@@ -17,25 +17,38 @@
    * Nothing is optimistic: an answer is the same `permission.answer` command
    * the session's own card sends, and the row leaves when the hub has taken
    * it — the request card above that pane's composer leaves with it.
+   *
+   * An approved action is the same row with the call laid out under its
+   * reason: when it runs (in this browser's zone), the connection and the
+   * account it signs in as, the tool, and the exact arguments in a well that
+   * scrolls. Deny and Approve are the permission's peers; Approve names the
+   * arguments' hash the hub gave with them, so the hub runs the call shown
+   * and refuses any other. One whose call may or may not have happened says
+   * so, and Remove puts it away once you have checked the service.
    */
   import { questionsOf } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
+    IconCheck,
     IconClose,
     IconDollar,
     IconFolder,
     IconMaximize,
+    IconSend,
     IconTick,
+    IconWarningTriangle,
     IconWorkflow,
   } from "#lib/icons.js";
   import { isTyping } from "#lib/utils/typing.js";
   import {
     cawco,
+    decideAction,
     type PermissionAnswer,
     permissionAnswer,
     submitCommand,
   } from "../client.svelte";
+  import ErrorText from "../ErrorText.svelte";
   import { conversationHref } from "../links";
   import OsMark from "../OsMark.svelte";
   import SessionMark from "../SessionMark.svelte";
@@ -74,10 +87,85 @@
           : item.ask;
       case "run":
         return "Waiting on your answer";
+      case "action":
+        return item.action.state === "unknown"
+          ? `This may or may not have happened. Check ${item.action.service}.`
+          : item.action.reason;
       default:
         return capLine(item.cap);
     }
   });
+
+  /** An action's call, laid out: when, through what, the tool, and its arguments as JSON. */
+  const call = $derived.by(() => {
+    if (item.kind !== "action") {
+      return null;
+    }
+    const { action } = item;
+    let { args } = action;
+    try {
+      args = JSON.stringify(JSON.parse(action.args), null, 2);
+    } catch {
+      // The hub stores what it serialised; shown as stored if it ever is not JSON.
+    }
+    return {
+      when: whenOf(action.state, action.runAt, action.startedAt, clock.now),
+      through: `${action.connection} · ${action.service} as ${action.account}`,
+      tool: action.tool,
+      args,
+      unknown: action.state === "unknown",
+    };
+  });
+
+  /** "Tue 13 Oct, 09:00 BST", in this browser's zone: the operator's. */
+  function stamp(at: number): string {
+    return new Intl.DateTimeFormat(undefined, {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZoneName: "short",
+    }).format(at);
+  }
+
+  /** When the call runs, or (unknown) when it went. */
+  function whenOf(
+    state: string,
+    runAt: number | null,
+    startedAt: number | null,
+    now: number
+  ): string {
+    if (state === "unknown") {
+      return startedAt === null ? "Unknown" : `Went ${stamp(startedAt)}`;
+    }
+    if (runAt === null) {
+      return "As soon as you approve";
+    }
+    return runAt <= now
+      ? `As soon as you approve (was due ${stamp(runAt)})`
+      : stamp(runAt);
+  }
+
+  /** The hub's refusal of your last decision on an action, in its words. */
+  let refusal = $state<string | null>(null);
+  /** A decision on its way: both peers hold until the hub answers. */
+  let deciding = $state(false);
+
+  async function decide(decision: "approve" | "deny" | "checked") {
+    if (item.kind !== "action" || held || deciding) {
+      return;
+    }
+    deciding = true;
+    refusal = null;
+    try {
+      await decideAction(item.action, decision);
+    } catch (error) {
+      refusal = error instanceof Error ? error.message : String(error);
+    } finally {
+      deciding = false;
+    }
+  }
   /**
    * A run's and a budget's last line: the kind, then where it is. An ask's
    * is drawn in the markup: its project, its kind, its machine by its mark.
@@ -121,10 +209,15 @@
     });
   }
 
-  /** The permission's own keys (`y`/`a` allow, `n`/`d` deny) while a control here has focus. */
+  /** An approved action waiting for your approval: Deny and Approve stand. */
+  const approvable = $derived(
+    item.kind === "action" && item.action.state === "proposed"
+  );
+
+  /** The permission's own keys (`y`/`a` approve, `n`/`d` deny) while a control here has focus. */
   function onkeydown(event: KeyboardEvent): void {
     if (
-      !answerable ||
+      !(answerable || approvable) ||
       isTyping() ||
       event.metaKey ||
       event.ctrlKey ||
@@ -135,10 +228,18 @@
     const key = event.key.toLowerCase();
     if (key === "y" || key === "a") {
       event.preventDefault();
-      answer("allow");
+      if (approvable) {
+        decide("approve");
+      } else {
+        answer("allow");
+      }
     } else if (key === "n" || key === "d") {
       event.preventDefault();
-      answer("deny");
+      if (approvable) {
+        decide("deny");
+      } else {
+        answer("deny");
+      }
     }
   }
 </script>
@@ -146,6 +247,7 @@
 <div
   class="row"
   data-flip
+  data-kind={item.kind}
   data-peek={peeks || undefined}
   data-share="pane:{item.kind === "ask" ? item.instanceId : item.key}"
   data-stale={held || undefined}
@@ -169,6 +271,12 @@
       />
     {:else if item.kind === "run"}
       <IconWorkflow aria-hidden="true" />
+    {:else if item.kind === "action"}
+      {#if item.action.state === "unknown"}
+        <IconWarningTriangle aria-hidden="true" />
+      {:else}
+        <IconSend aria-hidden="true" />
+      {/if}
     {:else}
       <IconDollar aria-hidden="true" />
     {/if}
@@ -225,6 +333,37 @@
         <span>machine offline</span>
       {/if}
     </span>
+  {:else if item.kind === "action" && call}
+    <!-- The exact call: when, through which account, the tool, the arguments. -->
+    <dl class="call">
+      <dt>Runs</dt>
+      <dd>{call.when}</dd>
+      <dt>Through</dt>
+      <dd>{call.through}</dd>
+      <dt>Tool</dt>
+      <dd class="tool">{call.tool}</dd>
+    </dl>
+    <!-- A scroller with no focusable child is itself in the tab order
+         (keyboard-focusable scrollers), so a keyboard scrolls it too. -->
+    <pre class="args focus-inset">{call.args}</pre>
+    <span class="meta where">
+      {#if item.project}
+        <span class="project">
+          <IconFolder
+            aria-hidden="true"
+            class="mark"
+            style="color: var(--mark-{item.project.hue})"
+          />
+          <span class="project-name">{item.project.name}</span>
+        </span>
+        <span aria-hidden="true" class="dot">·</span>
+      {/if}
+      <span>Approved action</span>
+      {#if item.action.taskId}
+        <span aria-hidden="true" class="dot">·</span>
+        <span class="task">{item.action.taskId}</span>
+      {/if}
+    </span>
   {:else}
     <span class="meta">{meta}</span>
   {/if}
@@ -254,6 +393,54 @@
         <IconTick />
         Approve
       </Button>
+    </div>
+  {:else if item.kind === "action"}
+    <div class="peers">
+      {#if refusal}
+        <ErrorText
+          class="refusal"
+          message={refusal}
+          title="The hub refused that decision"
+        />
+      {/if}
+      {#if approvable}
+        <Button
+          aria-label="Deny {item.action.tool} on {item.action.connection}"
+          class="peer deny"
+          disabled={held || deciding}
+          onclick={() => decide("deny")}
+          {onkeydown}
+          size="sm"
+          variant="secondary"
+        >
+          <IconClose />
+          Deny
+        </Button>
+        <Button
+          aria-label="Approve {item.action.tool} on {item.action.connection}"
+          class="peer approve"
+          disabled={held || deciding}
+          onclick={() => decide("approve")}
+          {onkeydown}
+          size="sm"
+          variant="secondary"
+        >
+          <IconTick />
+          Approve
+        </Button>
+      {:else}
+        <Button
+          aria-label="Remove {item.action.tool} on {item.action
+            .connection} from Needs you"
+          disabled={held || deciding}
+          onclick={() => decide("checked")}
+          size="sm"
+          variant="secondary"
+        >
+          <IconCheck />
+          Remove
+        </Button>
+      {/if}
     </div>
   {/if}
 </div>
@@ -498,5 +685,66 @@
   .peers > :global(.approve:hover) {
     background: var(--status-done-bg);
     color: var(--status-done-ink);
+  }
+
+  /* An approved action: its reason, then the call (when, through, tool) as
+     label and value pairs on the meta type, then the arguments in a content
+     well that scrolls, then where it is from, then the peers. Everything
+     the call says is read before the choice is made, in the order it is
+     made: when, as whom, what, with what. */
+  .row[data-kind="action"] > .meta {
+    grid-row: 5;
+  }
+  .row[data-kind="action"] > .peers {
+    grid-row: 6;
+  }
+  .call {
+    position: relative;
+    pointer-events: none;
+    grid-row: 3;
+    grid-column: 2 / 4;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    column-gap: var(--space-3);
+    margin: var(--space-2) 0 0;
+    font: var(--type-meta);
+  }
+  .call dt {
+    color: var(--ink-muted);
+  }
+  .call dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+    color: var(--ink-strong);
+  }
+  .call .tool {
+    font-family: var(--font-mono);
+  }
+  /* The arguments as the hub will send them, pretty-printed: a well the
+     pointer and the keyboard can scroll, over the row's cover. */
+  .args {
+    position: relative;
+    grid-row: 4;
+    grid-column: 2 / 4;
+    max-block-size: 12rem;
+    margin: var(--space-2) 0;
+    padding: var(--space-2) var(--space-3);
+    overflow: auto;
+    border: 1px solid var(--border-well);
+    border-radius: var(--radius-xs);
+    background: var(--surface-well);
+    color: var(--ink-strong);
+    font: var(--type-code);
+    white-space: pre;
+    overscroll-behavior: contain;
+  }
+  .task {
+    font-variant-numeric: tabular-nums;
+  }
+  .peers > :global(.refusal) {
+    flex: 1 1 auto;
+    align-self: center;
+    font: var(--type-meta);
+    color: var(--status-fail-ink);
   }
 </style>

@@ -15,6 +15,7 @@ import {
   type CallToolResult,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import { ACTION_TOOLS, type Actions } from "./actions";
 import { adminTools, answeredWithoutAsking, isAdminWrite } from "./admin-tools";
 import type { Caw } from "./caw";
 import type { Connections } from "./connections";
@@ -40,6 +41,7 @@ type ToolFactory = typeof handoffTools;
 type CawTool = ReturnType<Caw["tools"]>[number];
 type RoutineTool = ReturnType<Routines["tools"]>[number];
 type IngressTool = ReturnType<Ingress["tools"]>[number];
+type ActionTool = ReturnType<Actions["tools"]>[number];
 
 /** Tools that run for minutes, and what their progress heartbeat says meanwhile. */
 const LONG_CALLS: Record<string, string> = {
@@ -168,6 +170,8 @@ export function createDelegationMcp(options: {
   routineTools?: (actor: InstanceRow | undefined) => RoutineTool[];
   /** The ingress tools (ingress.ts): event routes and connector polls, for the same roles. */
   ingressTools?: (actor: InstanceRow | undefined) => IngressTool[];
+  /** The approved-action tools (actions.ts): proposing one exact call for you to approve. */
+  actionTools?: (actor: InstanceRow | undefined) => ActionTool[];
   /**
    * Connections (connections.ts): the `conn__<name>__<tool>` tools a session
    * is granted, and the hub's call of one for it.
@@ -273,6 +277,7 @@ export function createDelegationMcp(options: {
       ...(options.cawTools ? options.cawTools(undefined) : []),
       ...(options.routineTools ? options.routineTools(undefined) : []),
       ...(options.ingressTools ? options.ingressTools(undefined) : []),
+      ...(options.actionTools ? options.actionTools(undefined) : []),
     ];
     // Granted by a delegate type or a project, not a role's list: the
     // connections module answers which, the role's say included.
@@ -541,17 +546,19 @@ export function createDelegationMcp(options: {
     return await projectToolCall(actor, name, input);
   };
 
-  /** A routine or ingress tool (routines.ts, ingress.ts), bound to the caller. */
+  /** A routine, ingress or approved-action tool (routines.ts, ingress.ts, actions.ts), bound to the caller. */
   const projectToolCall = async (
     actor: InstanceRow,
     name: string,
     input: Record<string, unknown>
   ): Promise<CallToolResult | undefined> => {
-    let group: (RoutineTool | IngressTool)[] | undefined;
+    let group: (RoutineTool | IngressTool | ActionTool)[] | undefined;
     if (ROUTINE_TOOLS.has(name)) {
       group = options.routineTools?.(actor);
     } else if (INGRESS_TOOLS.has(name)) {
       group = options.ingressTools?.(actor);
+    } else if (ACTION_TOOLS.has(name)) {
+      group = options.actionTools?.(actor);
     }
     if (!group) {
       return undefined;

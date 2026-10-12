@@ -1101,6 +1101,13 @@ export const createDispatcher = ({
     }
     const kind = kindAfter(item);
     const target = stages.stages.find((each) => each.kind === kind);
+    // Only an approved action enters a `by: action` stage (§5.2): the task stays.
+    if (target?.hooks.by === "action") {
+      console.info(
+        `[dispatch] ${taskId}'s attempt ${item.id} is ${item.state}; ${target.name} is entered only by an approved action, so the task stays in ${task.stage}.`
+      );
+      return;
+    }
     if (target && target.name !== task.stage) {
       await tasks.move(
         projectId,
@@ -1252,7 +1259,9 @@ export const createDispatcher = ({
         task.kind === "done" ||
         task.kind === "dropped" ||
         !target ||
-        target.name === task.stage
+        target.name === task.stage ||
+        // Only an approved action enters a `by: action` stage (§5.2).
+        target.hooks.by === "action"
       ) {
         return { projectId, task: taskId, stage: task.stage };
       }

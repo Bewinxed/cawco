@@ -14,6 +14,7 @@ import type {
   AccountSignin,
   AccountSigninResult,
   AgentRow,
+  ApprovedActionView,
   AvailableCommand,
   BuildInfo,
   CanvasChoices,
@@ -861,6 +862,12 @@ const state = $state({
    * read on connect, then kept by `project_offer` frames.
    */
   projectOffers: {} as Record<string, ProjectOfferSummary>,
+  /**
+   * Approved actions waiting on the operator (proposed, or whose outcome is
+   * unknown until checked): read on connect, then kept whole by `actions`
+   * frames.
+   */
+  actions: [] as ApprovedActionView[],
   /**
    * Each followed session's plan (plan.ts): its steps, its spec, an
    * attempt's to-dos, as the hub's `plan.snapshot` and `plan.delta` keep it.
@@ -2306,6 +2313,8 @@ async function refresh(): Promise<boolean> {
   readAccounts();
   // Off the board's wait: an offer is a quiet card, not part of the fleet.
   readProjectOffers();
+  // Approved actions waiting on you: frames keep them from here.
+  readWaitingActions();
   // Every project's threads, for the rail; frames keep them from here.
   readThreads();
   // What the socket says about asks from here on is newer than the read.
@@ -2831,6 +2840,11 @@ function handleFrame(frame: FramePayload): void {
     if (project) {
       project.cap = frame.cap;
     }
+    return;
+  }
+
+  if (frame.kind === "actions") {
+    state.actions = frame.actions;
     return;
   }
 
@@ -5317,6 +5331,46 @@ async function readProjectOffers(): Promise<void> {
   }
 }
 
+/** The approved actions waiting on you, as the hub holds them now. */
+async function readWaitingActions(): Promise<void> {
+  const read = await load<{ actions: ApprovedActionView[] }>(
+    "/api/actions/waiting"
+  );
+  if (read) {
+    state.actions = read.actions;
+  }
+}
+
+/**
+ * Your decision on an approved action: approve the exact call shown (named
+ * by its arguments' hash, so the hub refuses any other), deny it, or put an
+ * unknown one away once you checked the service. Nothing is optimistic: the
+ * card leaves when the hub's `actions` frame says so. A refusal is thrown in
+ * the hub's own sentence.
+ */
+export async function decideAction(
+  action: Pick<ApprovedActionView, "argsHash" | "id">,
+  decision: "approve" | "deny" | "checked"
+): Promise<void> {
+  const response = await fetch(
+    `/api/actions/${encodeURIComponent(action.id)}/${decision}`,
+    {
+      method: "POST",
+      ...(decision === "approve"
+        ? {
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ argsHash: action.argsHash }),
+          }
+        : {}),
+    }
+  );
+  if (!response.ok) {
+    throw new Error(
+      (await response.text()) || `The hub answered ${response.status}.`
+    );
+  }
+}
+
 /** What "Create project" did: the project, and the plan items it filed as proposed tasks. */
 export interface ProjectOfferAccepted {
   joined: boolean;
@@ -7220,6 +7274,10 @@ export const cawco = {
     return state.projects.filter((project) =>
       capHolds(project.cap, minute.now)
     );
+  },
+  /** Approved actions waiting on you: proposed, or unknown until checked. */
+  get actions(): ApprovedActionView[] {
+    return state.actions;
   },
   /** The minute, for what reads a clock (ages, resets). */
   get now(): number {

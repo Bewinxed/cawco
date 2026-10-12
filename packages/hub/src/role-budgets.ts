@@ -12,6 +12,7 @@ import {
   SESSION_ROLES,
   type SessionRole,
 } from "@cawco/core";
+import { createActions } from "./actions";
 import { createCaw } from "./caw";
 import { createDelegationMcp } from "./delegation-mcp";
 import { createIngress } from "./ingress";
@@ -27,7 +28,9 @@ import type { Tasks } from "./tasks";
  * runs its project's routines (§5.5), five `routine_*` tools of about 870
  * tokens, on top of the 9,295 it had reached. Both the lead and the worker
  * grew again with P3's ingress: eight `event_route_*` and `connector_poll_*`
- * tools of about 1,240 tokens (lead 11,403, worker 20,225 measured).
+ * tools of about 1,240 tokens (lead 11,403, worker 20,225 measured). P3's
+ * approved actions add three `action_*` tools of about 560 tokens to both
+ * (lead 11,967, worker 20,792 measured): both now sit at their budget.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 21_000,
@@ -139,6 +142,15 @@ export const measureRoles = (): RoleSize[] => {
         dispatcher: {} as never,
         lifetime,
         routines: {} as never,
+      }).tools(actor),
+    actionTools: (actor) =>
+      createActions({
+        connections: {} as never,
+        db: {} as never,
+        lifetime,
+        publish: () => undefined,
+        push: {} as never,
+        tasks: {} as never,
       }).tools(actor),
   });
   try {

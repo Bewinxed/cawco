@@ -11,6 +11,7 @@ typeOverrides:
   schemas:
     AccountHue: OpenEnums.AccountHue
     AccountKind: OpenEnums.AccountKind
+    ActionState: OpenEnums.ActionState
     AgentRowAuth: OpenEnums.AgentRowAuth
     AuthState: OpenEnums.AuthState
     BadgePropsTone: OpenEnums.BadgePropsTone

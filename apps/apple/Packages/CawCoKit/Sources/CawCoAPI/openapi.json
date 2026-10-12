@@ -7164,6 +7164,443 @@
         }
       }
     },
+    "/api/actions": {
+      "get": {
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "proposed",
+                "approved",
+                "denied",
+                "running",
+                "done",
+                "failed",
+                "unknown",
+                "cancelled"
+              ]
+            }
+          }
+        ],
+        "operationId": "getApiActions",
+        "responses": {
+          "200": {
+            "description": "getApiActions 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiActions200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiActions 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions/waiting": {
+      "get": {
+        "operationId": "getApiActionsWaiting",
+        "responses": {
+          "200": {
+            "description": "getApiActionsWaiting 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiActionsWaiting200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions/{id}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiActionsById",
+        "responses": {
+          "200": {
+            "description": "getApiActionsById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovedActionView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiActionsById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiActionsById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiActionsById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiActionsById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions/{id}/approve": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "argsHash": {
+                    "minLength": 64,
+                    "maxLength": 64,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "argsHash"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiActionsByIdApprove",
+        "responses": {
+          "200": {
+            "description": "postApiActionsByIdApprove 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovedActionView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiActionsByIdApprove 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiActionsByIdApprove 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiActionsByIdApprove 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiActionsByIdApprove 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiActionsByIdApprove 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions/{id}/deny": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiActionsByIdDeny",
+        "responses": {
+          "200": {
+            "description": "postApiActionsByIdDeny 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovedActionView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiActionsByIdDeny 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiActionsByIdDeny 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiActionsByIdDeny 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiActionsByIdDeny 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions/{id}/cancel": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiActionsByIdCancel",
+        "responses": {
+          "200": {
+            "description": "postApiActionsByIdCancel 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovedActionView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiActionsByIdCancel 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiActionsByIdCancel 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiActionsByIdCancel 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiActionsByIdCancel 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/actions/{id}/checked": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiActionsByIdChecked",
+        "responses": {
+          "200": {
+            "description": "postApiActionsByIdChecked 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovedActionView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiActionsByIdChecked 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiActionsByIdChecked 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiActionsByIdChecked 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiActionsByIdChecked 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/spend-settings": {
       "get": {
         "operationId": "getApiSpendSettings",
@@ -16923,6 +17360,34 @@
           "deleted"
         ]
       },
+      "getApiActions200": {
+        "type": "object",
+        "properties": {
+          "actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApprovedActionView"
+            }
+          }
+        },
+        "required": [
+          "actions"
+        ]
+      },
+      "getApiActionsWaiting200": {
+        "type": "object",
+        "properties": {
+          "actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApprovedActionView"
+            }
+          }
+        },
+        "required": [
+          "actions"
+        ]
+      },
       "getApiSpendSettings200": {
         "type": "object",
         "properties": {
@@ -21706,6 +22171,9 @@
             "$ref": "#/components/schemas/ProjectCapFrame"
           },
           {
+            "$ref": "#/components/schemas/ActionsFrame"
+          },
+          {
             "$ref": "#/components/schemas/ProjectStopFrame"
           },
           {
@@ -21761,6 +22229,7 @@
             "tasks.changed": "#/components/schemas/TasksChangedFrame",
             "projects.changed": "#/components/schemas/ProjectsChangedFrame",
             "project.cap": "#/components/schemas/ProjectCapFrame",
+            "actions": "#/components/schemas/ActionsFrame",
             "project.stop": "#/components/schemas/ProjectStopFrame",
             "delegate_event": "#/components/schemas/DelegateEventFrame",
             "supervisor_event": "#/components/schemas/SupervisorEventFrame",
@@ -25363,6 +25832,178 @@
           "regex",
           "routineId",
           "source"
+        ]
+      },
+      "ApprovedActionView": {
+        "description": "One approved action as the hub answers it (times in ms epoch).",
+        "type": "object",
+        "properties": {
+          "account": {
+            "description": "The service's account the connection signed in as when it was proposed.",
+            "type": "string"
+          },
+          "approvedAt": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "args": {
+            "description": "The call's arguments, JSON, exactly as it will be sent.",
+            "type": "string"
+          },
+          "argsHash": {
+            "description": "SHA-256 of `args`, hex: what an approval names.",
+            "type": "string"
+          },
+          "checkedAt": {
+            "description": "When you put an unknown one away, having checked the service.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "connection": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "endedAt": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "error": {
+            "description": "Why it failed, was refused, or is unknown.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "projectName": {
+            "description": "The project's name, as the board names it.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "proposedBy": {
+            "description": "The session that proposed it, and its title while the hub holds it.",
+            "type": "string"
+          },
+          "proposerTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reason": {
+            "description": "The proposer's one sentence: why.",
+            "type": "string"
+          },
+          "result": {
+            "description": "What the service answered, JSON, cut at 16 KB.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "runAt": {
+            "description": "When it runs, at the earliest; null: as soon as it is approved.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "service": {
+            "type": "string"
+          },
+          "stageResult": {
+            "description": "What its stage move came to, once it tried.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "startedAt": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/ActionState"
+          },
+          "taskId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "taskTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "thenStage": {
+            "description": "The task stage it moves to once done.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tool": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "account",
+          "approvedAt",
+          "args",
+          "argsHash",
+          "checkedAt",
+          "connection",
+          "createdAt",
+          "endedAt",
+          "error",
+          "id",
+          "projectId",
+          "projectName",
+          "proposedBy",
+          "proposerTitle",
+          "reason",
+          "result",
+          "runAt",
+          "service",
+          "stageResult",
+          "startedAt",
+          "state",
+          "taskId",
+          "taskTitle",
+          "thenStage",
+          "tool"
+        ]
+      },
+      "ActionState": {
+        "type": "string",
+        "enum": [
+          "approved",
+          "cancelled",
+          "denied",
+          "done",
+          "failed",
+          "proposed",
+          "running",
+          "unknown"
         ]
       },
       "ProjectView": {
@@ -37281,6 +37922,28 @@
         "required": [
           "kind",
           "projectId"
+        ]
+      },
+      "ActionsFrame": {
+        "description": "Hub-originated: every approved action waiting on you, whole, on each\nchange: those proposed, and those whose outcome is unknown until you check.",
+        "type": "object",
+        "properties": {
+          "actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApprovedActionView"
+            }
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "actions"
+            ]
+          }
+        },
+        "required": [
+          "actions",
+          "kind"
         ]
       },
       "ProjectStopFrame": {

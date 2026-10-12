@@ -80,6 +80,7 @@ import { sessionLabel } from "../labels";
 import { HubLifetime } from "../lifetime";
 import { workflowSkill } from "../workflows/skills";
 import { type AccountsDb, accountsDb } from "./accounts";
+import { type ActionsDb, actionsDb } from "./actions";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
 import { type ConnectionsDb, connectionsDb } from "./connections";
 import { type IngressDb, ingressDb } from "./ingress";
@@ -377,6 +378,8 @@ export interface DbShape {
     instanceId: string,
     hash: string
   ) => boolean;
+  /** Approved actions: one exact tool call each, run once (actions.ts). */
+  readonly actions: ActionsDb;
   /** A machine's workspaces that still have their checkout. */
   readonly activeWorkspacesOn: (machineId: string) => WorkspaceRow[];
   /** Adds counted capability uses, summing into any row already there. */
@@ -6778,6 +6781,7 @@ const make = async (path: string): Promise<DbShape> => {
     routines: routinesDb(db),
     connections: connectionsDb(db),
     ingress: ingressDb(db),
+    actions: actionsDb(db),
     usageSpend: ({ harness, todayStart, weekStart }) => {
       const since = (start: number) =>
         sql<number>`coalesce(sum(case when ${usageBuckets.start} >= ${start} then ${usageBuckets.costUsd} else 0 end), 0)`;

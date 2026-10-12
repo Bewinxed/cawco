@@ -267,6 +267,7 @@ import {
   reconcileAccounts,
   sessionLimitsReader,
 } from "./accounts";
+import { actionRoutes, createActions } from "./actions";
 import { createAdminAsks } from "./admin-asks";
 import { adminTools, isAdminWrite } from "./admin-tools";
 import { appleDiagnosticsRoutes } from "./apple-diagnostics";
@@ -451,6 +452,7 @@ import {
   hubActor,
   LANDS,
   sessionActor,
+  type TaskStore,
   taskRoutes,
   YOU_ACTOR,
 } from "./tasks";
@@ -13540,7 +13542,11 @@ export const createServer = (
     placesChanged,
     projectsChanged,
   };
+  /** Set once approved actions exist (below): until then no `action` move goes. */
+  let actionMoves: NonNullable<TaskStore["actionMove"]> = () => false;
   const tasks = createTasks({
+    actionMove: (projectId, taskId, to, actionId) =>
+      actionMoves(projectId, taskId, to, actionId),
     project: (id) => db.project(id),
     projectIds: () => db.listProjects().map((project) => project.id),
     index: db.taskIndex,
@@ -13811,6 +13817,23 @@ export const createServer = (
     lifetime,
     routines,
   });
+  // Approved actions (actions.ts): one exact call a session proposes, you
+  // approve, and the hub runs once at its time.
+  const actions = createActions({
+    connections,
+    db,
+    lifetime,
+    push,
+    tasks,
+    publish: (needsYou) =>
+      registry.broadcast({
+        verb: "frames",
+        machineId: "hub",
+        payload: { kind: "actions", actions: needsYou },
+      }),
+  });
+  // The stage engine's one door for a `by: action` move (tasks.ts).
+  actionMoves = actions.actionMove;
   const delegationMcp = createDelegationMcp({
     lifetime,
     tasks,
@@ -13828,6 +13851,7 @@ export const createServer = (
     cawTools: (actor) => caw.tools(actor),
     routineTools: (actor) => routines.tools(actor),
     ingressTools: (actor) => ingress.tools(actor),
+    actionTools: (actor) => actions.tools(actor),
     askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
     sendToUser: telegram
       ? (actor, message, attachments) =>
@@ -13999,6 +14023,9 @@ export const createServer = (
   if (resumeWorkflows) {
     // The pollers pick up from the cursors a stopped hub kept.
     ingress.start();
+    // A call a stopped hub left under way becomes unknown, never re-run;
+    // then due approved actions run.
+    actions.start();
   }
 
   /**
@@ -15425,6 +15452,7 @@ export const createServer = (
       .use(routineRoutes(routines))
       .use(connectionRoutes(connections))
       .use(ingressRoutes(ingress))
+      .use(actionRoutes(actions))
       .use(caps.routes())
       .use(viewRoutes(views))
       .use(noticesSeen.routes)

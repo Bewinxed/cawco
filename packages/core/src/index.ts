@@ -7,13 +7,14 @@ import type { ToolStatus } from "./tools";
 export * from "./a2ui-catalog";
 // Accounts: several sign-ins per provider, and which one a session runs on.
 export * from "./accounts";
+// Connections: outside services the hub signs in to and calls for sessions.
+export * from "./actions";
 // "Continue in new session": the size rules the hub and the dashboard share.
 export * from "./archive";
 // Files and texts a turn carries, and the line naming each attached file.
 export * from "./attachments";
 // Claude Code's dir names, as a screen, a message or a shell script names them (paths.ts owns the paths).
 export * from "./claude-dirs";
-// Connections: outside services the hub signs in to and calls for sessions.
 export * from "./connections";
 export * from "./continuation";
 // Delegate types: named presets the `delegate` tool's `type` param resolves,
@@ -1149,6 +1150,7 @@ export type FramePayload =
   | import("./frames").TasksChangedFrame
   | import("./frames").ProjectsChangedFrame
   | import("./frames").ProjectCapFrame
+  | import("./actions").ActionsFrame
   | import("./frames").ProjectStopFrame
   | import("./frames").DelegateEventFrame
   | import("./frames").SupervisorEventFrame

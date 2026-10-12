@@ -86,6 +86,8 @@ export type TaskMover = Mover | "hub";
 
 /** Who is changing a task: what stage moves they may make, and whom the commit is by. */
 export interface TaskActor {
+  /** The approved action making the move, for the mover `action` (actions.ts). */
+  actionId?: string;
   author: FolderAuthor;
   /** The session making the change, when one is. */
   instanceId?: string;
@@ -101,6 +103,19 @@ export const YOU_ACTOR: TaskActor = { mover: "you", author: YOU };
 export const hubActor = (reason: string): TaskActor => ({
   mover: "hub",
   author: { name: "hub" },
+  reason,
+});
+
+/**
+ * An approved action moving its task once it is done (actions.ts). The
+ * actor alone moves nothing: the move goes only when the hub's actions
+ * table holds a done action of that id naming this task and stage, whose
+ * move has not gone yet ({@link TaskStore.actionMove}).
+ */
+export const actionActor = (actionId: string, reason: string): TaskActor => ({
+  mover: "action",
+  actionId,
+  author: { name: "approved action" },
   reason,
 });
 
@@ -181,6 +196,18 @@ export type TaskEvent =
 
 /** What the service needs of the hub's database. */
 export interface TaskStore {
+  /**
+   * Whether the approved action `actionId` is done, is for this task, names
+   * `to` as its stage, and has not moved it yet (db/actions.ts). Without it,
+   * no `action` move goes: §5.2's "stage moves with `by: action` happen only
+   * this way".
+   */
+  readonly actionMove?: (
+    projectId: string,
+    taskId: string,
+    to: string,
+    actionId: string
+  ) => boolean;
   /** Every work item at one of the project's tasks, newest first. */
   readonly attempts: (
     projectId: string
@@ -781,10 +808,23 @@ const stagesView = (
 });
 
 /** Why the hub cannot put a task in `stage`: only that the project has no such stage. */
-const hubProblem = (stages: Stages, stage: string): string | undefined =>
-  stageNamed(stages, stage)
-    ? undefined
-    : `${stage} is not a stage of this project.`;
+/**
+ * Why the hub's own code may not put a task in `stage`: it is not a stage,
+ * or its `by: action` says only an approved action moves a task there (the
+ * hub's dispatcher is not one).
+ */
+export const hubProblem = (
+  stages: Stages,
+  stage: string
+): string | undefined => {
+  const to = stageNamed(stages, stage);
+  if (!to) {
+    return `${stage} is not a stage of this project.`;
+  }
+  return to.hooks.by === "action"
+    ? `Only an approved action moves a task to ${stage}.`
+    : undefined;
+};
 
 /** Commit messages say who: `(by you)`, `(by Fix tray chip)`, `(by hub: attempt 5fd1e189 started)`. */
 const byWhom = (actor: TaskActor): string =>
@@ -1095,6 +1135,9 @@ export const createTasks = (store: TaskStore) => {
     );
     const stage =
       asked === undefined ? firstStage(stages).name : stageName(asked);
+    if (actor.mover === "action") {
+      refuse(403, "An approved action moves its task; it never files one.");
+    }
     const problem =
       actor.mover === "hub"
         ? hubProblem(stages, stage)
@@ -1520,6 +1563,18 @@ export const createTasks = (store: TaskStore) => {
         const from = doc.read().fields.stage ?? "";
         if (from === to) {
           return `stage ${to}`;
+        }
+        if (
+          actor.mover === "action" &&
+          !(
+            actor.actionId &&
+            store.actionMove?.(projectId, id, to, actor.actionId)
+          )
+        ) {
+          refuse(
+            403,
+            `${id} cannot go to ${to} as an approved action: only an action the owner approved, once its call is done, moves its own task to the stage it named.`
+          );
         }
         const problem =
           actor.mover === "hub"

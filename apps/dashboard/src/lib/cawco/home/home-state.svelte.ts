@@ -12,7 +12,12 @@
  * - Recent: everything else that can be opened — every session none of the
  *   groups above shows, and the transcripts stored on the machines.
  */
-import type { NeutralSessionInfo, ProjectCap, WorkflowRun } from "@cawco/core";
+import type {
+  ApprovedActionView,
+  NeutralSessionInfo,
+  ProjectCap,
+  WorkflowRun,
+} from "@cawco/core";
 import {
   archiveRefusal,
   machineLabel,
@@ -297,7 +302,25 @@ export interface CapItem {
   title: string;
 }
 
-export type NeedsItem = AskItem | RunItem | CapItem;
+/**
+ * An approved action waiting on you (actions.ts on the hub): one exact call
+ * to approve or deny, or one whose call may or may not have happened, to
+ * check at the service and remove.
+ */
+export interface ActionItem {
+  action: ApprovedActionView;
+  /** The project's page, at the task when it has one. */
+  href: string;
+  key: string;
+  kind: "action";
+  place: string;
+  /** Its project, named and marked as the rail marks it. */
+  project: ProjectMarking | null;
+  raisedAt: number;
+  title: string;
+}
+
+export type NeedsItem = AskItem | RunItem | CapItem | ActionItem;
 
 export interface RecentItem {
   at: number;
@@ -842,8 +865,32 @@ class Home {
           ]
         : []
     );
+    const actions: NeedsItem[] = cawco.actions.map((action) => {
+      const project = cawco.projects.find((one) => one.id === action.projectId);
+      const at = `/project/${encodeURIComponent(action.projectId)}`;
+      return {
+        kind: "action",
+        key: `action:${action.id}`,
+        action,
+        title:
+          action.taskTitle ??
+          action.proposerTitle ??
+          `${action.connection} · ${action.tool}`,
+        place: project?.name ?? action.projectName ?? "",
+        project: project
+          ? { name: project.name, hue: markHue(folderOf(project)) }
+          : null,
+        href: action.taskId
+          ? `${at}?task=${encodeURIComponent(action.taskId)}`
+          : at,
+        raisedAt:
+          action.state === "unknown"
+            ? (action.endedAt ?? action.createdAt)
+            : action.createdAt,
+      };
+    });
     // Longest wait first; an ask the hub has not stamped sorts last.
-    return [...asks, ...runs, ...caps].sort(
+    return [...asks, ...runs, ...caps, ...actions].sort(
       (a, b) =>
         (a.raisedAt ?? Number.POSITIVE_INFINITY) -
         (b.raisedAt ?? Number.POSITIVE_INFINITY)

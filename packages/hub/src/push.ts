@@ -157,6 +157,17 @@ export type PushData =
       routineId: string;
       runId: string;
     }
+  | {
+      /**
+       * An approved action (actions.ts) waiting for your approval, or whose
+       * call may or may not have happened. Opened, never answered from the
+       * lock screen: the card shows the exact call. The app opens the board
+       * for a kind it does not know.
+       */
+      kind: "action";
+      actionId: string;
+      projectId: string;
+    }
   | { kind: "test" };
 
 /** One option of a question answered from the push: its action is `ANSWER_<id>`, `id` its index among the question's options. */
@@ -1001,6 +1012,44 @@ export const createPush = ({
       );
       console.log(
         `[push] routine ${run.routineId} run ${run.runId}: ${run.failed ? "needs you" : "delivered"}`
+      );
+    },
+
+    /**
+     * An approved action needs you (actions.ts): it waits for your approval,
+     * or its call may or may not have happened. The permission push's shape,
+     * Open only; the visible words say "Approved action", the sealed ones
+     * the connection and the proposer's reason. Sent while `waiting` holds.
+     */
+    action(action: {
+      connection: string;
+      id: string;
+      projectId: string;
+      reason: string;
+      unknown: boolean;
+      waiting: () => boolean;
+    }): void {
+      const project = projectName(action.projectId);
+      const body = action.unknown ? "May or may not have run" : NEEDS_YOU;
+      moment(
+        {
+          shown: alertOf("Approved action", project, body),
+          sealed: alertOf(
+            `${action.connection}: ${action.unknown ? "check it" : "approve?"}`,
+            project,
+            firstLine(action.reason) || body
+          ),
+          category: PUSH_CATEGORIES.permissionOpenOnly,
+          collapseId: `action-${action.id}`,
+          threadId: action.projectId,
+          data: {
+            kind: "action",
+            actionId: action.id,
+            projectId: action.projectId,
+          },
+        },
+        null,
+        action.waiting
       );
     },
 

@@ -102,6 +102,62 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/ActionState`.
+    public enum ActionState: OpenEnum {
+        case approved
+        case cancelled
+        case denied
+        case done
+        case failed
+        case proposed
+        case running
+        case unknown
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "approved": self = .approved
+            case "cancelled": self = .cancelled
+            case "denied": self = .denied
+            case "done": self = .done
+            case "failed": self = .failed
+            case "proposed": self = .proposed
+            case "running": self = .running
+            case "unknown": self = .unknown
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .approved: "approved"
+            case .cancelled: "cancelled"
+            case .denied: "denied"
+            case .done: "done"
+            case .failed: "failed"
+            case .proposed: "proposed"
+            case .running: "running"
+            case .unknown: "unknown"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.approved, .cancelled, .denied, .done, .failed, .proposed, .running, .unknown]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/AgentRowAuth`.
     public enum AgentRowAuth: OpenEnum {
         case authenticated

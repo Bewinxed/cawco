@@ -12,8 +12,9 @@
  * the upstream echoes back is cut out of what the session is answered.
  *
  * One call path for every caller: sessions ({@link Connections.callAs}),
- * and hub code (the connector poller, approved actions) through
- * {@link Connections.callConnection} and {@link Connections.listConnectionTools}.
+ * and hub code (the connector poller) through
+ * {@link Connections.callConnection} and {@link Connections.listConnectionTools};
+ * an approved action's one call through {@link Connections.callOnce}.
  * The GitHub poller speaks REST, not MCP: it alone opens a `github`
  * connection's token ({@link Connections.githubToken}), in the hub.
  *
@@ -57,6 +58,7 @@ import {
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import {
   type CallToolResult,
+  ErrorCode,
   McpError,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -696,6 +698,86 @@ export const createConnections = (deps: ConnectionsDeps) => {
   };
 
   /**
+   * One call that must run at most once (actions.ts): `meta` rides in the
+   * request's `_meta`, and nothing is retried but what the server provably
+   * never ran (a 404 on a gone session id, as {@link using} does). Answers
+   * how it went, never throws:
+   * - `answered`: the server answered the call (its result may say it failed);
+   * - `refused`: it never ran: the hub could not connect or sign in, or the
+   *   server answered the request with an error;
+   * - `unknown`: the request went and no answer came back (a timeout, a
+   *   dropped stream, a server error status): it may or may not have run.
+   */
+  const callOnce = async (
+    name: string,
+    tool: string,
+    args: Record<string, unknown>,
+    meta: Record<string, unknown>
+  ): Promise<
+    | { kind: "answered"; result: CallToolResult }
+    | { kind: "refused" | "unknown"; error: string }
+  > => {
+    const r = db.byName(name);
+    if (!r) {
+      return { kind: "refused", error: `There is no connection ${name}.` };
+    }
+    /** The last error the call itself raised; none: it never left the hub. */
+    let raw: unknown;
+    try {
+      const result = (await using(r, (client) =>
+        client
+          .callTool({ name: tool, arguments: args, _meta: meta }, undefined, {
+            timeout: CALL_MS,
+            resetTimeoutOnProgress: true,
+          })
+          .catch((error: unknown) => {
+            raw = error;
+            throw error;
+          })
+      )) as CallToolResult;
+      const text = JSON.stringify(result);
+      const clean = scrub(r, text);
+      return {
+        kind: "answered",
+        result: clean === text ? result : (JSON.parse(clean) as CallToolResult),
+      };
+    } catch (error) {
+      const words = error instanceof Error ? error.message : String(error);
+      const neverRan =
+        raw === undefined ||
+        refusedSignIn(raw) ||
+        sessionGone(raw) ||
+        (raw instanceof McpError &&
+          raw.code !== ErrorCode.RequestTimeout &&
+          raw.code !== ErrorCode.ConnectionClosed);
+      return { kind: neverRan ? "refused" : "unknown", error: words };
+    }
+  };
+
+  /**
+   * The connections a session may propose an approved action on: those its
+   * delegate type and its project list, that exist. Unlike {@link granted},
+   * whatever its role: a proposal calls nothing; you approve the call.
+   */
+  const proposable = (actor: InstanceRow): string[] => {
+    const names = new Set([
+      ...deps.typeConnections(actor),
+      ...(actor.projectId ? db.namesForProject(actor.projectId) : []),
+    ]);
+    return [...names].filter((name) => db.byName(name) !== undefined);
+  };
+
+  /** A connection's tool by its own name: as last listed, else listed now. */
+  const toolNamed = async (
+    name: string,
+    tool: string
+  ): Promise<Tool | undefined> => {
+    const r = row(name);
+    const tools = listed.get(r.id) ?? (await listConnectionTools(name));
+    return tools.find((one) => one.name === tool);
+  };
+
+  /**
    * A `github` connection's bearer token, for the hub's own REST poller
    * (ingress.ts, github.ts) and nothing else: no route, tool or view answers
    * it, and it is never logged. Refused, in words, for a connection of
@@ -1042,6 +1124,9 @@ export const createConnections = (deps: ConnectionsDeps) => {
 
   return {
     callConnection,
+    callOnce,
+    proposable,
+    toolNamed,
     listConnectionTools,
     githubToken,
     sessionTools,

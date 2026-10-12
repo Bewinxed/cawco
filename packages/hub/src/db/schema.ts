@@ -2784,6 +2784,73 @@ export const connectorPolls = sqliteTable(
 );
 
 /**
+ * Where an approved action is (actions.ts): waiting for you, approved (and
+ * due at its time), denied, running (claimed, its one call under way), done,
+ * failed (the service answered it did not), unknown (the call went and no
+ * answer came back, or the hub stopped mid-call: it may or may not have
+ * happened), or cancelled before it ran.
+ */
+export type ActionState = import("@cawco/core").ActionState;
+
+/**
+ * An approved action (Projects spec §5.5, actions.ts): one exact tool call on
+ * a connection, proposed by a session, approved by you, and run by the hub
+ * once, at or after its time. `args` is the call's arguments as proposed,
+ * serialised once, and never written again: the call sends it, and an
+ * approval names its hash. A row's claim (approved → running) is the one
+ * transaction that lets the call go, so it goes at most once.
+ */
+export const actions = sqliteTable(
+  "actions",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** The task it is for, and moves on success; null for none. */
+    taskId: text("task_id"),
+    /** The connection's name, and the service and account it signed in as at proposal. */
+    connection: text("connection").notNull(),
+    service: text("service").notNull(),
+    account: text("account").notNull(),
+    /** The tool's own name on the connection's server. */
+    tool: text("tool").notNull(),
+    /** The arguments, JSON, as proposed: what the call sends, byte for byte. */
+    args: text("args").notNull(),
+    /** SHA-256 of `args`, hex: what an approval must name. */
+    argsHash: text("args_hash").notNull(),
+    /** When it runs, at the earliest; null: as soon as it is approved. */
+    runAt: timestamp("run_at"),
+    /** The proposer's one sentence: why. */
+    reason: text("reason").notNull(),
+    /** The session that proposed it. */
+    proposedBy: text("proposed_by").notNull(),
+    state: text("state").$type<ActionState>().notNull(),
+    /** Minted at proposal, sent in the call's `_meta`. */
+    idempotencyKey: text("idempotency_key").notNull().unique(),
+    approvedBy: text("approved_by"),
+    approvedAt: timestamp("approved_at"),
+    startedAt: timestamp("started_at"),
+    endedAt: timestamp("ended_at"),
+    /** What the service answered, JSON, cut at 16 KB. */
+    result: text("result"),
+    /** Why it failed, was denied, or is unknown, as a sentence. */
+    error: text("error"),
+    /** The task stage it moves to once done, `by: action`. */
+    thenStage: text("then_stage"),
+    /** What its stage move came to: the move, or why it was refused. Null until it tried. */
+    stageResult: text("stage_result"),
+    /** When you looked at an unknown one and put it away. */
+    checkedAt: timestamp("checked_at"),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (table) => [
+    index("actions_project").on(table.projectId, table.createdAt),
+    index("actions_due").on(table.state, table.runAt),
+  ]
+);
+
+/**
  * Every permission and question a session is parked on, as the hub relays it
  * (`pending.ts`). Kept here so a hub that restarts still holds them: every
  * screen reading `/api/pending` the moment it is back sees the asks its

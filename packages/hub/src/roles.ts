@@ -15,7 +15,8 @@
  *   fleet settings go to its parent through handoff.
  * - **lead**: a project's Caw. Board tools only: tasks and to-dos, threads,
  *   drafting views, its project's folder on the hub and decision pages in it,
- *   its routines, delegating and steering the project's work, the person's phone. It has
+ *   its routines, proposing approved actions, delegating and steering the
+ *   project's work, the person's phone. It has
  *   no edit or shell tools in its harness either (caw.ts).
  * - **overseer**: fleet-watch triage: read the fleet, stop or interrupt, tell
  *   a session or you, and the fleet's hooks (a write asks you first).
@@ -93,6 +94,13 @@ const INGRESS = [
   "connector_poll_delete",
 ] as const;
 
+/**
+ * Approved actions (actions.ts): one exact call proposed for you to approve,
+ * by the same roles as routines; never a delegate, triage or a web-facing
+ * session, which have no posting tools.
+ */
+const ACTION = ["action_propose", "action_list", "action_cancel"] as const;
+
 /** The session tools a delegate keeps from the worker's set. */
 const DELEGATE_SESSION = [
   "create_workflow",
@@ -135,6 +143,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     ...CAW_TOOLS,
     ...ROUTINE,
     ...INGRESS,
+    ...ACTION,
     "delegate",
     "delegate_list",
     "list_delegate_types",
