@@ -12,14 +12,21 @@ nonisolated enum Allowlist {
   nonisolated enum Form: Sendable {
     /// A bundled app: macOS names it by its display name.
     case app
-    /// A bare executable: macOS names it by its file name.
-    case tool(executable: String)
+    /// A bundle's executable that launchd starts, outside LaunchServices, so
+    /// no running-app list has it: found by its executable's path, which
+    /// ends in `path`. macOS names it by its bundle's name, `name`, and
+    /// records its grants under its bundle id.
+    case launchdBundle(name: String, path: String)
   }
 
   /// CawCo identities, by code-signing identifier. Each must also carry
   /// CawCo's Developer ID signature (Signing.developerID) when resolved.
   static let subjects: [String: Form] = {
-    var subjects: [String: Form] = ["dev.cawco.agent": .tool(executable: "cawco")]
+    // The agent and every session keeper run from CawCo Agent.app
+    // (packages/core/src/agent-bundle.ts).
+    var subjects: [String: Form] = [
+      "dev.cawco.agent": .launchdBundle(name: "CawCo Agent", path: "/CawCo Agent.app/Contents/MacOS/cawco")
+    ]
     #if DEBUG
     // The throwaway probe app that tests one press on the owner's Mac.
     subjects["dev.cawco.probe"] = .app
@@ -134,13 +141,13 @@ struct Rule {
       name = only
       pids = apps.map(\.processIdentifier)
       recordedAs = [identifier]
-    case .tool(let executable):
-      let paths = Processes.all().compactMap { pid in Processes.path(pid).map { (pid, $0) } }
-        .filter { ($0.1 as NSString).lastPathComponent == executable }
-      guard !paths.isEmpty else { return .failure(Refusal("no \(executable) process is running")) }
-      name = executable
-      pids = paths.map(\.0)
-      recordedAs = Array(Set(paths.map(\.1))).sorted()
+    case .launchdBundle(let bundleName, let path):
+      let found = Processes.all().compactMap { pid in Processes.path(pid).map { (pid, $0) } }
+        .filter { $0.1.hasSuffix(path) }
+      guard !found.isEmpty else { return .failure(Refusal("no \(bundleName) process is running")) }
+      name = bundleName
+      pids = found.map(\.0)
+      recordedAs = [identifier]
     }
     var checked: [pid_t] = []
     for pid in pids {

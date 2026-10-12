@@ -14,6 +14,10 @@ import { readdir, readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { UpdateReport } from "@cawco/core";
 import {
+  AGENT_BUNDLE_NAME,
+  installAgentBundle,
+} from "@cawco/core/agent-bundle";
+import {
   archiveMatches,
   readAtMost,
   type SignedRelease,
@@ -220,9 +224,14 @@ function helperEnvironment(): [string, string][] {
   );
 }
 
-/** The update helper (`cawco binary-apply`, given `args`), as a job of the service manager so it outlives the restarts it performs. */
+/**
+ * The update helper (`cawco binary-apply`, given `args`), as a job of the
+ * service manager so it outlives the restarts it performs. It is this build,
+ * from its own folder: on macOS this agent runs from CawCo Agent.app, which an
+ * update fills with another build while this agent still runs.
+ */
 async function launchApplyHelper(args: readonly string[]) {
-  const executable = process.execPath;
+  const executable = join(versionDirectory(runtimeVersion), "cawco");
   const forwarded = helperEnvironment();
   if (process.platform === "linux") {
     const child = Bun.spawn(
@@ -717,6 +726,12 @@ export class BinaryUpdater {
     }
     const path = join(binaryRoot(), "run");
     if ((await readFile(path, "utf8").catch(() => "")) !== BINARY_WRAPPER) {
+      // The wrapper starts CawCo Agent.app on macOS: it holds this build before the wrapper says so.
+      if (process.platform === "darwin") {
+        console.info(
+          `[update] ${AGENT_BUNDLE_NAME}.app: ${await installAgentBundle()}`
+        );
+      }
       await writeWrapper(binaryRoot());
       console.info(`[update] ${path} is ${runtimeVersion}'s wrapper now`);
     }

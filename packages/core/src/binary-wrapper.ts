@@ -1,5 +1,6 @@
 import { chmod, rename } from "node:fs/promises";
 import { join } from "node:path";
+import { AGENT_BUNDLE_NAME, AGENT_EXECUTABLE_NAME } from "./agent-bundle";
 
 /**
  * The script the hub, dashboard, agent and session keeper units start through.
@@ -16,8 +17,10 @@ import { join } from "node:path";
  * manager, not of this unit, so the rollback it may decide, which restarts
  * this unit, does not end it.
  *
- * A build's session keeper runs from its own folder, in a job of its own
- * (keepers.ts), and not through here. A legacy keeper's unit, from before
+ * On macOS every build runs from CawCo Agent.app (agent-bundle.ts), which
+ * always holds the build `current` names; elsewhere from `current`. A
+ * build's session keeper runs in a job of its own (keepers.ts), and not
+ * through here. A legacy keeper's unit, from before
  * keepers ran side by side, still starts through `sessiond`, from the
  * `keeper` link, until the handover that retires it removes the unit.
  *
@@ -93,8 +96,20 @@ fi
 if [ "$1" = sessiond ]; then
   exec "$ROOT/keeper/cawco" sessiond
 fi
+# macOS: the build \`current\` names, from ${AGENT_BUNDLE_NAME}.app, the identity every privacy grant is given to.
+if [ "$(uname)" = Darwin ]; then
+  exec "$ROOT/${AGENT_BUNDLE_NAME}.app/Contents/MacOS/${AGENT_EXECUTABLE_NAME}" "$@"
+fi
 exec "$ROOT/current/cawco" "$@"
 `;
+
+/**
+ * Whether a wrapper's text starts the units from CawCo Agent.app: the wrapper
+ * a build that keeps the bundle wrote. Until a confirmed build has written
+ * one, nothing starts from the bundle, and an update need not fill it.
+ */
+export const wrapperStartsBundle = (text: string): boolean =>
+  text.includes(`/${AGENT_BUNDLE_NAME}.app/Contents/MacOS/`);
 
 /**
  * Puts {@link BINARY_WRAPPER} at `<root>/run`, atomically: a shell already

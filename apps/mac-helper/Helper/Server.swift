@@ -33,8 +33,8 @@ nonisolated struct Peer: Sendable {
 /// as this same user.
 ///
 /// The uid check always holds. The signature check is enforced in Release; a
-/// DEBUG build logs the mismatch and admits the peer, because the agent is
-/// still ad-hoc signed while the helper is being probed.
+/// DEBUG build logs the mismatch and admits the peer, so an agent run from a
+/// checkout (unsigned) can reach a helper being probed.
 nonisolated enum PeerCheck {
   static let agentRequirement = Signing.developerID("dev.cawco.agent")
 

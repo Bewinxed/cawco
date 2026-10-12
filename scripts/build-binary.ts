@@ -119,6 +119,12 @@ export async function buildBinary(options: {
   prepare?: boolean;
   /** Link the credential-free stub harnesses into the real entry point; for proofs only. */
   stubHarness?: boolean;
+  /**
+   * A darwin build's CawCo Agent.app resource seal (`_CodeSignature/CodeResources`),
+   * as release.ts sealed it on the Mac: the build writes it into the bundle
+   * beside itself (packages/core/src/agent-bundle.ts).
+   */
+  agentCodeResources?: string;
   testPublicKey?: string;
 }) {
   if (Bun.version !== PINNED_BUN) {
@@ -300,6 +306,13 @@ export async function buildBinary(options: {
       __CAWCO_RELEASE__: "true",
       __CAWCO_VERSION__: JSON.stringify(options.version),
       __CAWCO_COMMIT__: JSON.stringify(options.commit),
+      ...(options.agentCodeResources === undefined
+        ? {}
+        : {
+            __CAWCO_AGENT_CODE_RESOURCES__: JSON.stringify(
+              options.agentCodeResources
+            ),
+          }),
       "process.env.NODE_ENV": '"production"',
     },
     plugins: [
@@ -416,6 +429,11 @@ if (import.meta.main) {
     version = "0.1.0-dev",
     commit = "dev",
   ] = Bun.argv.slice(2);
+  const seal = Bun.argv.indexOf("--agent-code-resources");
+  const sealFile = seal < 0 ? undefined : Bun.argv[seal + 1];
+  if (seal >= 0 && !sealFile) {
+    throw new Error("--agent-code-resources needs the seal's file");
+  }
   await buildBinary({
     target,
     outfile,
@@ -423,5 +441,8 @@ if (import.meta.main) {
     commit,
     proof: Bun.argv.includes("--proof"),
     prepare: !Bun.argv.includes("--skip-prepare"),
+    ...(sealFile
+      ? { agentCodeResources: await Bun.file(sealFile).text() }
+      : {}),
   });
 }

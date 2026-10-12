@@ -1,7 +1,8 @@
 /**
  * The machine's session keepers, side by side. Server-only.
  *
- * A keeper of build V (`cawco sessiond`, run from `versions/V/cawco`) runs in
+ * A keeper of build V (`cawco sessiond`, run from `versions/V/cawco`, or on
+ * macOS from CawCo Agent.app, agent-bundle.ts) runs in
  * a service-manager job of its own and listens on an endpoint of its own,
  * `sessiond-V.sock`, in the directory of the machine's endpoint
  * `sessiond.sock` ({@link sessiondEndpoint}). The machine's endpoint names the

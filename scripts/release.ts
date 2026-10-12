@@ -514,66 +514,99 @@ const build = async (current: Request): Promise<void> => {
       testSigned: false,
       artifacts: [],
     };
-    for (const target of TARGETS) {
-      if (freemem() < 4 * 1024 ** 3) {
-        throw new Error(
-          "Release build refused: less than 4 GiB available memory"
+    // macOS builds run as CawCo Agent.app, signed with the team's Developer ID
+    // (packages/core/src/agent-bundle.ts, scripts/binary/sign-agent-bundle.sh),
+    // on the Mac, in a folder under its home: its Info.plist from this commit,
+    // sealed once, the seal compiled into each darwin build, then each signed.
+    const mac = current.macHost;
+    const macDir = `build/cawco-agent-sign/${current.commit.slice(0, 12)}`;
+    const bundleFiles = join(staging, "agent-bundle");
+    const seal = join(bundleFiles, "CodeResources");
+    await mkdir(bundleFiles, { recursive: true });
+    await run(
+      [
+        process.execPath,
+        "-e",
+        `const { AGENT_INFO_PLIST } = await import(${JSON.stringify(join(checkout, "packages/core/src/agent-bundle.ts"))}); await Bun.write(${JSON.stringify(join(bundleFiles, "Info.plist"))}, AGENT_INFO_PLIST);`,
+      ],
+      checkout
+    );
+    await run(["ssh", mac, `rm -rf '${macDir}' && mkdir -p '${macDir}'`]);
+    try {
+      await run([
+        "scp",
+        join(bundleFiles, "Info.plist"),
+        join(checkout, "scripts/binary/agent.entitlements"),
+        join(checkout, "scripts/binary/sign-agent-bundle.sh"),
+        `${mac}:${macDir}/`,
+      ]);
+      await run([
+        "ssh",
+        mac,
+        `bash --norc '${macDir}/sign-agent-bundle.sh' seal '${macDir}'`,
+      ]);
+      await run(["scp", `${mac}:${macDir}/CodeResources`, seal]);
+      for (const target of TARGETS) {
+        if (freemem() < 4 * 1024 ** 3) {
+          throw new Error(
+            "Release build refused: less than 4 GiB available memory"
+          );
+        }
+        const dir = join(staging, target);
+        await mkdir(dir, { recursive: true });
+        const binary = join(dir, "cawco");
+        const darwin = target.startsWith("darwin");
+        await run(
+          [
+            process.execPath,
+            "scripts/build-binary.ts",
+            target,
+            binary,
+            version,
+            current.commit,
+            "--skip-prepare",
+            ...(darwin ? ["--agent-code-resources", seal] : []),
+          ],
+          checkout
         );
-      }
-      const dir = join(staging, target);
-      await mkdir(dir, { recursive: true });
-      const binary = join(dir, "cawco");
-      await run(
-        [
-          process.execPath,
-          "scripts/build-binary.ts",
-          target,
-          binary,
-          version,
-          current.commit,
-          "--skip-prepare",
-        ],
-        checkout
-      );
-      if (target.startsWith("darwin")) {
-        const remote = `/tmp/cawco-binary-sign-${current.commit.slice(0, 12)}-${target}`;
-        await run(["ssh", current.macHost, "mkdir", "-p", remote]);
-        try {
-          await run(["scp", binary, `${current.macHost}:${remote}/cawco`]);
+        if (darwin) {
+          await run(["scp", binary, `${mac}:${macDir}/cawco`]);
           await run([
             "ssh",
-            current.macHost,
-            `codesign --force --sign - --preserve-metadata=entitlements '${remote}/cawco' && codesign --verify --strict '${remote}/cawco'`,
+            mac,
+            `bash --norc '${macDir}/sign-agent-bundle.sh' sign '${macDir}' '${target}' '${version}'`,
           ]);
-          await run(["scp", `${current.macHost}:${remote}/cawco`, binary]);
-        } finally {
-          await run(["ssh", current.macHost, "rm", "-rf", remote]);
+          await run(["scp", `${mac}:${macDir}/cawco`, binary]);
         }
+        // The tag form, so the file name carries no `+`.
+        const archive = `cawco-${releaseTag(manifest)}-${target}.tar.gz`;
+        await run(
+          ["tar", "-czf", join(staging, archive), "-C", dir, "cawco"],
+          checkout
+        );
+        const sha256 = new Bun.CryptoHasher("sha256")
+          .update(await Bun.file(join(staging, archive)).bytes())
+          .digest("hex");
+        const binarySha256 = new Bun.CryptoHasher("sha256")
+          .update(await Bun.file(binary).bytes())
+          .digest("hex");
+        manifest.artifacts.push({
+          target,
+          archive,
+          sha256,
+          size: (await stat(join(staging, archive))).size,
+          binarySha256,
+          binarySize: (await stat(binary)).size,
+        });
+        await writeFile(
+          join(staging, `${archive}.sha256`),
+          `${sha256}  ${archive}\n`
+        );
       }
-      // The tag form, so the file name carries no `+`.
-      const archive = `cawco-${releaseTag(manifest)}-${target}.tar.gz`;
-      await run(
-        ["tar", "-czf", join(staging, archive), "-C", dir, "cawco"],
-        checkout
-      );
-      const sha256 = new Bun.CryptoHasher("sha256")
-        .update(await Bun.file(join(staging, archive)).bytes())
-        .digest("hex");
-      const binarySha256 = new Bun.CryptoHasher("sha256")
-        .update(await Bun.file(binary).bytes())
-        .digest("hex");
-      manifest.artifacts.push({
-        target,
-        archive,
-        sha256,
-        size: (await stat(join(staging, archive))).size,
-        binarySha256,
-        binarySize: (await stat(binary)).size,
-      });
-      await writeFile(
-        join(staging, `${archive}.sha256`),
-        `${sha256}  ${archive}\n`
-      );
+    } finally {
+      await run(["ssh", mac, "rm", "-rf", macDir]);
+      // Not an artifact: only the archives and the manifest are published.
+      await rm(bundleFiles, { recursive: true, force: true });
     }
     await writeFile(
       join(staging, "SHA256SUMS"),

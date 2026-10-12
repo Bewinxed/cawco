@@ -9,19 +9,56 @@
  * whenever its job restarts it. Its handover publishes it the first time.
  */
 
+import { existsSync } from "node:fs";
 import { lstat, readlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { readKeeperVersion } from "@cawco/core/binary-installation";
+import {
+  readKeeperVersion,
+  versionDirectory,
+} from "@cawco/core/binary-installation";
 import { detach } from "@cawco/core/detach";
-import { MACHINE_ENDPOINT, publishKeeper } from "@cawco/core/keepers";
-import { runtimeVersion } from "@cawco/core/runtime";
+import { keeperOf, MACHINE_ENDPOINT, publishKeeper } from "@cawco/core/keepers";
+import { runtimeVersion, standalone } from "@cawco/core/runtime";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { placeChildren } from "./cgroup";
 import { SessiondServer } from "./server";
 
+/**
+ * A build's keeper job names its build by its endpoint (`sessiond-<v>.sock`).
+ * On macOS every keeper's job starts CawCo Agent.app, which holds the build
+ * `current` names (core agent-bundle.ts); the job of another build's keeper
+ * (the machine's keeper when a handover to the current build could not start
+ * one, or a retiring keeper launchd starts again) runs its own build, from its
+ * folder, in this same process. One whose folder is gone holds nothing and has
+ * nothing to run, and exits 0, which launchd does not restart.
+ */
+const runOwnBuild = (endpoint: string): void => {
+  const own = keeperOf(basename(endpoint));
+  if (!standalone || own?.kind !== "build" || own.version === runtimeVersion) {
+    return;
+  }
+  const build = join(versionDirectory(own.version), "cawco");
+  if (!existsSync(build)) {
+    console.log(
+      `[sessiond] this job is ${own.version}'s keeper, and that build is no longer on this machine; it exits`
+    );
+    process.exit(0);
+  }
+  console.log(
+    `[sessiond] this job is ${own.version}'s keeper; ${runtimeVersion} runs that build, ${build}`
+  );
+  if (!process.execve) {
+    throw new Error(
+      `[sessiond] ${runtimeVersion} has no process.execve to run ${build} with`
+    );
+  }
+  process.execve(build, [build, "sessiond"], process.env);
+};
+
 const main = async (): Promise<void> => {
   // Read directly: `CAWCO_ENV` has no key for sessiond's own override.
   const endpoint = process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint();
+  runOwnBuild(endpoint);
   // The machine's endpoint as a symlink is a build's keeper's: one started on
   // it (a legacy keeper's unit, restarted after its keeper was retired) would
   // take it over, or refuse it again every two seconds. Nothing here is

@@ -60,6 +60,7 @@ import {
   writeJsonAtomic,
 } from "@cawco/core/binary-installation";
 import type { BinaryUpdateState } from "@cawco/core/binary-updates";
+import { wrapperStartsBundle } from "@cawco/core/binary-wrapper";
 import {
   answers,
   currentKeeper,
@@ -183,15 +184,47 @@ const svc = (action: "install" | "restart", ids: readonly ServiceId[]) =>
 const startAgain = (ids: readonly ServiceId[]) =>
   process.platform === "darwin" ? svc("install", ids) : svc("restart", ids);
 
-/** Points a link in the binary root at `versions/<version>`, atomically: relative, as the installer and the wrapper write it. */
+/** Points a link in the binary root at `versions/<version>`, atomically: relative, as the installer and the wrapper write it. The keeper link moves alone; the `current` link through {@link pointCurrentAt}. */
 async function pointLinkAt(link: string, version: string): Promise<void> {
   const temporary = `${link}.${process.pid}`;
   await rm(temporary, { force: true });
   await symlink(join("versions", version), temporary);
   await rename(temporary, link);
 }
-const pointCurrentAt = (version: string) =>
-  pointLinkAt(join(binaryRoot(), "current"), version);
+/**
+ * Moves `current`, and on macOS puts the same build in CawCo Agent.app, which
+ * the wrapper starts every unit from: the build itself writes it (`cawco
+ * binary-bundle`), since only it carries the seal its own signature names
+ * (agent-bundle.ts). Not while the wrapper is one from before the bundle: then
+ * nothing starts from it, and the build being moved to (a rollback's) may not
+ * know it.
+ */
+async function pointCurrentAt(version: string): Promise<void> {
+  await pointLinkAt(join(binaryRoot(), "current"), version);
+  if (
+    process.platform !== "darwin" ||
+    !wrapperStartsBundle(
+      await readFile(join(binaryRoot(), "run"), "utf8").catch(() => "")
+    )
+  ) {
+    return;
+  }
+  const bundled = Bun.spawn(
+    [join(versionDirectory(version), "cawco"), "binary-bundle"],
+    { stdout: "pipe", stderr: "pipe" }
+  );
+  const [out, err, code] = await Promise.all([
+    new Response(bundled.stdout).text(),
+    new Response(bundled.stderr).text(),
+    bundled.exited,
+  ]);
+  if (code !== 0) {
+    throw new Error(
+      `${version} could not be put in CawCo Agent.app (exit ${code}): ${err.trim() || out.trim()}`
+    );
+  }
+  await say(`bundle: ${out.trim()}`);
+}
 
 async function migrationRunning(db: string | undefined): Promise<boolean> {
   if (!db) {
