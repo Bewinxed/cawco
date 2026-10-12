@@ -659,7 +659,7 @@ public enum Effect {
     /// The strength of Caw's panel's vermillion hairline between its sections (CawPanel, web and iOS), and of an unchosen session tab's rim in the iOS app (PaneTabsView); the dashboard's unchosen tabs wear tab-rim-mix-subtle. At this strength a status rim holds 3:1 against the tab's fill and the shelf in both themes: by day 83% clears the working and failed tones, by night 64% the failed tone, the hardest.
     /// By day and by night: read it with `value(for:)`.
     public static let tabRimMix = SchemeValue(light: 0.83, dark: 0.64)
-    /// The chosen session tab's rim strength (its opacity, a plain number so the rim's arithmetic can divide by it), on every width, when its session is working, needs you or failed: its top holds 3:1 against the shelf (WCAG non-text contrast) in both themes; its sides taper over tab-rim-taper up to the shoulder and read softer by design. Unchosen tabs wear tab-rim-mix-subtle, or no rim when idle.
+    /// The chosen session tab's rim strength (its opacity, a plain number so the rim's arithmetic can divide by it), on every width, when its session is working, needs you or failed: its top holds 3:1 against the shelf (WCAG non-text contrast) in both themes, and so do its sides at their mid-height, their taper (tab-rim-taper, eased out by tab-rim-taper-ease) whole well before it. Unchosen tabs wear tab-rim-mix-subtle, or no rim when idle.
     /// By day and by night: read it with `value(for:)`.
     public static let tabRimMixChosen = SchemeValue(light: 0.97, dark: 0.78)
     /// The chosen tab's rim strength when its session is idle or done, in the muted ink: its top holds 3:1 against the shelf (3.2:1 by day, 3.8:1 by night at 1px); its sides taper softer by design. By day 0.32 left its side at 1.4:1, by night at 2.0:1.
@@ -671,6 +671,8 @@ public enum Effect {
     public static let tabRimWidth: Double = 1
     /// The owner's tuning on the bench ("32"). How far, in px along the stroke, a session tab's rim fades out at each free end (the tips of its feet on the shelf), on every tab, in both themes, so a rim never stops on a hard cut (owner: "the rim should taper-progress-fade at the very edges"). A plain number for the rim's arithmetic (PaneTabs `.rim`); the fade stops short of the shoulders.
     public static let tabRimTaper: Double = 32
+    /// The shape of a rim's taper along the stroke from its tip: its ink rises as 1 - (1 - s/tab-rim-taper)^p, an ease-out from the tip, 0 at the tip and full at tab-rim-taper (or at the shoulder, where that comes first). At 6 it is half up 3.5px from the tip and 90% up by 32% of the taper's length (10.2px of 32), so the chosen tab's sides stand whole at their mid-height and hold 3:1 against the shelf, while the faint tail stays at the very tip. A plain number for the rim's arithmetic (PaneTabs `.rim`, as gradient stops through pow()); the stroke's narrowing to a point ends where this curve's ink is 90% whole.
+    public static let tabRimTaperEase: Double = 6
 }
 
 public enum Motion {

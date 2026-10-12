@@ -2784,7 +2784,7 @@
     "tab-rim-mix-chosen": {
       "$type": "number",
       "$value": "0.97",
-      "$description": "The chosen session tab's rim strength (its opacity, a plain number so the rim's arithmetic can divide by it), on every width, when its session is working, needs you or failed: its top holds 3:1 against the shelf (WCAG non-text contrast) in both themes; its sides taper over tab-rim-taper up to the shoulder and read softer by design. Unchosen tabs wear tab-rim-mix-subtle, or no rim when idle.",
+      "$description": "The chosen session tab's rim strength (its opacity, a plain number so the rim's arithmetic can divide by it), on every width, when its session is working, needs you or failed: its top holds 3:1 against the shelf (WCAG non-text contrast) in both themes, and so do its sides at their mid-height, their taper (tab-rim-taper, eased out by tab-rim-taper-ease) whole well before it. Unchosen tabs wear tab-rim-mix-subtle, or no rim when idle.",
       "$extensions": { "dev.cawco": { "dark": "0.78" } }
     },
     "tab-rim-mix-idle": {
@@ -2807,6 +2807,11 @@
       "$type": "number",
       "$value": "32",
       "$description": "The owner's tuning on the bench (\"32\"). How far, in px along the stroke, a session tab's rim fades out at each free end (the tips of its feet on the shelf), on every tab, in both themes, so a rim never stops on a hard cut (owner: \"the rim should taper-progress-fade at the very edges\"). A plain number for the rim's arithmetic (PaneTabs `.rim`); the fade stops short of the shoulders."
+    },
+    "tab-rim-taper-ease": {
+      "$type": "number",
+      "$value": "6",
+      "$description": "The shape of a rim's taper along the stroke from its tip: its ink rises as 1 - (1 - s/tab-rim-taper)^p, an ease-out from the tip, 0 at the tip and full at tab-rim-taper (or at the shoulder, where that comes first). At 6 it is half up 3.5px from the tip and 90% up by 32% of the taper's length (10.2px of 32), so the chosen tab's sides stand whole at their mid-height and hold 3:1 against the shelf, while the faint tail stays at the very tip. A plain number for the rim's arithmetic (PaneTabs `.rim`, as gradient stops through pow()); the stroke's narrowing to a point ends where this curve's ink is 90% whole."
     }
   },
   "motion": {

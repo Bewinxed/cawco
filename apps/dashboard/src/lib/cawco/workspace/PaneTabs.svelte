@@ -2137,27 +2137,45 @@
     --fn: 8;
     --tl: var(--tab-rim-taper);
     --taper: calc(var(--tl) * 1px);
+    /* The taper's shape (`tab-rim-taper-ease`, p): at x of the taper's
+       length from the tip its ink is 1 - (1 - x)^p, an ease-out, steep off
+       the tip and nearly whole by 40% of the length. The masks draw it as
+       stops at these fractions of the length (`--e…`, its ink there),
+       straight between them. */
+    --te: var(--tab-rim-taper-ease);
+    --e04: calc(1 - pow(0.96, var(--te)));
+    --e08: calc(1 - pow(0.92, var(--te)));
+    --e13: calc(1 - pow(0.87, var(--te)));
+    --e19: calc(1 - pow(0.81, var(--te)));
+    --e26: calc(1 - pow(0.74, var(--te)));
+    --e35: calc(1 - pow(0.65, var(--te)));
+    --e50: calc(1 - pow(0.5, var(--te)));
+    --e70: calc(1 - pow(0.3, var(--te)));
     --R: calc(var(--fn) + var(--tn) / 2);
     --A: calc(var(--R) * pi / 2);
-    /* How much of the stroke is left when the flared foot reaches the run:
-       all of it when the fade ends on the foot. */
+    /* How far along the taper the flared foot's quarter turn reaches (1
+       when the fade ends on the foot), and the ink there, where it meets
+       the run. */
     --a0: min(1, calc(var(--A) / max(var(--tl), 0.001)));
-    /* Where on the flare's quarter turn (from the run, 0deg, to the
-       shelf, 90deg) the fade begins. */
-    --phi-full: max(0deg, calc(90deg - var(--tl) / var(--R) * 1rad));
+    --ea0: calc(1 - pow(1 - var(--a0), var(--te)));
+    /* How far from the tip the stroke narrows, on the taper's curve: to
+       where its ink is 90% whole, (1 - 0.1^(1/p)) of its length. */
+    --tn90: calc((1 - pow(0.1, 1 / var(--te))) * var(--tl));
     /* Where on the flare (an angle up from its tip, about the quarter
-       turn's centre) the stroke starts to narrow: the taper's length round
-       it, never so near the tip that its inner edge would cross the shelf,
-       and at most the whole quarter. Its inner edge runs round at the
-       stroke's width (radius `--ro`) down to there, at `--px` out and
-       `--py` above the shelf, then on a curve that leaves along that
-       circle and lands flat on the shelf at the tip (its control on the
-       shelf at `--cx`). */
+       turn's centre) the stroke starts to narrow: that length round it,
+       never so near the tip that its inner edge would cross the shelf, and
+       at most 60deg of the turn, past which the curve below swells wider
+       than the stroke before it meets it (35% wider at the quarter on the
+       phone's flare). Its inner edge runs round at the stroke's width
+       (radius `--ro`) down to there, at `--px` out and `--py` above the
+       shelf, then on a curve that leaves along that circle and lands flat
+       on the shelf at the tip (its control on the shelf at `--cx`): the
+       widest the stroke can stand between its flare and the shelf. */
     --ro: calc(var(--fn) + var(--tn));
     --th: clamp(
       acos(calc(var(--fn) / var(--ro))),
-      calc(var(--tl) / var(--R) * 1rad),
-      90deg
+      calc(var(--tn90) / var(--R) * 1rad),
+      60deg
     );
     --px: calc(var(--ro) * sin(var(--th)) * 1px);
     --py: calc((var(--fn) - var(--ro) * cos(var(--th))) * 1px);
@@ -2328,7 +2346,11 @@
      run stay, so the corner where the two tops meet is one line.
 
      The plain side: down the outline to the shelf, narrowing to a point
-     there over the taper's length, or the foot's where that is shorter. */
+     there up to where the taper's ink is 90% whole (`--tn90`), or the
+     foot's top where that is lower, on an ease-out from the tip as its ink
+     does: its inner edge leaves the tip square across the stroke (its
+     control at the tip's height), so the stroke widens fast off the point
+     and slows into its full width. */
   .rim-plain {
     opacity: clamp(0, 2 - 2 * var(--pick), 1);
     clip-path: shape(
@@ -2336,8 +2358,9 @@
       arc to calc(var(--F) + var(--s)) var(--radius) of var(--radius) ccw,
       line to var(--F) calc(100% - var(--F)),
       line to var(--F) calc(100% - var(--F) * var(--u)),
-      line to calc(var(--F) + var(--t))
-        calc(100% - max(min(var(--taper), var(--F)), var(--F) * var(--u))),
+      curve to calc(var(--F) + var(--t))
+        calc(100% - max(min(var(--tn90) * 1px, var(--F)), var(--F) * var(--u)))
+        with calc(var(--F) + var(--t)) calc(100% - var(--F) * var(--u)),
       line to calc(var(--F) + var(--t)) calc(100% - var(--F)),
       line to calc(var(--F) + var(--s) + var(--t)) var(--radius),
       arc to calc(var(--F) + var(--s) + var(--radius)) var(--t) of
@@ -2345,16 +2368,26 @@
       close
     );
     /* Up from the tip: straight, so the stroke's length is its height.
-       The fade stops short of the shoulder. */
+       The taper's curve (`--e…`), stopped short of the shoulder: a stop
+       past it lands on it, where the stroke is whole. */
+    --cap: calc(100% - var(--radius));
     mask-image: linear-gradient(
       to top,
       transparent,
-      #000 min(var(--taper), 100% - var(--radius))
+      rgb(0 0 0 / var(--e04)) min(0.04 * var(--taper), var(--cap)),
+      rgb(0 0 0 / var(--e08)) min(0.08 * var(--taper), var(--cap)),
+      rgb(0 0 0 / var(--e13)) min(0.13 * var(--taper), var(--cap)),
+      rgb(0 0 0 / var(--e19)) min(0.19 * var(--taper), var(--cap)),
+      rgb(0 0 0 / var(--e26)) min(0.26 * var(--taper), var(--cap)),
+      rgb(0 0 0 / var(--e35)) min(0.35 * var(--taper), var(--cap)),
+      rgb(0 0 0 / var(--e50)) min(0.5 * var(--taper), var(--cap)),
+      rgb(0 0 0 / var(--e70)) min(0.7 * var(--taper), var(--cap)),
+      #000 min(var(--taper), var(--cap))
     );
   }
   /* The flared side: down the outline, then out round the sheet's flare
-     to the shelf's line, narrowing over the taper's length (`--th`) to a
-     point where it meets it. */
+     to the shelf's line, narrowing from where the taper's ink is 90%
+     whole (`--th`) to a point where it meets it. */
   .rim-flared {
     opacity: clamp(0, 2 * var(--pick) - 1, 1);
     mix-blend-mode: plus-lighter;
@@ -2375,18 +2408,59 @@
         calc(var(--radius) - var(--t)) cw,
       close
     );
-    /* Round the flare's quarter turn from its tip (a conic about the
-       turn's centre), then on up the run from where the turn left it. */
+    /* The taper's curve (`--e…`) along the stroke: round the flare's
+       quarter turn from its tip (a conic about the turn's centre, from the
+       run at 0deg to the tip at 90deg, a stop at x of the taper's length
+       standing x·tl/R rad up from the tip), then on up the run from where
+       the turn left it (`--ea0`). A stop past the turn's end lands on the
+       run's foot and one short of it on the turn's, each in the ink there,
+       so the two meet in one ink; on the run the fade stops short of the
+       shoulder, where the stroke is whole. */
+    --cap: calc(100% - var(--radius));
     mask-image:
       conic-gradient(
         from 90deg at 0 0,
-        rgb(0 0 0 / var(--a0)) 0deg var(--phi-full),
+        rgb(0 0 0 / var(--ea0)) 0deg,
+        rgb(0 0 0 / var(--ea0))
+          max(0deg, calc(90deg - var(--tl) / var(--R) * 1rad)),
+        rgb(0 0 0 / calc(1 - pow(1 - min(0.7, var(--a0)), var(--te))))
+          max(0deg, calc(90deg - 0.7 * var(--tl) / var(--R) * 1rad)),
+        rgb(0 0 0 / calc(1 - pow(1 - min(0.5, var(--a0)), var(--te))))
+          max(0deg, calc(90deg - 0.5 * var(--tl) / var(--R) * 1rad)),
+        rgb(0 0 0 / calc(1 - pow(1 - min(0.35, var(--a0)), var(--te))))
+          max(0deg, calc(90deg - 0.35 * var(--tl) / var(--R) * 1rad)),
+        rgb(0 0 0 / calc(1 - pow(1 - min(0.26, var(--a0)), var(--te))))
+          max(0deg, calc(90deg - 0.26 * var(--tl) / var(--R) * 1rad)),
+        rgb(0 0 0 / calc(1 - pow(1 - min(0.19, var(--a0)), var(--te))))
+          max(0deg, calc(90deg - 0.19 * var(--tl) / var(--R) * 1rad)),
+        rgb(0 0 0 / calc(1 - pow(1 - min(0.13, var(--a0)), var(--te))))
+          max(0deg, calc(90deg - 0.13 * var(--tl) / var(--R) * 1rad)),
+        rgb(0 0 0 / calc(1 - pow(1 - min(0.08, var(--a0)), var(--te))))
+          max(0deg, calc(90deg - 0.08 * var(--tl) / var(--R) * 1rad)),
+        rgb(0 0 0 / calc(1 - pow(1 - min(0.04, var(--a0)), var(--te))))
+          max(0deg, calc(90deg - 0.04 * var(--tl) / var(--R) * 1rad)),
         transparent 90deg
       ),
       linear-gradient(
         to top,
-        rgb(0 0 0 / var(--a0)),
-        #000 clamp(0px, var(--taper) - var(--A) * 1px, 100% - var(--radius))
+        rgb(0 0 0 / var(--ea0)),
+        rgb(0 0 0 / calc(1 - pow(1 - max(0.04, var(--a0)), var(--te))))
+          clamp(0px, 0.04 * var(--taper) - var(--A) * 1px, var(--cap)),
+        rgb(0 0 0 / calc(1 - pow(1 - max(0.08, var(--a0)), var(--te))))
+          clamp(0px, 0.08 * var(--taper) - var(--A) * 1px, var(--cap)),
+        rgb(0 0 0 / calc(1 - pow(1 - max(0.13, var(--a0)), var(--te))))
+          clamp(0px, 0.13 * var(--taper) - var(--A) * 1px, var(--cap)),
+        rgb(0 0 0 / calc(1 - pow(1 - max(0.19, var(--a0)), var(--te))))
+          clamp(0px, 0.19 * var(--taper) - var(--A) * 1px, var(--cap)),
+        rgb(0 0 0 / calc(1 - pow(1 - max(0.26, var(--a0)), var(--te))))
+          clamp(0px, 0.26 * var(--taper) - var(--A) * 1px, var(--cap)),
+        rgb(0 0 0 / calc(1 - pow(1 - max(0.35, var(--a0)), var(--te))))
+          clamp(0px, 0.35 * var(--taper) - var(--A) * 1px, var(--cap)),
+        rgb(0 0 0 / calc(1 - pow(1 - max(0.5, var(--a0)), var(--te))))
+          clamp(0px, 0.5 * var(--taper) - var(--A) * 1px, var(--cap)),
+        rgb(0 0 0 / calc(1 - pow(1 - max(0.7, var(--a0)), var(--te))))
+          clamp(0px, 0.7 * var(--taper) - var(--A) * 1px, var(--cap)),
+        #000 clamp(0px, var(--taper) - var(--A) * 1px, var(--cap))
       );
     mask-size:
       calc(var(--F) + var(--t) + 1px) var(--F),

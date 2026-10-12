@@ -613,6 +613,8 @@ async function rimInk(page: Page, strip: Strip, drawn: number[]) {
         const R = fn + tn / 2;
         const A = (R * Math.PI) / 2;
         const taper = Number.parseFloat(rs.getPropertyValue("--tl"));
+        // The taper's shape: its ink at x of its length is 1 - (1 - x)^ease.
+        const ease = Number.parseFloat(rs.getPropertyValue("--te"));
         const radius = Number.parseFloat(rs.getPropertyValue("--radius"));
         // How far its rows stand closer for its lean: the rim's y scale.
         const lean = new DOMMatrix(rs.transform === "none" ? "" : rs.transform)
@@ -686,6 +688,7 @@ async function rimInk(page: Page, strip: Strip, drawn: number[]) {
           chosen: el.hasAttribute("data-chosen"),
           opacity: r2(Number(rs.opacity)),
           taper,
+          ease,
           shoulderAt: r2(box.height - radius),
           own,
           sides,
@@ -1552,19 +1555,19 @@ for (const [key, value] of Object.entries(report)) {
  *    whose front tab wears none crosses none, and neither side draws;
  *  - corner: where two tops meet, the rims' own ink is one connected
  *    piece, or none (no stub, no notch);
- *  - 3:1: at rest, the chosen tab's top holds 3:1 against the shelf; its
- *    sides taper up to the shoulder and read softer by design, so they are
- *    reported (the cell's `sides`, at their mid-height) and not held to it
- *    (an unchosen tab's subtle rim is a status mark, its card edge the
- *    boundary);
+ *  - 3:1: at rest, the chosen tab's rim holds 3:1: its top against the
+ *    shelf, and each side it stands in front of against the fills either
+ *    side, at the side's mid-height (the cell's `sides`); an unchosen tab's
+ *    subtle rim is a status mark, its card edge the boundary;
  *  - idle none: the unchosen idle tabs' rims change no pixel (the tabs
  *    drawn chosen left out);
  *  - subtle: at rest, every unchosen tab that is not idle wears its rim at
  *    `tab-rim-mix-subtle`, under the chosen tab's, and it draws ink;
  *  - taper: every free foot of every rim in view, read from its tip, has
- *    no ink at the tip, gains it without falling back, and has it whole
- *    by the taper's length along the stroke (the shoulder's height at
- *    most);
+ *    no ink at the tip, gains it without falling back, has it 90% whole
+ *    within the first 40% of the taper's length (an ease-out from the tip)
+ *    and whole by the taper's length along the stroke (the shoulder's
+ *    height at most);
  *  - handover: no tab's rim strength moves more than 0.08 between 49%
  *    and 51% of the switch, and where a seam's front changes there its
  *    stroke's contrast against the fills holds within 15%;
@@ -1632,7 +1635,12 @@ function strokeFaults(n: Numbers): string[] {
     const rim = n.ink?.tabs.find((t: InkTab) => t.i === front);
     const fadeEnd = rim ? Math.min(rim.taper, rim.shoulderAt) : 0;
     const off = s.perRow.filter(([h, count, core]) => {
-      const fade = fadeEnd > 0 ? Math.min(1, h / fadeEnd) : 1;
+      // The taper's curve at that height (its ink at x of its length is
+      // 1 - (1 - x)^ease), whole past the shoulder.
+      const fade =
+        rim && fadeEnd > 0 && h < fadeEnd
+          ? 1 - (1 - Math.min(1, h / rim.taper)) ** rim.ease
+          : 1;
       const want = wantOf(strengthOf(n, front) * fade);
       if (want === "one") {
         return count !== 1 || core > s.one;
@@ -1655,16 +1663,19 @@ function strokeFaults(n: Numbers): string[] {
   });
   return [...rows, ...sides];
 }
-/** At rest, seams with the chosen tab in front, in view and out of the fades, whose stroke holds under 3:1. */
+/** At rest, the chosen tab's rim under 3:1: its top against the shelf, and each side it stands in front of at a shared edge (in view, out of the fades), against the fills either side at the side's mid-height. */
 const contrastFaults = (n: Numbers, at: string): string[] =>
   AT_REST.has(at)
-    ? n.tabs.flatMap((t) =>
-        t.chosen && t.visible > 0.5 && t.topVsShelf < 3
-          ? [`${t.i} top ${t.topVsShelf}:1`]
-          : []
-      )
+    ? [
+        ...n.tabs.flatMap((t) =>
+          t.chosen && t.visible > 0.5 && t.topVsShelf < 3
+            ? [`${t.i} top ${t.topVsShelf}:1`]
+            : []
+        ),
+        ...chosenSides(n).flatMap((c) => (c < 3 ? [`side ${c}:1`] : [])),
+      ]
     : [];
-/** At rest, the chosen tab's sides as they stand: each shared edge it is in front of, its stroke's contrast against the fills (read at the side's mid-height, where the taper softens it by design). */
+/** At rest, the chosen tab's sides as they stand: each shared edge it is in front of, its stroke's contrast against the fills, read at the side's mid-height. */
 const chosenSides = (n: Numbers): number[] =>
   sharedOf(n).flatMap((e) => {
     const front = n.tabs.find((t) => t.i === Number(e.front));
@@ -1683,12 +1694,15 @@ type InkTab = Ink["tabs"][number];
  * length, or the shoulder's height where that is shorter. That last only
  * when its foot is drawn `alone`: while the feet hand over, both drawn,
  * the other foot's ink lies across this one's path near the run, so its
- * whole is not this foot's.
+ * whole is not this foot's. Drawn alone, it also eases out from the tip:
+ * 90% whole within the first 40% of the taper's length (`taper`, the
+ * token's).
  */
 function taperPath(
   samples: { ink: number; s: number }[],
   full: number,
-  alone: boolean
+  alone: boolean,
+  taper: number
 ): { faults: string[]; reach: string } {
   // Whole: where the fade has ended, read from a px before its end (a
   // taper as long as the side ends at the shoulder, where reading stops).
@@ -1723,7 +1737,11 @@ function taperPath(
     out.push(`${Math.round((past.ink / whole) * 100)}% at ${past.s}px`);
   }
   const at = (f: number) => samples.find((p) => p.ink >= whole * f)?.s ?? "-";
-  return { faults: out, reach: `${at(0.5)}/${at(0.9)}` };
+  const ninety = at(0.9);
+  if (alone && (ninety === "-" || ninety > taper * 0.4)) {
+    out.push(`90% at ${ninety}px > 40% of ${taper}`);
+  }
+  return { faults: out, reach: `${at(0.5)}/${ninety}` };
 }
 /** Each free foot of each rim in view: its plain path and its flared path, where each is drawn. */
 function taperOf(ink: Ink | null | undefined) {
@@ -1765,7 +1783,7 @@ function taperOf(ink: Ink | null | undefined) {
             tab: t.i,
             side: side.side,
             path: p.name,
-            ...taperPath(p.samples, p.full, p.alone),
+            ...taperPath(p.samples, p.full, p.alone, t.taper),
           }));
         })
   );
