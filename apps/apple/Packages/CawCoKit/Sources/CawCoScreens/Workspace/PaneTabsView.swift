@@ -1625,7 +1625,7 @@ final class TabView: UIView {
     /// else its card. Its pulled options grow out of it (`TabOptionsSheet`),
     /// and fold back into it once the finger has let go.
     var surface: UIColor {
-        (chosen ? Palette.surfaceRecess : card).resolvedColor(with: traitCollection)
+        (chosen ? Palette.tabSheet : card).resolvedColor(with: traitCollection)
     }
 
     /// What stands on the tab, its title and its rim, without its card or
@@ -1696,7 +1696,9 @@ final class TabView: UIView {
         CATransaction.setDisableActions(!animated)
         let fill: UIColor = pressed ? Palette.surfaceFill : (hovering && !chosen ? Palette.surfaceHover : card)
         tint.fillColor = fill.resolvedColor(with: traits).cgColor
-        sheet.fillColor = (pressed ? Palette.surfaceFill : Palette.surfaceRecess).resolvedColor(with: traits).cgColor
+        // The chosen tab's sheet (`tab-sheet`): the transcript's head fades
+        // into the same surface (TranscriptView's ground under its EdgeFade).
+        sheet.fillColor = (pressed ? Palette.surfaceFill : Palette.tabSheet).resolvedColor(with: traits).cgColor
         // The sheet shows as far as the tab is chosen, over its own card,
         // which hides once the sheet covers it whole; the chevron (its slot
         // kept on every tab) comes and goes with it. They follow the
