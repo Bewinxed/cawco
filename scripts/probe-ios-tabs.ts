@@ -94,11 +94,6 @@ const respond = (request: Seen) =>
         words: Array.from({ length: 900 }, (_, n) => `word${n} `),
       }
     : { everyMs: 10, words: ["Done."] };
-// A CawCo workspace's boundary refuses a connect to a Unix socket under its
-// cache dir and allows one under its TMPDIR: the fleet's sockets go there.
-if (process.env.CAWCO_WORKSPACE && process.env.TMPDIR) {
-  process.env.XDG_CACHE_HOME = process.env.TMPDIR.replace(/\/$/, "");
-}
 const fleet = await scratchFleet({ name: "probe-ios-tabs", respond });
 const sims: string[] = [];
 

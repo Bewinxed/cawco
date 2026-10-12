@@ -222,12 +222,19 @@ r 'test -n "${SSH_AUTH_SOCK:-}"' && row "SSH_AUTH_SOCK set" OPEN || row "SSH_AUT
 r "python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect(sys.argv[1])' '$CAWCO_SESSIOND_ENDPOINT' 2>/dev/null" && row "connect sessiond" OPEN || row "connect sessiond" BLOCKED
 agent_sock=$(ls -d /private/tmp/com.apple.launchd.*/Listeners 2>/dev/null | head -1)
 if [ -n "$agent_sock" ]; then r "python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect(sys.argv[1])' '$agent_sock' 2>/dev/null" && row "connect launchd's ssh-agent" OPEN || row "connect launchd's ssh-agent" BLOCKED; fi
-# Sockets under ~/.cawco that are not this workspace's own scratch dir's: one
-# in another workspace's scratch dir (a sibling of this one's), one in this
-# workspace's state dir. Each listens on the host for the row's length.
-other_tmp=$(dirname "$tmp")/check$(printf %s "$id" | cut -c1-3)
-mkdir -p "$other_tmp"
-for place in "another workspace's scratch dir:$other_tmp/other.sock" "this workspace's state dir:$state/host.sock"; do
+colima_sock=$HOME/.colima/default/docker.sock
+if [ -S "$colima_sock" ]; then r "python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect(sys.argv[1])' '$colima_sock' 2>/dev/null" && row "connect Colima's docker socket" OPEN || row "connect Colima's docker socket" BLOCKED; fi
+# Sockets that are not under this workspace's own writable roots: one in
+# another workspace's scratch dir (a sibling of this one's), one in this
+# workspace's state dir, one in another workspace's clone (a sibling of this
+# one's) and a host daemon's under home. Each listens on the host for the
+# row's length.
+short=$(printf %s "$id" | cut -c1-3)
+other_tmp=$(dirname "$tmp")/check$short
+other_clone=$(dirname "$clone")/check-clone-$short
+home_daemon=$HOME/.mac-check-$short
+mkdir -p "$other_tmp" "$other_clone" "$home_daemon"
+for place in "another workspace's scratch dir:$other_tmp/other.sock" "this workspace's state dir:$state/host.sock" "another workspace's clone:$other_clone/dev.sock" "a host daemon's dir under home:$home_daemon/daemon.sock"; do
   label="connect a socket in ${place%%:*}" sock=${place#*:}
   rm -f "$sock"
   /usr/bin/python3 -c 'import socket, sys, time
@@ -242,7 +249,7 @@ s = socket.socket(socket.AF_UNIX); s.bind(sys.argv[1]); s.listen(1); time.sleep(
   kill "$listener" 2>/dev/null; wait "$listener" 2>/dev/null
   rm -f "$sock"
 done
-rm -rf "$other_tmp"
+rm -rf "$other_tmp" "$other_clone" "$home_daemon"
 r "kill -0 $$ 2>/dev/null" && row "signal a process outside" OPEN || row "signal a process outside" BLOCKED
 r '/bin/launchctl print gui/$(id -u) >/dev/null 2>&1' && row "launchctl" OPEN || row "launchctl" BLOCKED
 source_hooks=$(cd "$source_repo" && git rev-parse --path-format=absolute --git-path hooks)
@@ -330,10 +337,12 @@ if [ -n "$xcode_dir" ]; then
     esac
   fi
 fi
-# A tool's own socket in $TMPDIR: bound, then connected to, inside.
+# A tool's own socket in each of the workspace's writable roots: bound, then
+# connected to, inside.
 cat > "$tmp/sock-check.py" <<'PY'
-import os, socket
-path = os.path.join(os.environ["TMPDIR"], "sock-check.sock")
+import os, socket, sys
+os.makedirs(sys.argv[1], exist_ok=True)
+path = os.path.join(sys.argv[1], "sock-check-%d.sock" % os.getpid())
 if os.path.exists(path):
     os.unlink(path)
 server = socket.socket(socket.AF_UNIX)
@@ -347,7 +356,9 @@ client.sendall(b"ok")
 print(conn.recv(2).decode(), path)
 os.unlink(path)
 PY
-checked "bind and connect a unix socket in \$TMPDIR" r 'set -o pipefail; /usr/bin/python3 "$TMPDIR/sock-check.py" 2>&1 | tail -3'
+checked "bind and connect a unix socket in \$TMPDIR" r 'set -o pipefail; /usr/bin/python3 "$TMPDIR/sock-check.py" "$TMPDIR" 2>&1 | tail -3'
+checked "bind and connect a unix socket in \$XDG_CACHE_HOME" r 'set -o pipefail; /usr/bin/python3 "$TMPDIR/sock-check.py" "$XDG_CACHE_HOME/mac-check" 2>&1 | tail -3'
+checked "bind and connect a unix socket in the clone" r 'set -o pipefail; /usr/bin/python3 "$TMPDIR/sock-check.py" "$PWD" 2>&1 | tail -3'
 cat > "$tmp/pw-check.mjs" <<'JS'
 import { createServer } from "node:http";
 import { chromium } from "playwright-core";

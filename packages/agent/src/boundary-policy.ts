@@ -163,12 +163,19 @@ export interface SeatbeltPlace {
  * Besides the policy: signals stay inside the sandbox, `launchctl` does not
  * run (so nothing reaches launchd), the scratch dir itself cannot be removed,
  * no keychain service is looked up ({@link KEYCHAIN_MACH_SERVICES}), and no
- * unix socket under {@link SeatbeltPlace.hostSockets} or a credential store
- * is reached but the tool and git doors' and those in the workspace's own
- * scratch dir: tools put their own sockets in `$TMPDIR` and connect back to
- * them (a browser's process singleton, a language server), and the scratch
- * dir lies under CawCo's state, where every other workspace's scratch dir
- * stays out of reach. The network is the host's: Seatbelt cannot judge a
+ * unix socket under {@link SeatbeltPlace.hostSockets} or a read-denied path
+ * (the home dir, every credential store) is reached but the tool and git
+ * doors' and those under the workspace's own writable roots: tools put their
+ * own sockets where they write and connect back to them (a browser's process
+ * singleton in `$TMPDIR`, a language server, a probe's sessiond under
+ * `$XDG_CACHE_HOME`). So a daemon's socket under home stays out of reach
+ * (Colima's `~/.colima/default/docker.sock`, a key agent's), and so do the
+ * agent's and sessiond's, every other workspace's clone, scratch dir and
+ * doors. The cache is every workspace's, as on Linux: a socket one binds
+ * there another reaches, as it already reaches every file the other writes
+ * there. Allows come after denies, as srt writes its `allowUnixSockets`
+ * (`(allow network-outbound (remote unix-socket (subpath …)))`,
+ * macos-sandbox-utils.ts). The network is the host's: Seatbelt cannot judge a
  * destination by the name it resolves.
  */
 export const seatbeltProfile = (
@@ -180,6 +187,13 @@ export const seatbeltProfile = (
     ...policy.allowRead.map((path) => ({ path, allow: true })),
   ].sort(
     (a, b) => depth(a.path) - depth(b.path) || Number(a.allow) - Number(b.allow)
+  );
+  const socketDenies = [...new Set([...place.hostSockets, ...policy.denyRead])];
+  // The workspace's own writable roots a socket deny covers: its clone, its
+  // scratch dir and the workspaces' cache, all under home. A root no deny
+  // covers (Apple's per-user temp dir) needs no rule of its own.
+  const ownSockets = policy.allowWrite.filter((root) =>
+    socketDenies.some((denied) => within(root, denied))
   );
   const lookups = new Set<string>();
   for (const path of policy.allowRead) {
@@ -217,15 +231,13 @@ export const seatbeltProfile = (
       (service) => `  (global-name ${sbString(service)})`
     ),
     ")",
-    ...[...new Set([...place.hostSockets, ...policy.denyRead])]
-      .filter((path) => path !== policy.home)
-      .map(
-        (path) =>
-          `(deny network-outbound (remote unix-socket (subpath ${sbString(path)})))`
-      ),
-    ...[...place.doors, policy.scratch].map(
-      (door) =>
-        `(allow network-outbound (remote unix-socket (subpath ${sbString(door)})))`
+    ...socketDenies.map(
+      (path) =>
+        `(deny network-outbound (remote unix-socket (subpath ${sbString(path)})))`
+    ),
+    ...[...place.doors, ...ownSockets].map(
+      (path) =>
+        `(allow network-outbound (remote unix-socket (subpath ${sbString(path)})))`
     ),
     "",
   ].join("\n");
