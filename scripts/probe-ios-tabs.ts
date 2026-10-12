@@ -676,10 +676,11 @@ const readable = (f: Foot): f is Extract<Foot, { kind: "free" }> =>
  * "feet"): at every held stop, each tab's flared foot in front of its
  * neighbour and in view draws its ink within 0.03 of its sheet's opacity,
  * read against the same foot drawn whole in the same frame; part way
- * through each held switch, every stop reads a foot of a tab the switch
- * moves, and each of its two tabs has a foot read at some stop (a tab can
- * stand with one side under its neighbour and the other in the strip's
- * edge fade for half the switch: the first tab, arriving). And every side
+ * through each held switch, each of its two tabs has a foot read at some
+ * stop, as the web proof asks (a tab can stand with one side under its
+ * neighbour and the other in the strip's edge fade for half the switch,
+ * the first tab arriving; and on the phone's row, mid-jump, the strip
+ * scrolls both tabs' feet into its fades at once). And every side
  * under its neighbour's card has no foot to draw and changes no pixel
  * (`judgeCovered`).
  */
@@ -699,25 +700,21 @@ function judgeFeet(run: string, log: string) {
   const shown = read
     .filter(({ r }) => r.sheet > 0.001 && r.sheet < 0.999)
     .map(({ r, side, ink }) => `${r.stop} ${r.id} ${side} ${r.sheet}/${ink}`);
-  // Each held switch, part way (the sheets between rest and whole): a foot
-  // read at every stop, and each of its two tabs read at some stop.
+  // Each held switch, part way (the sheets between rest and whole): each of
+  // its two tabs read at some stop.
   const unread = ["step-held", "jump-held"].flatMap((held) => {
-    const mid = ["t25", "f45", "t50", "f55", "t75"].map((stop) =>
-      rows.filter(
-        (r) =>
-          r.stop === `${held}-${stop}` &&
-          r.sheet > 0.001 &&
-          r.sheet < 0.999 &&
-          r.sides.some(([, f]) => readable(f))
-      )
+    const tabs = new Set(
+      rows
+        .filter(
+          (r) =>
+            r.stop.startsWith(`${held}-`) &&
+            r.sheet > 0.001 &&
+            r.sheet < 0.999 &&
+            r.sides.some(([, f]) => readable(f))
+        )
+        .map((r) => r.id)
     );
-    const stops = mid.flatMap((here, k) =>
-      here.length > 0 ? [] : [`${held} stop ${k} no foot read`]
-    );
-    const tabs = new Set(mid.flat().map((r) => r.id));
-    return tabs.size >= 2
-      ? stops
-      : [...stops, `${held} ${tabs.size} of its two tabs read`];
+    return tabs.size >= 2 ? [] : [`${held} ${tabs.size} of its two tabs read`];
   });
   const faults = [...off, ...unread];
   check(
