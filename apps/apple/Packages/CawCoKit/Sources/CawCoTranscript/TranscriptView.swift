@@ -1956,10 +1956,11 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         let latestShown = landed && farFromLatest && rowsDrawn
         latestButton.show(latestShown)
         // Over rows drawn only: with none, the pane says why in their place.
+        var toastFor: (SessionTranscript, ReadFault)?
         if rowsDrawn, let transcript, let fault = transcript.behind {
             behind.say(Self.notCaughtUp(fault) { [hub] in hub?.fleet.machineName($0) ?? $0 }, action: Self.dockAction(fault))
             behind.show(true)
-            toastBehind(transcript, fault)
+            toastFor = (transcript, fault)
         } else {
             behind.show(false)
         }
@@ -1970,6 +1971,15 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             if !behind.isHidden, !UIAccessibility.isReduceMotionEnabled {
                 Motion.easeOut.animator(latestShown ? Motion.durPanel : Motion.durExit) { self.layoutIfNeeded() }.startAnimation()
             }
+            Toast.floorsMoved()
+        }
+        // The toast stands on the dock where the dock now stands: its words
+        // and its place laid out first. Toasted before, it measured the dock
+        // where it stood a moment ago (its old line, or not yet over "Jump to
+        // latest").
+        if let (transcript, fault) = toastFor {
+            layoutIfNeeded()
+            toastBehind(transcript, fault)
         }
         // A catch-up is one stretch from its start to its end, each a fact
         // that moves with reads alone. It starts over rows already drawn when

@@ -114,10 +114,14 @@ private final class ToastWindow: UIWindow {
         let rest = place(toast, at: 0)
         #if DEBUG
         // Where it rests against the highest floor showing, for a simulator pass to read.
-        let line = String(format: "toast stands: x %.1f y %.1f w %.1f h %.1f foot %.1f floor top %@ clear %@", rest.x - toast.bounds.width / 2,
-                          rest.y - toast.bounds.height / 2, toast.bounds.width, toast.bounds.height, rest.y + toast.bounds.height / 2,
+        // Where it enters from: `popRise` short of its place on its edge's side, its foot that much lower on a desk.
+        let entering = narrow || UIAccessibility.isReduceMotionEnabled ? 0 : Motion.popRise
+        let line = String(format: "toast stands: x %.1f y %.1f w %.1f h %.1f foot %.1f enters foot %.1f floor top %@ clear %@ entering clear %@",
+                          rest.x - toast.bounds.width / 2, rest.y - toast.bounds.height / 2, toast.bounds.width, toast.bounds.height,
+                          rest.y + toast.bounds.height / 2, rest.y + toast.bounds.height / 2 + entering,
                           floorTop.map { String(format: "%.1f", $0) } ?? "none",
-                          floorTop.map { rest.y + toast.bounds.height / 2 <= $0 - Space.space3 + 0.5 ? "true" : "false" } ?? "n/a")
+                          floorTop.map { rest.y + toast.bounds.height / 2 <= $0 - Space.space3 + 0.5 ? "true" : "false" } ?? "n/a",
+                          floorTop.map { rest.y + toast.bounds.height / 2 + entering <= $0 ? "true" : "false" } ?? "n/a")
         Logger(subsystem: "dev.cawco.app", category: "Transcript").notice("\(line, privacy: .public)")
         #endif
         let still = UIAccessibility.isReduceMotionEnabled
@@ -167,6 +171,14 @@ private final class ToastWindow: UIWindow {
     func restandOnFloors() {
         guard !toasts.isEmpty, !narrow else { return }
         restack()
+        #if DEBUG
+        // Each toast's new foot against the floor, for a simulator pass to read.
+        for (index, toast) in toasts.enumerated() {
+            let rest = place(toast, at: index)
+            let line = String(format: "toast restands: foot %.1f floor top %@", rest.y + toast.bounds.height / 2, floorTop.map { String(format: "%.1f", $0) } ?? "none")
+            Logger(subsystem: "dev.cawco.app", category: "Transcript").notice("\(line, privacy: .public)")
+        }
+        #endif
     }
 
     private func restack(except arriving: ToastView? = nil) {
