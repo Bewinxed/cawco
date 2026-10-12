@@ -70,4 +70,6 @@ build.bak.*/
 
 # The mascot tracers: Python bytecode, and regress.py's scratch (the old tracer, its last report).
 assets/mascot/scripts/__pycache__/
+# testflight.py's bytecode, left by a check that runs its --dry-run.
+apps/apple/scripts/__pycache__/
 assets/mascot/scripts/.regress/
