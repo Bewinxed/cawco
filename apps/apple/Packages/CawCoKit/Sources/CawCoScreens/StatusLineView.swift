@@ -12,7 +12,10 @@ import UIKit
 /// the Mac one click short of it, the line naming that click: `LocalNetwork
 /// .refusal`): coming back reconnects by itself (`HubConnection
 /// .becameActive`), so there is no Reconnect beside it. The words wrap, never
-/// cut. Each change of phase cross-fades.
+/// cut, and the action wraps under them when the two do not fit on one line
+/// (StatusLine.svelte `.line`: `flex-wrap: wrap`, `gap: space-1 space-2`),
+/// never squeezed: in the rail's width "Open Settings" was drawn 2pt wide.
+/// Each change of phase cross-fades.
 final class StatusLineView: UIView {
     enum Phase: Equatable {
         case refused, unreachable, connecting, reading, connected
@@ -21,7 +24,11 @@ final class StatusLineView: UIView {
     private let glyph = GlyphView(.warning, size: Size.iconSm, tint: Palette.statusFailInk)
     private let words = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
     private var reconnect: UIButton!
+    /// The glyph and the words, one pair.
+    private let said = UIStackView()
+    private let spacer = UIView()
     private let row = UIStackView()
+    private lazy var saidFills = said.widthAnchor.constraint(equalTo: row.widthAnchor)
     private var phase: Phase?
     private var clock: Timer?
     private weak var hub: HubConnection?
@@ -37,12 +44,16 @@ final class StatusLineView: UIView {
             }
         }
         words.tabular = true
-        row.addArrangedSubview(glyph)
-        row.addArrangedSubview(words)
+        said.addArrangedSubview(glyph)
+        said.addArrangedSubview(words)
+        said.spacing = Space.space1
+        said.alignment = .center
+        reconnect.setContentCompressionResistancePriority(.required, for: .horizontal)
+        reconnect.setContentHuggingPriority(.required, for: .horizontal)
+        row.addArrangedSubview(said)
         row.addArrangedSubview(reconnect)
-        row.addArrangedSubview(UIView())
-        row.spacing = Space.space1
-        row.setCustomSpacing(Space.space2, after: words)
+        row.addArrangedSubview(spacer)
+        row.spacing = Space.space2
         row.alignment = .center
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
@@ -122,6 +133,8 @@ final class StatusLineView: UIView {
         }
         let action = phase == .refused ? LocalNetwork.settingsAction : hub.socket == .connecting ? "Connecting…" : "Reconnect"
         KitButton.setTitle(action, of: reconnect, variant: .outline, height: .xs)
+        // New words or a new action: whether the two fit on one line is asked again.
+        setNeedsLayout()
         #if DEBUG
         // What the line says, for a simulator pass to read (probe-ios-catchup.ts `--local-network`).
         let said = "\(words.text ?? "")|\(down ? action : "")"
@@ -135,6 +148,28 @@ final class StatusLineView: UIView {
     #if DEBUG
     private var lastSaid = ""
     #endif
+
+    /// One line while the words and the action fit beside each other; else
+    /// the action wraps under the words, at the line's start.
+    override func layoutSubviews() {
+        let width = bounds.width
+        if width > 0 {
+            let wordsWidth = words.text == nil ? 0 : words.intrinsicContentSize.width
+            let glyphWidth = glyph.isHidden ? 0 : Size.iconSm + Space.space1
+            let actionWidth = reconnect.isHidden ? 0 : Space.space2 + reconnect.intrinsicContentSize.width
+            let wraps = glyphWidth + wordsWidth + actionWidth > width
+            let axis: NSLayoutConstraint.Axis = wraps ? .vertical : .horizontal
+            if row.axis != axis {
+                row.axis = axis
+                row.alignment = wraps ? .leading : .center
+                row.spacing = wraps ? Space.space1 : Space.space2
+                spacer.isHidden = wraps
+                // Wrapped, the words take the line's whole width to wrap in.
+                saidFills.isActive = wraps
+            }
+        }
+        super.layoutSubviews()
+    }
 
     override func willMove(toWindow newWindow: UIWindow?) {
         super.willMove(toWindow: newWindow)
