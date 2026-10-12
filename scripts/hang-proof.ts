@@ -142,6 +142,8 @@ interface Card {
   open: (page: Page) => Promise<void>;
   /** The bench it opens on: the glass's on a page the shell shows whole. */
   route: string;
+  /** It opens with no hang to catch (a mouse's tab menu, the bench's staged panel): its rest alone is captured. */
+  still?: boolean;
 }
 
 const GLASS = "[data-bar-group]";
@@ -170,6 +172,21 @@ function cardsAt(touch: boolean): Card[] {
   const list: Card[] = [
     glass("caw", ".kit-pop.caw-pop", (page) => page.click("[data-needs-caw]")),
     {
+      // Caw's panel with rows: the real CawPanel in its HangCard on the
+      // glass, on the bench's staged feed (an update, five logins, two asks).
+      ...glass(
+        "caw-staged",
+        ".kit-pop.caw-pop[data-state='open']",
+        async () => {
+          /* open from the bench's own load */
+        }
+      ),
+      route: touch
+        ? "/motion/caw-notices?frame&fixture=full&width=phone"
+        : "/motion/caw-notices?fixture=full&width=desk",
+      still: true,
+    },
+    {
       name: "session-card",
       route: TABS_ROUTE,
       card: ".kit-pop.session-details-popover",
@@ -187,6 +204,8 @@ function cardsAt(touch: boolean): Card[] {
       anchor: ".session-tabs .tab[data-chosen]",
       open: tabOptions,
       close: (page) => page.keyboard.press("Escape"),
+      // A mouse's menu opens beside the pointer, a plain kit menu.
+      still: !touch,
     },
   ];
   if (touch) {
@@ -220,7 +239,11 @@ async function boxOf(page: Page, sel: string) {
   }, sel);
 }
 
-async function shoot(page: Page, card: Card, file: string) {
+async function shoot(
+  page: Page,
+  card: Card,
+  file: string
+): Promise<{ x: number; y: number }> {
   const a = await boxOf(page, card.anchor);
   const c = await boxOf(page, card.card);
   const vp = page.viewportSize() ?? { width: 0, height: 0 };
@@ -240,6 +263,7 @@ async function shoot(page: Page, card: Card, file: string) {
     clip: { x: left, y: top, width: right - left, height: bottom - top },
     animations: "allow",
   });
+  return { x: left, y: top };
 }
 
 /** Freezes the newest hang run at `pct` with everything else landed. */
@@ -312,6 +336,13 @@ async function measure(page: Page, card: Card) {
         : ab.bottom;
       const joinInk = footEl ? Number(getComputedStyle(footEl).opacity) : null;
       return {
+        card: {
+          left: cb.left,
+          top: cb.top,
+          right: cb.right,
+          bottom: cb.bottom,
+        },
+        foot,
         footGap: +(cb.top - foot).toFixed(2),
         trailing: +(cb.right - ab.right).toFixed(2),
         leading: +(cb.left - ab.left).toFixed(2),
@@ -327,6 +358,141 @@ async function measure(page: Page, card: Card) {
       };
     },
     { c: card.card, a: card.anchor, f: card.foot }
+  );
+}
+
+type Measured = Awaited<ReturnType<typeof measure>>;
+let lab: Page | null = null;
+
+/**
+ * A rest capture's pixels where the card meets its anchor (device px, scale
+ * 2), each against what stands above and below it:
+ *
+ *  - `seam`: across the neck (inside its flares), the pixels within 2px of
+ *    the foot that differ by more than 3 levels from both the anchor 4px
+ *    above and the card 4px below (a line drawn between them), and the
+ *    largest such step (`seamMax`);
+ *  - `edge`: down a flush side from 8px above the foot to 12px under it,
+ *    each row's outermost ink column inside the card's box (a pixel 16 levels off the fill 3px in),
+ *    as offsets from the card's edge, and the rows with none (a break);
+ *  - `lines`: 30px in from the card's side away from the neck, the
+ *    runs of rows within 6px of the card's top that differ from both the
+ *    page 10px above and the card 10px below, split where their ink turns:
+ *    the lines its top edge reads as (one is the card's edge; two is a
+ *    double line).
+ */
+async function analyse(
+  file: string,
+  origin: { x: number; y: number },
+  at: Measured,
+  width: number
+) {
+  if (!at) {
+    return null;
+  }
+  lab ??= await browser.newPage();
+  const src = `data:image/png;base64,${readFileSync(join(OUT, file)).toString("base64")}`;
+  const neckPx = at.neck.map((v) => Number.parseFloat(v) || 0);
+  return lab.evaluate(
+    async (g) => {
+      const { clip, card, foot, neck, flush, viewport } = g;
+      const img = new Image();
+      img.src = g.src;
+      await img.decode();
+      const c = document.createElement("canvas");
+      c.width = img.width;
+      c.height = img.height;
+      const ctx = c.getContext("2d") as CanvasRenderingContext2D;
+      ctx.drawImage(img, 0, 0);
+      const { data } = ctx.getImageData(0, 0, c.width, c.height);
+      const S = 2;
+      const px = (x: number, y: number) => {
+        const i = (Math.round(y) * c.width + Math.round(x)) * 4;
+        return [data[i], data[i + 1], data[i + 2]];
+      };
+      const off = (a: number[], b: number[]) =>
+        Math.max(...a.map((v, k) => Math.abs(v - b[k])));
+      const X = (css: number) => (css - clip.x) * S;
+      const Y = (css: number) => (css - clip.y) * S;
+      const [start, end, flareStart, flareEnd] = neck;
+      // Across the neck.
+      let seam = 0;
+      let seamMax = 0;
+      const from = X(card.left + start + flareStart + 3);
+      const to = X(card.left + end - flareEnd - 3);
+      const fy = Y(foot);
+      for (let x = from; x <= to; x += 1) {
+        const above = px(x, fy - 8);
+        const below = px(x, fy + 8);
+        for (let y = fy - 4; y < fy + 4; y += 1) {
+          const p = px(x, y);
+          const step = Math.min(off(p, above), off(p, below));
+          if (step > 3) {
+            seam += 1;
+            seamMax = Math.max(seamMax, step);
+          }
+        }
+      }
+      // Down a flush side, where one is drawn (not the screen's edge).
+      let edge: { offsets: number[]; breaks: number } | null = null;
+      if (flush === "end" ? card.right < viewport : flush === "start") {
+        const side = flush === "end" ? X(card.right) - 1 : X(card.left);
+        const inward = flush === "end" ? -1 : 1;
+        const offsets = new Set<number>();
+        let breaks = 0;
+        for (let y = fy - 16; y < fy + 24; y += 1) {
+          const fill = px(side + inward * 6, y);
+          let hit: number | null = null;
+          for (let k = 0; k <= 3; k += 1) {
+            if (off(px(side + inward * k, y), fill) > 16) {
+              hit = k;
+              break;
+            }
+          }
+          if (hit === null) {
+            breaks += 1;
+          } else {
+            offsets.add(hit);
+          }
+        }
+        edge = { offsets: [...offsets], breaks };
+      }
+      // The lines the top edge reads as, outside the neck.
+      const lx = X(start > 40 ? card.left + 30 : card.right - 30);
+      const ty = Y(card.top);
+      const page = px(lx, ty - 20);
+      const inside = px(lx, ty + 20);
+      const rows: number[] = [];
+      const inks: number[][] = [];
+      for (let y = ty - 12; y < ty + 12; y += 1) {
+        const p = px(lx, y);
+        if (off(p, page) > 16 && off(p, inside) > 16) {
+          rows.push(y - ty);
+          inks.push(p);
+        }
+      }
+      // A line ends where the rows stop, or where their ink turns.
+      let lines = 0;
+      rows.forEach((r, i) => {
+        if (
+          i === 0 ||
+          r !== rows[i - 1] + 1 ||
+          off(inks[i], inks[i - 1]) > 24
+        ) {
+          lines += 1;
+        }
+      });
+      return { seam, seamMax, edge, lines, lineRows: rows };
+    },
+    {
+      src,
+      clip: origin,
+      card: at.card,
+      foot: at.foot,
+      neck: neckPx,
+      flush: at.flush,
+      viewport: width,
+    }
   );
 }
 
@@ -348,7 +514,8 @@ for (const view of VIEWS) {
     for (const card of cardsAt(view.touch)) {
       const key = `${card.name}-${view.w}-${theme}`;
       try {
-        await page.goto(`${BASE}${card.route}`, {
+        const sep = card.route.includes("?") ? "&" : "?";
+        await page.goto(`${BASE}${card.route}${sep}theme=${theme}`, {
           waitUntil: "domcontentloaded",
         });
         await page.waitForSelector(
@@ -357,6 +524,24 @@ for (const view of VIEWS) {
             : "[data-needs-caw]",
           { timeout: 60_000 }
         );
+        if (card.still) {
+          await page.evaluate(() => document.fonts.ready);
+          await card.open(page);
+          await page.waitForSelector(card.card, { timeout: 10_000 });
+          await settle(page);
+          await page.waitForTimeout(400);
+          const open = await measure(page, card);
+          const clip = await shoot(page, card, `${TAG}-${key}-rest.png`);
+          const pixels = await analyse(
+            `${TAG}-${key}-rest.png`,
+            clip,
+            open,
+            view.w
+          );
+          report[key] = { open, pixels };
+          console.log(key, JSON.stringify(report[key]));
+          continue;
+        }
         await page.evaluate(() => document.fonts.ready);
         await settle(page);
         await page.waitForTimeout(400);
@@ -384,7 +569,13 @@ for (const view of VIEWS) {
         });
         await settle(page);
         const open = await measure(page, card);
-        await shoot(page, card, `${TAG}-${key}-rest.png`);
+        const clip = await shoot(page, card, `${TAG}-${key}-rest.png`);
+        const pixels = await analyse(
+          `${TAG}-${key}-rest.png`,
+          clip,
+          open,
+          view.w
+        );
         const before = await page.evaluate(() => window.__hang.length);
         await card.close(page);
         await page.waitForFunction((n) => window.__hang.length > n, before, {
@@ -416,6 +607,7 @@ for (const view of VIEWS) {
           openRuns,
           closeRuns,
           open,
+          pixels,
           closed: gone,
         };
         console.log(key, JSON.stringify(report[key]));
@@ -458,6 +650,18 @@ async function behaviour(page: Page, theme: string) {
       )
     );
   const out: Record<string, unknown> = {};
+  // ⌘K stands Jump open at once and Esc takes it away at once; a press
+  // brings it down and it slides back up, whatever then closes it.
+  out.keyOpen = await sample(page, () => page.keyboard.press("Control+k"));
+  out.keyClose = await sample(page, () => page.keyboard.press("Escape"));
+  out.pressOpen = await sample(page, () => page.click("[data-share='jump']"));
+  out.pressCloseByGlass = await sample(page, () =>
+    page.click("[data-share='jump']")
+  );
+  await page.click("[data-share='jump']");
+  await settle(page);
+  out.pressCloseByEsc = await sample(page, () => page.keyboard.press("Escape"));
+  await settle(page);
   await page.keyboard.press("Control+k");
   await settle(page);
   out.shortcutOpens = await openOf();
@@ -518,6 +722,91 @@ async function behaviour(page: Page, theme: string) {
       document.activeElement?.tagName
   );
   return out;
+}
+
+/**
+ * Jump frame by frame for 30 frames after `act`: from the first frame it is
+ * drawn out of the glass (or the first it is gone), where it stands, and
+ * every animation on the card, its wrapper and the glass's join.
+ */
+async function sample(page: Page, act: () => Promise<void>) {
+  await page.evaluate(() => {
+    const w = window as unknown as {
+      __frames: Record<string, unknown>[];
+      __framesDone: boolean;
+    };
+    w.__frames = [];
+    w.__framesDone = false;
+    let n = 0;
+    const step = () => {
+      const el = document.querySelector<HTMLElement>(".kit-pop.jump-pop");
+      const foot = document.querySelector("[data-bar-group] .join");
+      const runs = el
+        ? [...el.getAnimations(), ...(el.parentElement?.getAnimations() ?? [])]
+        : [];
+      w.__frames.push({
+        open: el?.dataset.state === "open",
+        shown: el?.hasAttribute("data-shown") ?? false,
+        translate: el ? getComputedStyle(el).translate : null,
+        runs: runs.map((run) =>
+          run instanceof CSSTransition
+            ? run.transitionProperty
+            : [
+                ...new Set(
+                  (run.effect as KeyframeEffect)
+                    .getKeyframes()
+                    .flatMap((k) =>
+                      Object.keys(k).filter(
+                        (x) =>
+                          ![
+                            "offset",
+                            "easing",
+                            "composite",
+                            "computedOffset",
+                          ].includes(x)
+                      )
+                    )
+                ),
+              ].join("+")
+        ),
+        join: foot ? getComputedStyle(foot).opacity : null,
+        joinRuns: foot?.getAnimations().length ?? 0,
+      });
+      n += 1;
+      if (n < 30) {
+        requestAnimationFrame(step);
+      } else {
+        w.__framesDone = true;
+      }
+    };
+    requestAnimationFrame(step);
+  });
+  await act();
+  await page.waitForFunction(
+    () => (window as unknown as { __framesDone: boolean }).__framesDone
+  );
+  const list = (await page.evaluate(
+    () => (window as unknown as { __frames: unknown[] }).__frames
+  )) as {
+    open: boolean;
+    shown: boolean;
+    translate: string | null;
+    runs: string[];
+    join: string | null;
+    joinRuns: number;
+  }[];
+  const firstShown = list.findIndex((f) => f.open && f.shown);
+  const firstGone = list.findIndex((f) => !f.open);
+  return {
+    firstShownFrame: firstShown,
+    translateThen: firstShown >= 0 ? list[firstShown].translate : null,
+    joinThen: firstShown >= 0 ? list[firstShown].join : null,
+    firstGoneFrame: firstGone,
+    cardRuns: [...new Set(list.flatMap((f) => f.runs))],
+    framesWithCardRuns: list.filter((f) => f.runs.length > 0).length,
+    framesWithJoinRuns: list.filter((f) => f.joinRuns > 0).length,
+    translates: [...new Set(list.map((f) => f.translate))].length,
+  };
 }
 
 async function diff([a, b]: string[]) {

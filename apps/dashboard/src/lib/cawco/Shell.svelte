@@ -984,6 +984,7 @@
           <div
             class="tools"
             data-bar-group
+            data-instant={barGlass.instant ? "" : undefined}
             data-joined={barGlass.joined ? "" : undefined}
           >
             <!-- The glass as one shape with the card hanging from it while
@@ -1501,6 +1502,11 @@
     opacity: 1;
     transition-duration: var(--dur-pop);
   }
+  /* A card the keyboard opened stands open and leaves at once (bar-glass
+     `instant`), and its join with it. */
+  .tools[data-instant] .join {
+    transition: none;
+  }
   /* An item of the group: borderless (Apple HIG, Toolbars: "Borders… aren't
      necessary because the section provides a visible container"), on the
      glass itself, every one the same height with the same symbol size, in
@@ -1630,7 +1636,9 @@
        card's clock. */
     .join {
       --r: calc(var(--c-bar-caw-glass-phone) / 2);
-      inset-block-end: calc(-1px - var(--caw-neck));
+      /* Down to the floor's line, where the card's top edge lies on it
+         (bar-glass `glassPlacement`). */
+      inset-block-end: calc(-1 * var(--caw-neck));
       clip-path: shape(
         from 0 var(--h),
         arc to var(--f) calc(var(--h) - var(--f)) of var(--f) ccw,

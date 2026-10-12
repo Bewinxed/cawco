@@ -1103,6 +1103,10 @@
     /* Its surface, named so the cut across its top edge is drawn in it
        (`::before`); a card on another surface sets this, not `background`. */
     --hang-surface: var(--surface-raised);
+    /* What runs on through the cut: the anchor's surface into the card's
+       top. The card's own surface unless its top is another (the session
+       card's head is its tab's). */
+    --hang-neck: var(--hang-surface);
     /* Cut at its top edge only, with room for the whole overlay shadow past
        the others (as the pulled menu's `drawPull`). */
     position: relative;
@@ -1139,6 +1143,15 @@
        mask drew the whole card's edge through a buffer of its own on every
        paint, which was most of what was left of the frame Caw's panel
        started its slide in. */
+    /* The cut stops short of a flush side's edge: there the anchor's
+       flank runs straight on down into the card's side, and its first
+       pixel is that side's edge, not the cut. */
+    &[data-flush="start"]::before {
+      --gap-from: 1px;
+    }
+    &[data-flush="end"]::before {
+      --gap-to: calc(var(--neck-end) - 1px);
+    }
     &::before {
       --gap-from: calc(var(--neck-start) - var(--neck-flare-start, 0px));
       --gap-to: calc(var(--neck-end) + var(--neck-flare-end, 0px));
@@ -1153,7 +1166,7 @@
       background: linear-gradient(
         to right,
         transparent,
-        var(--hang-surface) var(--neck-tail-start, 0px)
+        var(--hang-neck) var(--neck-tail-start, 0px)
           calc(100% - var(--neck-tail-end, 0px)),
         transparent
       );

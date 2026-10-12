@@ -3,7 +3,8 @@
    * The Jump palette: a HangCard on the bar's glass, hanging from its foot
    * flush with its trailing flank as Caw's panel does, and coming down out
    * of it; opening it closes the glass's other card (bar-glass). The search
-   * glass opens and closes it, ⌘K does too (Shell), and on a phone the
+   * glass opens and closes it, ⌘K does too (Shell): opened from the keyboard
+   * it stands open at once and leaves at once, with no slide. On a phone the
    * sidebar's search field opens it from the glass Caw stands on. Non-modal,
    * as the glass's other cards: a press elsewhere closes it and lands, and
    * Escape closes it and gives the focus back to what had it.
@@ -203,6 +204,14 @@
   const placement = $derived(glassPlacement(glass, phoneQuery.current));
   /** What had the focus before it opened, which has it back once it closes. */
   let returnTo: HTMLElement | null = null;
+  /** The last thing that could open it was a pointer press, not a key. */
+  let byPointer = false;
+  /**
+   * ⌘K opened it: it stands open at once and leaves at once, with no slide
+   * (summoned many times a day from the keyboard, it is never kept
+   * waiting); a press on the search glass brings it down out of the glass.
+   */
+  let openedByKey = false;
   $effect.pre(() => {
     if (open) {
       untrack(() => {
@@ -210,6 +219,7 @@
           document.activeElement instanceof HTMLElement
             ? document.activeElement
             : null;
+        openedByKey = !byPointer;
       });
     }
   });
@@ -224,7 +234,8 @@
     () => {
       closedOutside = true;
       open = false;
-    }
+    },
+    () => openedByKey
   );
 
   /* ── The list ────────────────────────────────────────────────────────
@@ -240,6 +251,15 @@
   });
 </script>
 
+<svelte:window
+  onkeydowncapture={() => {
+    byPointer = false;
+  }}
+  onpointerdowncapture={() => {
+    byPointer = true;
+  }}
+/>
+
 <Popover.Root bind:open>
   <HangCard
     align="end"
@@ -248,7 +268,9 @@
     class="jump-pop gap-0"
     collisionPadding={placement.collisionPadding}
     customAnchor={glass}
+    folded={() => openedByKey}
     glass
+    held={() => openedByKey}
     onCloseAutoFocus={(event) => {
       event.preventDefault();
       if (!closedOutside && returnTo?.isConnected) {
@@ -280,10 +302,8 @@
     }
   >
     <Command.Root class="text-body" loop shouldFilter={false}>
-      <!-- The signature move, applied to the whole panel rather than half of it:
-       ONE sunken well inside the raised card, holding the search line, the
-       results and the hints. The input was its own bordered control floating
-       above a separately bordered list — two boxes, two radii, two insets. -->
+      <!-- One frame, the hanging card's: the search line, the results and
+           the hints stand on its surface, parted by hairlines. -->
       <div class="jump-well">
         <!-- The search line is built here rather than taken from Command.Input:
          its input group owns the field's padding and puts the addon in flow,
@@ -486,12 +506,9 @@
   /* The card hangs from the glass; the well is bounded so the footer is
      never pushed under the fold. */
   :global(.kit-pop.jump-pop) {
-    /* The inset the well sits at — and the term the concentric radius below
-       subtracts. Changing it in one place keeps the corners true. */
-    --jump-inset: 7px;
     width: min(42rem, calc(100vw - 24px));
     max-height: 82vh;
-    padding: var(--jump-inset);
+    padding: 0;
   }
   /* On a phone it keeps the phone's 12px margin on its leading side; its
      trailing side is the screen's edge (app.css `.glass-card`). */
@@ -500,25 +517,22 @@
       width: calc(100vw - 12px - env(safe-area-inset-right, 0px));
     }
   }
-  /* The command element carries its own 4px padding and an 8px corner that
-     nothing paints — left in, they push the well to a 10px inset and the
-     concentric radius below stops being true. */
+  /* The command element carries its own 4px padding and corner: the card's
+     edge is the one frame, so its contents run to it. */
   :global(.jump-pop [data-slot="command"]) {
     padding: 0;
-    border-radius: 0;
+    border-radius: inherit;
+    background: transparent;
   }
-  /* One surface for the whole panel. Its radius is the card's minus the inset
-     it sits at: a well cut to the card's own 7px corner read as a tighter,
-     unrelated box inside a rounder one. */
+  /* The search line, the results and the hints on the card's own surface,
+     inside its one frame: the card's edge, which hangs from the glass. */
   .jump-well {
     display: flex;
     min-height: 0;
     flex: 1;
     flex-direction: column;
     overflow: hidden;
-    border: 1px solid var(--border-hairline);
-    border-radius: calc(var(--radius-lg) - var(--jump-inset));
-    background: var(--surface-recess);
+    border-radius: inherit;
   }
   :global(.jump-list) {
     max-height: calc(82vh - 104px);
@@ -564,9 +578,11 @@
     flex: none;
     color: var(--ink-muted);
   }
+  /* A placeholder longer than a phone's field ends in an ellipsis. */
   :global(.jump-field) {
     min-width: 0;
     flex: 1;
+    text-overflow: ellipsis;
     border: 0;
     background: transparent;
     color: var(--ink-strong);

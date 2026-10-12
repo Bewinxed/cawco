@@ -869,6 +869,9 @@
     opacity: 0;
     transition-duration: var(--dur-pop);
   }
+  :global([data-bar-group][data-instant]) .rim.foot {
+    transition: none;
+  }
   /* On a phone his box is his own glass's (Shell). His touch area is a 44px
      square (Apple HIG, Buttons: "a hit region of at least 44x44 pt") at the
      screen's edge, centred on his glass, so none of it falls off the screen

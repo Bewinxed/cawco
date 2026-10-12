@@ -1654,6 +1654,9 @@
      flared span, its shadow cut at its top edge, and its open and close
      are the component's. Its content runs edge to edge. */
   :global(.kit-pop.session-details-popover) {
+    /* Its head is its tab's surface, and the tab runs on into it through
+       the cut. */
+    --hang-neck: var(--surface-recess);
     display: flex;
     z-index: 60;
     width: min(416px, calc(100vw - 24px));
