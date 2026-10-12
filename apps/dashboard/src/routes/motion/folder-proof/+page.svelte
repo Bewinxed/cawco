@@ -382,6 +382,12 @@
     background: var(--surface-recess);
     color: var(--ink-strong);
   }
+  /* What the strips open (the session card, a tab's menu) is portalled to
+     the body and stands over the bench, so a finger reaches it. bits-ui
+     writes the wrapper's z-index inline, from the surface's own. */
+  :global(body:has([data-folder-proof]) [data-bits-floating-content-wrapper]) {
+    z-index: 2147483001 !important;
+  }
   /* A group as the workspace lays one out: its strip on the shelf, then
      the page the chosen tab opens into. */
   .group {

@@ -466,6 +466,83 @@
       return was;
     },
   });
+  /**
+   * A finger dragged outside the open card closes it and carries on as the
+   * scroll it is, as the iOS app's card does (a pan beside its light-dismiss
+   * tap). bits-ui's dismissable layer closes a touch on its `click`, which a
+   * drag never sends. A press
+   * outside it (not on a tab, which chooses or keeps it, and not in a layer
+   * the card opened) that travels past the kit's drag slop (utils/longpress)
+   * closes it; so does the browser taking that press for a scroll
+   * (`pointercancel`), which can come before any move past the slop is heard.
+   * Passive and never prevented: the scroll proceeds.
+   */
+  const DRAG_SLOP = 10;
+  let cardEl = $state<HTMLElement | null>(null);
+  const cardRef: Attachment<HTMLElement> = (node) => {
+    cardEl = node;
+    return () => {
+      if (cardEl === node) {
+        cardEl = null;
+      }
+    };
+  };
+  function closeOnOutsideDrag(card: HTMLElement) {
+    let press: { id: number; x: number; y: number } | null = null;
+    const down = (event: PointerEvent) => {
+      press = null;
+      const { target } = event;
+      if (
+        event.pointerType === "mouse" ||
+        !event.isPrimary ||
+        !(target instanceof Element) ||
+        card.contains(target) ||
+        target.closest(".session-tabs .tab") ||
+        target.closest("[data-bits-floating-content-wrapper]")
+      ) {
+        return;
+      }
+      press = { id: event.pointerId, x: event.clientX, y: event.clientY };
+    };
+    const move = (event: PointerEvent) => {
+      if (
+        press?.id === event.pointerId &&
+        Math.hypot(event.clientX - press.x, event.clientY - press.y) > DRAG_SLOP
+      ) {
+        press = null;
+        closeDetails();
+      }
+    };
+    const cancel = (event: PointerEvent) => {
+      if (press?.id === event.pointerId) {
+        press = null;
+        closeDetails();
+      }
+    };
+    const up = (event: PointerEvent) => {
+      if (press?.id === event.pointerId) {
+        press = null;
+      }
+    };
+    const options = { capture: true, passive: true } as const;
+    document.addEventListener("pointerdown", down, options);
+    document.addEventListener("pointermove", move, options);
+    document.addEventListener("pointercancel", cancel, options);
+    document.addEventListener("pointerup", up, options);
+    return () => {
+      document.removeEventListener("pointerdown", down, options);
+      document.removeEventListener("pointermove", move, options);
+      document.removeEventListener("pointercancel", cancel, options);
+      document.removeEventListener("pointerup", up, options);
+    };
+  }
+  $effect(() => {
+    const card = cardEl;
+    if (!(detailsOpen && card)) {
+      return;
+    }
+    return untrack(() => closeOnOutsideDrag(card));
+  });
   /** A finger's swipe up the card's head, beside bits-ui's own handlers in the content's props. */
   const swipeShut: Attachment<HTMLElement> = (node) => {
     node.addEventListener("pointerdown", swipeCardShut);
@@ -1617,6 +1694,7 @@
             data-morph={morphing ? "" : undefined}
             {@attach hangCard}
             {@attach swipeShut}
+            {@attach cardRef}
           >
             <div
               class="details-morph"
