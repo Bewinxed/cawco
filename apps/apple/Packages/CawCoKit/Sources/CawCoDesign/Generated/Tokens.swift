@@ -656,15 +656,20 @@ public enum Effect {
     /// Relative tints for rows inside any surface: hover +6%, selected +10% ink.
     public static let surfaceHoverMix: Double = 0.06
     public static let surfaceSelectedMix: Double = 0.1
-    /// How much of its session's status colour an unchosen session tab's rim carries, on every width; its glow carries half of it. A rim is a boundary, so its sides hold 3:1 against the tab's fill and the shelf (WCAG non-text contrast) in both themes. By day 51% left them at 1.6 to 2.2:1; 83% clears the working and failed tones, and the attention tone with its rim's own (tab-rim-attn). By night 51% left a failed tab's side at 2.5:1 and a working one at 2.9:1; 64% clears the failed tone, the hardest.
+    /// The strength of Caw's panel's vermillion hairline between its sections (CawPanel, web and iOS), and of an unchosen session tab's rim in the iOS app (PaneTabsView); the dashboard's unchosen tabs wear tab-rim-mix-subtle. At this strength a status rim holds 3:1 against the tab's fill and the shelf in both themes: by day 83% clears the working and failed tones, by night 64% the failed tone, the hardest.
     /// By day and by night: read it with `value(for:)`.
     public static let tabRimMix = SchemeValue(light: 0.83, dark: 0.64)
-    /// The chosen session tab's rim, on every width: 14 points louder than an unchosen one, by day and by night.
+    /// The chosen session tab's rim strength (its opacity, a plain number so the rim's arithmetic can divide by it), on every width, when its session is working, needs you or failed: its sides hold 3:1 against the tab's fill and the shelf (WCAG non-text contrast) in both themes. Unchosen tabs wear tab-rim-mix-subtle, or no rim when idle.
     /// By day and by night: read it with `value(for:)`.
     public static let tabRimMixChosen = SchemeValue(light: 0.97, dark: 0.78)
-    /// An idle session's rim, chosen or not, in the muted ink: 3:1 against the fill and the shelf. By day 32% left its side at 1.4:1, by night at 2.0:1.
+    /// The chosen tab's rim strength when its session is idle or done, in the muted ink: 3:1 against the fill and the shelf. By day 0.32 left its side at 1.4:1, by night at 2.0:1.
     /// By day and by night: read it with `value(for:)`.
     public static let tabRimMixIdle = SchemeValue(light: 0.86, dark: 0.54)
+    /// An unchosen session tab's rim strength when its session is anything but idle (working, needs you, done, failed): the same outline and taper as the chosen tab's, clearly quieter (owner: other tabs have no rim "unless they are active, then they should have a more subtle rim", "or any other status"). An unchosen idle tab draws no rim. It is a status mark, not a boundary: the tab's card edge is the boundary, so it is not held to 3:1. Its top against the shelf and its own fill: by day 1.9/2.0:1 needs you, 1.9/2.0:1 working, 2.0/2.1:1 failed, 1.8/1.9:1 done; by night (0.4) 3.1/2.9:1, 2.3/2.2:1, 2.1/2.0:1, 2.6/2.4:1.
+    /// By day and by night: read it with `value(for:)`.
+    public static let tabRimMixSubtle = SchemeValue(light: 0.5, dark: 0.4)
+    /// How far, in px along the stroke, a session tab's rim fades out at each free end (the tips of its feet on the shelf), on every tab, in both themes, so a rim never stops on a hard cut (owner: "the rim should taper-progress-fade at the very edges"). A plain number for the rim's arithmetic (PaneTabs `.rim`); the fade stops short of the shoulders.
+    public static let tabRimTaper: Double = 12
 }
 
 public enum Motion {

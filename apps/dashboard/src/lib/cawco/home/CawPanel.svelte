@@ -299,7 +299,7 @@
     );
   }
   /* Sections part with a vermillion hairline: 1px of the brand's vermillion
-     (`brand-solid`) at the session tabs' rim strength (`tab-rim-mix`),
+     (`brand-solid`) at `tab-rim-mix` (the strength a status rim holds 3:1 at),
      across the rows' width. Increase Contrast draws it solid. */
   .section + .section {
     margin-block-start: var(--space-2);

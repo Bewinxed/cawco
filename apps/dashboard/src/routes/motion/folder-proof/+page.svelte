@@ -3,8 +3,13 @@
    * Both folder strips on a bench, fed through the client's own state with
    * no hub, over everything the shell draws (its hub banner included):
    *
-   * - the session tabs (`data-strip="session"`): the real PaneTabs, five
-   *   tabs in mixed statuses (needs you, working, idle, done, working);
+   * - the session tabs (`data-strip="session"`): the real PaneTabs, six
+   *   tabs in mixed statuses (needs you, working, idle, done, failed,
+   *   idle), the working one chosen; and the same tabs again with the idle
+   *   one chosen (`data-strip="session-idle"`);
+   * - two sliders over the rims' tokens, written live on the bench:
+   *   Taper (`--tab-rim-taper`, px) and Subtle (`--tab-rim-mix-subtle`,
+   *   an unchosen tab's rim strength);
    * - the home's Working and Finished (`data-strip="work"`): the real
    *   WorkTabs over twelve working runs and fourteen finished, hosted as
    *   the shell hosts it, in the rail's 260px column on the desk and across
@@ -32,20 +37,22 @@
   import { page } from "$app/state";
 
   const RUN = "0f1e2d3c-0000-4000-8000-0000000000aa";
+  const FAILED_RUN = "0f1e2d3c-0000-4000-8000-0000000000ab";
   const WORKFLOW = "0f1e2d3c-0000-4000-8000-0000000000ff";
   const ids = [
     "0f1e2d3c-0000-4000-8000-000000000001",
     "0f1e2d3c-0000-4000-8000-000000000002",
     "0f1e2d3c-0000-4000-8000-000000000003",
     `run:${RUN}`,
-    "0f1e2d3c-0000-4000-8000-000000000005",
+    `run:${FAILED_RUN}`,
+    "0f1e2d3c-0000-4000-8000-000000000006",
   ];
-  /** What each session's pulse says: needs you, working, idle, (the run), working. */
+  /** What each session's pulse says: needs you, working, idle, (the runs: done, failed), idle. */
   const DOING: Record<string, SessionPulse["activity"]> = {
     [ids[0]]: "blocked",
     [ids[1]]: "working",
     [ids[2]]: "idle",
-    [ids[4]]: "working",
+    [ids[5]]: "idle",
   };
 
   // The client's own state, as the hub's frames would have set it: the
@@ -72,8 +79,15 @@
     id: WORKFLOW,
     name: "Release notes",
   } as Workflow);
-  /** A run of the bench's workflow, working or ended `ago` ms back. */
-  const runOf = (id: string, ago: number | null): WorkflowRun => ({
+  /** How a run that ended ended: done, or failed. */
+  const ENDED = ["done", "failed"] as const;
+  /** A run of the bench's workflow, working or ended `ago` ms back, done unless it `failed`. */
+  const runOf = (
+    id: string,
+    ago: number | null,
+    failed = false
+  ): WorkflowRun => ({
+    status: ago === null ? "running" : ENDED[Number(failed)],
     edges: {},
     endedAt: ago === null ? null : new Date(now - ago).toISOString(),
     failure: null,
@@ -90,12 +104,12 @@
     result: null,
     startedAt: new Date(now - 600_000).toISOString(),
     state: {},
-    status: ago === null ? "running" : "done",
     supervisorInstanceId: null,
     workflowId: WORKFLOW,
     workspace: "/bench",
   });
   workflowState.runs[RUN] = runOf(RUN, 60_000);
+  workflowState.runs[FAILED_RUN] = runOf(FAILED_RUN, 90_000, true);
 
   // The home's Working and Finished (WorkTabs), fed the same way: runs that
   // are working (their pulses say so) and runs that ended unseen, twelve
@@ -138,6 +152,38 @@
     tabs: ids,
     active: ids[first],
   });
+  /** The same tabs with the idle one chosen. */
+  const idleLeaf = $state<LeafNode>({
+    id: "folder-proof-idle",
+    t: "l",
+    tabs: ids,
+    active: ids[2],
+  });
+
+  /**
+   * The rims' two tunable tokens, written live on the bench: the taper's
+   * length (px) and an unchosen tab's rim strength (%). Each starts at the
+   * token's value in the bench's theme.
+   */
+  let proofEl = $state<HTMLElement>();
+  let taper = $state<number | null>(null);
+  let subtle = $state<number | null>(null);
+  $effect(() => {
+    // Again whenever the theme changes.
+    if (!(proofEl && scheme)) {
+      return;
+    }
+    // Read once the theme has landed on the root.
+    const frame = requestAnimationFrame(() => {
+      const style = getComputedStyle(document.documentElement);
+      taper ??= Number.parseFloat(style.getPropertyValue("--tab-rim-taper"));
+      // The token is a strength 0 to 1; the slider reads it in percent.
+      subtle = Math.round(
+        Number.parseFloat(style.getPropertyValue("--tab-rim-mix-subtle")) * 100
+      );
+    });
+    return () => cancelAnimationFrame(frame);
+  });
 
   /** The drawer layout, where the home is the phone's page, not the rail's. */
   const phone = new MediaQuery("(max-width: 899px)");
@@ -161,7 +207,7 @@
    * close one is the bench's: the strip's own would act on the workspace.
    * The chosen tab's own click (its details card) is left to the strip.
    */
-  function benchClick(event: MouseEvent) {
+  const benchClick = (group: LeafNode) => (event: MouseEvent) => {
     const target = event.target instanceof Element ? event.target : null;
     const tab = target?.closest<HTMLElement>(".tab");
     const id = tab
@@ -175,13 +221,15 @@
       event.stopPropagation();
       return;
     }
-    if (id === leaf.active) {
+    if (id === group.active) {
       return;
     }
     event.preventDefault();
     event.stopPropagation();
-    choose(id);
-  }
+    if (group.tabs.includes(id)) {
+      group.active = id;
+    }
+  };
 
   let workEl = $state<HTMLElement>();
   /** Chooses Working or Finished as a click on its tab does. */
@@ -212,6 +260,7 @@
         delete workflowState.runs[id];
       }
       delete workflowState.runs[RUN];
+      delete workflowState.runs[FAILED_RUN];
       workflowState.workflows = workflowState.workflows.filter(
         (one) => one.id !== WORKFLOW
       );
@@ -224,11 +273,63 @@
 <!-- Over the shell and anything it draws (a hub banner): the strip on its
      shelf, and the page its chosen tab opens into. -->
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div class="proof" data-folder-proof>
+<div
+  class="proof"
+  data-folder-proof
+  bind:this={proofEl}
+  style:--tab-rim-mix-subtle={subtle === null
+    ? undefined
+    : String(subtle / 100)}
+  style:--tab-rim-taper={taper === null ? undefined : String(taper)}
+>
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-  <div class="group" data-strip="session" onclickcapture={benchClick}>
+  <div class="group" data-strip="session" onclickcapture={benchClick(leaf)}>
     <PaneTabs {leaf} />
     <div class="page"></div>
+  </div>
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <div
+    class="group"
+    data-strip="session-idle"
+    onclickcapture={benchClick(idleLeaf)}
+  >
+    <PaneTabs leaf={idleLeaf} />
+    <div class="page"></div>
+  </div>
+  <!-- The rims' tokens, tuned live. -->
+  <div class="dials">
+    <label>
+      <span>Taper</span>
+      <input
+        max="32"
+        min="0"
+        step="1"
+        type="range"
+        bind:value={
+          () => taper ?? 0,
+          (v) => {
+    taper = v;
+  }
+        }
+      >
+      <output>{taper ?? "–"}px</output>
+    </label>
+    <label>
+      <span>Subtle</span>
+      <input
+        max="100"
+        min="0"
+        step="1"
+        type="range"
+        bind:value={
+          () => subtle ?? 0,
+          (v) => {
+    subtle = v;
+  }
+        }
+      >
+      <output>{subtle ?? "–"}%</output>
+    </label>
   </div>
   <!-- The home's Working and Finished as the shell hosts them: in the
        rail's column on the desk, across the phone's home page under a
@@ -267,6 +368,28 @@
   .group .page {
     block-size: var(--space-7);
     background: var(--surface-recess);
+  }
+  /* The bench's own controls, at the foot, clear of every strip. */
+  .dials {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2) var(--space-5);
+    padding: var(--space-3) var(--space-5);
+    background: var(--surface-raised);
+    border-block-start: 1px solid var(--border-hairline);
+    font: var(--type-label);
+    color: var(--ink-muted);
+
+    & label {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+    & output {
+      min-inline-size: 4ch;
+      color: var(--ink-strong);
+      font-variant-numeric: tabular-nums;
+    }
   }
   /* The rail's column (Shell .rail, Home .rail .groups) on the desk; the
      phone's home page (Home .page .groups) under 900px. Both stand on

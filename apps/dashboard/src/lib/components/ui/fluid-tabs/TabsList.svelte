@@ -140,7 +140,16 @@
       );
     return new Map(order.map(({ item }, at) => [item, at + 1]));
   }
-  /** Ranks the stack from each tab's depth now. */
+  /** Each tab's depth as last written, with its neighbours'. */
+  const depthWritten = new WeakMap<HTMLElement, string>();
+  /**
+   * Ranks the stack from each tab's depth now, and hands each tab its depth
+   * and its two neighbours' (`--depth`, `--depth-prev`, `--depth-next`, 0
+   * chosen to 1 receded, its own where it has no neighbour), so a host can
+   * draw what follows the choice on the switch's own clock (PaneTabs'
+   * rims, whose strength does, and whose sides at a gliding seam meet
+   * their neighbour's).
+   */
   function rank(track: HTMLElement, items: HTMLElement[], chosen: number) {
     const ranks = ranksBy(items, (item) => depthNow.get(item) ?? 1, chosen);
     for (const [item, z] of ranks) {
@@ -149,6 +158,21 @@
         laidOf(item, track).style.setProperty("--z", String(z));
       }
     }
+    const depth = (item: HTMLElement | undefined) =>
+      item ? String(Math.round((depthNow.get(item) ?? 1) * 1000) / 1000) : null;
+    items.forEach((item, i) => {
+      const own = depth(item) as string;
+      const prev = depth(items[i - 1]) ?? own;
+      const next = depth(items[i + 1]) ?? own;
+      const key = `${own} ${prev} ${next}`;
+      if (depthWritten.get(item) !== key) {
+        depthWritten.set(item, key);
+        const laid = laidOf(item, track);
+        laid.style.setProperty("--depth", own);
+        laid.style.setProperty("--depth-prev", prev);
+        laid.style.setProperty("--depth-next", next);
+      }
+    });
   }
 
   /* ── Where two tabs meet: one edge, gliding ─────────────────────────
@@ -217,15 +241,12 @@
         const laid = laidOf(item, track);
         laid.style.setProperty("--cut-start", String(start));
         laid.style.setProperty("--cut-end", String(end));
-        // A side under a neighbour draws nothing a host would paint on
-        // it (`visibility`): the card over it covers it, but on a switch
-        // the card is a compositor layer whose foot row is filtered half
+        // A side under a neighbour (1, else 0) draws no foot where a host
+        // paints on it: the card over it covers it, but on a switch the
+        // card is a compositor layer whose foot row is filtered half
         // clear, and a rim's foot under it showed through on the shelf.
-        laid.style.setProperty(
-          "--under-start",
-          startUnder ? "hidden" : "visible"
-        );
-        laid.style.setProperty("--under-end", endUnder ? "hidden" : "visible");
+        laid.style.setProperty("--under-start", startUnder ? "1" : "0");
+        laid.style.setProperty("--under-end", endUnder ? "1" : "0");
       }
     });
   }
@@ -280,6 +301,9 @@
     }
     rank(track, items, chosen);
     placeSeams(track, items, seamsFrom, seamsTo, 0);
+    // While a switch runs, what a host draws from the depths follows them
+    // frame by frame and eases nothing of its own (`data-switching`).
+    track.toggleAttribute("data-switching", true);
     // Read in the next frame's callbacks, where the frame lays the page out
     // anyway, once the switch's transitions have started.
     let frame = requestAnimationFrame(function step() {
@@ -293,6 +317,7 @@
         frame = requestAnimationFrame(step);
       } else {
         outgoing = null;
+        track.toggleAttribute("data-switching", false);
         capFades();
       }
     });
