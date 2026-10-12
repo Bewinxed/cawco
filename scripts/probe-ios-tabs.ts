@@ -251,14 +251,28 @@ function judge(
     onScreen,
     "each frame's on-screen sheet opacity is exactly a value the clock set (no implicit fade)"
   );
+  // Each rim's strength goes from how it rests with the choice left to how
+  // it rests with it landed, on the clock: frame to frame it moves no more
+  // than the clock does, give or take its lean toward a weaker neighbour at
+  // a gliding seam, which dips and comes back about half way (at most 2.5×
+  // the clock's step).
   const rimOut = timed.map((s) => tab(s, from)?.rim ?? Number.NaN);
   const rimIn = timed.map((s) => tab(s, to)?.rim ?? Number.NaN);
+  const onClock = timed.every((s, i) =>
+    s.tabs.every((t, k) => {
+      if (i === 0) {
+        return true;
+      }
+      const before = timed[i - 1];
+      return (
+        Math.abs(t.rim - (before.tabs[k]?.rim ?? Number.NaN)) <=
+        2.5 * Math.abs(s.f - before.f) + 0.01
+      );
+    })
+  );
   check(
     `${name} rims follow the clock`,
-    monotonic(rimOut, false) &&
-      monotonic(rimIn, true) &&
-      first(rimOut) > final(rimOut) &&
-      final(rimIn) > first(rimIn),
+    onClock && first(rimOut) > final(rimOut) && final(rimIn) > first(rimIn),
     `leaving ${rimOut.map((v) => v.toFixed(3)).join(" ")}; coming ${rimIn.map((v) => v.toFixed(3)).join(" ")}`
   );
   const still = samples.every((s) =>
@@ -368,6 +382,160 @@ function judgeSeam(run: string, samples: Sample[], from: string, to: string) {
  * across the takeover moves any sheet, rim or the strip further than the
  * largest step of the frames either side of it.
  */
+interface Rim {
+  /** Drawn chosen (how chosen the tab stands is 1), and drawn unchosen (0). */
+  chosen: boolean;
+  id: string;
+  length: number;
+  mid: number[];
+  px: number;
+  shoulder: number;
+  stop: string;
+  strength: number;
+  taper: number[];
+  tone: string;
+  unchosen: boolean;
+}
+/** A tab whole in view at a held stop (one out of view logs no measures). */
+const RIM =
+  /tabs rim (\S+) (\S+) tone=(\S+) pick=(\S+) strength=(\S+) px=(-?\d+) mid=(\S+) taper=(\S+) length=(\S+) shoulder=(\S+)/;
+const SEAM =
+  /tabs seam (\S+) (\S+) front=(\S+) strength=(\S+) strokes=(\d+) runs=(\S+)/;
+/** A held stop at rest: before the switch moves anything, and once it has landed. */
+const REST_STOP = /-(t0|t100)$/;
+
+/**
+ * The rims as each held stop drew them (PaneTabsView `probeRims`): at
+ * rest the chosen tab's rim whole with its sides at 3:1 at mid-height, an
+ * unchosen tab's at the subtle strength, an unchosen idle tab's not drawn
+ * at all; every drawn rim's taper rising from nothing at its tip, past 90%
+ * within 40% of its length, whole at it, and never past the shoulder; one
+ * stroke at every seam whose front tab wears a rim and none where it does
+ * not; and no rim's strength moving more than 0.08 across the handover,
+ * from f = 0.49 to 0.51.
+ */
+function judgeRims(run: string, log: string) {
+  const rims: Rim[] = log.split("\n").flatMap((line) => {
+    const m = RIM.exec(line);
+    return m
+      ? [
+          {
+            stop: m[1],
+            id: m[2],
+            tone: m[3],
+            chosen: +m[4] >= 0.999,
+            unchosen: +m[4] <= 0.001,
+            strength: +m[5],
+            px: +m[6],
+            mid: m[7].split(",").map(Number),
+            taper: m[8].split(",").map(Number),
+            length: +m[9],
+            shoulder: +m[10],
+          },
+        ]
+      : [];
+  });
+  const rest = rims.filter((r) => REST_STOP.test(r.stop));
+  const subtle = 0.5;
+  const idle = rest.filter((r) => r.unchosen && r.tone === "quiet");
+  check(
+    `${run} unchosen idle draws no rim`,
+    idle.some((r) => r.px >= 0) &&
+      idle.every((r) => r.strength === 0 && r.px <= 0),
+    idle
+      .map((r) => `${r.stop} ${r.id} strength ${r.strength} px ${r.px}`)
+      .join("; ") || "no unchosen idle tab at rest"
+  );
+  const others = rest.filter((r) => r.unchosen && r.tone !== "quiet");
+  check(
+    `${run} other unchosen rims are subtle`,
+    others.some((r) => r.px >= 0) &&
+      others.every((r) => Math.abs(r.strength - subtle) <= 0.002 && r.px !== 0),
+    [...new Set(others.map((r) => `${r.tone} ${r.strength} px ${r.px}`))].join(
+      "; "
+    )
+  );
+  const chosen = rest.filter((r) => r.chosen);
+  check(
+    `${run} chosen sides hold 3:1`,
+    chosen.some((r) => r.mid.some((v) => v >= 0)) &&
+      chosen.every((r) => r.mid.every((v) => v < 0 || v >= 3)),
+    [
+      ...new Set(
+        chosen.map(
+          (r) => `${r.tone} ${r.mid.map((v) => v.toFixed(2)).join("/")}`
+        )
+      ),
+    ].join("; ")
+  );
+  const drawn = rims.filter((r) => r.strength > 0);
+  const tapers = drawn.filter(
+    (r) =>
+      r.taper[0] <= 0.001 &&
+      monotonic(r.taper, true) &&
+      r.taper[3] >= 0.9 &&
+      r.taper[4] >= 0.999 &&
+      r.length <= r.shoulder + 0.01
+  );
+  const [sample] = drawn;
+  check(
+    `${run} taper`,
+    drawn.length > 0 && tapers.length === drawn.length,
+    sample
+      ? `ink at 0/10/20/40/100% of the taper ${sample.taper.join(" ")}; length ${sample.length} under the shoulder at ${sample.shoulder}; ${tapers.length} of ${drawn.length} drawn rims so`
+      : "no rim drawn"
+  );
+  const seams = log.split("\n").flatMap((line) => {
+    const m = SEAM.exec(line);
+    return m
+      ? [
+          {
+            stop: m[1],
+            pair: m[2],
+            front: m[3],
+            strength: +m[4],
+            strokes: +m[5],
+            runs: m[6],
+          },
+        ]
+      : [];
+  });
+  const wrong = seams.filter(
+    (s) =>
+      s.strokes > 1 ||
+      (s.strength >= 0.15 && s.strokes !== 1) ||
+      (s.strength === 0 && s.strokes !== 0)
+  );
+  check(
+    `${run} one stroke per seam`,
+    seams.length > 0 && wrong.length === 0,
+    wrong.length > 0
+      ? wrong
+          .map(
+            (s) =>
+              `${s.stop} ${s.pair} front ${s.front} at ${s.strength}: ${s.strokes} (${s.runs})`
+          )
+          .join("; ")
+      : `${seams.length} seams: ${seams.filter((s) => s.strokes === 1).length} with one stroke, ${seams.filter((s) => s.strokes === 0).length} with a rimless front tab and none`
+  );
+  for (const held of ["step-held", "jump-held"]) {
+    const before = rims.filter((r) => r.stop === `${held}-f49`);
+    const after = rims.filter((r) => r.stop === `${held}-f51`);
+    const moves = before.map((r) => {
+      const next = after.find((a) => a.id === r.id);
+      return {
+        id: r.id,
+        move: next ? Math.abs(next.strength - r.strength) : Number.NaN,
+      };
+    });
+    check(
+      `${run} ${held} no rim jumps at the handover`,
+      moves.length > 0 && moves.every((m) => m.move <= 0.08),
+      moves.map((m) => `${m.id} ${m.move.toFixed(3)}`).join(" ")
+    );
+  }
+}
+
 /** Whether the swipe took the tap's own switch part-way, 0.1 to 0.9 of it. */
 function tookMidway(samples: Sample[]): boolean {
   const frames = samples.filter((s) => s.t !== "landed");
@@ -446,9 +614,25 @@ try {
     "Review the folder tabs",
     "Ship the iOS build to TestFlight",
   ];
-  // The third asks (its rim the attention ink); the rest work (the live ink).
+  // The third asks (its rim the attention ink); the second is idle (no rim
+  // unless chosen), so with the first chosen it stands in front at its seam
+  // with the third, which draws no stroke; the rest work (the live ink).
   const ids = await Promise.all(
     titles.map(async (title, at) => {
+      if (at === 1) {
+        const id = await fleet.spawn("claude", title);
+        await fleet.send(id, "Say done.");
+        await until(
+          `${id} idle`,
+          async () =>
+            JSON.stringify(
+              await fleet.api<unknown>(`/api/instances/${id}/transcript`)
+            ),
+          (text) => text.includes("Done."),
+          180_000
+        );
+        return id;
+      }
       if (at === 2) {
         const id = await fleet.spawn("claude", title, fleet.workdir, {
           permissionMode: "default",
@@ -558,7 +742,9 @@ try {
       const y = Math.round(height * 0.55);
       let log = "";
       let takeover: Sample[] = [];
+      let tried = 0;
       for (let attempt = 1; attempt <= 5; attempt += 1) {
+        tried = attempt;
         // biome-ignore lint/performance/noAwaitInLoops: one finger at a time
         const armed = await until(
           `${run}: takeover ${attempt} armed`,
@@ -600,6 +786,44 @@ try {
           `  ${run}: takeover ${attempt} took the pages at f=${took.toFixed(3)} of the tap; trying again`
         );
       }
+      // A finger at rest on the pages while a tab's tap sends them: a tap on
+      // the next armed tab, and straight after it a finger down on the pages,
+      // held still for a second, then lifted. A still finger stops the
+      // pages' scroll at once, as one resting there before the tap does
+      // (axe drives one touch at a time, so the resting finger comes just
+      // after the tap). The tap is a choice: the pages follow it, and it holds.
+      const hold = tried + 1;
+      const armedHold = await until(
+        `${run}: the two-finger tap armed`,
+        read,
+        (text) => text.includes(`armed takeover attempt=${hold} `),
+        30_000
+      ).catch(async () => read());
+      const holdTap = new RegExp(
+        `armed takeover attempt=${hold} .* tap=(\\d+),(\\d+)`
+      ).exec(armedHold);
+      const rest = `-x ${Math.round(width * 0.5)} -y ${y}`;
+      if (holdTap) {
+        await sh(
+          `/opt/homebrew/bin/axe batch --udid ${udid} --continue-on-error --step "tap -x ${holdTap[1]} -y ${holdTap[2]}" --step "touch ${rest} --down" --step "sleep 1.0" --step "touch ${rest} --up" || true`
+        );
+      }
+      log = await until(
+        `${run}: the two-finger tap's outcome`,
+        read,
+        (text) => text.includes(`after tap attempt=${hold} `),
+        30_000
+      ).catch(async () => read());
+      const outcome = new RegExp(
+        `after tap attempt=${hold} active=(\\S+) tapped=(\\S+)`
+      ).exec(log);
+      check(
+        `${run} two-finger tap holds`,
+        Boolean(outcome && outcome[1] === outcome[2]),
+        outcome
+          ? `tapped ${outcome[2].slice(0, 8)} with a finger resting on the pages; the choice 5s later ${outcome[1].slice(0, 8)}`
+          : "the tap never reached the strip"
+      );
       stream.kill();
       await writeFile(join(out, `${kind}-${style}.log`), log);
       const container = (
@@ -630,7 +854,8 @@ try {
       const held = samples
         .filter((s) => s.label.endsWith("held") && s.t !== "landed")
         .map((s) => `${s.label}@${s.f}`);
-      check(`${run} stops captured`, held.length === 14, held.join(" "));
+      check(`${run} stops captured`, held.length === 18, held.join(" "));
+      judgeRims(run, log);
       const step = begins.find((b) => b[1] === "step-held");
       if (step) {
         judgeSeam(

@@ -725,10 +725,17 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
             // A side in front leans its ink toward the neighbour's as far as it
             // stands in; one under its neighbour is not drawn, and keeps its own.
             let lean = TabSides(leading: under.leading ? 0 : cut.leading, trailing: under.trailing ? 0 : cut.trailing)
-            let beside = TabSides(leading: index > 0 ? views[order[index - 1]]?.rimInk : nil,
-                                  trailing: index < q.count ? views[order[index + 1]]?.rimInk : nil)
+            // Each neighbour as its rim stands this frame, and how far each
+            // seam glides: 0 at either edge, 1 half way (TabsList `--glide-*`).
+            func beside(_ at: Int) -> TabView.Beside? {
+                guard order.indices.contains(at), let tone = views[order[at]]?.rimTone else { return nil }
+                return TabView.Beside(tone: tone, pick: looks[order[at]]?.pick ?? 0)
+            }
+            let glide = TabSides(leading: index > 0 ? 2 * min(q[index - 1], 1 - q[index - 1]) : 0,
+                                 trailing: index < q.count ? 2 * min(q[index], 1 - q[index]) : 0)
             view.look = looks[id] ?? TabView.Look()
-            view.edges = TabView.Edges(under: under, inset: inset, lean: lean, beside: beside)
+            view.edges = TabView.Edges(under: under, inset: inset, lean: lean,
+                                       beside: TabSides(leading: beside(index - 1), trailing: beside(index + 1)), glide: glide)
         }
         let bottomUp = order.indices.sorted { rank[$0] < rank[$1] }.map { order[$0] }
         guard bottomUp != stacked else { return }
@@ -844,8 +851,8 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
 extension PaneTabsView {
     private static let probeLog = Logger(subsystem: "dev.cawco.app", category: "TabsProbe")
     private static let probeStops: [(name: String, f: Double)] = [
-        ("t0", 0), ("t25", Motion.easeCrossfade.value(at: 0.25)), ("f45", 0.45), ("t50", 0.5),
-        ("f55", 0.55), ("t75", Motion.easeCrossfade.value(at: 0.75)), ("t100", 1),
+        ("t0", 0), ("t25", Motion.easeCrossfade.value(at: 0.25)), ("f45", 0.45), ("f49", 0.49), ("t50", 0.5),
+        ("f51", 0.51), ("f55", 0.55), ("t75", Motion.easeCrossfade.value(at: 0.75)), ("t100", 1),
     ]
 
     /// The stepped clock at `ms`: its stop's place among the stops (as `t`) and its fraction.
@@ -931,6 +938,11 @@ extension PaneTabsView {
         probeHold = nil
         probeRode = false
         Self.probeLog.notice("tabs probe begin takeover\(attempt) from=\(self.active ?? "-", privacy: .public) to=\(id, privacy: .public)")
+        // Where the choice stands once the tap has had its way: a tap made
+        // while a finger rests on the pages holds (the two-finger check).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+            Self.probeLog.notice("tabs probe after tap attempt=\(attempt) active=\(self?.active ?? "-", privacy: .public) tapped=\(id, privacy: .public)")
+        }
         // A finger the pages never followed lands no swipe: the attempt ends here, and the next is armed.
         DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
             guard let self, probeLabel == "takeover\(attempt)" else { return }
@@ -1004,6 +1016,130 @@ extension PaneTabsView {
             try? UIImage(cgImage: crop, scale: scale, orientation: .up).pngData()?.write(to: folder.appendingPathComponent("\(file)-strip.png"))
         }
         Self.probeLog.notice("tabs probe hold \(file, privacy: .public)")
+        probeRims(name, in: image, window: window)
+    }
+
+    /// Every rim and seam as drawn in a held stop's capture (`image`, the
+    /// window), one line each. A tab: its tone, whether chosen, its rim's
+    /// strength; how many pixels of its top's stroke band stand off its
+    /// card's fill (0 when it draws no rim); each side's contrast against
+    /// the shelf at mid-height, read off the drawn stroke; its taper's ink at
+    /// 0, 10, 20, 40 and 100% of its length up from the tip, read back from
+    /// its mask, and that length against the shoulder's height. A seam: the
+    /// tab in front, its rim's strength, and how many strokes cross the
+    /// row at the sides' mid-height there.
+    private func probeRims(_ name: String, in image: UIImage, window: UIWindow) {
+        guard let pixels = ProbePixels(image) else { return }
+        let shelf = Palette.surfaceShelf.resolvedColor(with: traitCollection)
+        // What the strip shows whole: inside its scroll's bounds, clear of each edge's fade.
+        let room = fadeRoom
+        let strip = scroll.convert(scroll.bounds, to: window)
+        let shown = CGRect(x: strip.minX + room.start, y: strip.minY, width: max(0, strip.width - room.start - room.end), height: strip.height)
+        for id in order {
+            guard let view = views[id], let rim = view.probeRim(in: window) else { continue }
+            let card = rim.card
+            // The top's stroke band along the middle 60% of the top, where
+            // the strip shows at least 20pt of it whole (-1 where it does not).
+            let band = CGRect(x: card.minX + card.width * 0.2, y: card.minY, width: card.width * 0.6, height: 1).intersection(shown)
+            var off = -1
+            if band.width >= 20 {
+                off = 0
+                let fill = pixels.at(CGPoint(x: band.midX, y: card.minY + 3))
+                for x in stride(from: band.minX, to: band.maxX, by: 1 / pixels.scale) {
+                    if ProbePixels.distance(pixels.at(CGPoint(x: x, y: card.minY + 0.5)), fill) > 6.0 / 255 { off += 1 }
+                }
+            }
+            // Each side at mid-height, where the strip shows it whole: the
+            // strongest pixel across its stroke (-1 where it is out of view).
+            let mid = card.minY + (card.height + rim.shoulder) / 2
+            func side(_ edge: CGFloat, inward: CGFloat) -> Double {
+                guard edge - 2 >= shown.minX, edge + 2 <= shown.maxX else { return -1 }
+                return stride(from: 0, to: 1.0, by: 1 / Double(pixels.scale)).map { d in
+                    ProbePixels.contrast(pixels.at(CGPoint(x: edge + inward * (d + 0.5 / Double(pixels.scale)), y: mid)), shelf)
+                }.max() ?? 0
+            }
+            let taper = [0, 0.1, 0.2, 0.4, 1].map { String(format: "%.3f", rim.taper($0)) }.joined(separator: ",")
+            Self.probeLog.notice("tabs rim \(name, privacy: .public) \(id.prefix(8), privacy: .public) tone=\(rim.tone, privacy: .public) pick=\(String(format: "%.3f", view.look.pick), privacy: .public) strength=\(String(format: "%.3f", rim.strength), privacy: .public) px=\(off) mid=\(String(format: "%.2f,%.2f", side(card.minX, inward: 1), side(card.maxX, inward: -1)), privacy: .public) taper=\(taper, privacy: .public) length=\(String(format: "%.1f", rim.length), privacy: .public) shoulder=\(String(format: "%.1f", card.height - rim.shoulder), privacy: .public)")
+        }
+        for (index, left) in order.dropLast().enumerated() {
+            let right = order[index + 1]
+            guard let a = views[left], let b = views[right], let ra = a.probeRim(in: window), let rb = b.probeRim(in: window) else { continue }
+            // The front tab draws the seam at its own edge there.
+            let leftFront = (stacked.firstIndex(of: left) ?? 0) > (stacked.firstIndex(of: right) ?? 0)
+            let front = leftFront ? ra : rb
+            let edge = leftFront ? ra.card.maxX : rb.card.minX
+            guard edge - 6 >= shown.minX, edge + 6 <= shown.maxX else { continue }
+            let y = ra.card.minY + (ra.card.height + max(ra.shoulder, rb.shoulder)) / 2
+            let near = pixels.at(CGPoint(x: edge + (leftFront ? -5 : 5), y: y))
+            let far = pixels.at(CGPoint(x: edge + (leftFront ? 5 : -5), y: y))
+            // Each run of ink across the row: where it starts from the edge
+            // (pt, toward the tab behind positive), its length in pixels, and
+            // its strongest pixel.
+            var runs: [(start: CGFloat, length: Int, peak: [Double], off: Double)] = []
+            var inStroke = false
+            for x in stride(from: edge - 4, to: edge + 4, by: 1 / pixels.scale) {
+                let p = pixels.at(CGPoint(x: x, y: y))
+                let off = min(ProbePixels.distance(p, near), ProbePixels.distance(p, far))
+                let ink = off > 8.0 / 255
+                if ink, !inStroke { runs.append((start: (x - edge) * (leftFront ? 1 : -1), length: 0, peak: p, off: 0)) }
+                if ink, var run = runs.popLast() {
+                    run.length += 1
+                    if off > run.off { (run.peak, run.off) = (p, off) }
+                    runs.append(run)
+                }
+                inStroke = ink
+            }
+            let detail = runs.map { String(format: "%.2f:%d:%02x%02x%02x", $0.start, $0.length, Int($0.peak[0] * 255), Int($0.peak[1] * 255), Int($0.peak[2] * 255)) }.joined(separator: ",")
+            Self.probeLog.notice("tabs seam \(name, privacy: .public) \(left.prefix(8), privacy: .public)|\(right.prefix(8), privacy: .public) front=\((leftFront ? left : right).prefix(8), privacy: .public) strength=\(String(format: "%.3f", front.strength), privacy: .public) strokes=\(runs.count) runs=\(detail.isEmpty ? "-" : detail, privacy: .public)")
+        }
+    }
+}
+
+/// A capture's pixels in sRGB, read by the window's points.
+private struct ProbePixels {
+    let bytes: [UInt8]
+    let width: Int
+    let height: Int
+    let scale: CGFloat
+
+    init?(_ image: UIImage) {
+        guard let cg = image.cgImage, let space = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        width = cg.width
+        height = cg.height
+        scale = image.scale
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn = bytes.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(data: buffer.baseAddress, width: cg.width, height: cg.height, bitsPerComponent: 8, bytesPerRow: cg.width * 4, space: space,
+                                          bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            context.draw(cg, in: CGRect(x: 0, y: 0, width: cg.width, height: cg.height))
+            return true
+        }
+        guard drawn else { return nil }
+        self.bytes = bytes
+    }
+
+    func at(_ point: CGPoint) -> [Double] {
+        let x = min(width - 1, max(0, Int(point.x * scale)))
+        let y = min(height - 1, max(0, Int(point.y * scale)))
+        let at = (y * width + x) * 4
+        return (0 ..< 3).map { Double(bytes[at + $0]) / 255 }
+    }
+
+    static func distance(_ a: [Double], _ b: [Double]) -> Double {
+        zip(a, b).map { abs($0 - $1) }.max() ?? 0
+    }
+
+    /// WCAG contrast between a pixel and a colour.
+    static func contrast(_ pixel: [Double], _ color: UIColor) -> Double {
+        var (r, g, b, alpha) = (CGFloat(0), CGFloat(0), CGFloat(0), CGFloat(0))
+        color.getRed(&r, green: &g, blue: &b, alpha: &alpha)
+        func luminance(_ rgb: [Double]) -> Double {
+            let linear = rgb.map { $0 <= 0.04045 ? $0 / 12.92 : pow(($0 + 0.055) / 1.055, 2.4) }
+            return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+        }
+        let one = luminance(pixel)
+        let two = luminance([Double(r), Double(g), Double(b)].map { min(1, max(0, $0)) })
+        return (max(one, two) + 0.05) / (min(one, two) + 0.05)
     }
 }
 #endif
@@ -1117,9 +1253,11 @@ final class TabView: UIView {
 
     private let tint = CAShapeLayer()
     private let sheet = CAShapeLayer()
-    /// The status rim (PaneTabs.svelte `.rim`): the tab's outline, 1.5pt
-    /// across the top tapering to 0.5pt down the sides, with a soft glow at
-    /// half its strength, gone by 90% of the tab's height (`rimFade`).
+    /// The status rim (PaneTabs.svelte `.rim`): the tab's outline at
+    /// `tabRimWidth`, with a soft glow at half its strength, each foot
+    /// narrowing to a point on the shelf and fading out up the side over
+    /// `tabRimTaper`, short of the shoulder (`rimFade`). Whole on the chosen
+    /// tab, subtle on an unchosen one, none on an unchosen idle one (`strength`).
     private let rimHost = CALayer()
     /// The rim's reach: off the phone's row it stops at a tucked shoulder's
     /// crest, stroke and glow (`layoutRim`).
@@ -1150,24 +1288,45 @@ final class TabView: UIView {
     /// stops at that neighbour's edge; on the phone's row it runs under in
     /// full; a side in front stands at the seam, which a switch glides
     /// between the two tabs' edges, its rim's ink leaning toward the
-    /// neighbour's (`beside`) as far as it stands in (`lean`, 0 to 1).
+    /// neighbour's (`beside`) as far as it stands in (`lean`, 0 to 1), and
+    /// its whole rim's strength toward the weaker of the two as the seam
+    /// nears half way (`glide`, 0 at either edge, 1 half way).
     struct Edges: Equatable {
         var under = TabSides(leading: false, trailing: false)
         var inset = TabSides(leading: 0.0, trailing: 0.0)
         var lean = TabSides(leading: 0.0, trailing: 0.0)
-        var beside = TabSides<UIColor?>(leading: nil, trailing: nil)
+        var beside = TabSides<Beside?>(leading: nil, trailing: nil)
+        var glide = TabSides(leading: 0.0, trailing: 0.0)
+    }
+
+    /// A neighbour as its rim stands: its session's tone and how chosen it is.
+    struct Beside: Equatable {
+        var tone: SessionStatusView.Tone
+        var pick: Double
     }
 
     var edges = Edges() {
         didSet {
             guard edges != oldValue else { return }
             if edges.under != oldValue.under || edges.inset != oldValue.inset { setNeedsLayout() }
-            if edges.lean != oldValue.lean || edges.beside != oldValue.beside { paintRim(animated: false) }
+            if edges.lean != oldValue.lean || edges.beside != oldValue.beside || edges.glide != oldValue.glide { paintRim(animated: false) }
         }
     }
 
-    /// Its rim's ink, by its session's status: what a neighbour's side leans toward.
-    var rimInk: UIColor? { tab.map { Self.ink($0.face.tone) } }
+    /// Its session's tone, which sets its rim's ink and strengths.
+    var rimTone: SessionStatusView.Tone? { tab?.face.tone }
+
+    /// A rim's strength (its opacity) with its tab `pick` chosen (0 to 1),
+    /// between its unchosen and chosen strengths (PaneTabs.svelte `RIM`):
+    /// chosen `tabRimMixChosen`, or `tabRimMixIdle` in the muted ink (idle,
+    /// done); unchosen `tabRimMixSubtle`, and none on an idle tab. Solid
+    /// (Increase Contrast, Reduce Transparency) wears every rim it draws whole.
+    static func strength(_ tone: SessionStatusView.Tone, pick: Double, traits: UITraitCollection, solid: Bool) -> Double {
+        let muted = tone == .quiet || tone == .done
+        let full = solid ? 1 : (muted ? Effect.tabRimMixIdle : Effect.tabRimMixChosen).value(for: traits)
+        let rest = tone == .quiet ? 0 : (solid ? 1 : Effect.tabRimMixSubtle)
+        return rest + (full - rest) * pick
+    }
 
     /// A rim's ink on the rail's scale: working the live ink, needs you the
     /// attention ink, failed the fail ink, the rest the muted ink.
@@ -1381,6 +1540,38 @@ final class TabView: UIView {
     /// Its session is parked on the operator, for `-tabs-probe`.
     var probeNeeds: Bool { tab?.needs == true }
 
+    /// Its rim as drawn, for `-tabs-probe`: its card in `window`'s points,
+    /// its shoulders' radius, its tone, its strength, how far up from the
+    /// tip its fade reaches, and its taper's ink at `s` of `tabRimTaper` up
+    /// from the tip, read back from the mask's own stops as the gradient
+    /// draws them.
+    struct ProbeRim {
+        let card: CGRect
+        let shoulder: Double
+        let tone: String
+        let strength: Double
+        let length: Double
+        let taper: (Double) -> Double
+    }
+
+    func probeRim(in window: UIWindow) -> ProbeRim? {
+        guard let tone = tab?.face.tone else { return nil }
+        let height = Double(rimHost.bounds.height)
+        let length = min(Effect.tabRimTaper, shoulderHeight)
+        let locations = (rimFade.locations ?? []).map(\.doubleValue)
+        let inks = ((rimFade.colors as? [CGColor]) ?? []).map { Double($0.alpha) }
+        let taper: (Double) -> Double = { s in
+            let at = (height - s * Effect.tabRimTaper) / height
+            guard locations.count == inks.count, let above = locations.firstIndex(where: { $0 >= at }) else { return inks.last ?? 1 }
+            guard above > 0 else { return inks.first ?? 1 }
+            let span = locations[above] - locations[above - 1]
+            let t = span > 0 ? (at - locations[above - 1]) / span : 0
+            return inks[above - 1] + (inks[above] - inks[above - 1]) * t
+        }
+        return ProbeRim(card: convert(cardRect, to: window), shoulder: max(shoulders.leading, shoulders.trailing), tone: "\(tone)",
+                        strength: Double(rim.opacity), length: length, taper: taper)
+    }
+
     /// How the tab is drawn now, for `-tabs-probe`: its look; its sheet's
     /// opacity (model and on screen) and its card's; its rim's strength; its
     /// chevron's; whether any transform, mask or running animation moves its
@@ -1505,36 +1696,41 @@ final class TabView: UIView {
         CATransaction.commit()
     }
 
-    /// The rim in its session's status colour (`ink`, the rest at the idle
-    /// strength), its strength following how chosen the tab is, each side's
-    /// ink leaning toward its neighbour's on a gliding seam (`edges`). A
-    /// status change cross-fades over `durPanel`.
+    /// The rim in its session's status colour (`ink`), at its strength now
+    /// (`strength`, how chosen the tab stands this frame); where one of its
+    /// seams glides on a switch, leaning toward the weaker of its own and
+    /// that neighbour's as the seam nears half way and back as it leaves, so
+    /// at the handover the two stand at one strength and the edge passes
+    /// with nothing moving; against a rimless neighbour the gliding edge
+    /// fades out (PaneTabs.svelte `.rim` opacity). Each side's ink leans
+    /// toward its neighbour's as far as it stands in (`edges`). A status
+    /// changing at rest cross-fades over `durPanel`.
     private func paintRim(animated: Bool) {
         guard let tone = tab?.face.tone else { return }
-        let ink = Self.ink(tone)
-        let quiet = tone == .quiet || tone == .done
-        // Its strengths by day or by night: a rim holds 3:1 against the tab
-        // and the shelf in either.
         let traits = traitCollection
-        let unchosen = Effect.tabRimMix.value(for: traits)
-        let chosen = Effect.tabRimMixChosen.value(for: traits)
-        let mix = quiet ? Effect.tabRimMixIdle.value(for: traits) : unchosen + (chosen - unchosen) * look.pick
         let solid = solidRim
-        let resolved = ink.resolvedColor(with: traitCollection)
+        let own = Self.strength(tone, pick: look.pick, traits: traits, solid: solid)
+        var strength = own
+        for (glide, beside) in [(edges.glide.leading, edges.beside.leading), (edges.glide.trailing, edges.beside.trailing)] {
+            guard glide > 0, own > 0, let beside else { continue }
+            let other = Self.strength(beside.tone, pick: beside.pick, traits: traits, solid: solid)
+            strength *= 1 - glide + glide * min(1, other / own)
+        }
+        let resolved = Self.ink(tone).resolvedColor(with: traits)
         CATransaction.begin()
         CATransaction.setDisableActions(!animated)
         CATransaction.setAnimationDuration(Motion.durPanel)
         CATransaction.setAnimationTimingFunction(Motion.easeOut.function)
-        rim.opacity = solid ? 1 : Float(mix)
+        rim.opacity = Float(strength)
         rimTop.fillColor = resolved.cgColor
-        func side(_ beside: UIColor?, _ lean: Double) -> CGColor {
-            beside.map { Self.mix(resolved, $0, lean, traits: traits).cgColor } ?? resolved.cgColor
+        func side(_ beside: Beside?, _ lean: Double) -> CGColor {
+            beside.map { Self.mix(resolved, Self.ink($0.tone), lean, traits: traits).cgColor } ?? resolved.cgColor
         }
         rimLead.fillColor = side(edges.beside.leading, edges.lean.leading)
         rimTrail.fillColor = side(edges.beside.trailing, edges.lean.trailing)
         // The glow at half the rim's strength; none when the rim is solid.
         glow.shadowColor = resolved.cgColor
-        glow.shadowOpacity = solid ? 0 : Float(mix / 2)
+        glow.shadowOpacity = solid ? 0 : Float(strength / 2)
         CATransaction.commit()
     }
 
@@ -1567,15 +1763,17 @@ final class TabView: UIView {
         return CGRect(x: bounds.minX + inset.leading, y: bounds.minY, width: max(0, bounds.width - inset.leading - inset.trailing), height: bounds.height)
     }
 
-    /// The rim's ring (PaneTabs.svelte `.rim::after`), on the card's own
-    /// outline: 1.5pt wide across the top and round both shoulders, where a
-    /// ring cut from two rounded rectangles thins with the corner's radius,
-    /// then tapering over the next `spill` down each side to 0.5pt (1pt all
-    /// round, solid), open at the foot; faded out by 90% of the tab's height
-    /// unless solid. Off the phone's row a tucked card's rim stops at that
-    /// shoulder's crest, stroke and glow (`rimClip`): the neighbour's stroke
-    /// alone runs down into the notch between the two shoulders, one outline
-    /// where they meet (PaneTabs.svelte, the desk's `.rim` clip).
+    /// The rim's ring (PaneTabs.svelte `.rim`), on the card's own outline:
+    /// `tabRimWidth` all round (1pt solid), each foot narrowing to a point on
+    /// the shelf from where the taper's ink is 90% whole, or the foot's top
+    /// where that is lower (`.rim-plain`, `narrowing`); and the rim and its
+    /// glow fading out up each side to that tip over `tabRimTaper` along the
+    /// stroke on the taper's ease-out, stopping at the shoulder (`rimFade`,
+    /// `taperInk`). Off the phone's row a tucked card's
+    /// rim stops at that shoulder's crest, stroke and glow (`rimClip`): the
+    /// neighbour's stroke alone runs down into the notch between the two
+    /// shoulders, one outline where they meet (PaneTabs.svelte, the desk's
+    /// `.rim` clip).
     private func layoutRim() {
         let spill = Self.spill
         let card = cardRect
@@ -1593,8 +1791,8 @@ final class TabView: UIView {
         rim.frame = rimHost.bounds
         let outline = CGRect(x: spill, y: spill, width: card.width, height: card.height)
         let solid = solidRim
-        let top = solid ? 1.0 : 1.5
-        let ring = Self.ring(outline, leading: corners.leading, trailing: corners.trailing, top: top, side: solid ? 1 : 0.5, taper: spill).cgPath
+        let top = solid ? 1.0 : Effect.tabRimWidth
+        let ring = Self.ring(outline, leading: corners.leading, trailing: corners.trailing, width: top, foot: min(Self.narrowing, flare)).cgPath
         // Cut in three where each shoulder meets the top, the pieces
         // overlapping by half a point.
         let lead = outline.minX + max(corners.leading, top)
@@ -1613,10 +1811,45 @@ final class TabView: UIView {
         outside.append(shape)
         glowOutside.frame = rimHost.bounds
         glowOutside.path = outside.cgPath
+        // The taper, up from the tip on the shelf (the host's foot): the
+        // stroke and its glow whole above it, fading to nothing at the tip.
+        // Each stop stands at its share of the taper up from the tip, no
+        // higher than the shoulder (PaneTabs.svelte `.rim-plain` mask).
         let height = rimHost.bounds.height
         rimFade.frame = rimHost.bounds
-        rimFade.locations = [0, NSNumber(value: spill / height), NSNumber(value: (spill + 0.9 * bounds.height) / height)]
-        rimHost.mask = solid ? nil : rimFade
+        let shoulder = shoulderHeight
+        let stops = Self.taperStops.reversed().map { x in
+            (at: (height - min(x * Effect.tabRimTaper, shoulder)) / height, ink: Self.taperInk(x))
+        }
+        rimFade.locations = [0] + stops.map { NSNumber(value: $0.at) }
+        rimFade.colors = [UIColor.black.cgColor] + stops.map { UIColor.black.withAlphaComponent($0.ink).cgColor }
+        rimHost.mask = rimFade
+    }
+
+    /// The feet's flare: the foot's height, over which a foot narrows to its tip.
+    private var flare: Double { phoneRow ? Radius.radiusLg : Radius.radiusSm }
+
+    /// How high a side runs from its tip to where its shoulder begins: the taper stops there.
+    var shoulderHeight: Double {
+        max(0, cardRect.height - max(shoulders.leading, shoulders.trailing))
+    }
+
+    /// The taper's ink at `x` of `tabRimTaper` up from the tip: an ease-out,
+    /// 1 − (1 − x)^`tabRimTaperEase`, 0 at the tip, 90% whole by 32% of the
+    /// way (10.2pt of 32), whole at it (PaneTabs.svelte `--te`, `--e04`…), so
+    /// a chosen tab's sides stand whole at mid-height and hold 3:1.
+    static func taperInk(_ x: Double) -> Double {
+        x >= 1 ? 1 : 1 - pow(1 - max(0, x), Effect.tabRimTaperEase)
+    }
+
+    /// The taper's stops, as shares of its length up from the tip, the
+    /// web's own; straight between them.
+    static let taperStops: [Double] = [0, 0.04, 0.08, 0.13, 0.19, 0.26, 0.35, 0.5, 0.7, 1]
+
+    /// How far up from the tip a foot narrows to its point: to where the
+    /// taper's ink is 90% whole, (1 − 0.1^(1/p)) of its length (`--tn90`).
+    static var narrowing: Double {
+        (1 - pow(0.1, 1 / Effect.tabRimTaperEase)) * Effect.tabRimTaper
     }
 
     /// A tab's outline: circular shoulders, `leading` and `trailing` their
@@ -1633,29 +1866,30 @@ final class TabView: UIView {
         return path
     }
 
-    /// The outline's stroke, inside it: `top` wide across the top and round
-    /// both shoulders (`leading` and `trailing` their radii, 0 square),
-    /// narrowing over `taper` below them to `side` down each side, open at
-    /// the foot (the web's `shape()` for `.rim::after`). The stroke's inner
-    /// edge turns on a radius `top` less than its shoulder's, none when square.
-    static func ring(_ rect: CGRect, leading: Double, trailing: Double, top: Double, side: Double, taper: Double) -> UIBezierPath {
+    /// The outline's stroke, inside it: `width` wide across the top, round
+    /// both shoulders (`leading` and `trailing` their radii, 0 square) and
+    /// down each side, then narrowing over the last `foot` to a point on the
+    /// shelf at the outline's edge (PaneTabs.svelte `.rim-plain`). The
+    /// stroke's inner edge turns on a radius `width` less than its
+    /// shoulder's, none when square.
+    static func ring(_ rect: CGRect, leading: Double, trailing: Double, width: Double, foot: Double) -> UIBezierPath {
         let path = UIBezierPath()
-        let lead = max(leading, top)
-        let trail = max(trailing, top)
+        let lead = max(leading, width)
+        let trail = max(trailing, width)
+        // The narrowing starts no higher than the shoulders end.
+        let narrow = max(rect.minY + max(lead, trail), rect.maxY - foot)
         path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
         path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + leading))
         path.addArc(withCenter: CGPoint(x: rect.minX + leading, y: rect.minY + leading), radius: leading, startAngle: .pi, endAngle: .pi * 1.5, clockwise: true)
         path.addLine(to: CGPoint(x: rect.maxX - trailing, y: rect.minY))
         path.addArc(withCenter: CGPoint(x: rect.maxX - trailing, y: rect.minY + trailing), radius: trailing, startAngle: .pi * 1.5, endAngle: 0, clockwise: true)
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.maxX - side, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.maxX - side, y: rect.minY + trail + taper))
-        path.addLine(to: CGPoint(x: rect.maxX - top, y: rect.minY + trail))
-        path.addArc(withCenter: CGPoint(x: rect.maxX - trail, y: rect.minY + trail), radius: trail - top, startAngle: 0, endAngle: .pi * 1.5, clockwise: false)
-        path.addLine(to: CGPoint(x: rect.minX + lead, y: rect.minY + top))
-        path.addArc(withCenter: CGPoint(x: rect.minX + lead, y: rect.minY + lead), radius: lead - top, startAngle: .pi * 1.5, endAngle: .pi, clockwise: false)
-        path.addLine(to: CGPoint(x: rect.minX + side, y: rect.minY + lead + taper))
-        path.addLine(to: CGPoint(x: rect.minX + side, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.maxX - width, y: narrow))
+        path.addLine(to: CGPoint(x: rect.maxX - width, y: rect.minY + trail))
+        path.addArc(withCenter: CGPoint(x: rect.maxX - trail, y: rect.minY + trail), radius: trail - width, startAngle: 0, endAngle: .pi * 1.5, clockwise: false)
+        path.addLine(to: CGPoint(x: rect.minX + lead, y: rect.minY + width))
+        path.addArc(withCenter: CGPoint(x: rect.minX + lead, y: rect.minY + lead), radius: lead - width, startAngle: .pi * 1.5, endAngle: .pi, clockwise: false)
+        path.addLine(to: CGPoint(x: rect.minX + width, y: narrow))
         path.close()
         return path
     }

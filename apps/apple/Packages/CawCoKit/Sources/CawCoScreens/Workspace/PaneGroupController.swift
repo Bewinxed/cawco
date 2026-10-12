@@ -190,6 +190,14 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         stack.onScroll = { [weak self] position in self?.pagingMoved(position) }
         stack.onLand = { [weak self] page in
             guard let self else { return }
+            // A tab tapped is a choice: a finger resting on the pages stops
+            // the scroll the tap sent at once, and the pages land where they
+            // stood. They follow the tap instead; a finger that drags them
+            // takes the choice back (`pagingMoved`).
+            if let tapped = chosenPage, tapped != page, shownTabs.indices.contains(tapped) {
+                stack.choose(tapped, animated: false)
+                return
+            }
             chosenPage = nil
             guard shownTabs.indices.contains(page) else { return }
             let id = shownTabs[page]
