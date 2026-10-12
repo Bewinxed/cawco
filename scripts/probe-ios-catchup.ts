@@ -33,7 +33,9 @@
  *
  * Checks: the pill shows at most once and hides at most once for the load,
  * and never changes more than twice in any second; the reads are the newest
- * page once and each older page once. The head's ink is measured by
+ * page once and each older page once. With the agent away, the dock says
+ * "Not caught up: <machine> is offline" over the rows held, and the line
+ * goes once the agent is back and the read lands. The head's ink is measured by
  * scripts/probe-ios-headfade.ts from the captures this writes.
  *
  * Captures go to $TMPDIR/ios-transcript/<label>/ (or .probe/ outside a
@@ -57,6 +59,8 @@ const root = resolve(import.meta.dir, "..");
 const home = process.env.HOME ?? "";
 const AXE = "/opt/homebrew/bin/axe";
 const PILL = "Catching up…";
+/** The dock's line while a read again found the machine offline (DockPill `note`). */
+const BEHIND = "Not caught up: ";
 const out = join(
   process.env.CAWCO_WORKSPACE && process.env.TMPDIR
     ? join(process.env.TMPDIR, "ios-transcript")
@@ -573,6 +577,14 @@ xcrun simctl install ${udid} "${app}"`);
           Math.abs((away.first?.y ?? 0) - (before.first?.y ?? 0)) < 2,
         `row-${before.first?.row} at y ${before.first?.y}, then row-${away.first?.row} at y ${away.first?.y}`
       );
+      const strip = (await tree()).find((n) =>
+        n.label?.startsWith(BEHIND)
+      )?.label;
+      check(
+        `${label}: the pane says it is not caught up`,
+        strip?.endsWith("is offline") === true,
+        strip ? `"${strip}"` : "no line in the pane"
+      );
       fleet.launch("agent");
       await fleet.agentUp();
       const again = await until(
@@ -590,6 +602,17 @@ xcrun simctl install ${udid} "${app}"`);
         `${label}: read again once the hub says the machine is online`,
         again,
         again ? "read because machineOnline" : "no read followed the machine"
+      );
+      const gone = await until(
+        `${label}: the not-caught-up line goes`,
+        tree,
+        (nodes) => !nodes.some((n) => n.label?.startsWith(BEHIND)),
+        30_000
+      ).catch(() => undefined);
+      check(
+        `${label}: the line goes once the read lands`,
+        gone !== undefined,
+        gone ? "no longer in the pane" : "still in the pane after 30s"
       );
       reads = 2;
     }

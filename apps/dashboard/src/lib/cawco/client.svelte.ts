@@ -424,6 +424,12 @@ export type ReadFault =
 
 export interface SessionState {
   /**
+   * Why the last read again over the rows held failed. The rows stay where
+   * the reader has them, and the read is made again on the next event that
+   * can answer it: the machine online again, the socket back, a retry.
+   */
+  behind: ReadFault | null;
+  /**
    * The main transcript as the hub built it, oldest first: every block it has
    * sent this view, sends drawn in their place. What is on screen,
    * {@link messages}, is these with this tab's own rows ({@link place}).
@@ -457,6 +463,12 @@ export interface SessionState {
   effort: SessionEffort | null;
   /** Which harness owns {@link sessionId} — what a resume and a catalog read route on. */
   harness: HarnessKind;
+  /**
+   * The hub read the stored transcript again (a transcript `reset`): the rows
+   * held may say something else now, so the next read reads every page back
+   * to the first row held. Cleared when a read lands.
+   */
+  historyChanged: boolean;
   /** An older page of the transcript is being read: one at a time (see {@link readOlderPage}). */
   hydrating: boolean;
   /** The `system.init` banner is re-emitted every turn; render it once. */
@@ -1032,6 +1044,8 @@ export function blankSession(instanceId: string): SessionState {
     loading: false,
     hydrating: false,
     readFault: null,
+    behind: null,
+    historyChanged: false,
     olderFault: null,
     reads: 0,
     initialized: false,
@@ -1429,7 +1443,7 @@ function applyTranscript(
       case "reset":
         beginRead(streamState, target.instanceId);
         // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and resumes the stream when it lands
-        void readTranscript(target.instanceId, true);
+        void readTranscript(target.instanceId, "transcriptReset");
         place(target);
         return;
       case "block.append":
@@ -1524,8 +1538,14 @@ function seesCompaction(page: TranscriptPage): void {
  * hub's blocks, branches, waiting sends, live tail and facts replace what the
  * view held. What only this tab holds survives it: its own sends the hub has
  * not taken. The failure lines it saw belonged to the transcript it replaced.
+ * `keepBranches`: the page's blocks start with rows held before it was read
+ * ({@link joinHeld}), whose branches stay beside the page's.
  */
-function adoptTranscriptPage(target: SessionState, page: TranscriptPage): void {
+function adoptTranscriptPage(
+  target: SessionState,
+  page: TranscriptPage,
+  keepBranches = false
+): void {
   const { where } = page;
   // The hub's word on machine and folder fills blanks only: a live row's own
   // values are already in place and are not walked back. The key is the one
@@ -1548,12 +1568,15 @@ function adoptTranscriptPage(target: SessionState, page: TranscriptPage): void {
   target.reads += 1;
   target.olderFault = null;
   const { tail } = page;
-  target.subagents = Object.fromEntries(
-    page.branches.map((branch) => [
-      branch.toolUseId,
-      pageBranch(branch, tail?.streams[branch.toolUseId] ?? ""),
-    ])
-  );
+  target.subagents = {
+    ...(keepBranches ? target.subagents : {}),
+    ...Object.fromEntries(
+      page.branches.map((branch) => [
+        branch.toolUseId,
+        pageBranch(branch, tail?.streams[branch.toolUseId] ?? ""),
+      ])
+    ),
+  };
   if (tail) {
     applyTail(target, { ...tail, streams: undefined });
   }
@@ -2388,6 +2411,14 @@ function adoptMachines(incoming: Machine[]): void {
       .map((machine) => machine.machineId)
   );
   state.machines = next;
+  // A transcript whose read found its machine offline is read again once the
+  // hub says it is online: across a hub restart this tab may never have seen
+  // it go, so it is every online machine, not a change of one.
+  for (const machine of next) {
+    if (machine.status === "online") {
+      readBehind(machine.machineId);
+    }
+  }
   // Before the first read the connect-time `refreshCatalogs` asks them all.
   if (!state.fleetRead) {
     return;
@@ -2396,6 +2427,26 @@ function adoptMachines(incoming: Machine[]): void {
     if (machine.status === "online" && !wasOnline.has(machine.machineId)) {
       // biome-ignore lint/complexity/noVoid: fire-and-forget — the catalog lands in the store the board reads
       void loadCatalog(machine.machineId);
+    }
+  }
+}
+
+/**
+ * `machineId` is online: every transcript the dashboard follows whose last
+ * read found that machine offline is read now, unless a read is already out.
+ */
+function readBehind(machineId: string): void {
+  for (const id of subscriptionIds()) {
+    const held = state.sessions[id];
+    const fault = held?.readFault ?? held?.behind;
+    if (
+      held &&
+      !held.loading &&
+      fault?.reason === "offline" &&
+      fault.machineId === machineId
+    ) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and resumes the stream when it lands
+      void readTranscript(id, "machineOnline");
     }
   }
 }
@@ -2990,9 +3041,9 @@ const streamHost: StreamHost = {
   },
   follows: (sessionId) => subscriptionIds().includes(sessionId),
   // The newest page again, which resumes the stream from the `seq` it carries.
-  rereadHistory: (sessionId) => {
+  rereadHistory: (sessionId, cause) => {
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and resumes the stream when it lands
-    void readTranscript(sessionId, true);
+    void readTranscript(sessionId, cause);
   },
   sendToHub: (message) => {
     const socket = globalThis.__cawcoSocket;
@@ -4270,6 +4321,15 @@ function hubReached(): void {
   // this dashboard the moment the socket dropped.
   lastSubscriptionKey = "";
   syncSubscriptions();
+  // A followed transcript whose last read failed waits on a read (its stream
+  // cursor stays `reading`): the hub that answers now may answer that too.
+  for (const id of subscriptionIds()) {
+    const held = state.sessions[id];
+    if (held && !held.loading && (held.readFault || held.behind)) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and resumes the stream when it lands
+      void readTranscript(id, "reconnect");
+    }
+  }
   lastPlanFollowKey = "";
   syncPlanFollows();
   resumePendingSends(streamState, streamHost);
@@ -5742,23 +5802,44 @@ async function pageFault(response: Response): Promise<TranscriptOutcome> {
   return { ok: false, status: response.status, ...readFaultOf(detail, away) };
 }
 
+/** Why the newest page is read: each caller of {@link readTranscript} names itself. */
+export type ReadCause =
+  /** A reader opened the session: a pane, a peek, a hover, a delegate card. */
+  | "open"
+  /** The hub read the stored transcript again (a transcript `reset` event). */
+  | "transcriptReset"
+  /** The hub's ring could not replay the gap (`stream.reset`). */
+  | "streamReset"
+  /** The replay came back broken {@link MAX_RESYNC_ATTEMPTS} times. */
+  | "backlogBroken"
+  /** The reader asked again after a failed read. */
+  | "retry"
+  /** The socket came back while the last read had failed. */
+  | "reconnect"
+  /** The machine the last read found offline is online again. */
+  | "machineOnline";
+
 /**
  * A session's transcript, read once: the newest page the hub built, then its
- * stream from the `seq` that page was read at. `again` reads it whether or not
- * the view already holds one — the hub said the transcript changed under it,
- * or its stream could not replay a gap. A read already in flight answers for
- * any ask that lands meanwhile, unless `fresh`: its reader left the view and
- * came back, so that read is ended unanswered and a new one starts.
+ * stream from the `seq` that page was read at. An `open` read is skipped when
+ * the view already follows the stream; every other cause reads it again. A
+ * read already in flight answers for any ask that lands meanwhile, unless
+ * `fresh`: its reader left the view and came back, so that read is ended
+ * unanswered and a new one starts.
  */
 export function readTranscript(
   viewId: string,
-  again = false,
+  cause: ReadCause = "open",
   fresh = false
 ): Promise<TranscriptOutcome> {
   // A workflow run's tab has no transcript of its own: its steps' do. A
   // thread's is its messages (`readThread`).
   if (runIdOf(viewId) || isThreadTab(viewId)) {
     return Promise.resolve({ ok: true, skipped: true });
+  }
+  const target = session(viewId);
+  if (cause === "transcriptReset") {
+    target.historyChanged = true;
   }
   const inFlight = pageReads.get(viewId);
   if (inFlight && !fresh) {
@@ -5768,12 +5849,13 @@ export function readTranscript(
   // A stream this view already follows carries everything after the page it
   // was read at — or, for a session this tab just started, everything there
   // is.
-  if (!again && streamState.cursors[viewId]?.subscribed) {
+  if (cause === "open" && streamState.cursors[viewId]?.subscribed) {
     return Promise.resolve({ ok: true, skipped: true });
   }
   const controller = new AbortController();
   const read: Promise<TranscriptOutcome> = readNewestPage(
-    session(viewId),
+    target,
+    cause,
     controller.signal
   ).finally(() => {
     // Only this read's own entry: a fresh one may have taken the slot.
@@ -5846,15 +5928,138 @@ async function readPage<T>(
 }
 
 /**
+ * The rows held and the pages read, as one transcript: its rows, the cursor
+ * before them, the branches read, how many of the rows held were kept as
+ * they were, and why a page before them could not be read.
+ */
+interface Joined {
+  blocks: TranscriptBlock[];
+  branches: TranscriptPageBranch[];
+  cursor: string | null;
+  kept: number;
+  older: ReadFault | null;
+}
+
+/**
+ * The pages read (`read`, oldest first, older pages before `readCursor`)
+ * joined to the rows held, once they reach them; null while they fall short
+ * and the pages before must be read too. The hub's row ids are its stored
+ * entries' own, the same on every read, so rows meet by id.
+ *
+ * - Nothing held: the read is the transcript.
+ * - The read holds the first row held: it covers every row held, and
+ *   replaces them (a row the hub no longer has goes with them).
+ * - The history changed: the read must reach the first row held, so every
+ *   row held is read again; until then, null.
+ * - The read's first row is held: the rows held before it stay, the read
+ *   replaces the rest, and the cursor before them is the one held.
+ */
+function joinHeld(
+  held: TranscriptBlock[],
+  heldCursor: string | null,
+  read: TranscriptBlock[],
+  readCursor: string | null,
+  historyChanged: boolean
+): Pick<Joined, "blocks" | "cursor" | "kept"> | null {
+  const [first] = held;
+  if (!first || read.some((block) => block.id === first.id)) {
+    return { blocks: read, cursor: readCursor, kept: 0 };
+  }
+  const [readFirst] = read;
+  const at = readFirst
+    ? held.findIndex((block) => block.id === readFirst.id)
+    : -1;
+  if (historyChanged || at < 0) {
+    return null;
+  }
+  return {
+    blocks: [...held.slice(0, at), ...read],
+    cursor: heldCursor,
+    kept: at,
+  };
+}
+
+/**
+ * The newest page joined to the rows the view holds ({@link joinHeld}),
+ * reading the pages before it while it does not reach them. A page before
+ * that cannot be read ends it: the read stands alone, and the strip before
+ * its first row says why ({@link SessionState.olderFault}).
+ */
+async function readBackToHeld(
+  target: SessionState,
+  page: TranscriptPage,
+  cancel: AbortSignal
+): Promise<Joined> {
+  let read = page.blocks;
+  let { branches, cursor } = page;
+  for (;;) {
+    const joined = joinHeld(
+      // Every row in `blocks` is one the hub placed (`take`): this tab's own
+      // sends wait in `local` until it does.
+      target.blocks as TranscriptBlock[],
+      target.cursor,
+      read,
+      cursor,
+      target.historyChanged
+    );
+    if (joined) {
+      return { ...joined, branches, older: null };
+    }
+    // Short of the rows held, with nothing before: the read is the whole conversation.
+    if (cursor === null) {
+      return { blocks: read, branches, cursor, kept: 0, older: null };
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: each page starts where the last one ended
+    const previous = await olderPage(target.instanceId, cursor, cancel);
+    if (!("blocks" in previous)) {
+      return { blocks: read, branches, cursor, kept: 0, older: previous };
+    }
+    const have = new Set(read.map((block) => block.id));
+    read = [...previous.blocks.filter((block) => !have.has(block.id)), ...read];
+    const listed = new Set(branches.map((branch) => branch.toolUseId));
+    branches = [
+      ...previous.branches.filter((branch) => !listed.has(branch.toolUseId)),
+      ...branches,
+    ];
+    ({ cursor } = previous);
+  }
+}
+
+/**
+ * Why a read failed, where the view says it: over rows held, they stay where
+ * the reader has them and the view is behind ({@link SessionState.behind});
+ * with nothing held, the pane says why in their place.
+ */
+function readFailed(target: SessionState, fault: ReadFault): void {
+  if (target.blocks.length > 0) {
+    target.behind = fault;
+  } else {
+    target.readFault = fault;
+  }
+}
+
+/**
  * The newest page into the view, and its stream resumed from the page's
- * `seq`. Nothing older is read here: the view asks for it a page at a time,
- * as its reader nears the first rows it holds ({@link readOlderPage}).
+ * `seq`.
+ *
+ * A READ AGAIN KEEPS WHAT THE READER HAS LOADED. Over rows already held (a
+ * reset, a resync, a retry, the socket or the machine back), the newest
+ * page is joined to them where they meet ({@link readBackToHeld}): the rows
+ * the reader stands among keep their ids, so the list keeps its place by
+ * them. Nothing held, the page is the transcript, and the view asks for
+ * older pages itself as its reader nears the first rows ({@link readOlderPage}).
+ *
+ * A read that fails leaves the stream waiting for the next one (its cursor
+ * stays `reading`), and that read is made on the next event that can answer
+ * it: the machine online again ({@link readBehind}), the socket back
+ * ({@link hubReached}), or the reader's retry.
  *
  * `cancel` fires when a fresh read took this one's place: whatever this one
  * would have said is dropped, and it answers `skipped`.
  */
 async function readNewestPage(
   target: SessionState,
+  cause: ReadCause,
   cancel: AbortSignal
 ): Promise<TranscriptOutcome> {
   const viewId = target.instanceId;
@@ -5894,20 +6099,39 @@ async function readNewestPage(
     }
     if (answer.fault) {
       if (!answer.fault.ok) {
-        target.readFault = answer.fault;
+        readFailed(target, answer.fault);
       }
       return answer.fault;
     }
+    const whole = await readBackToHeld(target, answer.page, cancel);
+    if (cancel.aborted) {
+      return { ok: true, skipped: true };
+    }
     target.readFault = null;
-    adoptTranscriptPage(target, answer.page);
+    target.behind = null;
+    target.historyChanged = false;
+    adoptTranscriptPage(
+      target,
+      {
+        ...answer.page,
+        blocks: whole.blocks,
+        branches: whole.branches,
+        cursor: whole.cursor,
+      },
+      whole.kept > 0
+    );
+    target.olderFault = whole.older;
     adoptPage(streamState, streamHost, viewId, answer.page.seq ?? 0);
     trackWorking(target);
+    console.info(
+      `[cawco] read ${viewId.slice(0, 8)} because ${cause}: ${answer.page.blocks.length} newest, ${whole.kept} held rows kept, ${whole.blocks.length} rows`
+    );
   } catch (error) {
     if (cancel.aborted) {
       return { ok: true, skipped: true };
     }
     const message = error instanceof Error ? error.message : String(error);
-    target.readFault = { reason: "failed", message };
+    readFailed(target, { reason: "failed", message });
     return { ok: false, reason: "failed", message };
   } finally {
     // A read that was replaced leaves `loading` to the one that replaced it.
@@ -5921,7 +6145,8 @@ async function readNewestPage(
 /** The page that ends at `cursor`, or why it could not be read. */
 async function olderPage(
   viewId: string,
-  cursor: string
+  cursor: string,
+  cancel?: AbortSignal
 ): Promise<TranscriptPage | ReadFault> {
   try {
     return await readPage(
@@ -5937,7 +6162,8 @@ async function olderPage(
             ? response.headers.get("x-cawco-machine")
             : null
         );
-      }
+      },
+      cancel
     );
   } catch (error) {
     return {

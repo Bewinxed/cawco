@@ -183,9 +183,14 @@ export interface StreamHost {
   /**
    * Read this session's newest transcript page; the read ends in
    * {@link adoptPage}, which resumes the stream from the page's `seq`.
+   * `cause` is which of the two ledger rules asked: the hub's reset, or a
+   * gap the ring replayed broken {@link MAX_RESYNC_ATTEMPTS} times.
    */
   // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
-  rereadHistory(sessionId: string): void;
+  rereadHistory(
+    sessionId: string,
+    cause: "streamReset" | "backlogBroken"
+  ): void;
   /** Put a client message on the dashboard socket; false when it is not open. */
   // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
   sendToHub(message: StreamClientMessage): boolean;
@@ -598,7 +603,7 @@ function applyBacklog(
     // exactly as a reset would have us do.
     cursor.resyncFailures = 0;
     cursor.reading = true;
-    host.rereadHistory(sessionId);
+    host.rereadHistory(sessionId, "backlogBroken");
     return;
   }
   requestResync(host, sessionId, cursor);
@@ -621,7 +626,7 @@ function applyReset(
   cursor.resyncAfter = null;
   cursor.resyncFailures = 0;
   cursor.warned = false;
-  host.rereadHistory(message.sessionId);
+  host.rereadHistory(message.sessionId, "streamReset");
 }
 
 /* ------------------------------------------------------------------ *

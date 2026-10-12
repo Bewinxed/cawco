@@ -133,6 +133,11 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private let latestButton = DockPill(glyph: .arrowDown, title: "Jump to latest")
     private let catchUp = DockPill(glyph: nil, title: "Catching up…")
     private let compacting = DockPill(glyph: nil, title: "Compacting context…", pill: true)
+    /// The transcript cannot be caught up while its machine is offline (Behind.svelte).
+    private let behind = DockPill(note: "Not caught up")
+    /// Where it rests: at the foot, or over "Jump to latest" while that shows.
+    private var behindAtFoot: NSLayoutConstraint?
+    private var behindOverLatest: NSLayoutConstraint?
     private let signposter = OSSignposter(subsystem: "dev.cawco.app", category: "Transcript")
     #if DEBUG
     private let probe = DisclosureProbe()
@@ -656,7 +661,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         if transcript.facts != self.transcript?.facts { facts = nil }
         self.transcript = transcript
         env.sessionId = transcript.id
-        for pill in [latestButton, catchUp, compacting] { pill.owner = String(transcript.id.prefix(8)) }
+        for pill in [latestButton, catchUp, compacting, behind] { pill.owner = String(transcript.id.prefix(8)) }
         joinTray()
         env.machineId = transcript.location?.machineId
         var agent = env.agentName
@@ -672,8 +677,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         // Read here so the screen hears of them: an older page on its way, one
         // that could not be read, and whether any is left (the strip before
-        // the first row, and when the next page is asked for).
-        _ = (transcript.loadingOlder, transcript.olderFault, transcript.cursor)
+        // the first row, and when the next page is asked for), and a read
+        // again that found the machine offline (the dock's `behind`).
+        _ = (transcript.loadingOlder, transcript.olderFault, transcript.cursor, transcript.behind)
         let tail = transcript.tail
         let next = tail?.streaming ?? ""
         if next != received {
@@ -1862,7 +1868,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     // MARK: The docks
 
     private func placeDock() {
-        for pill in [latestButton, catchUp, compacting] {
+        for pill in [latestButton, catchUp, compacting, behind] {
             pill.translatesAutoresizingMaskIntoConstraints = false
             pill.alpha = 0
             pill.isHidden = true
@@ -1871,7 +1877,14 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         latestButton.addAction(UIAction { [weak self] _ in self?.jump() }, for: .touchUpInside)
         catchUp.isUserInteractionEnabled = false
         compacting.isUserInteractionEnabled = false
+        behind.isUserInteractionEnabled = false
+        let atFoot = behind.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -Space.space4)
+        behindAtFoot = atFoot
+        behindOverLatest = behind.bottomAnchor.constraint(equalTo: latestButton.topAnchor, constant: -Space.space2)
         NSLayoutConstraint.activate([
+            behind.centerXAnchor.constraint(equalTo: centerXAnchor),
+            behind.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: Space.space4),
+            atFoot,
             latestButton.centerXAnchor.constraint(equalTo: centerXAnchor),
             latestButton.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -Space.space4),
             catchUp.centerXAnchor.constraint(equalTo: centerXAnchor),
@@ -1883,7 +1896,23 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
 
     private func updateDock() {
         let rowsDrawn = rowCount > 0
-        latestButton.show(landed && farFromLatest && rowsDrawn)
+        let latestShown = landed && farFromLatest && rowsDrawn
+        latestButton.show(latestShown)
+        // Over rows drawn only: with none, the pane says why in their place.
+        if rowsDrawn, let fault = transcript?.behind, fault.reason == .offline, let machine = fault.machineId {
+            behind.say("Not caught up: \(hub?.fleet.machineName(machine) ?? machine) is offline")
+            behind.show(true)
+        } else {
+            behind.show(false)
+        }
+        if behindOverLatest?.isActive != latestShown {
+            behindAtFoot?.isActive = !latestShown
+            behindOverLatest?.isActive = latestShown
+            // Shown, it moves up and back with "Jump to latest" as it rises and goes.
+            if !behind.isHidden, !UIAccessibility.isReduceMotionEnabled {
+                Motion.easeOut.animator(latestShown ? Motion.durPanel : Motion.durExit) { self.layoutIfNeeded() }.startAnimation()
+            }
+        }
         // A catch-up is one stretch from its start to its end, each a fact
         // that moves with reads alone. It starts over rows already drawn, when
         // the newest page is read again (a reset, a resync) or the place to
@@ -1980,37 +2009,63 @@ extension TranscriptView: RevealDriver {
     }
 }
 
-/// The floating surfaces over the list's foot (Latest.svelte, CatchUp.svelte)
-/// and top (the compacting pill): raised, hairline, --shadow-overlay; they
-/// rise in over --dur-panel and out over --dur-exit.
+/// The floating surfaces over the list's foot (Latest.svelte, CatchUp.svelte,
+/// Behind.svelte) and top (the compacting pill): raised, hairline,
+/// --shadow-overlay; they rise in over --dur-panel and out over --dur-exit.
 final class DockPill: UIControl {
     /// Each pill's coming and going, for a simulator pass to count (probe-ios-catchup.ts).
     private static let log = Logger(subsystem: "dev.cawco.app", category: "Transcript")
     private let beat = Dot(Size.txBeatLg, color: Palette.statusLiveInk)
+    private let label = LineLabel(hug: .required, resist: .required)
+    /// The type its words are set in: a note's are the strip before the first row's.
+    private let role: TypeRole
+    private let ink: UIColor
     private var shown = false
     /// The session whose transcript it floats over, for the log: panes side by side each have their own.
     var owner = ""
 
     init(glyph: Glyph?, title: String, pill: Bool = false) {
+        role = TypeScale.typeLabel
+        ink = Palette.inkStrong
         super.init(frame: .zero)
+        let lead: UIView = glyph.map { GlyphView($0, size: Size.iconMd, tint: Palette.inkStrong) } ?? beat
+        build([lead, label], inset: pill ? Space.space4 : Space.space3, radius: pill ? Size.cBtnHLg : Radius.radiusMd)
+        say(title)
+        accessibilityTraits = glyph == nil ? .updatesFrequently : .button
+    }
+
+    /// A line of words alone, set as the strip before the first row sets why
+    /// a page could not be read (Transcript.svelte `.empty`): meta, muted.
+    init(note title: String) {
+        role = TypeScale.typeMeta
+        ink = Palette.inkMuted
+        super.init(frame: .zero)
+        label.lineBreakMode = .byTruncatingTail
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        build([label], inset: Space.space3, radius: Radius.radiusMd)
+        say(title)
+        accessibilityTraits = .staticText
+    }
+
+    private func build(_ views: [UIView], inset: Double, radius: Double) {
         backgroundColor = Palette.surfaceRaised
-        layer.cornerRadius = pill ? Size.cBtnHLg : Radius.radiusMd
+        layer.cornerRadius = radius
         layer.cornerCurve = .continuous
         layer.borderWidth = 1
         boxShadow = Shadow.shadowOverlay
-        var views: [UIView] = []
-        if let glyph { views.append(GlyphView(glyph, size: Size.iconMd, tint: Palette.inkStrong)) } else { views.append(beat) }
-        let label = LineLabel(hug: .required, resist: .required)
-        label.attributedText = Styled.string(title, TypeScale.typeLabel, color: Palette.inkStrong)
-        views.append(label)
         let row = railLine(views)
         row.isUserInteractionEnabled = false
-        pin(row, insets: UIEdgeInsets(top: Space.space2, left: pill ? Space.space4 : Space.space3, bottom: Space.space2, right: pill ? Space.space4 : Space.space3))
+        pin(row, insets: UIEdgeInsets(top: Space.space2, left: inset, bottom: Space.space2, right: inset))
         isAccessibilityElement = true
-        accessibilityLabel = title
-        accessibilityTraits = glyph == nil ? .updatesFrequently : .button
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (pill: DockPill, _: UITraitCollection) in pill.paint() }
         paint()
+    }
+
+    /// Its words, set again only when they change.
+    func say(_ title: String) {
+        guard accessibilityLabel != title else { return }
+        label.attributedText = Styled.string(title, role, color: ink)
+        accessibilityLabel = title
     }
 
     @available(*, unavailable)

@@ -31,6 +31,7 @@
     openSession,
     type PendingPermission,
     pendingRestore,
+    type ReadCause,
     type ReadFault,
     readFaultOf,
     readTranscript,
@@ -142,6 +143,12 @@
   let empty = $state(false);
   /** Bumped by Retry: the one thing that re-runs the read after it has failed. */
   let attempt = $state(0);
+  /**
+   * Why the next pass of the read reads: an open, or what bumped `attempt`.
+   * A retry reads whether or not the stream is followed: a reset that failed
+   * left it subscribed and waiting on this very read.
+   */
+  let nextCause: ReadCause = "open";
 
   /**
    * Whether the hub holds this id as a running session. This, not the tab's
@@ -168,8 +175,12 @@
    * whichever machine holds the file — and every way this ends is a named
    * state.
    */
-  async function readHistory(id: string, fresh = false): Promise<void> {
-    const outcome = await readTranscript(id, false, fresh);
+  async function readHistory(
+    id: string,
+    cause: ReadCause,
+    fresh = false
+  ): Promise<void> {
+    const outcome = await readTranscript(id, cause, fresh);
     // Each outcome replaces what the last read said, and only an outcome
     // does: a read in flight leaves the pane showing what it showed.
     readAnswered = true;
@@ -262,8 +273,10 @@
       return;
     }
     untrack(() => {
+      const cause = nextCause;
+      nextCause = "open";
       // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — readHistory reports its outcome through the store fields this effect reads
-      void readHistory(id);
+      void readHistory(id, cause);
     });
   });
 
@@ -297,7 +310,7 @@
       if (leftUnread) {
         leftUnread = false;
         // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — readHistory reports its outcome through the store fields the pane reads
-        void readHistory(viewId, true);
+        void readHistory(viewId, "open", true);
       }
     });
   });
@@ -508,11 +521,12 @@
     clearReadFault(viewId);
     failure = null;
     missing = false;
-    reread();
+    reread("retry");
   }
 
   /** Read again behind what the pane shows; the outcome replaces it. */
-  function reread(): void {
+  function reread(cause: ReadCause): void {
+    nextCause = cause;
     attempt += 1;
   }
 
@@ -544,7 +558,7 @@
         return;
       }
       if (online && wasOnline === false) {
-        reread();
+        reread("machineOnline");
       }
       wasOnline = online;
     });

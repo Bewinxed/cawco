@@ -143,7 +143,9 @@
         <Button
           onclick={() =>
             id &&
-            (branch?.readFault ? readTranscript(id, true) : readOlderPage(id))}
+            (branch?.readFault
+              ? readTranscript(id, "retry")
+              : readOlderPage(id))}
           size="sm"
           variant="outline"
         >

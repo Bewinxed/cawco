@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { machineLabel } from "@cawco/core";
   import type { CacheSnapshot } from "virtua";
 
   /**
@@ -51,6 +52,7 @@
     type Ticket,
     watchedSessions,
   } from "./arrivals.svelte";
+  import Behind from "./Behind.svelte";
   import CatchUp from "./CatchUp.svelte";
   import CompactionDivider from "./CompactionDivider.svelte";
   import { compactionMarkComing } from "./compaction-mark";
@@ -2681,6 +2683,22 @@
     }
     return "";
   });
+
+  /**
+   * The machine a read again over these rows found offline, by the name the
+   * fleet lists it under; null while the transcript is caught up. Only over
+   * rows drawn: with none, the pane says why in their place.
+   */
+  const behindOn = $derived.by(() => {
+    const fault = cawco.session(session.instanceId)?.behind;
+    if (fault?.reason !== "offline" || renderedRows.length === 0) {
+      return null;
+    }
+    const machine = cawco.machines.find(
+      (row) => row.machineId === fault.machineId
+    );
+    return machine ? machineLabel(machine.hostname) : fault.machineId;
+  });
 </script>
 
 <!-- Off-screen, and the only thing on this surface that speaks. Two channels:
@@ -2862,6 +2880,9 @@
   <div class="dock">
     {#if catching}
       <CatchUp />
+    {/if}
+    {#if behindOn}
+      <Behind machine={behindOn} />
     {/if}
     {#if showLatest}
       <Latest onjump={jump} />
