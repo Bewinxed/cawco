@@ -27,7 +27,10 @@
  *     holds the clock's quarters and f = 0.45/0.5/0.55, capturing the window
  *     and the strip at each (PaneTabsView `-tabs-probe`); the held step is
  *     the working fourth tab to the attention third, whose seam's ink is
- *     read at f = 0.45/0.5/0.55. Then, on three working tabs in a row, a
+ *     read at f = 0.45/0.5/0.55; the held jump goes back past the idle
+ *     second tab, and a last jump past it again runs on the real clock:
+ *     on both, the outgoing and incoming rims' strength never dips below
+ *     the lower of their rests and moves one way. Then, on three working tabs in a row, a
  *     real tap on the second (axe tap, at the point the app logs) and
  *     straight after it a finger's drag on the pages toward the third (axe
  *     drag), which takes the pages while the tap's switch runs: retried
@@ -132,6 +135,8 @@ interface Tab {
   rim: number;
   sheet: number;
   sheetShown: number;
+  /** Each side's strength over the rim's, leading then trailing: 1 but at a gliding seam. */
+  sides: [number, number];
   tabTransform: string;
   top: string;
   trail: string;
@@ -149,7 +154,7 @@ interface Sample {
 const LINE =
   /tabs (\S+) t=(\S+) f=(\S+) front=(\S+) toward=(\S+) seams=\S* scroll=(\S+) \|\| (.*)$/;
 const TAB =
-  /^(\S+) pick=(\S+) sheet=(\S+)\/(\S+) tint=\S+ rim=(\S+) chev=(\S+) moved=(\d) tx=(.+?) keys=(\S+) fill=(\S+) under=\S+ top=(\S+) lead=(\S+) trail=(\S+)/;
+  /^(\S+) pick=(\S+) sheet=(\S+)\/(\S+) tint=\S+ rim=(\S+) chev=(\S+) moved=(\d) tx=(.+?) keys=(\S+) fill=(\S+) under=\S+ top=(\S+) lead=(\S+) trail=(\S+) sides=([\d.]+),([\d.]+)/;
 function parse(log: string): Sample[] {
   return log.split("\n").flatMap((line) => {
     const m = LINE.exec(line);
@@ -174,6 +179,7 @@ function parse(log: string): Sample[] {
               top: t[11],
               lead: t[12],
               trail: t[13],
+              sides: [+t[14], +t[15]] as [number, number],
             },
           ]
         : [];
@@ -253,9 +259,8 @@ function judge(
   );
   // Each rim's strength goes from how it rests with the choice left to how
   // it rests with it landed, on the clock: frame to frame it moves no more
-  // than the clock does, give or take its lean toward a weaker neighbour at
-  // a gliding seam, which dips and comes back about half way (at most 2.5×
-  // the clock's step).
+  // than 2.5× the clock's step (the lean at a gliding seam is its side's
+  // alone, `judgeJump`).
   const rimOut = timed.map((s) => tab(s, from)?.rim ?? Number.NaN);
   const rimIn = timed.map((s) => tab(s, to)?.rim ?? Number.NaN);
   const onClock = timed.every((s, i) =>
@@ -374,6 +379,77 @@ function judgeSeam(run: string, samples: Sample[], from: string, to: string) {
           `f=${r.f.toFixed(2)} drawn by ${r.drawer} in ${r.ink}, share ${r.share.toFixed(3)}`
       )
       .join("; ")}`
+  );
+}
+
+/**
+ * A jump past a rimless tab (the idle one, unchosen throughout: its rim 0
+ * on every frame): the outgoing and incoming tabs' top rim strength (the
+ * rim's own; the top draws at it whole), every frame logged and the landed
+ * one, never dips below the lower of its two rest strengths and moves one
+ * way only. A gliding seam leans its side alone (`sides`), never the rim.
+ */
+function judgeJump(
+  run: string,
+  label: string,
+  samples: Sample[],
+  from: string,
+  to: string
+) {
+  const name = `${run} ${label} rims never blink past the idle tab`;
+  const frames = [
+    ...samples.filter((s) => s.t !== "landed"),
+    ...samples.filter((s) => s.t === "landed"),
+  ];
+  const [first] = frames;
+  if (!first || frames.length < 3) {
+    check(name, false, `${frames.length} frames`);
+    return;
+  }
+  const at = (id: string) => first.tabs.findIndex((t) => id.startsWith(t.id));
+  const [a, b] = [at(from), at(to)];
+  // The tabs it passes (the iPad's strip opens the asking tab first, so
+  // its jumps pass a working tab as well); at least one of them rimless.
+  const passed = first.tabs.slice(Math.min(a, b) + 1, Math.max(a, b));
+  const rimless = passed.some((_, k) =>
+    frames.every((s) => s.tabs[Math.min(a, b) + 1 + k]?.rim === 0)
+  );
+  const faults: string[] = rimless ? [] : ["passes no rimless tab"];
+  const shown: string[] = [];
+  for (const [role, k] of [
+    ["outgoing", a],
+    ["incoming", b],
+  ] as const) {
+    const series = frames.map((s) => s.tabs[k]?.rim ?? Number.NaN);
+    const sides = frames.map((s) =>
+      s.tabs[k]?.sides
+        .map((v) => (v * (s.tabs[k]?.rim ?? 0)).toFixed(3))
+        .join("/")
+    );
+    const [start] = series;
+    const end = series.at(-1) as number;
+    const floor = Math.min(start, end);
+    const way = Math.sign(end - start);
+    series.forEach((v, i) => {
+      if (!(v >= floor - 0.001)) {
+        faults.push(
+          `${role} ${v.toFixed(3)} < ${floor.toFixed(3)} at f=${frames[i].f.toFixed(3)}`
+        );
+      }
+      if (i > 0 && (v - series[i - 1]) * way < -0.001) {
+        faults.push(
+          `${role} back ${series[i - 1].toFixed(3)}→${v.toFixed(3)} at f=${frames[i].f.toFixed(3)}`
+        );
+      }
+    });
+    shown.push(
+      `${role} ${first.tabs[k]?.id} top ${frames.map((s, i) => `${s.f.toFixed(2)}:${series[i].toFixed(3)}(${sides[i]})`).join(" ")}`
+    );
+  }
+  check(
+    name,
+    faults.length === 0,
+    `${faults.length > 0 ? `${faults.join("; ")}; ` : ""}${shown.join("; ")}`
   );
 }
 
@@ -837,19 +913,24 @@ try {
         ...log.matchAll(/tabs probe begin (\S+) from=(\S+) to=(\S+)/g),
       ];
       const samples = parse(log);
-      for (const label of ["step", "jump", "step-held", "jump-held"]) {
+      for (const label of [
+        "step",
+        "jump",
+        "step-held",
+        "jump-held",
+        "jump-idle",
+      ]) {
         const begin = begins.find((b) => b[1] === label);
         if (!begin) {
           check(`${run} ${label}`, false, "never began");
           continue;
         }
-        judge(
-          run,
-          label,
-          samples.filter((s) => s.label === label),
-          begin[2],
-          begin[3]
-        );
+        const own = samples.filter((s) => s.label === label);
+        judge(run, label, own, begin[2], begin[3]);
+        // The two jumps past the idle second tab.
+        if (label === "jump-held" || label === "jump-idle") {
+          judgeJump(run, label, own, begin[2], begin[3]);
+        }
       }
       const held = samples
         .filter((s) => s.label.endsWith("held") && s.t !== "landed")

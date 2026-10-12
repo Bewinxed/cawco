@@ -251,7 +251,7 @@
         // The seams' glide (`--glide-start`, `--glide-end`), on the tab in
         // front and the one behind alike, so a host can ease what meets
         // at the handover through it on both tabs with no step (PaneTabs'
-        // rims meet at one strength there).
+        // seam sides meet at one strength there).
         laid.style.setProperty("--glide-start", String(glideStart));
         laid.style.setProperty("--glide-end", String(glideEnd));
         // A side under a neighbour (1, else 0) draws no foot where a host

@@ -663,6 +663,8 @@ async function rimInk(page: Page, strip: Strip, drawn: number[]) {
             side,
             under,
             inView,
+            // The side's own lean at a gliding seam, over the rim's strength.
+            sideOp: r2(Number(getComputedStyle(sideEl).opacity)),
             arc: r2(A),
             flare: F,
             plainOp: r2(plainOp),
@@ -897,6 +899,9 @@ async function measure(page: Page, strip: Strip, region: Box, keep: number[]) {
         const rim = el.querySelector<HTMLElement>(".rim");
         const sides = [...el.querySelectorAll<HTMLElement>(".rim-side")];
         const text = el.querySelector(".label .text") as HTMLElement;
+        const op = (piece: Element | null | undefined) =>
+          piece ? Number(getComputedStyle(piece).opacity) : 0;
+        const r3 = (n: number) => Math.round(n * 1000) / 1000;
         return {
           el,
           left: r.left,
@@ -915,6 +920,13 @@ async function measure(page: Page, strip: Strip, region: Box, keep: number[]) {
           sideOpacity: sides.map((s) =>
             r2(Number(getComputedStyle(s).opacity))
           ),
+          // The strength its top is drawn at (the rim's, times the top's
+          // own), and each side's (the rim's, times the side's lean at a
+          // gliding seam), start then end: -1 with no rim.
+          topStrength: rim
+            ? r3(op(rim) * op(rim.querySelector(".rim-top")))
+            : -1,
+          sideStrength: rim ? sides.map((s) => r3(op(rim) * op(s))) : [],
           label: text.textContent ?? "",
           labelScroll: text.scrollWidth,
           labelClient: text.clientWidth,
@@ -1171,6 +1183,8 @@ async function measure(page: Page, strip: Strip, region: Box, keep: number[]) {
           chosen: t.chosen,
           z: t.z,
           rimOpacity: t.rimOpacity,
+          topStrength: t.topStrength,
+          sideStrength: t.sideStrength,
           startShown: t.startShown,
           endShown: t.endShown,
           fill: hex(fill),
@@ -1425,6 +1439,25 @@ for (const view of VIEWS) {
           ink: strip.rim ? await rimInk(page, strip, drawn) : null,
         };
       }
+      // A jump past a rimless tab: from the session strip's second tab
+      // (working) to its fourth (done), past its third (idle: no rim while
+      // unchosen), read every 5% of the switch.
+      const jump: Record<string, Numbers["tabs"]> = {};
+      if (strip.rim) {
+        await open(page, theme, 1, "working");
+        await page.evaluate((id) => window.__ft.choose(id), ids[from + 2]);
+        await frames(page);
+        await seek(page, strip, 0);
+        for (let pct = 0; pct <= 100; pct += 5) {
+          await seek(page, strip, pct / 100);
+          await frames(page);
+          const frame = await measure(page, strip, await clipOf(page, strip), [
+            from,
+            from + 2,
+          ]);
+          jump[pct] = frame.numbers.tabs;
+        }
+      }
       // The session strip at its start (the first tab chosen, nothing
       // scrolled); the home's with Finished chosen.
       await open(page, theme, 0, "finished");
@@ -1446,6 +1479,7 @@ for (const view of VIEWS) {
           ink: strip.rim ? await rimInk(page, strip, [other]) : null,
         },
         switch: { from: chosen, to: next, paused, frames: switchFrames },
+        jump: { from, past: from + 1, to: from + 2, frames: jump },
       };
     }
     await context.close();
@@ -1544,6 +1578,22 @@ for (const [key, value] of Object.entries(report)) {
       n
     );
   }
+  // The jump past a rimless tab: each 5% of it, the outgoing and incoming
+  // tabs' top strength, their sides' (start/end), and the top's contrast
+  // against the shelf as drawn.
+  const { jump } = value as { jump?: Jump };
+  if (jump && Object.keys(jump.frames).length > 0) {
+    console.log(`  jump ${jump.from} → ${jump.to} past ${jump.past}`);
+    for (const i of [jump.from, jump.to]) {
+      const rows = Object.entries(jump.frames)
+        .sort(([a], [b]) => Number(a) - Number(b))
+        .map(([pct, tabs]) => {
+          const t = tabs.find((u) => u.i === i);
+          return `${pct}%:${t?.topStrength}(${t?.sideStrength.join("/")};${t?.topVsShelf}:1)`;
+        });
+      console.log(`    tab ${i} top(sides;top vs shelf) ${rows.join(" ")}`);
+    }
+  }
 }
 
 /**
@@ -1571,6 +1621,11 @@ for (const [key, value] of Object.entries(report)) {
  *  - handover: no tab's rim strength moves more than 0.08 between 49%
  *    and 51% of the switch, and where a seam's front changes there its
  *    stroke's contrast against the fills holds within 15%;
+ *  - jump: on a jump past a rimless tab (the session strip's second tab to
+ *    its fourth, past the idle third), read every 5% of the switch, the
+ *    outgoing and the incoming tab's top rim strength never dips below the
+ *    lower of its two rest strengths (before and after) and moves one way
+ *    only: only a gliding seam's side leans, never the whole rim;
  *  - sheet edge (a strip with no rim): every seam's edge, where the two
  *    fills differ, shows within 1px of where the glide puts it, and across
  *    the switch it moves one way only, never back (no jump, no flicker);
@@ -1587,6 +1642,7 @@ const RULES = [
   "subtle",
   "taper",
   "handover",
+  "jump",
   "sheet edge",
   "fades",
   "titles",
@@ -1600,17 +1656,73 @@ const RIM_RULES: readonly Rule[] = [
   "subtle",
   "taper",
   "handover",
+  "jump",
 ];
+interface Jump {
+  frames: Record<string, Numbers["tabs"]>;
+  from: number;
+  past: number;
+  to: number;
+}
+/**
+ * A jump's faults: the tab it passes wears no rim (else it proves
+ * nothing), and the outgoing and incoming tabs' top strengths, frame by
+ * frame, stay at or over the lower of their two rests and move one way.
+ */
+function jumpFaults(jump: Jump): string[] {
+  const pcts = Object.keys(jump.frames)
+    .map(Number)
+    .sort((a, b) => a - b);
+  const tabAt = (pct: number, i: number) =>
+    jump.frames[pct]?.find((t) => t.i === i);
+  if (pcts.length < 3) {
+    return [`${pcts.length} frames`];
+  }
+  const out: string[] = [];
+  const passed = tabAt(0, jump.past);
+  if (!(passed?.tone === "quiet" && passed.topStrength <= 0.001)) {
+    out.push(
+      `passes tab ${jump.past} (${passed?.tone} at ${passed?.topStrength}), not a rimless one`
+    );
+  }
+  for (const [name, i] of [
+    ["outgoing", jump.from],
+    ["incoming", jump.to],
+  ] as const) {
+    const series = pcts.map((p) => tabAt(p, i)?.topStrength ?? Number.NaN);
+    const [first] = series;
+    const last = series.at(-1) as number;
+    const floor = Math.min(first, last);
+    const way = Math.sign(last - first);
+    series.forEach((s, k) => {
+      if (!(s >= floor - 0.001)) {
+        out.push(`${name} ${i} ${s} < ${floor} at ${pcts[k]}%`);
+      }
+      if (k > 0 && (s - series[k - 1]) * way < -0.001) {
+        out.push(`${name} ${i} back ${series[k - 1]}→${s} at ${pcts[k]}%`);
+      }
+    });
+  }
+  return out;
+}
 /** The frames that stand at rest: the rules of a resting strip hold there. */
 const AT_REST = new Set(["rest", "rest2", "100%"]);
 /** The shared edges a frame measured, the strip's outer two left out. */
 const sharedOf = (n: Numbers) =>
   n.edges.filter((e) => !e.between.includes("shelf"));
-/** Whether tab `i` wears a rim in this frame (any strength at all). */
-const strengthOf = (n: Numbers, i: number) =>
-  n.tabs.find((t) => t.i === i)?.rimOpacity ?? 0;
 /**
- * What a seam's row should cross, by its front tab's rim strength there:
+ * The strength the seam `between` ("2|3") is drawn at by its front tab
+ * `front`: that tab's side there (its end side when it is the left one),
+ * the rim's strength leaned toward the neighbour's while the seam glides.
+ */
+const seamStrengthOf = (n: Numbers, front: number, between: string) => {
+  const t = n.tabs.find((u) => u.i === front);
+  const left = Number(between.split("|")[0]) === front;
+  return t?.sideStrength[left ? 1 : 0] ?? 0;
+};
+/**
+ * What a seam's row should cross, by the strength its front tab's side
+ * stands at there (`seamStrengthOf`):
  * one stroke where it wears one at 0.3 or more, none where it wears none,
  * and one or none under that, while a rim fades in or out across a switch
  * or low on a long taper (a rim at a tenth of its strength reads as no
@@ -1627,7 +1739,7 @@ function strokeFaults(n: Numbers): string[] {
   const shared = sharedOf(n);
   const frontOf = (between: string) =>
     Number(shared.find((e) => e.between === between)?.front);
-  // Each row by the front rim's strength where it crosses: its strength
+  // Each row by the front side's strength where it crosses: its strength
   // now, faded by the taper at that row's height (up to the shoulder), so
   // a row low on a long taper may read as no stroke.
   const rows = n.seamRows.flatMap((s) => {
@@ -1641,7 +1753,7 @@ function strokeFaults(n: Numbers): string[] {
         rim && fadeEnd > 0 && h < fadeEnd
           ? 1 - (1 - Math.min(1, h / rim.taper)) ** rim.ease
           : 1;
-      const want = wantOf(strengthOf(n, front) * fade);
+      const want = wantOf(seamStrengthOf(n, front, s.between) * fade);
       if (want === "one") {
         return count !== 1 || core > s.one;
       }
@@ -1653,7 +1765,7 @@ function strokeFaults(n: Numbers): string[] {
     const [left] = s.between.split("|");
     const front = frontOf(s.between);
     const frontLeft = String(front) === left;
-    const want = wantOf(strengthOf(n, front));
+    const want = wantOf(seamStrengthOf(n, front, s.between));
     const frontDraws = frontLeft ? s.leftEnd : s.rightStart;
     const behindDraws = frontLeft ? s.rightStart : s.leftEnd;
     const ok =
@@ -1749,7 +1861,8 @@ function taperOf(ink: Ink | null | undefined) {
     t.opacity <= 0.01
       ? []
       : t.sides.flatMap((side) => {
-          if (side.under || !side.inView) {
+          // A side leaned out at a gliding seam draws nothing to read.
+          if (side.under || !side.inView || t.opacity * side.sideOp <= 0.01) {
             return [];
           }
           const shoulder = t.shoulderAt;
@@ -1826,8 +1939,9 @@ const faults = (n: Numbers, at: string): Record<Rule, string[]> => ({
   fades: n.clear.flatMap((c) =>
     c.clear ? [] : [`${c.i} ${c.inFade.start}/${c.inFade.end}`]
   ),
-  // Across two frames: the table's own (`handover`).
+  // Across frames: the table's own (`handover`, `jump`).
   handover: [],
+  jump: [],
   titles: n.tabs.flatMap((t) =>
     t.labelCut ? [`${t.i} ${t.labelScroll}>${t.labelClient}`] : []
   ),
@@ -1842,6 +1956,7 @@ for (const [key, value] of Object.entries(report)) {
     rest: Numbers;
     restFirst: Numbers;
     switch: { frames: Record<string, Numbers> };
+    jump: Jump;
   };
   const measured = [
     ["rest", v.rest],
@@ -1912,6 +2027,7 @@ for (const [key, value] of Object.entries(report)) {
       ),
       ...(rule === "sheet edge" ? glide : []),
       ...(rule === "handover" ? handover : []),
+      ...(rule === "jump" ? jumpFaults(v.jump) : []),
     ];
     // The 3:1 cell names the chosen tab's top and, as numbers, its sides,
     // in each resting frame.

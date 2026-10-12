@@ -872,13 +872,17 @@ extension PaneTabsView {
     }
 
     /// The steps: the held step lands on the tab asking (its rim the
-    /// attention ink) from its neighbour, so its seam is read between two inks.
+    /// attention ink) from its neighbour, so its seam is read between two
+    /// inks; the held jump goes back past the idle second tab (no rim while
+    /// unchosen), and the last jump past it again on the real clock, every
+    /// frame logged.
     private var probeSteps: [(label: String?, to: Int, hold: Double?)] {
         let asking = order.firstIndex { views[$0]?.probeNeeds == true } ?? 2
         let beside = asking + 1 < order.count ? asking + 1 : asking - 1
         return [
             (nil, 0, nil), ("step", 1, nil), ("jump", 3, nil), (nil, beside, nil),
             ("step-held", asking, 2000), ("jump-held", asking >= 2 ? 0 : 3, 2000),
+            ("jump-idle", asking >= 2 ? 2 : 0, nil),
         ]
     }
 
@@ -1026,8 +1030,8 @@ extension PaneTabsView {
     /// the shelf at mid-height, read off the drawn stroke; its taper's ink at
     /// 0, 10, 20, 40 and 100% of its length up from the tip, read back from
     /// its mask, and that length against the shoulder's height. A seam: the
-    /// tab in front, its rim's strength, and how many strokes cross the
-    /// row at the sides' mid-height there.
+    /// tab in front, the strength of the side it draws there, and how many
+    /// strokes cross the row at the sides' mid-height there.
     private func probeRims(_ name: String, in image: UIImage, window: UIWindow) {
         guard let pixels = ProbePixels(image) else { return }
         let shelf = Palette.surfaceShelf.resolvedColor(with: traitCollection)
@@ -1066,7 +1070,8 @@ extension PaneTabsView {
             guard let a = views[left], let b = views[right], let ra = a.probeRim(in: window), let rb = b.probeRim(in: window) else { continue }
             // The front tab draws the seam at its own edge there.
             let leftFront = (stacked.firstIndex(of: left) ?? 0) > (stacked.firstIndex(of: right) ?? 0)
-            let front = leftFront ? ra : rb
+            // The side the front tab draws the seam with, at its strength.
+            let strength = leftFront ? ra.sides.trailing : rb.sides.leading
             let edge = leftFront ? ra.card.maxX : rb.card.minX
             guard edge - 6 >= shown.minX, edge + 6 <= shown.maxX else { continue }
             let y = ra.card.minY + (ra.card.height + max(ra.shoulder, rb.shoulder)) / 2
@@ -1090,7 +1095,7 @@ extension PaneTabsView {
                 inStroke = ink
             }
             let detail = runs.map { String(format: "%.2f:%d:%02x%02x%02x", $0.start, $0.length, Int($0.peak[0] * 255), Int($0.peak[1] * 255), Int($0.peak[2] * 255)) }.joined(separator: ",")
-            Self.probeLog.notice("tabs seam \(name, privacy: .public) \(left.prefix(8), privacy: .public)|\(right.prefix(8), privacy: .public) front=\((leftFront ? left : right).prefix(8), privacy: .public) strength=\(String(format: "%.3f", front.strength), privacy: .public) strokes=\(runs.count) runs=\(detail.isEmpty ? "-" : detail, privacy: .public)")
+            Self.probeLog.notice("tabs seam \(name, privacy: .public) \(left.prefix(8), privacy: .public)|\(right.prefix(8), privacy: .public) front=\((leftFront ? left : right).prefix(8), privacy: .public) strength=\(String(format: "%.3f", strength), privacy: .public) strokes=\(runs.count) runs=\(detail.isEmpty ? "-" : detail, privacy: .public)")
         }
     }
 }
@@ -1266,7 +1271,9 @@ final class TabView: UIView {
     /// in its own ink, and each side, its shoulder and its run, in an ink
     /// that leans toward its neighbour's on a gliding seam. They are drawn
     /// opaque and overlap by half a point under the rim's one opacity, its
-    /// strength, so no join shows.
+    /// strength, so no join shows; a side at a gliding seam leans its own
+    /// strength on top of that (its opacity), the rest of the rim keeps the
+    /// tab's.
     private let rim = CALayer()
     private let rimTop = CAShapeLayer()
     private let rimLead = CAShapeLayer()
@@ -1274,8 +1281,12 @@ final class TabView: UIView {
     private let rimFade = CAGradientLayer()
     /// The glow: the outline's own shadow (`0 0 6px`, half the rim's
     /// strength), kept outside the tab as the web's box shadow is, so it
-    /// never deepens the stroke or the tab under it.
+    /// never deepens the stroke or the tab under it. It leans at a gliding
+    /// seam's side as that side's stroke does (`glowSides`), as the web's
+    /// glow, drawn off the pieces it shows, does.
     private let glowHost = CALayer()
+    private let glowLean = CALayer()
+    private let glowSides = CAGradientLayer()
     private let glow = CALayer()
     private let glowOutside = CAShapeLayer()
     /// Room round the outline for the glow, inside the fade.
@@ -1289,8 +1300,8 @@ final class TabView: UIView {
     /// full; a side in front stands at the seam, which a switch glides
     /// between the two tabs' edges, its rim's ink leaning toward the
     /// neighbour's (`beside`) as far as it stands in (`lean`, 0 to 1), and
-    /// its whole rim's strength toward the weaker of the two as the seam
-    /// nears half way (`glide`, 0 at either edge, 1 half way).
+    /// that side's strength alone toward the weaker of the two rims' as the
+    /// seam nears half way (`glide`, 0 at either edge, 1 half way).
     struct Edges: Equatable {
         var under = TabSides(leading: false, trailing: false)
         var inset = TabSides(leading: 0.0, trailing: 0.0)
@@ -1385,7 +1396,12 @@ final class TabView: UIView {
         glow.shadowRadius = 3
         glowOutside.fillRule = .evenOdd
         glowHost.mask = glowOutside
-        glowHost.addSublayer(glow)
+        glowSides.startPoint = CGPoint(x: 0, y: 0.5)
+        glowSides.endPoint = CGPoint(x: 1, y: 0.5)
+        glowSides.colors = Array(repeating: UIColor.black.cgColor, count: 6)
+        glowLean.mask = glowSides
+        glowLean.addSublayer(glow)
+        glowHost.addSublayer(glowLean)
         rimHost.addSublayer(glowHost)
         rimHost.addSublayer(rim)
         rimFade.colors = [UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]
@@ -1549,7 +1565,10 @@ final class TabView: UIView {
         let card: CGRect
         let shoulder: Double
         let tone: String
+        /// The rim's, its top's.
         let strength: Double
+        /// Each side's: the rim's, leaned at a gliding seam.
+        let sides: TabSides<Double>
         let length: Double
         let taper: (Double) -> Double
     }
@@ -1569,14 +1588,17 @@ final class TabView: UIView {
             return inks[above - 1] + (inks[above] - inks[above - 1]) * t
         }
         return ProbeRim(card: convert(cardRect, to: window), shoulder: max(shoulders.leading, shoulders.trailing), tone: "\(tone)",
-                        strength: Double(rim.opacity), length: length, taper: taper)
+                        strength: Double(rim.opacity),
+                        sides: TabSides(leading: Double(rim.opacity * rimLead.opacity), trailing: Double(rim.opacity * rimTrail.opacity)),
+                        length: length, taper: taper)
     }
 
     /// How the tab is drawn now, for `-tabs-probe`: its look; its sheet's
     /// opacity (model and on screen) and its card's; its rim's strength; its
     /// chevron's; whether any transform, mask or running animation moves its
     /// sheet or the tab; its card's fill; which sides stand under a
-    /// neighbour; its rim's top, leading and trailing ink.
+    /// neighbour; its rim's top, leading and trailing ink; its sides'
+    /// strengths over the rim's (1 but at a gliding seam).
     var probeState: String {
         func hex(_ color: CGColor?) -> String {
             guard let color, let rgb = color.converted(to: CGColorSpace(name: CGColorSpace.sRGB)!, intent: .defaultIntent, options: nil)?.components, rgb.count >= 3 else { return "-" }
@@ -1590,12 +1612,12 @@ final class TabView: UIView {
         let moved = !CATransform3DIsIdentity(sheet.transform) || !CATransform3DIsIdentity(sheet.presentation()?.transform ?? CATransform3DIdentity) || sheet.mask != nil
         let keys = (sheet.animationKeys() ?? []) + (tint.animationKeys() ?? [])
         // Short: a frame's line holds every tab, and the log cuts a line at 1KB.
-        return String(format: "pick=%.3f sheet=%.3f/%.3f tint=%.0f rim=%.3f chev=%.3f moved=%d tx=%@ keys=%@ fill=%@ under=%d%d top=%@ lead=%@ trail=%@",
+        return String(format: "pick=%.3f sheet=%.3f/%.3f tint=%.0f rim=%.3f chev=%.3f moved=%d tx=%@ keys=%@ fill=%@ under=%d%d top=%@ lead=%@ trail=%@ sides=%.3f,%.3f",
                       look.pick, sheet.opacity, sheet.presentation()?.opacity ?? sheet.opacity, tint.opacity,
                       rim.opacity, details.alpha, moved ? 1 : 0,
                       transform.isIdentity ? "id" : NSCoder.string(for: transform), keys.isEmpty ? "-" : keys.joined(separator: ","),
                       hex(tint.fillColor), edges.under.leading ? 1 : 0, edges.under.trailing ? 1 : 0,
-                      ink(rimTop.fillColor), ink(rimLead.fillColor), ink(rimTrail.fillColor))
+                      ink(rimTop.fillColor), ink(rimLead.fillColor), ink(rimTrail.fillColor), rimLead.opacity, rimTrail.opacity)
     }
     #endif
 
@@ -1697,40 +1719,50 @@ final class TabView: UIView {
     }
 
     /// The rim in its session's status colour (`ink`), at its strength now
-    /// (`strength`, how chosen the tab stands this frame); where one of its
-    /// seams glides on a switch, leaning toward the weaker of its own and
-    /// that neighbour's as the seam nears half way and back as it leaves, so
-    /// at the handover the two stand at one strength and the edge passes
-    /// with nothing moving; against a rimless neighbour the gliding edge
-    /// fades out (PaneTabs.svelte `.rim` opacity). Each side's ink leans
-    /// toward its neighbour's as far as it stands in (`edges`). A status
-    /// changing at rest cross-fades over `durPanel`.
+    /// (`strength`, how chosen the tab stands this frame), which a switch
+    /// moves one way only, from where it rests to where it will. Where one of
+    /// its seams glides on a switch, the side standing at that seam (its
+    /// shoulder, run and foot) leans its own strength toward the weaker of
+    /// its tab's and that neighbour's as the seam nears half way and back as
+    /// it leaves, so at the handover the two sides stand at one strength and
+    /// the edge passes with nothing moving; against a rimless neighbour the
+    /// gliding side fades out. The top and the far side keep the tab's own
+    /// strength, so a jump past a rimless tab never blinks the rims either
+    /// side of it out (PaneTabs.svelte `.rim-side` opacity). Each side's ink
+    /// leans toward its neighbour's as far as it stands in (`edges`). A
+    /// status changing at rest cross-fades over `durPanel`.
     private func paintRim(animated: Bool) {
         guard let tone = tab?.face.tone else { return }
         let traits = traitCollection
         let solid = solidRim
         let own = Self.strength(tone, pick: look.pick, traits: traits, solid: solid)
-        var strength = own
-        for (glide, beside) in [(edges.glide.leading, edges.beside.leading), (edges.glide.trailing, edges.beside.trailing)] {
-            guard glide > 0, own > 0, let beside else { continue }
+        /// A side's strength over the rim's: 1, but at a gliding seam leaning toward the neighbour's.
+        func lean(_ glide: Double, _ beside: Beside?) -> Double {
+            guard glide > 0, own > 0, let beside else { return 1 }
             let other = Self.strength(beside.tone, pick: beside.pick, traits: traits, solid: solid)
-            strength *= 1 - glide + glide * min(1, other / own)
+            return 1 - glide + glide * min(1, other / own)
         }
+        let leading = lean(edges.glide.leading, edges.beside.leading)
+        let trailing = lean(edges.glide.trailing, edges.beside.trailing)
         let resolved = Self.ink(tone).resolvedColor(with: traits)
         CATransaction.begin()
         CATransaction.setDisableActions(!animated)
         CATransaction.setAnimationDuration(Motion.durPanel)
         CATransaction.setAnimationTimingFunction(Motion.easeOut.function)
-        rim.opacity = Float(strength)
+        rim.opacity = Float(own)
+        rimLead.opacity = Float(leading)
+        rimTrail.opacity = Float(trailing)
         rimTop.fillColor = resolved.cgColor
         func side(_ beside: Beside?, _ lean: Double) -> CGColor {
             beside.map { Self.mix(resolved, Self.ink($0.tone), lean, traits: traits).cgColor } ?? resolved.cgColor
         }
         rimLead.fillColor = side(edges.beside.leading, edges.lean.leading)
         rimTrail.fillColor = side(edges.beside.trailing, edges.lean.trailing)
-        // The glow at half the rim's strength; none when the rim is solid.
+        // The glow at half the rim's strength, leaning with each side; none
+        // when the rim is solid.
         glow.shadowColor = resolved.cgColor
-        glow.shadowOpacity = solid ? 0 : Float(strength / 2)
+        glow.shadowOpacity = solid ? 0 : Float(own / 2)
+        glowSides.colors = [leading, leading, 1, 1, trailing, trailing].map { UIColor.black.withAlphaComponent($0).cgColor }
         CATransaction.commit()
     }
 
@@ -1802,9 +1834,19 @@ final class TabView: UIView {
             piece.frame = span
             piece.path = ring.intersection(CGPath(rect: CGRect(x: from, y: span.minY, width: max(0, to - from), height: span.height), transform: nil), using: .evenOdd)
         }
-        // The glow is the outline's shadow, shown only outside the outline.
+        // The glow is the outline's shadow, shown only outside the outline,
+        // each side's share of it at that side's strength (`paintRim`): the
+        // mask steps from one to the other over the glow's own reach about
+        // each join, as the web's glow, blurred off its pieces, blends.
         let shape = Self.outline(outline, leading: corners.leading, trailing: corners.trailing)
         glowHost.frame = rimHost.bounds
+        glowLean.frame = rimHost.bounds
+        glowSides.frame = rimHost.bounds
+        let width = max(1, Double(span.width))
+        let blend = Double(glow.shadowRadius)
+        let joins = (lead: Double(lead), trail: Double(trail))
+        glowSides.locations = [0, joins.lead - blend, joins.lead + blend, joins.trail - blend, joins.trail + blend, width]
+            .map { NSNumber(value: min(1, max(0, $0 / width))) }
         glow.frame = rimHost.bounds
         glow.shadowPath = shape.cgPath
         let outside = UIBezierPath(rect: rimHost.bounds)

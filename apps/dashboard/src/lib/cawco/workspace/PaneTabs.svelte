@@ -2068,7 +2068,8 @@
      one behind stands at its own edge. The front changes at equal depth,
      where the two stand in on the same pixels in the same ink (a gliding
      side's ink leans toward its neighbour's, `--tone-prev`/`--tone-next`,
-     by how far it has come), so the handover shows nothing. A tab in
+     by how far it has come) at the same strength (that side alone leans
+     toward the weaker rim's), so the handover shows nothing. A tab in
      front with no rim draws no stroke there, and the one behind draws
      none either: its side stands under the front card. Increase Contrast
      and Reduce Transparency draw a solid 1px outline and no glow, on
@@ -2202,34 +2203,10 @@
        not have. Nothing drawn is cut: every piece lies inside the
        outline's box. */
     overflow: clip;
-    /* Its strength now; where one of its seams glides on a switch (that
-       seam's glide, TabsList `--glide-start`/`--glide-end`, the same on
-       both its tabs: 0 at either edge, 1 half way), leaning toward the
-       weaker of its own and that neighbour's as the seam nears half way,
-       and back as it leaves, so at the handover the two rims stand at the
-       same strength and the edge passes from one to the other with nothing
-       moving, on either tab (its own cut drops to 0 as it goes behind, and
-       a lean read off it let the whole rim brighten in a frame; a rim
-       fading in met one fading out at another strength in a jump). Against
-       a neighbour with no rim, the gliding edge fades out. The whole rim
-       leans, so its top, shoulders and sides stay one stroke. */
-    --lean-s: var(--glide-start, 0);
-    --lean-e: var(--glide-end, 0);
-    opacity: calc(
-      var(--rim-mix) *
-      (
-        1 -
-        var(--lean-s) +
-        var(--lean-s) *
-        min(1, calc(var(--rim-mix-prev) / var(--rim-mix)))
-      ) *
-      (
-        1 -
-        var(--lean-e) +
-        var(--lean-e) *
-        min(1, calc(var(--rim-mix-next) / var(--rim-mix)))
-      )
-    );
+    /* Its strength now, the tab's own on every frame: a switch moves it
+       one way, from where it rests to where it will, and never through a
+       neighbour's. Only a gliding seam's side leans (`.rim-side`). */
+    opacity: var(--rim-mix);
     filter: drop-shadow(
       0 0 6px color-mix(in oklab, var(--tone) 50%, transparent)
     );
@@ -2292,14 +2269,33 @@
   /* A side, drawn as the leading one; the trailing one is its mirror. It
      stands at its tab's own edge, but for a seam gliding on a switch,
      where it stands in by its cut (TabsList), its ink leaning toward the
-     neighbour's as far as it has come (and the rim's strength with it,
-     `.rim`): at the handover the two sides stand on the same pixels in the
-     same ink at the same strength. */
+     neighbour's as far as it has come.
+
+     Its strength leans too, and only its own: where its seam glides (that
+     seam's glide, TabsList `--glide-start`/`--glide-end`, the same on both
+     its tabs: 0 at either edge, 1 half way), it leans toward the weaker of
+     its tab's rim and the neighbour's as the seam nears half way, and back
+     as it leaves, so at the handover the two sides stand on the same pixels
+     in the same ink at the same strength and the edge passes from one to
+     the other with nothing moving (a lean read off the cut instead dropped
+     to 0 as the side went behind, and brightened it in a frame). Against a
+     neighbour with no rim the gliding side fades out. The rim's top, its
+     far side and its feet keep the tab's own strength (`.rim`), so a jump
+     past a rimless tab never blinks the rims either side of it out. The
+     glow (`.rim`'s filter, drawn off what the pieces show) leans with it. */
   .rim-side {
     --s: var(--slope-start);
     /* 1 where the side stands under its neighbour's card (TabsList). */
     --u: var(--under-start, 0);
+    --glide: var(--glide-start, 0);
+    --beside: var(--rim-mix-prev);
     translate: calc(var(--seam-tuck) * var(--cut-start, 0)) 0;
+    opacity: calc(
+      1 -
+      var(--glide) +
+      var(--glide) *
+      min(1, calc(var(--beside) / max(var(--rim-mix), 0.001)))
+    );
     /* Its two drawings add up here and nowhere else (`.rim-flared`). */
     isolation: isolate;
 
@@ -2315,6 +2311,8 @@
     &[data-side="end"] {
       --s: var(--slope-end);
       --u: var(--under-end, 0);
+      --glide: var(--glide-end, 0);
+      --beside: var(--rim-mix-next);
       translate: calc(-1 * var(--seam-tuck) * var(--cut-end, 0)) 0;
       transform: scaleX(-1);
 
