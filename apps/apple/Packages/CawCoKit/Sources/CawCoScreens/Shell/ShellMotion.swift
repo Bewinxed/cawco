@@ -113,8 +113,12 @@ final class TravelAnimator: NSObject, UIViewControllerAnimatedTransitioning {
 final class ShellNavigationMotion: NSObject, UINavigationControllerDelegate, UIGestureRecognizerDelegate {
     /// Set just before a root swap, read by the next transition.
     var route: Travel?
-    /// The controller a transition (or a back swipe) left on top.
-    var didShow: (UIViewController) -> Void = { _ in }
+    /// The controller a transition (or a back swipe) left on top, and the one
+    /// that was on top before it: nil on the stack's first appearance, and
+    /// the same controller when the stack comes back on screen unchanged.
+    var didShow: (_ shown: UIViewController, _ left: UIViewController?) -> Void = { _, _ in }
+    /// The top the last `didShow` reported.
+    private weak var top: UIViewController?
     private var interaction: UIPercentDrivenInteractiveTransition?
     private weak var navigation: UINavigationController?
     private var transitioning = false
@@ -152,7 +156,9 @@ final class ShellNavigationMotion: NSObject, UINavigationControllerDelegate, UIG
 
     func navigationController(_: UINavigationController, didShow shown: UIViewController, animated _: Bool) {
         transitioning = false
-        didShow(shown)
+        let left = top
+        top = shown
+        didShow(shown, left)
     }
 
     func navigationController(_: UINavigationController, animationControllerFor operation: UINavigationController.Operation, from _: UIViewController, to _: UIViewController) -> (any UIViewControllerAnimatedTransitioning)? {

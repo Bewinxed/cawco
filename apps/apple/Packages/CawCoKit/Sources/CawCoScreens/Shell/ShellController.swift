@@ -26,15 +26,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// toggle and Caw float over the strip's ends (WorkspaceController `barOverlay`).
     private let sessionCluster = TopBarCluster()
     private let sessionBurger = BurgerButton(bare: true)
-    #if DEBUG
-    /// A simulator pass's `-open-session <id>`, until a fleet read holds that
-    /// session and the shell is on screen; then it opens once and is cleared.
-    private var probeSession: String? = {
-        let arguments = ProcessInfo.processInfo.arguments
-        guard let at = arguments.firstIndex(of: "-open-session"), arguments.indices.contains(at + 1) else { return nil }
-        return arguments[at + 1]
-    }()
-    #endif
+    /// Where this window comes to rest (`land`), until it has; nil after.
+    private var landing: ShellLanding?
+    private static let restoring = Logger(subsystem: "dev.cawco.app", category: "Restore")
     /// Every notification, in the panel under Caw's head on any bar.
     private let cawPanel = CawPanel()
     /// The asks already seen, by id: one that is not is new, and Caw beats once. Nil until the fleet is read.
@@ -175,9 +169,13 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         placeSessionRow()
         // One group on a wide screen: its strip is the bar's, in the crumb's place.
         workspaceController.onHost = { [weak self] strip in self?.barTabs.host(strip) }
-        // Back on the board (a back swipe), the focused group shows nothing; its tabs stay.
-        compactMotion.didShow = { [weak self] shown in
-            guard let self, shown === compactNav.viewControllers.first, compact else { return }
+        // Back on the board from the conversations (a back swipe, a place
+        // swapped in over them), the focused group shows nothing; its tabs
+        // stay. Only when the conversations are what left: the stack's first
+        // appearance shows its root too, and clearing the group there sent a
+        // restored scene's conversation away and the phone to rest on Home.
+        compactMotion.didShow = { [weak self] shown, left in
+            guard let self, shown === compactNav.viewControllers.first, left === workspaceController, compact else { return }
             // Back on the place the conversations were opened from: the shell is there again.
             if let under = compactUnder { settle(on: under) }
             if workspace.activeSessionId != nil { workspace.showBoard() }
@@ -197,34 +195,67 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             guard let self else { return }
             refreshBars()
             followWorkspace()
+            applyLanding()
             #if DEBUG
-            openProbeSession()
+            openProbeForm()
             #endif
         }
         // Apart from the bars: a pulse of a conversation in front wakes only this read.
         lookWatcher = ShellWatcher(hub: hub, home: home) { [weak self] in self?.lookAtFront() }
     }
 
-    #if DEBUG
-    /// Opens `-open-session`'s conversation once the fleet's first read that
-    /// holds it is in and the shell has appeared. Opened any sooner (from
-    /// `viewIsAppearing`, before the read) the push over the board was lost
-    /// and the pass landed on the board. Reads the rows on every pass while
-    /// it waits, so the watcher comes back when they change.
-    /// Several ids, comma-separated, open in that order as tabs, the last in front.
-    private func openProbeSession() {
-        openProbeForm()
-        guard let ids = probeSession?.split(separator: ",").map(String.init) else { return }
-        // A session its project is moving for is held by its move until it has a row.
-        let held = home.ready && ids.allSatisfy { id in hub.fleet.rows.contains { $0.id == id } || hub.fleet.move(for: id) != nil }
-        guard held, isViewLoaded, view.window != nil else { return }
-        probeSession = nil
-        // After the watcher's read: opening changes the workspace it observes.
+    // MARK: Landing
+
+    /// Where this window comes to rest: a restored scene's place and
+    /// conversation, a new window's conversation, a simulator pass's
+    /// `-open-session`, or, with nothing named, the launch's own start. One
+    /// route for all of them, so a restore is never raced by a launch default.
+    func land(_ next: ShellLanding) {
+        landing = next
+        // Its screen is built when its group first shows it: the draft and
+        // the transcript's place wait for it there (PaneHost `restore`).
+        if let values = next.values, let id = next.sessionIds.last { panes.restore(values, for: id) }
+        applyLanding()
+    }
+
+    /// Lands once the fleet's first read is in and the shell is in its
+    /// window, where its width is known. Before that the shell is off screen
+    /// (CawWaiting holds it out of the window until the read), its size class
+    /// unspecified: a conversation opened then went into the wide screen's
+    /// detail, and the phone's own stack stayed on its board.
+    private func applyLanding() {
+        guard landing != nil, home.ready, isViewLoaded, view.window != nil else { return }
+        // After the watcher's read: landing changes the workspace it observes.
         DispatchQueue.main.async { [weak self] in
-            for id in ids { self?.openSession(id) }
+            guard let self, let landing else { return }
+            self.landing = nil
+            let place = landing.place ?? .fleet
+            Self.restoring.notice("landing on \(place.route, privacy: .public), session \(landing.sessionIds.last?.prefix(8) ?? "none", privacy: .public), transcript place saved: \(landing.values?["transcriptPosition"] != nil), compact: \(self.compact)")
+            if place != .fleet { move(to: place, opening: false, animated: false) }
+            if landing.sessionIds.isEmpty {
+                // Nothing in front to bring back: a phone rests on the place,
+                // whatever its workspace kept in front from the last run.
+                if compact, workspace.activeSessionId != nil { workspace.showBoard() }
+                return
+            }
+            for id in landing.sessionIds { openSession(id, animated: false) }
         }
     }
 
+    /// What the scene keeps when it goes to the background
+    /// (RootViewController `restorationActivity`): the place in front, and
+    /// the conversation when the conversations are the page in front. On a
+    /// phone they are pushed over the place they were opened from, and that
+    /// place is kept with them.
+    var restoration: (place: ShellDestination, sessionId: String?) {
+        if compact {
+            let onSession = compactNav.topViewController === workspaceController
+            return onSession ? (compactUnder ?? .fleet, currentId) : (destination, nil)
+        }
+        return (destination, destination == .fleet ? currentId : nil)
+    }
+
+    #if DEBUG
     /// A simulator pass's `-new-session <projectId> <machineId>`: the New
     /// Session form, opened once the fleet's read holds that project, with it
     /// chosen on that machine (`-new-session-step` and `-new-session-machines`
@@ -355,18 +386,21 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         #endif
     }
 
-    #if DEBUG
-    /// The fleet may have been read before the shell was on screen: the probe's session opens now.
+    /// The fleet may have been read before the shell was on screen: it lands now.
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        openProbeSession()
+        applyLanding()
+        #if DEBUG
+        openProbeForm()
         if ProcessInfo.processInfo.arguments.contains("-shell-probe"), shellProbe == nil {
             shellProbe = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.probeShell() }
             }
         }
+        #endif
     }
 
+    #if DEBUG
     private var shellProbe: Timer?
 
     /// A simulator pass's `-shell-probe`: once a second, in the Probe log,
@@ -459,7 +493,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// place. On a compact width that is one push over the page in front,
     /// which stays under it; a navigation controller given two animated
     /// stacks in one turn (the board, then the conversations) keeps neither.
-    private func move(to next: ShellDestination, opening: Bool) {
+    /// `animated` false: a landing, the place put there with no travel.
+    private func move(to next: ShellDestination, opening: Bool, animated: Bool = true) {
         railSheet?.dismiss(animated: true)
         guard next != destination else {
             guard next == .fleet, compact else { return }
@@ -483,20 +518,21 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         let regularPage = next == .fleet ? detail : page(for: next)
         // The bar's toggle, crumb and cluster move with the place, so they stay one bar.
         TopBar.install(on: regularPage.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: railToggle)
-        mainMotion.route = travel
-        mainNav.setViewControllers([regularPage], animated: !compact)
-        compactMotion.route = travel
+        // A transition that is not animated never asks for its travel: none is left for the next one.
+        mainMotion.route = animated ? travel : nil
+        mainNav.setViewControllers([regularPage], animated: animated && !compact)
+        compactMotion.route = animated ? travel : nil
         if opening, compact, let under = compactNav.viewControllers.first {
             // The page in front keeps its bar and stays in the stack.
             compactUnder = from
             if workspaceController.parent != nil, workspaceController.parent !== compactNav { detail.show(nil) }
-            compactNav.setViewControllers([under, workspaceController], animated: true)
+            compactNav.setViewControllers([under, workspaceController], animated: animated)
         } else {
             compactUnder = nil
             let compactPage = next == .fleet ? board : page(for: next, compact: true)
-            compactCrumb.set(next.crumb, animated: true)
+            compactCrumb.set(next.crumb, animated: animated)
             TopBar.install(on: compactPage.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger, showsCrumb: next != .fleet)
-            compactNav.setViewControllers([compactPage], animated: compact)
+            compactNav.setViewControllers([compactPage], animated: animated && compact)
         }
         hostTabs()
         // The bar re-homes its items with the page: the hosted strip is measured against them again.
@@ -548,19 +584,21 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     var selected: SessionViewController? { currentId.flatMap(panes.session) }
     var currentId: String? { workspace.activeSessionId }
 
-    /// A restored scene's draft and place for session `id`, whenever its screen is built.
-    func restoreValues(_ values: [AnyHashable: Any], for id: String) { panes.restore(values, for: id) }
-
     /// Opens a conversation in the workspace: its group's tab, the deck pushed
     /// over the board on a compact width, the grid in the detail on a wide one.
     func openSession(_ id: String) {
+        openSession(id, animated: true)
+    }
+
+    /// `animated` false: a landing, the conversation put in front with no push.
+    private func openSession(_ id: String, animated: Bool) {
         railSheet?.dismiss(animated: true)
         workspace.open(id)
         // From another place the board and the conversations arrive as one
         // stack; `showWorkspace` then finds them in front on a compact width
         // and does the wide screen's part.
-        if destination != .fleet { move(to: .fleet, opening: true) }
-        showWorkspace(animated: true)
+        if destination != .fleet { move(to: .fleet, opening: true, animated: animated) }
+        showWorkspace(animated: animated)
         hostTabs()
         rail.requestRefresh()
     }
@@ -1139,14 +1177,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             edge.trailingAnchor.constraint(equalTo: rail.view.trailingAnchor),
             edge.widthAnchor.constraint(equalToConstant: 1),
         ])
-    }
-
-    // MARK: Restoration
-
-    var restorationValues: [AnyHashable: Any] {
-        var values = selected?.restorationValues ?? [:]
-        if case let .project(id) = destination { values["projectId"] = id }
-        return values
     }
 }
 

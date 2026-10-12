@@ -233,10 +233,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         guard let scene = scene as? UIWindowScene else {
             return
         }
-        let activity = options.userActivities.first ?? session.stateRestorationActivity
-        open(scene, sessionId: activity?.userInfo?["sessionId"] as? String, boardTab: activity?.userInfo?["boardTab"] as? String)
+        // A new window's conversation, else the scene as it was left.
+        open(scene, restoring: options.userActivities.first ?? session.stateRestorationActivity)
         let root = window?.rootViewController as? RootViewController
-        if let activity { root?.restore(activity) }
         // Launched cold by a tapped push: it opens the same way a warm tap does.
         if let response = options.notificationResponse, PushNote(response).action != UNNotificationDismissActionIdentifier {
             PushTaps.deliver(PushNote(response), to: root)
@@ -245,7 +244,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     /// Builds the scene's window: its root controller and its own hub connection.
-    func open(_ scene: UIWindowScene, sessionId: String? = nil, boardTab: String? = nil) {
+    func open(_ scene: UIWindowScene, restoring activity: NSUserActivity? = nil) {
         guard window == nil else {
             return
         }
@@ -254,9 +253,9 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window.tintColor = Palette.inkStrong
         #if DEBUG
         // A simulator pass at the paywall alone, with no hub (PaywallProbe).
-        window.rootViewController = PaywallProbe.asked ? PaywallProbe.root() : RootViewController(sessionId: sessionId, boardTab: boardTab)
+        window.rootViewController = PaywallProbe.asked ? PaywallProbe.root() : RootViewController(restoring: activity)
         #else
-        window.rootViewController = RootViewController(sessionId: sessionId, boardTab: boardTab)
+        window.rootViewController = RootViewController(restoring: activity)
         #endif
         window.makeKeyAndVisible()
         self.window = window

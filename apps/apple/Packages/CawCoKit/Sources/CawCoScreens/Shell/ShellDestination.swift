@@ -25,6 +25,41 @@ public enum ShellDestination: Hashable, Sendable {
         }
     }
 
+    /// The place as the web's path names it, which a scene keeps across a
+    /// relaunch (`ShellLanding`): `/session`, `/workflows`,
+    /// `/workflows/<id>` (`?tab=program` on its Program tab), `/project/<id>`,
+    /// `/config`, `/usage`.
+    var route: String {
+        switch self {
+        case .fleet: "/session"
+        case .workflows: "/workflows"
+        case let .workflow(id, program): "/workflows/\(id)" + (program ? "?tab=program" : "")
+        case let .project(id): "/project/\(id)"
+        case .configure: "/config"
+        case .usage: "/usage"
+        }
+    }
+
+    init?(route: String) {
+        let parts = route.split(separator: "?", maxSplits: 1)
+        let path = parts.first.map(String.init) ?? ""
+        let program = parts.count > 1 && parts[1] == "tab=program"
+        switch path {
+        case "/session": self = .fleet
+        case "/workflows": self = .workflows
+        case "/config": self = .configure
+        case "/usage": self = .usage
+        default:
+            if path.hasPrefix("/workflows/"), path.count > "/workflows/".count {
+                self = .workflow(id: String(path.dropFirst("/workflows/".count)), program: program)
+            } else if path.hasPrefix("/project/"), path.count > "/project/".count {
+                self = .project(String(path.dropFirst("/project/".count)))
+            } else {
+                return nil
+            }
+        }
+    }
+
     /// The sidebar's spokes, top to bottom (route.svelte.ts `SPOKE_ORDER`):
     /// a move between two slides that way. A project is not a spoke.
     var spoke: Int? {
@@ -36,6 +71,18 @@ public enum ShellDestination: Hashable, Sendable {
         case .project: nil
         }
     }
+}
+
+/// Where a window's shell comes to rest once the fleet is read
+/// (ShellController `land`): what its scene kept when it went to the
+/// background, or a new window's conversation. Nothing named is the launch's
+/// own start: a phone's Home, a wide screen's kept tabs.
+struct ShellLanding {
+    var place: ShellDestination?
+    /// Opened in this order as tabs, the last in front.
+    var sessionIds: [String] = []
+    /// The scene's saved values: the last session's draft and transcript place among them.
+    var values: [AnyHashable: Any]?
 }
 
 /// What a destination's screen is handed: the window's hub and shell.

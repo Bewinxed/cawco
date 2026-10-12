@@ -515,7 +515,8 @@ xcrun simctl install ${udid} "${app}"`);
   logger = listen();
   await pause(1500);
   const relaunched = Date.now();
-  // The scene's saved state restores the place; `-open-session` opens the session it is in.
+  // The scene's saved state brings the session back at its place; `-open-session`
+  // names the same session and lands through the same route (ShellController `land`).
   await launch(sessionId);
   const loadShots: string[] = [];
   while (Date.now() - relaunched < 9000) {
@@ -534,37 +535,6 @@ xcrun simctl install ${udid} "${app}"`);
       )
       .join(" | ");
   console.log(`  screen after the relaunch: ${await screen()}`);
-  // The phone's restore can come to rest on the board, the session's tab
-  // behind it: its row in Recent brings the tab to the front, the place it
-  // holds (or keeps parked) with it.
-  const tapOn = (frame: Frame) =>
-    sh(
-      `${AXE} tap -x ${Math.round(frame.x + frame.width / 2)} -y ${Math.round(frame.y + frame.height / 2)} --udid ${udid}`
-    );
-  const NAMED = /catch-?up probe/i;
-  let board = await tree();
-  if (!board.some((n) => n.label === "Session transcript")) {
-    // Recent may stand folded under its heading: open it first.
-    const heading = board.find((n) => n.label?.startsWith("Recent,"))?.frame;
-    if (heading && !board.some((n) => n.label && NAMED.test(n.label))) {
-      await tapOn(heading);
-      await pause(1500);
-      board = await tree();
-    }
-    const row = board.find(
-      (n) => n.label !== undefined && NAMED.test(n.label) && n.frame
-    )?.frame;
-    if (row) {
-      console.log(
-        "  the restore stood on the board: its Recent row opens the session"
-      );
-      await tapOn(row);
-    } else {
-      console.log(
-        `  the restore stood on the board, and no row names the session: ${await screen()}`
-      );
-    }
-  }
   const want = at.first?.row;
   const back = await until(
     `row-${want} in view again`,

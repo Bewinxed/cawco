@@ -19,16 +19,31 @@ public final class RootViewController: ObservedViewController {
     private var readFrom: URL?
     private var shown: UIViewController?
     private var shownKey = ""
-    private var initialSession: String?
-    private var initialValues: [AnyHashable: Any]?
-    /// A scene put back as it was left: which session, and whether its place came with it.
-    private static let restoring = Logger(subsystem: "dev.cawco.app", category: "Restore")
 
-    public init(sessionId: String? = nil, boardTab: String? = nil) {
-        initialSession = sessionId
+    /// A window, put back as its scene left it when `activity` is the scene's
+    /// saved one (or a new window's conversation); the shell lands there once
+    /// the fleet is read.
+    public init(restoring activity: NSUserActivity? = nil) {
         super.init(nibName: nil, bundle: nil)
-        if let boardTab, let tab = HomeModel.Tab(rawValue: boardTab) { home.tab = tab }
+        let landing = activity.map(landing(from:)) ?? ShellLanding()
+        #if DEBUG
+        board.land(Self.probing(landing))
+        #else
+        board.land(landing)
+        #endif
     }
+
+    #if DEBUG
+    /// A simulator pass's `-open-session <id>[,<id>…]`: these conversations
+    /// land the way a restored scene's does, as tabs, the last in front.
+    private static func probing(_ landing: ShellLanding) -> ShellLanding {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let at = arguments.firstIndex(of: "-open-session"), arguments.indices.contains(at + 1) else { return landing }
+        var probed = landing
+        probed.sessionIds = arguments[at + 1].split(separator: ",").map(String.init)
+        return probed
+    }
+    #endif
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
@@ -109,17 +124,6 @@ public final class RootViewController: ObservedViewController {
         waiting.content = board
         waiting.waiting = !read
         show(key: "board") { waiting }
-        if read, let id = initialSession {
-            initialSession = nil
-            board.openSession(id)
-            if let initialValues {
-                // Its screen is built when its group first shows it, after this:
-                // the values wait for it there (PaneHost `restore`).
-                Self.restoring.notice("restoring \(id.prefix(8), privacy: .public), place saved: \(initialValues["transcriptPosition"] != nil)")
-                board.restoreValues(initialValues, for: id)
-                self.initialValues = nil
-            }
-        }
         // After the first full read, `/api/pending` included: an ask's
         // session opens with its card in view, never an empty pane.
         if read, let route = pushRoute {
@@ -202,25 +206,36 @@ public final class RootViewController: ObservedViewController {
         home.stop()
         hub.disconnect()
     }
+    /// What the scene keeps when it goes to the background: the place in
+    /// front, the conversation when it is the page in front with its draft and
+    /// its place in the transcript, and Home's tab.
     public var restorationActivity: NSUserActivity {
-        let activity = board.currentId.map { SessionViewController.activity($0) }
+        let state = board.restoration
+        let activity = state.sessionId.map { SessionViewController.activity($0) }
             ?? NSUserActivity(activityType: "dev.cawco.scene")
         var values = activity.userInfo ?? [:]
         values["boardTab"] = home.tab.rawValue
-        if let selected = board.selected {
+        values["place"] = state.place.route
+        if let selected = board.selected, selected.sessionId == state.sessionId {
             for (key, value) in selected.restorationValues { values[key] = value }
         }
         activity.userInfo = values
         return activity
     }
 
+    /// An activity handed to a window already up (a conversation continued in it): it lands there.
     public func restore(_ activity: NSUserActivity) {
-        if let name = activity.userInfo?["boardTab"] as? String, let tab = HomeModel.Tab(rawValue: name) {
+        board.land(landing(from: activity))
+    }
+
+    private func landing(from activity: NSUserActivity) -> ShellLanding {
+        let values = activity.userInfo
+        if let name = values?["boardTab"] as? String, let tab = HomeModel.Tab(rawValue: name) {
             home.tab = tab
         }
-        initialSession = activity.userInfo?["sessionId"] as? String
-        initialValues = activity.userInfo
-        requestRefresh()
+        return ShellLanding(place: (values?["place"] as? String).flatMap(ShellDestination.init(route:)),
+                            sessionIds: (values?["sessionId"] as? String).map { [$0] } ?? [],
+                            values: values)
     }
 
     /// Approves (or denies) the first card in the needs-you queue, as its own buttons do.
