@@ -704,6 +704,15 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
                 self?.explainIncompatible(incompatible)
             }
         }
+        // Local Network privacy refuses the hub: known as soon as the socket is
+        // refused, so said from then (no outage grace), and its one fix is the
+        // status line's, Open Settings (no Reconnect: trying again can't help).
+        if hub.localNetworkDenied {
+            let reason = LocalNetwork.refusal
+            return SendBlock(reason: reason, menu: UIMenu(title: reason, children: [
+                UIAction(title: LocalNetwork.settingsAction, image: Glyph.settings.image) { _ in UIApplication.shared.open(LocalNetwork.settingsURL) },
+            ]))
+        }
         if hub.state == .unreachable {
             let reason = "Reconnecting to the hub…"
             return SendBlock(reason: reason, menu: UIMenu(title: reason, children: [
