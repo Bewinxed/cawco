@@ -73,7 +73,7 @@ const check = (name: string, ok: boolean, detail: string) => {
   results[name] = `${ok ? "PASS" : "FAIL"} — ${detail}`;
   console.log(`${ok ? "PASS" : "FAIL"} ${name}: ${detail}`);
 };
-const section = async (name: string, body: () => Promise<void>) => {
+const section = async (name: string, body: () => Promise<void> | void) => {
   try {
     await body();
   } catch (error) {
@@ -442,21 +442,59 @@ const views = async () =>
 const viewOf = async (name: string) =>
   (await views()).find((one) => one.name === name);
 
-/** A session's credential, read from the MCP config file its agent wrote for it. */
-const credentialOf = async (instanceId: string): Promise<string> => {
-  const dir = join(fleet.sandbox, "session-identity", "claude-mcp");
-  const file = (await readdir(dir)).find((name) =>
-    name.startsWith(`${instanceId}.`)
+/**
+ * What a running session can read of its own, taken while it runs: every
+ * process in its tree (the Claude Code process sessiond holds for it, and
+ * whatever that started), each one's environment and command line, and the
+ * MCP config files those command lines name (`--mcp-config <file>`, where
+ * the agent writes them for a plain session and a workspace delegate alike:
+ * claude-mcp-config.ts). The files go when the process does, so this is read
+ * the moment the session is known to be at work.
+ */
+interface Trace {
+  configs: { path: string; text: string }[];
+  /** The session credential its CawCo MCP entry carries. */
+  credential: string;
+  environs: Buffer[];
+  pids: number[];
+}
+
+const traceOf = async (instanceId: string): Promise<Trace> => {
+  const pid = await fleet.sessionPid(instanceId);
+  if (pid === undefined) {
+    throw new Error(`${instanceId} has no live process under sessiond`);
+  }
+  const pids = await tree(pid);
+  const read = (one: number, what: string) =>
+    readFile(`/proc/${one}/${what}`).catch(() => Buffer.from(""));
+  const environs = await Promise.all(pids.map((one) => read(one, "environ")));
+  const cmdlines = await Promise.all(pids.map((one) => read(one, "cmdline")));
+  const paths = new Set<string>();
+  for (const cmdline of cmdlines) {
+    const args = cmdline.toString("utf8").split("\0");
+    args.forEach((arg, at) => {
+      if (arg === "--mcp-config" && args[at + 1]) {
+        paths.add(args[at + 1] as string);
+      } else if (arg.startsWith("--mcp-config=")) {
+        paths.add(arg.slice("--mcp-config=".length));
+      }
+    });
+  }
+  const configs = await Promise.all(
+    [...paths].map(async (path) => ({
+      path,
+      text: await readFile(path, "utf8").catch(() => ""),
+    }))
   );
-  if (!file) {
-    throw new Error(`no MCP config for ${instanceId} in ${dir}`);
+  const credential = configs
+    .map((config) => CREDENTIAL.exec(config.text)?.[1])
+    .find(Boolean);
+  if (!credential) {
+    throw new Error(
+      `${instanceId}: no MCP config with its credential among ${pids.length} processes (${[...paths].join(", ") || "no --mcp-config"})`
+    );
   }
-  const config = await readFile(join(dir, file), "utf8");
-  const bearer = CREDENTIAL.exec(config)?.[1];
-  if (!bearer) {
-    throw new Error(`no credential in ${file}`);
-  }
-  return bearer;
+  return { pids, environs, configs, credential };
 };
 /** A tool call through the hub's REST door, as the session the credential is. */
 const door = (
@@ -681,7 +719,7 @@ try {
     });
   }
   const parent = await fleet.spawn("claude", "Connections parent", fleet.repo);
-  const parentCredential = await credentialOf(parent);
+  const { credential: parentCredential } = await traceOf(parent);
 
   // ── 7: admin set_key through the ask; admin read ──────────────────────
   await section(
@@ -782,18 +820,20 @@ try {
 
   // ── 2, 5, 6: the granted delegate calls through the hub ───────────────
   const user = await startDelegate(parent, "USER", "conn-user");
-  await section("2: a granted delegate calls through the hub", async () => {
-    await until(
-      "the delegate's four answers",
-      () =>
-        fleet.seen.find(
-          (one) =>
-            one.all.includes('{"said":"by alias"}') &&
-            one.all.includes("PROBE-CONN-USER")
-        ),
-      Boolean,
-      240_000
-    );
+  // Read the moment its last answer is in, while it is surely running.
+  await until(
+    "the delegate's four answers",
+    () =>
+      fleet.seen.find(
+        (one) =>
+          one.all.includes('{"said":"by alias"}') &&
+          one.all.includes("PROBE-CONN-USER")
+      ),
+    Boolean,
+    240_000
+  );
+  const userTrace = await traceOf(user.id);
+  await section("2: a granted delegate calls through the hub", () => {
     const answered = fleet.seen
       .filter((one) => one.all.includes("PROBE-CONN-USER"))
       .at(-1);
@@ -840,11 +880,15 @@ try {
     "6: a revoked access token is refreshed in the hub",
     async () => {
       issued.access.clear();
-      const credential = await credentialOf(user.id);
       const before = refreshes;
-      const again = await door(user.id, credential, "conn__echo-oauth__echo", {
-        said: "after revoke",
-      });
+      const again = await door(
+        user.id,
+        userTrace.credential,
+        "conn__echo-oauth__echo",
+        {
+          said: "after revoke",
+        }
+      );
       check(
         "6: the call after a revoked token refreshed and answered",
         again.text.includes("ECHO[oauth-user]") && refreshes === before + 1,
@@ -855,19 +899,20 @@ try {
 
   // ── 4: the delegate whose type lists none ─────────────────────────────
   const none = await startDelegate(parent, "NONE", "conn-none");
+  await until(
+    "the no-connection delegate searched",
+    () =>
+      fleet.seen.find(
+        (one) =>
+          one.all.includes("PROBE-CONN-NONE") &&
+          noneSearched.at > 0 &&
+          one.at > noneSearched.at
+      ),
+    Boolean,
+    240_000
+  );
+  const noneTrace = await traceOf(none.id);
   await section("4: a delegate whose type lists none", async () => {
-    await until(
-      "the no-connection delegate searched",
-      () =>
-        fleet.seen.find(
-          (one) =>
-            one.all.includes("PROBE-CONN-NONE") &&
-            noneSearched.at > 0 &&
-            one.at > noneSearched.at
-        ),
-      Boolean,
-      240_000
-    );
     const userTools = await listedTo(user.id);
     const noneTools = await listedTo(none.id);
     check(
@@ -888,7 +933,7 @@ try {
     );
     const refused = await door(
       none.id,
-      await credentialOf(none.id),
+      noneTrace.credential,
       "conn__echo-alpha__echo",
       {
         said: "not mine",
@@ -904,35 +949,35 @@ try {
 
   // ── 3: no trace of a key anywhere a session reads ─────────────────────
   await section("3: no session holds a key", async () => {
+    // Every secret the probe's services issued, the refreshed tokens too,
+    // against what the sessions held while they ran.
     const needles = secrets();
-    const pid = await fleet.sessionPid(user.id);
-    const pids = pid ? await tree(pid) : [];
-    const environs = await Promise.all(
-      pids.map((one) =>
-        readFile(`/proc/${one}/environ`).catch(() => Buffer.from(""))
-      )
-    );
-    const inEnv = environs.filter((bytes) =>
-      needles.some((n) => bytes.includes(n))
-    );
-    const configDir = join(fleet.sandbox, "session-identity", "claude-mcp");
-    const config = (await readdir(configDir)).filter((name) =>
-      name.startsWith(`${user.id}.`)
-    );
-    const inConfig = await holding(configDir, needles);
+    const holds = (bytes: Buffer | string) =>
+      needles.some((needle) => bytes.includes(needle));
+    for (const [who, trace] of [
+      ["granted", userTrace],
+      ["ungranted", noneTrace],
+    ] as const) {
+      check(
+        `3: the ${who} session's process tree environment holds no key or token`,
+        trace.pids.length > 0 && !trace.environs.some(holds),
+        `${trace.pids.length} processes read, ${trace.environs.filter(holds).length} holding a secret`
+      );
+      check(
+        `3: the ${who} session's Claude MCP config file holds none`,
+        trace.configs.length > 0 &&
+          !trace.configs.some((config) => holds(config.text)),
+        trace.configs
+          .map(
+            (config) =>
+              `${config.path}: ${holds(config.text) ? "HOLDS ONE" : "none"}`
+          )
+          .join("; ")
+      );
+    }
     const inWorkspace = await holding(user.cwd, needles);
     const inHome = await holding(fleet.home, needles);
     const inSandbox = await holding(fleet.sandbox, needles);
-    check(
-      "3: the delegate's process tree environment holds no key or token",
-      pids.length > 0 && inEnv.length === 0,
-      `${pids.length} processes read, ${inEnv.length} holding a secret`
-    );
-    check(
-      "3: its Claude MCP config file holds none",
-      config.length > 0 && inConfig.length === 0,
-      `${config.join(", ")}; holding: ${inConfig.join(", ") || "none"}`
-    );
     check(
       "3: its workspace holds none",
       inWorkspace.length === 0,
