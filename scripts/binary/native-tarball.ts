@@ -103,10 +103,51 @@ async function metadataFor(
 }
 
 /**
+ * Holds `${dest}.lock` (the holder's pid) so one process at a time appends to
+ * `${dest}.part`; a lock whose pid is gone is taken over.
+ */
+async function lockDownload(dest: string, label: string) {
+  const lock = `${dest}.lock`;
+  for (;;) {
+    try {
+      const handle = await open(lock, "wx");
+      await handle.write(String(process.pid));
+      await handle.close();
+      return async () => {
+        await rm(lock, { force: true });
+      };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+        throw error;
+      }
+    }
+    const holder = Number(
+      await Bun.file(lock)
+        .text()
+        .catch(() => "")
+    );
+    let alive = false;
+    try {
+      alive = holder > 0 && process.kill(holder, 0);
+    } catch {
+      alive = false;
+    }
+    if (alive) {
+      throw new Error(
+        `${label} is being downloaded by another build (pid ${holder}, ${lock})`
+      );
+    }
+    await rm(lock, { force: true });
+  }
+}
+
+/**
  * Downloads `url` to `dest`, verified against `integrity`. A connection that
- * drops or stalls resumes with a Range request from the bytes already on disk
- * (appended only on a 206 that starts there, otherwise restarted from zero),
- * up to {@link ATTEMPTS} attempts with backoff.
+ * drops or stalls resumes with a Range request from the bytes already in
+ * `${dest}.part` (appended only on a 206 that starts there, otherwise
+ * restarted from zero), up to {@link ATTEMPTS} attempts with backoff. The
+ * part file outlives a failed run so the next one resumes it; it becomes
+ * `dest` only once its hash matches.
  */
 export async function downloadVerified(
   url: string,
@@ -114,8 +155,18 @@ export async function downloadVerified(
   dest: string,
   label: string
 ) {
-  const part = { path: `${dest}.${process.pid}.part`, received: 0 };
-  await rm(part.path, { force: true });
+  const unlock = await lockDownload(dest, label);
+  const path = `${dest}.part`;
+  const existing = Bun.file(path);
+  const part = {
+    path,
+    received: (await existing.exists()) ? existing.size : 0,
+  };
+  if (part.received > 0) {
+    console.log(
+      `${label}: resuming a previous download at ${part.received} bytes`
+    );
+  }
   let last: unknown;
   try {
     for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
@@ -140,7 +191,7 @@ export async function downloadVerified(
       }
     }
   } finally {
-    await rm(part.path, { force: true });
+    await unlock();
   }
   throw new Error(
     `Native SDK download of ${label} failed after ${ATTEMPTS} attempts with ${part.received} bytes received: ${message(last)}`
@@ -188,6 +239,11 @@ async function appendBody(
         await handle.truncate(0);
         part.received = 0;
       }
+    } else if (resuming && response.status === 416) {
+      // The part already reaches past the end: it can only be wrong, start over.
+      await handle.truncate(0);
+      part.received = 0;
+      throw new Error("range not satisfiable, restarting from zero");
     } else {
       throw new Error(`HTTP ${response.status}`);
     }
