@@ -538,8 +538,17 @@ export async function scratchFleet(options: {
     );
     return texts.join("\n");
   };
-  /** Every descendant of `pid`, read from /proc. */
+  /** Every descendant of `pid`, read from /proc (on macOS, from `pgrep -P`: a workspace boundary refuses setuid `ps`). */
   const descendants = async (pid: number): Promise<number[]> => {
+    if (process.platform === "darwin") {
+      const below = async (at: number): Promise<number[]> => {
+        const text = await Bun.$`pgrep -P ${at}`.nothrow().text();
+        const kids = text.split("\n").filter(Boolean).map(Number);
+        const deeper = await Promise.all(kids.map(below));
+        return kids.flatMap((kid, i) => [kid, ...deeper[i]]);
+      };
+      return below(pid);
+    }
     const children = new Map<number, number[]>();
     for (const entry of await readdir("/proc")) {
       const id = Number(entry);

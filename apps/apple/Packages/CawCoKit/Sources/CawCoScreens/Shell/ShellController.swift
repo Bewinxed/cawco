@@ -206,15 +206,18 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// `viewIsAppearing`, before the read) the push over the board was lost
     /// and the pass landed on the board. Reads the rows on every pass while
     /// it waits, so the watcher comes back when they change.
+    /// Several ids, comma-separated, open in that order as tabs, the last in front.
     private func openProbeSession() {
         openProbeForm()
-        guard let id = probeSession else { return }
+        guard let ids = probeSession?.split(separator: ",").map(String.init) else { return }
         // A session its project is moving for is held by its move until it has a row.
-        let held = home.ready && (hub.fleet.rows.contains { $0.id == id } || hub.fleet.move(for: id) != nil)
+        let held = home.ready && ids.allSatisfy { id in hub.fleet.rows.contains { $0.id == id } || hub.fleet.move(for: id) != nil }
         guard held, isViewLoaded, view.window != nil else { return }
         probeSession = nil
         // After the watcher's read: opening changes the workspace it observes.
-        DispatchQueue.main.async { [weak self] in self?.openSession(id) }
+        DispatchQueue.main.async { [weak self] in
+            for id in ids { self?.openSession(id) }
+        }
     }
 
     /// A simulator pass's `-new-session <projectId> <machineId>`: the New

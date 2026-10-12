@@ -145,6 +145,9 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
             if let tab = strip.tabView(id) { tabDetails.click(id, tab: tab, chosen: false) }
             guard let at = shownTabs.firstIndex(of: id) else { return }
             if !mounted.contains(id) { mount(id) }
+            // The strip draws the switch on its own clock from the tap; the
+            // pages follow on theirs, and their landing moves the model.
+            strip.choose(id)
             chosenPage = at
             stack.choose(at, animated: swipeable)
         }
@@ -427,12 +430,14 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
     /// The page a tap on the strip sent the pages to, until they land.
     private var chosenPage: Int?
 
-    /// The pages' position carries the strip's choice: toward the page a tap
-    /// chose, however far, or the neighbour a finger is uncovering, by the
-    /// share of the way there. One path for both. With Reduce Motion the
-    /// strip does not scrub: the choice moves when the pages land.
+    /// The pages' position carries the strip's choice toward the neighbour
+    /// a finger is uncovering, by the share of the way there, from the tab
+    /// the strip has chosen. Pages a tap sent carry nothing: the strip
+    /// already chose their tab and draws that switch on its own clock. With
+    /// Reduce Motion the strip does not scrub: the choice moves when the
+    /// pages land.
     private func pagingMoved(_ position: Double) {
-        guard stack.active, let from = activeIndex, !shownTabs.isEmpty else { return }
+        guard stack.active, let from = strip.active.flatMap({ shownTabs.firstIndex(of: $0) }) ?? activeIndex, !shownTabs.isEmpty else { return }
         // A finger taking the pages mid-way takes the choice with them.
         if stack.isDragging { chosenPage = nil }
         let target = chosenPage ?? (position > Double(from) ? Int(position.rounded(.up)) : Int(position.rounded(.down)))

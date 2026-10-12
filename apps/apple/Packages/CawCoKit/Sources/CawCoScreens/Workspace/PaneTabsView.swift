@@ -1,4 +1,5 @@
 import CawCoDesign
+import OSLog
 import UIKit
 
 /// One open conversation as its tab shows it.
@@ -44,10 +45,15 @@ struct TabAction {
 /// variant): a row on the shelf, the open conversations as folder tabs (32pt,
 /// 10pt in, label type, at most 200 wide). An unchosen tab stands on its own
 /// tint card; the chosen one is a sheet in the transcript's surface with
-/// rounded shoulders and a foot that flares into the page. Switching wipes
-/// the new sheet in from the side facing the old one and the old one out
-/// toward the new over `durPop` on the drawer curve; a switch past a
-/// neighbour shows the sheet whole and slides it over instead. A tab that
+/// rounded shoulders and a foot that flares into the page. A switch is two
+/// states trading places where they stand, on one clock (`durSettle` on
+/// `easeCrossfade`, DESIGN.md "One clock"), a jump past a neighbour the same
+/// as a step: the old sheet fades out over its own card as the new one fades
+/// in over its own, every tab's rim, title ink and recede step move between
+/// how they rest, the front changes at half way and the seam where two tabs
+/// meet glides between their edges (`Passage`). Nothing slides or wipes; a
+/// swipe draws the same by its fraction, and with less motion it lands at
+/// once. A tab that
 /// opens grows from its start while the rest slide over (`durMorph`); one
 /// that closes narrows and fades (`durExit`) while the rest close the gap
 /// (`durFade`); a reorder slides on the drawer curve (`durPanel`). The track
@@ -208,6 +214,8 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         let removed = order.filter { !ids.contains($0) }
         let added = ids.filter { !order.contains($0) }
         let still = !animated || window == nil || UIAccessibility.isReduceMotionEnabled
+        // A switch under way is drawn between this order's tabs: a new order lands it.
+        if ids != order { land() }
         for id in removed {
             guard let view = views.removeValue(forKey: id) else { continue }
             leave(view, still: still)
@@ -218,7 +226,6 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         }
         let previous = active
         order = ids
-        active = next
         layoutTrack()
         // Every tab that stood elsewhere slides from there.
         if !still {
@@ -232,10 +239,27 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
             }
             for id in added { views[id]?.grow() }
         }
-        choose(from: previous, to: next, animated: !still)
-        // A new tab, or a new choice by any route (a tap, a swipe landing): the
-        // strip shows it. Its first fill, every tab new, shows the chosen one.
-        if !added.isEmpty || previous != next { reveal(added.count == ids.count ? next : (added.last ?? next), animated: !still) }
+        // A new tab, or a new choice by any route: the strip shows it. Its
+        // first fill, every tab new, shows the chosen one.
+        let shown = added.count == ids.count ? next : (added.last ?? next)
+        if previous != next {
+            pass(to: next, showing: shown, animated: !still)
+        } else {
+            for (id, view) in views { view.setChosen(id == next) }
+            if !added.isEmpty { reveal(shown, animated: !still) }
+        }
+        #if DEBUG
+        probeBegin()
+        #endif
+    }
+
+    /// A tap's choice, drawn at once on the switch's clock rather than when
+    /// the pages it sends land: the group still moves the pages and the
+    /// model, and the strip is already on its way (TabsList.svelte's
+    /// `optimisticIndex`). Told again by `configure`, it draws nothing more.
+    func choose(_ id: String) {
+        guard views[id] != nil, id != active else { return }
+        pass(to: id, showing: id, animated: window != nil && !UIAccessibility.isReduceMotionEnabled)
     }
 
     /// The one way a tab is brought into the strip: all of it, clear of the
@@ -268,12 +292,6 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     /// How far each edge's fade reaches into the strip (`edges`): the phone's
     /// row 24pt at its start and 16pt at its end, a group's strip 40pt.
     private var fadeRoom: (start: Double, end: Double) { barRow ? (24, 16) : (40, 40) }
-
-    /// A swipe carrying the choice: the tab it is heading to, how far it has
-    /// gone (0 to 1), and where the strip stood when it began.
-    private var scrubTo: String?
-    private var scrubF = 0.0
-    private var rideBase: CGFloat?
 
     private func makeTab(_ id: String) -> TabView {
         let view = TabView(id: id)
@@ -333,81 +351,152 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         out.startAnimation()
     }
 
-    // MARK: The chosen sheet
+    // MARK: The choice
 
-    private var leapFrom: CGFloat?
+    /// The choice on its way from one tab to another (TabsList.svelte's
+    /// switch, PaneTabs.svelte `look`): every tab's look and every seam as
+    /// they stood when it began, the tab it left and the one it is going
+    /// to, and how far it has come, 0 to 1. A tap's runs on the switch's
+    /// clock (`durSettle` on `easeCrossfade`) from wherever the strip stood,
+    /// a switch caught mid-way included; a swipe's is the pages' fraction,
+    /// from the choice at rest. Each frame draws every tab between where it
+    /// began and how it rests with the choice landed (`restyle`), and the
+    /// strip between where it rests for either end, so landing moves nothing.
+    private struct Passage {
+        var looks: [String: TabView.Look]
+        var seams: [String: Seam]
+        var leaving: String?
+        var toward: String
+        var scrollFrom: CGFloat
+        var scrollTo: CGFloat
+        /// A swipe's: where the strip stood as the finger took the pages.
+        var base: CGFloat?
+        var f = 0.0
+    }
 
-    /// The sheet moves to the new tab: a wipe between neighbours, a slide past them.
-    private func choose(from old: String?, to new: String?, animated: Bool) {
-        guard old != new else {
-            for (id, view) in views { view.setChosen(id == new, wipe: nil) }
+    /// Where two neighbours meet: 0 on the left tab's own edge (it is in
+    /// front), 1 on its right neighbour's (that one is), and between the two
+    /// while a switch that trades them glides it. Keyed by the left tab.
+    private struct Seam {
+        let right: String
+        let q: Double
+    }
+
+    private var passage: Passage?
+    private var seamNow: [String: Seam] = [:]
+    /// The tabs from the bottom of the stack up, as last drawn.
+    private var stacked: [String] = []
+    private let clock = Frames()
+    #if DEBUG
+    /// `-tabs-probe`: the switch being sampled, and a stepped clock's hold per quarter, ms.
+    private var probeLabel: String?
+    private var probeHold: Double?
+    private var probeStair = -1.0
+    private var probeBegun = false
+    #endif
+
+    /// The choice moves to `next`, and the strip to show `shown`: on the
+    /// switch's clock from wherever every tab stands now, or at once.
+    private func pass(to next: String?, showing shown: String?, animated: Bool) {
+        let leaving = active
+        let looks = views.mapValues(\.look)
+        let seams = seamNow
+        clock.stop()
+        passage = nil
+        active = next
+        for (id, view) in views { view.setChosen(id == next) }
+        accessibilityValue = next.flatMap { views[$0]?.accessibilityLabel }
+        guard animated, let next, views[next] != nil else {
+            restyle()
+            reveal(shown, animated: false)
             return
         }
-        let from = old.flatMap { order.firstIndex(of: $0) }
-        let to = new.flatMap { order.firstIndex(of: $0) }
-        let forward = (to ?? 0) >= (from ?? 0)
-        let leap = from != nil && to != nil && abs(to! - from!) > 1
-        for (id, view) in views where id != old && id != new { view.setChosen(false, wipe: nil) }
-        if let old, let view = views[old] {
-            view.setChosen(false, wipe: animated && !leap ? (forward ? .right : .left) : nil)
-        }
-        if let new, let view = views[new] {
-            view.setChosen(true, wipe: animated && !leap ? (forward ? .left : .right) : nil)
-            if animated, leap, let old, let was = views[old] {
-                view.slideSheet(from: was.frame.minX - view.frame.minX)
+        let from = scroll.contentOffset.x
+        passage = Passage(looks: looks, seams: seams, leaving: leaving, toward: next, scrollFrom: from, scrollTo: shown.map { restOffset($0, from: from) } ?? from)
+        let duration = Motion.durSettle * 1000
+        clock.run { [weak self] ms in
+            guard let self, passage?.base == nil, passage?.toward == next else { return false }
+            var t = min(1, ms / duration)
+            #if DEBUG
+            if let hold = probeHold { t = min(1, (ms / hold).rounded(.down) * 0.25) }
+            #endif
+            passage?.f = Motion.easeCrossfade.value(at: t)
+            draw()
+            #if DEBUG
+            probeFrame(t)
+            #endif
+            guard t < 1 else {
+                land()
+                #if DEBUG
+                probeFrame(nil)
+                #endif
+                return false
             }
-            accessibilityValue = view.accessibilityLabel
+            return true
         }
+    }
+
+    /// One frame of the passage: every tab where it has come to, and the
+    /// strip between where it rests for either end.
+    private func draw() {
+        restyle()
+        guard let passage, abs(passage.scrollTo - passage.scrollFrom) > 0.5 else { return }
+        scroll.contentOffset.x = passage.scrollFrom + (passage.scrollTo - passage.scrollFrom) * passage.f
+    }
+
+    /// The passage ends: a tap's where it was going, with nothing drawn anew;
+    /// a swipe's back at the choice at rest.
+    private func land() {
+        clock.stop()
+        guard let ended = passage else { return }
+        passage = nil
+        if ended.toward == active, abs(ended.scrollTo - ended.scrollFrom) > 0.5 { scroll.contentOffset.x = ended.scrollTo }
+        restyle()
     }
 
     /// The pages moving toward another tab carry the choice with them
-    /// (PaneTabs.svelte `look`, TabItem.svelte `ride`), frame by frame, by
-    /// how far they have gone: the chosen sheet fades as the one it is
-    /// heading to fades in, each over its own card; every tab's rim
-    /// strength, title ink, recede step and leading room move between how
-    /// they rest either side; the tab it is heading to takes the top past
-    /// half way; and the strip scrolls between where it rests for each, so
-    /// landing moves nothing. `toward` nil, or the chosen tab, is at rest.
+    /// (TabItem.svelte `ride`), frame by frame, by how far they have gone:
+    /// the passage from the choice at rest toward `toward`, the strip
+    /// between where it rests for each, both read from where it stood as the
+    /// finger took the pages. `toward` nil, or the chosen tab, is at rest.
     func ride(toward: String?, fraction: Double) {
         let heading = toward.flatMap { $0 != active && views[$0] != nil ? $0 : nil }
         guard let heading, let active else {
-            guard scrubTo != nil else { return }
-            scrubTo = nil
-            scrubF = 0
-            rideBase = nil
-            for view in views.values { view.ride(sheet: nil) }
-            layoutTrack()
+            // A swipe's passage hands back to rest; a tap's runs on.
+            guard passage?.base != nil else { return }
+            passage = nil
+            restyle()
             return
         }
-        let base = rideBase ?? scroll.contentOffset.x
-        rideBase = base
-        scrubTo = heading
-        scrubF = min(1, max(0, fraction))
-        for (id, view) in views {
-            view.ride(sheet: id == active ? 1 - scrubF : (id == heading ? scrubF : nil))
+        if passage?.base == nil || passage?.toward != heading {
+            let base = passage?.base ?? scroll.contentOffset.x
+            land()
+            let rest = restLooks(active)
+            passage = Passage(looks: rest, seams: restSeams(ranks(rest, tie: active)), leaving: active, toward: heading,
+                              scrollFrom: restOffset(active, from: base), scrollTo: restOffset(heading, from: base), base: base)
         }
-        layoutTrack()
-        let from = restOffset(active, from: base)
-        scroll.contentOffset.x = from + (restOffset(heading, from: base) - from) * scrubF
+        passage?.f = min(1, max(0, fraction))
+        draw()
     }
 
-    /// The pages came to rest on `id`. When they carried the choice there,
-    /// it stands where they brought it and `id` is chosen with nothing drawn
-    /// again: the switch was the swipe. Otherwise the choice goes back to
-    /// rest, and the switch, if any, is drawn when the strip is told of it
-    /// (`configure`).
+    /// The pages came to rest on `id`. When a swipe carried the choice
+    /// there, it stands where they brought it and `id` is chosen with nothing
+    /// drawn again: the switch was the swipe; any other swipe's goes back to
+    /// rest. Pages a tap sent and a finger took elsewhere bring the choice
+    /// after them, on the switch's clock.
     func settle(on id: String) {
-        let rode = scrubTo == id && views[id] != nil
-        scrubTo = nil
-        scrubF = 0
-        rideBase = nil
-        if rode {
-            active = id
-            for (tab, view) in views { view.setChosen(tab == id, wipe: nil) }
-            accessibilityValue = views[id]?.accessibilityLabel
+        if let swiped = passage, swiped.base != nil {
+            passage = nil
+            if swiped.toward == id, views[id] != nil {
+                active = id
+                for (tab, view) in views { view.setChosen(tab == id) }
+                accessibilityValue = views[id]?.accessibilityLabel
+            }
+            restyle()
         }
-        for view in views.values { view.ride(sheet: nil) }
-        layoutTrack()
+        if id != active, views[id] != nil {
+            pass(to: id, showing: id, animated: window != nil && !UIAccessibility.isReduceMotionEnabled)
+        }
     }
 
     // MARK: Drop caret
@@ -473,7 +562,6 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     /// The tabs laid along the track, each overlapping the one before it,
     /// with a flare of room at each end for the chosen sheet's foot.
     private func layoutTrack() {
-        recede()
         var x = flare
         var end = x
         for id in order {
@@ -488,53 +576,100 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
         track.frame = CGRect(x: 0, y: 0, width: max(content, 1), height: headroom + item)
         scroll.contentSize = track.frame.size
         scroll.contentInset = UIEdgeInsets(top: 0, left: leadingInset, bottom: 0, right: hosted || barRow ? 0 : Space.space4)
-        stack()
+        restyle()
     }
 
-    /// How each tab is drawn (`TabView.Look`), between how it rests with the
-    /// choice on the chosen tab and with it on the one a swipe is heading
-    /// to, by how far the swipe has gone; at rest, the chosen tab's alone.
-    /// On the phone's row an unchosen tab recedes a step toward the shelf
-    /// for each tab between it and the chosen one, to three, the chosen
-    /// tab's own card (under its sheet) one step back; with none chosen
-    /// every tab is one step back. Nothing here sizes a tab: choosing one
-    /// never moves the others.
-    private func recede() {
-        let chosen = active.flatMap { order.firstIndex(of: $0) }
-        let to = scrubTo.flatMap { order.firstIndex(of: $0) } ?? chosen
-        let f = scrubTo == nil ? 0 : scrubF
+    /// How every tab rests with the choice on `chosen` (`TabView.Look`): the
+    /// chosen tab whole; on the phone's row an unchosen tab a step further
+    /// toward the shelf for each tab between it and the chosen one, to
+    /// three, the chosen tab's own card (under its sheet) one step back;
+    /// with none chosen every tab one step back. Nothing here sizes a tab:
+    /// choosing one never moves the others.
+    private func restLooks(_ chosen: String?) -> [String: TabView.Look] {
+        let at = chosen.flatMap { order.firstIndex(of: $0) }
+        var looks: [String: TabView.Look] = [:]
         for (index, id) in order.enumerated() {
-            guard let view = views[id] else { continue }
-            func step(_ at: Int?) -> Int { at.map { max(1, min(abs(index - $0), 3)) } ?? 1 }
-            func pick(_ at: Int?) -> Double { at == index ? 1 : 0 }
-            view.look = TabView.Look(pick: pick(chosen) + (pick(to) - pick(chosen)) * f, from: step(chosen), to: step(to), f: f)
+            let step = at.map { max(1, min(abs(index - $0), 3)) } ?? 1
+            looks[id] = TabView.Look(pick: at == index ? 1 : 0, recede: Double(step))
         }
+        return looks
     }
 
-    /// The chosen tab on top, then each tab above the ones farther from it,
-    /// so every edge tucks under its neighbour toward the chosen tab; with
-    /// none chosen, the first on top. Past half way a swipe's tab takes the
-    /// top. A touch on an overlap is the tab drawn there.
-    private func stack() {
-        let scrubbed = scrubTo.flatMap { scrubF > 0.5 ? order.firstIndex(of: $0) : nil }
-        let chosen = scrubbed ?? active.flatMap { order.firstIndex(of: $0) } ?? 0
-        let farthestFirst = order.enumerated().sorted { a, b in
-            let da = abs(a.offset - chosen)
-            let db = abs(b.offset - chosen)
-            return da == db ? a.offset < b.offset : da > db
+    /// Each tab's place in the stack, by index, higher drawn over lower: a
+    /// tab as far back as it is unchosen now (DESIGN.md "Stack"), so two
+    /// trade places only at equal depth; ties to the one nearer `tie`, so
+    /// every edge tucks under its neighbour toward the choice, the first on
+    /// top with none; the earlier lower among those.
+    private func ranks(_ looks: [String: TabView.Look], tie: String?) -> [Int] {
+        let near = tie.flatMap { order.firstIndex(of: $0) } ?? 0
+        let back = order.map { 1 - (looks[$0]?.pick ?? 0) }
+        let lowestFirst = order.indices.sorted { a, b in
+            if back[a] != back[b] { return back[a] > back[b] }
+            let da = abs(a - near)
+            let db = abs(b - near)
+            return da == db ? a < b : da > db
         }
         var rank = [Int](repeating: 0, count: order.count)
-        for (place, entry) in farthestFirst.enumerated() {
-            rank[entry.offset] = place
-            if let view = views[entry.element] { track.bringSubviewToFront(view) }
+        for (place, index) in lowestFirst.enumerated() { rank[index] = place }
+        return rank
+    }
+
+    /// Where each seam rests in a stack: on the edge of the tab in front.
+    private func restSeams(_ rank: [Int]) -> [String: Seam] {
+        var seams: [String: Seam] = [:]
+        for index in order.indices.dropLast() {
+            seams[order[index]] = Seam(right: order[index + 1], q: rank[index] > rank[index + 1] ? 0 : 1)
+        }
+        return seams
+    }
+
+    /// Draws every tab as the choice stands (the passage's, else at rest):
+    /// its look between where it began and how it rests with the choice
+    /// landed; the stack ranked from those looks, the tab the choice is
+    /// going to taking ties past half way; and each seam between where it
+    /// began and where it rests then, the tab in front at that frame drawing
+    /// it: its card, sheet and rim stand in from its own edge to it, and the
+    /// side of the tab behind stands under it (DESIGN.md, "Session tab
+    /// status rim"). A touch on an overlap is the tab drawn there.
+    private func restyle() {
+        let goal = passage?.toward ?? active
+        let target = restLooks(goal)
+        let f = passage?.f ?? 1
+        var looks: [String: TabView.Look] = [:]
+        for (id, to) in target {
+            looks[id] = passage?.looks[id].map { $0.mixed(to, f) } ?? to
+        }
+        let rank = ranks(looks, tie: passage.map { $0.f > 0.5 ? $0.toward : $0.leaving } ?? active)
+        let restTo = restSeams(ranks(target, tie: goal))
+        var q: [Double] = []
+        var seams: [String: Seam] = [:]
+        for index in order.indices.dropLast() {
+            let left = order[index]
+            let right = order[index + 1]
+            let to = restTo[left]?.q ?? 0
+            let from = passage?.seams[left].flatMap { $0.right == right ? $0.q : nil } ?? to
+            q.append(from + (to - from) * f)
+            seams[left] = Seam(right: right, q: q[index])
+        }
+        seamNow = seams
+        for (index, id) in order.enumerated() {
+            guard let view = views[id] else { continue }
+            let under = TabSides(leading: index > 0 && rank[index - 1] > rank[index],
+                                 trailing: index < order.count - 1 && rank[index + 1] > rank[index])
+            // The phone's row runs a side under its neighbour in full; the
+            // desk's card stops at the neighbour's edge.
+            let inset = TabSides(leading: index > 0 && !(barRow && under.leading) ? (1 - q[index - 1]) * Self.overlap : 0,
+                                 trailing: index < q.count && !(barRow && under.trailing) ? q[index] * Self.overlap : 0)
+            view.look = looks[id] ?? TabView.Look()
+            view.edges = TabView.Edges(under: under, inset: inset)
+        }
+        let bottomUp = order.indices.sorted { rank[$0] < rank[$1] }.map { order[$0] }
+        guard bottomUp != stacked else { return }
+        stacked = bottomUp
+        for id in bottomUp {
+            if let view = views[id] { track.bringSubviewToFront(view) }
         }
         track.bringSubviewToFront(caret)
-        // Each tab's edge a neighbour drawn above it covers: its rim stops there.
-        for (index, id) in order.enumerated() {
-            let leading = index > 0 && rank[index - 1] > rank[index]
-            let trailing = index < order.count - 1 && rank[index + 1] > rank[index]
-            views[id]?.tucked = leading ? .leading : trailing ? .trailing : .none
-        }
     }
 
     func scrollViewDidScroll(_: UIScrollView) { edges() }
@@ -624,6 +759,83 @@ final class PaneTabsView: UIView, UIScrollViewDelegate, UIContextMenuInteraction
     }
 }
 
+#if DEBUG
+/// A simulator pass's `-tabs-probe`: once the strip holds four tabs on
+/// screen it taps them, each by its own tap's handler, through a step to a
+/// neighbour and a jump past one on the switch's clock, logging every frame
+/// (category TabsProbe), then the same two on a stepped clock that holds
+/// each quarter for 2s, logging and capturing the window and the strip at
+/// each into tmp/tabs-probe/<idiom>-<style>-<switch>-<percent>[-strip].png.
+/// "landed" is the frame after the passage ends: it matches t=1.
+extension PaneTabsView {
+    private static let probeLog = Logger(subsystem: "dev.cawco.app", category: "TabsProbe")
+
+    private func probeBegin() {
+        guard !probeBegun, ProcessInfo.processInfo.arguments.contains("-tabs-probe"), order.count >= 4, window != nil else { return }
+        probeBegun = true
+        let ids = order
+        let steps: [(label: String?, to: Int, hold: Double?)] = [
+            (nil, 0, nil), ("step", 1, nil), ("jump", 3, nil), ("step-held", 2, 2000), ("jump-held", 0, 2000),
+        ]
+        var at = 4.0
+        for step in steps {
+            DispatchQueue.main.asyncAfter(deadline: .now() + at) { [weak self] in
+                guard let self, let view = views[ids[step.to]] else { return }
+                probeLabel = step.label
+                probeHold = step.hold
+                probeStair = -1
+                Self.probeLog.notice("tabs probe begin \(step.label ?? "home", privacy: .public) from=\(self.active ?? "-", privacy: .public) to=\(view.id, privacy: .public)")
+                if !view.chosen { view.onSelect() }
+            }
+            at += step.hold.map { $0 * 5 / 1000 + 1.5 } ?? 2
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + at) { Self.probeLog.notice("tabs probe done") }
+    }
+
+    /// One sampled frame at `t` of the clock (nil: landed): the front of the
+    /// two tabs trading the choice, each seam, the scroll, every tab as drawn.
+    private func probeFrame(_ t: Double?) {
+        guard let label = probeLabel else { return }
+        if probeHold != nil, let t {
+            guard t != probeStair else { return }
+            probeStair = t
+        }
+        let pair = [passage?.leaving, passage?.toward ?? active].compactMap { $0 }
+        let front = pair.max { (stacked.firstIndex(of: $0) ?? -1) < (stacked.firstIndex(of: $1) ?? -1) }
+        let seams = order.dropLast().map { seamNow[$0].map { String(format: "%.3f", $0.q) } ?? "-" }.joined(separator: ",")
+        let tabs = order.compactMap { id in views[id].map { "\(id.prefix(8)) \($0.probeState)" } }.joined(separator: " | ")
+        let at = t.map { String(format: "%.3f", $0) } ?? "landed"
+        let f = passage.map { String(format: "%.3f", $0.f) } ?? "1.000"
+        Self.probeLog.notice("tabs \(label, privacy: .public) t=\(at, privacy: .public) f=\(f, privacy: .public) front=\(String(front?.prefix(8) ?? "-"), privacy: .public) seams=\(seams, privacy: .public) scroll=\(String(format: "%.2f", self.scroll.contentOffset.x), privacy: .public) || \(tabs, privacy: .public)")
+        if probeHold != nil, let t { probeCapture("\(label)-\(Int((t * 100).rounded()))") }
+        if t == nil {
+            probeLabel = nil
+            probeHold = nil
+        }
+    }
+
+    private func probeCapture(_ name: String) {
+        guard let window else { return }
+        let style = traitCollection.userInterfaceStyle == .dark ? "dark" : "light"
+        let idiom = traitCollection.userInterfaceIdiom == .pad ? "pad" : "phone"
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tabs-probe", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let image = UIGraphicsImageRenderer(bounds: window.bounds).image { _ in
+            _ = window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
+        }
+        let file = "\(idiom)-\(style)-\(name)"
+        try? image.pngData()?.write(to: folder.appendingPathComponent("\(file).png"))
+        let strip = convert(bounds, to: window).insetBy(dx: 0, dy: -6).intersection(window.bounds)
+        let scale = image.scale
+        let pixels = CGRect(x: strip.minX * scale, y: strip.minY * scale, width: strip.width * scale, height: strip.height * scale)
+        if let crop = image.cgImage?.cropping(to: pixels) {
+            try? UIImage(cgImage: crop, scale: scale, orientation: .up).pngData()?.write(to: folder.appendingPathComponent("\(file)-strip.png"))
+        }
+        Self.probeLog.notice("tabs probe hold \(file, privacy: .public)")
+    }
+}
+#endif
+
 /// The strip's scroll leaves a mostly vertical drag alone: it has no
 /// vertical travel, and a pull down off a tab is that tab's options.
 private final class StripScroll: UIScrollView {
@@ -670,8 +882,6 @@ private final class TabDragDelegate: NSObject, UIDragInteractionDelegate {
 /// glyph (none on the phone's row, whose rim is the status), label, details
 /// chevron (shown on the chosen tab, its slot kept on the rest) and close.
 final class TabView: UIView {
-    enum Wipe { case left, right }
-
     let id: String
     var onSelect: () -> Void = {}
     var onClose: () -> Void = {}
@@ -702,16 +912,20 @@ final class TabView: UIView {
         }
     }
 
-    /// How the tab is drawn, which a swipe moves frame by frame (the strip's
-    /// `recede`); at rest it is the chosen tab's alone.
+    /// How the tab is drawn, which a switch moves frame by frame on its
+    /// clock and a swipe by its fraction (the strip's `restyle`).
     struct Look: Equatable {
-        /// How chosen it is, 0 to 1: its rim's strength and its title's ink.
+        /// How chosen it is, 0 to 1: its sheet's opacity over its card, its
+        /// rim's strength, its title's ink and its chevron.
         var pick = 0.0
-        /// Its card's recede step with the choice where it rests (1 to 3)
-        /// and where a swipe is taking it, mixed by `f`.
-        var from = 1
-        var to = 1
-        var f = 0.0
+        /// Its card's recede step on the phone's row, 1 to 3, between two
+        /// steps while the choice moves.
+        var recede = 1.0
+
+        /// `f` of the way from this look to `to`.
+        func mixed(_ to: Look, _ f: Double) -> Look {
+            Look(pick: pick + (to.pick - pick) * f, recede: recede + (to.recede - recede) * f)
+        }
     }
 
     var look = Look() {
@@ -746,7 +960,6 @@ final class TabView: UIView {
 
     private let tint = CAShapeLayer()
     private let sheet = CAShapeLayer()
-    private let sheetMask = CALayer()
     /// The status rim (PaneTabs.svelte `.rim`): the tab's outline, 1.5pt
     /// across the top tapering to 0.5pt down the sides, with a soft glow at
     /// half its strength, gone by 90% of the tab's height (`rimFade`).
@@ -765,13 +978,20 @@ final class TabView: UIView {
     /// Room round the outline for the glow, inside the fade.
     private static let spill = 6.0
 
-    /// The edge a neighbour drawn above this tab covers (`PaneTabsView.stack`).
-    enum Tucked {
-        case none, leading, trailing
+    /// Its two sides as the strip stands them (`PaneTabsView.restyle`): which
+    /// stands under a neighbour drawn above it, and how far in from the
+    /// tab's own edge its card, sheet and rim stand there, pt, where the
+    /// seam with that neighbour is. On the desk a side under a neighbour
+    /// stops at that neighbour's edge; on the phone's row it runs under in
+    /// full; a side in front stands at the seam, which a switch glides
+    /// between the two tabs' edges.
+    struct Edges: Equatable {
+        var under = TabSides(leading: false, trailing: false)
+        var inset = TabSides(leading: 0.0, trailing: 0.0)
     }
 
-    var tucked = Tucked.none {
-        didSet { if tucked != oldValue { setNeedsLayout() } }
+    var edges = Edges() {
+        didSet { if edges != oldValue { setNeedsLayout() } }
     }
 
     /// Its shoulders' radii. On the phone's row a shoulder tucked under its
@@ -784,7 +1004,7 @@ final class TabView: UIView {
     private var shoulders: (leading: Double, trailing: Double) {
         let r = radius
         guard phoneRow else { return (r, r) }
-        return (tucked == .leading ? 0 : r, tucked == .trailing ? 0 : r)
+        return (edges.under.leading ? 0 : r, edges.under.trailing ? 0 : r)
     }
     private let status = SessionStatusView(.idle, compact: true)
     private let label = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
@@ -811,8 +1031,6 @@ final class TabView: UIView {
         self.id = id
         super.init(frame: .zero)
         layer.addSublayer(tint)
-        sheetMask.backgroundColor = UIColor.black.cgColor
-        sheet.mask = sheetMask
         layer.addSublayer(sheet)
         rim.fillRule = .evenOdd
         glow.shadowOffset = .zero
@@ -960,51 +1178,38 @@ final class TabView: UIView {
 
     // MARK: Sheet
 
-    /// Chosen or not; `wipe` grows (chosen) or shrinks (not) the sheet from that side.
-    func setChosen(_ next: Bool, wipe: Wipe?) {
-        let was = chosen
+    /// Chosen or not, as the strip's choice stands: what a tap on it does and
+    /// how VoiceOver reads it. How chosen it looks is its `look`, which the
+    /// switch's clock moves.
+    func setChosen(_ next: Bool) {
         chosen = next
         (row.arrangedSubviews.first)?.accessibilityTraits = next ? [.button, .selected] : .button
         details.isUserInteractionEnabled = !(tab?.isRun ?? false)
-        // The chevron's slot is kept on every tab; it shows on the chosen one,
-        // popping in or out when the choice moves, and is simply set otherwise.
-        let still = UIAccessibility.isReduceMotionEnabled
-        let chevron: @MainActor @Sendable () -> Void = {
-            self.details.alpha = next ? 1 : 0
-            self.details.transform = next || still ? .identity : CGAffineTransform(scaleX: Motion.popScale, y: Motion.popScale)
-        }
-        if was != next { Motion.easeOut.animator(Motion.durControl, animations: chevron).startAnimation() } else { chevron() }
         paint()
-        guard was != next || wipe == nil else { return }
-        CATransaction.begin()
-        CATransaction.setDisableActions(wipe == nil)
-        if let wipe {
-            CATransaction.setAnimationDuration(Motion.durPop)
-            CATransaction.setAnimationTimingFunction(Motion.easeDrawer.function)
-            anchorMask(right: wipe == .right)
-        }
-        sheetMask.transform = CATransform3DMakeScale(next ? 1 : 0.0001, 1, 1)
-        CATransaction.commit()
-        // The tint hides once the sheet covers it, and is back at once when it leaves.
-        if next {
-            DispatchQueue.main.asyncAfter(deadline: .now() + (wipe == nil ? 0 : Motion.durPop)) { [weak self] in
-                guard let self, chosen else { return }
-                tint.opacity = 0
-            }
-        } else {
-            tint.opacity = 1
-        }
     }
 
-    /// A switch past a neighbour: the sheet whole at once, sliding over from the tab it left.
-    func slideSheet(from dx: CGFloat) {
-        let slide = CABasicAnimation(keyPath: "transform.translation.x")
-        slide.fromValue = dx
-        slide.toValue = 0
-        slide.duration = Motion.durPop
-        slide.timingFunction = Motion.easeDrawer.function
-        sheet.add(slide, forKey: "leap")
+    #if DEBUG
+    /// How the tab is drawn now, for `-tabs-probe`: its look; its sheet's
+    /// opacity (model and on screen) and its card's; its rim's alpha and its
+    /// glow's; whether any transform, mask or running animation moves its
+    /// sheet or the tab; the sheet's and card's boxes; its card's fill; which
+    /// sides stand under a neighbour.
+    var probeState: String {
+        func hex(_ color: CGColor?) -> String {
+            guard let color, let rgb = color.converted(to: CGColorSpace(name: CGColorSpace.sRGB)!, intent: .defaultIntent, options: nil)?.components, rgb.count >= 3 else { return "-" }
+            return String(format: "%02x%02x%02x", Int((rgb[0] * 255).rounded()), Int((rgb[1] * 255).rounded()), Int((rgb[2] * 255).rounded()))
+        }
+        let moved = !CATransform3DIsIdentity(sheet.transform) || !CATransform3DIsIdentity(sheet.presentation()?.transform ?? CATransform3DIdentity) || sheet.mask != nil
+        let keys = (sheet.animationKeys() ?? []) + (tint.animationKeys() ?? [])
+        let card = cardRect
+        return String(format: "pick=%.3f recede=%.3f sheet=%.3f/%.3f tint=%.0f rim=%.3f glow=%.3f chevron=%.3f sheetMoved=%d tabTransform=%@ keys=%@ sheetX=%.2f-%.2f card=%.2f-%.2f fill=%@ under=%d%d",
+                      look.pick, look.recede, sheet.opacity, sheet.presentation()?.opacity ?? sheet.opacity, tint.opacity,
+                      rim.fillColor?.alpha ?? 0, glow.shadowOpacity, details.alpha, moved ? 1 : 0,
+                      transform.isIdentity ? "id" : NSCoder.string(for: transform), keys.isEmpty ? "-" : keys.joined(separator: ","),
+                      sheet.frame.minX, sheet.frame.maxX, card.minX, card.maxX, hex(tint.fillColor),
+                      edges.under.leading ? 1 : 0, edges.under.trailing ? 1 : 0)
     }
+    #endif
 
     /// The surface the tab stands in, its press aside: its sheet when chosen,
     /// else its card. Its pulled options grow out of it (`TabOptionsSheet`),
@@ -1030,33 +1235,6 @@ final class TabView: UIView {
         return snapshot
     }
 
-    /// Under a swipe the sheet shows by its fraction, whole and faded over
-    /// the tab's own card; nil hands back to rest.
-    func ride(sheet value: Double?) {
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        if let value {
-            sheetMask.transform = CATransform3DIdentity
-            sheet.opacity = Float(value)
-            tint.opacity = 1
-        } else {
-            sheetMask.transform = CATransform3DMakeScale(chosen ? 1 : 0.0001, 1, 1)
-            sheet.opacity = 1
-            tint.opacity = chosen ? 0 : 1
-        }
-        CATransaction.commit()
-    }
-
-    private func anchorMask(right: Bool) {
-        let size = sheet.bounds.size
-        let transform = sheetMask.transform
-        sheetMask.transform = CATransform3DIdentity
-        sheetMask.anchorPoint = CGPoint(x: right ? 1 : 0, y: 0.5)
-        sheetMask.bounds = CGRect(origin: .zero, size: size)
-        sheetMask.position = CGPoint(x: right ? size.width : 0, y: size.height / 2)
-        sheetMask.transform = transform
-    }
-
     /// A tab that opened grows from nothing at its place (`durMorph`, out curve).
     func grow() {
         let mask = CALayer()
@@ -1078,18 +1256,14 @@ final class TabView: UIView {
     }
 
     /// An unchosen tab's card: on the phone's row a step further toward the
-    /// shelf for each tab of distance from the chosen one (`look`), mixed
-    /// between its two steps while a swipe moves the choice.
+    /// shelf for each tab of distance from the chosen one (`look`), between
+    /// two steps while the choice moves.
     private var card: UIColor {
         guard phoneRow else { return Palette.surfaceRecessDeep }
-        func recede(_ step: Int) -> UIColor {
-            switch step {
-            case ...1: Palette.tabRecede1
-            case 2: Palette.tabRecede2
-            default: Palette.tabRecede3
-            }
-        }
-        return Self.mix(recede(look.from), recede(look.to), look.f, traits: traitCollection)
+        let steps = [Palette.tabRecede1, Palette.tabRecede2, Palette.tabRecede3]
+        let at = min(max(look.recede, 1), 3) - 1
+        let low = min(Int(at), 1)
+        return Self.mix(steps[low], steps[low + 1], at - Double(low), traits: traitCollection)
     }
 
     /// `a` toward `b` by `t`, both resolved for `traits`.
@@ -1105,7 +1279,7 @@ final class TabView: UIView {
         return UIColor(red: ar + (br - ar) * t, green: ag + (bg - ag) * t, blue: ab + (bb - ab) * t, alpha: aa + (ba - aa) * t)
     }
 
-    /// `animated` false under a swipe: every change lands in its own frame.
+    /// `animated` false under a switch: every change lands in its own frame.
     private func paint(animated: Bool = true) {
         let traits = traitCollection
         CATransaction.begin()
@@ -1113,6 +1287,20 @@ final class TabView: UIView {
         let fill: UIColor = pressed ? Palette.surfaceFill : (hovering && !chosen ? Palette.surfaceHover : card)
         tint.fillColor = fill.resolvedColor(with: traits).cgColor
         sheet.fillColor = (pressed ? Palette.surfaceFill : Palette.surfaceRecess).resolvedColor(with: traits).cgColor
+        // The sheet shows as far as the tab is chosen, over its own card,
+        // which hides once the sheet covers it whole; the chevron (its slot
+        // kept on every tab) comes and goes with it. They follow the
+        // switch's clock alone, so no implicit action runs on them.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        sheet.opacity = Float(look.pick)
+        tint.opacity = look.pick >= 1 ? 0 : 1
+        CATransaction.commit()
+        let scale = look.pick >= 1 || UIAccessibility.isReduceMotionEnabled ? 1 : Motion.popScale + (1 - Motion.popScale) * look.pick
+        UIView.performWithoutAnimation {
+            details.alpha = look.pick
+            details.transform = scale == 1 ? .identity : CGAffineTransform(scaleX: scale, y: scale)
+        }
         // The title's ink follows how chosen the tab is; parked on the
         // operator, or under a pointer, it is strong.
         label.ink = hovering || tab?.needs == true ? Palette.inkStrong : Self.mix(Palette.inkMuted, Palette.inkStrong, look.pick, traits: traits)
@@ -1160,28 +1348,25 @@ final class TabView: UIView {
         let radius = radius
         tint.frame = bounds
         let corners = shoulders
-        tint.path = Self.outline(cardRect, leading: corners.leading, trailing: corners.trailing).cgPath
-        sheet.frame = bounds.insetBy(dx: -flare, dy: 0)
+        let card = cardRect
+        tint.path = Self.outline(card, leading: corners.leading, trailing: corners.trailing).cgPath
+        // The sheet stands on the card's own box, its foot flaring past it.
+        sheet.frame = card.insetBy(dx: -flare, dy: 0)
         sheet.path = Self.sheetPath(in: sheet.bounds, radius: radius, flare: flare)
-        anchorMask(right: sheetMask.anchorPoint.x > 0.5)
         layoutRim()
         CATransaction.commit()
     }
 
-    /// The card's own box. Off the phone's row a card tucked under a
-    /// neighbour drawn above it starts where that neighbour's edge stands,
-    /// its own shoulder rounded there, so the neighbour's shoulder shows
-    /// against the shelf and each tab stands on it with its rounded top
-    /// (TabItem.svelte, `--tuck`). The phone's row runs it under in full:
-    /// its square shoulder meets the neighbour's rim at the top.
+    /// The card's own box, its sides where the strip stands them (`edges`).
+    /// Off the phone's row a card tucked under a neighbour drawn above it
+    /// starts where that neighbour's edge stands, its own shoulder rounded
+    /// there, so the neighbour's shoulder shows against the shelf and each
+    /// tab stands on it with its rounded top (TabItem.svelte, `--tuck`). The
+    /// phone's row runs it under in full: its square shoulder meets the
+    /// neighbour's rim at the top.
     private var cardRect: CGRect {
-        guard !phoneRow else { return bounds }
-        let tuck = PaneTabsView.overlap
-        switch tucked {
-        case .none: return bounds
-        case .leading: return CGRect(x: bounds.minX + tuck, y: bounds.minY, width: bounds.width - tuck, height: bounds.height)
-        case .trailing: return CGRect(x: bounds.minX, y: bounds.minY, width: bounds.width - tuck, height: bounds.height)
-        }
+        let inset = edges.inset
+        return CGRect(x: bounds.minX + inset.leading, y: bounds.minY, width: max(0, bounds.width - inset.leading - inset.trailing), height: bounds.height)
     }
 
     /// The rim's ring (PaneTabs.svelte `.rim::after`), on the card's own
@@ -1199,10 +1384,11 @@ final class TabView: UIView {
         let corners = shoulders
         let reach = CGRect(x: card.minX - spill, y: card.minY - spill, width: card.width + 2 * spill, height: card.height + spill)
         var clip = reach
-        if !phoneRow, tucked == .leading {
-            clip = CGRect(x: card.minX + corners.leading, y: reach.minY, width: reach.maxX - card.minX - corners.leading, height: reach.height)
-        } else if !phoneRow, tucked == .trailing {
-            clip = CGRect(x: reach.minX, y: reach.minY, width: card.maxX - corners.trailing - reach.minX, height: reach.height)
+        if !phoneRow, edges.under.leading {
+            clip = CGRect(x: card.minX + corners.leading, y: clip.minY, width: clip.maxX - card.minX - corners.leading, height: clip.height)
+        }
+        if !phoneRow, edges.under.trailing {
+            clip.size.width = max(0, card.maxX - corners.trailing - clip.minX)
         }
         rimClip.frame = clip
         rimHost.frame = reach.offsetBy(dx: -clip.minX, dy: -clip.minY)
@@ -1282,6 +1468,12 @@ final class TabView: UIView {
         path.close()
         return path.cgPath
     }
+}
+
+/// One thing for each of a tab's two sides (`TabView.Edges`).
+struct TabSides<Value: Equatable>: Equatable {
+    var leading: Value
+    var trailing: Value
 }
 
 /// The tab's VoiceOver element: its options as custom actions, read when
