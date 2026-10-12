@@ -3402,6 +3402,91 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/RelayProvider`.
+    public enum RelayProvider: OpenEnum {
+        case generic
+        case github
+        case stripe
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "generic": self = .generic
+            case "github": self = .github
+            case "stripe": self = .stripe
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .generic: "generic"
+            case .github: "github"
+            case .stripe: "stripe"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.generic, .github, .stripe]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/RelayState`.
+    public enum RelayState: OpenEnum {
+        case live
+        case needsOwner
+        case off
+        case wanted
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "live": self = .live
+            case "needs-owner": self = .needsOwner
+            case "off": self = .off
+            case "wanted": self = .wanted
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .live: "live"
+            case .needsOwner: "needs-owner"
+            case .off: "off"
+            case .wanted: "wanted"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.live, .needsOwner, .off, .wanted]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/RepoInfoVisibility`.
     public enum RepoInfoVisibility: OpenEnum {
         case _internal

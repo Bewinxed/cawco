@@ -7164,6 +7164,481 @@
         }
       }
     },
+    "/api/projects/{id}/relays": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdRelays",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdRelays 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiProjectsByIdRelays200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdRelays 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiProjectsByIdRelays 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdRelays 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdRelays 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "github",
+                      "stripe",
+                      "generic"
+                    ]
+                  },
+                  "connection": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "signatureHeader": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "timestampHeader": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "idPath": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "provider"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdRelays",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdRelays 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdRelays 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdRelays 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdRelays 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdRelays 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdRelays 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/relays/preview": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "provider": {
+                    "type": "string",
+                    "enum": [
+                      "github",
+                      "stripe",
+                      "generic"
+                    ]
+                  },
+                  "connection": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "signatureHeader": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "timestampHeader": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "idPath": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "provider"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdRelaysPreview",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdRelaysPreview 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiProjectsByIdRelaysPreview200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdRelaysPreview 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdRelaysPreview 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdRelaysPreview 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdRelaysPreview 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdRelaysPreview 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/relays/{id}": {
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiRelaysById",
+        "responses": {
+          "200": {
+            "description": "deleteApiRelaysById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiRelaysById200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "deleteApiRelaysById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "deleteApiRelaysById 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiRelaysById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiRelaysById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/relays/{id}/secret": {
+      "put": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "secret": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "secret"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiRelaysByIdSecret",
+        "responses": {
+          "200": {
+            "description": "putApiRelaysByIdSecret 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RelayView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "putApiRelaysByIdSecret 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "putApiRelaysByIdSecret 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "putApiRelaysByIdSecret 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiRelaysByIdSecret 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiRelaysByIdSecret 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/actions": {
       "get": {
         "parameters": [
@@ -17360,6 +17835,38 @@
           "deleted"
         ]
       },
+      "getApiProjectsByIdRelays200": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/RelayView"
+        }
+      },
+      "postApiProjectsByIdRelaysPreview200": {
+        "type": "object",
+        "properties": {
+          "public": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "public"
+        ]
+      },
+      "deleteApiRelaysById200": {
+        "type": "object",
+        "properties": {
+          "github": {
+            "type": "string"
+          },
+          "relay": {
+            "$ref": "#/components/schemas/RelayView"
+          }
+        },
+        "required": [
+          "github",
+          "relay"
+        ]
+      },
       "getApiActions200": {
         "type": "object",
         "properties": {
@@ -25836,6 +26343,161 @@
           "regex",
           "routineId",
           "source"
+        ]
+      },
+      "RelayView": {
+        "description": "One relay as the hub answers it (times in ms epoch). Never its secret.",
+        "type": "object",
+        "properties": {
+          "connection": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "number"
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "hasSecret": {
+            "description": "Whether a secret is set, and who made it: never the secret.",
+            "type": "boolean"
+          },
+          "host": {
+            "description": "The machine whose Tailscale serves it: the hub's.",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inbound": {
+            "description": "How events reach the project while it is or isn't live, in a sentence.",
+            "type": "string"
+          },
+          "lastDeliveryAt": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "provider": {
+            "$ref": "#/components/schemas/RelayProvider"
+          },
+          "publicUrl": {
+            "description": "The public URL, once Funnel says it is live.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reason": {
+            "description": "The exact step or command when it isn't live; null when it is.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "registered": {
+            "description": "Whether GitHub's webhook was registered by the hub (and is deleted with the relay).",
+            "type": "boolean"
+          },
+          "state": {
+            "$ref": "#/components/schemas/RelayState"
+          },
+          "testedAt": {
+            "description": "When the provider's test delivery arrived.",
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "required": [
+          "connection",
+          "createdAt",
+          "createdBy",
+          "hasSecret",
+          "host",
+          "id",
+          "inbound",
+          "lastDeliveryAt",
+          "projectId",
+          "provider",
+          "publicUrl",
+          "reason",
+          "registered",
+          "state",
+          "testedAt"
+        ]
+      },
+      "RelayProvider": {
+        "type": "string",
+        "enum": [
+          "generic",
+          "github",
+          "stripe"
+        ]
+      },
+      "RelayState": {
+        "type": "string",
+        "enum": [
+          "live",
+          "needs-owner",
+          "off",
+          "wanted"
+        ]
+      },
+      "RelayCreated": {
+        "description": "What creating a relay answers: the relay, and the routes a lead may propose for it.",
+        "type": "object",
+        "properties": {
+          "relay": {
+            "$ref": "#/components/schemas/RelayView"
+          },
+          "suggestedRoutes": {
+            "description": "Event routes for the project's routines, to propose to the owner (event_route_create), never made here.",
+            "type": "object",
+            "properties": {
+              "note": {
+                "type": "string"
+              },
+              "routines": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "name"
+                  ]
+                }
+              },
+              "source": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "note",
+              "routines",
+              "source"
+            ]
+          }
+        },
+        "required": [
+          "relay",
+          "suggestedRoutes"
         ]
       },
       "ApprovedActionView": {

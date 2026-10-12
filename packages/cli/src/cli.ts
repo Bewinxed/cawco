@@ -18,6 +18,7 @@ import { hubCredentialSocket } from "@cawco/core/paths";
 import { protocolRange, runtimeCommit } from "@cawco/core/runtime";
 import { ConnectionKeyError } from "./connections";
 import { discoverHub, findExistingHub, type Hub } from "./discover";
+import { RelayError } from "./relay";
 import {
   isServiceAction,
   isServiceId,
@@ -59,6 +60,13 @@ Usage
                                           give a connection its key: typed unseen, or
                                           piped (pbpaste | cawco connections set-key x)
                                           straight to the hub, never through a session
+  cawco relay on <project> [--provider github|stripe|generic] [--connection <name>]
+             [--signature-header <h>] [--timestamp-header <h>] [--id-path <path>] [--yes]
+                                          open the project's public webhook path through
+                                          Tailscale Funnel (in a session: asks the owner)
+  cawco relay off <relay> | list <project>
+  cawco relay set-secret <relay>          give a relay its provider's signing secret,
+                                          typed unseen or piped, never through a session
   cawco git-credential <get|store|erase>  git's credential helper for the hub's git
                                           remote, as this session; set up for every
                                           session, not run by hand
@@ -149,22 +157,30 @@ interface Args {
   autoUpdate: boolean;
   channel?: "stable" | "nightly";
   command?: string;
+  connection?: string;
   dev: boolean;
   follow: boolean;
   force: boolean;
   help: boolean;
   hub?: string;
+  idPath?: string;
   keeperOnly: boolean;
+  /** `relay on`: the provider, its connection, and a generic relay's headers and id path. */
+  provider?: string;
   releaseHost?: string;
   /** Everything after the verb — the services `service` acts on. */
   rest: string[];
   /** `binary-apply --resume`: decide the update trial a helper left open. */
   resume: boolean;
-  /** The session `tools` and `tool` act as. */
+  /** The session `tools`, `tool` and `relay` act as. */
   session?: string;
+  signatureHeader?: string;
+  timestampHeader?: string;
   verbose: boolean;
   version: boolean;
   whenIdle: boolean;
+  /** `relay on`: open it without asking. */
+  yes: boolean;
 }
 
 class UsageError extends Error {}
@@ -181,6 +197,7 @@ const parseArgs = (argv: string[]): Args => {
     whenIdle: false,
     force: false,
     follow: false,
+    yes: false,
     verbose: false,
     help: false,
     version: false,
@@ -230,6 +247,29 @@ const parseArgs = (argv: string[]): Args => {
         if (!args.session) {
           throw new UsageError("--session needs a session id");
         }
+        break;
+      case "--provider":
+      case "--connection":
+      case "--signature-header":
+      case "--timestamp-header":
+      case "--id-path": {
+        index += 1;
+        const value = argv[index];
+        if (!value) {
+          throw new UsageError(`${arg} needs a value`);
+        }
+        const field = {
+          "--provider": "provider",
+          "--connection": "connection",
+          "--signature-header": "signatureHeader",
+          "--timestamp-header": "timestampHeader",
+          "--id-path": "idPath",
+        } as const;
+        args[field[arg]] = value;
+        break;
+      }
+      case "--yes":
+        args.yes = true;
         break;
       case "--dev":
         args.dev = true;
@@ -547,6 +587,26 @@ const runConnections = async (args: Args): Promise<number> => {
   return signedIn ? 0 : 1;
 };
 
+/** `cawco relay <on|off|list|set-secret>`: a project's public webhook path. */
+const runRelayCommand = async (args: Args): Promise<number> => {
+  const { insideBoundary, runRelay } = await import("./relay");
+  // Inside a workspace's boundary the tool door is the way in: no hub is reachable.
+  const at = insideBoundary() ? undefined : (await resolve(args))?.httpUrl;
+  if (!(at || insideBoundary())) {
+    console.error(NO_HUB);
+    return 1;
+  }
+  const lines = await runRelay({
+    ...args,
+    rest: args.rest,
+    ...(at ? { hub: at } : {}),
+  });
+  for (const line of lines) {
+    console.log(line);
+  }
+  return 0;
+};
+
 /** `cawco tools` and `cawco tool <name> [json]`: the session's MCP tools, under its role. */
 const runTool = async (args: Args): Promise<number> => {
   // Inside a workspace's boundary the tool door is the way in: no hub is reachable.
@@ -660,6 +720,8 @@ const run = async (argv: string[]): Promise<number> => {
       return gitCredential(args);
     case "connections":
       return runConnections(args);
+    case "relay":
+      return runRelayCommand(args);
     case "service":
       return runService(args);
     default:
@@ -675,7 +737,8 @@ const code = await run(Bun.argv.slice(2)).catch((error: unknown) => {
   if (
     error instanceof ServiceError ||
     error instanceof ToolError ||
-    error instanceof ConnectionKeyError
+    error instanceof ConnectionKeyError ||
+    error instanceof RelayError
   ) {
     console.error(`cawco: ${error.message}`);
     return 1;

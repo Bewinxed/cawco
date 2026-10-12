@@ -84,6 +84,7 @@ import { type ActionsDb, actionsDb } from "./actions";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
 import { type ConnectionsDb, connectionsDb } from "./connections";
 import { type IngressDb, ingressDb } from "./ingress";
+import { type RelaysDb, relaysDb } from "./relays";
 import { type RoutinesDb, routinesDb } from "./routines";
 import {
   accountSignins,
@@ -1440,6 +1441,8 @@ export interface DbShape {
     model?: string;
     latencyMs?: number;
   }) => SupervisorEvent;
+  /** Relays: a project's public webhook paths through Funnel (relay.ts). */
+  readonly relays: RelaysDb;
   /**
    * Removes one of a project's places. Its primary checkout and its hub
    * folder are never removed here: forgetting the project is.
@@ -6781,6 +6784,7 @@ const make = async (path: string): Promise<DbShape> => {
     routines: routinesDb(db),
     connections: connectionsDb(db),
     ingress: ingressDb(db),
+    relays: relaysDb(db),
     actions: actionsDb(db),
     usageSpend: ({ harness, todayStart, weekStart }) => {
       const since = (start: number) =>

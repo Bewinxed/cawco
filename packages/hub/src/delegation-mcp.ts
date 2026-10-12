@@ -31,6 +31,7 @@ import {
   PROJECT_FROM_SESSION,
   projectFromSessionTool,
 } from "./project-offers";
+import { RELAY_TOOLS, type Relay } from "./relay";
 import { admitToolCall } from "./restart-holds";
 import { allows, CAW_TOOLS, refusal, roleOf } from "./roles";
 import { ROUTINE_TOOLS, type Routines } from "./routines";
@@ -42,6 +43,9 @@ type CawTool = ReturnType<Caw["tools"]>[number];
 type RoutineTool = ReturnType<Routines["tools"]>[number];
 type IngressTool = ReturnType<Ingress["tools"]>[number];
 type ActionTool = ReturnType<Actions["tools"]>[number];
+type RelayTool = ReturnType<Relay["tools"]>[number];
+/** A tool of a project's own groups: routines, ingress, approved actions, relays. */
+type ProjectTool = RoutineTool | IngressTool | ActionTool | RelayTool;
 
 /** Tools that run for minutes, and what their progress heartbeat says meanwhile. */
 const LONG_CALLS: Record<string, string> = {
@@ -172,6 +176,8 @@ export function createDelegationMcp(options: {
   ingressTools?: (actor: InstanceRow | undefined) => IngressTool[];
   /** The approved-action tools (actions.ts): proposing one exact call for you to approve. */
   actionTools?: (actor: InstanceRow | undefined) => ActionTool[];
+  /** The relay tools (relay.ts): a project's public webhook paths, opening one asks you. */
+  relayTools?: (actor: InstanceRow | undefined) => RelayTool[];
   /**
    * Connections (connections.ts): the `conn__<name>__<tool>` tools a session
    * is granted, and the hub's call of one for it.
@@ -274,10 +280,15 @@ export function createDelegationMcp(options: {
       ...admin,
       ...(options.tasks ? taskTools(undefined) : []),
       ...(options.projectFromSession ? [projectFromSessionTool()] : []),
-      ...(options.cawTools ? options.cawTools(undefined) : []),
-      ...(options.routineTools ? options.routineTools(undefined) : []),
-      ...(options.ingressTools ? options.ingressTools(undefined) : []),
-      ...(options.actionTools ? options.actionTools(undefined) : []),
+      ...(
+        [
+          options.cawTools,
+          options.routineTools,
+          options.ingressTools,
+          options.actionTools,
+          options.relayTools,
+        ] as (((actor: undefined) => (ProjectTool | CawTool)[]) | undefined)[]
+      ).flatMap((group) => group?.(undefined) ?? []),
     ];
     // Granted by a delegate type or a project, not a role's list: the
     // connections module answers which, the role's say included.
@@ -552,8 +563,12 @@ export function createDelegationMcp(options: {
     name: string,
     input: Record<string, unknown>
   ): Promise<CallToolResult | undefined> => {
-    let group: (RoutineTool | IngressTool | ActionTool)[] | undefined;
-    if (ROUTINE_TOOLS.has(name)) {
+    let group:
+      | (RoutineTool | IngressTool | ActionTool | RelayTool)[]
+      | undefined;
+    if (RELAY_TOOLS.has(name)) {
+      group = options.relayTools?.(actor);
+    } else if (ROUTINE_TOOLS.has(name)) {
       group = options.routineTools?.(actor);
     } else if (INGRESS_TOOLS.has(name)) {
       group = options.ingressTools?.(actor);

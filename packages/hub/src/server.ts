@@ -436,6 +436,7 @@ import {
   sessionBurn,
 } from "./rebalance";
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
+import { createRelay, type Relay, relayRoutes } from "./relay";
 import { createRoutines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
 import { createSessionIdentities } from "./session-identity";
@@ -2307,6 +2308,9 @@ export const createServer = (
       push.onAsk(envelope);
     }
   };
+  // The relay (relay.ts), made further down with ingress; an approved
+  // `relay_create` kept across a restart reaches it through this.
+  let relay: Relay | undefined;
   // Admin writes from any door wait on the person (admin-asks.ts). Made before
   // the settlement listener below: the boot sweep settles the asks of
   // sessions that did not survive the restart, and that listener withdraws
@@ -2320,6 +2324,13 @@ export const createServer = (
     },
     // An ask approved after a restart: the hub runs the write itself.
     run: async (name, input) => {
+      // A relay's opening asks as an admin write does (relay.ts).
+      if (name === "relay_create") {
+        if (!relay) {
+          throw new Error("The hub's relay isn't made yet.");
+        }
+        return await relay.runApproved(input);
+      }
       const entry = adminTools().find((tool) => tool.name === name);
       if (!entry) {
         throw new Error(`No admin tool ${name} in this build.`);
@@ -13817,6 +13828,16 @@ export const createServer = (
     lifetime,
     routines,
   });
+  // The relay (relay.ts): a project's one public webhook path through
+  // Funnel, to a receiver of its own on 127.0.0.1; deliveries go to ingest.
+  const relays = createRelay({
+    askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
+    connections,
+    db,
+    ingest: ingress.ingest,
+    lifetime,
+  });
+  relay = relays;
   // Approved actions (actions.ts): one exact call a session proposes, you
   // approve, and the hub runs once at its time.
   const actions = createActions({
@@ -13852,6 +13873,7 @@ export const createServer = (
     routineTools: (actor) => routines.tools(actor),
     ingressTools: (actor) => ingress.tools(actor),
     actionTools: (actor) => actions.tools(actor),
+    relayTools: (actor) => relays.tools(actor),
     askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
     sendToUser: telegram
       ? (actor, message, attachments) =>
@@ -14023,6 +14045,8 @@ export const createServer = (
   if (resumeWorkflows) {
     // The pollers pick up from the cursors a stopped hub kept.
     ingress.start();
+    // The receiver listens and the relays' wanted state is applied.
+    relays.start();
     // A call a stopped hub left under way becomes unknown, never re-run;
     // then due approved actions run.
     actions.start();
@@ -15452,6 +15476,7 @@ export const createServer = (
       .use(routineRoutes(routines))
       .use(connectionRoutes(connections))
       .use(ingressRoutes(ingress))
+      .use(relayRoutes(relays))
       .use(actionRoutes(actions))
       .use(caps.routes())
       .use(viewRoutes(views))

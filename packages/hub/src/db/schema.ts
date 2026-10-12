@@ -2859,6 +2859,57 @@ export const actions = sqliteTable(
   ]
 );
 
+/** Who signs a relay's deliveries (relay.ts). */
+export type RelayProvider = import("@cawco/core").RelayProvider;
+/** Where a relay is (relay.ts): asked for, live, waiting on one step of yours, or turned off. */
+export type RelayState = import("@cawco/core").RelayState;
+
+/**
+ * A relay (Projects spec §5.5 Relay, relay.ts): one public path,
+ * `/hooks/<id>`, through Tailscale Funnel to the hub's receiver, for one
+ * project and one provider. The row is the wanted state; the hub host applies
+ * it at start and whenever a relay comes or goes. `secret` is sealed and no
+ * route or tool answers it.
+ */
+export const relays = sqliteTable(
+  "relays",
+  {
+    /** 128 random bits, base64url: the path's last part. */
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    provider: text("provider").$type<RelayProvider>().notNull(),
+    /** What deliveries are signed with: minted for a webhook the hub registers, else the owner's (`cawco relay set-secret`). */
+    secret: sealedText("secret"),
+    /** `minted` (the hub made it and gave it to the provider), `owner` (set from the owner's terminal), or null: none yet. */
+    secretFrom: text("secret_from").$type<"minted" | "owner">(),
+    /** The connection the webhook is registered through (GitHub). */
+    connection: text("connection"),
+    /** GitHub's id for the webhook the hub registered, so removing the relay deletes it. */
+    hookId: text("hook_id"),
+    /** generic: the header carrying the hex HMAC-SHA256, and an optional timestamp header. */
+    signatureHeader: text("signature_header"),
+    timestampHeader: text("timestamp_header"),
+    /** generic: a dot path to the event's id in the body; the body's SHA-256 without one. */
+    idPath: text("id_path"),
+    /** The machine whose Tailscale serves the path: the hub's. */
+    host: text("host").notNull(),
+    /** `https://<machine>.<tailnet>.ts.net:10000/hooks/<id>`, once Funnel says it is live. */
+    publicUrl: text("public_url"),
+    state: text("state").$type<RelayState>().notNull(),
+    /** Why it isn't live, as the exact step or command; null when live. */
+    reason: text("reason"),
+    /** When the provider's test delivery (GitHub's ping) arrived. */
+    testedAt: timestamp("tested_at"),
+    lastDeliveryAt: timestamp("last_delivery_at"),
+    /** `owner`, or the id of the session whose ask the owner approved. */
+    createdBy: text("created_by").notNull(),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (table) => [index("relays_project").on(table.projectId)]
+);
+
 /**
  * Every permission and question a session is parked on, as the hub relays it
  * (`pending.ts`). Kept here so a hub that restarts still holds them: every

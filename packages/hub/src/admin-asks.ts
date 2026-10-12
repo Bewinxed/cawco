@@ -42,6 +42,8 @@ export interface AdminAsksDeps {
 }
 
 interface Waiter {
+  /** The tool the ask is for. */
+  name: string;
   reject: (error: Error) => void;
   resolve: () => void;
 }
@@ -52,9 +54,13 @@ interface AdminPayload {
   input?: unknown;
 }
 
-const refusalText = (result: PermissionResult): string => {
+/** What the ask was for, in the refusal's words: a relay opens a public path, everything else is a fleet setting. */
+const askedFor = (name: string) =>
+  name === "relay_create" ? "opening this relay" : "this fleet-settings change";
+
+const refusalText = (result: PermissionResult, name: string): string => {
   const reason = result.behavior === "deny" ? result.message.trim() : "";
-  return `The person declined this fleet-settings change${reason ? `: ${reason}` : "."}`;
+  return `The person declined ${askedFor(name)}${reason ? `: ${reason}` : "."}`;
 };
 
 export const createAdminAsks = ({
@@ -95,7 +101,7 @@ export const createAdminAsks = ({
     if (result.behavior !== "allow") {
       tell(
         ask.instanceId,
-        `${refusalText(result)} (${ask.name}, which you asked for before the hub restarted; nothing ran.)`
+        `${refusalText(result, ask.name)} (${ask.name}, which you asked for before the hub restarted; nothing ran.)`
       );
       return;
     }
@@ -129,7 +135,7 @@ export const createAdminAsks = ({
     ): Promise<void> {
       const requestId = crypto.randomUUID();
       const answered = new Promise<void>((resolve, reject) => {
-        waiting.set(requestId, { resolve, reject });
+        waiting.set(requestId, { name, resolve, reject });
       });
       park({
         verb: "frames",
@@ -179,7 +185,7 @@ export const createAdminAsks = ({
       if (result.behavior === "allow") {
         waiter.resolve();
       } else {
-        waiter.reject(new Error(refusalText(result)));
+        waiter.reject(new Error(refusalText(result, waiter.name)));
       }
       return true;
     },

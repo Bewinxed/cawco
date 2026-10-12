@@ -17,6 +17,7 @@ import { createCaw } from "./caw";
 import { createDelegationMcp } from "./delegation-mcp";
 import { createIngress } from "./ingress";
 import { makeLifetime } from "./lifetime";
+import { createRelay } from "./relay";
 import { createRoutines } from "./routines";
 import type { Tasks } from "./tasks";
 
@@ -30,12 +31,14 @@ import type { Tasks } from "./tasks";
  * grew again with P3's ingress: eight `event_route_*` and `connector_poll_*`
  * tools of about 1,240 tokens (lead 11,403, worker 20,225 measured). P3's
  * approved actions add three `action_*` tools of about 560 tokens to both
- * (lead 11,967, worker 20,792 measured): both now sit at their budget.
+ * (lead 11,967, worker 20,792 measured). P3's relay adds three `relay_*`
+ * tools of about 316 tokens, descriptions already cut to a line (lead
+ * 12,283, worker 21,108 measured).
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 21_000,
+  worker: 21_500,
   delegate: 4600,
-  lead: 12_000,
+  lead: 12_500,
   overseer: 2800,
   "web-facing": 3400,
 };
@@ -151,6 +154,15 @@ export const measureRoles = (): RoleSize[] => {
         publish: () => undefined,
         push: {} as never,
         tasks: {} as never,
+      }).tools(actor),
+    relayTools: (actor) =>
+      createRelay({
+        askPerson: () => Promise.reject(new Error("measuring")),
+        connections: {} as never,
+        db: {} as never,
+        funnel: {} as never,
+        ingest: () => undefined,
+        lifetime,
       }).tools(actor),
   });
   try {

@@ -50,11 +50,11 @@ const keystroke = (
   };
 };
 
-/** The key typed at the terminal, echoing nothing; refused when it is interrupted. */
-const typedKey = (name: string): Promise<string> =>
+/** A secret typed at the terminal after `prompt`, echoing nothing; refused when it is interrupted. */
+export const typedKey = (prompt: string): Promise<string> =>
   new Promise((resolve, reject) => {
     const input = process.stdin;
-    process.stderr.write(`Key for ${name} (not shown): `);
+    process.stderr.write(prompt);
     let key = "";
     const done = (error?: Error) => {
       input.setRawMode(false);
@@ -87,7 +87,7 @@ const typedKey = (name: string): Promise<string> =>
   });
 
 /** The key piped in, its trailing newline dropped. */
-const pipedKey = async (): Promise<string> =>
+export const pipedKey = async (): Promise<string> =>
   (await Bun.stdin.text()).replace(TRAILING_NEWLINES, "");
 
 /**
@@ -111,7 +111,9 @@ export const setConnectionKey = async (
     );
   }
   const key = (
-    process.stdin.isTTY ? await typedKey(name) : await pipedKey()
+    process.stdin.isTTY
+      ? await typedKey(`Key for ${name} (not shown): `)
+      : await pipedKey()
   ).trim();
   if (!key) {
     throw new ConnectionKeyError("no key was given; nothing was sent");
