@@ -73,6 +73,8 @@ public enum HangPull {
 /// go on the house spring at the finger's speed (`settle`). Only the slide's
 /// translation moves. A slide caught mid-way, by a finger or the other
 /// way, turns back from where it has reached. With Reduce Motion it fades.
+/// Its size tweened as it hangs (a glass card's morph, its content's
+/// height), its edge and cut tween with its box on the same clock.
 @MainActor
 public final class HangCard: UIView {
     /// What the card holds: on its surface, clipped to its corners.
@@ -107,6 +109,9 @@ public final class HangCard: UIView {
     private var share = 0.0
     /// Each slide, so a slide's end only acts for a card nothing has moved since.
     private var generation = 0
+
+    /// The size the edge and the cut were last laid for.
+    private var laidSize = CGSize.zero
 
     /// Room past the card's sides and foot for its whole overlay shadow (hang.ts `CLIP_ROOM`).
     private static let room = 120.0
@@ -144,6 +149,8 @@ public final class HangCard: UIView {
         for part in [edge, edgeMask, topRow, restRows, cut] as [CALayer] {
             part.actions = ["path": NSNull(), "bounds": NSNull(), "position": NSNull(), "frame": NSNull(),
                             "locations": NSNull(), "colors": NSNull()]
+            // Pinned at their top-leading corner: a change of size moves only their bounds (`follow`).
+            part.anchorPoint = .zero
         }
         isHidden = true
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (card: HangCard, _: UITraitCollection) in card.paint() }
@@ -188,6 +195,16 @@ public final class HangCard: UIView {
             part.bounds = CGRect(origin: .zero, size: bounds.size)
             part.center = CGPoint(x: bounds.midX, y: bounds.midY)
         }
+        // While the card's own size is tweened (a switch's morph, its content's
+        // height), the edge, its mask and the cut tween with it on its clock;
+        // otherwise they stand at the new size at once.
+        let moving = (layer.animation(forKey: "bounds.size") ?? layer.animation(forKey: "bounds")) as? CABasicAnimation
+        // A pass mid-tween at the same size leaves the tweens running as they are.
+        let resized = bounds.size != laidSize
+        laidSize = bounds.size
+        let followed: [(CALayer, String)] = [(edge, "path"), (edge, "bounds"), (edgeMask, "bounds"), (topRow, "bounds"),
+                                             (topRow, "locations"), (restRows, "bounds"), (cut, "path"), (cut, "bounds")]
+        let drawn = followed.map { part, key in part.presentation()?.value(forKeyPath: key) }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         edge.frame = slider.bounds
@@ -196,6 +213,21 @@ public final class HangCard: UIView {
         layEdgeMask()
         cut.frame = bounds
         cut.path = UIBezierPath(rect: CGRect(x: -Self.room, y: 0, width: bounds.width + 2 * Self.room, height: bounds.height + Self.room)).cgPath
+        for ((part, key), from) in zip(followed, drawn) {
+            if moving != nil, !resized { continue }
+            guard let moving, let from else {
+                part.removeAnimation(forKey: key)
+                continue
+            }
+            let tween = CABasicAnimation(keyPath: key)
+            tween.fromValue = from
+            tween.toValue = part.value(forKeyPath: key)
+            tween.duration = moving.duration
+            tween.timingFunction = moving.timingFunction
+            tween.beginTime = moving.beginTime
+            tween.fillMode = moving.fillMode
+            part.add(tween, forKey: key)
+        }
         CATransaction.commit()
         // At rest, or under a finger, it stands where it was drawn; mid-slide it is the animator's.
         if slide == nil { draw(share) }

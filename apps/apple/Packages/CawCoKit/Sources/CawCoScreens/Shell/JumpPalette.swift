@@ -255,7 +255,7 @@ enum JumpOpener {
 /// focus back to what had it. Rows that arrive, leave or change rank move as
 /// every list does: moves over `durPanel` in-out, the card's height with
 /// them, arrivals fading in, leavers out over `durExit`.
-final class JumpCard: GlassCard, UITextFieldDelegate {
+final class JumpCard: GlassContent, UITextFieldDelegate {
     var onProject: (String) -> Void = { _ in }
     var onMachine: (String) -> Void = { _ in }
     var onConversation: (String) -> Void = { _ in }
@@ -290,9 +290,7 @@ final class JumpCard: GlassCard, UITextFieldDelegate {
         self.home = home
         search = JumpSearch(hub: hub)
         index = JumpIndex.build(hub: hub, home: home)
-        super.init(name: "jump", widest: 672, log: Self.log)
-        card.accessibilityLabel = "Jump to"
-        card.accessibilityIdentifier = "jump-card"
+        super.init(name: "jump", widest: 672, log: Self.log, label: "Jump to", identifier: "jump-card")
 
         // The search line: the glyph, the author chip, the field, flex siblings.
         field.font = fieldFont
@@ -333,17 +331,17 @@ final class JumpCard: GlassCard, UITextFieldDelegate {
         for part in [searchRow, rule(), scroll, rule(), footer] { column.addArrangedSubview(part) }
         column.axis = .vertical
         column.translatesAutoresizingMaskIntoConstraints = false
-        card.content.addSubview(column)
+        addSubview(column)
         // The list gives way first (`listHeight`); a card shorter than the search
         // line and the hints together cuts the hints off rather than breaking.
-        let foot = column.bottomAnchor.constraint(equalTo: card.content.bottomAnchor, constant: -1)
+        let foot = column.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -1)
         foot.priority = .required - 1
         NSLayoutConstraint.activate([
             // Everything stands inside the card's drawn 1pt edge, its one frame.
-            column.topAnchor.constraint(equalTo: card.content.topAnchor, constant: 1),
+            column.topAnchor.constraint(equalTo: topAnchor, constant: 1),
             foot,
-            column.leadingAnchor.constraint(equalTo: card.content.leadingAnchor, constant: 1),
-            column.trailingAnchor.constraint(equalTo: card.content.trailingAnchor, constant: -1),
+            column.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 1),
+            column.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -1),
             listHeight,
             // `.jump-list` pads 4 and each group 4 more.
             list.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: Self.listInset),

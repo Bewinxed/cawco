@@ -240,27 +240,25 @@ protocol MachinesHost: AnyObject {
 }
 
 /// The machines card (MachinesButton.svelte): the machines' list
-/// (`MachinesListView`) on one of the glass's cards (`GlassCard`; DESIGN.md,
+/// (`MachinesListView`) on the glass's card (`GlassContent`; DESIGN.md,
 /// "The glass's cards"), 320pt wide at most (`w-[min(20rem,…)]`), as tall
 /// as the list, its content 7pt inside the card's drawn edge. A row's dialog
 /// opens as the card goes back into the glass.
-final class MachinesCard: GlassCard {
+final class MachinesCard: GlassContent {
     private let listView: MachinesListView
     private static let inset = 7.0
     private static let log = Logger(subsystem: "dev.cawco.app", category: "GlassCard")
 
     init(host: MachinesHost) {
         listView = MachinesListView(host: host)
-        super.init(name: "machines", widest: 320, log: Self.log)
-        card.accessibilityLabel = "Machines"
-        card.accessibilityIdentifier = "machines-card"
+        super.init(name: "machines", widest: 320, log: Self.log, label: "Machines", identifier: "machines-card")
         listView.leave = { [weak self] then in
             self?.close(refocus: false)
             then()
         }
         listView.onChange = { [weak self] in self?.place(animated: true) }
         listView.translatesAutoresizingMaskIntoConstraints = true
-        card.content.addSubview(listView)
+        addSubview(listView)
     }
 
     @available(*, unavailable)

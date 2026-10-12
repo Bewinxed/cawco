@@ -10,13 +10,13 @@ import UIKit
 /// update that landed, logins moved in and what a new account set moving,
 /// each with its ✕. A row opens what it asks for and closes the panel.
 ///
-/// One of the glass's cards (`GlassCard`; DESIGN.md, "Caw's panel"): it hangs
-/// from the glass Caw stands on, and on a phone from his tab, past his foot
-/// by the glass's neck, on the tab row's floor so it covers no tab. A finger
-/// pulls it down out of his glass and pushes it back up, from Caw or from its
-/// body once its list has nothing further to show. A notice is swiped off it
-/// sideways (`NoticeRow`).
-final class CawPanel: GlassCard {
+/// What the glass's card shows for Caw (`GlassContent`; DESIGN.md, "Caw's
+/// panel"): it hangs from the glass Caw stands on, and on a phone from his
+/// tab, past his foot by the glass's neck, on the tab row's floor so it
+/// covers no tab. A finger pulls it down out of his glass and pushes it back
+/// up, from Caw or from its body once its list has nothing further to show.
+/// A notice is swiped off it sideways (`NoticeRow`).
+final class CawPanel: GlassContent {
     /// Its width at most, pt.
     static let wide: CGFloat = 380
     static let tallest: CGFloat = 560
@@ -51,14 +51,12 @@ final class CawPanel: GlassCard {
     }
 
     init() {
-        super.init(name: "panel", widest: Self.wide, log: Self.log)
-        card.accessibilityLabel = "Notifications"
-        card.accessibilityIdentifier = "caw-panel"
-        scroll.frame = card.content.bounds
+        super.init(name: "panel", widest: Self.wide, log: Self.log, label: "Notifications", identifier: "caw-panel")
+        scroll.frame = bounds
         scroll.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         scroll.alwaysBounceVertical = false
         scroll.showsHorizontalScrollIndicator = false
-        card.content.addSubview(scroll)
+        addSubview(scroll)
         list.axis = .vertical
         list.isLayoutMarginsRelativeArrangement = true
         list.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Self.inset, leading: Self.inset, bottom: Self.inset, trailing: Self.inset)
@@ -73,8 +71,11 @@ final class CawPanel: GlassCard {
         scroll.addSubview(list)
         scroll.contentInsetAdjustmentBehavior = .never
         fade = EdgeFade(scroll, length: 40)
-        // The list scrolls only once a push up on the body has been ruled out.
-        scroll.panGestureRecognizer.require(toFail: pushGesture)
+    }
+
+    /// The list scrolls only once a push up on the card's body has been ruled out.
+    override func joined(_ card: GlassCard) {
+        scroll.panGestureRecognizer.require(toFail: card.pushGesture)
     }
 
     @available(*, unavailable)

@@ -171,14 +171,28 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             cluster.onCaw = { [weak self, weak cluster] head in
                 guard let self, let cluster else { return }
                 // It hangs from the glass he stands on: his own tab on a phone, the bar's group on a wide screen.
-                if cawPanel.open { cawPanel.close() } else { stand(cawPanel, head: head, glass: cluster.glass, instant: false) }
+                if cawPanel.open { glassCard.close() } else { glassCard.show(cawPanel, from: head, glass: cluster.glass) }
             }
             cluster.onCawPull = { [weak self, weak cluster] head, pan in
                 guard let self, let cluster else { return }
-                // A pull that brings his panel out folds whichever card stood.
-                if pan.state == .began { foldCards(except: cawPanel, instant: false) }
-                cawPanel.pulled(pan, from: head, glass: cluster.glass)
+                // A pull on him while the card hangs with another content morphs it into his panel, as his press does; the rest of that pull is spent.
+                if pan.state == .began, glassCard.open, glassCard.showing !== cawPanel {
+                    cawPullSpent = true
+                    glassCard.show(cawPanel, from: head, glass: cluster.glass)
+                }
+                if cawPullSpent {
+                    if [.ended, .cancelled, .failed].contains(pan.state) { cawPullSpent = false }
+                    return
+                }
+                glassCard.pulled(pan, showing: cawPanel, from: head, glass: cluster.glass)
             }
+        }
+        glassCard.onChange = { [weak self] in self?.refreshBars() }
+        glassCard.onLeave = { [weak self] content in
+            guard let self else { return }
+            // The machines and Jump are made for an opening and let go once out of the card.
+            if content === machinesCard { machinesCard = nil }
+            if content === jumpCard { jumpCard = nil }
         }
         cawPanel.onChoose = { [weak self] item in self?.openWaiting(item) }
         cawPanel.onAnswer = { [weak self] item, ask, answer in
@@ -191,7 +205,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             if notice.action == .openTestFlight { UIApplication.shared.open(HubConnection.Incompatible.testFlight) }
             self?.home.act(notice)
         }
-        cawPanel.onOpenChange = { [weak self] _ in self?.refreshBars() }
         installMainBar(on: detail)
         TopBar.install(on: board.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger, showsCrumb: false)
         TopBar.pin(compactCluster, to: compactNav.navigationBar)
@@ -319,8 +332,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         // Over every column and the grip, with nothing under it: the page
         // keeps working while it is open, and a tap outside it closes it and
         // lands where it fell.
-        view.addSubview(cawPanel)
-        cawPanel.dismissal(in: view)
+        view.addSubview(glassCard)
+        glassCard.dismissal(in: view)
         railEdge.maximumNumberOfTouches = 1
         // Only where the conversations' pages reach the screen's left edge,
         // with nothing over them: a phone's, and an iPad's with the rail's
@@ -669,59 +682,129 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         #endif
     }
 
-    /// The glass's three cards in turn, the way a press opens each (DESIGN.md,
-    /// "The glass's cards"), printing per card where it hangs against the
-    /// glass (its top on the glass's foot, its trailing edge flush within 1pt,
-    /// the neck's span the glass's), how many cards stand, and Jump's focus:
-    /// Caw's panel; the machines over it (where the bar has their glass);
-    /// Jump over them. Then ⌘K: Jump goes at once and stands again at once,
-    /// read in the same turn as the key, with no frame between.
+    /// The glass's card through each of its contents, the way a press opens
+    /// each (DESIGN.md, "The glass's cards"): Caw's panel from shut; the
+    /// machines (where the bar has their glass) and then Jump morphed in from
+    /// it; Caw's panel again; ⌘K into Jump from it. Per stop: the card's
+    /// identity (one card throughout), where it hangs against the glass (its
+    /// top on the glass's foot, its trailing edge flush within 1pt, the neck's
+    /// span the glass's) and what it shows. Per morph (`scrubMorph`): the size
+    /// tween's clock against the morph's, every animation key in the card (no
+    /// slide's `transform`), and the card held at 0, 50 and 100% of the tween
+    /// with its trailing edge and top against the glass's flank and foot. Then
+    /// ⌘K: Jump goes at once and stands again at once, read in the same turn
+    /// as the key, with no frame between and no animation in the card.
     private func probeGlassCards(window: UIWindow, say: (String) -> Void, snap: (String) -> Void) async {
         func box(_ r: CGRect) -> String { String(format: "x %.1f y %.1f w %.1f h %.1f (maxX %.1f)", r.minX, r.minY, r.width, r.height, r.maxX) }
-        func row(_ card: GlassCard) {
+        let card = glassCard
+        let identity = "\(ObjectIdentifier(card))"
+        func row() {
             guard let glass = card.glass else { return say("\(card.name) not hung") }
             let cap = view.convert(GlassCard.restingBox(of: glass, under: card.head, in: view), to: window)
             let drawn = card.convert(card.bounds, to: window)
             let neck = card.card.neck
             let edge = compact ? window.bounds.maxX - window.safeAreaInsets.right : cap.maxX
             say("\(card.name) glass \(box(cap)) card \(box(drawn)) top on the glass's foot \(abs(drawn.minY - (cap.maxY + glass.neck)) < 0.5) (neck \(glass.neck)) trailing flush \(abs(drawn.maxX - cap.maxX) <= 1) (screen edge \(abs(drawn.maxX - edge) <= 1)) neck span \(neck.end - neck.start) glass span \(cap.width) equal \(abs((neck.end - neck.start) - cap.width) < 0.5) flare \(neck.flareStart) flush end \(neck.flush == .end) glass joined \(glass.joined)")
-            say("cards standing \(glassCards.filter(\.open).map(\.name)) one at a time \(glassCards.filter(\.open).count == 1)")
+            say("card \(ObjectIdentifier(card)) the same \("\(ObjectIdentifier(card))" == identity) shows \(card.showing?.name ?? "nothing") open \(card.open)")
         }
         let cluster = frontCluster
         say(Self.glassReading(cluster.glass))
-        stand(cawPanel, head: cluster.caw, glass: cluster.glass, instant: false)
+        card.show(cawPanel, from: cluster.caw, glass: cluster.glass)
         try? await Task.sleep(for: .seconds(0.8))
-        row(cawPanel)
+        row()
         snap("caw-panel")
         if !compact {
-            openMachines(from: mainCluster.machinesItem)
-            try? await Task.sleep(for: .seconds(0.8))
-            say("caw's panel folded for the machines \(!cawPanel.open)")
-            if let machinesCard {
-                row(machinesCard)
-                say(Self.rulesReading(machinesCard))
-            }
+            await scrubMorph("panel-to-machines", say: say, snap: snap) { openMachines(from: mainCluster.machinesItem) }
+            row()
+            if let machinesCard { say(Self.rulesReading(machinesCard)) }
             snap("machines")
         }
-        openJump(.press(compact ? nil : mainCluster.jumpItem))
-        try? await Task.sleep(for: .seconds(0.8))
-        say("the machines folded for Jump \(machinesCard?.open != true) caw's panel shut \(!cawPanel.open)")
+        await scrubMorph(compact ? "panel-to-jump" : "machines-to-jump", say: say, snap: snap) { openJump(.press(compact ? nil : mainCluster.jumpItem)) }
+        row()
         if let jumpCard {
-            row(jumpCard)
             say(Self.rulesReading(jumpCard))
             say("jump field focused \(jumpCard.fieldFocused)")
         }
         snap("jump")
+        await scrubMorph("jump-to-panel", say: say, snap: snap) { card.show(cawPanel, from: cluster.caw, glass: cluster.glass) }
+        row()
+        // ⌘K into Jump while Caw's panel hangs: swapped at once, read in the key's own turn.
+        openJump(.key)
+        let swapKeys = Self.animationKeys(card.layer)
+        say("cmd-k swap: shows \(card.showing?.name ?? "nothing") revealed \(card.card.revealed) switch keys \(swapKeys.filter(Self.switchKeys.contains)) content's own \(swapKeys.filter { !Self.switchKeys.contains($0) }) card the same \("\(ObjectIdentifier(card))" == identity)")
+        try? await Task.sleep(for: .seconds(0.4))
         // ⌘K: read in the same turn as the key, before any frame is drawn.
         openJump(.key)
-        say("cmd-k close: jump hidden at once \(jumpCard?.isHidden ?? true) glass joined \(cluster.glass.joined)")
+        say("cmd-k close: jump hidden at once \(card.isHidden) glass joined \(cluster.glass.joined)")
         openJump(.key)
-        let instant = jumpCard.map { !$0.isHidden && $0.card.revealed >= 1 } ?? false
-        say("cmd-k open: jump standing at once \(instant) revealed \(jumpCard?.card.revealed ?? 0) glass joined \(cluster.glass.joined) field focused \(jumpCard?.fieldFocused ?? false)")
+        let instant = !card.isHidden && card.card.revealed >= 1 && card.showing === jumpCard
+        say("cmd-k open: jump standing at once \(instant) revealed \(card.card.revealed) glass joined \(cluster.glass.joined) field focused \(jumpCard?.fieldFocused ?? false) animation keys \(Self.animationKeys(card.layer))")
         try? await Task.sleep(for: .seconds(0.4))
         snap("jump-by-key")
         jumpCard?.leaveByKey()
         try? await Task.sleep(for: .seconds(0.6))
+    }
+
+    /// What a switch of the card animates, if it animates: its box, its
+    /// edge and cut, the contents' fades, a slide's transform. Anything else
+    /// in it is a content's own (a field's caret, a row's selection tint).
+    private static let switchKeys: Set<String> = ["bounds", "bounds.size", "bounds.origin", "position", "path", "locations", "opacity", "transform"]
+
+    /// Every animation key in `layer` and the layers under it, sorted, once each.
+    private static func animationKeys(_ layer: CALayer) -> [String] {
+        func all(_ at: CALayer) -> [String] { (at.animationKeys() ?? []) + (at.sublayers ?? []).flatMap(all) }
+        return Array(Set(all(layer))).sorted()
+    }
+
+    /// One switch of the glass's card (`start`), read on its own clock: the
+    /// size tween's duration and curve against `durMorph` and `easeDrawer`,
+    /// every animation key in the card (a slide out of or into the glass
+    /// would be the slider's `transform`), then the card's layer held
+    /// (`speed` 0) at 0, 50 and 100% of the tween by `timeOffset`, its
+    /// presentation's trailing edge and top against the glass's flank and
+    /// foot, captured at 50%; then let run on, and captured at its end.
+    private func scrubMorph(_ label: String, say: (String) -> Void, snap: (String) -> Void, start: () -> Void) async {
+        let card = glassCard
+        let layer = card.layer
+        let begun = layer.convertTime(CACurrentMediaTime(), from: nil)
+        let from = card.showing?.name ?? "nothing"
+        start()
+        let keys = Self.animationKeys(layer)
+        let tween = (layer.animation(forKey: "bounds.size") ?? layer.animation(forKey: "bounds")) as? CABasicAnimation
+        let curve: String = tween?.timingFunction.map { function in
+            var point: [Float] = [0, 0]
+            var all: [Float] = []
+            for index in 1 ... 2 {
+                function.getControlPoint(at: index, values: &point)
+                all += point
+            }
+            return all.map { String(format: "%.3f", $0) }.joined(separator: ",")
+        } ?? "none"
+        let drawer = [Motion.easeDrawer.x1, Motion.easeDrawer.y1, Motion.easeDrawer.x2, Motion.easeDrawer.y2].map { String(format: "%.3f", $0) }.joined(separator: ",")
+        say("\(label) card \(ObjectIdentifier(card)) from \(from) to \(card.showing?.name ?? "nothing") tween \(tween.map { String(format: "%.3f", $0.duration) } ?? "none") morph \(String(format: "%.3f", Motion.durMorph)) curve \(curve) drawer \(drawer) clock \(tween.map { abs($0.duration - Motion.durMorph) < 0.001 } ?? false && curve == drawer) keys \(keys) slide \(keys.contains("transform"))")
+        guard let tween, let glass = card.glass else { return }
+        try? await Task.sleep(for: .milliseconds(20))
+        let begin = (layer.animation(forKey: "bounds.size") ?? layer.animation(forKey: "bounds"))?.beginTime ?? 0
+        let at = begin > 0 ? begin : begun
+        layer.speed = 0
+        for fraction in [0.0, 0.5, 1.0] {
+            layer.timeOffset = at + fraction * tween.duration
+            try? await Task.sleep(for: .milliseconds(150))
+            let drawn = layer.presentation()?.frame ?? layer.frame
+            let cap = GlassCard.restingBox(of: glass, under: card.head, in: view)
+            let foot = cap.maxY + glass.neck
+            say(String(format: "\(label) at %.2f: card w %.1f h %.1f trailing %.2f glass flank %.2f flush %@ top %.2f glass foot %.2f on foot %@ revealed %.2f",
+                       fraction, drawn.width, drawn.height, drawn.maxX, cap.maxX, abs(drawn.maxX - cap.maxX) <= 1 ? "true" : "false",
+                       drawn.minY, foot, abs(drawn.minY - foot) <= 1 ? "true" : "false", card.card.revealed))
+            if fraction == 0.5 { snap("\(label)-50") }
+        }
+        let held = layer.timeOffset
+        layer.speed = 1
+        layer.timeOffset = 0
+        layer.beginTime = 0
+        layer.beginTime = layer.convertTime(CACurrentMediaTime(), from: nil) - held
+        try? await Task.sleep(for: .seconds(0.5))
+        snap("\(label)-end")
     }
 
     /// What stands on the glass at rest, against the glass's own bounds: every
@@ -755,7 +838,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// Every rule drawn in a card (a view a point tall or less with a fill),
     /// its colour as resolved in the card's scheme, and the two rule tokens
     /// resolved there: `seam` and `border-hairline`.
-    private static func rulesReading(_ card: GlassCard) -> String {
+    private static func rulesReading(_ card: GlassContent) -> String {
         let traits = card.traitCollection
         func rgb(_ color: UIColor) -> String {
             var (r, g, b, a) = (CGFloat(0), CGFloat(0), CGFloat(0), CGFloat(0))
@@ -842,9 +925,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         // The split view lays its columns over what else is in its view on
         // every pass (the grip brings itself back the same way): a card of
         // the glass stays over all of them, under the glass wherever it now stands.
-        for card in glassCards where !card.isHidden {
-            view.bringSubviewToFront(card)
-            card.follow()
+        if !glassCard.isHidden {
+            view.bringSubviewToFront(glassCard)
+            glassCard.follow()
         }
     }
 
@@ -1162,7 +1245,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     private func showRailSheet() {
         // The sidebar comes over the page: no card of the glass stays open under it.
-        for card in glassCards { card.close(refocus: false) }
+        glassCard.close(refocus: false)
         let sheet: SidebarViewController
         if let kept = keptRailSheet {
             sheet = kept
@@ -1375,11 +1458,16 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     // MARK: The glass's cards
 
-    /// The machines and Jump, each made for an opening and gone once shut;
-    /// Caw's panel stays for the window's life.
+    /// The one card on the glass (DESIGN.md, "The glass's cards"): it shows
+    /// Caw's panel, the machines or Jump, one at a time, and morphs from one
+    /// into the next while it hangs.
+    private let glassCard = GlassCard()
+    /// The machines and Jump, each made for an opening and let go once out
+    /// of the card (`onLeave`); Caw's panel stays for the window's life.
     private var machinesCard: MachinesCard?
     private var jumpCard: JumpCard?
-    private var glassCards: [GlassCard] { [cawPanel, machinesCard, jumpCard].compactMap(\.self) }
+    /// A pull on Caw that morphed the card into his panel: the rest of it moves nothing.
+    private var cawPullSpent = false
 
     /// The bar in front, whose glass the cards hang from: a wide screen's
     /// glass group; on a phone Caw's tab, on the conversations' row or the board's bar.
@@ -1388,35 +1476,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         return compactNav.topViewController === workspaceController ? sessionCluster : compactCluster
     }
 
-    /// Every card standing but `kept` goes back into the glass on its own clock (at once for a key).
-    private func foldCards(except kept: GlassCard, instant: Bool) {
-        for other in glassCards where other !== kept && other.open {
-            other.close(instant: instant, refocus: false)
-        }
-    }
-
-    /// One of the glass's cards stands open at a time (DESIGN.md, "The
-    /// glass's cards"): `next` comes down while the one standing folds back
-    /// into the glass, each on its own clock; opened by a key, both at once.
-    private func stand(_ next: GlassCard, head: NeedsCawButton, glass: GlassCapsule, instant: Bool) {
-        foldCards(except: next, instant: instant)
-        next.show(from: head, glass: glass, instant: instant)
-    }
-
-    /// A card made for one opening joins the shell over its columns, and leaves it once shut.
-    private func mount(_ card: GlassCard) {
-        view.addSubview(card)
-        card.dismissal(in: view)
-        card.onShut = { [weak self, weak card] in
-            guard let self, let card else { return }
-            card.detach()
-            if card === machinesCard { machinesCard = nil }
-            if card === jumpCard { jumpCard = nil }
-        }
-    }
-
     /// Jump to (JumpPalette): the search glass and ⌘K open and close it. A
-    /// press brings it down out of the glass; ⌘K stands it open at once.
+    /// press brings it down out of the glass, or morphs the hanging card
+    /// into it; ⌘K stands it, or swaps it in, at once.
     func openJump(_ opener: JumpOpener) {
         let instant: Bool
         let trigger: UIView?
@@ -1428,19 +1490,18 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             if instant { open.leaveByKey() } else { open.close() }
             return
         }
-        // One still folding back comes down again from where it has reached.
+        // One still fading out of the card, or folding back, comes back from where it has reached.
         let card = jumpCard ?? {
             let made = JumpCard(hub: hub, home: home)
             made.onProject = { [weak self] id in self?.go(.project(id)) }
             made.onMachine = { [weak self] id in self?.startSession(machineId: id, cwd: nil, projectId: nil) }
             made.onConversation = { [weak self] id in self?.openSession(id) }
-            mount(made)
             jumpCard = made
             return made
         }()
         card.trigger = trigger
         let cluster = frontCluster
-        stand(card, head: cluster.caw, glass: cluster.glass, instant: instant)
+        glassCard.show(card, from: cluster.caw, glass: cluster.glass, instant: instant)
     }
 
     // MARK: Keys (Shell.svelte `shortcut`): none of them while the reader is typing.
@@ -1493,13 +1554,12 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         }
         let card = machinesCard ?? {
             let made = MachinesCard(host: self)
-            mount(made)
             machinesCard = made
             return made
         }()
         card.trigger = source
         let cluster = frontCluster
-        stand(card, head: cluster.caw, glass: cluster.glass, instant: false)
+        glassCard.show(card, from: cluster.caw, glass: cluster.glass)
     }
 
     /// Connect a machine (AddMachineDialog), over whatever is up.

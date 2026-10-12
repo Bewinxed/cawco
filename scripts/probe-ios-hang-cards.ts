@@ -1,14 +1,19 @@
 #!/usr/bin/env bun
 // biome-ignore-all lint/performance/noAwaitInLoops: one simulator, one appearance and one log poll at a time, in order.
 /**
- * iOS glass cards probe: Caw's panel, the machines and the Jump palette hang
- * from the top bar's glass the same way, one at a time (DESIGN.md, "The
- * glass's cards"). The app measures itself (ShellController
- * `probeGlassCards`, run by `-hang-probe`): each card's top on the glass's
- * foot, its trailing edge flush within 1pt, the neck's span the glass's, one
- * card standing when the machines open over Caw's panel and Jump over the
- * machines, Jump's field focused, and ⌘K standing it and taking it at once
- * with no frame between. At rest, nothing on the glass reaches past its
+ * iOS glass card probe: Caw's panel, the machines and the Jump palette are
+ * what one card on the top bar's glass shows, and it morphs in place from one
+ * into the next (DESIGN.md, "The glass's cards"). The app measures itself
+ * (ShellController `probeGlassCards`, run by `-hang-probe`): at each stop the
+ * card's top on the glass's foot, its trailing edge flush within 1pt, the
+ * neck's span the glass's, and the same card throughout (its
+ * ObjectIdentifier); at each switch (Caw's panel to the machines to Jump on
+ * the iPad, Caw's panel to Jump on the phone, then Jump to Caw's panel) the
+ * size tween on `durMorph` and `easeDrawer`, no slide (`transform`) in the
+ * card, and the card held at 0, 50 and 100% of the tween flush with the
+ * glass's flank and on its foot, fully out of it; Jump's field focused; ⌘K
+ * swapping Caw's panel for Jump with no animation in the card, then taking
+ * Jump and standing it at once with no frame between. At rest, nothing on the glass reaches past its
  * bounds and no label on it is drawn narrower than its text; the machines'
  * and Jump's rules are printed with their resolved colour against `seam` and
  * `border-hairline`.
@@ -141,32 +146,57 @@ xcrun simctl install ${udid} "${app}"`);
           "glass joined"
         );
       }
-      const standing = lines.filter((line) =>
-        line.startsWith("hang cards standing")
-      );
+      // One card throughout, whatever it shows.
+      const same = lines.filter((line) => line.startsWith("hang card "));
       check(
-        `${label}: one card at a time`,
-        standing.length === cards.length &&
-          standing.every((line) => line.endsWith("one at a time true")),
-        standing.join(" | ")
-      );
-      if (device.kind === "ipad") {
-        check(
-          `${label}: Caw's panel folds for the machines`,
+        `${label}: one card, the same one at every stop`,
+        same.length === cards.length + 1 &&
+          same.every((line) => line.includes(" the same true ")) &&
           lines.some(
-            (line) => line === "hang caw's panel folded for the machines true"
+            (line) =>
+              line.includes("cmd-k swap:") &&
+              line.endsWith("card the same true")
           ),
-          "panel folded"
+        same.map((line) => line.slice(5)).join(" | ")
+      );
+      const morphs =
+        device.kind === "ipad"
+          ? ["panel-to-machines", "machines-to-jump", "jump-to-panel"]
+          : ["panel-to-jump", "jump-to-panel"];
+      for (const morph of morphs) {
+        const head =
+          lines.find((line) => line.startsWith(`hang ${morph} card `)) ?? "";
+        check(
+          `${label}: ${morph} tweens on the morph's clock`,
+          head.includes(" clock true "),
+          head || "no line"
         );
+        check(
+          `${label}: ${morph} slides nothing out of or into the glass`,
+          head.endsWith(" slide false"),
+          "no transform in the card"
+        );
+        for (const at of ["0.00", "0.50", "1.00"]) {
+          const held =
+            lines.find((line) => line.startsWith(`hang ${morph} at ${at}:`)) ??
+            "";
+          check(
+            `${label}: ${morph} at ${at} flush with the glass's flank and on its foot`,
+            held.includes(" flush true ") &&
+              held.includes(" on foot true ") &&
+              held.endsWith(" revealed 1.00"),
+            held || "no line"
+          );
+        }
       }
       check(
-        `${label}: the machines fold for Jump`,
-        lines.some((line) =>
-          line.startsWith(
-            "hang the machines folded for Jump true caw's panel shut true"
-          )
+        `${label}: ⌘K swaps Caw's panel for Jump with no animation`,
+        lines.some(
+          (line) =>
+            line.startsWith("hang cmd-k swap: shows jump revealed 1.0") &&
+            line.includes("switch keys []")
         ),
-        "machines and panel folded"
+        lines.find((line) => line.startsWith("hang cmd-k swap:")) ?? "no line"
       );
       check(
         `${label}: Jump's field focused`,
