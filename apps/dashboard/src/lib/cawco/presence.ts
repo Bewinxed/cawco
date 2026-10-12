@@ -1,75 +1,94 @@
 /**
- * The two rules behind the transcript's presence line, kept pure so they can be
- * asserted without a DOM: how long the turn has been running, and whether the
- * line is wanted at all.
+ * This tab's presence (`POST /api/presence`): which session it has in front
+ * and whether the owner is reading it. The hub holds every notification
+ * about a session some client is active on (hub notifications.ts), so a tab
+ * counts only while its page is visible and focused and a session is in
+ * front; it goes inactive the moment the tab blurs, hides or unloads, and
+ * the hold lifts at once. The web shows no notifications itself.
  */
-import type { Activity } from "./activity";
+import { PRESENCE_BEAT_MS, type PresenceBeat } from "@cawco/core";
+import { newId } from "#lib/cawco/id.js";
 
-/**
- * beui's `formatElapsed`, unchanged: tenths of a second always, minutes only
- * once there are some.
- */
-export function formatElapsed(totalSeconds: number): string {
-  const safeSeconds = Math.max(0, totalSeconds);
-  const minutes = Math.floor(safeSeconds / 60);
-  const seconds = (safeSeconds % 60).toFixed(1);
-  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
-}
+/** Per tab: sessionStorage outlives a reload and is the tab's own. */
+const CLIENT_KEY = "cawco-presence-client";
 
-/**
- * Whether the tail of the transcript needs something standing in for the
- * session — the last resort of a precedence the tail resolves in one order,
- * evidence first, one line at most:
- *
- * 1. The partials say a thinking block is open, or the trace it left is still
- *    the newest thing the session did: the live reasoning renders, and it says
- *    "Thinking" because something was measured saying so.
- * 2. Text is streaming: the answer is writing itself onto the screen, and the
- *    pixels a presence line would take are the ones it is arriving in.
- * 3. Nothing on screen is alive and the session is working: *this* line, and
- *    the only place the word is a guess — so it is never "Thinking".
- *
- * Every other working stretch that has no dedicated row gets this line: a tool
- * call running long, an MCP call waiting on its result, the send before the
- * first frame. Only the thinking trace and the streamed text keep their own
- * rows and keep the line away.
- *
- * Anything other than working renders nothing at all: a blocked session is
- * answered by its permission card, and an idle one says nothing (Absence over
- * placeholder).
- */
-export function showsPresence(input: {
-  activity: Activity;
-  /** The partial assistant text, `''` when nothing is streaming. */
-  streaming: string;
-  /**
-   * Whether the main loop has a tool call out. No longer gates presence — a
-   * long tool call is exactly the stretch this line now covers — but the caller
-   * still wires it through.
-   */
-  toolInFlight: boolean;
-  /**
-   * Whether the transcript's last group still has a tool row waiting on its
-   * result. Same as above: those rows no longer clear the line.
-   */
-  tailToolPending: boolean;
-  /**
-   * Whether the partials have a thinking block open, or left a trace with
-   * nothing newer over it. The live trace is rendered in its place.
-   */
-  thinkingLive: boolean;
-  /**
-   * Whether the transcript tail is a thinking block in a busy turn. A harness
-   * that streams no partials (opencode) reaches the reader this way and no
-   * other, and that block shimmers "Thinking…" for itself — a presence line
-   * under it would say the same thing twice on one screen.
-   */
-  tailIsThinking: boolean;
-}): boolean {
-  return (
-    input.activity === "working" &&
-    !input.thinkingLive &&
-    !input.tailIsThinking &&
-    !input.streaming
-  );
+let front: string | null = null;
+let listening = false;
+let beating: ReturnType<typeof setInterval> | undefined;
+/** The last state the hub was told, so only a change (or a beat) posts. */
+let told: string | undefined;
+
+const clientId = (): string => {
+  const kept = sessionStorage.getItem(CLIENT_KEY);
+  if (kept) {
+    return kept;
+  }
+  const minted = newId();
+  sessionStorage.setItem(CLIENT_KEY, minted);
+  return minted;
+};
+
+const reading = (): boolean =>
+  front !== null &&
+  document.visibilityState === "visible" &&
+  document.hasFocus();
+
+const post = (beat: PresenceBeat, leaving: boolean): void => {
+  const body = JSON.stringify(beat);
+  if (leaving) {
+    // The page is going: only a beacon is sure to leave with it.
+    navigator.sendBeacon(
+      "/api/presence",
+      new Blob([body], { type: "application/json" })
+    );
+    return;
+  }
+  fetch("/api/presence", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+    keepalive: true,
+  }).catch((error: unknown) => {
+    // The next change or beat says it again.
+    console.warn("[cawco] presence not sent:", error);
+  });
+};
+
+/** Tells the hub this tab's state when it changed, or on a beat. */
+const report = (beat = false, leaving = false): void => {
+  const active = !leaving && reading();
+  const state = `${front}|${active}`;
+  if (beat || state !== told) {
+    told = state;
+    post(
+      { clientId: clientId(), client: "web", sessionId: front, active },
+      leaving
+    );
+  }
+  if (active && beating === undefined) {
+    beating = setInterval(() => report(true), PRESENCE_BEAT_MS);
+  } else if (!active && beating !== undefined) {
+    clearInterval(beating);
+    beating = undefined;
+  }
+};
+
+const listen = (): void => {
+  if (listening) {
+    return;
+  }
+  listening = true;
+  const changed = () => report();
+  window.addEventListener("focus", changed);
+  window.addEventListener("blur", changed);
+  document.addEventListener("visibilitychange", changed);
+  window.addEventListener("pageshow", changed);
+  window.addEventListener("pagehide", () => report(false, true));
+};
+
+/** The session the owner has in front in this tab, or null when none is. */
+export function presenceFront(sessionId: string | null): void {
+  listen();
+  front = sessionId;
+  report();
 }

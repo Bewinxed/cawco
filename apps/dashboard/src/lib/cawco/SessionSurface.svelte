@@ -51,6 +51,7 @@
     ease,
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
+  import { presenceFront } from "#lib/cawco/presence.js";
   import { layoutPolicy } from "#lib/cawco/workspace/layout-policy.svelte.js";
   import PaneDeck from "#lib/cawco/workspace/PaneDeck.svelte";
   import PaneGrid from "#lib/cawco/workspace/PaneGrid.svelte";
@@ -273,6 +274,11 @@
         untrack(() => markOpened(row.id));
       }
     }
+  });
+  // The session in front, for the hub's hold on its notifications
+  // (presence.ts adds whether this tab is visible and focused).
+  $effect(() => {
+    presenceFront(shown && !onBoard ? workspace.activeSessionId : null);
   });
   // One the app picked that has left the front was switched away from: the
   // app never puts one back, so in front again it is the owner's doing.

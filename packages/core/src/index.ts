@@ -39,6 +39,9 @@ export * from "./join";
 // Moving a project to a machine without a checkout of it: the hub-owned job,
 // its estimate and request, and the hub ↔ machine controls that run its steps.
 export * from "./move";
+// Where the owner is (presence) and which notifications are over (clears):
+// the hub holds a session's notifications while a client has it in front.
+export * from "./notifications";
 // What a permission prompt says on every surface, stamped by the hub as it
 // parks the ask: the summary, who asked, the change it makes, its fields.
 export * from "./permission-presentation";

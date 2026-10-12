@@ -2255,6 +2255,33 @@ export const pushDevices = sqliteTable("push_devices", {
 });
 
 /**
+ * Notifications a device or Telegram was shown and nobody has cleared yet
+ * (notifications.ts), by collapse id: a look or a settle clears only what
+ * was sent, so looking at a session no notification named sends nothing.
+ * Pruned after three days.
+ */
+export const notificationSent = sqliteTable("notification_sent", {
+  collapseId: text("collapse_id").primaryKey(),
+  sentAt: timestamp("sent_at").notNull(),
+});
+
+/**
+ * Notifications cleared, by collapse id (notifications.ts): an ask settled,
+ * its session looked at, or a device acted on, opened or dismissed it.
+ * Every device reads them to take the notification down (a visible push's
+ * `cawco.cleared`, a background push, `/api/notifications/cleared` at launch),
+ * so they outlive a restart. Pruned after three days.
+ */
+export const notificationCleared = sqliteTable(
+  "notification_cleared",
+  {
+    collapseId: text("collapse_id").primaryKey(),
+    clearedAt: timestamp("cleared_at").notNull(),
+  },
+  (table) => [index("notification_cleared_at").on(table.clearedAt)]
+);
+
+/**
  * "Make this a project" (project-offers.ts): the one offer a plain session
  * gets when it outgrows itself. A row means it was offered, so it is never
  * offered again; `answer` stays null while the offer stands.

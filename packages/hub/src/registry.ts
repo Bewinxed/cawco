@@ -57,6 +57,8 @@ export interface RegistryShape {
    * an older page is connected.
    */
   readonly broadcastBoard: (delta: Envelope, snapshot: () => Envelope) => void;
+  /** A hub frame that is not an envelope (`{ type, … }`), to every dashboard and app socket. */
+  readonly broadcastTyped: (frame: { readonly type: string }) => void;
   /** The most recent usable dashboard origin, or nothing if none has connected. */
   readonly dashboardOrigin: () => string | undefined;
   /** Returns the machine the socket was registered as, if it was an agent. */
@@ -189,6 +191,11 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
     broadcast: (envelope) => {
       for (const socket of dashboards.values()) {
         sendFrame(socket, envelope);
+      }
+    },
+    broadcastTyped: (frame) => {
+      for (const socket of dashboards.values()) {
+        sendFrame(socket, frame);
       }
     },
     broadcastBoard: (delta, snapshot) => {

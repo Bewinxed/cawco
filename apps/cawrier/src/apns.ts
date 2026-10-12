@@ -32,6 +32,9 @@ import { Buffer } from "node:buffer";
 
 export type ApnsEnvironment = "production" | "sandbox";
 
+/** A visible alert, or a background push that only wakes the app with data. */
+export type PushType = "alert" | "background";
+
 const HOSTS: Record<ApnsEnvironment, string> = {
   production: "api.push.apple.com",
   sandbox: "api.sandbox.push.apple.com",
@@ -114,13 +117,18 @@ export const sendApns = async (
     readonly collapseId?: string;
     readonly deviceToken: string;
     readonly expiration?: number;
+    /**
+     * `background`: data only, delivered when the system chooses. Apple
+     * requires `apns-push-type: background` with `apns-priority: 5` for it.
+     */
+    readonly pushType: PushType;
   }
 ): Promise<ApnsAnswer> => {
   try {
     const headers: Record<string, string> = {
       "apns-topic": env.APNS_TOPIC,
-      "apns-push-type": "alert",
-      "apns-priority": "10",
+      "apns-push-type": push.pushType,
+      "apns-priority": push.pushType === "background" ? "5" : "10",
       "content-type": "application/json",
     };
     const key = keyOf(env);

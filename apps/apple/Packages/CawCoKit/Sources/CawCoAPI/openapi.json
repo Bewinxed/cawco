@@ -3291,6 +3291,179 @@
         }
       }
     },
+    "/api/presence": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "clientId": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  "client": {
+                    "type": "string",
+                    "enum": [
+                      "web",
+                      "ios",
+                      "mac"
+                    ]
+                  },
+                  "sessionId": {
+                    "minLength": 1,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "active": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "clientId",
+                  "client",
+                  "sessionId",
+                  "active"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiPresence",
+        "responses": {
+          "200": {
+            "description": "postApiPresence 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiPresence200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiPresence 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/dismiss": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "collapseIds": {
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "minLength": 1,
+                      "maxLength": 64,
+                      "type": "string"
+                    }
+                  },
+                  "via": {
+                    "type": "string",
+                    "enum": [
+                      "open",
+                      "action",
+                      "dismiss"
+                    ]
+                  }
+                },
+                "required": [
+                  "collapseIds",
+                  "via"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiNotificationsDismiss",
+        "responses": {
+          "200": {
+            "description": "postApiNotificationsDismiss 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiNotificationsDismiss200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiNotificationsDismiss 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/notifications/cleared": {
+      "get": {
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        ],
+        "operationId": "getApiNotificationsCleared",
+        "responses": {
+          "200": {
+            "description": "getApiNotificationsCleared 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiNotificationsCleared200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiNotificationsCleared 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/favicon": {
       "get": {
         "parameters": [
@@ -14686,6 +14859,54 @@
         },
         "required": [
           "ok"
+        ]
+      },
+      "postApiPresence200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "postApiNotificationsDismiss200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
+      "getApiNotificationsCleared200": {
+        "type": "object",
+        "properties": {
+          "cleared": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "collapseId": {
+                  "type": "string"
+                },
+                "at": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "at",
+                "collapseId"
+              ]
+            }
+          }
+        },
+        "required": [
+          "cleared"
         ]
       },
       "getApiProjectOffers200": {

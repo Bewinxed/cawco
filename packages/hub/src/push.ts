@@ -22,10 +22,18 @@
  *   an ask once per request, and one collapse id per task, so a failed attempt
  *   that moves its task into a `you` stage is one push, not two.
  *
+ * - **The gate** (notifications.ts): every push about a session is offered
+ *   there and held while a client has that session in front; it goes when
+ *   none does and the item still needs you. Every visible push carries the
+ *   last day's cleared collapse ids (`cawco.cleared`), and each clear queues
+ *   one background push per device, at most one per device every
+ *   {@link BACKGROUND_GAP_MS}, carrying the whole set: APNs keeps only the
+ *   newest background push for a device, and Apple asks for "two or three
+ *   per hour".
+ *
  * `CAWCO_CAWRIER_ORIGIN` points every push at a stand-in for a local run —
  * the Telegram bridge's `CAWCO_TELEGRAM_API` precedent.
  */
-import { createHash } from "node:crypto";
 import {
   type Envelope,
   machineLabel,
@@ -38,6 +46,13 @@ import { Elysia, t } from "elysia";
 import type { DbShape, PushDeviceRow, WorkItemRow } from "./db";
 import { hidden } from "./hidden";
 import { boardTitle } from "./labels";
+import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import {
+  askCollapseId,
+  type Notifications,
+  taskCollapseId,
+  turnCollapseId,
+} from "./notifications";
 import type { TaskEvent } from "./tasks";
 
 const CAWRIER = Bun.env.CAWCO_CAWRIER_ORIGIN ?? "https://cawrier.cawco.dev";
@@ -47,6 +62,8 @@ const SAME_MOMENT_MS = 10_000;
 /** An undelivered push is worth nothing after a day. */
 const EXPIRY_S = 24 * 60 * 60;
 const REQUEST_TIMEOUT_MS = 10_000;
+/** At most one background push per device in this window (Apple: "two or three per hour"). */
+const BACKGROUND_GAP_MS = 20 * 60_000;
 
 /**
  * The app's notification categories (the spec in the Projects plan, §5.5,
@@ -182,8 +199,15 @@ const utf8 = new TextEncoder();
 type Plaintext = Uint8Array<ArrayBuffer>;
 const byteLength = (text: string): number => utf8.encode(text).length;
 
-/** The payload APNs gets, `e` the sealed alert in base64. */
-const payloadOf = (notification: Notification, e: string) => ({
+/**
+ * The payload APNs gets, `e` the sealed alert in base64, `cawco.cleared` the
+ * collapse ids the device takes down as it shows this one.
+ */
+const payloadOf = (
+  notification: Notification,
+  e: string,
+  cleared: readonly string[]
+) => ({
   aps: {
     alert: notification.shown,
     sound: "default",
@@ -192,7 +216,7 @@ const payloadOf = (notification: Notification, e: string) => ({
     "mutable-content": 1,
   },
   e,
-  cawco: notification.data,
+  cawco: { ...notification.data, cleared },
 });
 
 /**
@@ -228,9 +252,13 @@ const longestCut = (
  * are never cut. Its sealed size is the same for every device, so it is
  * fitted once per push.
  */
-const plaintextOf = (notification: Notification): Plaintext => {
+const plaintextOf = (
+  notification: Notification,
+  cleared: readonly string[]
+): Plaintext => {
   const room =
-    MAX_PAYLOAD_BYTES - byteLength(JSON.stringify(payloadOf(notification, "")));
+    MAX_PAYLOAD_BYTES -
+    byteLength(JSON.stringify(payloadOf(notification, "", cleared)));
   // Base64 writes each 3 bytes as 4 characters, padded to a whole 4.
   const limit = Math.floor(room / 4) * 3 - IV_BYTES - TAG_BYTES;
   const { subtitle, options } = notification.sealed;
@@ -290,19 +318,18 @@ export interface PushOutcome {
 }
 
 export interface PushServices {
+  /** Whether an ask is still parked, waiting on its answer. */
+  readonly askOpen: (requestId: string) => boolean;
   readonly db: DbShape;
+  readonly lifetime: HubLifetimeShape;
+  /** The one gate every push about a session goes through. */
+  readonly notifications: Notifications;
   /** A task as a read shows it; undefined when it cannot be read. */
   readonly task: (
     projectId: string,
     taskId: string
   ) => Promise<{ kind: string | null; title: string } | undefined>;
 }
-
-/** A collapse id fits APNs' 64 bytes: long ids go as their hash. */
-const collapse = (prefix: string, id: string): string =>
-  `${prefix}-${id}`.length <= 64
-    ? `${prefix}-${id}`
-    : `${prefix}-${createHash("sha256").update(id).digest("hex").slice(0, 40)}`;
 
 /** Each harness as the operator knows it; a row without one is Claude Code. */
 const HARNESS_NAMES: Record<string, string> = {
@@ -354,13 +381,22 @@ const inlineOptions = (
 };
 
 /**
- * One POST to Cawrier, the alert sealed for this device; never throws.
- * `reason` is Cawrier's sentence, or APNs' reason it passed on.
+ * What one push asks of Cawrier beside the pairing: a visible alert under its
+ * collapse id, or a background push (`apns-push-type: background`, priority
+ * 5) that carries only data.
+ */
+type PushBody =
+  | { collapseId: string; payload: Record<string, unknown> }
+  | { pushType: "background"; payload: Record<string, unknown> };
+
+/**
+ * One POST to Cawrier for this device, its body made here (a visible alert
+ * is sealed per device); never throws. `reason` is Cawrier's sentence, or
+ * APNs' reason it passed on.
  */
 const post = async (
   device: PushDeviceRow,
-  notification: Notification,
-  plaintext: Plaintext
+  body: () => Promise<PushBody>
 ): Promise<{ status: number; reason: string | null }> => {
   try {
     const response = await fetch(`${CAWRIER}/v1/push`, {
@@ -371,9 +407,8 @@ const post = async (
       },
       body: JSON.stringify({
         pairingId: device.pairingId,
-        collapseId: notification.collapseId,
         expiration: Math.floor(Date.now() / 1000) + EXPIRY_S,
-        payload: payloadOf(notification, await seal(device.key, plaintext)),
+        ...(await body()),
       }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
@@ -435,13 +470,25 @@ const removeDevice = async (
   return db.push.dropDevice(pairingId);
 };
 
-export const createPush = ({ db, task }: PushServices) => {
+export const createPush = ({
+  askOpen,
+  db,
+  lifetime,
+  notifications,
+  task,
+}: PushServices) => {
   /** Asks already pushed, by request id: a replayed or re-escalated ask is not a new moment. */
   const asked = new Set<string>();
   /** When each collapse id last went out. */
   const recent = new Map<string, number>();
   /** Sessions whose running turn the operator interrupted: its end pushes nothing. */
   const stopped = new Set<string>();
+  /** By pairing: the clear count the device was last handed the whole cleared set at. */
+  const told = new Map<string, number>();
+  /** By pairing: when its last background push went. */
+  const backgroundAt = new Map<string, number>();
+  /** By pairing: the background push waiting out its gap. */
+  const queued = new Map<string, HubTimer>();
 
   /** Records what Cawrier said for a device: taken, pairing gone (the device goes) or refused. */
   const settle = (
@@ -469,17 +516,36 @@ export const createPush = ({ db, task }: PushServices) => {
     return pruned;
   };
 
-  /** Sends one notification to every device that is not quiet (or to the ones given). */
+  const awake = (): PushDeviceRow[] =>
+    db.push.devices().filter((device) => !device.quiet);
+
+  /**
+   * Sends one notification to every device that is not quiet (or to the ones
+   * given), carrying the cleared ids: a device that takes it has been handed
+   * every clear so far.
+   */
   const deliver = async (
     notification: Notification,
     to?: PushDeviceRow[]
   ): Promise<PushOutcome[]> => {
-    const devices = to ?? db.push.devices().filter((device) => !device.quiet);
-    const plaintext = plaintextOf(notification);
+    const devices = to ?? awake();
+    const count = notifications.clearCount();
+    const cleared = notifications.carried();
+    const plaintext = plaintextOf(notification, cleared);
     return await Promise.all(
       devices.map(async (device): Promise<PushOutcome> => {
-        const { status, reason } = await post(device, notification, plaintext);
+        const { status, reason } = await post(device, async () => ({
+          collapseId: notification.collapseId,
+          payload: payloadOf(
+            notification,
+            await seal(device.key, plaintext),
+            cleared
+          ),
+        }));
         const pruned = settle(device, status, reason);
+        if (status === 200) {
+          told.set(device.pairingId, count);
+        }
         return { name: device.name, status, reason, pruned };
       })
     );
@@ -488,6 +554,9 @@ export const createPush = ({ db, task }: PushServices) => {
   /** Sends now; a push already shown under its collapse id is replaced by it (`apns-collapse-id`). */
   const replace = (notification: Notification): void => {
     recent.set(notification.collapseId, Date.now());
+    if (awake().length > 0) {
+      notifications.shown(notification.collapseId);
+    }
     deliver(notification).catch((error: unknown) =>
       console.warn(
         `[push] ${notification.collapseId}: ${error instanceof Error ? error.message : String(error)}`
@@ -496,12 +565,35 @@ export const createPush = ({ db, task }: PushServices) => {
   };
 
   /**
-   * Sends unless the same collapse id went out a moment ago: a failed attempt
-   * that moves its task into a `you` stage reaches here twice, as the task
-   * and as the attempt, under one collapse id, and is one moment. A push
-   * whose every send is news (a session's finished turn) goes by `replace`.
+   * Offers a push about a session to the gate (notifications.ts): sent now,
+   * or held while a client has `instanceId` in front and sent when none does
+   * if `due` still holds.
    */
-  const moment = (notification: Notification): void => {
+  const offer = (
+    notification: Notification,
+    instanceId: string | null,
+    due: () => boolean | Promise<boolean>
+  ): void => {
+    notifications.offer({
+      outlet: "push",
+      collapseId: notification.collapseId,
+      instanceId,
+      due,
+      send: () => replace(notification),
+    });
+  };
+
+  /**
+   * Offers unless the same collapse id went out a moment ago: a failed
+   * attempt that moves its task into a `you` stage reaches here twice, as the
+   * task and as the attempt, under one collapse id, and is one moment. A push
+   * whose every send is news (a session's finished turn) goes by `offer`.
+   */
+  const moment = (
+    notification: Notification,
+    instanceId: string | null,
+    due: () => boolean | Promise<boolean>
+  ): void => {
     const now = Date.now();
     for (const [id, at] of recent) {
       if (now - at > SAME_MOMENT_MS) {
@@ -511,8 +603,60 @@ export const createPush = ({ db, task }: PushServices) => {
     if (recent.has(notification.collapseId)) {
       return;
     }
-    replace(notification);
+    offer(notification, instanceId, due);
   };
+
+  /** Nobody has looked at the session since `at`: what it pushed about then still needs you. */
+  const unseenSince = (instanceId: string, at: Date): boolean => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    return !(row?.seenAt && row.seenAt.getTime() >= at.getTime());
+  };
+
+  /**
+   * One background push to a device, carrying the whole cleared set, when it
+   * has clears it was not handed yet (a visible push since hands them too).
+   */
+  const background = async (pairingId: string): Promise<void> => {
+    const device = awake().find((row) => row.pairingId === pairingId);
+    const count = notifications.clearCount();
+    if (!device || (told.get(pairingId) ?? 0) >= count) {
+      return;
+    }
+    const cleared = notifications.carried();
+    if (cleared.length === 0) {
+      return;
+    }
+    backgroundAt.set(pairingId, Date.now());
+    const { status, reason } = await post(device, async () => ({
+      pushType: "background",
+      payload: { aps: { "content-available": 1 }, cawco: { cleared } },
+    }));
+    settle(device, status, reason);
+    if (status === 200) {
+      told.set(pairingId, count);
+    }
+  };
+
+  /** Ids cleared: each awake device gets a background push now, or when its gap since the last is out. */
+  notifications.onCleared(() => {
+    const now = Date.now();
+    for (const { pairingId } of awake()) {
+      if (queued.has(pairingId)) {
+        continue;
+      }
+      const wait = Math.max(
+        0,
+        (backgroundAt.get(pairingId) ?? 0) + BACKGROUND_GAP_MS - now
+      );
+      queued.set(
+        pairingId,
+        lifetime.after(wait, () => {
+          queued.delete(pairingId);
+          detach(background(pairingId), "background push");
+        })
+      );
+    }
+  });
 
   const projectName = (projectId: string | null | undefined): string | null =>
     (projectId ? db.project(projectId)?.name : undefined) ?? null;
@@ -586,27 +730,31 @@ export const createPush = ({ db, task }: PushServices) => {
       const { asker, summary } = (payload as PermissionRequestFrame)
         .presentation;
       const options = inlineOptions(payload, instanceId);
-      moment({
-        shown: alertOf(
-          askName(row, payload.workflowRunId, instanceId),
-          project
-        ),
-        sealed: {
-          ...alertOf(asker, project, summary),
-          ...(options ? { options } : {}),
+      moment(
+        {
+          shown: alertOf(
+            askName(row, payload.workflowRunId, instanceId),
+            project
+          ),
+          sealed: {
+            ...alertOf(asker, project, summary),
+            ...(options ? { options } : {}),
+          },
+          category: askCategory(payload),
+          collapseId: askCollapseId(requestId),
+          threadId: projectId ?? instanceId,
+          data: {
+            kind: "ask",
+            instanceId,
+            machineId: envelope.machineId,
+            projectId,
+            requestId,
+            workflowRunId: payload.workflowRunId ?? null,
+          },
         },
-        category: askCategory(payload),
-        collapseId: collapse("ask", requestId),
-        threadId: projectId ?? instanceId,
-        data: {
-          kind: "ask",
-          instanceId,
-          machineId: envelope.machineId,
-          projectId,
-          requestId,
-          workflowRunId: payload.workflowRunId ?? null,
-        },
-      });
+        instanceId || null,
+        () => askOpen(requestId)
+      );
     },
 
     /** An ask left the pending list: a later ask can never reuse its id, so its mark goes. */
@@ -632,8 +780,10 @@ export const createPush = ({ db, task }: PushServices) => {
      * project's lead or a continuation's worker; and not stopped by them.
      * It waits {@link LOOK_GRACE_MS} first: a dashboard or an app that has
      * the session in front marks it looked at as the turn ends (`/api/seen`
-     * `look`), and then nothing goes. One collapse id per session, sent by
-     * `replace`, never held back: a newer turn's push replaces the older on
+     * `look`), and then nothing goes. Then the gate holds it while a client
+     * has the session in front, and lets it go once none does unless the
+     * session was looked at since the turn ended. One collapse id per
+     * session, never deduplicated: a newer turn's push replaces the older on
      * the device however soon after it comes.
      */
     turnEnded(
@@ -653,32 +803,36 @@ export const createPush = ({ db, task }: PushServices) => {
           row.workItemId ||
           row.kind === "summariser" ||
           row.role === "lead" ||
-          (row.seenAt && row.seenAt.getTime() >= endedAt.getTime())
+          !unseenSince(instanceId, endedAt)
         ) {
           return;
         }
         const project = projectName(row.projectId);
-        replace({
-          shown: alertOf(
-            sessionName(instanceId) ?? "A session",
-            project,
-            TURN_ENDED
-          ),
-          sealed: alertOf(
-            boardTitle(row),
-            project,
-            firstLine(reply) ?? TURN_ENDED
-          ),
-          category: PUSH_CATEGORIES.turn,
-          collapseId: collapse("turn", instanceId),
-          threadId: row.projectId ?? instanceId,
-          data: {
-            kind: "turn",
-            instanceId,
-            machineId: row.machineId,
-            projectId: row.projectId ?? null,
+        offer(
+          {
+            shown: alertOf(
+              sessionName(instanceId) ?? "A session",
+              project,
+              TURN_ENDED
+            ),
+            sealed: alertOf(
+              boardTitle(row),
+              project,
+              firstLine(reply) ?? TURN_ENDED
+            ),
+            category: PUSH_CATEGORIES.turn,
+            collapseId: turnCollapseId(instanceId),
+            threadId: row.projectId ?? instanceId,
+            data: {
+              kind: "turn",
+              instanceId,
+              machineId: row.machineId,
+              projectId: row.projectId ?? null,
+            },
           },
-        });
+          instanceId,
+          () => unseenSince(instanceId, endedAt)
+        );
       }, LOOK_GRACE_MS);
     },
 
@@ -691,6 +845,15 @@ export const createPush = ({ db, task }: PushServices) => {
         return;
       }
       const { projectId, id } = event;
+      const at = new Date();
+      /** The task still sits in a stage of kind `you`. */
+      const stillYours = async (): Promise<boolean> => {
+        try {
+          return (await task(projectId, id))?.kind === "you";
+        } catch {
+          return false;
+        }
+      };
       task(projectId, id)
         .then((view) => {
           if (view?.kind !== "you") {
@@ -704,20 +867,28 @@ export const createPush = ({ db, task }: PushServices) => {
           const [row] = attempt
             ? db.getInstancesByIds([attempt.instanceId])
             : [];
-          moment({
-            shown: alert,
-            sealed: alert,
-            category: row ? PUSH_CATEGORIES.task : PUSH_CATEGORIES.taskOpenOnly,
-            collapseId: collapse("task", `${projectId}:${id}`),
-            threadId: projectId,
-            data: {
-              kind: "task",
-              instanceId: row?.id ?? null,
-              machineId: row?.machineId ?? null,
-              projectId,
-              taskId: id,
+          moment(
+            {
+              shown: alert,
+              sealed: alert,
+              category: row
+                ? PUSH_CATEGORIES.task
+                : PUSH_CATEGORIES.taskOpenOnly,
+              collapseId: taskCollapseId(projectId, id),
+              threadId: projectId,
+              data: {
+                kind: "task",
+                instanceId: row?.id ?? null,
+                machineId: row?.machineId ?? null,
+                projectId,
+                taskId: id,
+              },
             },
-          });
+            row?.id ?? null,
+            // Still waiting on you, in a session nobody has looked at since.
+            async () =>
+              (await stillYours()) && (row ? unseenSince(row.id, at) : true)
+          );
         })
         .catch(() => undefined);
     },
@@ -733,32 +904,38 @@ export const createPush = ({ db, task }: PushServices) => {
       if (item.state !== "failed" || !taskId || !projectId) {
         return;
       }
+      const at = new Date();
       const alerted = task(projectId, taskId)
         .catch(() => undefined)
         .then((view) => {
           const project = projectName(projectId);
           const [row] = db.getInstancesByIds([item.instanceId]);
-          moment({
-            shown: alertOf(
-              view?.title || sessionName(item.instanceId) || "A task",
-              project
-            ),
-            sealed: alertOf(
-              view?.title || (row ? boardTitle(row) : "A task"),
-              project
-            ),
-            category: PUSH_CATEGORIES.attempt,
-            collapseId: collapse("task", `${projectId}:${taskId}`),
-            threadId: projectId,
-            data: {
-              kind: "attempt",
-              instanceId: item.instanceId,
-              machineId: row?.machineId ?? null,
-              projectId,
-              taskId,
-              workItemId: item.id,
+          moment(
+            {
+              shown: alertOf(
+                view?.title || sessionName(item.instanceId) || "A task",
+                project
+              ),
+              sealed: alertOf(
+                view?.title || (row ? boardTitle(row) : "A task"),
+                project
+              ),
+              category: PUSH_CATEGORIES.attempt,
+              collapseId: taskCollapseId(projectId, taskId),
+              threadId: projectId,
+              data: {
+                kind: "attempt",
+                instanceId: item.instanceId,
+                machineId: row?.machineId ?? null,
+                projectId,
+                taskId,
+                workItemId: item.id,
+              },
             },
-          });
+            row ? item.instanceId : null,
+            // The failed session nobody has looked at since it failed.
+            () => unseenSince(item.instanceId, at)
+          );
         });
       detach(alerted, "attempt push");
     },

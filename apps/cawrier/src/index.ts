@@ -6,7 +6,7 @@
  * holds at most {@link SEATS_PER_PURCHASE} live pairings.
  *
  * POST /v1/enroll  { pairingId, secret, deviceToken, apnsEnvironment, proof }
- * POST /v1/push    Authorization: Bearer <secret>; { pairingId, collapseId?, expiration?, payload }
+ * POST /v1/push    Authorization: Bearer <secret>; { pairingId, collapseId?, expiration?, pushType?: "alert" | "background", payload }
  * POST /v1/unenroll Authorization: Bearer <secret>; { pairingId }: the pairing and its seat go
  * GET  /v1/health  one APNs probe: proves outbound HTTP/2 to Apple and the key
  * POST /v1/apple/notifications  { signedPayload }: App Store Server Notifications V2
@@ -15,6 +15,7 @@ import {
   type ApnsAnswer,
   type ApnsEnvironment,
   hasKey,
+  type PushType,
   sendApns,
 } from "./apns";
 import { SEATS_PER_PURCHASE } from "./seats";
@@ -128,7 +129,18 @@ interface Push {
   readonly expiration?: number;
   readonly pairingId: string;
   readonly payload: Body;
+  readonly pushType: PushType;
 }
+
+/** Absent is a visible alert; `background` carries data only, so it takes no collapse id. */
+const pushTypeOf = (body: Body): PushType | undefined => {
+  if (body.pushType === undefined || body.pushType === "alert") {
+    return "alert";
+  }
+  return body.pushType === "background" && body.collapseId === undefined
+    ? "background"
+    : undefined;
+};
 
 const isCollapseId = (value: unknown): value is string | undefined =>
   value === undefined ||
@@ -138,19 +150,23 @@ const isExpiration = (value: unknown): value is number | undefined =>
   value === undefined ||
   (Number.isSafeInteger(value) && (value as number) >= 0);
 
-const pushOf = (body: Body | undefined): Push | undefined =>
-  body &&
-  matches(body.pairingId, UUID) &&
-  isCollapseId(body.collapseId) &&
-  isExpiration(body.expiration) &&
-  isObject(body.payload)
+const pushOf = (body: Body | undefined): Push | undefined => {
+  const pushType = body && pushTypeOf(body);
+  return body &&
+    pushType &&
+    matches(body.pairingId, UUID) &&
+    isCollapseId(body.collapseId) &&
+    isExpiration(body.expiration) &&
+    isObject(body.payload)
     ? {
         pairingId: body.pairingId,
         collapseId: body.collapseId,
         expiration: body.expiration,
         payload: body.payload,
+        pushType,
       }
     : undefined;
+};
 
 const pairing = (env: Env, pairingId: string) =>
   env.PAIRING.get(env.PAIRING.idFromName(pairingId));
@@ -250,6 +266,7 @@ const relay = async (request: Request, env: Env): Promise<Response> => {
     body: payload,
     collapseId: push.collapseId,
     expiration: push.expiration,
+    pushType: push.pushType,
   });
   if (answer.status === 200) {
     return json(200, { ok: true });
@@ -381,6 +398,7 @@ const healthCheck = async (env: Env): Promise<Response> => {
       apnsEnvironment: "production",
       deviceToken: "0".repeat(64),
       body: JSON.stringify({ aps: { alert: "Cawrier health" } }),
+      pushType: "alert",
     });
     console.log(`health ${apns.status}: ${apns.reason ?? ""}`);
     health = { at: Date.now(), body: { apns, key: hasKey(env) } };

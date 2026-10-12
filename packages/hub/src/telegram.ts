@@ -18,6 +18,11 @@ import { detach, failureOf } from "@cawco/core/detach";
 import type { DbShape } from "./db";
 import { sessionLabel } from "./labels";
 import type { HubLifetimeShape } from "./lifetime";
+import {
+  askCollapseId,
+  type Notifications,
+  supervisorCollapseId,
+} from "./notifications";
 import type { PendingShape } from "./pending";
 import { answerPermission } from "./pending";
 import type { RegistryShape } from "./registry";
@@ -41,12 +46,10 @@ export interface TelegramBridge {
     text: string,
     attachments: string[]
   ) => Promise<string[]>;
-  /** A session is blocked on the reader; put it in their pocket. */
+  /** A session is blocked on the reader; put it in their pocket, unless they are reading it (the gate holds it). */
   readonly onAsk: (envelope: Envelope) => void;
   readonly onError: (instanceId: string, message: string) => void;
-  /** Answered somewhere else, or died with its process: the buttons are stale. */
-  readonly onSettled: (requestId: string) => void;
-  /** The supervisor wants the operator's attention — escalation or question. */
+  /** The supervisor wants the operator's attention — escalation or question; held like an ask. */
   readonly onSupervisor: (instanceId: string, text: string) => void;
   /** A session's own words to the owner — no ask, no buttons, no answer. */
   readonly onUserMessage: (envelope: Envelope) => void;
@@ -56,6 +59,12 @@ export interface TelegramBridge {
    * session's machine, and only the server holds the tunnel that reads it.
    */
   readonly setMediaReader: (read: MediaReader) => void;
+  /**
+   * The hub's notification gate (notifications.ts), registered by the server
+   * as it starts, before any ask can reach here: every needs-you message is
+   * offered there, and a cleared one is deleted from the chat.
+   */
+  readonly setNotifications: (notifications: Notifications) => void;
   /**
    * The server's one send path, registered after construction like
    * {@link setMediaReader}: a reply typed here is a message sent to the
@@ -127,6 +136,13 @@ const BACKOFF_CEILING_MS = 30_000;
 /** How many bridged messages stay answerable, and for how long. */
 const TRACKED_MESSAGES = 500;
 const TRACK_TTL_MS = 24 * 60 * 60_000;
+/**
+ * Bot API `deleteMessage`: "A message can only be deleted if it was sent
+ * less than 48 hours ago." An older cleared message is edited instead.
+ */
+const DELETE_WINDOW_MS = 48 * 60 * 60_000;
+/** What a cleared message says when it cannot be deleted. */
+const RESOLVED = "☑️ Resolved";
 const SWEEP_INTERVAL_MS = 60 * 60_000;
 
 /**
@@ -258,10 +274,23 @@ export const createTelegramBridge = ({
   const tracked = new Map<number, Tracked>();
   /** Open asks by `requestId`, for editing their message once they settle. */
   const asked = new Map<string, number>();
-  /** Asks this bridge answered itself, so `onSettled` does not overwrite them. */
+  /** Asks this bridge answered itself: their message keeps its verdict when the ask clears. */
   const settledHere = new Set<string>();
+  /** Needs-you messages by collapse id, so a clear can take them out of the chat. */
+  const shownMessages = new Map<
+    string,
+    { at: number; messageId: number; requestId?: string }[]
+  >();
+  /** Set by the server before any ask arrives (`setNotifications`). */
+  let notifications: Notifications | undefined;
 
   lifetime.every(SWEEP_INTERVAL_MS, () => {
+    const editable = Date.now() - 3 * TRACK_TTL_MS;
+    for (const [collapseId, messages] of shownMessages) {
+      if (messages.every((message) => message.at < editable)) {
+        shownMessages.delete(collapseId);
+      }
+    }
     const cutoff = Date.now() - TRACK_TTL_MS;
     for (const [messageId, entry] of tracked) {
       if (entry.at >= cutoff) {
@@ -518,6 +547,67 @@ export const createTelegramBridge = ({
     });
   };
 
+  /** The gate, which the server registers before the first ask. */
+  const gate = (): Notifications => {
+    if (!notifications) {
+      throw new Error(
+        "The Telegram bridge was handed a needs-you message before the hub registered its notification gate."
+      );
+    }
+    return notifications;
+  };
+
+  /** A needs-you message went out under its collapse id: shown, and taken down when it clears. */
+  const noteShown = (
+    collapseId: string,
+    messageId: number,
+    requestId?: string
+  ): void => {
+    gate().shown(collapseId);
+    shownMessages.set(collapseId, [
+      ...(shownMessages.get(collapseId) ?? []),
+      { at: Date.now(), messageId, ...(requestId ? { requestId } : {}) },
+    ]);
+  };
+
+  /**
+   * A needs-you message whose item cleared: deleted inside Telegram's 48
+   * hours, else (or when the delete is refused) edited to one resolved line.
+   * An ask answered here keeps the verdict `close` gives it.
+   */
+  const withdraw = async (collapseId: string): Promise<void> => {
+    const messages = shownMessages.get(collapseId) ?? [];
+    shownMessages.delete(collapseId);
+    for (const message of messages) {
+      if (message.requestId && settledHere.delete(message.requestId)) {
+        continue;
+      }
+      const entry = tracked.get(message.messageId);
+      tracked.delete(message.messageId);
+      if (entry?.requestId) {
+        asked.delete(entry.requestId);
+      }
+      if (chatId === undefined) {
+        return;
+      }
+      const deleted =
+        Date.now() - message.at < DELETE_WINDOW_MS &&
+        // biome-ignore lint/performance/noAwaitInLoops: one collapse id is rarely more than one message, and each is settled before the next
+        (await call<boolean>("deleteMessage", {
+          chat_id: chatId,
+          message_id: message.messageId,
+        })) === true;
+      if (!deleted) {
+        await call("editMessageText", {
+          chat_id: chatId,
+          message_id: message.messageId,
+          text: RESOLVED,
+          reply_markup: { inline_keyboard: [] },
+        });
+      }
+    }
+  };
+
   /** Where a session is, in the words its reader knows it by: its row, by its key. */
   const header = (instanceId: string, mark: string): string => {
     const [row] = db.listedInstancesByIds([instanceId]);
@@ -662,32 +752,31 @@ export const createTelegramBridge = ({
     }
 
     const text = fit(lines);
-    detach(
-      send(text, buttons).then((message) => {
-        if (!message) {
-          return;
-        }
-        track(message.message_id, {
-          instanceId: request.instanceId,
-          machineId: envelope.machineId,
-          // A multi-question ask keeps no `requestId`: nothing sent from here can
-          // settle it, so a reply to it should talk to the session instead.
-          ...(buttons && { requestId }),
-          text,
-        });
-      }),
-      "telegram ask"
-    );
-  };
-
-  const onSettled = (requestId: string): void => {
-    if (settledHere.delete(requestId)) {
-      return;
-    }
-    if (!asked.has(requestId)) {
-      return;
-    }
-    detach(close(requestId, "☑️ Answered in the dashboard"), "telegram settle");
+    const collapseId = askCollapseId(requestId);
+    gate().offer({
+      outlet: "telegram",
+      collapseId,
+      instanceId: request.instanceId || null,
+      due: () => pending.get(requestId) !== undefined,
+      send: () =>
+        detach(
+          send(text, buttons).then((message) => {
+            if (!message) {
+              return;
+            }
+            track(message.message_id, {
+              instanceId: request.instanceId,
+              machineId: envelope.machineId,
+              // A multi-question ask keeps no `requestId`: nothing sent from here can
+              // settle it, so a reply to it should talk to the session instead.
+              ...(buttons && { requestId }),
+              text,
+            });
+            noteShown(collapseId, message.message_id, requestId);
+          }),
+          "telegram ask"
+        ),
+    });
   };
 
   const onError = (instanceId: string, message: string): void => {
@@ -729,18 +818,32 @@ export const createTelegramBridge = ({
       `→ ${esc(dashboardUrl(registry))}/session/${instanceId}`,
     ];
     const text = fit(lines);
-    detach(
-      send(text).then((sent) => {
-        if (sent) {
-          track(sent.message_id, {
-            instanceId,
-            machineId: row.machineId,
-            text,
-          });
-        }
-      }),
-      "telegram supervisor"
-    );
+    const collapseId = supervisorCollapseId(instanceId);
+    const at = Date.now();
+    gate().offer({
+      outlet: "telegram",
+      collapseId,
+      instanceId,
+      // Still news unless the session was looked at since it was raised.
+      due: () => {
+        const [now] = db.getInstancesByIds([instanceId]);
+        return !(now?.seenAt && now.seenAt.getTime() >= at);
+      },
+      send: () =>
+        detach(
+          send(text).then((sent) => {
+            if (sent) {
+              track(sent.message_id, {
+                instanceId,
+                machineId: row.machineId,
+                text,
+              });
+              noteShown(collapseId, sent.message_id);
+            }
+          }),
+          "telegram supervisor"
+        ),
+    });
   };
 
   const onUserMessage = (envelope: Envelope): void => {
@@ -996,7 +1099,6 @@ export const createTelegramBridge = ({
 
   return {
     onAsk,
-    onSettled,
     onError,
     onSupervisor,
     onUserMessage,
@@ -1004,6 +1106,16 @@ export const createTelegramBridge = ({
     start,
     setMediaReader(read) {
       readMedia = read;
+    },
+    setNotifications(gateway) {
+      notifications = gateway;
+      gateway.onCleared((collapseIds) => {
+        for (const collapseId of collapseIds) {
+          if (shownMessages.has(collapseId)) {
+            detach(withdraw(collapseId), "telegram withdraw");
+          }
+        }
+      });
     },
     setSender(sender) {
       sendMessage = sender;

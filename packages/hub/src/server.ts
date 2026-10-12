@@ -363,6 +363,13 @@ import {
 } from "./media";
 import { createMoves, MoveAway, MoveRefused } from "./moves";
 import { createNoticesSeen } from "./notices";
+import {
+  askCollapseId,
+  createNotifications,
+  notificationRoutes,
+  supervisorCollapseId,
+  turnCollapseId,
+} from "./notifications";
 import type { PendingShape } from "./pending";
 import {
   answerPermission,
@@ -2260,9 +2267,17 @@ export const createServer = (
     string,
     { outcome?: "answered" | "cancelled" }
   >();
+  // The one gate every notification about a session goes through, and the
+  // ledger of the ones that are over (notifications.ts): held while a client
+  // has the session in front, cleared on every device once it is over.
+  const notifications = createNotifications({ db, lifetime, registry });
+  telegram?.setNotifications(notifications);
   // Pushes to the iOS app when something newly needs you (push.ts).
   const push = createPush({
+    askOpen: (requestId) => pending.get(requestId) !== undefined,
     db,
+    lifetime,
+    notifications,
     task: (projectId, id) => tasks.get(projectId, id),
   });
   /**
@@ -2349,8 +2364,9 @@ export const createServer = (
     if (answering) {
       answering.outcome = outcome;
     }
-    telegram?.onSettled(parked.requestId);
     push.onSettled(parked.requestId);
+    // Over on every device: its push taken down, its Telegram message deleted.
+    notifications.clear([askCollapseId(parked.requestId)], "settled");
     // An admin write whose ask left unanswered (its session ended) is refused.
     if (outcome === "cancelled") {
       adminAsks.withdrawn(parked.requestId);
@@ -15313,6 +15329,7 @@ export const createServer = (
         })
       )
       .use(pushRoutes(db, push))
+      .use(notificationRoutes(db, notifications))
       // The hub as a git remote and LFS server, for fleet machines and
       // sessions only (git-remote.ts).
       .use(
@@ -16586,6 +16603,29 @@ export const createServer = (
           }
           const at = body.kind === "unarchive" ? null : new Date();
           const seen = db.markSeen(instanceIds, runIds, at);
+          if (body.kind === "look") {
+            // Looked at: its finished turn, its asks and the supervisor's
+            // word about it are read, so their notifications come down.
+            const looked = new Set(instanceIds);
+            notifications.clear(
+              [
+                ...instanceIds.flatMap((id) => [
+                  turnCollapseId(id),
+                  supervisorCollapseId(id),
+                ]),
+                ...pending
+                  .list()
+                  .flatMap((parked) =>
+                    parked.requestId &&
+                    parked.instanceId &&
+                    looked.has(parked.instanceId)
+                      ? [askCollapseId(parked.requestId)]
+                      : []
+                  ),
+              ],
+              "look"
+            );
+          }
           for (const machineId of new Set(
             seen.instances.map((row) => row.machineId)
           )) {

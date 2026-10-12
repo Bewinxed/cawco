@@ -61,6 +61,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  lt,
   lte,
   ne,
   notInArray,
@@ -108,6 +109,8 @@ import {
   mcpServers,
   mcpToolListings,
   moves,
+  notificationCleared,
+  notificationSent,
   openrouterConnection,
   type PlaceKind,
   type PriorConversation,
@@ -946,6 +949,23 @@ export interface DbShape {
   ) => RuleState;
   /** The session's turn ended at `at`, on the hub's clock (`turnEndedAt`). */
   readonly noteTurnEnded: (id: string, at: Date) => void;
+  /** What a device or Telegram was shown and what has been cleared, by collapse id (notifications.ts). */
+  readonly notifications: {
+    /** Shown under this collapse id: outstanding again, and no longer cleared. */
+    readonly sent: (collapseId: string, at: Date) => void;
+    /**
+     * Clears the ids that were sent and are still outstanding; `any` clears
+     * an id however it was shown (a device's own dismiss). Answers the ids
+     * this newly cleared, in the order given.
+     */
+    readonly clear: (collapseIds: string[], at: Date, any: boolean) => string[];
+    /** Every id cleared at or after `since`, newest first. */
+    readonly clearedSince: (
+      since: Date
+    ) => { collapseId: string; clearedAt: Date }[];
+    /** Forgets sends and clears older than `before`. */
+    readonly prune: (before: Date) => void;
+  };
   /** Files an offer; false when the session was already offered one. */
   readonly offerProject: (offer: {
     instanceId: string;
@@ -7162,6 +7182,73 @@ const make = async (path: string): Promise<DbShape> => {
               : { lastError: error }
           )
           .where(eq(pushDevices.pairingId, pairingId))
+          .run();
+      },
+    },
+    notifications: {
+      sent: (collapseId, at) => {
+        db.transaction((tx) => {
+          tx.delete(notificationCleared)
+            .where(eq(notificationCleared.collapseId, collapseId))
+            .run();
+          tx.insert(notificationSent)
+            .values({ collapseId, sentAt: at })
+            .onConflictDoUpdate({
+              target: notificationSent.collapseId,
+              set: { sentAt: at },
+            })
+            .run();
+        });
+      },
+      clear: (collapseIds, at, any) =>
+        db.transaction((tx) => {
+          const ids = [...new Set(collapseIds)];
+          if (ids.length === 0) {
+            return [];
+          }
+          const outstanding = new Set(
+            tx
+              .delete(notificationSent)
+              .where(inArray(notificationSent.collapseId, ids))
+              .returning({ collapseId: notificationSent.collapseId })
+              .all()
+              .map((row) => row.collapseId)
+          );
+          const already = new Set(
+            tx
+              .select({ collapseId: notificationCleared.collapseId })
+              .from(notificationCleared)
+              .where(inArray(notificationCleared.collapseId, ids))
+              .all()
+              .map((row) => row.collapseId)
+          );
+          const newly = ids.filter(
+            (id) => outstanding.has(id) || (any && !already.has(id))
+          );
+          for (const collapseId of newly) {
+            tx.insert(notificationCleared)
+              .values({ collapseId, clearedAt: at })
+              .onConflictDoUpdate({
+                target: notificationCleared.collapseId,
+                set: { clearedAt: at },
+              })
+              .run();
+          }
+          return newly;
+        }),
+      clearedSince: (since) =>
+        db
+          .select()
+          .from(notificationCleared)
+          .where(gte(notificationCleared.clearedAt, since))
+          .orderBy(desc(notificationCleared.clearedAt))
+          .all(),
+      prune: (before) => {
+        db.delete(notificationSent)
+          .where(lt(notificationSent.sentAt, before))
+          .run();
+        db.delete(notificationCleared)
+          .where(lt(notificationCleared.clearedAt, before))
           .run();
       },
     },
