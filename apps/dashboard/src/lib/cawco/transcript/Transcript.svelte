@@ -1320,6 +1320,16 @@
   const ssrCount = $derived(browser ? undefined : built.rows.length);
 
   let scroller = $state<HTMLElement | undefined>();
+  /**
+   * The scroller's height: how far past the view virtua mounts rows (its
+   * `bufferSize`), so a row is measured a screen before the reader reaches it.
+   * virtua takes up a row's change of size for the reader only while the row
+   * is wholly above the view; scrolling up, a row it had only estimated
+   * (`ROW_ESTIMATE`) that came into view unmeasured — any page put in front,
+   * met by a wheel longer than its default 200px — grew there and pushed
+   * the rows under it down by the difference.
+   */
+  let viewHeight = $state(0);
   /** virtua's imperative handle: its sizes, its cache, and `scrollToIndex` for
       a row that is not the tail (the tray's reveal). */
   let list = $state<VirtualizerHandle | undefined>();
@@ -2705,6 +2715,7 @@
   class="tr tx-columns"
   {onscroll}
   role="log"
+  bind:clientHeight={viewHeight}
   bind:this={scroller}
 >
   <!-- Empty is what is drawn: a conversation whose one row is folding away
@@ -2762,6 +2773,7 @@
       {cache}
       data={renderedRows}
       getKey={(r) => r.key}
+      bufferSize={viewHeight}
       itemSize={ROW_ESTIMATE}
       {keepMounted}
       {onresize}

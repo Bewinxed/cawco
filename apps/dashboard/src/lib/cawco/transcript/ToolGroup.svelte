@@ -87,6 +87,9 @@
 
   let { messages }: { messages: Message[] } = $props();
 
+  /** This run's own prefix for the ids its calls' bodies go by. */
+  const uid = $props.id();
+
   /**
    * Each call arrives on its own line. A run of calls is one row, created
    * when the first of them lands, so the row cannot be what arrives — every
@@ -405,14 +408,28 @@
             </div>
           {:else if hasBody}
             {@const disclosed = disclosure(m)}
-            <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
-              <Collapsible.Trigger class="trow rail-line press-tint">
-                {@render line()}
-                <span class="chev"><IconChevronRight /></span>
-              </Collapsible.Trigger>
-              {#if disclosed.get() || opened.has(callId(m))}
+            {@const body = `${uid}-${m.id ?? m.toolCallId}`}
+            <!-- The trigger is a plain button and the disclosure is built only
+                 once the call is first opened: a scroll mounts calls by the
+                 dozen, and a closed Collapsible with its trigger was most of
+                 what one cost to mount. One button the whole time, so the
+                 chevron turns and focus stays where it was. -->
+            <button
+              aria-controls={opened.has(callId(m)) ? body : undefined}
+              aria-expanded={disclosed.get()}
+              class="trow rail-line press-tint"
+              data-state={disclosed.get() ? "open" : "closed"}
+              onclick={() => disclosed.set(!disclosed.get())}
+              type="button"
+            >
+              {@render line()}
+              <span class="chev"><IconChevronRight /></span>
+            </button>
+            {#if disclosed.get() || opened.has(callId(m))}
+              <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
                 <Collapsible.Content
                   entering={!openAtMount.has(callId(m))}
+                  id={body}
                   reveal
                 >
                   <!-- The body exists only while the call is open (and folding
@@ -478,8 +495,8 @@
                     {/if}
                   </CollapsibleLazy>
                 </Collapsible.Content>
-              {/if}
-            </Collapsible.Root>
+              </Collapsible.Root>
+            {/if}
           {:else}
             <div class="trow rail-line flat">{@render line()}</div>
           {/if}
