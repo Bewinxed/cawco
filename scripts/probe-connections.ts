@@ -41,7 +41,8 @@
  *   bun scripts/probe-connections.ts [--keep] [--start-session]
  */
 import { createHash } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { sessionToolName } from "../packages/hub/src/connections";
 import {
@@ -370,7 +371,7 @@ const userTurn = (request: Seen): Reply => {
   if (!request.all.includes('{"said":"by alias"}')) {
     return call(request, ALIAS, { said: "by alias" });
   }
-  return text("PROBE-USER-DONE");
+  return holdUntilRead(request, "USER") ?? text("PROBE-USER-DONE");
 };
 
 /** The session no type grants anything: it searches for the tool once. */
@@ -383,7 +384,36 @@ const noneTurn = (request: Seen): Reply => {
       max_results: 1,
     });
   }
-  return text("PROBE-NONE-DONE");
+  return holdUntilRead(request, "NONE") ?? text("PROBE-NONE-DONE");
+};
+
+/** Sessions held mid-turn for the probe to read them, by tag, and since when. */
+const held: Map<string, number> = new Map();
+/** The file a held session waits for, in its working directory: one per session, which may share it. */
+const goFile = (tag: string) => `.probe-go-${tag}`;
+/** Where a held session writes its commands' own environment, in its working directory. */
+const envFile = (tag: string) => `.probe-env-${tag}`;
+
+/**
+ * A session's last step, once: a command that writes the environment its
+ * commands run with (inside its workspace boundary, for a delegate) to
+ * {@link envFile}, then waits for {@link goFile}. While it waits the
+ * session is mid-turn, so its process and MCP config file are surely there
+ * to read; the probe writes the go file when it has read them. Undefined once
+ * the command has answered.
+ */
+const holdUntilRead = (request: Seen, tag: string): Reply | undefined => {
+  if (request.all.includes(`GO-SEEN-${tag}`)) {
+    return undefined;
+  }
+  if (!held.has(tag)) {
+    held.set(tag, Date.now());
+  }
+  return tool("Bash", {
+    command: `env > ${envFile(tag)}; while [ ! -e ${goFile(tag)} ]; do sleep 0.2; done; echo GO-SEEN-${tag}`,
+    description: "Wait for the probe to read this session",
+    timeout: 600_000,
+  });
 };
 
 const respond = (request: Seen): Reply => {
@@ -459,16 +489,42 @@ interface Trace {
   pids: number[];
 }
 
-const traceOf = async (instanceId: string): Promise<Trace> => {
-  const pid = await fleet.sessionPid(instanceId);
-  if (pid === undefined) {
-    throw new Error(`${instanceId} has no live process under sessiond`);
+const readProc = (pid: number, what: string) =>
+  readFile(`/proc/${pid}/${what}`).catch(() => Buffer.from(""));
+
+/**
+ * The process a session runs as, by the agent's own records: of everything
+ * sessiond holds (each session's process, each workspace's boundary host)
+ * and everything under it, the topmost process whose command line names the
+ * session's instance id (its `--mcp-config <id>.<launch>.json`), however the
+ * agent launched it. Throws, naming what sessiond holds, when none does.
+ */
+const processOf = async (instanceId: string): Promise<number> => {
+  const roots = await fleet.heldProcs();
+  for (const root of roots) {
+    // biome-ignore lint/performance/noAwaitInLoops: one held process's tree at a time
+    const pids = await tree(root.pid);
+    const cmdlines = await Promise.all(
+      pids.map((pid) => readProc(pid, "cmdline"))
+    );
+    const at = cmdlines.findIndex((cmdline) => cmdline.includes(instanceId));
+    if (at >= 0) {
+      return pids[at] as number;
+    }
   }
-  const pids = await tree(pid);
-  const read = (one: number, what: string) =>
-    readFile(`/proc/${one}/${what}`).catch(() => Buffer.from(""));
-  const environs = await Promise.all(pids.map((one) => read(one, "environ")));
-  const cmdlines = await Promise.all(pids.map((one) => read(one, "cmdline")));
+  throw new Error(
+    `no process names ${instanceId}; sessiond holds ${roots.map((one) => `${one.procId} (${one.pid})`).join(", ") || "nothing"}`
+  );
+};
+
+const traceOf = async (instanceId: string): Promise<Trace> => {
+  const pids = await tree(await processOf(instanceId));
+  const environs = await Promise.all(
+    pids.map((one) => readProc(one, "environ"))
+  );
+  const cmdlines = await Promise.all(
+    pids.map((one) => readProc(one, "cmdline"))
+  );
   const paths = new Set<string>();
   for (const cmdline of cmdlines) {
     const args = cmdline.toString("utf8").split("\0");
@@ -496,6 +552,35 @@ const traceOf = async (instanceId: string): Promise<Trace> => {
   }
   return { pids, environs, configs, credential };
 };
+/**
+ * A session's trace, read while it is held mid-turn ({@link holdUntilRead}):
+ * once its waiting command has written its environment (so it is running),
+ * the trace is taken, and then the go file lets it finish its turn.
+ */
+const readWhileHeld = async (
+  session: { cwd: string; id: string },
+  tag: string
+): Promise<Trace> => {
+  const written = join(session.cwd, envFile(tag));
+  await until(
+    `the ${tag} session holding mid-turn`,
+    () => held.has(tag) && existsSync(written),
+    Boolean,
+    300_000
+  );
+  try {
+    return await traceOf(session.id);
+  } finally {
+    await writeFile(join(session.cwd, goFile(tag)), "go\n");
+    await until(
+      `the ${tag} session let go`,
+      () => fleet.seen.some((one) => one.all.includes(`GO-SEEN-${tag}`)),
+      Boolean,
+      120_000
+    );
+  }
+};
+
 /** A tool call through the hub's REST door, as the session the credential is. */
 const door = (
   instanceId: string,
@@ -820,19 +905,8 @@ try {
 
   // ── 2, 5, 6: the granted delegate calls through the hub ───────────────
   const user = await startDelegate(parent, "USER", "conn-user");
-  // Read the moment its last answer is in, while it is surely running.
-  await until(
-    "the delegate's four answers",
-    () =>
-      fleet.seen.find(
-        (one) =>
-          one.all.includes('{"said":"by alias"}') &&
-          one.all.includes("PROBE-CONN-USER")
-      ),
-    Boolean,
-    240_000
-  );
-  const userTrace = await traceOf(user.id);
+  // Its four answers are in once it is held; it is read while it waits.
+  const userTrace = await readWhileHeld(user, "USER");
   await section("2: a granted delegate calls through the hub", () => {
     const answered = fleet.seen
       .filter((one) => one.all.includes("PROBE-CONN-USER"))
@@ -899,19 +973,8 @@ try {
 
   // ── 4: the delegate whose type lists none ─────────────────────────────
   const none = await startDelegate(parent, "NONE", "conn-none");
-  await until(
-    "the no-connection delegate searched",
-    () =>
-      fleet.seen.find(
-        (one) =>
-          one.all.includes("PROBE-CONN-NONE") &&
-          noneSearched.at > 0 &&
-          one.at > noneSearched.at
-      ),
-    Boolean,
-    240_000
-  );
-  const noneTrace = await traceOf(none.id);
+  // It is held once its search has answered; it is read while it waits.
+  const noneTrace = await readWhileHeld(none, "NONE");
   await section("4: a delegate whose type lists none", async () => {
     const userTools = await listedTo(user.id);
     const noneTools = await listedTo(none.id);
@@ -978,6 +1041,21 @@ try {
     const inWorkspace = await holding(user.cwd, needles);
     const inHome = await holding(fleet.home, needles);
     const inSandbox = await holding(fleet.sandbox, needles);
+    for (const [tag, session] of [
+      ["USER", user],
+      ["NONE", none],
+    ] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: one session's file at a time
+      const dumped = await readFile(
+        join(session.cwd, envFile(tag)),
+        "utf8"
+      ).catch(() => "");
+      check(
+        `3: the ${tag === "USER" ? "granted" : "ungranted"} session's own commands run with no key or token`,
+        dumped.includes("PATH=") && !holds(dumped),
+        `${session.cwd}/${envFile(tag)}: ${dumped.split("\n").length} lines, ${holds(dumped) ? "HOLDS ONE" : "none"}`
+      );
+    }
     check(
       "3: its workspace holds none",
       inWorkspace.length === 0,
