@@ -49,9 +49,14 @@ enum Recall {
     /// regular width, five rows deep.
     static let soft = 0.3
     static let softest = 5 * soft
-    /// A ghost row `o` rows above the line: each a tenth fainter than the one below.
-    static func ghost(_ o: Double) -> Double {
-        0.7 * (1 - o * 0.1)
+    /// How much fainter a row is per row of depth (RecallWheel.svelte `FAINT`).
+    static let faint = 0.015
+    /// How strongly a row `deep` rows of depth back shows, of a wheel whose
+    /// topmost row stands `depth` back (RecallWheel.svelte `presence`): full
+    /// on the line, a touch fainter by its depth, the topmost at 95.5% on a
+    /// phone and 94% at regular width, so every row holds 4.5:1.
+    static func presence(_ deep: Double, of depth: Int) -> Double {
+        1 - faint * Double(min(depth, 4)) * min(1, deep / Double(depth))
     }
 
     /// `--ease-drawer`, close enough for a frame-driven morph (composer-recall `drawer`).
@@ -545,6 +550,16 @@ final class RecallRow: UIView {
     #if DEBUG
     /// How much of its blurred copy shows (the `-recall-probe` reads it).
     var softShown: Double { Double(soft.alpha) }
+    /// The inks its words and its time are drawn in now (the probe's contrast).
+    var probeInks: [(name: String, ink: UIColor)] {
+        let words: (String, UIColor) = switch kind {
+        case .none: ("muted", Palette.inkMuted)
+        case .draft: text.isEmpty ? ("subtle", Palette.inkSubtle) : ("strong", Palette.inkStrong)
+        case .sent: picked ? ("selected", Palette.selectedInk) : ("strong", Palette.inkStrong)
+        }
+        guard showsMeta else { return [words] }
+        return [words, picked ? ("selected time", Palette.selectedInk) : ("muted time", Palette.inkMuted)]
+    }
     #endif
 
     init(kind: Kind, text: String, marks: Set<[UInt16]> = [], date: Date? = nil, queued: Bool = false, showsMeta: Bool, faces: RecallFaces) {
@@ -1244,8 +1259,8 @@ final class RecallWheel: NSObject, UIGestureRecognizerDelegate {
             row.layer.transform = Recall.transform(off: off, up: deep)
             if row.soften(deep * Recall.soft, slow: slow && blurs < 2) { blurs += 1 }
             if row.waitsForBlur { unfinished = true }
-            // On the field's line a row is at full strength; above it the rows are ghosts, fading as they rise.
-            row.alpha = off >= 0 ? max(0, off < 1 ? 1 + (Recall.ghost(spread) - 1) * off : Recall.ghost(deep)) : max(0, 1 + off * 1.6)
+            // On the field's line a row is at full strength; above it each is a touch fainter by its depth.
+            row.alpha = off >= 0 ? Recall.presence(deep, of: depth) : max(0, 1 + off * 1.6)
             row.pick(line == k)
         }
         if built > 0 || !gone.isEmpty || rows.count != held {
@@ -1519,6 +1534,7 @@ struct RecallProbeState {
         let blur: Double
         let softShown: Double
         let alpha: Double
+        let inks: [(name: String, ink: UIColor)]
     }
 
     /// The grown shape's top, in the window.
@@ -1536,7 +1552,8 @@ extension RecallWheel {
         let top = halo.map { Double($0.convert($0.bounds, to: nil).minY) } ?? .nan
         let rows = rows.keys.sorted().compactMap { k in
             self.rows[k].map {
-                RecallProbeState.Row(index: k, off: Double(k) - shown, depth: $0.depth, blur: $0.blur, softShown: $0.softShown, alpha: Double($0.alpha))
+                RecallProbeState.Row(index: k, off: Double(k) - shown, depth: $0.depth, blur: $0.blur, softShown: $0.softShown, alpha: Double($0.alpha),
+                                     inks: $0.probeInks)
             }
         }
         return RecallProbeState(top: top, floor: foot, above: above, depth: depth, open: halo?.open ?? 0, matches: list.count, rows: rows)

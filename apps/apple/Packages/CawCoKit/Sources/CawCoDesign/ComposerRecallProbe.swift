@@ -141,9 +141,21 @@ enum RecallProbe {
         check("\(label) the shape's top reaches its reach", state.open == 1 && state.top <= target + Recall.row,
               "top \(f(state.top, 1)) ≤ \(f(target + Recall.row, 1)) (reach + one row)\(regular ? ", at least five rows: \(state.above)" : "")")
         let ghosts = state.rows.filter { $0.off > -0.01 }.sorted { $0.off < $1.off }
+        // Each ink at the row's opacity over the shape's own surface, resolved in this appearance.
+        let traits = composer.traitCollection
+        let surface = Palette.surfaceRaised.resolvedColor(with: traits)
+        var weakest = (ratio: Double.infinity, what: "")
         for row in ghosts {
-            say("\(label) row \(row.index) off \(f(row.off)) depth \(f(row.depth, 3)) lean \(f(row.depth * Recall.lean))° width \(f(1 - row.depth * Recall.shrink, 4)) blur \(f(row.blur, 3)) (shown \(f(row.softShown))) opacity \(f(row.alpha, 3))")
+            let contrasts = row.inks.map { name, ink in
+                (name, Contrast.ratio(ink.resolvedColor(with: traits), alpha: row.alpha, over: surface))
+            }
+            for (name, ratio) in contrasts where ratio < weakest.ratio {
+                weakest = (ratio, "row \(row.index) \(name)")
+            }
+            say("\(label) row \(row.index) off \(f(row.off)) depth \(f(row.depth, 3)) lean \(f(row.depth * Recall.lean))° width \(f(1 - row.depth * Recall.shrink, 4)) blur \(f(row.blur, 3)) (shown \(f(row.softShown))) opacity \(f(row.alpha, 3)) contrast \(contrasts.map { "\($0.0) \(f($0.1))" }.joined(separator: ", "))")
         }
+        check("\(label) every row holds 4.5:1 on the shape's surface", weakest.ratio >= 4.5,
+              "the weakest: \(weakest.what) at \(f(weakest.ratio)):1 (\(traits.userInterfaceStyle == .dark ? "dark" : "light"))")
         let above = ghosts.filter { $0.off > 0.5 }
         check("\(label) rows shown", above.count == state.above, "\(above.count) above the line, \(state.above) measured")
         let rising = zip(ghosts, ghosts.dropFirst()).allSatisfy { low, high in
@@ -152,9 +164,11 @@ enum RecallProbe {
         check("\(label) depth only grows from the pick", rising, "lean, width, blur and opacity monotone over \(ghosts.count) rows")
         if let top = above.last {
             let deep = Double(state.depth)
-            let ok = abs(top.depth - deep) < 1e-6 && abs(top.blur - deep * Recall.soft) < 1e-6 && abs(top.alpha - Recall.ghost(deep)) < 1e-3
+            // The web's topmost row: 94% at regular width, 95.5% on a phone.
+            let faintest = regular ? 0.94 : 0.955
+            let ok = abs(top.depth - deep) < 1e-6 && abs(top.blur - deep * Recall.soft) < 1e-6 && abs(top.alpha - faintest) < 1e-3
             check("\(label) the oldest row ends at row \(state.depth)'s values", ok,
-                  "lean \(f(top.depth * Recall.lean))° (want \(f(deep * Recall.lean))), width \(f(1 - top.depth * Recall.shrink, 4)) (want \(f(1 - deep * Recall.shrink, 4))), blur \(f(top.blur, 3)) (want \(f(deep * Recall.soft, 3))), opacity \(f(top.alpha, 3)) (want \(f(Recall.ghost(deep), 3)))")
+                  "lean \(f(top.depth * Recall.lean))° (want \(f(deep * Recall.lean))), width \(f(1 - top.depth * Recall.shrink, 4)) (want \(f(1 - deep * Recall.shrink, 4))), blur \(f(top.blur, 3)) (want \(f(deep * Recall.soft, 3))), opacity \(f(top.alpha, 3)) (want \(f(faintest, 3)))")
         }
     }
 
@@ -199,6 +213,31 @@ enum RecallProbe {
         check("the rows' worst frame fits a 120Hz frame", cost < 1.0 / 120, "worst \(f(cost * 1000))ms against 8.33ms")
         check("glide holds its frames", worst < 0.0167 && dropped == 0, "worst frame \(f(worst * 1000))ms, \(dropped) dropped")
         wheel.dismiss()
+    }
+}
+
+/// WCAG 2's contrast ratio of an ink, at an opacity, composited over a
+/// surface (in sRGB, as the screen blends it).
+enum Contrast {
+    static func ratio(_ ink: UIColor, alpha: Double, over surface: UIColor) -> Double {
+        let fg = rgba(ink), bg = rgba(surface)
+        let a = fg.3 * alpha
+        let mixed = (fg.0 * a + bg.0 * (1 - a), fg.1 * a + bg.1 * (1 - a), fg.2 * a + bg.2 * (1 - a))
+        let l1 = luminance(mixed), l2 = luminance((bg.0, bg.1, bg.2))
+        return (max(l1, l2) + 0.05) / (min(l1, l2) + 0.05)
+    }
+
+    private static func rgba(_ color: UIColor) -> (Double, Double, Double, Double) {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        color.getRed(&r, green: &g, blue: &b, alpha: &a)
+        // Extended sRGB can step outside 0…1 for P3 inks: held to the sRGB gamut.
+        let clamp = { (v: CGFloat) in min(1, max(0, Double(v))) }
+        return (clamp(r), clamp(g), clamp(b), clamp(a))
+    }
+
+    private static func luminance(_ c: (Double, Double, Double)) -> Double {
+        func channel(_ v: Double) -> Double { v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+        return 0.2126 * channel(c.0) + 0.7152 * channel(c.1) + 0.0722 * channel(c.2)
     }
 }
 
