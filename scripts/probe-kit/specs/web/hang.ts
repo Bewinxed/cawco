@@ -23,7 +23,8 @@
  * takes it away at once, a press brings it down and it slides back up
  * whatever closes it; ⌘K focuses its field and it hangs; typing reaches it;
  * Esc, its glass again, or a press outside closes it; one glass card at a
- * time, focus following; Esc gives the focus back to Caw.
+ * time, focus following; Esc gives the focus back to what had it before the
+ * first card opened.
  */
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: each card and step is read in order, case by case.
 import type { Page } from "playwright-core";
@@ -213,13 +214,20 @@ const props = (page: Page, sel: string) =>
     return [...out];
   }, sel);
 
-/** The card's translate along y, and the cut's place (its wrapper's box top and clip-path). */
+/**
+ * How far the card is drawn from where it rests, along y (its top against
+ * the cut: the translate as laid out, whatever units it is written in, a
+ * shut card's `calc(-100% - reach)` too), and the cut's place (its
+ * wrapper's box top and clip-path).
+ */
 const slide = (page: Page, sel: string) =>
   page.evaluate((s) => {
     const card = document.querySelector<HTMLElement>(s);
     const wrapper = card?.parentElement;
-    const t = card ? getComputedStyle(card).translate : "none";
-    const y = t === "none" ? 0 : Number.parseFloat(t.split(" ")[1] ?? "0");
+    const y =
+      card && wrapper
+        ? card.getBoundingClientRect().top - wrapper.getBoundingClientRect().top
+        : 0;
     return {
       y,
       cut: wrapper
@@ -601,10 +609,15 @@ async function behaviour(kit: Kit, page: Page, theme: string) {
   );
   await esc(page);
   await settle(page);
+  // What had it before the first of them opened: the search glass, whose
+  // press opened Jump (DESIGN.md, "The glass's cards").
   const back = await page.evaluate(
-    () => document.activeElement?.hasAttribute("data-needs-caw") ?? false
+    () => document.activeElement?.matches("[data-share='jump']") ?? false
   );
-  kit.check(`${where}: Esc gives the focus back to Caw`, back);
+  kit.check(
+    `${where}: Esc gives the focus back to what had it before the first card opened`,
+    back
+  );
 }
 
 const spec: Spec = {
