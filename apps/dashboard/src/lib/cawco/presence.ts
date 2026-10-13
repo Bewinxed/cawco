@@ -17,12 +17,6 @@ let listening = false;
 let beating: ReturnType<typeof setInterval> | undefined;
 /** The last state the hub was told, so only a change (or a beat) posts. */
 let told: string | undefined;
-/**
- * The post said last: the next waits for it to be answered, so the hub hears
- * them in the order they were said. A blur and a focus at once can otherwise
- * land reversed, leaving the hub on the older state until the next beat.
- */
-let sending: Promise<void> = Promise.resolve();
 
 const clientId = (): string => {
   const kept = sessionStorage.getItem(CLIENT_KEY);
@@ -49,22 +43,15 @@ const post = (beat: PresenceBeat, leaving: boolean): void => {
     );
     return;
   }
-  sending = sending
-    .then(() =>
-      fetch("/api/presence", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body,
-        keepalive: true,
-      })
-    )
-    .then(
-      () => undefined,
-      (error: unknown) => {
-        // The next change or beat says it again.
-        console.warn("[cawco] presence not sent:", error);
-      }
-    );
+  fetch("/api/presence", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+    keepalive: true,
+  }).catch((error: unknown) => {
+    // The next change or beat says it again.
+    console.warn("[cawco] presence not sent:", error);
+  });
 };
 
 /** Tells the hub this tab's state when it changed, or on a beat. */
@@ -74,7 +61,14 @@ const report = (beat = false, leaving = false): void => {
   if (beat || state !== told) {
     told = state;
     post(
-      { clientId: clientId(), client: "web", sessionId: front, active },
+      {
+        clientId: clientId(),
+        client: "web",
+        sessionId: front,
+        active,
+        // Beats can land out of order; the hub keeps the newest said.
+        saidAt: Date.now(),
+      },
       leaving
     );
   }

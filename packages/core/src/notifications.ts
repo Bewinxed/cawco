@@ -22,6 +22,12 @@ export interface PresenceBeat {
   readonly client: PresenceClient;
   /** Stable per browser tab or app install. */
   readonly clientId: string;
+  /**
+   * When the client said this, epoch ms on its own clock. Beats can land out
+   * of order (two connections, a page's last beacon), so the hub keeps the
+   * newest said and drops an older one.
+   */
+  readonly saidAt: number;
   /** The session in front, or null when none is. */
   readonly sessionId: string | null;
 }

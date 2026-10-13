@@ -4606,13 +4606,18 @@
                   },
                   "active": {
                     "type": "boolean"
+                  },
+                  "saidAt": {
+                    "minimum": 0,
+                    "type": "number"
                   }
                 },
                 "required": [
                   "clientId",
                   "client",
                   "sessionId",
-                  "active"
+                  "active",
+                  "saidAt"
                 ]
               }
             }

@@ -642,6 +642,7 @@ try {
       client: "ios",
       sessionId: session,
       active,
+      saidAt: Date.now(),
     });
   await ios(true);
   const turnsBefore4 = pushesFor(turnId).length;

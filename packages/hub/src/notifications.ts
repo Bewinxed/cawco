@@ -105,6 +105,8 @@ interface Client {
   readonly active: boolean;
   readonly at: number;
   readonly client: PresenceClient;
+  /** The client's own clock when it said this beat. */
+  readonly saidAt: number;
   readonly sessionId: string | null;
 }
 
@@ -205,6 +207,13 @@ export const createNotifications = ({
     presence(beat: PresenceBeat): void {
       const now = Date.now();
       const before = clients.get(beat.clientId);
+      // Said before the beat already kept: it landed late, and is over.
+      if (before !== undefined && beat.saidAt < before.saidAt) {
+        console.log(
+          `[presence] ${beat.client} ${beat.clientId.slice(0, 8)}: a beat said ${before.saidAt - beat.saidAt}ms before the one kept landed late; dropped`
+        );
+        return;
+      }
       const counted = before !== undefined && isActive(before, now);
       // It was in front up to this beat, whatever this beat says.
       if (counted && before.sessionId) {
@@ -214,6 +223,7 @@ export const createNotifications = ({
         client: beat.client,
         sessionId: beat.sessionId,
         active: beat.active,
+        saidAt: beat.saidAt,
         at: now,
       };
       clients.set(beat.clientId, client);
@@ -333,6 +343,7 @@ export const notificationRoutes = (db: DbShape, notifications: Notifications) =>
           ]),
           sessionId: t.Nullable(t.String({ minLength: 1 })),
           active: t.Boolean(),
+          saidAt: t.Number({ minimum: 0 }),
         }),
       },
       ({ body }) => {
