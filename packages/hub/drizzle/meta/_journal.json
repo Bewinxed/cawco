@@ -1002,6 +1002,20 @@
       "when": 1791886964659,
       "tag": "0142_session_limits",
       "breakpoints": true
+    },
+    {
+      "idx": 143,
+      "version": "6",
+      "when": 1791887886211,
+      "tag": "0143_artifacts",
+      "breakpoints": true
+    },
+    {
+      "idx": 144,
+      "version": "6",
+      "when": 1791887894228,
+      "tag": "0144_drop_canvases",
+      "breakpoints": true
     }
   ]
 }

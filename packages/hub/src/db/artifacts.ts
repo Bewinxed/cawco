@@ -9,7 +9,7 @@ export type ArtifactPatch = Partial<
   Omit<ArtifactRow, "id" | "instanceId" | "projectId" | "kind" | "createdAt">
 >;
 
-/** A canvas's picks as the tables before artifacts kept them (drizzle 0141 set them aside). */
+/** A canvas's picks as the tables before artifacts kept them (drizzle 0144 set them aside). */
 export interface LegacyCanvas {
   choices: {
     choice: string;

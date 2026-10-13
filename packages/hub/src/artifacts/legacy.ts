@@ -1,5 +1,5 @@
 /**
- * The one-time move of the canvases' picks into artifacts (drizzle 0141 set
+ * The one-time move of the canvases' picks into artifacts (drizzle 0144 set
  * the tables aside as `legacy_canvases` and `legacy_canvas_choices`). Each
  * canvas becomes its session's artifact: a decision page
  * (`decisions:<project>/<page>`) a page of that name, its published
