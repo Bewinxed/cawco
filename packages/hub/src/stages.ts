@@ -9,11 +9,11 @@
  * draft      active    runs: writer
  * review     you
  * scheduled  waiting   until: post_at
- * posted     done      by: action   after: 48h
+ * posted     done      after: 48h
  * measured   done
  * moves
  *   idea → draft         lead, session
- *   scheduled → posted   action
+ *   scheduled → posted   lead, session
  * views
  *   board      by stage
  *   calendar   by post_at
@@ -535,12 +535,12 @@ views
     },
     launch: {
       about:
-        "Stages for a launch campaign: a piece is planned, made by the writer,\nreviewed by you, scheduled for launch day, sent live by an approved action,\nand measured a week on.",
+        "Stages for a launch campaign: a piece is planned, made by the writer,\nreviewed by you, scheduled for launch day, sent live by the agent,\nand measured a week on.",
       block: `plan       todo
 make       active    runs: writer
 review     you
 scheduled  waiting   until: launch_at
-live       done      by: action   after: 1w
+live       done      after: 1w
 measured   done
 dropped    dropped
 moves
@@ -548,7 +548,7 @@ moves
   plan → make          lead, session
   make → review        lead, session
   review → make        lead
-  scheduled → live     action
+  scheduled → live     lead, session
   live → measured      routine
   * → dropped          lead
 views
@@ -574,12 +574,12 @@ views
     },
     social: {
       about:
-        "Stages for social posts: an idea is drafted by the writer, reviewed by you,\nscheduled, posted by an approved action, and measured two days later.",
+        "Stages for social posts: an idea is drafted by the writer, reviewed by you,\nscheduled, posted by the agent, and measured two days later.",
       block: `idea       todo
 draft      active    runs: writer
 review     you
 scheduled  waiting   until: post_at
-posted     done      by: action   after: 48h
+posted     done      after: 48h
 measured   done
 dropped    dropped
 moves
@@ -587,7 +587,7 @@ moves
   idea → draft         lead, session
   draft → review       lead, session
   review → draft       lead
-  scheduled → posted   action
+  scheduled → posted   lead, session
   posted → measured    routine
   * → dropped          lead
 views
@@ -596,16 +596,16 @@ views
     },
     outreach: {
       about:
-        "Stages for outreach: a prospect is contacted by an approved action; a\nreply moves it on, three days of silence close it.",
+        "Stages for outreach: a prospect is contacted by the agent; a reply moves\nit on, three days of silence close it.",
       block: `prospect   todo
-contacted  waiting   by: action   after: 3d
+contacted  waiting   after: 3d
 replied    active
 meeting    you
 won        done
 lost       dropped
 moves
   * → *                  you
-  prospect → contacted   action
+  prospect → contacted   lead, session
   contacted → replied    routine, lead, session
   contacted → lost       routine
   replied → meeting      lead, session
@@ -615,12 +615,13 @@ views
     },
     seo: {
       about:
-        "Stages for SEO: a topic gets a brief and a draft, you review it, an\napproved action publishes it, and a routine measures it four weeks on.",
+        "Stages for SEO: a topic gets a brief and a draft, you review and approve\nit, the agent publishes it, and a routine measures it four weeks on.",
       block: `topic      todo
 brief      active    runs: seo
 draft      active    runs: writer
 review     you
-published  waiting   by: action   after: 4w
+approved   todo
+published  waiting   after: 4w
 measured   done
 dropped    dropped
 moves
@@ -629,7 +630,7 @@ moves
   brief → draft          lead, session
   draft → review         lead, session
   review → draft         lead
-  review → published     action
+  approved → published   lead, session
   published → measured   routine
   * → dropped            lead
 views
