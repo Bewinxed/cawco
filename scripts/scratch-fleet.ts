@@ -502,26 +502,28 @@ export async function scratchFleet(options: {
       join(dir, ".config", "cawco", "config.json"),
       JSON.stringify({ hubUrl: base })
     );
-    const mockModel = (name: string) => ({
-      name,
-      tool_call: true,
-      limit: { context: 100_000, output: 4000 },
-    });
+    // OpenCode 2.0's config: a provider under `providers`, its package and
+    // its settings, each model's capabilities.
     await mkdir(join(dir, ".config", "opencode"), { recursive: true });
     await writeFile(
       join(dir, ".config", "opencode", "opencode.json"),
       JSON.stringify({
-        $schema: "https://opencode.ai/config.json",
-        autoupdate: false,
-        share: "disabled",
         model: MODEL.opencode,
-        small_model: MODEL.opencode,
-        provider: {
+        providers: {
           mockoc: {
             name: "Mock",
-            npm: "@ai-sdk/openai-compatible",
-            options: { baseURL: `${mockBase}/v1`, apiKey: "fake-opencode-key" },
-            models: { "mock-oc": mockModel("Mock OC") },
+            package: "@ai-sdk/openai-compatible",
+            settings: {
+              baseURL: `${mockBase}/v1`,
+              apiKey: "fake-opencode-key",
+            },
+            models: {
+              "mock-oc": {
+                name: "Mock OC",
+                capabilities: { tools: true },
+                limit: { context: 100_000, output: 4000 },
+              },
+            },
           },
         },
       })

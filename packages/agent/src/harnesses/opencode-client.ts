@@ -121,30 +121,61 @@ export const errorText = (error: unknown): string => {
 };
 
 /**
+ * How long a location's plugins may take to load after it boots. 2.0.28
+ * answers a location's first `GET /api/plugin` as soon as its built-in
+ * services are up, before a configured plugin has loaded (observed: the
+ * list without CawCo's plugin, then `loading plugin` in the server's log,
+ * then the plugin active ~0.2 s later). Ours: a cold machine's import of the
+ * plugin module, with margin.
+ */
+export const PLUGIN_LOAD_TIMEOUT_MS = 30_000;
+
+/** How long one read of a wait below may take: a read that hangs ends as the wait's own deadline would. */
+const WAIT_READ_TIMEOUT_MS = 10_000;
+
+/** `signal`, or the end of one read's {@link WAIT_READ_TIMEOUT_MS}. */
+const oneRead = (signal: AbortSignal): AbortSignal =>
+  AbortSignal.any([signal, AbortSignal.timeout(WAIT_READ_TIMEOUT_MS)]);
+
+/**
  * The gate, failing closed: a location whose plugin list does not carry
- * CawCo's plugin, active, takes no session. A v1 plugin is not loaded at all
- * by 2.0 ("Plugin must export a default definition with an id and an effect
- * or setup function", a warning only), so without this every guard the
- * plugin carries (the workspace judge, the credential stamp, the bounded
+ * CawCo's plugin, active, takes no session. The list is read until the
+ * plugin is there (a location just booted lists it a moment later): one
+ * that failed to load refuses at once, and one still not there at
+ * {@link PLUGIN_LOAD_TIMEOUT_MS} refuses then. A v1 plugin is not loaded at
+ * all by 2.0 ("Plugin must export a default definition with an id and an
+ * effect or setup function", a warning only), so without this every guard
+ * the plugin carries (the workspace judge, the credential stamp, the bounded
  * shell) would be gone while sessions ran on.
  */
 export const assertPluginLoaded = async (
   client: OpencodeClient,
   directory: string,
-  signal: AbortSignal
+  signal: AbortSignal,
+  timeoutMs = PLUGIN_LOAD_TIMEOUT_MS
 ): Promise<void> => {
-  const listed = await client.plugin.list(at(directory), { signal });
-  const ours = listed.data.find((plugin) => plugin.id === CAWCO_PLUGIN_ID);
-  if (!ours) {
-    throw new Error(
-      `OpenCode at ${directory} has not loaded CawCo's plugin (${CAWCO_PLUGIN_ID}), so it takes no session: its workspace judge, credential stamp and bounded shell would not run.`
-    );
-  }
-  if (ours.state.status !== "active") {
-    const failed = ours.state as { error?: string };
-    throw new Error(
-      `OpenCode at ${directory} failed to load CawCo's plugin (${CAWCO_PLUGIN_ID}), so it takes no session: ${failed.error ?? ours.state.status}`
-    );
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: each read decides whether the next is needed
+    const listed = await client.plugin.list(at(directory), {
+      signal: oneRead(signal),
+    });
+    const ours = listed.data.find((plugin) => plugin.id === CAWCO_PLUGIN_ID);
+    if (ours?.state.status === "active") {
+      return;
+    }
+    if (ours) {
+      const failed = ours.state as { error?: string };
+      throw new Error(
+        `OpenCode at ${directory} failed to load CawCo's plugin (${CAWCO_PLUGIN_ID}), so it takes no session: ${failed.error ?? ours.state.status}`
+      );
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `OpenCode at ${directory} has not loaded CawCo's plugin (${CAWCO_PLUGIN_ID}) within ${timeoutMs / 1000} s, so it takes no session: its workspace judge, credential stamp and bounded shell would not run.`
+      );
+    }
+    await Bun.sleep(250);
   }
 };
 
@@ -175,7 +206,9 @@ export const waitForMcp = async (
   for (;;) {
     signal.throwIfAborted();
     // biome-ignore lint/performance/noAwaitInLoops: each read decides whether the next is needed
-    const listed = await client.mcp.list(at(directory), { signal });
+    const listed = await client.mcp.list(at(directory), {
+      signal: oneRead(signal),
+    });
     const waiting = listed.data.filter(
       (server) =>
         server.status.status !== "connected" &&

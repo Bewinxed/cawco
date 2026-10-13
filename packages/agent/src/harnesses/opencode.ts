@@ -3756,8 +3756,8 @@ export class OpencodeHarness implements Harness {
     const ready = existing?.running
       ? Promise.resolve()
       : (async () => {
-          const signal = AbortSignal.timeout(RECOVERY_TIMEOUT_MS * 3);
-          await assertPluginLoaded(client, ctx.cwd, signal);
+          // Each wait has its own deadline, which says what it waited for.
+          await assertPluginLoaded(client, ctx.cwd, this.#lifetimeSignal());
           await waitForMcp(client, ctx.cwd, this.#lifetimeSignal());
         })();
     ready.catch(() => undefined);
