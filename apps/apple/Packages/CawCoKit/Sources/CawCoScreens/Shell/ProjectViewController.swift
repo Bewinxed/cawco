@@ -102,6 +102,12 @@ final class ProjectViewController: ObservedViewController {
         notices.isLayoutMarginsRelativeArrangement = true
         view.addSubview(page)
         view.addSubview(pane)
+        // The head and the strip stand at their content's height: the pane,
+        // which has none of its own, takes the rest. Without this pull the
+        // board's pane left the head free to stretch.
+        let snug = page.heightAnchor.constraint(equalToConstant: 0)
+        snug.priority = .fittingSizeLevel
+        snug.isActive = true
         headTop = page.topAnchor.constraint(equalTo: safe.topAnchor, constant: Space.space6)
         headLeading = page.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: Space.space7)
         headTrailing = page.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -Space.space6)
