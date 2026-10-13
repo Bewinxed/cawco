@@ -24,7 +24,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// Opening another session or a run in its own view; the host routes it.
     public var onOpenSession: (String) -> Void = { _ in }
     public var onOpenRun: (String) -> Void = { _ in }
-    /// A `show_preview` call's card was tapped: its input, what to show.
+    /// An artifact tool row's card was tapped: its input, the artifact to reveal once it is open.
     public var onOpenPreview: ([String: Any]) -> Void = { _ in }
     /// "Back to the fleet", from the state an unreachable id shows.
     public var onReturnToFleet: () -> Void = {}
