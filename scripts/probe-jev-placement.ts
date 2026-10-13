@@ -229,14 +229,11 @@ try {
     "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
   );
 
-  const openrouter = await send<{ connected: boolean }>(
-    "GET",
-    "/api/openrouter"
-  );
+  const jev = await send<{ route: string | null }>("GET", "/api/jev");
   check(
-    "0: Jev is off: the scratch hub holds no OpenRouter key",
-    !openrouter.connected,
-    `GET /api/openrouter → ${JSON.stringify(openrouter)}`
+    "0: Jev is off: the scratch hub holds no TypeSafe key and no OpenRouter key",
+    jev.route === null,
+    `GET /api/jev → ${JSON.stringify(jev)}`
   );
 
   const placementSrc = await checkout("placement", true);

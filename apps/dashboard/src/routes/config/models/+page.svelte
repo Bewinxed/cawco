@@ -21,7 +21,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
-  import { IconGlobe, IconKey, IconRules } from "#lib/icons.js";
+  import { IconGlobe, IconJev, IconRules } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -61,7 +61,7 @@
 
   // ── Jev: its route and the TypeSafe key ────────────────────────────────
   let jev = $state<JevState | null>(null);
-  let typesafeError = $state<string | null>(null);
+  let jevError = $state<string | null>(null);
   let typesafeKey = $state("");
   let savingKey = $state(false);
   let removingKey = $state(false);
@@ -80,19 +80,19 @@
       }
       takeJev((await response.json()) as JevState);
     } catch (error) {
-      typesafeError = `Could not read Jev's settings — ${error instanceof Error ? error.message : String(error)}.`;
+      jevError = `Could not read Jev's settings — ${error instanceof Error ? error.message : String(error)}.`;
     }
   }
 
   async function saveKey(event: SubmitEvent) {
     event.preventDefault();
     if (typesafeKey.trim() === "") {
-      typesafeError =
+      jevError =
         "Paste a TypeSafe API key first. Nothing was saved, and Jev's route is unchanged.";
       return;
     }
     savingKey = true;
-    typesafeError = null;
+    jevError = null;
     const response = await fetch("/api/jev/typesafe-key", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -102,19 +102,19 @@
       typesafeKey = "";
       takeJev((await response.json()) as JevState);
     } else {
-      typesafeError = `The hub did not save the key (${response.status}): ${await response.text()}. Jev's route is unchanged.`;
+      jevError = `The hub did not save the key (${response.status}): ${await response.text()}. Jev's route is unchanged.`;
     }
     savingKey = false;
   }
 
   async function removeKey() {
     removingKey = true;
-    typesafeError = null;
+    jevError = null;
     const response = await fetch("/api/jev/typesafe-key", { method: "DELETE" });
     if (response.ok) {
       takeJev((await response.json()) as JevState);
     } else {
-      typesafeError = `The hub did not remove the key (${response.status}): ${await response.text()}. It is still held.`;
+      jevError = `The hub did not remove the key (${response.status}): ${await response.text()}. It is still held.`;
     }
     removingKey = false;
   }
@@ -126,7 +126,7 @@
   const routeLine = $derived.by((): string => {
     switch (jev?.route) {
       case "typesafe":
-        return "Jev goes to TypeSafe directly with this key.";
+        return "Jev goes to TypeSafe directly with the key held here.";
       case "openrouter":
         return "Jev goes through OpenRouter. A key saved here takes over from it.";
       default:
@@ -186,12 +186,12 @@
       return;
     }
     savingSuggest = true;
-    openrouterError = null;
+    jevError = null;
     try {
       await saveSuggestSetting(on);
       jev.suggestWhileTyping = on;
     } catch (error) {
-      openrouterError = error instanceof Error ? error.message : String(error);
+      jevError = error instanceof Error ? error.message : String(error);
     }
     savingSuggest = false;
   }
@@ -313,7 +313,7 @@
 </script>
 
 <SectionFrame
-  problem={ready ? null : (openrouterError ?? typesafeError ?? supervisorError)}
+  problem={ready ? null : (openrouterError ?? jevError ?? supervisorError)}
   purpose={section.purpose}
   {ready}
   title={section.label}
@@ -345,8 +345,7 @@
       {/snippet}
     </SectionHeader>
     <p class="note">
-      One way to reach Jev, for meaning rules, suggestions and the hub's own
-      judgments. A TypeSafe key below takes over from it while held.
+      One way to reach Jev. A TypeSafe key held in Jev below takes over from it.
     </p>
     <div
       class="morph"
@@ -386,23 +385,13 @@
         {/key}
       </div>
     </div>
-    <SwitchField
-      checked={jev?.suggestWhileTyping ?? false}
-      disabled={!jev?.route || savingSuggest}
-      hint={jev?.route
-        ? "Jev reads the message as you write it and offers chips you can add to it. The session's tools are not changed."
-        : "Needs Jev — connect OpenRouter above, or save a TypeSafe key below."}
-      id="suggest-while-typing"
-      label="Suggest skills and MCP servers while typing"
-      onchange={setSuggest}
-    />
     {#if openrouterError}
       <p class="problem" role="alert" transition:unfold>{openrouterError}</p>
     {/if}
   </div>
 
-  <form class="group" onsubmit={saveKey}>
-    <SectionHeader hue={HUE} icon={IconKey} label="TypeSafe key">
+  <form class="group" data-group="jev" onsubmit={saveKey}>
+    <SectionHeader hue={HUE} icon={IconJev} label="Jev">
       {#snippet right()}
         <div class="actions">
           {#if jev?.typesafe}
@@ -418,7 +407,7 @@
           {/if}
           <Button
             disabled={removingKey}
-            failed={typesafeError !== null}
+            failed={jevError !== null}
             label="Save key"
             pending={savingKey}
             pendingLabel="Saving…"
@@ -429,9 +418,30 @@
       {/snippet}
     </SectionHeader>
     <p class="note">
-      Reaches Jev straight at TypeSafe with your own API key. While a key is
-      held, Jev uses it instead of OpenRouter.
+      Answers the hub's yes/no questions: meaning rules, suggestions and its own
+      judgments. It goes straight to TypeSafe while a key is held here,
+      otherwise through OpenRouter.
     </p>
+    <p
+      aria-live="polite"
+      class="status"
+      data-testid="jev-route"
+      data-tone={jev?.route ? "ok" : "off"}
+    >
+      <span aria-hidden="true" class="dot"></span>
+      {routeLine}
+    </p>
+    <Field id="typesafe-key" label="TypeSafe key">
+      <Input
+        autocomplete="off"
+        id="typesafe-key"
+        placeholder={jev?.typesafe
+          ? "Paste a new key to replace the held one"
+          : "Paste your TypeSafe API key"}
+        type="password"
+        bind:value={typesafeKey}
+      />
+    </Field>
     <div
       class="morph"
       style:block-size={keyHeight ? `${keyHeight}px` : undefined}
@@ -441,6 +451,7 @@
           <p
             aria-live="polite"
             class="status num"
+            data-testid="typesafe-key-state"
             data-tone={keyPhase === "held" ? "ok" : "off"}
             in:blur={{
               duration: dur("--dur-panel"),
@@ -467,20 +478,18 @@
         {/key}
       </div>
     </div>
-    <p aria-live="polite" class="note" data-testid="jev-route">{routeLine}</p>
-    <Field id="typesafe-key" label="API key">
-      <Input
-        autocomplete="off"
-        id="typesafe-key"
-        placeholder={jev?.typesafe
-          ? "Paste a new key to replace the held one"
-          : "Paste your TypeSafe API key"}
-        type="password"
-        bind:value={typesafeKey}
-      />
-    </Field>
-    {#if typesafeError}
-      <p class="problem" role="alert" transition:unfold>{typesafeError}</p>
+    <SwitchField
+      checked={jev?.suggestWhileTyping ?? false}
+      disabled={!jev?.route || savingSuggest}
+      hint={jev?.route
+        ? "Jev reads the message as you write it and offers chips you can add to it. The session's tools are not changed."
+        : "Needs Jev — save a TypeSafe key above, or connect OpenRouter."}
+      id="suggest-while-typing"
+      label="Suggest skills and MCP servers while typing"
+      onchange={setSuggest}
+    />
+    {#if jevError}
+      <p class="problem" role="alert" transition:unfold>{jevError}</p>
     {/if}
   </form>
 

@@ -299,7 +299,7 @@ const writePlain = () => {
   const now = Date.now();
   sqlite
     .query(
-      "INSERT INTO openrouter_connection (id, api_key, connected_at, suggest_while_typing) VALUES ('openrouter', ?, ?, 0)"
+      "INSERT INTO openrouter_connection (id, api_key, connected_at) VALUES ('openrouter', ?, ?)"
     )
     .run(OPENROUTER_KEY, now);
   sqlite
@@ -349,7 +349,7 @@ const writePlain = () => {
 
 /** Each feature that reads a sealed secret, used once. */
 const features = async (round: string) => {
-  const suggest = await json("PUT", "/api/openrouter/suggest", {
+  const suggest = await json("PUT", "/api/jev/suggest", {
     enabled: true,
   });
   const status = JSON.parse((await json("GET", "/api/openrouter")).body) as {
