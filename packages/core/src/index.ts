@@ -1196,9 +1196,17 @@ export interface ArtifactSummary {
   id: string;
   kind: ArtifactKind;
   name: string;
+  /** Its last promote into the project's folder (`artifact_promote`, the doc's `meta.promoted`); null until one. */
+  promoted: ArtifactPromotion | null;
   /** When it was last brought to the front of the panel. */
   shownAt: string | null;
   updatedAt: string;
+}
+
+/** An artifact's promote: the project folder's commit that holds it, and when. */
+export interface ArtifactPromotion {
+  at: string;
+  commit: string;
 }
 
 /**

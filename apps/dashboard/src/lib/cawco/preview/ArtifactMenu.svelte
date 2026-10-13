@@ -2,7 +2,8 @@
   /**
    * The artifact panel's title control (DESIGN.md Artifact panel, canvas and
    * ink): the shown artifact's name as a menu button listing the session's
-   * artifacts, newest first; choosing one shows it.
+   * artifacts, newest first, each promoted one tagged with its commit;
+   * choosing one shows it.
    */
   import type { ArtifactKind, ArtifactSummary } from "@cawco/core";
   import type { Component } from "svelte";
@@ -35,12 +36,13 @@
 
   let open = $state(false);
   let listed = $state<ArtifactSummary[] | null>(null);
-  /** Until the list is read, the one the panel shows, with no age to say. */
+  /** Until the list is read, the one the panel shows, with no age or promote to say. */
   const rows = $derived<
     (Pick<ArtifactSummary, "id" | "kind" | "name"> & {
       createdAt: string | null;
+      promoted: ArtifactSummary["promoted"];
     })[]
-  >(listed ?? [{ ...shown, createdAt: null }]);
+  >(listed ?? [{ ...shown, createdAt: null, promoted: null }]);
 
   $effect(() => {
     if (!open) {
@@ -82,6 +84,13 @@
       >
         <Glyph />
         <span class="row-name">{artifact.name}</span>
+        {#if artifact.promoted}
+          <span
+            class="row-promoted"
+            title="Promoted into the project's folder at artifacts/{artifact.name}/"
+            >Promoted {artifact.promoted.commit.slice(0, 7)}</span
+          >
+        {/if}
         {#if artifact.createdAt}
           <span class="row-age"
             >{formatAgeShort(Date.parse(artifact.createdAt))}</span
@@ -121,6 +130,7 @@
     white-space: nowrap;
     font: var(--type-label);
   }
+  .row-promoted,
   .row-age {
     color: var(--ink-muted);
     font-size: var(--text-meta);

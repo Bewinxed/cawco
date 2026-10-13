@@ -4307,6 +4307,41 @@
         }
       }
     },
+    "/api/instances/{id}/artifacts/{artifact}/promote": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiInstancesByIdArtifactsByArtifactPromote",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdArtifactsByArtifactPromote 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Promoted"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/instances/{id}/artifacts/{artifact}/sent": {
       "post": {
         "parameters": [
@@ -27075,6 +27110,10 @@
           "name": {
             "type": "string"
           },
+          "promoted": {
+            "description": "Its last promote into the project's folder (`artifact_promote`, the doc's `meta.promoted`); null until one.",
+            "$ref": "#/components/schemas/ArtifactPromotion"
+          },
           "shownAt": {
             "description": "When it was last brought to the front of the panel.",
             "type": [
@@ -27102,6 +27141,22 @@
           "canvas",
           "page",
           "preview"
+        ]
+      },
+      "ArtifactPromotion": {
+        "description": "An artifact's promote: the project folder's commit that holds it, and when.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "commit": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "commit"
         ]
       },
       "Created": {
@@ -27721,6 +27776,23 @@
           "by",
           "id",
           "text"
+        ]
+      },
+      "Promoted": {
+        "description": "What `artifact_promote` answers: the project folder's commit, and the folder it wrote.",
+        "type": "object",
+        "properties": {
+          "commit": {
+            "type": "string"
+          },
+          "path": {
+            "description": "`artifacts/<name>/`, from the project folder's root.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "commit",
+          "path"
         ]
       },
       "CanvasExport": {

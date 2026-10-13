@@ -7,6 +7,7 @@ import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
   artifactCreate,
+  artifactPromote,
   artifactRead,
   artifactShow,
   artifactUpdate,
@@ -1105,6 +1106,24 @@ export function handoffTools(deps: HandoffDeps) {
         json(
           await actions.artifactCall("POST", `/${encodeURIComponent(id)}/show`)
         )
+    ),
+    tool(
+      artifactPromote.name,
+      artifactPromote.description,
+      artifactPromote.input,
+      async ({ id }) =>
+        json(
+          await actions.artifactCall(
+            "POST",
+            `/${encodeURIComponent(id)}/promote`
+          )
+        ),
+      {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      }
     ),
     tool(
       commentRead.name,

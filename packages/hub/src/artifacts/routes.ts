@@ -1,6 +1,6 @@
 /**
  * The artifact routes (Projects spec §5.10), on the session that made the
- * artifact: the panel's list and its Show, what the four tools call, and the
+ * artifact: the panel's list and its Show, what the five tools call, and the
  * lookup an artifact's own tab opens with. A session reaches only its own
  * artifacts; any other id is 404. The person's Send is on the preview
  * listener, beside the doc's socket (sync.ts `artifactSend`).
@@ -280,6 +280,17 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       ({ params, body }) => {
         try {
           return artifacts.shown(params.id, params.artifact, body);
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    // The artifact into its project's folder at artifacts/<name>/, one commit (artifact_promote).
+    .post(
+      "/api/instances/:id/artifacts/:artifact/promote",
+      async ({ params }) => {
+        try {
+          return await artifacts.promote(params.id, params.artifact);
         } catch (error) {
           return refused(error);
         }

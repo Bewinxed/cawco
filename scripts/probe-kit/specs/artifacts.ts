@@ -43,13 +43,34 @@
  *    page's `cawco:ready`), and the artifact's `shownAt` is set.
  * 14. A preview of a port nothing listens on answers `opened: false` with
  *    the server sentence within 10 s, and the pane draws its failure.
+ *
+ * `artifact_promote` (slice 6), read from the project's folder on the hub
+ * with git:
+ *
+ * 15. In a project session, a page with one pick and one pin promotes to a
+ *    commit and `artifacts/<name>/`; that commit holds index.html,
+ *    state.json (the pick), pins.json (the pin) and artifact.json, and the
+ *    panel's menu tags the row "Promoted <short commit>". After a `patch`, a
+ *    second promote is a newer commit changing state.json.
+ * 16. A canvas, once its screen drew its picture, promotes canvas.excalidraw,
+ *    outline.md and picture.png.
+ * 17. Outside a project the tool answers the refusal sentence and no project
+ *    folder holds anything of it.
  */
+import { existsSync, readdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { Frame, Page } from "playwright-core";
-import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
 const UPDATE = "mcp__cawco__artifact_update";
+const PROMOTE = "mcp__cawco__artifact_promote";
+/** The commit in artifact_promote's answer. */
+const ANSWERED_COMMIT = /"commit":"([0-9a-f]{40})"/;
+/** The refusal outside a project (artifacts/service.ts `NO_PROJECT`). */
+const NO_PROJECT =
+  "This session belongs to no project, so there is nowhere to promote to.";
 const COMMAND = /PROBE-CALL:(\d+)/g;
 const CHANGED = "I changed my picks";
 /** A cawco tool named for previews or choices: the tools the artifact tools replaced. */
@@ -289,19 +310,23 @@ const run = async (kit: Kit) => {
   const session = await fleet.spawn("claude", "Artifacts", fleet.repo);
 
   let sent = 0;
-  const call = async (tool: string, input: object): Promise<string> => {
-    sent += 1;
-    const marker = String(sent);
-    lastMarker = marker;
-    asks.set(marker, { name: tool, input });
-    await fleet.send(session, `PROBE-CALL:${marker}`);
-    return (await until(
-      `the ${tool} call (${marker})`,
-      () => answered.get(marker),
-      Boolean,
-      180_000
-    )) as string;
-  };
+  /** Asks session `on` to call `tool` with `input`; what it answered. */
+  const callIn =
+    (on: string) =>
+    async (tool: string, input: object): Promise<string> => {
+      sent += 1;
+      const marker = String(sent);
+      lastMarker = marker;
+      asks.set(marker, { name: tool, input });
+      await fleet.send(on, `PROBE-CALL:${marker}`);
+      return (await until(
+        `the ${tool} call (${marker})`,
+        () => answered.get(marker),
+        Boolean,
+        180_000
+      )) as string;
+    };
+  const call = callIn(session);
   const read = (artifact: string) =>
     fleet.api<Read>(`/api/instances/${session}/artifacts/${artifact}`);
 
@@ -491,6 +516,226 @@ const run = async (kit: Kit) => {
   );
 
   await fieldChecks({ kit, fleet, session, page, base, call, said });
+  await promoteChecks({ kit, fleet, base, call, callIn, heroId: id });
+};
+
+/** A git command in `folder`; its output. */
+const gitIn = (folder: string, ...args: string[]) =>
+  Bun.$`git -C ${folder} ${args}`.quiet().text();
+
+/** The files a commit touched, from the folder's root. */
+const touched = async (folder: string, commit: string) =>
+  (await gitIn(folder, "show", "--name-only", "--format=", commit))
+    .split("\n")
+    .filter(Boolean);
+
+/** Checks 15–17: artifact_promote outside a project, then in one. */
+const promoteChecks = async ({
+  kit,
+  fleet,
+  base,
+  call,
+  callIn,
+  heroId,
+}: {
+  base: string;
+  call: (tool: string, input: object) => Promise<string>;
+  callIn: (on: string) => (tool: string, input: object) => Promise<string>;
+  fleet: KitFleet;
+  heroId: string;
+  kit: Kit;
+}) => {
+  const projects = join(dirname(fleet.env.CAWCO_DB_PATH ?? ""), "projects");
+  /** Every project folder's `artifacts/` entries, by project. */
+  const promotedAnywhere = () =>
+    existsSync(projects)
+      ? readdirSync(projects).flatMap((one) =>
+          existsSync(join(projects, one, "artifacts"))
+            ? readdirSync(join(projects, one, "artifacts")).map(
+                (name) => `${one}/${name}`
+              )
+            : []
+        )
+      : [];
+
+  // 17. Outside a project: the refusal, and nothing written.
+  const refused = await call(PROMOTE, { id: heroId });
+  const strays = promotedAnywhere();
+  kit.check(
+    "17: outside a project artifact_promote answers the refusal sentence and writes nothing",
+    refused.includes(NO_PROJECT) && strays.length === 0,
+    `${refused.slice(0, 300)}; promoted folders: ${strays.join(", ") || "none"}`
+  );
+
+  // 15. A project session's page, with one pick and one pin.
+  const project = await fleet.api<{ id: string }>("/api/projects", {
+    name: "Promotes",
+    machineId: MACHINE,
+    cwd: fleet.repo,
+    caw: false,
+  });
+  const folder = join(projects, project.id);
+  const inProject = await fleet.spawn("claude", "Promotes", fleet.repo, {
+    projectId: project.id,
+  });
+  const callP = callIn(inProject);
+  const made = await callP(CREATE, { kind: "page", name: "kept", html: PAGE });
+  const keptId = made.match(ANSWERED_ID)?.[1];
+  if (!keptId) {
+    kit.check("15: artifact_create answers the page's id", false, made);
+    return;
+  }
+  // Its panel, as check 1 opens one: the page in its frame, a screen for the canvas.
+  const page = await kit.page("desk");
+  await open(page, `${base}/session/${inProject}`, ".artifact-trigger");
+  const at = `/api/instances/${inProject}/artifacts/${keptId}`;
+  const frame = page.frameLocator('iframe[title="Preview"]');
+  await until(
+    "the page's bridge marking its options",
+    () => frame.locator('[data-option="a"][aria-pressed]').count(),
+    (count) => count === 1,
+    60_000
+  );
+  await frame.locator('[data-option="b"]').click();
+  await until(
+    "the pick in the hub's read",
+    () => fleet.api<Read>(at),
+    (answer) => answer.state.hero?.options.join() === "b",
+    10_000
+  );
+  // The person's pin, written by the page's own doc client as the overlay writes one.
+  const pageFrame = await (
+    await page.locator('iframe[title="Preview"]').elementHandle()
+  )?.contentFrame();
+  await pageFrame?.evaluate(() => {
+    const { doc } = (
+      window as unknown as {
+        cawcoArtifact: {
+          doc: {
+            getMap: (n: string) => { set: (k: string, v: object) => void };
+          };
+        };
+      }
+    ).cawcoArtifact;
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+    doc.getMap("pins").set(id, {
+      id,
+      number: 1,
+      kind: "comment",
+      by: "person",
+      at: now,
+      anchor: { selector: "h1", source: null, text: "Pick a hero" },
+      elements: [],
+      thread: [
+        { id: crypto.randomUUID(), by: "person", text: "Bigger", at: now },
+      ],
+    });
+  });
+  await until(
+    "the pin in comment_read",
+    () =>
+      fleet.api<{ artifacts: { pins: unknown[] }[] }>(
+        `/api/instances/${inProject}/artifacts/comments?artifact=${keptId}&filter=all`
+      ),
+    (answer) => answer.artifacts[0]?.pins.length === 1,
+    10_000
+  );
+  const first = await callP(PROMOTE, { id: keptId });
+  const firstCommit = first.match(ANSWERED_COMMIT)?.[1];
+  const firstFiles = firstCommit ? await touched(folder, firstCommit) : [];
+  const keptState = firstCommit
+    ? await gitIn(folder, "show", `${firstCommit}:artifacts/kept/state.json`)
+    : "";
+  const keptPins = firstCommit
+    ? await gitIn(folder, "show", `${firstCommit}:artifacts/kept/pins.json`)
+    : "";
+  const wanted = ["index.html", "state.json", "pins.json", "artifact.json"].map(
+    (name) => `artifacts/kept/${name}`
+  );
+  kit.check(
+    "15: a promote answers a commit and artifacts/kept/, and that commit holds index.html, state.json (the pick), pins.json (the pin) and artifact.json",
+    !!firstCommit &&
+      first.includes('"path":"artifacts/kept/"') &&
+      wanted.every((path) => firstFiles.includes(path)) &&
+      JSON.parse(keptState || "{}").hero?.options?.join() === "b" &&
+      keptPins.includes('"Bigger"'),
+    `${first.slice(first.indexOf('{"commit"'), first.indexOf('{"commit"') + 120)}; git show --stat: ${firstFiles.join(", ")}`
+  );
+
+  // 15. The panel's menu tags the row with the commit.
+  await page.click(".artifact-trigger");
+  const tag = await page
+    .locator(`.artifact-row[data-artifact="${keptId}"] .row-promoted`)
+    .textContent({ timeout: 10_000 })
+    .catch(() => null);
+  kit.check(
+    "15: the panel's menu tags the promoted row with its short commit",
+    !!firstCommit && tag?.trim() === `Promoted ${firstCommit.slice(0, 7)}`,
+    JSON.stringify(tag)
+  );
+  await page.keyboard.press("Escape");
+
+  // 15. A patch, then a second promote: a newer commit changing state.json.
+  await callP(UPDATE, {
+    id: keptId,
+    patch: [{ op: "replace", path: "/hero/options", value: ["a"] }],
+  });
+  const second = await callP(PROMOTE, { id: keptId });
+  const secondCommit = second.match(ANSWERED_COMMIT)?.[1];
+  const secondFiles = secondCommit ? await touched(folder, secondCommit) : [];
+  const after = Boolean(
+    firstCommit &&
+      secondCommit &&
+      secondCommit !== firstCommit &&
+      (
+        await Bun.$`git -C ${folder} merge-base --is-ancestor ${firstCommit} ${secondCommit}`
+          .quiet()
+          .nothrow()
+      ).exitCode === 0
+  );
+  kit.check(
+    "15: after a patch a second promote makes a newer commit changing state.json",
+    after && secondFiles.includes("artifacts/kept/state.json"),
+    `${firstCommit?.slice(0, 7)} → ${secondCommit?.slice(0, 7)}: ${secondFiles.join(", ")}`
+  );
+
+  // 16. A canvas, once its screen drew its picture.
+  const drawn = await callP(CREATE, {
+    kind: "canvas",
+    name: "sketch",
+    mermaid: "flowchart LR; A --> B",
+  });
+  const sketchId = drawn.match(ANSWERED_ID)?.[1];
+  const pictured = sketchId
+    ? await until(
+        "the canvas's picture",
+        () =>
+          fleet.api<{ pictureAt?: string | null }>(
+            `/api/instances/${inProject}/artifacts/${sketchId}`
+          ),
+        (answer) => !!answer.pictureAt,
+        60_000
+      ).then(
+        () => true,
+        () => false
+      )
+    : false;
+  const sketch = sketchId ? await callP(PROMOTE, { id: sketchId }) : drawn;
+  const sketchCommit = sketch.match(ANSWERED_COMMIT)?.[1];
+  const sketchFiles = sketchCommit ? await touched(folder, sketchCommit) : [];
+  const outline = sketchCommit
+    ? await gitIn(folder, "show", `${sketchCommit}:artifacts/sketch/outline.md`)
+    : "";
+  kit.check(
+    "16: a canvas promote writes canvas.excalidraw, outline.md and picture.png",
+    pictured &&
+      ["canvas.excalidraw", "outline.md", "picture.png"].every((name) =>
+        sketchFiles.includes(`artifacts/sketch/${name}`)
+      ) &&
+      outline.includes("rectangle"),
+    `picture drawn: ${pictured}; git show --stat: ${sketchFiles.join(", ")}; outline: ${outline.slice(0, 120)}`
+  );
 };
 
 /** What checks 7–11 run on: the fleet, its session and the dashboard page checks 1–6 opened. */

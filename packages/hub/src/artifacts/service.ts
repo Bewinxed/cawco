@@ -1,8 +1,9 @@
 /**
- * Artifacts (Projects spec §5.10): what the four tools and the panel do to
+ * Artifacts (Projects spec §5.10): what the five tools and the panel do to
  * them. A session makes an artifact with `artifact_create`, changes it with
- * `artifact_update`, reads it with `artifact_read` and brings it to the front
- * of its panel with `artifact_show`; the person's picks, notes and values
+ * `artifact_update`, reads it with `artifact_read`, brings it to the front
+ * of its panel with `artifact_show` and, in a project, keeps it in the
+ * project's folder with `artifact_promote`; the person's picks, notes and values
  * live in the artifact's doc (docs.ts) and reach the session as one message
  * after {@link QUIET_MS} of quiet, at once while its turn runs, and at once
  * when the person sends.
@@ -14,6 +15,7 @@ import {
   ARTIFACT_NAME,
   type ArtifactChoices,
   type ArtifactKind,
+  type ArtifactPromotion,
   type ArtifactSummary,
   type ChoiceEntry,
   choiceEntryProblem,
@@ -42,6 +44,13 @@ import { applyPatch, type Operation } from "rfc6902";
 import { Doc, encodeStateAsUpdate } from "yjs";
 import { PREVIEW_PORT } from "../config";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
+import { sessionLabel } from "../labels";
+import {
+  changeFolderFiles,
+  FolderRefusal,
+  folderFileNames,
+  folderPath,
+} from "../project-folder";
 import {
   canvasEntries,
   convertOnScreen,
@@ -64,9 +73,10 @@ export class ArtifactRefusal extends Error {
   readonly status: 400 | 403 | 404 | 409 | 413 | 422 | 503 | 504;
   constructor(
     status: 400 | 403 | 404 | 409 | 413 | 422 | 503 | 504,
-    message: string
+    message: string,
+    options?: ErrorOptions
   ) {
-    super(message);
+    super(message, options);
     this.status = status;
   }
 }
@@ -266,16 +276,54 @@ export interface CanvasExport {
   port: number;
 }
 
-const routeOf = (id: string) => `/__cawco/artifact/${id}`;
+/** What `artifact_promote` answers: the project folder's commit, and the folder it wrote. */
+export interface Promoted {
+  commit: string;
+  /** `artifacts/<name>/`, from the project folder's root. */
+  path: string;
+}
 
-const summaryOf = (row: ArtifactRow): ArtifactSummary => ({
-  id: row.id,
-  kind: row.kind,
-  name: row.name,
-  createdAt: row.createdAt.toISOString(),
-  updatedAt: row.updatedAt.toISOString(),
-  shownAt: row.shownAt?.toISOString() ?? null,
-});
+/** A promote from a session outside a project. WORDS.md's error formula. */
+export const NO_PROJECT =
+  "This session belongs to no project, so there is nowhere to promote to.";
+
+/**
+ * Every file a promote may write into `artifacts/<name>/`: one of these an
+ * earlier promote wrote and this one does not (a picture since cleared) is
+ * taken out in the same commit.
+ */
+const PROMOTED_FILES = [
+  "artifact.json",
+  "index.html",
+  "state.json",
+  "canvas.excalidraw",
+  "outline.md",
+  "preview.json",
+  "pins.json",
+  "ink.json",
+  "picture.png",
+] as const;
+type PromotedFile = (typeof PROMOTED_FILES)[number];
+
+/** `artifacts/<name>`, inside the project folder; refused for a name that would leave it. */
+const promotedFolder = (name: string): string => {
+  const folder = `artifacts/${name}`;
+  if (!ARTIFACT_NAME.test(name) || folderPath(folder) !== folder) {
+    throw new ArtifactRefusal(
+      400,
+      `${JSON.stringify(name)} would not stay inside artifacts/: a name is lowercase letters, digits and dashes.`
+    );
+  }
+  return folder;
+};
+
+const TRAILING_DOT = /\.$/;
+
+/** A promoted file's text: JSON, two-space indented, ending on a newline, as a repository keeps it. */
+const promotedJson = (value: unknown): string =>
+  `${JSON.stringify(value, null, 2)}\n`;
+
+const routeOf = (id: string) => `/__cawco/artifact/${id}`;
 
 /** The doc's `state`, read as entries. */
 const stateOf = (doc: Doc): Record<string, ChoiceEntry> =>
@@ -447,6 +495,19 @@ export interface ArtifactServiceDeps {
 export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const { db, docs } = deps;
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
+
+  const summaryOf = (row: ArtifactRow): ArtifactSummary => ({
+    id: row.id,
+    kind: row.kind,
+    name: row.name,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    shownAt: row.shownAt?.toISOString() ?? null,
+    promoted:
+      (docs.doc(row.id).getMap("meta").get("promoted") as
+        | ArtifactPromotion
+        | undefined) ?? null,
+  });
 
   const sessionOf = (id: string): InstanceRow => {
     const row = deps.instance(id);
@@ -801,12 +862,83 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    */
 
   /** The canvas's latest picture as base64; null until a screen drew one. */
-  const pictureOf = (id: string): string | null => {
+  const pictureOf = (id: string): string | null =>
+    pictureBytes(id)?.toString("base64") ?? null;
+
+  /** The artifact's latest picture's bytes: a canvas's, or a page's from its last send; null when it has none. */
+  const pictureBytes = (id: string): Buffer | null => {
     try {
-      return readFileSync(picturePath(deps.root, id)).toString("base64");
+      return readFileSync(picturePath(deps.root, id));
     } catch {
       return null;
     }
+  };
+
+  /**
+   * A send's page with the person's ink on it (its picture with no pin)
+   * becomes a page's or preview's picture, as a canvas keeps its own;
+   * `artifact_promote` writes it.
+   */
+  const keepComposited = (row: ArtifactRow, body: SendBody) => {
+    const composited = body.pictures?.findLast((one) => one.pin === null);
+    if (!composited || row.kind === "canvas") {
+      return;
+    }
+    mkdirSync(join(deps.root, row.id), { recursive: true });
+    writeFileSync(
+      picturePath(deps.root, row.id),
+      Buffer.from(composited.png, "base64")
+    );
+  };
+
+  /** A canvas's `.excalidraw` file and its outline, as the doc holds them now. */
+  const canvasFile = (id: string) => {
+    const elements = canvasEntries(docs, id).map((entry) => entry.el);
+    return {
+      file: excalidrawFile(
+        elements,
+        docs.doc(id).getMap("files").toJSON() as Record<string, unknown>
+      ),
+      outline: canvasOutline(elements),
+    };
+  };
+
+  /** What `artifacts/<name>/` holds for the artifact now, by file name. */
+  const promotedFiles = (
+    instance: InstanceRow,
+    row: ArtifactRow,
+    at: string
+  ): Partial<Record<PromotedFile, string | Uint8Array>> => {
+    const doc = docs.doc(row.id);
+    const files: Partial<Record<PromotedFile, string | Uint8Array>> = {
+      "artifact.json": promotedJson({
+        kind: row.kind,
+        name: row.name,
+        id: row.id,
+        promotedAt: at,
+        session: instance.id,
+      }),
+      "pins.json": promotedJson(doc.getMap("pins").toJSON()),
+      "ink.json": promotedJson(doc.getMap("ink").toJSON()),
+    };
+    if (row.kind === "page") {
+      files["index.html"] = readFileSync(join(deps.root, row.id, "index.html"));
+      files["state.json"] = promotedJson(stateOf(doc));
+    } else if (row.kind === "canvas") {
+      const { file, outline } = canvasFile(row.id);
+      files["canvas.excalidraw"] = promotedJson(file);
+      files["outline.md"] = outline ? `${outline}\n` : "";
+    } else {
+      files["preview.json"] = promotedJson({
+        ...row.source,
+        machine: machineOf(row),
+      });
+    }
+    const picture = pictureBytes(row.id);
+    if (picture) {
+      files["picture.png"] = picture;
+    }
+    return files;
   };
 
   /** The elements the person changed after `since` that the canvas still holds. */
@@ -1256,16 +1388,60 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           `${row.name} is a ${row.kind}: only a canvas exports.`
         );
       }
-      const elements = canvasEntries(docs, id).map((entry) => entry.el);
-      return {
-        file: excalidrawFile(
-          elements,
-          docs.doc(id).getMap("files").toJSON() as Record<string, unknown>
-        ),
-        outline: canvasOutline(elements),
-        png: pictureOf(id),
-        port: PREVIEW_PORT,
-      };
+      return { ...canvasFile(id), png: pictureOf(id), port: PREVIEW_PORT };
+    },
+
+    /**
+     * Writes the artifact into its session's project folder at
+     * `artifacts/<name>/` as one commit by the session, so it outlives the
+     * session and reaches every checkout of the project; a promote again
+     * commits it as it stands then over the same folder. Stamps the doc's
+     * `meta.promoted`. Refused outside a project, and when git refuses.
+     */
+    promote: async (instanceId: string, id: string): Promise<Promoted> => {
+      const instance = sessionOf(instanceId);
+      const row = own(instance, id);
+      const { projectId } = instance;
+      if (!projectId) {
+        throw new ArtifactRefusal(409, NO_PROJECT);
+      }
+      const folder = promotedFolder(row.name);
+      const at = new Date().toISOString();
+      const files = promotedFiles(instance, row, at);
+      let commit: string;
+      try {
+        const there = new Set(await folderFileNames(projectId, folder));
+        ({ sha: commit } = await changeFolderFiles(
+          projectId,
+          {
+            writes: Object.entries(files).map(([name, content]) => ({
+              path: `${folder}/${name}`,
+              content,
+            })),
+            deletes: PROMOTED_FILES.filter(
+              (name) => !(name in files) && there.has(name)
+            ).map((name) => `${folder}/${name}`),
+          },
+          {
+            author: { name: sessionLabel(instance).name },
+            message: `Promote ${row.kind} ${row.name} from session ${instance.id.slice(0, 8)}`,
+          }
+        ));
+      } catch (error) {
+        if (!(error instanceof FolderRefusal)) {
+          throw error;
+        }
+        throw new ArtifactRefusal(
+          error.status === 413 || error.status === 409 ? error.status : 503,
+          `${row.name} could not be committed: ${error.message.replace(TRAILING_DOT, "")}.`,
+          { cause: error }
+        );
+      }
+      const promoted: ArtifactPromotion = { commit, at };
+      docs.transact(row.id, "hub", (doc) =>
+        doc.getMap("meta").set("promoted", promoted)
+      );
+      return { commit, path: `${folder}/` };
     },
 
     /** A draft canvas went out with a send: it is the session's to hold now. */
@@ -1486,6 +1662,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           data: png,
         }))
       );
+      keepComposited(row, body);
       const at = new Date().toISOString();
       docs.transact(row.id, "hub", (live) => {
         live.getMap("meta").set("sentAt", at);

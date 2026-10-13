@@ -53,12 +53,15 @@ import type { Tasks } from "./tasks";
  * `comment_reply` and `comment_resolve` beside the artifact tools, the
  * agent's only way to read and answer a pin's thread: about 634 tokens more
  * for the worker, the delegate and the lead (worker 23,136, delegate 6,160,
- * lead 14,978 measured).
+ * lead 14,978 measured). `artifact_promote` (§5.10, slice 6), the agent's
+ * only way to keep an artifact in its project's folder, adds about 197
+ * tokens to the same three (worker 23,333, delegate 6,358, lead 15,175
+ * measured).
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 23_500,
-  delegate: 6200,
-  lead: 15_200,
+  worker: 23_800,
+  delegate: 6500,
+  lead: 15_500,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,

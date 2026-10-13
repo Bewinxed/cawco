@@ -22,6 +22,7 @@ export const ARTIFACT_TOOLS = [
   "artifact_update",
   "artifact_read",
   "artifact_show",
+  "artifact_promote",
   "comment_read",
   "comment_reply",
   "comment_resolve",
@@ -158,6 +159,15 @@ export const artifactShow = {
   description:
     "Bring one of your artifacts to the front of your panel when the person should look at it again. Answers `opened`: " +
     "true once a dashboard showing your session has it on screen (up to 10 s), else false with `why`.",
+  input: { id },
+};
+
+export const artifactPromote = {
+  name: "artifact_promote",
+  description:
+    "Keep one of your artifacts with your project when a page, canvas or preview is worth keeping: commits it to " +
+    "artifacts/<name>/ in the project's folder, which outlives this session and reaches every checkout. Again " +
+    "later commits it as it stands then. Answers `commit` and `path`; outside a project it is refused.",
   input: { id },
 };
 
