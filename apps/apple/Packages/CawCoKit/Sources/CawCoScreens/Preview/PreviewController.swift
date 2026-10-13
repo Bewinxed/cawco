@@ -304,7 +304,14 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         Task { [weak self] in
             guard let self else { return }
             do {
-                _ = try await web.callAsyncJavaScript("await window.cawco.send();", contentWorld: .page)
+                // WebKit's own method, not the Swift overlay's `async` refinement of it:
+                // that lives in libswiftWebKit, which iOS 18 does not ship, and
+                // linking it stopped the app at launch there (OS_REASON_DYLD).
+                try await withCheckedThrowingContinuation { (done: CheckedContinuation<Void, any Error>) in
+                    web.__callAsyncJavaScript("await window.cawco.send();", arguments: [:], inFrame: nil, in: .page) { _, error in
+                        if let error { done.resume(throwing: error) } else { done.resume() }
+                    }
+                }
                 if failureOf == "send" { clearFailure() }
             } catch {
                 // Its sentence came first, as `cawco:error`.
