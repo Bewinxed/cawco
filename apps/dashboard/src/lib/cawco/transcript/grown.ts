@@ -325,6 +325,23 @@ export class GrownShape {
     return { d, height, up };
   }
 
+  /** The shape at `p` as `path()`, in a box `box` placed in the shell: a keyframe for what stands in it. */
+  cutAt(p: number, box: ClipBox): string {
+    return this.#cut(this.outline(p).height, box, p);
+  }
+
+  /** The outline and its drop, for a motion that moves them as layers. */
+  get layers(): { halo: HTMLElement; drop: HTMLElement } {
+    return { halo: this.#halo, drop: this.#drop };
+  }
+
+  /** The drop goes at once: a motion of the layers is about to run. */
+  unsettle(): void {
+    this.#dropFold?.cancel();
+    this.#dropFold = null;
+    this.#drop.classList.remove("settled");
+  }
+
   /** The shape as `path()`, in a box `box` placed in the shell. */
   #cut(height: number, box: ClipBox, p = this.open): string {
     const top = height - box.bottom - box.height;
@@ -538,6 +555,34 @@ export class GrownShape {
     }
     this.#clips.clear();
   }
+}
+
+/**
+ * A rounded box as `path()`, drawn with the grown outline's own commands
+ * in the same order, so a motion between the two interpolates point by
+ * point: the composer's canvas folding into its chip's box and opening
+ * out of it.
+ */
+export function boxCut(
+  box: { left: number; top: number; width: number; height: number },
+  r: number
+): string {
+  const x0 = box.left;
+  const y0 = box.top;
+  const x1 = box.left + box.width;
+  const y1 = box.top + box.height;
+  const q = Math.min(r, box.width / 2, box.height / 2);
+  const P = (x: number, y: number) => `${x.toFixed(1)} ${y.toFixed(1)}`;
+  const top = P(x1, y0 + q);
+  const left = P(x0, y0 + q);
+  let d = `M ${P(x0 + q, y1)} L ${P(x1 - q, y1)} A ${q} ${q} 0 0 0 ${P(x1, y1 - q)} L ${top}`;
+  d += ` C ${top} ${top} ${top}`;
+  d += ` Q ${P(x1, y0)} ${P(x1 - q, y0)}`;
+  d += ` C ${P(x1 - q, y0)} ${P(x0 + q, y0)} ${P(x0 + q, y0)}`;
+  d += ` Q ${P(x0, y0)} ${left}`;
+  d += ` C ${left} ${left} ${left}`;
+  d += ` L ${P(x0, y1 - q)} A ${q} ${q} 0 0 0 ${P(x0 + q, y1)} Z`;
+  return `path("${d}")`;
 }
 
 /**

@@ -118,6 +118,8 @@ export { default as IconToolNotebook } from "~icons/solar/notebook-bold-duotone"
 export { default as IconFileLog } from "~icons/solar/notes-bold-duotone";
 /** Solar's own spelling. The `palette-*` cut is a board; this one is the palette. */
 export { default as IconPalette } from "~icons/solar/pallete-2-bold-duotone";
+/** Attach's Files and photos. */
+export { default as IconPaperclip } from "~icons/solar/paperclip-bold-duotone";
 /** Caw holds still while his lead works (the sidebar's motion switch). */
 export { default as IconPause } from "~icons/solar/pause-bold-duotone";
 export { default as IconToolEdit } from "~icons/solar/pen-2-bold-duotone";
@@ -159,6 +161,8 @@ export { default as IconShield } from "~icons/solar/shield-bold-duotone";
 /** Rules: a standing guard over what sessions say, distinct from bare `shield`. */
 export { default as IconRules } from "~icons/solar/shield-check-bold-duotone";
 export { default as IconShop } from "~icons/solar/shop-bold-duotone";
+/** A canvas's Undock, out of the artifact panel back over the field. */
+export { default as IconUndock } from "~icons/solar/sidebar-minimalistic-bold-duotone";
 export { default as IconSidebar } from "~icons/solar/sidebar-minimalistic-line-duotone";
 export { default as IconToolGeneric } from "~icons/solar/sledgehammer-bold-duotone";
 export { default as IconPhone } from "~icons/solar/smartphone-bold-duotone";

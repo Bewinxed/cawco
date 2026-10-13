@@ -91,6 +91,20 @@ export interface PendingFile {
   size: number;
 }
 
+/**
+ * The canvas the message carries (Projects spec §5.10): a draft canvas
+ * artifact, standing over the field or folded to its chip. Send carries
+ * its file, its outline and its picture.
+ */
+export interface DraftCanvas {
+  /** Folded to its chip; otherwise it stands in the composer. */
+  folded: boolean;
+  id: string;
+  name: string;
+  /** Its picture as the chip shows it, base64 PNG; null until drawn. */
+  thumb: string | null;
+}
+
 /** The most element notes one message carries. */
 const MAX_SELECTIONS = 12;
 
@@ -120,6 +134,7 @@ export class ComposerDraft {
   texts = $state<PendingText[]>([]);
   files = $state<PendingFile[]>([]);
   selections = $state<PendingSelection[]>([]);
+  canvas = $state<DraftCanvas | null>(null);
   /** The note whose editor is (or was last) open, and whether it is open. */
   editing = $state<PendingSelection | null>(null);
   editorOpen = $state(false);
@@ -161,7 +176,8 @@ export class ComposerDraft {
       this.text.length > 0 ||
       this.images.length > 0 ||
       this.texts.length > 0 ||
-      this.files.length > 0;
+      this.files.length > 0 ||
+      this.canvas !== null;
     // Held in state, the unsent message is a proxy all the way down, and a
     // proxy cannot be stored: its plain copy is what gets kept.
     if (!writing && this.unsent) {
@@ -173,6 +189,7 @@ export class ComposerDraft {
       texts: $state.snapshot(this.texts),
       files: $state.snapshot(this.files),
       selections: $state.snapshot(this.selections),
+      canvas: $state.snapshot(this.canvas),
     };
   }
 
@@ -183,6 +200,7 @@ export class ComposerDraft {
     this.texts = content.texts;
     this.files = content.files;
     this.selections = content.selections;
+    this.canvas = content.canvas;
   }
 
   /**
@@ -200,6 +218,7 @@ export class ComposerDraft {
         texts: $state.snapshot(this.texts),
         files: $state.snapshot(this.files),
         selections: $state.snapshot(this.selections),
+        canvas: $state.snapshot(this.canvas),
       },
     };
     liftedIds.add(id);
@@ -210,6 +229,7 @@ export class ComposerDraft {
     this.texts = [];
     this.files = [];
     this.selections = [];
+    this.canvas = null;
   }
 
   /**
@@ -246,7 +266,8 @@ export class ComposerDraft {
       this.images.length > 0 ||
       this.texts.length > 0 ||
       this.files.length > 0 ||
-      this.selections.length > 0
+      this.selections.length > 0 ||
+      this.canvas !== null
   );
 
   /** A file is still on its way to the hub: nothing sends until it lands. */
@@ -438,11 +459,13 @@ export class ComposerDraft {
       texts: $state.snapshot(this.texts),
       files: $state.snapshot(this.files),
       selections: $state.snapshot(this.selections),
+      canvas: $state.snapshot(this.canvas),
     };
     this.text = "";
     this.images = [];
     this.texts = [];
     this.files = [];
+    this.canvas = null;
     this.editorOpen = false;
     this.editing = null;
     return { text, extras };
@@ -486,6 +509,8 @@ export class ComposerDraft {
     // take the field.
     this.putBack();
     this.text = text;
+    // A canvas that went out rides back as its file, outline and picture.
+    this.canvas = null;
     this.selections = extras.selections ?? [];
     this.texts = (extras.attachments ?? []).flatMap((attachment) =>
       attachment.kind === "text"

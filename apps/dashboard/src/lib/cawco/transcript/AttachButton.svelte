@@ -6,11 +6,18 @@
    * prompt both carry it. Its box is the composer's control size,
    * `--c-composer-field`, concentric with a shell inset by
    * `--c-composer-inset`.
+   *
+   * Where a session can draw (`ondraw`), Attach is a menu: Files and photos,
+   * and Draw, which opens the composer's canvas (The pen's swipe: Draw is
+   * how a finger, a mouse and a phone get there).
    */
-  import { IconPlus } from "#lib/icons.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import { IconArtifactCanvas, IconPaperclip, IconPlus } from "#lib/icons.js";
   import type { ComposerDraft } from "./composer-draft.svelte";
 
-  let { draft }: { draft: ComposerDraft } = $props();
+  let { draft, ondraw }: { draft: ComposerDraft; ondraw?: () => void } =
+    $props();
 
   let input = $state<HTMLInputElement>();
 
@@ -34,14 +41,33 @@
   type="file"
   bind:this={input}
 >
-<button
-  aria-label="Attach a file or image"
-  class="att-btn touch-hit"
-  onclick={() => input?.click()}
-  type="button"
->
-  <IconPlus />
-</button>
+{#if ondraw}
+  <DropdownMenu.Root>
+    <DropdownMenu.Trigger aria-label="Attach or draw" class="att-btn touch-hit">
+      <IconPlus />
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Content align="start" side="top">
+      <DropdownMenu.Item onSelect={() => input?.click()}>
+        <IconPaperclip />
+        Files and photos
+      </DropdownMenu.Item>
+      <DropdownMenu.Item onSelect={ondraw}>
+        <IconArtifactCanvas />
+        Draw
+        <DropdownMenu.Shortcut>⌘⇧D</DropdownMenu.Shortcut>
+      </DropdownMenu.Item>
+    </DropdownMenu.Content>
+  </DropdownMenu.Root>
+{:else}
+  <button
+    aria-label="Attach a file or image"
+    class="att-btn touch-hit"
+    onclick={() => input?.click()}
+    type="button"
+  >
+    <IconPlus />
+  </button>
+{/if}
 
 <style>
   .hidden-file {

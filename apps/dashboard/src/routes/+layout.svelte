@@ -4,6 +4,7 @@
   import type { Snippet } from "svelte";
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import CanvasStages from "#lib/cawco/canvas/CanvasStages.svelte";
   import { ensureConnected } from "#lib/cawco/client.svelte.js";
   import { GROUPS } from "#lib/cawco/config/sections.js";
   import { trackDevicePixel } from "#lib/cawco/device-pixel.js";
@@ -123,3 +124,4 @@
   position={narrowToasts.current ? "top-center" : "bottom-right"}
 />
 <Shell railWidth={data.railWidth}> {@render children()} </Shell>
+<CanvasStages />

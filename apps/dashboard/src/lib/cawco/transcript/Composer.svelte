@@ -83,6 +83,7 @@
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconChevronUp, IconSend, IconStop } from "#lib/icons.js";
+  import { handBack, stages } from "../canvas/stage.svelte";
   import {
     cawco,
     readOlderPage,
@@ -106,6 +107,7 @@
   import type { Message } from "../types";
   import AttachButton from "./AttachButton.svelte";
   import AttachmentChips from "./AttachmentChips.svelte";
+  import { CanvasRoom } from "./canvas-room.svelte";
   import type { ComposerDraft } from "./composer-draft.svelte";
   import { stand } from "./composer-presence.svelte";
   import DelegateTray from "./DelegateTray.svelte";
@@ -1090,6 +1092,7 @@
     dismissed = false;
     if (event.type === "input") {
       sendBlock = "";
+      room.error = "";
       draft.notice = "";
     }
   }
@@ -1122,14 +1125,18 @@
   }
 
   let sendBlock = $state("");
-  const sendNotice = $derived(sendError || sendBlock || draft.notice);
+  const sendNotice = $derived(
+    sendError || sendBlock || canvasNotice() || draft.notice
+  );
 
   /** A send pressed while a note's screenshot was still on its way. */
   let awaiting = $state<{
     draft: ComposerDraft;
     via: (text: string, extras: SendExtras, id: string) => void;
   } | null>(null);
-  const pending = $derived(sending || awaiting?.draft === draft);
+  const pending = $derived(
+    sending || awaiting?.draft === draft || canvasWorking()
+  );
   $effect(() => {
     if (awaiting && awaiting.draft !== draft) {
       // The composer moved to another conversation: that press was the other's.
@@ -1182,6 +1189,10 @@
       return;
     }
     awaiting = null;
+    if (draft.canvas) {
+      sendWithCanvas(via);
+      return;
+    }
     // The text leaves the field for the one row it becomes (motion/share),
     // keyed by the id the message is sent under. The field is measured
     // before it redraws empty.
@@ -1190,6 +1201,40 @@
     departBox(`sent:${id}`, field as HTMLTextAreaElement);
     dismissed = true;
     via(text, extras, id);
+  }
+
+  /**
+   * A message carrying the canvas: the canvas's picture is drawn now and
+   * its file, outline and picture join the send through the attachments
+   * and images it already carries. The chip flies into the row the message
+   * becomes when no words go with it; the words do otherwise. A canvas that
+   * cannot go says why under the chip and nothing is sent.
+   */
+  async function sendWithCanvas(
+    via: (text: string, extras: SendExtras, id: string) => void
+  ): Promise<void> {
+    const writing = draft;
+    const { canvas } = draft;
+    if (!canvas) {
+      return;
+    }
+    const extra = await room.extras();
+    if (!extra || draft !== writing || draft.canvas !== canvas) {
+      return;
+    }
+    const chip = canvas.folded ? canvasChip : undefined;
+    const id = newId();
+    if (draft.text.trim() || !chip) {
+      departBox(`sent:${id}`, field as HTMLTextAreaElement);
+    } else {
+      departBox(`sent:${id}`, chip, false);
+    }
+    const { text, extras } = draft.take();
+    dismissed = true;
+    extras.attachments = [...(extras.attachments ?? []), ...extra.attachments];
+    extras.images = [...(extras.images ?? []), ...extra.images];
+    via(text, extras, id);
+    room.sent(canvas.id);
   }
 
   /**
@@ -1240,6 +1285,9 @@
     // While the wheel is up its keys are its own; what it leaves (a key
     // typed into a draft of your own, any key once it is folding away)
     // reaches the field as usual.
+    if (canvasKey(event)) {
+      return;
+    }
     if ((recall && wheel?.key(event)) || recallKey(event)) {
       return;
     }
@@ -1252,6 +1300,11 @@
       return;
     }
     if (menuOpen ? menuKey(event) : chipKey(event)) {
+      return;
+    }
+    if (event.key === "Escape" && canvasUp) {
+      event.preventDefault();
+      room.fold();
       return;
     }
     if (event.key === "Enter" && !event.shiftKey) {
@@ -1339,6 +1392,128 @@
   /** The box the pill stands in, which the grown shape and its rows share. */
   let shell = $state<HTMLElement>();
   let pill = $state<HTMLFormElement>();
+
+  /* ---- the canvas: the draft's drawing, standing over the field -------- */
+
+  /** The composer's box (chips, notice, pill), whose top the canvas stands on. */
+  let column = $state<HTMLElement>();
+  /** The canvas's box over the field, while it stands there. */
+  let canvasSlot = $state<HTMLElement>();
+  /** The canvas's chip, while it is folded. */
+  let canvasChip = $state<HTMLElement>();
+  const room = new CanvasRoom({
+    column: () => column,
+    dock: () => dockEl,
+    draft: () => draft,
+    field: () => field,
+    chip: () => canvasChip,
+    pill: () => pill,
+    session: () => recallOf,
+    shell: () => shell,
+    slot: () => canvasSlot,
+  });
+  /** What went wrong making, reading or sending the canvas, said over the field. */
+  function canvasNotice(): string {
+    return room.error;
+  }
+  /** The canvas is being made, or read for a send: Send waits, pending. */
+  function canvasWorking(): boolean {
+    return room.working;
+  }
+  /** The canvas stands over the field, or is on its way up or down: the grown shape is the composer. */
+  const canvasUp = $derived(room.up);
+  /** Its box over the field is laid out while the draft's canvas stands there. */
+  const canvasStands = $derived(
+    room.up && !!draft.canvas && !draft.canvas.folded
+  );
+
+  // The composer handed another conversation's draft: this one's canvas goes,
+  // the new one's stands if it was standing.
+  let canvasDraft: ComposerDraft | undefined;
+  $effect(() => {
+    const next = draft;
+    untrack(() => {
+      if (canvasDraft !== undefined && canvasDraft !== next) {
+        room.rebind();
+      } else if (
+        canvasDraft === undefined &&
+        next.canvas &&
+        !next.canvas.folded
+      ) {
+        room.rebind();
+      }
+      canvasDraft = next;
+    });
+  });
+  // The panel gives a canvas back (Undock, or Done while docked).
+  $effect(() => {
+    const asked = handBack.ask;
+    if (!asked || asked.instanceId !== recallOf) {
+      return;
+    }
+    untrack(() => {
+      handBack.ask = null;
+      room.takeBack(asked);
+    });
+  });
+  // The panel shows the canvas standing here (picked from its list): it is the panel's.
+  $effect(() => {
+    const id = draft.canvas?.id;
+    const stage = id ? stages.get(id) : undefined;
+    if (stage?.at === "panel" && !draft.canvas?.folded) {
+      untrack(() => room.yielded());
+    }
+  });
+  $effect(() => {
+    const refit = () => room.refit();
+    window.addEventListener("resize", refit);
+    return () => {
+      window.removeEventListener("resize", refit);
+      room.destroy();
+    };
+  });
+
+  /** ⌘⇧D (Ctrl+Shift+D): the canvas opens, or folds when it stands. */
+  const isCanvasKey = (event: KeyboardEvent) =>
+    event.shiftKey &&
+    (event.metaKey || event.ctrlKey) &&
+    !event.altKey &&
+    event.key.toLowerCase() === "d";
+
+  function canvasKey(event: KeyboardEvent): boolean {
+    if (!(recallOf && isCanvasKey(event)) || askOpen) {
+      return false;
+    }
+    event.preventDefault();
+    if (recall) {
+      wheel?.back();
+    }
+    room.toggle();
+    return true;
+  }
+
+  /**
+   * The key reaches the composer from anywhere in its group: the field,
+   * its chips, the page around it. Escape folds a standing canvas.
+   */
+  function windowKey(event: KeyboardEvent): void {
+    if (event.defaultPrevented || !paneVisible || !dockEl) {
+      return;
+    }
+    const at = document.activeElement;
+    const ours =
+      !at || at === document.body || !!dockEl.closest(".leaf")?.contains(at);
+    if (!ours || at === field) {
+      return;
+    }
+    if (canvasKey(event)) {
+      return;
+    }
+    if (event.key === "Escape" && canvasUp && !recall) {
+      event.preventDefault();
+      room.fold();
+    }
+  }
   const recalled = $derived(recallOf ? cawco.session(recallOf) : null);
 
   /**
@@ -1385,7 +1560,7 @@
    * start, so in a draft it still moves the caret, as a shell's does.
    */
   function startsRecall(): boolean {
-    if (!(recallOf && field) || recall || draft.lifted || askOpen) {
+    if (!(recallOf && field) || recall || draft.lifted || askOpen || canvasUp) {
       return false;
     }
     const { selectionStart: from, selectionEnd: to } = field;
@@ -1592,7 +1767,8 @@
       !(recallOf && field && shell && pill && ctrls) ||
       recall ||
       draft.lifted ||
-      askOpen
+      askOpen ||
+      canvasUp
     ) {
       return;
     }
@@ -1778,7 +1954,7 @@
 
   /*
    * A held press or a swipe up on a touch screen. With the keyboard down the
-   * composer is a control you can hold: a touch or a pen resting on it
+   * composer is a control you can hold: a finger resting on it
    * --dur-press-hold brings the wheel up under it, and so does one that
    * swipes up off it; dragging while still down rolls it. A swipe's own
    * rise is the opening's: the roll starts where the finger turns back
@@ -1806,9 +1982,42 @@
   } | null>(null);
   let swallowClick = false;
 
+  /**
+   * A pen on the pill (The pen's swipe): a swipe up with it, by the wheel's
+   * own test (past the slop, more up than across), grows the pill into the
+   * canvas. A pen never holds the wheel up; that press is a finger's.
+   */
+  let pen: { id: number; x: number; y: number } | null = null;
+
+  /** The pen on the pill moved: true when the move was the pen's. */
+  function penMoved(event: PointerEvent): boolean {
+    if (!pen || event.pointerId !== pen.id) {
+      return false;
+    }
+    const dx = event.clientX - pen.x;
+    const dy = event.clientY - pen.y;
+    if (dy < -SLOP && -dy > Math.abs(dx)) {
+      pen = null;
+      event.preventDefault();
+      room.open();
+    } else if (Math.hypot(dx, dy) > SLOP) {
+      pen = null;
+    }
+    return true;
+  }
+
   function onholddown(event: PointerEvent): void {
+    if (event.pointerType === "pen") {
+      pen =
+        recallOf &&
+        !(recall || draft.lifted || askOpen || canvasUp) &&
+        !(event.target as Element).closest("button, a, input")
+          ? { id: event.pointerId, x: event.clientX, y: event.clientY }
+          : null;
+      return;
+    }
     if (
-      event.pointerType === "mouse" ||
+      event.pointerType !== "touch" ||
       !recallOf ||
       recall ||
       draft.lifted ||
@@ -1847,6 +2056,9 @@
 
   $effect(() => {
     const moved = (event: PointerEvent) => {
+      if (penMoved(event)) {
+        return;
+      }
       const press = hold;
       if (!press || event.pointerId !== press.id) {
         return;
@@ -1890,6 +2102,9 @@
       wheel?.follow(event.clientY - press.from);
     };
     const lifted = (event: PointerEvent) => {
+      if (pen?.id === event.pointerId) {
+        pen = null;
+      }
       const press = hold;
       if (!press || event.pointerId !== press.id) {
         return;
@@ -1993,7 +2208,7 @@
   }
 
   async function liftQueued(message: Message): Promise<void> {
-    if (!(field && recallOf) || draft.lifted || recall || askOpen) {
+    if (!(field && recallOf) || draft.lifted || recall || askOpen || canvasUp) {
       return;
     }
     // Both ends first, then the change: one layout.
@@ -2409,6 +2624,7 @@
     if (draft.lifted) {
       returnEdit();
     }
+    room.stepAside();
     if (document.activeElement === field) {
       askRefocus = true;
       field.blur();
@@ -2552,15 +2768,15 @@
       }
     });
     sizes.observe(node);
-    const room = () => {
+    const remeasure = () => {
       if (askBox) {
         askBox.max = askRoom();
       }
     };
-    window.addEventListener("resize", room);
+    window.addEventListener("resize", remeasure);
     return () => {
       sizes.disconnect();
-      window.removeEventListener("resize", room);
+      window.removeEventListener("resize", remeasure);
     };
   });
 
@@ -2662,6 +2878,8 @@
      longer deliver ("ResizeObserver loop completed with undelivered
      notifications", every frame the field grew), and it stood a frame
      behind the panel. -->
+<svelte:window onkeydown={windowKey} />
+
 <div
   class="dock"
   data-keeps-draft
@@ -2669,6 +2887,7 @@
   bind:this={dockEl}
   style:--perch-rise={perch && perchHeight ? `${perchHeight}px` : null}
   class:asking={askRaised}
+  class:drawing={canvasUp}
   class:minimized={minimized}
 >
   {#if prompts}
@@ -2739,10 +2958,28 @@
       </div>
     {/if}
   </div>
-  <div class="composer" bind:clientHeight={panel} in:rise out:fade>
-    <!-- The row of attachments is one block above the field, the element
-         notes picked in the preview leading it. -->
-    <AttachmentChips {draft} hasNotes={draft.selections.length > 0}>
+  <div
+    class="composer"
+    bind:this={column}
+    bind:clientHeight={panel}
+    in:rise
+    out:fade
+  >
+    {#if canvasStands}
+      <!-- The canvas's box over the field: its stage (canvas/) stands on
+           it, the grown shape round it and the field. -->
+      <div aria-hidden="true" class="canvas-slot" bind:this={canvasSlot}></div>
+    {/if}
+    <!-- The row of attachments is one block above the field, the canvas's
+         chip and the element notes picked in the preview leading it. -->
+    <AttachmentChips
+      canvasHidden={room.chipHidden}
+      {draft}
+      hasNotes={draft.selections.length > 0}
+      onopencanvas={() => room.open()}
+      onremovecanvas={() => room.remove()}
+      bind:canvasChip
+    >
       {#snippet notes()}
         {#each draft.selections as selection (`${selection.element.url}:${selection.element.selector}`)}
           <SelectionChip
@@ -2863,6 +3100,9 @@
          touches. -->
       <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: the press handlers read a touch held on the pill for the recall wheel; everything it leads to is also a key (↑, the field's aria-keyshortcuts) -->
       <form
+        aria-keyshortcuts={recallOf
+          ? "Meta+Shift+D Control+Shift+D"
+          : undefined}
         aria-label={FIELD_LABEL}
         class="cin field-shell"
         onclickcapture={onholdclick}
@@ -2872,7 +3112,7 @@
         ontouchend={onholdnative}
         bind:this={pill}
         class:asking={askOpen}
-        class:grown={!!edit || askOpen}
+        class:grown={!!edit || askOpen || canvasUp}
         class:hint-back={!!hintBack}
         class:recalling={!!recall}
         class:settling={!!recall && !wheeling}
@@ -3036,7 +3276,10 @@
              a press outside put the wheel away. -->
         <div class="ctrls" inert={!!recall} bind:this={ctrls}>
           {@render leading?.()}
-          <AttachButton {draft} />
+          <AttachButton
+            {draft}
+            ondraw={recallOf ? () => room.open() : undefined}
+          />
           <!-- Pending from the press until the hub takes the message: the glyph
            slot turns to the kit spinner and presses are swallowed. -->
           <button
@@ -3098,6 +3341,23 @@
   }
   .composer > :global(*) {
     pointer-events: auto;
+  }
+  .composer {
+    position: relative;
+  }
+  /* The canvas's box: on the composer's top, a pixel inside the grown
+     shape's edge; the room writes its height. Its stage stands over it. */
+  .composer > .canvas-slot {
+    position: absolute;
+    inset-inline: 1px;
+    bottom: 100%;
+    pointer-events: none;
+  }
+  /* While the canvas stands, the chips and a notice stand in the grown
+     shape over the field, above its surface. */
+  .dock.drawing .composer > :global(:is(.atts, .send-error)) {
+    position: relative;
+    z-index: 2;
   }
   /* The rest of the dock above the panel, cards stood on its bottom edge;
      the gap to the panel is the stack's own bottom padding, so its
@@ -3739,7 +3999,8 @@
      gone, out of the tab order with them, and come back the same way
      (`--step-aside`) as the ask folds. */
   .dock.asking :is(.prompts, .lift, .perch, .ctrls),
-  .dock.asking :global(.atts) {
+  .dock.asking :global(.atts),
+  .dock.drawing :is(.prompts, .lift, .perch) {
     opacity: 0;
     visibility: hidden;
     transition:

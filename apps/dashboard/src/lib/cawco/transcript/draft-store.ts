@@ -12,6 +12,7 @@
 import { newId } from "../id";
 import type { PendingSelection } from "../preview/selection";
 import type {
+  DraftCanvas,
   PendingFile,
   PendingImage,
   PendingText,
@@ -30,6 +31,8 @@ const STORE = "drafts";
 export const CAP_BYTES = 50 * 1024 * 1024;
 
 interface DraftRecord {
+  /** The canvas the message carries; absent on a record stored before canvases. */
+  canvas?: DraftCanvas | null;
   /** Absent on a record stored before files could be attached. */
   files?: StoredFile[];
   images: { blob: Blob; mediaType: string; name: string }[];
@@ -102,6 +105,7 @@ function base64Of(blob: Blob): Promise<string> {
 
 /** What a stored draft is made of: the composer's own pieces. */
 export interface DraftContent {
+  canvas: DraftCanvas | null;
   files: PendingFile[];
   images: PendingImage[];
   selections: PendingSelection[];
@@ -143,11 +147,14 @@ export async function loadDraft(
       ...selection,
       capturing: null,
     })),
+    // Back as its chip: a reload opens nothing over the field by itself.
+    canvas: record.canvas ? { ...record.canvas, folded: true } : null,
   };
 }
 
 const isEmpty = (draft: DraftContent) =>
   !(
+    draft.canvas ||
     draft.text ||
     draft.images.length ||
     draft.texts.length ||
@@ -198,6 +205,7 @@ export async function saveDraft(
     files.reduce((sum, file) => sum + (file.blob?.size ?? 0), 0) +
     2 *
       (draft.text.length +
+        (draft.canvas?.thumb?.length ?? 0) +
         draft.texts.reduce((sum, t) => sum + t.content.length, 0) +
         JSON.stringify(selections).length);
   const record: DraftRecord = {
@@ -207,6 +215,7 @@ export async function saveDraft(
     texts: draft.texts,
     files,
     selections,
+    canvas: draft.canvas,
     size,
     updatedAt: Date.now(),
   };

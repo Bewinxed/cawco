@@ -15,11 +15,24 @@
     IconAlert,
     IconCursor,
     IconExternal,
+    IconPlus,
     IconRefresh,
     IconSend,
+    IconUndock,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
-  import { cawco, closePreview } from "../client.svelte";
+  import {
+    handBack,
+    holdStage,
+    letGo,
+    type Stage,
+  } from "../canvas/stage.svelte";
+  import {
+    cawco,
+    closePreview,
+    createDraftCanvas,
+    showArtifact,
+  } from "../client.svelte";
   import { conversationHref, resolveSessionTitle } from "../links";
   import { appear, dur } from "../motion/curves.svelte";
   import { closeInto, depart } from "../motion/share.svelte";
@@ -582,6 +595,73 @@
   async function backToSession() {
     await goto(conversationHref(instanceId, cawco.instanceIndex));
   }
+  /*
+   * A canvas stands on its stage (canvas/stage.svelte.ts), one iframe for it
+   * wherever it is: the well holds a slot the stage stands over, so Dock and
+   * Undock fly that same iframe between the composer and here.
+   */
+  const isCanvas = $derived(artifact?.kind === "canvas");
+  const holder = Symbol("panel");
+  let canvasSlot = $state<HTMLElement>();
+  let stage = $state<Stage>();
+  /** This session's composer can take the canvas back: not a lead's shown beside a thread, not its own tab. */
+  const canUndock = $derived(isCanvas && !(ownTab || linkSession));
+  $effect(() => {
+    const canvas = isCanvas ? artifact : undefined;
+    const slot = canvasSlot;
+    if (!(canvas && slot)) {
+      return;
+    }
+    const held = holdStage(holder, instanceId, canvas.id, canvas.name);
+    stage = held;
+    held.slots.panel = slot;
+    held.actions.panel = {
+      undock: () => giveBack(false),
+      done: () => giveBack(true),
+    };
+    held.standAt("panel");
+    held.changed();
+    return () => {
+      if (held.slots.panel === slot) {
+        held.slots.panel = undefined;
+        held.actions.panel = undefined;
+        if (held.at === "panel") {
+          held.standAt(null);
+        }
+      }
+      letGo(holder, held.id);
+      stage = undefined;
+    };
+  });
+  /** Undock (or Done here): the session's composer takes the canvas back, open or as its chip. */
+  function giveBack(folded: boolean) {
+    if (!(canUndock && artifact)) {
+      return;
+    }
+    handBack.ask = {
+      instanceId,
+      id: artifact.id,
+      name: artifact.name,
+      folded,
+    };
+  }
+  /** The head's +: a new canvas, standing here at once. */
+  let making = $state(false);
+  async function newCanvas() {
+    making = true;
+    try {
+      const made = await createDraftCanvas(instanceId);
+      await showArtifact(instanceId, made.id);
+    } catch (error) {
+      failure = {
+        message: `The canvas couldn't be made: ${error instanceof Error ? error.message : String(error)}. Try + again.`,
+        again: null,
+      };
+    } finally {
+      making = false;
+    }
+  }
+
   let closing = $state(false);
   async function close() {
     closing = true;
@@ -615,6 +695,31 @@
       <span class="send-label">Send picks</span>
     </button>
   {/if}
+  {#if !(ownTab || linkSession)}
+    <button
+      aria-busy={making || undefined}
+      aria-disabled={making || undefined}
+      aria-label="New canvas"
+      class="touch-hit"
+      onclick={whileIdle(() => making, newCanvas)}
+      title="New canvas"
+      type="button"
+    >
+      <PendingContent icon={IconPlus} pending={making} />
+    </button>
+  {/if}
+  {#if canUndock}
+    <button
+      aria-label="Undock"
+      class="other touch-hit"
+      disabled={!stage}
+      onclick={() => giveBack(false)}
+      title="Undock"
+      type="button"
+    >
+      <IconUndock />
+    </button>
+  {/if}
   {#if artifact && !ownTab}
     <!-- The same artifact, its doc and its tools, in a tab of its own. -->
     <a
@@ -627,7 +732,7 @@
       ><IconExternal /></a
     >
   {/if}
-  {#if onselect}
+  {#if onselect && !isCanvas}
     <button
       aria-pressed={selecting}
       class="touch-hit"
@@ -643,7 +748,11 @@
     aria-label="Reload"
     class="other touch-hit"
     onclick={() => {
-      reload += 1;
+      if (isCanvas && stage?.frame) {
+        stage.frame.src = stage.src;
+      } else {
+        reload += 1;
+      }
     }}
     title="Reload"
     type="button"
@@ -674,54 +783,58 @@
   bind:section
   bind:well
 >
-  {#each frames as key (key)}
-    {@const current = key === frameKey}
-    <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
-    <iframe
-      allow="clipboard-write"
-      inert={!current}
-      onerror={() => arrived(key)}
-      onload={(event) => {
-        arrived(key);
-        // Input inside the frame never reaches this page: heard there, it
-        // keeps a tab in use from reloading under its reader.
-        try {
-          const inner = (event.currentTarget as HTMLIFrameElement)
-            .contentWindow;
-          if (inner) {
-            watchInput(inner);
+  {#if isCanvas}
+    <!-- The canvas's stage stands over this box: its one iframe. -->
+    <div aria-hidden="true" class="canvas-slot" bind:this={canvasSlot}></div>
+  {:else}
+    {#each frames as key (key)}
+      {@const current = key === frameKey}
+      <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
+      <iframe
+        allow="clipboard-write"
+        inert={!current}
+        onerror={() => arrived(key)}
+        onload={(event) => {
+          arrived(key);
+          // Input inside the frame never reaches this page: heard there, it
+          // keeps a tab in use from reloading under its reader.
+          try {
+            const inner = (event.currentTarget as HTMLIFrameElement)
+              .contentWindow;
+            if (inner) {
+              watchInput(inner);
+            }
+          } catch {
+            // A frame of another origin: its input is not ours to hear.
           }
-        } catch {
-          // A frame of another origin: its input is not ours to hear.
-        }
-        if (key === frameKey) {
-          down = downOf(event.currentTarget as HTMLIFrameElement);
-          if (down) {
-            retrying = false;
+          if (key === frameKey) {
+            down = downOf(event.currentTarget as HTMLIFrameElement);
+            if (down) {
+              retrying = false;
+            }
+            announce();
           }
-          announce();
-        }
-      }}
-      src={url}
-      title="Preview"
-      class:canvas={artifact?.kind === "canvas"}
-      class:ready={!current || loaded}
-      {@attach (node) => {
-        if (key === frameKey) {
-          iframe = node;
-        }
-      }}
-    ></iframe>
-  {/each}
-  <div
-    aria-hidden="true"
-    class="cover"
-    class:ready={loaded || standing !== null}
-  >
-    <span
-      class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
-    ></span>
-  </div>
+        }}
+        src={url}
+        title="Preview"
+        class:ready={!current || loaded}
+        {@attach (node) => {
+          if (key === frameKey) {
+            iframe = node;
+          }
+        }}
+      ></iframe>
+    {/each}
+    <div
+      aria-hidden="true"
+      class="cover"
+      class:ready={loaded || standing !== null}
+    >
+      <span
+        class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
+      ></span>
+    </div>
+  {/if}
   {#if down}
     <!-- What happened, why and the way back, where the page would be. -->
     <div class="down" role="alert" transition:appear>
@@ -842,10 +955,11 @@
   iframe.ready {
     opacity: 1;
   }
-  /* A canvas is ours, drawn in our tokens: its theme follows the
-     dashboard's (the frame's scheme is its prefers-color-scheme). */
-  iframe.canvas {
-    color-scheme: inherit;
+  /* The canvas's stage (canvas/) stands over the well's whole box. */
+  .canvas-slot {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
   }
   /* Covers the frame until it connects, holding one kit skeleton line. */
   .cover {

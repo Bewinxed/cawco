@@ -12,7 +12,7 @@
   import type { Snippet } from "svelte";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
-  import { IconClose } from "#lib/icons.js";
+  import { IconArtifactCanvas, IconClose } from "#lib/icons.js";
   import type { ComposerDraft } from "./composer-draft.svelte";
   import DocThumb from "./DocThumb.svelte";
 
@@ -20,13 +20,24 @@
     draft,
     notes,
     hasNotes = false,
+    canvasChip = $bindable(),
+    canvasHidden = false,
+    onopencanvas,
+    onremovecanvas,
   }: {
     draft: ComposerDraft;
     /** Chips that lead the row, the composer's element notes. */
     notes?: Snippet;
     /** Whether `notes` has any to show. */
     hasNotes?: boolean;
+    /** The folded canvas's chip, which the canvas folds into and opens out of. */
+    canvasChip?: HTMLElement;
+    /** Drawn but not shown: the canvas is flying into it. */
+    canvasHidden?: boolean;
+    onopencanvas?: () => void;
+    onremovecanvas?: () => void;
   } = $props();
+  const folded = $derived(draft.canvas?.folded ? draft.canvas : null);
 
   const removeImage = (i: number) => {
     draft.images = draft.images.filter((_, n) => n !== i);
@@ -39,11 +50,44 @@
   };
 </script>
 
-{#if hasNotes ||
+{#if folded ||
+  hasNotes ||
   draft.images.length ||
   draft.texts.length ||
   draft.files.length}
   <div class="atts" transition:unfold {@attach reflow()}>
+    {#if folded}
+      <!-- The canvas, folded: a tap opens it again out of this box. -->
+      <span
+        class="att canvas-chip"
+        data-artifact={folded.id}
+        data-flip="pop"
+        bind:this={canvasChip}
+        style:visibility={canvasHidden ? "hidden" : null}
+      >
+        <button
+          aria-label="Open the canvas"
+          class="canvas-open touch-hit"
+          onclick={onopencanvas}
+          type="button"
+        >
+          {#if folded.thumb}
+            <img alt="" src="data:image/png;base64,{folded.thumb}">
+          {:else}
+            <IconArtifactCanvas aria-hidden="true" />
+          {/if}
+          <span class="att-name">Canvas</span>
+        </button>
+        <button
+          aria-label="Remove the canvas"
+          class="touch-hit"
+          onclick={onremovecanvas}
+          type="button"
+        >
+          <IconClose />
+        </button>
+      </span>
+    {/if}
     {@render notes?.()}
     {#each draft.images as img, i (img.name + i)}
       <span class="att" data-flip="pop">
@@ -194,5 +238,27 @@
   .att button :global(svg) {
     inline-size: 16px;
     block-size: 16px;
+  }
+  /* The canvas's chip opens the canvas from its picture and name; the
+     picture box holds the pen glyph until the picture is drawn. */
+  .att .canvas-open {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: auto;
+    min-width: 0;
+    height: 20px;
+    padding: 0;
+    color: var(--ink-strong);
+    font: inherit;
+
+    & :global(svg) {
+      flex: 0 0 auto;
+      color: var(--ink-muted);
+    }
+    &:hover {
+      background: none;
+      color: var(--ink-strong);
+    }
   }
 </style>

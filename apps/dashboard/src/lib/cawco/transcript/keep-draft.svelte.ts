@@ -110,6 +110,7 @@ export function keepDraft(
           texts: [],
           files: [],
           selections: [],
+          canvas: null,
         });
       }
     },

@@ -5266,6 +5266,55 @@ export async function showArtifact(
   }
 }
 
+/**
+ * A new canvas for the composer (a pen's swipe, Draw, ⌘⇧D, the panel's +):
+ * empty, a draft until its first send, not shown in the panel by being made.
+ */
+export async function createDraftCanvas(
+  instanceId: string
+): Promise<{ id: string; name: string }> {
+  const response = await fetch(artifactsPath(instanceId), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ kind: "canvas", name: "canvas", draft: true }),
+  });
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  const made = (await response.json()) as { id: string; name: string };
+  return { id: made.id, name: made.name };
+}
+
+/** A canvas as a send carries it: its `.excalidraw` file, its outline, its picture (base64 PNG, null until drawn). */
+export interface CanvasExport {
+  file: { elements: { isDeleted?: boolean }[] } & Record<string, unknown>;
+  outline: string;
+  png: string | null;
+}
+
+export async function exportCanvas(id: string): Promise<CanvasExport> {
+  const response = await fetch(
+    `/api/artifacts/${encodeURIComponent(id)}/export`
+  );
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+  return response.json();
+}
+
+/** The draft canvas went out with a send: the session holds it now. */
+export async function canvasSent(
+  instanceId: string,
+  id: string
+): Promise<void> {
+  const response = await fetch(`${artifactsPath(instanceId, id)}/sent`, {
+    method: "POST",
+  });
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+}
+
 /** An artifact by id with the session that made it, and whether its panel shows it now: what its own tab opens on. */
 export async function findArtifact(
   id: string
