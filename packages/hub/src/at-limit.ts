@@ -5,9 +5,10 @@ import {
   type AccountProvider,
   type AccountReading,
   type AtLimit,
-  accountMoveWords,
+  accountMoveSentence,
   accountName,
   type ContinueStep,
+  clockWords,
   type LimitWindow,
   modelScope,
   type NeutralOrigin,
@@ -53,8 +54,17 @@ import { createRebalancer, readForecast, reReadCost } from "./rebalance";
 
 export type LimitRow = ReturnType<DbShape["getInstancesByIds"]>[number];
 
-/** Why a carry left a session's data where it was: its process runs there (server.ts `moveRowsToAccount`). */
-export const PROCESS_RUNS = "its process runs";
+/**
+ * Why a carry left a session's conversation where it was (server.ts
+ * `moveRowsToAccount`), in words a line quotes after "can't move …: ".
+ * `running`: its Claude Code process still runs there and keeps something
+ * a stop would lose, so a move waits for its next turn's end rather than
+ * failing.
+ */
+export interface Kept {
+  running: boolean;
+  why: string;
+}
 
 export type AtLimitDecision =
   /** Held until `until`: the reset, or the next look when none was named. */
@@ -301,7 +311,9 @@ export interface AtLimitPorts {
     row: LimitRow,
     accountId: string,
     carryOn: false | "limit" | "signin"
-  ) => Promise<string | undefined>;
+  ) => Promise<Kept | undefined>;
+  /** `row` as a line names it: its title. */
+  named: (row: LimitRow) => string;
   /** Writes one line into `row`'s transcript; under `id`, the line already written there is what it says now. */
   note: (row: LimitRow, move: AccountMove, id?: string) => void;
   /** What adding an account set moving, for the Accounts page. */
@@ -309,9 +321,14 @@ export interface AtLimitPorts {
   /**
    * Owes `row` a move to `accountId` at its turn's end, or its next start
    * (server.ts `relaunchAtTurnEnd`, the way a person's move mid-turn waits):
-   * `move` is the line written once it has moved.
+   * `move` is the line written once it has moved; `why` says why it waits.
    */
-  owe: (row: LimitRow, accountId: string, move: AccountMove) => void;
+  owe: (
+    row: LimitRow,
+    accountId: string,
+    move: AccountMove,
+    why: string
+  ) => void;
   /** The account each session owing a move, or with a launch on its way, goes to, by session. */
   owed: () => ReadonlyMap<string, string>;
   /** A move off a refused sign-in, said to whoever hears `row`'s reports. */
@@ -348,6 +365,16 @@ export interface AtLimitPorts {
   /** Whether `row`'s prompt cache is still warm: a move off its account then re-reads it. */
   warm: (row: LimitRow) => boolean;
 }
+
+/** A move or continuation as a line says what waits: "move from A to B". */
+const actionWords = (
+  decision: Exclude<AtLimitDecision, { action: "wait" }>,
+  current: Account,
+  target: Account
+): string =>
+  decision.action === "move"
+    ? `move from ${accountName(current)} to ${accountName(target)}`
+    : `go on from a summary on ${accountName(target)}`;
 
 /** What a failure said, as a line quotes it. */
 const messageOf = (error: unknown): string =>
@@ -490,16 +517,26 @@ export const createAtLimit = (ports: AtLimitPorts) => {
    * running when the refusal came. Given up once {@link SETTLE_FOR_MS} has
    * passed: a session busy that long is in a turn its account took.
    */
-  const settle = (row: LimitRow, current: Account, cause: Cause): void => {
+  const settle = (
+    row: LimitRow,
+    current: Account,
+    cause: Cause,
+    /** What waits for its turn's end, as a line says it: "move from A to B". */
+    what: string
+  ): void => {
     const was = settling.get(row.id);
     const until = was?.until ?? Date.now() + SETTLE_FOR_MS;
     if (was) {
       lifetime.cancel(was.timer);
+    } else {
+      console.info(
+        `[at-limit] ${ports.named(row)} can't ${what} yet: it is inside a turn, and a session is moved or continued only between turns. The hub looks again every ${SETTLE_MS / 1000} s for ${SETTLE_FOR_MS / 60_000} minutes.`
+      );
     }
     if (lifetime.closed() || Date.now() >= until) {
       settling.delete(row.id);
       console.info(
-        `[at-limit] ${row.id}: still mid-turn after ${SETTLE_FOR_MS / 1000}s; its next refusal is looked at then`
+        `[at-limit] ${ports.named(row)} is still inside a turn ${SETTLE_FOR_MS / 60_000} minutes after ${accountName(current)} refused one, so the hub stops looking: a turn running that long is one ${accountName(current)} took. Its next refused turn is answered when it ends.`
       );
       return;
     }
@@ -510,13 +547,19 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         return;
       }
       act(fresh, current, cause).catch((error: unknown) => {
-        console.error(
-          `[at-limit] ${row.id}: ${error instanceof Error ? error.message : String(error)}`
-        );
+        console.error(failedWords(fresh, current, error));
       });
     });
     settling.set(row.id, { timer: next, until });
   };
+
+  /** The line a failure of the controller's own answer to `current`'s limit writes. */
+  const failedWords = (
+    row: LimitRow,
+    current: Account,
+    error: unknown
+  ): string =>
+    `[at-limit] ${ports.named(row)}: the hub's answer to ${accountName(current)}'s limit failed: ${messageOf(error)}. It stays on ${accountName(current)} as it was; the next look at the limit decides again.`;
 
   /** The line a move writes: what it cost, and the window, or the refused sign-in, that sent it. */
   const movedNote = (
@@ -597,6 +640,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const move: AccountMove = {
       kind: "unmoved",
       action: failed.action,
+      ...(refused ? { signedOut: true as const } : {}),
       from: namedAccount(current),
       to: namedAccount(target),
       step: failed.step,
@@ -605,7 +649,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (repeated) {
       // The line written the first time logged itself; this says it again.
       console.warn(
-        `[at-limit] ${row.id}: ${accountMoveWords(move, Date.now()).line} (again)`
+        `[at-limit] ${ports.named(row)}, again: ${accountMoveSentence(move, Date.now())}`
       );
       if (line && events.some((event) => event.id === line)) {
         // Its "Summarising…" line goes, the first telling of it stands.
@@ -638,14 +682,14 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     cause: Cause
   ): Promise<void> => {
     const refused = cause === "refused";
-    const why = await ports.move(row, target.id, refused ? "signin" : "limit");
-    if (why) {
+    const kept = await ports.move(row, target.id, refused ? "signin" : "limit");
+    if (kept) {
       unmoved(
         row,
         current,
         target,
         { action: "move", step: "start" },
-        why,
+        kept.why,
         undefined,
         refused
       );
@@ -705,10 +749,18 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       row.model,
       now
     );
+    const from = accountName(current);
+    const to = target ? accountName(target) : "the account a person chose";
     if (full !== null) {
       settling.delete(row.id);
-      // Held without a line of its own: its account's "waiting" line would
-      // name the wrong reset, and the person's move already says where it goes.
+      // Held without a transcript line of its own: its account's "waiting"
+      // line would name the wrong reset, and the person's move already says
+      // where it goes.
+      if (db.atLimit.hold(row.id)?.until !== full) {
+        console.info(
+          `[at-limit] ${ports.named(row)} can't move from ${from} to ${to} yet, as a person asked: ${to} is at its limit too, until ${clockWords(full)}. It is held on ${from} and moves when ${to} resets; nothing else is done to it meanwhile.`
+        );
+      }
       db.atLimit.putHold({
         instanceId: row.id,
         accountId: current.id,
@@ -719,7 +771,12 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     // Only between turns: never inside a tool round, never over a turn
     // someone started since.
     if (!(await ports.idle(row))) {
-      settle(row, current, cause);
+      settle(
+        row,
+        current,
+        cause,
+        `move from ${from} to ${to}, as a person asked`
+      );
       return;
     }
     const was = settling.get(row.id);
@@ -728,7 +785,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       settling.delete(row.id);
     }
     console.info(
-      `[at-limit] ${row.id}: carrying out the move a person asked, off ${accountName(current)} to ${target ? accountName(target) : toId}`
+      `[at-limit] ${ports.named(row)} moves from ${from} to ${to} now, as a person asked: it is between turns and ${to} has room. Its conversation is copied whole and it carries on there.`
     );
     await ports.carryHandMove(row);
   };
@@ -763,20 +820,20 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         }
         return;
       }
+      const target = db.accounts.get(decision.targetId);
+      if (!target) {
+        return;
+      }
       // Only between turns: never inside a tool round, never over a turn
       // someone started since.
       if (!(await ports.idle(row))) {
-        settle(row, current, cause);
+        settle(row, current, cause, actionWords(decision, current, target));
         return;
       }
       const was = settling.get(row.id);
       if (was) {
         lifetime.cancel(was.timer);
         settling.delete(row.id);
-      }
-      const target = db.accounts.get(decision.targetId);
-      if (!target) {
-        return;
       }
       db.atLimit.dropHold(row.id);
       if (decision.action === "move") {
@@ -881,7 +938,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
           summary: summary.text,
         });
         console.info(
-          `[at-limit] ${row.id}: summary kept ahead of ${accountName(current)}'s limit (${window.percent}%)`
+          `[at-limit] ${ports.named(row)}: its summary is written ahead of ${accountName(current)}'s limit, at ${Math.round(window.percent)}% of its ${windowWords(window)} window. If the limit refuses it, it goes on from that summary without waiting for one to be written.`
         );
       } else {
         db.atLimit.dropSummary(row.id);
@@ -889,23 +946,40 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     } catch (error) {
       db.atLimit.dropSummary(row.id);
       console.warn(
-        `[at-limit] ${row.id}: summary ahead of the limit failed: ${error instanceof Error ? error.message : String(error)}`
+        `[at-limit] ${ports.named(row)}: writing its summary ahead of ${accountName(current)}'s limit failed: ${messageOf(error)}. Nothing changes for it now; if the limit refuses it and it is continued, the summary is written then.`
       );
     }
+  };
+
+  /** Why a kept summary goes now, in words; nothing while it is still wanted. */
+  const discardWhy = (
+    kept: { accountId: string; resetsAt: string },
+    row: LimitRow | undefined,
+    named: string,
+    now: number
+  ): string | undefined => {
+    if (!row || over(row)) {
+      return "the session has ended";
+    }
+    if (Date.parse(kept.resetsAt) <= now) {
+      return `${named}'s window reset before it was needed`;
+    }
+    return ports.accountOf(row) === kept.accountId
+      ? undefined
+      : `it runs on another account now, not ${named}`;
   };
 
   /** Drops each kept summary whose window reset first, or whose session left its account or ended. */
   const discardSummaries = (now: number): void => {
     for (const kept of db.atLimit.summaries()) {
       const row = rowOf(kept.instanceId);
-      if (
-        Date.parse(kept.resetsAt) <= now ||
-        over(row) ||
-        (row && ports.accountOf(row) !== kept.accountId)
-      ) {
+      const account = db.accounts.get(kept.accountId);
+      const named = account ? accountName(account) : "its account";
+      const why = discardWhy(kept, row, named, now);
+      if (why) {
         db.atLimit.dropSummary(kept.instanceId);
         console.info(
-          `[at-limit] ${kept.instanceId}: summary kept at its limit discarded`
+          `[at-limit] ${row ? ports.named(row) : "A session no longer recorded"}: the summary kept for it at ${named}'s limit is dropped: ${why}. A later limit writes a new one.`
         );
       }
     }
@@ -942,14 +1016,12 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         last.resetsAt === resetsAt
       )
     ) {
+      // Its line says it, in the log too ({@link AtLimitPorts.note}).
       ports.note(row, {
         kind: "stopped",
         account: namedAccount(current),
         resetsAt,
       });
-      console.info(
-        `[at-limit] ${row.id}: ${project.name}'s Caw is off, so nothing carries it on past ${accountName(current)}'s limit`
-      );
     }
     if (held) {
       ports.changed();
@@ -971,7 +1043,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     } else if (await ports.idle(row)) {
       db.atLimit.dropHold(row.id);
       console.info(
-        `[at-limit] ${row.id}: ${accountName(current)} is signed in again; carrying on`
+        `[at-limit] ${ports.named(row)}: ${accountName(current)} is signed in again on its machine, so it carries on there.`
       );
       ports.resume(row, "signin");
     }
@@ -1010,7 +1082,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (await ports.idle(row)) {
       db.atLimit.dropHold(row.id);
       console.info(
-        `[at-limit] ${row.id}: ${accountName(current)} reset; carrying on`
+        `[at-limit] ${ports.named(row)}: ${accountName(current)}'s limit has reset, so it carries on there, told to pick up where the limit stopped it.`
       );
       ports.resume(row, "limit");
     }
@@ -1096,8 +1168,16 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       if (!(row && current)) {
         return;
       }
+      const now = Date.now();
+      const resets = refusedUntil(
+        db.accounts.bench(now),
+        readingOf(current.id),
+        current.id,
+        row.model,
+        now
+      );
       console.info(
-        `[at-limit] ${instanceId}: turn refused at ${accountName(current)}'s limit`
+        `[at-limit] ${ports.named(row)}'s turn was refused: ${accountName(current)} is at its limit${resets === null ? "" : ` until ${clockWords(resets)}`}. ${ports.handMove(row) ? "A person moved it, so that move is all the hub does with it." : "The hub decides now whether it waits for the reset, moves whole to another account, or goes on from a summary."}`
       );
       // A person moved it: that move is all that is done, whoever started
       // the turn and whoever's work it is.
@@ -1108,7 +1188,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       const origin = ports.startedBy(row);
       if (origin?.kind === "system" && noticeTurn(origin)) {
         console.info(
-          `[at-limit] ${instanceId}: the hub's own word (${origin.name ?? "a notice"}) started that turn; it is left for a person or its parent`
+          `[at-limit] ${ports.named(row)}'s refused turn was started by the hub's own word (${origin.name ?? "a notice"}), not by a person or its parent, so it isn't moved or continued for it. It stays on ${accountName(current)} until a person or its parent writes to it.`
         );
         return;
       }
@@ -1129,7 +1209,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         return;
       }
       console.info(
-        `[at-limit] ${instanceId}: turn ended on ${accountName(current)}'s refused sign-in`
+        `[at-limit] ${ports.named(row)}'s turn ended because Claude Code refused ${accountName(current)}'s sign-in, so ${accountName(current)} is signed out on its machine. It moves to another account and carries on there; with none free, it waits until ${accountName(current)} is signed in again in Configure → Accounts.`
       );
       await act(row, current, "refused");
     },
@@ -1153,8 +1233,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
           raced.delete(instanceId);
           return;
         }
+        const current = currentOf(row);
         console.info(
-          `[accounts] ${instanceId}: its turn raced another Claude Code process refreshing its token; sent again after ${RACE_RETRY_MS / 1000}s`
+          `[accounts] ${ports.named(row)}'s last turn was cut because another Claude Code process was refreshing ${current ? `${accountName(current)}'s` : "its account's"} token at the same moment. It is sent again now, ${RACE_RETRY_MS / 1000} s later, once; a second cut ends the turn as failed.`
         );
         ports.resume(row, "signin");
       });

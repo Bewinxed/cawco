@@ -32835,6 +32835,11 @@
                     "$ref": "#/components/schemas/BlockMetadataAction",
                     "description": "What failed: a move whole (`move`), or a continuation from a summary (`continue`)."
                   },
+                  "signedOut": {
+                    "description": "It was moving off `from` because Claude Code refused `from`'s sign-in: `from` has no reset to wait for.",
+                    "const": true,
+                    "type": "boolean"
+                  },
                   "from": {
                     "$ref": "#/components/schemas/NamedAccount"
                   },
@@ -38402,6 +38407,11 @@
                   "action": {
                     "$ref": "#/components/schemas/BlockMetadataAction",
                     "description": "What failed: a move whole (`move`), or a continuation from a summary (`continue`)."
+                  },
+                  "signedOut": {
+                    "description": "It was moving off `from` because Claude Code refused `from`'s sign-in: `from` has no reset to wait for.",
+                    "const": true,
+                    "type": "boolean"
                   },
                   "from": {
                     "$ref": "#/components/schemas/NamedAccount"

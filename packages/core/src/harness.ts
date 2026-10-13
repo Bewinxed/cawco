@@ -1368,8 +1368,8 @@ export interface CarrySessionRequest {
 export type CarrySessionOutcome =
   /** Its data is all in the dir the request named; `entries` were moved there now. */
   | { state: "carried"; entries: number }
-  /** Its process runs, so nothing moved. */
-  | { state: "live" }
+  /** Its process runs, so nothing moved; `why`: what keeps it running, in the machine's words. */
+  | { state: "live"; why: string }
   | { state: "failed"; error: string };
 
 /**

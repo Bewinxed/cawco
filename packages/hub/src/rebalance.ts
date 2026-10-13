@@ -13,7 +13,7 @@ import {
   windowWords,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
-import { type AtLimitPorts, type LimitRow, PROCESS_RUNS } from "./at-limit";
+import type { AtLimitPorts, Kept, LimitRow } from "./at-limit";
 import { stoppedByCawOff } from "./caw-own";
 import type { DbShape } from "./db";
 import type { LimitHold } from "./db/at-limit";
@@ -403,6 +403,7 @@ export interface RebalancerDeps {
     | "idle"
     | "machineName"
     | "move"
+    | "named"
     | "note"
     | "noticed"
     | "owe"
@@ -572,25 +573,30 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       source.out.cacheKept = kept;
     };
     if (!(await ports.idle(row))) {
-      ports.owe(row, target.id, move);
+      ports.owe(
+        row,
+        target.id,
+        move,
+        "it is inside a turn, and a session moves only between turns"
+      );
       going();
       return "owed";
     }
     acting.add(row.id);
-    let why: string | undefined;
+    let why: Kept | undefined;
     try {
       why = await ports.move(row, target.id, false);
     } finally {
       acting.delete(row.id);
     }
-    if (why === PROCESS_RUNS) {
-      ports.owe(row, target.id, move);
+    if (why?.running) {
+      ports.owe(row, target.id, move, why.why);
       going();
       return "owed";
     }
     if (why) {
       console.warn(
-        `[rebalance] ${row.id}: did not move to ${accountName(target)}: ${why}`
+        `[rebalance] ${ports.named(row)} stays on ${accountName(from)}, not moved to ${accountName(target)} ahead of its forecast run-out: ${why.why}. The next look at the accounts, within 5 minutes, decides again.`
       );
       return "skip";
     }
@@ -620,7 +626,7 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     const target = targetId ? db.accounts.get(targetId) : undefined;
     if (!target) {
       console.info(
-        `[rebalance] ${row.id}: no other account has room to take it off ${accountName(from)}`
+        `[rebalance] ${ports.named(fresh)} stays on ${accountName(from)}, which is forecast to run out at ${clockWords(source.stress.runsOutAt)}: no other account signed in on its machine has room for it. The next look at the accounts, within 5 minutes, decides again.`
       );
       return "stop";
     }
@@ -631,10 +637,10 @@ export const createRebalancer = (deps: RebalancerDeps) => {
           ok: true,
           why: "its cache is cold, so moving re-reads nothing extra",
         };
-    const head = `[rebalance] ${row.id} on ${accountName(from)} (forecast to run out at ${clockWords(source.stress.runsOutAt)}): ${share.why}`;
+    const head = `[rebalance] ${ports.named(fresh)} is on ${accountName(from)}, which is forecast to run out at ${clockWords(source.stress.runsOutAt)}, and ${share.why}`;
     if (!allowed.ok) {
       console.info(
-        `${head}; stays, not moved to ${accountName(target)}: ${allowed.why}`
+        `${head}. It stays, not moved to ${accountName(target)}: ${allowed.why}. The next look at the accounts, within 5 minutes, decides again.`
       );
       return "skip";
     }
@@ -675,11 +681,13 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     );
     if (out !== null) {
       console.info(
-        `${head}; stays, and so do the rest: ${accountName(target)} would run out at ${clockWords(out)} with its burn`
+        `${head}. It stays, and so do the rest on ${accountName(from)}: with its burn, ${accountName(target)} would run out at ${clockWords(out)}. The next look at the accounts, within 5 minutes, decides again.`
       );
       return "stop";
     }
-    console.info(`${head}; moves to ${accountName(target)}: ${allowed.why}`);
+    console.info(
+      `${head}. It moves to ${accountName(target)} between turns: ${allowed.why}.`
+    );
     const done = await carry(source, fresh, target, warm);
     // Owed or moved, its burn leaves `from` for `target`.
     if (done !== "skip") {
@@ -1133,8 +1141,15 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       causes.set(key, entry);
     }
     for (const { cause, machineId, provider } of causes.values()) {
+      const came = cause.came
+        .map((one) => {
+          const account = db.accounts.get(one.accountId);
+          const named = account ? accountName(account) : "an account";
+          return `${named} ${one.how === "added" ? "signed in" : "came back from its bench"}`;
+        })
+        .join(", ");
       console.info(
-        `[rebalance] ${cause.came.map((one) => `${one.accountId} ${one.how === "added" ? "signed in" : "back from its bench"}`).join(", ")} on ${machineId}: rebalancing ${provider} there`
+        `[rebalance] ${came} on ${ports.machineName(machineId)}, so its accounts there are looked at now: sessions on accounts forecast to run out move to it between turns, and sessions held at a limit are decided again.`
       );
       detach(rebalance(provider, machineId, cause), "rebalance");
     }

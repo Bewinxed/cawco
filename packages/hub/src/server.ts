@@ -101,7 +101,7 @@ import {
   AGENT_BUSY,
   ASK_USER_QUESTION,
   ATTACHMENTS_HOME,
-  accountMoveWords,
+  accountMoveSentence,
   accountName,
   accountProvidersOf,
   agentProblem,
@@ -156,6 +156,7 @@ import {
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
   CUSTODY_HELD,
+  clockWords,
   contextFitRefusal,
   delegateAskText,
   deriveTitleFromFirstMessage,
@@ -297,8 +298,8 @@ import {
 import {
   cacheCarries,
   createAtLimit,
+  type Kept,
   type KeptSummary,
-  PROCESS_RUNS,
   refusedUntil,
   type Summarised,
 } from "./at-limit";
@@ -3661,11 +3662,11 @@ export const createServer = (
     ) {
       return;
     }
-    const account = db.accounts.get(accountId);
-    const where = `${account ? accountName(account) : accountId} on ${machineName(machineId)}`;
+    const named = accountWords(accountId);
+    const where = `${named} on ${machineName(machineId)}`;
     if (word.kind === "raced") {
       console.info(
-        `[accounts] ${instanceId}: refreshing ${where}'s token raced another Claude Code process; it stays signed in`
+        `[accounts] ${sessionName(row)}'s turn was cut: its Claude Code refreshed ${named}'s token at the same moment as another Claude Code process on ${machineName(machineId)}. ${named} stays signed in there, and the turn is sent again in a minute, once.`
       );
       return word;
     }
@@ -3687,7 +3688,7 @@ export const createServer = (
       reason: word.reason,
     });
     console.warn(
-      `[accounts] ${where} is signed out: ${instanceId}'s Claude Code refused its credential (${word.reason}); nothing new is placed on it there until it is signed in again`
+      `[accounts] ${where} is signed out: ${sessionName(row)}'s Claude Code refused its credential (${word.reason}). Nothing new is placed on ${named} there until it is signed in again on ${machineName(machineId)} in Configure → Accounts; the session it stopped is moved to another account.`
     );
     publishUsage(machineId);
     return word;
@@ -5967,8 +5968,17 @@ export const createServer = (
       move.accountId
     );
     const running = [...kept]
-      .filter(([, why]) => why === PROCESS_RUNS)
+      .filter(([, why]) => why.running)
       .map(([id]) => id);
+    for (const row of rows) {
+      const why = kept.get(row.id);
+      if (!why) {
+        continue;
+      }
+      console.warn(
+        `[accounts] ${sessionName(row)} stays on ${machineName(move.machineId)}'s own Claude Code login for now, not ${accountWords(move.accountId)}: ${why.why}. ${why.running ? "It is copied there once its process is gone." : "Its row keeps the login it ran on."}`
+      );
+    }
     for (const row of rows) {
       if (!(running.includes(row.id) || ranFrom.includes(row.id))) {
         db.accounts.removeMovedFrom(row.id);
@@ -6020,8 +6030,14 @@ export const createServer = (
     repinning.add(instanceId);
     try {
       const { kept } = await moveRowsToAccount(machineId, [row], into);
+      const why = kept.get(instanceId);
+      if (why) {
+        console.warn(
+          `[accounts] ${sessionName(row)} stays on ${machineName(machineId)}'s own Claude Code login for now, not ${accountWords(into)}: ${why.why}. ${why.running ? "It is copied there once its process is gone again." : "Its row keeps the login it ran on."}`
+        );
+      }
       // A process that came back is carried when it is gone again.
-      if (kept.get(instanceId) !== PROCESS_RUNS) {
+      if (!why?.running) {
         db.accounts.removeMovedFrom(instanceId);
       }
       publishInstances(machineId);
@@ -6809,7 +6825,7 @@ export const createServer = (
     }[],
     accountId: string | null,
     stop = false
-  ): Promise<{ kept: Map<string, string>; moved: string[] }> => {
+  ): Promise<{ kept: Map<string, Kept>; moved: string[] }> => {
     const requests: CarrySessionRequest[] = rows.flatMap((row) =>
       (row.harness ?? "claude") === "claude" && row.sessionId
         ? [
@@ -6824,7 +6840,9 @@ export const createServer = (
         : []
     );
     const outcomes = await askCarry(machineId, requests);
-    const kept = new Map<string, string>();
+    // Each caller says what became of a row left where it was, and what
+    // happens next: only it knows.
+    const kept = new Map<string, Kept>();
     const moved: string[] = [];
     for (const row of rows) {
       const why = requests.some((one) => one.instanceId === row.id)
@@ -6832,9 +6850,6 @@ export const createServer = (
         : undefined;
       if (why) {
         kept.set(row.id, why);
-        console.warn(
-          `[accounts] ${row.id} stays on its account; its data could not be carried to ${accountId ?? "no account"}: ${why}`
-        );
         continue;
       }
       db.patchInstance(row.id, { accountId });
@@ -6880,14 +6895,34 @@ export const createServer = (
   const keptBecause = (
     machineId: string,
     outcome: CarrySessionOutcome | undefined
-  ): string | undefined => {
+  ): Kept | undefined => {
     if (!outcome) {
-      return `${machineName(machineId)} said nothing of it`;
+      return {
+        running: false,
+        why: `${machineName(machineId)} didn't say whether it copied the conversation`,
+      };
     }
     if (outcome.state === "carried") {
       return;
     }
-    return outcome.state === "live" ? PROCESS_RUNS : outcome.error;
+    return outcome.state === "live"
+      ? {
+          running: true,
+          why: `its Claude Code process is busy (${outcome.why}), and a conversation isn't copied while the process writing it runs`,
+        }
+      : {
+          running: false,
+          why: `copying its conversation on ${machineName(machineId)} failed: ${outcome.error}`,
+        };
+  };
+
+  /** An account as a line names it: its email (or the name a person gave it); none is the machine's own login. */
+  const accountWords = (accountId: string | null | undefined): string => {
+    if (!accountId) {
+      return "the machine's own Claude Code login";
+    }
+    const account = db.accounts.get(accountId);
+    return account ? accountName(account) : "an account this hub no longer has";
   };
 
   /** The machine's word on each carry asked of it; one it never gave is a failure with its reason. */
@@ -6941,7 +6976,7 @@ export const createServer = (
         });
       } else if (seen && seen.accountId !== accountId) {
         console.warn(
-          `[accounts] conversation ${row.sessionId} has rows on ${seen.accountId ?? "no account"} and ${accountId ?? "no account"}; its data is left where it is`
+          `[accounts] ${sessionName(row)}'s conversation is claimed by sessions on ${accountWords(seen.accountId)} and on ${accountWords(accountId)}, so it is left where it is on ${machineName(machineId)}: it can't be in both accounts' stores. Moving one of those sessions to the other's account settles it.`
         );
         bySession.set(row.sessionId, null);
       }
@@ -7061,7 +7096,7 @@ export const createServer = (
     }
     if (rows.length > 0) {
       console.log(
-        `[accounts] ${rows.length} session(s) on ${accountId} are on ${into ?? "no account"} now`
+        `[accounts] ${rows.length} session${rows.length === 1 ? "" : "s"} that ran on ${accountWords(accountId)} ${rows.length === 1 ? "runs" : "run"} on ${accountWords(into)} now: ${accountWords(accountId)} left ${machineId ? machineName(machineId) : "every machine"}, and its conversations went with its store. Each one's next start runs there.`
       );
       publishInstances("");
     }
@@ -7355,12 +7390,12 @@ export const createServer = (
     const strangers = unheld.filter((id) => !removed.includes(id));
     if (removed.length > 0) {
       console.log(
-        `[accounts] ${machineName(machineId)} holds stores of ${removed.length} account${removed.length === 1 ? "" : "s"} this hub removed (${removed.join(", ")}); it forgets them`
+        `[accounts] ${machineName(machineId)} still holds the stores of ${removed.length} account${removed.length === 1 ? "" : "s"} this hub removed, so it is told to forget them. Their folders are named by account id, the only name left for them: ${removed.join(", ")}.`
       );
     }
     if (strangers.length > 0) {
       console.warn(
-        `[accounts] ${machineName(machineId)} holds stores of ${strangers.length} account${strangers.length === 1 ? "" : "s"} this hub has never heard of (${strangers.join(", ")}); left alone`
+        `[accounts] ${machineName(machineId)} holds the stores of ${strangers.length} account${strangers.length === 1 ? "" : "s"} this hub has never heard of, so they are left alone: another hub may own them. Remove the folders on that machine if nothing uses them. They are named by account id, the only name they have: ${strangers.join(", ")}.`
       );
     }
     return removed;
@@ -7424,7 +7459,7 @@ export const createServer = (
     }
     const joined = answer.result as AccountJoinedOn;
     console.log(
-      `[accounts] ${fromId} signed in on ${machineName(machineId)} as ${identity.email}, already ${existing.id}: ${joined.outcome === "kept" ? "its login there kept, the new one dropped" : "the new login is its own there now"}`
+      `[accounts] A new sign-in on ${machineName(machineId)} is ${identity.email}, which this hub already has as ${accountName(existing)}, so the two are one account there: ${joined.outcome === "kept" ? `${accountName(existing)}'s login on ${machineName(machineId)} is kept, and the new one is dropped` : `the new login is ${accountName(existing)}'s on ${machineName(machineId)} from now on`}.`
     );
     db.accounts.putSignin({
       accountId: existing.id,
@@ -10140,7 +10175,7 @@ export const createServer = (
       error: null,
     });
     console.info(
-      `[continuation] ${row.id}: ${prepared.source.instanceId} goes on ${inPlace ? "in place, in a fresh conversation" : `in a new session ${row.targetInstanceId}`}${request.target.account ? ` on account ${request.target.account}` : ""}; asked by ${askerWords(askedBy)}`
+      `[continuation] ${prepared.source.title} goes on from a summary ${inPlace ? "as itself, in a fresh conversation" : "in a new session"}${request.target.account ? ` on ${accountWords(request.target.account)}` : ""}, asked by ${askerWords(askedBy)}. ${summarise ? "Its summary is written first; the" : "The"} ${inPlace ? "fresh conversation" : "new session"} opens on it.`
     );
     publishInstances(prepared.source.machineId);
     // The job runs on its own; its record is what anyone follows.
@@ -10333,7 +10368,7 @@ export const createServer = (
     db.atLimit.dropHold(id);
     db.atLimit.dropSummary(id);
     console.info(
-      `[continuation] ${id} goes on in a fresh conversation${move.to ? ` on ${move.to.name}` : ""}; its last one is kept on its row`
+      `[continuation] ${sessionName(row)} goes on in a fresh conversation${move.to ? ` on ${move.to.name}` : ""}, opened on its summary. Its last conversation is kept and reads on above a "Continued" line in its transcript.`
     );
     // What was kept for it while it went on goes once the opening is read
     // ({@link readSend}); one a restart found read already goes now.
@@ -10341,6 +10376,8 @@ export const createServer = (
     publishInstances(row.machineId);
   };
 
+  /** Continuations whose session's process still runs, already said so ({@link leaveConversation}). */
+  const leavingSaid = new Set<string>();
   /**
    * A continuation in place's session leaves the conversation it runs, once
    * it is between turns: refused before anything changes when its start on
@@ -10376,14 +10413,21 @@ export const createServer = (
       true
     );
     const why = kept.get(id);
-    if (why === PROCESS_RUNS) {
+    if (why?.running) {
       // Between turns, yet holding work for later its machine will not end:
-      // asked again a beat later, not at once.
+      // asked again a beat later, not at once. Said once per wait.
+      if (!leavingSaid.has(job.id)) {
+        leavingSaid.add(job.id);
+        console.info(
+          `[continuation] ${sessionName(row)} can't go on from its summary yet: ${why.why}. The hub asks again every ${IN_PLACE_IDLE_LOOK_MS / 1000} s until it can.`
+        );
+      }
       await lifetime.sleep(IN_PLACE_IDLE_LOOK_MS);
       return leaveConversation(job);
     }
+    leavingSaid.delete(job.id);
     if (why) {
-      throw new Error(why);
+      throw new Error(why.why);
     }
     const left = db.continueInPlace(id, {
       accountId,
@@ -10527,7 +10571,7 @@ export const createServer = (
     const id = row.sourceInstanceId;
     if (!db.sendRecord(row.openingUuid) && db.undoContinueInPlace(id, row.id)) {
       console.warn(
-        `[continuation] ${id} goes on in the conversation it had: ${reason}`
+        `[continuation] ${row.prepared.source.title} couldn't go on in a fresh conversation: ${reason}. It goes on in the conversation it had, as it was.`
       );
       publishInstances(row.prepared.source.machineId);
     }
@@ -10676,8 +10720,11 @@ export const createServer = (
    */
   const adoptChildren = (from: string, to: string): void => {
     const adopted = db.adoptChildren(from, to);
+    const [source, target] = [from, to].map(
+      (id) => db.getInstancesByIds([id])[0]
+    );
     console.log(
-      `[continuation] ${to} took on from ${from}: ${adopted.sessions.length} delegate(s), ${adopted.items} work item(s), ${adopted.queuedItems} queued delegate(s), ${adopted.queuedStarts} queued task start(s), ${adopted.asks} pending ask(s)`
+      `[continuation] The new session${target ? ` ${sessionName(target)}` : ""} takes on ${source ? sessionName(source) : "its source"}'s live work: ${adopted.sessions.length} delegate(s), ${adopted.items} work item(s), ${adopted.queuedItems} queued delegate(s), ${adopted.queuedStarts} queued task start(s), ${adopted.asks} pending ask(s). Their reports go to it from now on.`
     );
     const machines = new Set(
       db
@@ -12739,6 +12786,32 @@ export const createServer = (
   };
 
   /**
+   * What a person's move of `row` mid-turn says: it waits for the turn's end,
+   * and, when its account is at its limit, that the limit will refuse that
+   * turn and the move goes then.
+   */
+  const midTurnMoveWords = (
+    row: StoredRow,
+    title: string,
+    fromName: string,
+    toName: string
+  ): string => {
+    const now = Date.now();
+    const resets = row.accountId
+      ? refusedUntil(
+          db.accounts.bench(now),
+          db.accounts.readings().find((one) => one.accountId === row.accountId),
+          row.accountId,
+          row.model,
+          now
+        )
+      : null;
+    return resets === null
+      ? `${title} can't move from ${fromName} to ${toName} yet: it is inside a turn, and a session moves only between turns. It moves when the turn ends.`
+      : `${title} can't move from ${fromName} to ${toName} yet: it is inside a turn, and ${fromName} is at its limit until ${clockWords(resets)}, so the limit will refuse that turn. It moves as soon as the turn ends and carries on on ${toName}; if ${toName} is at its limit by then, it is held until ${toName} resets.`;
+  };
+
+  /**
    * Moves `row` to `account` because a person asked, the line "Moved to …"
    * written as it moves. Its data is carried into the account's dir first
    * ({@link moveRowsToAccount}) and only then does its row name the account:
@@ -12748,7 +12821,8 @@ export const createServer = (
    * until then ({@link relaunchAtTurnEnd}); so does one whose machine is
    * away, whose next launch carries it. A hold at its old account's limit
    * ends: the person chose. A carry that cannot happen is refused, the row
-   * left as it was.
+   * left as it was. Every answer is a sentence: what happened, why, what
+   * happens next.
    */
   const moveByHand = async (
     row: StoredRow,
@@ -12775,21 +12849,20 @@ export const createServer = (
         }
       : null;
     const running = !["sleeping", "stopped", "error"].includes(row.status);
-    const owe = () => {
+    const title = sessionName(row);
+    const fromName = accountWords(row.accountId);
+    const toName = accountName(account);
+    const owe = (words: string) => {
       relaunchAtTurnEnd.set(row.id, { byHand: true, to: account.id, move });
-      return {
-        state: "pending" as const,
-        accountId: account.id,
-        why: running
-          ? `${sessionName(row)} moves to ${accountName(account)} when its turn ends.`
-          : `${sessionName(row)} moves to ${accountName(account)} when it next starts.`,
-      };
+      return { state: "pending" as const, accountId: account.id, why: words };
     };
-    if (
-      (running && !(await sessionIdle(row))) ||
-      !registry.agent(row.machineId)
-    ) {
-      return owe();
+    if (!registry.agent(row.machineId)) {
+      return owe(
+        `${title} can't move from ${fromName} to ${toName} yet: ${machineName(row.machineId)} isn't connected, and its conversation is copied on that machine. It moves when it next starts on ${machineName(row.machineId)}.`
+      );
+    }
+    if (running && !(await sessionIdle(row))) {
+      return owe(midTurnMoveWords(row, title, fromName, toName));
     }
     // A move it still owed (asked mid-turn, to another account) is over.
     relaunchAtTurnEnd.delete(row.id);
@@ -12803,12 +12876,14 @@ export const createServer = (
       running
     );
     const why = kept.get(row.id);
-    if (why === PROCESS_RUNS) {
-      return owe();
+    if (why?.running) {
+      return owe(
+        `${title} can't move from ${fromName} to ${toName} yet: ${why.why}. It moves when its next turn ends.`
+      );
     }
     if (why) {
       return {
-        refusal: `${sessionName(row)} stays on its account: its conversation could not be carried to ${accountName(account)} (${why}).`,
+        refusal: `${title} stays on ${fromName}, not moved to ${toName}: ${why.why}. Nothing changed; move it again once that is fixed.`,
       };
     }
     db.atLimit.dropHold(row.id);
@@ -12824,11 +12899,20 @@ export const createServer = (
     return {
       state: "moved",
       accountId: account.id,
-      why: running
-        ? `${sessionName(row)} runs on ${accountName(account)} now.`
-        : `${sessionName(row)} runs on ${accountName(account)} when it next starts.`,
+      why: handMovedWords(running, title, fromName, toName),
     };
   };
+
+  /** What a person's move that went says: copied, and relaunched now or at its next start. */
+  const handMovedWords = (
+    running: boolean,
+    title: string,
+    fromName: string,
+    toName: string
+  ): string =>
+    running
+      ? `${title} moved from ${fromName} to ${toName}: its conversation was copied whole and it relaunched there. What was kept for it goes to it now.`
+      : `${title} moved from ${fromName} to ${toName}: its conversation was copied there, and it runs on ${toName} when it next starts.`;
 
   /**
    * Relaunches a session on the account its row now names (or on none), its
@@ -12855,7 +12939,7 @@ export const createServer = (
       return;
     }
     console.log(
-      `[hub] ${row.id} relaunches on ${row.accountId ? `account ${row.accountId}` : "no account"}`
+      `[hub] ${sessionName(row)} relaunches on ${accountWords(row.accountId)}, its conversation resumed${carry ? " and told to carry on past the limit that stopped it" : ""}.`
     );
     transcripts.noteRelaunch(row.id);
     resumeSpawn(
@@ -12896,9 +12980,12 @@ export const createServer = (
       ({ kept }) => {
         const why = kept.get(stored.id);
         if (why) {
-          if (why === PROCESS_RUNS) {
+          if (why.running) {
             relaunchAtTurnEnd.set(stored.id, owed);
           }
+          console.warn(
+            `[accounts] ${sessionName(stored)} can't move from ${accountWords(stored.accountId)} to ${accountWords(to)} yet: ${why.why}. ${why.running ? "It moves when its next turn ends." : "The move is dropped; it stays where it is until it is moved again."}`
+          );
           return;
         }
         db.atLimit.dropHold(stored.id);
@@ -12937,7 +13024,7 @@ export const createServer = (
       return false;
     }
     console.info(
-      `[at-limit] ${row.id}: its turn was refused at its account's limit; the move it owes to ${accountName(to)} goes now, and it carries on there`
+      `[at-limit] ${sessionName(row)}'s turn was refused: ${accountWords(row.accountId)} is at its limit. It already owed a move to ${accountName(to)}, which has room, so it moves there now and carries on there.`
     );
     relaunchOnAccount(row.id, "limit");
     return true;
@@ -14920,6 +15007,22 @@ export const createServer = (
       "The sign-in failure that stopped your last turn has been dealt with. Carry on from where you stopped.",
   };
 
+  /** What a turn's end asks of the at-limit controller when nothing refused it: a summary ahead of the limit. */
+  const AHEAD_OF_LIMIT =
+    "its turn's end (a summary ahead of its account's limit)";
+
+  /** The line a failure of the at-limit controller's answer to `what` writes. */
+  const limitAnswerFailed = (
+    instanceId: string,
+    what: string,
+    error: unknown
+  ): void => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    console.error(
+      `[at-limit] ${row ? sessionName(row) : "A session no longer recorded"}: the hub's answer to ${what} failed: ${error instanceof Error ? error.message : String(error)}. It stays on ${accountWords(row?.accountId)} as it was; the next look at the limit decides again.`
+    );
+  };
+
   /** Has a session carry on where its account's limit, or a sign-in failure, stopped it. */
   const carryOn = (
     row: { id: string; machineId: string },
@@ -15485,7 +15588,13 @@ export const createServer = (
 
   /** Writes a line into a session's transcript: kept, and folded into what its screens show now. */
   const noteAtLimit = (
-    row: { id: string; sessionId: string | null; harness: string | null },
+    row: {
+      derivedTitle?: string | null;
+      harness: string | null;
+      id: string;
+      sessionId: string | null;
+      title?: string | null;
+    },
     move: AccountMove,
     /** A line already written under this id is what it says now: a continuation's "Summarising…" turned into what came of it. */
     id: string = crypto.randomUUID()
@@ -15498,8 +15607,9 @@ export const createServer = (
       harness: (row.harness ?? "claude") as HarnessKind,
       message: limitLine(row, event),
     });
+    // The transcript's own words: its line, then the detail under it.
     console.info(
-      `[at-limit] ${row.id}: ${accountMoveWords(move, event.at).line}`
+      `[at-limit] ${sessionName(row)}: ${accountMoveSentence(move, event.at)}`
     );
   };
 
@@ -15648,7 +15758,7 @@ export const createServer = (
       return;
     }
     console.info(
-      `[rebalance] ${row.id}: woken with its cache cold; re-placed from ${accountName(from)} to ${accountName(to)}`
+      `[rebalance] ${sessionName(row)} moves from ${accountName(from)} to ${accountName(to)} as it wakes: its prompt cache is cold, so re-reading its context costs the same on either account, and ${accountName(to)} is where placement puts it now. Its conversation is copied there before it starts.`
     );
     relaunchAtTurnEnd.set(row.id, {
       to: to.id,
@@ -15672,7 +15782,6 @@ export const createServer = (
    * that end, and its summary is stale.
    */
   const stillCovers = (
-    instanceId: string,
     kept: KeptSummary | undefined,
     prepared: PreparedContinuation
   ): KeptSummary | undefined => {
@@ -15682,7 +15791,7 @@ export const createServer = (
     const { covers } = prepared.extracted;
     const holds = !!prepared.prompt && kept.covers === covers;
     console.info(
-      `[at-limit] ${instanceId}: ${holds ? "reusing the summary kept" : "the summary kept is stale"} (it covers to ${kept.covers}; the conversation's summarised part ends at ${covers ?? "nothing"})`
+      `[at-limit] ${prepared.source.title}: ${holds ? "the summary written ahead of the limit still covers its conversation, so it goes on from that one and no new summary is written." : "the summary written ahead of the limit is out of date (it took a turn since), so a new one is written now."}`
     );
     return holds ? kept : undefined;
   };
@@ -15707,7 +15816,7 @@ export const createServer = (
     }
     const prepared = await prepareContinuation(row.id);
     const harness = (row.harness ?? "claude") as HarnessKind;
-    const reused = stillCovers(row.id, kept, prepared);
+    const reused = stillCovers(kept, prepared);
     startContinuation(
       prepared,
       {
@@ -15846,9 +15955,12 @@ export const createServer = (
     },
     move: async (row, accountId, stopped) => {
       if (!(registry.agent(row.machineId) && row.sessionId)) {
-        return row.sessionId
-          ? awayWords(row.machineId, "offline")
-          : "it has no conversation";
+        return {
+          running: false,
+          why: row.sessionId
+            ? awayWords(row.machineId, "offline")
+            : "it has no conversation to copy yet",
+        };
       }
       // Its process ends at rest and its data goes into the account's dir,
       // and only then does its row say the account; it starts again there.
@@ -15868,7 +15980,7 @@ export const createServer = (
       const agent = registry.agent(row.machineId);
       const [now] = db.getInstancesByIds([row.id]);
       if (!(agent && now?.sessionId)) {
-        return awayWords(row.machineId, "offline");
+        return { running: false, why: awayWords(row.machineId, "offline") };
       }
       resumeSpawn(
         agent,
@@ -15883,13 +15995,14 @@ export const createServer = (
     resume: carryOn,
     // Rebalance's move of a session mid-turn waits for its turn's end, as a
     // person's does; its line is written once it lands.
-    owe: (row, accountId, move) => {
+    owe: (row, accountId, move, why) => {
       relaunchAtTurnEnd.set(row.id, { to: accountId, move });
       console.info(
-        `[rebalance] ${row.id}: moves to ${move.kind === "moved" ? move.to.name : accountId} when its turn ends`
+        `[rebalance] ${sessionName(row)} can't move from ${accountWords(row.accountId)} to ${accountWords(accountId)} yet: ${why}. It moves when its turn ends.`
       );
     },
     owed: owedTargets,
+    named: (row) => sessionName(row),
     handMove: (row) => {
       const owed = relaunchAtTurnEnd.get(row.id);
       return owed?.byHand && owed.to !== undefined && owed.to !== row.accountId
@@ -15905,7 +16018,7 @@ export const createServer = (
       if (listed?.parentInstanceId) {
         reportToParent(
           listed,
-          accountMoveWords(move, Date.now()).line,
+          accountMoveSentence(move, Date.now()),
           false,
           undefined,
           true
@@ -17060,8 +17173,9 @@ export const createServer = (
             };
           }
           const moved = await moveByHand(row, account);
+          // A person's move, in the words its answer gives them.
           console.info(
-            `[accounts] ${row.id}: asked by hand to move to ${accountName(account)}: ${"refusal" in moved ? `refused: ${moved.refusal}` : `${moved.state}: ${moved.why}`}`
+            `[accounts] ${"refusal" in moved ? moved.refusal : moved.why}`
           );
           return "refusal" in moved ? status(409, moved.refusal) : moved;
         }
@@ -21967,9 +22081,7 @@ export const createServer = (
                     atLimit.turnRaced(ended);
                   } else {
                     atLimit.signedOut(ended).catch((error: unknown) => {
-                      console.error(
-                        `[at-limit] ${ended}: ${error instanceof Error ? error.message : String(error)}`
-                      );
+                      limitAnswerFailed(ended, "its refused sign-in", error);
                     });
                   }
                 } else if (
@@ -21988,9 +22100,7 @@ export const createServer = (
                   // end, as any turn's end is.
                   if (!moveOwedAtRefusal(refused)) {
                     atLimit.turnRefused(refused).catch((error: unknown) => {
-                      console.error(
-                        `[at-limit] ${refused}: ${error instanceof Error ? error.message : String(error)}`
-                      );
+                      limitAnswerFailed(refused, "its account's limit", error);
                     });
                   }
                 } else if (neutral.type === "result") {
@@ -22012,9 +22122,7 @@ export const createServer = (
                     }
                     // Near the limit, a summary is written ahead of it.
                     atLimit.turnEnded(cacheRow.id).catch((error: unknown) => {
-                      console.error(
-                        `[at-limit] ${cacheRow.id}: ${error instanceof Error ? error.message : String(error)}`
-                      );
+                      limitAnswerFailed(cacheRow.id, AHEAD_OF_LIMIT, error);
                     });
                   } else if (cacheRow) {
                     // A pi or OpenCode session's context, as its harness
@@ -22028,9 +22136,7 @@ export const createServer = (
                     // On an account: the same summary ahead of its limit.
                     if (cacheRow.accountId) {
                       atLimit.turnEnded(cacheRow.id).catch((error: unknown) => {
-                        console.error(
-                          `[at-limit] ${cacheRow.id}: ${error instanceof Error ? error.message : String(error)}`
-                        );
+                        limitAnswerFailed(cacheRow.id, AHEAD_OF_LIMIT, error);
                       });
                     }
                   }

@@ -1006,6 +1006,8 @@ export type AccountMove =
       kind: "unmoved";
       /** What failed: a move whole (`move`), or a continuation from a summary (`continue`). */
       action: "move" | "continue";
+      /** It was moving off `from` because Claude Code refused `from`'s sign-in: `from` has no reset to wait for. */
+      signedOut?: true;
       from: NamedAccount | null;
       to: NamedAccount | null;
       /** The session asked for it (`continue_session`), not its account's limit. */
@@ -1163,10 +1165,7 @@ export const accountMoveWords = (
     case "unmoved":
       return {
         line: `${unmovedWords(move)}: ${move.reason}`,
-        detail:
-          move.asked || !move.from
-            ? "It goes on in the conversation it has"
-            : `It stays on ${move.from.name}; the hub tries again in a few minutes, or it goes on when ${move.from.name} resets`,
+        detail: unmovedNext(move),
       };
     case "continuing":
       return {
@@ -1178,14 +1177,43 @@ export const accountMoveWords = (
   }
 };
 
-/** What failed, by its action: "Couldn't move to B", "Couldn't continue on B". */
+/** What failed, by its action: "Couldn't move from A to B", "Couldn't continue on B". */
 const unmovedWords = (
   move: Extract<AccountMove, { kind: "unmoved" }>
 ): string => {
   if (move.action === "move") {
-    return `Couldn't move${move.to ? ` to ${move.to.name}` : ""}`;
+    return `Couldn't move${move.from ? ` from ${move.from.name}` : ""}${move.to ? ` to ${move.to.name}` : ""}`;
   }
   return `Couldn't continue${move.to ? ` on ${move.to.name}` : ""}`;
+};
+
+/** What happens next after a failed move or continuation: where it stays, and what carries it on. */
+const unmovedNext = (
+  move: Extract<AccountMove, { kind: "unmoved" }>
+): string => {
+  if (move.asked || !move.from) {
+    return "It goes on in the conversation it has";
+  }
+  const from = move.from.name;
+  return move.signedOut
+    ? `It stays on ${from}, held: the hub tries again within 5 minutes, and it carries on on ${from} once ${from} is signed in again in Configure → Accounts`
+    : `It stays on ${from}, held: the hub tries again within 5 minutes, and it carries on on ${from} when ${from} resets`;
+};
+
+/** Trailing stops a clause ends on, so a sentence ends on one of its own. */
+const TRAILING_STOP = /[\s.]+$/;
+
+/**
+ * An account line as one sentence, for a log: its line, then its detail,
+ * the same words its transcript line and the second line under it say.
+ */
+export const accountMoveSentence = (move: AccountMove, now: number): string => {
+  const { line, detail } = accountMoveWords(move, now);
+  // A line still under way ends on its ellipsis, which stands for the stop.
+  const head = line.endsWith("…")
+    ? line
+    : `${line.replace(TRAILING_STOP, "")}.`;
+  return `${head} ${detail.replace(TRAILING_STOP, "")}.`;
 };
 
 /** A continuation in words: where it went on, what stayed behind, and where its summary was written. */

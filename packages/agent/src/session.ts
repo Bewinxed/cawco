@@ -276,6 +276,30 @@ const warn = (message: string): void => {
  */
 export const CUSTODY_BOUND_MS = 90_000;
 
+/**
+ * Why a carry without `stop` leaves a session's data where it is, in words
+ * a line can quote; nothing when nothing of it runs here.
+ */
+const liveBecause = (of: {
+  adopting: boolean;
+  held: boolean;
+  queued: boolean;
+  running: boolean;
+}): string | undefined => {
+  if (of.running) {
+    return "its process is running, and this carry does not stop it";
+  }
+  if (of.adopting) {
+    return "its custody is still being decided";
+  }
+  if (of.queued) {
+    return "something sent to it is still on its way";
+  }
+  return of.held
+    ? "sessiond still holds its process from before the agent restarted"
+    : undefined;
+};
+
 /** Read-only custody probes can be abandoned; an adoption keeps its claim until it settles. */
 const custodyProbe = async <T>(
   read: Promise<T>,
@@ -1655,8 +1679,15 @@ export class SessionSupervisor {
           true,
           request.atLimit === true
         );
-        if (awake || this.#queues.has(instanceId)) {
-          outcomes[instanceId] = { state: "live" };
+        if (awake) {
+          outcomes[instanceId] = { state: "live", why: awake.why };
+          continue;
+        }
+        if (this.#queues.has(instanceId)) {
+          outcomes[instanceId] = {
+            state: "live",
+            why: "something sent to it is still on its way",
+          };
           continue;
         }
         this.#sessions.delete(instanceId);
@@ -1665,13 +1696,14 @@ export class SessionSupervisor {
         go.push(request);
         continue;
       }
-      if (
-        running ||
-        this.#adopting.has(instanceId) ||
-        this.#queues.has(instanceId) ||
-        held.has(instanceId)
-      ) {
-        outcomes[instanceId] = { state: "live" };
+      const live = liveBecause({
+        running: !!running,
+        adopting: this.#adopting.has(instanceId),
+        queued: this.#queues.has(instanceId),
+        held: held.has(instanceId),
+      });
+      if (live) {
+        outcomes[instanceId] = { state: "live", why: live };
         continue;
       }
       go.push(request);

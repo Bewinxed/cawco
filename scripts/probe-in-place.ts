@@ -56,7 +56,8 @@ const hubRequire = createRequire(join(root, "packages/hub/package.json"));
 
 const delay = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
 /** A whole move the machine refused, as its transcript line says it (core `accountMoveWords`). */
-const MOVE_REFUSED = /^Couldn't move to (B|C): its process runs$/;
+const MOVE_REFUSED =
+  /^Couldn't move from A to (B|C): its Claude Code process is busy \(it holds 1 send\(s\) it has not read yet\), and a conversation isn't copied while the process writing it runs$/;
 /** Any wording of a continuation. */
 const CONTINUE_WORDS = /continu/i;
 
@@ -959,6 +960,8 @@ if (role === "sessiond") {
     }
   };
   const short = (id: string) => id.slice(0, 8);
+  /** A session's title, as the stand-in's spawns name it and the hub's lines say it. */
+  const titled = (id: string) => `Private ${short(id)}`;
   let dashboard: WebSocket | undefined;
   const dash = (frame: object) => dashboard?.send(JSON.stringify(frame));
   const spawn = (id: string, account: string, parent?: string) =>
@@ -1407,10 +1410,7 @@ if (role === "sessiond") {
         .some((block) => block.content.includes("Turn 1:")),
       "the old conversation reads above it"
     );
-    quote("the continuation (hub log)", [
-      ...lines(await hubLog(), `[at-limit] ${s0}`),
-      ...lines(await hubLog(), `[continuation] ${s0}`),
-    ]);
+    quote("the continuation (hub log)", [...lines(await hubLog(), titled(s0))]);
     quote(
       "the stand-in: what S0's processes did",
       lines(await eventLog(), s0).filter((one) => !one.includes("Turn "))
@@ -1494,7 +1494,7 @@ if (role === "sessiond") {
         .every((one) => one.state === "read"),
       JSON.stringify(qSends)
     );
-    quote("the restore (hub log)", lines(await hubLog(), q).slice(-8));
+    quote("the restore (hub log)", lines(await hubLog(), titled(q)).slice(-8));
 
     // ── (e) a person's move of a session parked at its account's limit ───
     // Two orchestrators on A, mainline, each a delegate's parent and each
@@ -1617,17 +1617,13 @@ if (role === "sessiond") {
     const log5 = await hubLog();
     assert.ok(
       !lines(log5, "[continuation]").some(
-        (one) => one.includes(p) || one.includes(o)
+        (one) => one.includes(titled(p)) || one.includes(titled(o))
       ),
       "no continuation of P or O was started"
     );
     quote("(e) the hand moves (hub log)", [
-      ...lines(log5, `[accounts] ${p}`),
-      ...lines(log5, `[at-limit] ${p}`),
-      ...lines(log5, `[hub] ${p} relaunches`),
-      ...lines(log5, `[accounts] ${o}`),
-      ...lines(log5, `[at-limit] ${o}`),
-      ...lines(log5, `[hub] ${o} relaunches`),
+      ...lines(log5, titled(p)),
+      ...lines(log5, titled(o)),
     ]);
     quote(
       "(e) the stand-in: what P's and O's processes did",
@@ -1663,13 +1659,13 @@ if (role === "sessiond") {
     const rDividers = rPage.blocks
       .filter((block) => block.type === "system.account_move")
       .map((block) => block.content);
-    const rLog = lines(await hubLog(), `[at-limit] ${r}`);
+    const rLog = lines(await hubLog(), titled(r));
     assert.ok(
       rDividers.some((one) => MOVE_REFUSED.test(one)),
       JSON.stringify(rDividers)
     );
     assert.ok(
-      rLog.some((one) => one.includes("Couldn't move to")) &&
+      rLog.some((one) => one.includes("Couldn't move from A to")) &&
         !rLog.some((one) => CONTINUE_WORDS.test(one)),
       JSON.stringify(rLog)
     );
