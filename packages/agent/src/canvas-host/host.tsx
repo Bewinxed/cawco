@@ -320,6 +320,36 @@ function Host() {
       bound?.destroy();
     };
   }, [api, generation, ink]);
+  /*
+   * The pencil's double-tap (`cawco:pencil-double-tap`, which the iOS app
+   * posts into the page, or the dashboard relays) swaps to the eraser and
+   * back to the tool it left, the rail showing whichever is chosen.
+   */
+  useEffect(() => {
+    if (!api) {
+      return;
+    }
+    type Tool = Exclude<AppState["activeTool"]["type"], "custom">;
+    let left: Tool = "freedraw";
+    const tapped = (event: MessageEvent) => {
+      if (
+        (event.source !== window && event.source !== window.parent) ||
+        event.origin !== location.origin ||
+        event.data?.type !== "cawco:pencil-double-tap"
+      ) {
+        return;
+      }
+      const now = api.getAppState().activeTool.type;
+      if (now === "eraser") {
+        api.setActiveTool({ type: left });
+      } else {
+        left = now === "custom" ? left : now;
+        api.setActiveTool({ type: "eraser" });
+      }
+    };
+    window.addEventListener("message", tapped);
+    return () => window.removeEventListener("message", tapped);
+  }, [api]);
   const changed = useCallback(
     (elements: readonly ExcalidrawElement[], state: AppState) => {
       setEmpty(elements.every((el) => el.isDeleted));

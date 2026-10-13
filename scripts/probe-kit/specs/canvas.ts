@@ -28,11 +28,18 @@
  *     (`window.cawcoArtifact.doc`) and its scene doc is of the same Yjs
  *     (one `Doc` constructor on the page); an `artifact_update` with one
  *     skeleton element is in Excalidraw's scene within 2 s.
+ * 18–24. A pen stroke held still at its end becomes its shape (snap.ts):
+ *     a wobbly rectangle held 400 ms is one rectangle on its box, in one
+ *     transaction, undone in one step; lifted without the hold, or drawn
+ *     with the mouse, or a scribble, it stays ink; an ellipse, a triangle,
+ *     a line and a hooked arrow read as theirs; the pencil's double-tap
+ *     swaps to the eraser and back; the swap's two opacities run on one
+ *     clock of `--dur-fade`, and at once with reduced motion.
  *
  * The scratch hub builds the canvas page with `CAWCO_PROBE_HOOKS=1` (core
  * canvas-host.ts), which exposes the binding as `window.cawcoCanvasProbe`.
  */
-import type { Frame, Page } from "playwright-core";
+import type { CDPSession, Frame, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 
@@ -219,6 +226,7 @@ const run = async (kit: Kit) => {
   await frameChecks(on);
   await fitChecks(on);
   await themeChecks(on, made.id);
+  await shapeChecks(on);
   await emptyChecks(on);
 
   // 9. Every canvas page load so far (the flow canvas, its reloads, the blank one).
@@ -415,10 +423,12 @@ const oneDocCheck = async (on: OnCanvas, id: string) => {
 
 interface ProbeElement {
   boundElements?: { id: string; type: string }[] | null;
+  customData?: { shape?: string } | null;
   frameId?: string | null;
   height: number;
   id: string;
   isDeleted?: boolean;
+  opacity?: number;
   points?: [number, number][];
   strokeColor?: string;
   type: string;
@@ -431,12 +441,14 @@ interface ProbeElement {
 interface CanvasProbe {
   api: {
     getAppState: () => {
+      activeTool: { type: string };
       offsetLeft: number;
       offsetTop: number;
       scrollX: number;
       scrollY: number;
       zoom: { value: number };
     };
+    getSceneElementsIncludingDeleted: () => ProbeElement[];
     scrollToContent: (
       target: ProbeElement,
       options: { animate: boolean; fitToContent: boolean }
@@ -446,6 +458,9 @@ interface CanvasProbe {
   elements: () => ProbeElement[];
   live: {
     getArray: (name: string) => {
+      observeDeep: (
+        heard: (events: unknown[], transaction: { origin: unknown }) => void
+      ) => void;
       toArray: () => { get: (key: string) => unknown }[];
     };
   };
@@ -1063,6 +1078,742 @@ const themeChecks = async (on: OnCanvas, id: string) => {
     ok && lines.length === 2,
     lines.join(" | ")
   );
+};
+
+/*
+ * Checks 18–24: a held stroke snaps to its shape (snap.ts).
+ */
+
+type Pt = [number, number];
+
+/** A seeded tremor: the same strokes on every run. */
+const tremor = (seed: number) => {
+  let s = seed;
+  return (amount: number) => {
+    s = (s * 16_807) % 2_147_483_647;
+    return ((s / 2_147_483_647) * 2 - 1) * amount;
+  };
+};
+
+/** Points along `corners`, `per` to a side, each off by up to `jitter` px. */
+const along = (corners: Pt[], per: number, jitter: number): Pt[] => {
+  const off = tremor(7);
+  const out: Pt[] = [];
+  for (let i = 1; i < corners.length; i += 1) {
+    const [a, b] = [corners[i - 1], corners[i]];
+    for (let step = 0; step < per; step += 1) {
+      const t = step / per;
+      out.push([
+        a[0] + (b[0] - a[0]) * t + off(jitter),
+        a[1] + (b[1] - a[1]) * t + off(jitter),
+      ]);
+    }
+  }
+  out.push(corners.at(-1) as Pt);
+  return out;
+};
+
+/** The strokes, `s` px across, in the frame's px from where each is put. */
+const strokesOf = (s: number) => {
+  const h = 0.6 * s;
+  const off = tremor(11);
+  return {
+    rectangle: along(
+      [
+        [0, 0],
+        [s, 0],
+        [s, h],
+        [0, h],
+        [0, 4],
+      ],
+      16,
+      2.5
+    ),
+    ellipse: Array.from({ length: 73 }, (_, i): Pt => {
+      const a = (i / 72) * 2 * Math.PI;
+      return [
+        s / 2 + (s / 2) * Math.cos(a) + off(2),
+        h / 2 + (h / 2) * Math.sin(a) + off(2),
+      ];
+    }),
+    triangle: along(
+      [
+        [0, h],
+        [s / 2, 0],
+        [s, h],
+        [2, h - 2],
+      ],
+      16,
+      2
+    ),
+    line: along(
+      [
+        [0, 0],
+        [s, 0.25 * s],
+      ],
+      30,
+      1.5
+    ),
+    arrow: along(
+      [
+        [0, 0.2 * s],
+        [s, 0.2 * s],
+        [0.91 * s, 0.135 * s],
+      ],
+      20,
+      1
+    ),
+    scribble: Array.from(
+      { length: 60 },
+      // Clear of the ink icon an earlier stroke left at the corner.
+      (_, i): Pt => [
+        48 + (i * s) / 60 + off(12),
+        48 + (i % 2 ? h : 0) + off(0.3 * h),
+      ]
+    ),
+  };
+};
+type Strokes = ReturnType<typeof strokesOf>;
+
+/** The pen (or the mouse) on the panel's frame, through the DevTools protocol. */
+interface Pen {
+  cdp: CDPSession;
+  draw: (
+    points: Pt[],
+    at: Pt,
+    how: { hold: boolean; pointer?: "pen" | "mouse" }
+  ) => Promise<void>;
+}
+
+const penOn = async (on: OnCanvas): Promise<Pen> => {
+  const well = await on.page.locator(PANEL_CANVAS).boundingBox();
+  if (!well) {
+    throw new Error("the panel's frame has no box");
+  }
+  const cdp = await on.page.context().newCDPSession(on.page);
+  const send = (
+    type: "mousePressed" | "mouseMoved" | "mouseReleased",
+    [x, y]: Pt,
+    pointerType: "pen" | "mouse"
+  ) =>
+    cdp.send("Input.dispatchMouseEvent", {
+      type,
+      x: well.x + x,
+      y: well.y + y,
+      button: "left",
+      buttons: type === "mouseReleased" ? 0 : 1,
+      clickCount: 1,
+      pointerType,
+      force: 0.5,
+    });
+  return {
+    cdp,
+    draw: async (points, [ox, oy], { hold, pointer = "pen" }) => {
+      const placed = points.map(([x, y]): Pt => [ox + x, oy + y]);
+      const last = placed.at(-1) as Pt;
+      await send("mousePressed", placed[0], pointer);
+      for (const point of placed.slice(1)) {
+        // biome-ignore lint/performance/noAwaitInLoops: a stroke's points, one after another
+        await send("mouseMoved", point, pointer);
+      }
+      if (hold) {
+        // The hand held still for 400 ms, a pixel's tremor inside the 4px.
+        for (const [dx, dy] of [
+          [1, 0],
+          [0, 1],
+          [-1, 0],
+          [0, 0],
+        ]) {
+          // biome-ignore lint/performance/noAwaitInLoops: a hold, moment by moment
+          await Bun.sleep(100);
+          await send("mouseMoved", [last[0] + dx, last[1] + dy], pointer);
+        }
+      }
+      await send("mouseReleased", last, pointer);
+    },
+  };
+};
+
+/** Every element of Excalidraw's scene, the deleted ones too. */
+const sceneOf = (frame: Frame) =>
+  frame.evaluate(() =>
+    (
+      window as unknown as { cawcoCanvasProbe: CanvasProbe }
+    ).cawcoCanvasProbe.api
+      .getSceneElementsIncludingDeleted()
+      .map((el) => ({
+        id: el.id,
+        type: el.type,
+        isDeleted: !!el.isDeleted,
+        x: el.x,
+        y: el.y,
+        width: el.width,
+        height: el.height,
+        points: el.points,
+        opacity: el.opacity,
+        customData: el.customData ?? null,
+      }))
+  );
+
+/** The ids of the live doc's elements. */
+const docIds = (frame: Frame) =>
+  frame.evaluate(() =>
+    (
+      window as unknown as { cawcoCanvasProbe: CanvasProbe }
+    ).cawcoCanvasProbe.live
+      .getArray("elements")
+      .toArray()
+      .map((map) => (map.get("el") as { id: string }).id)
+  );
+
+/** An element's box on the canvas, from its points when it has them. */
+const boxIn = (el: ProbeElement) => {
+  if (!el.points?.length) {
+    return { x: el.x, y: el.y, w: el.width, h: el.height };
+  }
+  const xs = el.points.map(([px]) => el.x + px);
+  const ys = el.points.map(([, py]) => el.y + py);
+  return {
+    x: Math.min(...xs),
+    y: Math.min(...ys),
+    w: Math.max(...xs) - Math.min(...xs),
+    h: Math.max(...ys) - Math.min(...ys),
+  };
+};
+
+interface Drawn {
+  /** Elements of the scene deleted by the stroke, beside its own. */
+  deleted: number;
+  /** What the scene holds after that it did not before, for the record. */
+  fresh: string[];
+  /** What the stroke left that is not ink. */
+  made: ProbeElement[];
+  /** The stroke's own freedraw, deleted or not. */
+  stroke?: ProbeElement & { isDeleted: boolean };
+}
+
+/** Draws one stroke and answers what it left, once any swap has run out. */
+const drawnBy = async (
+  on: OnCanvas,
+  frame: Frame,
+  pen: Pen,
+  points: Pt[],
+  at: Pt,
+  how: { hold: boolean; pointer?: "pen" | "mouse" }
+): Promise<Drawn> => {
+  const before = await sceneOf(frame);
+  const seen = new Set(Object.keys((await heard(frame)).els));
+  const standing = new Set(
+    before.filter((el) => !el.isDeleted).map((el) => el.id)
+  );
+  await pen.draw(points, at, how);
+  await settle(on.page, 700);
+  const after = await sceneOf(frame);
+  const live = new Set(after.filter((el) => !el.isDeleted).map((el) => el.id));
+  // The stroke as the doc last held it: a deleted element leaves Excalidraw's
+  // scene at the doc's next change (y-excalidraw rebuilds it from the doc).
+  const stroke = Object.values((await heard(frame)).els).findLast(
+    (el) => el.type === "freedraw" && !seen.has(el.id)
+  );
+  return {
+    stroke: stroke && { ...stroke, isDeleted: !live.has(stroke.id) },
+    made: after.filter(
+      (el) => !(standing.has(el.id) || el.isDeleted) && el.type !== "freedraw"
+    ),
+    deleted: [...standing].filter((id) => !live.has(id)).length,
+    fresh: after
+      .filter((el) => !standing.has(el.id))
+      .map((el) => `${el.type}${el.isDeleted ? " (deleted)" : ""}`),
+  };
+};
+
+/**
+ * Counts the frame's `cawco:stroke-end`s, logs the live doc's ids after each
+ * of its transactions, and keeps every element the doc has held, as it last
+ * held it.
+ */
+const listen = (frame: Frame) =>
+  frame.evaluate(() => {
+    const kept = window as unknown as {
+      __strokeEnds: number;
+      __docLog: string[][];
+      __docEls: Record<string, ProbeElement>;
+      cawcoCanvasProbe: CanvasProbe;
+    };
+    kept.__strokeEnds = 0;
+    kept.__docLog = [];
+    kept.__docEls = {};
+    addEventListener("cawco:stroke-end", () => {
+      kept.__strokeEnds += 1;
+    });
+    const array = kept.cawcoCanvasProbe.live.getArray("elements");
+    const look = () => {
+      const els = array.toArray().map((map) => map.get("el") as ProbeElement);
+      for (const el of els) {
+        kept.__docEls[el.id] = el;
+      }
+      return els.map((el) => el.id);
+    };
+    look();
+    array.observeDeep(() => {
+      kept.__docLog.push(look());
+    });
+  });
+
+const heard = (frame: Frame) =>
+  frame.evaluate(() => {
+    const kept = window as unknown as {
+      __strokeEnds: number;
+      __docLog: string[][];
+      __docEls: Record<string, ProbeElement>;
+    };
+    return { ends: kept.__strokeEnds, log: kept.__docLog, els: kept.__docEls };
+  });
+
+/** Check 18: the held rectangle, its one transaction, its stamp, and one undo. */
+const rectangleCheck = async (
+  on: OnCanvas,
+  frame: Frame,
+  pen: Pen,
+  strokes: Strokes,
+  at: Pt
+) => {
+  const { ends } = await heard(frame);
+  const held = await drawnBy(on, frame, pen, strokes.rectangle, at, {
+    hold: true,
+  });
+  const [shape] = held.made;
+  const { stroke } = held;
+  const after = await heard(frame);
+  // The doc's transaction that brought the shape is the one that took the stroke.
+  const at1 = shape ? after.log.findIndex((ids) => ids.includes(shape.id)) : -1;
+  const oneTransaction =
+    !!(shape && stroke) &&
+    at1 > 0 &&
+    !after.log[at1].includes(stroke.id) &&
+    after.log[at1 - 1].includes(stroke.id) &&
+    !after.log[at1 - 1].includes(shape.id);
+  const by = shape
+    ? await until(
+        "the shape stamped the person's",
+        () =>
+          frame.evaluate(
+            (id) =>
+              (
+                window as unknown as { cawcoCanvasProbe: CanvasProbe }
+              ).cawcoCanvasProbe.live
+                .getArray("elements")
+                .toArray()
+                .find((map) => (map.get("el") as { id: string }).id === id)
+                ?.get("by"),
+            shape.id
+          ),
+        (who) => who === "person",
+        3000
+      ).catch(() => null)
+    : null;
+  const a = stroke ? boxIn(stroke) : null;
+  const b = shape ? boxIn(shape) : null;
+  const off =
+    a && b
+      ? Math.max(
+          Math.abs(a.x - b.x),
+          Math.abs(a.y - b.y),
+          Math.abs(a.x + a.w - b.x - b.w),
+          Math.abs(a.y + a.h - b.y - b.h)
+        )
+      : null;
+  await frame.locator(".excalidraw").first().press("Control+z");
+  await settle(on.page, 600);
+  const undone = await sceneOf(frame);
+  const doc = await docIds(frame);
+  const strokeBack = undone.find((el) => el.id === stroke?.id);
+  const shapeGone = undone.find((el) => el.id === shape?.id);
+  on.kit.check(
+    "18: a wobbly rectangle held 400ms becomes one rectangle within 6px of the stroke's box; the stroke is gone in the same doc transaction, the shape is the person's, nothing tells a stroke end; one undo brings the stroke back",
+    held.made.length === 1 &&
+      shape?.type === "rectangle" &&
+      stroke?.isDeleted === true &&
+      off !== null &&
+      off <= 6 &&
+      oneTransaction &&
+      by === "person" &&
+      after.ends === ends &&
+      strokeBack?.isDeleted === false &&
+      (!shapeGone || shapeGone.isDeleted) &&
+      !!stroke &&
+      doc.includes(stroke.id) &&
+      !doc.includes(shape?.id ?? ""),
+    `new in the scene ${held.fresh.join(", ")}; made ${held.made.map((el) => el.type).join(",") || "nothing"}; stroke ${JSON.stringify(a)} shape ${JSON.stringify(b)} off ${off?.toFixed(1)}px; one transaction ${oneTransaction}; by ${by}; stroke ends ${after.ends - ends}; after undo: stroke deleted ${strokeBack?.isDeleted}, shape in the scene ${!!shapeGone && !shapeGone.isDeleted}, doc has stroke ${!!stroke && doc.includes(stroke.id)}, shape ${doc.includes(shape?.id ?? "")}`
+  );
+};
+
+/** Check 20: the ellipse, the triangle, the line and the arrow, each held. */
+const shapeTypeCheck = async (
+  on: OnCanvas,
+  frame: Frame,
+  pen: Pen,
+  strokes: Strokes,
+  at: Pt,
+  id: string
+) => {
+  const got: string[] = [];
+  const read: Record<string, Drawn> = {};
+  for (const kind of ["ellipse", "triangle", "line", "arrow"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one stroke at a time
+    const drawn = await drawnBy(on, frame, pen, strokes[kind], at, {
+      hold: true,
+    });
+    read[kind] = drawn;
+    const [made] = drawn.made;
+    got.push(
+      `${kind} → ${made ? `${made.type}${made.customData?.shape ? ` (${made.customData.shape})` : ""} ${made.points?.length ?? ""}` : "nothing"}, stroke deleted ${drawn.stroke?.isDeleted}`
+    );
+  }
+  const [triangle] = read.triangle.made;
+  const corners = triangle?.points ?? [];
+  const closed =
+    corners.length === 4 &&
+    corners[0][0] === corners[3][0] &&
+    corners[0][1] === corners[3][1];
+  const outline = (await reader(on, id)()).outline ?? "";
+  const named = triangle
+    ? outline
+        .split("\n")
+        .some((line) => line.startsWith(`${triangle.id} triangle at `))
+    : false;
+  on.kit.check(
+    "20: held, a wobbly ellipse becomes an ellipse, a three-sided closed stroke a triangle (a closed 3-point line, `triangle` in the outline), a straight stroke a line, a hooked one an arrow",
+    read.ellipse.made[0]?.type === "ellipse" &&
+      triangle?.type === "line" &&
+      triangle.customData?.shape === "triangle" &&
+      closed &&
+      named &&
+      read.line.made[0]?.type === "line" &&
+      read.line.made[0]?.points?.length === 2 &&
+      read.arrow.made[0]?.type === "arrow" &&
+      Object.values(read).every(
+        (drawn) => drawn.made.length === 1 && drawn.stroke?.isDeleted === true
+      ),
+    `${got.join("; ")}; triangle closed ${closed}, outline names it ${named}`
+  );
+};
+
+/** Checks 19, 21 and 22: lifted without the hold, a scribble held, a mouse stroke held; each stays ink. */
+const staysInkChecks = async (
+  on: OnCanvas,
+  frame: Frame,
+  pen: Pen,
+  strokes: Strokes,
+  at: Pt
+) => {
+  const ink = (drawn: Drawn) =>
+    drawn.stroke?.isDeleted === false &&
+    drawn.made.length === 0 &&
+    drawn.deleted === 0;
+  const { ends } = await heard(frame);
+  const lifted = await drawnBy(on, frame, pen, strokes.rectangle, at, {
+    hold: false,
+  });
+  const told = (await heard(frame)).ends - ends;
+  on.kit.check(
+    "19: the same rectangle lifted without the hold stays freedraw, and tells its stroke end",
+    ink(lifted) && told === 1,
+    `stroke ${lifted.stroke?.type} deleted ${lifted.stroke?.isDeleted}; made ${lifted.made.length}; stroke ends ${told}`
+  );
+  const scribble = await drawnBy(on, frame, pen, strokes.scribble, at, {
+    hold: true,
+  });
+  on.kit.check(
+    "21: a scribble held stays freedraw, nothing deleted",
+    ink(scribble),
+    `stroke ${scribble.stroke?.type} deleted ${scribble.stroke?.isDeleted}; made ${scribble.made.map((el) => el.type).join(",") || "nothing"}; deleted ${scribble.deleted}; new in the scene ${scribble.fresh.join(", ") || "nothing"}`
+  );
+  const mouse = await drawnBy(on, frame, pen, strokes.rectangle, at, {
+    hold: true,
+    pointer: "mouse",
+  });
+  on.kit.check(
+    "22: a mouse stroke held stays freedraw",
+    ink(mouse),
+    `stroke ${mouse.stroke?.type} deleted ${mouse.stroke?.isDeleted}; made ${mouse.made.map((el) => el.type).join(",") || "nothing"}`
+  );
+};
+
+/** Check 23: the pencil's double-tap swaps to the eraser, shown in the rail, and back. */
+const doubleTapCheck = async (on: OnCanvas, frame: Frame) => {
+  const tap = () =>
+    on.page.evaluate((selector) => {
+      (
+        document.querySelector(selector) as HTMLIFrameElement | null
+      )?.contentWindow?.postMessage(
+        { type: "cawco:pencil-double-tap" },
+        location.origin
+      );
+    }, PANEL_CANVAS);
+  const look = () =>
+    frame.evaluate(() => {
+      const probe = document.createElement("span");
+      probe.style.background = "var(--surface-fill)";
+      document.body.append(probe);
+      const fill = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      const chosen = document.querySelector(".rail-box[data-chosen]");
+      return {
+        tool: (
+          window as unknown as { cawcoCanvasProbe: CanvasProbe }
+        ).cawcoCanvasProbe.api.getAppState().activeTool.type,
+        chosen: chosen?.getAttribute("aria-label") ?? null,
+        filled: chosen
+          ? getComputedStyle(chosen).backgroundColor === fill
+          : false,
+      };
+    });
+  const before = await look();
+  await tap();
+  await settle(on.page, 300);
+  const erasing = await look();
+  await tap();
+  await settle(on.page, 300);
+  const back = await look();
+  on.kit.check(
+    "23: cawco:pencil-double-tap picks the eraser, its rail box on surface-fill; a second one goes back to the pen",
+    before.tool === "freedraw" &&
+      erasing.tool === "eraser" &&
+      !!erasing.chosen?.startsWith("Eraser") &&
+      erasing.filled &&
+      back.tool === "freedraw" &&
+      !!back.chosen?.startsWith("Pen") &&
+      back.filled,
+    `before ${JSON.stringify(before)}; tap ${JSON.stringify(erasing)}; tap ${JSON.stringify(back)}`
+  );
+};
+
+/** Records, every frame from now, the first frame a new shape stands in and whether a swap's ghost ever does. */
+const watchSwap = (frame: Frame) =>
+  frame.evaluate(() => {
+    const { api } = (window as unknown as { cawcoCanvasProbe: CanvasProbe })
+      .cawcoCanvasProbe;
+    const known = new Set(
+      api.getSceneElementsIncludingDeleted().map((el) => el.id)
+    );
+    const seen: {
+      first: { shape: number; ghost: number | null } | null;
+      ghost: boolean;
+    } = { first: null, ghost: false };
+    (window as unknown as { __swapSeen: typeof seen }).__swapSeen = seen;
+    let left = 240;
+    const tick = () => {
+      const all = api.getSceneElementsIncludingDeleted();
+      const ghost = all.find((el) => el.id.endsWith("~shape-swap"));
+      seen.ghost ||= !!ghost;
+      const shape = all.find(
+        (el) => !(known.has(el.id) || el.isDeleted) && el.type !== "freedraw"
+      );
+      if (shape && seen.first === null) {
+        seen.first = {
+          shape: shape.opacity ?? 100,
+          ghost: ghost?.opacity ?? null,
+        };
+      }
+      left -= 1;
+      if (left > 0) {
+        requestAnimationFrame(tick);
+      }
+    };
+    requestAnimationFrame(tick);
+  });
+
+const swapSeen = (frame: Frame) =>
+  frame.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __swapSeen: {
+            first: { shape: number; ghost: number | null } | null;
+            ghost: boolean;
+          };
+        }
+      ).__swapSeen
+  );
+
+interface SwapRun {
+  id: string;
+  name: string;
+  source?: { duration: number; easing: string };
+}
+
+/** The ghost's and the new shape's opacity now (null for a ghost gone). */
+const opacities = (frame: Frame, known: string[]) =>
+  frame.evaluate((ids) => {
+    const all = (
+      window as unknown as { cawcoCanvasProbe: CanvasProbe }
+    ).cawcoCanvasProbe.api.getSceneElementsIncludingDeleted();
+    const had = new Set(ids);
+    return {
+      ghost: all.find((el) => el.id.endsWith("~shape-swap"))?.opacity ?? null,
+      shape:
+        all.find(
+          (el) => !(had.has(el.id) || el.isDeleted) && el.type !== "freedraw"
+        )?.opacity ?? null,
+    };
+  }, known);
+
+/** The swap's run scrubbed at 0, ½ and 1 of its length, its two opacities read at each. */
+const scrubSwap = async (
+  frame: Frame,
+  cdp: CDPSession,
+  swap: SwapRun,
+  known: string[]
+) => {
+  const samples: { ghost: number | null; shape: number | null }[] = [];
+  for (const fraction of [0, 0.5, 1]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one moment of the clock at a time
+    await cdp.send("Animation.seekAnimations", {
+      animations: [swap.id],
+      currentTime: fraction * (swap.source?.duration ?? 0),
+    });
+    await frame.evaluate(
+      () =>
+        new Promise<void>((done) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => done()))
+        )
+    );
+    samples.push(await opacities(frame, known));
+  }
+  await cdp.send("Animation.setPaused", {
+    animations: [swap.id],
+    paused: false,
+  });
+  return samples;
+};
+
+/** Check 24: the swap's two opacities on one clock of `--dur-fade`; with reduced motion, no clock and no fade. */
+const motionCheck = async (
+  on: OnCanvas,
+  frame: Frame,
+  pen: Pen,
+  strokes: Strokes,
+  at: Pt
+) => {
+  const { cdp } = pen;
+  const runs: SwapRun[] = [];
+  cdp.on("Animation.animationStarted", (event: { animation: SwapRun }) => {
+    if (event.animation.name === "shape-swap") {
+      runs.push(event.animation);
+      cdp
+        .send("Animation.setPaused", {
+          animations: [event.animation.id],
+          paused: true,
+        })
+        .catch(() => undefined);
+    }
+  });
+  await cdp.send("Animation.enable");
+  const known = (await sceneOf(frame)).map((el) => el.id);
+  await watchSwap(frame);
+  await pen.draw(strokes.rectangle, at, { hold: true });
+  const caught = await until(
+    "the swap's run",
+    () => runs[0],
+    Boolean,
+    3000
+  ).catch(() => null);
+  const tokens = await frame.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    return {
+      fade: Number.parseFloat(root.getPropertyValue("--dur-fade")),
+      ease: root.getPropertyValue("--ease-out").trim(),
+    };
+  });
+  const samples = caught ? await scrubSwap(frame, cdp, caught, known) : [];
+  await settle(on.page, 600);
+  const moving = await swapSeen(frame);
+  const [start, half, end] = samples;
+  const flat = (text = "") => text.replaceAll(" ", "");
+  const oneClock =
+    runs.length === 1 &&
+    caught?.source?.duration === tokens.fade &&
+    flat(caught.source.easing) === flat(tokens.ease) &&
+    start?.ghost === 100 &&
+    start.shape === 0 &&
+    !!half &&
+    half.ghost !== null &&
+    half.shape !== null &&
+    Math.abs(half.ghost + half.shape - 100) < 0.5 &&
+    half.shape > 50 &&
+    half.shape < 100 &&
+    end?.ghost === null &&
+    end.shape === 100 &&
+    moving.first !== null &&
+    moving.first.shape < 50 &&
+    moving.first.ghost !== null;
+
+  await on.page.emulateMedia({ reducedMotion: "reduce" });
+  await watchSwap(frame);
+  const reduced = await drawnBy(on, frame, pen, strokes.rectangle, at, {
+    hold: true,
+  });
+  const still = await swapSeen(frame);
+  await on.page.emulateMedia({ reducedMotion: "no-preference" });
+  const atOnce =
+    reduced.made[0]?.type === "rectangle" &&
+    runs.length === 1 &&
+    still.first?.shape === 100 &&
+    still.ghost === false;
+  on.kit.check(
+    "24: the swap's ghost and shape opacities run on one clock (one run, --dur-fade on --ease-out: 100/0, then summing to 100, then 0/100), the first frame already fading; with reduced motion the shape stands at once, no run, no ghost",
+    oneClock && atOnce,
+    `runs ${runs.length} ${JSON.stringify(caught?.source)} against ${JSON.stringify(tokens)}; scrubbed ${JSON.stringify(samples)}; first frame ${JSON.stringify(moving.first)}; reduced: made ${reduced.made.map((el) => el.type).join(",") || "nothing"}, runs ${runs.length}, first frame ${JSON.stringify(still.first)}, ghost ${still.ghost}`
+  );
+};
+
+/** Checks 18–24 on a canvas of their own, the pen picked from the rail. */
+const shapeChecks = async (on: OnCanvas) => {
+  const answer = await on.call(CREATE, {
+    kind: "canvas",
+    name: "shapes",
+    elements: [
+      { type: "rectangle", id: "anchor", x: 0, y: 0, width: 40, height: 40 },
+    ],
+  });
+  const id = answer.match(ANSWERED_ID)?.[1];
+  if (!id) {
+    on.kit.check("18: the shapes canvas is made", false, answer.slice(0, 300));
+    return;
+  }
+  const frame = (await until(
+    "the shapes canvas in the panel",
+    async () => {
+      const found = await canvasFrame(on.page);
+      const ready = await found.evaluate(() =>
+        (
+          window as unknown as { cawcoCanvasProbe?: CanvasProbe }
+        ).cawcoCanvasProbe
+          ?.elements()
+          .some((el) => el.id === "anchor")
+      );
+      return ready ? found : null;
+    },
+    Boolean,
+    30_000
+  )) as Frame;
+  await frame.click('.rail-box[aria-label^="Pen"]');
+  await settle(on.page, 400);
+  const pen = await penOn(on);
+  const well = await on.page.locator(PANEL_CANVAS).boundingBox();
+  if (!well) {
+    throw new Error("the panel's frame has no box");
+  }
+  const strokes = strokesOf(Math.round(Math.min(160, well.width * 0.35)));
+  const at: Pt = [Math.round(well.width * 0.3), Math.round(well.height * 0.3)];
+  await listen(frame);
+  await rectangleCheck(on, frame, pen, strokes, at);
+  await staysInkChecks(on, frame, pen, strokes, at);
+  await shapeTypeCheck(on, frame, pen, strokes, at, id);
+  await doubleTapCheck(on, frame);
+  await motionCheck(on, frame, pen, strokes, at);
+  await pen.cdp.detach();
 };
 
 /** The canvas's read, as the agent's tool reads it. */

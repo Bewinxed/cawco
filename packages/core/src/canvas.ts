@@ -16,6 +16,8 @@ export type CanvasAuthor = "person" | "agent";
 export interface CanvasElement {
   boundElements?: readonly { id: string; type: string }[] | null;
   containerId?: string | null;
+  /** Ours on Excalidraw's element: `shape` names what a held stroke was read as when Excalidraw has no type for it (a triangle). */
+  customData?: Record<string, unknown> | null;
   endBinding?: { elementId: string } | null;
   groupIds?: readonly string[];
   height: number;
@@ -146,6 +148,7 @@ const arrowLine = (
  *
  * - `<id> <type> "<text>" at x,y w×h`, the text its own or its bound
  *   label's (a label is read on its container, not on a line of its own);
+ *   a held stroke read as a triangle (a closed line) reads `triangle`;
  * - `arrow <id> "<label>": <startId> → <endId>` (`free` for an end bound to
  *   nothing), and `at x,y w×h` after it when an end is free, since its
  *   place is then its own;
@@ -187,7 +190,9 @@ export const canvasOutline = (elements: readonly CanvasElement[]): string => {
     }
     const text =
       element.type === "text" ? (element.text ?? "") : labelOf(element);
-    return `${element.id} ${element.type}${text === null ? "" : ` ${quoted(text)}`} at ${boxText(box)}`;
+    const shape = element.customData?.shape;
+    const type = typeof shape === "string" ? shape : element.type;
+    return `${element.id} ${type}${text === null ? "" : ` ${quoted(text)}`} at ${boxText(box)}`;
   });
   const groups = new Map<string, string[]>();
   for (const element of shown) {

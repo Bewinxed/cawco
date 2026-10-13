@@ -36,6 +36,7 @@ import {
 import type { ExcalidrawElementSkeleton } from "@excalidraw/excalidraw/data/transform";
 import type {
   ExcalidrawElement,
+  ExcalidrawFreeDrawElement,
   OrderedExcalidrawElement,
 } from "@excalidraw/excalidraw/element/types";
 import type {
@@ -54,6 +55,7 @@ import {
   Map as YMap,
 } from "yjs";
 import type { ArtifactHold } from "../preview-overlay/artifact";
+import { HOLD_PX, seenByDoc, snapToShape, swapView, tokenMs } from "./snap";
 
 /** With `CAWCO_PROBE_HOOKS=1` at build (core canvas-host.ts), the page shows the probe what it binds. */
 declare const __CAWCO_PROBE_HOOKS__: boolean;
@@ -302,12 +304,22 @@ export function bindScene(
     window.addEventListener(type, listener, true);
     stops.push(() => window.removeEventListener(type, listener, true));
   }
-  stops.push(tellStrokeEnds(api, later));
+  const swaps = swapView();
+  stops.push(
+    tellStrokeEnds(api, later, (stroke) =>
+      snapToShape(api, stroke, swaps, options.reduced())
+    )
+  );
   stops.push(tellPresses(api));
 
-  /** Excalidraw's reconcile rule (`shouldDiscardRemoteElement`), kept here for every remote element. */
+  /**
+   * Excalidraw's reconcile rule (`shouldDiscardRemoteElement`), kept here for
+   * every remote element; and the scene the doc hears is the one a shape's
+   * swap settles on (snap.ts), never a frame of its fade.
+   */
   const guarded: ExcalidrawImperativeAPI = {
     ...api,
+    getSceneElements: () => seenByDoc(swaps, api.getSceneElements()),
     updateScene: (data) => {
       if (!data.elements) {
         api.updateScene(data);
@@ -591,17 +603,34 @@ export const fitScene = (api: ExcalidrawImperativeAPI): void => {
  * (`cawco:stroke-end`: its id, its last point in the window, its box on the
  * canvas, the elements whose boxes it crosses) and puts the stroke's icon
  * there; Erase in its menu comes back as `cawco:erase`, which deletes it.
+ *
+ * A stroke whose pen stayed within {@link HOLD_PX} for `--dur-press-hold`
+ * before it lifted is offered to `held` first (snap.ts); one it replaced
+ * with a shape is ink no longer, and tells nothing.
  */
 const tellStrokeEnds = (
   api: ExcalidrawImperativeAPI,
-  later: (run: () => void, ms: number) => void
+  later: (run: () => void, ms: number) => void,
+  held: (stroke: ExcalidrawFreeDrawElement) => boolean
 ): (() => void) => {
   let before: Set<string> | null = null;
+  /** Where the pen last came to rest, and since when. */
+  let rest = { x: 0, y: 0, at: 0 };
   const down = (event: PointerEvent) => {
     if (event.pointerType === "pen") {
       before = new Set(
         api.getSceneElementsIncludingDeleted().map((el) => el.id)
       );
+      rest = { x: event.clientX, y: event.clientY, at: performance.now() };
+    }
+  };
+  const move = (event: PointerEvent) => {
+    if (
+      event.pointerType === "pen" &&
+      before &&
+      Math.hypot(event.clientX - rest.x, event.clientY - rest.y) > HOLD_PX
+    ) {
+      rest = { x: event.clientX, y: event.clientY, at: performance.now() };
     }
   };
   const up = (event: PointerEvent) => {
@@ -610,6 +639,9 @@ const tellStrokeEnds = (
     if (event.pointerType !== "pen" || !known) {
       return;
     }
+    const still =
+      Math.hypot(event.clientX - rest.x, event.clientY - rest.y) <= HOLD_PX &&
+      performance.now() - rest.at >= tokenMs("--dur-press-hold");
     // Excalidraw finishes the freedraw on this same pointerup: read it after.
     later(() => {
       const elements = api.getSceneElements();
@@ -617,6 +649,9 @@ const tellStrokeEnds = (
         (el) => el.type === "freedraw" && !known.has(el.id)
       );
       if (!(stroke && "points" in stroke && stroke.points.length > 0)) {
+        return;
+      }
+      if (still && held(stroke as ExcalidrawFreeDrawElement)) {
         return;
       }
       const [px, py] = stroke.points.at(-1) as readonly [number, number];
@@ -669,10 +704,12 @@ const tellStrokeEnds = (
     });
   };
   window.addEventListener("pointerdown", down, true);
+  window.addEventListener("pointermove", move, true);
   window.addEventListener("pointerup", up, true);
   window.addEventListener("cawco:erase", erase);
   return () => {
     window.removeEventListener("pointerdown", down, true);
+    window.removeEventListener("pointermove", move, true);
     window.removeEventListener("pointerup", up, true);
     window.removeEventListener("cawco:erase", erase);
   };
