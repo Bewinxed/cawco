@@ -32,6 +32,7 @@
 import { mkdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { projectClaudeDir } from "../packages/core/src/paths";
+import { type MacSim, macSim } from "./lib/mac-sim";
 import { scratchFleet, until } from "./scratch-fleet";
 
 const keep = process.argv.includes("--keep");
@@ -118,6 +119,7 @@ await Bun.write(
 );
 
 let tunnel: ReturnType<typeof Bun.spawn> | undefined;
+let sim: MacSim | undefined;
 let udid = "";
 const marker = `probe hello ${crypto.randomUUID().slice(0, 6)}`;
 
@@ -321,32 +323,12 @@ try {
   );
 
   // ── 4. The simulator ───────────────────────────────────────────────────
-  udid = (
-    await mac(`read -r RUNTIME TYPE < <(xcrun simctl list devices available -j | python3 -c '
-import json, re, sys
-best = None
-for runtime, devices in json.load(sys.stdin)["devices"].items():
-    m = re.search(r"\\.iOS-(\\d+)-(\\d+)$", runtime)
-    if not m:
-        continue
-    for d in devices:
-        pro = re.fullmatch(r"iPhone (\\d+) Pro", d["name"])
-        if pro:
-            key = (int(m[1]), int(m[2]), int(pro[1]))
-            if best is None or key > best[0]:
-                best = (key, runtime, d["deviceTypeIdentifier"])
-if best is None:
-    sys.exit("no iPhone Pro simulator")
-print(best[1], best[2])
-')
-xcrun simctl create "CawCo probe composer" "$TYPE" "$RUNTIME"`)
-  ).trim();
+  sim = await macSim({ newest: "iPhone \\d+ Pro", ssh: true });
+  ({ udid } = sim);
   console.log(`  simulator ${udid}`);
   // The status bar held still (as captures are): a clock ticking over a
   // minute redraws on its own, in whatever style it last had.
-  await mac(`xcrun simctl boot ${udid}
-xcrun simctl bootstatus ${udid} -b >/dev/null
-xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+  await mac(`xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
 xcrun simctl install ${udid} "${app}"
 xcrun simctl ui ${udid} appearance light
 xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${port} -open-session ${id} >/dev/null`);
@@ -604,13 +586,7 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
 } catch (error) {
   check("probe", false, error instanceof Error ? error.message : String(error));
 } finally {
-  if (udid) {
-    await mac(`xcrun simctl terminate ${udid} dev.cawco.app >/dev/null 2>&1 || true
-xcrun simctl shutdown ${udid} >/dev/null 2>&1 || true
-xcrun simctl delete ${udid}`).catch((error) =>
-      console.log(`  simulator cleanup: ${error}`)
-    );
-  }
+  await sim?.release();
   tunnel?.kill();
   await fleet.close();
   await fleet.clean(keep || failures > 0);

@@ -20,16 +20,18 @@
  *
  *   bun scripts/probe-ios-hang-cards.ts <CawCo.app> <hub url> [out dir]
  *
- * Run on the Mac (a CawCo workspace on it is fine): it makes an iPhone 16
- * Pro and an iPad Pro 11-inch (M4) simulator on iOS 18.5, and on each, light
+ * Run on the Mac (a CawCo workspace on it is fine): it takes an iPhone 16
+ * Pro and then an iPad Pro 11-inch (M4) simulator on iOS 18.5 in the Mac's
+ * simulator slots (scripts/lib/mac-sim.ts), and on each, light
  * then dark, installs the app, launches it with `-hang-probe` on the hub
  * given, reads the app's `hang …` lines from the Probe log, prints `PASS` /
  * `FAIL` per check, and copies the app's captures (`tmp/hang/*.png`) into the
- * out folder (default `$TMPDIR/hang-ios`). It deletes the simulators it made.
+ * out folder (default `$TMPDIR/hang-ios`). Each slot deletes its simulator.
  * Exits 0 only if every check passed.
  */
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { type MacSim, macSim } from "./lib/mac-sim";
 
 const [app, hub, outArg] = process.argv.slice(2);
 if (!(app && hub)) {
@@ -95,15 +97,13 @@ async function hangLines(udid: string, since: string): Promise<string[]> {
   return [];
 }
 
-const made: string[] = [];
+const sims: MacSim[] = [];
 try {
   for (const device of DEVICES) {
-    const udid = await sh(
-      `xcrun simctl create "hang-probe-${device.kind}" ${device.type} ${RUNTIME}`
-    );
-    made.push(udid);
-    await sh(`xcrun simctl boot ${udid}; xcrun simctl bootstatus ${udid} -b >/dev/null
-# Jump's field raises the keyboard: its first-use tips ("Speed up your typing…") would cover the card in a capture.
+    const sim = await macSim({ runtime: RUNTIME, device: device.type });
+    sims.push(sim);
+    const { udid } = sim;
+    await sh(`# Jump's field raises the keyboard: its first-use tips ("Speed up your typing…") would cover the card in a capture.
 xcrun simctl spawn ${udid} defaults write com.apple.keyboard.preferences DidShowContinuousPathIntroduction -bool true
 xcrun simctl spawn ${udid} defaults write com.apple.keyboard.preferences KeyboardDidShowProductivityTutorial -bool true
 xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3
@@ -380,15 +380,11 @@ xcrun simctl install ${udid} "${app}"`);
       );
       await sh(`cp "${data}"/tmp/hang/*.png "${out}"/ 2>/dev/null`);
     }
-    await sh(
-      `xcrun simctl terminate ${udid} dev.cawco.app >/dev/null 2>&1; xcrun simctl shutdown ${udid}`
-    );
+    await sim.release();
   }
 } finally {
-  for (const udid of made) {
-    await sh(
-      `xcrun simctl shutdown ${udid} >/dev/null 2>&1; xcrun simctl delete ${udid}`
-    );
+  for (const sim of sims) {
+    await sim.release();
   }
 }
 console.log(

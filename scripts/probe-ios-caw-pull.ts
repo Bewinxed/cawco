@@ -42,6 +42,7 @@
  */
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { type MacSim, macSim } from "./lib/mac-sim";
 import { ACCOUNT, MACHINE, scratchFleet, until } from "./scratch-fleet";
 
 const keep = process.argv.includes("--keep");
@@ -364,33 +365,23 @@ const fleet = await scratchFleet({
   name: "probe-ios-caw-pull",
   respond: () => ({ everyMs: 10, words: ["ok"] }),
 });
-const sims: string[] = [];
+const sims: MacSim[] = [];
 
-async function simulator(pattern: string, name: string): Promise<string> {
-  const udid = (
-    await sh(`read -r RUNTIME TYPE < <(xcrun simctl list devices available -j | python3 -c '
-import json, re, sys
-for runtime, devices in json.load(sys.stdin)["devices"].items():
-    if not runtime.endswith(".iOS-18-5"):
-        continue
-    for d in devices:
-        if re.fullmatch(r"${pattern}", d["name"]):
-            print(runtime, d["deviceTypeIdentifier"]); sys.exit(0)
-sys.exit("no iOS 18.5 simulator matching ${pattern}")
-')
-xcrun simctl create "${name}" "$TYPE" "$RUNTIME"`)
-  ).trim();
-  sims.push(udid);
-  return udid;
+/** A simulator slot's booted iOS 18.5 simulator of the device type called `device`. */
+async function simulator(device: string): Promise<MacSim> {
+  const sim = await macSim({
+    runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
+    device,
+  });
+  sims.push(sim);
+  return sim;
 }
 
 type Kind = "phone" | "pad";
 
 async function pass(kind: Kind, udid: string, port: number) {
   const passStart = Date.now();
-  await sh(`xcrun simctl boot ${udid}
-xcrun simctl bootstatus ${udid} -b >/dev/null
-xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3
+  await sh(`xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3
 xcrun simctl install ${udid} "${app}"
 xcrun simctl ui ${udid} appearance light
 xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${port} >/dev/null`);
@@ -810,27 +801,20 @@ try {
     `  the hub serves ${accounts.signins.filter((one) => one.movedAt !== null).length} moved logins`
   );
   const port = Number(new URL(fleet.base).port);
-  const phone = await simulator("iPhone 16 Pro", "CawCo probe pull phone");
-  console.log(`  phone simulator ${phone} (iOS 18.5)`);
-  await pass("phone", phone, port);
-  await sh(`xcrun simctl shutdown ${phone} >/dev/null 2>&1 || true`);
+  const phone = await simulator("iPhone 16 Pro");
+  console.log(`  phone simulator ${phone.udid} (iOS 18.5)`);
+  await pass("phone", phone.udid, port);
+  await phone.release();
   seed("pad");
-  const pad = await simulator(
-    "iPad Pro 13-inch \\(M4\\)",
-    "CawCo probe pull iPad"
-  );
-  console.log(`  iPad simulator ${pad} (iOS 18.5)`);
-  await pass("pad", pad, port);
+  const pad = await simulator("iPad Pro 13-inch (M4)");
+  console.log(`  iPad simulator ${pad.udid} (iOS 18.5)`);
+  await pass("pad", pad.udid, port);
 } catch (error) {
   check("probe", false, error instanceof Error ? error.message : String(error));
 } finally {
-  for (const udid of sims) {
+  for (const sim of sims) {
     // biome-ignore lint/performance/noAwaitInLoops: each simulator torn down in turn
-    await sh(`xcrun simctl terminate ${udid} dev.cawco.app >/dev/null 2>&1 || true
-xcrun simctl shutdown ${udid} >/dev/null 2>&1 || true
-xcrun simctl delete ${udid}`).catch((error) =>
-      console.log(`  simulator cleanup: ${error}`)
-    );
+    await sim.release();
   }
   await fleet.close();
   await fleet.clean(keep || failures > 0);

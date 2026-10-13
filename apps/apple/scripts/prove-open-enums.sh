@@ -11,7 +11,7 @@
 #    app's enum (agent, owner) does not have.
 # 3. Opens a reverse tunnel so 127.0.0.1:<port> on the Mac (and so in its
 #    simulator) is that hub.
-# 4. On a fresh simulator: installs the build, launches it with
+# 4. On a simulator in one of the Mac's slots (mac-slot.sh sim): installs the build, launches it with
 #    -paywall-env sandbox and the hub's address, and streams its log.
 # 5. Prints the log lines that prove it (the unknown value, logged once; the
 #    fleet read with its row count; the update notice shown in Caw's panel),
@@ -21,7 +21,7 @@
 #    each step. Screenshots land in $OUT.
 #
 # Stops only what it started: the hub (by PID), the tunnel (by PID), the log
-# stream (by PID on the Mac), and the simulator it created (deleted).
+# stream (by PID on the Mac), and its simulator slot (whose simulator the slot deletes).
 set -euo pipefail
 
 [[ -f apps/apple/project.yml ]] || { echo "run from the repo root" >&2; exit 2; }
@@ -38,10 +38,16 @@ HUB_PID=
 TUNNEL_PID=
 UDID=
 STREAM_PID=
+HOLDER_PID=
 cleanup() {
   set +e
   if [[ -n $UDID ]]; then
-    "${MAC[@]}" "kill $STREAM_PID 2>/dev/null; xcrun simctl terminate $UDID dev.cawco.app >/dev/null 2>&1; xcrun simctl shutdown $UDID >/dev/null 2>&1; xcrun simctl delete $UDID; rm -f /tmp/prove-open-enums-$UDID.log"
+    "${MAC[@]}" "kill $STREAM_PID 2>/dev/null; rm -f /tmp/prove-open-enums-$UDID.log"
+  fi
+  # The slot's holder reads EOF: the slot shuts the simulator down and deletes it.
+  if [[ -n $HOLDER_PID ]]; then
+    exec 7>&- 8<&-
+    wait "$HOLDER_PID" 2>/dev/null
   fi
   [[ -z $TUNNEL_PID ]] || kill "$TUNNEL_PID" 2>/dev/null
   if [[ -n $HUB_PID ]]; then
@@ -127,29 +133,25 @@ TUNNEL_PID=$!
 echo "tunnel up (pid $TUNNEL_PID)"
 
 echo "== 4. simulator"
-read -r RUNTIME TYPE < <("${MAC[@]}" "xcrun simctl list devices available -j" | python3 -c '
-import json, re, sys
-best = None
-for runtime, devices in json.load(sys.stdin)["devices"].items():
-    m = re.search(r"\.iOS-(\d+)-(\d+)$", runtime)
-    if not m:
-        continue
-    for d in devices:
-        pro = re.fullmatch(r"iPhone (\d+) Pro", d["name"])
-        if pro:
-            key = (int(pro[1]), int(m[1]), int(m[2]))
-            if best is None or key > best[0]:
-                best = (key, runtime, d["deviceTypeIdentifier"])
-if best is None:
-    sys.exit("no iPhone Pro simulator")
-print(best[1], best[2])
-')
-UDID=$("${MAC[@]}" "xcrun simctl create 'CawCo prove-open-enums' $TYPE $RUNTIME")
-echo "simulator $UDID ($RUNTIME)"
+# One of the Mac's two simulator slots (mac-slot.sh, from build-both.sh's copy
+# of apps/apple on the Mac) with its own pick: the newest iPhone Pro on a
+# runtime that meets the app's target. The holder prints the booted
+# simulator's UDID and holds the slot until its stdin closes: cleanup closes
+# it, and so does this script ending however it ends; the slot then deletes
+# the simulator.
+# Its stdin and stdout are two FIFOs on fds 7 (to it) and 8 (from it).
+LINK=$(mktemp -d "${TMPDIR:-/tmp}/prove-open-enums-slot.XXXXXX")
+mkfifo "$LINK/in" "$LINK/out"
+"${MAC[@]}" "bash build/cawco-apple/$BUILD/apps/apple/scripts/mac-slot.sh sim -- sh -c 'echo \"\$CAWCO_SIM_UDID\"; exec cat >/dev/null'" \
+  <"$LINK/in" >"$LINK/out" &
+HOLDER_PID=$!
+exec 7>"$LINK/in" 8<"$LINK/out"
+rm -rf "$LINK"
+read -r UDID <&8 || true
+[[ $UDID =~ ^[0-9A-Fa-f-]{36}$ ]] || { echo "FAILED: no simulator slot (${UDID:-no output})"; UDID=; exit 1; }
+echo "simulator $UDID (CawCo slot)"
 MACLOG=/tmp/prove-open-enums-$UDID.log
 STREAM_PID=$("${MAC[@]}" "set -e
-xcrun simctl boot $UDID
-xcrun simctl bootstatus $UDID -b >/dev/null
 xcrun simctl install $UDID \"\$HOME/$APP\"
 nohup xcrun simctl spawn $UDID log stream --style compact --level info --predicate 'subsystem == \"dev.cawco.app\"' >$MACLOG 2>&1 </dev/null &
 echo \$!")

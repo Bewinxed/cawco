@@ -47,6 +47,7 @@
  */
 import { mkdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import { type MacSim, macSim } from "./lib/mac-sim";
 import {
   ACCOUNT,
   MACHINE,
@@ -190,7 +191,7 @@ const respond = (request: Seen) => {
 const fleet = await scratchFleet({ name: "probe-ios-caw-panel", respond });
 
 let tunnel: ReturnType<typeof Bun.spawn> | undefined;
-const sims: string[] = [];
+const sims: MacSim[] = [];
 
 interface Frame {
   height: number;
@@ -585,29 +586,19 @@ rm -rf "$F"`);
   console.log(`  capture: ${file}`);
 };
 
-/** A new simulator of the newest runtime's `pattern` device (an iPhone Pro, an iPad Pro). */
-async function simulator(pattern: string, name: string): Promise<string> {
-  const udid = (
-    await mac(`read -r RUNTIME TYPE < <(xcrun simctl list devices available -j | python3 -c '
-import json, re, sys
-best = None
-for runtime, devices in json.load(sys.stdin)["devices"].items():
-    m = re.search(r"\\.iOS-(\\d+)-(\\d+)$", runtime)
-    if not m:
-        continue
-    for d in devices:
-        if re.fullmatch(r"${pattern}", d["name"]):
-            key = (int(m[1]), int(m[2]), d["name"])
-            if best is None or key > best[0]:
-                best = (key, runtime, d["deviceTypeIdentifier"])
-if best is None:
-    sys.exit("no simulator matching ${pattern}")
-print(best[1], best[2])
-')
-xcrun simctl create "${name}" "$TYPE" "$RUNTIME"`)
-  ).trim();
-  sims.push(udid);
-  return udid;
+/** A simulator slot's booted simulator of the newest runtime's `pattern` device (an iPhone Pro, an iPad Pro). */
+async function simulator(pattern: string): Promise<MacSim> {
+  const sim = await macSim({ newest: pattern, ssh: true });
+  sims.push(sim);
+  return sim;
+}
+
+/** Stops the Maestro runner on `sim`, then gives its slot back. */
+async function endSim(sim: MacSim) {
+  await stopRunner(sim.udid).catch((error) =>
+    console.log(`  Maestro runner cleanup: ${error}`)
+  );
+  await sim.release();
 }
 
 type Kind = "phone" | "pad";
@@ -622,9 +613,7 @@ async function openPanel(
   port: number,
   rowSession: string
 ): Promise<Frame | undefined> {
-  await mac(`xcrun simctl boot ${udid}
-xcrun simctl bootstatus ${udid} -b >/dev/null
-xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3
+  await mac(`xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3
 xcrun simctl install ${udid} "${app}"
 xcrun simctl ui ${udid} appearance light
 xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${port} -open-session ${rowSession} -shell-probe >/dev/null`);
@@ -1675,26 +1664,19 @@ try {
   );
 
   // ── 4. Phone, then iPad ────────────────────────────────────────────────
-  const phone = await simulator("iPhone \\d+ Pro", "CawCo probe panel phone");
-  console.log(`  phone simulator ${phone}`);
-  await pass("phone", phone, port, rowSession, false);
-  await mac(`xcrun simctl shutdown ${phone} >/dev/null 2>&1 || true`);
-  const pad = await simulator("iPad Pro.*", "CawCo probe panel iPad");
-  console.log(`  iPad simulator ${pad}`);
-  await pass("pad", pad, port, rowSession, true);
+  const phone = await simulator("iPhone \\d+ Pro");
+  console.log(`  phone simulator ${phone.udid}`);
+  await pass("phone", phone.udid, port, rowSession, false);
+  await endSim(phone);
+  const pad = await simulator("iPad Pro.*");
+  console.log(`  iPad simulator ${pad.udid}`);
+  await pass("pad", pad.udid, port, rowSession, true);
 } catch (error) {
   check("probe", false, error instanceof Error ? error.message : String(error));
 } finally {
-  for (const udid of sims) {
+  for (const sim of sims) {
     // biome-ignore lint/performance/noAwaitInLoops: one ssh session at a time, each simulator torn down in turn
-    await stopRunner(udid).catch((error) =>
-      console.log(`  Maestro runner cleanup: ${error}`)
-    );
-    await mac(`xcrun simctl terminate ${udid} dev.cawco.app >/dev/null 2>&1 || true
-xcrun simctl shutdown ${udid} >/dev/null 2>&1 || true
-xcrun simctl delete ${udid}`).catch((error) =>
-      console.log(`  simulator cleanup: ${error}`)
-    );
+    await endSim(sim);
   }
   tunnel?.kill();
   await fleet.close();

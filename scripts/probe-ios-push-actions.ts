@@ -81,6 +81,7 @@
 import { mkdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import type { DbShape, WorkItemRow } from "../packages/hub/src/db";
+import { type MacSim, macSim } from "./lib/mac-sim";
 import { MACHINE, scratchFleet, until } from "./scratch-fleet";
 
 const keep = process.argv.includes("--keep");
@@ -389,6 +390,7 @@ fleet.env.CAWCO_CAWRIER_ORIGIN = cawrierOrigin;
 process.env.CAWCO_CAWRIER_ORIGIN = cawrierOrigin;
 
 let tunnel: ReturnType<typeof Bun.spawn> | undefined;
+let sim: MacSim | undefined;
 let udid = "";
 let hub = "";
 
@@ -667,19 +669,18 @@ try {
   // app's first synchronous call (removePendingNotificationRequests) then
   // parks in xpc_connection_send_message_with_reply_sync for good (runs at
   // 2aa48ace, db520abc and 4b4bc2d5), so iOS never asks.
-  udid = (
-    await mac(
-      `xcrun simctl create "CawCo probe push actions" ${SIM_TYPE} ${SIM_RUNTIME}`
-    )
-  ).trim();
+  sim = await macSim({
+    runtime: SIM_RUNTIME,
+    device: SIM_TYPE,
+    ssh: !onMac,
+  });
+  ({ udid } = sim);
   console.log(`  simulator ${udid} (${SIM_RUNTIME})`);
-  // One boot. The double boot that set SpringBoard's AX switch
+  // One boot, the slot's. The double boot that set SpringBoard's AX switch
   // (IgnoreAXServerEntitlements) was for axe, a host-side reader SpringBoard
   // refuses from iOS 26.5; Maestro reads and taps from its XCTest runner, an
   // app on the simulator, so nothing is switched.
-  await mac(`xcrun simctl boot ${udid}
-xcrun simctl bootstatus ${udid} -b >/dev/null
-xcrun simctl install ${udid} "${app}"`);
+  await mac(`xcrun simctl install ${udid} "${app}"`);
   check(
     "the app's log streams from the simulator",
     true,
@@ -1489,14 +1490,8 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
 } catch (error) {
   check("probe", false, error instanceof Error ? error.message : String(error));
 } finally {
-  if (udid) {
-    await mac(`xcrun simctl terminate ${udid} ${BUNDLE} >/dev/null 2>&1 || true
-xcrun simctl shutdown ${udid} >/dev/null 2>&1 || true
-xcrun simctl delete ${udid}`).catch((error) =>
-      console.log(`  simulator cleanup: ${error}`)
-    );
-  }
   logStream?.kill();
+  await sim?.release();
   tunnel?.kill();
   await cawrier.stop(true);
   await fleet.close();

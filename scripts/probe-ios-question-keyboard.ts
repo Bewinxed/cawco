@@ -49,6 +49,7 @@
  */
 import { mkdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import { type MacSim, macSim } from "./lib/mac-sim";
 import { scratchFleet, until } from "./scratch-fleet";
 
 const argv = process.argv.slice(2);
@@ -605,35 +606,9 @@ rm -rf "$F"`);
   },
 });
 
-/** Makes an iPhone Pro simulator on the newest iOS runtime; its UDID. */
-const createSim = async () =>
-  (
-    await mac(`read -r RUNTIME TYPE < <(xcrun simctl list devices available -j | python3 -c '
-import json, re, sys
-best = None
-for runtime, devices in json.load(sys.stdin)["devices"].items():
-    m = re.search(r"\\.iOS-(\\d+)-(\\d+)$", runtime)
-    if not m:
-        continue
-    for d in devices:
-        pro = re.fullmatch(r"iPhone (\\d+) Pro", d["name"])
-        if pro:
-            key = (int(m[1]), int(m[2]), int(pro[1]))
-            if best is None or key > best[0]:
-                best = (key, runtime, d["deviceTypeIdentifier"])
-if best is None:
-    sys.exit("no iPhone Pro simulator")
-print(best[1], best[2])
-')
-xcrun simctl create "CawCo probe question" "$TYPE" "$RUNTIME"`)
-  ).trim();
-
-/** Boots `udid` with its status bar held still (as captures are), installs
- * `app` and opens it on `session`. */
+/** Holds its status bar still (as captures are), installs `app` and opens it on `session`. */
 const launch = (udid: string, app: string, session: string, hub: string) =>
-  mac(`xcrun simctl boot ${udid}
-xcrun simctl bootstatus ${udid} -b >/dev/null
-xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+  mac(`xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
 xcrun simctl install ${udid} "${app}"
 xcrun simctl ui ${udid} appearance light
 xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${hub} -open-session ${session} >/dev/null`);
@@ -816,9 +791,12 @@ async function scenario(
   hub: string,
   name: string
 ) {
+  let slot: MacSim | undefined;
   let udid = "";
   try {
-    udid = await createSim();
+    // An iPhone Pro on the newest iOS runtime.
+    slot = await macSim({ newest: "iPhone \\d+ Pro", ssh: !onMac });
+    ({ udid } = slot);
     console.log(`  simulator ${udid}`);
     const sim = simOf(udid, name);
     await hardwareKeyboardOff(udid, true);
@@ -835,12 +813,8 @@ async function scenario(
       error instanceof Error ? error.message : String(error)
     );
   } finally {
+    await slot?.release();
     if (udid) {
-      await mac(`xcrun simctl terminate ${udid} dev.cawco.app >/dev/null 2>&1 || true
-xcrun simctl shutdown ${udid} >/dev/null 2>&1 || true
-xcrun simctl delete ${udid}`).catch((error) =>
-        console.log(`  simulator cleanup: ${error}`)
-      );
       await hardwareKeyboardOff(udid, false).catch((error) =>
         console.log(`  keyboard setting cleanup: ${error}`)
       );

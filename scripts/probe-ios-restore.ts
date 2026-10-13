@@ -30,6 +30,7 @@
 import { access, mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
+import { type MacSim, macSim } from "./lib/mac-sim";
 import { type Reply, type Seen, scratchFleet, until } from "./scratch-fleet";
 
 const args = process.argv.slice(2);
@@ -159,6 +160,7 @@ interface Node {
   id?: string;
   label?: string;
 }
+let sim: MacSim | undefined;
 let udid = "";
 let device = "";
 let lastTree: unknown;
@@ -356,18 +358,13 @@ const openFromHome = async () => {
 async function runDevice(kind: string, sessionId: string) {
   device = kind;
   const type = kind === "phone" ? "iPhone 16 Pro" : "iPad Pro 11-inch (M4)";
-  udid = (
-    await sh(`TYPE=$(xcrun simctl list devicetypes -j | python3 -c '
-import json, sys
-names = {d["name"]: d["identifier"] for d in json.load(sys.stdin)["devicetypes"]}
-print(names["${type}"])
-')
-xcrun simctl create "CawCo probe restore ${kind}" "$TYPE" com.apple.CoreSimulator.SimRuntime.iOS-18-5`)
-  ).trim();
+  sim = await macSim({
+    runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
+    device: type,
+  });
+  ({ udid } = sim);
   console.log(`  ${kind}: ${type} ${udid} (iOS 18.5)`);
-  await sh(`xcrun simctl boot ${udid}
-xcrun simctl bootstatus ${udid} -b >/dev/null
-xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+  await sh(`xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
 xcrun simctl ui ${udid} appearance light
 xcrun simctl install ${udid} "${app}"`);
   logger = listen();
@@ -523,7 +520,6 @@ async function fromUsage(kind: string) {
   }
 }
 
-const made: string[] = [];
 try {
   fleet.launch("sessiond");
   await fleet.sessiondUp();
@@ -556,15 +552,11 @@ try {
         .then(() => shot("error"))
         .catch(() => undefined);
     } finally {
-      made.push(udid);
       logger?.kill();
       await writeFile(join(out, `${kind}-log.txt`), logLines.join("\n"));
       logLines.length = 0;
-      await sh(`xcrun simctl terminate ${udid} dev.cawco.app >/dev/null 2>&1 || true
-xcrun simctl shutdown ${udid} >/dev/null 2>&1 || true
-xcrun simctl delete ${udid}`).catch((error) =>
-        console.log(`  simulator cleanup: ${error}`)
-      );
+      await sim?.release();
+      sim = undefined;
     }
   }
 } catch (error) {

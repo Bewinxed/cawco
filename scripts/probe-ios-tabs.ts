@@ -47,6 +47,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import { type MacSim, macSim } from "./lib/mac-sim";
 import { type Seen, scratchFleet, until } from "./scratch-fleet";
 
 const args = process.argv.slice(2);
@@ -129,7 +130,7 @@ const respond = (request: Seen) => {
   return { everyMs: 10, words: ["Done."] };
 };
 const fleet = await scratchFleet({ name: "probe-ios-tabs", respond });
-const sims: string[] = [];
+const sims: MacSim[] = [];
 
 interface Tab {
   chevron: number;
@@ -919,14 +920,13 @@ try {
     ],
   ] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one simulator at a time, its runs in order
-    const created = await sh(
-      `xcrun simctl create "CawCo tabs probe ${kind}" ${type} com.apple.CoreSimulator.SimRuntime.iOS-18-5`
-    );
-    const udid = created.trim();
-    sims.push(udid);
-    await sh(
-      `xcrun simctl boot ${udid}; xcrun simctl bootstatus ${udid} -b >/dev/null; xcrun simctl install ${udid} "${app}"`
-    );
+    const sim = await macSim({
+      runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
+      device: type,
+    });
+    sims.push(sim);
+    const { udid } = sim;
+    await sh(`xcrun simctl install ${udid} "${app}"`);
     for (const style of ["light", "dark"] as const) {
       const run = `${kind} ${style}`;
       // biome-ignore lint/performance/noAwaitInLoops: one appearance at a time on the one app
@@ -1110,6 +1110,7 @@ try {
       }
       judgeTakeover(run, takeover);
     }
+    await sim.release();
   }
 } catch (error) {
   check(
@@ -1125,11 +1126,9 @@ try {
     );
   }
 } finally {
-  for (const udid of sims) {
+  for (const sim of sims) {
     // biome-ignore lint/performance/noAwaitInLoops: one simulator's teardown at a time
-    await sh(
-      `xcrun simctl shutdown ${udid} >/dev/null 2>&1 || true; xcrun simctl delete ${udid}`
-    ).catch(() => undefined);
+    await sim.release();
   }
   await fleet.close();
   await fleet.clean(keep);

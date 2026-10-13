@@ -45,6 +45,7 @@
  */
 import { mkdir, rm } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import { type MacSim, macSim } from "./lib/mac-sim";
 import { scratchFleet, until } from "./scratch-fleet";
 
 const argv = process.argv.slice(2);
@@ -195,6 +196,7 @@ const fleet = await scratchFleet({
 });
 
 let tunnel: ReturnType<typeof Bun.spawn> | undefined;
+let sim: MacSim | undefined;
 let udid = "";
 
 interface Node {
@@ -553,30 +555,10 @@ try {
     (text) => text.trim() === "up",
     30_000
   );
-  udid = (
-    await mac(`read -r RUNTIME TYPE < <(xcrun simctl list devices available -j | python3 -c '
-import json, re, sys
-best = None
-for runtime, devices in json.load(sys.stdin)["devices"].items():
-    m = re.search(r"\\.iOS-(\\d+)-(\\d+)$", runtime)
-    if not m:
-        continue
-    for d in devices:
-        pro = re.fullmatch(r"iPhone (\\d+) Pro", d["name"])
-        if pro:
-            key = (int(m[1]), int(m[2]), int(pro[1]))
-            if best is None or key > best[0]:
-                best = (key, runtime, d["deviceTypeIdentifier"])
-if best is None:
-    sys.exit("no iPhone Pro simulator")
-print(best[1], best[2])
-')
-xcrun simctl create "CawCo probe disclosure" "$TYPE" "$RUNTIME"`)
-  ).trim();
+  sim = await macSim({ newest: "iPhone \\d+ Pro", ssh: true });
+  ({ udid } = sim);
   console.log(`  simulator ${udid}`);
-  await mac(`xcrun simctl boot ${udid}
-xcrun simctl bootstatus ${udid} -b >/dev/null
-xcrun simctl ui ${udid} appearance light`);
+  await mac(`xcrun simctl ui ${udid} appearance light`);
 
   const launch = async (build: Build) => {
     await mac(`xcrun simctl terminate ${udid} dev.cawco.app >/dev/null 2>&1 || true
@@ -670,13 +652,7 @@ xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-e
 } catch (error) {
   check("probe", false, error instanceof Error ? error.message : String(error));
 } finally {
-  if (udid) {
-    await mac(`xcrun simctl terminate ${udid} dev.cawco.app >/dev/null 2>&1 || true
-xcrun simctl shutdown ${udid} >/dev/null 2>&1 || true
-xcrun simctl delete ${udid}`).catch((error) =>
-      console.log(`  simulator cleanup: ${error}`)
-    );
-  }
+  await sim?.release();
   tunnel?.kill();
   await fleet.close();
   await fleet.clean(keep || failures > 0);

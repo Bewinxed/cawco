@@ -28,6 +28,7 @@
  */
 import { mkdir, readdir, rm } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
+import { type MacSim, macSim } from "./lib/mac-sim";
 import { scratchFleet, until } from "./scratch-fleet";
 
 const keep = process.argv.includes("--keep");
@@ -128,20 +129,8 @@ const WORDS = [
 ];
 // The measures want 40 at least; the glide wants 200.
 const SENDS = 200;
-const udids: string[] = [];
+const sims: MacSim[] = [];
 const DEVICES = ["iPhone 16 Pro", "iPad Pro 11-inch (M4)"];
-/** A new simulator of the device type called `name`, on iOS 18.5: its UDID. */
-const simulator = async (name: string) =>
-  (
-    await sh(`read -r RUNTIME TYPE < <(xcrun simctl list -j | python3 -I -c '
-import json, sys
-d = json.load(sys.stdin)
-runtime = next(r["identifier"] for r in d["runtimes"] if r.get("version") == "18.5" and r["platform"] == "iOS")
-kind = next(t["identifier"] for t in d["devicetypes"] if t["name"] == sys.argv[1])
-print(runtime, kind)
-' "${name}")
-xcrun simctl create "CawCo probe recall" "$TYPE" "$RUNTIME"`)
-  ).trim();
 /** What `log show --style compact` puts before a Probe line's own words. */
 const PROBE_PREFIX = /^.*\[dev\.cawco\.app:Probe\]\s*/;
 /** The app holding the wheel up with the keyboard: `<device>-<style>`. */
@@ -177,12 +166,14 @@ try {
   // ── 3. Each device ─────────────────────────────────────────────────────
   for (const name of DEVICES) {
     // biome-ignore lint/performance/noAwaitInLoops: one simulator at a time, each with the machine to itself
-    const udid = await simulator(name);
-    udids.push(udid);
+    const sim = await macSim({
+      runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
+      device: name,
+    });
+    sims.push(sim);
+    const { udid } = sim;
     console.log(`  ${name}: simulator ${udid}`);
-    await sh(`xcrun simctl boot ${udid}
-xcrun simctl bootstatus ${udid} -b >/dev/null
-# The keyboard's first-use tips ("Speed up your typing…") would cover the wheel in a capture.
+    await sh(`# The keyboard's first-use tips ("Speed up your typing…") would cover the wheel in a capture.
 xcrun simctl spawn ${udid} defaults write com.apple.keyboard.preferences DidShowContinuousPathIntroduction -bool true
 xcrun simctl spawn ${udid} defaults write com.apple.keyboard.preferences KeyboardDidShowProductivityTutorial -bool true
 xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
@@ -279,8 +270,7 @@ xcrun simctl io ${udid} screenshot "${join(out, shot)}" >/dev/null 2>&1`);
       await sh(`xcrun simctl get_app_container ${udid} dev.cawco.app data`)
     ).trim();
     await sh(`cp "${data}/tmp/recall/"*.png "${out}/" 2>/dev/null || true`);
-    await sh(`xcrun simctl terminate ${udid} dev.cawco.app >/dev/null 2>&1 || true
-xcrun simctl shutdown ${udid} >/dev/null 2>&1 || true`);
+    await sim.release();
   }
 
   // ── 4. The review folder ───────────────────────────────────────────────
@@ -316,12 +306,9 @@ xcrun simctl shutdown ${udid} >/dev/null 2>&1 || true`);
 } catch (error) {
   fail(`probe: ${error instanceof Error ? error.message : String(error)}`);
 } finally {
-  for (const udid of udids) {
+  for (const sim of sims) {
     // biome-ignore lint/performance/noAwaitInLoops: one simulator at a time
-    await sh(`xcrun simctl shutdown ${udid} >/dev/null 2>&1 || true
-xcrun simctl delete ${udid}`).catch((error) =>
-      console.log(`  simulator cleanup: ${error}`)
-    );
+    await sim.release();
   }
   await fleet.close();
   await fleet.clean(keep || failures > 0);

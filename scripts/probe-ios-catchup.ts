@@ -49,7 +49,14 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
+import { type MacSim, macSim } from "./lib/mac-sim";
 import { type Reply, type Seen, scratchFleet, until } from "./scratch-fleet";
+
+/** The simulator both passes run on: an iPhone 16 Pro on iOS 18.5. */
+const SIM = {
+  runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
+  device: "iPhone 16 Pro",
+};
 
 const args = process.argv.slice(2);
 const option = (name: string): string | undefined => {
@@ -290,21 +297,13 @@ if (LIVE) {
       },
     },
   });
-  let device = "";
+  let sim: MacSim | undefined;
   let stream: Subprocess | undefined;
   const lines: string[] = [];
   try {
-    device = (
-      await sh(`TYPE=$(xcrun simctl list devicetypes -j | python3 -c '
-import json, sys
-names = {d["name"]: d["identifier"] for d in json.load(sys.stdin)["devicetypes"]}
-print(names["iPhone 16 Pro"])
-')
-xcrun simctl create "CawCo probe live" "$TYPE" com.apple.CoreSimulator.SimRuntime.iOS-18-5`)
-    ).trim();
-    await sh(`xcrun simctl boot ${device}
-xcrun simctl bootstatus ${device} -b >/dev/null
-xcrun simctl install ${device} "${app}"`);
+    sim = await macSim(SIM);
+    const device = sim.udid;
+    await sh(`xcrun simctl install ${device} "${app}"`);
     const child = Bun.spawn(
       [
         "bash",
@@ -547,10 +546,7 @@ xcrun simctl install ${device} "${app}"`);
       join(out, "live-log.txt"),
       [...lines, ...notes.map((n) => `proxy ${n}`)].join("\n")
     );
-    if (device) {
-      await sh(`xcrun simctl shutdown ${device} >/dev/null 2>&1 || true
-xcrun simctl delete ${device}`).catch(() => undefined);
-    }
+    await sim?.release();
     live.stop(true);
   }
   console.log(failures === 0 ? "ALL PASS" : `${failures} FAILED`);
@@ -715,6 +711,7 @@ const proxy = Bun.serve<Link>({
 const port = proxy.port as number;
 
 // ── 4. The simulator ─────────────────────────────────────────────────────
+let sim: MacSim | undefined;
 let udid = "";
 let logger: Subprocess | undefined;
 const logLines: string[] = [];
@@ -903,18 +900,10 @@ try {
   );
   console.log(`  seeded: ${seeded.rows} rows in ${seeded.pages} hub pages`);
 
-  udid = (
-    await sh(`TYPE=$(xcrun simctl list devicetypes -j | python3 -c '
-import json, sys
-names = {d["name"]: d["identifier"] for d in json.load(sys.stdin)["devicetypes"]}
-print(names["iPhone 16 Pro"])
-')
-xcrun simctl create "CawCo probe catchup" "$TYPE" com.apple.CoreSimulator.SimRuntime.iOS-18-5`)
-  ).trim();
+  sim = await macSim(SIM);
+  ({ udid } = sim);
   console.log(`  simulator ${udid} (iOS 18.5)`);
-  await sh(`xcrun simctl boot ${udid}
-xcrun simctl bootstatus ${udid} -b >/dev/null
-xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
+  await sh(`xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
 xcrun simctl ui ${udid} appearance light
 xcrun simctl install ${udid} "${app}"`);
 
@@ -1307,13 +1296,7 @@ xcrun simctl install ${udid} "${app}"`);
   check("probe", false, error instanceof Error ? error.message : String(error));
 } finally {
   logger?.kill();
-  if (udid) {
-    await sh(`xcrun simctl terminate ${udid} dev.cawco.app >/dev/null 2>&1 || true
-xcrun simctl shutdown ${udid} >/dev/null 2>&1 || true
-xcrun simctl delete ${udid}`).catch((error) =>
-      console.log(`  simulator cleanup: ${error}`)
-    );
-  }
+  await sim?.release();
   proxy.stop(true);
   await fleet.close();
   await fleet.clean(keep || failures > 0);
