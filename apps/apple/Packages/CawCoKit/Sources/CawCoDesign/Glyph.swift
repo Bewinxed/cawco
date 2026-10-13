@@ -135,6 +135,8 @@ public enum Glyph: String, CaseIterable, Sendable {
     case clock = "clock-circle-bold-duotone"
     case graphUp = "graph-up-bold-duotone"
     case bug = "bug-bold-duotone"
+    /// StopTray.svelte's `Away`: a session whose machine is away stops when it is back.
+    case away = "cloud-cross-bold-duotone"
 
     /// The web's names for glyphs the transcript already carries under its own.
     public static let send = Glyph.toolMessage // plain-2-bold-duotone (IconSend)

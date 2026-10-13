@@ -42,6 +42,10 @@ final class ProjectViewController: ObservedViewController {
     private var places: UIButton!
     private var startButton: UIButton!
     private var spinOff: UIButton!
+    private let spinOffProblem = TaskSheetController.problemLabel()
+    private var spinning = false
+    /// The hub's refusal of a move, on the card it refused, until that card moves again.
+    private var refusals: [String: String] = [:]
     private var more: UIButton!
     private var headTop: NSLayoutConstraint!
     private var headLeading: NSLayoutConstraint!
@@ -158,10 +162,10 @@ final class ProjectViewController: ObservedViewController {
                 context.startSession(nil, nil, projectId)
                 return
             }
-            KitPopover.present(ProjectStartController { [weak self] prompt in self?.start(scratch: false, prompt: prompt) },
+            KitPopover.present(ProjectStartController { [weak self] prompt in try await self?.start(scratch: false, prompt: prompt) },
                                from: startButton, in: self, align: .end)
         }
-        spinOff = KitButton.make("Spin off", variant: .outline) { [weak self] in self?.start(scratch: true, prompt: nil) }
+        spinOff = KitButton.make("Spin off", variant: .outline) { [weak self] in self?.spinOffNow() }
         more = KitButton.make("", glyph: .more, variant: .ghost) {}
         more.showsMenuAsPrimaryAction = true
         more.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in done(self?.moreMenu() ?? []) }])
@@ -173,8 +177,12 @@ final class ProjectViewController: ObservedViewController {
             button.setContentHuggingPriority(.required, for: .horizontal)
             button.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
+        // A refused Spin off says why under the row it was asked from.
+        let actions = UIStackView(arrangedSubviews: [acts, spinOffProblem])
+        actions.axis = .vertical
+        actions.spacing = Space.space1
         head.addArrangedSubview(who)
-        head.addArrangedSubview(acts)
+        head.addArrangedSubview(actions)
         head.isLayoutMarginsRelativeArrangement = true
     }
 
@@ -385,7 +393,8 @@ final class ProjectViewController: ObservedViewController {
                 boardForm.stage = store.newIn ?? ""
                 boardForm.setOpen(adding, announce: false)
                 let kinds = Dictionary(tasks.map { ($0.id, $0.kind) }, uniquingKeysWith: { first, _ in first })
-                board.show(stages: shownStages, tasks: shownTasks, newIn: store.newIn, foot: boardForm, kindOf: kinds)
+                board.show(stages: shownStages, tasks: shownTasks, newIn: store.newIn, foot: boardForm, kindOf: kinds,
+                           settling: Set(store.moving.keys), refusals: refusals)
             case .table:
                 what = "table"
                 if adding {
@@ -476,21 +485,33 @@ final class ProjectViewController: ObservedViewController {
         guard next != adding else { return }
         adding = next
         requestRefresh()
+        // The form opens where the new task will stand: its column comes into view.
+        if next, let column = store.newIn {
+            DispatchQueue.main.async { [weak self] in self?.board.reveal(column) }
+        }
     }
 
     private func open(_ taskId: String) {
         context.openTask(projectId, taskId)
     }
 
-    /// A drop or a Move to…: the card stands in its new column at once; a
-    /// refusal puts it back and says the hub's sentence.
+    /// A drop or a Move to…: the card itself goes to its new column, where the
+    /// board brings it into view, and breathes there until the hub confirms the
+    /// move; then it settles. A refusal puts it back where it was, in view,
+    /// with the hub's sentence on it.
     private func move(_ taskId: String, to stage: String) {
+        let from = store.tasks.first { $0.id == taskId }?.stage
+        refusals[taskId] = nil
+        board.reveal(stage)
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
                 try await store.move(taskId, to: stage)
             } catch {
-                Toast.error(error.localizedDescription, in: view)
+                refusals[taskId] = "Not moved to \(TaskWords.stage(stage)): \(error.localizedDescription)"
+                requestRefresh()
+                if let from { board.reveal(from) }
+                UIAccessibility.post(notification: .announcement, argument: refusals[taskId])
             }
         }
     }
@@ -516,20 +537,15 @@ final class ProjectViewController: ObservedViewController {
         }
         sections.append(UIMenu(options: .displayInline, children: [UIAction(title: "Forget project…", attributes: .destructive) { [weak self] _ in
             guard let self, let project else { return }
-            context.forgetProject(project)
+            context.forgetProject(project, more)
         }]))
         return sections
     }
 
     private func pickStages() {
         guard let tasks = try? ProjectTasks(hub: context.hub, projectId: projectId) else { return }
-        let control = StagesControl(tasks: tasks) { [weak self] stages, stranded in
-            guard let self else { return }
-            store.applied(stages)
-            guard !stranded.isEmpty else { return }
-            let one = stranded.count == 1
-            Toast.show("\(stranded.joined(separator: ", ")) \(one ? "is in a stage" : "are in stages") the new set lacks; \(one ? "it stands" : "they stand") in Other stages until moved.", in: view)
-        }
+        // The board changes in place under the popover; tasks the set lacks are named in it.
+        let control = StagesControl(tasks: tasks) { [weak self] stages in self?.store.applied(stages) }
         KitPopover.present(control, from: more, in: self, align: .end)
     }
 
@@ -546,15 +562,39 @@ final class ProjectViewController: ObservedViewController {
 
     /// "New session" and "Spin off": a session here on what the new-session
     /// form was last set to, opened in its tab as soon as the hub has it.
-    private func start(scratch: Bool, prompt: String?) {
+    /// The hub's refusal is thrown to whoever asked, which says it where it was asked.
+    private func start(scratch: Bool, prompt: String?) async throws {
         guard let project, let home = project.primaryPlace else { return }
-        Task { @MainActor [weak self, context] in
+        let id = try await context.hub.spawnSession(machineId: home.machineId, cwd: home.path, projectId: project.id, prompt: prompt, scratch: scratch)
+        context.openSession(id)
+    }
+
+    /// Spin off, at once: the button says it is starting, and a refusal stands
+    /// under the head's action row until the next Spin off answers.
+    private func spinOffNow() {
+        guard !spinning else { return }
+        spinning = true
+        KitButton.setTitle("Spinning off…", of: spinOff, variant: .outline, height: .standard)
+        spinOff.configuration?.showsActivityIndicator = true
+        spinOff.isEnabled = false
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            var refused: String?
             do {
-                let id = try await context.hub.spawnSession(machineId: home.machineId, cwd: home.path, projectId: project.id, prompt: prompt, scratch: scratch)
-                context.openSession(id)
+                try await start(scratch: true, prompt: nil)
             } catch {
-                Toast.error(error.localizedDescription, in: self?.view)
+                refused = error.localizedDescription
             }
+            spinning = false
+            KitButton.setTitle("Spin off", of: spinOff, variant: .outline, height: .standard)
+            spinOff.configuration?.showsActivityIndicator = false
+            spinOff.isEnabled = true
+            spinOffProblem.text = refused
+            Motion.easeDrawer.animator(Motion.durMorph) {
+                self.spinOffProblem.isHidden = refused == nil
+                self.view.layoutIfNeeded()
+            }.startAnimation()
+            if let refused { UIAccessibility.post(notification: .announcement, argument: refused) }
         }
     }
 }

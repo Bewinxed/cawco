@@ -149,6 +149,17 @@ public final class HubConnection {
     /// project's tasks reads them again when it moves.
     public private(set) var tasksChanged: [String: Int] = [:]
 
+    @ObservationIgnored private var projectStopListeners: [UUID: (Components.Schemas.ProjectStopFrame) -> Void] = [:]
+
+    /// Hears each `project.stop` frame: a session a forget asked to stop has
+    /// stopped (its machine confirmed), could not be, or is owed to its
+    /// machine's return. Returns the unsubscribe.
+    public func onProjectStop(_ listener: @escaping (Components.Schemas.ProjectStopFrame) -> Void) -> () -> Void {
+        let key = UUID()
+        projectStopListeners[key] = listener
+        return { [weak self] in self?.projectStopListeners[key] = nil }
+    }
+
     @ObservationIgnored private var run: Task<Void, Never>?
     @ObservationIgnored private var outageTimer: Task<Void, Never>?
     @ObservationIgnored private var fleetRead: Task<Void, Never>?
@@ -1119,6 +1130,8 @@ public final class HubConnection {
             fleet.moves = jobs
         case let .tasksChanged(projectId):
             tasksChanged[projectId, default: 0] += 1
+        case let .projectStop(frame):
+            for listener in projectStopListeners.values { listener(frame) }
         case .ignored:
             break
         }

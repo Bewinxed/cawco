@@ -237,6 +237,8 @@ enum Frame {
     case moves([Components.Schemas.MoveJob])
     /// A project's tasks changed, by anyone: whatever shows them reads them again.
     case tasksChanged(projectId: String)
+    /// One session a forget asked to stop: stopped as its machine confirmed, refused, or owed to its machine's return.
+    case projectStop(Components.Schemas.ProjectStopFrame)
     case ignored
 
     /// `answering`: the envelope's own `requestId`, which an error frame takes
@@ -275,6 +277,8 @@ enum Frame {
             self = .moves(frame.moves)
         case .tasks_changed(let frame):
             self = .tasksChanged(projectId: frame.projectId)
+        case .project_stop(let frame):
+            self = .projectStop(frame)
         default:
             self = .ignored
         }

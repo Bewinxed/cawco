@@ -146,6 +146,8 @@ const SOLAR_ICONS = [
   "clock-circle-bold-duotone", // IconClock
   "graph-up-bold-duotone", // IconGraphUp
   "bug-bold-duotone", // IconBug
+  // Forget's tray (StopTray.svelte `Away`): a session whose machine is away.
+  "cloud-cross-bold-duotone",
 ];
 
 /**

@@ -97,7 +97,7 @@ public struct ShellContext {
     /// and a push's, the one way in, so each opens the same sheet.
     let openTask: (_ projectId: String, _ taskId: String) -> Void
     /// Asks to forget a project (the confirm, then the hub).
-    let forgetProject: (ProjectRow) -> Void
+    let forgetProject: (_ project: ProjectRow, _ from: UIView?) -> Void
     /// Starts a session, at a place when one is given (the New Session flow).
     let startSession: (_ machineId: String?, _ cwd: String?, _ projectId: String?) -> Void
     /// What a session's context menu needs from the shell.

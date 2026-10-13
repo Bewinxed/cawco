@@ -39,6 +39,7 @@ final class TaskCardView: UIControl {
     private let attnGlyph = GlyphView(.attention, size: Size.iconSm, tint: Palette.statusAttnGlyph)
     private let liveWords = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let foot = UIView()
+    private let refusalLabel = KitLabel(TypeScale.typeMeta, ink: Palette.error11, lines: 0)
     private let stack = UIStackView()
 
     static let mono = TypeScale.typeCode.with(points: TypeScale.typeMeta.points)
@@ -65,7 +66,8 @@ final class TaskCardView: UIControl {
         liveFoot.spacing = Space.space2
         liveFoot.alignment = .center
 
-        for part in [head, titleLabel, liveFoot, foot] as [UIView] { stack.addArrangedSubview(part) }
+        refusalLabel.isHidden = true
+        for part in [head, titleLabel, liveFoot, foot, refusalLabel] as [UIView] { stack.addArrangedSubview(part) }
         stack.axis = .vertical
         stack.spacing = Space.space1
         stack.alignment = .fill
@@ -149,13 +151,14 @@ final class TaskCardView: UIControl {
                 wrap.trailingAnchor.constraint(equalTo: foot.trailingAnchor),
             ])
         }
-        var said = [next.id, next.title]
-        if next.lastAttemptFailed && !next.liveAttempt { said.append("Failed") }
-        if !liveFoot.isHidden, let words = liveWords.text { said.append(words) }
-        if total > 0 { said.append("\(done) of \(total) to-dos done") }
-        if let first = waitsOn.first { said.append("after \(first)") }
-        said += next.labels
-        accessibilityLabel = said.joined(separator: ", ")
+        var words = [next.id, next.title]
+        if next.lastAttemptFailed && !next.liveAttempt { words.append("Failed") }
+        if !liveFoot.isHidden, let live = liveWords.text { words.append(live) }
+        if total > 0 { words.append("\(done) of \(total) to-dos done") }
+        if let first = waitsOn.first { words.append("after \(first)") }
+        words += next.labels
+        said = words.joined(separator: ", ")
+        relabel()
     }
 
     /// A retry in flight: a live attempt whose one before failed or was stopped (`isRetry`).
@@ -195,6 +198,47 @@ final class TaskCardView: UIControl {
     /// The card in the air: its place stays drawn, faint, until it lands.
     var lifted = false {
         didSet { alpha = lifted ? 0.4 : 1 }
+    }
+
+    /// Moved, and the hub has not answered yet: it breathes in its new column
+    /// (Live work breathes, `--breath`), held faint under Reduce Motion, and
+    /// settles when the hub confirms.
+    var settling = false {
+        didSet {
+            guard settling != oldValue else { return }
+            layer.removeAnimation(forKey: "settle")
+            layer.opacity = 1
+            guard settling else { return }
+            guard !UIAccessibility.isReduceMotionEnabled else {
+                layer.opacity = 0.6
+                return
+            }
+            let breath = CABasicAnimation(keyPath: "opacity")
+            breath.fromValue = 1
+            breath.toValue = 0.6
+            breath.duration = Motion.breath / 2
+            breath.autoreverses = true
+            breath.repeatCount = .infinity
+            breath.timingFunction = Motion.easeInOut.function
+            layer.add(breath, forKey: "settle")
+        }
+    }
+
+    /// The hub's refusal of this card's move, said on the card that stayed.
+    var refusal: String? {
+        didSet {
+            guard refusal != oldValue else { return }
+            refusalLabel.text = refusal
+            refusalLabel.isHidden = refusal == nil
+            relabel()
+        }
+    }
+
+    /// What VoiceOver reads: the card's words, then a refusal it carries.
+    private var said = ""
+
+    private func relabel() {
+        accessibilityLabel = [said, refusal].compactMap(\.self).joined(separator: ", ")
     }
 
     override var isHighlighted: Bool {
@@ -389,7 +433,9 @@ final class TaskBoardView: UIView, UIScrollViewDelegate, UIDragInteractionDelega
     }
 
     /// The board for `stages` and `tasks`; `foot` stands under the cards of the `newIn` column.
-    func show(stages: [TaskStage], tasks: [TaskSummary], newIn: String?, foot: UIView, kindOf: [String: Components.Schemas.StageKind?]) {
+    /// `settling`: the cards whose move the hub has not answered yet; `refusals`: the hub's refusals, on the cards they refused.
+    func show(stages: [TaskStage], tasks: [TaskSummary], newIn: String?, foot: UIView, kindOf: [String: Components.Schemas.StageKind?],
+              settling: Set<String>, refusals: [String: String]) {
         let named = Set(stages.map(\.name))
         var byStage: [String: [TaskSummary]] = [:]
         for task in tasks { byStage[named.contains(task.stage) ? task.stage : "", default: []].append(task) }
@@ -412,6 +458,8 @@ final class TaskBoardView: UIView, UIScrollViewDelegate, UIDragInteractionDelega
                 return kind != .done && kind != .dropped
             } : task.blockedBy
             card.configure(task, waitsOn: waits)
+            card.settling = settling.contains(task.id)
+            card.refusal = refusals[task.id]
         }
 
         // The columns, kept by stage.
@@ -511,6 +559,19 @@ final class TaskBoardView: UIView, UIScrollViewDelegate, UIDragInteractionDelega
         page = velocity.x > 0.2 ? ceil(now) : (velocity.x < -0.2 ? floor(now) : page.rounded())
         page = min(max(0, page), Double(max(0, order.count - 1)))
         targetContentOffset.pointee.x = min(page * step - inset, scrollView.contentSize.width - scrollView.bounds.width + inset)
+    }
+
+    /// Brings `stage`'s column into view, so the card a move acts on stays in
+    /// sight: the column a page under 640pt, its edge otherwise.
+    func reveal(_ stage: String) {
+        guard let column = columns[stage], column.window != nil else { return }
+        layoutIfNeeded()
+        let frame = column.convert(column.bounds, to: scroll)
+        let visible = CGRect(x: scroll.contentOffset.x + inset, y: 0, width: scroll.bounds.width - inset * 2, height: scroll.bounds.height)
+        guard frame.minX < visible.minX - 1 || frame.maxX > visible.maxX + 1 else { return }
+        let most = max(-inset, scroll.contentSize.width - scroll.bounds.width + inset)
+        let x = frame.minX < visible.minX ? frame.minX - inset : frame.maxX - scroll.bounds.width + inset
+        scroll.setContentOffset(CGPoint(x: min(max(-inset, x), most), y: 0), animated: !UIAccessibility.isReduceMotionEnabled)
     }
 
     private func settle() {

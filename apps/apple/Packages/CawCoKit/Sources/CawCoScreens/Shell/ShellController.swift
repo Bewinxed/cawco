@@ -95,7 +95,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     var context: ShellContext {
         ShellContext(hub: hub, home: home, openSession: { [weak self] id in self?.openSession(id) }, go: { [weak self] place in self?.go(place) },
                      openTask: { [weak self] projectId, taskId in self?.openTask(projectId: projectId, taskId: taskId, attempt: nil) },
-                     forgetProject: { [weak self] project in self?.forgetProject(project) },
+                     forgetProject: { [weak self] project, source in self?.forgetProject(project, from: source) },
                      startSession: { [weak self] machineId, cwd, projectId in self?.startSession(machineId: machineId, cwd: cwd, projectId: projectId) },
                      sessionMenus: sessionMenus)
     }
@@ -1477,22 +1477,18 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                                     from: self) { [weak self] id in self?.openSession(id) }
     }
 
-    /// FolderMenu's "Forget project…" and the project page's: the grouping
-    /// goes, the checkout and its sessions stay; a project page that was
-    /// showing it goes back to the place it was opened from.
-    func forgetProject(_ project: ProjectRow) {
-        let dialog = ConfirmDialog(
-            title: "Forget \(project.name)?",
-            body: "The grouping is removed. The checkout and its sessions stay on disk.",
-            confirmLabel: "Forget",
-            pendingLabel: "Forgetting…"
-        ) { [weak self] in
+    /// FolderMenu's "Forget project…" and the project page's: one dialog
+    /// (ForgetProjectDialog) that grows out of `source`, names what runs and
+    /// stops it first. The grouping goes, the checkout and its sessions stay;
+    /// a project page that was showing it goes back to the place it was opened from.
+    func forgetProject(_ project: ProjectRow, from source: UIView?) {
+        let dialog = ForgetProjectDialog(project: project, hub: hub, home: home) { [weak self] in
             guard let self else { return }
-            try await hub.deleteProject(id: project.id)
             if destination == .project(project.id) { go(spoke) }
             pages[.project(project.id)] = nil
             pages[Self.compactKey(.project(project.id))] = nil
         }
+        dialog.origin = source
         (presentedViewController ?? self).present(dialog, animated: true)
     }
 

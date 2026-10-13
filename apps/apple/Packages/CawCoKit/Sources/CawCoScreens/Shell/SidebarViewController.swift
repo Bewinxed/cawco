@@ -14,7 +14,7 @@ protocol SidebarHost: AnyObject {
     func openSession(_ id: String)
     func startSession(machineId: String?, cwd: String?, projectId: String?)
     func newProject(from source: UIView)
-    func forgetProject(_ project: ProjectRow)
+    func forgetProject(_ project: ProjectRow, from source: UIView?)
     func showLimits()
     /// The phone sheet's Search: Jump, once the sheet has stepped aside.
     func search()
@@ -775,7 +775,7 @@ final class SidebarViewController: ObservedViewController {
         for list in lists {
             let block = blocks[list.project.id] ?? ProjectBlock(project: list.project)
             block.row.addTarget(self, action: #selector(projectTapped(_:)), for: .primaryActionTriggered)
-            block.onMenu = { [weak self] in self?.folderMenu(list.project) ?? UIMenu() }
+            block.onMenu = { [weak self, weak block] in self?.folderMenu(list.project, from: block?.row) ?? UIMenu() }
             keptBlocks[list.project.id] = block
             block.clearSessions()
             if !prefs.collapsed(list.project.id) {
@@ -993,7 +993,8 @@ final class SidebarViewController: ObservedViewController {
     // MARK: Folder menu
 
     /// FolderMenu.svelte: what a project's row answers to on a right-click or long press.
-    private func folderMenu(_ project: ProjectRow) -> UIMenu {
+    /// `row`: the folder's row, which Forget grows out of.
+    private func folderMenu(_ project: ProjectRow, from row: UIView?) -> UIMenu {
         let pinned = prefs.isPinned(project.id)
         let chosen = prefs.chosenHue(project.folder)
         let current = prefs.hue(project.folder)
@@ -1029,7 +1030,7 @@ final class SidebarViewController: ObservedViewController {
             }), at: 2)
         }
         let forget = UIAction(title: "Forget project…", image: Glyph.trash.image, attributes: .destructive) { [weak self] _ in
-            self?.host?.forgetProject(project)
+            self?.host?.forgetProject(project, from: row)
         }
         return UIMenu(children: [UIMenu(options: .displayInline, children: sections), UIMenu(options: .displayInline, children: [forget])])
     }

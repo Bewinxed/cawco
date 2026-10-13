@@ -11,7 +11,10 @@ import UIKit
 /// Asked for from the project head's ⋯ (Pick stages…), and opens from it.
 final class StagesControl: KitPopoverController {
     private let tasks: ProjectTasks
-    private let onApplied: (StagesView, [String]) -> Void
+    private let onApplied: (StagesView) -> Void
+    private let intro = UIStackView()
+    /// After a set is applied with tasks it lacks: which ones, and where they stand.
+    private let result = UIStackView()
     private let stack = UIStackView()
     private let list = UIStackView()
     private let problem = KitLabel(TypeScale.typeMeta, ink: Palette.error11, lines: 0)
@@ -20,7 +23,7 @@ final class StagesControl: KitPopoverController {
     private static let width = 320.0
     private static let inset = 6 + 1.0
 
-    init(tasks: ProjectTasks, onApplied: @escaping (StagesView, [String]) -> Void) {
+    init(tasks: ProjectTasks, onApplied: @escaping (StagesView) -> Void) {
         self.tasks = tasks
         self.onApplied = onApplied
         super.init()
@@ -52,7 +55,8 @@ final class StagesControl: KitPopoverController {
         let line = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
         line.text = "The code stages stand in until you pick a set. The set is written to stages.md in the project folder."
         line.wrap = .pretty
-        let intro = UIStackView(arrangedSubviews: [lead, line])
+        intro.addArrangedSubview(lead)
+        intro.addArrangedSubview(line)
         intro.axis = .vertical
         intro.spacing = Space.space1
         intro.isLayoutMarginsRelativeArrangement = true
@@ -62,7 +66,12 @@ final class StagesControl: KitPopoverController {
         problemRow.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: Space.space2, bottom: 0, trailing: Space.space2)
         problem.isHidden = true
         list.axis = .vertical
-        for part in [intro, problemRow, list] as [UIView] { stack.addArrangedSubview(part) }
+        result.axis = .vertical
+        result.spacing = Space.space3
+        result.isLayoutMarginsRelativeArrangement = true
+        result.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space2, leading: Space.space2, bottom: Space.space2, trailing: Space.space2)
+        result.isHidden = true
+        for part in [intro, problemRow, list, result] as [UIView] { stack.addArrangedSubview(part) }
         stack.axis = .vertical
         stack.spacing = Space.space2
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -103,6 +112,11 @@ final class StagesControl: KitPopoverController {
                 list.addArrangedSubview(lines)
             }
         }
+        fit()
+    }
+
+    /// The card's size for what it holds now; a change of it morphs the popover.
+    private func fit() {
         let width = min(Self.width, (view.window?.bounds.width ?? UIScreen.main.bounds.width) - 32)
         let height = stack.systemLayoutSizeFitting(CGSize(width: width - Self.inset * 2, height: 0), withHorizontalFittingPriority: .required,
                                                    verticalFittingPriority: .fittingSizeLevel).height + Self.inset * 2
@@ -138,14 +152,43 @@ final class StagesControl: KitPopoverController {
             do {
                 let (stages, stranded) = try await tasks.applyTemplate(template)
                 applying = nil
-                onApplied(stages, stranded)
-                dismiss(animated: true)
+                // The board takes its new columns under the popover.
+                onApplied(stages)
+                guard !stranded.isEmpty else {
+                    dismiss(animated: true)
+                    return
+                }
+                strand(stranded, set: Self.name(template))
             } catch {
                 applying = nil
                 say(error.localizedDescription)
                 render()
             }
         }
+    }
+}
+
+extension StagesControl {
+    /// The set is written and some tasks are in stages it lacks: the popover
+    /// becomes what happened, naming them, with Done to put it away.
+    fileprivate func strand(_ stranded: [String], set: String) {
+        let one = stranded.count == 1
+        let lead = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, lines: 0)
+        lead.text = "\(set) stages picked"
+        let line = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+        line.text = "\(stranded.joined(separator: ", ")) \(one ? "is in a stage" : "are in stages") the new set lacks; \(one ? "it stands" : "they stand") in Other stages until moved."
+        line.wrap = .pretty
+        let done = KitButton.make("Done", variant: .outline, height: .sm) { [weak self] in self?.dismiss(animated: true) }
+        let foot = UIStackView(arrangedSubviews: [UIView(), done])
+        let words = UIStackView(arrangedSubviews: [lead, line])
+        words.axis = .vertical
+        words.spacing = Space.space1
+        for part in [words, foot] as [UIView] { result.addArrangedSubview(part) }
+        intro.isHidden = true
+        list.isHidden = true
+        result.isHidden = false
+        fit()
+        UIAccessibility.post(notification: .announcement, argument: line.text)
     }
 }
 
