@@ -14,6 +14,7 @@ import {
 } from "@modelcontextprotocol/sdk/client/auth.js";
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js";
 import type { DbShape } from "./db";
+import type { HubLifetimeShape, HubTimer } from "./lifetime";
 
 const SHARED_CLIENT_ID = `${CAWCO_OAUTH_URL}/client.json`;
 const SHARED_REDIRECT = `${CAWCO_OAUTH_URL}/callback`;
@@ -30,7 +31,35 @@ const MCP_HEADERS = [
   "Last-Event-ID",
 ];
 const DISCOVERY_TIMEOUT_MS = 15_000;
+/** Re-probes of a server the hub could not reach: 30 s, 1 m, 2 m, 4 m, 8 m, then every 15 m. */
+const REPROBE_FIRST_MS = 30_000;
+const REPROBE_MAX_MS = 15 * 60_000;
 type OAuthRow = NonNullable<ReturnType<DbShape["getMcpOauth"]>>;
+type McpServerRow = NonNullable<ReturnType<DbShape["getMcpServer"]>>;
+
+/** No HTTP response came back: the network, DNS, a timeout or an abort. */
+class Unreachable extends Error {}
+
+/** A body cut off by the deadline is as unanswered as a connection that never opened. */
+const unreachable = (error: unknown): boolean =>
+  error instanceof Unreachable ||
+  (error instanceof DOMException &&
+    (error.name === "TimeoutError" || error.name === "AbortError"));
+
+/** A fetch whose failure to get any response is told apart from what a response said. */
+const reach = async (
+  input: string | URL,
+  init?: RequestInit
+): Promise<Response> => {
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
+    });
+  } catch (error) {
+    throw new Unreachable("No response.", { cause: error });
+  }
+};
 
 /** The proxy owns credentials, so a harness never sees an OAuth discovery challenge. */
 const signedOut = () =>
@@ -42,13 +71,20 @@ const signedOut = () =>
 export class FleetMcp {
   readonly #db: DbShape;
   readonly #changed: () => void;
+  readonly #lifetime: HubLifetimeShape;
   readonly #probing = new Map<string, Promise<void>>();
+  /** One per server the hub could not reach: the config it tried, how many times, and the next try. */
+  readonly #reprobes = new Map<
+    string,
+    { config: string; attempt: number; timer?: HubTimer }
+  >();
   readonly #refreshing = new Map<string, Promise<OAuthRow>>();
   readonly #signingIn = new Map<string, Promise<SignInStart>>();
 
-  constructor(db: DbShape, changed: () => void) {
+  constructor(db: DbShape, changed: () => void, lifetime: HubLifetimeShape) {
     this.#db = db;
     this.#changed = changed;
+    this.#lifetime = lifetime;
   }
 
   async ready(): Promise<void> {
@@ -78,9 +114,77 @@ export class FleetMcp {
     if (running !== undefined) {
       return running.then(() => this.probe(name));
     }
+    // This probe stands in for a scheduled one; an unreachable answer schedules the next.
+    this.#lifetime.cancel(this.#reprobes.get(name)?.timer);
     const probing = this.#probe(name).finally(() => this.#probing.delete(name));
     this.#probing.set(name, probing);
     return probing;
+  }
+
+  /** A removed server is probed no more. */
+  forget(name: string): void {
+    this.#lifetime.cancel(this.#reprobes.get(name)?.timer);
+    this.#reprobes.delete(name);
+  }
+
+  /** What a probe can change, to tell the fleet only when a re-probe changed it. */
+  #auth(name: string): string {
+    const server = this.#db.getMcpServer(name);
+    return JSON.stringify([
+      server?.authMode,
+      server?.authError,
+      this.#db.getMcpOauth(name)?.generation,
+    ]);
+  }
+
+  /** Backs off per server while the same config stays unreachable; another config starts over. */
+  #reprobe(name: string, config: string): void {
+    const previous = this.#reprobes.get(name);
+    const attempt = previous?.config === config ? previous.attempt + 1 : 0;
+    const delay = Math.min(REPROBE_FIRST_MS * 2 ** attempt, REPROBE_MAX_MS);
+    const timer = this.#lifetime.after(delay, () => {
+      if (!this.#db.getMcpServer(name)) {
+        this.forget(name);
+        return;
+      }
+      const before = this.#auth(name);
+      this.probe(name).then(
+        () => {
+          if (this.#auth(name) !== before) {
+            this.#changed();
+          }
+        },
+        (error: unknown) => {
+          console.warn(`[fleet-mcp] ${name} re-probe failed:`, error);
+        }
+      );
+    });
+    this.#reprobes.set(name, { config, attempt, timer });
+    console.info(
+      `[fleet-mcp] ${name} did not answer; probing again in ${delay / 1000} s`
+    );
+  }
+
+  /**
+   * Silence is no answer: a server the hub had settled stays as it was, synced
+   * and usable. Its detail is untouched, since any detail reads as failed and
+   * takes it off every machine. Only one never settled (no answer since this
+   * config was saved, or OAuth without discovered metadata) says why it is
+   * still off. Either way the hub asks again.
+   */
+  #unanswered(server: McpServerRow, config: string): void {
+    const settled =
+      server.authError === null &&
+      (server.authMode === "direct" ||
+        this.#db.getMcpOauth(server.name) !== undefined);
+    if (!settled) {
+      this.#db.setMcpAuth(
+        server.name,
+        server.authMode,
+        "The hub could not reach this server. It keeps trying on its own; check the URL if this stays."
+      );
+    }
+    this.#reprobe(server.name, config);
   }
 
   async #probe(name: string): Promise<void> {
@@ -88,8 +192,15 @@ export class FleetMcp {
     if (!("url" in config)) {
       return;
     }
+    const key = JSON.stringify(config);
+    const fresh = () => {
+      const latest = this.#db.getMcpServer(name);
+      return latest && JSON.stringify(latest.config) === key
+        ? latest
+        : undefined;
+    };
     try {
-      const response = await fetch(config.url, {
+      const response = await reach(config.url, {
         method: "POST",
         headers: {
           ...config.headers,
@@ -106,18 +217,21 @@ export class FleetMcp {
             clientInfo: { name: "CawCo fleet", version: "1" },
           },
         }),
-        signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
-        redirect: "error",
+        // A redirect is an answer: it fails discovery below, as it always has.
+        redirect: "manual",
       });
       const { resourceMetadataUrl } = extractWWWAuthenticateParams(response);
       await response.body?.cancel();
-      const latest = this.#db.getMcpServer(name);
-      if (!latest || JSON.stringify(latest.config) !== JSON.stringify(config)) {
+      if (!fresh()) {
         return;
+      }
+      if (response.status >= 300 && response.status < 400) {
+        throw new Error("The server redirected the initialize request.");
       }
       if (response.status !== 401 || !resourceMetadataUrl) {
         this.#db.setMcpAuth(name, "direct");
         this.#db.deleteMcpOauth(name);
+        this.#reprobes.delete(name);
         return;
       }
       // Mark OAuth before discovery: a metadata failure must never sync the upstream to a harness.
@@ -125,28 +239,19 @@ export class FleetMcp {
       const resource = await discoverOAuthProtectedResourceMetadata(
         config.url,
         { resourceMetadataUrl },
-        (input, init) =>
-          fetch(input, {
-            ...init,
-            signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
-          })
+        reach
       );
       const [issuer] = resource.authorization_servers ?? [];
       if (!issuer) {
         throw new Error("No authorization server in resource metadata.");
       }
       const metadata = await discoverAuthorizationServerMetadata(issuer, {
-        fetchFn: (input, init) =>
-          fetch(input, {
-            ...init,
-            signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
-          }),
+        fetchFn: reach,
       });
       if (!metadata) {
         throw new Error("Authorization server metadata is unavailable.");
       }
-      const current = this.#server(name).config;
-      if (JSON.stringify(current) !== JSON.stringify(config)) {
+      if (!fresh()) {
         return;
       }
       const previous = this.#db.getMcpOauth(name);
@@ -164,11 +269,17 @@ export class FleetMcp {
         metadata,
       });
       this.#db.setMcpAuth(name, "oauth");
-    } catch {
-      const latest = this.#db.getMcpServer(name);
-      if (!latest || JSON.stringify(latest.config) !== JSON.stringify(config)) {
+      this.#reprobes.delete(name);
+    } catch (error) {
+      const latest = fresh();
+      if (!latest) {
         return;
       }
+      if (unreachable(error)) {
+        this.#unanswered(latest, key);
+        return;
+      }
+      this.#reprobes.delete(name);
       this.#db.setMcpAuth(
         name,
         latest.authMode,

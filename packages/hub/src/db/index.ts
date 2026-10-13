@@ -1988,6 +1988,9 @@ const hookOf = (row: {
 /** A hub place's machine: the hub itself, which is no machine of the fleet. */
 export const HUB_PLACE_MACHINE = "hub";
 
+/** A fleet MCP server's detail between saving a new config and the server's first answer. */
+export const MCP_NOT_YET_REACHED = "The hub has not reached this server yet.";
+
 /**
  * `instances.turn_open_at` of a session from before the hub kept the turn it
  * had open (migration `turn_open_at`): whether that turn ended is its harness's
@@ -4561,17 +4564,27 @@ const make = async (path: string): Promise<DbShape> => {
       }
       const placement = placementOf(projectId, previous?.projectId, "local");
       const bound = placement.projectId;
+      // A new or changed config is unsettled — failed, so never synced — until
+      // the hub hears from the server (fleet-mcp.ts `#probe`).
+      const unsettled = {
+        authMode: "direct" as const,
+        authError: MCP_NOT_YET_REACHED,
+      };
       db.insert(mcpServers)
-        .values({ name, config, enabled: enabled ?? true, ...placement })
+        .values({
+          name,
+          config,
+          enabled: enabled ?? true,
+          ...placement,
+          ...unsettled,
+        })
         .onConflictDoUpdate({
           target: mcpServers.name,
           set: {
             config,
             enabled: enabled ?? true,
             ...placement,
-            ...(changed
-              ? { authMode: "direct" as const, authError: null }
-              : {}),
+            ...(changed ? unsettled : {}),
           },
         })
         .run();

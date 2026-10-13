@@ -11967,7 +11967,7 @@ export const createServer = (
     } satisfies Envelope<FramePayload>);
     fanOutFleet();
   };
-  const fleetMcp = new FleetMcp(db, announceMcp);
+  const fleetMcp = new FleetMcp(db, announceMcp, lifetime);
   const mcpReady = Promise.all(
     db.fleetConfig().mcp.map((row) => fleetMcp.probe(row.name))
   );
@@ -16992,6 +16992,7 @@ export const createServer = (
       )
       .delete("/api/fleet/mcp/:name", ({ params }) => {
         db.deleteMcpServer(params.name);
+        fleetMcp.forget(params.name);
         announceMcp();
         return { ok: true };
       })
