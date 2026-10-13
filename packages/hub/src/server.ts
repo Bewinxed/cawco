@@ -364,6 +364,7 @@ import { accountForecasts, carrySequence } from "./forecast";
 import { gitRemoteRoutes } from "./git-remote";
 import type { HarnessPlanDeps } from "./harness-plans";
 import { hidden } from "./hidden";
+import { hubId } from "./hub-id";
 import { createIngress, ingressRoutes } from "./ingress";
 import { joinRoutes } from "./join";
 import { streamLargeJson } from "./json-response";
@@ -16358,6 +16359,8 @@ export const createServer = (
         ok: true,
         version: HUB_VERSION,
         build: hubBuild,
+        // Which hub this is, whatever address answered (hub-id.ts).
+        hubId: hubId(),
       }))
       .get("/api/agents", () => withPresence(db.listAgents()))
       .post(

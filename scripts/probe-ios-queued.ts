@@ -9,7 +9,7 @@
  * continued its own, and a socket that is dead while it reads open is
  * noticed within ~30 s, after which the client reconnects and reads again.
  *
- *   bun scripts/probe-ios-queued.ts --app <CawCo.app> [--harness claude|opencode] [--keep]
+ *   bun scripts/probe-ios-queued.ts --app <CawCo.app> [--harness claude|opencode] [--join direct] [--keep]
  *
  * Run from the repo root on the Mac (a CawCo workspace on the Mac runs it
  * too: the scratch fleet is loopback, the simulator is local). It:
@@ -80,7 +80,7 @@ const app = option("--app");
 const harness = option("--harness") ?? "claude";
 if (!app || (harness !== "claude" && harness !== "opencode")) {
   console.log(
-    "usage: bun scripts/probe-ios-queued.ts --app <CawCo.app> [--harness claude|opencode] [--keep]"
+    "usage: bun scripts/probe-ios-queued.ts --app <CawCo.app> [--harness claude|opencode] [--join direct] [--keep]"
   );
   process.exit(2);
 }
@@ -169,17 +169,18 @@ const respond = (seen: Seen): Reply => {
       words: Array.from({ length: STEPS }, (_, i) => `step ${i + 1}. `),
     };
   }
-  if (seen.last.includes(LINK)) {
+  if (seen.last.includes(LINK) && !seen.afterTool) {
     return {
       everyMs: 1500,
       words: [],
       tool: {
-        name: "Bash",
+        // Each harness's own name for its shell tool.
+        name: seen.toolNames.includes("bash") ? "bash" : "Bash",
         input: { command: `echo ${LINK_MARK}`, description: "Print the mark" },
       },
     };
   }
-  if (seen.tools && seen.all.includes(LINK)) {
+  if (seen.afterTool && seen.all.includes(LINK)) {
     return {
       everyMs: 600,
       words: LINK_WORDS.split(" ").map((word) => `${word} `),
@@ -307,6 +308,19 @@ const linkProxy = (hubPort: number) => {
 const proxy = linkProxy(Number(new URL(fleet.base).port));
 // The agent reaches the hub through it; everything else, directly.
 fleet.env.CAWCO_HUB_URL = `ws://127.0.0.1:${proxy.port}/ws`;
+/**
+ * The address the scratch machine joined (`config.json`'s `hubUrl`): the
+ * proxied one its agent uses, as on a real machine; or, `--join direct`, the
+ * hub's own, so the machine joined by one address and its agent reaches the
+ * same hub by another, and is the machine's agent by the hub's id
+ * (agent machine-agent.ts).
+ */
+const joinedBy =
+  option("--join") === "direct" ? fleet.base : `http://127.0.0.1:${proxy.port}`;
+await Bun.write(
+  join(fleet.home, ".config", "cawco", "config.json"),
+  JSON.stringify({ hubUrl: joinedBy })
+);
 
 interface Node {
   frame?: { x: number; y: number; width: number; height: number };
@@ -783,6 +797,37 @@ try {
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
+  // The agent's own word on whether it is the machine's: joined by the
+  // address it uses, nothing to say; joined by another, the machine's agent
+  // by the hub's id once it registers. Never "not this machine's agent"
+  // after it has registered, which stops OpenCode from starting.
+  const machineSaid = await until(
+    "the agent's word on being the machine's",
+    async () => {
+      const lines = (await fleet.logs("agent")).split("\n");
+      const registered = lines.findIndex((line) =>
+        line.includes("registered with")
+      );
+      const after = lines.slice(registered + 1);
+      return registered < 0
+        ? undefined
+        : {
+            refused: after.filter((line) =>
+              line.includes("not this machine's agent")
+            ),
+            by: after.find((line) => line.includes("this machine's agent:")),
+          };
+    },
+    (said) =>
+      said !== undefined &&
+      (option("--join") !== "direct" || said.by !== undefined),
+    60_000
+  ).catch(() => undefined);
+  check(
+    "the agent is the machine's own, joined by the address it uses or another",
+    machineSaid !== undefined && machineSaid.refused.length === 0,
+    `joined by ${joinedBy}, the agent at ${fleet.env.CAWCO_HUB_URL}: ${machineSaid?.by ?? (machineSaid ? "the same address" : "nothing said")}${machineSaid?.refused.length ? `; refused: ${machineSaid.refused.join(" / ")}` : ""}`
+  );
   sessionId = await fleet.spawn(harness, "Queued probe");
   console.log(`  ${harness} session ${sessionId}`);
   await fleet.send(sessionId, "Say hello.");
@@ -1106,11 +1151,7 @@ try {
   console.log("  … the agent's link to the hub black-holed");
   await until(
     "the mock asked for the message after the tool's result",
-    () =>
-      fleet.seen.some(
-        (seen) =>
-          seen.tools && seen.all.includes(LINK) && !seen.last.includes(LINK)
-      ),
+    () => fleet.seen.some((seen) => seen.afterTool && seen.all.includes(LINK)),
     Boolean,
     90_000
   );

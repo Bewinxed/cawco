@@ -23,6 +23,12 @@ export const HARNESSES: Harness[] = ["claude", "opencode", "pi"];
 
 /** One request the mock answered. */
 export interface Seen {
+  /**
+   * The request answers a tool call: its last message is the tool's result
+   * (a `tool` message on chat completions, a `tool_result` block on
+   * Anthropic messages). `last` is still the user's prompt then.
+   */
+  afterTool: boolean;
   /** Every user message's text, joined: the conversation so far. */
   all: string;
   at: number;
@@ -36,7 +42,8 @@ export interface Seen {
 
 /**
  * What the mock answers a request with: its words, one every `everyMs`; or,
- * with `tool` (Anthropic messages only), one call of that tool.
+ * with `tool`, one call of that tool (Anthropic messages and chat
+ * completions alike).
  */
 export interface Reply {
   everyMs: number;
@@ -204,14 +211,45 @@ const anthropicEvents = (words: string[], tool?: Reply["tool"]): string[] => {
   ];
 };
 
-const chatEvents = (words: string[]): string[] => {
+const chatEvents = (words: string[], tool?: Reply["tool"]): string[] => {
   const chunk = (delta: object, finish: string | null) =>
     `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 0, model: "mock", choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
+  const usage = `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 0, model: "mock", choices: [], usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 } })}\n\n`;
+  if (tool) {
+    return [
+      chunk(
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              index: 0,
+              id: `call_${crypto.randomUUID().replaceAll("-", "")}`,
+              type: "function",
+              function: { name: tool.name, arguments: "" },
+            },
+          ],
+        },
+        null
+      ),
+      chunk(
+        {
+          tool_calls: [
+            { index: 0, function: { arguments: JSON.stringify(tool.input) } },
+          ],
+        },
+        null
+      ),
+      chunk({}, "tool_calls"),
+      usage,
+      "data: [DONE]\n\n",
+    ];
+  }
   return [
     chunk({ role: "assistant", content: "" }, null),
     ...words.map((content) => chunk({ content }, null)),
     chunk({}, "stop"),
-    `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 0, model: "mock", choices: [], usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 } })}\n\n`,
+    usage,
     "data: [DONE]\n\n",
   ];
 };
@@ -341,7 +379,7 @@ export async function scratchFleet(options: {
       const body = (await request.json().catch(() => ({}))) as {
         messages?: { role: string; content: unknown }[];
         stream?: boolean;
-        tools?: { name?: string }[];
+        tools?: { function?: { name?: string }; name?: string }[];
       };
       if (path.endsWith("/count_tokens")) {
         return Response.json({ input_tokens: 100 });
@@ -349,14 +387,23 @@ export async function scratchFleet(options: {
       const users = (body.messages ?? []).filter(
         (message) => message.role === "user"
       );
+      const final = body.messages?.at(-1);
       const one: Seen = {
         at: Date.now(),
+        afterTool:
+          final?.role === "tool" ||
+          (Array.isArray(final?.content) &&
+            (final.content as { type?: string }[]).some(
+              (block) => block.type === "tool_result"
+            )),
         all: users.map((user) => textOf(user.content)).join("\n"),
         last: textOf(users.at(-1)?.content),
         tools: (body.tools?.length ?? 0) > 0,
-        toolNames: (body.tools ?? []).flatMap((tool) =>
-          typeof tool.name === "string" ? [tool.name] : []
-        ),
+        // Anthropic names a tool at its top; chat completions, in `function`.
+        toolNames: (body.tools ?? []).flatMap((tool) => {
+          const name = tool.name ?? tool.function?.name;
+          return typeof name === "string" ? [name] : [];
+        }),
       };
       seen.push(one);
       const reply = options.respond(one);
@@ -375,7 +422,7 @@ export async function scratchFleet(options: {
       }
       return sseStream(
         chat
-          ? chatEvents(reply.words)
+          ? chatEvents(reply.words, reply.tool)
           : anthropicEvents(reply.words, reply.tool),
         reply.everyMs
       );

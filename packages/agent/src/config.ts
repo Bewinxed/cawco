@@ -4,6 +4,13 @@ import { cawcoConfigDir } from "@cawco/core/paths";
 
 /** Machine configuration shared by the CLI and daemon. */
 export interface CliConfig {
+  /**
+   * The id of the hub this machine joined (hub hub-id.ts), recorded the
+   * first time the agent reaches it at `hubUrl` or asks its `/health`; a
+   * new `hubUrl` drops it. What makes an agent the machine's own whichever
+   * address it reaches that hub by (machine-agent.ts).
+   */
+  hubId?: string;
   hubUrl: string;
   /** Transcript cache budget in megabytes (default 256). */
   transcriptCacheMb?: number;
@@ -33,6 +40,9 @@ export const readConfig = async (
   }
   const tcm = config.transcriptCacheMb;
   return {
+    ...(typeof config.hubId === "string" && config.hubId
+      ? { hubId: config.hubId }
+      : {}),
     hubUrl: typeof config.hubUrl === "string" ? config.hubUrl : "",
     transcriptCacheMb:
       typeof tcm === "number" && Number.isFinite(tcm) && tcm > 0
@@ -51,12 +61,22 @@ export const writeConfig = async (
   patch: Partial<CliConfig>,
   path = CONFIG_PATH
 ): Promise<void> => {
+  const held = await readConfig(path);
   const config: CliConfig = {
     hubUrl: "",
-    ...(await readConfig(path)),
+    ...held,
     ...patch,
     updatedAt: new Date().toISOString(),
   };
+  // Another hub address is another join: the id recorded for the old one is
+  // not this one's until it is read again.
+  if (
+    patch.hubUrl !== undefined &&
+    patch.hubUrl !== held?.hubUrl &&
+    patch.hubId === undefined
+  ) {
+    config.hubId = undefined;
+  }
   await Bun.write(path, `${JSON.stringify(config, null, 2)}\n`);
   await chmod(path, CONFIG_MODE);
 };
