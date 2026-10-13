@@ -500,6 +500,10 @@ The weight of the decision sets the shape, so flows differ:
 
 The tray is one worked answer to the four questions, not a template. Carry its reasoning to every flow, and its parts only to a flow that asks the same questions.
 
+**The Open Page Rule.** Almost nothing blurs the page or stops the reader acting elsewhere. A surface that asks or shows something opens in the page, beside what it concerns, and the rest of the page stays live: the reader can scroll, read, or press something else, and the surface waits or follows. The owner: "standing rule, there should almost never be a dialog or a sheet that blurs the page or prevents the user from taking other actions". The question to ask: if they press something else now, does anything break? If nothing breaks, nothing blocks. A scrim, a blur or a modal hold is for the rare moment when acting elsewhere would make the open question wrong, and the dialog, sheet and drawer recipes below are for those moments only.
+
+**The Show Don't Tell Rule.** A fact with a shape is drawn, not written out: a schedule as times on a line, a budget as a meter, a run of outcomes as marks in their status colours, who runs something as their mark. Words are for what has no shape (a prompt, a reason, a name), and a row of labelled text facts is a sign that something should be drawn. The owner, on a routine's detail written as label and value rows: "walls of text with no structure, many things can be told with ui or visually rather than spamming text rows".
+
 **Springs.** Surfaces released by a finger settle on one spring (`motion/spring.ts`): perceptual duration 0.4s, bounce 0, mass 1, stiffness `(2π / 0.4)²` ≈ 246.7, damping `4π / 0.4` ≈ 31.4 (critically damped). The spring is integrated once at release at 120Hz and handed to the compositor as keyframes about 8ms apart, carrying the finger's velocity. A tab track scrolled with a mouse wheel glides on a second, critically damped spring with a 0.3s response (stiffness `(2π / 0.3)²` ≈ 438.6, damping `4π / 0.3` ≈ 41.9).
 
 **Live work breathes.** Anything still running pulses its opacity on `--breath` (2s, ease-in-out): the catch-up dot, a subagent's beat, the in-flight tool glyph, the Working status glyph. Nothing that has finished moves.
@@ -775,6 +779,7 @@ Tactile and quiet: a hairline-edged raised block that dips under the hand.
 Solid ink, never coral: `ink-solid` fill and arrow, `on-ink` text, meta role, 8px radius, 6×10px padding, with a 10px rotated square arrow. It fades in and settles from 0.96 over 140ms on ease-out, and leaves the same way.
 
 ### Dialog, sheet and drawer
+These recipes are for the rare moments The Open Page Rule allows a hold. Anything else opens in the page.
 - **Dialog:** a recess tray (18px radius, 6px padding, overlay shadow) holding a raised body (12px radius, 18px padding) for concentric corners, over the blurred scrim. It enters over 280ms on ease-out rising 6px, exits over 160ms, and tweens to a new height over 180ms when its body changes. The close button is a 30px ghost icon button 12px from the corner.
 - **Sheet:** a raised side or edge panel with the drawer shadow. It slides its whole size in over 280ms on the drawer curve and leaves over 160ms; with reduced motion it fades over 120ms.
 - **Drag to dismiss:** a sheet follows the finger 1:1 along its axis and rubber-bands past rest (35% of travel, at most 25% of its size). Released past 30% of its size, or flicked faster than 0.3px/ms toward its edge, it leaves on the settle spring at the finger's speed while its scrim fades with the share still on screen. Otherwise the spring puts it back. A mouse never drags; it has the close button and Escape.
@@ -804,6 +809,8 @@ A compact tinted row, never a slab: 10px radius, 10×12px padding, body type, an
 - **Empty** (`ui/empty`): a 20px Solar duotone mark in muted ink, a title in the title role, one body line in muted ink up to 60ch saying why, and at most one action. It sits on the column the content would have started on, with 21px of block padding.
 - **Skeleton** (`ui/skeleton`): a `surface-fill` block at exactly the size of what it stands for, with an 8px radius. One band of the raised surface at 60% crosses it every 1.2s, by transform only; without motion it sits still. Board skeleton rows are 44px (83px on a phone) with a header band in `surface-band`.
 - **Spinner:** a 16px ring at 25% with a 25% arc, turning once per 1.2s loop. It is used inside a pending button's slot, as a toast's loading icon, and where a wait is under the skeleton threshold.
+
+**The Empty Starts Work Rule.** An empty state always offers to start the work that would fill it. Its one action starts a session with Caw that already asks him to create the thing, its words written for him and editable before they go. The owner: "all empty states should have a way to initiate a session that prompts caw to create it". Where Caw can't start, the empty state says why, and offers the way to do it by hand.
 
 **The Claim Of Nothing Rule.** An empty state claims there is nothing to show, so it renders only once the data is known to be empty, never while it is still being read. While data loads, the skeleton stands in at the real layout's size, and the first real read replaces it in one cross-fade (120ms) rather than as rows arriving.
 
@@ -910,6 +917,7 @@ A 34px raised control. Armed, its glyph and edge take `brand-ink`. While the sup
 - **Do** enter on ease-out over 260 to 280ms and leave over 160ms; move things already on screen on ease-in-out.
 - **Do** carry shared objects across a change, and reflow lists rather than letting rows jump.
 - **Do** design each flow from the four questions of The Stay In Context Rule, sized to the decision: in place for a light one, the affected things named for a heavy one, and every result taken from the system's word.
+- **Do** open what asks or shows in the page, with the rest still live (The Open Page Rule). Draw facts that have a shape (The Show Don't Tell Rule), and give every empty state the start of Caw's work on it (The Empty Starts Work Rule).
 - **Do** put every travelling motion under `prefers-reduced-motion: no-preference` (or `motionOk` in script), and keep fades for reduced motion.
 - **Do** show a skeleton at the real layout's size while data loads, and the empty state only once the data is known to be empty.
 - **Do** keep sound off until the reader turns it on, play every cue at the subtle emphasis for a gesture the reader made, and give touch only to a finger (The Quiet Feel Rule).
