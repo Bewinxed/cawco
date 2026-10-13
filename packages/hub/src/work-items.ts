@@ -1033,17 +1033,78 @@ export const depsScript = (): string => {
   ].join("\n");
 };
 
-/** The install step's line in the check log, named for what it ran. */
-const depsCheck = (stdout: string): WorkItemCheck => {
-  const command =
-    stdout.split("\n")[0]?.slice(DEPS_INSTALLING.length) ||
-    "dependency install";
-  return { name: `install dependencies: ${command}`, command };
-};
+/**
+ * An install {@link depsScript} ran ahead of the checks: not one of the
+ * item's checks, and never counted with them.
+ */
+interface InstallOutcome {
+  durationMs: number;
+  passed: boolean;
+  result: CommandResult;
+  /** What it said it ran: `bun install (bun.lock changed …)`. */
+  said: string;
+  /** Where it ran, when on another machine's check workspace. */
+  where?: string;
+}
+
+/**
+ * A check run: the installs it made first, and the checks' own outcomes,
+ * none of them when the workspace's own install failed.
+ */
+interface CheckRun {
+  installs: InstallOutcome[];
+  outcomes: CheckOutcome[];
+}
+
+/** Whether a run fails: an install that failed, or a check. */
+const runFailed = (run: CheckRun): boolean =>
+  run.installs.some((install) => !install.passed) ||
+  run.outcomes.some((outcome) => !outcome.passed);
 
 /** A fenced block that no command output can close early. */
 const fenced = (text: string): string =>
   `\n\`\`\`\`\n${text.trimEnd()}\n\`\`\`\``;
+
+/**
+ * An install's line above the checks: what it ran, and on a failure the
+ * installer's output (and its stderr, for the delegate).
+ */
+const installLine = (
+  { said, passed, result, durationMs, where }: InstallOutcome,
+  withStderr = false
+): string => {
+  const facts = `${passed ? "" : `exit ${result.exitCode}, `}${(durationMs / 1000).toFixed(1)}s${where ? `, ${where}` : ""}`;
+  const line = `- ${passed ? "installed dependencies" : "dependencies didn't install"}: ${said} (${facts})`;
+  if (passed) {
+    return line;
+  }
+  const out = result.stdout.trim() ? `${line}${fenced(result.stdout)}` : line;
+  return withStderr && result.stderr.trim()
+    ? `${out}\nstderr:${fenced(result.stderr)}`
+    : out;
+};
+
+/** A run's install lines, each on its own line ahead of the checks; empty without one. */
+const installLines = (run: CheckRun, withStderr = false): string =>
+  run.installs.map((each) => `${installLine(each, withStderr)}\n`).join("");
+
+/**
+ * A failed run as the delegate reads it: `head`, when the workspace's
+ * install failed, that no check ran, else how many of the item's checks
+ * failed; `lines`, the install lines and then the checks', failures first.
+ */
+const failedRun = (run: CheckRun): { head: string; lines: string } => {
+  const failing = run.outcomes.filter((outcome) => !outcome.passed);
+  const passing = run.outcomes.filter((outcome) => outcome.passed);
+  return {
+    head:
+      run.outcomes.length === 0
+        ? "Dependencies didn't install, so no checks ran."
+        : `${failing.length} of ${run.outcomes.length} checks failed.`,
+    lines:
+      `${installLines(run, true)}${[...failing, ...passing].map(checkResultLine).join("\n")}`.trimEnd(),
+  };
+};
 
 /**
  * A check's line: its name, pass or fail, exit code and duration. A failure
@@ -2970,10 +3031,10 @@ export const createWorkItems = ({
     workspace: WorkspaceRow,
     item: WorkItemRow,
     checks: WorkItemCheck[]
-  ): Promise<CheckOutcome[]> => {
+  ): Promise<CheckRun> => {
     let commit: Promise<WorkspaceCommit> | undefined;
     /** The installs this run made, each a line of the check log ahead of the checks. */
-    const installs: CheckOutcome[] = [];
+    const installs: InstallOutcome[] = [];
     /**
      * Installs `at`'s dependencies on `machineId`, inside its boundary, when
      * its lockfile moved since they were installed ({@link depsScript}).
@@ -2999,16 +3060,17 @@ export const createWorkItems = ({
       ) {
         return true;
       }
-      const result = checkTails(complete);
+      const said = complete.stdout.startsWith(DEPS_INSTALLING)
+        ? (complete.stdout.split("\n")[0] ?? "").slice(DEPS_INSTALLING.length)
+        : "the dependency install";
       installs.push({
-        check: depsCheck(complete.stdout),
-        result,
+        said,
+        result: checkTails(complete),
         where,
-        exitCode: result.exitCode,
         durationMs: Date.now() - started,
-        passed: result.exitCode === 0,
+        passed: complete.exitCode === 0,
       });
-      return result.exitCode === 0;
+      return complete.exitCode === 0;
     };
     const placed = new Map<
       string,
@@ -3036,7 +3098,7 @@ export const createWorkItems = ({
           const where = `on ${machineName(machineId)} at ${made.head.slice(0, 9)}`;
           if (!(await install(machineId, at, where))) {
             throw new Error(
-              "its dependency install failed there; the install dependencies line has the installer's output"
+              "its dependency install failed there; the dependencies line above the checks has the installer's output"
             );
           }
           return { at, head: made.head };
@@ -3079,7 +3141,7 @@ export const createWorkItems = ({
     );
     // A failed install is the run's one line: no check can pass without it.
     if (local && !(await install(workspace.machineId, workspace))) {
-      return installs;
+      return { installs, outcomes: [] };
     }
     const outcomes: CheckOutcome[] = [];
     for (const check of checks) {
@@ -3111,7 +3173,7 @@ export const createWorkItems = ({
           (check.expect === undefined || result.stdout.includes(check.expect)),
       });
     }
-    return [...installs, ...outcomes];
+    return { installs, outcomes };
   };
 
   /**
@@ -3176,11 +3238,17 @@ export const createWorkItems = ({
     checks: WorkItemCheck[]
   ): Promise<Landed> => {
     const { base } = workspace;
-    const outcome = await land<CheckOutcome[]>(base, {
+    /** What the recheck after a rebase installed first, for the landing line. */
+    let installed = "";
+    const outcome = await land<CheckRun>(base, {
       run: runIn(workspace),
       recheck: async () => {
         const again = await runChecks(workspace, item, checks);
-        return again.some((check) => !check.passed) ? again : undefined;
+        installed = again.installs
+          .filter((each) => each.passed)
+          .map((each) => `; installed dependencies first: ${each.said}`)
+          .join("");
+        return runFailed(again) ? again : undefined;
       },
       queue: landings,
       skip: item.outputs ?? [],
@@ -3190,7 +3258,7 @@ export const createWorkItems = ({
       case "landed":
         return {
           kind: "done",
-          line: `Landed on ${base} at ${outcome.sha.slice(0, 9)}${outcome.rebased ? `, rebased onto the newer ${base} with the checks run again` : ""}.`,
+          line: `Landed on ${base} at ${outcome.sha.slice(0, 9)}${outcome.rebased ? `, rebased onto the newer ${base} with the checks run again${installed}` : ""}.`,
         };
       case "nothing":
         return {
@@ -3210,11 +3278,10 @@ export const createWorkItems = ({
           text: `The checks passed, but your commits conflict with origin/${base} in:${fenced(outcome.files)}\nThe hub undid its rebase. Rebase onto origin/${base} yourself, resolve the conflicts, commit, and call finish_item again.`,
         };
       case "recheck-failed": {
-        const failing = outcome.failing.filter((check) => !check.passed);
-        const passing = outcome.failing.filter((check) => check.passed);
+        const { head, lines } = failedRun(outcome.failing);
         return {
           kind: "retry",
-          text: `${base} had moved, so the hub rebased your commits onto it and ran the checks again: ${failing.length} of ${outcome.failing.length} failed. Your branch is now on top of origin/${base}. Fix the cause and call finish_item again.\n\n${[...failing, ...passing].map(checkResultLine).join("\n")}`,
+          text: `${base} had moved, so the hub rebased your commits onto it and ran the checks again. ${head} Your branch is now on top of origin/${base}. Fix the cause and call finish_item again.\n\n${lines}`,
         };
       }
       default:
@@ -3532,17 +3599,18 @@ export const createWorkItems = ({
     const settled = { checkingSince: null, submission: null };
     finishing.add(item.id);
     try {
-      const outcomes = await runChecks(workspace, item, checks);
-      const failing = outcomes.filter((outcome) => !outcome.passed);
-      if (failing.length > 0) {
+      const run = await runChecks(workspace, item, checks);
+      if (runFailed(run)) {
         update(item.id, settled);
-        const passing = outcomes.filter((outcome) => outcome.passed);
+        const { head, lines } = failedRun(run);
         return {
           done: false,
-          text: `${failing.length} of ${outcomes.length} checks failed. The item is still running: fix the cause and call finish_item again.\n\n${[...failing, ...passing].map(checkResultLine).join("\n")}`,
+          text: `${head} The item is still running: fix the cause and call finish_item again.\n\n${lines}`,
         };
       }
-      const lines = outcomes.map(checkLine).join("\n");
+      const { outcomes } = run;
+      // The install, when one ran, is its own line above the checks.
+      const lines = `${installLines(run)}${outcomes.map(checkLine).join("\n")}`;
       // The checks took their time: the item may have been stopped since.
       const stopped = db.workItem(item.id) ?? item;
       if (!LIVE.has(stopped.state)) {
