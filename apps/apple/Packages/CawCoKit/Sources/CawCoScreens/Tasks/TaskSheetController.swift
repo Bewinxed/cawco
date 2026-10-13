@@ -71,6 +71,8 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
     private let idLabel = KitLabel(TaskSheetController.mono, ink: Palette.inkSubtle)
     private let stagePicker = KitSelect(small: true)
     private let stageSkeleton = SkeletonView(height: Size.cBtnHSm)
+    /// "Created <date> · Updated <relative>", its own line under the id and stage (`.dates`).
+    private let datesLabel = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let titleButton = UIControl()
     private let titleLabel = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong, lines: 0)
     private let titleField = KitField()
@@ -181,6 +183,8 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         meta.spacing = Space.space2
         meta.alignment = .center
         head.addArrangedSubview(meta)
+        datesLabel.isHidden = true
+        head.addArrangedSubview(datesLabel)
 
         // The title edits in place (`title-button`): a tap opens the field.
         titleLabel.wrap = .balance
@@ -313,6 +317,14 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
             stagePicker.setValue(TaskWords.stage(shown.stage))
             stagePicker.isEnabled = !moving
             stagePicker.menu = stageMenu(shown)
+        }
+        datesLabel.isHidden = shown == nil
+        if let shown {
+            // time.ts `formatTimestamp` (en-US "Oct 13, 11:15 AM") and `formatDistanceToNow`.
+            let created = Date(timeIntervalSince1970: shown.createdAt / 1000)
+                .formatted(.dateTime.month(.abbreviated).day().hour().minute().locale(Locale(identifier: "en_US")))
+            let updated = RailAge.ago(shown.updatedAt, now: Date().timeIntervalSince1970 * 1000)
+            datesLabel.text = "Created \(created) · Updated \(updated)"
         }
 
         flagsHolder.subviews.forEach { $0.removeFromSuperview() }
