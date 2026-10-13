@@ -8,7 +8,7 @@
     resultField,
   } from "@cawco/core/tool-presentation";
   import { getContext, untrack } from "svelte";
-  import { SvelteSet } from "svelte/reactivity";
+  import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import {
     cawco,
     revealPreview,
@@ -22,7 +22,6 @@
     calledArtifact,
     previewPlace,
   } from "#lib/cawco/preview/source.js";
-  import { toast } from "#lib/cawco/toasts.js";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import {
     describeTool,
@@ -185,9 +184,9 @@
 
   /** Favicons that failed to load; their rows keep the tool's glyph. */
   const brokenIcons = new SvelteSet<string>();
-  /** Preview calls whose open request is out, and those whose last one failed. */
+  /** Preview calls whose open request is out, and why the last one failed, said under its row. */
   const opening = new SvelteSet<string>();
-  const openFailed = new SvelteSet<string>();
+  const openFailed = new SvelteMap<string, string>();
 
   async function openArtifact(m: Message, artifact: CalledArtifact) {
     const key = callId(m);
@@ -197,8 +196,10 @@
       await showArtifact(m.instanceId, artifact.id);
       revealPreview(m.instanceId);
     } catch (error) {
-      openFailed.add(key);
-      toast.error(error instanceof Error ? error.message : String(error));
+      openFailed.set(
+        key,
+        error instanceof Error ? error.message : String(error)
+      );
     } finally {
       opening.delete(key);
     }
@@ -410,6 +411,14 @@
                 </div>
               {/if}
             </div>
+            {#if openFailed.has(callId(m))}
+              <!-- What happened and the way back, under the row that asked;
+                   the row itself is still the way to open it. -->
+              <p class="open-fault" role="alert">
+                Couldn't open {name}: {openFailed.get(callId(m))} Press it to
+                try again.
+              </p>
+            {/if}
           {:else if hasBody}
             {@const disclosed = disclosure(m)}
             {@const body = `${uid}-${m.id ?? m.toolCallId}`}
@@ -551,6 +560,13 @@
 </div>
 
 <style>
+  .open-fault {
+    max-inline-size: 440px;
+    margin: calc(-1 * var(--space-1)) 0 var(--space-2);
+    color: var(--data-bad);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
+  }
   .preview-tool {
     position: relative;
     display: flex;
