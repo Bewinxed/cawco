@@ -733,7 +733,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "delegate_list",
-      "Your delegation tree: each delegate you started, theirs nested, with its work item's state, last activity, cache warmth, queued messages, what it waits on, and plan progress. Read it before handing off to a delegate or calling one stuck.",
+      "Your delegation tree: each delegate you started, theirs nested, with its work item's state, last activity, cache warmth, queued messages, what it waits on, and plan progress; and under queued, your delegates still waiting for owned files (state queued), each with when it was queued and the live item and globs holding it. Read it before handing off to a delegate or calling one stuck.",
       {
         include: z
           .enum(["live", "all"])
@@ -878,12 +878,14 @@ export function handoffTools(deps: HandoffDeps) {
     tool(
       "stop_delegate",
       "Stop one of YOUR delegates (a session you spawned with delegate). Only your own delegates " +
-        "can be stopped. Its work item is cancelled; a later handoff to it reopens the item in the same session.",
+        "can be stopped. Its work item is cancelled; a later handoff to it reopens the item in the same session. " +
+        "Given a queued delegate's id (one delegate queued behind owned files, listed under queued by delegate_list), " +
+        "it withdraws it from the queue: it never started, so it has no session or workspace.",
       {
         target: z
           .string()
           .describe(
-            'The delegate to stop: its directory name, e.g. "keeboard", or its id.'
+            'The delegate to stop: its directory name, e.g. "keeboard", or its id; for a queued delegate, its queued id or its first 8 characters.'
           ),
       },
       async ({ target }) => ({

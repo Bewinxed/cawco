@@ -472,6 +472,19 @@ export interface WorkItemRequest {
 type QueuedRequest = WorkItemRequest &
   Required<Pick<WorkItemRequest, "queuedAs">>;
 
+/**
+ * A `delegate` waiting in the queue for owned files, as `delegate_list`
+ * shows it: when it was queued, and the live item and globs that hold it
+ * (null once its files are free and it is about to start).
+ */
+export interface QueuedDelegate {
+  heldBy: { itemId: string; title: string; globs: string } | null;
+  id: string;
+  queuedAt: string;
+  state: "queued";
+  title: string;
+}
+
 export interface WorkItemStart {
   item: WorkItemRow;
   text: string;
@@ -589,8 +602,18 @@ export interface WorkItemDeps {
 const PLAN_TODO = /\[(td-\d{1,6})\]/;
 /** Plan items one attempt may leave behind as proposed to-dos. */
 const PROPOSALS_LIMIT = 20;
-/** How often the hub looks at every live item's budget, between turns. */
+/**
+ * How often the hub looks at every live item's budget, between turns, and
+ * for items whose session is gone or asleep: the first look comes this long
+ * after the hub starts.
+ */
 const BUDGET_SWEEP_MS = 30_000;
+
+/** Why a live item whose session row no longer exists fails. */
+const SESSION_GONE = "its session is gone";
+
+/** How long an agent leaves a session at rest before it sleeps it (agent session.ts `IDLE_SLEEP_MS`). */
+const IDLE_SLEEP_MS = 30 * 60_000;
 
 /**
  * How long archiving waits on a running session's machine to confirm its
@@ -1481,12 +1504,118 @@ export const createWorkItems = ({
     );
   };
 
+  // --- items their session can no longer finish ------------------------------------
+
+  /**
+   * The item's session as its report names it, once its row is gone: the
+   * fields the report path reads (its id and machine, its parent and item,
+   * its title as its label), from the item and its workspace.
+   */
+  const standIn = (item: WorkItemRow): InstanceRow => {
+    const [workspace] = db.workspacesNamed(item.workspaceId);
+    return {
+      id: item.instanceId,
+      machineId: workspace?.machineId ?? "",
+      parentInstanceId: item.parentInstanceId,
+      workItemId: item.id,
+      title: item.title,
+      cwd: workspace?.path ?? "",
+      launchDir: "unknown",
+      harness: item.harness,
+    } as InstanceRow;
+  };
+
+  /**
+   * Every live item whose session row no longer exists fails with
+   * {@link SESSION_GONE}, and whoever hears its reports is told: nothing can
+   * run it or call finish_item. One whose checks this hub runs now is left
+   * to that run.
+   */
+  const endGone = (): void => {
+    for (const item of db.liveWorkItems()) {
+      if (finishing.has(item.id) || db.ownedInstance(item.instanceId)) {
+        continue;
+      }
+      quiet.delete(item.id);
+      const failed = finish(item, {
+        state: "failed",
+        error: SESSION_GONE,
+        checkingSince: null,
+        submission: null,
+      });
+      console.log(`[work-items] ${item.id}: ${SESSION_GONE}`);
+      report(
+        standIn(item),
+        `${item.title} failed: ${SESSION_GONE}. The hub has no row for its session ${item.instanceId.slice(0, 8)} any more, so nothing can run it or call finish_item. Delegate the work again if it is still needed.\n\n[Work item ${failed.id} is ${failed.state} in workspace ${failed.workspaceId}.]`,
+        true
+      );
+    }
+  };
+
+  /**
+   * A live item whose session has slept past the agent's idle timeout with
+   * no wait and no finish_item: its last turn ended quietly. A quiet turn of
+   * an item with checks reports nothing to its parent ({@link turnEnded}
+   * answers undefined: busy, or the "still open" word goes to the session
+   * alone), so unless a report reached the parent since that turn ended, the
+   * parent is told now, once: the newer report this leaves is the mark. One
+   * whose parent did hear (an item without checks reports every turn) is the
+   * parent's to decide, and stays as it is.
+   */
+  const tellAsleep = (): void => {
+    const open = db
+      .liveWorkItems()
+      .filter(
+        (item) => !(item.waitUntil || item.waitResumeBy || item.checkingSince)
+      );
+    if (open.length === 0) {
+      return;
+    }
+    const rows = new Map(
+      db
+        .getInstancesByIds(open.map((item) => item.instanceId))
+        .map((row) => [row.id, row])
+    );
+    const now = Date.now();
+    for (const item of open) {
+      const row = rows.get(item.instanceId);
+      if (!(row && row.status === "sleeping" && row.workItemId === item.id)) {
+        continue;
+      }
+      const since = Math.max(
+        row.turnEndedAt ? new Date(row.turnEndedAt).getTime() : 0,
+        item.createdAt.getTime()
+      );
+      if (now - since < IDLE_SLEEP_MS) {
+        continue;
+      }
+      const told = db
+        .listDelegateEvents({ instance: row.id })
+        .some(
+          (event) =>
+            event.kind === "report" &&
+            new Date(event.createdAt).getTime() >= since
+        );
+      if (told) {
+        continue;
+      }
+      report(
+        row,
+        `${item.title} has been asleep since ${new Date(since).toISOString()} with its work item open: its last turn ended without finish_item or wait_item, and nothing reached you then. The item stays open. Hand off to it to carry the work on, or stop_delegate to cancel it.${reportLine(item)}`,
+        false,
+        true
+      );
+    }
+  };
+
   lifetime.every(BUDGET_SWEEP_MS, () => {
     for (const item of db.liveWorkItems()) {
       if (item.budget) {
         enforceBudget(item);
       }
     }
+    endGone();
+    tellAsleep();
   });
 
   // --- groups ---------------------------------------------------------------------
@@ -1744,14 +1873,10 @@ export const createWorkItems = ({
       unqueue(queued);
       return;
     }
-    const repo = repoOfRequest(
-      request,
-      parent,
-      request.task?.projectId ?? parent.projectId ?? null
-    );
-    if (ownsBlocker(repo, request.owns ?? [])) {
+    if (heldBy(queued, parent)) {
       return;
     }
+    startingQueued.add(queued.id);
     try {
       await start(request);
       db.dropQueuedWorkItem(queued.id);
@@ -1764,8 +1889,42 @@ export const createWorkItems = ({
         parent,
         `Your queued delegate “${queued.title}” could not start: ${error instanceof Error ? error.message : String(error)}`
       );
+    } finally {
+      startingQueued.delete(queued.id);
     }
   };
+
+  /** Queued delegates whose start is running now: a withdraw would race their filed item. */
+  const startingQueued = new Set<string>();
+
+  /** The live item and the globs that hold a queued delegate back; nothing once its files are free. */
+  const heldBy = (
+    queued: QueuedWorkItemRow,
+    parent: InstanceRow
+  ): ReturnType<typeof ownsBlocker> => {
+    const request = queued.request as QueuedRequest;
+    const repo = repoOfRequest(
+      request,
+      parent,
+      request.task?.projectId ?? parent.projectId ?? null
+    );
+    return ownsBlocker(repo, request.owns ?? []);
+  };
+
+  /**
+   * The queued delegates `caller` may withdraw: those it queued, and, as its
+   * project's lead, those of its project. One that has filed its item is that
+   * item now, and is left out.
+   */
+  const queuedFor = (caller: string): QueuedWorkItemRow[] =>
+    db
+      .queuedWorkItems()
+      .filter((row) => !db.workItem(row.id))
+      .filter(
+        (row) =>
+          row.parentInstanceId === caller ||
+          queuedSummaryOf(row).leadInstanceId === caller
+      );
 
   /** A workspace's clone and boundary gone on its machine, its places with them, and its row archived. */
   const closeWorkspace = async (
@@ -3377,6 +3536,72 @@ export const createWorkItems = ({
           `[work-items] queued delegates did not start: ${error instanceof Error ? error.message : String(error)}`
         )
       );
+    },
+
+    /**
+     * `stop_delegate` on a queued delegate: the one `target` names (its full
+     * id, or a prefix of eight or more characters) leaves the queue through
+     * {@link unqueue}, its chip with it. Only its parent or its project's
+     * lead may withdraw it; anyone else is refused as `stop_delegate`
+     * refuses a session that is not theirs. Undefined when `target` names no
+     * queued delegate, so the caller looks among sessions.
+     */
+    withdrawQueued(from: string, target: string): string | undefined {
+      const needle = target.trim().toLowerCase();
+      const named = (row: QueuedWorkItemRow): boolean =>
+        row.id === needle || (needle.length >= 8 && row.id.startsWith(needle));
+      const mine = queuedFor(from).filter(named);
+      if (mine.length === 0) {
+        const theirs = db
+          .queuedWorkItems()
+          .some((row) => named(row) && !db.workItem(row.id));
+        if (theirs) {
+          throw new WorkItemRefusal(
+            403,
+            `"${target}" is not your delegate — you can only stop or interrupt your own delegates.`
+          );
+        }
+        return;
+      }
+      if (mine.length > 1) {
+        throw new WorkItemRefusal(
+          400,
+          `"${target}" names ${mine.length} queued delegates: ${mine.map((row) => `“${row.title}” (${row.id})`).join(", ")}. Pass the full id.`
+        );
+      }
+      const [queued] = mine;
+      if (startingQueued.has(queued.id)) {
+        throw new WorkItemRefusal(
+          409,
+          `Your queued delegate “${queued.title}” (${queued.id.slice(0, 8)}) is starting now that its files are free. Stop it by its id once delegate_list shows its session.`
+        );
+      }
+      unqueue(queued);
+      return `Withdrew your queued delegate “${queued.title}” (${queued.id.slice(0, 8)}): it never started, so it has no session or workspace.`;
+    },
+
+    /**
+     * The queued delegates `caller` may withdraw, for `delegate_list`: each
+     * with when it was queued and the live item and globs that hold it.
+     */
+    queuedOf(caller: string): QueuedDelegate[] {
+      return queuedFor(caller).map((queued) => {
+        const [parent] = db.getInstancesByIds([queued.parentInstanceId]);
+        const held = parent ? heldBy(queued, parent) : undefined;
+        return {
+          id: queued.id,
+          title: queued.title,
+          state: "queued",
+          queuedAt: queued.queuedAt.toISOString(),
+          heldBy: held
+            ? {
+                itemId: held.item.id,
+                title: held.item.title,
+                globs: held.globs,
+              }
+            : null,
+        };
+      });
     },
 
     /**

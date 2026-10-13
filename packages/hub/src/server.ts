@@ -19244,6 +19244,53 @@ export const createServer = (
           }
         }
       )
+      // `stop_delegate` on a queued delegate: withdrawn by its parent or its
+      // project's lead; 404 when the target names no queued delegate.
+      .post(
+        "/api/work-items/queued/withdraw",
+        {
+          ...hidden,
+          body: t.Object({
+            from: t.String({ minLength: 1 }),
+            target: t.String({ minLength: 1 }),
+          }),
+        },
+        ({ body, request, status }) => {
+          const authorization = request.headers.get("authorization");
+          const identity = identities.resolve(authorization);
+          if (authorization !== null && !identity) {
+            return status(401, "Invalid session credential");
+          }
+          if (identity && identity.instanceId !== body.from) {
+            return status(
+              403,
+              "Session credential does not belong to the withdraw's requester"
+            );
+          }
+          try {
+            const text = workItems.withdrawQueued(body.from, body.target);
+            return text === undefined
+              ? status(404, `no queued delegate ${body.target}`)
+              : { text };
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            return status(
+              error instanceof WorkItemRefusal ? error.status : 502,
+              message
+            );
+          }
+        }
+      )
+      // `delegate_list`'s queued delegates: the caller's, and its led project's.
+      .get(
+        "/api/work-items/queued",
+        {
+          ...hidden,
+          query: t.Object({ for: t.String({ minLength: 1 }) }),
+        },
+        ({ query }) => ({ queued: workItems.queuedOf(query.for) })
+      )
       .get("/api/work-items/:id", hidden, ({ params, status }) => {
         const item = workItems.item(params.id);
         return item ?? status(404, `no work item ${params.id}`);

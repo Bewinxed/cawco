@@ -40,7 +40,7 @@ import type {
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import { type KeepAliveRow, promptCacheExpiresAt } from "./keep-alive";
 import { leafOf, sessionLabel } from "./labels";
-import { resolveSpawnType } from "./work-items";
+import { type QueuedDelegate, resolveSpawnType } from "./work-items";
 
 const WS_SCHEME = /^ws/;
 const WS_PATH_SUFFIX = /\/ws$/;
@@ -725,7 +725,7 @@ export interface HandoffActions {
   /** This session's delegation tree: its delegates, theirs nested. */
   readonly delegateList: (
     include: DelegateListInclude
-  ) => Promise<{ delegates: DelegateNode[] }>;
+  ) => Promise<{ delegates: DelegateNode[]; queued: QueuedDelegate[] }>;
   /**
    * Finishes this session's work item: the hub runs its checks, or fails it
    * as blocked. Answers what the hub says of the results.
@@ -1022,7 +1022,17 @@ export const handoffActions = ({
         "delegate_list is read by the hub, which is not wired here."
       );
     }
-    return { delegates: await delegateList(include) };
+    const [delegates, waiting] = await Promise.all([
+      delegateList(include),
+      fetch(
+        `${hubHttpUrl()}/api/work-items/queued?for=${encodeURIComponent(instanceId)}`
+      ),
+    ]);
+    if (!waiting.ok) {
+      throw new Error(await waiting.text());
+    }
+    const { queued } = (await waiting.json()) as { queued: QueuedDelegate[] };
+    return { delegates, queued };
   },
   async continueSession(input) {
     const { rows, hosts } = fleetInstances(fleet);
@@ -1528,6 +1538,24 @@ export const handoffActions = ({
   },
 
   async stopDelegate(asked: string): Promise<string> {
+    // A queued delegate has no session yet: it is withdrawn from the queue.
+    const withdrawn = await fetch(
+      `${hubHttpUrl()}/api/work-items/queued/withdraw`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(authorization ? { Authorization: authorization } : {}),
+        },
+        body: JSON.stringify({ from: instanceId, target: asked }),
+      }
+    );
+    if (withdrawn.ok) {
+      return ((await withdrawn.json()) as { text: string }).text;
+    }
+    if (withdrawn.status !== 404) {
+      throw new Error(await withdrawn.text());
+    }
     const { peers, asleep } = roster(fleet, instanceId);
     const followed = formerOf(formerIds(), asked);
     const target = followed?.now ?? asked;
