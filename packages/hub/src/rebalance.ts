@@ -523,13 +523,22 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     };
   };
 
-  /** `row` as it stands now, when it is still on `from`, running, not Caw's own with Caw off (at-limit `stays`), owing no move, and nothing else is acting on it. */
+  /**
+   * Sessions whose carry their machine refused for a reason a later pass
+   * would meet unchanged: left out until their next turn ends
+   * ({@link turnEnded}) or the accounts change ({@link accountsChanged}),
+   * so a refusal is tried, and said, once.
+   */
+  const refused = new Set<string>();
+
+  /** `row` as it stands now, when it is still on `from`, running, not Caw's own with Caw off (at-limit `stays`), owing no move, not refused unchanged, and nothing else is acting on it. */
   const candidate = (row: LimitRow, from: Account): LimitRow | undefined => {
     const fresh = rowOf(row.id);
     if (
       fresh?.status !== "running" ||
       stoppedByCawOff(db, fresh) ||
       fresh.accountId !== from.id ||
+      refused.has(row.id) ||
       ports.owed().has(row.id) ||
       acting.has(row.id) ||
       ports.continuing(fresh) ||
@@ -595,8 +604,9 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       return "owed";
     }
     if (why) {
+      refused.add(row.id);
       console.warn(
-        `[rebalance] ${ports.named(row)} stays on ${accountName(from)}, not moved to ${accountName(target)} ahead of its forecast run-out: ${why.why}. The next look at the accounts, within 5 minutes, decides again.`
+        `[rebalance] ${ports.named(row)} stays on ${accountName(from)}, not moved to ${accountName(target)} ahead of its forecast run-out: ${why.why}. It isn't tried again until its next turn ends or an account signs in, leaves, or comes back from its bench.`
       );
       return "skip";
     }
@@ -1110,6 +1120,8 @@ export const createRebalancer = (deps: RebalancerDeps) => {
         same(new Set(was.benched.keys()), new Set(benched.keys()))
       )
     ) {
+      // Another account to carry to, or one fewer: a refused carry may go now.
+      refused.clear();
       deps.replan();
     }
     if (!was) {
@@ -1161,5 +1173,9 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     pairs,
     rebalance: (provider: AccountProvider, machineId: string) =>
       rebalance(provider, machineId),
+    /** A turn of `instanceId` ended: a carry refused before may go now. */
+    turnEnded: (instanceId: string): void => {
+      refused.delete(instanceId);
+    },
   };
 };

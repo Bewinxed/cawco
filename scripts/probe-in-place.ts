@@ -58,6 +58,8 @@ const delay = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
 /** A whole move the machine refused, as its transcript line says it (core `accountMoveWords`). */
 const MOVE_REFUSED =
   /^Couldn't move from A to (B|C): its Claude Code process is busy \(it holds 1 send\(s\) it has not read yet\), and a conversation isn't copied while the process writing it runs$/;
+/** A move refused, held back or not tried again, as a hub line says it. */
+const MOVE_HELD = /can't move|stays on|isn't tried/;
 /** Any wording of a continuation. */
 const CONTINUE_WORDS = /continu/i;
 
@@ -454,6 +456,30 @@ if (role === "sessiond") {
             pinned.push(c.id);
             return { id: c.id };
           })
+          .post("/proof/forecast", ({ body }) => {
+            // An account's 5-hour window read twice, half an hour apart,
+            // 85% then 90%: at 10% an hour it runs out in one, well before its
+            // reset, and that pace carried to another account lasts there.
+            const { account } = body as { account: string };
+            const now = Date.now();
+            const resetsAt = new Date(now + 4 * 3_600_000).toISOString();
+            const reading = (percent: number) => ({
+              windows: [
+                {
+                  group: "session",
+                  isActive: true,
+                  kind: "session",
+                  percent,
+                  resetsAt,
+                  scopeLabel: null,
+                  severity: "normal",
+                },
+              ],
+            });
+            db.accounts.putReading(account, reading(85), now - 30 * 60_000);
+            db.accounts.putReading(account, reading(90), now);
+            return { ok: true };
+          })
           .post("/proof/routing", ({ body }) => {
             // Moving at the limit on or off, for one step of the proof.
             const { move } = body as { move: boolean };
@@ -624,15 +650,14 @@ if (role === "sessiond") {
       ctx.busy(false);
     },
     dispose: async () => closeStream(ctx.instanceId),
-    // A background task it started, while `background-<id>` exists: at its
-    // account's limit it holds nothing (agent `holding`).
-    // A send it holds unread, while `unread-held-<id>` exists: that holds it
-    // at its limit too.
-    holding: (atLimit?: boolean) => {
+    // A background task it started, while `background-<id>` exists: a move's
+    // stop does not count it (agent `holding`). A send it holds unread, while
+    // `unread-held-<id>` exists: that holds it for a move too.
+    holding: (forMove?: boolean) => {
       if (existsSync(join(scratch, `unread-held-${ctx.instanceId}`))) {
         return "it holds 1 send(s) it has not read yet";
       }
-      return !atLimit &&
+      return !forMove &&
         existsSync(join(scratch, `background-${ctx.instanceId}`))
         ? "1 background task(s) it started are still running"
         : undefined;
@@ -1509,18 +1534,23 @@ if (role === "sessiond") {
     const o = crypto.randomUUID();
     // R, small enough that the controller moves it whole at A's limit.
     const r = crypto.randomUUID();
+    // R2, idle between turns on A with a background task in its live process:
+    // what a rebalance move carries in (f).
+    const r2 = crypto.randomUUID();
     await withHistory(p, a);
     await withHistory(o, a);
     await withHistory(r, a);
+    await withHistory(r2, a);
     await api("/proof/context", { id: r, tokens: 500 });
+    await api("/proof/context", { id: r2, tokens: 500 });
     const pChild = crypto.randomUUID();
     const oChild = crypto.randomUUID();
     spawn(pChild, b, p);
     spawn(oChild, b, o);
     await running(pChild);
     await running(oChild);
-    for (const id of [p, o]) {
-      // biome-ignore lint/performance/noAwaitInLoops: two marker files
+    for (const id of [p, o, r2]) {
+      // biome-ignore lint/performance/noAwaitInLoops: three marker files
       await writeFile(join(dir, `background-${id}`), "a monitor");
     }
     const sessionsOf = async () =>
@@ -1671,6 +1701,45 @@ if (role === "sessiond") {
     );
     quote("(e3) R's move refused: its transcript's line", rDividers);
     quote("(e3) R's move refused: the hub log", rLog);
+
+    // (f) A rebalance move of a session between turns whose live process
+    // holds a background task: A is forecast to run out, so the next look
+    // (within 5 minutes) moves R2 off it. The carry ends its idle process
+    // and relaunches it with its conversation, once; nothing is refused or
+    // tried again.
+    const r2Session = (await row(r2))?.sessionId;
+    await api("/proof/forecast", { account: a });
+    const r2Spawn = await until(
+      "R2 moved by rebalance and relaunched with its conversation",
+      eventLog,
+      (text) =>
+        lines(text, `SPAWN ${r2} `).some(
+          (one) => one.includes(" resume") && one.includes(`${r2Session}`)
+        ),
+      330_000
+    ).then((text) =>
+      lines(text, `SPAWN ${r2} `).filter((one) => one.includes(" resume"))
+    );
+    const r2After = (await row(r2)) as Row;
+    assert.notEqual(r2After.account, a, "R2 left A");
+    assert.equal(r2After.sessionId, r2Session, "R2's own conversation");
+    assert.equal(r2Spawn.length, 1, "one relaunch");
+    assert.deepEqual(await sessionsOf(), before5, "no session row was added");
+    const r2Log = lines(await hubLog(), titled(r2));
+    assert.ok(
+      !r2Log.some((one) => MOVE_HELD.test(one)),
+      `no refusal: ${JSON.stringify(r2Log)}`
+    );
+    assert.equal(
+      r2Log.filter((one) => one.includes("It moves to")).length,
+      1,
+      `one move: ${JSON.stringify(r2Log)}`
+    );
+    quote("(f) R2's rebalance move (hub log)", r2Log);
+    quote(
+      "(f) the stand-in: what R2's processes did",
+      lines(await eventLog(), r2).filter((one) => !one.includes("Turn "))
+    );
     await rm(join(dir, `limit-${a}`));
     // A person's "Continue in new session" of P, as the dashboard asks it.
     const byPerson = (await api(`/api/instances/${p}/continue`, {

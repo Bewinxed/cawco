@@ -6667,11 +6667,6 @@ export const createServer = (
    */
   const limitRefused = new Set<string>();
   /**
-   * Sessions whose last turn their account's limit refused, until a turn of
-   * theirs ends any other way: parked there ({@link parkedAtLimit}).
-   */
-  const refusedLast = new Set<string>();
-  /**
    * Sessions whose turn in flight died on their account's credential and
    * whose end is the at-limit controller's to answer, not a failed turn to
    * hand back ({@link takeCredentialTurn}): a token refresh race it sends
@@ -6808,13 +6803,13 @@ export const createServer = (
    * `sessionConfigDir`), so each one's machine carries it there first
    * ({@link CONTROL_CARRY_SESSIONS}) and its row says the new account only
    * once the machine answers that it all is: a reader with the row reads
-   * that one dir. `stop` ends a session's process first when it is at rest,
-   * for a move that relaunches it; without it a session whose process runs
-   * stays where it is. One whose account is at its limit is at rest with no
-   * turn running, ask parked or send unread ({@link parkedAtLimit}): what its
-   * process holds for later only wakes it into a refused turn. A row with no
-   * conversation yet, or of another harness, has nothing of Claude's to
-   * carry. Answers the rows that moved, and why each other did not.
+   * that one dir. `stop` ends a session's process first when it is between
+   * turns (no turn running, no ask parked, no send unread), for a move that
+   * relaunches it with its conversation; what the process holds for later
+   * ends with it. Without `stop`, a session whose process runs stays where
+   * it is. A row with no conversation yet, or of another harness, has
+   * nothing of Claude's to carry. Answers the rows that moved, and why each
+   * other did not.
    */
   const moveRowsToAccount = async (
     machineId: string,
@@ -6834,7 +6829,6 @@ export const createServer = (
               sessionId: row.sessionId,
               accountId,
               ...(stop ? { stop: true } : {}),
-              ...(stop && parkedAtLimit(row.id) ? { atLimit: true } : {}),
             },
           ]
         : []
@@ -6856,39 +6850,6 @@ export const createServer = (
       moved.push(row.id);
     }
     return { moved, kept };
-  };
-
-  /**
-   * Whether `instanceId` is parked at its account's limit: its last turn
-   * ended refused there ({@link refusedLast}), the at-limit controller holds
-   * it for a reset, or the hub reads its account at its limit for its model
-   * (a bench, or a window full until its reset). Every turn its process
-   * starts there is refused, whatever it holds for later.
-   */
-  const parkedAtLimit = (instanceId: string): boolean => {
-    if (
-      refusedLast.has(instanceId) ||
-      (db.atLimit.hold(instanceId)?.until ?? null) !== null
-    ) {
-      return true;
-    }
-    const [row] = db.getInstancesByIds([instanceId]);
-    if (!row?.accountId) {
-      return false;
-    }
-    const now = Date.now();
-    const reading = db.accounts
-      .readings()
-      .find((one) => one.accountId === row.accountId);
-    return (
-      refusedUntil(
-        db.accounts.bench(now),
-        reading,
-        row.accountId,
-        row.model,
-        now
-      ) !== null
-    );
   };
 
   /** Why a carry left a row's data where it was ({@link moveRowsToAccount}); undefined when it is all in the new dir. */
@@ -12719,8 +12680,6 @@ export const createServer = (
    */
   const landSessionDir = (row: StoredRow, accountId: string | null): void => {
     launchClaims.delete(row.id);
-    // A new process: nothing of it has been refused yet.
-    refusedLast.delete(row.id);
     const owed = relaunchAtTurnEnd.get(row.id);
     if (owed?.to !== undefined && owed.to === accountId) {
       relaunchAtTurnEnd.delete(row.id);
@@ -22075,7 +22034,6 @@ export const createServer = (
                   const word = credentialTurns.get(ended);
                   credentialTurns.delete(ended);
                   limitRefused.delete(ended);
-                  refusedLast.delete(ended);
                   finalMessage.delete(ended);
                   if (word === "raced") {
                     atLimit.turnRaced(ended);
@@ -22095,7 +22053,6 @@ export const createServer = (
                   // the context is not the session's context.
                   finalMessage.delete(message.instanceId);
                   const refused = message.instanceId;
-                  refusedLast.add(refused);
                   // A move it owes to an account with room is its turn's
                   // end, as any turn's end is.
                   if (!moveOwedAtRefusal(refused)) {
@@ -22108,7 +22065,6 @@ export const createServer = (
                   // sends again: one waiting to go again went with it, and a
                   // second race fails as any turn does.
                   atLimit.turnWent(message.instanceId);
-                  refusedLast.delete(message.instanceId);
                   const [cacheRow] = db.getInstancesByIds([message.instanceId]);
                   if (cacheRow?.harness === "claude") {
                     db.updateKeepAlive(

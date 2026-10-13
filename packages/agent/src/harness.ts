@@ -188,12 +188,13 @@ export interface HarnessSession {
    * What stopping this session's processes now would lose, in words, beyond
    * what the supervisor sees for itself (a running turn, a parked ask): work
    * the runtime holds in its own process. Nothing when it holds nothing.
-   * `atLimit`: its account is at its limit, so what it holds for later
-   * (background work, scheduled wake-ups) could only start a refused turn,
-   * and is not counted (core `CarrySessionRequest.atLimit`).
+   * `forMove`: the stop is a move's, which relaunches it on another account
+   * with its conversation, so what it holds for later (background work,
+   * scheduled wake-ups) ends with it and is not counted (core
+   * `CarrySessionRequest.stop`).
    */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
-  holding?(atLimit?: boolean): string | undefined;
+  holding?(forMove?: boolean): string | undefined;
   /** Interrupt the current turn. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   interrupt(): Promise<void>;

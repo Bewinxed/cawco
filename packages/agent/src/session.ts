@@ -1509,8 +1509,8 @@ export class SessionSupervisor {
     serverBusy?: string[],
     /** The hub's keep-alive is left out: {@link CONTROL_RESTLESS} asks for the rest alone. */
     keepAliveAside = false,
-    /** Its account is at its limit: what it holds for later is not counted ({@link HarnessSession.holding}). */
-    atLimit = false
+    /** A move's stop: what it holds for later is not counted ({@link HarnessSession.holding}). */
+    forMove = false
   ): Promise<{ why: string; unsure?: true } | undefined> {
     if (this.#adopting.has(instanceId)) {
       return { why: "its custody is still being decided", unsure: true };
@@ -1538,7 +1538,7 @@ export class SessionSupervisor {
     if (!keepAliveAside && this.#keptAwake?.has(instanceId)) {
       return { why: "the hub is keeping its prompt cache warm" };
     }
-    const held = session.holding?.(atLimit);
+    const held = session.holding?.(forMove);
     if (held) {
       return { why: held };
     }
@@ -1637,13 +1637,12 @@ export class SessionSupervisor {
   /**
    * Carries each Claude session's own data into the dir its row is to say
    * ({@link CONTROL_CARRY_SESSIONS}). A session whose process runs is left
-   * where it is, `live`, unless the request says `stop` and it is at rest:
-   * then its process ends first, the way a relaunch ends it, and the hub
-   * starts it again on the account it moved to. One whose account is at its
-   * limit (`atLimit`) is at rest with no turn running, ask parked or send
-   * unread: what it holds for later would only wake it into a refused turn.
-   * A process sessiond still holds that no session here has taken back is
-   * live too.
+   * where it is, `live`, unless the request says `stop` and it is between
+   * turns (no turn running, no ask parked, no send unread): then its process
+   * ends first, the way a relaunch ends it, and the hub starts it again on
+   * the account it moved to. What it holds for later (background work,
+   * scheduled wake-ups) ends with it. A process sessiond still holds that no
+   * session here has taken back is live too.
    */
   async carrySessions(
     requests: CarrySessionRequest[]
@@ -1677,7 +1676,7 @@ export class SessionSupervisor {
           running,
           undefined,
           true,
-          request.atLimit === true
+          true
         );
         if (awake) {
           outcomes[instanceId] = { state: "live", why: awake.why };

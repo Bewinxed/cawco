@@ -5,7 +5,6 @@ import {
   type AccountProvider,
   type AccountReading,
   type AtLimit,
-  accountMoveSentence,
   accountName,
   type ContinueStep,
   clockWords,
@@ -647,10 +646,8 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       reason,
     };
     if (repeated) {
-      // The line written the first time logged itself; this says it again.
-      console.warn(
-        `[at-limit] ${ports.named(row)}, again: ${accountMoveSentence(move, Date.now())}`
-      );
+      // Said once, as the line written the first time logged itself: it
+      // already says the hub tries again.
       if (line && events.some((event) => event.id === line)) {
         // Its "Summarising…" line goes, the first telling of it stands.
         ports.unnote(row, line);
@@ -1248,6 +1245,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     },
     /** A turn of `instanceId` ended as any turn does: maybe write a summary ahead of the limit. */
     async turnEnded(instanceId: string): Promise<void> {
+      rebalancer.turnEnded(instanceId);
       const row = rowOf(instanceId);
       const current = row ? currentOf(row) : undefined;
       if (row && current) {
