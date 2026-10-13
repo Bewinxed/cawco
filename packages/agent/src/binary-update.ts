@@ -25,6 +25,7 @@ import {
   binaryRoot,
   EXECUTABLE_IN_VERSION,
   helperIsLive,
+  liveHelper,
   prune,
   readInstallation,
   readKeeperVersion,
@@ -525,21 +526,46 @@ export class BinaryUpdater {
   readonly #idleJobSince = new Map<string, number>();
 
   /**
-   * THE KEEPERS BESIDE THE CURRENT ONE GO WHEN THEY HOLD NOTHING. A keeper
-   * handover leaves the keeper before it running with the sessions it holds;
-   * every new start goes to the current keeper. Each retiring keeper that has
-   * held no live child for {@link RETIRING_EMPTY_MS} is removed (its job ends
-   * and leaves the machine; keeper-jobs.ts), and what no process runs any
-   * more is pruned. One holding anything is never signalled. The machine's
-   * endpoint is made to name the keeper the `keeper` link names, once that
-   * one answers, should a handover have stopped between the two. What is
-   * still retiring is in the state (`retiringKeepers`). Nothing is done while
-   * an update helper runs: keepers are its to hand over then.
+   * THE KEEPERS BESIDE THE CURRENT ONE GO WHEN THEY HOLD NOTHING
+   * (#retireKeepers), AND THE STATE SAYS EACH ONE STILL RETIRING, with the
+   * live children it holds (`retiringKeepers`), on every watch. While an
+   * update helper runs nothing is done to any keeper, for keepers are its to
+   * hand over then; what is retiring is said all the same, so from the moment
+   * a handover makes the new keeper the machine's the state says the keeper
+   * before is handing over with what it holds, not a trial later. The keeper
+   * of the build the helper applies is not said to be retiring while it
+   * runs: it answers before the machine's endpoint names it, arriving.
    */
   async #tendKeepers(): Promise<void> {
-    if (await helperIsLive()) {
-      return;
+    const helper = await liveHelper();
+    if (!helper) {
+      await this.#retireKeepers();
     }
+    await this.#sayRetiring(
+      (await readKeepers())
+        .filter(
+          ({ current, keeper }) =>
+            !(
+              current ||
+              (keeper.kind === "build" && keeper.version === helper?.version)
+            )
+        )
+        .map(({ keeper, live }) => ({
+          version: keeper.version,
+          sessions: live,
+        }))
+    );
+  }
+
+  /**
+   * Each retiring keeper that has held no live child for
+   * {@link RETIRING_EMPTY_MS} is removed (its job ends and leaves the machine;
+   * keeper-jobs.ts), and what no process runs any more is pruned. One holding
+   * anything is never signalled. The machine's endpoint is made to name the
+   * keeper the `keeper` link names, once that one answers, should a handover
+   * have stopped between the two. Only while no update helper runs.
+   */
+  async #retireKeepers(): Promise<void> {
     const keepers = await readKeepers();
     const link = await readKeeperVersion();
     const named = keepers.find(
@@ -612,14 +638,6 @@ export class BinaryUpdater {
     if (removed) {
       await prune().catch(logFailure);
     }
-    await this.#sayRetiring(
-      (await readKeepers())
-        .filter((keeper) => !keeper.current)
-        .map(({ keeper, live }) => ({
-          version: keeper.version,
-          sessions: live,
-        }))
-    );
   }
 
   /**
@@ -670,9 +688,19 @@ export class BinaryUpdater {
     return removed;
   }
 
-  /** The retiring keepers in the state, written only when they changed, and never over a pass's state that only memory holds. */
+  /**
+   * The retiring keepers in the state, written only when they changed, and
+   * never over a pass's state that only memory holds. Laid over the state as
+   * the file holds it at the write: an update helper writes the file while it
+   * hands a keeper over and decides its trial (its `installed` among it), and
+   * what it wrote is never written back over.
+   */
   async #sayRetiring(retiring: RetiringKeeper[]): Promise<void> {
     const next = retiring.length > 0 ? retiring : undefined;
+    if (this.#running) {
+      return;
+    }
+    await this.#load();
     if (
       this.#running ||
       JSON.stringify(next) === JSON.stringify(this.#state.retiringKeepers)

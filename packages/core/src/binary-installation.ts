@@ -189,13 +189,21 @@ const linkedVersion = async (path: string): Promise<string | undefined> => {
   }
 };
 
-/** Whether an update helper is running: the lock names a process that is still the one that wrote it. */
-export async function helperIsLive(): Promise<boolean> {
-  const lock = await readJson<Parameters<typeof markerIsLive>[0]>(
-    lockFilePath()
-  );
-  return lock !== undefined && (await markerIsLive(lock));
+/**
+ * The running update helper's lock, which names the build it applies (or
+ * rolls back from), or `undefined` when none runs: a lock is a helper's only
+ * while the process it names is still the one that wrote it.
+ */
+export async function liveHelper(): Promise<{ version?: string } | undefined> {
+  const lock = await readJson<
+    { version?: string } & Parameters<typeof markerIsLive>[0]
+  >(lockFilePath());
+  return lock !== undefined && (await markerIsLive(lock)) ? lock : undefined;
 }
+
+/** Whether an update helper is running ({@link liveHelper}). */
+export const helperIsLive = async (): Promise<boolean> =>
+  (await liveHelper()) !== undefined;
 
 /**
  * Deletes the directories under `versions/` nothing needs. Kept: what `current`
@@ -218,12 +226,7 @@ export async function prune(): Promise<void> {
   const trial = await readTrial();
   add(trial?.previous);
   add(trial?.version);
-  const lock = await readJson<
-    { version?: string } & Parameters<typeof markerIsLive>[0]
-  >(lockFilePath());
-  if (lock && (await helperIsLive())) {
-    add(lock.version);
-  }
+  add((await liveHelper())?.version);
   for (const version of await versionsInUse(binaryRoot())) {
     add(version);
   }
