@@ -26139,6 +26139,10 @@
             "description": "A canvas's outline once drawn (core `canvasOutline`).",
             "type": "string"
           },
+          "port": {
+            "description": "A draft canvas's: the hub's preview listener, on the hub's host, where a\nclient that is not a page (the Apple app) loads the canvas at\n`/__cawco/canvas/<id>/`, naming its session in a `cawco-preview` cookie.",
+            "type": "number"
+          },
           "route": {
             "description": "Its live document on the hub's preview listener.",
             "type": "string"
@@ -26326,12 +26330,17 @@
               "null",
               "string"
             ]
+          },
+          "port": {
+            "description": "The hub's preview listener, where the canvas's page stands (`Created.port`).",
+            "type": "number"
           }
         },
         "required": [
           "file",
           "outline",
-          "png"
+          "png",
+          "port"
         ]
       },
       "CanvasElement": {

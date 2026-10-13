@@ -30,6 +30,7 @@ import {
 import { pageHash } from "@cawco/core/preview-proxy";
 import { applyPatch, type Operation } from "rfc6902";
 import { Doc, encodeStateAsUpdate } from "yjs";
+import { PREVIEW_PORT } from "../config";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
 import {
   canvasEntries,
@@ -199,6 +200,12 @@ export interface Created {
   opened: true | string;
   /** A canvas's outline once drawn (core `canvasOutline`). */
   outline?: string;
+  /**
+   * A draft canvas's: the hub's preview listener, on the hub's host, where a
+   * client that is not a page (the Apple app) loads the canvas at
+   * `/__cawco/canvas/<id>/`, naming its session in a `cawco-preview` cookie.
+   */
+  port?: number;
   /** Its live document on the hub's preview listener. */
   route: string;
   /** The element ids a canvas's create wrote. */
@@ -211,6 +218,8 @@ export interface CanvasExport {
   outline: string;
   /** Base64 PNG; null until a screen has drawn one. */
   png: string | null;
+  /** The hub's preview listener, where the canvas's page stands (`Created.port`). */
+  port: number;
 }
 
 const routeOf = (id: string) => `/__cawco/artifact/${id}`;
@@ -764,6 +773,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       name: row.name,
       route: routeOf(row.id),
       opened: "It stands in the composer until it is docked.",
+      port: PREVIEW_PORT,
     };
   };
 
@@ -1103,6 +1113,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ),
         outline: canvasOutline(elements),
         png: pictureOf(id),
+        port: PREVIEW_PORT,
       };
     },
 
