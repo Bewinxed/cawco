@@ -32,9 +32,12 @@ person's shell on obelisk the script reaches the Mac over `ssh mac`; on the
 Mac it runs there. A CawCo workspace holds no SSH key and reaches no other
 machine, so from one the script refuses: an item's check names the Mac
 instead (`delegate`'s `checks[].machine`, e.g. `{ machine: "Omars-MacBook-Pro",
-command: "bash apps/apple/scripts/build-both.sh ios --compile-only", expect:
-"BUILT iOS" }`), and the hub runs it in a workspace on the Mac at the item's
-commit; or the work is delegated to the Mac. Inside a workspace only the iOS
+command: "bash apps/apple/scripts/build-both.sh ios", expect: "LAUNCHED iOS 18.5" }`),
+and the hub runs it in a workspace on the Mac at the item's commit; or the
+work is delegated to the Mac. A landing check launches (`build-both.sh ios`
+proves the floor, iOS 18.5, and the newest runtime): a binary that dies at
+launch compiles clean. `--compile-only` never launches; it is for a workspace
+that cannot. Inside a workspace only the iOS
 Simulator builds: Mac Catalyst (which signs, `--compile-only` too), device
 builds, `signed.sh` and TestFlight refuse there, since signing keys never
 reach agent code. Those run from the orchestrator's shell.

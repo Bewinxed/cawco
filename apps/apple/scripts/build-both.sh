@@ -6,6 +6,9 @@
 # With no argument it builds both and prints BUILT iOS, LAUNCHED iOS,
 # BUILT macOS, LAUNCHED macOS, BUILT iOS 18.5, LAUNCHED iOS 18.5.
 # `ios` proves both iOS runtimes; `macos` proves only macOS.
+# A landing check runs `build-both.sh ios`: it launches on the floor (iOS
+# 18.5) and the newest runtime, so a binary that dies at launch fails it.
+# `--compile-only` never launches; it is for a workspace that cannot.
 # Exits non-zero at the first failure.
 #
 # The builds run one after the other into one DerivedData: two xcodebuilds
@@ -39,7 +42,7 @@ if [[ $(uname -s) == Darwin ]]; then
   MAC=(bash --norc -c)
   APPLE_ROOT=${XDG_CACHE_HOME:-$HOME/Library/Caches}/cawco-apple
 elif [[ -n ${CAWCO_WORKSPACE:-} ]]; then
-  echo "build-both.sh builds on the Mac, and this CawCo workspace reaches no other machine. Name the Mac on the check instead, e.g. { machine: \"Omars-MacBook-Pro\", command: \"bash apps/apple/scripts/build-both.sh ios --compile-only\", expect: \"BUILT iOS\" }, or delegate the work to the Mac." >&2
+  echo "build-both.sh builds on the Mac, and this CawCo workspace reaches no other machine. Name the Mac on the check instead, e.g. { machine: \"Omars-MacBook-Pro\", command: \"bash apps/apple/scripts/build-both.sh ios\", expect: \"LAUNCHED iOS 18.5\" }, or delegate the work to the Mac." >&2
   exit 2
 else
   MAC=(ssh -F "$HOME/.ssh/config" -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 mac)
