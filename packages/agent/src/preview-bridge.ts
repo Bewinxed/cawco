@@ -20,7 +20,7 @@
  * boundary running answers {@link WorkspaceDown}; a port named for a
  * workspace is reached there, never on the host.
  */
-import { existsSync, readFileSync, readlinkSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, readlinkSync } from "node:fs";
 import { mkdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -79,6 +79,7 @@ const netOf = (pid: number): string | undefined => {
 };
 
 const FIELDS = /\s+/;
+const PID = /^\d+$/;
 
 /** Whether something in `inner`'s network listens on TCP `port`. */
 const listening = (inner: number, port: number): boolean => {
@@ -110,15 +111,59 @@ const tool = (name: string): string => {
   return found;
 };
 
-export const closeBridge = (instanceId: string): void => {
+/** How long a stopped bridge's processes have to be gone. Our call: SIGKILL lands in milliseconds. */
+const BRIDGE_STOP_MS = 2000;
+
+/** The process group `pgid`'s members still running; none when `/proc` cannot say. */
+const inGroup = (pgid: number): number[] =>
+  readdirSync("/proc").flatMap((entry) => {
+    if (!PID.test(entry)) {
+      return [];
+    }
+    try {
+      const stat = readFileSync(`/proc/${entry}/stat`, "utf8");
+      // Fields after the command's closing paren: state, ppid, pgrp, …
+      const pgrp = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[2]);
+      return pgrp === pgid ? [Number(entry)] : [];
+    } catch {
+      // Gone as it was read.
+      return [];
+    }
+  });
+
+/**
+ * Stops preview `instanceId`'s bridge with every connection it holds: the
+ * bridge leads a process group of its own ({@link open}), and socat's child
+ * for each connection, a browser's open HMR socket among them, is in it. The
+ * whole group is killed at once, so the caller that cannot wait (the agent's
+ * own detach) still takes all of it; the promise settles once none of it
+ * runs.
+ */
+export const closeBridge = async (instanceId: string): Promise<void> => {
   onHost.delete(instanceId);
   const bridge = bridges.get(instanceId);
   if (!bridge) {
     return;
   }
   bridges.delete(instanceId);
-  bridge.proc.kill("SIGKILL");
-  rm(bridge.socket, { force: true }).catch(() => undefined);
+  try {
+    process.kill(-bridge.proc.pid, "SIGKILL");
+  } catch {
+    // The group is gone already.
+  }
+  await rm(bridge.socket, { force: true });
+  await bridge.proc.exited;
+  const deadline = Date.now() + BRIDGE_STOP_MS;
+  while (inGroup(bridge.proc.pid).length > 0 && Date.now() < deadline) {
+    // biome-ignore lint/performance/noAwaitInLoops: polls until the group's last connection is gone, or the deadline passes
+    await Bun.sleep(10);
+  }
+  const left = inGroup(bridge.proc.pid);
+  if (left.length > 0) {
+    console.warn(
+      `[preview] the bridge for ${instanceId} left ${left.join(", ")} running ${BRIDGE_STOP_MS / 1000}s after it was stopped`
+    );
+  }
 };
 
 const alive = (bridge: Bridge): boolean =>
@@ -135,7 +180,7 @@ const open = async (
   workspace: string,
   port: number
 ): Promise<string | "host"> => {
-  closeBridge(instanceId);
+  await closeBridge(instanceId);
   const networks = await workspaceNetworks(workspace);
   const [first] = networks;
   if (!first) {
@@ -162,8 +207,11 @@ const open = async (
   }
   await mkdir(dir, { recursive: true, mode: 0o700 });
   await rm(socket, { force: true });
+  // `setsid` execs in place (a child is no group leader), so the bridge's pid
+  // leads a process group of its own, which every connection's child joins.
   const proc = Bun.spawn(
     [
+      tool("setsid"),
       tool("setpriv"),
       "--pdeathsig",
       "KILL",

@@ -31,10 +31,16 @@ const previews = new Map<
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const PREVIEW_PREFIX = /^\/preview\/[^/]+\/[^/]+\//;
 
-export function stopPreview({ instanceId }: { instanceId: string }): boolean {
+/** Stops a preview's listener and its bridge; settles once the bridge's every connection is gone. */
+export async function stopPreview({
+  instanceId,
+}: {
+  instanceId: string;
+}): Promise<boolean> {
   previews.get(instanceId)?.listener.stop(true);
-  closeBridge(instanceId);
-  return previews.delete(instanceId);
+  const had = previews.delete(instanceId);
+  await closeBridge(instanceId);
+  return had;
 }
 
 /**
@@ -71,9 +77,10 @@ export function servingPreviews(): {
   }));
 }
 
+/** Stops every preview: each bridge's whole group is killed before this returns, its end awaited by no one. */
 export function stopPreviews(): void {
-  for (const instanceId of previews.keys()) {
-    stopPreview({ instanceId });
+  for (const instanceId of [...previews.keys()]) {
+    stopPreview({ instanceId }).catch(console.error);
   }
 }
 
@@ -108,7 +115,7 @@ export async function startPreview(options: {
     port === undefined
       ? { dir: root as string }
       : { port, ...(workspace === undefined ? {} : { workspace }) };
-  stopPreview({ instanceId });
+  await stopPreview({ instanceId });
   if ("port" in source) {
     // A workspace no boundary runs refuses the preview in so many words.
     await upstreamOf(instanceId, source);
@@ -186,7 +193,7 @@ export async function startPreview(options: {
             source.workspace !== undefined &&
             (await workspaceGone(source.workspace))
           ) {
-            closeBridge(instanceId);
+            await closeBridge(instanceId);
             return downResponse("workspace", 503);
           }
           throw error;
