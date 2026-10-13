@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Select as SelectPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
+  import { drawn, own } from "#lib/components/ui/floating-presence.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import type { WithoutChildrenOrChild } from "#lib/utils.js";
   import { cn, type WithoutChild } from "#lib/utils.js";
@@ -15,6 +16,7 @@
     portalProps,
     children,
     preventScroll = true,
+    forceMount = false,
     ...restProps
   }: WithoutChild<SelectPrimitive.ContentProps> & {
     portalProps?: WithoutChildrenOrChild<ComponentProps<typeof SelectPortal>>;
@@ -30,6 +32,8 @@
   });
 </script>
 
+<!-- Mounted by bits-ui's forceMount and drawn while its presence says so:
+     the page has its pointer back at the dismissal (floating-presence). -->
 <SelectPortal {...portalProps}>
   <SelectPrimitive.Content
     class={cn(
@@ -37,19 +41,31 @@
       className
     )}
     data-slot="select-content"
+    forceMount
     {preventScroll}
     {sideOffset}
     bind:ref
     {...restProps}
   >
-    <SelectScrollUpButton />
-    <SelectPrimitive.Viewport
-      class={cn(
-        "h-(--bits-select-anchor-height) w-full min-w-(--bits-select-anchor-width) scroll-my-1"
-      )}
-    >
-      {@render children?.()}
-    </SelectPrimitive.Viewport>
-    <SelectScrollDownButton />
+    {#snippet child({
+      props,
+      wrapperProps,
+    })}
+      {#if forceMount || drawn(props)}
+        <div {...wrapperProps}>
+          <div {...own(props)}>
+            <SelectScrollUpButton />
+            <SelectPrimitive.Viewport
+              class={cn(
+                "h-(--bits-select-anchor-height) w-full min-w-(--bits-select-anchor-width) scroll-my-1"
+              )}
+            >
+              {@render children?.()}
+            </SelectPrimitive.Viewport>
+            <SelectScrollDownButton />
+          </div>
+        </div>
+      {/if}
+    {/snippet}
   </SelectPrimitive.Content>
 </SelectPortal>

@@ -3,6 +3,7 @@
   import type { ComponentProps } from "svelte";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { type Morph, morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { drawn, own } from "#lib/components/ui/floating-presence.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import { browser } from "$app/env";
   import PopoverPortal from "./popover-portal.svelte";
@@ -15,6 +16,9 @@
     collisionPadding,
     portalProps,
     morphs,
+    forceMount = false,
+    child: callerChild,
+    children,
     ...restProps
   }: PopoverPrimitive.ContentProps & {
     portalProps?: WithoutChildrenOrChild<ComponentProps<typeof PopoverPortal>>;
@@ -40,6 +44,8 @@
   });
 </script>
 
+<!-- Mounted by bits-ui's forceMount and drawn while its presence says so:
+     the page has its pointer back at the dismissal (floating-presence). -->
 <PopoverPortal {...portalProps}>
   <PopoverPrimitive.Content
     {align}
@@ -49,8 +55,23 @@
     )}
     collisionPadding={inset}
     data-slot="popover-content"
+    forceMount
     {sideOffset}
     bind:ref
     {...restProps}
-  />
+  >
+    {#snippet child(
+      snippet
+    )}
+      {#if forceMount || drawn(snippet.props)}
+        {#if callerChild}
+          {@render callerChild(snippet)}
+        {:else}
+          <div {...snippet.wrapperProps}>
+            <div {...own(snippet.props)}>{@render children?.()}</div>
+          </div>
+        {/if}
+      {/if}
+    {/snippet}
+  </PopoverPrimitive.Content>
 </PopoverPortal>

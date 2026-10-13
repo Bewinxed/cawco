@@ -1,5 +1,7 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import http from "node:http";
+import { join } from "node:path";
 import adapter from "@sveltejs/adapter-node";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
@@ -252,22 +254,40 @@ const BUILD_VERSION = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
   encoding: "utf8",
 }).trim();
 
+/** Answers `_app/running-version.json` with `body`, as serve.js does. */
+function answerRunningVersion(
+  server: ViteDevServer | PreviewServer,
+  body: string
+) {
+  server.middlewares.use("/_app/running-version.json", (_req, res) => {
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    });
+    res.end(body);
+  });
+}
+
 /**
- * `vite dev` answers `_app/running-version.json` as serve.js does, with the
- * body SvelteKit writes to `_app/version.json`, so a dev page runs the same
- * served-build check as production instead of logging a 404 on every load.
+ * `vite dev` and `vite preview` answer `_app/running-version.json` as serve.js
+ * does, so their pages run the same served-build check as production instead
+ * of logging a 404 on every load. Dev answers the body SvelteKit writes to
+ * `_app/version.json`; preview answers the built one (SvelteKit previews
+ * `.svelte-kit/output/client`), read once at start as serve.js reads its own.
  */
 const runningVersion = (): Plugin => ({
   name: "cawco:running-version",
   configureServer(server) {
-    const body = JSON.stringify({ version: BUILD_VERSION });
-    server.middlewares.use("/_app/running-version.json", (_req, res) => {
-      res.writeHead(200, {
-        "Content-Type": "application/json",
-        "Cache-Control": "no-store",
-      });
-      res.end(body);
-    });
+    answerRunningVersion(server, JSON.stringify({ version: BUILD_VERSION }));
+  },
+  configurePreviewServer(server) {
+    answerRunningVersion(
+      server,
+      readFileSync(
+        join(server.config.root, ".svelte-kit/output/client/_app/version.json"),
+        "utf8"
+      )
+    );
   },
 });
 

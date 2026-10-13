@@ -44,6 +44,7 @@
   } from "#lib/cawco/motion/hang.js";
   import type { Morph } from "#lib/cawco/motion/morph.svelte.js";
   import type ContextMenuContent from "#lib/components/ui/context-menu/context-menu-content.svelte";
+  import { drawn, own } from "#lib/components/ui/floating-presence.js";
   import PopoverContent from "#lib/components/ui/popover/popover-content.svelte";
   import { cn } from "#lib/utils.js";
 
@@ -88,6 +89,7 @@
     held,
     folded,
     quiet,
+    forceMount = false,
     class: className,
     children,
     ...rest
@@ -133,7 +135,8 @@
   let width = 0;
   /** Where the card's left edge stood at its last placement. */
   let placedAt: number | null = null;
-  let drawn: Neck | null = null;
+  /** The neck last written onto the card. */
+  let drawnNeck: Neck | null = null;
 
   function neckAt(
     node: HTMLElement,
@@ -176,8 +179,8 @@
    */
   function draw(node: HTMLElement, neck: Neck) {
     const standing =
-      drawn !== null &&
-      sameNeck(neck, drawn) &&
+      drawnNeck !== null &&
+      sameNeck(neck, drawnNeck) &&
       node.style.getPropertyValue("--neck-start") === `${neck.start}px`;
     if (!standing) {
       setNeck(node, neck);
@@ -186,7 +189,7 @@
       } else {
         delete node.dataset.flush;
       }
-      drawn = neck;
+      drawnNeck = neck;
     }
     onneck?.(neck);
   }
@@ -213,7 +216,7 @@
       sized.disconnect();
       motion?.();
       placedAt = null;
-      drawn = null;
+      drawnNeck = null;
     };
   };
 
@@ -240,23 +243,29 @@
   };
 </script>
 
+<!-- Mounted by bits-ui's forceMount and drawn while its presence says so,
+     unless the site keeps it drawn (`forceMount`): the page has its pointer
+     back at the dismissal (floating-presence). -->
 <Content
   {...rest}
   class={cn("kit-pop kit-hang", glass && "glass-card", className)}
+  forceMount
   bind:ref
 >
   {#snippet child({
     props,
     wrapperProps,
   })}
-    <div {...wrapperProps}>
-      <div {...props} {@attach hung} {@attach kept}>
-        {#if glass}
-          <!-- Its surface, over the shadow picture it wears as its border-image (motion/hung-shadow). -->
-          <span aria-hidden="true" class="hung-surface"></span>
-        {/if}
-        {@render children()}
+    {#if forceMount || drawn(props)}
+      <div {...wrapperProps}>
+        <div {...own(props)} {@attach hung} {@attach kept}>
+          {#if glass}
+            <!-- Its surface, over the shadow picture it wears as its border-image (motion/hung-shadow). -->
+            <span aria-hidden="true" class="hung-surface"></span>
+          {/if}
+          {@render children()}
+        </div>
       </div>
-    </div>
+    {/if}
   {/snippet}
 </Content>
