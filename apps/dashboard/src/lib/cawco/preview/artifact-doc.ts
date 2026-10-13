@@ -1,25 +1,15 @@
-import {
-  type ArtifactChoices,
-  CHOICE_LIMITS,
-  type ChoiceChange,
-  type ChoiceEntry,
-  changedEntry,
-  choiceEntryProblem,
-} from "@cawco/core";
+import type { ArtifactChoices, ChoiceEntry } from "@cawco/core";
 import { WebsocketProvider } from "y-websocket";
 import { Doc } from "yjs";
 
 /**
- * The pane's hold on an artifact's live document (Projects spec §5.10): the
- * Yjs doc the hub keeps, joined through the preview listener's sync endpoint
- * (`/__cawco/artifact/<id>`, reached under the dashboard's `/preview/<id>/`
- * proxy, which names the session). The page's bridge reads and writes the
- * doc's `state` through it; every change, the person's on another screen
- * and the agent's included, is heard back as the choices the page reads.
+ * The pane's hold on an artifact's live document (Projects spec §5.10), for
+ * its own head only: the picks the session has not heard, which Send sends.
+ * The page in the pane joins the same doc itself (the overlay) and is the
+ * one that writes it; this reads. Joined through the preview listener's
+ * sync endpoint (`/__cawco/artifact/<id>`) under the dashboard's
+ * `/preview/<id>/` proxy, which names the session.
  */
-
-/** The hub's close code for an update it would not keep (hub artifacts/sync.ts). */
-const REFUSED = 4400;
 
 /**
  * How often the client asks the hub for its state: the hub serves no
@@ -29,13 +19,9 @@ const REFUSED = 4400;
 const RESYNC_MS = 10_000;
 
 export interface ArtifactDoc {
-  /** The choices as they stand: what `artifact_read` answers the page. */
+  /** The choices as they stand. */
   choices: () => ArtifactChoices;
   destroy: () => void;
-  /** Resolves once the doc has the hub's state. */
-  ready: () => Promise<void>;
-  /** Writes one change into `state`; a sentence when it breaks the bridge's bounds. */
-  write: (change: ChoiceChange) => string | null;
 }
 
 const choicesOf = (doc: Doc): ArtifactChoices => {
@@ -47,76 +33,50 @@ const choicesOf = (doc: Doc): ArtifactChoices => {
   };
 };
 
-export function joinArtifact(
-  instanceId: string,
-  artifactId: string,
-  on: {
-    /** The choices after any change to the doc. */
-    changed: (choices: ArtifactChoices) => void;
-    /** The hub refused an update; the doc was joined again from the hub's. */
-    refused: (reason: string) => void;
+/** The doc's path on the dashboard's origin, under the preview's own prefix (`base`, the frame's `path`). */
+export const artifactSyncPath = (base: string, artifactId: string): string =>
+  `${base}__cawco/artifact/${artifactId}`;
+
+/**
+ * The person sends (the head's Send): every pick to the session as one
+ * message, through the listener's send beside the doc's socket, the path a
+ * page's `cawco.send` takes.
+ */
+export async function sendArtifact(
+  base: string,
+  artifactId: string
+): Promise<void> {
+  const response = await fetch(`${artifactSyncPath(base, artifactId)}/send`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  if (!response.ok) {
+    throw new Error(
+      (await response.text()) || "The hub didn't take the picks. Send again."
+    );
   }
+}
+
+export function joinArtifact(
+  base: string,
+  artifactId: string,
+  changed: (choices: ArtifactChoices) => void
 ): ArtifactDoc {
-  let doc: Doc;
-  let provider: WebsocketProvider;
-  let synced: Promise<void>;
-  const base = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/preview/${encodeURIComponent(instanceId)}/artifact/__cawco/artifact`;
-
-  const join = () => {
-    doc = new Doc();
-    const own = doc;
-    own.on("update", () => on.changed(choicesOf(own)));
-    provider = new WebsocketProvider(base, artifactId, own, {
-      disableBc: true,
-      resyncInterval: RESYNC_MS,
-    });
-    const joined = provider;
-    synced = new Promise((done) => {
-      if (joined.synced) {
-        done();
-        return;
-      }
-      const heard = (isSynced: boolean) => {
-        if (isSynced) {
-          joined.off("sync", heard);
-          done();
-        }
-      };
-      joined.on("sync", heard);
-    });
-    joined.on("connection-close", (event) => {
-      if (event?.code !== REFUSED || joined !== provider) {
-        return;
-      }
-      // What this doc holds the hub would not keep: start again from the hub's.
-      joined.destroy();
-      own.destroy();
-      on.refused(event.reason);
-      join();
-    });
-  };
-  join();
-
+  const doc = new Doc();
+  doc.on("update", () => changed(choicesOf(doc)));
+  const path = artifactSyncPath(base, artifactId);
+  const provider = new WebsocketProvider(
+    `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${path.slice(0, path.lastIndexOf("/"))}`,
+    artifactId,
+    doc,
+    { disableBc: true, resyncInterval: RESYNC_MS }
+  );
   return {
     choices: () => choicesOf(doc),
     destroy: () => {
       provider.destroy();
       doc.destroy();
-    },
-    ready: () => synced,
-    write: (change) => {
-      const state = doc.getMap("state");
-      const before = state.get(change.choice) as ChoiceEntry | undefined;
-      if (!before && state.size >= CHOICE_LIMITS.perArtifact) {
-        return `An artifact keeps at most ${CHOICE_LIMITS.perArtifact} ids.`;
-      }
-      const entry = changedEntry(before, change, new Date().toISOString());
-      const problem = choiceEntryProblem(change.choice, entry);
-      if (problem) {
-        return problem;
-      }
-      state.set(change.choice, entry);
-      return null;
     },
   };
 }

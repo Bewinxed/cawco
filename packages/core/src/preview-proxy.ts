@@ -89,13 +89,30 @@ export function downResponse(down: PreviewDown, status = 502): Response {
 export const pageHash = (html: string): string =>
   new Bun.CryptoHasher("sha256").update(html).digest("hex");
 
+const ATTRIBUTE_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  '"': "&quot;",
+  "<": "&lt;",
+};
+
 /**
- * The page with the overlay's script tag in it, carrying the page's hash.
+ * The page with the overlay's script tag in it, carrying the page's hash and
+ * `data` as `data-*` attributes (the hub's page artifacts add their id and
+ * their document's state, so the overlay fills the page before it paints).
  * First child of <head>, so it runs before Vite's deferred `/@vite/client`
  * module; else before </head> or </body>; else at the end.
  */
-export function injectOverlay(html: string): string {
-  const script = `<script src="${OVERLAY_PATH}" data-page-hash="${pageHash(html)}"></script>`;
+export function injectOverlay(
+  html: string,
+  data: Record<string, string> = {}
+): string {
+  const extra = Object.entries(data)
+    .map(
+      ([name, value]) =>
+        ` data-${name}="${value.replaceAll(/[&"<]/g, (char) => ATTRIBUTE_ESCAPES[char] ?? char)}"`
+    )
+    .join("");
+  const script = `<script src="${OVERLAY_PATH}" data-page-hash="${pageHash(html)}"${extra}></script>`;
   if (HEAD_OPEN.test(html)) {
     return html.replace(HEAD_OPEN, (match) => match + script);
   }

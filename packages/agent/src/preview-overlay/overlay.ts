@@ -2,14 +2,28 @@
 /// <reference lib="dom.iterable" />
 
 import type { PreviewElement } from "@cawco/core";
+import type { ChoiceChange } from "@cawco/core/choices";
 import { domToPng } from "modern-screenshot";
+import { artifact, NO_ARTIFACT, type State } from "./artifact";
+import { fillFields, trackFields } from "./fields";
+import { morphPage, watchPointers, whenPointersUp } from "./morph";
 
 const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/;
 const PNG_PREFIX = /^data:image\/png;base64,/;
+/** The page hash on the overlay's tag in a page's HTML (core `injectOverlay`). */
+const SERVED_HASH =
+  /<script src="\/__cawco\/overlay\.js" data-page-hash="([0-9a-f]{64})"/;
 let selecting = false;
-/** The page as it was served, from the tag that loaded this script (core's `injectOverlay`). */
-const pageHash =
-  (document.currentScript as HTMLScriptElement | null)?.dataset.pageHash ?? "";
+/** The tag that loaded this script (core's `injectOverlay`). */
+const tag = document.currentScript as HTMLScriptElement | null;
+/** The page as it was served; a morph moves it to the revision morphed to. */
+let pageHash = tag?.dataset.pageHash ?? "";
+// A page the hub serves carries its artifact's doc, so it is filled before it paints.
+if (tag?.dataset.artifact && tag.dataset.state) {
+  artifact.seed(tag.dataset.artifact, tag.dataset.state);
+}
+// Before any listener that stops a press: a morph waits for every pointer up.
+watchPointers();
 
 /**
  * The `/preview/<id>/<revision>/` prefix this page lives under. Derived from the current
@@ -129,132 +143,38 @@ function ready() {
 }
 
 /*
- * The choices bridge (Projects spec §5.10). A page marks a choice in markup —
- * `data-cawco-choice="hero"` on the element (or a container), `data-option="b"`
- * on each option, `data-cawco-multiple` on the choice to allow several — or
- * calls `cawco.choose`, `cawco.note`, `cawco.set` and `cawco.on("picks", …)`.
- *
- * Those sit on MCP Apps' messages (JSON-RPC 2.0 over postMessage, spec
- * 2026-01-26), so the page talks to the pane as an MCP App view talks to its
- * host: `ui/initialize` then `ui/notifications/initialized`; each change is a
- * `ui/update-model-context` request whose `structuredContent` is one id's
- * change (CawCo keeps every id rather than overwriting); the picks are read
- * with `tools/call` → `artifact_read` and arrive after every change, the
- * agent's included, as `ui/notifications/tool-result`; `ui/message` sends the
- * picks to the session. The pane checks each message and writes it into the
- * artifact's document, which the hub checks and keeps; the page hears the
- * picks back from the document. The bridge starts on first use, so a page
- * without choices sends nothing.
+ * The page's state (Projects spec §5.10), kept in its artifact's document,
+ * which the overlay joins itself (artifact.ts). A page marks a choice in
+ * markup — `data-cawco-choice="hero"` on the element (or a container),
+ * `data-option="b"` on each option, `data-cawco-multiple` on the choice to
+ * allow several — or calls `cawco.choose`, `cawco.note`, `cawco.set` and
+ * `cawco.on("picks", …)`; every named field of a page is kept too
+ * (fields.ts). All of them read and write the doc's `state` directly; the
+ * host relays nothing. The one thing the page asks its host is
+ * `cawco.pickPlace`, which needs the host's own pickers.
  */
 
-interface Pick {
-  at: string;
-  note: string | null;
-  options: string[];
-  pageHash: string;
-  value: unknown;
-}
-type Picks = Record<string, Pick>;
+const listeners = new Set<(current: State) => void>();
 
-let picks: Picks = {};
-let heard = false;
-const listeners = new Set<(current: Picks) => void>();
-
-let nextId = 1;
-const waiting = new Map<
-  number,
-  { resolve: (result: unknown) => void; reject: (error: Error) => void }
->();
-
-function request(method: string, params: object): Promise<unknown> {
-  const id = nextId;
-  nextId += 1;
-  window.parent.postMessage(
-    { jsonrpc: "2.0", id, method, params },
-    location.origin
-  );
-  return new Promise((resolve, reject) => waiting.set(id, { resolve, reject }));
+/**
+ * Tells the host something went wrong, `of` naming what: a field the hub's
+ * bounds refused, a send, the state as a whole, a morph, the artifact.
+ */
+function failed(
+  of: "artifact" | "field" | "morph" | "send" | "state",
+  message: string
+) {
+  post("cawco:error", { message: message.slice(0, 300), of });
 }
 
-function notify(method: string, params: object) {
-  window.parent.postMessage(
-    { jsonrpc: "2.0", method, params },
-    location.origin
-  );
-}
-
-/** The host's answers and notifications; false when the message is not the bridge's. */
-function answered(data: unknown): boolean {
-  const message = data as {
-    jsonrpc?: unknown;
-    id?: unknown;
-    method?: unknown;
-    params?: { structuredContent?: { choices?: Picks } };
-    result?: unknown;
-    error?: { message?: unknown };
-  } | null;
-  if (message?.jsonrpc !== "2.0") {
-    return false;
+/** Writes one change into the doc; refused with the bound's sentence, which the host also hears. */
+function change(entry: ChoiceChange): Promise<void> {
+  const problem = artifact.write(entry);
+  if (problem) {
+    failed("state", problem);
+    return Promise.reject(new Error(problem));
   }
-  if (message.method === "ui/notifications/tool-result") {
-    const choices = message.params?.structuredContent?.choices;
-    if (choices) {
-      heardPicks(choices);
-    }
-    return true;
-  }
-  const pending =
-    typeof message.id === "number" ? waiting.get(message.id) : undefined;
-  if (pending) {
-    waiting.delete(message.id as number);
-    if (message.error) {
-      pending.reject(new Error(String(message.error.message)));
-    } else {
-      pending.resolve(message.result);
-    }
-  }
-  return true;
-}
-
-/** A refusal the pane already showed the person; the page stays as stored. */
-const shownByPane = () => undefined;
-
-let bridge: Promise<void> | undefined;
-/** The handshake and the first read, once per page load. */
-function connect(): Promise<void> {
-  bridge ??= request("ui/initialize", {
-    protocolVersion: "2026-01-26",
-    appCapabilities: {},
-    clientInfo: { name: "cawco-preview", version: "1.0.0" },
-  })
-    .then(() => {
-      notify("ui/notifications/initialized", {});
-      return request("tools/call", { name: "artifact_read", arguments: {} });
-    })
-    .then((result) => {
-      const read = result as
-        | { structuredContent?: { choices?: Picks } }
-        | undefined;
-      heardPicks(read?.structuredContent?.choices ?? {});
-    })
-    .catch((error: unknown) => {
-      // The next use tries the handshake again.
-      bridge = undefined;
-      throw error;
-    });
-  return bridge;
-}
-
-async function change(entry: {
-  choice: string;
-  options?: string[];
-  note?: string;
-  value?: unknown;
-}): Promise<void> {
-  await connect();
-  await request("ui/update-model-context", {
-    structuredContent: { ...entry, pageHash },
-  });
+  return Promise.resolve();
 }
 
 const choiceOf = (option: Element): Element | null =>
@@ -262,6 +182,7 @@ const choiceOf = (option: Element): Element | null =>
 
 /** Marks each option in the page as picked or not, from the stored picks. */
 function reflect() {
+  const picks = artifact.state();
   for (const option of document.querySelectorAll("[data-option]")) {
     const choice = choiceOf(option)?.getAttribute("data-cawco-choice");
     const on =
@@ -276,12 +197,138 @@ function reflect() {
   }
 }
 
-function heardPicks(next: Picks) {
-  picks = next;
-  heard = true;
-  reflect();
+/** The page's own listeners hear the state as it stands. */
+function told() {
+  const current = artifact.state();
   for (const listener of listeners) {
-    listener(picks);
+    listener(current);
+  }
+}
+
+/** Whether this page's fields are kept: a page's are; a dev server's app is its own. */
+const keepsFields = () => artifact.kind() === "page";
+
+/** Fields whose last write the hub's bounds refused, so a later good one clears the host's word. */
+const refusedFields = new Set<string>();
+
+trackFields((key, holds, el) => {
+  if (!keepsFields()) {
+    return;
+  }
+  const problem = artifact.write({ choice: key, pageHash, ...holds });
+  // Said under the field itself, as the browser says any field's problem.
+  if ("setCustomValidity" in el) {
+    (el as HTMLInputElement).setCustomValidity(problem ?? "");
+  }
+  if (problem) {
+    refusedFields.add(key);
+    (el as HTMLInputElement).reportValidity?.();
+    failed("field", `${key}: ${problem}`);
+  } else if (refusedFields.delete(key)) {
+    post("cawco:resolved", { of: "field" });
+  }
+});
+
+artifact.watch({
+  state: (keys, remote) => {
+    reflect();
+    if (remote && keepsFields()) {
+      fillFields(artifact.state(), keys);
+    }
+    told();
+  },
+  meta: () => republished(),
+  synced: () => {
+    reflect();
+    if (keepsFields()) {
+      fillFields(artifact.state());
+    }
+    told();
+    republished();
+  },
+  refused: (reason) => failed("state", reason),
+});
+
+/** The page as the doc has it, before the first paint the page reaches. */
+function filled() {
+  reflect();
+  if (keepsFields()) {
+    fillFields(artifact.state());
+  }
+}
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", filled, { once: true });
+} else {
+  filled();
+}
+
+/*
+ * Re-publish (`artifact_update` with new HTML): the doc's `meta` names the
+ * page's new hash, and the page morphs to it in place (morph.ts), fetched
+ * afresh from its own origin. The overlay's host and its own script are not
+ * the page's, and stay as they are.
+ */
+const kept = (node: Node): boolean =>
+  node === host ||
+  (node instanceof HTMLScriptElement &&
+    node.getAttribute("src") === "/__cawco/overlay.js");
+
+/** Where the page is served: the root of its own address. */
+const pageUrl = () => new URL(prefix || "/", location.origin);
+
+let fetching = false;
+let fetchAgain = false;
+/** The newest HTML fetched: what an element left unmorphed morphs to on its blur. */
+let latest = "";
+
+function morphTo(html: string) {
+  const held = morphPage(html, kept);
+  pageHash = html.match(SERVED_HASH)?.[1] ?? pageHash;
+  filled();
+  told();
+  navigated();
+  if (held) {
+    held.addEventListener(
+      "focusout",
+      () => {
+        if (latest === html) {
+          whenPointersUp(() => {
+            morphPage(html, kept);
+            filled();
+          });
+        }
+      },
+      { once: true }
+    );
+  }
+}
+
+async function republished() {
+  const wanted = artifact.meta().pageHash;
+  if (!(keepsFields() && wanted) || wanted === pageHash) {
+    return;
+  }
+  if (fetching) {
+    fetchAgain = true;
+    return;
+  }
+  fetching = true;
+  try {
+    const response = await fetch(pageUrl(), { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`The new revision did not load (${response.status}).`);
+    }
+    const html = await response.text();
+    latest = html;
+    whenPointersUp(() => morphTo(html));
+  } catch (error) {
+    failed("morph", error instanceof Error ? error.message : String(error));
+  } finally {
+    fetching = false;
+    if (fetchAgain) {
+      fetchAgain = false;
+      republished();
+    }
   }
 }
 
@@ -295,8 +342,11 @@ function choose(
   } else if (option !== null) {
     options = [option];
   }
-  return change({ choice, options });
+  return change({ choice, pageHash, options });
 }
+
+/** A refusal the host was already told of; the page stays as stored. */
+const toldHost = () => undefined;
 
 window.addEventListener(
   "click",
@@ -311,20 +361,54 @@ window.addEventListener(
     if (!(holder && choice && value)) {
       return;
     }
-    const current = picks[choice]?.options ?? [];
+    const current = artifact.state()[choice]?.options ?? [];
     if (holder.hasAttribute("data-cawco-multiple")) {
       choose(
         choice,
         current.includes(value)
           ? current.filter((picked) => picked !== value)
           : [...current, value]
-      ).catch(shownByPane);
+      ).catch(toldHost);
     } else {
-      choose(choice, current.includes(value) ? null : value).catch(shownByPane);
+      choose(choice, current.includes(value) ? null : value).catch(toldHost);
     }
   },
   true
 );
+
+/*
+ * `cawco.pickPlace`: the one request the page makes of its host, which
+ * answers with its own machine list and folder browser (the dashboard's
+ * PlacePick) as a JSON-RPC result.
+ */
+let nextAsk = 1;
+const asking = new Map<number, (result: unknown) => void>();
+
+function askHost(method: string, params: object): Promise<unknown> {
+  const id = nextAsk;
+  nextAsk += 1;
+  window.parent.postMessage(
+    { jsonrpc: "2.0", id, method, params },
+    location.origin
+  );
+  return new Promise((resolve) => asking.set(id, resolve));
+}
+
+/** The host's answer to an ask; false when the message is not one. */
+function answered(data: unknown): boolean {
+  const message = data as {
+    jsonrpc?: unknown;
+    id?: unknown;
+    result?: unknown;
+  } | null;
+  if (message?.jsonrpc !== "2.0" || typeof message.id !== "number") {
+    return false;
+  }
+  const resolve = asking.get(message.id);
+  asking.delete(message.id);
+  resolve?.(message.result ?? null);
+  return true;
+}
 
 declare global {
   interface Window {
@@ -337,7 +421,7 @@ declare global {
       set: (key: string, value: unknown) => Promise<void>;
       /** Sends the picks to the session as one message, with `text` added when given. */
       send: (text?: string) => Promise<void>;
-      on: (event: "picks", listener: (picks: Picks) => void) => () => void;
+      on: (event: "picks", listener: (picks: State) => void) => () => void;
       /**
        * Asks the person for a machine and a folder on it, with CawCo's own
        * machine list and folder browser; the pick is stored under `place`
@@ -354,35 +438,43 @@ interface PlacePick {
   path: string;
 }
 
+const isPlace = (value: unknown): value is PlacePick =>
+  typeof (value as PlacePick | null)?.machineId === "string" &&
+  typeof (value as PlacePick).path === "string";
+
 Object.defineProperty(window, "cawco", {
   value: Object.freeze({
     choose,
-    note: (choice: string, text: string) => change({ choice, note: text }),
-    set: (key: string, value: unknown) => change({ choice: key, value }),
+    note: (choice: string, text: string) =>
+      change({ choice, pageHash, note: text }),
+    set: (key: string, value: unknown) =>
+      change({ choice: key, pageHash, value }),
     send: async (text = "") => {
-      await connect();
-      await request("ui/message", {
-        role: "user",
-        content: { type: "text", text },
-      });
+      try {
+        await artifact.send(text.trim());
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        failed("send", message);
+        throw error;
+      }
     },
-    on: (event: "picks", listener: (current: Picks) => void) => {
+    on: (event: "picks", listener: (current: State) => void) => {
       if (event !== "picks") {
         throw new Error(`cawco.on: unknown event ${event}`);
       }
       listeners.add(listener);
-      if (heard) {
-        listener(picks);
-      } else {
-        connect().catch(shownByPane);
+      if (artifact.known()) {
+        listener(artifact.state());
       }
       return () => listeners.delete(listener);
     },
     pickPlace: async () => {
-      await connect();
-      return (await request("cawco/pick-place", {
-        pageHash,
-      })) as PlacePick | null;
+      const place = await askHost("cawco/pick-place", { pageHash });
+      if (!isPlace(place)) {
+        return null;
+      }
+      await change({ choice: "place", pageHash, value: place });
+      return place;
     },
   }),
 });
@@ -758,9 +850,9 @@ window.addEventListener("message", async (event) => {
   }
   if (message?.type === "cawco:hello") {
     ready();
-    // Markup choices show their stored picks as soon as the pane is there.
-    if (document.querySelector("[data-cawco-choice]")) {
-      connect().catch(shownByPane);
+    // The host names the artifact this page is, and where its doc is synced.
+    if (!artifact.join(message.artifact, message.sync)) {
+      failed("artifact", NO_ARTIFACT);
     }
   } else if (message?.type === "cawco:mode") {
     mode(message.mode === "select");

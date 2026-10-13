@@ -15,7 +15,6 @@ import type {
   AccountSigninResult,
   AgentRow,
   ApprovedActionView,
-  ArtifactChoices,
   ArtifactSummary,
   AvailableCommand,
   BuildInfo,
@@ -5207,17 +5206,11 @@ export async function showArtifact(
   }
 }
 
-/** Sends the person's picks to the session, as one message; a page's own words go below them. */
-export async function sendArtifact(
-  instanceId: string,
-  id: string,
-  text?: string
-): Promise<ArtifactChoices> {
-  const response = await fetch(`${artifactsPath(instanceId, id)}/send`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(text ? { text } : {}),
-  });
+/** An artifact by id with the session that made it, and whether its panel shows it now: what its own tab opens on. */
+export async function findArtifact(
+  id: string
+): Promise<ArtifactSummary & { instanceId: string; shown: boolean }> {
+  const response = await fetch(`/api/artifacts/${encodeURIComponent(id)}`);
   if (!response.ok) {
     throw new Error(await response.text());
   }

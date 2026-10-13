@@ -1,9 +1,11 @@
 /**
  * The artifact routes (Projects spec §5.10), on the session that made the
- * artifact: the panel's list and its Show and Send, and what the four tools
- * call. A session reaches only its own artifacts; any other id is 404.
+ * artifact: the panel's list and its Show, what the four tools call, and the
+ * lookup an artifact's own tab opens with. A session reaches only its own
+ * artifacts; any other id is 404. The person's Send is on the preview
+ * listener, beside the doc's socket (sync.ts `artifactSend`).
  */
-import { ARTIFACT_NAME, CHOICE_LIMITS, PREVIEW_START_PATH } from "@cawco/core";
+import { ARTIFACT_NAME, PREVIEW_START_PATH } from "@cawco/core";
 import { Elysia, t } from "elysia";
 import type { Operation } from "rfc6902";
 import { PAGE_LIMIT } from "../decision-page";
@@ -119,22 +121,11 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         return refused(error);
       }
     })
-    // The person sends: the session hears every pick as one message, at once.
-    // A page's `ui/message` adds its text below the picks.
-    .post(
-      "/api/instances/:id/artifacts/:artifact/send",
-      {
-        body: t.Optional(
-          t.Object({
-            text: t.Optional(t.String({ maxLength: CHOICE_LIMITS.note })),
-          })
-        ),
-      },
-      ({ params, body }) => {
-        try {
-          return artifacts.send(params.id, params.artifact, body?.text?.trim());
-        } catch (error) {
-          return refused(error);
-        }
+    // The artifact's own tab (the dashboard's /artifact/<id>) finds its session.
+    .get("/api/artifacts/:artifact", ({ params }) => {
+      try {
+        return artifacts.find(params.artifact);
+      } catch (error) {
+        return refused(error);
       }
-    );
+    });

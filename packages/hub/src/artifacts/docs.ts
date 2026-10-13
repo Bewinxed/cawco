@@ -56,6 +56,8 @@ export interface ArtifactDocs {
   /** Starts sending `client` every update another makes. */
   join: (id: string, client: ArtifactClient) => Doc;
   leave: (id: string, client: ArtifactClient) => void;
+  /** The whole doc as one base64 Yjs update: what a page's overlay starts from before it joins. */
+  snapshot: (id: string) => string;
   /** Runs `change` as one transaction on the artifact's doc, made by `origin`. */
   transact: (
     id: string,
@@ -164,6 +166,8 @@ export const createArtifactDocs = (deps: {
         sleep(id, entry);
       }
     },
+    snapshot: (id) =>
+      Buffer.from(encodeStateAsUpdate(load(id).doc)).toString("base64"),
     transact: (id, origin, change) => {
       const { doc } = load(id);
       doc.transact(() => change(doc), origin);

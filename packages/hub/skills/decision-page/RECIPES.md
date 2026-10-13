@@ -59,6 +59,8 @@ For values the person tunes rather than picks (a radius, a colour, a spring), ke
 - `cawco.send(text?)` — sends the picks to the session as one message, your text below them.
 - `cawco.on("picks", (picks) => …)` — the stored picks now and after every change, yours included (`artifact_update`'s patches arrive here too): `{ [id]: { options, note, value, pageHash, at } }`. Returns a function that stops listening.
 
-Each returns a promise that settles when the change is in the page's artifact, which the hub keeps. Underneath they are MCP Apps messages (`ui/update-model-context`, `ui/message`, `tools/call` → `artifact_read`).
+Each returns a promise that settles when the change is in the page's artifact, which the hub keeps: the page reads and writes the artifact's document itself, so a pick made in the panel, in the page's own tab or by your `artifact_update` patch shows in every open view.
+
+Every form field with a `name` or `id` (`input`, `select`, `textarea`, `[contenteditable]`) is kept too, under that name, with no script: a radio group, checkboxes sharing a name and a select as `options`, anything typed as `value` (written once typing pauses). Passwords, files and hidden inputs are not kept. A field keeps what was typed across a reload, and when you re-publish the page with `artifact_update({ id, html })` it morphs in place: keep each field's `name` and the person's answers, focus and scroll stay.
 
 Bounds: ids and options up to 200 characters with no spaces at either end, 50 options per multiple pick, notes up to 2,000 characters, 500 ids per page.

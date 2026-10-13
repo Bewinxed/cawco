@@ -3904,17 +3904,9 @@
         }
       }
     },
-    "/api/instances/{id}/artifacts/{artifact}/send": {
-      "post": {
+    "/api/artifacts/{artifact}": {
+      "get": {
         "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
           {
             "name": "artifact",
             "in": "path",
@@ -3924,40 +3916,14 @@
             }
           }
         ],
-        "requestBody": {
-          "required": false,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "text": {
-                    "maxLength": 2000,
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "operationId": "postApiInstancesByIdArtifactsByArtifactSend",
+        "operationId": "getApiArtifactsByArtifact",
         "responses": {
           "200": {
-            "description": "postApiInstancesByIdArtifactsByArtifactSend 200",
+            "description": "getApiArtifactsByArtifact 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ArtifactChoices"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "postApiInstancesByIdArtifactsByArtifactSend 422",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                  "$ref": "#/components/schemas/getApiArtifactsByArtifact200"
                 }
               }
             }
@@ -18359,6 +18325,28 @@
           "opened"
         ]
       },
+      "getApiArtifactsByArtifact200": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ArtifactSummary"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string"
+              },
+              "shown": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "instanceId",
+              "shown"
+            ]
+          }
+        ]
+      },
       "getApiPush200": {
         "type": "object",
         "properties": {
@@ -26005,34 +25993,6 @@
           "sentAt",
           "seq",
           "state"
-        ]
-      },
-      "ArtifactChoices": {
-        "description": "An artifact's choices as the page reads them through the bridge (`cawco.on(\"picks\")`).",
-        "type": "object",
-        "properties": {
-          "choices": {
-            "type": "object"
-          },
-          "pageHash": {
-            "description": "The page's hash when the hub last built it; null for a preview.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "sentAt": {
-            "description": "When the person last sent their picks to the session.",
-            "type": [
-              "null",
-              "string"
-            ]
-          }
-        },
-        "required": [
-          "choices",
-          "pageHash",
-          "sentAt"
         ]
       },
       "PushOutcome": {

@@ -85,25 +85,4 @@ public extension HubConnection {
         let path = frame.source?.value1?.path ?? frame.source?.value2?.path
         return path.flatMap { URL(string: $0, relativeTo: origin)?.absoluteURL } ?? origin
     }
-
-    /// The choices bridge's three hub calls (client.svelte.ts `previewChoices`,
-    /// `changePreviewChoice`, `sendPreviewChoices`), JSON passed through as
-    /// the page sent it and as the hub answers it: the page reads the
-    /// canvas's choices exactly as the hub keeps them.
-    func previewChoices(_ instanceId: String, method: String, path: String = "", body: Data? = nil) async throws -> Data {
-        guard let address else { throw TaskRefusal(message: "No hub is connected.") }
-        let id = instanceId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? instanceId
-        var request = URLRequest(url: address.appending(path: "api/instances/\(id)/preview/choices\(path)"))
-        request.httpMethod = method
-        if let body {
-            request.httpBody = body
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        }
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-            let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-            throw TaskRefusal(message: text.isEmpty ? "The hub refused that." : text)
-        }
-        return data
-    }
 }

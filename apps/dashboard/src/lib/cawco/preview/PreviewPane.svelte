@@ -6,7 +6,6 @@
     type PreviewDown,
   } from "@cawco/core";
   import { type Snippet, untrack } from "svelte";
-  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
@@ -15,18 +14,19 @@
   import {
     IconAlert,
     IconCursor,
-    IconExternalLink,
+    IconExternal,
     IconRefresh,
     IconSend,
   } from "#lib/icons.js";
-  import { cawco, closePreview, sendArtifact } from "../client.svelte";
+  import { goto } from "$app/navigation";
+  import { cawco, closePreview } from "../client.svelte";
   import { conversationHref, resolveSessionTitle } from "../links";
   import { appear, dur } from "../motion/curves.svelte";
   import { closeInto, depart } from "../motion/share.svelte";
   import { watchInput } from "../reload.svelte";
   import SideSurface from "../side/SideSurface.svelte";
   import ArtifactMenu from "./ArtifactMenu.svelte";
-  import { type ArtifactDoc, joinArtifact } from "./artifact-doc";
+  import { artifactSyncPath, joinArtifact, sendArtifact } from "./artifact-doc";
   import PlacePick from "./PlacePick.svelte";
   import {
     type CapturedSelection,
@@ -36,15 +36,12 @@
   import { applySetupPicks, isSetupPage } from "./setup-page";
   import { previewPlace } from "./source";
   import {
-    type PreviewRpc,
-    previewChoice,
     previewElement,
     previewError,
-    previewMessageText,
+    previewErrorOf,
     previewPickId,
     previewPickPlace,
     previewPng,
-    previewRpc,
     previewScale,
     previewTitle,
     previewUrl,
@@ -58,8 +55,14 @@
     switcher,
     sheet = false,
     linkSession = false,
+    ownTab = false,
   }: {
     instanceId: string;
+    /**
+     * The artifact's own tab (routes/artifact/[id]): the same pane at full
+     * width, with no Open in new tab, and Close back to the session.
+     */
+    ownTab?: boolean;
     /**
      * The preview is another session's than the conversation beside it (a
      * thread shows its project's lead's): its states name that session, as
@@ -73,12 +76,16 @@
     sheet?: boolean;
     /** The Plan | Preview switch, when the conversation has a plan beside it (SideSplit). */
     switcher?: Snippet;
-    onselect: (
+    /**
+     * A selected element goes to the conversation's composer; with no
+     * composer beside the pane (its own tab) there is no Select.
+     */
+    onselect?: (
       selection: CapturedSelection
     ) => "added" | "duplicate" | "full" | undefined;
     /** A pick's screenshot arrived (null: it could not be drawn). */
-    oncapture: (pick: string, shot: SelectionShot | null) => void;
-    onescape: () => boolean;
+    oncapture?: (pick: string, shot: SelectionShot | null) => void;
+    onescape?: () => boolean;
   } = $props();
   let iframe = $state<HTMLIFrameElement>();
   let selecting = $state(false);
@@ -89,11 +96,14 @@
   /**
    * What last went wrong, and what trying again means: the frame's own
    * errors (a capture the page refused) reload the frame; a refused close
-   * asks again.
+   * asks again; a refused send sends again. A field the hub's bounds
+   * refused has no way back here: the page says so under the field, and
+   * the band goes once the field is kept.
    */
-  let failure = $state<{ message: string; again: "reload" | "close" } | null>(
-    null
-  );
+  let failure = $state<{
+    message: string;
+    again: "reload" | "close" | "send" | null;
+  } | null>(null);
   let well = $state<HTMLDivElement>();
   const preview = $derived(cawco.previews[instanceId]);
   const source = $derived(preview?.source);
@@ -183,6 +193,8 @@
   }
   const frameError = (message: string | null) =>
     message ? { message, again: "reload" as const } : null;
+  /** The way back from what a page's `cawco:error` names. */
+  const AGAIN = { send: "send", field: null } as const;
 
   /*
    * Nothing serves the page: the proxy answered with its own page, which
@@ -246,13 +258,11 @@
   }
 
   /*
-   * The choices bridge's host side (Projects spec §5.10): the page speaks MCP
-   * Apps' JSON-RPC (wire.ts `previewRpc`), and this answers from the
-   * artifact's live document (artifact-doc.ts), which the hub checks, keeps
-   * and syncs. Every change to the doc, this page's, another screen's or the
-   * agent's, reaches the page as a fresh `artifact_read` result.
+   * The page keeps its own state (Projects spec §5.10): the overlay joins
+   * the artifact's live document itself, on the path `cawco:hello` names.
+   * The pane joins the same doc for its head alone (artifact-doc.ts): the
+   * picks the session has not heard, which Send sends.
    */
-  let doc: ArtifactDoc | null = null;
   let choices = $state.raw<ArtifactChoices | null>(null);
   /** Picks the session has not heard sent: what Send picks would send. */
   const unsent = $derived(
@@ -262,56 +272,41 @@
       )
   );
   let sending = $state(false);
-  const toolResult = (state: ArtifactChoices) => ({
-    content: [{ type: "text", text: JSON.stringify(state) }],
-    structuredContent: state,
-  });
-  function heard(state: ArtifactChoices) {
-    choices = state;
-    post({
-      jsonrpc: "2.0",
-      method: "ui/notifications/tool-result",
-      params: toolResult(state),
-    });
-  }
   const artifactId = $derived(artifact?.id);
   $effect(() => {
     const id = artifactId;
-    if (!id) {
+    const base = previewBase;
+    if (!(id && base)) {
       return;
     }
-    const joined = joinArtifact(instanceId, id, {
-      changed: heard,
-      refused: (reason) => toast.error(reason),
+    const joined = joinArtifact(base, id, (state) => {
+      choices = state;
     });
-    doc = joined;
     choices = null;
-    return () => {
-      joined.destroy();
-      if (doc === joined) {
-        doc = null;
-      }
-    };
+    return () => joined.destroy();
   });
-  /** Writes one change into the doc; refused with the bridge's sentence. */
-  function write(change: Parameters<ArtifactDoc["write"]>[0]) {
-    if (!doc) {
-      throw new Error("This preview shows no artifact to keep picks in.");
-    }
-    const problem = doc.write(change);
-    if (problem) {
-      throw new Error(problem);
-    }
-  }
-  async function send(text?: string) {
+  /**
+   * Send: the setup page's fleet choices and place first (setup-page.ts),
+   * then every pick to the session. A refusal stands in the band over the
+   * page, its way back sending again.
+   */
+  async function send() {
     if (!artifact) {
       return;
     }
     sending = true;
     try {
-      // A setup page's fleet choices and place are applied first (setup-page.ts).
       await applySetupPicks(artifact, owner?.projectId, choices);
-      await sendArtifact(instanceId, artifact.id, text);
+      await sendArtifact(previewBase, artifact.id);
+      if (failure?.again === "send") {
+        failure = null;
+      }
+    } catch (error) {
+      failure = {
+        message: error instanceof Error ? error.message : String(error),
+        again: "send",
+      };
+      return;
     } finally {
       sending = false;
     }
@@ -321,17 +316,19 @@
       await close();
     }
   }
-  /** A page's `cawco.pickPlace()` waiting on the person: the request it answers, and the page it came from. */
-  let picking = $state<{ id: number | string; pageHash: string } | null>(null);
-  async function pickedPlace(place: { machineId: string; path: string }) {
+  /** A page's `cawco.pickPlace()` waiting on the person: the request it answers. */
+  let picking = $state<{ id: number | string } | null>(null);
+  /** The place picked goes back to the page, which keeps it in its state. */
+  function pickedPlace(place: {
+    machineId: string;
+    path: string;
+  }): Promise<void> {
     const asked = picking;
-    if (!asked) {
-      return;
-    }
-    write({ choice: "place", pageHash: asked.pageHash, value: place });
-    await doc?.ready();
     picking = null;
-    post({ jsonrpc: "2.0", id: asked.id, result: place });
+    if (asked) {
+      post({ jsonrpc: "2.0", id: asked.id, result: place });
+    }
+    return Promise.resolve();
   }
   function cancelPick() {
     const asked = picking;
@@ -340,84 +337,22 @@
       post({ jsonrpc: "2.0", id: asked.id, result: null });
     }
   }
-  async function answer(rpc: PreviewRpc) {
-    const reply = (result: object) =>
-      rpc.id !== undefined && post({ jsonrpc: "2.0", id: rpc.id, result });
-    const refuse = (code: number, message: string) =>
-      rpc.id !== undefined &&
-      post({ jsonrpc: "2.0", id: rpc.id, error: { code, message } });
-    try {
-      switch (rpc.method) {
-        case "ui/initialize":
-          reply({
-            protocolVersion: "2026-01-26",
-            hostInfo: { name: "cawco", version: "1.0.0" },
-            hostCapabilities: { serverTools: {} },
-            hostContext: { platform: "web" },
-          });
-          break;
-        case "ping":
-          reply({});
-          break;
-        case "tools/call": {
-          if (rpc.params.name !== "artifact_read") {
-            refuse(-32_601, "A preview can call artifact_read only.");
-            break;
-          }
-          if (!doc) {
-            refuse(-32_000, "This preview shows no artifact to read.");
-            break;
-          }
-          const joined = doc;
-          await joined.ready();
-          reply(toolResult(joined.choices()));
-          break;
-        }
-        case "ui/update-model-context": {
-          const change = previewChoice(rpc.params.structuredContent);
-          if (!change) {
-            refuse(-32_602, "That change is not a choice the bridge keeps.");
-            break;
-          }
-          write(change);
-          reply({});
-          break;
-        }
-        case "ui/message": {
-          const text = previewMessageText(rpc.params);
-          if (text === null) {
-            refuse(-32_602, "A message is a user's text.");
-            break;
-          }
-          await send(text);
-          reply({});
-          break;
-        }
-        case "cawco/pick-place": {
-          const asked = previewPickPlace(rpc.params);
-          if (!asked || rpc.id === undefined) {
-            refuse(-32_602, "pickPlace names the page it is asked from.");
-            break;
-          }
-          // A second ask replaces one still open: the page asked again.
-          if (picking) {
-            cancelPick();
-          }
-          picking = { id: rpc.id, pageHash: asked.pageHash };
-          break;
-        }
-        default:
-          break;
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      refuse(-32_000, message);
-      toast.error(message);
-    }
-  }
+  /** Tells the page which artifact it is and where its doc is synced. */
   function announce() {
     connected = false;
-    post({ type: "cawco:hello" });
+    post({
+      type: "cawco:hello",
+      ...(artifact && previewBase
+        ? {
+            artifact: {
+              id: artifact.id,
+              kind: artifact.kind,
+              name: artifact.name,
+            },
+            sync: artifactSyncPath(previewBase, artifact.id),
+          }
+        : {}),
+    });
   }
   function select(on: boolean) {
     selecting = on;
@@ -431,7 +366,7 @@
     ) {
       return;
     }
-    if (onescape()) {
+    if (onescape?.()) {
       event.preventDefault();
       return;
     }
@@ -448,9 +383,11 @@
     ) {
       return;
     }
-    const rpc = previewRpc(event.data);
-    if (rpc) {
-      answer(rpc);
+    const ask = previewPickPlace(event.data);
+    if (ask !== null) {
+      // A second ask replaces one still open: the page asked again.
+      cancelPick();
+      picking = { id: ask };
       return;
     }
     const message = event.data;
@@ -485,7 +422,7 @@
         break;
       }
       case "cawco:selected": {
-        if (!selecting) {
+        if (!(selecting && onselect)) {
           return;
         }
         const element = previewElement(message.element, location.origin);
@@ -530,20 +467,32 @@
         const error = previewError(message.error);
         if (error) {
           failure = frameError(error);
-          oncapture(pick, null);
+          oncapture?.(pick, null);
           break;
         }
         const png = previewPng(message.png);
         const scale = previewScale(message.scale);
-        oncapture(pick, png && scale ? { png, scale } : null);
+        oncapture?.(pick, png && scale ? { png, scale } : null);
         break;
       }
       case "cawco:escape":
         select(false);
         break;
-      case "cawco:error":
-        failure = frameError(previewError(message.message));
+      case "cawco:error": {
+        const said = previewError(message.message);
+        const of = previewErrorOf(message.of);
+        if (said) {
+          // A send the page made itself goes again from Send; a field's
+          // problem is the page's to show under the field.
+          failure = { message: said, again: of ? AGAIN[of] : "reload" };
+        }
         retrying = false;
+        break;
+      }
+      case "cawco:resolved":
+        if (failure && failure.again === null) {
+          failure = null;
+        }
         break;
       default:
         break;
@@ -630,6 +579,10 @@
       done();
     }
   }
+  /** Close in the artifact's own tab: back to the session that made it. */
+  async function backToSession() {
+    await goto(conversationHref(instanceId, cawco.instanceIndex));
+  }
   let closing = $state(false);
   async function close() {
     closing = true;
@@ -654,10 +607,7 @@
       aria-busy={sending || undefined}
       aria-disabled={sending || undefined}
       class="touch-hit"
-      onclick={whileIdle(
-        () => sending,
-        () => send().catch((error: Error) => toast.error(error.message))
-      )}
+      onclick={whileIdle(() => sending, send)}
       title="Send picks"
       type="button"
       transition:appear
@@ -666,16 +616,30 @@
       <span class="send-label">Send picks</span>
     </button>
   {/if}
-  <button
-    aria-pressed={selecting}
-    class="touch-hit"
-    disabled={!connected}
-    onclick={() => select(!selecting)}
-    title="Select"
-    type="button"
-  >
-    <IconCursor /><span class="select-label">Select</span>
-  </button>
+  {#if artifact && !ownTab}
+    <!-- The same artifact, its doc and its tools, in a tab of its own. -->
+    <a
+      aria-label="Open in new tab"
+      class="other touch-hit"
+      href={`/artifact/${encodeURIComponent(artifact.id)}`}
+      rel="noopener"
+      target="_blank"
+      title="Open in new tab"
+      ><IconExternal /></a
+    >
+  {/if}
+  {#if onselect}
+    <button
+      aria-pressed={selecting}
+      class="touch-hit"
+      disabled={!connected}
+      onclick={() => select(!selecting)}
+      title="Select"
+      type="button"
+    >
+      <IconCursor /><span class="select-label">Select</span>
+    </button>
+  {/if}
   <button
     aria-label="Reload"
     class="other touch-hit"
@@ -687,15 +651,6 @@
   >
     <IconRefresh />
   </button>
-  <a
-    aria-label="Open in new tab"
-    class="other touch-hit"
-    href={url}
-    rel="noopener noreferrer"
-    target="_blank"
-    title="Open in new tab"
-    ><IconExternalLink /></a
-  >
 {/snippet}
 
 <!-- The card beside the conversation (SideSurface): the switch, the
@@ -713,7 +668,7 @@
   closeFailed={failure?.again === "close"}
   {closing}
   label="Preview"
-  onclose={close}
+  onclose={ownTab ? backToSession : close}
   subtitle={page ? "" : displayPath || (source ? previewPlace(source) : "")}
   {switcher}
   titleControl={artifact ? artifactTitle : undefined}
@@ -831,7 +786,16 @@
           size="sm"
           variant="outline"
         />
-      {:else}
+      {:else if failure.again === "send"}
+        <Button
+          label="Send again"
+          onclick={send}
+          pending={sending}
+          pendingLabel="Sending…"
+          size="sm"
+          variant="outline"
+        />
+      {:else if failure.again === "close"}
         <Button
           label="Try again"
           onclick={close}

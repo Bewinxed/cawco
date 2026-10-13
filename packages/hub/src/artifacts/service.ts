@@ -549,6 +549,24 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       db.ofInstance(sessionOf(instanceId).id).map(summaryOf),
 
     /**
+     * An artifact by id with the session that made it, and whether that
+     * session's panel shows it now: what its own tab opens on.
+     */
+    find: (
+      id: string
+    ): ArtifactSummary & { instanceId: string; shown: boolean } => {
+      const row = db.get(id);
+      if (!row) {
+        throw new ArtifactRefusal(404, `No artifact ${id} on this hub.`);
+      }
+      return {
+        ...summaryOf(row),
+        instanceId: row.instanceId,
+        shown: deps.showing(row.instanceId) === row.id,
+      };
+    },
+
+    /**
      * Makes an artifact and shows it in the session's panel. A page or preview
      * the session already has under the same kind and name is replaced in
      * place: its doc, and so every pick, stays.
@@ -621,8 +639,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * New HTML for a page (its revision moves and the panel reloads it, its
-     * state kept), or a JSON Patch (RFC 6902) over its `state` applied as one
+     * New HTML for a page (its revision moves and every open view morphs to
+     * it, its state kept), or a JSON Patch (RFC 6902) over its `state` applied as one
      * transaction; the state after the change.
      */
     update: async (
@@ -648,11 +666,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           updatedAt: new Date(),
         }) as ArtifactRow;
         writePage(row.id, html);
+        // Every page open on it hears the new revision in the doc and morphs
+        // in place (the overlay); nothing reloads.
         stampMeta(row, pageHash(html));
-        // The panel showing it reloads onto the new HTML; its state stays in the doc.
-        if (deps.showing(instance.id) === row.id) {
-          await deps.open(row);
-        }
         return read(row);
       }
       const doc = docs.doc(row.id);

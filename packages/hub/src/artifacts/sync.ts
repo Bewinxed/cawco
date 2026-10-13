@@ -1,6 +1,7 @@
 /**
  * The y-websocket protocol (y-protocols/sync) for one artifact's doc, on the
- * preview listener at `/__cawco/artifact/<id>` (preview.ts). Sync only:
+ * preview listener at `/__cawco/artifact/<id>` (preview.ts), and the
+ * person's send beside it at `/__cawco/artifact/<id>/send`. Sync only:
  * awareness, auth and awareness queries are read and ignored, so a client
  * keeps its socket fresh with its own resync (`resyncInterval`).
  *
@@ -10,7 +11,11 @@
  * {@link REFUSED} and the reason, and the client joins again from the hub's
  * doc.
  */
-import { CHOICE_LIMITS, choiceEntryProblem } from "@cawco/core";
+import {
+  type ArtifactChoices,
+  CHOICE_LIMITS,
+  choiceEntryProblem,
+} from "@cawco/core";
 import type { ServerWebSocket } from "bun";
 import { createDecoder, readVarUint, readVarUint8Array } from "lib0/decoding";
 import {
@@ -29,6 +34,7 @@ import {
 } from "y-protocols/sync";
 import { applyUpdate, Doc, encodeStateAsUpdate, type Map as YMap } from "yjs";
 import { type ArtifactClient, type ArtifactDocs, MAPS } from "./docs";
+import { ArtifactRefusal } from "./service";
 
 /** y-websocket's sync message type (its server's `messageSync`). */
 const MESSAGE_SYNC = 0;
@@ -92,6 +98,71 @@ export const updateProblem = (doc: Doc, update: Uint8Array): string | null => {
     trial.destroy();
   }
 };
+
+/**
+ * The listener's paths for an artifact: its doc's socket, and the person's
+ * send (`/send`), on the page's own origin as the overlay reaches them.
+ */
+export const ARTIFACT_PATH = /^\/__cawco\/artifact\/([0-9a-f-]{36})(\/send)?$/;
+
+/** The longest send body read: its text at the note's bound, as JSON. */
+const SEND_BODY_MAX = 4 * CHOICE_LIMITS.note;
+
+/**
+ * The person sends (`cawco.send`, and the panel's Send): the session hears
+ * every pick as one message, at once, with the page's text below them.
+ * `instanceId` already owns `artifactId` (the listener checked).
+ */
+export const artifactSend =
+  (
+    send: (
+      instanceId: string,
+      artifactId: string,
+      text?: string
+    ) => ArtifactChoices
+  ) =>
+  async (
+    request: Request,
+    instanceId: string,
+    artifactId: string
+  ): Promise<Response> => {
+    if (request.method !== "POST") {
+      return new Response("Send is a POST.", {
+        status: 405,
+        headers: { allow: "POST" },
+      });
+    }
+    const body = await request.text();
+    if (body.length > SEND_BODY_MAX) {
+      return new Response(
+        `A page's text stops at ${CHOICE_LIMITS.note} characters.`,
+        { status: 413 }
+      );
+    }
+    let text: unknown;
+    try {
+      text = body ? (JSON.parse(body) as { text?: unknown }).text : undefined;
+    } catch {
+      return new Response("Send takes JSON: { text? }.", { status: 400 });
+    }
+    if (
+      text !== undefined &&
+      !(typeof text === "string" && text.length <= CHOICE_LIMITS.note)
+    ) {
+      return new Response(
+        `text is a string of at most ${CHOICE_LIMITS.note} characters.`,
+        { status: 400 }
+      );
+    }
+    try {
+      return Response.json(send(instanceId, artifactId, text?.trim()));
+    } catch (error) {
+      if (error instanceof ArtifactRefusal) {
+        return new Response(error.message, { status: error.status });
+      }
+      throw error;
+    }
+  };
 
 /** The listener's handlers for artifact sockets. */
 export const artifactSocket = (docs: ArtifactDocs) => ({

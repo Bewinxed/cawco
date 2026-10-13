@@ -166,7 +166,6 @@ export { default as IconSort } from "~icons/solar/sort-bold-duotone";
 export { default as IconUnfold } from "~icons/solar/sort-vertical-bold-duotone";
 export { default as IconCollapseOthers } from "~icons/solar/square-double-alt-arrow-up-bold-duotone";
 export { default as IconExternal } from "~icons/solar/square-top-down-bold-duotone";
-export { default as IconExternalLink } from "~icons/solar/square-top-up-bold-duotone";
 /** A release's New section (ReleaseNotes). */
 export { default as IconStars } from "~icons/solar/stars-bold-duotone";
 export { default as IconStop } from "~icons/solar/stop-bold-duotone";

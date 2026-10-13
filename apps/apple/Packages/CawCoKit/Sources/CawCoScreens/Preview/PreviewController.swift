@@ -4,12 +4,13 @@ import UIKit
 import WebKit
 
 /// A session's preview (preview/PreviewPane.svelte): its header (title and
-/// path, Send picks, Select, Reload, Close) over the page, which a web view
-/// loads from the hub's preview listener, naming the session in its
-/// `cawco-preview` cookie. The page carries the agent's overlay, which talks
-/// to its host as an iframe talks to the dashboard: the script injected here
-/// stands in for that parent window, so the overlay, its element picker and
-/// the page's choices bridge run unchanged.
+/// path, Select, Reload, Close) over the page, which a web view loads from
+/// the hub's preview listener, naming the session in its `cawco-preview`
+/// cookie. The page carries the agent's overlay, which talks to its host as
+/// an iframe talks to the dashboard: the script injected here stands in for
+/// that parent window, so the overlay and its element picker run unchanged.
+/// The page keeps its own state in its artifact's document, which the
+/// overlay joins itself.
 final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate {
     private let hub: HubConnection
     let instanceId: String
@@ -19,7 +20,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var web: WKWebView!
     private let titleLabel = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
     private let pathLabel = KitLabel(TypeScale.typeCode.with(points: TypeScale.typeMeta.points), ink: Palette.inkMuted)
-    private var sendButton: UIButton!
     private var selectButton: UIButton!
     private var reloadButton: UIButton!
     private var closeButton: UIButton!
@@ -38,8 +38,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var selecting = false
     private var connected = false
     private var closing = false
-    /// The canvas's choices as the hub last answered them: Send picks shows while some are unsent.
-    private var choices: [String: Any]?
 
     init(hub: HubConnection, instanceId: String) {
         self.hub = hub
@@ -69,7 +67,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             part.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             part.setContentHuggingPriority(.defaultLow, for: .horizontal)
         }
-        sendButton = KitButton.make("Send picks", glyph: Glyph.send, variant: .ghost, height: .sm) { [weak self] in self?.sendPicks(nil) }
         selectButton = KitButton.make("Select", glyph: .toolScreen, variant: .ghost, height: .sm) { [weak self] in
             guard let self else { return }
             select(!selecting)
@@ -92,14 +89,13 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         reloadButton = reload
         closeButton = KitButton.make("", glyph: .close, variant: .ghost, height: .sm) { [weak self] in self?.close() }
         closeButton.accessibilityLabel = "Close"
-        sendButton.isHidden = true
         selectButton.isEnabled = false
-        let head = UIStackView(arrangedSubviews: [identity, sendButton, selectButton, reload, closeButton])
+        let head = UIStackView(arrangedSubviews: [identity, selectButton, reload, closeButton])
         head.spacing = Space.space1
         head.alignment = .center
         head.translatesAutoresizingMaskIntoConstraints = false
         dragArea = head
-        for button in [sendButton!, selectButton!, reload, closeButton!] {
+        for button in [selectButton!, reload, closeButton!] {
             button.setContentHuggingPriority(.required, for: .horizontal)
             button.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
@@ -136,7 +132,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // The grabber, `space-1` from the top, centred, 100×6 in the control
         // edge; its hit area is 44pt tall about it (vaul's handle hit area),
         // over the header, which yields to the header's actions.
-        grabArea.yields = [sendButton, selectButton, reload, closeButton]
+        grabArea.yields = [selectButton, reload, closeButton]
         grabber.translatesAutoresizingMaskIntoConstraints = false
         grabber.backgroundColor = Palette.borderControl
         grabber.layer.cornerRadius = 3
@@ -210,8 +206,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         pathLabel.text = Self.place(frame)
         self.origin = origin
         connected = false
-        choices = nil
-        sendButton.isHidden = true
         selectButton.isEnabled = false
         cover.alpha = 1
         let cookie = HTTPCookie(properties: [
@@ -236,16 +230,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     func webView(_: WKWebView, didFail _: WKNavigation!, withError error: any Error) { failed(error.localizedDescription) }
     func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError error: any Error) { failed(error.localizedDescription) }
 
-    /// What the page posted to its host: the overlay's messages, and the
-    /// choices bridge's JSON-RPC (wire.ts reads them the same way). The
-    /// page is code an agent wrote: every field is checked and bounded.
+    /// What the page posted to its host: the overlay's messages (wire.ts
+    /// reads them the same way). The page is code an agent wrote: every
+    /// field is checked and bounded.
     func userContentController(_: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let text = message.body as? String, let data = text.data(using: .utf8),
               let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
-        if body["jsonrpc"] as? String == "2.0" {
-            answer(body)
-            return
-        }
         switch body["type"] as? String {
         case "cawco:ready", "cawco:navigated":
             if let at = (body["url"] as? String).flatMap(URL.init(string:)), at.host() == origin?.host(), at.port == origin?.port {
@@ -304,97 +294,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         guard let data = try? JSONSerialization.data(withJSONObject: message),
               let json = String(data: data, encoding: .utf8) else { return }
         web.evaluateJavaScript("window.__cawcoDeliver && window.__cawcoDeliver(\(json))")
-    }
-
-    // MARK: The choices bridge (PreviewPane.svelte `answer`)
-
-    private static let rpcMethods: Set<String> = ["ui/initialize", "ui/notifications/initialized", "ping", "tools/call", "ui/update-model-context", "ui/message"]
-
-    private func answer(_ rpc: [String: Any]) {
-        guard let method = rpc["method"] as? String, Self.rpcMethods.contains(method) else { return }
-        let id = rpc["id"]
-        let params = rpc["params"] as? [String: Any] ?? [:]
-        let reply = { [weak self] (result: Any) in
-            if let id { self?.deliver(["jsonrpc": "2.0", "id": id, "result": result]) }
-        }
-        let refuse = { [weak self] (code: Int, message: String) in
-            if let id { self?.deliver(["jsonrpc": "2.0", "id": id, "error": ["code": code, "message": message]]) }
-        }
-        Task { [weak self] in
-            guard let self else { return }
-            do {
-                switch method {
-                case "ui/initialize":
-                    reply(["protocolVersion": "2026-01-26", "hostInfo": ["name": "cawco", "version": "1.0.0"],
-                           "hostCapabilities": ["serverTools": [:] as [String: Any]], "hostContext": ["platform": "mobile"]])
-                case "ping":
-                    reply([:] as [String: Any])
-                case "tools/call":
-                    guard params["name"] as? String == "read_choices" else {
-                        refuse(-32_601, "A preview can call read_choices only.")
-                        return
-                    }
-                    let state = try await choicesCall("GET")
-                    reply(Self.toolResult(state))
-                case "ui/update-model-context":
-                    guard let change = params["structuredContent"] as? [String: Any] else {
-                        refuse(-32_602, "That change is not a choice the bridge keeps.")
-                        return
-                    }
-                    heard(try await choicesCall("PUT", body: change))
-                    reply([:] as [String: Any])
-                case "ui/message":
-                    let content = params["content"] as? [String: Any]
-                    guard params["role"] as? String == "user", content?["type"] as? String == "text",
-                          let text = Self.text(content?["text"], 2000) else {
-                        refuse(-32_602, "A message is a user's text.")
-                        return
-                    }
-                    try await send(text)
-                    reply([:] as [String: Any])
-                default:
-                    break
-                }
-            } catch {
-                refuse(-32_000, error.localizedDescription)
-                Toast.error(error.localizedDescription, in: view)
-            }
-        }
-    }
-
-    private func choicesCall(_ method: String, path: String = "", body: [String: Any]? = nil) async throws -> [String: Any] {
-        let data = try await hub.previewChoices(instanceId, method: method, path: path,
-            body: try body.map { try JSONSerialization.data(withJSONObject: $0) })
-        let state = try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
-        choices = state
-        sendButton.isHidden = !unsent
-        return state
-    }
-
-    /// Picks the session has not heard yet.
-    private var unsent: Bool {
-        guard let choices, let entries = choices["choices"] as? [String: [String: Any]] else { return false }
-        let sentAt = choices["sentAt"] as? String
-        return entries.values.contains { entry in sentAt == nil || (entry["at"] as? String ?? "") > (sentAt ?? "") }
-    }
-
-    private func heard(_ state: [String: Any]) {
-        deliver(["jsonrpc": "2.0", "method": "ui/notifications/tool-result", "params": Self.toolResult(state)])
-    }
-
-    private func send(_ text: String?) async throws {
-        heard(try await choicesCall("POST", path: "/send", body: text.map { ["text": $0] } ?? [:]))
-    }
-
-    private func sendPicks(_ text: String?) {
-        Task { [weak self] in
-            do { try await self?.send(text) } catch { Toast.error(error.localizedDescription, in: self?.view) }
-        }
-    }
-
-    private static func toolResult(_ state: [String: Any]) -> [String: Any] {
-        let text = (try? JSONSerialization.data(withJSONObject: state)).flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
-        return ["content": [["type": "text", "text": text]], "structuredContent": state]
     }
 
     // MARK: Closing

@@ -277,7 +277,7 @@ import { createArtifactDocs } from "./artifacts/docs";
 import { importLegacyCanvases } from "./artifacts/legacy";
 import { artifactRoutes } from "./artifacts/routes";
 import { type Artifacts, createArtifacts } from "./artifacts/service";
-import { artifactSocket } from "./artifacts/sync";
+import { artifactSend, artifactSocket } from "./artifacts/sync";
 import {
   answeredWithOriginal,
   clientCopy,
@@ -15904,7 +15904,9 @@ export const createServer = (
   /** What the preview listener (index.ts) needs to serve artifacts' documents. */
   const artifactListener = {
     ownerOf: (artifactId: string) => db.artifacts.get(artifactId)?.instanceId,
+    send: artifactSend(artifacts.send),
     socket: artifactSocket(artifactDocs),
+    state: artifactDocs.snapshot,
   };
 
   return Object.assign(

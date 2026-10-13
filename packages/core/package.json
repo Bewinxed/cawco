@@ -25,6 +25,7 @@
     "./keepers": "./src/keepers.ts",
     "./install-script": "./src/install-script.ts",
     "./preview-proxy": "./src/preview-proxy.ts",
+    "./choices": "./src/choices.ts",
     "./paths": "./src/paths.ts",
     "./workspace-policy": "./src/workspace-policy.ts",
     "./workspace-judge": "./src/workspace-judge.ts",

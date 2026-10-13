@@ -74,8 +74,9 @@ export const artifactCreate = {
 export const artifactUpdate = {
   name: "artifact_update",
   description:
-    "Change one of your artifacts in place. `html` replaces a page (the panel reloads it; picks stay). `patch` is a " +
-    'JSON Patch (RFC 6902) over its state, keyed by choice id, like [{"op":"replace","path":"/hero/options","value":["b"]}]; ' +
+    "Change one of your artifacts in place. `html` replaces a page: every open view morphs to it without a reload, and " +
+    "picks, typed fields, focus and scroll stay. `patch` is a " +
+    'JSON Patch (RFC 6902) over its state, keyed by choice id or field name, like [{"op":"replace","path":"/hero/options","value":["b"]}]; ' +
     "all of it applies or none. Answers the state after the change.",
   input: {
     id,

@@ -12,7 +12,12 @@ import {
   upgradePreview,
 } from "@cawco/core/preview-proxy";
 import type { ServerWebSocket, WebSocketHandler } from "bun";
-import type { ArtifactSocket, artifactSocket } from "./artifacts/sync";
+import {
+  ARTIFACT_PATH,
+  type ArtifactSocket,
+  type artifactSend,
+  type artifactSocket,
+} from "./artifacts/sync";
 import { ARTIFACTS_ROOT, PREVIEW_PORT } from "./config";
 import { FolderRefusal, folderPath } from "./project-folder";
 
@@ -75,7 +80,8 @@ export function previewFrame(
  */
 async function servePage(
   artifactId: string,
-  pathname: string
+  pathname: string,
+  state: (artifactId: string) => string
 ): Promise<Response> {
   if (pathname === OVERLAY_PATH) {
     return overlayResponse();
@@ -109,12 +115,15 @@ async function servePage(
   const body = Bun.file(file);
   const headers = { "cache-control": "no-store", "content-type": body.type };
   return body.type.startsWith("text/html")
-    ? new Response(injectOverlay(await body.text()), { headers })
+    ? new Response(
+        injectOverlay(await body.text(), {
+          artifact: artifactId,
+          state: state(artifactId),
+        }),
+        { headers }
+      )
     : new Response(body, { headers });
 }
-
-/** Where an artifact's live document is synced on the listener (artifacts/sync.ts). */
-const ARTIFACT_SOCKET = /^\/__cawco\/artifact\/([0-9a-f-]{36})$/;
 
 type ListenerSocket = PreviewSocket | ArtifactSocket;
 
@@ -132,16 +141,22 @@ const sessionNamed = (request: Request): string | null | undefined =>
   request.headers.get("x-cawco-preview") ??
   new Bun.CookieMap(request.headers.get("cookie") ?? "").get("cawco-preview");
 
-/** An artifact's sync socket, for the session that owns it only. */
+/** An artifact's sync socket, or its send (`/send`), for the session that owns it only. */
 const joinArtifact = (
   request: Request,
   server: Bun.Server<ListenerSocket>,
-  [, artifactId]: RegExpMatchArray,
+  [, artifactId, send]: RegExpMatchArray,
   instanceId: string | null | undefined,
-  artifacts: { ownerOf: (artifactId: string) => string | undefined }
-): Response | undefined => {
+  artifacts: {
+    ownerOf: (artifactId: string) => string | undefined;
+    send: ReturnType<typeof artifactSend>;
+  }
+): Response | Promise<Response> | undefined => {
   if (!instanceId || artifacts.ownerOf(artifactId) !== instanceId) {
     return new Response("This session has no such artifact.", { status: 404 });
+  }
+  if (send) {
+    return artifacts.send(request, instanceId, artifactId);
   }
   return server.upgrade(request, { data: { artifactId } })
     ? undefined
@@ -153,7 +168,10 @@ export function startPreviewListener(
   artifacts: {
     /** The session that owns an artifact; undefined when there is none. */
     ownerOf: (artifactId: string) => string | undefined;
+    send: ReturnType<typeof artifactSend>;
     socket: ReturnType<typeof artifactSocket>;
+    /** A page artifact's doc as one base64 Yjs update, embedded in its overlay tag. */
+    state: (artifactId: string) => string;
   }
 ) {
   const proxy = previewWebSocket as unknown as WebSocketHandler<ListenerSocket>;
@@ -176,7 +194,7 @@ export function startPreviewListener(
     },
     async fetch(request, server) {
       const instanceId = sessionNamed(request);
-      const synced = new URL(request.url).pathname.match(ARTIFACT_SOCKET);
+      const synced = new URL(request.url).pathname.match(ARTIFACT_PATH);
       if (synced) {
         return joinArtifact(request, server, synced, instanceId, artifacts);
       }
@@ -185,7 +203,11 @@ export function startPreviewListener(
         return new Response("No preview selected.", { status: 404 });
       }
       if ("page" in target.source) {
-        return servePage(target.artifact.id, new URL(request.url).pathname);
+        return servePage(
+          target.artifact.id,
+          new URL(request.url).pathname,
+          artifacts.state
+        );
       }
       // Its machine is away: the register that brings it back serves it again.
       if (!target.upstream) {
