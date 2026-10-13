@@ -248,6 +248,13 @@ export interface AccountSignin {
   movedAt: number | null;
   /** The store it was moved from: `~/.claude`, pi's own `auth.json`, OpenCode's own; null when not moved. */
   movedFrom: HomeStore | null;
+  /**
+   * Why the hub signed it out there itself: the words a session on it met
+   * when Claude Code refused its credential for good (revoked, or a refresh
+   * that can't succeed). It stays signed out, whatever the store says, until
+   * it is signed in again through CawCo. Null for any other state.
+   */
+  reason: string | null;
   state: SigninState;
 }
 

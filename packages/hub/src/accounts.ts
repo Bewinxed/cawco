@@ -154,12 +154,45 @@ const dirState = (
 };
 
 /**
+ * Where one account store on `machineId` stands for a pass of a report
+ * received at `receivedAt`, and whether the pass writes it. A sign-in settled
+ * since the report came in stands. One the hub signed out when a session met
+ * its credential refused for good (`reason`, server.ts `settleRefusal`)
+ * stands too, reason and all, while the store reads signed in or signed out:
+ * the store still holds that credential, which `auth status` reads as
+ * signed in, so only a sign-in through CawCo brings it back. Signed in as
+ * someone else is news, and is written.
+ */
+const squaredState = (
+  db: DbShape,
+  machineId: string,
+  account: Account,
+  report: AccountReport,
+  receivedAt: number
+): { state: SigninState; write: boolean } => {
+  const here = db.accounts
+    .signins()
+    .find((one) => one.accountId === account.id && one.machineId === machineId);
+  if (here && here.checkedAt > receivedAt) {
+    return { state: here.state, write: false };
+  }
+  const state = dirState(db, account, report);
+  if (here?.state === "signed-out" && here.reason !== null) {
+    return state === "mismatch"
+      ? { state, write: true }
+      : { state: "signed-out", write: false };
+  }
+  return { state, write: true };
+};
+
+/**
  * Squares the account sign-ins on `machineId` with what its agent just read
  * from every account store there of one kind: Claude's config dirs
  * (`claude`), or every other provider's credential stores (`providers`). Who
  * each store is signed in as decides its sign-in, every time, except one
  * settled since the report came in (`receivedAt`): a sign-in finished, or an
- * earlier pass of this same report, while it waited behind a probe. True
+ * earlier pass of this same report, while it waited behind a probe; or one
+ * the hub signed out on a refused credential ({@link squaredState}). True
  * when anything changed; `failed` when a Claude catalog probe it needed
  * could not be read, which the caller retries.
  */
@@ -199,10 +232,15 @@ export const reconcileAccounts = async (
     if (!ofScope(found)) {
       continue;
     }
-    const settled = settledSince(found.id);
-    const state = settled ? settled.state : dirState(db, found, report);
+    const { state, write } = squaredState(
+      db,
+      machineId,
+      found,
+      report,
+      receivedAt
+    );
     const account = store.get(found.id) ?? found;
-    if (!settled) {
+    if (write) {
       changed =
         store.putSignin({ accountId: account.id, machineId, state }) || changed;
     }
@@ -224,6 +262,47 @@ export const reconcileAccounts = async (
     }
   }
   return { changed, failed };
+};
+
+/**
+ * What Claude Code's error message in place of an answer says about its
+ * account's credential: `refused` for good, so the account is signed out
+ * there; `raced`, a refresh another of its processes held, which is no
+ * sign-out; nothing for any other failure. Read on the message's own `error`
+ * first, then on the words the CLI writes for that one cause, measured on
+ * CLI 2.1.288's API-error mapping:
+ * - a 403 "OAuth token has been revoked" or a 401 "OAuth access token has
+ *   been revoked" → `authentication_failed`, "Failed to authenticate: OAuth
+ *   token revoked. …" ("OAuth token revoked · Please run /login" in its UI);
+ * - `OAuthRefreshDeadError` ("OAuth refresh token is no longer valid") →
+ *   `authentication_failed`, "Failed to authenticate: OAuth session expired
+ *   and could not be refreshed" ("Login expired · Please run /login");
+ * - `OAuthRefreshLockTimeoutError` → `server_error`, "Failed to refresh OAuth
+ *   token: another Claude Code process is refreshing it …" ("Could not
+ *   refresh your login because another Claude Code process is refreshing
+ *   it …").
+ * A bare 401 ("Failed to authenticate. API Error: 401 …") is neither: it
+ * says nothing of whether a refresh was tried or why it failed.
+ */
+export const claudeCredentialWord = (
+  error: string | undefined,
+  text: string
+): { kind: "refused"; reason: string } | { kind: "raced" } | undefined => {
+  if (
+    error === "server_error" &&
+    text.includes("another Claude Code process is refreshing")
+  ) {
+    return { kind: "raced" };
+  }
+  if (
+    error === "authentication_failed" &&
+    (text.includes("OAuth token revoked") ||
+      text.includes("OAuth session expired and could not be refreshed") ||
+      text.startsWith("Login expired · Please run /login"))
+  ) {
+    return { kind: "refused", reason: text.trim() };
+  }
+  return undefined;
 };
 
 /** Why extra usage is off, by Claude Code's `overageDisabledReason`, in words. */

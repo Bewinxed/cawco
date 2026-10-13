@@ -1,0 +1,1 @@
+ALTER TABLE `account_signins` ADD `reason` text;

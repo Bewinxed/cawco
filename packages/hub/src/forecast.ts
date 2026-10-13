@@ -377,6 +377,7 @@ class Walk {
           state: "signed-in" as const,
           movedAt: null,
           movedFrom: null,
+          reason: null,
           checkedAt: t,
         })),
     });

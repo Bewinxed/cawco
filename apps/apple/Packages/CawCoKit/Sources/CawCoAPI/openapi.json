@@ -33826,6 +33826,13 @@
             "$ref": "#/components/schemas/HarnessKind",
             "description": "The store it was moved from: `~/.claude`, pi's own `auth.json`, OpenCode's own; null when not moved."
           },
+          "reason": {
+            "description": "Why the hub signed it out there itself: the words a session on it met\nwhen Claude Code refused its credential for good (revoked, or a refresh\nthat can't succeed). It stays signed out, whatever the store says, until\nit is signed in again through CawCo. Null for any other state.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "state": {
             "$ref": "#/components/schemas/SigninState"
           }
@@ -33835,6 +33842,7 @@
           "checkedAt",
           "machineId",
           "movedAt",
+          "reason",
           "state"
         ]
       },

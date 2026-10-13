@@ -108,10 +108,15 @@ export interface AccountsDb {
   /**
    * Whether the row changed. `moved` left out keeps what the row says about
    * a move (when, and from which store); null clears it; a new row says none.
+   * `reason` is the row's from now on; left out, it has none.
    */
   readonly putSignin: (
-    signin: Omit<AccountSignin, "checkedAt" | "movedAt" | "movedFrom"> & {
+    signin: Omit<
+      AccountSignin,
+      "checkedAt" | "movedAt" | "movedFrom" | "reason"
+    > & {
       moved?: { at: number; from: HomeStore } | null;
+      reason?: string | null;
     }
   ) => boolean;
   readonly readings: () => AccountReading[];
@@ -281,8 +286,9 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           checkedAt: row.checkedAt.getTime(),
           movedAt: row.movedAt?.getTime() ?? null,
           movedFrom: row.movedFrom ?? null,
+          reason: row.reason ?? null,
         })),
-    putSignin: ({ accountId, machineId, state, moved }) => {
+    putSignin: ({ accountId, machineId, state, moved, reason = null }) => {
       if (!get(accountId)) {
         return false;
       }
@@ -304,14 +310,23 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         movedFrom = moved?.from ?? null;
       }
       db.insert(accountSignins)
-        .values({ accountId, machineId, state, movedAt, movedFrom, checkedAt })
+        .values({
+          accountId,
+          machineId,
+          state,
+          movedAt,
+          movedFrom,
+          reason,
+          checkedAt,
+        })
         .onConflictDoUpdate({
           target: [accountSignins.accountId, accountSignins.machineId],
-          set: { state, movedAt, movedFrom, checkedAt },
+          set: { state, movedAt, movedFrom, reason, checkedAt },
         })
         .run();
       return (
         before?.state !== state ||
+        (before.reason ?? null) !== reason ||
         (before.movedAt?.getTime() ?? null) !== (movedAt?.getTime() ?? null)
       );
     },

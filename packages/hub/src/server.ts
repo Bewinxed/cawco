@@ -259,6 +259,7 @@ import { websocket } from "elysia/websocket";
 import {
   type AccountProber,
   accountOfIdentity,
+  claudeCredentialWord,
   keepProbe,
   machineAccount,
   machineReadings,
@@ -3554,6 +3555,66 @@ export const createServer = (
   const processGeneration = (
     row: ReturnType<DbShape["getInstancesByIds"]>[number]
   ): string => JSON.stringify([row.id, row.spawnedAt]);
+  /**
+   * A Claude session's error in place of an answer, read for what it says of
+   * its account's credential ({@link claudeCredentialWord}). Refused for good:
+   * the account is signed out on the session's machine with the refusal's
+   * words, so no new session is placed on it there and Configure → Accounts
+   * offers to sign it in again; a refresh another process held changes
+   * nothing. Only the row's live launch speaks for its account, and only one
+   * reading the account's own credential: not one on the machine's own login
+   * while it moves into CawCo, nor one still running from a credential that
+   * has moved out of its store, whose refusal is that old credential's.
+   */
+  const settleRefusal = (
+    machineId: string,
+    instanceId: string,
+    generation: string | undefined,
+    error: string | undefined,
+    text: string
+  ): void => {
+    const word = claudeCredentialWord(error, text);
+    const [row] = word ? db.getInstancesByIds([instanceId]) : [];
+    const accountId = row?.accountId;
+    if (
+      !(word && row && accountId) ||
+      (row.harness ?? "claude") !== "claude" ||
+      generation !== processGeneration(row) ||
+      homeLoginMoveOf(machineId, row) ||
+      movedFrom().has(row.id)
+    ) {
+      return;
+    }
+    const account = db.accounts.get(accountId);
+    const where = `${account ? accountName(account) : accountId} on ${machineName(machineId)}`;
+    if (word.kind === "raced") {
+      console.info(
+        `[accounts] ${instanceId}: refreshing ${where}'s token raced another Claude Code process; it stays signed in`
+      );
+      return;
+    }
+    const signedIn = db.accounts
+      .signins()
+      .some(
+        (one) =>
+          one.accountId === accountId &&
+          one.machineId === machineId &&
+          one.state === "signed-in"
+      );
+    if (!signedIn) {
+      return;
+    }
+    db.accounts.putSignin({
+      accountId,
+      machineId,
+      state: "signed-out",
+      reason: word.reason,
+    });
+    console.warn(
+      `[accounts] ${where} is signed out: ${instanceId}'s Claude Code refused its credential (${word.reason}); nothing new is placed on it there until it is signed in again`
+    );
+    publishUsage(machineId);
+  };
   /** Why an ask arriving from a machine is not this row's live process's; none when it is. */
   const askRefusal = (
     owner: ReturnType<DbShape["getInstancesByIds"]>[number] | undefined,
@@ -20822,6 +20883,25 @@ export const createServer = (
                   }
                   publishUsage(message.machineId);
                   break;
+                }
+                // Claude Code's error in the model's place: what it says of
+                // the account's credential settles its sign-in there.
+                if (
+                  frame.message.type === "assistant" &&
+                  !frame.message.parent_tool_use_id &&
+                  frame.message.error
+                ) {
+                  settleRefusal(
+                    message.machineId,
+                    message.instanceId,
+                    peek(message.payload, "processGeneration"),
+                    frame.message.error,
+                    frame.message.message.content
+                      .flatMap((block) =>
+                        block.type === "text" ? [block.text] : []
+                      )
+                      .join("\n")
+                  );
                 }
                 if (
                   frame.message.type === "assistant" ||

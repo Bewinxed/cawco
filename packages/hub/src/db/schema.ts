@@ -1614,6 +1614,8 @@ export const accountSignins = sqliteTable(
     movedAt: timestamp("moved_at"),
     /** The store it was moved from: `claude` (`~/.claude`), `pi` or `opencode` (their own `auth.json`). */
     movedFrom: text("moved_from").$type<HomeStore>(),
+    /** Why the hub signed it out itself: the refusal a session on it met (`AccountSignin.reason`); null otherwise. */
+    reason: text("reason"),
     checkedAt: timestamp("checked_at")
       .notNull()
       .$defaultFn(() => new Date()),
