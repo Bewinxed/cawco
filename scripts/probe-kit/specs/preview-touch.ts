@@ -119,13 +119,18 @@ const pageFrame = async (page: Page, loads = 1): Promise<Frame> =>
     60_000
   ) as Promise<Frame>;
 
-/** Where an element of the pane's page stands on the screen. */
-const pointOf = async (page: Page, frame: Frame, selector: string) => {
+/** Where an element of the pane's page stands on the screen: `along` its width (its middle by default), half its height. */
+const pointOf = async (
+  page: Page,
+  frame: Frame,
+  selector: string,
+  along = 0.5
+) => {
   const outer = await page.locator(FRAME).boundingBox();
-  const inner = await frame.locator(selector).evaluate((el) => {
+  const inner = await frame.locator(selector).evaluate((el, fx) => {
     const r = el.getBoundingClientRect();
-    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-  });
+    return { x: r.x + r.width * fx, y: r.y + r.height / 2 };
+  }, along);
   if (!outer) {
     throw new Error("the pane's frame has no box");
   }
@@ -149,9 +154,9 @@ const hitAt = (page: Page, x: number, y: number) =>
     [x, y]
   );
 
-/** A finger's tap on an element of the page; what the engine hit there. */
-const tapIn = async (on: On, frame: Frame, selector: string) => {
-  const at = await pointOf(on.page, frame, selector);
+/** A finger's tap on an element of the page, `along` its width; what the engine hit there. */
+const tapIn = async (on: On, frame: Frame, selector: string, along = 0.5) => {
+  const at = await pointOf(on.page, frame, selector, along);
   const hit = await hitAt(on.page, at.x, at.y);
   await on.page.touchscreen.tap(at.x, at.y);
   await on.page.waitForTimeout(250);
@@ -417,12 +422,13 @@ const iPhoneEngine = async (kit: Kit, url: string) => {
   await tapBox(await comment.boundingBox());
   await page.waitForTimeout(300);
   const off = Number(await textIn(pinning, "#count"));
-  await tapIn(on, pinning, "#count");
+  // Its pin stands on the counter's middle, where the comment was tapped, and a press on a pin opens its card: the tap lands beside it.
+  const offHit = await tapIn(on, pinning, "#count", 0.15);
   kit.check(
     "3: Comment off again, a tap on the counter adds one",
     Number(await textIn(pinning, "#count")) === off + 1 &&
       (await comment.getAttribute("aria-pressed")) === "false",
-    `aria-pressed ${await comment.getAttribute("aria-pressed")}`
+    `aria-pressed ${await comment.getAttribute("aria-pressed")}; count ${off} → ${await textIn(pinning, "#count")}; hit ${offHit}`
   );
 
   // 2. The head: the name menu, Reload, Close.

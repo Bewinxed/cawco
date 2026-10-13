@@ -425,7 +425,14 @@ export function startPins(deps: PinsDeps): Pins {
       const el = id ? (placed.get(id)?.el ?? null) : null;
       if (scroll && id) {
         const at = placed.get(id)?.at;
-        if (at) {
+        // A pin already in view stays where the person is looking: the page moves only to bring one in.
+        const inView =
+          !!at &&
+          at[1] - scrollY >= PIN_R &&
+          at[1] - scrollY <= innerHeight - PIN_R &&
+          at[0] - scrollX >= 0 &&
+          at[0] - scrollX <= innerWidth;
+        if (at && !inView) {
           const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
           scrollTo({
             top: Math.max(0, at[1] - innerHeight / 3),

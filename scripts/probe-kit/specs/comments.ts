@@ -326,7 +326,23 @@ const commentChecks = async (on: On, frame: Frame) => {
 
 /** 2. The radial's Comment on a stroke, the list's two rows, J and K. */
 const inkCommentChecks = async (on: On, frame: Frame) => {
-  await strokeOver(on, frame, "#second");
+  const { from } = await strokeOver(on, frame, "#second");
+  const drawn = Object.keys((await docOf(frame)).ink).length;
+  if (drawn === 0) {
+    const outer = await on.page
+      .locator('iframe[title="Preview"]')
+      .boundingBox();
+    const hit = await frame.evaluate(
+      ([x, y]) => {
+        const el = document.elementFromPoint(x, y);
+        return `${el?.localName}${el?.id ? `#${el.id}` : ""} pe=${el ? getComputedStyle(el).pointerEvents : ""}`;
+      },
+      [from.x - (outer?.x ?? 0), from.y - (outer?.y ?? 0)]
+    );
+    on.kit.note(
+      `the stroke over #second kept no group: the page hit ${hit} at its start; said ${on.said.join(" | ") || "nothing"}`
+    );
+  }
   await dragFromIcon(on, frame, 0, 40);
   const doc = await until(
     "pin 2 in the doc",
