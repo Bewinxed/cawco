@@ -328,12 +328,44 @@ const openCheck = async (
       .filter((run) => run.id === "canvas-grow")
       .map((run) => Number(run.startTime))
   );
+  // A fifth of the way (the rise eases out, nearly up by half-time): the
+  // shape's outline, its edge the pill's border, is drawn part-way up,
+  // whole, never cut by a clip of its own.
+  await seekCanvas(page, 0.2);
+  const halfway = await page.evaluate((sel) => {
+    const halo = document.querySelector(`${sel} .grown-halo`);
+    const path = halo?.querySelector("path");
+    const field = document.querySelector(`${sel} form.cin`);
+    return halo && path && field
+      ? {
+          height: halo.getBoundingClientRect().height,
+          pill: field.getBoundingClientRect().height,
+          clip: getComputedStyle(halo).clipPath,
+          stroke: path.getAttribute("stroke"),
+        }
+      : null;
+  }, DOCK);
   await clock.seek(1);
   await seekCanvas(page, 1);
   const frame = await box(page, FRAME);
   const room = await column(page);
+  const whole = await page.evaluate(
+    (sel) =>
+      document.querySelector(`${sel} .grown-halo`)?.getBoundingClientRect()
+        .height ?? 0,
+    DOCK
+  );
   await clock.release();
   await settle(page);
+  kit.check(
+    "1: a fifth of the way through, the grown shape's outline stands part-way up, its edge drawn whole (no clip on it)",
+    !!halfway &&
+      halfway.clip === "none" &&
+      !!halfway.stroke &&
+      halfway.height > halfway.pill + 20 &&
+      halfway.height < whole - 20,
+    `${JSON.stringify(halfway)}; grown ${whole}`
+  );
   kit.check(
     "1: a pen's swipe up on the pill starts the grown shape's growth on --dur-grow: the shape and the canvas in it, together",
     growth.length === 2 &&

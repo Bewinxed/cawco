@@ -292,6 +292,40 @@ export class CanvasRoom {
     return shape;
   }
 
+  /**
+   * The shape follows a run's clock: its outline is painted each frame at
+   * the run's progress (its curve applied), so its edge, the pill's border,
+   * is drawn whole while it grows and folds, as the wheel's is. The run
+   * itself changes nothing drawn (a custom property): it is the clock, so it
+   * is held, scrubbed and turned back like any other, and the shape with it.
+   */
+  #paintAlong(
+    shape: GrownShape,
+    ms: number,
+    easing: string,
+    from: number,
+    to: number
+  ): Animation {
+    const run = shape.layers.halo.animate(
+      [{ "--canvas-morph": "0" }, { "--canvas-morph": "1" }],
+      { duration: ms, easing }
+    );
+    const paint = () => {
+      if (run.playState === "idle" || this.#shape !== shape) {
+        return;
+      }
+      const progress = run.effect?.getComputedTiming().progress;
+      const t = typeof progress === "number" ? progress : 1;
+      shape.open = from + (to - from) * t;
+      shape.paint();
+      if (run.playState !== "finished") {
+        requestAnimationFrame(paint);
+      }
+    };
+    paint();
+    return run;
+  }
+
   #stop(): void {
     for (const run of this.#runs) {
       run.cancel();
@@ -404,7 +438,7 @@ export class CanvasRoom {
           )
         : null;
       runs = [
-        halo.animate(grown(sizes.halo), { duration: ms, easing: "linear" }),
+        this.#paintAlong(shape, ms, "linear", 0, 1),
         chip
           ? stage.el.animate([{ clipPath: chip }, { clipPath: rest }], {
               duration: ms,
@@ -462,9 +496,6 @@ export class CanvasRoom {
     const ms = dur("--dur-grow-exit");
     let runs: Animation[];
     if (motionOk.current && to) {
-      const folded = Array.from({ length: STEPS + 1 }, (_, i) => ({
-        clipPath: shape.cutAt(1 - i / STEPS, sizes.halo),
-      }));
       const into = boxCut(
         {
           left: to.left - from.left,
@@ -477,11 +508,7 @@ export class CanvasRoom {
         )
       );
       runs = [
-        halo.animate(folded, {
-          duration: ms,
-          easing: "linear",
-          fill: "forwards",
-        }),
+        this.#paintAlong(shape, ms, "linear", 1, 0),
         stage.el.animate(
           [{ clipPath: shape.cutAt(1, sizes.stage) }, { clipPath: into }],
           { duration: ms, easing: CURVE.drawer, fill: "forwards" }
@@ -641,17 +668,7 @@ export class CanvasRoom {
       const to = atRest(() => boxOf(slot));
       const { halo } = shape.layers;
       const room = motionOk.current
-        ? halo.animate(
-            [
-              { clipPath: shape.cutAt(1, sizes.halo) },
-              { clipPath: shape.cutAt(0, sizes.halo) },
-            ],
-            {
-              duration: dur("--dur-control"),
-              easing: CURVE.out,
-              fill: "forwards",
-            }
-          )
+        ? this.#paintAlong(shape, dur("--dur-control"), CURVE.out, 1, 0)
         : halo.animate([{ opacity: 1 }, { opacity: 0 }], {
             duration: dur("--dur-fade"),
             easing: CURVE.out,
@@ -782,13 +799,7 @@ export class CanvasRoom {
     const to = atRest(() => boxOf(slot));
     const { halo } = shape.layers;
     const room = motionOk.current
-      ? halo.animate(
-          [
-            { clipPath: shape.cutAt(0, sizes.halo) },
-            { clipPath: shape.cutAt(1, sizes.halo) },
-          ],
-          { duration: dur("--dur-control"), easing: CURVE.out }
-        )
+      ? this.#paintAlong(shape, dur("--dur-control"), CURVE.out, 0, 1)
       : halo.animate([{ opacity: 0 }, { opacity: 1 }], {
           duration: dur("--dur-fade"),
           easing: CURVE.out,
