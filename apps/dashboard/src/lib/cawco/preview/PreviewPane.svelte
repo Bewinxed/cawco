@@ -21,6 +21,7 @@
     IconSend,
     IconUndock,
   } from "#lib/icons.js";
+  import { theme } from "#lib/theme.svelte.js";
   import { goto } from "$app/navigation";
   import {
     handBack,
@@ -479,11 +480,12 @@
       post({ jsonrpc: "2.0", id: asked.id, result: null });
     }
   }
-  /** Tells the page which artifact it is and where its doc is synced. */
+  /** Tells the page which artifact it is, where its doc is synced, and the dashboard's theme. */
   function announce() {
     connected = false;
     post({
       type: "cawco:hello",
+      theme: theme.resolved,
       ...(artifact && previewBase
         ? {
             artifact: {
@@ -496,6 +498,18 @@
         : {}),
     });
   }
+  // The dashboard's theme turning tells the page: a page artifact draws in it
+  // (the overlay), never in the OS's; a preview is its own app and keeps its
+  // own. Only a page that said ready hears it: one still loading takes the
+  // theme from its hello.
+  $effect(() => {
+    const scheme = theme.resolved;
+    untrack(() => {
+      if (connected) {
+        post({ type: "cawco:theme", theme: scheme });
+      }
+    });
+  });
   /** Comment mode on or off; `place` is the moved pin the next tap places again. */
   function comment(on: boolean, place: string | null = null) {
     commenting = on;
@@ -590,7 +604,9 @@
   }
   function resolvePin(resolved: boolean) {
     if (openPin) {
-      doc?.resolve(openPin, resolved);
+      cardError = doc
+        ? doc.resolve(openPin, resolved)
+        : `The pane lost the page's document, so the pin wasn't ${resolved ? "resolved" : "reopened"}. Reload, then try again.`;
     }
   }
   /** A pin's picture full size, in the lightbox, out of its thumbnail. */

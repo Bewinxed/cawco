@@ -1,13 +1,12 @@
 import type { ArtifactChoices, ChoiceEntry } from "@cawco/core";
 import {
-  COMMENT_LIMITS,
   type Pin,
+  replyToPin,
+  resolvePin,
   type SendBody,
-  type ThreadEntry,
 } from "@cawco/core/comments";
 import { WebsocketProvider } from "y-websocket";
-import { Doc, type Map as YMap } from "yjs";
-import { newId } from "../id";
+import { Doc } from "yjs";
 
 /**
  * The pane's hold on an artifact's live document (Projects spec §5.10): the
@@ -38,8 +37,8 @@ export interface ArtifactDoc {
   destroy: () => void;
   /** The person's words in pin `pin`'s thread; a sentence when they were not kept. */
   reply: (pin: string, text: string) => string | null;
-  /** The person resolves pin `pin`, or reopens it. */
-  resolve: (pin: string, resolved: boolean) => void;
+  /** The person resolves pin `pin`, or reopens it; a sentence when it was not. */
+  resolve: (pin: string, resolved: boolean) => string | null;
 }
 
 const viewOf = (doc: Doc): ArtifactView => {
@@ -104,43 +103,9 @@ export function joinArtifact(
     doc,
     { disableBc: true, resyncInterval: RESYNC_MS }
   );
-  const pins = () => doc.getMap("pins") as YMap<Pin>;
   return {
-    reply: (id, text) => {
-      const pin = pins().get(id);
-      if (!pin) {
-        return "This pin is gone from the page, so the reply wasn't kept.";
-      }
-      if (text.length > COMMENT_LIMITS.text) {
-        return `A reply holds ${COMMENT_LIMITS.text.toLocaleString()} characters, so this one wasn't kept. Shorten it, then reply again.`;
-      }
-      if (pin.thread.length >= COMMENT_LIMITS.entries) {
-        return `This thread holds ${COMMENT_LIMITS.entries} entries, so the reply wasn't kept. Start a new pin.`;
-      }
-      const entry: ThreadEntry = {
-        id: newId(),
-        by: "person",
-        text,
-        at: new Date().toISOString(),
-      };
-      doc.transact(() =>
-        pins().set(id, { ...pin, thread: [...pin.thread, entry] })
-      );
-      return null;
-    },
-    resolve: (id, resolved) => {
-      const pin = pins().get(id);
-      if (!pin) {
-        return;
-      }
-      const { resolvedAt: _was, ...rest } = pin;
-      doc.transact(() =>
-        pins().set(
-          id,
-          resolved ? { ...rest, resolvedAt: new Date().toISOString() } : rest
-        )
-      );
-    },
+    reply: (pin, text) => replyToPin(doc, pin, text),
+    resolve: (pin, resolved) => resolvePin(doc, pin, resolved),
     destroy: () => {
       provider.destroy();
       doc.destroy();

@@ -344,6 +344,10 @@ export const artifact = {
   /** Whether the doc holds the hub's state: embedded, or synced. */
   known: () => synced || seeded !== null,
 
+  /** Resolves once the doc holds the hub's state; ask only when it {@link artifact.keeps}. */
+  whenKnown: (): Promise<void> =>
+    synced || seeded !== null ? Promise.resolve() : syncedOnce,
+
   state: (): State => doc.getMap("state").toJSON() as State,
 
   meta: () => {

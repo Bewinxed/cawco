@@ -15,7 +15,13 @@
  * again.
  *
  * Every entry is a plain JSON value in its map.
+ *
+ * A person's reply to a pin, and a resolve or reopen, is one write on the
+ * artifact's doc, whoever asks ({@link replyToPin}, {@link resolvePin}): the
+ * web pane on the doc it joins, the page's overlay on its own for a host that
+ * holds no doc (the app, by `cawco:reply` and `cawco:resolve`).
  */
+import type { Doc, Map as YMap } from "yjs";
 import type { PreviewElement } from "./index";
 
 export const COMMENT_LIMITS = {
@@ -209,6 +215,76 @@ export function pinsProblem(
 export const pinUnsent = (pin: Pin): boolean =>
   !pin.sentAt ||
   pin.thread.some((entry) => entry.by === "person" && !entry.sentAt);
+
+/**
+ * A version 4 UUID from `crypto.getRandomValues`: a page or a dashboard
+ * opened over plain http on a tailnet address has no `crypto.randomUUID`
+ * (secure contexts only).
+ */
+const entryId = (): string => {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  // biome-ignore lint/suspicious/noBitwiseOperators: RFC 4122's version bits
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  // biome-ignore lint/suspicious/noBitwiseOperators: RFC 4122's variant bits
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0"));
+  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
+};
+
+const pinsOf = (doc: Doc) => doc.getMap("pins") as YMap<Pin>;
+
+/**
+ * The person's words in pin `pin`'s thread, unsent until their Send; the
+ * refusal's sentence when they were not kept, and nothing was written.
+ */
+export function replyToPin(doc: Doc, pin: string, text: string): string | null {
+  const held = pinsOf(doc).get(pin);
+  if (!held) {
+    return "This pin is gone from the page, so the reply wasn't kept.";
+  }
+  if (!text.trim()) {
+    return "This reply has no words, so it wasn't kept. Write one, then reply again.";
+  }
+  if (text.length > COMMENT_LIMITS.text) {
+    return `A reply holds ${COMMENT_LIMITS.text.toLocaleString()} characters, so this one wasn't kept. Shorten it, then reply again.`;
+  }
+  if (held.thread.length >= COMMENT_LIMITS.entries) {
+    return `This thread holds ${COMMENT_LIMITS.entries} entries, so the reply wasn't kept. Start a new pin.`;
+  }
+  const entry: ThreadEntry = {
+    id: entryId(),
+    by: "person",
+    text,
+    at: new Date().toISOString(),
+  };
+  doc.transact(() =>
+    pinsOf(doc).set(pin, { ...held, thread: [...held.thread, entry] })
+  );
+  return null;
+}
+
+/**
+ * The person resolves pin `pin`, or reopens it; the refusal's sentence when
+ * the pin is gone, and nothing was written.
+ */
+export function resolvePin(
+  doc: Doc,
+  pin: string,
+  resolved: boolean
+): string | null {
+  const held = pinsOf(doc).get(pin);
+  if (!held) {
+    return `This pin is gone from the page, so it wasn't ${resolved ? "resolved" : "reopened"}.`;
+  }
+  const { resolvedAt: _was, ...rest } = held;
+  doc.transact(() =>
+    pinsOf(doc).set(
+      pin,
+      resolved ? { ...rest, resolvedAt: new Date().toISOString() } : rest
+    )
+  );
+  return null;
+}
 
 /**
  * How a page looks an anchor up: the element whose dev source is `file` at

@@ -255,34 +255,6 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }
       }
     )
-    // The person's words in a pin's thread, from a client with no doc of its own (the app).
-    .post(
-      "/api/instances/:id/artifacts/comments/:pin/person-reply",
-      {
-        body: t.Object({
-          text: t.String({ minLength: 1, maxLength: COMMENT_LIMITS.text }),
-        }),
-      },
-      ({ params, body }) => {
-        try {
-          return artifacts.personReply(params.id, params.pin, body.text);
-        } catch (error) {
-          return refused(error);
-        }
-      }
-    )
-    // The person resolves a pin, or reopens it, from a client with no doc of its own (the app).
-    .post(
-      "/api/instances/:id/artifacts/comments/:pin/person-resolve",
-      { body: t.Object({ resolved: t.Boolean() }) },
-      ({ params, body }) => {
-        try {
-          return artifacts.personResolve(params.id, params.pin, body.resolved);
-        } catch (error) {
-          return refused(error);
-        }
-      }
-    )
     // Whether a view has it on screen within 10 s, or why not; 503 when its server could not start.
     .post("/api/instances/:id/artifacts/:artifact/show", async ({ params }) => {
       try {

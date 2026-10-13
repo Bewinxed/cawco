@@ -20,7 +20,10 @@
  * 4. comment_read answers both pins; comment_reply on pin 1 is in its card
  *    within 2 s, the live dot showing while the agent's turn runs;
  *    comment_resolve dims pin 1 to 40% and moves it to Resolved; Reopen
- *    brings it back.
+ *    brings it back. A host that holds no doc (the app) posts `cawco:reply`
+ *    and `cawco:resolve` into the page: pin 1's doc takes a person's entry
+ *    and a resolve then a reopen, each answered ok, and a gone pin answers
+ *    the refusal's sentence.
  * 5. A re-publish that moves and rewords the paragraph re-anchors pin 1 by
  *    its source's file:line; one that renames it and drops its source,
  *    keeping its text, re-anchors it by text; one that removes it puts pin 1
@@ -255,6 +258,7 @@ const run = async (kit: Kit) => {
   }
   await sendChecks(on, frame, one);
   await agentChecks(on, frame, one, two);
+  await hostChecks(on, frame, one);
   await anchorChecks(on, frame, id, one);
   await cutoverCheck(kit);
   kit.check(
@@ -596,6 +600,76 @@ const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
     `resolvedAt ${String(reopened?.resolvedAt)}; open row ${back}`
   );
   await on.page.keyboard.press("Escape");
+};
+
+/**
+ * 4. A host that holds no doc (the app) posts `cawco:reply` and
+ * `cawco:resolve` into the page: the overlay writes them on its own doc and
+ * answers each with its result, a gone pin with the refusal's sentence.
+ */
+const hostChecks = async (on: On, frame: Frame, one: string) => {
+  const iframe = await frame.frameElement();
+  const ask = (message: object, type: string) =>
+    on.page.evaluate(
+      ([el, sent, answer]) =>
+        new Promise<Record<string, unknown> | null>((resolve) => {
+          const win = (el as HTMLIFrameElement).contentWindow;
+          if (!win) {
+            resolve(null);
+            return;
+          }
+          const listen = (event: MessageEvent) => {
+            if (event.source === win && event.data?.type === answer) {
+              removeEventListener("message", listen);
+              resolve(event.data);
+            }
+          };
+          addEventListener("message", listen);
+          win.postMessage(sent, location.origin);
+          setTimeout(() => resolve(null), 5000);
+        }),
+      [iframe, message, type] as const
+    );
+  type Thread = { by: string; text: string }[];
+  const pinNow = async () =>
+    ((await docOf(frame)).pins[one] ?? {}) as {
+      resolvedAt?: string;
+      thread?: Thread;
+    };
+  const replied = await ask(
+    { type: "cawco:reply", pin: one, text: "From the app." },
+    "cawco:reply-result"
+  );
+  const entry = (await pinNow()).thread?.at(-1);
+  const resolved = await ask(
+    { type: "cawco:resolve", pin: one, resolved: true },
+    "cawco:resolve-result"
+  );
+  const { resolvedAt } = await pinNow();
+  const reopened = await ask(
+    { type: "cawco:resolve", pin: one, resolved: false },
+    "cawco:resolve-result"
+  );
+  const cleared = !(await pinNow()).resolvedAt;
+  const gone = await ask(
+    { type: "cawco:reply", pin: "no-such-pin", text: "Lost." },
+    "cawco:reply-result"
+  );
+  on.kit.check(
+    "4: the host's cawco:reply and cawco:resolve write pin 1's doc (a person's entry, resolvedAt set then cleared) and answer ok; a gone pin answers the refusal",
+    replied?.pin === one &&
+      replied.ok === true &&
+      entry?.by === "person" &&
+      entry.text === "From the app." &&
+      resolved?.ok === true &&
+      !!resolvedAt &&
+      reopened?.ok === true &&
+      cleared &&
+      gone?.ok === false &&
+      gone.error ===
+        "This pin is gone from the page, so the reply wasn't kept.",
+    `reply ${JSON.stringify(replied)}; entry ${JSON.stringify(entry)}; resolve ${JSON.stringify(resolved)} at ${String(resolvedAt)}; reopen ${JSON.stringify(reopened)} cleared ${cleared}; gone ${JSON.stringify(gone)}`
+  );
 };
 
 /** 5. Re-anchoring by file:line, by text, the moved tray and Place again. */

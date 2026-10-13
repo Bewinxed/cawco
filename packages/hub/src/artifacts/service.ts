@@ -535,11 +535,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /** Pin `pinId` on one of the session's artifacts, and that artifact; refused when no artifact of the session holds it. */
-  /** `missing`: the sentence a pin no artifact holds is refused with, for whoever asked. */
   const pinOf = (
     instance: InstanceRow,
-    pinId: string,
-    missing = `No artifact of this session holds pin ${pinId}. comment_read lists its pins with their ids.`
+    pinId: string
   ): { pin: Pin; row: ArtifactRow } => {
     for (const row of db.ofInstance(instance.id)) {
       const pin = docs.doc(row.id).getMap("pins").get(pinId) as Pin | undefined;
@@ -547,7 +545,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return { pin, row };
       }
     }
-    throw new ArtifactRefusal(404, missing);
+    throw new ArtifactRefusal(
+      404,
+      `No artifact of this session holds pin ${pinId}. comment_read lists its pins with their ids.`
+    );
   };
 
   const writePage = (id: string, html: string) => {
@@ -1585,60 +1586,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         : pin.thread;
       docs.transact(row.id, "hub", (doc) =>
         doc.getMap("pins").set(pin.id, { ...pin, thread, resolvedAt: at })
-      );
-      return { pin: pin.id, number: pin.number, resolvedAt: at };
-    },
-
-    /**
-     * The person's words in a pin's thread, from a client that holds no
-     * doc of its own (the app): the entry the web pane's doc write makes
-     * (dashboard artifact-doc.ts `reply`), unsent until the person's Send.
-     */
-    personReply: (
-      instanceId: string,
-      pinId: string,
-      text: string
-    ): { entry: ThreadEntry; number: number; pin: string } => {
-      const { row, pin } = pinOf(
-        sessionOf(instanceId),
-        pinId,
-        "This pin is gone from the page, so the reply wasn't kept."
-      );
-      if (pin.thread.length >= COMMENT_LIMITS.entries) {
-        throw new ArtifactRefusal(
-          409,
-          `This thread holds ${COMMENT_LIMITS.entries} entries, so the reply wasn't kept. Start a new pin.`
-        );
-      }
-      const entry: ThreadEntry = {
-        id: crypto.randomUUID(),
-        by: "person",
-        text,
-        at: new Date().toISOString(),
-      };
-      docs.transact(row.id, "hub", (doc) =>
-        doc
-          .getMap("pins")
-          .set(pin.id, { ...pin, thread: [...pin.thread, entry] })
-      );
-      return { pin: pin.id, number: pin.number, entry };
-    },
-
-    /** The person resolves a pin, or reopens it (dashboard artifact-doc.ts `resolve`). */
-    personResolve: (
-      instanceId: string,
-      pinId: string,
-      resolved: boolean
-    ): { number: number; pin: string; resolvedAt: string | null } => {
-      const { row, pin } = pinOf(
-        sessionOf(instanceId),
-        pinId,
-        `This pin is gone from the page, so it wasn't ${resolved ? "resolved" : "reopened"}.`
-      );
-      const { resolvedAt: _was, ...rest } = pin;
-      const at = resolved ? new Date().toISOString() : null;
-      docs.transact(row.id, "hub", (doc) =>
-        doc.getMap("pins").set(pin.id, at ? { ...rest, resolvedAt: at } : rest)
       );
       return { pin: pin.id, number: pin.number, resolvedAt: at };
     },

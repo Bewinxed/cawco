@@ -10,6 +10,8 @@ import {
   type Pin,
   type PinnedElement,
   pinUnsent,
+  replyToPin,
+  resolvePin,
   type SendPicture,
 } from "@cawco/core/comments";
 import type { InkGroup } from "@cawco/core/ink";
@@ -315,8 +317,33 @@ artifact.watch({
   refused: (reason) => failed("state", reason),
 });
 
-/** The page as the doc has it, before the first paint the page reaches. */
+/** The host's theme, once it said one: "light" or "dark". */
+let hostTheme: "light" | "dark" | null = null;
+
+/**
+ * A page artifact (HTML the agent wrote) draws in the host's theme, never the
+ * OS's (DESIGN.md: the theme follows ours), on its root's `color-scheme` and
+ * `data-theme`; a preview is someone's own app and keeps its own.
+ */
+function themed() {
+  if (!hostTheme || artifact.kind() !== "page") {
+    return;
+  }
+  const root = document.documentElement;
+  root.style.colorScheme = hostTheme;
+  root.dataset.theme = hostTheme;
+}
+
+function takeTheme(said: unknown) {
+  if (said === "light" || said === "dark") {
+    hostTheme = said;
+    themed();
+  }
+}
+
+/** The page as the doc has it, before the first paint the page reaches; a morph's new root takes the theme again. */
 function filled() {
+  themed();
   reflect();
   if (keepsFields()) {
     fillFields(artifact.state());
@@ -1006,6 +1033,29 @@ type HostMessage = Record<string, unknown>;
 const idOf = (message: HostMessage) =>
   typeof message.id === "string" ? message.id : null;
 
+/**
+ * The person's write on pin `message.pin`, once the doc holds the hub's
+ * state, answered as `result` with `ok`, or the refusal's sentence. A message
+ * naming no pin has nothing to answer under.
+ */
+async function personWrite(
+  message: HostMessage,
+  result: "cawco:reply-result" | "cawco:resolve-result",
+  write: (pin: string) => string | null
+) {
+  const { pin } = message;
+  if (typeof pin !== "string") {
+    return;
+  }
+  if (!artifact.keeps()) {
+    post(result, { pin, ok: false, error: NO_ARTIFACT });
+    return;
+  }
+  await artifact.whenKnown();
+  const error = write(pin);
+  post(result, error ? { pin, ok: false, error } : { pin, ok: true });
+}
+
 /** What each of the host's messages does, by its type. */
 const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
   {
@@ -1019,7 +1069,25 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       if (!artifact.join(named.artifact, named.sync)) {
         failed("artifact", NO_ARTIFACT);
       }
+      takeTheme(message.theme);
     },
+    "cawco:theme": (message) => takeTheme(message.theme),
+    // A host that holds no doc of its own (the app) writes the person's reply
+    // and resolve through this page's, by the one write core keeps.
+    "cawco:reply": (message) =>
+      personWrite(message, "cawco:reply-result", (pin) =>
+        replyToPin(
+          artifact.doc(),
+          pin,
+          typeof message.text === "string" ? message.text : ""
+        )
+      ),
+    "cawco:resolve": (message) =>
+      personWrite(message, "cawco:resolve-result", (pin) =>
+        typeof message.resolved === "boolean"
+          ? resolvePin(artifact.doc(), pin, message.resolved)
+          : "A resolve says resolved or reopened, so the pin wasn't changed."
+      ),
     "cawco:mode": (message) =>
       mode(
         message.mode === "comment",

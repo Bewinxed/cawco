@@ -44,6 +44,13 @@
  * 14. A preview of a port nothing listens on answers `opened: false` with
  *    the server sentence within 10 s, and the pane draws its failure.
  *
+ * The theme follows ours (DESIGN.md, Artifact panel, canvas and ink):
+ *
+ * 18. The fields page's root reads `data-theme` and `color-scheme` light
+ *    from the pane's hello, dark after the dashboard's switch flips to dark,
+ *    light after it flips back; a preview of a live port keeps its root
+ *    untouched through the same flips.
+ *
  * `artifact_promote` (slice 6), read from the project's folder on the hub
  * with git:
  *
@@ -749,6 +756,107 @@ interface OnSession {
   session: string;
 }
 
+/** A frame's root as the theme writes it: `data-theme` and the computed `color-scheme`. */
+const rootTheme = (frame: Frame) =>
+  frame.evaluate(() => ({
+    data: document.documentElement.dataset.theme ?? null,
+    inline: document.documentElement.style.colorScheme || null,
+    scheme: getComputedStyle(document.documentElement).colorScheme,
+  }));
+
+/** The dashboard's theme switch (the sidebar's), pressed from `from` to the other scheme. */
+const flipTheme = (page: Page, from: "light" | "dark") =>
+  page
+    .getByRole("button", {
+      name: from === "light" ? "Light mode" : "Dark mode",
+    })
+    .first()
+    .click();
+
+/**
+ * 18. A page artifact draws in the dashboard's theme (DESIGN.md: the theme
+ * follows ours): its root reads `data-theme` and `color-scheme` light from
+ * the pane's hello, dark after the dashboard flips to dark, light again
+ * after it flips back. A preview is someone's own app: its root is untouched.
+ */
+const themeChecks = async (
+  { kit, page, call }: Pick<OnSession, "call" | "kit" | "page">,
+  pageFrame: Frame
+) => {
+  const turned = (frame: Frame, scheme: "light" | "dark") =>
+    until(
+      `the page's root ${scheme}`,
+      () => rootTheme(frame),
+      (root) => root.data === scheme && root.scheme === scheme,
+      5000
+    ).catch(() => rootTheme(frame));
+  const hello = await turned(pageFrame, "light");
+  await flipTheme(page, "light");
+  const dark = await turned(pageFrame, "dark");
+  await flipTheme(page, "dark");
+  const light = await turned(pageFrame, "light");
+  kit.check(
+    "18: a page artifact's root reads data-theme and color-scheme light from the hello, dark after the dashboard flips to dark, light after it flips back",
+    hello.data === "light" &&
+      hello.scheme === "light" &&
+      dark.data === "dark" &&
+      dark.scheme === "dark" &&
+      light.data === "light" &&
+      light.scheme === "light",
+    `hello ${JSON.stringify(hello)}; dark ${JSON.stringify(dark)}; light ${JSON.stringify(light)}`
+  );
+
+  const app = Bun.serve({
+    port: 0,
+    fetch: () =>
+      new Response(
+        '<!doctype html><html lang="en"><head><title>Own app</title></head><body><p id="own-app">Its own app.</p></body></html>',
+        { headers: { "content-type": "text/html" } }
+      ),
+  });
+  try {
+    await call(CREATE, { kind: "preview", name: "own-app", port: app.port });
+    const frames = page.locator('iframe[title="Preview"]');
+    await until(
+      "the panel's one frame showing the preview, its overlay in it",
+      async () =>
+        (await frames.count()) === 1 &&
+        (await page
+          .frameLocator('iframe[title="Preview"]')
+          .locator("#own-app")
+          .count()) === 1 &&
+        (await page
+          .frameLocator('iframe[title="Preview"]')
+          .locator("cawco-overlay")
+          .count()),
+      (found) => found === 1,
+      60_000
+    );
+    const previewFrame = await (await frames.elementHandle())?.contentFrame();
+    if (!previewFrame) {
+      kit.check("18: the preview's frame has a document", false, "none");
+      return;
+    }
+    const before = await rootTheme(previewFrame);
+    await flipTheme(page, "light");
+    // The flip's message reaches the page within a frame or two; give it ample.
+    await settle(page, 500);
+    const flipped = await rootTheme(previewFrame);
+    await flipTheme(page, "dark");
+    await settle(page, 500);
+    const back = await rootTheme(previewFrame);
+    kit.check(
+      "18: a preview's root is untouched by the hello and both flips: no data-theme, no inline color-scheme",
+      [before, flipped, back].every(
+        (root) => root.data === null && root.inline === null
+      ),
+      `before ${JSON.stringify(before)}; dark ${JSON.stringify(flipped)}; light ${JSON.stringify(back)}`
+    );
+  } finally {
+    await app.stop(true);
+  }
+};
+
 /** One entry of a read, or none. */
 const entryOf = (answer: Read, key: string) =>
   answer.state[key] as Read["state"][string] | undefined;
@@ -977,6 +1085,8 @@ const fieldChecks = async ({
     rpc.length === 0,
     rpc.slice(0, 4).join(" | ") || "none"
   );
+
+  await themeChecks({ kit, page, call }, fieldFrame);
 
   // 14. A preview of a port nothing listens on: the pane's word is the failure.
   const freed = Bun.serve({ port: 0, fetch: () => new Response() });
