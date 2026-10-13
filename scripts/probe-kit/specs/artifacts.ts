@@ -15,7 +15,8 @@
  *    reads it back (the other option marked).
  * 5. The session hears the person's change as one message, after the 3 s
  *    quiet, and nothing for the agent's own patch.
- * 6. `show_preview` is not among the session's tools; the artifact tools are.
+ * 6. No cawco tool about previews or choices is among the session's tools
+ *    (the ones the artifact tools replaced); the artifact tools are.
  */
 import type { Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
@@ -25,6 +26,8 @@ const CREATE = "mcp__cawco__artifact_create";
 const UPDATE = "mcp__cawco__artifact_update";
 const COMMAND = /PROBE-CALL:(\d+)/g;
 const CHANGED = "I changed my picks";
+/** A cawco tool named for previews or choices: the tools the artifact tools replaced. */
+const PREVIEW_TOOL = /mcp__cawco__\w*(?:preview|choices)\w*/g;
 /** The id in artifact_create's answer, as the tool result carries it. */
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 /** The quiet the hub waits for before it tells the session (artifacts/service.ts). */
@@ -286,13 +289,16 @@ const run = async (kit: Kit) => {
     .flatMap((one) => [...one.toolNames, one.all]);
   const names = (tool: string) =>
     offered.some((each) => each.includes(`mcp__cawco__${tool}`));
+  const strays = [
+    ...new Set(offered.flatMap((each) => each.match(PREVIEW_TOOL) ?? [])),
+  ];
   kit.check(
-    "6: show_preview is not in the tool list; the artifact tools are",
-    !(names("show_preview") || names("read_choices")) &&
+    "6: no preview or choices tool is in the tool list; the artifact tools are",
+    strays.length === 0 &&
       ["artifact_create", "artifact_update", "artifact_read", "artifact_show"]
         .map(names)
         .every(Boolean),
-    `show_preview ${names("show_preview")}, read_choices ${names("read_choices")}, artifact_read ${names("artifact_read")}`
+    `preview or choices tools: ${strays.join(", ") || "none"}; artifact_read ${names("artifact_read")}`
   );
 };
 
