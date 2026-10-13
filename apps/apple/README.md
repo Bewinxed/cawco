@@ -71,9 +71,14 @@ bash apps/apple/scripts/mac-slot.sh sim [--runtime <id>] [--device <type>] -- <c
 bash apps/apple/scripts/mac-slot.sh build -- bash apps/apple/scripts/mac-slot.sh sim -- sh -c 'xcodebuild test -destination "id=$CAWCO_SIM_UDID" ...'
 ```
 
-The simulator ("CawCo slot 1" or "2") is created and booted for the command,
+The simulator ("CawCo slot 1" or "2") is cloned and booted for the command,
 then shut down and deleted when it ends, or when its caller dies (SIGKILL
-too). Nest the build slot outside the simulator slot; the other order is
+too). It is a clone of a template ("CawCo template <device type> <runtime
+build> v<n>", kept shut down) that has already booted once and sat through
+iOS's first-boot work (Photos, widgets, asset downloads) until its data
+folder stopped changing, so the clone starts without that work. The first
+slot to need a device type on a runtime build makes its template, which
+takes minutes; a runtime update makes a new one and deletes the old. Nest the build slot outside the simulator slot; the other order is
 refused, since it could wait on a slot its own caller holds.
 
 ## TestFlight

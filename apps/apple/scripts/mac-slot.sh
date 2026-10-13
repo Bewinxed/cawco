@@ -3,14 +3,18 @@
 # builds outside build-both.sh go through mac-slot.sh.
 #
 #   mac-slot.sh build -- <cmd...>
-#   mac-slot.sh sim [--runtime <id>] [--device <type>] -- <cmd...>
+#   mac-slot.sh sim [--runtime <id>] [--device <type name or id>] -- <cmd...>
+#
+# --device takes a device type's name ("iPhone 16 Pro Max") or its
+# identifier (com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro-Max).
 #
 # build: the one Mac build slot, the same lock build-both.sh and TestFlight's
 # archive hold, so the Mac runs at most one Xcode build at a time.
-# sim: one of two simulator slots. It creates and boots a simulator named
-# "CawCo slot <n>" (by default the newest iPhone Pro whose runtime meets
-# project.yml's iOS target, as build-both.sh picks), runs the command with
-# CAWCO_SIM_UDID set, then shuts the simulator down and deletes it.
+# sim: one of two simulator slots. It clones a simulator named "CawCo slot
+# <n>" from a settled template (below) and boots it (by default the newest
+# iPhone Pro whose runtime meets project.yml's iOS target, as build-both.sh
+# picks), runs the command with CAWCO_SIM_UDID set, then shuts the simulator
+# down and deletes it.
 # A waiter prints a WAITING line every 60 s.
 #
 # Nesting: build outside, sim inside (mac-slot.sh build -- mac-slot.sh sim --
@@ -28,7 +32,7 @@ set -euo pipefail
 
 LOCKS=$HOME/.cawco/workspace-cache/xdg/cawco-apple/.locks
 usage() {
-  echo "usage: mac-slot.sh build -- <cmd...> | mac-slot.sh sim [--runtime <id>] [--device <type>] -- <cmd...>" >&2
+  echo "usage: mac-slot.sh build -- <cmd...> | mac-slot.sh sim [--runtime <id>] [--device <type name or id>] -- <cmd...>" >&2
   exit 2
 }
 MODE=${1:-}
@@ -169,7 +173,140 @@ SLOT=${reply#SLOT }
 
 # Commands below close fds 3 and 4: only this shell may hold the keeper's
 # link, or a killed caller's EOF never reaches it.
+
+# A slot's simulator is a clone (simctl clone) of a template of its device
+# type and runtime: a device that booted once, took the settings below, sat
+# through iOS's first-boot work (Photos, widgets, Spotlight and the rest:
+# minutes of several cores) until its data folder stopped changing, and shut
+# down. The clone carries the template's data folder, so it boots without
+# that work. A template is made on first need under the template lock and
+# named for its device type, runtime build and TEMPLATE_VERSION ("CawCo
+# template iPhone-16-Pro 22F77 v1"): a runtime update or a new version makes a
+# new one and deletes the old. While it is made it is the slot's simulator
+# ("CawCo slot <n>"), so a caller that dies leaves the keeper to delete it.
+# Bump TEMPLATE_VERSION when the settings change.
+# Settling, as measured on iOS 18.5 (iPhone 16 Pro, 2026-10-13): the storm
+# (STExtractionService, mobileassetd's asset downloads, nsurlsessiond,
+# thousands of files a look) ends about 2 min after boot; a second wave
+# (MobileAsset, CoreSpotlight, Avatar, dataaccessd) runs at 9 to 11 min; after
+# that a trickle of 0 to 3 files a look (xpc activity plists) never stops.
+TEMPLATE_VERSION=1
+SETTLE_EVERY=15   # s between looks at the template's data folder
+SETTLE_FLOOR=720  # s settling (after boot finishes) before a look can count as quiet: past the second wave
+SETTLE_TRICKLE=3  # files written in a look that still count as quiet
+SETTLE_QUIET=4    # quiet looks in a row: settled
+SETTLE_LIMIT=1800 # s: a template still writing then fails the slot
+fail() {
+  echo "mac-slot: $*" >&2
+  exit 1
+}
+device_field() { # <udid> <field>: the device's field in simctl's list
+  xcrun simctl list devices -j | /usr/bin/python3 -I -c '
+import json, sys
+for devices in json.load(sys.stdin)["devices"].values():
+    for d in devices:
+        if d["udid"] == sys.argv[1]:
+            print(d[sys.argv[2]])
+' "$1" "$2"
+}
+# Waits until the device's data folder (aside from its unified log store,
+# which any process writes to, and tmp and var/run, which boot clears) has had
+# at most SETTLE_TRICKLE files written in each of SETTLE_QUIET looks in a row,
+# past SETTLE_FLOOR.
+settle() { # <udid>
+  local data stamp quiet=0 waited=0 written=0
+  data=$(device_field "$1" dataPath) && [[ -d $data ]] || fail "no data folder for $1"
+  stamp=$(mktemp "${TMPDIR:-/tmp}/mac-slot-settle.XXXXXX") || fail "mktemp failed"
+  while ((quiet < SETTLE_QUIET)); do
+    if ((waited >= SETTLE_LIMIT)); then
+      rm -f "$stamp"
+      fail "$TEMPLATE did not settle in $SETTLE_LIMIT s: $written files written in its last $SETTLE_EVERY s"
+    fi
+    touch "$stamp"
+    sleep "$SETTLE_EVERY"
+    waited=$((waited + SETTLE_EVERY))
+    written=$(find "$data" -type f -newer "$stamp" ! -path "$data/var/db/diagnostics/*" ! -path "$data/var/db/uuidtext/*" ! -path "$data/tmp/*" ! -path "$data/var/run/*" 2>/dev/null | wc -l | tr -d ' ')
+    if ((waited > SETTLE_FLOOR && written <= SETTLE_TRICKLE)); then quiet=$((quiet + 1)); else quiet=0; fi
+    if ((waited % 60 == 0)); then
+      echo "mac-slot: settling $TEMPLATE: $waited s, $written files written in the last $SETTLE_EVERY s" >&2
+    fi
+  done
+  rm -f "$stamp"
+  echo "mac-slot: $TEMPLATE settled after $waited s" >&2
+}
+make_template() { # the new template's UDID
+  local udid
+  echo "mac-slot: making $TEMPLATE: first boot, then settling (minutes)" >&2
+  udid=$(xcrun simctl create "CawCo slot $SLOT" "$TYPE" "$RUNTIME") || fail "cannot create a $TYPE on $RUNTIME for $TEMPLATE"
+  xcrun simctl boot "$udid" || fail "cannot boot $TEMPLATE ($udid)"
+  xcrun simctl bootstatus "$udid" -b >/dev/null || fail "$TEMPLATE ($udid) did not finish booting"
+  # The probes' settings: the keyboard's first-use tips ("Speed up your
+  # typing…") would cover what a capture shows; light appearance.
+  xcrun simctl spawn "$udid" defaults write com.apple.keyboard.preferences DidShowContinuousPathIntroduction -bool true &&
+    xcrun simctl spawn "$udid" defaults write com.apple.keyboard.preferences KeyboardDidShowProductivityTutorial -bool true &&
+    xcrun simctl ui "$udid" appearance light || fail "cannot write $TEMPLATE's settings"
+  settle "$udid"
+  xcrun simctl shutdown "$udid" || fail "cannot shut $TEMPLATE ($udid) down"
+  xcrun simctl rename "$udid" "$TEMPLATE" || fail "cannot name $udid $TEMPLATE"
+  echo "$udid"
+}
+slot_sim() { # the slot's new simulator's UDID, cloned from its template
+  local template= line out now next=0
+  trap '[[ $(cat "$LOCKS/template" 2>/dev/null) != $$ ]] || rm -f "$LOCKS/template.owner" "$LOCKS/template"' EXIT
+  until shlock -p $$ -f "$LOCKS/template"; do
+    now=$(date +%s)
+    if ((now >= next)); then
+      echo "WAITING for the simulator template lock: $(cat "$LOCKS/template.owner" 2>/dev/null || echo unknown) holds it" >&2
+      next=$((now + 60))
+    fi
+    sleep 5
+  done
+  echo "$LABEL" >"$LOCKS/template.owner"
+  # This template if it is ready; templates for this device type and runtime
+  # from another runtime build or version, a half-made one, and those whose
+  # runtime is gone, deleted.
+  out=$(xcrun simctl list devices -j | /usr/bin/python3 -I -c '
+import json, sys
+name, runtime, kind = sys.argv[1:4]
+kept = False
+for rt, devices in json.load(sys.stdin)["devices"].items():
+    for d in devices:
+        if not d["name"].startswith("CawCo template "):
+            continue
+        if not kept and d["name"] == name and d["state"] == "Shutdown" and d["isAvailable"]:
+            kept = True
+            print("keep", d["udid"])
+        elif d["name"] == name or not d["isAvailable"] or (rt == runtime and d["deviceTypeIdentifier"] == kind):
+            print("drop", d["udid"])
+' "$TEMPLATE" "$RUNTIME" "$TYPE") || fail "cannot list simulators"
+  while read -r line; do
+    case $line in
+      keep\ *) template=${line#keep } ;;
+      drop\ *)
+        xcrun simctl delete "${line#drop }" || fail "cannot delete the old template ${line#drop }"
+        echo "mac-slot: deleted old template ${line#drop }" >&2 ;;
+    esac
+  done <<<"$out"
+  [[ -n $template ]] || template=$(make_template) || exit 1
+  out=$(xcrun simctl clone "$template" "CawCo slot $SLOT" 2>&1) || fail "cannot clone $TEMPLATE ($template) for slot $SLOT: $out"
+  [[ $out =~ ^[0-9A-F-]{36}$ ]] || fail "cloning $TEMPLATE ($template) for slot $SLOT gave no UDID: $out"
+  echo "$out"
+}
+
 if [[ $MODE == sim ]]; then
+  # --device by name or identifier: its identifier from here on.
+  if [[ -n $TYPE ]]; then
+    GIVEN=$TYPE
+    TYPE=$(xcrun simctl list devicetypes -j 3>&- 4<&- | /usr/bin/python3 -I -c '
+import json, sys
+given = sys.argv[1]
+for t in json.load(sys.stdin)["devicetypes"]:
+    if given in (t["name"], t["identifier"]):
+        print(t["identifier"])
+        break
+' "$TYPE") || fail "cannot list simulator device types"
+    [[ -n $TYPE ]] || fail "no simulator device type is named or identified \"$GIVEN\" (xcrun simctl list devicetypes)"
+  fi
   if [[ -z $RUNTIME || -z $TYPE ]]; then
     MIN_IOS=$(sed -n 's/^ *iOS: "\([0-9.]*\)"$/\1/p' "$(dirname "$0")/../project.yml" | head -1)
     PICK=$(/usr/bin/python3 -c '
@@ -194,10 +331,18 @@ print(best[1], best[2])
 ' "$RUNTIME" "$TYPE" "$MIN_IOS" 3>&- 4<&-)
     read -r RUNTIME TYPE <<<"$PICK"
   fi
-  CAWCO_SIM_UDID=$(xcrun simctl create "CawCo slot $SLOT" "$TYPE" "$RUNTIME" 3>&- 4<&-)
+  BUILD=$(xcrun simctl list runtimes -j 3>&- 4<&- | /usr/bin/python3 -I -c '
+import json, sys
+for r in json.load(sys.stdin)["runtimes"]:
+    if r["identifier"] == sys.argv[1] and r["isAvailable"]:
+        print(r["buildversion"])
+' "$RUNTIME") || fail "cannot list simulator runtimes"
+  [[ -n $BUILD ]] || fail "runtime $RUNTIME is not installed"
+  TEMPLATE="CawCo template ${TYPE#com.apple.CoreSimulator.SimDeviceType.} $BUILD v$TEMPLATE_VERSION"
+  CAWCO_SIM_UDID=$(slot_sim 3>&- 4<&-) || exit 1
   xcrun simctl boot "$CAWCO_SIM_UDID" 3>&- 4<&-
   xcrun simctl bootstatus "$CAWCO_SIM_UDID" -b >/dev/null 3>&- 4<&-
-  echo "SIMULATOR CawCo slot $SLOT $CAWCO_SIM_UDID ($TYPE, $RUNTIME)" >&2
+  echo "SIMULATOR CawCo slot $SLOT $CAWCO_SIM_UDID ($TYPE, $RUNTIME, cloned from $TEMPLATE)" >&2
   export CAWCO_SIM_UDID
 fi
 export CAWCO_MAC_SLOT=$MODE

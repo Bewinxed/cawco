@@ -2,8 +2,11 @@
  * A booted iOS Simulator in one of the Mac's two simulator slots
  * (apps/apple/scripts/mac-slot.sh, apps/apple/README.md "The Mac's slots").
  * Every probe that needs a simulator takes it here: the Mac holds at most two
- * booted machine-wide, and each is deleted when its holder ends, however it
- * ends.
+ * booted machine-wide, each a clone of a template that has already sat
+ * through iOS's first boot (so it starts without that storm of work), and
+ * each is deleted when its holder ends, however it ends. The first slot that
+ * needs a device type on a runtime build makes its template, which takes
+ * minutes; mac-slot.sh prints its progress on stderr.
  *
  *   const sim = await macSim({ runtime: IOS_18_5, device: "iPhone 16 Pro" });
  *   … xcrun simctl install ${sim.udid} …
@@ -36,15 +39,15 @@ const SSH = [
   "mac",
 ];
 const UDID = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i;
-const TYPE_ID = "com.apple.CoreSimulator.SimDeviceType.";
 /** The command the slot runs: says the UDID, then holds until its stdin ends. */
 const HOLDER = 'echo "$CAWCO_SIM_UDID"; exec cat >/dev/null';
 
 export interface SimChoice {
   /**
    * Device type: an identifier (com.apple.CoreSimulator.SimDeviceType.…) or
-   * its name ("iPhone 16 Pro"). Unset with `runtime` unset too: mac-slot.sh's
-   * pick, the newest iPhone Pro on a runtime that meets project.yml's target.
+   * its name ("iPhone 16 Pro"), passed to mac-slot.sh's --device, which
+   * resolves either. Unset with `runtime` unset too: mac-slot.sh's pick, the
+   * newest iPhone Pro on a runtime that meets project.yml's target.
    */
   device?: string;
   /**
@@ -70,13 +73,12 @@ const quote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
 const onMac = (ssh: boolean, words: string[]) =>
   ssh ? [...SSH, words.map(quote).join(" ")] : words;
 
-/** The runtime and device type `choice` names, as identifiers. */
+/** The runtime and device type `choice` names: `newest` resolved here, a device name or identifier left to mac-slot.sh's --device. */
 async function resolveChoice(
   ssh: boolean,
   choice: SimChoice
 ): Promise<{ device?: string; runtime?: string }> {
-  const named = choice.device && !choice.device.startsWith(TYPE_ID);
-  if (!(choice.newest || named)) {
+  if (!choice.newest) {
     return { runtime: choice.runtime, device: choice.device };
   }
   const child = Bun.spawn(
@@ -86,31 +88,23 @@ async function resolveChoice(
       "-c",
       `
 import json, re, subprocess, sys
-newest, name, runtime = sys.argv[1:4]
-listed = json.loads(subprocess.run(["xcrun", "simctl", "list", "-j"], capture_output=True, text=True, check=True).stdout)
-if newest:
-    best = None
-    for rt, devices in listed["devices"].items():
-        m = re.search(r"\\.iOS-(\\d+)-(\\d+)$", rt)
-        if not m:
-            continue
-        for d in devices:
-            if d.get("isAvailable") and re.fullmatch(newest, d["name"]):
-                key = (int(m[1]), int(m[2]), d["name"])
-                if best is None or key > best[0]:
-                    best = (key, rt, d["deviceTypeIdentifier"])
-    if best is None:
-        sys.exit("no available simulator matching " + newest)
-    print(best[1], best[2])
-else:
-    kind = next((t["identifier"] for t in listed["devicetypes"] if t["name"] == name), None)
-    if kind is None:
-        sys.exit("no simulator device type named " + name)
-    print(runtime, kind)
+newest = sys.argv[1]
+listed = json.loads(subprocess.run(["xcrun", "simctl", "list", "devices", "-j"], capture_output=True, text=True, check=True).stdout)
+best = None
+for rt, devices in listed["devices"].items():
+    m = re.search(r"\\.iOS-(\\d+)-(\\d+)$", rt)
+    if not m:
+        continue
+    for d in devices:
+        if d.get("isAvailable") and re.fullmatch(newest, d["name"]):
+            key = (int(m[1]), int(m[2]), d["name"])
+            if best is None or key > best[0]:
+                best = (key, rt, d["deviceTypeIdentifier"])
+if best is None:
+    sys.exit("no available simulator matching " + newest)
+print(best[1], best[2])
 `,
-      choice.newest ?? "",
-      choice.device ?? "",
-      choice.runtime ?? "",
+      choice.newest,
     ]),
     { stdout: "pipe", stderr: "pipe" }
   );
