@@ -76,11 +76,18 @@ const reach = async (
   return response;
 };
 
-/** The proxy owns credentials, so a harness never sees an OAuth discovery challenge. */
+/**
+ * The hub's sign-in is missing: 503, never 401. The proxy is the upstream's
+ * OAuth client and asks its own callers for no authorization, so a harness is
+ * never told to authorize. A 401 sends every harness's MCP client into
+ * discovery and Dynamic Client Registration against the proxy's origin (the
+ * machine's gateway or the hub), where no `/register` exists; Claude Code then
+ * reports "Dynamic Client Registration rejected (HTTP 404)" and keeps the
+ * server in its needs-auth cache for 15 minutes, past the hub's sign-in.
+ */
 const signedOut = () =>
   new Response("Sign in to this server from Configure → MCP servers.", {
-    status: 401,
-    headers: { "WWW-Authenticate": 'Bearer realm="CawCo fleet"' },
+    status: 503,
   });
 
 export class FleetMcp {
@@ -511,6 +518,7 @@ export class FleetMcp {
         clientInformation: row.tokenClient,
         refreshToken: row.tokens.refresh_token,
         resource: new URL(row.resource.resource),
+        fetchFn: reach,
       });
       if (!this.#current(row)) {
         throw new Error("Server changed.");
@@ -533,7 +541,12 @@ export class FleetMcp {
       };
       this.#db.putMcpOauth(updated);
       return updated;
-    } catch {
+    } catch (error) {
+      // A token endpoint that did not answer refused nothing: the sign-in
+      // stays, and the request that needed it is answered 502 to retry.
+      if (unreachable(error)) {
+        throw error;
+      }
       const current = this.#db.getMcpOauth(row.name);
       if (
         this.#current(row) &&
