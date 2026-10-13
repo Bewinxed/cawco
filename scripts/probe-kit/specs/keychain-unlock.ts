@@ -26,13 +26,18 @@
  * (DLDBListCFPref.cpp `getPwInfo(kHomeDir)`,
  * github.com/apple-oss-distributions/Security, OSX/libsecurity_keychain/lib).
  *
- * The owner's own keychains are never named. Every `security` call that
- * names a keychain goes through {@link inScratch}, which runs it with HOME
- * set to the scratch HOME and refuses any path outside it or under the real
- * home's Library; the scratch HOME itself is refused if it is, holds, or sits
- * under the real home's Library. The real user's search list is read (no
- * path named) before, right after the scratch list is set, and at the end,
- * and must never move.
+ * The owner's own keychains are named by one call only. Every `security`
+ * call on the scratch keychain goes through {@link inScratch}, which runs it
+ * with HOME set to the scratch HOME and refuses any path outside it or under
+ * the real home's Library; the scratch HOME itself is refused if it is,
+ * holds, or sits under the real home's Library. The real user's search list
+ * is captured as exact paths before anything runs ({@link captureOwnerList}),
+ * and read again right after the scratch list is set, before delete-keychain
+ * and after it. If the scratch list wrote through to the real user's domain
+ * (should cfprefsd key it by uid, not HOME), the list is restored at once
+ * with `list-keychains -d user -s <the captured paths>`, the one call under
+ * the real HOME that names a keychain, and {@link ownerSecurity} allows it
+ * with exactly those paths and nothing else.
  */
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, realpathSync } from "node:fs";
@@ -157,17 +162,108 @@ const scratchSearchList = (home: string): Promise<Said> => {
   return securityAs(home, ["list-keychains", "-d", "user"]);
 };
 
-/** The real user's keychain search list, read under the real HOME; names no keychain. */
-async function ownerSearchList(): Promise<string> {
-  const child = Bun.spawn(
-    ["/usr/bin/security", "list-keychains", "-d", "user"],
-    { stdout: "pipe", stderr: "pipe" }
-  );
-  const [out, code] = await Promise.all([
+const OWNER_READ = ["list-keychains", "-d", "user"] as const;
+/** One line of `list-keychains`: a path in double quotes. */
+const LISTED_PATH = /^\s*"(.+)"\s*$/;
+
+/** `list-keychains` output as its exact paths; throws on any line it cannot read as one. */
+function listedPaths(out: string): string[] {
+  return out
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line) => {
+      const path = LISTED_PATH.exec(line)?.[1];
+      if (path === undefined) {
+        throw new Error(
+          `Refusing: a line of the real user's search list is not a quoted path, so it could not be restored exactly: ${JSON.stringify(line)}`
+        );
+      }
+      return path;
+    });
+}
+
+const sameList = (a: readonly string[], b: readonly string[]): boolean =>
+  a.length === b.length && a.every((path, i) => path === b[i]);
+
+/** The real user's search list, captured once; the one baseline a restore may name. */
+let ownerBaseline: readonly string[] | null = null;
+
+/**
+ * The only `security` call under the real HOME, and it allows exactly two:
+ * the read `list-keychains -d user`, which names no keychain, and the
+ * restore `list-keychains -d user -s <the captured paths>`, in their
+ * captured order and nothing else. Every other call is refused before it runs.
+ */
+async function ownerSecurity(args: readonly string[]): Promise<Said> {
+  const read =
+    args.length === OWNER_READ.length &&
+    OWNER_READ.every((word, i) => args[i] === word);
+  const restore =
+    ownerBaseline !== null &&
+    args.length === OWNER_READ.length + 1 + ownerBaseline.length &&
+    OWNER_READ.every((word, i) => args[i] === word) &&
+    args[OWNER_READ.length] === "-s" &&
+    sameList(args.slice(OWNER_READ.length + 1), ownerBaseline);
+  if (!(read || restore)) {
+    throw new Error(
+      "Refusing: under the real HOME only the search list's read and its restore to the captured paths may run."
+    );
+  }
+  const child = Bun.spawn(["/usr/bin/security", ...args], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [out, err, code] = await Promise.all([
     new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
     child.exited,
   ]);
-  return `exit ${code}: ${out.trim()}`;
+  return { code, out: out.trim(), err: err.trim() };
+}
+
+/** The real user's search list now, as exact paths; throws when it cannot be read. */
+async function readOwnerList(): Promise<string[]> {
+  const said = await ownerSecurity(OWNER_READ);
+  if (said.code !== 0) {
+    throw new Error(
+      `security list-keychains -d user (the real user's) exited ${said.code}: ${said.err}`
+    );
+  }
+  return listedPaths(said.out);
+}
+
+/**
+ * Captures the real user's search list before anything runs, and squares it
+ * with that capture later: a list found moved is restored at once to the
+ * captured paths, read again, and both are printed. Each move found is kept.
+ */
+async function captureOwnerList() {
+  if (ownerBaseline !== null) {
+    throw new Error(
+      "Refusing: the real user's search list is captured once per run."
+    );
+  }
+  const baseline = Object.freeze(await readOwnerList());
+  ownerBaseline = baseline;
+  const moves: string[] = [];
+  return {
+    baseline,
+    moves,
+    read: readOwnerList,
+    /** Restores the captured list if it moved; the move's account, or undefined when it had not. */
+    squareUp: async (when: string): Promise<string | undefined> => {
+      const found = await readOwnerList();
+      if (sameList(found, baseline)) {
+        return;
+      }
+      const restored = await ownerSecurity([...OWNER_READ, "-s", ...baseline]);
+      const now = await readOwnerList();
+      const account = `${when}: the real user's search list had moved. Captured: ${JSON.stringify(baseline)}. Found: ${JSON.stringify(found)}. Restore exited ${restored.code}${restored.err ? ` (${restored.err})` : ""}. Read again: ${JSON.stringify(now)}${sameList(now, baseline) ? ", as captured" : ", STILL NOT AS CAPTURED"}.`;
+      console.log(`  ${account}`);
+      moves.push(account);
+      return account;
+    },
+  };
 }
 
 /** The user name the agent files its Keychain item under (agent/src/accounts.ts `keychainUser`). */
@@ -249,7 +345,12 @@ const spec: Spec = {
         "keychain-unlock cannot run inside a CawCo workspace: its boundary denies the keychain's mach services (boundary-policy.ts KEYCHAIN_MACH_SERVICES). Run it from a shell on the Mac, over ssh."
       );
     }
-    const ownerBefore = await ownerSearchList();
+    // Before anything runs: a list that cannot be read exactly cannot be
+    // restored, so the run stops here.
+    const owner = await captureOwnerList();
+    kit.note(
+      `the real user's search list, captured: ${JSON.stringify(owner.baseline)}`
+    );
 
     const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
     const { home } = fleet;
@@ -303,11 +404,14 @@ const spec: Spec = {
         ["list-keychains", "-d", "user", "-s", keychain],
         keychain
       );
-      const ownerMid = await ownerSearchList();
-      if (ownerMid !== ownerBefore) {
-        throw new Error(
-          `Stopped: setting the scratch HOME's search list moved the real user's. Before: ${ownerBefore}. Now: ${ownerMid}.`
-        );
+      // If the scratch HOME's list wrote through to the real user's (should
+      // cfprefsd key the user domain by uid, not HOME), it is restored now
+      // and the run stops.
+      const movedMid = await owner.squareUp(
+        "after the scratch HOME's search list was set"
+      );
+      if (movedMid) {
+        throw new Error(`Stopped: ${movedMid}`);
       }
       const added = await inScratch(
         home,
@@ -502,27 +606,58 @@ const spec: Spec = {
         `auth ${after?.auth}`
       );
     } finally {
-      if (made) {
-        const deleted = await inScratch(
-          home,
-          ["delete-keychain", keychain],
-          keychain
-        );
-        console.log(
-          `  teardown: security delete-keychain (scratch) exited ${deleted.code}${deleted.err ? `: ${deleted.err}` : ""}`
-        );
-      }
-      // The fleet's PIDs stop and its HOME, sandbox and runtime dir go when
-      // the spec ends, failed or not (kit.ts `fleet`: `close` by PID, then
-      // `clean`).
-      const ownerAfter = await ownerSearchList();
-      kit.check(
-        "the real user's keychain search list is what it was before the run",
-        ownerAfter === ownerBefore,
-        JSON.stringify({ ownerBefore, ownerAfter })
-      );
+      await tearDown(kit, owner, made ? { home, keychain } : null);
     }
   },
 };
+
+/**
+ * Teardown, on failure too: the real user's list squared with its capture
+ * before the scratch keychain goes, so it never points at a deleted keychain,
+ * and again after, since deleting edits a search list too; then the checks
+ * that it never moved and ends as captured. The fleet's PIDs stop and its
+ * HOME, sandbox and runtime dir go after the spec (kit.ts `fleet`: `close` by
+ * PID, then `clean`).
+ */
+async function tearDown(
+  kit: Kit,
+  owner: Awaited<ReturnType<typeof captureOwnerList>>,
+  made: { home: string; keychain: string } | null
+): Promise<void> {
+  const squared = async (when: string) => {
+    try {
+      await owner.squareUp(when);
+    } catch (error) {
+      kit.check(
+        `the real user's search list could be squared ${when}`,
+        false,
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  };
+  await squared("before delete-keychain");
+  if (made) {
+    const deleted = await inScratch(
+      made.home,
+      ["delete-keychain", made.keychain],
+      made.keychain
+    );
+    console.log(
+      `  teardown: security delete-keychain (scratch) exited ${deleted.code}${deleted.err ? `: ${deleted.err}` : ""}`
+    );
+  }
+  await squared("after delete-keychain");
+  kit.check(
+    "the real user's keychain search list never moved during the run",
+    owner.moves.length === 0,
+    owner.moves.join(" | ") || JSON.stringify(owner.baseline)
+  );
+  const ending = await owner.read().catch((error: unknown) => error);
+  kit.check(
+    "the real user's keychain search list ends exactly as captured",
+    Array.isArray(ending) && sameList(ending, owner.baseline),
+    JSON.stringify({ captured: owner.baseline, now: ending })
+  );
+}
 
 export default spec;
