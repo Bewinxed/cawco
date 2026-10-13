@@ -22,7 +22,11 @@
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { enableLongPressMenus } from "#lib/utils/longpress.js";
   import { onNavigate } from "$app/navigation";
+  import { page } from "$app/state";
   import type { LayoutServerData } from "./$types";
+
+  /** One custom view and nothing around it: what the app's web view shows (PRD §5.2). */
+  const VIEW_ALONE = "/project/[id]/view/[name]";
 
   let { children, data }: { children: Snippet; data: LayoutServerData } =
     $props();
@@ -123,5 +127,9 @@
   offset={toastOffset}
   position={narrowToasts.current ? "top-center" : "bottom-right"}
 />
-<Shell railWidth={data.railWidth}> {@render children()} </Shell>
-<CanvasStages />
+{#if page.route.id === VIEW_ALONE}
+  {@render children()}
+{:else}
+  <Shell railWidth={data.railWidth}> {@render children()} </Shell>
+  <CanvasStages />
+{/if}

@@ -2,10 +2,8 @@ import { CAWCO_MCP_DEFAULT_PORT, type FleetSyncReport } from "./fleet";
 import type { HarnessReport } from "./harness";
 import type { ToolStatus } from "./tools";
 
-// A project's views: CawCo's A2UI catalog, a view's file, and the data it binds to.
-// biome-ignore lint/performance/noBarrelFile: this is the package's public API surface — packages/core's consumers (hub, cli, dashboard) import from "@cawco/core" as one module, not per-file.
-export * from "./a2ui-catalog";
 // Accounts: several sign-ins per provider, and which one a session runs on.
+// biome-ignore lint/performance/noBarrelFile: this is the package's public API surface — packages/core's consumers (hub, cli, dashboard) import from "@cawco/core" as one module, not per-file.
 export * from "./accounts";
 // Connections: outside services the hub signs in to and calls for sessions.
 export * from "./actions";
@@ -86,6 +84,9 @@ export {
 export * from "./transcript-types";
 // Usage, cost & limits (USAGE-SPEC.md §4). Pure types/math only.
 export * from "./usage";
+// A project's custom views: their files, and the view tools' inputs and
+// outputs. The OpenUI library itself is `@cawco/core/views-library`.
+export * from "./views";
 
 // sessiond's protocol types are deliberately NOT re-exported here. That module
 // reaches for `node:os` and `node:path` to derive its endpoint, and this barrel

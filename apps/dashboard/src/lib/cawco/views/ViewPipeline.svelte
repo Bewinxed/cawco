@@ -20,8 +20,9 @@
     stages,
     tasks,
   }: {
-    stages: Stage[];
-    tasks: TaskSummary[];
+    /** The board's stages, or a view's (the `stages` tool's rows): a row reads only its name and kind. */
+    stages: Pick<Stage, "kind" | "name">[];
+    tasks: Pick<TaskSummary, "stage">[];
   } = $props();
 
   const counts = $derived.by(() => {
@@ -37,7 +38,7 @@
 </script>
 
 {#snippet row(
-  stage: Stage
+  stage: Pick<Stage, "kind" | "name">
 )}
   {@const count = counts.get(stage.name) ?? 0}
   <li>

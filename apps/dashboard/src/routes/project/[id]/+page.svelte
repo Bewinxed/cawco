@@ -14,7 +14,7 @@
    * link opens the same. Needs you is a filter, not a stage: the tasks whose
    * stage is of kind `you`.
    */
-  import type { ProjectView, ViewData } from "@cawco/core";
+  import type { ProjectView } from "@cawco/core";
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import {
@@ -24,8 +24,8 @@
     requestView,
     startThread,
     threadsOf,
-    viewData,
     viewsOf,
+    viewTool,
   } from "#lib/cawco/client.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
   import type { HubRead } from "#lib/cawco/hub-read.js";
@@ -62,12 +62,13 @@
   import TaskTable from "#lib/cawco/tasks/TaskTable.svelte";
   import { threadHref } from "#lib/cawco/thread-tabs.js";
   import { toast } from "#lib/cawco/toasts.js";
+  import type { ViewTaskRow } from "#lib/cawco/views/openui/context.js";
   import { taskEdges } from "#lib/cawco/views/task-graph.js";
-  import ViewA2ui from "#lib/cawco/views/ViewA2ui.svelte";
   import ViewCalendar, {
     calendarField,
   } from "#lib/cawco/views/ViewCalendar.svelte";
   import ViewCanvas from "#lib/cawco/views/ViewCanvas.svelte";
+  import ViewOpenUi from "#lib/cawco/views/ViewOpenUi.svelte";
   import ViewPipeline from "#lib/cawco/views/ViewPipeline.svelte";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
@@ -191,8 +192,8 @@
   let views = $state<ProjectView[]>([]);
   let viewsRead = $state(false);
   let viewsProblem = $state<string | null>(null);
-  /** What views bind to: the tasks with their dates, from the hub. */
-  let bound = $state<ViewData | null>(null);
+  /** The tasks with their dates, as the `tasks` view tool answers them: what the Calendar places. */
+  let dated = $state<ViewTaskRow[] | null>(null);
 
   async function readViews() {
     const id = projectId;
@@ -209,28 +210,30 @@
     }
   }
 
-  async function readBound() {
+  async function readDated() {
     const id = projectId;
     try {
-      const read = await viewData(id);
+      const read = (await viewTool(id, "tasks", {})) as {
+        rows: ViewTaskRow[];
+      };
       if (id === projectId) {
-        bound = read;
+        dated = read.rows;
       }
     } catch {
-      // Calendar and the views wait for the next read; the board stands.
+      // The Calendar waits for the next read; the board stands.
     }
   }
 
   /** The date field the calendar places tasks by; null: no Calendar tab. */
   const dateField = $derived(
     calendarField(
-      bound?.tasks ?? [],
+      dated ?? [],
       stages?.views.find((each) => each.name === "calendar")?.by ?? null
     )
   );
   const dateById = $derived(
     new Map(
-      (bound?.tasks ?? []).flatMap((task) => {
+      (dated ?? []).flatMap((task) => {
         const at = dateField ? task.dates[dateField] : undefined;
         return at === undefined ? [] : [[task.id, at] as const];
       })
@@ -376,7 +379,7 @@
       stagesProblem = message(readStagesNow.reason);
     }
     // biome-ignore lint/complexity/noVoid: the re-read sets its own state
-    void readBound();
+    void readDated();
   }
 
   /** A task the hub just wrote, put into the list until the list is read again. */
@@ -573,7 +576,7 @@
     untrack(() => {
       lead.read();
       readViews();
-      readBound();
+      readDated();
       if (list) {
         refresh();
       }
@@ -711,7 +714,7 @@
 )}
   {#if value.startsWith("view:")}
     {@const view = views.find((each) => `view:${each.name}` === value)}
-    {#if view && bound}
+    {#if view}
       <div class="view-pane">
         {#if view.draft}
           <!-- The tab already says `draft`; the bar says what it is and
@@ -740,13 +743,10 @@
             </div>
           </div>
         {/if}
-        <ViewA2ui
-          data={bound}
+        <ViewOpenUi
           hrefOf={(id) => hrefOf(id)}
-          {kindOf}
           onopen={openOne}
-          stages={stageList}
-          {tasks}
+          {projectId}
           {view}
         />
       </div>
@@ -851,8 +851,8 @@
       onopen={openOne}
       tasks={shownTasks}
     />
-  {:else if value === "calendar" && dateField && bound}
-    <ViewCalendar field={dateField} onopen={openOne} tasks={bound.tasks} />
+  {:else if value === "calendar" && dateField && dated}
+    <ViewCalendar field={dateField} onopen={openOne} tasks={dated} />
   {:else}
     <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
   {/if}

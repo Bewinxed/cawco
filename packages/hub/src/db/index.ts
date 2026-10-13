@@ -1195,6 +1195,16 @@ export interface DbShape {
     todayUsd: number;
   };
   /**
+   * The project's delegated work since `since` (ms epoch), by the delegate
+   * type each work item ran on (attempts, routine runs, delegates; null where
+   * none was named): what their sessions reported spending in the window, and
+   * how many items spent. Most first.
+   */
+  readonly projectSpendByType: (
+    projectId: string,
+    since: number
+  ) => { items: number; type: string | null; usd: number }[];
+  /**
    * Dollars the project has cost since `since` (ms epoch): its Caw's booked
    * turns and every other session's reported usage. What its cap counts.
    */
@@ -5809,6 +5819,28 @@ const make = async (path: string): Promise<DbShape> => {
         })),
       };
     },
+    projectSpendByType: (projectId, since) =>
+      db
+        .select({
+          type: workItems.type,
+          usd: sql<number>`coalesce(sum(${usageBuckets.costUsd}), 0)`,
+          items: sql<number>`count(distinct ${workItems.id})`,
+        })
+        .from(workItems)
+        .innerJoin(instances, eq(instances.id, workItems.instanceId))
+        .innerJoin(
+          usageBuckets,
+          eq(usageBuckets.sessionId, instances.sessionId)
+        )
+        .where(
+          and(
+            eq(workItems.projectId, projectId),
+            sql`${usageBuckets.start} >= ${since}`
+          )
+        )
+        .groupBy(workItems.type)
+        .orderBy(desc(sql`coalesce(sum(${usageBuckets.costUsd}), 0)`))
+        .all(),
     projectThreads: (projectId) => {
       const rows = db
         .select()

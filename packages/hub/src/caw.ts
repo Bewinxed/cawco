@@ -39,14 +39,15 @@
  *   question is tagged with its thread (server.ts) and your answer lands in
  *   it. Every change reaches open dashboards as `thread.upsert` and
  *   `thread.message` frames.
- * - **Views**: Caw drafts a view with `view_draft` (views.ts); you keep or
- *   discard it.
+ * - **Views**: Caw drafts a view with `view_draft` (views.ts), an OpenUI
+ *   Lang program written to the prompt generated from CawCo's library
+ *   (openui.ts `VIEW_PROMPT`, which your ask for a view carries), reading the
+ *   view tools he can try with `view_query`; you keep or discard it.
  * - Each lead shows its spend: what every Caw session of the project has
  *   cost, from the usage buckets budgets already read.
  */
 import {
   CAW_DENIED_TOOLS,
-  CAWCO_COMPONENT_NAMES,
   type CawHarness,
   type CawInitiated,
   type CawRunning,
@@ -69,6 +70,7 @@ import {
   type ThreadSummary,
   type ThreadUpsertFrame,
   type UserAnswers,
+  VIEW_TOOLS,
 } from "@cawco/core";
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
@@ -83,6 +85,7 @@ import type {
 } from "./db";
 import type { Origin, WorkOrigin } from "./db/schema";
 import { inboxText } from "./ingress";
+import { VIEW_PROMPT } from "./openui";
 import type { Caps } from "./project-caps";
 import { readProjectTypes } from "./project-delegate-types";
 import {
@@ -281,10 +284,10 @@ const refuse = (code: 400 | 403 | 404 | 409, message: string): never => {
 const briefOf = (projectName: string): string =>
   [
     `You are Caw, the lead of the project “${projectName}” in CawCo.`,
-    "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft), its folder on the hub (folder_read, folder_write: stages.md, delegates/, AGENTS.md, decisions/), decision pages (artifact_create with kind page builds decisions/<name>/page.html and shows it; artifact_read has the picks), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate, set_item_checks), and send_to_user. You have no edit or shell tools: work that changes the project's code becomes a task or a delegate.",
+    "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft, view_query), its folder on the hub (folder_read, folder_write: stages.md, delegates/, AGENTS.md, decisions/), decision pages (artifact_create with kind page builds decisions/<name>/page.html and shows it; artifact_read has the picks), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate, set_item_checks), and send_to_user. You have no edit or shell tools: work that changes the project's code becomes a task or a delegate.",
     "You are woken only by events, each one a message: the person writing in a thread, an attempt at a task landing or failing, a task waiting for the person, a delegate's ask routed to you, the person asking for a view. Handle the event, then end your turn. Nothing wakes you on a timer. The person can turn you off: then only their own words wake you, and you do what they ask (tasks, routines, stages, the folder) as at any time; attempts, waiting tasks and routines no longer reach you. Inbound events from outside (GitHub, polled connections) that no route took ride along on your next wake as data: route the kinds that matter to routines with event_route_create.",
     "When the person writes in a thread, answer in that thread with thread_reply; the person does not see what you say outside it. Name the tasks a reply is about in its `tasks`. Code coordinates, models judge, the person decides: permissions, merges, configuration and public actions are theirs, so ask in the thread (AskUserQuestion lands there).",
-    "A view-request event is the person asking for a view of the project's tasks: answer it with view_draft, then say in that thread what you drafted; the person keeps or discards it.",
+    "A view-request event is the person asking for a view of the project: it carries how to write one. Answer it with view_draft, then say in that thread what you drafted; the person keeps or discards it.",
     'Judgments go to Jev while the person has connected it; while Jev is off some are yours, and never about your own work. Mark a task `fields: { ready: "yes" }` when an agent can do it from its file alone: the dispatcher starts no other. Rank tasks with `rank`: the dispatcher starts them in that order. Triage the tasks a wake lists for triage. Judge an attempt\'s acceptance criteria when a wake asks you to.',
   ].join("\n\n");
 
@@ -366,8 +369,8 @@ export interface CawDeps {
    * each wake carries, or nothing (jev-tasks.ts `triageFor`).
    */
   readonly triage: (projectId: string) => Promise<string | undefined>;
-  /** Writes Caw's draft views (views.ts). */
-  readonly views: Pick<Views, "draft">;
+  /** Writes Caw's draft views, and answers the view tools he tries (views.ts). */
+  readonly views: Pick<Views, "draft" | "query">;
 }
 
 export const createCaw = ({
@@ -1074,9 +1077,9 @@ export const createCaw = ({
   const yourWords = (thread: ThreadRow, body: string, first: boolean) =>
     `${first ? "You started a thread" : "You wrote in the thread"} “${thread.title}” (thread ${thread.id}):\n\n${body}\n\nAnswer with thread_reply({ thread: "${thread.id}", body }).`;
 
-  /** What Caw reads when you ask for a view. */
+  /** What Caw reads when you ask for a view: your words, then how a view is written. */
   const viewRequest = (thread: ThreadRow, body: string) =>
-    `Event view-request: you asked for a view in the thread “${thread.title}” (thread ${thread.id}):\n\n${body}\n\nDraft it with view_draft({ name, spec }), then tell the person in that thread with thread_reply.`;
+    `Event view-request: you asked for a view in the thread “${thread.title}” (thread ${thread.id}):\n\n${body}\n\nDraft it with view_draft({ name, source }), then tell the person in that thread with thread_reply.\n\n# How a view is written\n\n${VIEW_PROMPT}`;
 
   /**
    * Refuses your words before they are kept when Caw cannot read them: he
@@ -1886,26 +1889,51 @@ export const createCaw = ({
         ),
         tool(
           "view_draft",
-          `Draft a view of the project's tasks for the person to keep or discard: an A2UI v0.9.1 message list, createSurface {surfaceId, catalogId: "cawco.dev:views/v1"} then updateComponents with a "root". Components: ${CAWCO_COMPONENT_NAMES.join(", ")}. Bind to the hub's data by path: /tasks, /stages, /counts, /project. No URLs, code or data of its own.`,
+          "Draft a view for the person to keep or discard: an OpenUI Lang program over CawCo's components reading the project only by Query() on the view tools, as the view-request event says. A component outside them is dropped and named in the answer.",
           {
             name: z
               .string()
               .describe("Lowercase words and dashes, like weekly-review."),
-            spec: z
-              .array(z.record(z.string(), z.unknown()))
-              .describe("The view's messages, in order."),
+            source: z
+              .string()
+              .min(1)
+              .describe("The program: openui-lang alone, no fences."),
           },
-          async ({ name, spec }) => {
+          async ({ name, source }) => {
             const projectId = mine();
-            const drafted = await views.draft(projectId, name, spec, {
-              name: "Caw",
-            });
+            const drafted = await folderCall(() =>
+              views.draft(projectId, name, source, { name: "Caw" })
+            );
             noteIn(
               projectId,
               actor ? turns.get(actor.id)?.threadId : undefined,
               { title: `View · Caw drafted “${drafted.name}”` }
             );
-            return ok({ ok: true, view: drafted.name, draft: true });
+            return ok({
+              ok: true,
+              view: drafted.name,
+              draft: true,
+              ...(drafted.dropped.length
+                ? {
+                    dropped: drafted.dropped,
+                    note: `CawCo's views have no ${drafted.dropped.join(", ")}: ${drafted.dropped.length > 1 ? "they are" : "it is"} left out of the view. Use only the components listed.`,
+                  }
+                : {}),
+            });
+          }
+        ),
+        tool(
+          "view_query",
+          `Run a view tool for your project: what a view's Query("<tool>", args) reads.`,
+          {
+            tool: z.enum(VIEW_TOOLS),
+            args: z.record(z.string(), z.unknown()).optional(),
+          },
+          async ({ tool: name, args }) => {
+            const projectId = mine();
+            return ok(
+              await folderCall(() => views.query(projectId, name, args ?? {}))
+            );
           }
         ),
       ];

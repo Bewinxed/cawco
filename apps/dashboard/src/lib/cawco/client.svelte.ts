@@ -85,7 +85,7 @@ import type {
   UsageLimitsReading,
   UsageLimitsResponse,
   UsageSpend,
-  ViewData,
+  ViewToolName,
   WorkflowRun,
   WorkItemSummary,
 } from "@cawco/core";
@@ -5719,7 +5719,7 @@ export async function sayInThread(
 export const viewsOf = (projectId: string): Promise<ProjectView[]> =>
   askHub(`${projectPath(projectId)}/views`);
 
-/** Keeps a draft view: it becomes `views/<name>.json`, one commit. */
+/** Keeps a draft view: it becomes `views/<name>.oui`, one commit. */
 export const keepView = (
   projectId: string,
   name: string
@@ -5753,9 +5753,16 @@ export async function requestView(
   return said;
 }
 
-/** What a project's views bind to, computed by the hub now. */
-export const viewData = (projectId: string): Promise<ViewData> =>
-  askHub(`${projectPath(projectId)}/view-data`);
+/**
+ * One view tool's answer: what a view's `Query("<tool>", args)` reads, the
+ * hub's route for it (views.ts). A view reaches nothing else.
+ */
+export const viewTool = (
+  projectId: string,
+  tool: ViewToolName,
+  args: Record<string, unknown>
+): Promise<unknown> =>
+  askHub(`${projectPath(projectId)}/view-tools/${tool}`, json("POST", args));
 
 /** What a project has spent: today, this month, its Caw's share, each attempt and thread. */
 export const projectSpend = (projectId: string): Promise<ProjectSpend> =>

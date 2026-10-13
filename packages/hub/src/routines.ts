@@ -272,7 +272,7 @@ const newestDue = (cron: Cron.Cron, now: number): Date =>
   Cron.prev(cron, new Date(now + 1000));
 
 /** `09:00`, a slot's time in the routine's zone; `test`, `by hand` for the others. */
-const slotLabel = (slot: string, timeZone: string): string => {
+export const slotLabel = (slot: string, timeZone: string): string => {
   if (slot.startsWith("test:")) {
     return "test";
   }

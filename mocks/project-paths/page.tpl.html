@@ -902,7 +902,7 @@ The tray chip overflows at 320px wide…</pre>
       <p class="q">Optional: let agents build a view. "Let Caw create a custom view for you", using BYOA.</p>
       <p class="a">Yes, as an optional button beside the view picker. Caw runs on your own agent, the harness and model the project already uses, so there's no extra provider.</p>
       <ul class="a" style="margin:0;padding-left:18px">
-        <li><b>What it writes:</b> <code>views/&lt;name&gt;.json</code>, an A2UI view over CawCo's catalog, bound to data the hub computes (tasks by stage, fields, dates).</li>
+        <li><b>What it writes:</b> <code>views/&lt;name&gt;.oui</code>, an OpenUI Lang program over CawCo's components, reading data the hub computes through its view tools (tasks by stage, fields, dates; routines, spend, events).</li>
         <li><b>When it's kept:</b> it shows you a live preview and saves only when you approve.</li>
         <li><b>What a view can't do:</b> run code or reach the network.</li>
         <li><b>A missing component:</b> Caw says so instead of inventing one.</li>
@@ -1498,7 +1498,7 @@ resolve        → finish_item → land</pre>
         <tr><td>Plan, inside one session</td><td>Agent Client Protocol's <code>plan</code>: entries marked pending, in_progress or completed; the whole list is resent on every update</td><td>Every harness's plan converted to this shape. CawCo already reads plans; this makes them uniform.</td><td><span class="st2 plan">borrow</span></td></tr>
         <tr><td>Live state of a running task</td><td>A2A's Task states (submitted, working, input-required, auth-required, completed, failed, canceled, rejected); MCP Tasks, SEP-1686 (working, input_required, completed, failed, cancelled)</td><td>The names for an attempt's derived state. input-required is Needs you. Outside agents can hand CawCo a task and check on it.</td><td><span class="st2 plan">borrow</span></td></tr>
         <tr><td>Backlog: tasks, edges, stages, to-dos</td><td>No protocol. Backlog.md (MIT: Markdown task files, configurable statuses, acceptance criteria, MCP, kanban); beads (MIT: blocks, parent-child, related, discovered-from, ready work); Linear's fixed state types</td><td>Tasks as files with Backlog.md's sections, beads' four edge types, six fixed kinds (D17). Import from both.</td><td><span class="st2 gap">build · borrowed shapes</span></td></tr>
-        <tr><td>Showing it</td><td>AG-UI 1.0: state, activity, step and subagent events</td><td>Ledger events named after AG-UI's, so an adapter is cheap. A2UI for custom views.</td><td><span class="st2 plan">borrow names</span></td></tr>
+        <tr><td>Showing it</td><td>AG-UI 1.0: state, activity, step and subagent events</td><td>Ledger events named after AG-UI's, so an adapter is cheap. OpenUI Lang for custom views.</td><td><span class="st2 plan">borrow names</span></td></tr>
       </tbody></table></div>
     <p class="a">The primitives: <b>task</b>, <b>edge</b>, <b>stage</b>, <b>to-do</b>, <b>plan</b>, <b>assignment</b> (a delegate type), <b>progress</b> (derived) and <b>live state</b>, all through MCP tools. Why not adopt Backlog.md or beads whole: neither has hub-run checks, leases, landing, role scoping or derived liveness. Their shapes, our engine.</p>
     <div class="prim"><table>
@@ -1557,7 +1557,7 @@ views
       <button class="opt" type="button" role="radio" data-opt="fixed"><b>Fixed columns</b><span>Ready, Running, Needs you, Review, Done for every project.</span></button>
       <button class="opt" type="button" role="radio" data-opt="kinds"><b>Project stages on fixed kinds</b><span>Names are the project's; six kinds keep the machinery working.</span><span class="tag">Recommended</span></button>
       <button class="opt" type="button" role="radio" data-opt="free"><b>Free statuses</b><span>Any name, any move. Nothing can tell what done means.</span><span class="tag warn">Costly</span></button>
-      <button class="opt" type="button" role="radio" data-opt="agent"><b>Views built by agents</b><span>Caw writes an A2UI view per project; no stages file.</span></button>
+      <button class="opt" type="button" role="radio" data-opt="agent"><b>Views built by agents</b><span>Caw writes an OpenUI Lang view per project; no stages file.</span></button>
     </div>
     <div class="foot">
       <details class="more"><summary>Details</summary><div class="in">
@@ -1573,7 +1573,7 @@ views
 <span class="c">site (design)</span>
   brief → explore → review
   → picked → build → shipped</pre>
-        <p>Views are settings, built from libraries rather than by hand: board with Pragmatic drag and drop and canvas with Svelte Flow (both already in the dashboard), table with TanStack Table, calendar with Event Calendar (MIT, Svelte 5), pipeline with a chart library. A view none of these covers is the escape hatch: "Ask Caw for a view" writes an A2UI view over CawCo's catalog, kept only when you approve it.</p>
+        <p>Views are settings, built from libraries rather than by hand: board with Pragmatic drag and drop and canvas with Svelte Flow (both already in the dashboard), table with TanStack Table, calendar with Event Calendar (MIT, Svelte 5), pipeline with a chart library. A view none of these covers is the escape hatch: "Ask Caw for a view" writes an OpenUI Lang view over CawCo's components, kept only when you approve it.</p>
       </div></details>
       <label class="note">Note <input id="note-stages" data-note="stages" type="text" placeholder="Anything to add"></label>
     </div>
@@ -1879,7 +1879,7 @@ read_choices("hero options")
     <li><a href="https://storybook.js.org/docs/ai/mcp/overview">Storybook MCP</a></li>
     <li><a href="https://www.designtokens.org/">Design Tokens Community Group</a></li>
     <li><a href="https://github.com/terrazzoapp/terrazzo">Terrazzo</a></li>
-    <li><a href="https://github.com/a2ui-project/a2ui">A2UI</a></li>
+    <li><a href="https://www.openui.com/docs/openui-lang">OpenUI Lang</a></li>
     <li><a href="https://github.com/modelcontextprotocol/ext-apps">MCP Apps</a></li>
     <li><a href="https://github.com/ag-ui-protocol/ag-ui">AG-UI</a></li>
     <li><a href="https://github.com/vercel-labs/json-render">json-render</a></li>

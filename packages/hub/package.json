@@ -6,7 +6,6 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "a2ui:check": "bun scripts/a2ui-conformance.ts",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "dev": "CAWCO_NO_MDNS=1 bun --watch src/index.ts",
@@ -22,9 +21,9 @@
     "@cawco/core": "workspace:*",
     "@effect/sql-sqlite-bun": "4.0.0",
     "@modelcontextprotocol/sdk": "1.32.0",
+    "@openuidev/lang-core": "1.0.0",
     "ai": "^7.0.127",
     "ajv": "^8.20.0",
-    "ajv-formats": "3.0.1",
     "bonjour-service": "^1.4.4",
     "drizzle-orm": "^0.45.3",
     "effect": "^4.0.0",

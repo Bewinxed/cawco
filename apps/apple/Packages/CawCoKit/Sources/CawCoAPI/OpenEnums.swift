@@ -284,53 +284,6 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/BadgePropsTone`.
-    public enum BadgePropsTone: OpenEnum {
-        case attn
-        case done
-        case fail
-        case live
-        case neutral
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "attn": self = .attn
-            case "done": self = .done
-            case "fail": self = .fail
-            case "live": self = .live
-            case "neutral": self = .neutral
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .attn: "attn"
-            case .done: "done"
-            case .fail: "fail"
-            case .live: "live"
-            case .neutral: "neutral"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.attn, .done, .fail, .live, .neutral]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
     /// `#/components/schemas/BinaryUpdateLandingOutcome`.
     public enum BinaryUpdateLandingOutcome: OpenEnum {
         case installed
@@ -703,44 +656,6 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/CalendarPropsRange`.
-    public enum CalendarPropsRange: OpenEnum {
-        case month
-        case week
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "month": self = .month
-            case "week": self = .week
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .month: "month"
-            case .week: "week"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.month, .week]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
     /// `#/components/schemas/CapPeriod`.
     public enum CapPeriod: OpenEnum {
         case day
@@ -886,50 +801,6 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.attempt, .delegate, .turn]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/ColumnPropsAlign`.
-    public enum ColumnPropsAlign: OpenEnum {
-        case center
-        case end
-        case start
-        case stretch
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "center": self = .center
-            case "end": self = .end
-            case "start": self = .start
-            case "stretch": self = .stretch
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .center: "center"
-            case .end: "end"
-            case .start: "start"
-            case .stretch: "stretch"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.center, .end, .start, .stretch]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -1777,100 +1648,6 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.dir, .file]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/FunctionCallCall`.
-    public enum FunctionCallCall: OpenEnum {
-        case formatDate
-        case formatNumber
-        case formatString
-        case pluralize
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "formatDate": self = .formatDate
-            case "formatNumber": self = .formatNumber
-            case "formatString": self = .formatString
-            case "pluralize": self = .pluralize
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .formatDate: "formatDate"
-            case .formatNumber: "formatNumber"
-            case .formatString: "formatString"
-            case .pluralize: "pluralize"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.formatDate, .formatNumber, .formatString, .pluralize]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/FunctionCallReturnType`.
-    public enum FunctionCallReturnType: OpenEnum {
-        case any
-        case array
-        case boolean
-        case number
-        case object
-        case string
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "any": self = .any
-            case "array": self = .array
-            case "boolean": self = .boolean
-            case "number": self = .number
-            case "object": self = .object
-            case "string": self = .string
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .any: "any"
-            case .array: "array"
-            case .boolean: "boolean"
-            case .number: "number"
-            case .object: "object"
-            case .string: "string"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.any, .array, .boolean, .number, .object, .string]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -4009,50 +3786,6 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/RowPropsJustify`.
-    public enum RowPropsJustify: OpenEnum {
-        case center
-        case end
-        case spaceBetween
-        case start
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "center": self = .center
-            case "end": self = .end
-            case "spaceBetween": self = .spaceBetween
-            case "start": self = .start
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .center: "center"
-            case .end: "end"
-            case .spaceBetween: "spaceBetween"
-            case .start: "start"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.center, .end, .spaceBetween, .start]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
     /// `#/components/schemas/RuleAction`.
     public enum RuleAction: OpenEnum {
         case llm
@@ -4964,50 +4697,6 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.archived, .deleted, .live]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/TextPropsVariant`.
-    public enum TextPropsVariant: OpenEnum {
-        case body
-        case label
-        case meta
-        case title
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "body": self = .body
-            case "label": self = .label
-            case "meta": self = .meta
-            case "title": self = .title
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .body: "body"
-            case .label: "label"
-            case .meta: "meta"
-            case .title: "title"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.body, .label, .meta, .title]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

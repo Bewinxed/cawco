@@ -53,6 +53,7 @@
         "@fontsource/fredoka": "^5.3.0",
         "@lezer/highlight": "^1.2.5",
         "@milkdown/crepe": "^7.22.2",
+        "@openuidev/lang-core": "1.0.0",
         "@pierre/diffs": "1.5.1",
         "@rive-app/canvas": "2.44.0",
         "@tanstack/svelte-table": "9.2.6",
@@ -65,7 +66,6 @@
         "rfc6902": "5.3.0",
         "shiki": "^4.5.0",
         "socket-activation": "3.2.0",
-        "svelte-a2ui": "0.2.0",
         "svelte-streamdown": "^4.2.1",
         "tailwind-merge": "^3.7.0",
         "tailwind-variants": "^3.3.1",
@@ -170,6 +170,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@dagrejs/dagre": "^3.1.1",
+        "@openuidev/lang-core": "1.0.0",
         "@typescript/native": "npm:typescript@^7.0.2",
         "typescript": "npm:@typescript/typescript6@^6.0.2",
         "yaml": "^2.9.1",
@@ -188,9 +189,9 @@
         "@cawco/core": "workspace:*",
         "@effect/sql-sqlite-bun": "4.0.0",
         "@modelcontextprotocol/sdk": "1.32.0",
+        "@openuidev/lang-core": "1.0.0",
         "ai": "^7.0.127",
         "ajv": "^8.20.0",
-        "ajv-formats": "3.0.1",
         "bonjour-service": "^1.4.4",
         "drizzle-orm": "^0.45.3",
         "effect": "^4.0.0",
@@ -799,6 +800,8 @@
     "@opencode/protocol": ["@opencode/protocol@2.0.28", "", { "dependencies": { "@opencode/schema": "2.0.28", "effect": "4.0.1" } }, "sha512-yfc0SDa7FxqSDZRC0olACnhB7Gvsx8X0ji0gEmO2xunCswNiJTCPUngcIKphxN5NFeMl/A5E0iNG4q39KW5fyA=="],
 
     "@opencode/schema": ["@opencode/schema@2.0.28", "", { "dependencies": { "@standard-schema/spec": "1.1.0", "effect": "4.0.1" } }, "sha512-NHl42ngFN6uLCjtmtooYlEGEayng9ZFc+30DAqQuPcvKpMWsO23OqximHlukxtErp209C4f9LW+OJH/6k60+yw=="],
+
+    "@openuidev/lang-core": ["@openuidev/lang-core@1.0.0", "", { "dependencies": { "ci-info": "^4.4.0" }, "peerDependencies": { "@modelcontextprotocol/sdk": ">=1.0.0", "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["@modelcontextprotocol/sdk"] }, "sha512-f5uC/p9agSMEwAqhWGSgT++cJ35mK0jjfCatNAPE47IKpInClywcFSQ9goaXE+ctvFIcjZP+hNm+TLe5vq10Gw=="],
 
     "@oxc-parser/binding-android-arm-eabi": ["@oxc-parser/binding-android-arm-eabi@0.114.0", "", { "os": "android", "cpu": "arm" }, "sha512-O64coa+5VuqhwQV5t7PcgiY1ubGy35QZSMi+GrXewCRbi7MMzQcuyfv2xg1FV7Kj7SR47+gg/eC9xrOph2Pbcg=="],
 
@@ -1489,6 +1492,8 @@
     "chevrotain-allstar": ["chevrotain-allstar@0.3.1", "", { "dependencies": { "lodash-es": "^4.17.21" }, "peerDependencies": { "chevrotain": "^11.0.0" } }, "sha512-b7g+y9A0v4mxCW1qUhf3BSVPg+/NvGErk/dOkrDaHA0nQIQGAtrOjlX//9OQtRlSCy+x9rfB5N8yC71lH1nvMw=="],
 
     "chokidar": ["chokidar@4.0.3", "", { "dependencies": { "readdirp": "^4.0.1" } }, "sha512-Qgzu8kfBvo+cA4962jnP1KkS6Dop5NS6g7R5LFYJr4b8Ub94PPQXUksCw9PvXoeXPRRddRNC5C1JQUR2SMGtnA=="],
+
+    "ci-info": ["ci-info@4.4.0", "", {}, "sha512-77PSwercCZU2Fc4sX94eF8k8Pxte6JAwL4/ICZLFjJLqegs7kCuAsqqj/70NQF6TvDpgFjkubQB2FW2ZZddvQg=="],
 
     "citty": ["citty@0.2.2", "", {}, "sha512-+6vJA3L98yv+IdfKGZHBNiGW5KHn22e/JwID0Strsz8h4S/csAu/OuICwxrg44k5MRiZHWIo8XXuJgQTriRP4w=="],
 
@@ -2507,8 +2512,6 @@
     "supports-color": ["supports-color@10.2.2", "", {}, "sha512-SS+jx45GF1QjgEXQx4NJZV9ImqmO2NPz5FNsIHrsDjh2YsHnawpan7SNQ1o8NuhrbHZy9AZhIoCUiCeaW/C80g=="],
 
     "svelte": ["svelte@5.57.1", "", { "dependencies": { "@jridgewell/remapping": "^2.3.5", "@jridgewell/sourcemap-codec": "^1.6.0", "@sveltejs/acorn-typescript": "^1.0.13", "@types/estree": "^1.0.9", "acorn": "^8.18.0", "aria-query": "5.3.1", "axobject-query": "^4.1.0", "clsx": "^2.1.1", "devalue": "^5.9.2", "esm-env": "^1.2.1", "esrap": "^2.3.6", "is-reference": "^3.0.3", "locate-character": "^3.0.0", "magic-string": "^0.30.11", "zimmerframe": "^1.1.2" } }, "sha512-Uqj49lWKB+iSSnneuwiYYJ7MZgkB+eXr0LXBhv4uDuAkXqnWmq65Sxflfvp0Lc6MdKjMUxGaeOKWJqz5SNiVIA=="],
-
-    "svelte-a2ui": ["svelte-a2ui@0.2.0", "", { "peerDependencies": { "svelte": "^5.55.0" } }, "sha512-sMICNIi8vyTiuJtXwznqBAlw/TrGJUzMOZ2umLudWmsztpEECP9Z3vx9xt6/ty4OJ38YMxDpGETMKdS0RoIxxA=="],
 
     "svelte-check": ["svelte-check@4.7.6", "", { "dependencies": { "@jridgewell/trace-mapping": "^0.3.25", "@sveltejs/load-config": "^0.2.3", "chokidar": "^4.0.1", "fdir": "^6.2.0", "picocolors": "^1.0.0", "sade": "^1.7.4" }, "peerDependencies": { "svelte": "^4.0.0 || ^5.0.0-next.0", "typescript": "^5.0.0 || ^6.0.0" }, "bin": { "svelte-check": "bin/svelte-check" } }, "sha512-t2scM//ZuVbSY/T2w6FSBw1v9s2NEmh/g+sy1lqtosW5ylBV5AF4wFb1Ts9Kf3MbfPDUDJDZ9L436YT0SPTdvw=="],
 

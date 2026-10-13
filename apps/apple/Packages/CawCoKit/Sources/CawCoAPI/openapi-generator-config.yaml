@@ -15,7 +15,6 @@ typeOverrides:
     AgentRowAuth: OpenEnums.AgentRowAuth
     ArtifactKind: OpenEnums.ArtifactKind
     AuthState: OpenEnums.AuthState
-    BadgePropsTone: OpenEnums.BadgePropsTone
     BinaryUpdateLandingOutcome: OpenEnums.BinaryUpdateLandingOutcome
     BinaryUpdatePhase: OpenEnums.BinaryUpdatePhase
     BinaryUpdatePolicyChannel: OpenEnums.BinaryUpdatePolicyChannel
@@ -25,12 +24,10 @@ typeOverrides:
     BlockMetadataReportKind: OpenEnums.BlockMetadataReportKind
     BlockMetadataToolStatus: OpenEnums.BlockMetadataToolStatus
     BlockMetadataTrigger: OpenEnums.BlockMetadataTrigger
-    CalendarPropsRange: OpenEnums.CalendarPropsRange
     CapPeriod: OpenEnums.CapPeriod
     CatalogTypeSource: OpenEnums.CatalogTypeSource
     CawHarness: OpenEnums.CawHarness
     CawRunningKind: OpenEnums.CawRunningKind
-    ColumnPropsAlign: OpenEnums.ColumnPropsAlign
     CommandAckOutcome: OpenEnums.CommandAckOutcome
     CommandAckStage: OpenEnums.CommandAckStage
     ConnectionAuth: OpenEnums.ConnectionAuth
@@ -51,8 +48,6 @@ typeOverrides:
     FleetScope: OpenEnums.FleetScope
     FolderEntryKind: OpenEnums.FolderEntryKind
     FsEntryKind: OpenEnums.FsEntryKind
-    FunctionCallCall: OpenEnums.FunctionCallCall
-    FunctionCallReturnType: OpenEnums.FunctionCallReturnType
     GetApiAccountsPlacement200Strategy: OpenEnums.GetApiAccountsPlacement200Strategy
     GetApiInstances200Kind: OpenEnums.GetApiInstances200Kind
     GetApiRulesByIdActivity200Status: OpenEnums.GetApiRulesByIdActivity200Status
@@ -100,7 +95,6 @@ typeOverrides:
     RoutineRunState: OpenEnums.RoutineRunState
     RoutineRunViewOutcome: OpenEnums.RoutineRunViewOutcome
     RoutineTarget: OpenEnums.RoutineTarget
-    RowPropsJustify: OpenEnums.RowPropsJustify
     RuleAction: OpenEnums.RuleAction
     RuleMatchKind: OpenEnums.RuleMatchKind
     RuleTiming: OpenEnums.RuleTiming
@@ -122,7 +116,6 @@ typeOverrides:
     TaskHistoryActorMover: OpenEnums.TaskHistoryActorMover
     TaskHistoryKind: OpenEnums.TaskHistoryKind
     TaskHistoryState: OpenEnums.TaskHistoryState
-    TextPropsVariant: OpenEnums.TextPropsVariant
     ThreadStatus: OpenEnums.ThreadStatus
     ToolPlatform: OpenEnums.ToolPlatform
     ToolState: OpenEnums.ToolState

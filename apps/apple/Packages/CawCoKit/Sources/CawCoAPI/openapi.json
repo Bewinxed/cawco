@@ -9905,8 +9905,8 @@
         }
       }
     },
-    "/api/projects/{id}/view-data": {
-      "get": {
+    "/api/projects/{id}/view-tools/tasks": {
+      "post": {
         "parameters": [
           {
             "name": "id",
@@ -9917,20 +9917,49 @@
             }
           }
         ],
-        "operationId": "getApiProjectsByIdViewData",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "stage": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "todo",
+                      "active",
+                      "waiting",
+                      "you",
+                      "done",
+                      "dropped"
+                    ]
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdViewToolsTasks",
         "responses": {
           "200": {
-            "description": "getApiProjectsByIdViewData 200",
+            "description": "postApiProjectsByIdViewToolsTasks 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ViewData"
+                  "$ref": "#/components/schemas/postApiProjectsByIdViewToolsTasks200"
                 }
               }
             }
           },
           "400": {
-            "description": "getApiProjectsByIdViewData 400",
+            "description": "postApiProjectsByIdViewToolsTasks 400",
             "content": {
               "text/plain": {
                 "schema": {
@@ -9940,7 +9969,7 @@
             }
           },
           "403": {
-            "description": "getApiProjectsByIdViewData 403",
+            "description": "postApiProjectsByIdViewToolsTasks 403",
             "content": {
               "text/plain": {
                 "schema": {
@@ -9950,7 +9979,7 @@
             }
           },
           "404": {
-            "description": "getApiProjectsByIdViewData 404",
+            "description": "postApiProjectsByIdViewToolsTasks 404",
             "content": {
               "text/plain": {
                 "schema": {
@@ -9960,7 +9989,7 @@
             }
           },
           "409": {
-            "description": "getApiProjectsByIdViewData 409",
+            "description": "postApiProjectsByIdViewToolsTasks 409",
             "content": {
               "text/plain": {
                 "schema": {
@@ -9970,7 +9999,7 @@
             }
           },
           "413": {
-            "description": "getApiProjectsByIdViewData 413",
+            "description": "postApiProjectsByIdViewToolsTasks 413",
             "content": {
               "text/plain": {
                 "schema": {
@@ -9980,7 +10009,7 @@
             }
           },
           "415": {
-            "description": "getApiProjectsByIdViewData 415",
+            "description": "postApiProjectsByIdViewToolsTasks 415",
             "content": {
               "text/plain": {
                 "schema": {
@@ -9990,17 +10019,22 @@
             }
           },
           "422": {
-            "description": "getApiProjectsByIdViewData 422",
+            "description": "postApiProjectsByIdViewToolsTasks 422",
             "content": {
               "text/plain": {
                 "schema": {
                   "type": "string"
                 }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
               }
             }
           },
           "500": {
-            "description": "getApiProjectsByIdViewData 500",
+            "description": "postApiProjectsByIdViewToolsTasks 500",
             "content": {
               "text/plain": {
                 "schema": {
@@ -10010,7 +10044,557 @@
             }
           },
           "503": {
-            "description": "getApiProjectsByIdViewData 503",
+            "description": "postApiProjectsByIdViewToolsTasks 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/view-tools/stages": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdViewToolsStages",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdViewToolsStages 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewStagesOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdViewToolsStages 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdViewToolsStages 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdViewToolsStages 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdViewToolsStages 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectsByIdViewToolsStages 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectsByIdViewToolsStages 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdViewToolsStages 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdViewToolsStages 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdViewToolsStages 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/view-tools/routines": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "runs": {
+                    "minimum": 1,
+                    "maximum": 20,
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdViewToolsRoutines",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdViewToolsRoutines 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewRoutinesOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdViewToolsRoutines 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdViewToolsRoutines 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdViewToolsRoutines 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdViewToolsRoutines 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectsByIdViewToolsRoutines 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectsByIdViewToolsRoutines 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdViewToolsRoutines 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdViewToolsRoutines 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdViewToolsRoutines 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/view-tools/spend": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "days": {
+                    "minimum": 1,
+                    "maximum": 90,
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdViewToolsSpend",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdViewToolsSpend 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewSpendOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdViewToolsSpend 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdViewToolsSpend 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdViewToolsSpend 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdViewToolsSpend 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectsByIdViewToolsSpend 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectsByIdViewToolsSpend 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdViewToolsSpend 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdViewToolsSpend 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdViewToolsSpend 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/view-tools/events": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "limit": {
+                    "minimum": 1,
+                    "maximum": 100,
+                    "type": "integer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdViewToolsEvents",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdViewToolsEvents 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ViewEventsOutput"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdViewToolsEvents 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdViewToolsEvents 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdViewToolsEvents 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdViewToolsEvents 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectsByIdViewToolsEvents 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectsByIdViewToolsEvents 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdViewToolsEvents 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdViewToolsEvents 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdViewToolsEvents 503",
             "content": {
               "text/plain": {
                 "schema": {
@@ -19221,6 +19805,20 @@
         },
         "required": [
           "ok"
+        ]
+      },
+      "postApiProjectsByIdViewToolsTasks200": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ViewTaskRow"
+            }
+          }
+        },
+        "required": [
+          "rows"
         ]
       },
       "postApiNoticesSeen200": {
@@ -28762,997 +29360,87 @@
         ]
       },
       "ProjectView": {
-        "description": "A view as `GET /api/projects/:id/views` lists it: kept (`views/<name>.json`) or a draft (`views/drafts/<name>.json`).",
+        "description": "A view as `GET /api/projects/:id/views` lists it: kept (`views/<name>.oui`)\nor a draft (`views/drafts/<name>.oui`), its program as written, and the\ncomponents it names that CawCo's library does not have, which are left out\nwhen it is drawn (the hub's parse, the same one the dashboard renders with).",
         "type": "object",
         "properties": {
           "draft": {
             "type": "boolean"
           },
+          "dropped": {
+            "description": "Components the program names that the library does not have, by name: dropped, not invented.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "name": {
             "type": "string"
           },
-          "spec": {
-            "description": "A view's file: its messages, in order (the spec's `server_to_client_list.json`).",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ViewMessage"
-            }
+          "source": {
+            "description": "The OpenUI Lang program.",
+            "type": "string"
           }
         },
         "required": [
           "draft",
+          "dropped",
           "name",
-          "spec"
+          "source"
         ]
       },
-      "ViewMessage": {
-        "description": "One message of a view: the surface over CawCo's catalog, then its\ncomponents. A view carries no data of its own (no `updateDataModel`): it\nbinds to the hub's {@link ViewData}.",
-        "anyOf": [
+      "ViewTaskRow": {
+        "description": "One task as the `tasks` tool answers it: the board's row, and its dates.",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/TaskSummary"
+          },
           {
             "type": "object",
             "properties": {
-              "createSurface": {
-                "type": "object",
-                "properties": {
-                  "catalogId": {
-                    "type": "string"
-                  },
-                  "surfaceId": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "catalogId",
-                  "surfaceId"
-                ]
-              },
-              "version": {
-                "type": "string",
-                "enum": [
-                  "v0.9.1"
-                ]
+              "dates": {
+                "type": "object"
               }
             },
             "required": [
-              "createSurface",
-              "version"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "updateComponents": {
-                "type": "object",
-                "properties": {
-                  "components": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/ViewComponent"
-                    }
-                  },
-                  "surfaceId": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "components",
-                  "surfaceId"
-                ]
-              },
-              "version": {
-                "type": "string",
-                "enum": [
-                  "v0.9.1"
-                ]
-              }
-            },
-            "required": [
-              "updateComponents",
-              "version"
+              "dates"
             ]
           }
         ]
       },
-      "ViewComponent": {
-        "description": "One component of a view, by its catalog name.",
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/BoardProps"
-          },
-          {
-            "$ref": "#/components/schemas/StageColumnProps"
-          },
-          {
-            "$ref": "#/components/schemas/TaskCardProps"
-          },
-          {
-            "$ref": "#/components/schemas/TableProps"
-          },
-          {
-            "$ref": "#/components/schemas/CalendarProps"
-          },
-          {
-            "$ref": "#/components/schemas/PipelineProps"
-          },
-          {
-            "$ref": "#/components/schemas/StatTileProps"
-          },
-          {
-            "$ref": "#/components/schemas/TextProps"
-          },
-          {
-            "$ref": "#/components/schemas/RowProps"
-          },
-          {
-            "$ref": "#/components/schemas/ColumnProps"
-          },
-          {
-            "$ref": "#/components/schemas/BadgeProps"
-          }
-        ]
-      },
-      "BoardProps": {
+      "ViewStagesOutput": {
         "type": "object",
         "properties": {
-          "children": {
-            "$ref": "#/components/schemas/ChildList"
-          },
-          "component": {
-            "type": "string",
-            "enum": [
-              "Board"
-            ]
-          },
-          "title": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/DataBinding"
-              },
-              {
-                "$ref": "#/components/schemas/FunctionCall"
-              },
-              {
-                "type": "string"
-              }
-            ]
-          },
-          "accessibility": {
+          "byKind": {
             "type": "object",
             "properties": {
-              "description": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
+              "done": {
+                "type": "number"
               },
-              "label": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              }
-            }
-          },
-          "id": {
-            "type": "string"
-          },
-          "weight": {
-            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
-            "type": "number"
-          }
-        },
-        "required": [
-          "children",
-          "component",
-          "id"
-        ]
-      },
-      "ChildList": {
-        "anyOf": [
-          {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          {
-            "type": "object",
-            "properties": {
-              "componentId": {
-                "type": "string"
+              "todo": {
+                "type": "number"
               },
-              "path": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "componentId",
-              "path"
-            ]
-          }
-        ]
-      },
-      "DataBinding": {
-        "description": "A JSON Pointer into the view's data (common_types `DataBinding`).",
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "path"
-        ]
-      },
-      "FunctionCall": {
-        "description": "One of {@link CAWCO_FUNCTIONS}, called by name (common_types `FunctionCall`).",
-        "type": "object",
-        "properties": {
-          "args": {
-            "type": "object"
-          },
-          "call": {
-            "$ref": "#/components/schemas/FunctionCallCall"
-          },
-          "returnType": {
-            "$ref": "#/components/schemas/FunctionCallReturnType"
-          }
-        },
-        "required": [
-          "call"
-        ]
-      },
-      "StageColumnProps": {
-        "type": "object",
-        "properties": {
-          "component": {
-            "type": "string",
-            "enum": [
-              "StageColumn"
-            ]
-          },
-          "fields": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "stage": {
-            "$ref": "#/components/schemas/DynamicString"
-          },
-          "accessibility": {
-            "type": "object",
-            "properties": {
-              "description": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
+              "active": {
+                "type": "number"
               },
-              "label": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              }
-            }
-          },
-          "id": {
-            "type": "string"
-          },
-          "weight": {
-            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
-            "type": "number"
-          }
-        },
-        "required": [
-          "component",
-          "id",
-          "stage"
-        ]
-      },
-      "DynamicString": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/DataBinding"
-          },
-          {
-            "$ref": "#/components/schemas/FunctionCall"
-          },
-          {
-            "type": "string"
-          }
-        ]
-      },
-      "TaskCardProps": {
-        "type": "object",
-        "properties": {
-          "component": {
-            "type": "string",
-            "enum": [
-              "TaskCard"
-            ]
-          },
-          "fields": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "task": {
-            "$ref": "#/components/schemas/DynamicString"
-          },
-          "accessibility": {
-            "type": "object",
-            "properties": {
-              "description": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
+              "waiting": {
+                "type": "number"
               },
-              "label": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              }
-            }
-          },
-          "id": {
-            "type": "string"
-          },
-          "weight": {
-            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
-            "type": "number"
-          }
-        },
-        "required": [
-          "component",
-          "id",
-          "task"
-        ]
-      },
-      "TableProps": {
-        "type": "object",
-        "properties": {
-          "columns": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "field": {
-                  "type": "string"
-                },
-                "label": {
-                  "$ref": "#/components/schemas/DynamicString"
-                }
+              "you": {
+                "type": "number"
               },
-              "required": [
-                "field",
-                "label"
-              ]
-            }
-          },
-          "component": {
-            "type": "string",
-            "enum": [
-              "Table"
-            ]
-          },
-          "rows": {
-            "$ref": "#/components/schemas/DataBinding",
-            "description": "A JSON Pointer into the view's data (common_types `DataBinding`)."
-          },
-          "accessibility": {
-            "type": "object",
-            "properties": {
-              "description": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              },
-              "label": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              }
-            }
-          },
-          "id": {
-            "type": "string"
-          },
-          "weight": {
-            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
-            "type": "number"
-          }
-        },
-        "required": [
-          "columns",
-          "component",
-          "id"
-        ]
-      },
-      "CalendarProps": {
-        "type": "object",
-        "properties": {
-          "component": {
-            "type": "string",
-            "enum": [
-              "Calendar"
-            ]
-          },
-          "date": {
-            "type": "string"
-          },
-          "range": {
-            "$ref": "#/components/schemas/CalendarPropsRange"
-          },
-          "rows": {
-            "$ref": "#/components/schemas/DataBinding",
-            "description": "A JSON Pointer into the view's data (common_types `DataBinding`)."
-          },
-          "accessibility": {
-            "type": "object",
-            "properties": {
-              "description": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              },
-              "label": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              }
-            }
-          },
-          "id": {
-            "type": "string"
-          },
-          "weight": {
-            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
-            "type": "number"
-          }
-        },
-        "required": [
-          "component",
-          "date",
-          "id"
-        ]
-      },
-      "PipelineProps": {
-        "type": "object",
-        "properties": {
-          "component": {
-            "type": "string",
-            "enum": [
-              "Pipeline"
-            ]
-          },
-          "stages": {
-            "anyOf": [
-              {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              {
-                "$ref": "#/components/schemas/DataBinding"
-              },
-              {
-                "$ref": "#/components/schemas/FunctionCall"
-              }
-            ]
-          },
-          "accessibility": {
-            "type": "object",
-            "properties": {
-              "description": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              },
-              "label": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              }
-            }
-          },
-          "id": {
-            "type": "string"
-          },
-          "weight": {
-            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
-            "type": "number"
-          }
-        },
-        "required": [
-          "component",
-          "id"
-        ]
-      },
-      "StatTileProps": {
-        "type": "object",
-        "properties": {
-          "component": {
-            "type": "string",
-            "enum": [
-              "StatTile"
-            ]
-          },
-          "label": {
-            "$ref": "#/components/schemas/DynamicString"
-          },
-          "tone": {
-            "$ref": "#/components/schemas/BadgePropsTone"
-          },
-          "unit": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/DataBinding"
-              },
-              {
-                "$ref": "#/components/schemas/FunctionCall"
-              },
-              {
-                "type": "string"
-              }
-            ]
-          },
-          "value": {
-            "$ref": "#/components/schemas/DynamicValue"
-          },
-          "accessibility": {
-            "type": "object",
-            "properties": {
-              "description": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              },
-              "label": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              }
-            }
-          },
-          "id": {
-            "type": "string"
-          },
-          "weight": {
-            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
-            "type": "number"
-          }
-        },
-        "required": [
-          "component",
-          "id",
-          "label",
-          "value"
-        ]
-      },
-      "DynamicValue": {
-        "anyOf": [
-          {
-            "type": "array",
-            "items": {}
-          },
-          {
-            "$ref": "#/components/schemas/DataBinding"
-          },
-          {
-            "$ref": "#/components/schemas/FunctionCall"
-          },
-          {
-            "type": "string"
-          },
-          {
-            "type": "number"
-          },
-          {
-            "type": "boolean"
-          }
-        ]
-      },
-      "TextProps": {
-        "type": "object",
-        "properties": {
-          "component": {
-            "type": "string",
-            "enum": [
-              "Text"
-            ]
-          },
-          "text": {
-            "$ref": "#/components/schemas/DynamicString"
-          },
-          "variant": {
-            "$ref": "#/components/schemas/TextPropsVariant"
-          },
-          "accessibility": {
-            "type": "object",
-            "properties": {
-              "description": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              },
-              "label": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              }
-            }
-          },
-          "id": {
-            "type": "string"
-          },
-          "weight": {
-            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
-            "type": "number"
-          }
-        },
-        "required": [
-          "component",
-          "id",
-          "text"
-        ]
-      },
-      "RowProps": {
-        "type": "object",
-        "properties": {
-          "align": {
-            "$ref": "#/components/schemas/ColumnPropsAlign"
-          },
-          "children": {
-            "$ref": "#/components/schemas/ChildList"
-          },
-          "component": {
-            "type": "string",
-            "enum": [
-              "Row"
-            ]
-          },
-          "justify": {
-            "$ref": "#/components/schemas/RowPropsJustify"
-          },
-          "accessibility": {
-            "type": "object",
-            "properties": {
-              "description": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              },
-              "label": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              }
-            }
-          },
-          "id": {
-            "type": "string"
-          },
-          "weight": {
-            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
-            "type": "number"
-          }
-        },
-        "required": [
-          "children",
-          "component",
-          "id"
-        ]
-      },
-      "ColumnProps": {
-        "type": "object",
-        "properties": {
-          "align": {
-            "$ref": "#/components/schemas/ColumnPropsAlign"
-          },
-          "children": {
-            "$ref": "#/components/schemas/ChildList"
-          },
-          "component": {
-            "type": "string",
-            "enum": [
-              "Column"
-            ]
-          },
-          "accessibility": {
-            "type": "object",
-            "properties": {
-              "description": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              },
-              "label": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              }
-            }
-          },
-          "id": {
-            "type": "string"
-          },
-          "weight": {
-            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
-            "type": "number"
-          }
-        },
-        "required": [
-          "children",
-          "component",
-          "id"
-        ]
-      },
-      "BadgeProps": {
-        "type": "object",
-        "properties": {
-          "component": {
-            "type": "string",
-            "enum": [
-              "Badge"
-            ]
-          },
-          "text": {
-            "$ref": "#/components/schemas/DynamicString"
-          },
-          "tone": {
-            "$ref": "#/components/schemas/BadgePropsTone"
-          },
-          "accessibility": {
-            "type": "object",
-            "properties": {
-              "description": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              },
-              "label": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/DataBinding"
-                  },
-                  {
-                    "$ref": "#/components/schemas/FunctionCall"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              }
-            }
-          },
-          "id": {
-            "type": "string"
-          },
-          "weight": {
-            "description": "Its share of a Row's or Column's length, like CSS flex-grow.",
-            "type": "number"
-          }
-        },
-        "required": [
-          "component",
-          "id",
-          "text"
-        ]
-      },
-      "ViewData": {
-        "description": "What a view binds to: `GET /api/projects/:id/view-data`, computed by the hub on every read.",
-        "type": "object",
-        "properties": {
-          "counts": {
-            "type": "object",
-            "properties": {
-              "byKind": {
-                "type": "object",
-                "properties": {
-                  "done": {
-                    "type": "number"
-                  },
-                  "todo": {
-                    "type": "number"
-                  },
-                  "active": {
-                    "type": "number"
-                  },
-                  "waiting": {
-                    "type": "number"
-                  },
-                  "you": {
-                    "type": "number"
-                  },
-                  "dropped": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "active",
-                  "done",
-                  "dropped",
-                  "todo",
-                  "waiting",
-                  "you"
-                ]
-              },
-              "total": {
+              "dropped": {
                 "type": "number"
               }
             },
             "required": [
-              "byKind",
-              "total"
-            ]
+              "active",
+              "done",
+              "dropped",
+              "todo",
+              "waiting",
+              "you"
+            ],
+            "description": "Tasks in a stage of each kind."
           },
           "project": {
             "type": "object",
@@ -29776,23 +29464,20 @@
               "$ref": "#/components/schemas/ViewStage"
             }
           },
-          "tasks": {
-            "description": "Every task, in rank order.",
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ViewTask"
-            }
+          "total": {
+            "description": "Every task.",
+            "type": "number"
           }
         },
         "required": [
-          "counts",
+          "byKind",
           "project",
           "stages",
-          "tasks"
+          "total"
         ]
       },
       "ViewStage": {
-        "description": "One stage as a view binds to it.",
+        "description": "One stage with its count.",
         "type": "object",
         "properties": {
           "count": {
@@ -29812,94 +29497,256 @@
           "name"
         ]
       },
-      "ViewTask": {
-        "description": "One task as a view binds to it.",
+      "ViewRoutinesOutput": {
         "type": "object",
         "properties": {
-          "blockedBy": {
+          "rows": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/ViewRoutine"
+            }
+          }
+        },
+        "required": [
+          "rows"
+        ]
+      },
+      "ViewRoutine": {
+        "description": "One routine of the project, with its newest runs.",
+        "type": "object",
+        "properties": {
+          "cron": {
+            "type": "string"
+          },
+          "delegateType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "lastSlot": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "nextSlot": {
+            "type": "number"
+          },
+          "runs": {
+            "description": "Newest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ViewRoutineRun"
             }
           },
-          "dates": {
-            "type": "object",
-            "description": "Its dates, ms epoch, by name: `createdAt` and `updatedAt` always (the\ncommit that added its file, and its file's last change: its last commit,\nor an edit no commit has yet); `startedAt` (its first move into an active\nstage), `completedAt` and `droppedAt` (its move into the done or dropped\nstage it is in) once they happen; `attemptStartedAt` and `attemptEndedAt` of its newest\nattempt when it has one; and every field its file carries whose value is\nan ISO 8601 date, under the field's own name."
+          "target": {
+            "$ref": "#/components/schemas/RoutineTarget"
           },
-          "fields": {
-            "type": "object",
-            "description": "The front matter fields its file carries beyond a task file's own, as written."
+          "timeZone": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cron",
+          "delegateType",
+          "enabled",
+          "id",
+          "lastSlot",
+          "name",
+          "nextSlot",
+          "runs",
+          "target",
+          "timeZone"
+        ]
+      },
+      "ViewRoutineRun": {
+        "description": "One run of a routine.",
+        "type": "object",
+        "properties": {
+          "endedAt": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "outcome": {
+            "description": "How it ended: `delivered`, `silent`, `failed`; null while it runs or when it was skipped.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reason": {
+            "description": "Why it was skipped or queued, or how it failed.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "slot": {
+            "description": "`test`, `by-hand`, `event`, or the time of its scheduled slot in the routine's zone (\"09:00\").",
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "number"
+          },
+          "state": {
+            "type": "string"
+          },
+          "usd": {
+            "type": [
+              "null",
+              "number"
+            ]
+          }
+        },
+        "required": [
+          "endedAt",
+          "outcome",
+          "reason",
+          "slot",
+          "startedAt",
+          "state",
+          "usd"
+        ]
+      },
+      "ViewSpendOutput": {
+        "type": "object",
+        "properties": {
+          "byRoutine": {
+            "description": "Each routine of the project: what its runs in the window spent, and how many there were.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "routineId": {
+                  "type": "string"
+                },
+                "runs": {
+                  "type": "number"
+                },
+                "usd": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "name",
+                "routineId",
+                "runs",
+                "usd"
+              ]
+            }
+          },
+          "byType": {
+            "description": "Each delegate type the project's delegated work ran on in the window (null: none named), and its items.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "items": {
+                  "type": "number"
+                },
+                "type": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "usd": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "items",
+                "type",
+                "usd"
+              ]
+            }
+          },
+          "since": {
+            "description": "The window's start, ms epoch.",
+            "type": "number"
+          },
+          "until": {
+            "description": "The window's end: now.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "byRoutine",
+          "byType",
+          "since",
+          "until"
+        ]
+      },
+      "ViewEventsOutput": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "description": "Newest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ViewEvent"
+            }
+          }
+        },
+        "required": [
+          "rows"
+        ]
+      },
+      "ViewEvent": {
+        "description": "One inbound event from outside (GitHub, a polled connection).",
+        "type": "object",
+        "properties": {
+          "handledAt": {
+            "description": "When a routine took it, or null while none has.",
+            "type": [
+              "null",
+              "number"
+            ]
           },
           "id": {
             "type": "string"
           },
           "kind": {
-            "$ref": "#/components/schemas/StageKind",
-            "description": "Its stage's kind; null when its stage is not one of the project's."
+            "description": "What kind of event it is (`issues.opened`, `pull_request.closed`, a connector's kind).",
+            "type": "string"
           },
-          "labels": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "liveAttempt": {
-            "type": "boolean"
-          },
-          "needsYou": {
-            "type": "boolean"
-          },
-          "number": {
+          "receivedAt": {
             "type": "number"
           },
-          "rank": {
+          "routedTo": {
+            "description": "The routine a route sent it to, by name; null when no route took it.",
             "type": [
               "null",
               "string"
             ]
           },
-          "stage": {
+          "source": {
+            "description": "Where it came from (`github`, a connection's name).",
             "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "todos": {
-            "type": "object",
-            "properties": {
-              "done": {
-                "type": "number"
-              },
-              "total": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "done",
-              "total"
-            ]
-          },
-          "type": {
-            "type": [
-              "null",
-              "string"
-            ]
           }
         },
         "required": [
-          "blockedBy",
-          "dates",
-          "fields",
+          "handledAt",
           "id",
-          "labels",
-          "liveAttempt",
-          "needsYou",
-          "number",
-          "rank",
-          "stage",
-          "title",
-          "todos",
-          "type"
+          "kind",
+          "receivedAt",
+          "routedTo",
+          "source"
         ]
       },
       "JoinInfo": {
@@ -41683,16 +41530,6 @@
           "unreadable-credentials"
         ]
       },
-      "BadgePropsTone": {
-        "type": "string",
-        "enum": [
-          "attn",
-          "done",
-          "fail",
-          "live",
-          "neutral"
-        ]
-      },
       "BinaryUpdateLandingOutcome": {
         "type": "string",
         "enum": [
@@ -41751,13 +41588,6 @@
           "manual"
         ]
       },
-      "CalendarPropsRange": {
-        "type": "string",
-        "enum": [
-          "month",
-          "week"
-        ]
-      },
       "CatalogTypeSource": {
         "type": "string",
         "enum": [
@@ -41771,15 +41601,6 @@
           "attempt",
           "delegate",
           "turn"
-        ]
-      },
-      "ColumnPropsAlign": {
-        "type": "string",
-        "enum": [
-          "center",
-          "end",
-          "start",
-          "stretch"
         ]
       },
       "CommandAckOutcome": {
@@ -41891,26 +41712,6 @@
         "enum": [
           "dir",
           "file"
-        ]
-      },
-      "FunctionCallCall": {
-        "type": "string",
-        "enum": [
-          "formatDate",
-          "formatNumber",
-          "formatString",
-          "pluralize"
-        ]
-      },
-      "FunctionCallReturnType": {
-        "type": "string",
-        "enum": [
-          "any",
-          "array",
-          "boolean",
-          "number",
-          "object",
-          "string"
         ]
       },
       "HomeCredentialKind": {
@@ -42084,15 +41885,6 @@
           "silent"
         ]
       },
-      "RowPropsJustify": {
-        "type": "string",
-        "enum": [
-          "center",
-          "end",
-          "spaceBetween",
-          "start"
-        ]
-      },
       "SessionPulseActivity": {
         "type": "string",
         "enum": [
@@ -42170,15 +41962,6 @@
           "routine",
           "session",
           "you"
-        ]
-      },
-      "TextPropsVariant": {
-        "type": "string",
-        "enum": [
-          "body",
-          "label",
-          "meta",
-          "title"
         ]
       },
       "TranscriptBlockState": {

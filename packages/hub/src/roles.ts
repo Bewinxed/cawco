@@ -64,6 +64,7 @@ export const CAW_TOOLS = [
   "thread_read",
   "thread_reply",
   "view_draft",
+  "view_query",
   "folder_read",
   "folder_write",
 ] as const;

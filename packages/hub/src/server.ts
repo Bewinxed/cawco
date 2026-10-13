@@ -14315,8 +14315,10 @@ export const createServer = (
   );
   // Attempts at tasks: started by a session, a stage's `runs:` hook, or the
   // dispatcher itself for a project that dispatches (dispatch.ts).
-  // A project's views: drafts Caw writes, kept when you approve (views.ts).
+  // A project's views: drafts Caw writes, kept when you approve, and the
+  // view tools they read (views.ts).
   const views = createViews({
+    db,
     projectName: (id) => db.project(id)?.name,
     tasks,
   });
