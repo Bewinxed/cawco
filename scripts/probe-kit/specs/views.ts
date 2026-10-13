@@ -6,15 +6,18 @@
  *
  * a. Ask Caw for a view on a project with tasks: his draft arrives as a tab,
  *    renders, and its Queries fill it with the project's data (each task's
- *    title, the count of tasks); every request the view makes is a view
- *    tool on the dashboard's own origin.
+ *    title, the count of tasks, a month calendar of them); a Query's default
+ *    is never shown as its data (the frame stands as its skeleton until the
+ *    tools answer); every request the view makes is a view tool on the
+ *    dashboard's own origin.
  * b. A hand-written .oui naming a component the library does not have
  *    renders the rest and names the one it dropped.
  * c. A draft whose Query names a tool views do not have is refused at
  *    draft: no file, and Caw reads why.
  * d. Keep stores views/<name>.oui (the draft's file gone), and the view
  *    still renders after a reload.
- * e. The app's route renders that one view and nothing around it.
+ * e. The app's route renders that one view and nothing around it (on a
+ *    phone, its month calendar as the month's list).
  *
  *   bun scripts/probe-kit/run.ts views
  */
@@ -31,14 +34,35 @@ const TITLES = ["Probe alpha", "Probe beta", "Probe gamma"];
 /** The figure tile over the tasks' count: the `stages` tool's total. */
 const ALL_THREE = /All tasks\s*3/;
 
-/** Caw's good draft (a): two Queries, figures, a table and the board. */
-const GOOD = `root = Column([title, figures, table, board])
+/** Caw's good draft (a): two Queries, figures, a table, the board and a month. */
+const GOOD = `root = Column([title, figures, table, board, month])
 tasks = Query("tasks", {}, {rows: []})
 stages = Query("stages", {}, {stages: [], byKind: {you: 0, done: 0}, total: 0})
 title = Text("Probe week", "title")
 figures = Row([StatTile("All tasks", stages.total), StatTile("Waiting on you", stages.byKind.you, "attn")])
 table = Table(tasks.rows, [{label: "Task", field: "title"}, {label: "Stage", field: "stage"}])
-board = Board(@Each(stages.stages, "s", StageColumn(s, tasks.rows)), "By stage")`;
+board = Board(@Each(stages.stages, "s", StageColumn(s, tasks.rows)), "By stage")
+month = Calendar(tasks.rows, "dates.createdAt", "month")`;
+
+/**
+ * Every time the view frame's shown words change: whether its count tile
+ * ever read 0 (a Query's default drawn as data), and whether its skeleton
+ * stood while the tools had not answered.
+ */
+const RECORD = () => {
+  const seen = { zero: false, skeleton: false };
+  (window as unknown as { probeView: typeof seen }).probeView = seen;
+  // biome-ignore lint/performance/useTopLevelRegex: this runs in the page as an init script, where the module's constants do not exist
+  const zero = /All tasks\s*0\b/;
+  new MutationObserver(() => {
+    const frame = document.querySelector<HTMLElement>(".view-frame");
+    if (!frame) {
+      return;
+    }
+    seen.skeleton ||= frame.querySelector("[data-view-pending]") !== null;
+    seen.zero ||= zero.test(frame.innerText);
+  }).observe(document, { subtree: true, childList: true, characterData: true });
+};
 
 /** A draft reading a tool views do not have (c). */
 const BAD_TOOL = `root = Column([people])
@@ -164,7 +188,7 @@ const run = async (kit: Kit) => {
     ).then((response) => response.status);
 
   const base = await fleet.dashboard();
-  const page = await kit.page("desk");
+  const page = await kit.page("desk", { init: [RECORD] });
   const tab = (name: string) =>
     page.locator(`a[href$="view=view%3A${name}"]`).first();
 
@@ -186,6 +210,19 @@ const run = async (kit: Kit) => {
   await tab("probe-week").click();
   const drawn = await viewWords(page, ".view-frame", ["All tasks"]);
   const rows = await page.locator(".view-frame tbody tr").count();
+  const monthChips = await page
+    .locator(".view-frame .ec-month-view .ec-event")
+    .count();
+  const recorded = await page.evaluate(
+    () =>
+      (window as unknown as { probeView: { zero: boolean; skeleton: boolean } })
+        .probeView
+  );
+  kit.check(
+    "a: the month calendar places every task, and no Query's default is drawn as data",
+    monthChips === TITLES.length && recorded.skeleton && !recorded.zero,
+    `${monthChips} chips in the month grid; skeleton seen ${recorded.skeleton}; a count of 0 seen ${recorded.zero}`
+  );
   const { origin } = new URL(base);
   const viewCalls = requests.filter((url) => url.includes("/view-tools/"));
   const elsewhere = requests.filter(
@@ -299,16 +336,20 @@ const run = async (kit: Kit) => {
       x: box?.x ?? -1,
       width: box?.width ?? 0,
       viewport: window.innerWidth,
+      monthList: document.querySelectorAll(
+        "[data-view-alone] .ec-list .ec-event"
+      ).length,
     };
   });
   kit.check(
-    "e: the app's route renders the one view, with no shell, rail or bar",
+    "e: the app's route renders the one view, with no shell, rail or bar, its month as a list",
     TITLES.every((title) => alone.includes(title)) &&
       !frame.shell &&
       !frame.rail &&
       !frame.top &&
       frame.x === 0 &&
-      frame.width === frame.viewport,
+      frame.width === frame.viewport &&
+      frame.monthList === TITLES.length,
     JSON.stringify(frame)
   );
 };

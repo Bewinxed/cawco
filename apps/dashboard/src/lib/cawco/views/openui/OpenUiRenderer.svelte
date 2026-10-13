@@ -87,6 +87,7 @@
     isStreaming = false,
     toolProvider = null,
     class: className,
+    pending: pendingContent,
     onParseResult,
     onError,
   }: {
@@ -97,6 +98,12 @@
     isStreaming?: boolean;
     toolProvider?: OpenUIToolProvider | null;
     class?: string;
+    /**
+     * Drawn instead of the program until each of its Queries has answered
+     * once, so a Query's defaults are never shown as its data. Without it,
+     * the program draws at once with the defaults.
+     */
+    pending?: Snippet;
     /** The raw parse (props still as AST), each time it changes. */
     onParseResult?: (result: ParseResult | null) => void;
     /** Every error the parser, the evaluation, a render or a tool reported; [] once all are gone. */
@@ -377,6 +384,18 @@
   });
 
   const loading = $derived(querySnapshot.__openui_loading.length > 0);
+  /**
+   * A Query has not answered once yet: the manager has no entry for it, or
+   * it is loading for the first time (loading, and not a refetch).
+   */
+  const unanswered = $derived(
+    (result?.queryStatements ?? []).some(
+      ({ statementId }) =>
+        !(statementId in querySnapshot) ||
+        (querySnapshot.__openui_loading.includes(statementId) &&
+          !querySnapshot.__openui_refetching.includes(statementId))
+    )
+  );
 </script>
 
 {#snippet renderNode(
@@ -413,7 +432,9 @@
   {/if}
 {/snippet}
 
-{#if evaluated}
+{#if pendingContent && unanswered}
+  {@render pendingContent()}
+{:else if evaluated}
   <div
     aria-busy={loading}
     class={className}

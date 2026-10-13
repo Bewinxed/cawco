@@ -35,27 +35,40 @@
 <script lang="ts">
   /**
    * The calendar view: Event Calendar's week grid (PRD §5.2, MIT, Svelte 5),
-   * a list of the week under 640px. Each task is placed by its date field;
+   * or its month grid for a view that asks for a month (`range`), a list of
+   * the week or month under 640px. Each task is placed by its date field;
    * a task without one is left off. A chip is the task's title in the label
    * role: set for later on the raised surface with the control edge, done in
    * the done pair, waiting on you in the attention pair. A chip opens the
    * task's sheet. The library's palette is not loaded (vite.config.ts); its
    * variables take the tokens here.
    */
-  import { Calendar, List, TimeGrid } from "@event-calendar/core";
+  import { Calendar, DayGrid, List, TimeGrid } from "@event-calendar/core";
   import "../../../../node_modules/@event-calendar/core/src/styles/index.css";
   import { MediaQuery } from "svelte/reactivity";
 
   let {
     tasks,
     field,
+    range = "week",
     onopen,
   }: {
     tasks: ViewTask[];
     /** The date field that places a task. */
     field: string;
+    /** How much it shows at once: a week (the project's Calendar), or a month. */
+    range?: "week" | "month";
     onopen: (id: string) => void;
   } = $props();
+
+  const month = $derived(range === "month");
+  /** Each width's view of the range: a grid on a desk, a list on a phone. */
+  const shownView = $derived.by(() => {
+    if (narrow.current) {
+      return month ? "listMonth" : "listWeek";
+    }
+    return month ? "dayGridMonth" : "timeGridWeek";
+  });
 
   const narrow = new MediaQuery("(max-width: 639px)");
   const HALF_HOUR = 30 * 60_000;
@@ -97,14 +110,15 @@
   );
 
   const options = $derived({
-    view: narrow.current ? "listWeek" : "timeGridWeek",
+    view: shownView,
     date: first,
     events,
-    height: narrow.current ? "auto" : "40rem",
+    // The week's hours scroll inside the grid; a month's weeks stand whole.
+    height: narrow.current || month ? "auto" : "40rem",
     headerToolbar: { start: "title", center: "", end: "today prev,next" },
     buttonText: (text: Record<string, string>) => ({
       ...text,
-      today: "This week",
+      today: month ? "This month" : "This week",
     }),
     allDayContent: "All day",
     scrollTime: "08:00:00",
@@ -116,7 +130,7 @@
 </script>
 
 <div class="view-calendar">
-  <Calendar {options} plugins={[TimeGrid, List]} />
+  <Calendar {options} plugins={[TimeGrid, DayGrid, List]} />
 </div>
 
 <style>

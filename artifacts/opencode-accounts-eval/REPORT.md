@@ -527,7 +527,7 @@ memory figures above are one server process each; §8 measures whole process
 trees.
 
 Checks run on the change: `bun run typecheck` at the root (every package,
-`openapi:check`, `roles:check`, `a2ui:check`, `tools:check`, the binary
+`openapi:check`, `roles:check`, the views' conformance check, `tools:check`, the binary
 tsconfig): green. `bunx biome check packages/agent/src packages/core/src
 scripts/probe-opencode-accounts.ts`: clean. And this grep returns nothing
 outside this report:
