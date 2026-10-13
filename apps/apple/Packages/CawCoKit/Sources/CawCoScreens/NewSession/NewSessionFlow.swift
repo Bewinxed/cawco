@@ -7,9 +7,11 @@ import UIKit
 /// (Sidebar.svelte's single dialog mount over continue.svelte.ts): a new
 /// session with a place filled in, or "Continue in new session" from any
 /// session's menu. The hub carries each continuation to its end whatever
-/// happens to the form; one whose form was closed while it runs is seen
-/// through here: its new session opens once it starts, or a toast says why it
-/// failed, with the way back into the same form.
+/// happens to the form. One whose form was put away while it runs is seen
+/// through on the row it was asked from (`HubConnection.acts`): "Continuing
+/// in a new session…", then "Continued in a new session" with the new
+/// session one menu item away, or the hub's reason why not. Asking to
+/// continue that row again brings the form back as it was left.
 @MainActor
 final class NewSessionFlow {
     private let hub: HubConnection
@@ -20,7 +22,10 @@ final class NewSessionFlow {
     /// What a continuation's source is called, where the row carries no title of its own.
     var title: (String) -> String? = { _ in nil }
 
-    private var detached: [String: (source: ContinueSource, draft: SessionDraft)] = [:]
+    /// Each continuation carried on without its form, by the hub's job id: the row it was asked from, and the form to recover with.
+    private var detached: [String: (row: String, source: ContinueSource, draft: SessionDraft?)] = [:]
+    /// What a refused continuation's form held, by its source row: the next ask to continue there starts from it.
+    private var refused: [String: (source: ContinueSource, draft: SessionDraft?)] = [:]
 
     init(hub: HubConnection) {
         self.hub = hub
@@ -39,18 +44,33 @@ final class NewSessionFlow {
                                        model: row.model, title: name))
     }
 
-    func continueSession(_ source: ContinueSource, restore: SessionDraft? = nil) {
-        show(NewSessionViewController(hub: hub, continuing: source, restore: restore))
+    func continueSession(_ source: ContinueSource) {
+        let row = sourceRow(source)
+        let kept = refused.removeValue(forKey: row)
+        if kept != nil { hub.acts.clear(row) }
+        show(NewSessionViewController(hub: hub, continuing: kept?.source ?? source, restore: kept?.draft ?? nil))
+    }
+
+    /// The row a continuation was asked from: the hub's instance, or the stored session's conversation.
+    private func sourceRow(_ source: ContinueSource) -> String {
+        hub.fleet.byId[source.instanceId] != nil
+            ? source.instanceId
+            : hub.fleet.conversationId(sessionKey: source.instanceId, machineId: source.machineId, cwd: source.cwd)
     }
 
     private func show(_ form: NewSessionViewController) {
         guard let presenter = presenter(), !(presenter is NewSessionViewController) else { return }
         form.onOpen = { [weak self] id in self?.open(id) }
-        form.onDetach = { [weak self] id, source, draft in
-            self?.detached[id] = (source, draft)
-            self?.settle()
-        }
+        form.onDetach = { [weak self] id, source, draft in self?.detach(id, source: source, draft: draft) }
         presenter.present(form, animated: true)
+    }
+
+    /// A continuation the hub carries on while its form is put away: followed on its source's row from here.
+    func detach(_ id: String, source: ContinueSource, draft: SessionDraft?) {
+        let row = sourceRow(source)
+        detached[id] = (row, source, draft)
+        hub.acts.begin(.continueOn, [row])
+        settle()
     }
 
     /// Each detached continuation, as the hub's table moves.
@@ -68,15 +88,16 @@ final class NewSessionFlow {
             switch job.stage {
             case .started:
                 detached[id] = nil
-                open(job.targetInstanceId)
+                // The operator has moved on: the new session waits on its source's row, one item away.
+                hub.acts.finish(entry.row, "Continued in a new session", opens: job.targetInstanceId)
             case .failed:
                 detached[id] = nil
-                // Kept until dismissed or used: it carries the form to recover with.
-                Toast.show("Couldn't continue \"\(entry.source.title)\"", description: job.error, kind: .error,
-                           action: .init("Reopen") { [weak self] in self?.continueSession(entry.source, restore: entry.draft) },
-                           sticky: true, in: presenter()?.view)
+                // The reason on the row; continuing it again brings the form back as it was left.
+                refused[entry.row] = (entry.source, entry.draft)
+                hub.acts.refuse(entry.row, job.error ?? "", status: hub.fleet.byId[entry.row]?.status.rawValue)
             case .cancelled:
                 detached[id] = nil
+                hub.acts.clear(entry.row)
             case .starting, .summarising, .unrecognized:
                 break
             }

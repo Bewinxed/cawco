@@ -115,16 +115,15 @@ Options
   --version       print the version
 
 Signing in
-  The daemon runs Claude Code as you, so it uses the login Claude Code keeps on
-  this machine. Log a machine in from the dashboard — Log in… in its machine
-  menu — which runs \`claude auth login\` there and takes the code you paste
-  back, or run \`claude auth login\` on the machine yourself.
+  Claude sessions run on CawCo's own accounts: add one in the dashboard's
+  Configure → Accounts and sign it in there on each machine. Each keeps its
+  login in its own folder on the machine (~/.cawco/accounts/<id>/claude); the
+  machine's own ~/.claude login is not used.
 
   On macOS, run the daemon as a service — \`cawco service install\` — so it
   inherits your desktop session and can read the login keychain. A daemon
   started over SSH cannot, and every turn comes back "Not logged in" until the
-  machine is logged in from the dashboard, which keeps that login in a file the
-  daemon can read.
+  keychain is unlocked: Unlock keychain… in the machine's menu.
 
 Finding the hub, in order — the first that answers wins
   1. --hub, then ${CAWCO_ENV.hubUrl}

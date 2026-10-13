@@ -6,6 +6,13 @@ import UIKit
 // A session's menus (LiveSessionMenu.svelte, StoredSessionMenu.svelte):
 // right-click, or a long-press under a finger, on a session wherever one is
 // listed. Copies say so in a toast and hold a check before the menu closes.
+//
+// Each action keeps the operator where they asked (DESIGN.md, The Stay In
+// Context Rule). Stop and Archive say what is happening on the session's own
+// row until the hub answers, and a refusal stays there in the hub's words
+// (`HubConnection.acts`). Fork and Keep stay open in the menu while they run
+// and say why there when refused. Rename turns the row into a field.
+// Delete and Discard ask in a dialog that comes out of the row.
 
 /// What the menus need from where they are shown.
 @MainActor
@@ -26,42 +33,57 @@ enum SessionMenus {
     /// A live (hub-held) session. Keep and Discard only on a spin-off; Fork
     /// needs a conversation and its machine, Stop a live process. `onArchive`
     /// where it is listed as finished.
-    static func live(_ row: InstanceRow, context: SessionMenuContext, onArchive: (() -> Void)? = nil,
-                     copy: @escaping (String, String, String) -> UIAction) -> UIMenu {
+    static func live(_ row: InstanceRow, context: SessionMenuContext, onArchive: (() -> Void)? = nil, copy host: MenuHost) -> UIMenu {
         let hub = context.hub
+        let acts = hub.acts
         let id = row.id
+        let status = row.status.rawValue
         let running = row.status == .running || row.status == .starting
         let machine = hub.fleet.machines.first { $0.machineId == row.machineId }
         let forkable = row.sessionId
         let title = hub.fleet.title(row)
-        var first: [UIMenuElement] = [
-            UIAction(title: "Open", image: Glyph.external.image) { _ in context.open(id) },
-            UIAction(title: "Fork", image: Glyph.structure.image, attributes: forkable != nil && machine != nil ? [] : .disabled) { _ in
-                guard let key = forkable else { return }
-                Task { @MainActor in
-                    do {
-                        let forked = try await hub.fork(machineId: row.machineId, cwd: row.cwd, sessionKey: key,
-                                                        harness: row.harness.flatMap { .init(rawValue: $0) } ?? .claude)
-                        context.open(forked)
-                    } catch {
-                        Toast.error(error.localizedDescription, in: context.presenter().view)
-                    }
-                }
-            },
-        ]
-        if let onward = context.continueInNewSession {
-            first.append(UIAction(title: "Continue in new session…", image: Glyph.arrowRight.image) { _ in onward(id) })
-        }
-        if running {
-            first.append(UIAction(title: "Stop", image: Glyph.stop.image) { _ in
-                Task { @MainActor in try? await hub.stopSession(instanceId: id, machineId: row.machineId) }
+        let asked = acts.act(id, status: status)
+        func busy(_ verb: SessionActs.Verb) -> Bool { asked?.verb == verb && asked?.stage == .inFlight }
+        var first: [UIMenuElement] = []
+        // A continuation carried on after its form was put away ends on this row: it opens from here.
+        if let made = acts.opens(id) {
+            first.append(UIAction(title: "Open the new session", image: Glyph.arrowRight.image) { _ in
+                acts.clear(id)
+                context.open(made)
             })
         }
-        if let onArchive { first.append(UIAction(title: "Archive", image: Glyph.archive.image) { _ in onArchive() }) }
+        first.append(UIAction(title: "Open", image: Glyph.external.image) { _ in context.open(id) })
+        first.append(pending("Fork", running: "Forking…", image: Glyph.structure.image, verb: .fork, id: id, status: status,
+                             host: host, hub: hub, enabled: forkable != nil && machine != nil) {
+            guard let key = forkable else { return nil }
+            return try await hub.fork(machineId: row.machineId, cwd: row.cwd, sessionKey: key,
+                                      harness: row.harness.flatMap { .init(rawValue: $0) } ?? .claude)
+        } then: { forked in
+            if let forked { context.open(forked) }
+        })
+        if let onward = context.continueInNewSession {
+            first.append(UIAction(title: "Continue in new session…", image: Glyph.arrowRight.image,
+                                  attributes: busy(.continueOn) ? .disabled : []) { _ in onward(id) })
+        }
+        if running {
+            // Stopping cuts a turn short when one is running: the item says so.
+            let midTurn = hub.fleet.activityPulse(id)?.activity == .working
+            first.append(UIAction(title: busy(.stop) ? "Stopping…" : midTurn ? "Stop mid-turn" : "Stop", image: Glyph.stop.image,
+                                  attributes: busy(.stop) ? .disabled : []) { _ in
+                Task { @MainActor in
+                    await stop(id, machineId: row.machineId, hub: hub)
+                }
+            })
+        }
+        if let onArchive {
+            first.append(UIAction(title: busy(.archive) ? "Archiving…" : "Archive", image: Glyph.archive.image,
+                                  attributes: busy(.archive) ? .disabled : []) { _ in onArchive() })
+        }
         first.append(UIAction(title: "Rename…", image: Glyph.toolEdit.image) { _ in
-            context.presenter().present(RenameDialog(current: title) { next in
-                try await hub.renameInstance(id: id, title: next)
-            }, animated: true)
+            host.whenClosed {
+                guard let view = host.view else { return }
+                rename(id, over: view, current: title, hub: hub)
+            }
         })
         var sections = [UIMenu(options: .displayInline, children: first)]
 
@@ -70,58 +92,57 @@ enum SessionMenus {
         if asleepWithTranscript, let key = row.sessionId {
             sections.append(UIMenu(options: .displayInline, children: [
                 UIAction(title: "Delete transcript", image: Glyph.trash.image, attributes: .destructive) { _ in
-                    context.presenter().present(ConfirmDialog(
+                    confirm(ConfirmDialog(
                         title: "Delete this transcript?",
                         body: "“\(title)” is removed from \(row.cwd.isEmpty ? "this machine" : row.cwd), for good. Nothing else on the machine is touched.",
                         confirmLabel: "Delete transcript", pendingLabel: "Deleting…", destructive: true
                     ) {
                         try await deleteTranscript(hub: hub, machineId: row.machineId, sessionKey: key, dir: row.cwd.isEmpty ? nil : row.cwd, harness: row.harness)
-                    }, animated: true)
+                    }, from: host, context: context)
                 },
             ]))
         }
         if neverStarted {
             sections.append(UIMenu(options: .displayInline, children: [
                 UIAction(title: "Remove session", image: Glyph.trash.image, attributes: .destructive) { _ in
-                    context.presenter().present(ConfirmDialog(
+                    confirm(ConfirmDialog(
                         title: "Remove this session?", body: "It never started, so there is no transcript to lose.",
                         confirmLabel: "Remove session", pendingLabel: "Removing…", destructive: true
                     ) {
                         try await hub.removeSession(id: id)
-                    }, animated: true)
+                    }, from: host, context: context)
                 },
             ]))
         }
         if row.kind == "scratch" {
             sections.append(UIMenu(options: .displayInline, children: [
-                UIAction(title: "Keep", image: Glyph.check.image) { _ in
-                    Task { @MainActor in
-                        do { try await hub.keepSession(id: id) } catch { Toast.error(error.localizedDescription, in: context.presenter().view) }
-                    }
+                pending("Keep", running: "Keeping…", image: Glyph.check.image, verb: .keep, id: id, status: status, host: host, hub: hub) {
+                    try await hub.keepSession(id: id)
+                    return nil
                 },
                 UIAction(title: "Discard", image: Glyph.trash.image, attributes: .destructive) { _ in
-                    context.presenter().present(ConfirmDialog(
+                    confirm(ConfirmDialog(
                         title: "Discard this spin-off?",
                         body: "The session stops, and whatever the spawn created for it — its worktree, its transcript — goes with it, for good.",
                         confirmLabel: "Discard spin-off", pendingLabel: "Discarding…", destructive: true
                     ) {
                         try await hub.stopSession(instanceId: id, machineId: row.machineId, discard: true)
-                    }, animated: true)
+                        _ = await hub.refresh()
+                    }, from: host, context: context)
                 },
             ]))
         }
         var copies: [UIMenuElement] = []
-        let path = copy("Copy path", "Path", row.cwd)
+        let path = host("Copy path", "Path", row.cwd)
         if row.cwd.isEmpty { path.attributes = [.disabled, .keepsMenuPresented] }
         copies.append(path)
-        copies.append(copy("Copy id", "Session id", id))
+        copies.append(host("Copy id", "Session id", id))
         sections.append(UIMenu(options: .displayInline, children: copies))
         return UIMenu(children: sections)
     }
 
     /// A stored conversation, by its machine's catalog entry.
-    static func stored(machineId: String, info: StoredSession, context: SessionMenuContext,
-                       copy: @escaping (String, String, String) -> UIAction) -> UIMenu {
+    static func stored(machineId: String, info: StoredSession, context: SessionMenuContext, copy host: MenuHost) -> UIMenu {
         let hub = context.hub
         let to = hub.fleet.conversationId(sessionKey: info.sessionId, machineId: machineId, cwd: info.cwd)
         let row = hub.fleet.rows.first { $0.id == to }
@@ -136,49 +157,128 @@ enum SessionMenus {
         if UIApplication.shared.supportsMultipleScenes {
             first.append(UIAction(title: "Open in new window", image: Glyph.window.image) { _ in openInNewWindow(to) })
         }
-        first.append(
-            UIAction(title: "Fork from here", image: Glyph.structure.image) { _ in
-                Task { @MainActor in
-                    do {
-                        let forked = try await hub.fork(machineId: machineId, cwd: info.cwd ?? "", sessionKey: info.sessionId,
-                                                        harness: .init(rawValue: harness) ?? .claude)
-                        context.open(forked)
-                    } catch {
-                        Toast.error(error.localizedDescription, in: context.presenter().view)
-                    }
-                }
-            })
-        let path = copy("Copy path", "Path", info.cwd ?? "")
+        first.append(pending("Fork from here", running: "Forking…", image: Glyph.structure.image, verb: .fork, id: to,
+                             status: row?.status.rawValue, host: host, hub: hub) {
+            try await hub.fork(machineId: machineId, cwd: info.cwd ?? "", sessionKey: info.sessionId,
+                               harness: .init(rawValue: harness) ?? .claude)
+        } then: { forked in
+            if let forked { context.open(forked) }
+        })
+        let path = host("Copy path", "Path", info.cwd ?? "")
         if (info.cwd ?? "").isEmpty { path.attributes = [.disabled, .keepsMenuPresented] }
         let second: [UIMenuElement] = [
             UIAction(title: "Rename…", image: Glyph.toolEdit.image) { _ in
-                context.presenter().present(RenameDialog(current: title) { next in
-                    // A session the hub keeps is named there; a transcript it never ran, in the transcript.
-                    if let row {
-                        try await hub.renameInstance(id: row.id, title: next)
-                    } else {
-                        try await hub.renameSession(machineId: machineId, sessionKey: info.sessionId, title: next, dir: info.cwd,
-                                                    harness: .init(rawValue: harness))
-                        try await hub.reloadCatalog(machineId)
+                host.whenClosed {
+                    guard let view = host.view else { return }
+                    RenameInPlace.begin(over: view, current: title) { next in
+                        // A session the hub keeps is named there; a transcript it never ran, in the transcript.
+                        if let row {
+                            try await hub.renameInstance(id: row.id, title: next)
+                        } else {
+                            try await hub.renameSession(machineId: machineId, sessionKey: info.sessionId, title: next, dir: info.cwd,
+                                                        harness: .init(rawValue: harness))
+                            try await hub.reloadCatalog(machineId)
+                        }
+                    } named: { next in
+                        if let held = hub.fleet.byId[to] { return hub.fleet.title(held) == next }
+                        return hub.fleet.catalog(machineId).first { $0.sessionId == info.sessionId }
+                            .map { hub.fleet.storedTitle($0, machineId: machineId) } == next
                     }
-                }, animated: true)
+                }
             },
             path,
-            copy("Copy session id", "Session id", info.sessionId),
+            host("Copy session id", "Session id", info.sessionId),
         ]
         let third: [UIMenuElement] = [
             UIAction(title: "Delete transcript", image: Glyph.trash.image, attributes: .destructive) { _ in
-                context.presenter().present(ConfirmDialog(
+                confirm(ConfirmDialog(
                     title: "Delete this transcript?",
                     body: "“\(title)” is removed from \(info.cwd ?? "this machine"), for good. Nothing else on the machine is touched.",
                     confirmLabel: "Delete transcript", pendingLabel: "Deleting…", destructive: true
                 ) {
                     try await deleteTranscript(hub: hub, machineId: machineId, sessionKey: info.sessionId, dir: info.cwd, harness: harness)
-                }, animated: true)
+                }, from: host, context: context)
             },
         ]
         return UIMenu(children: [UIMenu(options: .displayInline, children: first), UIMenu(options: .displayInline, children: second),
                                  UIMenu(options: .displayInline, children: third)])
+    }
+
+    /// A menu item that runs where it was chosen (PendingSelect): the menu
+    /// stays up saying it is running, closes once the hub has it, and on a
+    /// refusal stays with the hub's reason under the item. The row says it
+    /// too, so a menu put away meanwhile loses nothing. `work`'s answer is
+    /// what `then` goes on to (a fork, the session it made).
+    static func pending(_ title: String, running: String, image: UIImage, verb: SessionActs.Verb, id: String, status: String?,
+                                host: MenuHost, hub: HubConnection, enabled: Bool = true,
+                                work: @escaping @MainActor () async throws -> String?,
+                                then: @escaping @MainActor (String?) -> Void = { _ in }) -> UIAction {
+        let acts = hub.acts
+        let asked = acts.act(id, status: status).flatMap { $0.verb == verb ? $0 : nil }
+        let busy = asked?.stage == .inFlight
+        var attributes: UIMenuElement.Attributes = .keepsMenuPresented
+        if busy || !enabled { attributes.insert(.disabled) }
+        let action = UIAction(title: busy ? running : title, image: image, attributes: attributes) { _ in
+            Task { @MainActor in
+                await runPending(verb, id: id, host: host, hub: hub, work: work, then: then)
+            }
+        }
+        if case .refused = asked?.stage { action.subtitle = acts.words(id, status: status)?.text }
+        return action
+    }
+
+    /// What a pending item does once chosen: in flight with the menu kept
+    /// up, then closed and on to what it made, or refused in the hub's words.
+    static func runPending(_ verb: SessionActs.Verb, id: String, host: MenuHost, hub: HubConnection,
+                           work: @MainActor () async throws -> String?, then: @MainActor (String?) -> Void) async {
+        let acts = hub.acts
+        acts.begin(verb, [id])
+        host.refresh()
+        do {
+            let made = try await work()
+            acts.settle([id])
+            host.close()
+            then(made)
+        } catch {
+            acts.refuse(id, error.localizedDescription, status: hub.fleet.byId[id]?.status.rawValue)
+            host.refresh()
+        }
+    }
+
+    /// Renames a hub-held session where its row stands.
+    @discardableResult
+    static func rename(_ id: String, over view: UIView, current: String, hub: HubConnection) -> RenameInPlace {
+        RenameInPlace.begin(over: view, current: current) { next in
+            try await hub.renameInstance(id: id, title: next)
+        } named: { next in
+            hub.fleet.byId[id].map { hub.fleet.title($0) } == next
+        }
+    }
+
+    /// Stops a session from wherever it is listed: "Stopping…" on its row
+    /// until the hub answers, then the row is what the hub's instance list
+    /// says; a refusal stays on the row in the hub's words, read against
+    /// the list as the hub left it (it files a Stop at once, even one its
+    /// machine has not carried out).
+    static func stop(_ id: String, machineId: String, hub: HubConnection) async {
+        await hub.acts.run(.stop, on: id, status: { hub.fleet.byId[id]?.status.rawValue }) {
+            do {
+                try await hub.stopSession(instanceId: id, machineId: machineId)
+            } catch {
+                _ = await hub.refresh()
+                throw error
+            }
+            _ = await hub.refresh()
+        }
+    }
+
+    /// A confirm that comes out of the row it was asked on and goes back into
+    /// it (KitDialogController `origin`), once the menu has gone.
+    static func confirm(_ dialog: ConfirmDialog, from host: MenuHost, context: SessionMenuContext) {
+        host.whenClosed {
+            dialog.origin = host.view
+            context.presenter().present(dialog, animated: true)
+        }
     }
 
     /// client.svelte.ts `deleteTranscript`: the machine deletes it, then its catalog is read again.
@@ -193,18 +293,39 @@ enum SessionMenus {
     }
 }
 
+/// What a menu's items reach of the menu and of the view it opened on: its
+/// copy items, the view itself (the row a rename edits in place, the row a
+/// confirm comes out of), and the open menu, redrawn as an item runs or put
+/// away when it is done.
+@MainActor
+struct MenuHost {
+    let copier: (_ title: String, _ what: String, _ text: String) -> UIAction
+    /// The view the menu opened on: the row the session is drawn in.
+    weak var view: UIView?
+    /// Draws the open menu again from the state now.
+    let refresh: () -> Void
+    /// Puts the menu away.
+    let close: () -> Void
+    /// Runs `work` once the menu has gone, at once when none is open.
+    let whenClosed: (@escaping () -> Void) -> Void
+
+    /// A copy item (ContextMenu.CopyItem).
+    func callAsFunction(_ title: String, _ what: String, _ text: String) -> UIAction { copier(title, what, text) }
+}
+
 /// A context menu on a view (ContextMenu.Root): built as it opens, from the
 /// state at that moment. Its copy items (ContextMenu.CopyItem) copy, say so
 /// in a toast, turn their glyph to a check for `durHold`, then close.
 @MainActor
 final class ContextMenuHost: NSObject, UIContextMenuInteractionDelegate {
-    typealias Copy = (_ title: String, _ what: String, _ text: String) -> UIAction
-    private let build: (@escaping Copy) -> UIMenu?
+    private let build: (MenuHost) -> UIMenu?
     private weak var interaction: UIContextMenuInteraction?
     private var copied: String?
+    private var shown = false
+    private var afterClose: [() -> Void] = []
 
     @discardableResult
-    static func attach(to view: UIView, build: @escaping (@escaping Copy) -> UIMenu?) -> ContextMenuHost {
+    static func attach(to view: UIView, build: @escaping (MenuHost) -> UIMenu?) -> ContextMenuHost {
         let host = ContextMenuHost(build: build)
         let interaction = UIContextMenuInteraction(delegate: host)
         view.addInteraction(interaction)
@@ -215,12 +336,41 @@ final class ContextMenuHost: NSObject, UIContextMenuInteractionDelegate {
 
     nonisolated(unsafe) private static var key = 0
 
-    private init(build: @escaping (@escaping Copy) -> UIMenu?) {
+    private init(build: @escaping (MenuHost) -> UIMenu?) {
         self.build = build
     }
 
     private func menu() -> UIMenu? {
-        build { [weak self] title, what, text in self?.copyItem(title, what: what, text: text) ?? UIAction(title: title) { _ in } }
+        build(MenuHost(
+            copier: { [weak self] title, what, text in self?.copyItem(title, what: what, text: text) ?? UIAction(title: title) { _ in } },
+            view: interaction?.view,
+            refresh: { [weak self] in
+                guard let self, shown else { return }
+                interaction?.updateVisibleMenu { [weak self] current in self?.menu() ?? current }
+            },
+            close: { [weak self] in self?.interaction?.dismissMenu() },
+            whenClosed: { [weak self] work in
+                guard let self, shown else { return work() }
+                afterClose.append(work)
+            }
+        ))
+    }
+
+    func contextMenuInteraction(_: UIContextMenuInteraction, willDisplayMenuFor _: UIContextMenuConfiguration,
+                                animator _: (any UIContextMenuInteractionAnimating)?) {
+        shown = true
+    }
+
+    func contextMenuInteraction(_: UIContextMenuInteraction, willEndFor _: UIContextMenuConfiguration,
+                                animator: (any UIContextMenuInteractionAnimating)?) {
+        let finish = { [weak self] in
+            guard let self else { return }
+            shown = false
+            let waiting = afterClose
+            afterClose = []
+            waiting.forEach { $0() }
+        }
+        if let animator { animator.addCompletion(finish) } else { finish() }
     }
 
     private func copyItem(_ title: String, what: String, text: String) -> UIAction {
@@ -254,88 +404,5 @@ final class ContextMenuHost: NSObject, UIContextMenuInteractionDelegate {
         parameters.visiblePath = UIBezierPath(roundedRect: view.bounds, cornerRadius: Radius.radiusSm)
         parameters.backgroundColor = Palette.surfaceRaised
         return UITargetedPreview(view: view, parameters: parameters)
-    }
-}
-
-/// Renaming a session (RenameDialog.svelte): the field opens holding its
-/// current name and focused; Rename runs the caller's rename and stays
-/// open, saying why, if it fails.
-final class RenameDialog: KitDialogController, UITextFieldDelegate {
-    private let current: String
-    private let rename: (String) async throws -> Void
-    private let field = KitField()
-    private let problem = KitLabel(TypeScale.typeLabel, ink: Palette.destructive, lines: 0)
-    private var submit: UIButton!
-    private var busy = false
-
-    init(current: String, rename: @escaping (String) async throws -> Void) {
-        self.current = current
-        self.rename = rename
-        super.init(width: .md)
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("RenameDialog is built in code")
-    }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        body.addArrangedSubview(KitDialogController.header(title: "Rename session",
-                                                           description: "What this session is called wherever it is listed. It does not change the transcript."))
-        field.text = current
-        field.accessibilityLabel = "Session title"
-        field.delegate = self
-        field.returnKeyType = .done
-        field.addAction(UIAction { [weak self] _ in self?.paint() }, for: .editingChanged)
-        problem.isHidden = true
-        let column = UIStackView(arrangedSubviews: [field, problem])
-        column.axis = .vertical
-        column.spacing = Space.space2
-        body.addArrangedSubview(column)
-        let cancel = KitButton.make("Cancel", variant: .outline) { [weak self] in self?.dismiss(animated: true) }
-        submit = KitButton.make("Rename", variant: .action) { [weak self] in self?.commit() }
-        body.addArrangedSubview(KitDialogController.footer([cancel, submit]))
-        paint()
-    }
-
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        field.becomeFirstResponder()
-        field.selectAll(nil)
-    }
-
-    private func paint() {
-        submit.isEnabled = !(field.text ?? "").trimmingCharacters(in: .whitespaces).isEmpty && !busy
-    }
-
-    private func commit() {
-        let next = (field.text ?? "").trimmingCharacters(in: .whitespaces)
-        guard !next.isEmpty, !busy else { return }
-        busy = true
-        holdsOpen = true
-        submit.configuration?.showsActivityIndicator = true
-        KitButton.setTitle("Renaming…", of: submit, variant: .action, height: .standard)
-        paint()
-        Task { @MainActor in
-            do {
-                try await rename(next)
-                holdsOpen = false
-                dismiss(animated: true)
-            } catch {
-                busy = false
-                holdsOpen = false
-                submit.configuration?.showsActivityIndicator = false
-                KitButton.setTitle("Rename", of: submit, variant: .action, height: .standard)
-                problem.text = error.localizedDescription
-                morph { problem.isHidden = false }
-                paint()
-            }
-        }
-    }
-
-    func textFieldShouldReturn(_: UITextField) -> Bool {
-        commit()
-        return true
     }
 }

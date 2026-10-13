@@ -15,7 +15,6 @@ public struct ContextUsage: Codable, Sendable {
     public let totalTokens: Double
 }
 
-public struct LoginChallenge: Codable, Sendable { public let url: String }
 public struct FileWriteResult: Codable, Sendable { public let bytes: Double }
 public struct ReloadedSkills: Codable, Sendable { public let skills: [Components.Schemas.SlashCommand] }
 
@@ -176,17 +175,30 @@ extension HubConnection {
         let response = try await api.instances.update(.init(path: .init(id: id), body: .json(body)))
         let statusCode: Int
         var said: String?
+        // Every refusal carries the hub's own words ("title is blank", "no session …"): they are what the row says.
         switch response {
         case .ok: return
-        case .badRequest: statusCode = 400
-        case .notFound: statusCode = 404
-        case .conflict: statusCode = 409
+        case let .badRequest(refused):
+            statusCode = 400
+            said = await Wire.words(try? refused.body.plainText)
+        case let .notFound(refused):
+            statusCode = 404
+            said = await Wire.words(try? refused.body.plainText)
+        case let .conflict(refused):
+            statusCode = 409
+            said = await Wire.words(try? refused.body.plainText)
         case let .unprocessableContent(refused):
             statusCode = 422
             said = (try? refused.body.applicationProblemJson).flatMap { Wire.words(problem: $0) }
-        case .internalServerError: statusCode = 500
-        case .serviceUnavailable: statusCode = 503
-        case .gatewayTimeout: statusCode = 504
+        case let .internalServerError(refused):
+            statusCode = 500
+            said = await Wire.words(try? refused.body.plainText)
+        case let .serviceUnavailable(refused):
+            statusCode = 503
+            said = await Wire.words(try? refused.body.plainText)
+        case let .gatewayTimeout(refused):
+            statusCode = 504
+            said = await Wire.words(try? refused.body.plainText)
         case let .undocumented(code, payload):
             statusCode = code
             said = await Wire.words(payload.body)
@@ -224,12 +236,6 @@ extension HubConnection {
     }
     public func repositories(machineId: String) async throws -> Components.Schemas.ReposResult {
         try await machineControl(machineId: machineId, method: "listRepos")
-    }
-    public func beginLogin(machineId: String) async throws -> LoginChallenge {
-        try await machineControl(machineId: machineId, method: "beginLogin")
-    }
-    public func completeLogin(machineId: String, code: String) async throws -> Components.Schemas.AuthState {
-        try await Self.decodeResult(await control(machineId, method: "completeLogin", args: [code]))
     }
     public func unlockKeychain(machineId: String, password: String) async throws -> Components.Schemas.AuthState {
         try await Self.decodeResult(await control(machineId, method: "unlockKeychain", args: [password]))

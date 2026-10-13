@@ -544,11 +544,16 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                 MainActor.assumeIsolated { self?.probeShell() }
             }
         }
+        if ActsProbe.on, !actsProbed {
+            actsProbed = true
+            ActsProbe.start(shell: self, home: home, continuations: newSession)
+        }
         #endif
     }
 
     #if DEBUG
     private var shellProbe: Timer?
+    private var actsProbed = false
 
     /// A simulator pass's `-shell-probe`: once a second, in the Probe log,
     /// the tab in front, how many tabs its group has, whether the sidebar's

@@ -677,6 +677,35 @@ final class DelegateTrayView: UIView {
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.groundLinger, execute: work)
     }
 
+    #if DEBUG
+    /// A simulator probe opens `key`'s panel and presses its Dismiss.
+    func probeDismiss(_ key: String) -> Bool {
+        open(key, pin: true)
+        guard let dismiss = Self.probeButtons(in: panel).first(where: { $0.accessibilityLabel == "Dismiss" || $0.configuration?.attributedTitle.map { String($0.characters) } == "Dismiss" })
+        else { return false }
+        dismiss.sendActions(for: .primaryActionTriggered)
+        return true
+    }
+
+    /// What `key`'s panel shows now: its button and the reason under it.
+    func probePanel(_ key: String) -> String {
+        guard openKey == key, panel.window != nil else { return "panel closed; chip \(chips.contains { $0.item.id == key } ? "still in the tray" : "gone from the tray")" }
+        let buttons = Self.probeButtons(in: panel).compactMap { button in
+            button.configuration?.attributedTitle.map { "'\(String($0.characters))' enabled=\(button.isEnabled)" }
+        }
+        let problem = Self.probeLabels(in: panel).first { $0.accessibilityIdentifier == "tray-dismiss-problem" }
+        return "buttons \(buttons.joined(separator: ", ")) problem \(problem.map { $0.isHidden ? "hidden" : "'\($0.text ?? "")'" } ?? "none")"
+    }
+
+    private static func probeButtons(in view: UIView) -> [UIButton] {
+        [view as? UIButton].compactMap(\.self) + view.subviews.flatMap { probeButtons(in: $0) }
+    }
+
+    private static func probeLabels(in view: UIView) -> [KitLabel] {
+        [view as? KitLabel].compactMap(\.self) + view.subviews.flatMap { probeLabels(in: $0) }
+    }
+    #endif
+
     private func open(_ key: String, pin: Bool) {
         dwell?.cancel()
         closing?.cancel()
@@ -944,16 +973,28 @@ final class DelegateTrayView: UIView {
         column.spacing = Space.space2
         column.onLayout = { [weak self] in self?.panel.contentChanged() }
         head.widthAnchor.constraint(greaterThanOrEqualToConstant: 240).isActive = true
-        if chip.tone == .needs || chip.tone == .failed {
-            let act = chip.tone == .needs
-                ? KitButton.make("Open question", variant: .outline, height: .sm) { [weak self] in
-                    self?.close()
-                    self?.onOpen(item.instanceId)
-                }
-                : KitButton.make("Dismiss", variant: .ghost, height: .sm) { [weak self] in self?.dismiss(item) }
-            let acts = UIStackView(arrangedSubviews: [act, UIView()])
-            column.addArrangedSubview(acts)
+        if chip.tone == .needs {
+            let act = KitButton.make("Open question", variant: .outline, height: .sm) { [weak self] in
+                self?.close()
+                self?.onOpen(item.instanceId)
+            }
+            column.addArrangedSubview(UIStackView(arrangedSubviews: [act, UIView()]))
             column.setCustomSpacing(Space.space3, after: tail)
+        } else if chip.tone == .failed {
+            // Dismiss runs on the item's own row: pending there, the item
+            // leaving on the hub's word, a refusal under the button.
+            let problem = TaskSheetController.problemLabel()
+            problem.accessibilityIdentifier = "tray-dismiss-problem"
+            var dismissing: UIButton?
+            let act = KitButton.make("Dismiss", variant: .ghost, height: .sm) { [weak self] in
+                guard let self, let dismissing else { return }
+                dismiss(item, button: dismissing, problem: problem)
+            }
+            dismissing = act
+            column.addArrangedSubview(UIStackView(arrangedSubviews: [act, UIView()]))
+            column.addArrangedSubview(problem)
+            column.setCustomSpacing(Space.space3, after: tail)
+            column.setCustomSpacing(Space.space1, after: act.superview ?? act)
         }
         return column
     }
@@ -968,9 +1009,23 @@ final class DelegateTrayView: UIView {
         }
     }
 
-    private func dismiss(_ item: WorkItem) {
+    private func dismiss(_ item: WorkItem, button: UIButton, problem: KitLabel) {
+        button.isEnabled = false
+        button.configuration?.showsActivityIndicator = true
+        KitButton.setTitle("Dismissing…", of: button, variant: .ghost, height: .sm)
         Task { @MainActor [weak self, hub] in
-            do { try await hub.workItems.dismiss(item.id) } catch { Toast.error(error.localizedDescription, in: self?.window) }
+            do {
+                // The chip goes when the hub's list no longer has it.
+                try await hub.workItems.dismiss(item.id)
+            } catch {
+                button.isEnabled = true
+                button.configuration?.showsActivityIndicator = false
+                KitButton.setTitle("Dismiss", of: button, variant: .ghost, height: .sm)
+                problem.text = "Not dismissed: \(error.localizedDescription)"
+                problem.isHidden = false
+                self?.panel.contentChanged()
+                UIAccessibility.post(notification: .announcement, argument: problem.text)
+            }
         }
     }
 }

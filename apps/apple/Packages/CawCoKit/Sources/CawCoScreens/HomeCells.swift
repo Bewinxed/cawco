@@ -695,11 +695,20 @@ final class SessionRowView: UIView, HoverSessionRow {
         accessibilityElements = [summary]
         // The row is the session menu's trigger (SessionRow.svelte): a
         // long-press under a finger, a right-click under a pointer.
-        ContextMenuHost.attach(to: self) { [weak self] copy in self?.menu?(copy) }
+        ContextMenuHost.attach(to: self) { [weak self] host in self?.menu?(host) }
     }
 
     /// The session's menu, built as it opens from the fleet at that moment; nil where the row has none (a workflow run).
-    var menu: ((@escaping ContextMenuHost.Copy) -> UIMenu?)?
+    var menu: ((MenuHost) -> UIMenu?)?
+    /// The session drawn: a field renaming another one goes when the cell is given this one.
+    private var drawnId: String?
+
+    #if DEBUG
+    /// What the row draws now, read off its labels.
+    var probeState: String {
+        "says '\(summary.accessibilityLabel ?? "")' line '\(line.text ?? "")' ink \(line.ink == Palette.statusFailInk ? "fail" : "muted") lines \(line.numberOfLines)"
+    }
+    #endif
 
     private lazy var summary = UIAccessibilityElement(accessibilityContainer: self)
 
@@ -720,6 +729,8 @@ final class SessionRowView: UIView, HoverSessionRow {
         var status: MarkStatus
         var title: String
         var line = ""
+        /// `line` is the hub's refusal of what was asked of this session, in the fail ink, whole.
+        var lineFails = false
         var trail = ""
         var fold: HomeModel.Fold?
         /// The parent of delegates the list shows, drawn so they hang off it.
@@ -745,6 +756,18 @@ final class SessionRowView: UIView, HoverSessionRow {
     private(set) var hoverSessionId: String?
 
     func configure(_ content: Content) {
+        if drawnId != content.id {
+            subviews.compactMap { $0 as? RenameInPlace }.forEach { $0.removeFromSuperview() }
+            drawnId = content.id
+        }
+        accessibilityIdentifier = "session-row-\(content.id)"
+        #if DEBUG
+        if ActsProbe.on {
+            ActsProbe.log.notice("row drawn \(content.id, privacy: .public): '\(content.title, privacy: .public)' line '\(content.line, privacy: .public)' \(content.lineFails ? "FAULT" : "plain", privacy: .public)")
+        }
+        #endif
+        line.ink = content.lineFails ? Palette.statusFailInk : Palette.inkMuted
+        line.numberOfLines = content.lineFails ? 0 : 1
         hoverSessionId = content.hover
         mark.beat = (content.beat, content.beats)
         mark.configure(id: content.id, place: content.place, status: content.status, count: content.fold?.count ?? 0, open: content.fold?.open ?? false)

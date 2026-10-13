@@ -41,6 +41,8 @@ final class AssistantPanelView: UIView {
     private let logBox = UIStackView()
     private var supervisor: SupervisorStatus?
     private var supervisorError: String?
+    /// Why the log's first read failed; frames that arrive since still list.
+    private var eventsError: String?
     private var seeded = false
     private var statusKey = ""
 
@@ -210,8 +212,14 @@ final class AssistantPanelView: UIView {
         Task { @MainActor [weak self, hub] in
             // The seed goes through the one recorder the frames use: the same
             // row can arrive by both, and there is one merge.
-            let rows = (try? await hub.api.supervisor.events(.init(query: .init(limit: 100))).ok.body.json) ?? []
-            for row in rows { _ = hub.fleet.recordSupervisorEvent(row) }
+            do {
+                let rows = try await hub.api.supervisor.events(.init(query: .init(limit: 100))).ok.body.json
+                for row in rows { _ = hub.fleet.recordSupervisorEvent(row) }
+                self?.eventsError = nil
+            } catch {
+                // Never "No interventions yet" for a log that was not read: the reason stands in its place.
+                self?.eventsError = error.localizedDescription
+            }
             self?.seeded = true
             self?.render()
         }
@@ -304,6 +312,10 @@ final class AssistantPanelView: UIView {
         }
         logBox.spacing = 1
         let list = events
+        if list.isEmpty, let eventsError {
+            logBox.addArrangedSubview(note("Could not read the supervisor's log. \(eventsError)", ink: Palette.statusFailInk))
+            return
+        }
         guard !list.isEmpty else {
             let mark = GlyphView(.assistant, size: 20, tint: Palette.inkMuted)
             let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)

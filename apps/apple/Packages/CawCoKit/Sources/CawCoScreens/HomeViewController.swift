@@ -570,12 +570,15 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         guard let entry = rows[id] else { return nil }
         let line = entry.line.line
         let session = line.row
+        // What was asked of it from a row and the hub has not answered, or refused, stands in its line.
+        let asked = hub.acts.words(session.id, status: session.status.rawValue)
         return SessionRowView.Content(
             id: session.id,
             place: session.cwd.isEmpty ? session.machineId : session.cwd,
             status: Self.status(session, home: home, done: entry.tab == .finished),
             title: home.fleetTitle(session),
-            line: line.context ? "" : home.meta(session, tab: entry.tab, group: entry.group),
+            line: asked?.text ?? (line.context ? "" : home.meta(session, tab: entry.tab, group: entry.group)),
+            lineFails: asked?.failed ?? false,
             trail: line.context ? "" : home.age(session, tab: entry.tab),
             fold: entry.line.fold,
             context: line.context,
@@ -590,12 +593,15 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
     private func recentContent(_ id: String) -> SessionRowView.Content? {
         guard let recent = recentItems[id] else { return nil }
+        // Acted on by its live menu under its instance's id, by its stored menu under its own.
+        let asked = hub.acts.words(recent.instance?.id ?? recent.id, status: recent.instance?.status.rawValue)
         return SessionRowView.Content(
             id: recent.id,
             place: recent.markPlace,
             status: Self.status(recent.instance, home: home),
             title: recent.title,
-            line: recent.place,
+            line: asked?.text ?? recent.place,
+            lineFails: asked?.failed ?? false,
             trail: recent.at > 0 ? Naming.span(ms: home.now - recent.at) : "",
             stale: !home.live,
             hover: recent.instance?.id,

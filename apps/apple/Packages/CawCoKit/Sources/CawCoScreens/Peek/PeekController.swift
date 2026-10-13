@@ -1,6 +1,7 @@
 import CawCoCore
 import CawCoDesign
 import CawCoTranscript
+import OSLog
 import UIKit
 
 /// Which session the board is peeking (PeekPane.svelte `PeekTarget`).
@@ -55,6 +56,7 @@ private final class BaselineRow: UIStackView {
 /// it stands, exactly like an open tab, and lets it go when it is put away.
 final class PeekController: ObservedViewController {
     enum Fill { case sheet, side }
+    private static let log = Logger(subsystem: "dev.cawco.app", category: "Peek")
 
     private let hub: HubConnection
     private let home: HomeModel
@@ -65,6 +67,13 @@ final class PeekController: ObservedViewController {
     var onClose: () -> Void = {}
 
     private func onOpen() { onDive(target.viewId) }
+
+    #if DEBUG
+    /// What the peek draws now: its status line and its note.
+    var probeState: String {
+        "state '\(stateLabel.text ?? "")' note \(noteBox.isHidden ? "hidden" : "'\(note.text ?? "")'")"
+    }
+    #endif
 
     private let column = UIStackView()
     // Header.
@@ -135,9 +144,13 @@ final class PeekController: ObservedViewController {
     private func refreshContext() {
         guard let row, row.isLive else { return }
         Task { [weak self, hub, id = target.viewId] in
-            guard let usage = try? await hub.contextUsage(instanceId: id, machineId: row.machineId) else { return }
-            self?.usage = usage
-            self?.requestRefresh()
+            do {
+                self?.usage = try await hub.contextUsage(instanceId: id, machineId: row.machineId)
+                self?.requestRefresh()
+            } catch {
+                // A reading the session could not give leaves the meter without a number, as before one is asked.
+                Self.log.error("context usage for \(id, privacy: .public) not read: \(error.localizedDescription, privacy: .public)")
+            }
         }
     }
 
@@ -253,32 +266,37 @@ final class PeekController: ObservedViewController {
             line.trailingAnchor.constraint(equalTo: header.trailingAnchor, constant: -(16 - 6)),
         ])
         column.addArrangedSubview(header)
-        _ = ContextMenuHost.attach(to: header) { [weak self] _ in self?.menu() }
+        _ = ContextMenuHost.attach(to: header) { [weak self] host in self?.menu(host) }
     }
 
     /// The header's menu: Open, Fork, Stop while it runs, and Close peek.
-    private func menu() -> UIMenu {
+    /// Fork runs in the menu and leaves for the fork; Stop is said on the
+    /// peek's own status line until the hub answers, and a refusal in its note.
+    private func menu(_ host: MenuHost) -> UIMenu {
         let row = row
+        let id = target.viewId
+        let status = row?.status.rawValue
         let machine = row.flatMap { row in hub.fleet.machines.first { $0.machineId == row.machineId } }
         let forkable = row?.sessionId
         var first: [UIMenuElement] = [
             UIAction(title: "Open", image: Glyph.external.image) { [weak self] _ in self?.onOpen() },
-            UIAction(title: "Fork", image: Glyph.fork.image, attributes: forkable != nil && machine != nil ? [] : .disabled) { [weak self] _ in
-                guard let self, let row, let key = forkable else { return }
-                Task { @MainActor [hub, weak self] in
-                    do {
-                        let forked = try await hub.fork(machineId: row.machineId, cwd: row.cwd, sessionKey: key,
-                                                        harness: row.harness.flatMap { .init(rawValue: $0) } ?? .claude)
-                        self?.onDive(forked)
-                    } catch {
-                        Toast.error(error.localizedDescription, in: self?.view)
-                    }
-                }
+            SessionMenus.pending("Fork", running: "Forking…", image: Glyph.fork.image, verb: .fork, id: id, status: status,
+                                 host: host, hub: hub, enabled: forkable != nil && machine != nil) { [hub] in
+                guard let row, let key = forkable else { return nil }
+                return try await hub.fork(machineId: row.machineId, cwd: row.cwd, sessionKey: key,
+                                          harness: row.harness.flatMap { .init(rawValue: $0) } ?? .claude)
+            } then: { [weak self] forked in
+                if let forked { self?.onDive(forked) }
             },
         ]
         if let row, row.isLive {
-            first.append(UIAction(title: "Stop", image: Glyph.stop.image) { [hub] _ in
-                Task { @MainActor in try? await hub.stopSession(instanceId: row.id, machineId: row.machineId) }
+            let stopping = hub.acts.act(id, status: status).map { $0.verb == .stop && $0.stage == .inFlight } ?? false
+            let midTurn = hub.fleet.activityPulse(id)?.activity == .working
+            first.append(UIAction(title: stopping ? "Stopping…" : midTurn ? "Stop mid-turn" : "Stop", image: Glyph.stop.image,
+                                  attributes: stopping ? .disabled : []) { [hub] _ in
+                Task { @MainActor in
+                    await SessionMenus.stop(row.id, machineId: row.machineId, hub: hub)
+                }
             })
         }
         let close = UIAction(title: "Close peek", image: Glyph.close.image) { [weak self] _ in self?.onClose() }
@@ -385,7 +403,9 @@ final class PeekController: ObservedViewController {
             case .idle: "Idle"
             }
         }
-        stateLabel.text = word
+        // What was asked of it from here and the hub has not answered says itself on the status line.
+        let asked = hub.acts.words(target.viewId, status: row?.status.rawValue)
+        stateLabel.text = asked.flatMap { $0.failed ? nil : $0.text } ?? word
         let loud = failed || activity == .blocked
         stateLabel.role = loud ? TypeScale.typeMeta.with(weight: .medium) : TypeScale.typeMeta
         stateLabel.ink = loud ? Palette.error : Palette.mutedForeground
@@ -412,7 +432,13 @@ final class PeekController: ObservedViewController {
         // (`permission_settled`), and one whose agent is restarting is still waiting on its answer.
         drawAsks(hub.needs.parked[target.viewId] ?? [], machineId: row?.machineId ?? "")
 
-        if failed {
+        if let asked, asked.failed {
+            // The hub refused what was asked from this peek: said here, where it was asked.
+            noteBox.isHidden = false
+            noteBox.backgroundColor = Palette.error.withAlphaComponent(0.1)
+            note.ink = Palette.error
+            note.text = asked.text
+        } else if failed {
             noteBox.isHidden = false
             noteBox.backgroundColor = Palette.error.withAlphaComponent(0.1)
             note.ink = Palette.error

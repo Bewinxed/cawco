@@ -3,7 +3,7 @@ import CawCoCore
 import CawCoDesign
 import UIKit
 
-// A machine's login dialogs (MachineLogin.svelte, UnlockKeychain.svelte),
+// A machine's keychain dialog (UnlockKeychain.svelte),
 // what they show once sent (MachineAuthStatus.svelte), and an error read in
 // full (ErrorDialog.svelte).
 
@@ -11,7 +11,7 @@ import UIKit
 typealias AuthSaid = [Components.Schemas.AuthState: (title: String, body: String)]
 
 /// The body a login dialog shows once sent (MachineAuthStatus.svelte): the
-/// wait, naming the first step and after 1.5s the second, then the answer,
+/// wait, naming what the machine is doing until it answers, then the answer,
 /// a check for a machine that can start a turn and a warning for any
 /// other, which stays up until Done. Closing while it works only stops
 /// watching.
@@ -19,7 +19,6 @@ final class MachineAuthStatusView: UIStackView {
     private let mark = UIView()
     private let title = KitLabel(TypeScale.typeTitle, ink: Palette.foreground, lines: 0)
     private let line = CrossView()
-    private var stepTimer: Task<Void, Never>?
     private let onClose: () -> Void
     private var button: UIButton?
     private let buttonRow = UIStackView()
@@ -81,22 +80,16 @@ final class MachineAuthStatusView: UIStackView {
         line.show(label)
     }
 
-    func working(title text: String, steps: (String, String)) {
+    /// One step, said until the machine answers: nothing the machine has not said is claimed as passed.
+    func working(title text: String, step: String) {
         setMark(KitSpinner(side: 24, tint: Palette.mutedForeground))
         title.text = text
-        sayLine(steps.0)
+        sayLine(step)
         setButton("Close", variant: .outline)
-        stepTimer?.cancel()
-        stepTimer = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(1500))
-            guard !Task.isCancelled else { return }
-            self?.sayLine(steps.1)
-        }
         UIAccessibility.post(notification: .announcement, argument: text)
     }
 
     func answered(_ state: Components.Schemas.AuthState, said: AuthSaid) {
-        stepTimer?.cancel()
         let ok = state == .authenticated
         let glyph = GlyphView(ok ? .passed : .warning, size: 36, tint: ok ? Palette.success : Palette.warning)
         setMark(glyph)
@@ -142,9 +135,9 @@ class MachineAuthDialog: KitDialogController {
         body.addArrangedSubview(views)
     }
 
-    func showStatus(working title: String, steps: (String, String)) -> MachineAuthStatusView {
+    func showStatus(working title: String, step: String) -> MachineAuthStatusView {
         let status = MachineAuthStatusView { [weak self] in self?.dismiss(animated: true) }
-        status.working(title: title, steps: steps)
+        status.working(title: title, step: step)
         morph { views.show(status, holdHeight: true) }
         return status
     }
@@ -154,146 +147,6 @@ class MachineAuthDialog: KitDialogController {
     func answer(_ status: MachineAuthStatusView, _ state: Components.Schemas.AuthState, said: AuthSaid) {
         status.answered(state, said: said)
         morph { views.release() }
-    }
-}
-
-/// Logs a machine in from here (MachineLogin.svelte): the machine starts
-/// Claude Code's own `claude auth login` as the dialog opens and passes its
-/// link here, the reader authorises in their own browser and pastes the code
-/// back into that sign-in. Claude Code on the machine keeps the login.
-final class MachineLoginController: MachineAuthDialog, UITextFieldDelegate {
-    private let codeField = KitField(placeholder: "Paste the code from that page", mono: true)
-    private let asking = KitLabel(TypeScale.typeLabel, ink: Palette.mutedForeground, lines: 0)
-    private let problem = KitLabel(TypeScale.typeMeta, ink: Palette.destructive, lines: 0)
-    private var openLink: UIButton!
-    private var submit: UIButton!
-    private var url: URL?
-
-    init(hub: HubConnection, machine: MachineRow) {
-        super.init(hub: hub, machine: machine, width: .lg)
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("MachineLoginController is built in code")
-    }
-
-    private var said: AuthSaid {
-        let host = machine.name
-        return [
-            .authenticated: ("\(host) is logged in", "New sessions on \(host) will use this login."),
-            .unauthenticated: ("\(host) is not logged in", "\(host) saved the token, but still reports nobody logged in."),
-            .unreadableCredentials: ("\(host) cannot read its login", "\(host) saved the token, but cannot read its credentials."),
-        ]
-    }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        views.show(form())
-        begin()
-    }
-
-    private func form() -> UIView {
-        let header = KitDialogController.header(
-            title: "Log in \(machine.name)",
-            description: "Authorise in your browser here, then paste the code back. Nothing needs to be typed on that machine.",
-            glyph: .key
-        )
-        asking.text = "Asking \(machine.name) for a login link…"
-        asking.wrap = .pretty
-        openLink = KitButton.make("Open the authorisation page", glyph: .external, variant: .action, height: .sm, stretch: true) { [weak self] in
-            guard let url = self?.url else { return }
-            UIApplication.shared.open(url)
-        }
-        // The web's link (`rounded-[var(--radius-sm)]`, no border), standing
-        // on the small button token (`cBtnHSm`) like the kit's other buttons.
-        openLink.configuration?.background.backgroundInsets = .zero
-        openLink.configuration?.background.cornerRadius = Radius.radiusSm
-        openLink.isHidden = true
-        codeField.accessibilityLabel = "Authorisation code"
-        codeField.isEnabled = false
-        codeField.delegate = self
-        codeField.returnKeyType = .go
-        codeField.addAction(UIAction { [weak self] _ in self?.paintSubmit() }, for: .editingChanged)
-        problem.wrap = .pretty
-        problem.isHidden = true
-        let cancel = KitButton.make("Cancel", variant: .outline) { [weak self] in self?.dismiss(animated: true) }
-        submit = KitButton.make("Log in", variant: .action) { [weak self] in self?.finish() }
-        submit.isEnabled = false
-        let fields = UIStackView(arrangedSubviews: [asking, openLink, codeField, problem, KitDialogController.actions([cancel, submit])])
-        fields.axis = .vertical
-        fields.spacing = Space.space4
-        let stack = UIStackView(arrangedSubviews: [header, fields])
-        stack.axis = .vertical
-        stack.spacing = 24
-        return stack
-    }
-
-    private func paintSubmit() {
-        submit.isEnabled = url != nil && !(codeField.text ?? "").trimmingCharacters(in: .whitespaces).isEmpty
-    }
-
-    /// Asked for as the dialog opens, so the reader never waits on a blank box.
-    private func begin() {
-        attempt += 1
-        let mine = attempt
-        Task { @MainActor [weak self, hub, machine] in
-            do {
-                let challenge = try await hub.beginLogin(machineId: machine.machineId)
-                guard let self, mine == attempt else { return }
-                url = URL(string: challenge.url)
-                morph {
-                    self.asking.isHidden = true
-                    self.openLink.isHidden = false
-                }
-                codeField.isEnabled = true
-                paintSubmit()
-            } catch {
-                guard let self, mine == attempt else { return }
-                fail(error.localizedDescription)
-            }
-        }
-    }
-
-    private func fail(_ message: String) {
-        views.show(form())
-        if url != nil {
-            asking.isHidden = true
-            openLink.isHidden = false
-            codeField.isEnabled = true
-        }
-        problem.text = message
-        problem.isHidden = false
-        codeField.accessibilityHint = message
-        paintSubmit()
-        if url != nil { codeField.becomeFirstResponder() }
-        morph {}
-    }
-
-    private func finish() {
-        let code = (codeField.text ?? "").trimmingCharacters(in: .whitespaces)
-        guard !code.isEmpty, url != nil else { return }
-        attempt += 1
-        let mine = attempt
-        codeField.resignFirstResponder()
-        let status = showStatus(working: "Logging in \(machine.name)…",
-                                steps: ("Exchanging the code", "Checking \(machine.name) can use the new login"))
-        Task { @MainActor [weak self, hub, machine] in
-            do {
-                let state = try await hub.completeLogin(machineId: machine.machineId, code: code)
-                guard let self, mine == attempt else { return }
-                codeField.text = ""
-                answer(status, state, said: said)
-            } catch {
-                guard let self, mine == attempt else { return }
-                fail(error.localizedDescription)
-            }
-        }
-    }
-
-    func textFieldShouldReturn(_: UITextField) -> Bool {
-        finish()
-        return true
     }
 }
 
@@ -372,7 +225,7 @@ final class UnlockKeychainController: MachineAuthDialog, UITextFieldDelegate {
         password.text = ""
         password.resignFirstResponder()
         let status = showStatus(working: "Unlocking \(machine.name)…",
-                                steps: ("Unlocking the login keychain", "Checking \(machine.name) can read its credentials"))
+                                step: "Unlocking the login keychain and checking \(machine.name) can read its credentials")
         Task { @MainActor [weak self, hub, machine] in
             do {
                 let state = try await hub.unlockKeychain(machineId: machine.machineId, password: sent)

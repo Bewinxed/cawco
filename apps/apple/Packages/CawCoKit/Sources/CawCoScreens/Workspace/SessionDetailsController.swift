@@ -40,12 +40,17 @@ final class SessionReadings {
         }
     }
 
-    /// Which MCP servers the session runs. A failed ask reads as none, and is not asked again.
+    /// Which MCP servers the session runs. A failed ask shows no figure,
+    /// never a zero it was not told, and is asked again the next time the card asks.
     func loadMcp(_ hub: HubConnection, _ id: String, _ machineId: String) {
         guard !mcpAsked.contains(id) else { return }
         mcpAsked.insert(id)
         Task {
-            mcp[id] = (try? await hub.mcpServerStatus(instanceId: id, machineId: machineId))?.count ?? 0
+            do {
+                mcp[id] = try await hub.mcpServerStatus(instanceId: id, machineId: machineId).count
+            } catch {
+                mcpAsked.remove(id)
+            }
         }
     }
 }

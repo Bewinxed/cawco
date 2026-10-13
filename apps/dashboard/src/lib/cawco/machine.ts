@@ -39,9 +39,9 @@ export function signInWarning(
   }
   switch (machine.auth) {
     case "unreadable-credentials":
-      return `${machineLabel(machine.hostname)} has Claude Code credentials it cannot read: they are in the login keychain, and its agent is running outside the desktop session. On that machine, run \`cawco service install\` — a LaunchAgent can read the keychain — or use Log in… in its menu, which keeps a login its agent can read.`;
+      return `${machineLabel(machine.hostname)} has Claude Code credentials it cannot read: they are in the login keychain, and its agent is running outside the desktop session. On that machine, run \`cawco service install\` — a LaunchAgent can read the keychain — or use Unlock keychain… in its menu.`;
     case "unauthenticated":
-      return `Nobody is signed in to Claude Code on ${machineLabel(machine.hostname)}, so sessions there will answer "Not logged in". Use Log in… in its menu.`;
+      return `No Claude account is signed in on ${machineLabel(machine.hostname)}, so sessions there will answer "Not logged in". Add one in Configure → Accounts and sign it in there.`;
     default:
       return undefined;
   }

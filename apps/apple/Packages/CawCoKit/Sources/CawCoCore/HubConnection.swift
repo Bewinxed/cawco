@@ -128,6 +128,8 @@ public final class HubConnection {
 
     public let ledger = Ledger()
     public let fleet = FleetStore()
+    /// What the operator asked of each session from where it is listed, until the hub answers.
+    public let acts = SessionActs()
     /// Each session's preview, as the hub says it.
     public let previews = PreviewStore()
     /// What the new-session form was last set to: every start without a form runs on it.
@@ -580,10 +582,43 @@ public final class HubConnection {
     /// Marks rows seen on the hub; the hub's stamp of the mark, ms epoch (the
     /// `seenAt` its echo carries), nil for an unarchive.
     func markSeen(_ ids: [String], kind: Operations.PostApiSeen.Input.Body.JsonPayload.KindPayload) async throws -> Double? {
-        guard let client else {
-            throw URLError(.notConnectedToInternet)
+        let response = try await api.instances.markSeen(.init(body: .json(.init(ids: ids, kind: kind))))
+        let statusCode: Int
+        let said: String?
+        switch response {
+        case let .ok(answer):
+            return try answer.body.json.at
+        case let .conflict(refused):
+            // "Not archived, still doing something. <id>: <why> <id>: <why>"
+            let text = await Wire.words(try refused.body.plainText) ?? ""
+            throw ArchiveRefusal(reasons: ArchiveRefusal.reasons(text, ids: ids), whole: text)
+        case let .unprocessableContent(refused):
+            statusCode = 422
+            said = (try? refused.body.applicationProblemJson).flatMap { Wire.words(problem: $0) }
+        case let .undocumented(code, payload):
+            statusCode = code
+            said = await Wire.words(payload.body)
         }
-        return try await client.postApiSeen(body: .json(.init(ids: ids, kind: kind))).ok.body.json.at
+        throw ControlError(message: said ?? "The hub answered \(statusCode). Try again.")
+    }
+
+    /// The hub's refusal to archive (`/api/seen` 409): nothing of the ask was
+    /// marked, and each row it refused is named with why (`archiveRefusal`).
+    public struct ArchiveRefusal: LocalizedError {
+        public let reasons: [String: String]
+        let whole: String
+        public var errorDescription: String? { whole }
+
+        /// Each id's reason, from its "<id>: " to the next id's.
+        static func reasons(_ text: String, ids: [String]) -> [String: String] {
+            let marks = ids.compactMap { id in text.range(of: "\(id): ").map { (id, $0) } }.sorted { $0.1.lowerBound < $1.1.lowerBound }
+            var out: [String: String] = [:]
+            for (index, (id, range)) in marks.enumerated() {
+                let end = index + 1 < marks.count ? marks[index + 1].1.lowerBound : text.endIndex
+                out[id] = text[range.upperBound ..< end].trimmingCharacters(in: .whitespaces)
+            }
+            return out
+        }
     }
 
     /// Reads the hub's accounts, their sign-ins and catalogs, the providers
@@ -717,7 +752,7 @@ public final class HubConnection {
     }
 
     /// Registry reads; true once machines, sessions and projects all landed.
-    func refresh() async -> Bool {
+    public func refresh() async -> Bool {
         guard let client else {
             return false
         }
@@ -864,6 +899,19 @@ public final class HubConnection {
             guard let self, incompatible?.read == read else { return }
             incompatible = Incompatible(hubVersion: version, read: read)
         }
+    }
+
+    /// Where the web dashboard is reached, as the hub says (`/health`
+    /// `dashboard`, the address its Telegram links open): for what this app
+    /// has no screen of its own for yet.
+    public func dashboardAddress() async throws -> URL {
+        guard let address else { throw URLError(.notConnectedToInternet) }
+        let (data, _) = try await URLSession.shared.data(from: address.appending(path: "health"))
+        guard let body = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let said = body["dashboard"] as? String, let url = URL(string: said) else {
+            throw ControlError(message: "The hub did not say where its dashboard is. Update the hub, then try again.")
+        }
+        return url
     }
 
     /// The hub's version, as its `/health` says it.

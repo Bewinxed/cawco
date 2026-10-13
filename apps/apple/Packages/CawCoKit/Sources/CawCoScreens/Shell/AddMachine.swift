@@ -72,7 +72,13 @@ final class JoinState {
     /// One read of the run in flight; the dialog calls it every second while it is open.
     func poll(_ hub: HubConnection) async {
         guard let current = job, current.state == .running else { return }
-        let response = try? await hub.api.machines.sshStatus(.init(path: .init(id: current.id)))
+        let response: Operations.GetApiMachinesSshById.Output
+        do {
+            response = try await hub.api.machines.sshStatus(.init(path: .init(id: current.id)))
+        } catch {
+            // The run keeps its last word; the dialog asks again in a second.
+            return
+        }
         guard job?.id == current.id else { return }
         switch response {
         case let .ok(ok):

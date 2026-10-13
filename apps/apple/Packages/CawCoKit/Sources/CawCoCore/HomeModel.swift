@@ -425,9 +425,45 @@ public final class HomeModel {
         return ids
     }
 
-    /// Takes rows off Finished without opening them; a refusal puts them back.
+    /// Takes rows off Finished without opening them (one request, light and
+    /// reversible): each row says "Archiving…" until the hub answers, then
+    /// leaves. The hub refuses the whole ask for any row still doing
+    /// something, naming each: those keep their place with its reason, and
+    /// the rest are asked again on their own.
     public func archive(_ ids: [String]) {
-        mark(ids, kind: .archive)
+        let ids = ids.filter { !hub.acts.inFlight($0) }
+        guard !ids.isEmpty else {
+            return
+        }
+        hub.acts.begin(.archive, ids)
+        Task { [weak self] in
+            guard let self else {
+                return
+            }
+            var asking = ids
+            while !asking.isEmpty {
+                do {
+                    let at = try await hub.markSeen(asking, kind: .archive)
+                    seenMarks += 1
+                    for id in asking {
+                        let row = fleet.byId[id] ?? fleet.runRows.first { $0.id == id }
+                        seenHere[id] = SeenMark(mark: seenMarks, through: row.flatMap { endedAt($0) } ?? 0, at: at)
+                    }
+                    hub.acts.settle(asking)
+                    asking = []
+                } catch let refusal as HubConnection.ArchiveRefusal where !refusal.reasons.isEmpty {
+                    for (id, why) in refusal.reasons {
+                        hub.acts.refuse(id, why, status: fleet.byId[id]?.status.rawValue)
+                    }
+                    asking.removeAll { refusal.reasons[$0] != nil }
+                } catch {
+                    for id in asking {
+                        hub.acts.refuse(id, error.localizedDescription, status: fleet.byId[id]?.status.rawValue)
+                    }
+                    asking = []
+                }
+            }
+        }
     }
 
     /// The owner has these in front where they see them, ended
