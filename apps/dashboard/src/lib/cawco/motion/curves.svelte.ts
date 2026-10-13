@@ -351,15 +351,48 @@ export function crossOut(node: HTMLElement) {
   if (!node.checkVisibility()) {
     return { duration: 0 };
   }
-  const { offsetTop, offsetLeft, offsetWidth } = node;
-  node.style.position = "absolute";
-  node.style.top = `${offsetTop}px`;
-  node.style.left = `${offsetLeft}px`;
-  node.style.width = `${offsetWidth}px`;
-  node.style.pointerEvents = "none";
+  let lifted = false;
+  const lift = () => {
+    if (lifted) {
+      return;
+    }
+    lifted = true;
+    const { offsetTop, offsetLeft, offsetWidth } = node;
+    node.style.position = "absolute";
+    node.style.top = `${offsetTop}px`;
+    node.style.left = `${offsetLeft}px`;
+    node.style.width = `${offsetWidth}px`;
+    node.style.pointerEvents = "none";
+  };
+  const land = () => {
+    lifted = false;
+    for (const prop of ["position", "top", "left", "width", "pointer-events"]) {
+      node.style.removeProperty(prop);
+    }
+  };
+  lift();
   return {
     duration: dur("--dur-control"),
     easing: easeOut,
     css: (t: number) => `opacity: ${t}`,
+    /*
+     * Asked for again while it fades (an answer back sooner than the fade:
+     * a refused password), Svelte resumes this same node rather than making
+     * a new one, cancels the fade and ticks (1, 0) with nothing left playing
+     * on it: it is set back down in the flow and pressable, or it stood out
+     * of the flow and out of the pointer's way, its box (and a card sized by
+     * it) short of it and whatever lay behind it taking its presses. Svelte
+     * keeps these options for its next leave and does not call this again,
+     * so that leave lifts it on its first frame.
+     */
+    tick: (t: number) => {
+      if (t < 1) {
+        lift();
+      } else if (
+        !node.getAnimations().some((one) => one.playState === "running")
+      ) {
+        land();
+      }
+    },
   };
 }
