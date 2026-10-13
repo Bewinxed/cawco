@@ -37,7 +37,7 @@ const REPROBE_MAX_MS = 15 * 60_000;
 type OAuthRow = NonNullable<ReturnType<DbShape["getMcpOauth"]>>;
 type McpServerRow = NonNullable<ReturnType<DbShape["getMcpServer"]>>;
 
-/** No HTTP response came back: the network, DNS, a timeout or an abort. */
+/** No answer from the server: the network, DNS, a timeout, an abort, or a 5xx. */
 class Unreachable extends Error {}
 
 /** A body cut off by the deadline is as unanswered as a connection that never opened. */
@@ -46,19 +46,30 @@ const unreachable = (error: unknown): boolean =>
   (error instanceof DOMException &&
     (error.name === "TimeoutError" || error.name === "AbortError"));
 
-/** A fetch whose failure to get any response is told apart from what a response said. */
+/**
+ * A fetch whose failure to get the server's own answer is told apart from what
+ * that answer said. A 5xx is no answer either: it is what an edge or a proxy in
+ * front of the server says while the server cannot be reached, and taking it
+ * for "direct" would delete a signed-in server's OAuth row.
+ */
 const reach = async (
   input: string | URL,
   init?: RequestInit
 ): Promise<Response> => {
+  let response: Response;
   try {
-    return await fetch(input, {
+    response = await fetch(input, {
       ...init,
       signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
     });
   } catch (error) {
     throw new Unreachable("No response.", { cause: error });
   }
+  if (response.status >= 500) {
+    await response.body?.cancel();
+    throw new Unreachable(`HTTP ${response.status}.`);
+  }
+  return response;
 };
 
 /** The proxy owns credentials, so a harness never sees an OAuth discovery challenge. */
