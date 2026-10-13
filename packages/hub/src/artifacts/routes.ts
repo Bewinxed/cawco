@@ -5,7 +5,7 @@
  * artifacts; any other id is 404. The person's Send is on the preview
  * listener, beside the doc's socket (sync.ts `artifactSend`).
  */
-import { ARTIFACT_NAME, PREVIEW_START_PATH } from "@cawco/core";
+import { ARTIFACT_NAME, PREVIEW_START_PATH, SHOWN_FAILURES } from "@cawco/core";
 import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
 import { Elysia, t } from "elysia";
 import type { Operation } from "rfc6902";
@@ -181,16 +181,36 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }
       }
     )
+    // Whether a view has it on screen within 10 s, or why not; 503 when its server could not start.
     .post("/api/instances/:id/artifacts/:artifact/show", async ({ params }) => {
       try {
-        const opened = await artifacts.show(params.id, params.artifact);
-        return opened === true
-          ? { opened: true }
-          : new Response(opened, { status: 503 });
+        return await artifacts.show(params.id, params.artifact);
       } catch (error) {
         return refused(error);
       }
     })
+    // A view (a dashboard tab, the app) has the artifact on screen at the
+    // open frame's revision, or could not load it: the waiting show answers.
+    .post(
+      "/api/instances/:id/artifacts/:artifact/shown",
+      {
+        body: t.Object({
+          client: t.String({ minLength: 1, maxLength: 100 }),
+          revision: t.String({ minLength: 1, maxLength: 100 }),
+          ok: t.Boolean(),
+          error: t.Optional(
+            t.Union(SHOWN_FAILURES.map((failure) => t.Literal(failure)))
+          ),
+        }),
+      },
+      ({ params, body }) => {
+        try {
+          return artifacts.shown(params.id, params.artifact, body);
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
     // A draft canvas went out with the composer's send: no longer a draft.
     .post("/api/instances/:id/artifacts/:artifact/sent", ({ params }) => {
       try {

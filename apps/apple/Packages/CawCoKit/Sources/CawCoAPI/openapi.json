@@ -4005,6 +4005,90 @@
         }
       }
     },
+    "/api/instances/{id}/artifacts/{artifact}/shown": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "client": {
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minLength": 1,
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  "ok": {
+                    "type": "boolean"
+                  },
+                  "error": {
+                    "type": "string",
+                    "enum": [
+                      "server",
+                      "machine",
+                      "workspace",
+                      "page"
+                    ]
+                  }
+                },
+                "required": [
+                  "client",
+                  "revision",
+                  "ok"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiInstancesByIdArtifactsByArtifactShown",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdArtifactsByArtifactShown 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactShown200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstancesByIdArtifactsByArtifactShown 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/instances/{id}/artifacts/{artifact}/sent": {
       "post": {
         "parameters": [
@@ -18482,14 +18566,53 @@
         }
       },
       "postApiInstancesByIdArtifactsByArtifactShow200": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "opened": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
+              }
+            },
+            "required": [
+              "opened"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "opened": {
+                "type": "boolean",
+                "enum": [
+                  false
+                ]
+              },
+              "why": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "opened",
+              "why"
+            ]
+          }
+        ]
+      },
+      "postApiInstancesByIdArtifactsByArtifactShown200": {
         "type": "object",
         "properties": {
-          "opened": {
-            "type": "boolean"
+          "heard": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
           }
         },
         "required": [
-          "opened"
+          "heard"
         ]
       },
       "postApiInstancesByIdArtifactsByArtifactSent200": {
@@ -26124,16 +26247,8 @@
             "type": "string"
           },
           "opened": {
-            "description": "Whether the session's panel shows it now, or why not.",
-            "anyOf": [
-              {
-                "const": true,
-                "type": "boolean"
-              },
-              {
-                "type": "string"
-              }
-            ]
+            "description": "Whether a view the person is looking at has it on screen ({@link Opened}).",
+            "type": "boolean"
           },
           "outline": {
             "description": "A canvas's outline once drawn (core `canvasOutline`).",
@@ -26145,6 +26260,10 @@
           },
           "route": {
             "description": "Its live document on the hub's preview listener.",
+            "type": "string"
+          },
+          "why": {
+            "description": "Why it is not on screen, one sentence; only with `opened: false`.",
             "type": "string"
           },
           "wrote": {

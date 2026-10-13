@@ -8115,13 +8115,17 @@ export const createServer = (
     instance: (id) => db.getInstancesByIds([id])[0],
     machines: () => db.listAgents(),
     // A page is the hub's: its target names no machine.
-    open: (artifact) =>
-      openPreview(
+    open: async (artifact) => {
+      const opened = await openPreview(
         artifact.instanceId,
         artifact.machineId ?? "",
         artifact.source,
         { id: artifact.id, kind: artifact.kind, name: artifact.name }
-      ),
+      );
+      return opened.ok
+        ? { ok: true, revision: opened.frame.revision }
+        : { ok: false, error: opened.error };
+    },
     page: buildArtifactPage,
     sending: (instance, artifact, state) =>
       applySetupPicks(artifact, instance.projectId, state, {

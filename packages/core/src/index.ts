@@ -1256,6 +1256,20 @@ export interface ArtifactSummary {
 export type PreviewDown = "server" | "machine" | "workspace";
 export const PREVIEW_DOWN_META = "cawco-preview-down";
 
+/**
+ * Why a view could not put an artifact on screen, as it tells the hub
+ * (`POST /api/instances/:id/artifacts/:artifact/shown`): a hop that did not
+ * answer ({@link PreviewDown}), or `page`: something answered, but with no
+ * page the panel can show (no CawCo overlay said it was ready).
+ */
+export const SHOWN_FAILURES = [
+  "server",
+  "machine",
+  "workspace",
+  "page",
+] as const;
+export type ShownFailure = (typeof SHOWN_FAILURES)[number];
+
 export interface PreviewElement {
   classes: string[];
   html: string;

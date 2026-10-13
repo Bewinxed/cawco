@@ -4,6 +4,7 @@
     machineLabel,
     PREVIEW_DOWN_META,
     type PreviewDown,
+    type ShownFailure,
   } from "@cawco/core";
   import { type Snippet, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -28,6 +29,7 @@
     type Stage,
   } from "../canvas/stage.svelte";
   import {
+    artifactShown,
     cawco,
     closePreview,
     createDraftCanvas,
@@ -270,6 +272,66 @@
   function post(message: object) {
     iframe?.contentWindow?.postMessage(message, location.origin);
   }
+
+  /*
+   * This view's word to the hub that the artifact is on screen at the open
+   * frame's revision, or why it could not be: the agent's artifact_create and
+   * artifact_show answer `opened` from it (Projects spec §5.10). On screen is
+   * a page whose overlay said it was ready, or a canvas whose stage stands in
+   * this pane and said so, in a tab the person has in view. Could not be is
+   * the proxy's own page naming the hop that failed, or a load no overlay
+   * answered within PAGE_SILENT_MS. Said once per revision.
+   */
+  /** How long a loaded frame has for its overlay to answer the pane's hello. Our call: it answers in milliseconds. */
+  const PAGE_SILENT_MS = 3000;
+  /** The frame that last finished loading, and whether it then said nothing. */
+  let loadedKey = $state<string | null>(null);
+  let silentKey = $state<string | null>(null);
+  let inView = $state(true);
+  let saidFor: string | null = null;
+  $effect(() => {
+    const seen = () => {
+      inView = document.visibilityState === "visible";
+    };
+    seen();
+    document.addEventListener("visibilitychange", seen);
+    return () => document.removeEventListener("visibilitychange", seen);
+  });
+  function loadedFrame(key: string) {
+    loadedKey = key;
+    silentKey = null;
+    setTimeout(() => {
+      if (key === frameKey && loadedKey === key && !connected && !down) {
+        silentKey = key;
+      }
+    }, PAGE_SILENT_MS);
+  }
+  $effect(() => {
+    const revision = preview?.state === "open" ? preview.revision : undefined;
+    const id = artifact?.id;
+    if (!(revision && id && inView) || saidFor === revision) {
+      return;
+    }
+    const current = loadedKey === frameKey;
+    let word: { ok: true } | { ok: false; error: ShownFailure } | null = null;
+    if (isCanvas) {
+      word = stage?.connected && stage.at === "panel" ? { ok: true } : null;
+    } else if (current && down) {
+      word = { ok: false, error: down };
+    } else if (current && connected) {
+      word = { ok: true };
+    } else if (silentKey === frameKey) {
+      word = { ok: false, error: "page" };
+    }
+    if (!word) {
+      return;
+    }
+    saidFor = revision;
+    artifactShown(instanceId, id, { revision, ...word }).catch(() => {
+      // Unheard: the next change of state says it again.
+      saidFor = null;
+    });
+  });
 
   /*
    * The page keeps its own state (Projects spec §5.10): the overlay joins
@@ -825,6 +887,7 @@
             if (down) {
               retrying = false;
             }
+            loadedFrame(key);
             announce();
           }
         }}

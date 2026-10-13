@@ -63,6 +63,7 @@ import type {
   SessionPulse,
   SessionStreamFrame,
   SessionTooling,
+  ShownFailure,
   SlashCommand,
   SpawnPayload,
   StopPayload,
@@ -5271,6 +5272,29 @@ export async function showArtifact(
 ): Promise<void> {
   const response = await fetch(`${artifactsPath(instanceId, id)}/show`, {
     method: "POST",
+  });
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+}
+
+/**
+ * This tab's word to the hub that its pane has artifact `id` on screen at the
+ * open frame's `revision`, or why it could not load it: the agent's
+ * artifact_create and artifact_show answer from it.
+ */
+export async function artifactShown(
+  instanceId: string,
+  id: string,
+  word: { revision: string } & (
+    | { ok: true }
+    | { ok: false; error: ShownFailure }
+  )
+): Promise<void> {
+  const response = await fetch(`${artifactsPath(instanceId, id)}/shown`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ client: currentClientId(), ...word }),
   });
   if (!response.ok) {
     throw new Error(await response.text());

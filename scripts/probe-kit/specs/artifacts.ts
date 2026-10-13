@@ -32,6 +32,17 @@
  * 10. The artifact's own tab (`/artifact/<id>`) shows the same state, and a
  *    pick made there is marked in the first page within 2 s.
  * 11. No JSON-RPC message crosses postMessage in any window during 7–10.
+ *
+ * `opened` is a view's word, not the publish's:
+ *
+ * 12. Check 1's create, made while no dashboard is open, answers
+ *    `opened: false` with the no-view sentence once the hub's 10 s wait is
+ *    up; the panel's menu lists the artifact once a page opens (check 1).
+ * 13. Check 7's create, made with the session's page open, answers
+ *    `opened: true` only after the pane's `/shown` (which comes after the
+ *    page's `cawco:ready`), and the artifact's `shownAt` is set.
+ * 14. A preview of a port nothing listens on answers `opened: false` with
+ *    the server sentence within 10 s, and the pane draws its failure.
  */
 import type { Frame, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
@@ -47,6 +58,14 @@ const PREVIEW_TOOL = /mcp__cawco__\w*(?:preview|choices)\w*/g;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 /** The quiet the hub waits for before it tells the session (artifacts/service.ts). */
 const QUIET_MS = 3000;
+/** How long a show waits for a view's word (artifacts/service.ts `SHOWN_WAIT_MS`). */
+const SHOWN_WAIT_MS = 10_000;
+/** A pane's word to the hub: `POST /api/instances/:id/artifacts/:artifact/shown`. */
+const SHOWN_PATH =
+  /^\/api\/instances\/[^/]+\/artifacts\/([0-9a-f-]{36})\/shown$/;
+/** The no-view sentence (artifacts/service.ts `NO_VIEW`). */
+const NO_VIEW =
+  "No open dashboard is showing this session. The artifact is in the session's panel and opens when one is.";
 
 const PAGE = `<!doctype html>
 <html lang="en">
@@ -176,10 +195,38 @@ const rpcSeen = async (on: Page): Promise<string[]> => {
   return all.flat();
 };
 
+/** Each `/shown` a page's panes post to the hub, as they go: when, for which artifact, and the body. */
+const watchShown = (on: Page) => {
+  const posts: {
+    artifact: string;
+    at: number;
+    body: { client?: string; error?: string; ok?: boolean; revision?: string };
+  }[] = [];
+  on.on("request", (request) => {
+    const shown = SHOWN_PATH.exec(new URL(request.url()).pathname);
+    if (request.method() === "POST" && shown?.[1]) {
+      posts.push({
+        artifact: shown[1],
+        at: Date.now(),
+        body: request.postDataJSON() ?? {},
+      });
+    }
+  });
+  return posts;
+};
+
 /** What each numbered message asks the session to call, and what it answered. */
 const asks = new Map<string, { input: object; name: string }>();
 const issued = new Set<string>();
 const answered = new Map<string, string>();
+/** When the model called each tool, and when its answer came back: the tool's own time. */
+const issuedAt = new Map<string, number>();
+const answeredAt = new Map<string, number>();
+let lastMarker = "";
+/** The last call's own time: from the model's call to its answer, ms. */
+const took = () =>
+  (answeredAt.get(lastMarker) ?? Number.NaN) -
+  (issuedAt.get(lastMarker) ?? Number.NaN);
 
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
@@ -194,11 +241,13 @@ const respond = (request: Seen): Reply => {
   if (issued.has(marker)) {
     if (!answered.has(marker)) {
       answered.set(marker, request.last);
+      answeredAt.set(marker, Date.now());
     }
     return text("done");
   }
   if (request.toolNames.includes(ask.name)) {
     issued.add(marker);
+    issuedAt.set(marker, Date.now());
     return { everyMs: 5, words: [], tool: ask };
   }
   return request.toolNames.includes("ToolSearch")
@@ -243,6 +292,7 @@ const run = async (kit: Kit) => {
   const call = async (tool: string, input: object): Promise<string> => {
     sent += 1;
     const marker = String(sent);
+    lastMarker = marker;
     asks.set(marker, { name: tool, input });
     await fleet.send(session, `PROBE-CALL:${marker}`);
     return (await until(
@@ -262,10 +312,14 @@ const run = async (kit: Kit) => {
     html: PAGE,
   });
   const id = created.match(ANSWERED_ID)?.[1];
+  const unseen = took();
   kit.check(
-    "1: artifact_create answers the page's id, opened in the panel",
-    !!id && created.includes('"opened":true'),
-    created.slice(0, 300)
+    "12: with no dashboard open, artifact_create answers its id, opened false and the no-view sentence once the 10 s wait is up",
+    !!id &&
+      created.includes('"opened":false') &&
+      created.includes(NO_VIEW) &&
+      unseen >= SHOWN_WAIT_MS,
+    `the tool took ${unseen} ms; ${created.slice(created.indexOf('{"id"'), created.indexOf('{"id"') + 400)}`
   );
   if (!id) {
     return;
@@ -296,7 +350,11 @@ const run = async (kit: Kit) => {
   const listed = await page
     .locator(`.artifact-row[data-artifact="${id}"]`)
     .count();
-  kit.check("1: the panel's menu lists it", listed === 1, `${listed} rows`);
+  kit.check(
+    "1, 12: the panel's menu lists it once a page opens",
+    listed === 1,
+    `${listed} rows`
+  );
   // DESIGN.md (Artifact panel, canvas and ink): a 44px row, the kind's 16px
   // glyph, the name in the label role, its age in meta ink.
   const row = await page
@@ -463,6 +521,18 @@ const fieldChecks = async ({
   // 7. A page of fields: each field is state.
   await page.addInitScript(watchFrames);
   await page.evaluate(watchFrames);
+  // 13. When the dashboard heard a page say it was ready, and when its pane told the hub.
+  const shownPosts = watchShown(page);
+  await page.evaluate(() => {
+    const kept = window as unknown as { __readyAt: number[] };
+    kept.__readyAt = [];
+    addEventListener("message", (event) => {
+      if ((event.data as { type?: unknown } | null)?.type === "cawco:ready") {
+        kept.__readyAt.push(Date.now());
+      }
+    });
+  });
+  const askedAt = Date.now();
   const made = await call(CREATE, {
     kind: "page",
     name: "fields",
@@ -473,6 +543,32 @@ const fieldChecks = async ({
     kit.check("7: artifact_create answers the fields page's id", false, made);
     return;
   }
+  const madeAt = answeredAt.get(lastMarker) ?? Number.NaN;
+  const readyAt = (
+    await page.evaluate(
+      () => (window as unknown as { __readyAt: number[] }).__readyAt
+    )
+  ).find((at) => at >= askedAt);
+  const ack = shownPosts.find(
+    (post) => post.artifact === fieldsId && post.body.ok === true
+  );
+  const fieldsRow = (
+    await fleet.api<{ id: string; shownAt: string | null }[]>(
+      `/api/instances/${session}/artifacts`
+    )
+  ).find((one) => one.id === fieldsId);
+  const shownAt = fieldsRow?.shownAt ? Date.parse(fieldsRow.shownAt) : null;
+  kit.check(
+    "13: with the page open, opened is true only after the pane's word, which follows the page's cawco:ready; shownAt is set by it",
+    made.includes('"opened":true') &&
+      readyAt !== undefined &&
+      ack !== undefined &&
+      readyAt <= ack.at &&
+      ack.at <= madeAt &&
+      shownAt !== null &&
+      shownAt >= readyAt,
+    `ready +${(readyAt ?? Number.NaN) - askedAt} ms, /shown +${(ack?.at ?? Number.NaN) - askedAt} ms ${JSON.stringify(ack?.body)}, shownAt +${(shownAt ?? Number.NaN) - askedAt} ms, answer +${madeAt - askedAt} ms: ${made.slice(made.indexOf('{"id"'), made.indexOf('{"id"') + 200)}`
+  );
   const readFields = () =>
     fleet.api<Read>(`/api/instances/${session}/artifacts/${fieldsId}`);
   /** Milliseconds until the hub's read passes `test`, or null past 2 s. */
@@ -635,6 +731,34 @@ const fieldChecks = async ({
     "11: no JSON-RPC message crossed postMessage during 7–10",
     rpc.length === 0,
     rpc.slice(0, 4).join(" | ") || "none"
+  );
+
+  // 14. A preview of a port nothing listens on: the pane's word is the failure.
+  const freed = Bun.serve({ port: 0, fetch: () => new Response() });
+  const deadPort = freed.port as number;
+  await freed.stop(true);
+  const dead = await call(CREATE, {
+    kind: "preview",
+    name: "dead-port",
+    port: deadPort,
+  });
+  const deadTook = took();
+  const deadId = dead.match(ANSWERED_ID)?.[1];
+  const failed = shownPosts.find((post) => post.artifact === deadId);
+  const band = await page
+    .locator(".preview-pane .down[role=alert]")
+    .textContent({ timeout: 5000 })
+    .catch(() => null);
+  kit.check(
+    "14: a port nothing answers: opened false with the server sentence within 10 s, from the pane's word, and the pane's failure band",
+    dead.includes('"opened":false') &&
+      dead.includes(`The server on port ${deadPort} on `) &&
+      dead.includes("did not answer: nothing is listening on that port.") &&
+      deadTook < SHOWN_WAIT_MS &&
+      failed?.body.ok === false &&
+      failed.body.error === "server" &&
+      !!band?.includes(`Nothing is running on port ${deadPort}`),
+    `the tool took ${deadTook} ms; pane said ${JSON.stringify(failed?.body)}; band ${JSON.stringify(band?.trim().slice(0, 160))}; ${dead.slice(dead.indexOf('{"id"'), dead.indexOf('{"id"') + 300)}`
   );
 };
 

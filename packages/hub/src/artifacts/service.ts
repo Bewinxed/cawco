@@ -20,6 +20,7 @@ import {
   type InstanceRow,
   machineLabel,
   type PreviewSource,
+  type ShownFailure,
 } from "@cawco/core";
 import {
   CANVAS_LIMITS,
@@ -196,8 +197,8 @@ export interface Created {
   name: string;
   /** A canvas made with nothing to draw says so. */
   note?: string;
-  /** Whether the session's panel shows it now, or why not. */
-  opened: true | string;
+  /** Whether a view the person is looking at has it on screen ({@link Opened}). */
+  opened: boolean;
   /** A canvas's outline once drawn (core `canvasOutline`). */
   outline?: string;
   /**
@@ -208,8 +209,36 @@ export interface Created {
   port?: number;
   /** Its live document on the hub's preview listener. */
   route: string;
+  /** Why it is not on screen, one sentence; only with `opened: false`. */
+  why?: string;
   /** The element ids a canvas's create wrote. */
   wrote?: string[];
+}
+
+/**
+ * Whether a view the person is looking at has the artifact on screen: a
+ * dashboard tab (or the app) showing the session heard the open frame,
+ * mounted the pane and loaded the page, and said so ({@link Artifacts.shown})
+ * within {@link SHOWN_WAIT_MS}; else why not, in one sentence.
+ */
+export type Opened = { opened: true } | { opened: false; why: string };
+
+/** How long a show waits for a view to say it has the artifact on screen. The spec's number. */
+export const SHOWN_WAIT_MS = 10_000;
+
+/** No view of the session said it showed the artifact in time. WORDS.md's error formula. */
+export const NO_VIEW =
+  "No open dashboard is showing this session. The artifact is in the session's panel and opens when one is.";
+
+/** A view's word that it has (or could not load) the artifact at `revision` (`POST …/artifacts/:artifact/shown`). */
+export interface ShownAck {
+  /** Which view: a dashboard tab's id, or the app's. */
+  client: string;
+  /** Why the page didn't load; only with `ok: false`. */
+  error?: ShownFailure | undefined;
+  ok: boolean;
+  /** The open frame's revision the view loaded. */
+  revision: string;
 }
 
 /** A canvas's export: the `.excalidraw` file, its outline and its latest picture. */
@@ -353,10 +382,15 @@ export interface ArtifactServiceDeps {
   instance: (id: string) => InstanceRow | undefined;
   /** The machines the hub knows. */
   machines: () => Pick<AgentRow, "machineId" | "hostname">[];
-  /** Shows `artifact` in its session's panel, at a fresh revision; why not, when it cannot. */
+  /**
+   * Publishes `artifact` to its session's panel at a fresh revision (the open
+   * frame every view of the session hears); why not, when its server could
+   * not be started. Whether a view put it on screen is that view's word
+   * ({@link Artifacts.shown}).
+   */
   open: (
     artifact: ArtifactRow
-  ) => Promise<{ ok: true } | { error: string; ok: false }>;
+  ) => Promise<{ ok: true; revision: string } | { error: string; ok: false }>;
   /** The workspace a session runs in, by id; undefined outside one. */
   ownWorkspace: (instance: InstanceRow) => string | undefined;
   /**
@@ -635,14 +669,94 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return built.html;
   };
 
-  const show = async (row: ArtifactRow): Promise<true | string> => {
-    const opened = await deps.open(row);
-    if (!opened.ok) {
-      return opened.error;
+  /*
+   * A view's word that it has an artifact on screen. Each show publishes a
+   * fresh revision and waits for a view to say it loaded that revision; a
+   * word that came before the wait began (a fast page) is kept here for it.
+   */
+  const heard = new Map<string, ShownAck>();
+  const waiting = new Map<string, (ack: ShownAck) => void>();
+  const shownKey = (id: string, revision: string) => `${id}:${revision}`;
+
+  /** The first view's word on `revision` of artifact `id`; null when none came in time. */
+  const shownBy = (id: string, revision: string): Promise<ShownAck | null> => {
+    const key = shownKey(id, revision);
+    const early = heard.get(key);
+    if (early) {
+      heard.delete(key);
+      return Promise.resolve(early);
+    }
+    return new Promise((done) => {
+      const timer = setTimeout(() => {
+        waiting.delete(key);
+        done(null);
+      }, SHOWN_WAIT_MS);
+      waiting.set(key, (ack) => {
+        clearTimeout(timer);
+        waiting.delete(key);
+        done(ack);
+      });
+    });
+  };
+
+  /** Why a view could not load the artifact, in WORDS.md's error formula: what failed, and why. */
+  const notLoaded = (row: ArtifactRow, failure: ShownFailure): string => {
+    const { source } = row;
+    const machine = machineOf(row);
+    const subject =
+      "port" in source
+        ? `The server on port ${source.port} ${source.workspace ? `in workspace ${source.workspace.slice(0, 8)}` : `on ${machine}`}`
+        : `${named(row)[0]?.toUpperCase()}${named(row).slice(1)}`;
+    switch (failure) {
+      case "server":
+        return `${subject} did not answer: nothing is listening on that port.`;
+      case "workspace":
+        return `${subject} did not answer: the workspace isn't running.`;
+      case "machine":
+        return `${subject} did not answer: ${machine} isn't connected to the hub.`;
+      default:
+        return `${subject} answered, but not with a page the panel can show.`;
+    }
+  };
+  const machineOf = (row: ArtifactRow): string => {
+    const machine = deps
+      .machines()
+      .find((one) => one.machineId === row.machineId);
+    return machine ? machineLabel(machine.hostname) : "its machine";
+  };
+
+  /**
+   * Publishes the artifact to its session's panel and waits for a view to
+   * have it on screen; `started` is false when its server could not even be
+   * started, and nothing was published.
+   */
+  const show = async (
+    row: ArtifactRow
+  ): Promise<
+    | { opened: true; started: true }
+    | { opened: false; started: boolean; why: string }
+  > => {
+    const published = await deps.open(row);
+    if (!published.ok) {
+      return { opened: false, why: published.error, started: false };
+    }
+    const ack = await shownBy(row.id, published.revision);
+    if (!ack) {
+      return { opened: false, why: NO_VIEW, started: true };
+    }
+    if (!ack.ok) {
+      return {
+        opened: false,
+        why: notLoaded(row, ack.error ?? "page"),
+        started: true,
+      };
     }
     db.update(row.id, { shownAt: new Date() });
-    return true;
+    return { opened: true, started: true };
   };
+  /** A show's answer, as the tools and the panel's Show give it. */
+  const openedOf = (shown: Opened): Opened =>
+    shown.opened ? { opened: true } : { opened: false, why: shown.why };
 
   /*
    * A canvas (Projects spec §5.10, D24–D25). Its `deliveredSeq` is the seq
@@ -772,7 +886,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       kind: row.kind,
       name: row.name,
       route: routeOf(row.id),
-      opened: "It stands in the composer until it is docked.",
+      opened: false,
+      why: "It stands in the composer until it is docked.",
       port: PREVIEW_PORT,
     };
   };
@@ -813,13 +928,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         shownAt: null,
       });
     stampMeta(row, null);
-    const opened = await show(row);
     const made = {
       id: row.id,
       kind: row.kind,
       name: row.name,
       route: routeOf(row.id),
-      opened,
+      ...openedOf(await show(row)),
     };
     if (input.elements === undefined && input.mermaid === undefined) {
       const { outline } = readCanvas(db.get(row.id) as ArtifactRow);
@@ -977,18 +1091,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         writePage(row.id, html);
       }
       stampMeta(row, html === null ? null : pageHash(html));
-      const opened = await show(row);
-      if (opened !== true && !before && input.kind === "preview") {
-        // A preview nothing could start shows nothing: it is not kept.
+      const shown = await show(row);
+      if (!(shown.started || before) && input.kind === "preview") {
+        // A preview nothing could start shows nothing: it is not kept. One
+        // whose server did not answer stays in the panel, its failure on it.
         db.remove(row.id);
-        throw new ArtifactRefusal(503, opened);
+        throw new ArtifactRefusal(503, shown.why);
       }
       return {
         id: row.id,
         kind: row.kind,
         name: row.name,
         route: routeOf(row.id),
-        opened,
+        ...openedOf(shown),
       };
     },
 
@@ -1132,9 +1247,38 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return { draft: false };
     },
 
-    /** Brings an artifact to the front of its session's panel: true, or why not. */
-    show: async (instanceId: string, id: string): Promise<true | string> =>
-      await show(own(sessionOf(instanceId), id)),
+    /**
+     * Brings an artifact to the front of its session's panel and waits for a
+     * view to have it on screen ({@link Opened}); a refusal when its server
+     * could not be started.
+     */
+    show: async (instanceId: string, id: string): Promise<Opened> => {
+      const shown = await show(own(sessionOf(instanceId), id));
+      if (!shown.started) {
+        throw new ArtifactRefusal(503, shown.why);
+      }
+      return openedOf(shown);
+    },
+
+    /**
+     * A view's word that it has (or could not load) the artifact at the
+     * revision it was opened at: the show waiting on that revision answers
+     * from it. A word on a revision no show waits for is kept for one that
+     * starts waiting (a fast page answers before the publish returns).
+     */
+    shown: (instanceId: string, id: string, ack: ShownAck): { heard: true } => {
+      const row = own(sessionOf(instanceId), id);
+      const key = shownKey(row.id, ack.revision);
+      const waiter = waiting.get(key);
+      if (waiter) {
+        waiter(ack);
+      } else if (!heard.has(key)) {
+        heard.set(key, ack);
+        // Kept as long as a show could still come to wait for it.
+        setTimeout(() => heard.delete(key), SHOWN_WAIT_MS).unref?.();
+      }
+      return { heard: true };
+    },
 
     /**
      * The person sends, by any path: what the send applies first (`sending`),

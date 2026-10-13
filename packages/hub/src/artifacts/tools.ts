@@ -57,7 +57,8 @@ export const artifactCreate = {
     "holding a decision page's page.html (decision-page skill); in a project, neither builds decisions/<name>/page.html " +
     "from its folder. A preview is your dev server (`port`) or a folder (`dir`). A canvas is a drawing from `elements` " +
     "or `mermaid`, or empty for the person. The same kind and name again replaces it in place and keeps the person's " +
-    "picks. Answers its id and whether the panel opened it.",
+    "picks. Answers its id and `opened`: true once a dashboard showing your session has it on screen (up to 10 s), " +
+    "else false with `why`.",
   input: {
     kind: z.enum(["page", "preview", "canvas"]),
     name: z
@@ -150,6 +151,7 @@ export const artifactRead = {
 export const artifactShow = {
   name: "artifact_show",
   description:
-    "Bring one of your artifacts to the front of your panel when the person should look at it again. Answers opened, or why not.",
+    "Bring one of your artifacts to the front of your panel when the person should look at it again. Answers `opened`: " +
+    "true once a dashboard showing your session has it on screen (up to 10 s), else false with `why`.",
   input: { id },
 };
