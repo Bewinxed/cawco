@@ -45,7 +45,12 @@ export function embeddedFile(name: string): string {
   return path;
 }
 
-/** A child process cannot open $bunfs; publish immutable resources atomically. */
+/**
+ * A child process cannot open $bunfs; publish immutable resources atomically.
+ * A file already published is left alone without touching its folder: inside
+ * a workspace the runtime folder is read-only, and even a recursive mkdir of
+ * a folder that exists fails there with EEXIST (`cawco tools` in a workspace).
+ */
 export function materializeTree(prefix: string): string {
   const root = join(runtimeDataDir(), prefix);
   const entries = Object.entries(binaryAssets).filter(([name]) =>
@@ -56,12 +61,13 @@ export function materializeTree(prefix: string): string {
   }
   for (const [name, source] of entries) {
     const path = join(runtimeDataDir(), name);
-    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-    if (!existsSync(path)) {
-      const temp = `${path}.${process.pid}.tmp`;
-      writeFileSync(temp, readFileSync(source), { mode: 0o600 });
-      renameSync(temp, path);
+    if (existsSync(path)) {
+      continue;
     }
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    const temp = `${path}.${process.pid}.tmp`;
+    writeFileSync(temp, readFileSync(source), { mode: 0o600 });
+    renameSync(temp, path);
   }
   return root;
 }
