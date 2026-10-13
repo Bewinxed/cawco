@@ -399,9 +399,10 @@ untouched() { as_user "$1" sh -c 'test ! -e "$HOME/.local/share/cawco" && test !
 # the handover check began). on_exit adds a step, a command, to what the check runs as it exits, passed or failed; the
 # steps run last-added first, each undoing what was started after the one before it, and one that fails is passed
 # over, so the next still runs and the check's verdict stays its own. ROW_STATUS is the check's exit status there:
-# sessions a check hands to the checks after it are ended by the last of those, and by each of them only when it
-# fails, for none after a failed check runs (one that a failure elsewhere stops from running leaves them to the next
-# check's own guard, end_all_sessions).
+# sessions a check hands to the checks after it are ended by the last of those, by the check itself when it fails
+# (none of them runs then), and, where each of them runs only once the one before it passed, by each one that fails.
+# A reader that a failure elsewhere, or PROOF_ONLY, keeps from running leaves them to the next check's own guard,
+# end_all_sessions.
 on_exit() {
   EXIT_STEPS=("$1" ${EXIT_STEPS[@]+"${EXIT_STEPS[@]}"})
   trap 'ROW_STATUS=$?; for step in "${EXIT_STEPS[@]}"; do eval "$step" || true; done' EXIT
@@ -1201,6 +1202,10 @@ auto_with_held_child() {
   # The joined machine's watcher outlives this check, and "a session started while an update is installing ..."
   # reads and ends what it starts; when this check fails that one does not run, and the watcher stops here.
   on_exit '[[ $ROW_STATUS == 0 ]] || { as_user "$joinerc" pkill -f stage2-during-install.ts; end_children "$joinerc" during-; }'
+  # What it starts on the hub's machine the checks after it read: the starts during the install end with "a session
+  # start requested while the hub's own machine installs ...", the held child and the sessions from before the update
+  # with "the keeper before goes by itself ...". When this check fails none of them runs, and they end here.
+  on_exit '[[ $ROW_STATUS == 0 ]] || { as_user "$hubc" pkill -f stage2-during-install.ts; end_children "$hubc" boundary-held hubpre- hubstart-; }'
   put_policy nightly true
   wait_until 300 '[[ "$(build_version $hid)" == "0.0.1-nightly.3+333333333333" ]]'
   wait_until 120 'grep -q "^done " "$out/watch-hub.txt"'
@@ -1213,6 +1218,8 @@ check "with auto-update on the build is applied when the machine is idle" auto_w
 
 hub_starts_held() {
   need_hub
+  # The only check that reads the starts the hub's machine's watcher asked for.
+  on_exit 'end_children "$hubc" hubstart-'
   grep -q "^done " "$out/watch-hub.txt"
   accepted_ran_once "$hid" "$hubc" hubstart "$out/accepted-hub.txt"
 }
@@ -1269,6 +1276,9 @@ check "a session started while an update is installing is still alive afterwards
 keeper_advances() {
   need_hub
   local child keeper unit endpoint pid now
+  # The last check that reads the held child and the sessions from before the hub's machine's update: it ends what
+  # the keeper before holds, and whatever of them it did not reach ends with it.
+  on_exit 'end_children "$hubc" boundary-held hubpre-'
   read -r child keeper unit endpoint < "$out/held.txt"
   now=$(keeper_pid "$hubc")
   # Everything the keeper before holds ends, so it holds nothing.
@@ -1354,7 +1364,9 @@ stub_when_staged() { as_user "$hubc" sh -c 'rm -f /tmp/stub.done; sh /shared/kee
 # keeper retiring, on the hub's machine.
 keeper_start_state() {
   need_hub
-  on_exit 'keeper_dropin remove > /dev/null 2>&1'
+  # A stub that still waits for its build to be staged (a check that ended first) would stub that build when a later
+  # check installs it: the waiter goes before the stubs are removed.
+  on_exit 'as_user "$hubc" pkill -f "keeper-dropin\.sh (break|slow)-when-staged"; keeper_dropin remove > /dev/null 2>&1'
   keeper_dropin remove
   end_all_sessions "$hubc"
   wait_until 60 '[[ "$(children_total "$hubc")" == 0 ]]'
@@ -1366,6 +1378,7 @@ export -f nb publish_nightly keeper_dropin keeper_link current_link has_file has
 
 full_update_keeper_cannot_start() {
   keeper_start_state
+  on_exit 'end_children "$hubc" keeperlive-4'
   local before
   before=$(keeper_link "$hubc")
   stub_when_staged break-when-staged "$(nb 4)" sessiond
@@ -1410,6 +1423,7 @@ check "the build a pending trial would restore is still on disk, and is removed 
 
 keeper_cannot_start_with_held() {
   keeper_start_state
+  on_exit 'end_children "$hubc" boundary-k1hold keeperlive-6'
   local before held keeper
   before=$(keeper_link "$hubc")
   # A child the keeper holds through the update to build 6, whose keeper cannot start.
@@ -1444,6 +1458,7 @@ check "with a child held, a build whose keeper cannot start leaves the child and
 
 helper_killed_mid_handover() {
   keeper_start_state
+  on_exit 'end_children "$hubc" boundary-k2hold keeperlive-7'
   local before held keeper
   before=$(keeper_link "$hubc")
   spawn_child "$hubc" k2hold
@@ -1573,6 +1588,7 @@ check "a joined machine installs a build with sessions on its keeper: the new ke
 
 agent_cannot_start_whole_recovery() {
   keeper_start_state
+  on_exit 'end_children "$hubc" keeperlive-9'
   # Only the commanded update below may move the machine: an automatic one (a newer build published by an
   # earlier check) is stopped, and any that already began is waited out, before the previous build is read.
   put_policy nightly false
@@ -1869,6 +1885,9 @@ highest_pids() {
 }
 keeper_children_capped_on() {
   local c=$1 since said group max limit keeper pid own forker ack top events
+  # Its children on this machine end however far it got: the forker's tree with it, which its keeper reaps. Named
+  # now, for this machine's name is a local the step would not see when it runs.
+  on_exit "end_children $c cg-"
   echo "======== $c"
   $P exec "$c" sh -c "mkdir -p /etc/systemd/user/cawco-sessiond-.service.d && printf '[Service]\nTasksMax=%s\n' $KEEPER_TASKS > /etc/systemd/user/cawco-sessiond-.service.d/proof-tasks.conf"
   as_user "$c" systemctl --user daemon-reload
@@ -1967,8 +1986,10 @@ keeper_children_of_hub() { echo "/sys/fs/cgroup$(dirname "$(cgroup_of "$hubc" "$
 runaway_stays_its_own() {
   need_hub
   local a=limit-tasks-a b=limit-tasks-b ack group children current pool top token
-  # Whatever happens below, the runaway goes, and the check ends once nothing of it is left (runaway_gone).
-  trap runaway_gone EXIT
+  # Whatever happens below, the runaway goes, and the check ends once nothing of it is left (runaway_gone); then
+  # both its sessions end.
+  on_exit 'end_children "$hubc" limit-tasks-a limit-tasks-b'
+  on_exit runaway_gone
   start_session "$hid" "$a" > /dev/null
   wait_until 60 "session_running $a"
   # The session's process becomes a command that starts processes without end, under the session's id, as a
@@ -2015,8 +2036,9 @@ runaway_stays_its_own() {
 memory_limit_stays_its_own() {
   need_hub
   local m=limit-mem-a n=limit-mem-b since ack holder group max expected others pid pool
-  # Whatever happens below, the setting is cleared again: it applies to every machine's next process.
-  trap 'put_session_limits "{\"memoryPercent\":null,\"cpuPercent\":null}" > /dev/null 2>&1 || true' EXIT
+  # Whatever happens below, its sessions end and the setting is cleared again: it applies to every machine's next process.
+  on_exit 'put_session_limits "{\"memoryPercent\":null,\"cpuPercent\":null}" > /dev/null 2>&1'
+  on_exit 'end_children "$hubc" limit-mem-a limit-mem-b'
   # It starts from a keeper whose children hold nothing an earlier check left running: every live child goes with
   # its process group (a runaway's forks are in it), and the children's pool drains. A runaway left over filled
   # that pool in the run of 2026-10-13, and this check's session was refused ("process-limit: its cgroup's task
