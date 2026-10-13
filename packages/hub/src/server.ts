@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { hostname as osHostname } from "node:os";
 import { join, posix } from "node:path";
 import { generateCodeChallenge, generateCodeVerifier } from "@cawco/auth";
 import type {
@@ -2487,6 +2488,16 @@ export const createServer = (
    */
   const memoryWatch = createTurnWatch({
     get: (instanceId) => db.sessionTaint(instanceId),
+    // The fleet's machines are inside it: a fetch from one of them is no web read.
+    fleetHosts: () => [
+      osHostname(),
+      ...db.listAgents().flatMap((agent) => [agent.hostname, agent.machineId]),
+    ],
+    // A fleet MCP server reached at a URL: an outside one's every tool reads the web.
+    mcpUrl: (server) => {
+      const config = db.getMcpServer(server)?.config;
+      return config && "url" in config ? config.url : undefined;
+    },
     put: (row) => db.putSessionTaint(row),
   });
   pending.onSettled((parked, outcome, why) => {

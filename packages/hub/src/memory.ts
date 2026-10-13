@@ -79,6 +79,7 @@ import {
 } from "./project-folder";
 import { roleOf } from "./roles";
 import { listOf, scalarOf } from "./task-file";
+import { readsWeb, type WebContext } from "./web-reads";
 import { isRoutineParent } from "./work-items";
 
 export const AGENTS_FILE = "AGENTS.md";
@@ -164,44 +165,8 @@ export const personsTier = (rel: string): string | undefined => {
 
 // --- what a session has been doing ---------------------------------------------
 
-/** The harnesses' own web tools. */
-const WEB_TOOLS: ReadonlySet<string> = new Set([
-  "WebFetch",
-  "WebSearch",
-  "webfetch",
-  "websearch",
-]);
-/** An MCP tool, by its server or its name, that reads the web. */
-const WEB_NAME =
-  /fetch|scrape|crawl|search|browser|chrome|playwright|puppeteer|navigate|firecrawl|exa|web/i;
-/** A shell command that reaches a URL. */
-const SHELL_WEB = /\b(?:curl|wget|lynx|w3m)\b|https?:\/\//i;
-const SHELLS: ReadonlySet<string> = new Set(["Bash", "bash"]);
-/** CawCo's own tools as a harness names them: `mcp__cawco__<tool>` (Claude, pi), `cawco_<tool>` (OpenCode). */
-const CAWCO_TOOL = /^(?:mcp__cawco__|cawco_)/;
-
-/** Whether a tool call read the web: a web tool, a web-reading MCP server, a connection's tool, or a shell command naming a URL. */
-const readsWeb = (name: string, input: Record<string, unknown>): boolean => {
-  if (WEB_TOOLS.has(name)) {
-    return true;
-  }
-  // A connection's tool (connections.ts), served by CawCo's own server as
-  // `conn__<connection>__<tool>`: an outside service's words.
-  if (name.replace(CAWCO_TOOL, "").startsWith("conn__")) {
-    return true;
-  }
-  if (CAWCO_TOOL.test(name)) {
-    return false;
-  }
-  if (name.startsWith("mcp__")) {
-    return WEB_NAME.test(name);
-  }
-  if (SHELLS.has(name)) {
-    return typeof input.command === "string" && SHELL_WEB.test(input.command);
-  }
-  // OpenCode names an MCP tool `<server>_<tool>`; its own tools have no `_`.
-  return name.includes("_") && WEB_NAME.test(name);
-};
+/** How long what the web test reads of the fleet (its hostnames, its MCP servers' URLs) is kept before it is read again. */
+const FLEET_READ_MS = 60_000;
 
 /** The origin a lead's wake carries when a routine woke it (caw.ts). */
 export const ROUTINE_ORIGIN = "routine:";
@@ -214,9 +179,13 @@ const KEEPALIVE = "keepalive";
  */
 const ENDS_WITH_CALL: ReadonlySet<string> = new Set(["opencode"]);
 
-/** Where the watch keeps each session's state (db `session_taints`). */
+/** Where the watch keeps each session's state (db `session_taints`), and what it reads of the fleet. */
 export interface TaintStore {
+  /** The fleet's machines, by hostname and id: hosts inside the fleet (web-reads.ts). */
+  fleetHosts: () => Iterable<string>;
   get: (instanceId: string) => SessionTaintRow | undefined;
+  /** The URL the fleet's MCP server of that name is reached at; undefined for one run as a command, or none by that name. */
+  mcpUrl: (server: string) => string | undefined;
   put: (row: SessionTaintRow) => void;
 }
 
@@ -242,7 +211,9 @@ const blank = (instanceId: string): SessionTaintRow => ({
  *   note is written after its turn's input was read, so a delivery is
  *   always seen before the note it precedes.
  * - **Web**, sticky: once the session (or a subagent of it) called a tool
- *   that reads the web, every later note of it is tainted.
+ *   that read content from outside the fleet (web-reads.ts: a search, a
+ *   connection's tool, an outside service's MCP server, a URL or a fetcher's
+ *   target that is not local), every later note of it is tainted.
  * - **Subagents**, by their own start and end: Claude's `task_started` and
  *   `task_notification`, OpenCode's `task_started` and its call's result.
  *   A turn's end closes none of them.
@@ -251,6 +222,33 @@ const blank = (instanceId: string): SessionTaintRow => ({
  */
 export const createTurnWatch = (store: TaintStore) => {
   const held = new Map<string, SessionTaintRow>();
+  let fleet:
+    | { at: number; context: WebContext; urls: Map<string, string | undefined> }
+    | undefined;
+
+  /** What the web test reads of the fleet: its hostnames and ids (lower case), its MCP servers' URLs; read again once a minute. */
+  const webContext = (): WebContext => {
+    const now = Date.now();
+    if (!fleet || now - fleet.at > FLEET_READ_MS) {
+      const urls = new Map<string, string | undefined>();
+      fleet = {
+        at: now,
+        urls,
+        context: {
+          fleet: new Set(
+            [...store.fleetHosts()].map((host) => host.toLowerCase())
+          ),
+          mcpUrl: (server) => {
+            if (!urls.has(server)) {
+              urls.set(server, store.mcpUrl(server));
+            }
+            return urls.get(server);
+          },
+        },
+      };
+    }
+    return fleet.context;
+  };
 
   const stateOf = (instanceId: string): SessionTaintRow => {
     const known = held.get(instanceId);
@@ -296,11 +294,13 @@ export const createTurnWatch = (store: TaintStore) => {
     instanceId: string,
     neutral: Extract<NeutralMessage, { type: "assistant" }>
   ): void => {
+    const calls = neutral.message.content.filter(
+      (block) => block.type === "tool_use"
+    );
     if (
-      neutral.message.content.some(
-        (block) =>
-          block.type === "tool_use" && readsWeb(block.name, block.input)
-      )
+      calls.length > 0 &&
+      !stateOf(instanceId).web &&
+      calls.some((block) => readsWeb(block.name, block.input, webContext()))
     ) {
       change(instanceId, { web: true });
     }

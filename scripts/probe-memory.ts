@@ -13,7 +13,12 @@
  *     the curator run's, citing the notes it read.
  * (a) A delegate's memory_note lands in memory/inbox as a commit by it.
  * (e) An attempt's brief carries the knowledge file its task names.
- * Besides: a note written in a turn that reached a URL is tainted `web`.
+ * Besides: a note written in a turn that reached an outside URL is tainted
+ * `web`, and (w) only content from outside the fleet is: a curl to localhost,
+ * loopback, a 100.x tailnet address, *.ts.net, *.local or the fleet's own
+ * host, and a browser's navigate to localhost, leave a note clean; github.com,
+ * a URL in a variable, a navigate to an outside page, a claude.ai connector's
+ * tool and a fleet MCP server at an outside URL taint it.
  *
  * Taint the hub keeps past a turn (memory.ts `TurnWatch`, db
  * `session_taints`), each across a hub restart:
@@ -73,7 +78,80 @@ const MARKERS = [
   "PROBE-MEMORY-PARENT",
   "PROBE-MEMORY-CHILD",
   "PROBE-MEMORY-RCHILD",
+  "PROBE-MEMORY-NET",
 ] as const;
+
+/** One tool call a mock answers with. */
+interface NetCall {
+  input: object;
+  name: string;
+}
+const bash = (command: string): NetCall => ({
+  name: "Bash",
+  input: { command, description: "Reach a host" },
+});
+
+/**
+ * (w) What reads the web: one session per case runs its call once, then
+ * notes; `web` says whether its note must be tainted. `{host}` is the fleet
+ * machine's own hostname. The MCP calls need no server: the hub judges the
+ * call as its frame names it.
+ */
+const NET_CASES: Record<string, { call: NetCall; web: boolean }> = {
+  localhost: {
+    call: bash("curl -s -m 2 http://localhost:3456/health"),
+    web: false,
+  },
+  "loopback-bare": {
+    call: bash("curl -sf -m 2 127.0.0.1:9/health"),
+    web: false,
+  },
+  "tailnet-ip": {
+    call: bash("curl -s -m 2 http://100.101.102.103:4000/"),
+    web: false,
+  },
+  "ts-net": {
+    call: bash("curl -s -m 2 https://obelisk.tail1234.ts.net/"),
+    web: false,
+  },
+  "dot-local": {
+    call: bash("curl -s -m 2 http://studio.local:8080/"),
+    web: false,
+  },
+  "fleet-host": { call: bash("curl -s -m 2 http://{host}:4000/"), web: false },
+  github: {
+    call: bash("curl -s -m 2 -o /dev/null https://github.com/"),
+    web: true,
+  },
+  variable: { call: bash('curl -s -m 2 "$PROBE_TARGET"'), web: true },
+  "navigate-local": {
+    call: {
+      name: "mcp__chrome-devtools__navigate_page",
+      input: { url: "http://localhost:5173/" },
+    },
+    web: false,
+  },
+  "navigate-outside": {
+    call: {
+      name: "mcp__chrome-devtools__navigate_page",
+      input: { url: "https://example.com/" },
+    },
+    web: true,
+  },
+  connector: {
+    call: {
+      name: "mcp__claude_ai_Gmail__search_threads",
+      input: { query: "invoice" },
+    },
+    web: true,
+  },
+  "remote-server": {
+    call: { name: "mcp__remote-probe__lookup", input: { id: "1" } },
+    web: true,
+  },
+};
+const NET_CASE = /PROBE-MEMORY-NET (\S+)(?: (\S+))?/;
+const TAINT_LINE = /taint: (.*)/;
 /** The prompt the timer session's CronCreate fires with: a turn no hub send started. */
 const TIMED = "PROBE-MEMORY-TIMED";
 /** The person's later asks to note, in order: each one more note. */
@@ -254,6 +332,8 @@ const respond = (request: Seen): Reply => {
       return parent(request);
     case "PROBE-MEMORY-CHILD":
       return sleeper(request, "CHILD-SLEPT", 45, CHILD_NOTE, undefined);
+    case "PROBE-MEMORY-NET":
+      return netCase(request);
     case "PROBE-MEMORY-RCHILD":
       return sleeper(request, "RCHILD-SLEPT", 90, RCHILD_NOTE, "noted");
     default: {
@@ -277,12 +357,31 @@ const briefed = (request: Seen, words: string, summary: string): Reply => {
   return finished(request) ? text("done") : call(request, FINISH, { summary });
 };
 
+/** A case of (w): its call once, on the person's message; then its note. */
+const netCase = (request: Seen): Reply => {
+  const [, name = "", host = ""] = NET_CASE.exec(request.all) ?? [];
+  const known = NET_CASES[name];
+  if (!known) {
+    return text(`no case ${name}`);
+  }
+  if (!request.afterTool) {
+    return tool(
+      known.call.name,
+      JSON.parse(JSON.stringify(known.call.input).replaceAll("{host}", host))
+    );
+  }
+  return noted(request.all)
+    ? text("ok")
+    : call(request, NOTE, { text: `Net case ${name} noted.` });
+};
+
 /** The web reader: reaches a URL, notes; asked again later (NOTE-NOW), notes again without reading anything. */
 const webReader = (request: Seen): Reply => {
   const { all } = request;
   if (!all.includes("WEB-REACHED")) {
     return tool("Bash", {
-      command: "curl -s -m 2 http://127.0.0.1:9/ ; echo WEB-REACHED",
+      command:
+        "curl -s -m 2 -o /dev/null https://github.com/ ; echo WEB-REACHED",
       description: "Read a page",
     });
   }
@@ -611,6 +710,61 @@ try {
       !!webNote?.content.includes("taint: [web]"),
     `${workerNote?.content}\n${webNote?.content}`
   );
+
+  // ── (w) what reads the web: content from outside the fleet ──────────────
+  await section("w: what reads the web", async () => {
+    // A fleet MCP server reached at an outside URL; off, so no session loads it.
+    const remote = await http("PUT", "/api/fleet/mcp/remote-probe", {
+      config: { type: "http", url: "https://mcp.example.invalid/mcp" },
+      enabled: false,
+    });
+    if (remote.status !== 200) {
+      throw new Error(`remote-probe was not saved: ${remote.text}`);
+    }
+    const [machine] = fleet.query<{ hostname: string }>(
+      "SELECT hostname FROM agents"
+    );
+    const names = Object.keys(NET_CASES);
+    await Promise.all(
+      names.map(async (name) => {
+        const id = await fleet.spawn("claude", `Probe net ${name}`, src, {
+          projectId,
+        });
+        await fleet.send(
+          id,
+          `PROBE-MEMORY-NET ${name} ${machine?.hostname ?? ""}`
+        );
+      })
+    );
+    const notes = await until(
+      "every case's note",
+      async () => {
+        const all = await inbox();
+        const found = names.map((name) =>
+          noteWith(all, `Net case ${name} noted.`)
+        );
+        return found.every(Boolean) ? found : undefined;
+      },
+      (found) => found !== undefined,
+      300_000
+    );
+    const rows = names.map((name, at) => {
+      const content = notes[at]?.content ?? "";
+      const web = NET_CASES[name]?.web ?? false;
+      const ok = web
+        ? content.includes("taint: [web]")
+        : !content.includes("taint:");
+      return {
+        ok,
+        said: `${name}: ${TAINT_LINE.exec(content)?.[1] ?? "clean"}${ok ? "" : ` (expected ${web ? "web" : "clean"})`}`,
+      };
+    });
+    check(
+      "w: only content from outside the fleet reads the web",
+      rows.every((row) => row.ok),
+      `fleet host ${machine?.hostname}; ${rows.map((row) => row.said).join("; ")}`
+    );
+  });
 
   // ── (b) Caw woken by a lead routine notes ──────────────────────────────
   await http("PATCH", `/api/projects/${projectId}/caw`, { on: true });
