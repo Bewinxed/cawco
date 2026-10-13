@@ -81,10 +81,14 @@ if (typeof window !== "undefined") {
 /**
  * What the send carries for the session's unsent ink: its pins as `pins.md`
  * and the page with its ink as one PNG (a canvas's own picture, which holds
- * its strokes). Null with no ink waiting; throws when the page or the hub
- * did not answer.
+ * its strokes); with `picture: false` (the message's own canvas, whose
+ * picture the send already carries) the pins alone. Null with no ink
+ * waiting; throws when the page or the hub did not answer.
  */
-export async function inkExtras(instanceId: string): Promise<{
+export async function inkExtras(
+  instanceId: string,
+  { picture = true } = {}
+): Promise<{
   extras: Required<Pick<SendExtras, "attachments" | "images">>;
   sent: () => void;
 } | null> {
@@ -108,22 +112,27 @@ export async function inkExtras(instanceId: string): Promise<{
     });
     frame.postMessage({ type: "cawco:ink-export" }, location.origin);
   });
+  const attachments: NonNullable<SendExtras["attachments"]> = answer.md
+    ? [{ kind: "text", name: "pins.md", content: answer.md }]
+    : [];
+  const sent = () => {
+    frame.postMessage({ type: "cawco:ink-sent" }, location.origin);
+    if (inks.get(instanceId)?.artifactId === artifactId) {
+      inks.delete(instanceId);
+    }
+  };
+  if (!picture) {
+    return { extras: { attachments, images: [] }, sent };
+  }
   const png = answer.canvas ? (await exportCanvas(artifactId)).png : answer.png;
   if (!png) {
     throw new Error("the picture of the ink wasn't drawn");
   }
   return {
     extras: {
-      attachments: answer.md
-        ? [{ kind: "text", name: "pins.md", content: answer.md }]
-        : [],
+      attachments,
       images: [{ mediaType: "image/png", data: png }],
     },
-    sent: () => {
-      frame.postMessage({ type: "cawco:ink-sent" }, location.origin);
-      if (inks.get(instanceId)?.artifactId === artifactId) {
-        inks.delete(instanceId);
-      }
-    },
+    sent,
   };
 }

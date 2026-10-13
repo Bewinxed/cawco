@@ -1216,7 +1216,10 @@
     }
     inking = true;
     try {
-      return await inkExtras(recallOf);
+      // The message's own canvas sends its own picture, strokes and all.
+      return await inkExtras(recallOf, {
+        picture: inkWaiting.artifactId !== draft.canvas?.id,
+      });
     } catch (error) {
       room.error = `The ink couldn't be read for sending: ${error instanceof Error ? error.message : String(error)}. Nothing was sent; send again.`;
       return false;
@@ -1458,6 +1461,13 @@
   }
   /** The person's unsent ink on this session's artifact: the next Send carries it. */
   const inkWaiting = $derived(recallOf ? inks.get(recallOf) : undefined);
+  /**
+   * Its chip: none for ink on the message's own canvas, whose chip and
+   * picture already hold its strokes (its pins still go).
+   */
+  const inkChip = $derived(
+    inkWaiting?.artifactId === draft.canvas?.id ? undefined : inkWaiting
+  );
   /** The ink's pins and picture are being read for a send. */
   let inking = $state(false);
   /** The canvas stands over the field, or is on its way up or down: the grown shape is the composer. */
@@ -3016,7 +3026,7 @@
       canvasHidden={room.chipHidden}
       {draft}
       hasNotes={draft.selections.length > 0}
-      ink={inkWaiting}
+      ink={inkChip}
       onopencanvas={() => room.open()}
       onremovecanvas={() => room.remove()}
       bind:canvasChip
