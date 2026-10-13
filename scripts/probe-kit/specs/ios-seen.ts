@@ -36,10 +36,9 @@ import { type Kit, ROOT, type Spec } from "../kit";
 
 const AXE = "/opt/homebrew/bin/axe";
 /**
- * iOS 18.5, where axe reaches the simulator from a workspace (on iOS 27 its
- * automation socket is refused there). Its app is build-both.sh's own
- * 18.5 build: `--compile-only` builds for any simulator and leaves out the
- * Swift libraries a newer OS ships (libswiftWebKit), and does not launch here.
+ * iOS 18.5, the app's oldest target, where axe reaches the simulator from a
+ * workspace: on iOS 27 its automation socket is refused there
+ * ("testmanagerd.remote-automation.uds: Operation not permitted").
  */
 const SIM = {
   runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
