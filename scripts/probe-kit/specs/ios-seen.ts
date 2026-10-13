@@ -509,6 +509,38 @@ async function run(kit: Kit): Promise<void> {
       `${beats.length} beats in ${(readFor / 1000).toFixed(0)}s: ${beats.map((b) => `+${((b.at - readStart) / 1000).toFixed(0)}s`).join(", ")}`
     );
 
+    // ── A beat that lands late ────────────────────────────────────────────
+    // Two beats on two connections can land reversed: the hub keeps the
+    // newest said, so a late inactive leaves the client active.
+    const said = Date.now();
+    const beat = (active: boolean, saidAt: number) =>
+      fleet.api("/api/presence", {
+        clientId: "probe-late-beat",
+        client: "web",
+        sessionId: session,
+        active,
+        saidAt,
+      });
+    await beat(true, said);
+    await beat(false, said - 1000);
+    const lateRead = async () =>
+      (await fleet.logs("hub"))
+        .split("\n")
+        // The probe client's id is its own: every line for it is this check's.
+        .filter((l) => l.includes("[presence] web probe-la"));
+    const lateLines = await until(
+      "the late beat's line",
+      lateRead,
+      (lines) => lines.some((l) => l.includes("landed late")),
+      5000
+    ).catch(lateRead);
+    kit.check(
+      "a beat said before the one kept is dropped, and the client stays active",
+      lateLines.some((l) => l.includes("landed late; dropped")) &&
+        !lateLines.some((l) => l.includes("inactive")),
+      lateLines.join(" | ") || "no [presence] line for the probe client"
+    );
+
     // ── Leaving ──────────────────────────────────────────────────────────
     const leftFrom = (await presence()).length;
     await sh(`${AXE} button home --udid ${udid}`);
