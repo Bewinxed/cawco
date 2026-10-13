@@ -1,9 +1,10 @@
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
-import { homedir, platform } from "node:os";
+import { platform } from "node:os";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { extractFromBunfs } from "@anthropic-ai/claude-agent-sdk/extract";
 import { embeddedFile, standalone } from "@cawco/core/runtime";
+import { loginKeychainPath } from "./login-keychain";
 
 /**
  * A prompt that never yields. `query()` starts the CLI and its control channel
@@ -96,7 +97,7 @@ export const unlockKeychain = async (password: string): Promise<void> => {
     throw new Error("The keychain password is required.");
   }
 
-  const keychain = `${homedir()}/Library/Keychains/login.keychain-db`;
+  const keychain = loginKeychainPath();
   const unlocked =
     await Bun.$`security unlock-keychain -p ${password} ${keychain}`
       .quiet()

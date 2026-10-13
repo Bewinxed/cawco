@@ -36,6 +36,7 @@ import {
 import { claudeExecutableOptions, idle, resolveClaudeExecutable } from "./auth";
 import { retireConfigDir } from "./claude-sessions";
 import { hostGit } from "./clone";
+import { keychainLocked, loginKeychainPath } from "./login-keychain";
 
 /**
  * An account's Claude Code on this machine: its config dir, which holds its
@@ -184,9 +185,6 @@ export const accountReports = async (): Promise<AccountReport[]> => {
   }
 };
 
-/** `errSecInteractionNotAllowed`: the item is there, this session may not read it. */
-const SEC_INTERACTION_NOT_ALLOWED = 36;
-
 /**
  * The user name Claude Code files its Keychain item under: `$USER`, else the
  * login's, and `claude-code-user` when that is not `[a-zA-Z0-9._-]+`. Read
@@ -220,20 +218,25 @@ export const keychainService = (account: string): string =>
     .digest("hex")
     .slice(0, 8)}`;
 
-/** Whether macOS holds an account's login but refuses this process the read (exit 36; a missing item is 44). */
-const keychainRefused = async (account: string): Promise<boolean> => {
+/**
+ * Whether the keychain holds an account's login item: its attributes only
+ * (no `-w`), which read while the keychain is locked and never touch the
+ * secret, so no prompt rises. A missing item exits 44.
+ */
+const keychainHolds = async (account: string): Promise<boolean> => {
   const read =
     await Bun.$`security find-generic-password -a ${keychainUser()} -s ${keychainService(account)}`
       .quiet()
       .nothrow();
-  return read.exitCode === SEC_INTERACTION_NOT_ALLOWED;
+  return read.exitCode === 0;
 };
 
 /**
  * The machine's word on Claude, from its account dirs alone: authenticated
  * when any account is signed in here; on macOS, `unreadable-credentials`
- * when none is but the login keychain refuses the read of one's login;
- * else unauthenticated. The machine's own `~/.claude` has no say.
+ * when none is, the keychain holds one's login, and the login keychain is
+ * locked for this process (login-keychain.ts, read with no secret and no
+ * UI); else unauthenticated. The machine's own `~/.claude` has no say.
  */
 export const claudeAuth = async (
   reports: readonly AccountReport[]
@@ -242,10 +245,10 @@ export const claudeAuth = async (
     return "authenticated";
   }
   if (platform() === "darwin") {
-    const refused = await Promise.all(
-      reports.map((report) => keychainRefused(report.account))
+    const held = await Promise.all(
+      reports.map((report) => keychainHolds(report.account))
     );
-    if (refused.some(Boolean)) {
+    if (held.some(Boolean) && keychainLocked(loginKeychainPath())) {
       return "unreadable-credentials";
     }
   }

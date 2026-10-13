@@ -16,15 +16,17 @@
  * answering `errSecInteractionNotAllowed` (exit 36), which is the case the
  * feature exists for.
  *
- * Why a scratch HOME is enough: the agent unlocks
- * `${homedir()}/Library/Keychains/login.keychain-db` (agent/src/auth.ts) and
- * detects the lock with `security find-generic-password` over the user's
- * search list (agent/src/accounts.ts `keychainRefused`). Both follow HOME:
- * Bun's `homedir()` reads it, and the Security framework expands the user
- * domain's `~/Library/Preferences/com.apple.security.plist` and
+ * Why a scratch HOME is enough: the agent unlocks, and reads the lock state
+ * of, `${homedir()}/Library/Keychains/login.keychain-db`
+ * (agent/src/login-keychain.ts, `SecKeychainGetStatus`), and finds the
+ * account's item with `security find-generic-password` (no `-w`) over the
+ * user's search list (agent/src/accounts.ts `keychainHolds`). Both follow
+ * HOME: Bun's `homedir()` reads it, and the Security framework expands the
+ * user domain's `~/Library/Preferences/com.apple.security.plist` and
  * `~/Library/Keychains/login.keychain` with `getenv("HOME")`
  * (DLDBListCFPref.cpp `getPwInfo(kHomeDir)`,
  * github.com/apple-oss-distributions/Security, OSX/libsecurity_keychain/lib).
+ * The spec reads the lock state with the agent's own `keychainLocked`.
  *
  * The owner's own keychains are named by one call only. Every `security`
  * call on the scratch keychain goes through {@link inScratch}, which runs it
@@ -45,6 +47,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { platform, userInfo } from "node:os";
 import { basename, dirname, join } from "node:path";
 import type { Page } from "playwright-core";
+import { keychainLocked } from "../../../packages/agent/src/login-keychain";
 import { ACCOUNT, MACHINE, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 import { open, settle } from "../kit";
@@ -54,8 +57,6 @@ const UNLOCK_ITEM = /^Unlock keychain/;
 const UNLOCK_BUTTON = /^Unlock$/;
 /** agent/src/auth.ts, `security unlock-keychain` exiting errSecAuthFailed. */
 const WRONG_PASSWORD = "That password did not unlock the keychain.";
-/** `errSecInteractionNotAllowed`'s exit: the keychain is there and locked, and nothing may ask. */
-const LOCKED_EXIT = 36;
 /** A user name Claude Code files its Keychain item under as it is (agent/src/accounts.ts). */
 const KEYCHAIN_USER = /^[a-zA-Z0-9._-]+$/;
 
@@ -105,6 +106,36 @@ interface Said {
 }
 
 /**
+ * Throws unless the keychain `path` that `what` names resolves inside the
+ * scratch HOME `home` and outside every real home's Library.
+ */
+function refuseUnlessScratchPath(home: string, path: string, what: string) {
+  const scratch = refuseUnlessScratch(home);
+  const real = resolved(path);
+  if (!within(real, scratch)) {
+    throw new Error(
+      `Refusing: ${what} names ${real}, outside the scratch HOME ${scratch}.`
+    );
+  }
+  for (const owner of realHomes()) {
+    if (within(real, join(owner, "Library"))) {
+      throw new Error(
+        `Refusing: ${what} names ${real}, under the real ${owner}/Library.`
+      );
+    }
+  }
+}
+
+/**
+ * Whether the scratch keychain is locked, by the agent's own primitive
+ * (agent/src/login-keychain.ts: `SecKeychainGetStatus`, no secret, no UI).
+ */
+function scratchLocked(home: string, path: string): boolean {
+  refuseUnlessScratchPath(home, path, "SecKeychainGetStatus");
+  return keychainLocked(path);
+}
+
+/**
  * One `security` call with HOME set to the scratch HOME `home`, naming the
  * keychain `path`, which must resolve inside `home` and outside every real
  * home's Library, or the call is refused before it runs. Its arguments are
@@ -115,20 +146,7 @@ async function inScratch(
   args: string[],
   path: string
 ): Promise<Said> {
-  const scratch = refuseUnlessScratch(home);
-  const real = resolved(path);
-  if (!within(real, scratch)) {
-    throw new Error(
-      `Refusing: security ${args[0]} names ${real}, outside the scratch HOME ${scratch}.`
-    );
-  }
-  for (const owner of realHomes()) {
-    if (within(real, join(owner, "Library"))) {
-      throw new Error(
-        `Refusing: security ${args[0]} names ${real}, under the real ${owner}/Library.`
-      );
-    }
-  }
+  refuseUnlessScratchPath(home, path, `security ${args[0]}`);
   if (!args.includes(path)) {
     throw new Error(
       `Refusing: security ${args[0]} does not name the scratch keychain it was checked for.`
@@ -365,13 +383,15 @@ const spec: Spec = {
     const configDir = join(home, ".cawco", "accounts", ACCOUNT, "claude");
     const service = keychainServiceOf(configDir);
     const user = keychainUserOf(fleet.env.USER);
-    /** The agent's own lock probe, naming the scratch keychain: 36 locked, 0 readable. */
-    const probe = () =>
+    /** The agent's item read (no `-w`), naming the scratch keychain: 0 when the item is there, locked or not. */
+    const holds = () =>
       inScratch(
         home,
         ["find-generic-password", "-a", user, "-s", service, keychain],
         keychain
       );
+    /** The agent's lock read on the scratch keychain. */
+    const lockedNow = () => scratchLocked(home, keychain);
     const info = () =>
       inScratch(home, ["show-keychain-info", keychain], keychain);
     let made = false;
@@ -433,27 +453,30 @@ const spec: Spec = {
         keychain
       );
       const searchList = await scratchSearchList(home);
-      const lockedRead = await probe();
+      const held = await holds();
+      const lockedAtStart = lockedNow();
       const infoBefore = await info();
       kit.note(
         `scratch keychain ${keychain}: set-keychain-settings exit ${settings.code}, list-keychains -s exit ${listed.code}, add-generic-password exit ${added.code}, lock-keychain exit ${locked.code}; H's search list: ${searchList.out}; show-keychain-info before: exit ${infoBefore.code} ${infoBefore.err || infoBefore.out}`
       );
       kit.check(
-        "the throwaway keychain is the scratch HOME's only one, holds the account's item and is locked (find-generic-password exits 36)",
+        "the throwaway keychain is the scratch HOME's only one, holds the account's item (read without -w exits 0) and is locked (SecKeychainGetStatus)",
         settings.code === 0 &&
           listed.code === 0 &&
           added.code === 0 &&
           locked.code === 0 &&
           searchList.out.includes(keychain) &&
           searchList.out.split("\n").length === 1 &&
-          lockedRead.code === LOCKED_EXIT,
+          held.code === 0 &&
+          lockedAtStart,
         JSON.stringify({
           settings,
           listed,
           added,
           locked,
           searchList,
-          lockedRead,
+          held: held.code,
+          lockedByStatus: lockedAtStart,
         })
       );
 
@@ -524,7 +547,7 @@ const spec: Spec = {
         refused.alert === WRONG_PASSWORD && refused.underRow,
         JSON.stringify({ alert: refused.alert, underRow: refused.underRow })
       );
-      const stillLocked = await probe();
+      const stillLocked = lockedNow();
       kit.check(
         "after the refusal the field keeps its place, marked invalid, and the keychain stays locked",
         refused.field !== null &&
@@ -532,11 +555,11 @@ const spec: Spec = {
           refused.field.top === opened.field.top &&
           refused.field.left === opened.field.left &&
           refused.field.invalid === "true" &&
-          stillLocked.code === LOCKED_EXIT,
+          stillLocked,
         JSON.stringify({
           opened: opened.field,
           refused: refused.field,
-          probe: stillLocked.code,
+          locked: stillLocked,
         })
       );
 
@@ -561,19 +584,19 @@ const spec: Spec = {
       );
       await settle(page);
       const answered = await stepState(page, MACHINE);
-      const readable = await probe();
+      const lockedAfter = lockedNow();
       const infoAfter = await info();
       kit.note(
         `show-keychain-info after: exit ${infoAfter.code} ${infoAfter.err || infoAfter.out}`
       );
       kit.check(
-        "the right password unlocks it: the agent's probe reads the item, and the step says the machine is past its keychain",
-        readable.code === 0 &&
+        "the right password unlocks it: SecKeychainGetStatus reads it unlocked, and the step says the machine is past its keychain",
+        !lockedAfter &&
           answered.alert === null &&
           answered.titles.length === 1 &&
           (answered.titles[0] === answers[0] ||
             answered.titles[0] === answers[1]),
-        JSON.stringify({ probe: readable.code, answered })
+        JSON.stringify({ locked: lockedAfter, answered })
       );
 
       const after = await until(
