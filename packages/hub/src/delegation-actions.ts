@@ -898,41 +898,95 @@ async function saveWorkflowProgram(
 
 const coldRefusals = new Map<string, string>();
 
+/** The cold check waits for Jev's answer when the hub asks it: its 20 s, and the hub's own read. */
+const FOLLOWUP_STATE_MS = 30_000;
+
+/**
+ * Whether a session's prompt cache is warm now (mid-turn, unmeasured, or
+ * unexpired); a warm one forgets the cold refusals given about it.
+ */
+function warmNow(
+  row: KeepAliveRow,
+  midTurn: boolean,
+  lastTurnAt: string | null
+): boolean {
+  const expires = promptCacheExpiresAt(row, lastTurnAt);
+  if (!(midTurn || expires === null || expires > Date.now())) {
+    return false;
+  }
+  const prefix = `${row.id}:`;
+  for (const key of coldRefusals.keys()) {
+    if (key.startsWith(prefix)) {
+      coldRefusals.delete(key);
+    }
+  }
+  return true;
+}
+
+/**
+ * Jev's answer about a cold session stands: attach delivers (returns), fresh
+ * refuses, and a Jev that did not answer refuses saying so; none of them is
+ * handed back to the caller to repeat.
+ */
+function jevVerdict(
+  row: KeepAliveRow,
+  jev: { attach: boolean; noul: number } | { error: string }
+): void {
+  const title = row.title ?? row.derivedTitle ?? sessionLabel(row).dir;
+  if ("error" in jev) {
+    throw new Error(
+      `Refused: "${title}" (${row.id}) is cold, and ${jev.error} Nothing was sent.`
+    );
+  }
+  if (!jev.attach) {
+    throw new Error(
+      `Refused: "${title}" (${row.id}) is cold, and Jev judged that this message does not need its history (${jev.noul.toFixed(2)}): a fresh delegate with a tight brief fits. Nothing was sent. Start one with delegate and no workspace.`
+    );
+  }
+}
+
+/**
+ * Attach or fresh (§5.9) with a caller: a message to a session whose
+ * prompt cache has expired. Jev on: the hub asks Jev whether that session's
+ * history matters to `message`, and its answer stands (a Jev that does not
+ * answer refuses, saying so). Jev off: the caller decides: the first call
+ * is refused with the cost, and the same call again is delivered.
+ */
 async function checkCold(
   instanceId: string | undefined,
   workspace: string | undefined,
-  caller: string
+  caller: string,
+  message: string
 ): Promise<void> {
   const response = await fetch(`${hubHttpUrl()}/api/followup-state`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ instanceId, workspace }),
-    signal: AbortSignal.timeout(5000),
+    body: JSON.stringify({ instanceId, workspace, message }),
+    signal: AbortSignal.timeout(FOLLOWUP_STATE_MS),
   });
   if (!response.ok) {
     throw new Error(await response.text());
   }
-  const { row, midTurn, hasTurns, lastTurnAt, activityBound } =
+  const { row, midTurn, hasTurns, lastTurnAt, activityBound, jev } =
     (await response.json()) as {
       row: KeepAliveRow | null;
       midTurn: boolean;
       hasTurns: boolean;
       lastTurnAt: string | null;
       activityBound: boolean;
+      /** Jev's answer, when Jev is on and the hub found the session cold. */
+      jev?: { attach: boolean; noul: number } | { error: string };
     };
   if (!row) {
     return;
   }
   row.lastRequestAt = row.lastRequestAt ? new Date(row.lastRequestAt) : null;
-  const expires = promptCacheExpiresAt(row, lastTurnAt);
-  const now = Date.now();
   const prefix = `${row.id}:`;
-  if (midTurn || expires === null || expires > now) {
-    for (const key of coldRefusals.keys()) {
-      if (key.startsWith(prefix)) {
-        coldRefusals.delete(key);
-      }
-    }
+  if (warmNow(row, midTurn, lastTurnAt)) {
+    return;
+  }
+  if (jev) {
+    jevVerdict(row, jev);
     return;
   }
   const key = `${prefix}${caller}`;
@@ -1308,7 +1362,7 @@ export const handoffActions = ({
       ? resolveDelegate(peers, addressed, instanceId, ledBy)
       : resolveHandoff(peers, sleeping, addressed, own);
     if (peer.row.id !== own?.parentInstanceId) {
-      await checkCold(peer.row.id, undefined, instanceId);
+      await checkCold(peer.row.id, undefined, instanceId, message);
     }
     const whose =
       peer.row.id === own?.parentInstanceId ? ", your parent session" : "";
@@ -1436,7 +1490,7 @@ export const handoffActions = ({
       ? resolveMachine(fleet.machines(), machine)
       : undefined;
     if (opts.workspace) {
-      await checkCold(undefined, opts.workspace, instanceId);
+      await checkCold(undefined, opts.workspace, instanceId, prompt);
     }
     const response = await fetch(`${hubHttpUrl()}/api/work-items`, {
       method: "POST",

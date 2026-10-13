@@ -147,6 +147,8 @@ export function createDelegationMcp(options: {
   workItemTask?: (workItemId: string) => string | null | undefined;
   /** Where a work item lands: what its session's finish_item says happens. */
   workItemLands?: (workItemId: string) => LandsMode | undefined;
+  /** Duplicates for a task a session filed with `task_create` (jev-tasks.ts). */
+  duplicates?: TaskToolContext["duplicates"];
   /** Starts an attempt at a task for `task_start` (dispatch.ts). */
   startAttempt?: (
     projectId: string,
@@ -426,6 +428,7 @@ export function createDelegationMcp(options: {
       taskTools({
         actor,
         mainline,
+        duplicates: options.duplicates,
         startAttempt: options.startAttempt,
         retryAttempt: options.retryAttempt,
         tasks: options.tasks,

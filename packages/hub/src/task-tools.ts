@@ -28,6 +28,7 @@ import {
   sessionActor,
   type TaskList,
   type Tasks,
+  type TaskView,
 } from "./tasks";
 
 /** Every task tool, by name. */
@@ -45,6 +46,11 @@ export const TASK_TOOLS: ReadonlySet<string> = new Set([
 
 export interface TaskToolContext {
   actor: InstanceRow;
+  /**
+   * Duplicates (§5.9) for a task this session just filed (jev-tasks.ts
+   * `filed`): Jev's verdict, or the candidates the session compares.
+   */
+  duplicates?: (projectId: string, task: TaskView) => Promise<unknown>;
   /** Its role files tasks (roles.ts): it may name any task's to-dos, not only its own work item's. */
   mainline: boolean;
   /** Retries a task whose last attempt failed, reporting to `parent` (dispatch.ts); without it task_retry refuses. */
@@ -335,7 +341,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_create",
-      "File a task: work that must outlive this conversation or run without you. Returns it with its id (tsk-12). `stage` defaults to the first stage; `after` names tasks it waits for.",
+      "File a task: work that must outlive this conversation or run without you. Returns it with its id (tsk-12) and `duplicates`: Jev's verdict, or open tasks to compare (link `duplicate_of` if it repeats one). `stage` defaults to the first stage.",
       {
         title: z.string().describe("One line, verb first."),
         description: z.string().optional(),
@@ -367,9 +373,13 @@ export function taskTools(context: TaskToolContext | undefined) {
       },
       async ({ found_in, ...draft }) => {
         const { projectId, tasks, actor } = scope();
-        return ok(
-          await tasks.create(projectId, { ...draft, foundIn: found_in }, actor)
+        const task = await tasks.create(
+          projectId,
+          { ...draft, foundIn: found_in },
+          actor
         );
+        const duplicates = await context?.duplicates?.(projectId, task);
+        return ok(duplicates ? { ...task, duplicates } : task);
       }
     ),
     tool(

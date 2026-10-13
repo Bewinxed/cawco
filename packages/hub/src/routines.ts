@@ -52,11 +52,13 @@ import type { Decide, RoutineRow, RoutineRunRow } from "./db/routines";
 import type { RoutineOutcome, RoutineTarget, WorkBudget } from "./db/schema";
 import { defaultCheck } from "./dispatch";
 import { eventData } from "./ingress";
+import { jevType, offLine } from "./jev-placement";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { Push } from "./push";
 import { BUDGET, LANDS } from "./tasks";
 import {
   budgetProblem,
+  DEFAULT_DELEGATE_TYPE,
   isRoutineParent,
   routineParent,
   titleProblem,
@@ -219,6 +221,8 @@ export interface RoutineDeps {
   readonly hubCheckout: () => Promise<
     { cwd: string; machineId: string } | string
   >;
+  /** Jev's key while Jev is on (jev-placement.ts `jevKey`). */
+  readonly jevKey: () => string | undefined;
   readonly lifetime: HubLifetimeShape;
   /** Whether a machine is connected now. */
   readonly online: (machineId: string) => boolean;
@@ -317,6 +321,7 @@ export const createRoutines = ({
   caw,
   db,
   hubCheckout,
+  jevKey,
   lifetime,
   online,
   pauses,
@@ -325,6 +330,35 @@ export const createRoutines = ({
   types,
   workItems,
 }: RoutineDeps) => {
+  /**
+   * Delegate type (§5.9) for a delegate run: the type the routine names;
+   * one that names none runs Jev's choice from its project's catalog while
+   * Jev is on, else "medium" (undefined here: work-items' default). A Jev
+   * that does not answer fails the run with its words.
+   */
+  const runType = async (routine: RoutineRow): Promise<string | undefined> => {
+    if (routine.delegateType) {
+      return routine.delegateType;
+    }
+    const key = jevKey();
+    if (!key) {
+      offLine(
+        "type",
+        routine.projectId,
+        `routine “${routine.name}” names no type, so its run is "${DEFAULT_DELEGATE_TYPE}"`
+      );
+      return;
+    }
+    const catalog = types(routine.projectId);
+    return catalog.length > 0
+      ? await jevType(
+          key,
+          routine.projectId,
+          { title: routine.name, text: routine.prompt },
+          catalog
+        )
+      : undefined;
+  };
   const store = db.routines;
   /** The scheduler's one timer. */
   let timer: HubTimer | undefined;
@@ -621,11 +655,12 @@ export const createRoutines = ({
       return;
     }
     const label = slotLabel(run.slot, routine.timeZone);
+    const type = await runType(routine);
     const begun = await workItems.startForRoutine(
       {
         title: routine.name,
         prompt: `Routine “${routine.name}”, its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}. Its prompt:\n\n${routine.prompt}${inputOf(run)}\n\n${CONTRACT}`,
-        ...(routine.delegateType ? { type: routine.delegateType } : {}),
+        ...(type ? { type } : {}),
         checks: [defaultCheck(routine.lands, [])],
         lands: routine.lands,
         ...(routine.budget ? { budget: routine.budget } : {}),

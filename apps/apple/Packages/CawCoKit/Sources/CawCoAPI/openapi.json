@@ -6363,6 +6363,159 @@
         }
       }
     },
+    "/api/projects/{id}/requests": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  },
+                  "taskId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdRequests",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdRequests 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PhoneDone"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdRequests 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdRequests 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdRequests 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdRequests 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectsByIdRequests 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectsByIdRequests 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdRequests 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdRequests 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "postApiProjectsByIdRequests 502",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdRequests 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/routines": {
       "get": {
         "parameters": [
@@ -27605,6 +27758,32 @@
           "thread"
         ]
       },
+      "PhoneDone": {
+        "description": "What the hub did for a phone request.",
+        "type": "object",
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/PhoneDoneAction"
+          },
+          "decidedBy": {
+            "$ref": "#/components/schemas/PhoneDoneDecidedBy"
+          },
+          "stage": {
+            "type": "string"
+          },
+          "task": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "decidedBy",
+          "text"
+        ]
+      },
       "RoutineView": {
         "description": "A routine, as the routes and tools answer it (times in ms), with its newest runs.",
         "type": "object",
@@ -41819,6 +41998,24 @@
           "allow",
           "ask",
           "deny"
+        ]
+      },
+      "PhoneDoneAction": {
+        "type": "string",
+        "enum": [
+          "caw",
+          "comment",
+          "lead",
+          "move",
+          "retry",
+          "start"
+        ]
+      },
+      "PhoneDoneDecidedBy": {
+        "type": "string",
+        "enum": [
+          "jev",
+          "lead"
         ]
       },
       "PlanSnapshotSource": {

@@ -372,6 +372,14 @@ import type { HarnessPlanDeps } from "./harness-plans";
 import { hidden } from "./hidden";
 import { hubId } from "./hub-id";
 import { createIngress, ingressRoutes } from "./ingress";
+import {
+  JevFailed,
+  jevAttach,
+  jevKey,
+  jevType,
+  offLine,
+} from "./jev-placement";
+import { createJevTasks, phoneRequestRoutes } from "./jev-tasks";
 import { joinRoutes } from "./join";
 import { streamLargeJson } from "./json-response";
 import {
@@ -517,7 +525,6 @@ import {
 import {
   createWorkItems,
   type ItemPlacement,
-  isLive,
   LEAF_DELEGATE_REFUSAL,
   SESSION_TITLE_DESCRIPTION,
   titleProblem,
@@ -14328,6 +14335,7 @@ export const createServer = (
     end: (instanceId) =>
       endSession(instanceId, "stop", { kind: "session", name: "Caw" }),
     task: (projectId, id) => tasks.get(projectId, id),
+    triage: (projectId) => jevTasks.triageFor(projectId),
     views,
   });
   lead = caw;
@@ -14338,6 +14346,26 @@ export const createServer = (
     lead: (projectId, by) => caw.lead(projectId, by),
     online: (machineId) => Boolean(registry.agent(machineId)),
     pauses: (projectId) => caps.pauses(projectId),
+    placement: {
+      key: () => jevKey(db),
+      typesFor: (projectId) => projectTypes.typesFor(projectId),
+      judgeByLead: (projectId, taskId, text) => {
+        caw
+          .wake(projectId, {
+            by: "event",
+            text,
+            threadId: db.threadOfTask(projectId, taskId)?.id,
+            note: {
+              title: `Attempt · ${taskId}'s acceptance criteria wait for Caw`,
+            },
+          })
+          .catch((error: unknown) =>
+            console.warn(
+              `[dispatch] ${taskId}'s acceptance criteria did not reach Caw: ${error instanceof Error ? error.message : String(error)}`
+            )
+          );
+      },
+    },
     start: (request) => workItems.start(request),
   });
   tasks.listen(dispatcher.taskChanged);
@@ -14402,48 +14430,50 @@ export const createServer = (
     projectIds: () => db.listProjects().map((project) => project.id),
   });
   tasks.listen(waits.taskChanged);
-  // Your comment on a task reaches its live attempt's session, as any
-  // message of yours does.
-  tasks.listen((event) => {
-    if (
-      event.kind !== "changed" ||
-      event.comment?.actor.mover !== "you" ||
-      !event.id
-    ) {
-      return;
-    }
-    const live = db
-      .projectAttempts(event.projectId)
-      .find((item) => item.taskId === event.id && isLive(item.state));
-    const [row] = live ? db.getInstancesByIds([live.instanceId]) : [];
-    if (!row) {
-      return;
-    }
-    try {
-      deliverSend({
-        verb: "send",
-        machineId: row.machineId,
-        instanceId: row.id,
-        payload: {
+  // Jev placement on the board (§5.9, jev-tasks.ts): Duplicates and Triage
+  // as a task is filed; Attach or fresh as you comment on a task (a live
+  // attempt reads your comment as any message of yours); phone requests.
+  const jevTasks = createJevTasks({
+    caw,
+    db,
+    dispatcher,
+    tasks,
+    refused: (row) =>
+      workItems.refusal(row, { kind: "human" })?.reason ?? undefined,
+    warmth: (row) => {
+      const state = followupState(row);
+      // The cold check's own test: warm mid-turn, unmeasured, or unexpired.
+      const expires = promptCacheExpiresAt(row, state.lastTurnAt);
+      return {
+        warm: state.midTurn || expires === null || expires > Date.now(),
+        idle: !state.midTurn,
+      };
+    },
+    sendYours: (row, text) => {
+      try {
+        deliverSend({
+          verb: "send",
+          machineId: row.machineId,
           instanceId: row.id,
-          message: {
-            type: "user",
-            uuid: crypto.randomUUID(),
+          payload: {
+            instanceId: row.id,
             message: {
-              role: "user",
-              content: `A comment on ${event.id}, your task:\n\n${event.comment.text}`,
+              type: "user",
+              uuid: crypto.randomUUID(),
+              message: { role: "user", content: text },
+              parent_tool_use_id: null,
+              origin: { kind: "human" },
             },
-            parent_tool_use_id: null,
-            origin: { kind: "human" },
           },
-        },
-      });
-    } catch (error) {
-      console.warn(
-        `[tasks] the comment on ${event.id} did not reach ${row.id}: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
+        });
+      } catch (error) {
+        console.warn(
+          `[tasks] your words did not reach ${row.id}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    },
   });
+  tasks.listen(jevTasks.taskChanged);
   /**
    * What `handoff`'s cold check reads of a session (`/api/followup-state`):
    * its recorded turns, whether one is under way, and when the last ended.
@@ -14469,6 +14499,99 @@ export const createServer = (
       lastTurnAt,
       activityBound,
     };
+  };
+  /**
+   * Attach or fresh (§5.9) for a caller about to message `row`: asked only
+   * of a cold session, and only while Jev is on (off, the caller decides in
+   * its cold check). Jev's answer, its failure in words, or undefined when
+   * there is nothing to ask.
+   */
+  const attachVerdict = async (
+    row: KeepAliveRow & { projectId: string | null; workItemId: string | null },
+    message: string | undefined
+  ): Promise<
+    { attach: boolean; noul: number } | { error: string } | undefined
+  > => {
+    const { midTurn, lastTurnAt } = followupState(row);
+    const expires = promptCacheExpiresAt(row, lastTurnAt);
+    const cold = !(midTurn || expires === null || expires > Date.now());
+    const key = jevKey(db);
+    if (!(cold && key && message)) {
+      return;
+    }
+    const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
+    try {
+      const judged = await jevAttach(key, row.projectId, {
+        cache: "cold",
+        lastWork: item?.digest ?? item?.result ?? item?.error ?? "",
+        message,
+        session: sessionLabel(row).name,
+      });
+      console.log(
+        `[handoff] ${row.id}: cold; Jev says ${judged.attach ? "attach" : "fresh"} (${judged.noul.toFixed(2)})`
+      );
+      return judged;
+    } catch (error) {
+      if (error instanceof JevFailed) {
+        return { error: error.message };
+      }
+      throw error;
+    }
+  };
+  /**
+   * Delegate type (§5.9) for a `delegate` call that names no type, harness
+   * or model and continues no session: Jev's choice from the parent's
+   * project's catalog while Jev is on; off, the delegating session named
+   * none, so "medium" (work-items' default, undefined here). A Jev that does
+   * not answer refuses the call in its words (the route's 502).
+   */
+  const delegateTypeFor = async (request: {
+    fork?: boolean;
+    harness?: string;
+    model?: string;
+    parentInstanceId: string;
+    prompt: string;
+    title: string;
+    type?: string;
+    workspace?: string;
+  }): Promise<{ type?: string }> => {
+    if (
+      request.type ||
+      request.harness ||
+      request.model ||
+      request.workspace ||
+      request.fork
+    ) {
+      return {};
+    }
+    const projectId =
+      db.getInstancesByIds([request.parentInstanceId])[0]?.projectId ?? null;
+    const key = jevKey(db);
+    if (!key) {
+      offLine(
+        "type",
+        projectId,
+        `the delegating session named no type for “${request.title}”, so it runs "medium"`
+      );
+      return {};
+    }
+    try {
+      const type = await jevType(
+        key,
+        projectId,
+        { title: request.title, text: request.prompt },
+        projectTypes.typesFor(projectId)
+      );
+      console.log(`[work-items] “${request.title}” runs ${type}, Jev's choice`);
+      return { type };
+    } catch (error) {
+      if (error instanceof JevFailed) {
+        throw new Error(`${error.message} Nothing was started; name a type.`, {
+          cause: error,
+        });
+      }
+      throw error;
+    }
   };
   // `delegate_list`: a session's own delegation tree (§5.2).
   const delegationTree = createDelegationTree({
@@ -14513,6 +14636,7 @@ export const createServer = (
     quiets: (projectId) => caps.quiets(projectId),
     push,
     types: (projectId) => projectTypes.typesFor(projectId),
+    jevKey: () => jevKey(db),
     workItems,
     hubCheckout: async () => {
       const machineId = await ownMachineId;
@@ -14569,6 +14693,7 @@ export const createServer = (
     connections,
     db,
     dispatcher,
+    jevKey: () => jevKey(db),
     lifetime,
     routines,
   });
@@ -14605,6 +14730,7 @@ export const createServer = (
     connections,
     workItemTask: (id) => db.workItem(id)?.taskId,
     workItemLands: (id) => db.workItem(id)?.lands,
+    duplicates: (projectId, task) => jevTasks.filed(projectId, task, "session"),
     startAttempt: (projectId, ref, parent) =>
       dispatcher.startAttempt(projectId, ref, parent),
     retryAttempt: (projectId, ref, parent) =>
@@ -16404,6 +16530,7 @@ export const createServer = (
       .use(planRoutes(plans))
       .use(dispatchRoutes(dispatcher))
       .use(cawRoutes(caw))
+      .use(phoneRequestRoutes(jevTasks))
       .use(routineRoutes(routines))
       .use(connectionRoutes(connections))
       .use(ingressRoutes(ingress))
@@ -17165,9 +17292,11 @@ export const createServer = (
           body: t.Object({
             instanceId: t.Optional(t.String()),
             workspace: t.Optional(t.String()),
+            /** The message or brief the caller would send: Attach or fresh's question, with Jev on. */
+            message: t.Optional(t.String()),
           }),
         },
-        ({ body, status }) => {
+        async ({ body, status }) => {
           let { instanceId } = body;
           if (body.workspace) {
             const workspaces = db.workspacesNamed(body.workspace.trim());
@@ -17188,7 +17317,15 @@ export const createServer = (
           }
           const { midTurn, hasTurns, lastTurnAt, activityBound } =
             followupState(row);
-          return { row, midTurn, hasTurns, lastTurnAt, activityBound };
+          const jev = await attachVerdict(row, body.message);
+          return {
+            row,
+            midTurn,
+            hasTurns,
+            lastTurnAt,
+            activityBound,
+            ...(jev ? { jev } : {}),
+          };
         }
       )
       // Moves a session to another account of its provider, whole: its
@@ -19527,7 +19664,10 @@ export const createServer = (
             );
           }
           try {
-            const started = await workItems.delegate(body);
+            const started = await workItems.delegate({
+              ...body,
+              ...(await delegateTypeFor(body)),
+            });
             // Waiting for files a live item owns: no item yet.
             if ("queued" in started) {
               return {

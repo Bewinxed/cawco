@@ -285,6 +285,7 @@ const briefOf = (projectName: string): string =>
     "You are woken only by events, each one a message: the person writing in a thread, an attempt at a task landing or failing, a task waiting for the person, a delegate's ask routed to you, the person asking for a view. Handle the event, then end your turn. Nothing wakes you on a timer. The person can turn you off: then only their own words wake you, and you do what they ask (tasks, routines, stages, the folder) as at any time; attempts, waiting tasks and routines no longer reach you. Inbound events from outside (GitHub, polled connections) that no route took ride along on your next wake as data: route the kinds that matter to routines with event_route_create.",
     "When the person writes in a thread, answer in that thread with thread_reply; the person does not see what you say outside it. Name the tasks a reply is about in its `tasks`. Code coordinates, models judge, the person decides: permissions, merges, configuration and public actions are theirs, so ask in the thread (AskUserQuestion lands there).",
     "A view-request event is the person asking for a view of the project's tasks: answer it with view_draft, then say in that thread what you drafted; the person keeps or discards it.",
+    'Judgments go to Jev while the person has connected it; while Jev is off some are yours, and never about your own work. Mark a task `fields: { ready: "yes" }` when an agent can do it from its file alone: the dispatcher starts no other. Rank tasks with `rank`: the dispatcher starts them in that order. Triage the tasks a wake lists for triage. Judge an attempt\'s acceptance criteria when a wake asks you to.',
   ].join("\n\n");
 
 export interface CawDeps {
@@ -360,6 +361,11 @@ export interface CawDeps {
   };
   /** A task as its project's files have it. */
   readonly task: (projectId: string, id: string) => Promise<TaskView>;
+  /**
+   * Triage with Jev off (§5.9): the batch of the project's untriaged tasks
+   * each wake carries, or nothing (jev-tasks.ts `triageFor`).
+   */
+  readonly triage: (projectId: string) => Promise<string | undefined>;
   /** Writes Caw's draft views (views.ts). */
   readonly views: Pick<Views, "draft">;
 }
@@ -380,6 +386,7 @@ export const createCaw = ({
   spawn,
   stops,
   task,
+  triage,
   views,
 }: CawDeps) => {
   /**
@@ -755,6 +762,27 @@ export const createCaw = ({
   };
 
   /**
+   * What a wake says: the event, where it was noted, and, with Jev off, the
+   * batch of the project's untriaged tasks every wake carries (§5.9 Triage).
+   */
+  const wakeWords = async (
+    projectId: string,
+    event: CawEvent,
+    threadId: string | undefined
+  ): Promise<string> => {
+    const noted =
+      event.note && threadId
+        ? `${event.text}\n\n(Noted in thread ${threadId}; answer there with thread_reply when the person should hear of it.)`
+        : event.text;
+    const triaging = await triage(projectId).catch((error: unknown) => {
+      console.warn(
+        `[caw] ${projectId}: this wake carries no triage batch: the tasks did not read: ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
+    return triaging ? `${noted}\n\n---\n\n${triaging}` : noted;
+  };
+
+  /**
    * The one way anything wakes a project's Caw (§5.3: your message, your ask
    * for a view, the project's setup; an attempt landing or failing, a
    * needs-you item; routines, GitHub events and check results call it the
@@ -777,10 +805,7 @@ export const createCaw = ({
     if (capHolds(projectId, event.by, () => settle(threadId))) {
       return false;
     }
-    const words =
-      event.note && threadId
-        ? `${event.text}\n\n(Noted in thread ${threadId}; answer there with thread_reply when the person should hear of it.)`
-        : event.text;
+    const words = await wakeWords(projectId, event, threadId);
     // Inbound events no route took ride on this wake (ingress.ts): taken
     // now, given back when the wake does not go out.
     const inbox = db.ingress.claimInbox(projectId, new Date());

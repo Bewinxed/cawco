@@ -19,13 +19,17 @@
  *   interval of 60 s or more; its items diffed by id and version against
  *   what the last call saw and stored as `conn:<connection>:<tool>`,
  *   `<id>:<version>`. A first call only looks.
- * - **Routing**: the project's oldest enabled route whose every condition
- *   holds (source pattern, kinds, author, label, branch, a regex over title
- *   and body, both matched on RE2 in linear time) runs its routine with the
- *   event as the run's input (routines.ts `runForEvent`; behind a run still
- *   going it queues, and is handled when it starts). An unmatched event goes to the lead's next
- *   wake as an inbox line (caw.ts); with the lead off it is stored, and
- *   nothing is woken.
+ * - **Routing** (§5.9 Event routing): the matcher filters first, to the
+ *   project's enabled routes whose every condition holds (source pattern,
+ *   kinds, author, label, branch, a regex over title and body, both matched
+ *   on RE2 in linear time). Jev on: Jev chooses among their routines, or
+ *   none, which is the lead's; a Jev that does not answer leaves the event
+ *   stored and unrouted, and says so in the log. Jev off: the oldest
+ *   matching route takes it. The routine runs with the event as the run's
+ *   input (routines.ts `runForEvent`; behind a run still going it queues,
+ *   and is handled when it starts). An event no route took goes to the
+ *   lead's next wake as an inbox line (caw.ts); with the lead off it is
+ *   stored, and nothing is woken.
  * - **Data, never instructions.** An event reaches a model only inside a
  *   delimited block ({@link eventData}, {@link inboxText}) whose JSON cannot
  *   close it, after a sentence that says it is untrusted content.
@@ -48,6 +52,7 @@ import type {
 import type { GitHubCursor, GitHubResource, InboundVia } from "./db/schema";
 import type { Dispatcher } from "./dispatch";
 import { githubRepoOf, pollRepo } from "./github";
+import { JevFailed, jevRoute, offLine, TO_LEAD } from "./jev-placement";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { Routines } from "./routines";
 
@@ -387,6 +392,8 @@ export interface IngressDeps {
   >;
   /** Moves a task on when the pull request its attempt opened merges (dispatch.ts). */
   readonly dispatcher: Pick<Dispatcher, "pullRequestMerged">;
+  /** Jev's key while Jev is on (jev-placement.ts `jevKey`). */
+  readonly jevKey: () => string | undefined;
   readonly lifetime: HubLifetimeShape;
   /** Runs a routine once with an event as its input (routines.ts). */
   readonly routines: Pick<Routines, "runForEvent">;
@@ -444,6 +451,7 @@ export const createIngress = ({
   connections,
   db,
   dispatcher,
+  jevKey,
   lifetime,
   routines,
 }: IngressDeps) => {
@@ -476,9 +484,9 @@ export const createIngress = ({
 
   // --- the one door ----------------------------------------------------------
 
-  /** Where a stored event goes: its route's routine, the lead's inbox, or nowhere. */
-  const route = (row: InboundEventRow, event: InboundEvent): void => {
-    const taken = store.routes(row.projectId).find((each) => {
+  /** The routes whose every condition holds for `event`, oldest first: the matcher's filter. */
+  const matching = (projectId: string, event: InboundEvent) =>
+    store.routes(projectId).filter((each) => {
       if (!(each.enabled && db.routines.get(each.routineId)?.enabled)) {
         return false;
       }
@@ -491,15 +499,71 @@ export const createIngress = ({
         return false;
       }
     });
-    if (taken) {
+
+  /**
+   * The routine an event goes to among the matching routes' (Event routing,
+   * §5.9), or `lead`; undefined when Jev did not answer: the event stays
+   * stored and unrouted.
+   */
+  const chosen = async (
+    row: InboundEventRow,
+    event: InboundEvent,
+    routineIds: string[]
+  ): Promise<string | undefined> => {
+    const key = jevKey();
+    if (!key) {
+      offLine(
+        "routing",
+        row.projectId,
+        `${row.source} ${row.deliveryKey}: the matcher's oldest route, routine ${routineIds[0]}${routineIds.length > 1 ? ` (of ${routineIds.length} matching)` : ""}`
+      );
+      return routineIds[0];
+    }
+    try {
+      return await jevRoute(
+        key,
+        row.projectId,
+        event,
+        routineIds.flatMap((id) => {
+          const routine = db.routines.get(id);
+          return routine
+            ? [{ id, name: routine.name, prompt: routine.prompt }]
+            : [];
+        })
+      );
+    } catch (error) {
+      if (error instanceof JevFailed) {
+        console.warn(
+          `[ingress] ${row.source} ${row.deliveryKey} stays unrouted: ${error.message}`
+        );
+        return;
+      }
+      throw error;
+    }
+  };
+
+  /** Where a stored event goes: a routine, the lead's inbox, or nowhere. */
+  const route = async (
+    row: InboundEventRow,
+    event: InboundEvent
+  ): Promise<void> => {
+    const routineIds = [
+      ...new Set(matching(row.projectId, event).map((each) => each.routineId)),
+    ];
+    const to =
+      routineIds.length > 0 ? await chosen(row, event, routineIds) : TO_LEAD;
+    if (to === undefined) {
+      return;
+    }
+    if (to !== TO_LEAD) {
       // Routed first: a queued run is handled when it starts (routines.ts `drain`).
-      store.setEvent(row.id, { routedTo: taken.routineId });
-      const run = routines.runForEvent(taken.routineId, row.id);
+      store.setEvent(row.id, { routedTo: to });
+      const run = routines.runForEvent(to, row.id);
       if (run?.state !== "queued") {
         store.setEvent(row.id, { handledAt: new Date() });
       }
       console.log(
-        `[ingress] ${row.source} ${row.deliveryKey} → routine ${taken.routineId}${run ? ` (run ${run.id}, ${run.state}${run.reason ? `: ${run.reason}` : ""})` : ""}`
+        `[ingress] ${row.source} ${row.deliveryKey} → routine ${to}${run ? ` (run ${run.id}, ${run.state}${run.reason ? `: ${run.reason}` : ""})` : ""}`
       );
       return;
     }
@@ -534,7 +598,14 @@ export const createIngress = ({
       return undefined;
     }
     console.log(`[ingress] ${row.source} ${row.deliveryKey} landed via ${via}`);
-    route(row, event);
+    detach(
+      route(row, event).catch((error: unknown) =>
+        console.warn(
+          `[ingress] ${row.source} ${row.deliveryKey} was not routed: ${wordsOf(error)}`
+        )
+      ),
+      "route an inbound event"
+    );
     const { url } = event;
     if (event.kind === "pr.merged" && url) {
       detach(

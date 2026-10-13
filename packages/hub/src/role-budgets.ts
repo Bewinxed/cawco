@@ -128,6 +128,7 @@ export const measureRoles = (): RoleSize[] => {
         stops: { running: () => [], stop: () => undefined },
         spawn: () => Promise.resolve(),
         task: () => Promise.reject(new Error("measuring")),
+        triage: () => Promise.resolve(undefined),
         views: {} as never,
       }).tools(actor),
     routineTools: (actor) =>
@@ -136,6 +137,7 @@ export const measureRoles = (): RoleSize[] => {
         caw: {} as never,
         db: {} as never,
         hubCheckout: () => Promise.reject(new Error("measuring")),
+        jevKey: () => undefined,
         lifetime,
         online: () => false,
         pauses: () => undefined,
@@ -149,6 +151,7 @@ export const measureRoles = (): RoleSize[] => {
         connections: {} as never,
         db: {} as never,
         dispatcher: {} as never,
+        jevKey: () => undefined,
         lifetime,
         routines: {} as never,
       }).tools(actor),

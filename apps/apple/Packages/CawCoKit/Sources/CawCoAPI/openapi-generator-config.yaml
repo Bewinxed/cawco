@@ -80,6 +80,8 @@ typeOverrides:
     PermissionSettledFrameOutcome: OpenEnums.PermissionSettledFrameOutcome
     PermissionUpdateBehavior: OpenEnums.PermissionUpdateBehavior
     PermissionUpdateDestination: OpenEnums.PermissionUpdateDestination
+    PhoneDoneAction: OpenEnums.PhoneDoneAction
+    PhoneDoneDecidedBy: OpenEnums.PhoneDoneDecidedBy
     PlaceKind: OpenEnums.PlaceKind
     PlacementStrategy: OpenEnums.PlacementStrategy
     PlanSnapshotSource: OpenEnums.PlanSnapshotSource

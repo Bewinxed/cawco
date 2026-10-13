@@ -50,6 +50,19 @@
  *   `owns`) and tried again as items end; its `budget:`, else the project's,
  *   is what the attempt may spend (work-items.ts).
  *
+ * - **Judgments** (§5.9, jev-placement.ts), each by Jev while it is on and
+ *   by the table's Jev-off rule otherwise. Ready to dispatch: a frontier
+ *   task starts only when Jev scores it ready, else when the lead marked it
+ *   `ready: yes`; a task triaged as anything but `ready-for-agent` never.
+ *   Dispatch order: Jev's three scores, else the lead's ranks, else board
+ *   order. Delegate type: a task whose stage runs none and that names none
+ *   runs Jev's choice from the project's catalog, else "medium". Judged
+ *   checks: an attempt that lands at a task with acceptance criteria moves
+ *   it to done only when Jev shows every criterion met (else to the first
+ *   `you` stage, with a comment naming what is not); Jev off, the lead
+ *   judges them (the task stays until he moves it), and with the lead off
+ *   it goes to you.
+ *
  * It wakes on events only: a work item ending, a task changing, a setting
  * changing, a machine with a checkout coming online. A slow timer looks
  * again as a safety net and starts nothing when nothing is ready.
@@ -59,10 +72,24 @@ import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, PlaceRow, ProjectRow, WorkItemRow } from "./db";
 import type { Origin, WorkBudget, WorkItemCheck } from "./db/schema";
+import {
+  criteriaOf,
+  DISPATCH_ASKED_MAX,
+  type DispatchJudgement,
+  JevFailed,
+  jevDispatch,
+  jevJudged,
+  jevType,
+  offLine,
+  readyByRule,
+  TRIAGE_FIELD,
+  tailOf,
+} from "./jev-placement";
 import { quote, statusCommand } from "./landing";
 import type { HubLifetimeShape } from "./lifetime";
 import { FolderRefusal, type FolderRefusalStatus } from "./project-folder";
 import type { Stage } from "./stages";
+import type { TaskComment } from "./task-file";
 import {
   BUDGET,
   hubActor,
@@ -77,6 +104,7 @@ import {
 } from "./tasks";
 import {
   budgetProblem,
+  DEFAULT_DELEGATE_TYPE,
   isLive,
   OwnsOverlap,
   SESSION_TITLE_MAX,
@@ -118,6 +146,24 @@ export interface DispatchDeps {
    * for a paused project.
    */
   readonly pauses: (projectId: string) => string | undefined;
+  /** What the dispatcher's judgments (§5.9) need of the hub. */
+  readonly placement: {
+    /**
+     * Jev off and the lead on: his wake to judge a landed attempt's
+     * acceptance criteria (he did not do the work).
+     */
+    readonly judgeByLead: (
+      projectId: string,
+      taskId: string,
+      text: string
+    ) => void;
+    /** Jev's key while Jev is on. */
+    readonly key: () => string | undefined;
+    /** The delegate types a session of the project may name. */
+    readonly typesFor: (
+      projectId: string
+    ) => { description: string; name: string }[];
+  };
   /** Files and spawns a work item (work-items.ts `start`). */
   readonly start: (request: WorkItemRequest) => Promise<WorkItemStart>;
   readonly tasks: Tasks;
@@ -347,6 +393,7 @@ const briefOf = (
   all: TaskSummary[],
   checks: WorkItemCheck[],
   lands: LandsMode,
+  comments: TaskComment[],
   retry?: RetryContext
 ): string => {
   const byId = new Map(all.map((each) => [each.id, each]));
@@ -400,8 +447,22 @@ const briefOf = (
     }`,
     `## Where it sits\n\n${sits.length > 0 ? sits.join("\n") : "Nothing waits on it, and it waits for nothing."}`,
     ...(retry ? [retrySection(task, retry)] : []),
+    ...(comments.length > 0 ? [commentsSection(comments)] : []),
   ].join("\n\n");
 };
+
+/** The most comments a brief carries: the newest. */
+const BRIEF_COMMENTS_MAX = 20;
+
+/** The comments left on the task since its last attempt started, batched into the brief (§5.3). */
+const commentsSection = (comments: TaskComment[]): string =>
+  `## Comments since the last attempt\n\n${comments
+    .slice(-BRIEF_COMMENTS_MAX)
+    .map(
+      (comment) =>
+        `**${comment.author.name}**, ${new Date(comment.at).toISOString()}:\n\n${comment.text}`
+    )
+    .join("\n\n")}`;
 
 /** A retry's section of the brief: how the last attempt ended, and what of the task is done. */
 const retrySection = (task: TaskView, retry: RetryContext): string => {
@@ -505,10 +566,17 @@ export const createDispatcher = ({
   lifetime,
   online,
   pauses,
+  placement,
   start,
   tasks,
   typeLands,
 }: DispatchDeps) => {
+  /**
+   * Jev's readiness and order for each frontier task, by `project\0task`,
+   * with the hash of the file it read: a file that did not change is not
+   * asked about again.
+   */
+  const judgements = new Map<string, DispatchJudgement & { hash: string }>();
   /** Attempts being started now, by `project\0task`: their work item is not filed yet. */
   const starting = new Set<string>();
   /** Why the hub last could not start an attempt at a task, and the file it read then. */
@@ -634,6 +702,192 @@ export const createDispatcher = ({
     project.lands;
 
   /**
+   * Delegate type (§5.9) for an attempt whose stage runs none and whose task
+   * names none: Jev's choice from the project's catalog while Jev is on;
+   * with Jev off nobody named one, so "medium" (undefined here: work-items'
+   * default). Jev failing refuses the start with its words; the next look
+   * asks again.
+   */
+  const chosenType = async (
+    project: ProjectRow,
+    task: TaskView
+  ): Promise<string | undefined> => {
+    const key = placement.key();
+    if (!key) {
+      offLine(
+        "type",
+        project.id,
+        `${task.id} names no type and its stage runs none, so it runs "${DEFAULT_DELEGATE_TYPE}"`
+      );
+      return;
+    }
+    const types = placement.typesFor(project.id);
+    if (types.length === 0) {
+      return;
+    }
+    const type = await jevType(
+      key,
+      project.id,
+      {
+        title: task.title,
+        text: [task.description, task.acceptance].filter(Boolean).join("\n\n"),
+      },
+      types
+    );
+    console.log(
+      `[dispatch] ${project.name}: ${task.id} runs ${type}, Jev's choice of ${types.length} types`
+    );
+    return type;
+  };
+
+  /**
+   * The frontier tasks to start, in the order to start them (§5.9 Ready to
+   * dispatch and Dispatch order). A task triaged as anything but
+   * `ready-for-agent` is not an agent's. Jev on: the ones Jev scores ready,
+   * by its three order scores (ties keep board order); a Jev that does not
+   * answer starts nothing this look. Jev off: the ones the lead scored
+   * `ready: yes` (with the lead off, the ones with a check), in board order,
+   * which is the lead's ranks, then the rest by number.
+   */
+  const readyInOrder = async (
+    project: ProjectRow,
+    frontier: string[]
+  ): Promise<string[]> => {
+    const { tasks: all } = await tasks.list(project.id);
+    const byId = new Map(all.map((each) => [each.id, each]));
+    const triaged = frontier
+      .filter((id) => {
+        const state = byId.get(id)?.fields[TRIAGE_FIELD];
+        return !state || state === "ready-for-agent";
+      })
+      .slice(0, DISPATCH_ASKED_MAX);
+    const views = await Promise.all(
+      triaged.map((id) => tasks.get(project.id, id))
+    );
+    const key = placement.key();
+    return key
+      ? await readyByJev(project, key, views, all)
+      : readyByLead(project, views, byId);
+  };
+
+  /** Ready to dispatch and Dispatch order with Jev off: the lead's scores (else a check), in board order. */
+  const readyByLead = (
+    project: ProjectRow,
+    views: TaskView[],
+    byId: Map<string, TaskSummary>
+  ): string[] => {
+    const ready = views
+      .filter((task) =>
+        readyByRule(
+          {
+            checks: task.checks.length,
+            fields: byId.get(task.id)?.fields ?? {},
+          },
+          project.caw
+        )
+      )
+      .map((task) => task.id);
+    const waiting = views
+      .map((task) => task.id)
+      .filter((id) => !ready.includes(id));
+    offLine(
+      "ready",
+      project.id,
+      `${project.caw ? "the lead's scores" : "with the lead off, a check must exist"}: ready ${ready.join(", ") || "none"}${waiting.length > 0 ? `; not ready ${waiting.join(", ")}` : ""}`
+    );
+    if (ready.length > 0) {
+      offLine(
+        "order",
+        project.id,
+        `the lead's ranks, else board order: ${ready.join(", ")}`
+      );
+    }
+    return ready;
+  };
+
+  /**
+   * Asks Jev about the frontier tasks it has no judgement of for the file as
+   * it stands, and keeps the answers; false when Jev did not answer.
+   */
+  const judgeFresh = async (
+    project: ProjectRow,
+    key: string,
+    views: TaskView[],
+    all: TaskSummary[]
+  ): Promise<boolean> => {
+    const fresh = views.filter(
+      (task) => judgements.get(keyOf(project.id, task.id))?.hash !== task.hash
+    );
+    if (fresh.length === 0) {
+      return true;
+    }
+    let answered: Map<string, DispatchJudgement>;
+    try {
+      answered = await jevDispatch(
+        key,
+        project.id,
+        fresh.map((task) => ({
+          id: task.id,
+          title: task.title,
+          description: task.description,
+          acceptance: task.acceptance,
+          checks: task.checks,
+          todos: task.todos
+            .filter((todo) => !todo.done)
+            .map((todo) => todo.text),
+          waiting: all.filter((each) => each.after.includes(task.id)).length,
+        }))
+      );
+    } catch (error) {
+      if (error instanceof JevFailed) {
+        console.warn(
+          `[dispatch] ${project.name}: nothing starts this look: ${error.message}`
+        );
+        return false;
+      }
+      throw error;
+    }
+    for (const task of fresh) {
+      const judged = answered.get(task.id);
+      if (judged) {
+        judgements.set(keyOf(project.id, task.id), {
+          ...judged,
+          hash: task.hash,
+        });
+      }
+    }
+    return true;
+  };
+
+  /** Ready to dispatch and Dispatch order with Jev on: the ones Jev scores ready, by its order scores. */
+  const readyByJev = async (
+    project: ProjectRow,
+    key: string,
+    views: TaskView[],
+    all: TaskSummary[]
+  ): Promise<string[]> => {
+    if (!(await judgeFresh(project, key, views, all))) {
+      return [];
+    }
+    const ready = views
+      .map((task, index) => ({
+        task,
+        index,
+        judged: judgements.get(keyOf(project.id, task.id)),
+      }))
+      .filter((each) => each.judged?.ready)
+      .sort(
+        (a, b) =>
+          (b.judged?.order ?? 0) - (a.judged?.order ?? 0) || a.index - b.index
+      )
+      .map((each) => each.task.id);
+    console.log(
+      `[dispatch] ${project.name}: Jev scores ready, in order: ${ready.join(", ") || "none"} of ${views.length}`
+    );
+    return ready;
+  };
+
+  /**
    * Files and spawns the attempt's work item; a failure is remembered on the
    * task. A retry names the attempt before it, whose workspace it runs in
    * again when that clone is still there. `origin` is whose work it is
@@ -652,7 +906,8 @@ export const createDispatcher = ({
       note(project.id, task, message);
       return refuse(409, message);
     }
-    const type = active?.hooks.runs ?? task.type ?? undefined;
+    const type =
+      active?.hooks.runs ?? task.type ?? (await chosenType(project, task));
     const lands = landsOf(project, task, type);
     const checks = checksOf(task.checks, lands, task.outputs);
     const { tasks: all } = await tasks.list(project.id);
@@ -663,10 +918,19 @@ export const createDispatcher = ({
           failure: previous.error ?? previous.result ?? "",
         }
       : undefined;
+    // The comments left since the task's newest attempt started.
+    const [last] = db
+      .projectAttempts(project.id)
+      .filter((item) => item.taskId === task.id);
+    const comments = last
+      ? task.comments.filter(
+          (comment) => comment.at >= last.createdAt.getTime()
+        )
+      : [];
     try {
       const started = await start({
         parentInstanceId: parent.id,
-        prompt: briefOf(project, task, all, checks, lands, retry),
+        prompt: briefOf(project, task, all, checks, lands, comments, retry),
         title: titleOf(task),
         type,
         checks,
@@ -880,7 +1144,17 @@ export const createDispatcher = ({
    * One look at a project: starts the frontier's first tasks up to the cap,
    * unless paused, reporting to its Caw (started for the first one).
    */
-  const dispatchOnce = async (projectId: string): Promise<void> => {
+  /**
+   * What one look would start: the project, how many attempts are live, and
+   * its ready frontier in order; undefined for a project that does not
+   * dispatch now, or has nothing ready. Judged before the lead is started:
+   * nothing ready wakes nobody.
+   */
+  const lookAt = async (
+    projectId: string
+  ): Promise<
+    { live: number; project: ProjectRow; ready: string[] } | undefined
+  > => {
     const project = db.project(projectId);
     if (!(project?.dispatch && project.caw)) {
       return;
@@ -889,12 +1163,22 @@ export const createDispatcher = ({
     if (view.paused || view.frontier.length === 0 || pauses(projectId)) {
       return;
     }
+    const ready = await readyInOrder(project, view.frontier);
+    return ready.length > 0 ? { project, live: view.live, ready } : undefined;
+  };
+
+  const dispatchOnce = async (projectId: string): Promise<void> => {
+    const look = await lookAt(projectId);
+    if (!look) {
+      return;
+    }
+    const { project, ready } = look;
     const reportsTo = await leadOf(project);
     if (!reportsTo) {
       return;
     }
-    let slots = project.maxAttempts - view.live;
-    for (const id of view.frontier) {
+    let slots = project.maxAttempts - look.live;
+    for (const id of ready) {
       if (slots <= 0) {
         break;
       }
@@ -1140,7 +1424,12 @@ export const createDispatcher = ({
     if (task.kind === "done" || task.kind === "dropped") {
       return;
     }
-    const kind = kindAfter(item);
+    const criteria = criteriaOf(task.acceptance);
+    const kind = await kindAfterJudged(projectId, task, criteria, item);
+    // The lead judges: the task stays where it is until he moves it.
+    if (kind === "lead") {
+      return;
+    }
     const target = stages.stages.find((each) => each.kind === kind);
     // Only an approved action enters a `by: action` stage (§5.2): the task stays.
     if (target?.hooks.by === "action") {
@@ -1154,13 +1443,111 @@ export const createDispatcher = ({
         projectId,
         taskId,
         target.name,
-        hubActor(
-          kind === "you"
-            ? `attempt ${short(item.id)} opened ${item.prUrl}`
-            : `attempt ${short(item.id)} ${item.state}`
-        )
+        hubActor(movedBecause(item, kind, criteria.length))
       );
     }
+  };
+
+  /**
+   * The stage kind an ended attempt sends its task to, once a landed one's
+   * acceptance criteria are judged ({@link judgeCriteria}); `lead` while he
+   * judges them.
+   */
+  const kindAfterJudged = async (
+    projectId: string,
+    task: TaskView,
+    criteria: string[],
+    item: WorkItemRow
+  ): Promise<"done" | "lead" | "todo" | "you"> => {
+    const kind = kindAfter(item);
+    return kind === "done" && criteria.length > 0
+      ? await judgeCriteria(projectId, task, criteria, item)
+      : kind;
+  };
+
+  /** Why the hub moved a task after its attempt ended, as its commit says. */
+  const movedBecause = (
+    item: WorkItemRow,
+    kind: "done" | "todo" | "you",
+    criteria: number
+  ): string => {
+    if (kind === "you" && item.prUrl && item.lands === "pr") {
+      return `attempt ${short(item.id)} opened ${item.prUrl}`;
+    }
+    if (kind === "you") {
+      return `attempt ${short(item.id)} ${item.state}; its acceptance criteria wait for you`;
+    }
+    return criteria > 0 && kind === "done"
+      ? `attempt ${short(item.id)} ${item.state}; Jev shows its ${criteria} acceptance criteria met`
+      : `attempt ${short(item.id)} ${item.state}`;
+  };
+
+  /**
+   * Judged checks (§5.9) for an attempt that landed at a task with
+   * acceptance criteria: never by the session that did the work. Jev on:
+   * done when Jev shows every criterion met, else `you`, with a comment
+   * naming the ones it does not (a Jev that does not answer says so in the
+   * comment, and they go to you). Jev off: the lead judges them (`lead`: he
+   * is woken, the task stays); with the lead off, shell checks passed and
+   * the rest is yours.
+   */
+  const judgeCriteria = async (
+    projectId: string,
+    task: TaskView,
+    criteria: string[],
+    item: WorkItemRow
+  ): Promise<"done" | "lead" | "you"> => {
+    const report = item.digest ?? item.result ?? "";
+    const key = placement.key();
+    const about = hubActor(`attempt ${short(item.id)} judged`);
+    if (key) {
+      try {
+        const judged = await jevJudged(key, projectId, task, criteria, report);
+        const unmet = judged.filter((each) => !each.met);
+        if (unmet.length === 0) {
+          return "done";
+        }
+        await tasks.comment(
+          projectId,
+          task.id,
+          `Jev judged the acceptance criteria against attempt ${short(item.id)}'s report. Not shown met:\n\n${unmet
+            .map((each) => `- ${each.criterion} (${each.noul.toFixed(2)})`)
+            .join("\n")}`,
+          about
+        );
+        return "you";
+      } catch (error) {
+        if (!(error instanceof JevFailed)) {
+          throw error;
+        }
+        await tasks.comment(
+          projectId,
+          task.id,
+          `${error.message} The acceptance criteria of attempt ${short(item.id)} wait for you.`,
+          about
+        );
+        return "you";
+      }
+    }
+    if (db.project(projectId)?.caw) {
+      offLine(
+        "judged",
+        projectId,
+        `${task.id}'s attempt ${short(item.id)} passed its checks; its ${criteria.length} acceptance criteria go to the lead, who did not do the work`
+      );
+      placement.judgeByLead(
+        projectId,
+        task.id,
+        `Judge ${task.id} “${task.title}”: its attempt ${short(item.id)} passed its checks and its work is in, and its acceptance criteria wait for your judgment (Jev is off; you did not do this work). Move the task to its done stage when the report shows every criterion met; else move it back to its todo stage with a task_comment naming what is missing.\n\nCriteria:\n${criteria.map((each) => `- ${each}`).join("\n")}\n\nThe attempt's report:\n\n${tailOf(report, 4000)}`
+      );
+      return "lead";
+    }
+    offLine(
+      "judged",
+      projectId,
+      `${task.id}'s attempt ${short(item.id)} passed its shell checks; with the lead off its ${criteria.length} acceptance criteria go to you`
+    );
+    return "you";
   };
 
   /**

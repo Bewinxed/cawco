@@ -3156,6 +3156,94 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/PhoneDoneAction`.
+    public enum PhoneDoneAction: OpenEnum {
+        case caw
+        case comment
+        case lead
+        case move
+        case retry
+        case start
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "caw": self = .caw
+            case "comment": self = .comment
+            case "lead": self = .lead
+            case "move": self = .move
+            case "retry": self = .retry
+            case "start": self = .start
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .caw: "caw"
+            case .comment: "comment"
+            case .lead: "lead"
+            case .move: "move"
+            case .retry: "retry"
+            case .start: "start"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.caw, .comment, .lead, .move, .retry, .start]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/PhoneDoneDecidedBy`.
+    public enum PhoneDoneDecidedBy: OpenEnum {
+        case jev
+        case lead
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "jev": self = .jev
+            case "lead": self = .lead
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .jev: "jev"
+            case .lead: "lead"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.jev, .lead]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/PlaceKind`.
     public enum PlaceKind: OpenEnum {
         case checkout
