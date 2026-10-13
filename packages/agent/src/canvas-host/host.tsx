@@ -306,7 +306,6 @@ function Host() {
       bound = bindScene(api, () => holdStore.now() as ArtifactHold, {
         ink,
         dark: () => schemeStore.now() === "dark",
-        reduced: lessMotion.now,
       });
       if (fitted.current === false) {
         fitted.current = true;
@@ -322,9 +321,17 @@ function Host() {
   }, [api, generation, ink]);
   /*
    * The pencil's double-tap (`cawco:pencil-double-tap`, which the iOS app
-   * posts into the page, or the dashboard relays) swaps to the eraser and
-   * back to the tool it left, the rail showing whichever is chosen.
+   * posts into the page, or the dashboard relays) toggles the eraser: the
+   * box of the tool the pen was on stays chosen and swaps its glyph for the
+   * eraser's (DESIGN.md, Pen rules on the canvas), and a second double-tap
+   * goes back to that tool. Any other way to a tool ends the swap.
    */
+  const [swappedFrom, setSwappedFrom] = useState<string | null>(null);
+  const swapped = useRef<string | null>(null);
+  const endSwap = useCallback(() => {
+    swapped.current = null;
+    setSwappedFrom(null);
+  }, []);
   useEffect(() => {
     if (!api) {
       return;
@@ -341,11 +348,13 @@ function Host() {
       }
       const now = api.getAppState().activeTool.type;
       if (now === "eraser") {
-        api.setActiveTool({ type: left });
-      } else {
-        left = now === "custom" ? left : now;
-        api.setActiveTool({ type: "eraser" });
+        api.setActiveTool({ type: (swapped.current as Tool | null) ?? left });
+        return;
       }
+      left = now === "custom" ? left : now;
+      swapped.current = left;
+      setSwappedFrom(left);
+      api.setActiveTool({ type: "eraser" });
     };
     window.addEventListener("message", tapped);
     return () => window.removeEventListener("message", tapped);
@@ -354,8 +363,11 @@ function Host() {
     (elements: readonly ExcalidrawElement[], state: AppState) => {
       setEmpty(elements.every((el) => el.isDeleted));
       setTool(state.activeTool.type);
+      if (state.activeTool.type !== "eraser" && swapped.current !== null) {
+        endSwap();
+      }
     },
-    []
+    [endSwap]
   );
   // Our grid, in `code-bg`, moves with the scene under a clear canvas.
   const scrolled = useCallback(
@@ -400,7 +412,14 @@ function Host() {
         zenModeEnabled={false}
       />
       {api ? (
-        <Rail api={api} docked={docked} reduced={lessMotion.now} tool={tool} />
+        <Rail
+          api={api}
+          docked={docked}
+          onPick={endSwap}
+          reduced={lessMotion.now}
+          swappedFrom={tool === "eraser" ? swappedFrom : null}
+          tool={tool}
+        />
       ) : null}
       {empty ? <Empty onDraw={draw} /> : null}
     </div>

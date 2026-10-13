@@ -55,7 +55,8 @@ import {
   Map as YMap,
 } from "yjs";
 import type { ArtifactHold } from "../preview-overlay/artifact";
-import { HOLD_PX, seenByDoc, snapToShape, swapView, tokenMs } from "./snap";
+import { clock, progressOf, tokenMs } from "./motion";
+import { HOLD_PX, seenByDoc, snapToShape, swapView } from "./snap";
 
 /** With `CAWCO_PROBE_HOOKS=1` at build (core canvas-host.ts), the page shows the probe what it binds. */
 declare const __CAWCO_PROBE_HOOKS__: boolean;
@@ -108,36 +109,8 @@ export const tokenHex = (token: string): string => {
   return `#${[r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("")}`;
 };
 
-const CUBIC_BEZIER = /cubic-bezier\(([^)]+)\)/;
-
-/** A cubic-bezier curve token (`--ease-out`) as a function of time. */
-const curve = (token: string): ((t: number) => number) => {
-  const found = getComputedStyle(document.documentElement)
-    .getPropertyValue(token)
-    .match(CUBIC_BEZIER);
-  const [x1, y1, x2, y2] = (found?.[1] ?? "0, 0, 1, 1").split(",").map(Number);
-  const at = (a: number, b: number, s: number) =>
-    3 * a * s * (1 - s) ** 2 + 3 * b * s ** 2 * (1 - s) + s ** 3;
-  return (t) => {
-    let lo = 0;
-    let hi = 1;
-    for (let i = 0; i < 20; i += 1) {
-      const mid = (lo + hi) / 2;
-      if (at(x1, x2, mid) < t) {
-        lo = mid;
-      } else {
-        hi = mid;
-      }
-    }
-    return at(y1, y2, (lo + hi) / 2);
-  };
-};
-
-/** A token's duration in ms (`--dur-menu` is 140ms). */
-const duration = (token: string): number =>
-  Number.parseFloat(
-    getComputedStyle(document.documentElement).getPropertyValue(token)
-  ) || 0;
+/** The clock of an agent's element fading up, which the probe finds it by. */
+const ARRIVAL = "agent-arrival";
 
 const BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
@@ -205,7 +178,7 @@ export interface BoundScene {
 export function bindScene(
   api: ExcalidrawImperativeAPI,
   hold: () => ArtifactHold,
-  options: { ink: CanvasInk; dark: () => boolean; reduced: () => boolean }
+  options: { ink: CanvasInk; dark: () => boolean }
 ): BoundScene {
   const stops: (() => void)[] = [];
   const timers = new Set<ReturnType<typeof setTimeout>>();
@@ -306,9 +279,7 @@ export function bindScene(
   }
   const swaps = swapView();
   stops.push(
-    tellStrokeEnds(api, later, (stroke) =>
-      snapToShape(api, stroke, swaps, options.reduced())
-    )
+    tellStrokeEnds(api, later, (stroke) => snapToShape(api, stroke, swaps))
   );
   stops.push(tellPresses(api));
 
@@ -395,40 +366,42 @@ export function bindScene(
   };
 
   // The agent's elements arrive as a transcript row does: each fades up
-  // where it stands, the changed ones first (DESIGN.md).
-  const ease = curve("--ease-out");
+  // where it stands over `--dur-menu`, the changed ones first, staggered
+  // across `--dur-stagger` (DESIGN.md, The agent's turn on the canvas). Each
+  // element's clock is an `agent-arrival` run (motion.ts); with reduced
+  // motion they fade the same, since nothing travels.
   const fadeIn = (ids: string[]) => {
-    const fade = duration("--dur-menu");
-    const step = duration("--dur-stagger") / Math.max(1, ids.length);
-    const start = performance.now();
-    const order = new Map(ids.map((id, i) => [id, i]));
+    const fade = tokenMs("--dur-menu");
+    const step = tokenMs("--dur-stagger") / Math.max(1, ids.length);
+    const runs = new Map(
+      ids.map((id, i) => [id, clock(ARRIVAL, fade, i * step)])
+    );
     const versions = new Map<string, { version: number; opacity: number }>();
     for (const el of api.getSceneElementsIncludingDeleted()) {
-      if (order.has(el.id)) {
+      if (runs.has(el.id)) {
         versions.set(el.id, { version: el.version, opacity: el.opacity });
       }
     }
-    const frame = (now: number) => {
-      let running = false;
+    const frame = () => {
       const elements = api.getSceneElementsIncludingDeleted().map((el) => {
         const was = versions.get(el.id);
-        if (!was || el.version !== was.version) {
+        const run = runs.get(el.id);
+        if (!(was && run) || el.version !== was.version) {
           return el;
         }
-        const t = Math.min(
-          1,
-          Math.max(0, (now - start - (order.get(el.id) ?? 0) * step) / fade)
-        );
-        running ||= t < 1;
-        const opacity = was.opacity * ease(t);
+        const opacity = was.opacity * progressOf(run);
         return el.opacity === opacity ? el : { ...el, opacity };
       });
       api.updateScene({ elements, captureUpdate: CaptureUpdateAction.NEVER });
-      if (running) {
+      if ([...runs.values()].some((run) => run.playState !== "finished")) {
         requestAnimationFrame(frame);
+        return;
+      }
+      for (const run of runs.values()) {
+        run.cancel();
       }
     };
-    requestAnimationFrame(frame);
+    frame();
   };
 
   const observer = (
@@ -445,7 +418,7 @@ export function bindScene(
       clearTimeout(stampTimer);
       stampTimer = later(stamp, STAMP_MS);
     }
-    if (transaction.origin === LIVE && !options.reduced()) {
+    if (transaction.origin === LIVE) {
       const arrived = agentArrivals(sceneElements, events);
       if (arrived.length > 0) {
         fadeIn(arrived);

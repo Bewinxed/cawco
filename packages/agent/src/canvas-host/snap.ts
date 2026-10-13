@@ -13,8 +13,12 @@
  * clock, and each frame reads its progress into the freedraw's ghost (the
  * stroke drawn on, fading out) and the shape (fading up to its own
  * opacity). Neither is written: the doc holds the shape at its own opacity
- * from the swap on, and never the ghost ({@link SwapView}). Reduced motion
- * swaps at once.
+ * from the swap on, and never the ghost ({@link SwapView}). It runs under
+ * reduced motion too: it is a fade, and nothing travels.
+ *
+ * A snap tells the page's host (`cawco:snap` with the shape's id), whose
+ * app plays the `selection` tick under the finger (DESIGN.md, Pen rules on
+ * the canvas); the page cannot.
  */
 import { recognise } from "@cawco/core/shapes";
 import {
@@ -28,20 +32,13 @@ import type {
   OrderedExcalidrawElement,
 } from "@excalidraw/excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import { clock, progressOf, tokenMs } from "./motion";
 
 /** How far a held pen may wander and still be held, px: the brief's number. */
 export const HOLD_PX = 4;
 
 /** The clock's name, which the probe finds it by. */
 const CLOCK = "shape-swap";
-
-/** A token's value as written (`--ease-out` is a `cubic-bezier(…)`). */
-const tokenValue = (token: string) =>
-  getComputedStyle(document.documentElement).getPropertyValue(token).trim();
-
-/** A token's duration in ms (`--dur-fade` is 200ms). */
-export const tokenMs = (token: string): number =>
-  Number.parseFloat(tokenValue(token)) || 0;
 
 /**
  * What the doc sees of a scene mid-swap: no ghost, and every fading shape
@@ -150,8 +147,7 @@ const shapeOf = (
 export const snapToShape = (
   api: ExcalidrawImperativeAPI,
   stroke: ExcalidrawFreeDrawElement,
-  view: SwapView,
-  reduced: boolean
+  view: SwapView
 ): boolean => {
   const found = shapeOf(stroke);
   if (!found) {
@@ -177,13 +173,6 @@ export const snapToShape = (
         ]
       : [el]
   );
-  if (reduced) {
-    api.updateScene({
-      elements: replaced,
-      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
-    });
-    return true;
-  }
   // The fade begins once Excalidraw has taken the swap into its history (its
   // store commits before onChange): what the fade draws is never undone.
   const stop = api.onChange(() => {
@@ -194,6 +183,10 @@ export const snapToShape = (
     elements: replaced,
     captureUpdate: CaptureUpdateAction.IMMEDIATELY,
   });
+  window.parent.postMessage(
+    { type: "cawco:snap", id: shape.id },
+    location.origin
+  );
   return true;
 };
 
@@ -212,14 +205,7 @@ const crossfade = (
   const own = shape.opacity;
   view.ghosts.add(ghost.id);
   view.fading.set(shape.id, own);
-  const host =
-    document.querySelector(".excalidraw") ?? document.documentElement;
-  const clock = host.animate([], {
-    duration: tokenMs("--dur-fade"),
-    easing: tokenValue("--ease-out") || "linear",
-    fill: "both",
-  });
-  clock.id = CLOCK;
+  const run = clock(CLOCK, tokenMs("--dur-fade"));
   const draw = (progress: number) => {
     const elements: ExcalidrawElement[] = api
       .getSceneElementsIncludingDeleted()
@@ -237,12 +223,12 @@ const crossfade = (
     api.updateScene({ elements, captureUpdate: CaptureUpdateAction.NEVER });
   };
   const frame = () => {
-    const progress = clock.effect?.getComputedTiming().progress ?? 1;
-    if (clock.playState === "finished" || progress === null) {
+    const progress = progressOf(run);
+    if (run.playState === "finished") {
       view.ghosts.delete(ghost.id);
       view.fading.delete(shape.id);
       draw(1);
-      clock.cancel();
+      run.cancel();
       return;
     }
     draw(progress);

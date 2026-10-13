@@ -54,8 +54,10 @@
       case "cawco:done":
         actions?.done?.();
         break;
-      // A press on an element (no drag), for whoever hosts the dashboard (the Decisions tab).
+      // A press on an element (no drag), for whoever hosts the dashboard (the Decisions tab);
+      // a held stroke snapped to its shape, for the app that plays its selection tick.
       case "cawco:element-press":
+      case "cawco:snap":
         window.parent.postMessage(event.data, location.origin);
         break;
       default:

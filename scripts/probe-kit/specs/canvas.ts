@@ -28,13 +28,15 @@
  *     (`window.cawcoArtifact.doc`) and its scene doc is of the same Yjs
  *     (one `Doc` constructor on the page); an `artifact_update` with one
  *     skeleton element is in Excalidraw's scene within 2 s.
- * 18–24. A pen stroke held still at its end becomes its shape (snap.ts):
+ * 18–25. A pen stroke held still at its end becomes its shape (snap.ts):
  *     a wobbly rectangle held 400 ms is one rectangle on its box, in one
- *     transaction, undone in one step; lifted without the hold, or drawn
- *     with the mouse, or a scribble, it stays ink; an ellipse, a triangle,
- *     a line and a hooked arrow read as theirs; the pencil's double-tap
- *     swaps to the eraser and back; the swap's two opacities run on one
- *     clock of `--dur-fade`, and at once with reduced motion.
+ *     transaction, undone in one step, and the page posts its host
+ *     `cawco:snap`; lifted without the hold, or drawn with the mouse, or a
+ *     scribble, it stays ink; an ellipse, a triangle, a line and a hooked
+ *     arrow read as theirs; the pencil's double-tap swaps the eraser's glyph
+ *     into the pen's box and back, as Send and Stop swap; the swap's two
+ *     opacities run on one clock of `--dur-fade`, the same with reduced
+ *     motion, as the agent's elements still fade up there.
  *
  * The scratch hub builds the canvas page with `CAWCO_PROBE_HOOKS=1` (core
  * canvas-host.ts), which exposes the binding as `window.cawcoCanvasProbe`.
@@ -211,7 +213,7 @@ const setUp = async (kit: Kit): Promise<OnCanvas> => {
   return { call, fleet, kit, logged, offOrigin, page, said, session };
 };
 
-const run = async (kit: Kit) => {
+const runSpec = async (kit: Kit) => {
   const on = await setUp(kit);
   const made = await created(on);
   if (!made) {
@@ -1370,7 +1372,27 @@ const heard = (frame: Frame) =>
     return { ends: kept.__strokeEnds, log: kept.__docLog, els: kept.__docEls };
   });
 
-/** Check 18: the held rectangle, its one transaction, its stamp, and one undo. */
+/** Keeps every `cawco:snap` the canvas's frame posts the dashboard (its host). */
+const hearSnaps = (on: OnCanvas) =>
+  on.page.evaluate(() => {
+    const kept = window as unknown as { __snaps: { id?: string }[] };
+    kept.__snaps = [];
+    addEventListener("message", (event) => {
+      if (
+        event.source !== window &&
+        (event.data as { type?: string } | null)?.type === "cawco:snap"
+      ) {
+        kept.__snaps.push(event.data);
+      }
+    });
+  });
+
+const snapsHeard = (on: OnCanvas) =>
+  on.page.evaluate(
+    () => (window as unknown as { __snaps: { id?: string }[] }).__snaps
+  );
+
+/** Check 18: the held rectangle, its one transaction, its stamp, its message to the host, and one undo. */
 const rectangleCheck = async (
   on: OnCanvas,
   frame: Frame,
@@ -1429,9 +1451,12 @@ const rectangleCheck = async (
   const doc = await docIds(frame);
   const strokeBack = undone.find((el) => el.id === stroke?.id);
   const shapeGone = undone.find((el) => el.id === shape?.id);
+  const snaps = await snapsHeard(on);
   on.kit.check(
-    "18: a wobbly rectangle held 400ms becomes one rectangle within 6px of the stroke's box; the stroke is gone in the same doc transaction, the shape is the person's, nothing tells a stroke end; one undo brings the stroke back",
-    held.made.length === 1 &&
+    "18: a wobbly rectangle held 400ms becomes one rectangle within 6px of the stroke's box; the stroke is gone in the same doc transaction, the shape is the person's, nothing tells a stroke end, the page posts its host cawco:snap with the shape's id; one undo brings the stroke back",
+    snaps.length === 1 &&
+      snaps[0].id === shape?.id &&
+      held.made.length === 1 &&
       shape?.type === "rectangle" &&
       stroke?.isDeleted === true &&
       off !== null &&
@@ -1444,7 +1469,7 @@ const rectangleCheck = async (
       !!stroke &&
       doc.includes(stroke.id) &&
       !doc.includes(shape?.id ?? ""),
-    `new in the scene ${held.fresh.join(", ")}; made ${held.made.map((el) => el.type).join(",") || "nothing"}; stroke ${JSON.stringify(a)} shape ${JSON.stringify(b)} off ${off?.toFixed(1)}px; one transaction ${oneTransaction}; by ${by}; stroke ends ${after.ends - ends}; after undo: stroke deleted ${strokeBack?.isDeleted}, shape in the scene ${!!shapeGone && !shapeGone.isDeleted}, doc has stroke ${!!stroke && doc.includes(stroke.id)}, shape ${doc.includes(shape?.id ?? "")}`
+    `snaps posted ${JSON.stringify(snaps)}; new in the scene ${held.fresh.join(", ")}; made ${held.made.map((el) => el.type).join(",") || "nothing"} ${shape?.id}; stroke ${JSON.stringify(a)} shape ${JSON.stringify(b)} off ${off?.toFixed(1)}px; one transaction ${oneTransaction}; by ${by}; stroke ends ${after.ends - ends}; after undo: stroke deleted ${strokeBack?.isDeleted}, shape in the scene ${!!shapeGone && !shapeGone.isDeleted}, doc has stroke ${!!stroke && doc.includes(stroke.id)}, shape ${doc.includes(shape?.id ?? "")}`
   );
 };
 
@@ -1540,7 +1565,130 @@ const staysInkChecks = async (
   );
 };
 
-/** Check 23: the pencil's double-tap swaps to the eraser, shown in the rail, and back. */
+/** The rail as it stands: the tool, which boxes are chosen, and the glyph each tool's box shows. */
+const railNow = (frame: Frame) =>
+  frame.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.background = "var(--surface-fill)";
+    document.body.append(probe);
+    const fill = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    const box = (tool: string) => {
+      const node = document.querySelector(`[data-action="tool:${tool}"]`);
+      return {
+        chosen: node?.hasAttribute("data-chosen") ?? false,
+        filled: node ? getComputedStyle(node).backgroundColor === fill : false,
+        glyph: [
+          ...(node?.querySelectorAll(".rail-glyph:not([data-swap='out'])") ??
+            []),
+        ]
+          .map((one) => (one as HTMLElement).dataset.glyph)
+          .join(","),
+      };
+    };
+    return {
+      tool: (
+        window as unknown as { cawcoCanvasProbe: CanvasProbe }
+      ).cawcoCanvasProbe.api.getAppState().activeTool.type,
+      pen: box("freedraw"),
+      eraser: box("eraser"),
+    };
+  });
+
+interface GlyphRun {
+  duration: number;
+  easing: string;
+  glyph: string;
+  name: string;
+  properties: string[];
+  start: number | null;
+}
+
+/** From now, every glyph swap's run in the rail as it starts: its name, glyph, length, curve, start and what it animates. */
+const watchGlyphs = (frame: Frame) =>
+  frame.evaluate(() => {
+    const kept = window as unknown as {
+      __glyphRuns: GlyphRun[];
+      __glyphWatch?: boolean;
+    };
+    kept.__glyphRuns = [];
+    // One listener for the page; each watch starts the record afresh.
+    if (kept.__glyphWatch) {
+      return;
+    }
+    kept.__glyphWatch = true;
+    addEventListener("animationstart", (started) => {
+      const event = started as AnimationEvent;
+      const target = event.target as HTMLElement;
+      if (!target.classList.contains("rail-glyph")) {
+        return;
+      }
+      const run = target
+        .getAnimations()
+        .find(
+          (one) => (one as CSSAnimation).animationName === event.animationName
+        );
+      const frames =
+        (run?.effect as KeyframeEffect | null)?.getKeyframes() ?? [];
+      kept.__glyphRuns.push({
+        name: event.animationName,
+        glyph: target.dataset.glyph ?? "",
+        duration: Number(run?.effect?.getTiming().duration ?? 0),
+        easing: String(frames[0]?.easing ?? ""),
+        start: run?.startTime === null ? null : Number(run?.startTime),
+        properties: [
+          ...new Set(
+            frames.flatMap((one) =>
+              Object.keys(one).filter(
+                (key) =>
+                  !["offset", "computedOffset", "easing", "composite"].includes(
+                    key
+                  )
+              )
+            )
+          ),
+        ],
+      });
+    });
+  });
+
+const glyphRuns = (frame: Frame) =>
+  frame.evaluate(
+    () => (window as unknown as { __glyphRuns: GlyphRun[] }).__glyphRuns
+  );
+
+/** Whether a swap's runs are one --dur-control clock on ease-out: the glyph going out and the eraser's or the pen's coming in, by opacity, transform and blur. */
+const oneGlyphSwap = (
+  runs: GlyphRun[],
+  incoming: string,
+  tokens: { control: number; ease: string }
+) => {
+  const flat = (text: string) => text.replaceAll(" ", "");
+  const into = runs.find((run) => run.name === "rail-glyph-in");
+  const out = runs.find((run) => run.name === "rail-glyph-out");
+  return (
+    runs.length === 2 &&
+    into?.glyph === incoming &&
+    !!out &&
+    out.glyph !== incoming &&
+    runs.every(
+      (run) =>
+        run.duration === tokens.control &&
+        flat(run.easing) === flat(tokens.ease) &&
+        run.start !== null &&
+        run.start === runs[0].start &&
+        run.properties.every((key) =>
+          ["opacity", "transform", "filter"].includes(key)
+        )
+    )
+  );
+};
+
+/**
+ * Check 23: the pencil's double-tap swaps the eraser's glyph into the pen's
+ * box, which stays chosen, as Send and Stop swap; a second one swaps back.
+ * The rail's own eraser box still picks the eraser in its own box.
+ */
 const doubleTapCheck = async (on: OnCanvas, frame: Frame) => {
   const tap = () =>
     on.page.evaluate((selector) => {
@@ -1551,41 +1699,50 @@ const doubleTapCheck = async (on: OnCanvas, frame: Frame) => {
         location.origin
       );
     }, PANEL_CANVAS);
-  const look = () =>
-    frame.evaluate(() => {
-      const probe = document.createElement("span");
-      probe.style.background = "var(--surface-fill)";
-      document.body.append(probe);
-      const fill = getComputedStyle(probe).backgroundColor;
-      probe.remove();
-      const chosen = document.querySelector(".rail-box[data-chosen]");
-      return {
-        tool: (
-          window as unknown as { cawcoCanvasProbe: CanvasProbe }
-        ).cawcoCanvasProbe.api.getAppState().activeTool.type,
-        chosen: chosen?.getAttribute("aria-label") ?? null,
-        filled: chosen
-          ? getComputedStyle(chosen).backgroundColor === fill
-          : false,
-      };
-    });
-  const before = await look();
+  const tokens = await frame.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    return {
+      control: Number.parseFloat(root.getPropertyValue("--dur-control")),
+      ease: root.getPropertyValue("--ease-out").trim(),
+    };
+  });
+  const before = await railNow(frame);
+  await watchGlyphs(frame);
   await tap();
-  await settle(on.page, 300);
-  const erasing = await look();
+  await settle(on.page, 400);
+  const erasing = await railNow(frame);
+  const outRuns = await glyphRuns(frame);
+  await watchGlyphs(frame);
   await tap();
+  await settle(on.page, 400);
+  const back = await railNow(frame);
+  const backRuns = await glyphRuns(frame);
+  // The rail's eraser box keeps choosing the eraser in its own box.
+  await frame.click('[data-action="tool:eraser"]');
   await settle(on.page, 300);
-  const back = await look();
+  const picked = await railNow(frame);
+  await frame.click('[data-action="tool:freedraw"]');
+  await settle(on.page, 300);
   on.kit.check(
-    "23: cawco:pencil-double-tap picks the eraser, its rail box on surface-fill; a second one goes back to the pen",
+    "23: cawco:pencil-double-tap swaps the eraser's glyph into the pen's box, still chosen on surface-fill, the eraser's own box not chosen, as one --dur-control run pair on opacity/transform/blur; a second swaps the pen's back; the rail's eraser box picks the eraser in its own box",
     before.tool === "freedraw" &&
+      before.pen.glyph === "pen" &&
       erasing.tool === "eraser" &&
-      !!erasing.chosen?.startsWith("Eraser") &&
-      erasing.filled &&
+      erasing.pen.chosen &&
+      erasing.pen.filled &&
+      erasing.pen.glyph === "eraser" &&
+      !erasing.eraser.chosen &&
+      oneGlyphSwap(outRuns, "eraser", tokens) &&
       back.tool === "freedraw" &&
-      !!back.chosen?.startsWith("Pen") &&
-      back.filled,
-    `before ${JSON.stringify(before)}; tap ${JSON.stringify(erasing)}; tap ${JSON.stringify(back)}`
+      back.pen.chosen &&
+      back.pen.glyph === "pen" &&
+      oneGlyphSwap(backRuns, "pen", tokens) &&
+      picked.tool === "eraser" &&
+      picked.eraser.chosen &&
+      picked.eraser.filled &&
+      !picked.pen.chosen &&
+      picked.pen.glyph === "pen",
+    `before ${JSON.stringify(before)}; tap ${JSON.stringify(erasing)} runs ${JSON.stringify(outRuns)}; tap ${JSON.stringify(back)} runs ${JSON.stringify(backRuns)}; eraser box ${JSON.stringify(picked)}; tokens ${JSON.stringify(tokens)}`
   );
 };
 
@@ -1637,69 +1794,17 @@ const swapSeen = (frame: Frame) =>
       ).__swapSeen
   );
 
-interface SwapRun {
+interface CaughtRun {
   id: string;
   name: string;
-  source?: { duration: number; easing: string };
+  source?: { delay: number; duration: number; easing: string };
 }
 
-/** The ghost's and the new shape's opacity now (null for a ghost gone). */
-const opacities = (frame: Frame, known: string[]) =>
-  frame.evaluate((ids) => {
-    const all = (
-      window as unknown as { cawcoCanvasProbe: CanvasProbe }
-    ).cawcoCanvasProbe.api.getSceneElementsIncludingDeleted();
-    const had = new Set(ids);
-    return {
-      ghost: all.find((el) => el.id.endsWith("~shape-swap"))?.opacity ?? null,
-      shape:
-        all.find(
-          (el) => !(had.has(el.id) || el.isDeleted) && el.type !== "freedraw"
-        )?.opacity ?? null,
-    };
-  }, known);
-
-/** The swap's run scrubbed at 0, ½ and 1 of its length, its two opacities read at each. */
-const scrubSwap = async (
-  frame: Frame,
-  cdp: CDPSession,
-  swap: SwapRun,
-  known: string[]
-) => {
-  const samples: { ghost: number | null; shape: number | null }[] = [];
-  for (const fraction of [0, 0.5, 1]) {
-    // biome-ignore lint/performance/noAwaitInLoops: one moment of the clock at a time
-    await cdp.send("Animation.seekAnimations", {
-      animations: [swap.id],
-      currentTime: fraction * (swap.source?.duration ?? 0),
-    });
-    await frame.evaluate(
-      () =>
-        new Promise<void>((done) =>
-          requestAnimationFrame(() => requestAnimationFrame(() => done()))
-        )
-    );
-    samples.push(await opacities(frame, known));
-  }
-  await cdp.send("Animation.setPaused", {
-    animations: [swap.id],
-    paused: false,
-  });
-  return samples;
-};
-
-/** Check 24: the swap's two opacities on one clock of `--dur-fade`; with reduced motion, no clock and no fade. */
-const motionCheck = async (
-  on: OnCanvas,
-  frame: Frame,
-  pen: Pen,
-  strokes: Strokes,
-  at: Pt
-) => {
-  const { cdp } = pen;
-  const runs: SwapRun[] = [];
-  cdp.on("Animation.animationStarted", (event: { animation: SwapRun }) => {
-    if (event.animation.name === "shape-swap") {
+/** Every run named `name` the page starts from now, each held still as the protocol reports it. */
+const catchNamed = (cdp: CDPSession, name: string): CaughtRun[] => {
+  const runs: CaughtRun[] = [];
+  cdp.on("Animation.animationStarted", (event: { animation: CaughtRun }) => {
+    if (event.animation.name === name) {
       runs.push(event.animation);
       cdp
         .send("Animation.setPaused", {
@@ -1709,32 +1814,111 @@ const motionCheck = async (
         .catch(() => undefined);
     }
   });
-  await cdp.send("Animation.enable");
-  const known = (await sceneOf(frame)).map((el) => el.id);
-  await watchSwap(frame);
-  await pen.draw(strokes.rectangle, at, { hold: true });
-  const caught = await until(
-    "the swap's run",
-    () => runs[0],
-    Boolean,
-    3000
-  ).catch(() => null);
-  const tokens = await frame.evaluate(() => {
-    const root = getComputedStyle(document.documentElement);
+  return runs;
+};
+
+/** Holds a run at `currentTime`, then lets two frames draw from it. */
+const seekTo = async (
+  frame: Frame,
+  cdp: CDPSession,
+  run: CaughtRun,
+  currentTime: number
+) => {
+  await cdp.send("Animation.seekAnimations", {
+    animations: [run.id],
+    currentTime,
+  });
+  await frame.evaluate(
+    () =>
+      new Promise<void>((done) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => done()))
+      )
+  );
+};
+
+/** Lets held runs play out. */
+const letGo = (cdp: CDPSession, runs: CaughtRun[]) =>
+  cdp.send("Animation.setPaused", {
+    animations: runs.map((run) => run.id),
+    paused: false,
+  });
+
+/** The ghost's and the new shape's opacity now (null for a ghost gone), and the shape's box. */
+const opacities = (frame: Frame, known: string[]) =>
+  frame.evaluate((ids) => {
+    const all = (
+      window as unknown as { cawcoCanvasProbe: CanvasProbe }
+    ).cawcoCanvasProbe.api.getSceneElementsIncludingDeleted();
+    const had = new Set(ids);
+    const shape = all.find(
+      (el) => !(had.has(el.id) || el.isDeleted) && el.type !== "freedraw"
+    );
     return {
-      fade: Number.parseFloat(root.getPropertyValue("--dur-fade")),
+      ghost: all.find((el) => el.id.endsWith("~shape-swap"))?.opacity ?? null,
+      shape: shape?.opacity ?? null,
+      box: shape ? `${shape.x},${shape.y} ${shape.width}×${shape.height}` : "",
+    };
+  }, known);
+
+const motionTokens = (frame: Frame) =>
+  frame.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    const ms = (token: string) =>
+      Number.parseFloat(root.getPropertyValue(token));
+    return {
+      fade: ms("--dur-fade"),
+      menu: ms("--dur-menu"),
+      stagger: ms("--dur-stagger"),
       ease: root.getPropertyValue("--ease-out").trim(),
     };
   });
-  const samples = caught ? await scrubSwap(frame, cdp, caught, known) : [];
+
+const flat = (text = "") => text.replaceAll(" ", "");
+
+/** One held rectangle's swap under `motion`: its run, scrubbed at 0, ½ and 1, and the first frame drawn. */
+const swapUnder = async (
+  on: OnCanvas,
+  frame: Frame,
+  pen: Pen,
+  stroke: { at: Pt; points: Pt[] },
+  motion: "reduce" | "no-preference"
+) => {
+  await on.page.emulateMedia({ reducedMotion: motion });
+  const runs = catchNamed(pen.cdp, "shape-swap");
+  const known = (await sceneOf(frame)).map((el) => el.id);
+  await watchSwap(frame);
+  await pen.draw(stroke.points, stroke.at, { hold: true });
+  const run = await until("the swap's run", () => runs[0], Boolean, 3000).catch(
+    () => null
+  );
+  const samples: Awaited<ReturnType<typeof opacities>>[] = [];
+  if (run) {
+    for (const fraction of [0, 0.5, 1]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one moment of the clock at a time
+      await seekTo(frame, pen.cdp, run, fraction * (run.source?.duration ?? 0));
+      samples.push(await opacities(frame, known));
+    }
+    await letGo(pen.cdp, [run]);
+  }
   await settle(on.page, 600);
-  const moving = await swapSeen(frame);
-  const [start, half, end] = samples;
-  const flat = (text = "") => text.replaceAll(" ", "");
-  const oneClock =
-    runs.length === 1 &&
-    caught?.source?.duration === tokens.fade &&
-    flat(caught.source.easing) === flat(tokens.ease) &&
+  return {
+    runs: runs.length,
+    run,
+    samples,
+    first: (await swapSeen(frame)).first,
+  };
+};
+
+/** Whether one swap ran as the one clock: one run of --dur-fade on --ease-out, 100/0, then summing to 100, then 0/100, the shape's box still throughout, the first frame drawn already fading. */
+const swappedOnOneClock = (
+  swap: Awaited<ReturnType<typeof swapUnder>>,
+  tokens: Awaited<ReturnType<typeof motionTokens>>
+) => {
+  const [start, half, end] = swap.samples;
+  return (
+    swap.runs === 1 &&
+    swap.run?.source?.duration === tokens.fade &&
+    flat(swap.run.source.easing) === flat(tokens.ease) &&
     start?.ghost === 100 &&
     start.shape === 0 &&
     !!half &&
@@ -1745,30 +1929,127 @@ const motionCheck = async (
     half.shape < 100 &&
     end?.ghost === null &&
     end.shape === 100 &&
-    moving.first !== null &&
-    moving.first.shape < 50 &&
-    moving.first.ghost !== null;
-
-  await on.page.emulateMedia({ reducedMotion: "reduce" });
-  await watchSwap(frame);
-  const reduced = await drawnBy(on, frame, pen, strokes.rectangle, at, {
-    hold: true,
-  });
-  const still = await swapSeen(frame);
-  await on.page.emulateMedia({ reducedMotion: "no-preference" });
-  const atOnce =
-    reduced.made[0]?.type === "rectangle" &&
-    runs.length === 1 &&
-    still.first?.shape === 100 &&
-    still.ghost === false;
-  on.kit.check(
-    "24: the swap's ghost and shape opacities run on one clock (one run, --dur-fade on --ease-out: 100/0, then summing to 100, then 0/100), the first frame already fading; with reduced motion the shape stands at once, no run, no ghost",
-    oneClock && atOnce,
-    `runs ${runs.length} ${JSON.stringify(caught?.source)} against ${JSON.stringify(tokens)}; scrubbed ${JSON.stringify(samples)}; first frame ${JSON.stringify(moving.first)}; reduced: made ${reduced.made.map((el) => el.type).join(",") || "nothing"}, runs ${runs.length}, first frame ${JSON.stringify(still.first)}, ghost ${still.ghost}`
+    start.box !== "" &&
+    start.box === half.box &&
+    half.box === end.box &&
+    swap.first !== null &&
+    swap.first.shape < 50 &&
+    swap.first.ghost !== null
   );
 };
 
-/** Checks 18–24 on a canvas of their own, the pen picked from the rail. */
+/** Check 24: the swap's two opacities on one clock of `--dur-fade`, the same with reduced motion; nothing travels. */
+const motionCheck = async (
+  on: OnCanvas,
+  frame: Frame,
+  pen: Pen,
+  strokes: Strokes,
+  at: Pt
+) => {
+  await pen.cdp.send("Animation.enable");
+  const tokens = await motionTokens(frame);
+  const stroke = { at, points: strokes.rectangle };
+  const moving = await swapUnder(on, frame, pen, stroke, "no-preference");
+  const reduced = await swapUnder(on, frame, pen, stroke, "reduce");
+  await on.page.emulateMedia({ reducedMotion: "no-preference" });
+  const said = (swap: typeof moving) =>
+    `${swap.runs} run ${JSON.stringify(swap.run?.source)}, scrubbed ${JSON.stringify(swap.samples)}, first frame ${JSON.stringify(swap.first)}`;
+  on.kit.check(
+    "24: the swap's ghost and shape opacities run on one clock (one run, --dur-fade on --ease-out: 100/0, then summing to 100, then 0/100), the shape's box still throughout, the first frame already fading; the same with reduced motion",
+    swappedOnOneClock(moving, tokens) && swappedOnOneClock(reduced, tokens),
+    `tokens ${JSON.stringify(tokens)}; motion: ${said(moving)}; reduced: ${said(reduced)}`
+  );
+};
+
+/**
+ * Check 25: with reduced motion the agent's elements still fade up where
+ * they stand (The agent's turn on the canvas): one `agent-arrival` run each
+ * of --dur-menu on --ease-out, staggered across --dur-stagger, each
+ * element's opacity 0, then between, then 100 at its run's 0, ½ and 1, its
+ * box still.
+ */
+const arrivalCheck = async (
+  on: OnCanvas,
+  frame: Frame,
+  cdp: CDPSession,
+  id: string
+) => {
+  await on.page.emulateMedia({ reducedMotion: "reduce" });
+  const tokens = await motionTokens(frame);
+  const runs = catchNamed(cdp, "agent-arrival");
+  const ids = ["arrive-a", "arrive-b"];
+  await on.call(UPDATE, {
+    id,
+    elements: ids.map((one, i) => ({
+      type: "rectangle",
+      id: one,
+      x: 400 + i * 140,
+      y: 400,
+      width: 120,
+      height: 60,
+    })),
+  });
+  await until(
+    "two arrivals' runs",
+    () => runs.length,
+    (n) => n >= 2,
+    10_000
+  ).catch(() => 0);
+  const read = () =>
+    frame.evaluate(
+      (names) =>
+        (
+          window as unknown as { cawcoCanvasProbe: CanvasProbe }
+        ).cawcoCanvasProbe
+          .elements()
+          .filter((el) => names.includes(el.id))
+          .map((el) => `${el.id} ${el.opacity} at ${el.x},${el.y}`),
+      ids
+    );
+  const samples: string[][] = [];
+  for (const fraction of [0, 0.5, 1]) {
+    for (const run of runs) {
+      // biome-ignore lint/performance/noAwaitInLoops: each run held at its own moment
+      await seekTo(
+        frame,
+        cdp,
+        run,
+        (run.source?.delay ?? 0) + fraction * (run.source?.duration ?? 0)
+      );
+    }
+    samples.push(await read());
+  }
+  await letGo(cdp, runs);
+  await settle(on.page, 400);
+  await on.page.emulateMedia({ reducedMotion: "no-preference" });
+  const opacity = (line = "") => Number(line.split(" ")[1]);
+  const [start, half, end] = samples;
+  const step = tokens.stagger / ids.length;
+  const pass =
+    runs.length === 2 &&
+    runs.every(
+      (run, i) =>
+        run.source?.duration === tokens.menu &&
+        flat(run.source.easing) === flat(tokens.ease) &&
+        Math.abs((run.source.delay ?? 0) - i * step) < 0.5
+    ) &&
+    start?.length === 2 &&
+    start.every((line) => opacity(line) === 0) &&
+    half?.every((line) => opacity(line) > 0 && opacity(line) < 100) &&
+    end?.every((line) => opacity(line) === 100) &&
+    [0, 1].every(
+      (i) =>
+        start[i]?.split(" at ")[1] === half?.[i]?.split(" at ")[1] &&
+        half?.[i]?.split(" at ")[1] === end?.[i]?.split(" at ")[1]
+    );
+  on.kit.check(
+    "25: with reduced motion the agent's two elements still fade up where they stand: one agent-arrival run each of --dur-menu on --ease-out, staggered across --dur-stagger, 0 → between → 100",
+    pass,
+    `tokens ${JSON.stringify(tokens)}; runs ${JSON.stringify(runs.map((run) => run.source))}; scrubbed ${JSON.stringify(samples)}`
+  );
+};
+
+/** Checks 18–25 on a canvas of their own, the pen picked from the rail. */
 const shapeChecks = async (on: OnCanvas) => {
   const answer = await on.call(CREATE, {
     kind: "canvas",
@@ -1808,11 +2089,13 @@ const shapeChecks = async (on: OnCanvas) => {
   const strokes = strokesOf(Math.round(Math.min(160, well.width * 0.35)));
   const at: Pt = [Math.round(well.width * 0.3), Math.round(well.height * 0.3)];
   await listen(frame);
+  await hearSnaps(on);
   await rectangleCheck(on, frame, pen, strokes, at);
   await staysInkChecks(on, frame, pen, strokes, at);
   await shapeTypeCheck(on, frame, pen, strokes, at, id);
   await doubleTapCheck(on, frame);
   await motionCheck(on, frame, pen, strokes, at);
+  await arrivalCheck(on, frame, pen.cdp, id);
   await pen.cdp.detach();
 };
 
@@ -2024,5 +2307,5 @@ const pictureChecks = async (on: OnCanvas, id: string, lifted: number) => {
   );
 };
 
-const spec: Spec = { name: "canvas", run };
+const spec: Spec = { name: "canvas", run: runSpec };
 export default spec;

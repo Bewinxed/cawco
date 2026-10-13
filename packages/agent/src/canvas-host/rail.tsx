@@ -6,7 +6,9 @@
  * is hidden. Tools at the top-left (select, hand, pen, shapes as a menu,
  * arrow, text, eraser), view at the top-right (zoom as a menu, Dock, Done).
  * A tool is Excalidraw's own (`setActiveTool`); the chosen one is the one
- * Excalidraw reports (`appState.activeTool`). Dock (Undock while the host
+ * Excalidraw reports (`appState.activeTool`), save while the pencil's
+ * double-tap has swapped the eraser into the box of the tool the pen was
+ * on: that box stays chosen and shows the eraser. Dock (Undock while the host
  * says the canvas is docked) and Done are the host's: they post
  * `cawco:dock`, `cawco:undock` and `cawco:done` to it.
  *
@@ -114,33 +116,98 @@ const actionAt = (event: MouseEvent) =>
 /** The rail's one press handler, which every box and item takes. */
 const Press = createContext<(event: MouseEvent) => void>(() => undefined);
 
+/** What a swapped box reads while it shows the eraser. */
+const ERASER = AFTER_SHAPES.find((one) => one.tool === "eraser") as {
+  label: string;
+  glyph: Glyph;
+};
+
+interface Layer {
+  glyph: Glyph;
+  key: number;
+  swap?: "in" | "out";
+}
+
+/**
+ * A box's glyph, which swaps as the composer's Send and Stop do
+ * (Composer.svelte, `icon-swap`): when the box is `swapped` the glyph going
+ * out and the one coming in share the box's one cell, trading places by
+ * opacity and scale over `--dur-control` (canvas.css, `rail-glyph-in` and
+ * `rail-glyph-out`); any other change of glyph lands at once.
+ */
+function SwapGlyph({ glyph, swapped }: { glyph: Glyph; swapped: boolean }) {
+  const [layers, setLayers] = useState<Layer[]>([{ glyph, key: 0 }]);
+  const [was, setWas] = useState({ glyph, swapped });
+  if (was.glyph !== glyph || was.swapped !== swapped) {
+    setWas({ glyph, swapped });
+    const key = Math.max(...layers.map((one) => one.key)) + 1;
+    setLayers(
+      was.swapped === swapped
+        ? [{ glyph, key }]
+        : [
+            ...layers
+              .filter((one) => one.swap !== "out")
+              .map((one) => ({ ...one, swap: "out" as const })),
+            { glyph, key, swap: "in" },
+          ]
+    );
+  }
+  const landed = (layer: Layer) => () =>
+    setLayers((now) =>
+      layer.swap === "out"
+        ? now.filter((one) => one.key !== layer.key)
+        : now.map((one) =>
+            one.key === layer.key ? { glyph: one.glyph, key: one.key } : one
+          )
+    );
+  return (
+    <span className="rail-glyphs">
+      {layers.map((layer) => (
+        <span
+          className="rail-glyph"
+          data-glyph={layer.glyph}
+          data-swap={layer.swap}
+          key={layer.key}
+          onAnimationEnd={layer.swap ? landed(layer) : undefined}
+        >
+          <Icon name={layer.glyph} />
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function Box({
   action,
   chosen,
   glyph,
   label,
   shape,
+  swapped = false,
 }: {
   action: string;
   chosen?: boolean;
   glyph: Glyph;
   label: string;
   shape?: Tool;
+  /** Showing the eraser in this tool's place (the pencil's double-tap). */
+  swapped?: boolean;
 }) {
   const press = useContext(Press);
+  const named = swapped ? ERASER.label : label;
   return (
     <button
-      aria-label={label}
+      aria-label={named}
       aria-pressed={chosen}
       className="rail-box"
       data-action={action}
       data-chosen={chosen || undefined}
       data-shape={shape}
       onClick={press}
-      title={label}
+      title={named}
       type="button"
     >
-      <Icon name={glyph} />
+      <SwapGlyph glyph={swapped ? ERASER.glyph : glyph} swapped={swapped} />
     </button>
   );
 }
@@ -151,6 +218,7 @@ function MenuBox({
   glyph,
   chosen,
   shape,
+  swapped = false,
   children,
 }: {
   children: ReactNode;
@@ -158,6 +226,8 @@ function MenuBox({
   glyph: Glyph;
   label: string;
   shape?: Tool;
+  /** Showing the eraser in its shape's place (the pencil's double-tap). */
+  swapped?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   /** Whether the menu was opened from the keyboard: its focus moves in, and back out on close. */
@@ -229,13 +299,13 @@ function MenuBox({
         aria-label={label}
         className="rail-box"
         data-chosen={chosen || undefined}
-        data-shape={shape}
+        data-shape={swapped ? undefined : shape}
         onClick={toggle}
         ref={trigger}
         title={label}
         type="button"
       >
-        <Icon name={glyph} />
+        <SwapGlyph glyph={swapped ? ERASER.glyph : glyph} swapped={swapped} />
       </button>
       {open ? (
         <div
@@ -312,32 +382,44 @@ function Item({
 export function Rail({
   api,
   docked,
-  tool,
+  onPick,
   reduced,
+  swappedFrom,
+  tool,
 }: {
   api: ExcalidrawImperativeAPI;
   /** The host stands the canvas in its artifact panel: Dock reads Undock. */
   docked: boolean;
+  /** A tool picked here: the pencil's swap, if one stands, ends. */
+  onPick: () => void;
   reduced: () => boolean;
+  /** The tool whose box shows the eraser in its place (the pencil's double-tap); null when none does. */
+  swappedFrom: string | null;
   tool: string;
 }) {
   const pressed = useCallback(
     (event: MouseEvent) => {
       const action = actionAt(event);
+      if (action?.startsWith("tool:")) {
+        onPick();
+      }
       if (action) {
         perform(api, action, reduced);
       }
     },
-    [api, reduced]
+    [api, onPick, reduced]
   );
-  const shape = SHAPES.find((one) => one.tool === tool) ?? SHAPES[0];
+  // The box that reads as chosen: the swapped one's while the pencil's swap stands.
+  const chosen = swappedFrom ?? tool;
+  const shape = SHAPES.find((one) => one.tool === chosen) ?? SHAPES[0];
   const box = (one: { tool: Tool; label: string; glyph: Glyph }) => (
     <Box
       action={`tool:${one.tool}`}
-      chosen={tool === one.tool}
+      chosen={chosen === one.tool}
       glyph={one.glyph}
       key={one.tool}
       label={one.label}
+      swapped={swappedFrom === one.tool}
     />
   );
   return (
@@ -345,10 +427,11 @@ export function Rail({
       <div aria-label="Tools" className="rail rail-tools" role="toolbar">
         {BEFORE_SHAPES.map(box)}
         <MenuBox
-          chosen={SHAPES.some((one) => one.tool === tool)}
+          chosen={SHAPES.some((one) => one.tool === chosen)}
           glyph={shape.glyph}
           label="Shapes"
           shape={shape.tool}
+          swapped={SHAPES.some((one) => one.tool === swappedFrom)}
         >
           {SHAPES.map((one) => (
             <Item
