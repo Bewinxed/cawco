@@ -1,5 +1,16 @@
 import { spawn } from "node:child_process";
-import type { CommandResult, WorkspaceRef } from "@cawco/core";
+import {
+  type CommandQueue,
+  type CommandQueueFrame,
+  type CommandResult,
+  type CommandRun,
+  QUEUE_MARKER,
+  QUEUE_SLOTS,
+  QUEUE_WAIT_MAX_MS,
+  type QueueSlot,
+  queueWords,
+  type WorkspaceRef,
+} from "@cawco/core";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { ensureBoundary } from "./boundary";
 
@@ -11,6 +22,14 @@ const DEFAULT_TIMEOUT_MS = 300_000;
 
 /** The process group of every command still running, by its leader's pid. */
 const live = new Set<number>();
+
+/** Where queue frames go: the daemon's socket. */
+let sendQueue: (frame: CommandQueueFrame) => void = () => undefined;
+export const setCommandQueue = (
+  send: (frame: CommandQueueFrame) => void
+): void => {
+  sendQueue = send;
+};
 
 /**
  * The hub connection ended: nobody is left to receive what the running
@@ -37,11 +56,118 @@ const isWorkspaceRef = (value: unknown): value is WorkspaceRef =>
   typeof (value as WorkspaceRef).path === "string" &&
   (value as WorkspaceRef).path.startsWith("/");
 
+/** Whether `value` names a run the hub follows: `{ id, queueMaxMs }` (core `CommandRun`). */
+const isCommandRun = (value: unknown): value is CommandRun =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as CommandRun).id === "string" &&
+  typeof (value as CommandRun).queueMaxMs === "number";
+
+/** `CAWCO-QUEUE wait <slot>: <holders>` or `CAWCO-QUEUE held <slot>`. */
+const QUEUE_LINE = new RegExp(
+  `^${QUEUE_MARKER} (wait|held) (${Object.keys(QUEUE_SLOTS).join("|")})(?:: (.*))?$`
+);
+
+/**
+ * The command's clock: its limit counts only the time no slot wait is open.
+ * While one is, the work timer stands and the queue timer runs, over every
+ * wait of the command together, up to `queueMaxMs`.
+ */
+const commandClock = (
+  limitMs: number,
+  queueMaxMs: number,
+  expire: (why: string) => void,
+  report: (queue: CommandQueue | null) => void
+) => {
+  /** Open waits by slot, with what their last marker said. */
+  const waits = new Map<QueueSlot, CommandQueue>();
+  let workLeft = limitMs;
+  let queueLeft = queueMaxMs;
+  let since = Date.now();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  /** The wait the status shows: the latest opened. */
+  const showing = (): CommandQueue | null => [...waits.values()].at(-1) ?? null;
+  const arm = () => {
+    clearTimeout(timer);
+    since = Date.now();
+    timer =
+      waits.size === 0
+        ? setTimeout(() => expire(""), workLeft)
+        : setTimeout(() => {
+            const queue = showing();
+            expire(
+              `\nCawCo: this command waited ${Math.round(queueMaxMs / 1000)} s in slot queues, the most it may, and was stopped${queue ? `: still ${queueWords(queue)}` : ""}.\n`
+            );
+          }, queueLeft);
+  };
+  const spend = () => {
+    const spent = Date.now() - since;
+    if (waits.size === 0) {
+      workLeft = Math.max(0, workLeft - spent);
+    } else {
+      queueLeft = Math.max(0, queueLeft - spent);
+    }
+  };
+  arm();
+  return {
+    /** One line of output: a queue marker opens or closes a wait. */
+    line(text: string) {
+      const marker = QUEUE_LINE.exec(text);
+      if (!marker) {
+        return;
+      }
+      const slot = marker[2] as QueueSlot;
+      if (marker[1] === "held" && !waits.has(slot)) {
+        return;
+      }
+      // What ran so far is spent from the phase it ran in; the timer then
+      // runs for what is left of the phase the line leaves it in.
+      spend();
+      waits.delete(slot);
+      if (marker[1] === "wait") {
+        // A repeat moves it last: the status shows its newest words.
+        waits.set(slot, { slot, holders: marker[3] ?? "" });
+      }
+      arm();
+      report(showing());
+    },
+    stop() {
+      clearTimeout(timer);
+      if (waits.size > 0) {
+        waits.clear();
+        report(null);
+      }
+    },
+  };
+};
+
+const CARRIAGE_RETURN = /\r$/;
+
+/** Splits a stream into whole lines for `each`, holding a partial last one. */
+const lines = (each: (line: string) => void) => {
+  let partial = "";
+  return (chunk: Buffer) => {
+    const text = partial + chunk.toString("utf8");
+    const parts = text.split("\n");
+    partial = (parts.pop() ?? "").slice(-4096);
+    for (const part of parts) {
+      each(part.replace(CARRIAGE_RETURN, ""));
+    }
+  };
+};
+
 /**
  * `CONTROL_RUN_COMMAND`: runs `cmd` in `cwd` on this machine, killed with its
- * whole process group after `timeoutMs` (exit 124). Answers complete stdout
- * and complete stderr; a command that writes more than {@link OUTPUT_LIMIT}
- * bytes across both is killed the same way and rejects.
+ * whole process group after `timeoutMs` of its own work (exit 124): the
+ * clock stands while the command waits for a shared machine slot
+ * ({@link commandClock}), and a command whose waits pass the run's
+ * `queueMaxMs` (the hub sends {@link QUEUE_WAIT_MAX_MS}; a run the hub did
+ * not name waits that long too) is killed the same way, its stderr saying
+ * who held the slot. Each change of its wait goes to the hub under the
+ * run's `id`.
+ * Answers complete stdout and complete stderr; a command that writes more
+ * than {@link OUTPUT_LIMIT} bytes across both is killed the same way and
+ * rejects.
  *
  * Given a `workspace`, the command runs inside that workspace's boundary,
  * through the executor its sessions' shell commands run through: the same
@@ -53,8 +179,10 @@ export async function runWorkflowCommand(
   cwd: unknown,
   cmd: unknown,
   timeoutMs: unknown,
-  workspace?: unknown
+  workspace?: unknown,
+  run?: unknown
 ): Promise<CommandResult> {
+  const named = isCommandRun(run) ? run : undefined;
   if (
     typeof cwd !== "string" ||
     !cwd.startsWith("/") ||
@@ -89,6 +217,8 @@ export async function runWorkflowCommand(
     let written = 0;
     let expired = false;
     let overflowed = false;
+    /** What the runner adds to stderr when it ends the command itself. */
+    let said = "";
     const killGroup = () => {
       if (child.pid) {
         try {
@@ -98,43 +228,55 @@ export async function runWorkflowCommand(
         }
       }
     };
-    const collect = (into: Buffer[]) => (chunk: Buffer) => {
-      if (overflowed) {
-        return;
-      }
-      written += chunk.length;
-      if (written > OUTPUT_LIMIT) {
-        overflowed = true;
-        stdout.length = 0;
-        stderr.length = 0;
+    const clock = commandClock(
+      typeof timeoutMs === "number" ? timeoutMs : DEFAULT_TIMEOUT_MS,
+      named?.queueMaxMs ?? QUEUE_WAIT_MAX_MS,
+      (why) => {
+        expired = true;
+        said = why;
         killGroup();
-        reject(
-          new Error(
-            `Command output passed ${OUTPUT_LIMIT} bytes: ${cmd.slice(0, 200)}`
-          )
-        );
-        return;
+      },
+      (queue) => {
+        if (named) {
+          sendQueue({ kind: "command_queue", runId: named.id, queue });
+        }
       }
-      into.push(chunk);
+    );
+    const collect = (into: Buffer[]) => {
+      const scan = lines((line) => clock.line(line));
+      return (chunk: Buffer) => {
+        if (overflowed) {
+          return;
+        }
+        written += chunk.length;
+        if (written > OUTPUT_LIMIT) {
+          overflowed = true;
+          stdout.length = 0;
+          stderr.length = 0;
+          clock.stop();
+          killGroup();
+          reject(
+            new Error(
+              `Command output passed ${OUTPUT_LIMIT} bytes: ${cmd.slice(0, 200)}`
+            )
+          );
+          return;
+        }
+        into.push(chunk);
+        scan(chunk);
+      };
     };
     child.stdout.on("data", collect(stdout));
     child.stderr.on("data", collect(stderr));
-    const timer = setTimeout(
-      () => {
-        expired = true;
-        killGroup();
-      },
-      typeof timeoutMs === "number" ? timeoutMs : DEFAULT_TIMEOUT_MS
-    );
     child.on("error", (error) => {
-      clearTimeout(timer);
+      clock.stop();
       if (pid) {
         live.delete(pid);
       }
       reject(error);
     });
     child.on("close", (code) => {
-      clearTimeout(timer);
+      clock.stop();
       if (pid) {
         live.delete(pid);
       }
@@ -144,7 +286,7 @@ export async function runWorkflowCommand(
       resolve({
         exitCode: expired ? 124 : (code ?? 1),
         stdout: Buffer.concat(stdout).toString("utf8"),
-        stderr: Buffer.concat(stderr).toString("utf8"),
+        stderr: Buffer.concat(stderr).toString("utf8") + said,
       });
     });
   });

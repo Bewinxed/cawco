@@ -23729,6 +23729,9 @@
             "$ref": "#/components/schemas/MoveProgressFrame"
           },
           {
+            "$ref": "#/components/schemas/CommandQueueFrame"
+          },
+          {
             "$ref": "#/components/schemas/AccountBorrowFrame"
           },
           {
@@ -23773,6 +23776,7 @@
             "supervisor_status": "#/components/schemas/SupervisorStatusFrame",
             "moves": "#/components/schemas/MovesFrame",
             "move_progress": "#/components/schemas/MoveProgressFrame",
+            "command_queue": "#/components/schemas/CommandQueueFrame",
             "account_borrow": "#/components/schemas/AccountBorrowFrame",
             "workflow": "#/components/schemas/WorkflowFrame"
           }
@@ -34136,6 +34140,22 @@
         "description": "One delegate's work item as its parent's delegate tray reads it: the hub's\n`work_items` row cut to what a chip and its panel say, pushed as a\n`work_item` frame on every change and read back over\n`GET /api/work-items?parent=`. Times are epoch ms. A `delegate` call that\nwaits for files a live item owns is one too, `starting` with `queued` set,\nunder the ids its item takes when it starts.",
         "type": "object",
         "properties": {
+          "checkQueue": {
+            "description": "While one of its checks waits for a shared machine slot: \"queued for the\nMac's build slot behind …\", and since when (epoch ms); null otherwise.",
+            "type": "object",
+            "properties": {
+              "words": {
+                "type": "string"
+              },
+              "since": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "since",
+              "words"
+            ]
+          },
           "createdAt": {
             "type": "number"
           },
@@ -40850,6 +40870,52 @@
           "kind",
           "stage",
           "total"
+        ]
+      },
+      "CommandQueueFrame": {
+        "description": "Daemon → hub: a {@link CONTROL_RUN_COMMAND} run named `runId` began\nwaiting for a slot (`queue`), or stopped (null).",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "command_queue"
+            ]
+          },
+          "queue": {
+            "$ref": "#/components/schemas/CommandQueue"
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "runId"
+        ]
+      },
+      "CommandQueue": {
+        "description": "A command's wait for a slot: which, and who holds it (the marker's words).",
+        "type": "object",
+        "properties": {
+          "holders": {
+            "type": "string"
+          },
+          "slot": {
+            "$ref": "#/components/schemas/QueueSlot"
+          }
+        },
+        "required": [
+          "holders",
+          "slot"
+        ]
+      },
+      "QueueSlot": {
+        "type": "string",
+        "enum": [
+          "build",
+          "sim",
+          "template"
         ]
       },
       "AccountBorrowFrame": {

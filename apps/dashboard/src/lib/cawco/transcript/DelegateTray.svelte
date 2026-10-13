@@ -451,9 +451,17 @@
   /** Why a queued delegate waits, as its chip says it: the files it owns. */
   const queuedWords = (item: WorkItemSummary): string =>
     item.queued ? `queued: owns ${item.queued.owns.join(", ")}` : "";
+  /** A check waiting for a shared machine slot, as its chip says it, with how long. */
+  const checkQueueWords = (item: WorkItemSummary): string =>
+    item.checkQueue
+      ? `${item.checkQueue.words}, ${span(item.checkQueue.since, minute)}`
+      : "";
   const stateWords = (chip: Chip): string => {
     if (chip.item.queued) {
       return queuedWords(chip.item);
+    }
+    if (chip.item.checkQueue) {
+      return checkQueueWords(chip.item);
     }
     switch (chip.tone) {
       case "needs":
@@ -982,6 +990,8 @@
       <span class="title">{item.title}</span>
       {#if item.queued}
         <span class="note">{queuedWords(item)}</span>
+      {:else if item.checkQueue}
+        <span class="note">{checkQueueWords(item)}</span>
       {:else if tone === "needs"}
         <span class="note">{questionWords(chip.questions)}</span>
       {:else if tone === "failed" || tone === "cancelled"}

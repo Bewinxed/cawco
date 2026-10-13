@@ -1499,8 +1499,12 @@ export const CONTROL_WORKSPACE_MIGRATE = "workspaceMigrate";
 
 /**
  * Runs a shell command on a machine, in a directory, killed with its process
- * group after a limit (exit 124). Args `[cwd, command, timeoutMs?, workspace?]`;
- * answers {@link CommandResult}. A command that writes more than 8 MiB across
+ * group after a limit (exit 124). Args `[cwd, command, timeoutMs?, workspace?,
+ * run?]`; answers {@link CommandResult}. The limit counts the command's own
+ * work: while it waits in a shared machine slot's queue (a
+ * {@link QUEUE_MARKER} line) the clock stands, for the run's `queueMaxMs` at
+ * most ({@link CommandRun}), and each change of that wait goes to the hub as
+ * a {@link CommandQueueFrame} under the run's id. A command that writes more than 8 MiB across
  * stdout and stderr is killed with its process group and the call fails with
  * an error naming the limit. The hub's one way to run something on a machine:
  * a workflow's `w.exec`, and a work item's acceptance checks. A
@@ -1509,6 +1513,63 @@ export const CONTROL_WORKSPACE_MIGRATE = "workspaceMigrate";
  * boundary fails the call with its reason.
  */
 export const CONTROL_RUN_COMMAND = "runCommand";
+
+/**
+ * The line a command prints, on stdout or stderr, as it starts and stops
+ * waiting for a shared machine slot (apps/apple/scripts/mac-slot.sh and
+ * build-both.sh print it):
+ *
+ *   CAWCO-QUEUE wait <slot>: <who holds it, and for how long>
+ *   CAWCO-QUEUE held <slot>
+ *
+ * A line in the command's own output, not a file: the runner already reads
+ * both streams live, the line crosses the workspace boundary, SSH and
+ * build-both.sh's relay as it is, and a wait cannot outlive the process
+ * that printed it. The runner reads only the token, the verb and the slot;
+ * what follows the colon is shown as written.
+ */
+export const QUEUE_MARKER = "CAWCO-QUEUE";
+
+/** The shared slots a command may queue for, as the status names each. */
+export const QUEUE_SLOTS = {
+  build: "the Mac's build slot",
+  sim: "a simulator slot",
+  template: "the simulator template lock",
+} as const;
+export type QueueSlot = keyof typeof QUEUE_SLOTS;
+
+/** The most a command waits in slot queues, all its waits together: past it, it fails. */
+export const QUEUE_WAIT_MAX_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * The run a {@link CONTROL_RUN_COMMAND} names: the id its
+ * {@link CommandQueueFrame}s carry, and the most its slot waits may last
+ * (the hub sends {@link QUEUE_WAIT_MAX_MS}).
+ */
+export interface CommandRun {
+  id: string;
+  queueMaxMs: number;
+}
+
+/** A command's wait for a slot: which, and who holds it (the marker's words). */
+export interface CommandQueue {
+  holders: string;
+  slot: QueueSlot;
+}
+
+/** How a status says a {@link CommandQueue}: "queued for the Mac's build slot behind …". */
+export const queueWords = (queue: CommandQueue): string =>
+  `queued for ${QUEUE_SLOTS[queue.slot]}${queue.holders ? ` behind ${queue.holders}` : ""}`;
+
+/**
+ * Daemon → hub: a {@link CONTROL_RUN_COMMAND} run named `runId` began
+ * waiting for a slot (`queue`), or stopped (null).
+ */
+export interface CommandQueueFrame {
+  kind: "command_queue";
+  queue: CommandQueue | null;
+  runId: string;
+}
 
 /**
  * What {@link CONTROL_RUN_COMMAND} answers: both streams complete, each

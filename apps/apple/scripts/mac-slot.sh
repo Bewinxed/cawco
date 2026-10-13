@@ -15,7 +15,10 @@
 # iPhone Pro whose runtime meets project.yml's iOS target, as build-both.sh
 # picks), runs the command with CAWCO_SIM_UDID set, then shuts the simulator
 # down and deletes it.
-# A waiter prints a WAITING line every 60 s.
+# A waiter prints "CAWCO-QUEUE wait <slot>: <who holds it, for how long>"
+# every 60 s, and "CAWCO-QUEUE held <slot>" once it holds the slot: the queue
+# marker (core harness.ts QUEUE_MARKER). A CawCo check's time limit stands
+# between the two, for 3 h at most.
 #
 # Nesting: build outside, sim inside (mac-slot.sh build -- mac-slot.sh sim --
 # xcodebuild test ...). The other order, or a slot inside the same kind,
@@ -108,11 +111,12 @@ held() { # <lock>: who holds it and for how long
   now=$(date +%s)
   if [[ -f $1.owner ]]; then read -r since who <"$1.owner" || true; fi
   [[ $since =~ ^[0-9]+$ ]] || since=$now
-  echo "$who has held it for $((now - since)) s"
+  echo "$who for $((now - since)) s"
 }
 
 mkdir -p "$LOCKS"
 next_notice=0
+waited=
 while :; do
   if [[ $MODE == build ]]; then
     if shlock -p $$ -f "$LOCKS/.machine"; then SLOT=machine; LOCK=$LOCKS/.machine; fi
@@ -126,16 +130,20 @@ while :; do
   kill -0 "$CALLER" 2>/dev/null || exit 0
   now=$(date +%s)
   if ((now >= next_notice)); then
+    # The queue marker (core harness.ts QUEUE_MARKER): a CawCo check's clock
+    # stands from this line to the held line.
     if [[ $MODE == build ]]; then
-      echo "WAITING for the Mac build slot: $(held "$LOCKS/.machine")" >&2
+      echo "CAWCO-QUEUE wait build: $(held "$LOCKS/.machine")" >&2
     else
-      echo "WAITING for a simulator slot: slot 1: $(held "$LOCKS/sim-1"); slot 2: $(held "$LOCKS/sim-2")" >&2
+      echo "CAWCO-QUEUE wait sim: $(held "$LOCKS/sim-1") and $(held "$LOCKS/sim-2")" >&2
     fi
+    waited=1
     next_notice=$((now + 60))
   fi
   sleep 5
 done
 printf '%s %s\n' "$(date +%s)" "$LABEL" >"$LOCK.owner"
+[[ -z $waited ]] || echo "CAWCO-QUEUE held $MODE" >&2
 if [[ $MODE == sim ]]; then drop_sims; fi
 echo "SLOT $SLOT"
 exec >&2
@@ -251,17 +259,19 @@ make_template() { # the new template's UDID
   echo "$udid"
 }
 slot_sim() { # the slot's new simulator's UDID, cloned from its template
-  local template= line out now next=0
+  local template= line out now next=0 waited=
   trap '[[ $(cat "$LOCKS/template" 2>/dev/null) != $$ ]] || rm -f "$LOCKS/template.owner" "$LOCKS/template"' EXIT
   until shlock -p $$ -f "$LOCKS/template"; do
     now=$(date +%s)
     if ((now >= next)); then
-      echo "WAITING for the simulator template lock: $(cat "$LOCKS/template.owner" 2>/dev/null || echo unknown) holds it" >&2
+      echo "CAWCO-QUEUE wait template: $(cat "$LOCKS/template.owner" 2>/dev/null || echo unknown), making a template" >&2
+      waited=1
       next=$((now + 60))
     fi
     sleep 5
   done
   echo "$LABEL" >"$LOCKS/template.owner"
+  [[ -z $waited ]] || echo "CAWCO-QUEUE held template" >&2
   # This template if it is ready; templates for this device type and runtime
   # from another runtime build or version, a half-made one, and those whose
   # runtime is gone, deleted.

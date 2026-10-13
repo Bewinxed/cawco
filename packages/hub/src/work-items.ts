@@ -35,6 +35,7 @@
  * to-dos still open, and steps left open become `(proposed)` to-dos.
  */
 import type {
+  CommandQueue,
   CommandResult,
   DelegateType,
   Envelope,
@@ -63,6 +64,7 @@ import {
   depsScript,
   handoffMarker,
   machineLabel,
+  queueWords,
   type WorkspaceLanding,
   withLandingLine,
   withWorkspaceLine,
@@ -510,14 +512,17 @@ export interface WorkItemDeps {
   ) => Promise<unknown>;
   /**
    * Runs a command on a machine, in a directory — inside `workspace`'s
-   * boundary when one is named; throws when the machine cannot.
+   * boundary when one is named; throws when the machine cannot. Its limit
+   * stands while it waits for a shared machine slot; `onQueue` hears each
+   * change of that wait.
    */
   readonly command: (
     machineId: string,
     cwd: string,
     cmd: string,
     timeoutMs?: number,
-    workspace?: WorkspaceRef
+    workspace?: WorkspaceRef,
+    onQueue?: (queue: CommandQueue | null) => void
   ) => Promise<CommandResult>;
   readonly db: DbShape;
   /**
@@ -1285,6 +1290,12 @@ export const createWorkItems = ({
   };
   /** Items whose checks this hub process is running now: a resume leaves them to that run. */
   const finishing = new Set<string>();
+  /**
+   * Items one of whose checks waits for a shared machine slot now: what its
+   * status says, and since when. In memory: a hub that starts runs the
+   * checks again from the first.
+   */
+  const checkQueues = new Map<string, { words: string; since: number }>();
   /** One landing at a time per repository and branch (landing.ts). */
   const landings = landingQueue();
   /** Creates this hub is still waiting for; register recovery leaves those to their caller. */
@@ -1385,6 +1396,7 @@ export const createWorkItems = ({
     dismissedAt: item.dismissedAt?.getTime() ?? null,
     waitUntil: item.waitUntil?.getTime() ?? null,
     waitReason: item.waitReason,
+    checkQueue: checkQueues.get(item.id) ?? null,
     firstLines: {
       brief: firstLine(item.brief),
       result: firstLine(item.result),
@@ -1420,6 +1432,7 @@ export const createWorkItems = ({
       dismissedAt: dismissedAt?.getTime() ?? null,
       waitUntil: null,
       waitReason: null,
+      checkQueue: null,
       firstLines: { brief: firstLine(request.prompt), result: "", error: "" },
     };
   };
@@ -3054,6 +3067,18 @@ export const createWorkItems = ({
     checks: WorkItemCheck[]
   ): Promise<CheckRun> => {
     let commit: Promise<WorkspaceCommit> | undefined;
+    /** A check's slot wait, as the item's status says it (WorkItemSummary `checkQueue`). */
+    const queued = (queue: CommandQueue | null): void => {
+      if (queue) {
+        checkQueues.set(item.id, {
+          words: queueWords(queue),
+          since: checkQueues.get(item.id)?.since ?? Date.now(),
+        });
+      } else if (!checkQueues.delete(item.id)) {
+        return;
+      }
+      published(db.workItem(item.id));
+    };
     /** The installs this run made, each a line of the check log ahead of the checks. */
     const installs: InstallOutcome[] = [];
     /**
@@ -3143,7 +3168,8 @@ export const createWorkItems = ({
             at.path,
             check.command,
             limit,
-            refOf(at)
+            refOf(at),
+            queued
           ),
         };
       } catch (error) {
@@ -3168,20 +3194,21 @@ export const createWorkItems = ({
     for (const check of checks) {
       const started = Date.now();
       const limit = (check.timeoutSec ?? CHECK_TIMEOUT_SEC) * 1000;
-      const { complete, where } =
-        check.machine && check.machine !== workspace.machineId
-          ? // biome-ignore lint/performance/noAwaitInLoops: checks run in order, one at a time
-            await runElsewhere(check.machine, check, limit)
-          : {
-              complete: await command(
-                workspace.machineId,
-                workspace.path,
-                check.command,
-                limit,
-                refOf(workspace)
-              ),
-              where: undefined,
-            };
+      // A check that ends while waiting (killed, past the most a wait may
+      // last, or a machine that could not run it) leaves no wait behind it.
+      // biome-ignore lint/performance/noAwaitInLoops: checks run in order, one at a time
+      const { complete, where } = await (check.machine &&
+      check.machine !== workspace.machineId
+        ? runElsewhere(check.machine, check, limit)
+        : command(
+            workspace.machineId,
+            workspace.path,
+            check.command,
+            limit,
+            refOf(workspace),
+            queued
+          ).then((done) => ({ complete: done, where: undefined }))
+      ).finally(() => queued(null));
       const result = checkTails(complete);
       outcomes.push({
         check,
@@ -3655,6 +3682,10 @@ export const createWorkItems = ({
 
   return {
     start: (asked: WorkItemRequest) => start(asked),
+
+    /** While one of the item's checks waits for a shared machine slot: what its status says, and since when. */
+    checkQueueOf: (itemId: string): { words: string; since: number } | null =>
+      checkQueues.get(itemId) ?? null,
 
     /**
      * A routine's run (routines.ts): a fresh session in a new workspace cut

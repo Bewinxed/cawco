@@ -162,7 +162,11 @@ const takeSessionLimits = (
 
 import { probeTools } from "./tools";
 import { UsageScanner } from "./usage/scanner";
-import { abandonCommands, runWorkflowCommand } from "./workflow-command";
+import {
+  abandonCommands,
+  runWorkflowCommand,
+  setCommandQueue,
+} from "./workflow-command";
 import {
   archiveWorkspace,
   createWorkspace,
@@ -1478,13 +1482,15 @@ const attach = (
       }
       // Usage and workflow-run transitions originate at the hub, never at a
       // daemon; machine-scoped control replies do travel through this sink,
-      // without an instanceId. A move's progress goes out on `emit`.
+      // without an instanceId. A move's progress and a command's slot wait
+      // go out on `emit`.
       if (
         frame.kind === "usage" ||
         frame.kind === "workflow" ||
         frame.kind === "fleet_mcp" ||
         frame.kind === "moves" ||
-        frame.kind === "move_progress"
+        frame.kind === "move_progress" ||
+        frame.kind === "command_queue"
       ) {
         return false;
       }
@@ -2284,12 +2290,15 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
       )
     );
     // A command runs as this process's child, so a restart kills it: none starts behind a raised fence.
+    setCommandQueue((frame) =>
+      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
+    );
     supervisor.registerDaemonFunction(
       CONTROL_RUN_COMMAND,
-      (cwd, cmd, timeoutMs, workspace) =>
+      (cwd, cmd, timeoutMs, workspace, run) =>
         fenced()
           ? Promise.reject(new Error(AGENT_RESTARTING))
-          : runWorkflowCommand(cwd, cmd, timeoutMs, workspace)
+          : runWorkflowCommand(cwd, cmd, timeoutMs, workspace, run)
     );
     // A workspace is cut in this process, so a restart would cut it too: none starts behind a raised fence.
     supervisor.registerDaemonFunction(

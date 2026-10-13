@@ -3484,6 +3484,47 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/QueueSlot`.
+    public enum QueueSlot: OpenEnum {
+        case build
+        case sim
+        case template
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "build": self = .build
+            case "sim": self = .sim
+            case "template": self = .template
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .build: "build"
+            case .sim: "sim"
+            case .template: "template"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.build, .sim, .template]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/RebalanceNoticeHow`.
     public enum RebalanceNoticeHow: OpenEnum {
         case added

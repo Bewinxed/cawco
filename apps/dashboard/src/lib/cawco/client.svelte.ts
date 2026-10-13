@@ -3012,6 +3012,10 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "move_progress") {
     return;
   }
+  // A command's slot wait travels machine → hub only; its item's status carries it.
+  if (frame.kind === "command_queue") {
+    return;
+  }
   // A borrower's ask for a fresh sign-in travels machine → hub only.
   if (frame.kind === "account_borrow") {
     return;

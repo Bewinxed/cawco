@@ -52,7 +52,8 @@ DEST=$HOME/Applications/$APP
 # in-depth analysis", which "usually completes within a few days"
 # (developer.apple.com/forums/thread/802183); a later run resumes the wait.
 NOTARY_WAIT=20m
-LOCKS=$HOME/build/cawco-apple/.locks
+# The one Mac build slot every caller shares (apps/apple/scripts/mac-slot.sh).
+LOCKS=$HOME/.cawco/workspace-cache/xdg/cawco-apple/.locks
 
 release_slot() {
   rm -f "$LOCKS/.machine.owner" "$LOCKS/.machine"
@@ -69,15 +70,24 @@ build_step() {
   mkdir -p "$LOCKS"
   command -v shlock >/dev/null || { echo "shlock is required" >&2; exit 2; }
   next_notice=0
+  waited=
   until shlock -p $$ -f "$LOCKS/.machine"; do
     now=$(date +%s)
     if (( now >= next_notice )); then
-      echo "WAITING for the Mac build slot: $(cat "$LOCKS/.machine.owner" 2>/dev/null || echo unknown)"
+      holder=unknown
+      held_since=$now
+      if [[ -f $LOCKS/.machine.owner ]]; then read -r held_since holder <"$LOCKS/.machine.owner" || true; fi
+      [[ $held_since =~ ^[0-9]+$ ]] || held_since=$now
+      # The queue marker (core harness.ts QUEUE_MARKER): a CawCo check's
+      # clock stands from this line to the held line.
+      echo "CAWCO-QUEUE wait build: $holder for $((now - held_since)) s"
+      waited=1
       next_notice=$((now + 60))
     fi
     sleep 5
   done
-  printf '%s %s\n' "mac-helper-$BUILD" "$(date +%s)" >"$LOCKS/.machine.owner"
+  printf '%s %s\n' "$(date +%s)" "$BUILD mac-helper build.sh (pid $$)" >"$LOCKS/.machine.owner"
+  [[ -z $waited ]] || echo "CAWCO-QUEUE held build"
   trap release_slot EXIT
 
   cd "$DIR"

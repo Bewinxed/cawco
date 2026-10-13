@@ -986,6 +986,11 @@ export interface KeepAlive {
  * under the ids its item takes when it starts.
  */
 export interface WorkItemSummary {
+  /**
+   * While one of its checks waits for a shared machine slot: "queued for the
+   * Mac's build slot behind …", and since when (epoch ms); null otherwise.
+   */
+  checkQueue: { words: string; since: number } | null;
   createdAt: number;
   dismissedAt: number | null;
   endedAt: number | null;
@@ -1189,6 +1194,8 @@ export type FramePayload =
   | import("./move").MovesFrame
   /** Daemon-originated: how far a move's clone or large files are. */
   | import("./move").MoveProgressFrame
+  /** Daemon-originated: a running command's wait for a shared machine slot. */
+  | import("./harness").CommandQueueFrame
   /** Daemon-originated: a borrowed sign-in near its expiry, asking for a fresh one. */
   | import("./accounts").AccountBorrowFrame
   /** Hub-originated workflow run transition (§7.2). */

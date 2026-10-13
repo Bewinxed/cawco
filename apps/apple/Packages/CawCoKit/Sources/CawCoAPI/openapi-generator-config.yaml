@@ -88,6 +88,7 @@ typeOverrides:
     PreviewFrameState: OpenEnums.PreviewFrameState
     ProjectOfferReason: OpenEnums.ProjectOfferReason
     ProjectStopFrameOutcome: OpenEnums.ProjectStopFrameOutcome
+    QueueSlot: OpenEnums.QueueSlot
     RebalanceNoticeHow: OpenEnums.RebalanceNoticeHow
     RelayProvider: OpenEnums.RelayProvider
     RelayState: OpenEnums.RelayState

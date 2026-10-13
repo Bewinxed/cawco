@@ -155,6 +155,9 @@ import {
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
+  type CommandQueue,
+  type CommandQueueFrame,
+  type CommandRun,
   CUSTODY_HELD,
   clockWords,
   contextFitRefusal,
@@ -211,6 +214,7 @@ import {
   providerChoices,
   providerLimitRefused,
   QUESTION_DISMISSED,
+  QUEUE_WAIT_MAX_MS,
   questionsOf,
   RATE_LIMIT_READ,
   READ_FLEET_HOLDINGS,
@@ -6731,6 +6735,8 @@ export const createServer = (
    */
   const waiting = new Map<string, (frame: ControlResult) => void>();
   const waitingMachines = new Map<string, string>();
+  /** Who hears a running command's slot waits, by the run id it was sent with. */
+  const commandQueues = new Map<string, (queue: CommandQueue | null) => void>();
   const unroutedReplies = new Set<string>();
   const logUnroutedReply = (message: Envelope): void => {
     const requestId = message.requestId ?? peek(message.payload, "requestId");
@@ -13769,27 +13775,42 @@ export const createServer = (
    * complete stdout and stderr (past 8 MiB it fails). A workflow's `w.exec` and a work item's
    * acceptance checks both go through it; a check names its workspace, so it
    * runs inside that workspace's boundary, as its delegate's commands do.
+   * The machine's clock stands while the command waits for a shared slot,
+   * up to QUEUE_WAIT_MAX_MS, so the hub waits that much longer; each change
+   * of that wait reaches `onQueue`.
    */
   const runOnMachine = async (
     machineId: string,
     cwd: string,
     cmd: string,
     timeoutMs?: number,
-    workspace?: WorkspaceRef
+    workspace?: WorkspaceRef,
+    onQueue?: (queue: CommandQueue | null) => void
   ): Promise<CommandResult> => {
-    const response = await callAgent(
-      machineId,
-      CONTROL_RUN_COMMAND,
-      [cwd, cmd, timeoutMs, workspace],
-      (timeoutMs ?? 300_000) + 10_000
-    );
-    if (typeof response === "string") {
-      throw new Error(`Command refused: machine ${response}.`);
+    const run: CommandRun = {
+      id: crypto.randomUUID(),
+      queueMaxMs: QUEUE_WAIT_MAX_MS,
+    };
+    if (onQueue) {
+      commandQueues.set(run.id, onQueue);
     }
-    if (response.error) {
-      throw new Error(String(response.error));
+    try {
+      const response = await callAgent(
+        machineId,
+        CONTROL_RUN_COMMAND,
+        [cwd, cmd, timeoutMs, workspace, run],
+        (timeoutMs ?? 300_000) + run.queueMaxMs + 10_000
+      );
+      if (typeof response === "string") {
+        throw new Error(`Command refused: machine ${response}.`);
+      }
+      if (response.error) {
+        throw new Error(String(response.error));
+      }
+      return response.result as CommandResult;
+    } finally {
+      commandQueues.delete(run.id);
     }
-    return response.result as CommandResult;
   };
 
   /**
@@ -14448,6 +14469,7 @@ export const createServer = (
   // `delegate_list`: a session's own delegation tree (§5.2).
   const delegationTree = createDelegationTree({
     db,
+    checkQueue: (itemId) => workItems.checkQueueOf(itemId),
     machineName: (machineId) =>
       machineLabel(
         db.listAgents().find((agent) => agent.machineId === machineId)
@@ -21172,6 +21194,11 @@ export const createServer = (
                 db.invalidateClaudeCaches(message.machineId, reason, at);
                 publishInstances(message.machineId);
                 // Cache bookkeeping is neither a turn nor fleet attention.
+                break;
+              }
+              if (kind === "command_queue") {
+                const { runId, queue } = message.payload as CommandQueueFrame;
+                commandQueues.get(runId)?.(queue);
                 break;
               }
               if (kind === "move_progress") {

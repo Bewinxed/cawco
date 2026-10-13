@@ -143,6 +143,7 @@ until shlock -p $$ -f "$LOCK"; do
   sleep 5
 done
 next_notice=0
+waited=
 until shlock -p $$ -f "$MACHINE_LOCK"; do
   now=$(date +%s)
   if (( now >= next_notice )); then
@@ -152,12 +153,16 @@ until shlock -p $$ -f "$MACHINE_LOCK"; do
       read -r held_since holder <"$MACHINE_OWNER" || true
     fi
     [[ $held_since =~ ^[0-9]+$ ]] || held_since=$now
-    echo "WAITING for the Mac build slot: $holder has held it for $((now - held_since)) s"
+    # The queue marker (mac-slot.sh, core harness.ts QUEUE_MARKER): a CawCo
+    # check's clock stands from this line to the held line.
+    echo "CAWCO-QUEUE wait build: $holder for $((now - held_since)) s"
+    waited=1
     next_notice=$((now + 60))
   fi
   sleep 5
 done
 printf '%s %s\n' "$(date +%s)" "$BUILD build-both.sh (pid $$)" >"$MACHINE_OWNER"
+[[ -z $waited ]] || echo "CAWCO-QUEUE held build"
 
 retire() {
   local directory=$1 lock=$2 size

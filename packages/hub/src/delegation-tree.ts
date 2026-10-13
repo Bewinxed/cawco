@@ -20,6 +20,8 @@ const ENDED_LIVE_MS = 3_600_000;
 
 export interface DelegateNode {
   cacheWarm: boolean;
+  /** While one of its checks waits for a shared machine slot: "queued for the Mac's build slot behind …", since when. */
+  checkQueue?: { words: string; since: string };
   children: DelegateNode[];
   instanceId: string;
   lastActivityAt: string;
@@ -43,6 +45,8 @@ export interface DelegationTreeDeps {
     lastActivityAt: Date;
     cacheWarm: boolean;
   };
+  /** While one of the item's checks waits for a shared machine slot (work-items `checkQueueOf`). */
+  checkQueue: (itemId: string) => { words: string; since: number } | null;
   db: Pick<
     DbShape,
     | "getInstancesByIds"
@@ -103,6 +107,7 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
   ): Promise<DelegateNode> => {
     const waiting = item.waitUntil && item.waitReason;
     const report = firstLine(item.result) ?? firstLine(item.error);
+    const checkQueue = deps.checkQueue(item.id);
     const plan = await deps.plan(item.instanceId).catch(() => undefined);
     const activity = row
       ? deps.activity(row)
@@ -122,6 +127,14 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
             waitingOn: {
               reason: item.waitReason as string,
               until: (item.waitUntil as Date).toISOString(),
+            },
+          }
+        : {}),
+      ...(checkQueue
+        ? {
+            checkQueue: {
+              words: checkQueue.words,
+              since: new Date(checkQueue.since).toISOString(),
             },
           }
         : {}),
