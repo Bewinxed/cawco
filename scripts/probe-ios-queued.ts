@@ -46,7 +46,15 @@
  *     reconnecting state (iOS: "Reconnecting to the hub…" or "Hub
  *     unreachable"; the web: "Hub connection lost"), and once the hub runs
  *     again (SIGCONT) reconnects and reads again, subscribing as in (a);
- *  7. waits for the turn's end and Claude Code's read, then relaunches the
+ *  7. (c) black-holes the agent's link to the hub alone (a proxy between the
+ *     two, its sockets left open), the hub, the web page and the app staying
+ *     connected, while a turn runs a tool and ends on a message. The agent
+ *     drops its silent link by its heartbeat's deadline, and once the link
+ *     is back sends again what the hub did not take (outbox.ts, "same hub").
+ *     The web page and the app draw the tool and the message with no reload,
+ *     and exactly as a fresh read draws them (the page reloaded, the app
+ *     relaunched cold): neither missing, neither twice;
+ *  8. waits for the turn's end and Claude Code's read, then relaunches the
  *     app cold as the control, and counts the rows that carry the
  *     message's words in its accessibility tree.
  *
@@ -142,15 +150,163 @@ const sh = async (script: string): Promise<string> => {
   return text;
 };
 
-/** A turn held open by a long reply to `HOLD`; anything else answered at once. */
-const respond = (seen: Seen): Reply =>
-  seen.last.includes(HOLD)
-    ? {
-        everyMs: 250,
-        words: Array.from({ length: STEPS }, (_, i) => `step ${i + 1}. `),
-      }
-    : { everyMs: 20, words: ["Done."] };
+/** The turn case (c) runs while the agent's link is down: a tool call, then a message. */
+const LINK = "LINKDROP";
+/** What the tool prints: its row carries it. */
+const LINK_MARK = "linkmark-tool-ran";
+/** The message the turn ends on. */
+const LINK_WORDS = "Relinked: this was written while the link was down.";
+
+/**
+ * A turn held open by a long reply to `HOLD`; the `LINKDROP` turn's tool
+ * call, slow, then its message once the tool's result is read; anything else
+ * answered at once.
+ */
+const respond = (seen: Seen): Reply => {
+  if (seen.last.includes(HOLD)) {
+    return {
+      everyMs: 250,
+      words: Array.from({ length: STEPS }, (_, i) => `step ${i + 1}. `),
+    };
+  }
+  if (seen.last.includes(LINK)) {
+    return {
+      everyMs: 1500,
+      words: [],
+      tool: {
+        name: "Bash",
+        input: { command: `echo ${LINK_MARK}`, description: "Print the mark" },
+      },
+    };
+  }
+  if (seen.tools && seen.all.includes(LINK)) {
+    return {
+      everyMs: 600,
+      words: LINK_WORDS.split(" ").map((word) => `${word} `),
+    };
+  }
+  return { everyMs: 20, words: ["Done."] };
+};
 const fleet = await scratchFleet({ name: "probe-ios-queued", respond });
+
+/**
+ * The agent's link to the hub, through a proxy the probe holds: `freeze`
+ * black-holes every byte both ways on every connection, the sockets left
+ * open (a network that went away: no FIN, no reset), new connections too;
+ * `thaw` ends the black-holed ones and lets new ones through. The hub, the
+ * web page and the app stay connected to each other throughout.
+ */
+const linkProxy = (hubPort: number) => {
+  /** Bytes owed one way: a socket's `write` takes what fits, `drain` says when more does. */
+  interface Way {
+    queue: Uint8Array[];
+    to?: import("bun").Socket<Pair>;
+  }
+  interface Pair {
+    client: import("bun").Socket<Pair>;
+    dead: boolean;
+    down: Way;
+    up: Way;
+  }
+  /** Every byte, in order: what a write did not take waits for the socket's drain. */
+  const flush = (way: Way): void => {
+    while (way.to && way.queue.length > 0) {
+      const [chunk] = way.queue;
+      const wrote = way.to.write(chunk);
+      if (wrote < chunk.length) {
+        way.queue[0] = chunk.subarray(Math.max(0, wrote));
+        return;
+      }
+      way.queue.shift();
+    }
+  };
+  const pass = (way: Way, chunk: Uint8Array): void => {
+    // Copied: the socket reuses the buffer it hands `data`.
+    way.queue.push(new Uint8Array(chunk));
+    flush(way);
+  };
+  let frozen = false;
+  const pairs = new Set<Pair>();
+  const server = Bun.listen<Pair>({
+    hostname: "127.0.0.1",
+    port: 0,
+    socket: {
+      open(client) {
+        const pair: Pair = {
+          client,
+          dead: frozen,
+          down: { queue: [], to: client },
+          up: { queue: [] },
+        };
+        client.data = pair;
+        pairs.add(pair);
+        Bun.connect<Pair>({
+          hostname: "127.0.0.1",
+          port: hubPort,
+          socket: {
+            open(upstream) {
+              upstream.data = pair;
+              pair.up.to = upstream;
+              flush(pair.up);
+            },
+            data(_upstream, chunk) {
+              if (!pair.dead) {
+                pass(pair.down, chunk);
+              }
+            },
+            drain() {
+              flush(pair.up);
+            },
+            close() {
+              if (!pair.dead) {
+                pair.client.end();
+              }
+            },
+            error() {
+              pair.client.end();
+            },
+          },
+        }).catch(() => client.end());
+      },
+      data(client, chunk) {
+        if (!client.data.dead) {
+          pass(client.data.up, chunk);
+        }
+      },
+      drain(client) {
+        flush(client.data.down);
+      },
+      close(client) {
+        pairs.delete(client.data);
+        client.data.up.to?.end();
+      },
+    },
+  });
+  return {
+    port: server.port,
+    freeze() {
+      frozen = true;
+      for (const pair of pairs) {
+        pair.dead = true;
+      }
+    },
+    thaw() {
+      frozen = false;
+      for (const pair of pairs) {
+        if (pair.dead) {
+          pair.client.end();
+          pair.up.to?.end();
+        }
+      }
+    },
+    stop() {
+      server.stop(true);
+    },
+  };
+};
+const proxy = linkProxy(Number(new URL(fleet.base).port));
+// The agent reaches the hub through it; everything else, directly.
+fleet.env.CAWCO_HUB_URL = `ws://127.0.0.1:${proxy.port}/ws`;
 
 interface Node {
   frame?: { x: number; y: number; width: number; height: number };
@@ -200,7 +356,7 @@ const listen = () => {
     [
       "bash",
       "-c",
-      `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "Transcript" OR category == "Ledger" OR category == "Hub")'`,
+      `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "Transcript" OR category == "Ledger" OR category == "Hub" OR category == "Restore")'`,
     ],
     { stdout: "pipe", stderr: "ignore" }
   );
@@ -218,6 +374,8 @@ const listen = () => {
           line.includes("page adopted") ||
           line.includes("hub socket") ||
           line.includes("status line: ") ||
+          line.includes("place ") ||
+          line.includes("catch-up ") ||
           (line.includes("stream: ") && !line.includes(" applied"))
         ) {
           heard.push({ at: Date.now(), line: line.replace(LOG_PREFIX, "") });
@@ -563,6 +721,7 @@ const teardown = () => {
       await fleet.killTree(dashboard.pid, "SIGTERM").catch(() => undefined);
     }
     await fleet.close();
+    proxy.stop();
     await fleet.clean(keep);
   })();
   return tornDown;
@@ -573,6 +732,40 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
     teardown().finally(() => process.exit(130));
   });
 }
+
+/** The last lines the scratch agent, hub and OpenCode server wrote, said on a failure. */
+const sayScratchLogs = async (): Promise<void> => {
+  const tail = (text: string, lines: number) =>
+    text
+      .split("\n")
+      .filter(Boolean)
+      .slice(-lines)
+      .map((line) => `    ${line.slice(0, 400)}`)
+      .join("\n");
+  const [agentSaid, hubSaid] = await Promise.all(
+    (["agent", "hub"] as const).map((role) => fleet.logs(role).catch(() => ""))
+  );
+  console.log(`  the scratch agent's last lines:\n${tail(agentSaid, 40)}`);
+  console.log(`  the scratch hub's last lines:\n${tail(hubSaid, 40)}`);
+  const opencodeLogs = join(fleet.home, ".local/share/opencode/log");
+  const files = (
+    await Array.fromAsync(
+      new Bun.Glob("*.log").scan({ cwd: opencodeLogs })
+    ).catch(() => [] as string[])
+  )
+    .sort()
+    .slice(-2);
+  const texts = await Promise.all(
+    files.map((file) =>
+      Bun.file(join(opencodeLogs, file))
+        .text()
+        .catch(() => "")
+    )
+  );
+  for (const [index, file] of files.entries()) {
+    console.log(`  OpenCode's ${file}, last lines:\n${tail(texts[index], 25)}`);
+  }
+};
 
 const banner = async () =>
   (await page
@@ -891,23 +1084,182 @@ try {
     console.log(`    web: +${said.at - t0} ms ${said.text}`);
   }
 
+  // ── (c) The agent's link drops, the hub stays up ───────────────────────
+  // A turn that runs a tool and ends on a message, all while the agent's
+  // link to the hub is black-holed: the agent notices by its heartbeat's
+  // deadline, reconnects once the link is back, and sends again what the hub
+  // did not take (outbox.ts). The web page and the app, connected to the
+  // hub throughout, draw both, once each, with no reload.
+  await until("the session idle", busy, (b) => !b, 120_000);
+  const linkLogs = async () => await fleet.logs("agent");
+  const silentBefore = (await linkLogs()).split("hub link silent").length;
+  const resentBefore = (await linkLogs()).split("frame(s) again").length;
+  await fleet.send(sessionId, `${LINK}: run the mark command, then say so.`);
+  await until(
+    "the mock asked for the tool call",
+    () => fleet.seen.some((seen) => seen.last.includes(LINK)),
+    Boolean,
+    60_000
+  );
+  proxy.freeze();
+  const linkDownAt = Date.now();
+  console.log("  … the agent's link to the hub black-holed");
+  await until(
+    "the mock asked for the message after the tool's result",
+    () =>
+      fleet.seen.some(
+        (seen) =>
+          seen.tools && seen.all.includes(LINK) && !seen.last.includes(LINK)
+      ),
+    Boolean,
+    90_000
+  );
+  // The message streams for a few seconds more, the link still down.
+  await pause(LINK_WORDS.split(" ").length * 600 + 3000);
+  const noticed = await until(
+    "the agent dropping its silent link",
+    async () =>
+      (await linkLogs()).split("hub link silent").length > silentBefore,
+    Boolean,
+    60_000
+  ).catch(() => false);
+  check(
+    "(c) agent: its silent link is dropped as dead",
+    noticed === true,
+    `within ${Date.now() - linkDownAt} ms of the link going`
+  );
+  proxy.thaw();
+  const thawedLinkAt = Date.now();
+  console.log("  … the agent's link let through again");
+  const resent = await until(
+    "the agent sending again what the hub did not take",
+    async () =>
+      (await linkLogs())
+        .split("\n")
+        .filter((line) => line.includes("frame(s) again"))
+        .slice(resentBefore - 1)
+        .find((line) => line.includes(sessionId.slice(0, 8))),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  check(
+    "(c) agent: what the hub did not take is sent again, to the same hub",
+    resent?.includes("same hub") === true,
+    resent ?? "no outbox line"
+  );
+  const count = (text: string, part: string) => text.split(part).length - 1;
+  const webDrawn = await until(
+    "the web drawing the tool and the message",
+    async () => {
+      const text = await listingText();
+      return { mark: count(text, LINK_MARK), words: count(text, LINK_WORDS) };
+    },
+    (drawn) => drawn.mark > 0 && drawn.words > 0,
+    60_000
+  ).catch(() => ({ mark: 0, words: 0 }));
+  const iosDrawn = await until(
+    "the app drawing the tool and the message",
+    async () => {
+      const labels = (await tree()).map((n) => n.label ?? "");
+      return {
+        mark: labels.filter((label) => label.includes(LINK_MARK)).length,
+        words: labels.filter((label) => label.includes("Relinked")).length,
+      };
+    },
+    (drawn) => drawn.mark > 0 && drawn.words > 0,
+    60_000
+  ).catch(() => ({ mark: 0, words: 0 }));
+  console.log(
+    `  drawn ${Date.now() - thawedLinkAt} ms after the link was back: web ${JSON.stringify(webDrawn)}, app ${JSON.stringify(iosDrawn)}`
+  );
+  // Read whole again, the web page reloaded: what it drew live must be what
+  // a fresh read draws, so neither is missing nor twice.
+  await page?.reload({ waitUntil: "domcontentloaded" });
+  const webRead = await until(
+    "the reloaded web page drawing the turn",
+    async () => {
+      const text = await listingText();
+      return { mark: count(text, LINK_MARK), words: count(text, LINK_WORDS) };
+    },
+    (drawn) => drawn.words > 0,
+    60_000
+  ).catch(() => ({ mark: 0, words: 0 }));
+  check(
+    "(c) web: the tool and the message are drawn without a reload, once each",
+    webDrawn.mark > 0 &&
+      webDrawn.words === 1 &&
+      webDrawn.mark === webRead.mark &&
+      webDrawn.words === webRead.words,
+    `live ${JSON.stringify(webDrawn)}, read whole after a reload ${JSON.stringify(webRead)}`
+  );
+
   // ── The control: a cold launch reads it whole ──────────────────────────
   await sh(`xcrun simctl terminate ${udid} dev.cawco.app`);
+  const coldAt = Date.now();
   await launch();
+  const iosRead = await until(
+    "the link-drop turn on screen after a cold launch",
+    async () => {
+      const labels = (await tree()).map((n) => n.label ?? "");
+      return {
+        mark: labels.filter((label) => label.includes(LINK_MARK)).length,
+        words: labels.filter((label) => label.includes("Relinked")).length,
+      };
+    },
+    (drawn) => drawn.words > 0,
+    120_000
+  ).catch(() => ({ mark: 0, words: 0 }));
+  check(
+    "(c) iOS: the tool and the message were drawn without a reload, once each",
+    iosDrawn.mark > 0 &&
+      iosDrawn.words > 0 &&
+      iosDrawn.mark === iosRead.mark &&
+      iosDrawn.words === iosRead.words,
+    `live ${JSON.stringify(iosDrawn)}, read whole after a cold launch ${JSON.stringify(iosRead)}`
+  );
+  // The field capitalises a message's first word as it is typed.
+  const carrying = async () =>
+    (await tree()).filter(
+      (n) => n.label?.toLowerCase().includes(WORDS) === true
+    );
   const shown = await until(
     "the message's words on screen after a cold launch",
-    // The field capitalises a message's first word as it is typed.
-    async () =>
-      (await tree()).filter(
-        (n) => n.label?.toLowerCase().includes(WORDS) === true
-      ),
+    carrying,
     (nodes) => nodes.length > 0,
-    120_000
-  );
+    60_000
+  ).catch(() => []);
+  // Where the view put the reader: a place restored above the latest rows
+  // leaves the message drawn but off screen, which the accessibility tree
+  // does not list. Then the dock's Jump to latest is tapped, and looked again.
+  const restored = heard
+    .filter((h) => h.at >= coldAt && h.line.includes("place "))
+    .map((h) => h.line);
+  let afterJump: Node[] = [];
+  if (shown.length === 0) {
+    const jump = (await tree()).find((n) => n.label === "Jump to latest");
+    if (jump) {
+      await tapNode(jump);
+      afterJump = await until(
+        "the message's words on screen after Jump to latest",
+        carrying,
+        (nodes) => nodes.length > 0,
+        30_000
+      ).catch(() => []);
+    }
+  }
   check(
-    "cold launch: the message's words are drawn",
+    "cold launch: the message's words are drawn where the reader lands",
     shown.length >= 1,
-    `${shown.length} element(s) carry them`
+    shown.length >= 1
+      ? `${shown.length} element(s) carry them`
+      : `none on screen; after Jump to latest ${afterJump.length}; the place restored: ${restored.join(" / ") || "nothing said"}; the latest labels: ${(
+          await tree().catch(() => [])
+        )
+          .map((n) => n.label ?? "")
+          .filter(Boolean)
+          .slice(-12)
+          .map((label) => label.slice(0, 60))
+          .join(" | ")}`
   );
 } catch (error) {
   console.log(`FAIL ${error instanceof Error ? error.message : String(error)}`);
@@ -936,6 +1288,11 @@ try {
     );
   }
 } finally {
+  // Any failure: the scratch services' own last words, read before the
+  // sandbox they are in is deleted.
+  if (failures > 0) {
+    await sayScratchLogs();
+  }
   await teardown();
 }
 console.log(failures === 0 ? "ALL PASS" : `${failures} FAILED`);

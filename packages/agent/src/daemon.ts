@@ -173,6 +173,12 @@ import {
 
 const DEFAULT_HUB_URL = `ws://localhost:${CAWCO_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
+/**
+ * How long after a heartbeat the hub's link may stay silent before it is
+ * dropped as dead (the hub answers every beat). Our choice: a whole beat's
+ * interval, so a hub that is slow under load is not taken for gone.
+ */
+const HUB_SILENT_MS = 15_000;
 const USAGE_INTERVAL = Duration.seconds(60);
 const MEMORY_LOG_INTERVAL = Duration.millis(MEMORY_LOG_INTERVAL_MS);
 const USAGE_FULL_REBUILD_MS = 30 * 60 * 1000;
@@ -1163,6 +1169,8 @@ const attach = (
       "close",
       () => {
         launchAsks.disconnected(askHub);
+        // Frames wait in the outbox for the next register.
+        supervisor.linkDown();
         supervisor.resetStopSequence();
         clearTimeout(registrationDeadline);
         // A new epoch first, so the aborted attempt's failure is for an epoch
@@ -1502,9 +1510,6 @@ const attach = (
     // see one to answer. The register is already on the wire above and the
     // socket preserves that order, so the hub still reads the register first.
     supervisor.replayOpenAsks();
-    // And each session's reply so far: what streamed while no hub listened
-    // was dropped, and a hub that started since knows only what comes next.
-    supervisor.replayStreams();
     supervisor.replaySessionAddresses();
     supervisor.replaySpawnFailures();
     /**
@@ -1860,6 +1865,10 @@ const attach = (
             .addressContract === true
         );
         awaitingRegisterAck = false;
+        // What each session is owed goes first, ahead of anything this ack
+        // sets off: every frame the hub has not taken, then each running
+        // reply so far (outbox.ts).
+        supervisor.linkUp(envelope.payload);
         takeSessionLimits(
           (envelope.payload as RegisterAckPayload).sessionLimits
         );
@@ -1942,6 +1951,7 @@ const attach = (
           | undefined;
         supervisor.keepAwake(beat?.keepAwake);
         takeSessionLimits(beat?.sessionLimits);
+        supervisor.acknowledged(beat);
         return;
       }
       if (!waitsForCustody(envelope)) {
@@ -1952,35 +1962,61 @@ const attach = (
     // per turn of the loop; a message too long for one frame arrives as parts.
     const line = clientLine(socket);
     line.listen((message) => onEnvelope(message as Envelope));
-    socket.addEventListener("message", (event) =>
-      line.receive(String(event.data))
-    );
+    // When anything last came from the hub: what the heartbeat's deadline reads.
+    let lastHeard = Date.now();
+    socket.addEventListener("message", (event) => {
+      lastHeard = Date.now();
+      line.receive(String(event.data));
+    });
 
     yield* Effect.forkScoped(
       Effect.repeat(
-        Effect.promise(async () =>
+        Effect.promise(async () => {
+          // `instances` rides every beat (not just register) so the hub can
+          // reconcile session truth continuously — see HeartbeatPayload.
+          // `binaryUpdate` rides it for the same reason: it is a live fact
+          // that changes without anybody reconnecting.
+          const beat = {
+            at: Date.now(),
+            sessionAddresses: supervisor.sessionAddresses,
+            instances: supervisor.instanceIds,
+            custody: await readCustody(supervisor.stopSequence, [
+              ...supervisor.custodyInstanceIds,
+              ...undecided.keys(),
+            ]),
+            ...(changedPiAuth() ? { harnesses: reportedHarnesses } : {}),
+            ...(latestBinaryUpdate()
+              ? { binaryUpdate: latestBinaryUpdate() }
+              : {}),
+          } satisfies HeartbeatPayload;
+          if (socket.readyState !== WebSocket.OPEN) {
+            return;
+          }
           send(socket, {
             verb: "heartbeat",
             machineId: identity.machineId,
-            // `instances` rides every beat (not just register) so the hub can
-            // reconcile session truth continuously — see HeartbeatPayload.
-            // `binaryUpdate` rides it for the same reason: it is a live fact
-            // that changes without anybody reconnecting.
-            payload: {
-              at: Date.now(),
-              sessionAddresses: supervisor.sessionAddresses,
-              instances: supervisor.instanceIds,
-              custody: await readCustody(supervisor.stopSequence, [
-                ...supervisor.custodyInstanceIds,
-                ...undecided.keys(),
-              ]),
-              ...(changedPiAuth() ? { harnesses: reportedHarnesses } : {}),
-              ...(latestBinaryUpdate()
-                ? { binaryUpdate: latestBinaryUpdate() }
-                : {}),
-            } satisfies HeartbeatPayload,
-          })
-        ),
+            payload: beat,
+          });
+          // THE LINK'S DEADLINE. The hub answers every beat. A socket on a
+          // network that went away (Wi-Fi, a laptop that slept) reads open
+          // and delivers nothing, for as long as the system lets it: with
+          // nothing heard {@link HUB_SILENT_MS} after a beat, it is dropped
+          // as dead, the reconnect below runs, and the outbox sends again
+          // what the hub did not take.
+          const asked = Date.now();
+          setTimeout(() => {
+            if (lastHeard >= asked || socket.readyState !== WebSocket.OPEN) {
+              return;
+            }
+            Effect.runFork(
+              Effect.logWarning(
+                `hub link silent ${Date.now() - asked} ms after a heartbeat: dropping it as dead`
+              )
+            );
+            // Not `close()`: its handshake waits on the peer that went silent.
+            (socket as WebSocket & { terminate: () => void }).terminate();
+          }, HUB_SILENT_MS);
+        }),
         Schedule.spaced(HEARTBEAT_INTERVAL)
       )
     );

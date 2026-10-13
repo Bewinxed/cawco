@@ -56,6 +56,7 @@ import {
   CONTROL_WORKSPACE_AT,
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
+  type DeliveryMark,
   FLEET_STATUS,
   FLEET_SYNC,
   GENERATE_IMAGE,
@@ -74,6 +75,7 @@ import {
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
   RESOLVE_PERMISSION,
+  readDelivered,
   readIngested,
   repoPath,
   resumeCursor,
@@ -117,6 +119,7 @@ import { withKeepers } from "./keepers";
 import { isMachineAgent } from "./machine-agent";
 import { prepareFleetMcp } from "./mcp-launcher";
 import { gaugeGroup, gaugeTables } from "./memory";
+import { Outbox } from "./outbox";
 import { startPreview, stopPreview, stopPreviews } from "./preview";
 import { parseProcId, type SESSION_PROC_KINDS } from "./proc-id";
 import { type PromptWriteNotice, withPromptWrites } from "./prompt-writes";
@@ -236,7 +239,10 @@ export type FrameSink = (
       >
     | DaemonPermissionRequestFrame
   ) &
-    Partial<FrameProvenance> & { processGeneration?: string }
+    Partial<FrameProvenance> & {
+      processGeneration?: string;
+      sent?: DeliveryMark;
+    }
 ) => boolean;
 
 /**
@@ -879,14 +885,43 @@ export class SessionSupervisor {
   readonly #streams = new StreamsSoFar();
 
   /**
-   * Says each session's reply so far again — called by the daemon after
-   * register. What streamed while no hub listened was dropped, and a hub that
-   * started since would draw a running reply from its middle.
+   * Every frame a session writes, kept until the hub says it took it
+   * ({@link Outbox}). Handed to whatever socket {@link sink} is now.
    */
-  replayStreams(): void {
-    for (const frame of this.#streams.frames()) {
-      this.sink({ kind: "frame", ...frame });
-    }
+  readonly #outbox = new Outbox(
+    (frame) => this.sink(frame),
+    (line) => console.info(`[agent] ${line}`)
+  );
+
+  /**
+   * A register was acknowledged — called by the daemon from its ack, ahead
+   * of anything that ack sets off. What each session is owed goes again
+   * ({@link Outbox.linkUp}), then each session's reply so far: what streamed
+   * while no hub listened was dropped, and a hub that started since would
+   * draw a running reply from its middle.
+   */
+  linkUp(ack: unknown): void {
+    this.#outbox.linkUp(
+      {
+        delivered: readDelivered(ack),
+        hubEpoch: (ack as { hubEpoch?: string } | undefined)?.hubEpoch,
+      },
+      () => {
+        for (const frame of this.#streams.frames()) {
+          this.sink({ kind: "frame", ...frame });
+        }
+      }
+    );
+  }
+
+  /** The hub socket is gone: frames wait in the outbox for the next register. */
+  linkDown(): void {
+    this.#outbox.linkDown();
+  }
+
+  /** A heartbeat's ack: what the hub took of each session, which the outbox lets go. */
+  acknowledged(ack: unknown): void {
+    this.#outbox.acknowledged(readDelivered(ack));
   }
 
   /** Re-sinks every unresolved ask, and every ask's end the hub missed — called by the daemon after register. */
@@ -2449,7 +2484,9 @@ export class SessionSupervisor {
         if (alreadyIngested(this.#ingested.get(instanceId), src)) {
           return;
         }
-        this.sink({
+        // Through the outbox: kept until the hub says it took it, and sent
+        // again if the link drops first (outbox.ts).
+        this.#outbox.frame({
           kind: "frame",
           instanceId,
           harness: adapter.kind,

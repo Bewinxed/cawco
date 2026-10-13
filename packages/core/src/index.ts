@@ -471,6 +471,11 @@ export interface HeartbeatPayload {
  * what it held; it puts none of them to sleep.
  */
 export interface HeartbeatAckPayload {
+  /**
+   * The hub's delivery mark for each instance the beat names
+   * (stream.ts `DeliveryMark`): what the agent may stop keeping.
+   */
+  delivered: Record<string, import("./stream").DeliveryMark>;
   keepAwake: string[];
   ok: true;
   /**

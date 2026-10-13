@@ -21,6 +21,7 @@
  */
 
 import {
+  alreadyDelivered,
   alreadyIngested,
   CONTROL_INTERRUPT,
   CONTROL_SET_EFFORT,
@@ -30,6 +31,7 @@ import {
   type CommandEnvelope,
   type CommandKind,
   type ControlPayload,
+  type DeliveryMark,
   type Envelope,
   type FramePayload,
   type FrameProvenance,
@@ -145,11 +147,26 @@ export interface StreamHubShape {
    * A frame with no provenance is always admitted and advances nothing: an
    * opencode session, a pi session and every agent that predates the field are
    * unchanged, and their frames are not deduped by a mark that does not exist.
+   *
+   * THE DELIVERY LEDGER beside it (core stream.ts `DeliveryMark`): a frame
+   * whose `sent` stamp this hub already took from the same agent process is
+   * refused too, so a frame an agent sends again after its link came back is
+   * drawn once.
    */
   readonly admitFrame: (
     instanceId: string,
-    provenance: FrameProvenance | undefined
+    provenance: FrameProvenance | undefined,
+    sent: DeliveryMark | undefined
   ) => boolean;
+  /**
+   * The hub's delivery mark for each instance named, for the register's and
+   * every heartbeat's ack: the agent sends again what it has past it, and
+   * lets go of what it covers. An instance this hub took nothing of from that
+   * agent process is absent.
+   */
+  readonly deliveredFor: (
+    instanceIds: readonly string[]
+  ) => Record<string, DeliveryMark>;
   /** A dashboard socket is gone: it follows nothing and awaits nothing. */
   readonly dropSocket: (socketId: string) => void;
   /** How many sockets follow a session — for tests and for reasoning about fan-out. */
@@ -246,6 +263,12 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
    * outcome §7 exists to forbid. One epoch string and one integer per instance.
    */
   const ledger = new Map<string, IngestMark>();
+  /**
+   * THE DELIVERY LEDGER: instanceId -> the last frame this hub took from the
+   * agent process now sending it (core stream.ts `DeliveryMark`). A frame
+   * from another agent process (another epoch) replaces it.
+   */
+  const delivered = new Map<string, DeliveryMark>();
 
   /**
    * Drops what nothing is waiting for any more: commands whose reply never
@@ -748,8 +771,15 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
    */
   const admitFrame = (
     instanceId: string,
-    provenance: FrameProvenance | undefined
+    provenance: FrameProvenance | undefined,
+    sent: DeliveryMark | undefined
   ): boolean => {
+    if (alreadyDelivered(delivered.get(instanceId), sent)) {
+      return false;
+    }
+    if (sent) {
+      delivered.set(instanceId, { ...sent });
+    }
     if (!provenance) {
       ledger.delete(instanceId);
       return true;
@@ -762,6 +792,19 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       srcSeq: provenance.srcSeq,
     });
     return true;
+  };
+
+  const deliveredFor = (
+    instanceIds: readonly string[]
+  ): Record<string, DeliveryMark> => {
+    const marks: Record<string, DeliveryMark> = {};
+    for (const instanceId of instanceIds) {
+      const mark = delivered.get(instanceId);
+      if (mark) {
+        marks[instanceId] = { ...mark };
+      }
+    }
+    return marks;
   };
 
   const ingestedFor = (
@@ -781,6 +824,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     sequence,
     admitFrame,
     ingestedFor,
+    deliveredFor,
     handleClientMessage,
     settleCommand,
     dropSocket,

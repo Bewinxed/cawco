@@ -224,9 +224,35 @@ export interface IngestMark {
   srcSeq: number;
 }
 
+/**
+ * THE DELIVERY LEDGER: an agent process's own count of the frames it has
+ * sent one session (`epoch`, random at the agent's start; `seq`, 1 up), as
+ * a frame's `sent` stamp and as the hub's mark of the last one it took.
+ *
+ * The ingest ledger ({@link IngestMark}) counts sessiond lines, which a
+ * returning agent replays from sessiond's ring; it says nothing of a frame
+ * the agent made itself, or of a harness with no ring behind it (opencode).
+ * This one counts every frame the agent sends, so a link that dropped while
+ * both ends stayed up loses none: the agent keeps what the hub has not
+ * acknowledged (agent outbox.ts) and sends it again behind the mark the hub
+ * hands back, and the hub refuses what it already took
+ * ({@link alreadyDelivered}).
+ */
+export interface DeliveryMark {
+  epoch: string;
+  seq: number;
+}
+
 /** `register`'s ack, with the ledger the returning agent reattaches against. */
 export interface RegisterAckPayload {
   addressContract?: true;
+  /**
+   * The hub's delivery mark for each instance the register names
+   * ({@link DeliveryMark}): the agent sends again what it has past it.
+   * Every heartbeat's ack carries them again, and the agent lets go of what
+   * they cover.
+   */
+  delivered?: Record<string, DeliveryMark>;
   /**
    * This hub process, random at its start: an agent that last saw another
    * epoch knows the hub restarted since, and that every connection a harness
@@ -312,6 +338,53 @@ export const readProvenance = (
   }
   return undefined;
 };
+
+/** A frame's delivery stamp ({@link DeliveryMark}), read off its payload; malformed reads as absent. */
+export const readSent = (message: unknown): DeliveryMark | undefined => {
+  const sent = record(record(record(message)?.payload)?.sent);
+  const epoch = sent?.epoch;
+  const seq = sent?.seq;
+  return typeof epoch === "string" &&
+    epoch.length > 0 &&
+    typeof seq === "number" &&
+    Number.isInteger(seq) &&
+    seq > 0
+    ? { epoch, seq }
+    : undefined;
+};
+
+/** The delivery marks off a register or heartbeat ack, by instance; malformed entries are dropped. */
+export const readDelivered = (
+  payload: unknown
+): Record<string, DeliveryMark> => {
+  const marks = record(record(payload)?.delivered) ?? {};
+  const read: Record<string, DeliveryMark> = {};
+  for (const [instanceId, value] of Object.entries(marks)) {
+    const mark = record(value);
+    if (
+      typeof mark?.epoch === "string" &&
+      typeof mark.seq === "number" &&
+      Number.isInteger(mark.seq)
+    ) {
+      read[instanceId] = { epoch: mark.epoch, seq: mark.seq };
+    }
+  }
+  return read;
+};
+
+/**
+ * AT MOST ONCE, per (instanceId, agent epoch, seq): whether the hub already
+ * took this frame. Asked by the hub before sequencing, beside
+ * {@link alreadyIngested}.
+ */
+export const alreadyDelivered = (
+  mark: DeliveryMark | undefined,
+  sent: DeliveryMark | undefined
+): boolean =>
+  sent !== undefined &&
+  mark !== undefined &&
+  mark.epoch === sent.epoch &&
+  sent.seq <= mark.seq;
 
 /**
  * The ledger off a register ack. `undefined` when the hub said nothing — an

@@ -877,6 +877,17 @@ export const MESSAGES_HELD = "held";
  */
 export const STREAM_SO_FAR = "stream_so_far";
 
+/**
+ * The `system` subtype an agent sends a session ahead of what it sends again
+ * after a link came back, when it could not keep everything the hub had not
+ * acknowledged (agent outbox.ts `OUTBOX_BYTES`): frames between the hub's
+ * mark and what it kept are gone. The hub reads the session's transcript
+ * from its machine again, so what was stored of them is drawn; what only
+ * those frames said (a turn's cost, a report they carried) is lost, said
+ * here once. Never stored, and nothing else reads it.
+ */
+export const FRAMES_LOST = "frames_lost";
+
 export interface NeutralStreamMessage {
   event:
     | {

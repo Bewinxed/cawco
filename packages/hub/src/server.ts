@@ -14,6 +14,7 @@ import type {
   ContinueStep,
   ControlPayload,
   DelegateEvent,
+  DeliveryMark,
   Envelope,
   ErrorFrame,
   FleetConfig,
@@ -163,6 +164,7 @@ import {
   estimateTokens,
   FLEET_STATUS,
   FLEET_SYNC,
+  FRAMES_LOST,
   FRESH_START,
   GENERATE_IMAGE,
   HARNESSES,
@@ -219,6 +221,7 @@ import {
   type Relaunch,
   RULE_TEMPLATES,
   readProvenance,
+  readSent,
   rebalanceWords,
   relaunchOf,
   reportMarker,
@@ -1156,6 +1159,7 @@ const HUB_EPOCH = crypto.randomUUID();
 const registerAck = (
   envelope: Envelope,
   ingested: Record<string, IngestMark>,
+  delivered: Record<string, DeliveryMark>,
   unknownAccounts: string[] | undefined,
   sessions: CarrySessionRequest[],
   machineCredential: string,
@@ -1166,6 +1170,7 @@ const registerAck = (
   payload: {
     ok: true,
     ingested,
+    delivered,
     addressContract: true,
     hubEpoch: HUB_EPOCH,
     machineCredential,
@@ -20526,6 +20531,9 @@ export const createServer = (
                 registerAck(
                   message,
                   streams.ingestedFor(reattaching),
+                  // What this hub took of each session the agent holds: it
+                  // sends again what it kept past each mark.
+                  streams.deliveredFor(peekInstances(message.payload)),
                   unknownAccountsOf(message.machineId, message.payload),
                   claudeSessionsOn(message.machineId),
                   // This connection's credential for the hub's git remote;
@@ -20756,6 +20764,9 @@ export const createServer = (
                 ...ack(message),
                 payload: {
                   ok: true,
+                  // What this hub took of each session: the agent lets go
+                  // of what it kept to send again.
+                  delivered: streams.deliveredFor(beatIds),
                   keepAwake: keptWarm(message.machineId, beatIds),
                   sessionLimits: db.sessionLimits(),
                 } satisfies HeartbeatAckPayload,
@@ -21105,6 +21116,22 @@ export const createServer = (
                   }
                   break;
                 }
+                // Frames the agent could not keep while its link was down
+                // (FRAMES_LOST): the transcript is read from its machine
+                // again, so what was stored of them is drawn.
+                if (
+                  frame.message.type === "system" &&
+                  frame.message.subtype === FRAMES_LOST
+                ) {
+                  const [row] = db.getInstancesByIds([message.instanceId]);
+                  if (row?.machineId === message.machineId) {
+                    console.warn(
+                      `[hub] ${row.id}: ${frame.message.content ?? "frames were lost while its machine's link was down"}; its transcript is read again`
+                    );
+                    transcripts.reread(row.id);
+                  }
+                  break;
+                }
               }
               // THE INGEST LEDGER (design §7): a line becomes a hub frame AT MOST
               // ONCE per (instanceId, epoch, srcSeq). A returning agent replays
@@ -21117,7 +21144,11 @@ export const createServer = (
               if (
                 kind === "frame" &&
                 message.instanceId &&
-                !streams.admitFrame(message.instanceId, readProvenance(message))
+                !streams.admitFrame(
+                  message.instanceId,
+                  readProvenance(message),
+                  readSent(message)
+                )
               ) {
                 break;
               }
