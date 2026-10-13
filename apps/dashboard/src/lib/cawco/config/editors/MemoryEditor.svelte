@@ -5,7 +5,7 @@
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
-  import { toast } from "#lib/cawco/toasts.js";
+  import RowFault from "#lib/cawco/RowFault.svelte";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import MarkdownEditor from "#lib/components/features/MarkdownEditor.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -19,7 +19,6 @@
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
   import { cawco, type Machine } from "../../client.svelte";
-  import { confirm } from "../../confirm.svelte";
   import {
     adoptMemory,
     adoptMemoryDoc,
@@ -40,6 +39,7 @@
   import { machineOs } from "../../machine";
   import { orderMachines } from "../../rail.svelte";
   import { drafts, keepDraft } from "../drafts.svelte";
+  import { EditorQuestion } from "../EditorFooter.svelte";
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
   import {
@@ -50,6 +50,7 @@
     memoryStateOf,
   } from "../memory";
   import PickerChip from "../PickerChip.svelte";
+  import RolloutChip from "../RolloutChip.svelte";
   import { configStore, upsert } from "../store.svelte";
 
   /**
@@ -103,6 +104,8 @@
   /** The save running is "Save mine anyway", over a conflict. */
   let forcing = $state(false);
   let saveFailed = $state(false);
+  /** Why the last save was refused (not a conflict): said under the title. */
+  let saveProblem = $state<string | null>(null);
   let deleting = $state(false);
   let deleteFailed = $state(false);
   let conflict = $state<FleetMemoryRow | null>(null);
@@ -149,17 +152,18 @@
     busy = true;
     forcing = conflict !== null && expectedHash === conflict.hash;
     saveFailed = false;
+    saveProblem = null;
     try {
       const written = await write(expectedHash);
       saveFailed = !written;
       if (written) {
+        // Where it lands is the rollout chip's to say, beside Save.
         conflict = null;
         text = saved?.content ?? text;
-        toast.success(`${fileLabel(path)} is on its way to every machine.`);
       }
     } catch (caught) {
       saveFailed = true;
-      toast.error(message(caught));
+      saveProblem = message(caught);
     } finally {
       busy = false;
       forcing = false;
@@ -186,7 +190,7 @@
     if (!fleet) {
       return;
     }
-    await confirm({
+    await question.ask({
       title: `Delete ${fileLabel(path)}?`,
       body: "It is taken off every machine that still has CawCo's copy. A machine's own edited copy is left where it is.",
       confirmLabel: "Delete everywhere",
@@ -246,7 +250,9 @@
   let contents = $state<Record<number, string>>({});
   let reading = $state<Record<number, boolean>>({});
   let restoring = $state<number | null>(null);
-  let restoreFailed = $state<number | null>(null);
+  let restoreFailed = $state<{ id: number; reason: string } | null>(null);
+  /** Why a version could not be read, by version: said under its row. */
+  let versionProblem = $state<Record<number, string>>({});
   const visibleVersions = $derived(
     allVersions ? (versions ?? []) : (versions ?? []).slice(0, LATEST)
   );
@@ -283,11 +289,12 @@
       return;
     }
     reading[row.id] = true;
+    delete versionProblem[row.id];
     try {
       contents[row.id] = (await memoryVersion(row.id)).content;
     } catch (caught) {
       shown = null;
-      toast.error(message(caught));
+      versionProblem[row.id] = message(caught);
     } finally {
       delete reading[row.id];
     }
@@ -297,15 +304,14 @@
     restoring = row.id;
     restoreFailed = null;
     try {
+      // The contents are it now, and the rollout chip says where it lands.
       const landed = await restoreMemory(row.id);
       stored(landed);
       text = landed.content;
       shown = null;
-      toast.success("Restored — every machine gets it.");
       await loadHistory();
     } catch (caught) {
-      restoreFailed = row.id;
-      toast.error(message(caught));
+      restoreFailed = { id: row.id, reason: message(caught) };
     } finally {
       restoring = null;
     }
@@ -318,8 +324,8 @@
   let unread = $state<Record<string, string>>({});
   /** Per machine, the settle whose request is out. */
   let settling = $state<Record<string, "adopt" | "push">>({});
-  /** Per machine, the last settle failed: its button shows no check. */
-  let settleFailed = $state<Record<string, boolean>>({});
+  /** Per machine, why its last settle was refused: said under its row. */
+  let settleFailed = $state<Record<string, string>>({});
 
   const applied = $derived(
     machines.filter((row) => memoryStateOf(row, path)?.state === "applied")
@@ -359,17 +365,14 @@
       const landed = main
         ? await adoptMemory(machine.machineId)
         : await adoptMemoryDoc(machine.machineId, path);
+      // Its row turns "In sync" on the machine's next report.
       stored(landed);
       text = landed.content;
       comparing = null;
       delete copies[machine.machineId];
-      toast.success(
-        `The fleet now keeps ${machineLabel(machine.hostname)}'s copy.`
-      );
       await loadHistory();
     } catch (caught) {
-      settleFailed[machine.machineId] = true;
-      toast.error(message(caught));
+      settleFailed[machine.machineId] = message(caught);
     } finally {
       delete settling[machine.machineId];
     }
@@ -379,15 +382,12 @@
     settling[machine.machineId] = "push";
     delete settleFailed[machine.machineId];
     try {
+      // Its row turns "In sync" on the machine's next report.
       await pushMemory(machine.machineId, main ? undefined : path);
       comparing = null;
       delete copies[machine.machineId];
-      toast.success(
-        `${machineLabel(machine.hostname)} takes the fleet's copy.`
-      );
     } catch (caught) {
-      settleFailed[machine.machineId] = true;
-      toast.error(message(caught));
+      settleFailed[machine.machineId] = message(caught);
     } finally {
       delete settling[machine.machineId];
     }
@@ -398,6 +398,9 @@
     failed: "Kept its own copy",
     removed: "Taken off",
   };
+
+  /** Delete asks in this editor's own footer. */
+  const question = new EditorQuestion();
 </script>
 
 <svelte:window onkeydown={keydown} />
@@ -410,11 +413,22 @@
   oncancel={cancel}
   ondelete={saved ? askRemove : undefined}
   onsubmit={() => save()}
+  {question}
   saveLabel="Save"
   saving={busy && !forcing}
   settling={!drawn || (versions === null && historyError === null)}
   title={fileLabel(path)}
 >
+  {#snippet result()}
+    {#if saved}
+      <RolloutChip
+        kind={main ? "memory" : "memoryDocs"}
+        {machines}
+        name={path}
+        what={fileLabel(path)}
+      />
+    {/if}
+  {/snippet}
   {#snippet header()}
     <div class="switch">
       <PickerChip
@@ -447,6 +461,7 @@
         >
       {/if}
     </p>
+    <RowFault again={() => save()} reason={saveProblem} />
   {/snippet}
 
   <EditorSection hue={HUE} icon={IconDocument} label="Contents">
@@ -560,7 +575,7 @@
                         {/key}
                         <Button
                           class="self-start"
-                          failed={restoreFailed === row.id}
+                          failed={restoreFailed?.id === row.id}
                           label="Restore this version"
                           onclick={() => restore(row)}
                           pending={restoring === row.id}
@@ -568,11 +583,20 @@
                           size="sm"
                           variant="outline"
                         />
+                        <RowFault
+                          reason={restoreFailed?.id === row.id
+                            ? restoreFailed.reason
+                            : null}
+                        />
                       </div>
                     {/if}
                   </div>
                 </div>
               {/if}
+              <RowFault
+                again={() => openVersion(row)}
+                reason={versionProblem[row.id]}
+              />
             </li>
           {/each}
         </ul>
@@ -643,7 +667,7 @@
                   {/if}
                   <Button
                     disabled={!online || settle === "push"}
-                    failed={settleFailed[machine.machineId] === true}
+                    failed={machine.machineId in settleFailed}
                     label="Adopt this copy"
                     onclick={() => adopt(machine)}
                     pending={settle === "adopt"}
@@ -654,7 +678,7 @@
                   {#if drifted}
                     <Button
                       disabled={!online || settle === "adopt"}
-                      failed={settleFailed[machine.machineId] === true}
+                      failed={machine.machineId in settleFailed}
                       label="Send ours"
                       onclick={() => overwrite(machine)}
                       pending={settle === "push"}
@@ -666,6 +690,7 @@
                 </span>
               {/if}
             </div>
+            <RowFault reason={settleFailed[machine.machineId]} />
             {#if drifted && item?.detail}
               <pre class="said" in:unfold out:unfold>{item.detail}</pre>
             {/if}

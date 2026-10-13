@@ -2,19 +2,22 @@
   import { onMount } from "svelte";
   import { completeMcpSignIn } from "#lib/cawco/fleet.js";
   /**
-   * Where a provider's sign-in comes back to. cawco.dev/oauth/callback brings
-   * the person here with a one-time code; the hub exchanges it, and the person lands on the MCP
-   * servers with the answer toasted. Nothing here holds a credential: the code
-   * is spent once, by the hub, with the verifier only the hub has.
+   * Where a provider's sign-in comes back to, in the tab the sign-in opened
+   * (fleet.ts `signInToMcp`). cawco.dev/oauth/callback brings the person
+   * here with a one-time code; the hub exchanges it, and the tab closes: the
+   * dashboard that asked turns its row on the hub's word. Nothing here holds
+   * a credential: the code is spent once, by the hub, with the verifier only
+   * the hub has.
    */
-  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconWarningTriangle } from "#lib/icons.js";
-  import { goto, replaceState } from "$app/navigation";
+  import { replaceState } from "$app/navigation";
   import { page } from "$app/state";
 
   let failure = $state<string | null>(null);
+  /** The server the hub signed in, once it has. */
+  let signedIn = $state<string | null>(null);
 
   onMount(async () => {
     const answer = page.url.searchParams;
@@ -33,8 +36,11 @@
     }
     try {
       const { name } = await completeMcpSignIn(code, state, answer.get("iss"));
-      toast.success(`${name} is signed in for the whole fleet.`);
-      await goto("/config/mcp", { replaceState: true });
+      // The dashboard that asked is still where it was, in its own tab, and
+      // its row turns on the hub's word: this tab's work is done. A tab the
+      // browser will not let a page close says so instead.
+      signedIn = name;
+      window.close();
     } catch (error) {
       failure = error instanceof Error ? error.message : String(error);
     }
@@ -54,6 +60,11 @@
         <Button href="/config/mcp" label="Back to MCP servers" />
       {/snippet}
     </EmptyState>
+  {:else if signedIn}
+    <p class="working" role="status">
+      {signedIn}
+      is signed in for the whole fleet. You can close this tab.
+    </p>
   {:else}
     <p class="working" role="status">Finishing sign-in…</p>
   {/if}

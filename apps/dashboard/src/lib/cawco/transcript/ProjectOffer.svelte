@@ -7,36 +7,53 @@
    * the last word: a session is never offered again.
    */
   import type { ProjectOfferSummary } from "@cawco/core";
-  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { IconFolder } from "#lib/icons.js";
+  import { IconClose, IconFolder } from "#lib/icons.js";
   import { goto } from "$app/navigation";
-  import { answerProjectOffer } from "../client.svelte";
+  import {
+    answerProjectOffer,
+    dismissProjectJoin,
+    type ProjectOfferAccepted,
+  } from "../client.svelte";
+  import RowFault from "../RowFault.svelte";
   import { threadHref } from "../thread-tabs";
 
-  let { offer }: { offer: ProjectOfferSummary } = $props();
+  let {
+    instanceId,
+    offer,
+    joined,
+  }: {
+    instanceId: string;
+    /** The offer standing; gone once it is answered. */
+    offer: ProjectOfferSummary | undefined;
+    /** What answering it joined: the card says so where the offer stood. */
+    joined: ProjectOfferAccepted | undefined;
+  } = $props();
 
   let pending = $state<"accept" | "dismiss" | null>(null);
   let refused = $state("");
+
+  const joinedLine = $derived.by(() => {
+    if (!joined) {
+      return "";
+    }
+    const filed = joined.tasks.length;
+    return `Joined ${joined.project.name}${
+      filed
+        ? `, with ${filed} proposed ${filed === 1 ? "task" : "tasks"} from the plan`
+        : ""
+    }.`;
+  });
 
   async function answer(which: "accept" | "dismiss"): Promise<void> {
     pending = which;
     refused = "";
     try {
-      const accepted = await answerProjectOffer(offer.instanceId, which);
+      const accepted = await answerProjectOffer(instanceId, which);
       if (accepted?.setupThread) {
         // A new project: Caw sets it up in its Setup thread, with the
         // session's plan already on its board.
         await goto(threadHref(accepted.setupThread.id));
-      } else if (accepted) {
-        const filed = accepted.tasks.length;
-        toast.success(
-          `Joined ${accepted.project.name}${
-            filed
-              ? `, with ${filed} proposed ${filed === 1 ? "task" : "tasks"} from the plan`
-              : ""
-          }.`
-        );
       }
     } catch (error) {
       refused = error instanceof Error ? error.message : String(error);
@@ -52,35 +69,68 @@
     "rounded-[var(--radius-sm)] px-[var(--space-3)] text-label font-medium";
 </script>
 
-<section aria-label="Make this session a project" class="offer">
-  <p class="line">
-    <IconFolder aria-hidden="true" class="glyph" />
-    <span>{offer.line}</span>
-  </p>
-  <div class="actions">
-    <Button
-      class={btn}
-      disabled={pending !== null}
-      label="Not now"
-      onclick={() => answer("dismiss")}
-      pending={pending === "dismiss"}
-      variant="ghost"
-    />
-    <Button
-      class={btn}
-      disabled={pending !== null}
-      failed={!!refused}
-      icon={IconFolder}
-      label="Create project"
-      onclick={() => answer("accept")}
-      pending={pending === "accept"}
-      pendingLabel="Making project…"
-    />
-  </div>
-  {#if refused}
-    <p class="refused" role="status">{refused}</p>
-  {/if}
-</section>
+{#if joined && !offer}
+  <!-- The answer, where the question stood: what it joined, the way there,
+       and a way to put the card away. -->
+  <section
+    aria-label="Joined a project"
+    class="offer"
+    data-offer={instanceId}
+    role="status"
+  >
+    <p class="line">
+      <IconFolder aria-hidden="true" class="glyph" />
+      <span>{joinedLine}</span>
+    </p>
+    <div class="actions">
+      <Button
+        class={btn}
+        href="/project/{encodeURIComponent(joined.project.id)}"
+        variant="outline"
+        >Open {joined.project.name}</Button
+      >
+      <Button
+        aria-label="Put this away"
+        class={btn}
+        icon={IconClose}
+        onclick={() => dismissProjectJoin(instanceId)}
+        variant="ghost"
+      />
+    </div>
+  </section>
+{:else if offer}
+  <section
+    aria-label="Make this session a project"
+    class="offer"
+    data-offer={instanceId}
+  >
+    <p class="line">
+      <IconFolder aria-hidden="true" class="glyph" />
+      <span>{offer.line}</span>
+    </p>
+    <div class="actions">
+      <Button
+        class={btn}
+        disabled={pending !== null}
+        label="Not now"
+        onclick={() => answer("dismiss")}
+        pending={pending === "dismiss"}
+        variant="ghost"
+      />
+      <Button
+        class={btn}
+        disabled={pending !== null}
+        failed={!!refused}
+        icon={IconFolder}
+        label="Create project"
+        onclick={() => answer("accept")}
+        pending={pending === "accept"}
+        pendingLabel="Making project…"
+      />
+    </div>
+    <RowFault class="refused" reason={refused} />
+  </section>
+{/if}
 
 <style>
   @keyframes offer-settle {
@@ -128,9 +178,7 @@
     gap: var(--space-2);
     margin-inline-start: auto;
   }
-  .refused {
+  .offer > :global(.refused) {
     flex-basis: 100%;
-    font-size: var(--text-meta);
-    color: var(--status-fail-ink);
   }
 </style>

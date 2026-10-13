@@ -17,7 +17,6 @@
   } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
-  import { toast } from "#lib/cawco/toasts.js";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -39,7 +38,6 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { cawco, type Machine } from "../../client.svelte";
-  import { confirm } from "../../confirm.svelte";
   import { adoptHook, peekHook, pushHook } from "../../fleet";
   import { causeOf } from "../../fleet-faults";
   import HookTester from "../../HookTester.svelte";
@@ -58,10 +56,11 @@
   import { newId } from "../../id";
   import AddMachineLink from "../../join/AddMachineLink.svelte";
   import { machineOs } from "../../machine";
+  import RowFault from "../../RowFault.svelte";
   import { orderMachines } from "../../rail.svelte";
   import Choice from "../Choice.svelte";
   import { keepDraft, sameFields } from "../drafts.svelte";
-  import { savedShown } from "../EditorFooter.svelte";
+  import { EditorQuestion, savedShown } from "../EditorFooter.svelte";
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
   import Field from "../Field.svelte";
@@ -70,6 +69,7 @@
     type ListedVersion,
   } from "../PreviousVersions.svelte";
   import ReadingWell from "../ReadingWell.svelte";
+  import RolloutChip from "../RolloutChip.svelte";
   import SwitchField from "../SwitchField.svelte";
   import { configStore, upsert } from "../store.svelte";
   import TitleInput from "../TitleInput.svelte";
@@ -218,7 +218,7 @@
   /** From the first frame for a saved hook: the editor stands settling until they are in. */
   let versionsLoading = $state(untrack(() => hook !== null));
   let restoring = $state<number | null>(null);
-  let restoreFailed = $state<number | null>(null);
+  let restoreFailed = $state<{ id: number; reason: string } | null>(null);
   function loadVersions(current: string) {
     versionsLoading = true;
     versionsFailed = undefined;
@@ -251,10 +251,9 @@
       if (store.hooks.value) {
         upsert(store.hooks.value, restored, (row) => row.id === restored.id);
       }
-      toast.success(`Restored — this is now what ${restored.name} runs.`);
+      // The fields now hold it, and the rollout chip says where it lands.
     } catch (error) {
-      restoreFailed = version.id;
-      toast.error(message(error));
+      restoreFailed = { id: version.id, reason: message(error) };
     } finally {
       restoring = null;
     }
@@ -265,52 +264,62 @@
    * place; a new hook shows the same, then returns to the list, where it is
    * marked.
    */
+  /**
+   * The machines a save writes the script to and registers it on, run with
+   * no prompt: every machine in the fleet, or a project's hook only those
+   * with the project checked out. Said on Save and named beside it, before
+   * the press: this is the reach of the decision, and the only consequence
+   * it has.
+   */
+  const reach = $derived.by(() => {
+    if (!scoped) {
+      return cawco.machines;
+    }
+    const project = cawco.projects.find(
+      (candidate) => candidate.id === draft.projectId
+    );
+    const on = new Set(project?.places.map((place) => place.machineId) ?? []);
+    return cawco.machines.filter((machine) => on.has(machine.machineId));
+  });
+  const reachCount = $derived(
+    `${reach.length} machine${reach.length === 1 ? "" : "s"}`
+  );
+
+  /**
+   * Saving a hook keeps the editor open on it: Save says what it writes to,
+   * spins while the hub takes it, and the row's rollout chip beside it says
+   * machine by machine where it has landed. A new hook shows the same, then
+   * returns to the list, where it is marked. A refusal stays in the editor.
+   */
   async function save() {
     attempted = true;
     if (!ready || busy || created) {
       return;
     }
     let made: string | undefined;
-    const total = cawco.machines.length;
-    const project = cawco.projects.find(
-      (candidate) => candidate.id === draft.projectId
-    );
-    await confirm({
-      title: id
-        ? `Save ${draft.name.trim()}?`
-        : `Write ${draft.name.trim()} to the fleet?`,
-      body: scoped
-        ? `This writes a script and registers it to run with no prompt, on every machine that has ${project?.name ?? "this project"} checked out.`
-        : `This writes a script and registers it to run with no prompt, on every machine in the fleet — ${total} machine${total === 1 ? "" : "s"} right now.`,
-      confirmLabel: id ? "Save changes" : "Create hook",
-      pendingLabel: "Saving…",
-      run: async () => {
-        busy = true;
-        failed = undefined;
-        try {
-          const saved = await saveHook(id ?? newId(), {
-            ...draft,
-            name: draft.name.trim(),
-          });
-          if (store.hooks.value) {
-            upsert(store.hooks.value, saved, (row) => row.id === saved.id);
-          }
-          if (id) {
-            draft = draftOf(saved);
-            ({ commandArgs } = fieldsOf(draft));
-          } else {
-            created = true;
-            kept.drop();
-            made = saved.id;
-          }
-          toast.success(
-            `${saved.name} is written to every machine it applies to.`
-          );
-        } finally {
-          busy = false;
-        }
-      },
-    });
+    busy = true;
+    failed = undefined;
+    try {
+      const saved = await saveHook(id ?? newId(), {
+        ...draft,
+        name: draft.name.trim(),
+      });
+      if (store.hooks.value) {
+        upsert(store.hooks.value, saved, (row) => row.id === saved.id);
+      }
+      if (id) {
+        draft = draftOf(saved);
+        ({ commandArgs } = fieldsOf(draft));
+      } else {
+        created = true;
+        kept.drop();
+        made = saved.id;
+      }
+    } catch (error) {
+      failed = message(error);
+    } finally {
+      busy = false;
+    }
     if (made) {
       await savedShown();
       store.mark(made);
@@ -329,7 +338,7 @@
     if (!id) {
       return;
     }
-    await confirm({
+    await question.ask({
       title: `Delete ${draft.name || "this hook"}?`,
       body: "This removes it from every machine that has it — not just switches it off. There's no undo.",
       confirmLabel: "Delete hook",
@@ -365,8 +374,8 @@
   let unread = $state<Record<string, string>>({});
   /** Per machine, the settle whose request is out. */
   let settling = $state<Record<string, "adopt" | "push">>({});
-  /** Per machine, the last settle failed: its button shows no check. */
-  let settleFailed = $state<Record<string, boolean>>({});
+  /** Per machine, why its last settle was refused: said under its row. */
+  let settleFailed = $state<Record<string, string>>({});
 
   /** Where a kept version came from: the fleet's own row, or a machine's edited copy. */
   function sourceLabel(source: string): string {
@@ -423,16 +432,14 @@
       if (store.hooks.value) {
         upsert(store.hooks.value, landed, (row) => row.id === landed.id);
       }
+      // The fields hold its copy now, and its row turns "In sync" on the
+      // machine's next report.
       draft = draftOf(landed);
       comparing = null;
       delete copies[machine.machineId];
-      toast.success(
-        `The fleet now keeps ${machineLabel(machine.hostname)}'s copy.`
-      );
       loadVersions(id);
     } catch (caught) {
-      settleFailed[machine.machineId] = true;
-      toast.error(message(caught));
+      settleFailed[machine.machineId] = message(caught);
     } finally {
       delete settling[machine.machineId];
     }
@@ -445,16 +452,13 @@
     settling[machine.machineId] = "push";
     delete settleFailed[machine.machineId];
     try {
+      // Its row turns "In sync" on the machine's next report.
       await pushHook(machine.machineId, id);
       comparing = null;
       delete copies[machine.machineId];
-      toast.success(
-        `${machineLabel(machine.hostname)} takes the fleet's copy.`
-      );
       loadVersions(id);
     } catch (caught) {
-      settleFailed[machine.machineId] = true;
-      toast.error(message(caught));
+      settleFailed[machine.machineId] = message(caught);
     } finally {
       delete settling[machine.machineId];
     }
@@ -465,6 +469,9 @@
     failed: "Not applied",
     removed: "Taken off",
   };
+
+  /** Delete asks in this editor's own footer. */
+  const question = new EditorQuestion();
 </script>
 
 <EditorFrame
@@ -474,11 +481,29 @@
   oncancel={cancel}
   ondelete={id ? askRemove : undefined}
   onsubmit={save}
-  saveLabel={id ? "Save changes" : "Create hook"}
+  {question}
+  saveLabel={id ? `Write to ${reachCount}` : `Create on ${reachCount}`}
   saving={busy}
   settling={versionsLoading}
   title={id ? draft.name || "Hook" : "New hook"}
 >
+  {#snippet result()}
+    {#if id}
+      <RolloutChip
+        kind="hooks"
+        machines={cawco.machines}
+        name={id}
+        what={draft.name || "This hook"}
+      />
+    {/if}
+    <span
+      class="reach"
+      title={reach.map((m) => machineLabel(m.hostname)).join(", ")}
+      >{reach.length > 0
+        ? reach.map((m) => machineLabel(m.hostname)).join(", ")
+        : "No machine has it checked out"}</span
+    >
+  {/snippet}
   {#snippet header()}
     <TitleInput
       invalid={Boolean(shown("name") || duplicate)}
@@ -864,7 +889,7 @@
                     </Button>
                     <Button
                       disabled={!online || settle === "push"}
-                      failed={settleFailed[machine.machineId] === true}
+                      failed={machine.machineId in settleFailed}
                       label="Adopt this copy"
                       onclick={() => adopt(machine)}
                       pending={settle === "adopt"}
@@ -874,7 +899,7 @@
                     />
                     <Button
                       disabled={!online || settle === "adopt"}
-                      failed={settleFailed[machine.machineId] === true}
+                      failed={machine.machineId in settleFailed}
                       label="Send ours"
                       onclick={() => overwrite(machine)}
                       pending={settle === "push"}
@@ -885,6 +910,7 @@
                   </span>
                 {/if}
               </div>
+              <RowFault reason={settleFailed[machine.machineId]} />
               {#if refused && item?.detail}
                 <pre class="said" in:unfold out:unfold>{item.detail}</pre>
               {/if}
@@ -947,6 +973,13 @@
 </EditorFrame>
 
 <style>
+  /* The machines Save writes to, named beside it, one line. */
+  .reach {
+    max-inline-size: 32ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .note {
     max-width: 72ch;
     font: var(--type-meta);

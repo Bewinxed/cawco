@@ -34,7 +34,10 @@
   import Composer from "../transcript/Composer.svelte";
   import TranscriptSkeleton from "../transcript/TranscriptSkeleton.svelte";
   import { runIdOf } from "../workflow-runs";
-  import { composerBindings } from "./composer-dock.svelte";
+  import {
+    type ComposerBinding,
+    composerBindings,
+  } from "./composer-dock.svelte";
   import { dropHint, paneDropTarget } from "./dnd.svelte";
   import { settling, slot } from "./dock.svelte";
   import { createSwipe } from "./gesture.svelte";
@@ -56,6 +59,19 @@
   const bound = $derived(
     leaf.active ? composerBindings.get(leaf.active) : undefined
   );
+  /**
+   * What the dock's composer reads: the active conversation's bindings, kept
+   * as last lent while the composer goes. Its own deferred reads (a font
+   * load re-fitting its hint, queued as it mounts) can land after the
+   * binding is gone in the same tick, before the composer is torn down: a
+   * session restarting under another account drops its binding so.
+   */
+  let lent = $state.raw<ComposerBinding | undefined>(untrack(() => bound));
+  $effect.pre(() => {
+    if (bound) {
+      lent = bound;
+    }
+  });
 
   /**
    * What a drop hovering this group would do, as the box it would fill:
@@ -417,34 +433,34 @@
 
   <!-- Outside the stack the swipe moves, over the transcript's share of the
        group: a side preview beside the transcript keeps the rest. -->
-  {#if bound}
-    <div class="dock" style:width="{bound.transcriptShare * 100}%">
+  {#if bound && lent}
+    <div class="dock" style:width="{lent.transcriptShare * 100}%">
       <Composer
-        agentName={bound.agentName}
-        ask={bound.ask}
-        busy={bound.busy}
-        commands={bound.commands}
-        delegatesOf={bound.delegatesOf}
-        draft={bound.draft}
+        agentName={lent.agentName}
+        ask={lent.ask}
+        busy={lent.busy}
+        commands={lent.commands}
+        delegatesOf={lent.delegatesOf}
+        draft={lent.draft}
         held={swipe.moving}
         {landing}
-        leading={bound.leading}
-        mentions={bound.mentions}
-        onfoot={bound.onfoot}
-        oninterruptsend={bound.oninterruptsend}
-        onmenu={bound.onmenu}
-        onstop={bound.onstop}
-        onsubmit={bound.onsubmit}
-        paneVisible={bound.paneVisible}
-        perch={bound.perch}
-        placeholder={bound.placeholder}
-        planRing={bound.planRing}
-        previewPhone={bound.previewPhone}
-        prompts={bound.prompts}
-        recallOf={bound.recallOf}
-        sendError={bound.sendError}
-        sending={bound.sending}
-        suggest={bound.suggest}
+        leading={lent.leading}
+        mentions={lent.mentions}
+        onfoot={lent.onfoot}
+        oninterruptsend={lent.oninterruptsend}
+        onmenu={lent.onmenu}
+        onstop={lent.onstop}
+        onsubmit={lent.onsubmit}
+        paneVisible={lent.paneVisible}
+        perch={lent.perch}
+        placeholder={lent.placeholder}
+        planRing={lent.planRing}
+        previewPhone={lent.previewPhone}
+        prompts={lent.prompts}
+        recallOf={lent.recallOf}
+        sendError={lent.sendError}
+        sending={lent.sending}
+        suggest={lent.suggest}
         {switchDir}
       />
     </div>

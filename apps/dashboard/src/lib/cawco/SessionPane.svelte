@@ -761,6 +761,8 @@
 
   /** "Make this a project", when the hub offered it to this session. */
   const projectOffer = $derived(cawco.projectOfferOf(viewId));
+  /** The project the offer joined: the card says so where it stood. */
+  const projectJoin = $derived(cawco.projectJoinOf(viewId));
 
   /** What this conversation has half-written, whichever composer draws it. */
   const draft = new ComposerDraft();
@@ -1003,9 +1005,13 @@
 <!-- The quiet one: an offer, standing on the composer's tray row. A parked
      ask is not drawn here: the composer grows into it (`ask`). -->
 {#snippet offer()}
-  {#if projectOffer}
+  {#if projectOffer || projectJoin}
     <div class="parked" data-flip>
-      <ProjectOffer offer={projectOffer} />
+      <ProjectOffer
+        instanceId={viewId}
+        joined={projectJoin}
+        offer={projectOffer}
+      />
     </div>
   {/if}
 {/snippet}

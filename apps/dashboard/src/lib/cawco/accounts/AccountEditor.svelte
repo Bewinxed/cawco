@@ -9,20 +9,32 @@
    */
   import type { Account } from "@cawco/core";
   import { untrack } from "svelte";
-  import { deleteAccount, patchAccount } from "#lib/cawco/client.svelte.js";
+  import {
+    cawco,
+    deleteAccount,
+    patchAccount,
+  } from "#lib/cawco/client.svelte.js";
   import { keepDraft } from "#lib/cawco/config/drafts.svelte.js";
+  import { EditorQuestion } from "#lib/cawco/config/EditorFooter.svelte";
   import EditorFrame from "#lib/cawco/config/EditorFrame.svelte";
   import EditorSection from "#lib/cawco/config/EditorSection.svelte";
   import SwitchField from "#lib/cawco/config/SwitchField.svelte";
   import TitleInput from "#lib/cawco/config/TitleInput.svelte";
-  import { confirm } from "#lib/cawco/confirm.svelte.js";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { IconPalette, IconServer, IconUsage } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import AccountMachines from "./AccountMachines.svelte";
-  import { harnessWords, hueVar, nameOf, providerLimits } from "./model.svelte";
+  import {
+    harnessWords,
+    hueVar,
+    machineName,
+    machinesFor,
+    nameOf,
+    providerLimits,
+    signinState,
+  } from "./model.svelte";
   import ProviderMark from "./ProviderMark.svelte";
   import Swatches from "./Swatches.svelte";
 
@@ -93,9 +105,25 @@
   }
 
   async function askRemove() {
-    await confirm({
+    // The machines signed in to it are what the removal reaches: named.
+    const signins = cawco.accounts?.signins ?? [];
+    const on = machinesFor(account.provider)
+      .filter(
+        (machine) =>
+          signinState(signins, account.id, machine.machineId) === "signed-in"
+      )
+      .map(machineName);
+    const listed =
+      on.length > 1
+        ? `${on.slice(0, -1).join(", ")} and ${on.at(-1)}`
+        : (on[0] ?? "");
+    const reach =
+      on.length > 0
+        ? `${listed} ${on.length === 1 ? "is" : "are"} signed in to it: ${on.length === 1 ? "it signs" : "each signs"} it out of ${harnessWords(account.provider)} and forgets it.`
+        : "No machine is signed in to it.";
+    await question.ask({
       title: `Remove ${nameOf(account)}?`,
-      body: `Each machine signed in to it signs it out of ${harnessWords(account.provider)} and forgets it. New sessions stop being placed on it.`,
+      body: `${reach} New sessions stop being placed on it.`,
       confirmLabel: "Remove account",
       destructive: true,
       pendingLabel: "Removing…",
@@ -111,6 +139,9 @@
       },
     });
   }
+
+  /** Remove asks in this editor's own footer. */
+  const question = new EditorQuestion();
 </script>
 
 <EditorFrame
@@ -121,6 +152,7 @@
   oncancel={cancel}
   ondelete={askRemove}
   onsubmit={save}
+  {question}
   saveLabel="Save changes"
   {saving}
   title={nameOf(account)}

@@ -25,10 +25,21 @@
  * `from` names what asked (DESIGN.md, The Stay In Context Rule): the dialog
  * opens out of that row or item, so the question is seen to come from the
  * thing it is about.
+ *
+ * The dialog holds the page (a scrim, focus kept inside). The Open Page Rule
+ * keeps that for the rare question that acting elsewhere would make wrong;
+ * a question that nothing elsewhere can break is asked in the page, beside
+ * its control (`ask-here.svelte.ts`, `AskHere.svelte`), through the same
+ * `Asker`.
  */
 import { departBox } from "./motion/share.svelte";
 
-export interface ConfirmRequest {
+/** What any question needs: the work its confirm button starts. */
+export interface Askable {
+  run: () => Promise<unknown>;
+}
+
+export interface ConfirmRequest extends Askable {
   /**
    * The consequence, in plain words — what is lost, whether it can be undone.
    * Several strings are several paragraphs.
@@ -54,8 +65,6 @@ export interface ConfirmRequest {
   grant?: boolean;
   /** What the confirm button says while `run` runs ("Deleting…"). */
   pendingLabel: string;
-  /** The work the confirm button starts. */
-  run: () => Promise<unknown>;
   /** The question, as a heading. Name the thing and its blast radius here. */
   title: string;
 }
@@ -72,45 +81,55 @@ export function departRow(row: Element | null | undefined, id: string): string {
   return key;
 }
 
-interface Pending extends ConfirmRequest {
-  resolve: (ok: boolean) => void;
-}
+/**
+ * One question at a time, and its answer: what a host (the dialog, or a
+ * place in the page) reads and answers through. A new ask while one stands
+ * declines the first.
+ */
+export class Asker<R extends Askable> {
+  #pending = $state<(R & { resolve: (ok: boolean) => void }) | null>(null);
 
-let pending = $state<Pending | null>(null);
+  get pending(): R | null {
+    return this.#pending;
+  }
 
-/** What the single `<ConfirmDialog/>` host reads and answers through. */
-export const confirmHost = {
-  get pending(): Pending | null {
-    return pending;
-  },
+  /** Ask, then run the work. Resolves true once it has run, false if declined. */
+  ask(request: R): Promise<boolean> {
+    this.#pending?.resolve(false);
+    return new Promise<boolean>((resolve) => {
+      this.#pending = { ...request, resolve };
+    });
+  }
+
   /** The reader declined: the question ends unanswered. */
   dismiss(): void {
-    const settle = pending?.resolve;
-    pending = null;
+    const settle = this.#pending?.resolve;
+    this.#pending = null;
     settle?.(false);
-  },
+  }
+
   /**
    * The reader confirmed: the work runs, and the question ends once it has
    * (unless it was dismissed or replaced meanwhile). Work that throws leaves
    * the question open.
    */
   async accept(): Promise<void> {
-    const asked = pending;
+    const asked = this.#pending;
     if (!asked) {
       return;
     }
     await asked.run();
-    if (pending === asked) {
-      pending = null;
+    if (this.#pending === asked) {
+      this.#pending = null;
       asked.resolve(true);
     }
-  },
-};
+  }
+}
+
+/** What the single `<ConfirmDialog/>` host reads and answers through. */
+export const confirmHost = new Asker<ConfirmRequest>();
 
 /** Ask the reader to confirm, then run the work. Resolves true once it has run, false if they declined. */
 export function confirm(request: ConfirmRequest): Promise<boolean> {
-  pending?.resolve(false);
-  return new Promise<boolean>((resolve) => {
-    pending = { ...request, resolve };
-  });
+  return confirmHost.ask(request);
 }

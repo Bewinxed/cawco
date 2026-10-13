@@ -31,7 +31,7 @@
   import { page } from "$app/state";
   import { cawco } from "../client.svelte";
   import { type Cards, rememberCard } from "./cards";
-  import EditorFooter from "./EditorFooter.svelte";
+  import EditorFooter, { type EditorQuestion } from "./EditorFooter.svelte";
   import { hubDown } from "./hub.svelte";
   import SkeletonRows from "./SkeletonRows.svelte";
   import { SECTIONS } from "./sections";
@@ -51,6 +51,8 @@
     failed = false,
     ondelete,
     settling = false,
+    result,
+    question,
   }: {
     /** The document title. */
     title: string;
@@ -70,6 +72,10 @@
     ondelete?: () => void;
     /** Parts of the editor are still arriving. */
     settling?: boolean;
+    /** What the save reaches and where it landed, beside Save (EditorFooter). */
+    result?: Snippet;
+    /** The editor's own question (its delete's), drawn in its footer. */
+    question?: EditorQuestion;
   } = $props();
 
   /** The fields have taken their size (autosize fits in the next frame). */
@@ -208,6 +214,8 @@
     {failed}
     {oncancel}
     {ondelete}
+    {question}
+    {result}
     {saveLabel}
     {saving}
   />

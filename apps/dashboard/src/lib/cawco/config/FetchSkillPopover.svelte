@@ -12,7 +12,6 @@
   import { tick } from "svelte";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { closeInto } from "#lib/cawco/motion/share.svelte.js";
-  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
@@ -20,7 +19,6 @@
   import { IconPlus } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
   import {
-    formatBytes,
     normalizeSkillSource,
     pickSkill,
     saveSkill,
@@ -78,9 +76,6 @@
         enabled: true,
         projectId: projectId || null,
       });
-      const where = project
-        ? `every checkout and workspace of ${project.name}`
-        : "every machine";
       onsaved(row);
       if (row.choices && row.choices.length > 0) {
         ({ choices } = row);
@@ -93,15 +88,9 @@
       );
       const closing = surface && made ? closeInto(surface, made) : undefined;
       await closing?.finished.catch(() => undefined);
+      // The row it made says the rest: its rollout chip, machine by machine.
       expanded = false;
       reset();
-      if (!row.error) {
-        toast.success(
-          row.bytes === undefined
-            ? `${row.name} is on its way to ${where}.`
-            : `${row.name} — ${formatBytes(row.bytes)} on its way to ${where}.`
-        );
-      }
     } catch (error) {
       failed = error instanceof Error ? error.message : String(error);
     } finally {

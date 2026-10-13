@@ -17,20 +17,29 @@
     type StagesTemplateView,
     type StagesView,
     stageLabel,
+    type TaskSummary,
   } from "#lib/cawco/project-tasks.js";
+  import RowFault from "#lib/cawco/RowFault.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { IconToolTodo } from "#lib/icons.js";
+  import AskHere from "../AskHere.svelte";
+  import type { AskHereRequest, AskItem } from "../ask-here.svelte";
+  import { Asker } from "../confirm.svelte";
 
   let {
     projectId,
+    tasks,
     onapplied,
     anchor,
     open = $bindable(false),
   }: {
     projectId: string;
-    onapplied: (stages: StagesView, stranded: string[]) => void;
+    /** The project's tasks: a set that lacks their stages names them first. */
+    tasks: TaskSummary[];
+    onapplied: (stages: StagesView) => void;
     /** What it opens from. */
     anchor: HTMLElement | null;
     open?: boolean;
@@ -39,6 +48,8 @@
   let templates = $state<StagesTemplateView[] | null>(null);
   let problem = $state<string | null>(null);
   let applying = $state<StagesTemplate | null>(null);
+  /** The set last chosen: what Try again writes. */
+  let lastAsked = $state<StagesTemplateView | null>(null);
 
   const NAMES: Record<StagesTemplate, string> = {
     code: "Code",
@@ -61,13 +72,62 @@
     }
   });
 
-  async function apply(name: StagesTemplate) {
-    applying = name;
+  /** Writes the set; throws the hub's refusal. */
+  async function write(name: StagesTemplate) {
+    const { stranded: _, ...stages } = await applyTemplate(projectId, name);
+    onapplied(stages);
+    open = false;
+  }
+
+  /** The tasks a set strands: in a stage it lacks, each with where it stands. */
+  const strandedBy = (template: StagesTemplateView): AskItem[] => {
+    const kept = new Set(template.stages.map((stage) => stage.name));
+    return tasks
+      .filter((task) => !kept.has(task.stage))
+      .map((task) => ({
+        id: task.id,
+        title: `${task.id} ${task.title}`,
+        lead: { kind: "glyph" as const, icon: IconToolTodo },
+        status: stageLabel(task.stage),
+      }));
+  };
+
+  /**
+   * One question at a time, under the set it is about, in the picker: the
+   * page and the picker's other sets stay live while it stands.
+   */
+  const asks = new Asker<AskHereRequest>();
+  // The picker put away takes its question with it.
+  $effect(() => {
+    if (!open) {
+      asks.dismiss();
+    }
+  });
+
+  /**
+   * A set that keeps every task's stage is written at once. One that lacks
+   * stages tasks stand in asks first, under the set, naming those tasks and
+   * where each stands: that is the consequence of the choice, said before it
+   * is made.
+   */
+  async function apply(template: StagesTemplateView) {
+    const { name } = template;
     problem = null;
+    if (strandedBy(template).length > 0) {
+      await asks.ask({
+        at: name,
+        title: `Use the ${NAMES[name]} stages?`,
+        body: "The set lacks the stage each task below stands in. Each keeps its stage and stands in Other stages until moved.",
+        confirmLabel: `Use ${NAMES[name]}`,
+        items: () => strandedBy(template),
+        pendingLabel: "Writing stages.md…",
+        run: () => write(name),
+      });
+      return;
+    }
+    applying = name;
     try {
-      const { stranded, ...stages } = await applyTemplate(projectId, name);
-      onapplied(stages, stranded);
-      open = false;
+      await write(name);
     } catch (error) {
       problem = error instanceof Error ? error.message : String(error);
     } finally {
@@ -90,17 +150,25 @@
         stages.md in the project folder.
       </p>
     </div>
-    {#if problem}
-      <p class="problem" role="alert">{problem}</p>
-    {/if}
+    <RowFault
+      again={applying === null && lastAsked
+        ? () => apply(lastAsked as StagesTemplateView)
+        : undefined}
+      class="stages-fault"
+      reason={problem}
+    />
     <ul class="list">
       {#if templates}
         {#each templates as template (template.name)}
           <li>
             <button
+              aria-expanded={asks.pending?.at === template.name}
               class="kit-item template"
               disabled={applying !== null}
-              onclick={() => apply(template.name)}
+              onclick={() => {
+                lastAsked = template;
+                apply(template);
+              }}
               type="button"
             >
               <span class="name">
@@ -116,6 +184,7 @@
                   .join(" → ")}
               </span>
             </button>
+            <AskHere asker={asks} at={template.name} class="stages-ask" />
           </li>
         {/each}
       {:else if !problem}
@@ -187,9 +256,12 @@
     gap: var(--space-1);
     padding: var(--space-2) var(--space-3);
   }
-  .problem {
-    padding-inline: var(--space-2);
-    font: var(--type-meta);
-    color: var(--error-11);
+  :global(.stages-fault) {
+    --fault-indent: var(--space-2);
+    --fault-end: var(--space-2);
+  }
+  :global(.stages-ask) {
+    --ask-indent: var(--space-2);
+    --ask-end: var(--space-2);
   }
 </style>

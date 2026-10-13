@@ -9,7 +9,6 @@
   import { IconCpu, IconDocument, IconKey } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { confirm } from "../../confirm.svelte";
   import {
     blankDelegateType,
     DELEGATE_HARNESSES,
@@ -22,7 +21,7 @@
   import ModelCombobox from "../../ModelCombobox.svelte";
   import Choice from "../Choice.svelte";
   import { keepDraft, sameFields } from "../drafts.svelte";
-  import { savedShown } from "../EditorFooter.svelte";
+  import { EditorQuestion, savedShown } from "../EditorFooter.svelte";
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
   import Field from "../Field.svelte";
@@ -158,7 +157,7 @@
     if (!name) {
       return;
     }
-    await confirm({
+    await question.ask({
       title: `Delete ${draft.name || "this delegate type"}?`,
       body: "A session already running keeps the type list it started with — the prompt cache is frozen for its lifetime. This only stops the name from being offered to new sessions.",
       confirmLabel: "Delete delegate type",
@@ -183,6 +182,9 @@
       },
     });
   }
+
+  /** Delete asks in this editor's own footer. */
+  const question = new EditorQuestion();
 </script>
 
 <EditorFrame
@@ -192,6 +194,7 @@
   oncancel={cancel}
   ondelete={name ? askRemove : undefined}
   onsubmit={save}
+  {question}
   saveLabel={name ? "Save changes" : "Create delegate type"}
   saving={busy}
   title={name ? draft.name : "New delegate type"}

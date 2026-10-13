@@ -13,8 +13,8 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconShield } from "#lib/icons.js";
   import { confirmHost } from "./confirm.svelte";
-  import { unfold } from "./motion/fold.svelte";
   import { land } from "./motion/share.svelte";
+  import RowFault from "./RowFault.svelte";
 
   const pending = $derived(confirmHost.pending);
   const paragraphs = $derived(
@@ -78,9 +78,7 @@
           {/each}
         </AlertDialog.Description>
       {/if}
-      {#if failure}
-        <p class="failure" role="alert" transition:unfold>{failure}</p>
-      {/if}
+      <RowFault class="w-full" reason={failure} />
     </AlertDialog.Header>
     <AlertDialog.Footer>
       <AlertDialog.Cancel
@@ -112,11 +110,5 @@
   :global(.confirm-paragraphs) {
     display: grid;
     gap: var(--space-2);
-  }
-  .failure {
-    color: var(--status-fail-ink);
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    line-height: var(--leading-body);
   }
 </style>

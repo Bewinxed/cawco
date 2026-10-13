@@ -50,7 +50,7 @@
   import { crossIn, crossOut, dur } from "../motion/curves.svelte";
   import { unfold } from "../motion/fold.svelte";
   import { cancelMove, retryMove } from "../move.svelte";
-  import { toast } from "../toasts";
+  import RowFault from "../RowFault.svelte";
   import { workspace } from "../workspace/workspace.svelte";
   import MoveAskBody from "./MoveAsk.svelte";
 
@@ -355,18 +355,32 @@
     );
   }
 
+  /**
+   * Why the last Cancel or Retry was refused, under the button pressed: the
+   * wait stays as it was, and that button tries again.
+   */
+  let refused = $state<{ by: "cancel" | "retry"; reason: string } | null>(null);
+  const refusedBy = (by: "cancel" | "retry") =>
+    refused?.by === by
+      ? `Couldn't ${by === "cancel" ? "stop" : "retry"} the move: ${refused.reason}`
+      : null;
+
   let stopping = $state(false);
-  /** Cancel: the hub stops the step in flight; the tab closes and says what stayed on disk. */
+  /**
+   * Cancel: the hub stops the step in flight. The wait itself turns: its
+   * steps fold to "Stopped." with what stayed on disk, and Close; the tab
+   * stays until the person closes it.
+   */
   async function cancel(): Promise<void> {
     stopping = true;
+    refused = null;
     try {
-      const stopped = await cancelMove(job.id);
-      toast(["Stopped.", stopped.kept].filter(Boolean).join(" "));
-      workspace.close(job.targetInstanceId);
+      await cancelMove(job.id);
     } catch (cause) {
-      toast.error("Couldn't stop the move", {
-        description: cause instanceof Error ? cause.message : String(cause),
-      });
+      refused = {
+        by: "cancel",
+        reason: cause instanceof Error ? cause.message : String(cause),
+      };
     } finally {
       stopping = false;
     }
@@ -375,12 +389,14 @@
   let retrying = $state(false);
   async function retry(): Promise<void> {
     retrying = true;
+    refused = null;
     try {
       await retryMove(job.id);
     } catch (cause) {
-      toast.error("Couldn't retry the move", {
-        description: cause instanceof Error ? cause.message : String(cause),
-      });
+      refused = {
+        by: "retry",
+        reason: cause instanceof Error ? cause.message : String(cause),
+      };
     } finally {
       retrying = false;
     }
@@ -390,7 +406,7 @@
   const cancellable = $derived(waiting && job.stage !== "start");
 </script>
 
-<div class="wait" class:phone>
+<div class="wait" data-move={job.id} class:phone>
   <!-- A stopped move has no Caw and no room for him: its column starts at
        the same top whatever stage it stopped at, as on the phone app. -->
   <div
@@ -517,20 +533,29 @@
                       {/if}
                       <span class="alert-actions">
                         <Button
-                          disabled={stopping}
-                          onclick={cancel}
-                          size="sm"
-                          variant="secondary"
-                          >Cancel</Button
-                        >
-                        <Button
                           disabled={retrying}
-                          onclick={retry}
+                          failed={refused?.by === "cancel"}
+                          label="Cancel"
+                          onclick={cancel}
+                          pending={stopping}
+                          pendingLabel="Stopping…"
                           size="sm"
                           variant="secondary"
-                          >Retry</Button
-                        >
+                        />
+                        <Button
+                          disabled={stopping}
+                          failed={refused?.by === "retry"}
+                          label="Retry"
+                          onclick={retry}
+                          pending={retrying}
+                          pendingLabel="Retrying…"
+                          size="sm"
+                          variant="secondary"
+                        />
                       </span>
+                      <RowFault
+                        reason={refusedBy("cancel") ?? refusedBy("retry")}
+                      />
                     </AlertDescription>
                   </Alert>
                 </div>
@@ -551,11 +576,16 @@
       {#if cancellable}
         <Button
           class="foot-button"
-          disabled={stopping}
+          failed={refused?.by === "cancel"}
+          label="Cancel"
           onclick={cancel}
+          pending={stopping}
+          pendingLabel="Stopping…"
           variant="secondary"
-          >Cancel</Button
-        >
+        />
+        {#if !failed}
+          <RowFault reason={refusedBy("cancel")} />
+        {/if}
       {:else if job.stage === "cancelled"}
         <Button
           class="foot-button"
@@ -710,6 +740,9 @@
   }
   .foot {
     display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-1);
   }
   /* On a phone Cancel is the foot's whole width, clear of the safe area. */
   .phone {

@@ -1,11 +1,14 @@
 <script lang="ts">
   import { type RuleRow, ruleSentence } from "@cawco/core";
+  import AskHere from "#lib/cawco/AskHere.svelte";
+  import type { AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore, withStats } from "#lib/cawco/config/store.svelte.js";
-  import { confirm } from "#lib/cawco/confirm.svelte.js";
+  import { Asker } from "#lib/cawco/confirm.svelte.js";
+  import RowFault from "#lib/cawco/RowFault.svelte";
   import {
     createRule,
     draftOf,
@@ -16,7 +19,6 @@
     since,
     times,
   } from "#lib/cawco/rules.js";
-  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
@@ -42,8 +44,10 @@
 
   let busy = $state<Record<string, boolean>>({});
   let seeding = $state<string | null>(null);
-  /** The template whose last add failed: its button shows no check. */
-  let seedFailed = $state<string | null>(null);
+  /** The template whose last add was refused, and why: said under its row. */
+  let seedFailed = $state<{ title: string; reason: string } | null>(null);
+  /** Why a rule's switch did not take, by rule: said under its row. */
+  let toggleFailed = $state<Record<string, string>>({});
 
   const fired = (row: RuleRow) =>
     row.stats.totalFires === 0
@@ -52,18 +56,22 @@
 
   async function toggle(row: RuleRow, enabled: boolean) {
     busy[row.id] = true;
+    delete toggleFailed[row.id];
     try {
       await saveRule(row.id, { ...draftOf(row), enabled });
       row.enabled = enabled;
     } catch (error) {
-      toast.error(message(error));
+      toggleFailed[row.id] = message(error);
     } finally {
       delete busy[row.id];
     }
   }
 
+  /** Delete asks under the rule's row, in the page. */
+  const asks = new Asker<AskHereRequest>();
   async function askRemove(row: RuleRow) {
-    await confirm({
+    await asks.ask({
+      at: row.id,
       title: `Delete ${row.name}?`,
       body: "This rule stops applying to every session and is removed for good. You can always write it again, but there's no undo.",
       confirmLabel: "Delete rule",
@@ -86,12 +94,11 @@
     seedFailed = null;
     try {
       const saved = await createRule(template.draft);
+      // Its new row, marked, is the result.
       store.rules.value = [withStats(saved), ...rules];
       store.mark(saved.id);
-      toast.success(`${template.title} is live on every session.`);
     } catch (error) {
-      seedFailed = template.title;
-      toast.error(message(error));
+      seedFailed = { title: template.title, reason: message(error) };
     } finally {
       seeding = null;
     }
@@ -147,13 +154,21 @@
           {#snippet trailing()}
             <Button
               disabled={seeding !== null && seeding !== template.title}
-              failed={seedFailed === template.title}
+              failed={seedFailed?.title === template.title}
               label="Add"
               onclick={() => useTemplate(template)}
               pending={seeding === template.title}
               pendingLabel="Adding…"
               size="sm"
               variant="outline"
+            />
+          {/snippet}
+          {#snippet below()}
+            <RowFault
+              again={() => useTemplate(template)}
+              reason={seedFailed?.title === template.title
+                ? seedFailed.reason
+                : null}
             />
           {/snippet}
         </SectionRow>
@@ -196,6 +211,13 @@
             {#if row.stats.pending > 0}
               <span class="waiting num">{row.stats.pending} waiting</span>
             {/if}
+          {/snippet}
+          {#snippet below()}
+            <AskHere asker={asks} at={row.id} />
+            <RowFault
+              again={() => toggle(row, !row.enabled)}
+              reason={toggleFailed[row.id]}
+            />
           {/snippet}
         </SectionRow>
       {/each}

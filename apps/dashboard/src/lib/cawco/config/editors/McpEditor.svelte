@@ -9,13 +9,11 @@
   } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
-  import { toast } from "#lib/cawco/toasts.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { IconKey, IconMapPoint, IconPlay } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { cawco } from "../../client.svelte";
-  import { confirm } from "../../confirm.svelte";
   import {
     isRemoteMcp,
     mcpNameProblem,
@@ -29,12 +27,14 @@
   import KeyValueRows from "../../KeyValueRows.svelte";
   import Choice from "../Choice.svelte";
   import { keepDraft, sameFields } from "../drafts.svelte";
-  import { savedShown } from "../EditorFooter.svelte";
+  import { EditorQuestion, savedShown } from "../EditorFooter.svelte";
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
   import Field from "../Field.svelte";
+  import { holders } from "../holders";
   import McpSignIn from "../McpSignIn.svelte";
   import PickerChip from "../PickerChip.svelte";
+  import RolloutChip from "../RolloutChip.svelte";
   import { configStore, upsert } from "../store.svelte";
   import TitleInput from "../TitleInput.svelte";
 
@@ -189,11 +189,6 @@
       if (server?.name === saved.name) {
         baseline = { name: saved.name, config: build(), projectId };
       } else {
-        if (server) {
-          toast.info(
-            `${server.name} is still there — a new name makes a new server.`
-          );
-        }
         created = true;
         kept.drop();
         made = saved.name;
@@ -221,11 +216,12 @@
     if (!server) {
       return;
     }
-    await confirm({
-      title: `Remove ${server.name}?`,
-      body: `This removes ${server.name} from every machine in the fleet — not just this one. It can't be undone.`,
+    await question.ask({
+      title: `Remove ${server.name} everywhere?`,
+      body: "It leaves the fleet and every machine that holds it. It can't be undone.",
       confirmLabel: "Remove everywhere",
       destructive: true,
+      items: () => holders(cawco.machines, "mcp", server.name),
       pendingLabel: "Removing…",
       run: async () => {
         deleting = true;
@@ -247,6 +243,9 @@
       },
     });
   }
+
+  /** Delete asks in this editor's own footer. */
+  const question = new EditorQuestion();
 </script>
 
 <EditorFrame
@@ -257,10 +256,21 @@
   oncancel={cancel}
   ondelete={server ? askRemove : undefined}
   onsubmit={save}
+  {question}
   saveLabel={server ? "Save changes" : "Add server"}
   saving={busy}
   title={server ? server.name : "New MCP server"}
 >
+  {#snippet result()}
+    {#if server}
+      <RolloutChip
+        kind="mcp"
+        machines={cawco.machines}
+        name={server.name}
+        what={server.name}
+      />
+    {/if}
+  {/snippet}
   {#snippet header()}
     <TitleInput
       invalid={serverName !== "" && nameProblem !== undefined}
@@ -271,6 +281,13 @@
     />
     {#if serverName !== "" && nameProblem}
       <p class="problem" in:appear>{nameProblem}</p>
+    {:else if server &&
+      serverName.trim() !== "" &&
+      serverName.trim() !== server.name}
+      <!-- Said before Save, where the name is changed: that is its consequence. -->
+      <p class="note" in:appear>
+        A new name makes a new server; {server.name} stays as it is.
+      </p>
     {:else}
       <p class="note">
         What sessions call its tools —

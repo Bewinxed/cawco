@@ -99,8 +99,9 @@
     popScale,
   } from "./motion/curves.svelte";
   import { echoBeat } from "./motion/echo.svelte";
-  import { fold, unfold } from "./motion/fold.svelte";
+  import { fold } from "./motion/fold.svelte";
   import { departBox, land } from "./motion/share.svelte";
+  import RowFault from "./RowFault.svelte";
   import TreeMark from "./TreeMark.svelte";
   import { toast } from "./toasts";
 
@@ -321,7 +322,6 @@
       leave();
     } catch (error) {
       refusal = error instanceof Error ? error.message : String(error);
-      toast.error(refusal);
     } finally {
       otherPending = false;
     }
@@ -557,9 +557,6 @@
       }
       refusal = error instanceof Error ? error.message : String(error);
       phase = rows.length > 0 ? "fail" : "none";
-      if (phase === "none") {
-        toast.error(refusal);
-      }
       return;
     }
     // The ending word is read before the ended one: an end quicker than the
@@ -587,9 +584,7 @@
   /* ── What each part says ─────────────────────────────────────────── */
 
   const description = $derived(
-    phase === "fail" && refusal
-      ? refusal
-      : words.line(phase, phase === "list" ? listed : total, done())
+    words.line(phase, phase === "list" ? listed : total, done())
   );
 
   /** What the stops did: "Stopped 2 sessions. 1 stops when obelisk is back." */
@@ -787,9 +782,11 @@
           </span>
           <span class="trail num">{trailOf(row)}</span>
         </div>
-        {#if row.state === "failed" && row.error}
-          <p class="err" transition:unfold>{row.error}</p>
-        {/if}
+        <RowFault
+          again={() => stop([row.s.id])}
+          class="err"
+          reason={row.state === "failed" ? row.error : null}
+        />
       </div>
       {#if kids.length > 0}
         <ul class="kit-nest" {@attach nestFrom(".tree-mark")}>
@@ -837,6 +834,10 @@
         <AlertDialog.Description aria-live="polite" class="w-full">
           <MorphText text={description} wrap />
         </AlertDialog.Description>
+        <!-- The end, or the other way out, refused: the hub's words, where
+             the question is; the confirm (Try again) or the other button
+             goes on from here. -->
+        <RowFault class="w-full" reason={refusal} />
       </AlertDialog.Header>
     </div>
     {#if rows.some((row) => !row.gone)}
@@ -992,13 +993,9 @@
     white-space: nowrap;
   }
   /* Why it could not be stopped, under the row, from where its title starts. */
-  .err {
-    margin: 0;
-    padding: var(--space-row) var(--row-compact-pad-end) var(--space-row)
-      calc(var(--row-compact-gap) * 2 + var(--mark-size, 18px));
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-    overflow-wrap: anywhere;
+  .rin > :global(.err) {
+    --fault-indent: calc(var(--row-compact-gap) * 2 + var(--mark-size, 18px));
+    --fault-end: var(--row-compact-pad-end);
   }
   /* A phone: the word alone says the status. */
   @media (max-width: 639px) {

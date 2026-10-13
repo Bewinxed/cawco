@@ -393,25 +393,45 @@ export const removeMcpServer = (name: string): Promise<void> =>
   erase(`/api/fleet/mcp/${encodeURIComponent(name)}`, `remove ${name}`);
 
 /**
- * Signs this browser in to a fleet MCP server: the hub answers with the
- * authorization page, which this window reaches through CawCo's start page.
- * That page records the address this browser reached the hub by, and CawCo's
- * hand-back page forwards the provider's answer only there. That is what lets
- * a phone, or any browser, finish it, whichever machine runs the agent.
+ * Signs this browser in to a fleet MCP server, in a tab of its own: the
+ * dashboard stays where the person asked (an editor, a session's composer),
+ * and the server's row turns when the hub reports it signed in. The hub
+ * answers with the authorization page, which the new tab reaches through
+ * CawCo's start page. That page records the address this browser reached
+ * the hub by, and CawCo's hand-back page forwards the provider's answer only
+ * there, where the exchange finishes and the tab closes itself. That is what
+ * lets a phone, or any browser, finish it, whichever machine runs the agent.
+ *
+ * The tab is opened in the press itself (before anything is awaited), so a
+ * pop-up blocker lets it through; a refused start closes it again. Resolves
+ * with the tab, which the caller watches for closing before it finished.
  */
-export const signInToMcp = async (name: string): Promise<void> => {
+export const signInToMcp = async (name: string): Promise<Window> => {
+  const tab = window.open("", "_blank");
+  if (!tab) {
+    throw new Error(
+      "The browser blocked the sign-in tab. Allow pop-ups for this page, then try again."
+    );
+  }
   const { origin } = window.location;
-  const { authorizationUrl } = await send<{ authorizationUrl: string }>(
-    `/api/fleet/mcp/${encodeURIComponent(name)}/sign-in`,
-    { method: "POST" },
-    `start sign-in to ${name}`
-  );
+  let authorizationUrl: string;
+  try {
+    ({ authorizationUrl } = await send<{ authorizationUrl: string }>(
+      `/api/fleet/mcp/${encodeURIComponent(name)}/sign-in`,
+      { method: "POST" },
+      `start sign-in to ${name}`
+    ));
+  } catch (error) {
+    tab.close();
+    throw error;
+  }
   // The address rides in the fragment, which the browser never sends to a server.
   const hop = btoa(JSON.stringify({ origin, auth: authorizationUrl }))
     .replaceAll("+", "-")
     .replaceAll("/", "_")
     .replaceAll("=", "");
-  window.location.assign(`${CAWCO_OAUTH_URL}/start#${hop}`);
+  tab.location.assign(`${CAWCO_OAUTH_URL}/start#${hop}`);
+  return tab;
 };
 
 /**

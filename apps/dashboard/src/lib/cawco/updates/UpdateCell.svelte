@@ -5,7 +5,9 @@
    * and morphs the words into place; no row moves.
    */
   import type { BinaryUpdatePolicy } from "@cawco/core/binary-updates";
+  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import RowFault from "#lib/cawco/RowFault.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
@@ -16,18 +18,18 @@
   let {
     machine,
     policy,
-    onerror,
     cell: given,
   }: {
     machine: UpdateMachine;
     policy: BinaryUpdatePolicy;
-    /** Open the machine's whole error. */
-    onerror: () => void;
     /** A cell to draw as given, for the states page. */
     cell?: Cell;
   } = $props();
 
   const cell = $derived(given ?? cellFor(machine, policy));
+  /** The machine's whole error, unfolded in place under the cell. */
+  let reading = $state(false);
+  const refused = $derived(updates.refused.get(machine.machineId));
   const CHIP = "h-auto min-h-6 gap-1.5 whitespace-normal px-2 py-1 text-start";
 </script>
 
@@ -68,9 +70,12 @@
             />
           {:else if button === "error"}
             <Button
+              aria-expanded={reading}
               class="text-muted-foreground"
-              label="Read the error"
-              onclick={onerror}
+              label={reading ? "Hide the error" : "Read the error"}
+              onclick={() => {
+                reading = !reading;
+              }}
               size="xs"
               variant="ghost"
             />
@@ -94,6 +99,13 @@
       {/if}
     </div>
   {/key}
+  {#if reading && cell.buttons.includes("error")}
+    <pre
+      class="said"
+      transition:unfold
+    >{machine.binaryUpdate?.error ?? "The machine did not say why."}</pre>
+  {/if}
+  <RowFault again={refused?.again} reason={refused?.reason} />
 </div>
 
 <style>
@@ -122,6 +134,20 @@
   .meta {
     font: var(--type-meta);
     color: var(--ink-muted);
+  }
+  /* The machine's own words, in a well under the cell. */
+  .said {
+    max-block-size: 10rem;
+    margin: var(--space-2) 0 0;
+    padding: var(--space-2);
+    overflow: auto;
+    border: 1px solid var(--border-well);
+    border-radius: var(--radius-xs);
+    background: var(--surface-well);
+    color: var(--ink-strong);
+    font: var(--type-code);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
   @keyframes swap-in {
     from {

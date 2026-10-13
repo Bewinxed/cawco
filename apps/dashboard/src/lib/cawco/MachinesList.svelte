@@ -14,10 +14,13 @@
     machineIcon,
   } from "#lib/components/ui/machine-row/index.js";
   import { IconPlus } from "#lib/icons.js";
-  import { cawco } from "./client.svelte";
+  import { cawco, type Machine } from "./client.svelte";
   import { home } from "./home/home-state.svelte";
   import { addMachine, JOIN_WAYS } from "./join/join.svelte";
   import MachineMenu from "./MachineMenu.svelte";
+  import RowFault from "./RowFault.svelte";
+  import { cellFor } from "./updates/model";
+  import { updates } from "./updates/updates.svelte";
 
   let { onleave }: { onleave?: () => void } = $props();
 
@@ -35,6 +38,51 @@
   }
   const faultOf = (machineId: string): string | undefined =>
     home.exceptions.find((entry) => entry.machineId === machineId)?.text;
+
+  /**
+   * An update under way says where it stands on the machine's row, in the
+   * Update cell's words, on the machine's word; one that failed says why
+   * under the row, with Retry where a retry is the person's to make.
+   */
+  const MOVING = new Set([
+    "ready",
+    "downloading",
+    "installing",
+    "waiting-sessions",
+    "failed",
+    "failed-rolled-back",
+  ]);
+  $effect(() => {
+    if (!(updates.policy || updates.problem)) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — the rows read the policy when it lands
+      void updates.loadPolicy();
+    }
+  });
+  function updateOf(machine: Machine) {
+    const phase =
+      machine.status === "online" ? machine.binaryUpdate?.phase : undefined;
+    if (!(updates.policy && phase && MOVING.has(phase))) {
+      return null;
+    }
+    return cellFor(machine, updates.policy);
+  }
+  function updateFault(machine: Machine) {
+    const refused = updates.refused.get(machine.machineId);
+    if (refused) {
+      return refused;
+    }
+    const cell = updateOf(machine);
+    if (!cell?.fail) {
+      return null;
+    }
+    const said = machine.binaryUpdate?.error;
+    return {
+      reason: said ? `${cell.text} ${said}` : cell.text,
+      again: cell.buttons.includes("retry")
+        ? () => updates.installNow(machine)
+        : undefined,
+    };
+  }
 </script>
 
 {#if cawco.machines.length === 0}
@@ -68,18 +116,31 @@
       {@const up = machine.status === "online"}
       {@const live = liveOn(machine.machineId)}
       {@const fault = faultOf(machine.machineId)}
-      <li>
+      {@const update = updateOf(machine)}
+      {@const updateFailed = updateFault(machine)}
+      <li data-machine={machine.machineId}>
         <MachineMenu {machine}>
           <div class="row press-tint focus-inset" tabindex="-1">
             <MachineRow
               hue={machineHue(index, up)}
               icon={machineIcon(machine.os ?? "")}
-              meta={[`${live} live`, fault].filter(Boolean).join(" · ")}
+              meta={[
+                `${live} live`,
+                fault,
+                update && !update.fail ? update.text : undefined,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
               name={machineLabel(machine.hostname)}
               presence={presenceOf(up, fault)}
             />
           </div>
         </MachineMenu>
+        <RowFault
+          again={updateFailed?.again}
+          class="machine-fault"
+          reason={updateFailed?.reason}
+        />
       </li>
     {/each}
   </ul>
@@ -128,6 +189,16 @@
         background: var(--surface-hover);
       }
     }
+  }
+  /* Under the machine's name: past the row's padding, its 16px glyph and gap. */
+  .list :global(.machine-fault) {
+    --fault-indent: calc(var(--space-2) * 2 + 16px);
+    --fault-end: var(--space-2);
+  }
+  /* A question about the machine, under its row, inside the list's edges. */
+  .list :global(.machine-ask) {
+    --ask-indent: var(--space-2);
+    --ask-end: var(--space-2);
   }
   .none {
     margin: 0;

@@ -18,6 +18,7 @@
    * so the two read and restore the same way.
    */
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import RowFault from "#lib/cawco/RowFault.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
 
   const LATEST = 5;
@@ -35,8 +36,8 @@
     failed?: string;
     /** The version whose restore is out. */
     restoring: number | null;
-    /** The version whose last restore failed. */
-    restoreFailed: number | null;
+    /** The version whose last restore failed, and why: said under it. */
+    restoreFailed: { id: number; reason: string } | null;
     onrestore: (version: ListedVersion) => void;
     /** Where a kept version came from, in words. */
     sourceLabel: (source: string) => string;
@@ -73,13 +74,19 @@
           </span>
           <Button
             disabled={restoring !== null && restoring !== version.id}
-            failed={restoreFailed === version.id}
+            failed={restoreFailed?.id === version.id}
             label="Restore"
             onclick={() => onrestore(version)}
             pending={restoring === version.id}
             pendingLabel="Restoring…"
             size="sm"
             variant="outline"
+          />
+          <RowFault
+            class="restore-fault"
+            reason={restoreFailed?.id === version.id
+              ? restoreFailed.reason
+              : null}
           />
         </li>
       {/each}
@@ -125,6 +132,9 @@
     margin: 0;
     padding: 0;
     list-style: none;
+  }
+  .version > :global(.restore-fault) {
+    flex-basis: 100%;
   }
   .version {
     display: flex;

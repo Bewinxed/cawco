@@ -59,8 +59,12 @@
             {...snippet.wrapperProps}
             style:pointer-events={pressable(snippet.open)}
           >
+            <!-- Closing, it takes neither a press nor the focus: what an item
+                 opened (a row's title field) keeps the focus it was given,
+                 where the menu leaving would pull it back into itself. -->
             <div
               {...own(snippet.props)}
+              inert={!snippet.open}
               style:pointer-events={pressable(snippet.open)}
             >
               {@render children?.()}

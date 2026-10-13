@@ -885,6 +885,11 @@ const state = $state({
    */
   projectOffers: {} as Record<string, ProjectOfferSummary>,
   /**
+   * An offer this tab answered by joining a project that already was: the
+   * card stays where the offer stood, saying what it joined, until put away.
+   */
+  projectJoins: {} as Record<string, ProjectOfferAccepted>,
+  /**
    * Approved actions waiting on the operator (proposed, or failed or of
    * unknown outcome until put away): read on connect, then kept whole by
    * `actions` frames.
@@ -5557,16 +5562,25 @@ export async function answerProjectOffer(
         `The hub answered ${response.status}, so nothing changed. Try again.`
     );
   }
-  delete state.projectOffers[instanceId];
   if (answer === "dismiss") {
+    delete state.projectOffers[instanceId];
     return null;
   }
   const accepted = (await response.json()) as ProjectOfferAccepted;
   if (accepted.setupThread) {
     adoptThread(accepted.setupThread);
+  } else {
+    // In the same change as the offer leaving: its card turns, never blinks.
+    state.projectJoins[instanceId] = accepted;
   }
+  delete state.projectOffers[instanceId];
   await refresh();
   return accepted;
+}
+
+/** Puts away the card that said what an offer joined. */
+export function dismissProjectJoin(instanceId: string): void {
+  delete state.projectJoins[instanceId];
 }
 
 // --- a project's Caw, its threads and views ---------------------------------
@@ -7496,6 +7510,9 @@ export const cawco = {
   /** The "make this a project" offer standing on a session, if one does. */
   projectOfferOf: (instanceId: string): ProjectOfferSummary | undefined =>
     state.projectOffers[instanceId],
+  /** The project an offer on this session joined, while its card stands. */
+  projectJoinOf: (instanceId: string): ProjectOfferAccepted | undefined =>
+    state.projectJoins[instanceId],
   /** The work item a delegate session runs, when its parent's tray was told of it. */
   workItemFor: (instanceId: string): WorkItemSummary | undefined =>
     Object.values(state.workItems).find(

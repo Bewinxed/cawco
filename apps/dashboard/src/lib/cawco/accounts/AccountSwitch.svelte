@@ -39,7 +39,7 @@
 
   function pick(id: string) {
     open = false;
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the row names the new account when the move lands, and a refusal is moveTo's toast
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the session's rows say the move and name the new account when it lands; a refusal stays on them (moveTo)
     void moveTo(instance, id);
   }
 </script>

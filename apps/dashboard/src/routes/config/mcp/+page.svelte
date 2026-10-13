@@ -1,6 +1,9 @@
 <script lang="ts">
   import type { FleetMcpServer } from "@cawco/core";
+  import AskHere from "#lib/cawco/AskHere.svelte";
+  import type { AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import { cawco } from "#lib/cawco/client.svelte.js";
+  import { holders } from "#lib/cawco/config/holders.js";
   import McpSignIn from "#lib/cawco/config/McpSignIn.svelte";
   import RolloutChip from "#lib/cawco/config/RolloutChip.svelte";
   import RowFaults from "#lib/cawco/config/RowFaults.svelte";
@@ -9,7 +12,7 @@
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
-  import { confirm } from "#lib/cawco/confirm.svelte.js";
+  import { Asker } from "#lib/cawco/confirm.svelte.js";
   import {
     describeMcp,
     isRemoteMcp,
@@ -18,8 +21,8 @@
     syncFleet,
   } from "#lib/cawco/fleet.js";
   import MachineInventory from "#lib/cawco/MachineInventory.svelte";
+  import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
-  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import {
@@ -54,8 +57,14 @@
     }
   }
 
+  /** Why a server's switch did not take, by server: said under its row. */
+  let toggleFailed = $state<Record<string, string>>({});
+  /** Why Sync all was refused: said under it. */
+  let syncProblem = $state<string | null>(null);
+
   async function toggle(row: FleetMcpServer, enabled: boolean) {
     busy[row.name] = true;
+    delete toggleFailed[row.name];
     try {
       landed(
         await saveMcpServer(
@@ -66,19 +75,26 @@
         )
       );
     } catch (caught) {
-      toast.error(message(caught));
+      toggleFailed[row.name] = message(caught);
     } finally {
       delete busy[row.name];
     }
   }
 
-  /** Removing a server pulls it from every machine, so the confirm names that. */
+  /**
+   * Removing a server pulls it from every machine that holds it: the
+   * question stands under its row, in the page, naming them, each with
+   * whether it has it now.
+   */
+  const asks = new Asker<AskHereRequest>();
   async function askRemove(row: FleetMcpServer) {
-    await confirm({
-      title: `Remove ${row.name}?`,
-      body: `This removes ${row.name} from every machine in the fleet — not just this one. It can't be undone.`,
+    await asks.ask({
+      at: row.name,
+      title: `Remove ${row.name} everywhere?`,
+      body: `It leaves the fleet and every machine that holds it. It can't be undone.`,
       confirmLabel: "Remove everywhere",
       destructive: true,
+      items: () => holders(machines, "mcp", row.name),
       pendingLabel: "Removing…",
       run: async () => {
         busy[row.name] = true;
@@ -100,12 +116,13 @@
   async function syncAll() {
     syncing = true;
     syncFailed = false;
+    syncProblem = null;
     try {
+      // Each row's rollout chip says its sync, machine by machine.
       await syncFleet();
-      toast.success("Every machine that is online is syncing.");
     } catch (caught) {
       syncFailed = true;
-      toast.error(message(caught));
+      syncProblem = message(caught);
     } finally {
       syncing = false;
     }
@@ -141,6 +158,7 @@
       size="sm"
       variant="outline"
     />
+    <RowFault again={syncAll} reason={syncProblem} />
   {/snippet}
 
   {#if servers.length === 0}
@@ -185,6 +203,11 @@
             <McpSignIn server={row} />
           {/snippet}
           {#snippet below()}
+            <AskHere asker={asks} at={row.name} />
+            <RowFault
+              again={() => toggle(row, !row.enabled)}
+              reason={toggleFailed[row.name]}
+            />
             <RowFaults
               hub={row.auth?.state === "failed"
                 ? [

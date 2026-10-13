@@ -9,7 +9,7 @@ import type {
   BinaryUpdateChannels,
   BinaryUpdatePolicy,
 } from "@cawco/core/binary-updates";
-import { SvelteSet } from "svelte/reactivity";
+import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import { newId } from "../id";
 import { toast } from "../toasts";
 import { installable, type UpdateMachine } from "./model";
@@ -23,6 +23,14 @@ class Updates {
   problem = $state<string | null>(null);
   /** Machines whose install this tab commanded. */
   commanded = new SvelteSet<string>();
+  /**
+   * What the hub said when it refused an install or a cancel, by machine:
+   * said under that machine's row and its Update cell, where it was asked.
+   */
+  refused = new SvelteMap<
+    string,
+    { again: () => Promise<void>; reason: string }
+  >();
 
   async loadPolicy(): Promise<void> {
     try {
@@ -89,6 +97,7 @@ class Updates {
     const { machineId } = machine;
     const name = machineLabel(machine.hostname);
     this.commanded.add(machineId);
+    this.refused.delete(machineId);
     let response: Response;
     try {
       response = await fetch(`/api/agents/${machineId}/update`, {
@@ -104,16 +113,19 @@ class Updates {
     } catch {
       return;
     }
+    const again = () => this.installNow(machine);
     if (response.status === 404) {
       this.commanded.delete(machineId);
-      toast.error(
-        `${name} is not connected, so nothing was installed. Try again when it is back.`
-      );
+      this.refused.set(machineId, {
+        reason: `${name} is not connected, so nothing was installed. Try again when it is back.`,
+        again,
+      });
     } else if (response.status === 500) {
       this.commanded.delete(machineId);
-      toast.error(
-        `${name} could not start the update. ${await errorText(response)}`
-      );
+      this.refused.set(machineId, {
+        reason: `${name} could not start the update. ${await errorText(response)}`,
+        again,
+      });
     }
   }
 
@@ -129,11 +141,22 @@ class Updates {
     );
   }
 
+  /** Calls a queued install off; a refusal is said on the machine's row. */
   async cancel(machine: UpdateMachine): Promise<void> {
-    this.commanded.delete(machine.machineId);
-    await fetch(`/api/binary-updates/machines/${machine.machineId}/cancel`, {
-      method: "POST",
-    }).catch(() => null);
+    const { machineId } = machine;
+    this.refused.delete(machineId);
+    const response = await fetch(
+      `/api/binary-updates/machines/${machineId}/cancel`,
+      { method: "POST" }
+    ).catch(() => null);
+    if (!response?.ok) {
+      this.refused.set(machineId, {
+        reason: `The install was not called off: ${response ? await errorText(response) : "the hub did not answer"}.`,
+        again: () => this.cancel(machine),
+      });
+      return;
+    }
+    this.commanded.delete(machineId);
   }
 }
 

@@ -7,15 +7,13 @@
   } from "@cawco/core";
   import { untrack } from "svelte";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
-  import { toast } from "#lib/cawco/toasts.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconDocument } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { confirm } from "../../confirm.svelte";
   import { removeAgent, saveAgent } from "../../fleet";
   import { keepDraft } from "../drafts.svelte";
-  import { savedShown } from "../EditorFooter.svelte";
+  import { EditorQuestion, savedShown } from "../EditorFooter.svelte";
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
   import { configStore, upsert } from "../store.svelte";
@@ -93,7 +91,6 @@ You are a <role>, working in one repository at a time.
         kept.drop();
         made = saved.name;
       }
-      toast.success(`${target} is on its way to every machine that is online.`);
     } catch (error) {
       refused = error instanceof Error ? error.message : String(error);
     } finally {
@@ -117,7 +114,7 @@ You are a <role>, working in one repository at a time.
     if (!agent) {
       return;
     }
-    await confirm({
+    await question.ask({
       title: `Remove ${agent.name}?`,
       body: "The fleet forgets it. Every machine keeps the file it was already given, and lists it as unmanaged, until the daemon can take one away itself.",
       confirmLabel: "Remove",
@@ -142,6 +139,9 @@ You are a <role>, working in one repository at a time.
       },
     });
   }
+
+  /** Remove asks in this editor's own footer. */
+  const question = new EditorQuestion();
 </script>
 
 <EditorFrame
@@ -152,6 +152,7 @@ You are a <role>, working in one repository at a time.
   oncancel={cancel}
   ondelete={agent ? askForget : undefined}
   onsubmit={save}
+  {question}
   saveLabel={agent ? "Save changes" : "Create subagent"}
   {saving}
   title={agent ? agent.name : "New subagent"}

@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { ToolPolicy, ToolSpec } from "@cawco/core";
   import { machineLabel } from "@cawco/core";
-  import { toast } from "#lib/cawco/toasts.js";
+  import RowFault from "#lib/cawco/RowFault.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -43,8 +43,10 @@
     written[spec.id] ?? policyFor(policies, spec.id);
   let saving = $state<Record<string, boolean>>({});
   let asked = $state<Record<string, boolean>>({});
-  /** Cells whose last install request failed: their button shows no check. */
-  let refused = $state<Record<string, boolean>>({});
+  /** Why a cell's last install request was refused: said in the cell. */
+  let refused = $state<Record<string, string>>({});
+  /** Why a column's Required switch did not save: said under it. */
+  let policyRefused = $state<Record<string, string>>({});
   const cellKey = (machineId: string, toolId: string): string =>
     `${machineId}:${toolId}`;
   const installedOn = (spec: ToolSpec): number =>
@@ -65,10 +67,7 @@
         policyOf(spec).pinnedVersion
       );
     } catch (err) {
-      refused[key] = true;
-      toast.error(
-        `${spec.name} on ${machineLabel(machine.hostname)}: ${message(err)}`
-      );
+      refused[key] = message(err);
     } finally {
       delete asked[key];
     }
@@ -76,10 +75,11 @@
 
   async function requireEverywhere(spec: ToolSpec, required: boolean) {
     saving[spec.id] = true;
+    delete policyRefused[spec.id];
     try {
       written[spec.id] = await setPolicy(spec.id, { required });
     } catch (err) {
-      toast.error(message(err));
+      policyRefused[spec.id] = message(err);
     } finally {
       delete saving[spec.id];
     }
@@ -94,7 +94,7 @@
   {@const toolStatus = machine.tools?.[spec.id]}
   {@const pending = asked[cellKey(machine.machineId, spec.id)] === true}
   {@const shown = toolStatus?.state ?? "unknown"}
-  {@const failed = refused[cellKey(machine.machineId, spec.id)] === true}
+  {@const failed = cellKey(machine.machineId, spec.id) in refused}
 
   {#if shown === "installed"}
     <span class="flex items-center gap-[var(--space-1)]">
@@ -260,6 +260,11 @@
       />
     </span>
   {/if}
+  <!-- An install the hub refused, in its words, in the cell it was asked in. -->
+  <RowFault
+    again={online ? () => install(machine, spec) : undefined}
+    reason={refused[cellKey(machine.machineId, spec.id)]}
+  />
 {/snippet}
 
 {#if columns.length === 0}
@@ -331,6 +336,10 @@
                   />
                   Required on every machine
                 </label>
+                <RowFault
+                  again={() => requireEverywhere(spec, !policy.required)}
+                  reason={policyRefused[spec.id]}
+                />
               </div>
             </Table.Head>
           {/each}

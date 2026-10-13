@@ -14,7 +14,9 @@
     type StageKind,
     type TaskSummary,
   } from "#lib/cawco/project-tasks.js";
+  import RowFault from "#lib/cawco/RowFault.svelte";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconNeedsYou } from "#lib/icons.js";
   import TaskCard from "./TaskCard.svelte";
 
@@ -30,6 +32,8 @@
     over = false,
     drop,
     foot,
+    moving,
+    refused,
   }: {
     label: string;
     kind: StageKind | null;
@@ -46,6 +50,10 @@
     drop?: Attachment<HTMLElement>;
     /** What stands under the cards: the board's new task. */
     foot?: Snippet;
+    /** A card whose move the hub has not answered: it stands here, moving. */
+    moving?: (id: string) => boolean;
+    /** A move the hub refused: the card is back here, the reason under it. */
+    refused?: (id: string) => { again: () => void; reason: string } | null;
   } = $props();
 </script>
 
@@ -69,7 +77,12 @@
   </header>
   <ol class="cards" {@attach reflow()}>
     {#each cards as task (task.id)}
-      <li data-flip>
+      {@const fault = refused?.(task.id) ?? null}
+      <li
+        aria-busy={moving?.(task.id) || undefined}
+        data-flip
+        data-moving={moving?.(task.id) || undefined}
+      >
         <TaskCard
           date={dateOf(task.id)}
           href={hrefOf(task.id)}
@@ -77,6 +90,10 @@
           {onopen}
           {task}
         />
+        {#if moving?.(task.id)}
+          <span class="moving"><Spinner aria-hidden="true" />Moving…</span>
+        {/if}
+        <RowFault again={fault?.again} reason={fault?.reason} />
       </li>
     {/each}
   </ol>
@@ -86,6 +103,27 @@
 </section>
 
 <style>
+  /* A dropped card stands where the hand put it, quieter, saying it moves,
+     until the hub answers. */
+  li[data-moving] > :global(:first-child) {
+    opacity: 0.6;
+  }
+  .moving {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2) 0;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    & :global(svg) {
+      inline-size: 12px;
+      block-size: 12px;
+    }
+  }
+  li > :global(.row-fault) {
+    --fault-indent: var(--space-2);
+    --fault-end: var(--space-2);
+  }
   .column {
     display: flex;
     flex-direction: column;

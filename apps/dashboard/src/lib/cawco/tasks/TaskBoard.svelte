@@ -33,6 +33,8 @@
     onopen,
     onmove,
     oncreate,
+    moving,
+    refused,
   }: {
     stages: Stage[];
     tasks: TaskSummary[];
@@ -47,6 +49,10 @@
     onopen: (id: string) => void;
     onmove: (taskId: string, stage: string, source: HTMLElement) => void;
     oncreate: (title: string, stage: string) => Promise<void>;
+    /** A card whose move the hub has not answered yet. */
+    moving?: (id: string) => boolean;
+    /** A move the hub refused, said under its card. */
+    refused?: (id: string) => { again: () => void; reason: string } | null;
   } = $props();
 
   const named = $derived(new Set(stages.map((stage) => stage.name)));
@@ -86,8 +92,10 @@
     {kind}
     {kindOf}
     {label}
+    {moving}
     {onopen}
     over={boardDrag.over === name && name !== boardDrag.from}
+    {refused}
   />
 {/snippet}
 

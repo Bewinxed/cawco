@@ -1,5 +1,7 @@
 <script lang="ts">
   import { hookSentence } from "@cawco/core";
+  import AskHere from "#lib/cawco/AskHere.svelte";
+  import type { AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import RolloutChip from "#lib/cawco/config/RolloutChip.svelte";
   import RowFaults from "#lib/cawco/config/RowFaults.svelte";
@@ -8,7 +10,7 @@
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore } from "#lib/cawco/config/store.svelte.js";
-  import { confirm } from "#lib/cawco/confirm.svelte.js";
+  import { Asker } from "#lib/cawco/confirm.svelte.js";
   import {
     draftOf,
     type FleetHook,
@@ -18,8 +20,8 @@
     saveHook,
   } from "#lib/cawco/hooks.js";
   import { newId } from "#lib/cawco/id.js";
+  import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
-  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconHook, IconPlus, IconTrash } from "#lib/icons.js";
@@ -37,24 +39,32 @@
   const machines = $derived(orderMachines(cawco.machines));
   let busy = $state<Record<string, boolean>>({});
   let seeding = $state<string | null>(null);
-  /** The template whose last add failed: its button shows no check. */
-  let seedFailed = $state<string | null>(null);
+  /** The template whose last add was refused, and why: said under its row. */
+  let seedFailed = $state<{ title: string; reason: string } | null>(null);
+  /** Why a hook's switch did not take, by hook: said under its row. */
+  let toggleFailed = $state<Record<string, string>>({});
 
   async function toggle(row: FleetHook, enabled: boolean) {
     busy[row.id] = true;
+    delete toggleFailed[row.id];
     try {
       await saveHook(row.id, { ...draftOf(row), enabled });
       row.enabled = enabled;
     } catch (error) {
-      toast.error(message(error));
+      toggleFailed[row.id] = message(error);
     } finally {
       delete busy[row.id];
     }
   }
 
-  /** A hook is executable material on every machine — never a bare click. */
+  /**
+   * A hook is executable material on every machine — never a bare click. The
+   * question stands under its row, in the page.
+   */
+  const asks = new Asker<AskHereRequest>();
   async function askRemove(row: FleetHook) {
-    await confirm({
+    await asks.ask({
+      at: row.id,
       title: `Delete ${row.name}?`,
       body: "This hook stops running and is removed from every machine that had it. You can always write it again, but there's no undo.",
       confirmLabel: "Delete hook",
@@ -77,12 +87,11 @@
     seedFailed = null;
     try {
       const saved = await saveHook(newId(), template.draft);
+      // Its new row, marked, with its rollout chip, is the result.
       store.hooks.value = [saved, ...hooks];
       store.mark(saved.id);
-      toast.success(`${template.title} is written to every machine.`);
     } catch (error) {
-      seedFailed = template.title;
-      toast.error(message(error));
+      seedFailed = { title: template.title, reason: message(error) };
     } finally {
       seeding = null;
     }
@@ -125,13 +134,21 @@
           {#snippet trailing()}
             <Button
               disabled={seeding !== null && seeding !== template.title}
-              failed={seedFailed === template.title}
+              failed={seedFailed?.title === template.title}
               label="Add"
               onclick={() => useTemplate(template)}
               pending={seeding === template.title}
               pendingLabel="Adding…"
               size="sm"
               variant="outline"
+            />
+          {/snippet}
+          {#snippet below()}
+            <RowFault
+              again={() => useTemplate(template)}
+              reason={seedFailed?.title === template.title
+                ? seedFailed.reason
+                : null}
             />
           {/snippet}
         </SectionRow>
@@ -173,6 +190,11 @@
             />
           {/snippet}
           {#snippet below()}
+            <AskHere asker={asks} at={row.id} />
+            <RowFault
+              again={() => toggle(row, !row.enabled)}
+              reason={toggleFailed[row.id]}
+            />
             <RowFaults key={row.id} kind="hooks" {machines} />
           {/snippet}
         </SectionRow>

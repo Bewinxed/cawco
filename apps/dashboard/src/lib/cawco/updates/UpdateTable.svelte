@@ -11,7 +11,6 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Table from "#lib/components/ui/table/index.js";
   import { IconCheck, IconLaptop, IconServer } from "#lib/icons.js";
-  import ErrorDialog from "../ErrorDialog.svelte";
   import { addMachine } from "../join/join.svelte";
   import { machineOs } from "../machine";
   import OsMark from "../OsMark.svelte";
@@ -22,9 +21,6 @@
 
   let { machines, policy }: { machines: Row[]; policy: BinaryUpdatePolicy } =
     $props();
-
-  let reading = $state<Row | null>(null);
-  let open = $state(false);
 </script>
 
 {#if machines.length === 0}
@@ -110,28 +106,13 @@
             <Table.Cell
               class="update border-l border-border px-[var(--space-4)] py-[var(--space-2)] whitespace-normal"
             >
-              <UpdateCell
-                {machine}
-                onerror={() => {
-                  reading = machine;
-                  open = true;
-                }}
-                {policy}
-              />
+              <UpdateCell {machine} {policy} />
             </Table.Cell>
           </Table.Row>
         {/each}
       </Table.Body>
     </Table.Root>
   </div>
-{/if}
-
-{#if reading}
-  <ErrorDialog
-    message={reading.binaryUpdate?.error ?? "The machine did not say why."}
-    title="Update failed on {machineLabel(reading.hostname)}"
-    bind:open
-  />
 {/if}
 
 <style>

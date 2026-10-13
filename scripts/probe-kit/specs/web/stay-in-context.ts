@@ -14,9 +14,23 @@
  * Throughout, nothing reaches the page's unhandled-rejection reporter.
  * Desk, light: these are states, not looks.
  */
+import { cp, mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type { Page, Route, WebSocketRoute } from "playwright-core";
-import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
-import { type Kit, type KitFleet, open, type Spec } from "../../kit";
+import {
+  CLAUDE_JSON_NAME,
+  HOOK_TEMPLATES,
+} from "../../../../packages/core/src/index";
+import { projectClaudeDir } from "../../../../packages/core/src/paths";
+import {
+  ACCOUNT,
+  MACHINE,
+  MODEL,
+  type Reply,
+  type Seen,
+  until,
+} from "../../../scratch-fleet";
+import { type Kit, type KitFleet, open, ROOT, type Spec } from "../../kit";
 
 const ASK = "PROBE-ASK";
 const STOP_REFUSAL = "The machine would not stop it: probe refusal.";
@@ -29,12 +43,49 @@ const STOP_ITEM = /^Stop/;
 const RENAME_ITEM = /^Rename/;
 const DELETE_ITEM = /Delete transcript/;
 const FINISHED_TAB = /Finished/;
+const PICK_STAGES = /Pick stages/;
+const SOCIAL = /Social posts/;
+const FORGET = /Forget project/;
+const REMOVE_EVERYWHERE = /Remove everywhere/;
+const MACHINES_BUTTON = /^\d+ machines?/;
+const REMOVE_MACHINE = /Remove machine/;
+const ACCOUNT_ITEM = /^Account/;
+const SECOND_ACCOUNT = /^Probe two$/;
+const CANCEL_RUN = /^Cancel run$/;
+const ADOPT = /^Adopt$/;
+const SIGN_IN = /^Sign in$/;
+const TAB_CLOSED = /closed before it finished/;
+const CONTINUE_TO_HUB = /Continue to your hub/;
+const SIGNED_IN_ROW = /Signed in for the fleet/;
+const CREATE_PROJECT = /^Create project$/;
+const CANCEL = /^Cancel$/;
+const RETRY = /^Retry$/;
+/** How long the probe project's install runs on a target: the window a move's Cancel stands in. */
+const INSTALL_SECONDS = 173;
+const STOPPED = /^Stopped\./;
+const MOVE_CANCEL_REFUSAL = "The move is mid-step: probe refusal.";
+const MOVE_RETRY_REFUSAL = "The machine is busy: probe refusal.";
+const OFFER_REFUSAL = "The project could not take it: probe refusal.";
+/** A machine's word on a fleet row it holds or is being sent. */
+const HOLDING = /Has it|Being sent it/;
 
-/** Words for a turn; a tool call that needs a permission for the ask. */
+/** A workflow step's prompt: its turn runs long, so the step stays running. */
+const SLOW = "PROBE-SLOW-STEP";
+
+/**
+ * Words for a turn; a tool call that needs a permission for the ask; a
+ * workflow step's turn that goes on for minutes.
+ */
 const respondIn =
   (dir: string) =>
-  (request: Seen): Reply =>
-    request.tools && request.last.includes(ASK)
+  (request: Seen): Reply => {
+    if (request.all.includes(SLOW)) {
+      return {
+        everyMs: 1000,
+        words: Array.from({ length: 600 }, () => "step"),
+      };
+    }
+    return request.tools && request.last.includes(ASK)
       ? {
           everyMs: 5,
           words: [],
@@ -44,6 +95,7 @@ const respondIn =
           },
         }
       : { everyMs: 5, words: ["ok"] };
+  };
 
 type Rule = (frame: Record<string, unknown>) => "hold" | "refuse" | "pass";
 
@@ -186,6 +238,1651 @@ async function finishedTab(page: Page) {
   await page.getByRole("tab", { name: FINISHED_TAB }).first().click();
 }
 
+const rejectionsOf = (page: Page) =>
+  page.evaluate(
+    () => (window as unknown as { __rejections: string[] }).__rejections
+  );
+
+/**
+ * One request route, gated: while `hold` is on, requests of `method` wait
+ * here until refused (fulfilled with the hub's kind of refusal, a status and
+ * a sentence) or let through; everything else passes.
+ */
+async function gate(page: Page, url: string, method: string) {
+  const held: Route[] = [];
+  const rule = { hold: Boolean(url) };
+  await page.route(url, async (route) => {
+    if (route.request().method() === method && rule.hold) {
+      held.push(route);
+      return;
+    }
+    await route.fallback();
+  });
+  return {
+    held: () => held.length,
+    waitHeld: () =>
+      until(
+        `${method} ${url} held`,
+        () => held.length,
+        (n) => n > 0
+      ),
+    refuse: (status: number, body: string) =>
+      Promise.all(
+        held
+          .splice(0)
+          .map((route) =>
+            route.fulfill({ status, contentType: "text/plain", body })
+          )
+      ),
+    open: () => {
+      rule.hold = false;
+    },
+  };
+}
+
+const MOVE_REFUSAL = "That move is not open from here: probe refusal.";
+const TEMPLATE_REFUSAL = "stages.md could not be written: probe refusal.";
+const STOP_TRAY_REFUSAL = "The machine did not stop it: probe refusal.";
+const HOOK_REFUSAL = "The hook could not be written: probe refusal.";
+const MCP_REFUSAL = "The server could not be removed: probe refusal.";
+const ACCOUNT_REFUSAL = "The account could not be removed: probe refusal.";
+const MACHINE_REFUSAL = "The machine could not be removed: probe refusal.";
+
+const WORKFLOW_REFUSAL = "The run could not be cancelled: probe refusal.";
+const ACCOUNT_MOVE_REFUSAL = "That account is busy: probe refusal.";
+const ADOPT_REFUSAL = "The hub could not take the skill: probe refusal.";
+const SIGN_IN_REFUSAL = "The provider would not start: probe refusal.";
+const EDITOR_DELETE_REFUSAL = "The hook could not be deleted: probe refusal.";
+
+/**
+ * What a question asked in the page says now, by where it was asked
+ * (AskHere's `data-ask`): its title, the things it names, its refusal, its
+ * busy confirm, and whether anything holds the page (a modal, or the body
+ * made inert to the pointer), which The Open Page Rule says nothing does.
+ */
+const askState = (at: string) => {
+  const ask = document.querySelector(`[data-ask="${CSS.escape(at)}"]`);
+  return {
+    open: Boolean(ask),
+    title: ask?.querySelector("p.title")?.textContent?.trim() ?? null,
+    items: [...(ask?.querySelectorAll("[data-item]") ?? [])].map((item) =>
+      item.textContent?.replace(/\s+/g, " ").trim()
+    ),
+    fault:
+      ask
+        ?.querySelector(".row-fault")
+        ?.textContent?.replace(/\s+/g, " ")
+        .trim() ?? null,
+    busy: Boolean(ask?.querySelector('[aria-busy="true"]')),
+    held:
+      Boolean(
+        document.querySelector(
+          '[role="alertdialog"], [role="dialog"][aria-modal="true"]'
+        )
+      ) || getComputedStyle(document.body).pointerEvents === "none",
+    rejections: (window as unknown as { __rejections: string[] }).__rejections
+      .length,
+  };
+};
+
+/** Waits for the question asked at `at` to say `text` (its refusal), then reads it. */
+async function askSays(page: Page, at: string, text: string) {
+  await page
+    .locator(`[data-ask="${at}"]`)
+    .getByText(text)
+    .waitFor({ timeout: 30_000 });
+  return page.evaluate(askState, at);
+}
+
+/** The question asked at `at`: its confirm button (the last of its actions). */
+const askConfirm = (page: Page, at: string) =>
+  page.locator(`[data-ask="${at}"] .actions button`).last();
+
+/** Drag a task to another stage; Pick stages; Forget the project (its tray). */
+async function projectFlows(
+  kit: Kit,
+  fleet: KitFleet,
+  page: Page,
+  base: string
+) {
+  const project = await fleet.api<{ id: string; name: string }>(
+    "/api/projects",
+    { name: "Probe board", machineId: MACHINE, cwd: fleet.repo, caw: false }
+  );
+  const { stages } = await fleet.api<{ stages: { name: string }[] }>(
+    `/api/projects/${project.id}/stages`
+  );
+  const [from] = stages.map((stage) => stage.name);
+  const task = await fleet.api<{ id: string }>(
+    `/api/projects/${project.id}/tasks`,
+    { title: "Probe card", stage: from }
+  );
+  await open(
+    page,
+    `${base}/project/${project.id}`,
+    `[data-share="task:${task.id}"]`
+  );
+  const where = () =>
+    page.evaluate((id) => {
+      // The card standing in a column: while a move is out, the one marked
+      // moving (the copy leaving its old column is still drawn as it goes).
+      const placed = [
+        ...document.querySelectorAll(`[data-share="task:${id}"]`),
+      ].filter((one) => one.closest("section.column ol.cards > li"));
+      const card =
+        placed.find((one) => one.closest("li[aria-busy]")) ?? placed.at(-1);
+      const item = card?.closest("li");
+      return {
+        copies: document.querySelectorAll(`[data-share="task:${id}"]`).length,
+        column:
+          card
+            ?.closest("section.column")
+            ?.querySelector("h3")
+            ?.textContent?.trim() ?? null,
+        moving: item?.getAttribute("aria-busy") ?? null,
+        words: item?.querySelector(".moving")?.textContent?.trim() ?? null,
+        fault: item?.querySelector(".row-fault")?.textContent?.trim() ?? null,
+        rejections: (window as unknown as { __rejections: string[] })
+          .__rejections.length,
+      };
+    }, task.id);
+  const before = await where();
+  /** The board settled: one copy of the card stands, in one column. */
+  const standing = () =>
+    page.waitForFunction(
+      (id) =>
+        [...document.querySelectorAll(`[data-share="task:${id}"]`)].filter(
+          (one) => one.closest("section.column ol.cards > li")
+        ).length === 1,
+      task.id,
+      { timeout: 10_000 }
+    );
+
+  // ── #5 Drag a task to another stage ───────────────────────────────────
+  const moves = await gate(
+    page,
+    `**/api/projects/${project.id}/tasks/${task.id}/stage`,
+    "POST"
+  );
+  // The second stage's column: its heading is the stage's label.
+  const fromIndex = await page
+    .locator("section.column")
+    .evaluateAll(
+      (columns, id) =>
+        columns.findIndex((column) =>
+          column.querySelector(`[data-share="task:${id}"]`)
+        ),
+      task.id
+    );
+  await page
+    .locator(`[data-share="task:${task.id}"]`)
+    .dragTo(page.locator("section.column").nth(fromIndex + 1));
+  await moves.waitHeld();
+  const movePending = await where();
+  note(kit, "drag, before the hub answers", movePending);
+  kit.check(
+    "Drag: before the hub answers, the card stands where it was put, saying Moving…",
+    movePending.moving === "true" &&
+      movePending.words === "Moving…" &&
+      movePending.column !== before.column,
+    JSON.stringify({ before, movePending })
+  );
+  await moves.refuse(409, MOVE_REFUSAL);
+  await page.waitForSelector(`.row-fault >> text=${MOVE_REFUSAL}`);
+  await standing();
+  const moveRefused = await where();
+  note(kit, "drag, refused", moveRefused);
+  kit.check(
+    "Drag: refused, the card is back in its column with the hub's sentence under it and Try again",
+    moveRefused.column === before.column &&
+      (moveRefused.fault ?? "").includes(MOVE_REFUSAL) &&
+      moveRefused.moving === null &&
+      moveRefused.rejections === 0,
+    JSON.stringify(moveRefused)
+  );
+  moves.open();
+  await page
+    .locator(".row-fault", { hasText: MOVE_REFUSAL })
+    .getByRole("button", { name: TRY_AGAIN })
+    .click();
+  await page.waitForFunction(
+    (id) =>
+      !document
+        .querySelector(`[data-share="task:${id}"]`)
+        ?.closest("li")
+        ?.hasAttribute("aria-busy"),
+    task.id
+  );
+  await standing();
+  const moveDone = await where();
+  note(kit, "drag, confirmed", moveDone);
+  kit.check(
+    "Drag: confirmed, the card stays in its new column, no fault",
+    moveDone.column !== before.column &&
+      moveDone.fault === null &&
+      moveDone.rejections === 0,
+    JSON.stringify(moveDone)
+  );
+
+  // ── #21 Pick stages: the tasks a set strands, named before it is chosen ─
+  const templates = await gate(
+    page,
+    `**/api/projects/${project.id}/stages/template`,
+    "POST"
+  );
+  await page.getByRole("button", { name: `More for ${project.name}` }).click();
+  await page.getByRole("menuitem", { name: PICK_STAGES }).click();
+  await page.getByRole("button", { name: SOCIAL }).click();
+  await page.locator('[data-ask="social"]').waitFor();
+  const templateAsked = await page.evaluate(askState, "social");
+  note(kit, "stages, the question", templateAsked);
+  kit.check(
+    "Pick stages: before it is chosen, the question stands under the set in the picker, naming the task the set strands with its stage; nothing holds the page",
+    templateAsked.items.length === 1 &&
+      (templateAsked.items[0] ?? "").includes("Probe card") &&
+      !templateAsked.held,
+    JSON.stringify(templateAsked)
+  );
+  await askConfirm(page, "social").click();
+  await templates.waitHeld();
+  const templatePending = await page.evaluate(askState, "social");
+  note(kit, "stages, before the hub answers", templatePending);
+  kit.check(
+    "Pick stages: before the hub answers, the question stays, its button busy",
+    templatePending.open && templatePending.busy,
+    JSON.stringify(templatePending)
+  );
+  await templates.refuse(409, TEMPLATE_REFUSAL);
+  const templateRefused = await askSays(page, "social", TEMPLATE_REFUSAL);
+  note(kit, "stages, refused", templateRefused);
+  kit.check(
+    "Pick stages: refused, the question stays with the hub's reason, the task still named",
+    templateRefused.open &&
+      (templateRefused.fault ?? "").includes(TEMPLATE_REFUSAL) &&
+      templateRefused.items.length === 1 &&
+      templateRefused.rejections === 0,
+    JSON.stringify(templateRefused)
+  );
+  templates.open();
+  await askConfirm(page, "social").click();
+  await page
+    .locator('[data-ask="social"]')
+    .waitFor({ state: "detached", timeout: 30_000 });
+  const written = await fleet.api<{ source: string }>(
+    `/api/projects/${project.id}/stages`
+  );
+  kit.check(
+    "Pick stages: confirmed, the question goes and the project has its own stages",
+    written.source === "file",
+    JSON.stringify(written.source)
+  );
+
+  // ── StopTray: a session that would not stop says why on its row ─────────
+  const session = await fleet.spawn("claude", "Probe forget", fleet.repo, {
+    projectId: project.id,
+  });
+  const stops = await gate(page, `**/api/projects/${project.id}/stop`, "POST");
+  await page.getByRole("button", { name: `More for ${project.name}` }).click();
+  await page.getByRole("menuitem", { name: FORGET }).click();
+  await page.waitForSelector(`[data-row="${session}"]`);
+  await page.click("[data-stop-confirm]");
+  await page.waitForTimeout(500);
+  await page.click("[data-stop-confirm]");
+  await stops.waitHeld();
+  await stops.refuse(500, STOP_TRAY_REFUSAL);
+  await page.waitForSelector(`[data-row="${session}"] .row-fault`);
+  const trayRefused = await page.evaluate((id) => {
+    const row = document.querySelector(`[data-row="${id}"]`);
+    return {
+      fault: row
+        ?.querySelector(".row-fault")
+        ?.textContent?.replace(/\s+/g, " ")
+        .trim(),
+      tryAgain: Boolean(row?.querySelector(".row-fault button")),
+      rejections: (window as unknown as { __rejections: string[] }).__rejections
+        .length,
+    };
+  }, session);
+  note(kit, "forget tray, a stop refused", trayRefused);
+  kit.check(
+    "Forget tray: a stop refused says why under its row, with Try again (RowFault), no unhandled rejection",
+    (trayRefused.fault ?? "").includes(STOP_TRAY_REFUSAL) &&
+      trayRefused.tryAgain &&
+      trayRefused.rejections === 0,
+    JSON.stringify(trayRefused)
+  );
+  stops.open();
+  await page
+    .locator(`[data-row="${session}"] .row-fault`)
+    .getByRole("button", { name: TRY_AGAIN })
+    .click();
+  await until(
+    "the forgotten project's session stopped",
+    () => fleet.instance(session)?.status,
+    (status) => status === "stopped",
+    60_000
+  );
+  kit.check(
+    "Forget tray: Try again stops the row on the machine's word",
+    fleet.instance(session)?.status === "stopped",
+    String(fleet.instance(session)?.status)
+  );
+  await page.keyboard.press("Escape");
+}
+
+/** Writes a hook on the hub, as a probe's starting state; refused is a failure. */
+async function putHook(
+  fleet: KitFleet,
+  id: string,
+  draft: (typeof HOOK_TEMPLATES)[number]["draft"]
+) {
+  const response = await fetch(`${fleet.base}/api/fleet/hooks/${id}`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ...draft, matcher: draft.matcher ?? null }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `the probe's hook was refused: ${response.status} ${await response.text()}`
+    );
+  }
+}
+
+/**
+ * Opens an editor and waits until the one editor stands, the hub connected
+ * (the first drawn, before the hub's rows are in, gives way to it).
+ */
+async function openEditor(page: Page, url: string) {
+  await open(page, url, 'input[aria-label="Hook name"]');
+  await page.waitForFunction(
+    () =>
+      document.querySelectorAll("footer button[type=submit]").length === 1 &&
+      !document.querySelector("footer button[title*='unreachable']"),
+    null,
+    { timeout: 30_000 }
+  );
+}
+
+/** A hook saved in place; an MCP server removed, naming its machines. */
+async function configureFlows(
+  kit: Kit,
+  fleet: KitFleet,
+  page: Page,
+  base: string
+) {
+  // ── #11 Hook save: no second dialog, the reach on Save, the chip after ──
+  const hookId = crypto.randomUUID();
+  const draft = { ...HOOK_TEMPLATES[0].draft, name: "Probe hook" };
+  await putHook(fleet, hookId, draft);
+  const hookSaves = await gate(page, `**/api/fleet/hooks/${hookId}`, "PUT");
+  await openEditor(page, `${base}/config/hooks/${hookId}`);
+  await page.fill('input[aria-label="Hook name"]', "Probe hook renamed");
+  const save = page.locator("footer button[type=submit]");
+  await page.waitForFunction(
+    () =>
+      !(
+        document.querySelector(
+          "footer button[type=submit]"
+        ) as HTMLButtonElement | null
+      )?.disabled,
+    null,
+    { timeout: 30_000 }
+  );
+  const saveWords = (await save.textContent())?.replace(/\s+/g, " ").trim();
+  await save.click();
+  await hookSaves.waitHeld();
+  const hookPending = await page.evaluate(() => ({
+    dialog: Boolean(document.querySelector('[role="alertdialog"]')),
+    busy: document
+      .querySelector("footer button[type=submit]")
+      ?.getAttribute("aria-busy"),
+    reach: document.querySelector("footer .reach")?.textContent?.trim(),
+  }));
+  note(kit, "hook save, before the hub answers", { saveWords, ...hookPending });
+  kit.check(
+    "Hook save: no second dialog; Save says its reach and spins; the machines it writes to are named beside it",
+    !hookPending.dialog &&
+      hookPending.busy === "true" &&
+      (saveWords ?? "").includes("1 machine") &&
+      Boolean(hookPending.reach),
+    JSON.stringify({ saveWords, ...hookPending })
+  );
+  await hookSaves.refuse(409, HOOK_REFUSAL);
+  await page.waitForSelector(`[role="alert"] >> text=${HOOK_REFUSAL}`);
+  kit.check(
+    "Hook save: refused, the reason stands in the editor, the edit kept, no unhandled rejection",
+    (await page.inputValue('input[aria-label="Hook name"]')) ===
+      "Probe hook renamed" && (await rejectionsOf(page)).length === 0,
+    "reason shown in the editor"
+  );
+  hookSaves.open();
+  await save.click();
+  await until(
+    "the hook renamed on the hub",
+    () =>
+      fetch(`${fleet.base}/api/fleet/hooks`)
+        .then((r) => r.json())
+        .then(
+          (
+            all:
+              | { hooks?: { id: string; name: string }[] }
+              | { id: string; name: string }[]
+          ) =>
+            (Array.isArray(all) ? all : (all.hooks ?? [])).find(
+              (h) => h.id === hookId
+            )?.name
+        ),
+    (name) => name === "Probe hook renamed",
+    30_000
+  );
+  await page.waitForSelector(
+    "footer .result button, footer .result [data-slot]",
+    {
+      timeout: 30_000,
+    }
+  );
+  const hookDone = await page.evaluate(() => ({
+    toasts: document.querySelectorAll("[data-sonner-toast]").length,
+    chip: document
+      .querySelector("footer .result")
+      ?.textContent?.replace(/\s+/g, " ")
+      .trim(),
+  }));
+  note(kit, "hook save, confirmed", hookDone);
+  kit.check(
+    "Hook save: confirmed, no toast; the rollout chip beside Save is the result",
+    hookDone.toasts === 0 && (hookDone.chip ?? "").includes("machine"),
+    JSON.stringify(hookDone)
+  );
+
+  // ── #11 Remove an MCP server everywhere: its machines named ─────────────
+  await fetch(`${fleet.base}/api/fleet/mcp/probe-mcp`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      config: { command: "true" },
+      enabled: true,
+      projectId: null,
+    }),
+  });
+  const removals = await gate(page, "**/api/fleet/mcp/probe-mcp", "DELETE");
+  await open(
+    page,
+    `${base}/config/mcp`,
+    'button[aria-label="More for probe-mcp"]'
+  );
+  // The machine reports it before the question can name it.
+  await until(
+    "the machine holding probe-mcp",
+    () =>
+      fetch(`${fleet.base}/api/agents`)
+        .then((r) => r.json())
+        .then((rows: { fleet?: { mcp?: Record<string, unknown> } }[]) =>
+          rows.some((row) => row.fleet?.mcp?.["probe-mcp"])
+        ),
+    Boolean,
+    60_000
+  );
+  await page.click('button[aria-label="More for probe-mcp"]');
+  await page.getByRole("menuitem", { name: REMOVE_EVERYWHERE }).click();
+  await page.locator('[data-ask="probe-mcp"]').waitFor();
+  const mcpAsked = await page.evaluate(askState, "probe-mcp");
+  note(kit, "mcp remove, the question", mcpAsked);
+  kit.check(
+    "Remove everywhere: the question stands under the server's row, naming the machine that holds it with its status; nothing holds the page",
+    mcpAsked.items.length === 1 &&
+      HOLDING.test(mcpAsked.items[0] ?? "") &&
+      !mcpAsked.held,
+    JSON.stringify(mcpAsked)
+  );
+  await askConfirm(page, "probe-mcp").click();
+  await removals.waitHeld();
+  const mcpPending = await page.evaluate(askState, "probe-mcp");
+  await removals.refuse(409, MCP_REFUSAL);
+  const mcpRefused = await askSays(page, "probe-mcp", MCP_REFUSAL);
+  note(kit, "mcp remove, pending then refused", { mcpPending, mcpRefused });
+  kit.check(
+    "Remove everywhere: pending, the question waits busy; refused, the reason under it and the machine still named",
+    mcpPending.busy &&
+      mcpRefused.open &&
+      (mcpRefused.fault ?? "").includes(MCP_REFUSAL) &&
+      mcpRefused.items.length === 1 &&
+      mcpRefused.rejections === 0,
+    JSON.stringify({ mcpPending, mcpRefused })
+  );
+  removals.open();
+  await askConfirm(page, "probe-mcp").click();
+  await page.waitForFunction(
+    () => !document.querySelector('button[aria-label="More for probe-mcp"]'),
+    null,
+    { timeout: 30_000 }
+  );
+  kit.check(
+    "Remove everywhere: confirmed, the question and the row leave together",
+    (await page.locator('[data-ask="probe-mcp"]').count()) === 0 &&
+      (await rejectionsOf(page)).length === 0,
+    "row gone"
+  );
+}
+
+/**
+ * #11 An editor's delete asks in its footer, in the page: a hook's, held,
+ * refused, then let through. The editor's fields stay live while it stands.
+ */
+async function editorDelete(
+  kit: Kit,
+  fleet: KitFleet,
+  page: Page,
+  base: string
+) {
+  const hookId = crypto.randomUUID();
+  const draft = { ...HOOK_TEMPLATES[0].draft, name: "Probe hook to delete" };
+  await putHook(fleet, hookId, draft);
+  const deletes = await gate(page, `**/api/fleet/hooks/${hookId}*`, "DELETE");
+  await openEditor(page, `${base}/config/hooks/${hookId}`);
+  await page.locator("footer button.delete").click();
+  await page.locator('[data-ask="editor"]').waitFor();
+  // The field stays live while the question stands: typing into it works.
+  await page.fill('input[aria-label="Hook name"]', "Still typing");
+  const asked = {
+    ...(await page.evaluate(askState, "editor")),
+    typed: await page.inputValue('input[aria-label="Hook name"]'),
+  };
+  note(kit, "editor delete, the question", asked);
+  kit.check(
+    "Editor delete: the question stands in the footer, in the page; the fields still take typing; nothing holds the page",
+    asked.open && !asked.held && asked.typed === "Still typing",
+    JSON.stringify(asked)
+  );
+  await askConfirm(page, "editor").click();
+  await deletes.waitHeld();
+  const pending = await page.evaluate(askState, "editor");
+  await deletes.refuse(409, EDITOR_DELETE_REFUSAL);
+  const refused = await askSays(page, "editor", EDITOR_DELETE_REFUSAL);
+  note(kit, "editor delete, pending then refused", { pending, refused });
+  kit.check(
+    "Editor delete: pending, the question waits busy; refused, the hub's reason under it, the editor where it was",
+    pending.busy &&
+      refused.open &&
+      (refused.fault ?? "").includes(EDITOR_DELETE_REFUSAL) &&
+      new URL(page.url()).pathname === `/config/hooks/${hookId}` &&
+      refused.rejections === 0,
+    JSON.stringify({ pending, refused })
+  );
+  deletes.open();
+  await askConfirm(page, "editor").click();
+  await page.waitForURL("**/config/hooks", { timeout: 30_000 });
+  const left = await fetch(`${fleet.base}/api/fleet/hooks`)
+    .then((r) => r.json())
+    .then((all: { hooks?: { id: string }[] } | { id: string }[]) =>
+      (Array.isArray(all) ? all : (all.hooks ?? [])).some(
+        (hook) => hook.id === hookId
+      )
+    );
+  kit.check(
+    "Editor delete: confirmed, the hub no longer has it and the list is where the editor was",
+    !left && (await rejectionsOf(page)).length === 0,
+    JSON.stringify({ stillThere: left })
+  );
+}
+
+/** Remove the account (naming its machine), then the machine (its sessions). */
+async function removeFlows(
+  kit: Kit,
+  fleet: KitFleet,
+  page: Page,
+  base: string
+) {
+  // ── #24 Remove an account: the machines signed in to it named ──────────
+  const accounts = await fetch(`${fleet.base}/api/accounts`).then(
+    (r) => r.json() as Promise<{ accounts: { id: string }[] }>
+  );
+  const account = accounts.accounts[0]?.id as string;
+  const accountRemovals = await gate(
+    page,
+    `**/api/accounts/${account}`,
+    "DELETE"
+  );
+  await open(page, `${base}/config/accounts/${account}`, "footer");
+  // Asked the moment the editor stands, while the skeleton it replaces is
+  // still leaving: the skeleton going must not take this editor's question.
+  await page.locator("footer button.delete").click();
+  await page.locator('[data-ask="editor"]').waitFor();
+  await page.waitForFunction(
+    () => document.querySelectorAll("footer").length === 1,
+    null,
+    { timeout: 10_000 }
+  );
+  await page.waitForTimeout(400);
+  const accountAsked = {
+    ...(await page.evaluate(askState, "editor")),
+    body: await page
+      .locator('[data-ask="editor"] p.body')
+      .first()
+      .textContent(),
+  };
+  note(kit, "account remove, the question", accountAsked);
+  kit.check(
+    "Remove account: the question stands in the editor's footer naming the machine signed in to it, and stays once the skeleton it replaced has gone; nothing holds the page",
+    accountAsked.open &&
+      (accountAsked.body ?? "").includes("signed in to it") &&
+      !accountAsked.held,
+    JSON.stringify(accountAsked)
+  );
+  await askConfirm(page, "editor").click();
+  await accountRemovals.waitHeld();
+  const accountPending = await page.evaluate(askState, "editor");
+  await accountRemovals.refuse(409, ACCOUNT_REFUSAL);
+  const accountRefused = await askSays(page, "editor", ACCOUNT_REFUSAL);
+  note(kit, "account remove, pending then refused", {
+    accountPending,
+    accountRefused,
+  });
+  kit.check(
+    "Remove account: pending, the question waits busy; refused, the reason under it, no unhandled rejection",
+    accountPending.busy &&
+      (accountRefused.fault ?? "").includes(ACCOUNT_REFUSAL) &&
+      accountRefused.rejections === 0,
+    JSON.stringify({ accountPending, accountRefused })
+  );
+  // Kept: the machine's removal below needs the fleet as it is. Cancel puts
+  // the question away, the account untouched.
+  await page
+    .locator('[data-ask="editor"]')
+    .getByRole("button", { name: "Cancel" })
+    .click();
+  await page.locator('[data-ask="editor"]').waitFor({ state: "detached" });
+
+  // ── #23 Remove a machine: its sessions named, nested, with status ───────
+  await fleet.stop("agent");
+  await until(
+    "the machine offline",
+    () =>
+      fetch(`${fleet.base}/api/agents`)
+        .then((r) => r.json())
+        .then(
+          (rows: { machineId: string; status: string }[]) =>
+            rows.find((row) => row.machineId === MACHINE)?.status
+        ),
+    (status) => status !== "online",
+    60_000
+  );
+  const machineRemovals = await gate(
+    page,
+    `**/api/agents/${MACHINE}`,
+    "DELETE"
+  );
+  await open(page, base, "[data-needs-caw]");
+  await page.getByRole("button", { name: MACHINES_BUTTON }).first().click();
+  const machineRow = page.locator(`li[data-machine="${MACHINE}"] .row`).first();
+  await machineRow.waitFor();
+  await machineRow.click({ button: "right" });
+  await page.getByRole("menuitem", { name: REMOVE_MACHINE }).click();
+  await page.locator(`[data-ask="${MACHINE}"]`).waitFor();
+  const machineAsked = await page.evaluate(askState, MACHINE);
+  note(kit, "machine remove, the question", machineAsked);
+  kit.check(
+    "Remove machine: the question stands under the machine's row, naming its sessions each with its status; nothing holds the page",
+    machineAsked.items.length >= 3 && !machineAsked.held,
+    JSON.stringify(machineAsked)
+  );
+  await askConfirm(page, MACHINE).click();
+  await machineRemovals.waitHeld();
+  const machinePending = await page.evaluate(askState, MACHINE);
+  await machineRemovals.refuse(409, MACHINE_REFUSAL);
+  const machineRefused = await askSays(page, MACHINE, MACHINE_REFUSAL);
+  note(kit, "machine remove, pending then refused", {
+    machinePending,
+    machineRefused,
+  });
+  kit.check(
+    "Remove machine: pending, the question waits busy; refused, the reason under it, the sessions still named",
+    machinePending.busy &&
+      (machineRefused.fault ?? "").includes(MACHINE_REFUSAL) &&
+      machineRefused.items.length === machineAsked.items.length &&
+      machineRefused.rejections === 0,
+    JSON.stringify({ machinePending, machineRefused })
+  );
+  machineRemovals.open();
+  await askConfirm(page, MACHINE).click();
+  await page
+    .locator(`[data-ask="${MACHINE}"]`)
+    .waitFor({ state: "detached", timeout: 30_000 });
+  const left = await fetch(`${fleet.base}/api/agents`).then(
+    (r) => r.json() as Promise<{ machineId: string }[]>
+  );
+  kit.check(
+    "Remove machine: confirmed, the question closes and the hub no longer has it",
+    !left.some((one) => one.machineId === MACHINE),
+    JSON.stringify(left.map((one) => one.machineId))
+  );
+}
+
+/** A second Claude account on the scratch machine: the first's fake login, copied. */
+const SECOND = "acct-probe-two";
+
+/**
+ * #15 Move a session to another account: said on the session's own row
+ * ("Moving to Probe two…" at rest), held at the hub's door, refused with
+ * the reason on the row, then let through until the row names the account.
+ */
+async function accountMove(
+  kit: Kit,
+  fleet: KitFleet,
+  page: Page,
+  base: string
+) {
+  // A login of its own (its own identity), beside the first account's; the
+  // agent reports it when it connects.
+  const dir = join(fleet.home, ".cawco", "accounts", SECOND, "claude");
+  await mkdir(dir, { recursive: true });
+  await cp(
+    join(
+      fleet.home,
+      ".cawco",
+      "accounts",
+      ACCOUNT,
+      "claude",
+      ".credentials.json"
+    ),
+    join(dir, ".credentials.json")
+  );
+  await writeFile(
+    join(dir, CLAUDE_JSON_NAME),
+    JSON.stringify({
+      hasCompletedOnboarding: true,
+      oauthAccount: {
+        emailAddress: "probe-two@scratch-fleet.test",
+        organizationName: "Scratch Fleet Two",
+        accountUuid: "00000000-0000-4000-8000-000000000003",
+        organizationUuid: "00000000-0000-4000-8000-000000000004",
+      },
+    })
+  );
+  fleet.write(
+    "INSERT OR IGNORE INTO accounts (id, provider, kind, label, hue, \"order\", never_backup, created_at) VALUES (?, 'anthropic', 'console', 'Probe two', 'green', 1, 0, ?)",
+    SECOND,
+    Date.now()
+  );
+  await fleet.stop("agent");
+  fleet.launch("agent");
+  await fleet.agentUp();
+  await until(
+    "the second account signed in on the machine",
+    () =>
+      fleet.query<{ state: string }>(
+        "SELECT state FROM account_signins WHERE account_id = ? AND machine_id = ?",
+        SECOND,
+        MACHINE
+      )[0]?.state,
+    (state) => state === "signed-in",
+    120_000
+  );
+  const mover = await fleet.spawn("claude", "Probe mover");
+  await fleet.send(mover, "hello");
+  await until(
+    "the mover's turn ended",
+    () => fleet.instance(mover),
+    (row) => row?.turn_open_at === null,
+    120_000
+  );
+  const moves = await gate(page, `**/api/instances/${mover}/account`, "POST");
+  await open(page, base, "[data-needs-caw]");
+  await finishedTab(page);
+  await page.waitForSelector(`[data-hover-session="${mover}"]`, {
+    timeout: 60_000,
+  });
+  const path = new URL(page.url()).pathname;
+  await rightClickRow(page, mover);
+  await page.getByRole("menuitem", { name: ACCOUNT_ITEM }).first().click();
+  await page.getByRole("menuitem", { name: SECOND_ACCOUNT }).click();
+  await moves.waitHeld();
+  await page.waitForFunction(
+    (id) =>
+      document
+        .querySelector(`[data-hover-session="${id}"]`)
+        ?.closest(".item")
+        ?.querySelector(".doing")
+        ?.textContent?.includes("Probe two") ?? false,
+    mover
+  );
+  const movePending = await page.evaluate(rowState, mover);
+  note(kit, "account move, before the hub answers", movePending);
+  kit.check(
+    "Move account: before the hub answers, the session's own row says it moves to Probe two; no toast, no navigation",
+    (movePending.doing ?? "").includes("Moving to Probe two") &&
+      movePending.path === path &&
+      (await page.locator("[data-sonner-toast]").count()) === 0,
+    JSON.stringify(movePending)
+  );
+  await moves.refuse(409, ACCOUNT_MOVE_REFUSAL);
+  await page.waitForSelector(`.row-fault >> text=${ACCOUNT_MOVE_REFUSAL}`);
+  const moveRefused = await page.evaluate(rowState, mover);
+  note(kit, "account move, refused", moveRefused);
+  kit.check(
+    "Move account: refused, the hub's reason stands under the session's row with Try again, no toast, no unhandled rejection",
+    moveRefused.doing === null &&
+      moveRefused.faults.some((text) => text.includes(ACCOUNT_MOVE_REFUSAL)) &&
+      moveRefused.tryAgain &&
+      (await page.locator("[data-sonner-toast]").count()) === 0 &&
+      moveRefused.rejections === 0,
+    JSON.stringify({ ...moveRefused, said: await rejectionsOf(page) })
+  );
+  moves.open();
+  await page
+    .locator(".row-fault", { hasText: ACCOUNT_MOVE_REFUSAL })
+    .getByRole("button", { name: TRY_AGAIN })
+    .click();
+  await until(
+    "the session on the second account",
+    () =>
+      fleet.query<{ account_id: string | null }>(
+        "SELECT account_id FROM instances WHERE id = ?",
+        mover
+      )[0]?.account_id,
+    (account) => account === SECOND,
+    90_000
+  );
+  await page.waitForFunction(
+    (id) =>
+      !document
+        .querySelector(`[data-hover-session="${id}"]`)
+        ?.closest(".item")
+        ?.querySelector(".doing"),
+    mover,
+    { timeout: 30_000 }
+  );
+  const moveDone = await page.evaluate(rowState, mover);
+  note(kit, "account move, confirmed", moveDone);
+  kit.check(
+    "Move account: confirmed, the row stops saying it moves once the hub names the new account; its fault gone",
+    moveDone.doing === null &&
+      moveDone.faults.length === 0 &&
+      moveDone.rejections === 0,
+    JSON.stringify(moveDone)
+  );
+}
+
+/**
+ * #17 Cancel a workflow run: the question stands under the run's head, in
+ * the page, naming the step running now; held, refused, then let through
+ * until the hub has cancelled the run.
+ */
+async function workflowCancel(
+  kit: Kit,
+  fleet: KitFleet,
+  page: Page,
+  base: string
+) {
+  const workflow = await fleet.api<{ id: string }>("/api/workflows", {
+    name: "Probe slow run",
+    program: `import { z } from "zod"; export const inputs = z.object({}); export default async function(w: Workflow<typeof inputs>) { return await w.run({ title: "Probe slow step", harness: "claude", model: ${JSON.stringify(MODEL.claude)}, prompt: ${JSON.stringify(`${SLOW} take your time`)}, timeoutMinutes: 30, retries: 0, output: z.object({ ok: z.boolean() }) }); }`,
+  });
+  const { runId } = await fleet.api<{ runId: string }>(
+    `/api/workflows/${workflow.id}/runs`,
+    { workspace: { machineId: MACHINE, path: fleet.workdir } }
+  );
+  const detail = () =>
+    fleet.api<{
+      status: string;
+      steps: { status: string; instanceId?: string | null }[];
+    }>(`/api/workflow-runs/${runId}`);
+  await until(
+    "the run's step running",
+    detail,
+    (run) =>
+      run.steps.some((step) => step.status === "running" && step.instanceId),
+    120_000
+  );
+  const cancels = await gate(
+    page,
+    `**/api/workflow-runs/${runId}/cancel`,
+    "POST"
+  );
+  await open(page, `${base}/session/run:${runId}`, ".run-view .actions");
+  await page.getByRole("button", { name: CANCEL_RUN }).click();
+  await page.locator('[data-ask="cancel-run"]').waitFor();
+  const asked = await page.evaluate(askState, "cancel-run");
+  note(kit, "workflow cancel, the question", asked);
+  kit.check(
+    "Cancel run: the question stands under the run's head, in the page, naming the step running now with its status; nothing holds the page",
+    asked.open &&
+      asked.items.length === 1 &&
+      (asked.items[0] ?? "").length > 0 &&
+      !asked.held,
+    JSON.stringify(asked)
+  );
+  await askConfirm(page, "cancel-run").click();
+  await cancels.waitHeld();
+  const pending = await page.evaluate(askState, "cancel-run");
+  const stillRunning = (await detail()).status;
+  await cancels.refuse(409, WORKFLOW_REFUSAL);
+  const refused = await askSays(page, "cancel-run", WORKFLOW_REFUSAL);
+  note(kit, "workflow cancel, pending then refused", {
+    pending,
+    stillRunning,
+    refused,
+  });
+  kit.check(
+    "Cancel run: pending, the question waits busy and the run still runs; refused, the hub's reason under it, the step still named",
+    pending.busy &&
+      stillRunning === "running" &&
+      (refused.fault ?? "").includes(WORKFLOW_REFUSAL) &&
+      refused.items.length === 1 &&
+      refused.rejections === 0,
+    JSON.stringify({ pending, stillRunning, refused })
+  );
+  cancels.open();
+  await askConfirm(page, "cancel-run").click();
+  await until(
+    "the run cancelled",
+    async () => (await detail()).status,
+    (status) => status === "cancelled",
+    90_000
+  );
+  await page
+    .locator('[data-ask="cancel-run"]')
+    .waitFor({ state: "detached", timeout: 30_000 });
+  kit.check(
+    "Cancel run: confirmed, the hub cancels the run and the question goes; no unhandled rejection",
+    (await rejectionsOf(page)).length === 0,
+    "cancelled"
+  );
+}
+
+/**
+ * #25 Adopt a skill a machine already has: held, refused with the reason
+ * under its entry, then let through until the entry turns "In the fleet".
+ */
+async function adoptFromMachine(
+  kit: Kit,
+  fleet: KitFleet,
+  page: Page,
+  base: string
+) {
+  // The scratch machine's own user layer: its HOME, not this process's.
+  const dir = projectClaudeDir(fleet.home, "skills", "probe-adopt");
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    join(dir, "SKILL.md"),
+    "---\nname: probe-adopt\ndescription: A skill the probe wrote on the machine.\n---\n\nProbe.\n"
+  );
+  const adopts = await gate(page, "**/api/fleet/skills/probe-adopt", "PUT");
+  await open(page, `${base}/config/skills`, ".machines button.head");
+  await page.locator(".machines button.head").first().click();
+  const entry = page.locator(".machines li.entry", { hasText: "probe-adopt" });
+  await entry.waitFor({ timeout: 60_000 });
+  const adopt = entry.getByRole("button", { name: ADOPT });
+  await adopt.click();
+  await adopts.waitHeld();
+  const read = () =>
+    entry.evaluate((li) => ({
+      busy: li.querySelector('[aria-busy="true"]') !== null,
+      fault:
+        li
+          .querySelector(".row-fault")
+          ?.textContent?.replace(/\s+/g, " ")
+          .trim() ?? null,
+      inFleet: li.textContent?.includes("In the fleet") ?? false,
+      toasts: document.querySelectorAll("[data-sonner-toast]").length,
+      rejections: (window as unknown as { __rejections: string[] }).__rejections
+        .length,
+    }));
+  const pending = await read();
+  await adopts.refuse(409, ADOPT_REFUSAL);
+  await entry.getByText(ADOPT_REFUSAL).waitFor();
+  const refused = await read();
+  note(kit, "adopt, pending then refused", { pending, refused });
+  kit.check(
+    "Adopt: pending, its button busy; refused, the hub's reason under the entry, no toast, no unhandled rejection",
+    pending.busy &&
+      (refused.fault ?? "").includes(ADOPT_REFUSAL) &&
+      refused.toasts === 0 &&
+      refused.rejections === 0,
+    JSON.stringify({ pending, refused })
+  );
+  adopts.open();
+  await adopt.click();
+  await entry.getByText("In the fleet").waitFor({ timeout: 30_000 });
+  // The refusal folds away as the entry turns.
+  await entry
+    .locator(".row-fault")
+    .waitFor({ state: "detached", timeout: 10_000 });
+  const done = await read();
+  note(kit, "adopt, confirmed", done);
+  kit.check(
+    "Adopt: confirmed, the entry turns In the fleet in place, its fault gone, no toast",
+    done.inFleet && done.fault === null && done.toasts === 0,
+    JSON.stringify(done)
+  );
+}
+
+/**
+ * #26 Join a project from a session's offer: a project holds one checkout
+ * of a repository, and a plain session in another checkout of it has
+ * started a delegate, which the hub offers a project on (project-offers.ts,
+ * `delegates`). Accepting joins the project that holds the repository (by
+ * remote): held, refused (the reason on the card), then joined, the card
+ * saying what it joined where the offer stood, with no toast.
+ */
+async function offerJoin(kit: Kit, fleet: KitFleet, page: Page, base: string) {
+  // Two checkouts of one repository, as two clones of a hosted one are: the
+  // hub knows a repository by its host-named remote (projects.ts
+  // `normaliseRemote`; a path on the disk names none), and nothing here
+  // fetches from it.
+  const checkout = async (name: string) => {
+    const dir = join(fleet.sandbox, name);
+    await Bun.$`git clone -q ${join(fleet.sandbox, "origin.git")} ${dir} && git -C ${dir} remote set-url origin https://probe.test/scratch/repo.git`.quiet();
+    return dir;
+  };
+  const held = await checkout("offers-held");
+  const clone = await checkout("offers-loose");
+  const project = await fleet.api<{ id: string; name: string }>(
+    "/api/projects",
+    { name: "Probe offers", machineId: MACHINE, cwd: held, caw: false }
+  );
+  const loose = await fleet.spawn("claude", "Probe loose", clone);
+  await fleet.spawn("claude", "Probe loose's delegate", clone, {
+    parent: { instanceId: loose },
+  });
+  await fleet.send(loose, "hello");
+  await until(
+    "the hub offering the loose session a project, on its delegate",
+    () =>
+      fleet.query<{ reason: string }>(
+        "SELECT reason FROM project_offers WHERE instance_id = ?",
+        loose
+      )[0]?.reason,
+    (reason) => reason === "delegates",
+    120_000
+  );
+  const answers = await gate(
+    page,
+    `**/api/project-offers/${loose}/accept`,
+    "POST"
+  );
+  // This session's own card: other sessions the run opened stay in the
+  // workspace, and may carry offers of their own.
+  const pane = `[data-offer="${loose}"]`;
+  await open(
+    page,
+    `${base}/session/${loose}`,
+    `section${pane}[aria-label="Make this session a project"]`
+  );
+  const card = page.locator(`section${pane}`);
+  const read = () =>
+    card.evaluate((section) => ({
+      label: section.getAttribute("aria-label"),
+      words: section.textContent?.replace(/\s+/g, " ").trim() ?? "",
+      busy: section.querySelector('[aria-busy="true"]') !== null,
+      fault:
+        section
+          .querySelector(".row-fault")
+          ?.textContent?.replace(/\s+/g, " ")
+          .trim() ?? null,
+      path: location.pathname,
+      toasts: document.querySelectorAll("[data-sonner-toast]").length,
+      rejections: (window as unknown as { __rejections: string[] }).__rejections
+        .length,
+    }));
+  await card.getByRole("button", { name: CREATE_PROJECT }).click();
+  await answers.waitHeld();
+  const pending = await read();
+  await answers.refuse(409, OFFER_REFUSAL);
+  await card.getByText(OFFER_REFUSAL).waitFor();
+  const refused = await read();
+  note(kit, "offer, pending then refused", { pending, refused });
+  kit.check(
+    "Offer: pending, the card waits on its button; refused, the hub's reason on the card, the session where it was, no toast, no unhandled rejection",
+    pending.busy &&
+      (refused.fault ?? "").includes(OFFER_REFUSAL) &&
+      refused.label === "Make this session a project" &&
+      refused.path === `/session/${loose}` &&
+      refused.toasts === 0 &&
+      refused.rejections === 0,
+    JSON.stringify({ pending, refused })
+  );
+  answers.open();
+  await card.getByRole("button", { name: CREATE_PROJECT }).click();
+  await page
+    .locator(`section${pane}[aria-label="Joined a project"]`)
+    .waitFor({ timeout: 30_000 });
+  // The offer it answers leaves as the answer arrives: one card stands.
+  await page.waitForFunction(
+    (selector) => document.querySelectorAll(selector).length === 1,
+    `section${pane}`,
+    { timeout: 10_000 }
+  );
+  const joined = await read();
+  const filed = fleet.query<{ project_id: string | null }>(
+    "SELECT project_id FROM instances WHERE id = ?",
+    loose
+  )[0]?.project_id;
+  note(kit, "offer, joined", { ...joined, filed });
+  kit.check(
+    "Offer: joined, the card says what it joined where the offer stood, with the way there; the hub has the session in that project; no toast",
+    (joined.words ?? "").includes(`Joined ${project.name}`) &&
+      filed === project.id &&
+      joined.path === `/session/${loose}` &&
+      joined.toasts === 0 &&
+      joined.rejections === 0,
+    JSON.stringify({ ...joined, filed })
+  );
+}
+
+/**
+ * #18 A project move's Cancel and Retry, in the wait itself. The project's
+ * repository has a bun.lock at its root, so a move runs `bun install` on
+ * the target (core move.ts `installFor`), and its root `postinstall` takes
+ * a while: the job stands in its install step, where Cancel stands. Cancel
+ * held, refused (the reason under it, the wait as it was), then let
+ * through, the wait turning "Stopped." in place, its tab staying. A second
+ * move's install is ended from outside, so the job fails at it, which is
+ * when Retry stands: held, refused (the reason under it), then let through,
+ * the job running its install again on the hub's word.
+ */
+async function moveFlows(kit: Kit, fleet: KitFleet, page: Page, base: string) {
+  const two = await fleet.launchMachine("probe-two");
+  const folder = join(fleet.sandbox, "move-source");
+  await mkdir(folder, { recursive: true });
+  await writeFile(
+    join(folder, "package.json"),
+    JSON.stringify({
+      name: "probe-move",
+      private: true,
+      scripts: { postinstall: `sleep ${INSTALL_SECONDS}` },
+    })
+  );
+  // A bun project's lockfile, in bun's text format: a root with no
+  // packages (`bun install` writes none for a package with no
+  // dependencies, and the move picks its install by the lockfile).
+  await writeFile(
+    join(folder, "bun.lock"),
+    `${JSON.stringify(
+      {
+        lockfileVersion: 1,
+        workspaces: { "": { name: "probe-move" } },
+        packages: {},
+      },
+      null,
+      2
+    )}\n`
+  );
+  await Bun.$`git init -q && git add -A && git -c user.email=p@p -c user.name=p commit -q -m probe`
+    .cwd(folder)
+    .quiet();
+  const project = await fleet.api<{ id: string }>("/api/projects", {
+    name: "Probe move",
+    machineId: MACHINE,
+    cwd: folder,
+    caw: false,
+  });
+  const spawn = {
+    harness: "claude",
+    model: MODEL.claude,
+    permissionMode: "bypassPermissions",
+  };
+  const stageOf = (id: string) =>
+    fleet.query<{ stage: string }>(
+      "SELECT stage FROM moves WHERE id = ?",
+      id
+    )[0]?.stage;
+  const startMove = async (path: string) => {
+    const job = await fleet.api<{ id: string; targetInstanceId: string }>(
+      `/api/projects/${project.id}/moves`,
+      { machineId: two.machineId, path, spawn }
+    );
+    await until(
+      "the move in its install",
+      () => stageOf(job.id),
+      (stage) => stage === "install",
+      120_000
+    ).catch((error: Error) => {
+      // What the job was doing instead, in the hub's own row.
+      throw new Error(
+        `${error.message}: ${JSON.stringify(
+          fleet.query("SELECT * FROM moves WHERE id = ?", job.id)
+        )}`
+      );
+    });
+    return job;
+  };
+  const read = (jobId: string) =>
+    page.evaluate((id) => {
+      const root = document.querySelector(`[data-move="${id}"]`);
+      return {
+        words: root?.textContent?.replace(/\s+/g, " ").trim() ?? "",
+        busy: root?.querySelector('[aria-busy="true"]') !== null,
+        fault:
+          root
+            ?.querySelector(".row-fault")
+            ?.textContent?.replace(/\s+/g, " ")
+            .trim() ?? null,
+        path: location.pathname,
+        toasts: document.querySelectorAll("[data-sonner-toast]").length,
+        rejections: (window as unknown as { __rejections: string[] })
+          .__rejections.length,
+      };
+    }, jobId);
+
+  // ── Cancel, while the move runs its install ───────────────────────────
+  const first = await startMove(join(two.home, "probe-move-one"));
+  const cancels = await gate(page, `**/api/moves/${first.id}`, "DELETE");
+  await open(page, `${base}/session/${first.targetInstanceId}`, ".foot-button");
+  const cancel = page
+    .locator(`[data-move="${first.id}"] .foot`)
+    .getByRole("button", { name: CANCEL });
+  await cancel.click();
+  await cancels.waitHeld();
+  const cancelPending = await read(first.id);
+  await cancels.refuse(409, MOVE_CANCEL_REFUSAL);
+  await page.getByText(MOVE_CANCEL_REFUSAL).waitFor();
+  const cancelRefused = {
+    ...(await read(first.id)),
+    stage: stageOf(first.id),
+  };
+  note(kit, "move cancel, pending then refused", {
+    cancelPending,
+    cancelRefused,
+  });
+  kit.check(
+    "Move cancel: pending, Cancel waits busy in the install; refused, the hub's reason under it, the wait as it was, no toast, no unhandled rejection",
+    cancelPending.busy &&
+      (cancelRefused.fault ?? "").includes(MOVE_CANCEL_REFUSAL) &&
+      cancelRefused.stage === "install" &&
+      cancelRefused.path === `/session/${first.targetInstanceId}` &&
+      cancelRefused.toasts === 0 &&
+      cancelRefused.rejections === 0,
+    JSON.stringify({ cancelPending, cancelRefused })
+  );
+  cancels.open();
+  await cancel.click();
+  await page.getByText(STOPPED).first().waitFor({ timeout: 30_000 });
+  const cancelled = { ...(await read(first.id)), stage: stageOf(first.id) };
+  note(kit, "move cancel, confirmed", cancelled);
+  kit.check(
+    "Move cancel: confirmed, the wait turns Stopped. in place and its tab stays; the hub holds it cancelled; no toast",
+    cancelled.stage === "cancelled" &&
+      cancelled.words.includes("Stopped.") &&
+      cancelled.path === `/session/${first.targetInstanceId}` &&
+      cancelled.fault === null &&
+      cancelled.toasts === 0 &&
+      cancelled.rejections === 0,
+    JSON.stringify(cancelled)
+  );
+
+  // ── Retry, once a move's install has failed ───────────────────────────
+  const second = await startMove(join(two.home, "probe-move-two"));
+  const retries = await gate(page, `**/api/moves/${second.id}/retry`, "POST");
+  await open(
+    page,
+    `${base}/session/${second.targetInstanceId}`,
+    ".foot-button"
+  );
+  // The install ended from outside, as a machine's can be: the step fails.
+  await Bun.$`pkill -f ${`sleep ${INSTALL_SECONDS}`}`.nothrow().quiet();
+  await until(
+    "the second move failing at its install",
+    () => stageOf(second.id),
+    (stage) => stage === "failed",
+    90_000
+  );
+  const retry = page
+    .locator(`[data-move="${second.id}"] .alert-actions`)
+    .getByRole("button", { name: RETRY });
+  await retry.click();
+  await retries.waitHeld();
+  const retryPending = await read(second.id);
+  await retries.refuse(409, MOVE_RETRY_REFUSAL);
+  await page.getByText(MOVE_RETRY_REFUSAL).waitFor();
+  const retryRefused = {
+    ...(await read(second.id)),
+    stage: stageOf(second.id),
+  };
+  note(kit, "move retry, pending then refused", {
+    retryPending,
+    retryRefused,
+  });
+  kit.check(
+    "Move retry: pending, Retry waits busy under the failure; refused, the hub's reason under it, the failure as it was, no toast, no unhandled rejection",
+    retryPending.busy &&
+      (retryRefused.fault ?? "").includes(MOVE_RETRY_REFUSAL) &&
+      retryRefused.stage === "failed" &&
+      retryRefused.toasts === 0 &&
+      retryRefused.rejections === 0,
+    JSON.stringify({ retryPending, retryRefused })
+  );
+  retries.open();
+  await retry.click();
+  await until(
+    "the retried move running its install again",
+    () => stageOf(second.id),
+    (stage) => stage === "install",
+    90_000
+  );
+  const retried = { ...(await read(second.id)), stage: stageOf(second.id) };
+  note(kit, "move retry, confirmed", retried);
+  kit.check(
+    "Move retry: confirmed, the job runs its install again on the hub's word and the wait follows it, its failure and fault gone; no toast",
+    retried.stage === "install" &&
+      retried.fault === null &&
+      !retried.words.includes("Retry") &&
+      retried.toasts === 0 &&
+      retried.rejections === 0 &&
+      retried.path === `/session/${second.targetInstanceId}`,
+    JSON.stringify(retried)
+  );
+  // Its install would sleep on: the move stops here.
+  await fetch(`${fleet.base}/api/moves/${second.id}`, { method: "DELETE" });
+}
+
+/** The provider's sign-in page, as the browser sees it (Playwright routes it). */
+const PROVIDER_PAGE = "https://provider.probe";
+const PROBE_TOKEN = "probe-access-token";
+
+/**
+ * A provider and an OAuth-protected MCP server on loopback, for the hub:
+ * discovery, client registration and the token exchange. Its sign-in page
+ * is advertised over https (the hand-back takes no other), and the browser
+ * reaches it through the context's routing (`handBack`). Once the hub holds
+ * the token, the server answers it as an MCP server would.
+ */
+function oauthProvider() {
+  return Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: async (request) => {
+      const url = new URL(request.url);
+      const origin = `http://127.0.0.1:${url.port}`;
+      switch (url.pathname) {
+        case "/.well-known/oauth-protected-resource":
+          return Response.json({
+            resource: `${origin}/mcp`,
+            authorization_servers: [origin],
+          });
+        case "/.well-known/oauth-authorization-server":
+          return Response.json({
+            issuer: origin,
+            authorization_endpoint: `${PROVIDER_PAGE}/authorize`,
+            token_endpoint: `${origin}/token`,
+            registration_endpoint: `${origin}/register`,
+            response_types_supported: ["code"],
+            grant_types_supported: ["authorization_code", "refresh_token"],
+            code_challenge_methods_supported: ["S256"],
+            token_endpoint_auth_methods_supported: ["none"],
+          });
+        case "/register":
+          return Response.json(
+            {
+              ...((await request.json()) as object),
+              client_id: "probe-client",
+              token_endpoint_auth_method: "none",
+            },
+            { status: 201 }
+          );
+        case "/token":
+          return Response.json({
+            access_token: PROBE_TOKEN,
+            token_type: "Bearer",
+            expires_in: 3600,
+            refresh_token: "probe-refresh-token",
+          });
+        default:
+          break;
+      }
+      if (request.headers.get("authorization") !== `Bearer ${PROBE_TOKEN}`) {
+        return new Response("sign in", {
+          status: 401,
+          headers: {
+            "www-authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource"`,
+          },
+        });
+      }
+      // Signed in: an MCP server with no tools.
+      const call = (await request.json()) as {
+        id?: number | string;
+        method: string;
+        params?: { protocolVersion?: string };
+      };
+      if (call.id === undefined) {
+        return new Response(null, { status: 202 });
+      }
+      const results: Record<string, object> = {
+        initialize: {
+          protocolVersion: call.params?.protocolVersion,
+          capabilities: { tools: {} },
+          serverInfo: { name: "probe-oauth", version: "1" },
+        },
+        "tools/list": { tools: [] },
+      };
+      return Response.json({
+        jsonrpc: "2.0",
+        id: call.id,
+        result: results[call.method] ?? {},
+      });
+    },
+  });
+}
+
+/**
+ * cawco.dev's hand-back, served to this browser from the site's own pages
+ * and scripts (`site/oauth/*.html`, `site/src/oauth/*.ts`, bundled now), and
+ * the provider's sign-in page, whose Approve sends the code to the
+ * hand-back as a provider does. The workspace reaches neither host, so
+ * the context's routing stands in for the network, not for the pages.
+ */
+async function handBack(page: Page) {
+  const site = join(ROOT, "site");
+  const script = async (name: string) => {
+    const built = await Bun.build({
+      entrypoints: [join(site, "src", "oauth", `${name}.ts`)],
+      target: "browser",
+      format: "esm",
+    });
+    if (!(built.success && built.outputs[0])) {
+      throw new Error(
+        `site/src/oauth/${name}.ts did not bundle: ${built.logs.join("; ")}`
+      );
+    }
+    return built.outputs[0].text();
+  };
+  const files: Record<string, { body: string; type: string }> = {
+    "/oauth/start": {
+      body: await Bun.file(join(site, "oauth", "start.html")).text(),
+      type: "text/html",
+    },
+    "/oauth/callback": {
+      body: await Bun.file(join(site, "oauth", "callback.html")).text(),
+      type: "text/html",
+    },
+    "/src/oauth/start.ts": {
+      body: await script("start"),
+      type: "text/javascript",
+    },
+    "/src/oauth/callback.ts": {
+      body: await script("callback"),
+      type: "text/javascript",
+    },
+  };
+  await page.context().route("https://cawco.dev/**", (route) => {
+    const file = files[new URL(route.request().url()).pathname];
+    return file
+      ? route.fulfill({ status: 200, contentType: file.type, body: file.body })
+      : route.fulfill({ status: 404, body: "" });
+  });
+  await page.context().route(`${PROVIDER_PAGE}/**`, (route) => {
+    const asked = new URL(route.request().url()).searchParams;
+    const back = new URL(asked.get("redirect_uri") ?? "");
+    back.searchParams.set("code", "probe-code");
+    back.searchParams.set("state", asked.get("state") ?? "");
+    return route.fulfill({
+      status: 200,
+      contentType: "text/html",
+      body: `<!doctype html><title>Probe provider</title><p>Let CawCo use probe-oauth?</p><a id="approve" href="${back.href.replaceAll('"', "&quot;")}">Approve</a>`,
+    });
+  });
+}
+
+/**
+ * #10 Sign in to an OAuth MCP server, every state on the one button: the
+ * provider opens in a tab of its own and this page stays; the start held
+ * (Sign in waits), refused (the reason under it, the tab gone), a tab
+ * closed at the provider (said under the button), and signed in: approved
+ * at the provider, handed back through cawco.dev to this hub, the tab
+ * closing itself, and the row turning on the hub's word.
+ */
+async function mcpSignIn(kit: Kit, fleet: KitFleet, page: Page, base: string) {
+  const provider = oauthProvider();
+  await handBack(page);
+  try {
+    await fetch(`${fleet.base}/api/fleet/mcp/probe-oauth`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        config: { type: "http", url: `http://127.0.0.1:${provider.port}/mcp` },
+        enabled: true,
+        projectId: null,
+      }),
+    });
+    await until(
+      "the hub reading probe-oauth as an OAuth server",
+      () =>
+        fleet
+          .api<{
+            config: { mcp: { name: string; auth?: { mode?: string } }[] };
+          }>("/api/fleet")
+          .then(
+            (fleetRow) =>
+              fleetRow.config.mcp.find((one) => one.name === "probe-oauth")
+                ?.auth?.mode
+          ),
+      (mode) => mode === "oauth",
+      60_000
+    );
+    const starts = await gate(
+      page,
+      "**/api/fleet/mcp/probe-oauth/sign-in",
+      "POST"
+    );
+    await open(
+      page,
+      `${base}/config/mcp`,
+      'button[aria-label="More for probe-oauth"]'
+    );
+    const row = page.locator("li", {
+      has: page.locator('button[aria-label="More for probe-oauth"]'),
+    });
+    const read = () =>
+      row.evaluate((li) => ({
+        words: li.textContent?.replace(/\s+/g, " ").trim() ?? "",
+        busy: li.querySelector('[aria-busy="true"]') !== null,
+        fault:
+          li
+            .querySelector(".sign-in-fault")
+            ?.textContent?.replace(/\s+/g, " ")
+            .trim() ?? null,
+        path: location.pathname,
+        rejections: (window as unknown as { __rejections: string[] })
+          .__rejections.length,
+      }));
+    /** Presses `button` in the row; resolves with the tab the press opened. */
+    const press = async (button: ReturnType<Page["locator"]>) => {
+      const [tab] = await Promise.all([
+        page.context().waitForEvent("page"),
+        button.click(),
+      ]);
+      return tab;
+    };
+    const tryAgain = row
+      .locator(".sign-in-fault")
+      .getByRole("button", { name: TRY_AGAIN });
+
+    // ── Held: the provider's tab is open, this page waits ────────────────
+    const first = await press(row.getByRole("button", { name: SIGN_IN }));
+    await starts.waitHeld();
+    const pending = await read();
+    note(kit, "mcp sign-in, before the hub answers", pending);
+    kit.check(
+      "Sign in: the provider gets a tab of its own and this page stays; Sign in waits busy, naming the server",
+      pending.busy &&
+        pending.path === "/config/mcp" &&
+        !first.isClosed() &&
+        pending.words.includes("Waiting for probe-oauth"),
+      JSON.stringify(pending)
+    );
+
+    // ── Refused: the hub's reason under the button, the tab gone ─────────
+    await starts.refuse(409, SIGN_IN_REFUSAL);
+    await row.getByText(SIGN_IN_REFUSAL).waitFor();
+    const refused = { ...(await read()), tabClosed: first.isClosed() };
+    note(kit, "mcp sign-in, refused", refused);
+    kit.check(
+      "Sign in: refused, the hub's reason under the button with Try again, its tab closed, the page where it was",
+      (refused.fault ?? "").includes(SIGN_IN_REFUSAL) &&
+        refused.tabClosed &&
+        refused.path === "/config/mcp" &&
+        refused.rejections === 0,
+      JSON.stringify(refused)
+    );
+
+    // ── Closed at the provider: said under the button ────────────────────
+    starts.open();
+    const second = await press(tryAgain);
+    await second.waitForURL(`${PROVIDER_PAGE}/**`, { timeout: 30_000 });
+    const waiting = await read();
+    await second.close();
+    await row.getByText(TAB_CLOSED).waitFor({ timeout: 15_000 });
+    const unfinished = await read();
+    note(kit, "mcp sign-in, at the provider, then its tab closed", {
+      waiting,
+      unfinished,
+    });
+    kit.check(
+      "Sign in: at the provider the page stays waiting; the tab closed before it finished is said under the button, with Try again",
+      waiting.busy &&
+        waiting.path === "/config/mcp" &&
+        (unfinished.fault ?? "").includes("closed before it finished") &&
+        !unfinished.busy &&
+        unfinished.rejections === 0,
+      JSON.stringify({ waiting, unfinished })
+    );
+
+    // ── Signed in: approved, handed back, the row turns ──────────────────
+    const third = await press(tryAgain);
+    await third.waitForURL(`${PROVIDER_PAGE}/**`, { timeout: 30_000 });
+    await third.click("#approve");
+    // The hand-back asks before it sends a code to a hub it has not seen.
+    await third.waitForURL("https://cawco.dev/oauth/callback**");
+    await third.getByRole("button", { name: CONTINUE_TO_HUB }).click();
+    await third.waitForEvent("close", { timeout: 30_000 });
+    await row.getByText(SIGNED_IN_ROW).waitFor({ timeout: 30_000 });
+    const signedIn = await read();
+    const hubSays = await fleet
+      .api<{
+        config: {
+          mcp: { name: string; auth?: { state?: string } }[];
+        };
+      }>("/api/fleet")
+      .then(
+        (fleetRow) =>
+          fleetRow.config.mcp.find((one) => one.name === "probe-oauth")?.auth
+            ?.state
+      );
+    note(kit, "mcp sign-in, signed in", { ...signedIn, hubSays });
+    kit.check(
+      "Sign in: approved and handed back, the sign-in tab closes itself and the row says signed in on the hub's word, this page where it was, no fault",
+      signedIn.words.includes("Signed in for the fleet") &&
+        signedIn.fault === null &&
+        hubSays === "signed-in" &&
+        signedIn.path === "/config/mcp" &&
+        signedIn.rejections === 0,
+      JSON.stringify({ ...signedIn, hubSays })
+    );
+  } finally {
+    await provider.stop(true);
+  }
+}
+
 const spec: Spec = {
   name: "stay-in-context",
   run: async (kit) => {
@@ -233,7 +1930,11 @@ const spec: Spec = {
           addEventListener(
             "unhandledrejection",
             (event: PromiseRejectionEvent) => {
-              seen.push(String(event.reason));
+              seen.push(
+                event.reason instanceof Error
+                  ? (event.reason.stack ?? String(event.reason))
+                  : String(event.reason)
+              );
             }
           );
         },
@@ -621,14 +2322,25 @@ const spec: Spec = {
       null,
       { timeout: 60_000 }
     );
-    const rejections = await page.evaluate(
-      () => (window as unknown as { __rejections: string[] }).__rejections
-    );
     kit.check(
       "Approve: confirmed, the row leaves once the hub has taken the answer",
-      rejections.length === 0,
-      JSON.stringify({ rejections })
+      (await rejectionsOf(page)).length === 0,
+      "the row left"
     );
+    await page.keyboard.press("Escape");
+
+    await accountMove(kit, fleet, page, base);
+    await workflowCancel(kit, fleet, page, base);
+    await projectFlows(kit, fleet, page, base);
+    await configureFlows(kit, fleet, page, base);
+    await editorDelete(kit, fleet, page, base);
+    await adoptFromMachine(kit, fleet, page, base);
+    await mcpSignIn(kit, fleet, page, base);
+    await offerJoin(kit, fleet, page, base);
+    await moveFlows(kit, fleet, page, base);
+    await removeFlows(kit, fleet, page, base);
+
+    const rejections = await rejectionsOf(page);
     kit.check(
       "nothing reached the unhandled-rejection reporter, in any flow",
       rejections.length === 0,

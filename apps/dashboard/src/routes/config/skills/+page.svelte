@@ -5,8 +5,11 @@
     type MarketplacePluginInfo,
     machineLabel,
   } from "@cawco/core";
+  import AskHere from "#lib/cawco/AskHere.svelte";
+  import type { AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import FetchSkillPopover from "#lib/cawco/config/FetchSkillPopover.svelte";
+  import { holders } from "#lib/cawco/config/holders.js";
   import { hubDown } from "#lib/cawco/config/hub.svelte.js";
   import LinkMarketplacePopover from "#lib/cawco/config/LinkMarketplacePopover.svelte";
   import PreviousVersions, {
@@ -19,7 +22,7 @@
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
-  import { confirm } from "#lib/cawco/confirm.svelte.js";
+  import { Asker, confirm } from "#lib/cawco/confirm.svelte.js";
   import {
     formatBytes,
     marketplaceCatalog,
@@ -35,8 +38,8 @@
   } from "#lib/cawco/fleet.js";
   import { hubFaults } from "#lib/cawco/fleet-faults.js";
   import MachineInventory from "#lib/cawco/MachineInventory.svelte";
+  import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
-  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -80,7 +83,8 @@
   let unread = $state<Record<string, string>>({});
   let refetching = $state(false);
   let refetchFailed = $state(false);
-  let installFailed = $state<Record<string, boolean>>({});
+  /** Why a marketplace install was refused, by plugin id: said under its listing. */
+  let installFailed = $state<Record<string, string>>({});
 
   const message = (err: unknown) =>
     err instanceof Error ? err.message : String(err);
@@ -110,12 +114,26 @@
     }
   }
 
+  /**
+   * What a row's last action came to when the hub refused it, by the row's
+   * key (a skill's name, a plugin's id): said under that row with Try
+   * again. What landed is the row's own to say: its rollout chip, machine
+   * by machine, and a fetch the hub could not make its hub fault.
+   */
+  let rowFaults = $state<
+    Record<string, { again?: () => unknown; reason: string }>
+  >({});
+  const refusedOn = (key: string, error: unknown, again?: () => unknown) => {
+    rowFaults[key] = { reason: message(error), again };
+  };
+
   async function switchSkill(row: FleetSkillMeta, enabled: boolean) {
     busy[row.name] = true;
+    delete rowFaults[row.name];
     try {
       landedSkill(await saveSkill(row.name, { source: row.source, enabled }));
     } catch (err) {
-      toast.error(message(err));
+      refusedOn(row.name, err, () => switchSkill(row, enabled));
     } finally {
       delete busy[row.name];
     }
@@ -123,18 +141,12 @@
 
   async function refetchSkill(row: FleetSkillMeta) {
     busy[row.name] = true;
+    delete rowFaults[row.name];
     try {
-      const next = await refreshSkill(row.name);
-      landedSkill(next);
-      if (next.error) {
-        toast.error(next.error);
-      } else if (next.hash === row.hash) {
-        toast.info(`${row.name} is already current.`);
-      } else {
-        toast.success(`${row.name} changed — the machines get the new files.`);
-      }
+      // A fetch the hub could not make stands on the row as its hub fault.
+      landedSkill(await refreshSkill(row.name));
     } catch (err) {
-      toast.error(message(err));
+      refusedOn(row.name, err, () => refetchSkill(row));
     } finally {
       delete busy[row.name];
     }
@@ -142,47 +154,44 @@
 
   async function refetchPlugin(row: FleetPlugin) {
     busy[row.id] = true;
+    delete rowFaults[row.id];
     try {
-      const next = await refreshPlugin(row.id);
-      landedPlugin(next);
-      if (next.error) {
-        toast.error(next.error);
-      } else {
-        toast.success(`${row.id} fetched — the machines get the files.`);
-      }
+      landedPlugin(await refreshPlugin(row.id));
     } catch (err) {
-      toast.error(message(err));
+      refusedOn(row.id, err, () => refetchPlugin(row));
     } finally {
       delete busy[row.id];
     }
   }
 
-  /** Re-resolves every row the hub could not fetch, in order. */
+  /** Why Fetch again (every broken row) did not run: said under it. */
+  let refetchProblem = $state<string | null>(null);
+
+  /**
+   * Re-resolves every row the hub could not fetch, in order. Each row says
+   * what came of it (its fault clears, or stays with the hub's reason).
+   */
   async function refetchAll() {
     refetching = true;
     refetchFailed = false;
+    refetchProblem = null;
     try {
       let still = 0;
       for (const fault of hubBroken) {
         const next =
           fault.scope === "skills"
-            ? // biome-ignore lint/performance/noAwaitInLoops: one at a time, so the count in the toast is right
+            ? // biome-ignore lint/performance/noAwaitInLoops: one at a time, so the count is right
               await refreshSkill(fault.key)
             : await refreshPlugin(fault.key);
         if (next.error) {
           still += 1;
         }
       }
-      if (still > 0) {
-        refetchFailed = true;
-        toast.error(`${still} still would not fetch — the row says why.`);
-      } else {
-        toast.success("Fetched. The machines are being sent the files.");
-      }
+      refetchFailed = still > 0;
       resolved();
     } catch (err) {
       refetchFailed = true;
-      toast.error(message(err));
+      refetchProblem = message(err);
     } finally {
       refetching = false;
     }
@@ -195,7 +204,7 @@
   let versionsOf = $state<Record<string, ListedVersion[]>>({});
   let versionsFailed = $state<Record<string, string>>({});
   let restoring = $state<number | null>(null);
-  let restoreFailed = $state<number | null>(null);
+  let restoreFailed = $state<{ id: number; reason: string } | null>(null);
 
   /** Where a kept version came from: the fleet's own row, or a machine's edited copy. */
   function sourceLabel(source: string): string {
@@ -230,26 +239,35 @@
     restoring = version.id;
     restoreFailed = null;
     try {
+      // The row's rollout chip says where it lands.
       landedSkill(await restoreSkillVersion(version.id));
-      toast.success("Restored — every machine gets it.");
       await loadVersions(name);
     } catch (err) {
-      restoreFailed = version.id;
-      toast.error(message(err));
+      restoreFailed = { id: version.id, reason: message(err) };
     } finally {
       restoring = null;
     }
   }
 
+  /**
+   * Removing a skill or a plugin everywhere asks under its row, in the page,
+   * naming the machines that hold it, each with whether it has it now. The
+   * hub knows which machine holds what, not which session uses it, so the
+   * machines are the reach it names.
+   */
+  const asks = new Asker<AskHereRequest>();
+
   async function askForget(row: FleetSkillMeta) {
     if (!fleet) {
       return;
     }
-    await confirm({
-      title: `Remove ${row.name}?`,
-      body: `This removes the ${row.name} skill from every machine in the fleet. It can't be undone.`,
+    await asks.ask({
+      at: `skill:${row.name}`,
+      title: `Remove ${row.name} everywhere?`,
+      body: "The skill leaves the fleet and every machine that holds it. It can't be undone.",
       confirmLabel: "Remove everywhere",
       destructive: true,
+      items: () => holders(machines, "skills", row.name),
       pendingLabel: "Removing…",
       run: async () => {
         busy[row.name] = true;
@@ -314,12 +332,11 @@
   async function install(plugin: MarketplacePluginInfo, marketplace: string) {
     const id = `${plugin.name}@${marketplace}`;
     busy[id] = true;
-    installFailed[id] = false;
+    delete installFailed[id];
     try {
       landedPlugin(await savePlugin(id, { enabled: true }));
     } catch (err) {
-      installFailed[id] = true;
-      toast.error(message(err));
+      installFailed[id] = message(err);
     } finally {
       delete busy[id];
     }
@@ -327,10 +344,11 @@
 
   async function togglePlugin(id: string, enabled: boolean) {
     busy[id] = true;
+    delete rowFaults[id];
     try {
       landedPlugin(await savePlugin(id, { enabled }));
     } catch (err) {
-      toast.error(message(err));
+      refusedOn(id, err, () => togglePlugin(id, enabled));
     } finally {
       delete busy[id];
     }
@@ -340,11 +358,13 @@
     if (!fleet) {
       return;
     }
-    await confirm({
-      title: `Remove ${id}?`,
-      body: "This removes the plugin from every machine in the fleet. It can't be undone.",
+    await asks.ask({
+      at: `plugin:${id}`,
+      title: `Remove ${id} everywhere?`,
+      body: "The plugin leaves the fleet and every machine that holds it. It can't be undone.",
       confirmLabel: "Remove everywhere",
       destructive: true,
+      items: () => holders(machines, "plugins", id),
       pendingLabel: "Removing…",
       run: async () => {
         busy[id] = true;
@@ -393,6 +413,7 @@
         variant="outline"
       />
     {/if}
+    <RowFault again={refetchAll} reason={refetchProblem} />
     <LinkMarketplacePopover
       down={hubDown()}
       onsaved={(row) => fleet?.config.marketplaces.push(row)}
@@ -452,6 +473,11 @@
               />
             {/snippet}
             {#snippet below()}
+              <AskHere asker={asks} at="skill:{row.name}" />
+              <RowFault
+                again={rowFaults[row.name]?.again}
+                reason={rowFaults[row.name]?.reason}
+              />
               <RowFaults
                 hub={hubBroken.filter(
                   (fault) => fault.scope === "skills" && fault.key === row.name
@@ -586,7 +612,7 @@
                           <span class="note">Added</span>
                         {:else}
                           <Button
-                            failed={installFailed[id] === true}
+                            failed={id in installFailed}
                             label="Install"
                             onclick={() => install(plugin, row.name)}
                             pending={busy[id] === true}
@@ -595,6 +621,10 @@
                             variant="outline"
                           />
                         {/if}
+                        <RowFault
+                          class="install-fault"
+                          reason={installFailed[id]}
+                        />
                       </li>
                     {/each}
                   </ul>
@@ -650,6 +680,11 @@
               />
             {/snippet}
             {#snippet below()}
+              <AskHere asker={asks} at="plugin:{row.id}" />
+              <RowFault
+                again={rowFaults[row.id]?.again}
+                reason={rowFaults[row.id]?.reason}
+              />
               <RowFaults
                 hub={hubBroken.filter(
                   (fault) => fault.scope === "plugins" && fault.key === row.id

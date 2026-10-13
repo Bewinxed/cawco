@@ -10,11 +10,15 @@
    * log. There is no graph here: a graph is for editing (/workflows/[id]).
    */
   import type { WorkflowStep } from "@cawco/core";
+  import AskHere from "#lib/cawco/AskHere.svelte";
+  import type { AskHereRequest, AskItem } from "#lib/cawco/ask-here.svelte.js";
   import { cawco } from "#lib/cawco/client.svelte.js";
-  import { confirm } from "#lib/cawco/confirm.svelte.js";
+  import { Asker } from "#lib/cawco/confirm.svelte.js";
   import { message } from "#lib/cawco/delegate-types.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import RowFault from "#lib/cawco/RowFault.svelte";
+  import { sessionStatus, statusWord } from "#lib/cawco/SessionMark.svelte";
   import RunBlock from "#lib/cawco/transcript/RunBlock.svelte";
   import { runHref } from "#lib/cawco/workflow-runs.js";
   import {
@@ -108,33 +112,68 @@
     }
   });
 
+  /**
+   * What the last action came to when the hub refused it: said under the
+   * button that was pressed (`key`), where the person is looking, with the
+   * button itself the way to try again.
+   */
+  let fault = $state<{ key: string; reason: string } | null>(null);
+  const faultOf = (key: string) => (fault?.key === key ? fault.reason : null);
+
   async function act(key: string, action: () => Promise<unknown>) {
     acting = key;
-    errorMessage = "";
+    fault = null;
     try {
       await action();
       await refreshWorkflowRun(runId);
     } catch (caught) {
-      errorMessage = message(caught);
+      fault = { key, reason: message(caught) };
     } finally {
       acting = null;
     }
   }
-  async function cancel() {
-    const names = (run?.steps ?? [])
+  /**
+   * Cancel asks under the run's head, in the page (The Open Page Rule:
+   * nothing elsewhere breaks while it stands). What it reaches is named and
+   * read live: the steps running now, each as the rail names a session, with
+   * what it is doing; a step that ends while the question stands leaves it.
+   */
+  const asks = new Asker<AskHereRequest>();
+  const liveSteps = (): AskItem[] =>
+    (run?.steps ?? [])
       .filter((entry) => entry.status === "running" && entry.instanceId)
-      .map(
-        (entry) =>
-          cawco.instanceIndex.byId.get(entry.instanceId as string)?.title ??
-          entry.nodeId
-      );
-    await confirm({
-      title: "Cancel workflow run?",
-      body: `Stops these live sessions and any child runs: ${names.length ? names.join(", ") : "No live step sessions reported"}. Pending steps will be skipped.`,
+      .map((entry) => {
+        const id = entry.instanceId as string;
+        const row = cawco.instanceIndex.byId.get(id);
+        const status = sessionStatus(row);
+        return {
+          id,
+          title: row?.title || entry.nodeId,
+          lead: {
+            kind: "session" as const,
+            place: row?.cwd || row?.machineId || id,
+            status,
+          },
+          status: statusWord(row, status),
+        };
+      });
+  // A run that ended while asked has nothing left to cancel.
+  $effect(() => {
+    if (!going) {
+      asks.dismiss();
+    }
+  });
+  async function cancel() {
+    await asks.ask({
+      at: "cancel-run",
+      title: "Cancel this run?",
+      body: "The steps running now stop, with any child runs, and pending steps are skipped.",
       confirmLabel: "Cancel run",
+      cancelLabel: "Keep running",
       destructive: true,
+      items: liveSteps,
       pendingLabel: "Cancelling…",
-      // Not through `act`: a failure is the dialog's to show, under its body.
+      // Not through `act`: a refusal is the question's to show, under it.
       run: async () => {
         acting = "cancel";
         try {
@@ -148,7 +187,7 @@
   }
   /** Runs the workflow again, from the start or from one step, and opens the new run's tab. */
   async function rerun(fromStepId?: string) {
-    await act(fromStepId ? "rerun-step" : "rerun", async () => {
+    await act(fromStepId ? `rerun-step:${fromStepId}` : "rerun", async () => {
       const result = await rerunWorkflow(runId, fromStepId);
       await goto(runHref(result.runId));
     });
@@ -169,18 +208,20 @@
 )}
   <!-- Everything this run did before the step is kept: the new run is
        handed those results and goes live from here. -->
+  {@const key = `rerun-step:${step.id}`}
   <Button
-    disabled={(busy && acting !== "rerun-step") || !live || going}
-    failed={errorMessage !== ""}
+    disabled={(busy && acting !== key) || !live || going}
+    failed={faultOf(key) !== null}
     label="Re-run from this step"
     onclick={() => rerun(step.id)}
-    pending={acting === "rerun-step"}
+    pending={acting === key}
     pendingLabel="Re-running…"
     size="sm"
     title={offline("re-run") ??
       "Run the workflow again from this step, keeping what came before it"}
     variant="outline"
   />
+  <RowFault class="act-fault" reason={faultOf(key)} />
 {/snippet}
 
 <div class="run-view tx-columns">
@@ -217,6 +258,7 @@
       <div class="actions">
         {#if going}
           <Button
+            aria-expanded={asks.pending !== null}
             disabled={busy || !live}
             label="Cancel run"
             onclick={cancel}
@@ -227,7 +269,7 @@
         {:else}
           <Button
             disabled={(busy && acting !== "rerun") || !live}
-            failed={errorMessage !== ""}
+            failed={faultOf("rerun") !== null}
             label="Re-run"
             onclick={() => rerun()}
             pending={acting === "rerun"}
@@ -244,8 +286,10 @@
           variant="outline"
           >Edit workflow</Button
         >
+        <RowFault class="act-fault" reason={faultOf("rerun")} />
       </div>
     </header>
+    <AskHere asker={asks} at="cancel-run" />
 
     <RunBlock here more={rerunFrom} {runId} />
 
@@ -269,7 +313,7 @@
                   <li>
                     <Button
                       disabled={(busy && acting !== key) || !live}
-                      failed={errorMessage !== ""}
+                      failed={faultOf(key) !== null}
                       label={option.label}
                       onclick={() =>
                         act(key, () =>
@@ -288,6 +332,7 @@
                     {#if option.description}
                       <p class="hint">{option.description}</p>
                     {/if}
+                    <RowFault reason={faultOf(key)} />
                   </li>
                 {/each}
               </ul>
@@ -314,7 +359,7 @@
                     disabled={!valueText.trim() ||
                       (busy && acting !== "value") ||
                       !live}
-                    failed={errorMessage !== ""}
+                    failed={faultOf("value") !== null}
                     label="Send answer"
                     onclick={() =>
                       act("value", () =>
@@ -329,6 +374,7 @@
                     title={offline("answer")}
                   />
                 </div>
+                <RowFault reason={faultOf("value")} />
               {/if}
             {/if}
             {#if ask.allowOther}
@@ -338,7 +384,7 @@
                   <Input id="run-other-{runId}" bind:value={other} />
                   <Button
                     disabled={!other || (busy && acting !== "answer") || !live}
-                    failed={errorMessage !== ""}
+                    failed={faultOf("answer") !== null}
                     label="Send answer"
                     onclick={() =>
                       act("answer", () =>
@@ -355,6 +401,7 @@
                     variant="outline"
                   />
                 </div>
+                <RowFault reason={faultOf("answer")} />
               </div>
             {/if}
           </Card.Content>
@@ -456,6 +503,10 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
+  }
+  /* A refused re-run, under the buttons, on a line of its own. */
+  .actions > :global(.act-fault) {
+    flex-basis: 100%;
   }
   .answer {
     max-inline-size: 72ch;

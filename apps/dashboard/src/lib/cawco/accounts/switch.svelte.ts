@@ -9,8 +9,8 @@
 import { type Account, type AccountProvider, providerOf } from "@cawco/core";
 import { SvelteMap } from "svelte/reactivity";
 import { cawco, type InstanceRow, moveInstanceAccount } from "../client.svelte";
-import { toast } from "../toasts.js";
-import { accountsOf, signinState } from "./model.svelte";
+import { faultOn, pendingOn } from "../session-acts.svelte";
+import { accountsOf, nameOf, signinState } from "./model.svelte";
 
 /** Session id → the account it is moving to. */
 const moving = new SvelteMap<string, string>();
@@ -56,7 +56,12 @@ export function movingTo(instance: InstanceRow): string | undefined {
 export const shownAccount = (instance: InstanceRow): string | null =>
   movingTo(instance) ?? instance.accountId ?? null;
 
-/** Asks the hub to move the session; its refusal is a toast in its words. */
+/**
+ * Asks the hub to move the session. Its rows say so until they name the new
+ * account: "Moves to X when this turn ends" mid-turn, "Moving to X…" at
+ * rest (the hub moves it at once then). A refusal stays on its rows, in the
+ * hub's words, with Try again.
+ */
 export async function moveTo(
   instance: InstanceRow,
   accountId: string
@@ -64,22 +69,35 @@ export async function moveTo(
   if (accountId === instance.accountId || movingTo(instance) === accountId) {
     return;
   }
+  const account = cawco.accounts?.accounts.find((one) => one.id === accountId);
+  const name = account ? nameOf(account) : "the other account";
+  const working = cawco.activityOf(instance.id) === "working";
   moving.set(instance.id, accountId);
+  pendingOn(
+    instance.id,
+    working ? `Moves to ${name} when this turn ends` : `Moving to ${name}…`
+  );
   try {
     await moveInstanceAccount(instance.id, accountId);
   } catch (error) {
     moving.delete(instance.id);
-    toast.error(error instanceof Error ? error.message : String(error));
+    pendingOn(instance.id, undefined);
+    faultOn(instance.id, {
+      reason: error instanceof Error ? error.message : String(error),
+      again: () => moveTo(instance, accountId),
+    });
   }
 }
 
-// A move is over once the session's row names its account: the entry goes.
+// A move is over once the session's row names its account: the entry goes,
+// and its rows stop saying it moves.
 $effect.root(() => {
   $effect(() => {
     for (const [id, target] of moving) {
       const row = cawco.instances.find((one) => one.id === id);
       if (!row || row.accountId === target) {
         moving.delete(id);
+        pendingOn(id, undefined);
       }
     }
   });

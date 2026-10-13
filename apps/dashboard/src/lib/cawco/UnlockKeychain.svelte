@@ -1,8 +1,6 @@
 <script lang="ts">
   import type { AuthState } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
-  import * as Dialog from "#lib/components/ui/dialog/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   /**
    * Unlocks a Mac's login keychain from here.
@@ -14,6 +12,10 @@
    * answer is "go and open a terminal on the other machine" has stopped being a
    * fleet tool, so it is asked for here and relayed down the tunnel.
    *
+   * It opens under the machine's row, in the page (DESIGN.md, The Open Page
+   * Rule): nothing elsewhere breaks while the password is typed, so nothing
+   * else is held. Cancel or Escape puts it away.
+   *
    * The password is sent, used, and dropped. It is not stored here, not kept in
    * the store, and not written anywhere on the way.
    */
@@ -21,15 +23,16 @@
   import { type Machine, machineControl } from "./client.svelte";
   import MachineAuthStatus from "./MachineAuthStatus.svelte";
   import { crossIn, crossOut } from "./motion/curves.svelte";
+  import { unfold } from "./motion/fold.svelte";
 
   let {
     machine,
-    open: dialogOpen = $bindable(false),
+    open = $bindable(false),
   }: { machine: Machine; open?: boolean } = $props();
 
   /**
-   * Where the dialog is: the password form, the machine unlocking and
-   * checking, what it answered, or the form again with why it failed.
+   * Where it is: the password form, the machine unlocking and checking,
+   * what it answered, or the form again with why it failed.
    */
   type Phase =
     | { kind: "password" }
@@ -41,11 +44,12 @@
   let password = $state("");
   /**
    * Which submit an answer belongs to: an answer that lands after the reader
-   * closed the dialog and opened it again is dropped.
+   * put it away and opened it again is dropped.
    */
   let attempt = 0;
   /** The height the form's view stood at when sent, held while it works. */
   let held = $state(0);
+  const id = $props.id();
 
   const SAID: Record<AuthState, { title: string; body: string }> = $derived({
     authenticated: {
@@ -62,11 +66,10 @@
     },
   });
 
-  // A close by the bound value runs no `onOpenChange`, so the last answer is
-  // dropped as the dialog opens again, before it is drawn.
+  // Each opening starts from the form: the last answer is dropped.
   let shown = false;
   $effect.pre(() => {
-    if (!dialogOpen) {
+    if (!open) {
       shown = false;
       return;
     }
@@ -114,20 +117,43 @@
   }
 
   const close = () => {
-    dialogOpen = false;
+    open = false;
   };
+
+  /** In view as it opens, and Escape inside it puts it away. */
+  function arrive(node: HTMLElement) {
+    const frame = requestAnimationFrame(() =>
+      node.scrollIntoView({ block: "nearest" })
+    );
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        close();
+      }
+    };
+    node.addEventListener("keydown", onEscape);
+    return () => {
+      cancelAnimationFrame(frame);
+      node.removeEventListener("keydown", onEscape);
+    };
+  }
 
   const view = $derived(
     phase.kind === "working" || phase.kind === "done" ? "status" : "form"
   );
 </script>
 
-<Dialog.Root bind:open={dialogOpen}>
-  <Dialog.Content class="sm:max-w-md">
-    <div class="relative flex flex-col">
+{#if open}
+  <section
+    aria-labelledby="{id}-title"
+    class="unlock"
+    transition:unfold
+    {@attach arrive}
+  >
+    <div class="tile">
       {#key view}
         <div
-          class="flex flex-col gap-6"
+          class="flex flex-col gap-[var(--space-3)]"
           style:min-height={phase.kind === "working" ? `${held}px` : undefined}
           in:crossIn
           out:crossOut
@@ -137,32 +163,30 @@
               onclose={close}
               outcome={phase}
               said={SAID}
+              titleId="{id}-title"
               working={{
                 title: `Unlocking ${machine.hostname}…`,
-                steps: [
-                  "Unlocking the login keychain",
-                  `Checking ${machine.hostname} can read its credentials`,
-                ],
+                step: `Unlocking the login keychain and checking ${machine.hostname} can read its credentials`,
               }}
             />
           {:else}
-            <Dialog.Header>
-              <Dialog.Title class="flex items-center gap-2">
+            <div class="flex flex-col gap-[var(--space-1)]">
+              <p class="title" id="{id}-title">
                 <IconKey class="size-4 text-warning" />
                 Unlock {machine.hostname}
-              </Dialog.Title>
-              <Dialog.Description>
+              </p>
+              <p class="body">
                 Its login keychain is locked, so Claude Code there cannot read
                 its credentials. This is the macOS login password for that
                 machine.
-              </Dialog.Description>
-            </Dialog.Header>
+              </p>
+            </div>
 
-            <form class="flex flex-col gap-[var(--space-3)]" onsubmit={unlock}>
+            <form class="flex flex-col gap-[var(--space-2)]" onsubmit={unlock}>
               <Input
                 aria-describedby={phase.kind === "error"
-                  ? "unlock-error"
-                  : "unlock-note"}
+                  ? `${id}-error`
+                  : `${id}-note`}
                 aria-invalid={phase.kind === "error" ? "true" : undefined}
                 aria-label="Login password for {machine.hostname}"
                 autocomplete="current-password"
@@ -170,33 +194,70 @@
                 type="password"
                 bind:value={password}
                 {@attach (node) => {
-                  if (phase.kind === "error") {
-                    node.focus();
-                  }
+                  requestAnimationFrame(() => node.focus());
                 }}
               />
 
               {#if phase.kind === "error"}
-                <p class="text-label text-destructive" id="unlock-error">
+                <p class="fail" id="{id}-error" role="alert">
                   {phase.message}
                 </p>
               {:else}
-                <p class="text-meta text-muted-foreground" id="unlock-note">
+                <p class="body" id="{id}-note">
                   Sent over your tunnel to that machine, used once, and not
                   stored anywhere.
                 </p>
               {/if}
 
               <div class="flex justify-end gap-[var(--space-2)]">
-                <Button onclick={close} type="button" variant="outline">
+                <Button onclick={close} size="sm" type="button" variant="ghost">
                   Cancel
                 </Button>
-                <Button disabled={!password} type="submit">Unlock</Button>
+                <Button disabled={!password} size="sm" type="submit">
+                  Unlock
+                </Button>
               </div>
             </form>
           {/if}
         </div>
       {/key}
     </div>
-  </Dialog.Content>
-</Dialog.Root>
+  </section>
+{/if}
+
+<style>
+  /* Under the machine's row, inside the list's edges: the in-page tile
+     (AskHere's), the rest of the list live around it. */
+  .unlock {
+    min-inline-size: 0;
+    padding: var(--space-1) var(--space-2);
+  }
+  .tile {
+    position: relative;
+    display: grid;
+    padding: var(--space-3);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-raised);
+  }
+  .title {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    font: var(--type-label);
+    color: var(--ink-strong);
+  }
+  .body {
+    margin: 0;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    text-wrap: pretty;
+  }
+  .fail {
+    margin: 0;
+    font: var(--type-meta);
+    color: var(--status-fail-ink);
+  }
+</style>

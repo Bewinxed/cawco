@@ -1,5 +1,24 @@
 <script lang="ts" module>
+  import type { AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
+  import { Asker } from "#lib/cawco/confirm.svelte.js";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
+
+  /**
+   * One editor's question (its delete's), asked in that editor's own footer,
+   * over Delete, in the page (DESIGN.md, The Open Page Rule): the fields stay
+   * live, and a delete runs on what the hub holds whatever was typed
+   * meanwhile, so nothing elsewhere breaks. The editor makes it and hands it
+   * to its EditorFrame (`question`); it lives and goes with that editor, so
+   * another frame coming or going (the skeleton the editor replaces, the
+   * next editor) never touches it.
+   */
+  export class EditorQuestion {
+    readonly asker = new Asker<AskHereRequest>();
+
+    ask(request: Omit<AskHereRequest, "at">): Promise<boolean> {
+      return this.asker.ask({ ...request, at: "editor" });
+    }
+  }
 
   /**
    * Resolves once a save that just ended well has been shown as saved: an
@@ -13,7 +32,6 @@
 </script>
 
 <script lang="ts">
-  import { aboveKeyboard } from "#lib/cawco/visible-viewport.svelte.js";
   /**
    * The editor's commit row. It sits outside the scrolling body, on the
    * recess, so no field scrolls under it at rest; under 640px it pins to the
@@ -25,6 +43,9 @@
    * the save runs and draws a check for --dur-hold when it ends well, and
    * for that same hold the label says "Saved".
    */
+  import type { Snippet } from "svelte";
+  import AskHere from "#lib/cawco/AskHere.svelte";
+  import { aboveKeyboard } from "#lib/cawco/visible-viewport.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconTrash } from "#lib/icons.js";
 
@@ -39,6 +60,8 @@
     failed = false,
     ondelete,
     oncancel,
+    question,
+    result,
   }: {
     /** The scrolling body whose fields the row stands under. */
     body: HTMLElement | null;
@@ -54,6 +77,14 @@
     failed?: boolean;
     ondelete?: () => void;
     oncancel: () => void;
+    /** This editor's own question, drawn over the commit row while it stands. */
+    question?: EditorQuestion;
+    /**
+     * What the save reaches and where it has landed, beside Save: the row's
+     * rollout chip (machine by machine, on the machines' word) and, before
+     * a save, the machines it writes to.
+     */
+    result?: Snippet;
   } = $props();
 
   /** The save just ended well: the label says so for as long as the check stands. */
@@ -77,6 +108,9 @@
 </script>
 
 <footer class="footer" data-safe-bottom {@attach aboveKeyboard(() => body)}>
+  {#if question}
+    <AskHere asker={question.asker} at="editor" class="editor-ask" />
+  {/if}
   <div class="inner">
     {#if ondelete && deleteLabel}
       <Button
@@ -94,6 +128,9 @@
       />
     {/if}
     <span class="spacer"></span>
+    {#if result}
+      <span class="result">{@render result()}</span>
+    {/if}
     <Button
       class="footer-btn"
       disabled={saving}
@@ -130,6 +167,18 @@
   }
   .spacer {
     flex: 1 1 auto;
+  }
+  /* The question stands over the commit row, as wide as it. */
+  .footer > :global(.editor-ask) {
+    max-width: 980px;
+  }
+  .result {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    font: var(--type-meta);
+    color: var(--ink-muted);
   }
   .inner :global(.save) {
     min-width: 96px;

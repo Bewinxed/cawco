@@ -1,4 +1,6 @@
 <script lang="ts">
+  import AskHere from "#lib/cawco/AskHere.svelte";
+  import type { AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { drafts } from "#lib/cawco/config/drafts.svelte.js";
   import {
@@ -15,7 +17,7 @@
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
-  import { confirm } from "#lib/cawco/confirm.svelte.js";
+  import { Asker } from "#lib/cawco/confirm.svelte.js";
   import FleetFault from "#lib/cawco/FleetFault.svelte";
   import {
     type FleetMemoryDocRow,
@@ -72,11 +74,14 @@
   const drafted = (path: string) =>
     drafts.paths.has(fileHref(path)) ? " · unsaved draft" : "";
 
+  /** Delete asks under the file's row, in the page. */
+  const asks = new Asker<AskHereRequest>();
   async function askRemove(path: string) {
     if (!fleet) {
       return;
     }
-    await confirm({
+    await asks.ask({
+      at: path,
       title: `Delete ${fileLabel(path)}?`,
       body: "It is taken off every machine that still has CawCo's copy. A machine's own edited copy is left where it is.",
       confirmLabel: "Delete everywhere",
@@ -164,6 +169,7 @@
           {/if}
         {/snippet}
         {#snippet below()}
+          <AskHere asker={asks} at={MAIN} />
           <RowFaults key="" kind="memory" {machines} />
         {/snippet}
       </SectionRow>
@@ -196,6 +202,7 @@
           />
         {/snippet}
         {#snippet below()}
+          <AskHere asker={asks} at={doc.path} />
           <RowFaults key={doc.path} kind="memoryDocs" {machines} />
         {/snippet}
       </SectionRow>

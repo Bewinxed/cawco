@@ -443,9 +443,10 @@
   }
 
   /**
-   * A move, shown at once and asked of the hub. A refusal puts the card back
-   * where it was, and the hub's sentence (which names the moves that are
-   * open) is thrown to whoever asked.
+   * A move, the card standing where it was put, saying it moves, until the
+   * hub answers. A refusal puts the card back where it was, and the hub's
+   * sentence (which names the moves that are open) is thrown to whoever
+   * asked: the board says it under the card, the sheet beside its picker.
    */
   async function move(
     id: string,
@@ -469,21 +470,38 @@
     }
   }
 
-  function drop(id: string, stage: string, source: HTMLElement) {
+  /**
+   * Moves the hub refused from the board, by task: the card is back in its
+   * column with the hub's sentence (which names the moves that are open)
+   * under it, and Try again makes the same move.
+   */
+  let refusedMoves = $state<Record<string, { reason: string; stage: string }>>(
+    {}
+  );
+
+  function drop(id: string, stage: string, source?: HTMLElement) {
+    const { [id]: _, ...rest } = refusedMoves;
+    refusedMoves = rest;
     move(id, stage, source).catch((error: unknown) => {
-      toast.error(message(error));
+      refusedMoves = {
+        ...refusedMoves,
+        [id]: { reason: message(error), stage },
+      };
     });
   }
+  const refusedMove = (id: string) => {
+    const refused = refusedMoves[id];
+    return refused
+      ? { reason: refused.reason, again: () => drop(id, refused.stage) }
+      : null;
+  };
 
-  /** The project has stages of its own now; tasks the set lacks are named. */
-  function applied(next: StagesView, stranded: string[]) {
+  /**
+   * The project has stages of its own now. Tasks the set lacks were named
+   * before it was chosen (StagesControl); they stand in Other stages.
+   */
+  function applied(next: StagesView) {
     stages = next;
-    if (stranded.length > 0) {
-      const one = stranded.length === 1;
-      toast(
-        `${stranded.join(", ")} ${one ? "is in a stage" : "are in stages"} the new set lacks; ${one ? "it stands" : "they stand"} in Other stages until moved.`
-      );
-    }
     // biome-ignore lint/complexity/noVoid: the re-read sets its own state
     void refresh();
   }
@@ -795,10 +813,12 @@
       {dateOf}
       hrefOf={(id) => hrefOf(id)}
       {kindOf}
+      moving={(id) => id in moving}
       {newIn}
       oncreate={create}
       onmove={drop}
       onopen={openOne}
+      refused={refusedMove}
       stages={shownStages}
       tasks={shownTasks}
       bind:adding
@@ -1036,6 +1056,7 @@
     anchor={stagesAnchor}
     onapplied={applied}
     {projectId}
+    tasks={list?.tasks ?? []}
     bind:open={stagesOpen}
   />
 

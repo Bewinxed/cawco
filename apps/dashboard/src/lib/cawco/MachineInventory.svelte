@@ -7,7 +7,6 @@
     FleetSkillMeta,
   } from "@cawco/core";
   import { machineLabel } from "@cawco/core";
-  import { toast } from "#lib/cawco/toasts.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -18,6 +17,7 @@
   import { adoptSkill, inspectMachine, saveMcpServer } from "./fleet";
   import AddMachineLink from "./join/AddMachineLink.svelte";
   import OsMark from "./OsMark.svelte";
+  import RowFault from "./RowFault.svelte";
 
   let {
     machines,
@@ -38,7 +38,8 @@
   let reading = $state<Record<string, boolean>>({});
   let unread = $state<Record<string, string>>({});
   let busy = $state<Record<string, boolean>>({});
-  let adoptFailed = $state<Record<string, boolean>>({});
+  /** Why an adopt was refused, by row: said under that row. */
+  let adoptFailed = $state<Record<string, string>>({});
 
   const message = (error: unknown) =>
     error instanceof Error ? error.message : String(error);
@@ -68,13 +69,13 @@
   async function adoptServer(machine: Machine, row: DiscoveredMcp) {
     const key = keyOf(machine.machineId, row.scope, row.name);
     busy[key] = true;
-    adoptFailed[key] = false;
+    delete adoptFailed[key];
     try {
+      // The row turns "In the fleet", and the fleet's list gains it with its
+      // rollout chip: that is the result.
       onserver?.(await saveMcpServer(row.name, row.config, true, null));
-      toast.success(`${row.name} is the fleet's now — every machine gets it.`);
     } catch (error) {
-      adoptFailed[key] = true;
-      toast.error(message(error));
+      adoptFailed[key] = message(error);
     } finally {
       delete busy[key];
     }
@@ -83,15 +84,11 @@
   async function adopt(machine: Machine, row: DiscoveredSkill) {
     const key = keyOf(machine.machineId, row.scope, row.name);
     busy[key] = true;
-    adoptFailed[key] = false;
+    delete adoptFailed[key];
     try {
       onskill?.(await adoptSkill(row.name, machine.machineId));
-      toast.success(
-        `${row.name} is the fleet's now — its files went to the hub.`
-      );
     } catch (error) {
-      adoptFailed[key] = true;
-      toast.error(message(error));
+      adoptFailed[key] = message(error);
     } finally {
       delete busy[key];
     }
@@ -189,7 +186,7 @@
                     </span>
                     {#if !(row.managed || taken.includes(row.name))}
                       <Button
-                        failed={adoptFailed[key] === true}
+                        failed={key in adoptFailed}
                         label="Adopt"
                         onclick={() =>
                           kind === "mcp"
@@ -203,6 +200,7 @@
                     {:else if taken.includes(row.name) && !row.managed}
                       <span class="note">In the fleet</span>
                     {/if}
+                    <RowFault class="adopt-fault" reason={adoptFailed[key]} />
                   </li>
                 {/each}
               </ul>
@@ -283,6 +281,10 @@
     padding: 8px 10px;
     border-radius: var(--radius-sm);
     background: var(--surface-recess);
+  }
+  /* A refused adopt, on a line of its own under the entry's words. */
+  .entry > :global(.adopt-fault) {
+    flex-basis: 100%;
   }
   .text {
     display: flex;

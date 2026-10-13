@@ -75,7 +75,6 @@
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { departBox } from "#lib/cawco/motion/share.svelte.js";
-  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { whileIdle } from "#lib/components/ui/button/pending-content.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
@@ -1095,6 +1094,7 @@
       sendBlock = "";
       room.error = "";
       draft.notice = "";
+      draftNote = "";
     }
   }
 
@@ -1129,6 +1129,23 @@
   const sendNotice = $derived(
     sendError || sendBlock || canvasNotice() || draft.notice
   );
+  /**
+   * A fleet server this composer opened the sign-in for (`/mcp auth`): over
+   * the composer, it waits for the provider until the hub reports the
+   * server signed in, then says so.
+   */
+  let signingIn = $state<string | null>(null);
+  /** A word about `/mcp auth` that is not a failure ("already signed in"). */
+  let draftNote = $state("");
+  const signInNote = $derived.by(() => {
+    if (signingIn === null) {
+      return draftNote;
+    }
+    const server = (cawco.fleetMcp ?? []).find((one) => one.name === signingIn);
+    return server?.auth?.state === "signed-in"
+      ? `${signingIn} is signed in for the fleet.`
+      : `Waiting for ${signingIn}: sign in in the tab that opened.`;
+  });
 
   /** A send pressed while a note's screenshot was still on its way. */
   let awaiting = $state<{
@@ -1169,18 +1186,30 @@
     }
     sendBlock = "";
     draft.notice = "";
+    draftNote = "";
+    signingIn = null;
     // `/mcp auth <server>` for a fleet server is this browser's own sign-in,
     // not a message: the agent's machine may have no browser at all (a phone is
     // the browser here), and the hub holds the credentials either way.
+    // Its words stand over the composer, where it was typed; the session
+    // stays where it is while the provider opens in a tab of its own.
     const intent = mcpSignInIntent(draft.text, cawco.fleetMcp ?? []);
     if (intent.kind === "go") {
-      signInToMcp(intent.name).catch((error) =>
-        toast.error(error instanceof Error ? error.message : String(error))
-      );
+      const { name } = intent;
+      signingIn = name;
+      signInToMcp(name).catch((error) => {
+        signingIn = null;
+        sendBlock = error instanceof Error ? error.message : String(error);
+      });
       return;
     }
     if (intent.kind === "say") {
-      toast[intent.level](intent.message);
+      signingIn = null;
+      if (intent.level === "error") {
+        sendBlock = intent.message;
+      } else {
+        draftNote = intent.message;
+      }
       return;
     }
     // A picked element's screenshot is still being drawn: the press stands,
@@ -3067,6 +3096,8 @@
     <!-- A send that failed says so right over the field it left. -->
     {#if sendNotice}
       <p class="send-error" role="alert" transition:unfold>{sendNotice}</p>
+    {:else if signInNote}
+      <p class="send-note" role="status" transition:unfold>{signInNote}</p>
     {/if}
 
     <!-- The pill, and what grows up out of it over the transcript: the
@@ -3982,11 +4013,15 @@
     box-shadow: none;
     background-image: none;
   }
-  .send-error {
+  .send-error,
+  .send-note {
     padding-inline: var(--space-3);
     color: var(--status-fail-ink);
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
+  }
+  .send-note {
+    color: var(--ink-muted);
   }
 
   /* Optical centring: the send plane's mass sits low-left of its box, so the
