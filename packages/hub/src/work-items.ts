@@ -59,9 +59,9 @@ import {
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_MIGRATE,
+  DEPS_INSTALLING,
+  depsScript,
   handoffMarker,
-  installFor,
-  LOCKFILES,
   machineLabel,
   type WorkspaceLanding,
   withLandingLine,
@@ -1016,35 +1016,6 @@ interface CheckOutcome {
   /** Where a check that names another machine ran: `on Omars-MacBook-Pro at 1a2b3c4d5`. */
   where?: string;
 }
-
-/**
- * Where a workspace's install records the lockfile it installed from: the
- * lockfile's git blob hash, next to the dependencies.
- */
-const DEPS_STAMP = "node_modules/.cawco-lockfile";
-
-/** What {@link depsScript} prints first when it installs, and only then. */
-const DEPS_INSTALLING = "installing: ";
-
-/**
- * Installs a checkout's dependencies when its root lockfile no longer
- * matches the one they were installed from ({@link DEPS_STAMP}), by the
- * install core's `installFor` picks for that lockfile; then stamps it. No
- * lockfile, or a matching stamp: nothing runs and nothing is printed.
- */
-export const depsScript = (): string => {
-  const picks = LOCKFILES.map(
-    (lock, index) =>
-      `${index ? "elif" : "if"} [ -f ${lock} ]; then lock=${lock}; install=${quote(installFor(lock)?.command ?? "")}`
-  ).join("\n");
-  return [
-    `${picks}\nelse exit 0\nfi`,
-    `[ "$(cat ${DEPS_STAMP} 2>/dev/null)" = "$(git hash-object "$lock")" ] && exit 0`,
-    `echo "${DEPS_INSTALLING}$install ($lock changed since the dependencies were installed)"`,
-    "$install 2>&1 || exit $?",
-    `mkdir -p node_modules && git hash-object "$lock" > ${DEPS_STAMP}`,
-  ].join("\n");
-};
 
 /**
  * An install {@link depsScript} ran ahead of the checks: not one of the

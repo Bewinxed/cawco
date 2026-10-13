@@ -473,3 +473,35 @@ export const LOCKFILES = [
   "package-lock.json",
   "yarn.lock",
 ] as const;
+
+/**
+ * Where a checkout's install records the lockfile it installed from: the
+ * lockfile's git blob hash, next to the dependencies.
+ */
+const DEPS_STAMP = "node_modules/.cawco-lockfile";
+
+/** What {@link depsScript} prints first when it installs, and only then. */
+export const DEPS_INSTALLING = "installing: ";
+
+/**
+ * Installs a checkout's dependencies when its root lockfile no longer
+ * matches the one they were installed from ({@link DEPS_STAMP}), by
+ * {@link installFor}'s pick for that lockfile; then stamps it. No lockfile,
+ * or a matching stamp: nothing runs and nothing is printed. Run in the
+ * checkout's root: before a work item's checks (the hub's `runChecks`) and
+ * before a probe's scratch fleet starts from the checkout.
+ */
+export const depsScript = (): string => {
+  const word = (text: string) => `'${text.replaceAll("'", `'\\''`)}'`;
+  const picks = LOCKFILES.map(
+    (lock, index) =>
+      `${index ? "elif" : "if"} [ -f ${lock} ]; then lock=${lock}; install=${word(installFor(lock)?.command ?? "")}`
+  ).join("\n");
+  return [
+    `${picks}\nelse exit 0\nfi`,
+    `[ "$(cat ${DEPS_STAMP} 2>/dev/null)" = "$(git hash-object "$lock")" ] && exit 0`,
+    `echo "${DEPS_INSTALLING}$install ($lock changed since the dependencies were installed)"`,
+    "$install 2>&1 || exit $?",
+    `mkdir -p node_modules && git hash-object "$lock" > ${DEPS_STAMP}`,
+  ].join("\n");
+};

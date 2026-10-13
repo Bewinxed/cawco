@@ -14,13 +14,11 @@ import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { chmod, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { JUDGE_FORM_LENGTH, parseProcId } from "../packages/agent/src/proc-id";
+import { parseProcId } from "../packages/agent/src/proc-id";
 import { SessiondClient } from "../packages/agent/src/sessiond-client";
 import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
-import {
-  SCRATCH_SOCKET_SUFFIX,
-  socketPathProblem,
-} from "../packages/core/src/paths";
+import { DEPS_INSTALLING, depsScript } from "../packages/core/src/move";
+import { socketPathProblem } from "../packages/core/src/paths";
 
 export type Harness = "claude" | "opencode" | "pi";
 export const HARNESSES: Harness[] = ["claude", "opencode", "pi"];
@@ -332,43 +330,33 @@ export async function scratchFleet(options: {
     scratch,
     `${options.name}-${crypto.randomUUID().slice(0, 8)}`
   );
-  // The services' HOME and the agent's XDG_RUNTIME_DIR hold the paths of a
-  // delegate's sockets, and a unix socket's path holds UNIX_SOCKET_PATH_MAX
-  // bytes (103 on macOS, 107 on Linux). The longest the agent derives:
-  //  - under HOME, on macOS a workspace's judge in its door dir (paths.ts
-  //    `workspaceDoorDir`, boundary.ts `judge-<form>.sock`),
-  //    `/.cawco/workspaces/<id>/ro/judge-<16 hex>.sock`, 86 bytes, so HOME
-  //    holds 17; on Linux, whose doors are under the runtime dir, Chromium's
-  //    in a workspace's scratch dir (paths.ts `scratchSocketProblem`),
-  //    `/.cawco/tmp/<id8>/org.chromium.Chromium.XXXXXX/SingletonSocket`, 66;
-  //  - under the runtime dir, a preview's bridge (preview-bridge.ts
-  //    `bridgeDir`), `/cawco/previews/<instance id>.sock`, 57.
-  // Both sit apart from the sandbox, two hex under the shortest root this can
-  // write: a CawCo workspace's own TMPDIR (`~/.cawco/tmp/<id8>`, 35 bytes, on
-  // disk); else on macOS `/private/tmp` (12), since no dir under a home is
-  // short enough (`/Users/<name>` alone is most of 17), on the boot volume's
-  // disk and the real path the Seatbelt profile matches (`/tmp` links to it);
-  // else the cache root (`~/.cache`, 22). Mode 700, as a runtime dir is.
-  const inWorkspace = Boolean(
-    process.env.CAWCO_WORKSPACE && process.env.TMPDIR
-  );
-  let shortRoot = scratch;
-  if (inWorkspace) {
-    shortRoot = process.env.TMPDIR as string;
-  } else if (process.platform === "darwin") {
-    shortRoot = "/private/tmp";
+  // The checkout's dependencies as its lockfile names them, by the rule a
+  // work item's checks use (move.ts `depsScript`): a hub that imports a
+  // package a rebase added, run on the dependencies from before it, dies at
+  // start ("Cannot find package 'yjs'").
+  const deps = await Bun.$`sh -c ${depsScript()}`.cwd(root).nothrow().quiet();
+  if (deps.exitCode !== 0) {
+    throw new Error(
+      `the checkout's dependencies did not install (exit ${deps.exitCode}): ${deps.stdout.toString().trim().split("\n").slice(-20).join("\n")}`
+    );
   }
-  const anyId = crypto.randomUUID();
-  const longestUnderHome =
-    process.platform === "darwin"
-      ? join(
-          "/.cawco/workspaces",
-          anyId,
-          "ro",
-          `judge-${"0".repeat(JUDGE_FORM_LENGTH)}.sock`
-        )
-      : join("/.cawco/tmp", anyId.slice(0, 8), SCRATCH_SOCKET_SUFFIX);
-  const longestUnderRuntime = join("/cawco/previews", `${anyId}.sock`);
+  if (deps.stdout.toString().startsWith(DEPS_INSTALLING)) {
+    console.log(
+      `… ${deps.stdout.toString().split("\n")[0]?.slice(DEPS_INSTALLING.length)}`
+    );
+  }
+  // The services' HOME and the agent's XDG_RUNTIME_DIR, apart from the
+  // sandbox, two hex under the shortest root this can write: a CawCo
+  // workspace's own TMPDIR (`~/.cawco/tmp/<id8>`, 35 bytes, on disk), else
+  // the cache root (`~/.cache`, 22). Mode 700, as a runtime dir is. The agent
+  // keeps a workspace's sockets out of its HOME (paths.ts `workspaceDoorDir`)
+  // and refuses one under it that does not fit (`scratchSocketProblem`); the
+  // longest under the runtime dir is a preview's bridge (preview-bridge.ts
+  // `bridgeDir`), `/cawco/previews/<instance id>.sock`, checked here.
+  const shortRoot =
+    process.env.CAWCO_WORKSPACE && process.env.TMPDIR
+      ? process.env.TMPDIR
+      : scratch;
   const home = await shortDir(shortRoot);
   // In a folder of its own: a workspace boundary hides the database's folder.
   const dbPath = join(sandbox, "hub", "hub.db");
@@ -376,25 +364,12 @@ export async function scratchFleet(options: {
   await mkdir(join(home, ".config", "cawco"), { recursive: true });
   await mkdir(join(sandbox, "hub"), { recursive: true });
   const runtime = await shortDir(shortRoot);
-  const tooLong = [
-    socketPathProblem(
-      `${home}${longestUnderHome}`,
-      "The scratch agent's longest socket under its HOME,"
-    ),
-    socketPathProblem(
-      `${runtime}${longestUnderRuntime}`,
-      "The scratch agent's longest socket under its runtime dir,"
-    ),
-  ].filter((problem) => problem !== undefined);
-  // In a workspace only its TMPDIR is writable: on macOS the agent refuses a
-  // delegate's workspace there with these words, and every other part runs.
-  if (tooLong.length > 0 && !inWorkspace) {
-    throw new Error(tooLong.join("; "));
-  }
-  for (const problem of tooLong) {
-    console.log(
-      `… ${problem}; a delegate's workspace will not start in this fleet`
-    );
+  const bridge = socketPathProblem(
+    join(runtime, "cawco", "previews", `${crypto.randomUUID()}.sock`),
+    "The scratch agent's longest socket under its runtime dir, a preview's bridge,"
+  );
+  if (bridge) {
+    throw new Error(bridge);
   }
 
   const freePort = async (): Promise<number> => {
@@ -591,9 +566,12 @@ export async function scratchFleet(options: {
     OPENCODE_DISABLE_MODELS_FETCH: "1",
   };
   const procs: Partial<Record<Role, ReturnType<typeof Bun.spawn>>> = {};
+  /** Each role's latest launch's stderr file. */
+  const errs: Partial<Record<Role, string>> = {};
   let launches = 0;
   const launch = (role: Role) => {
     launches += 1;
+    const err = join(sandbox, `${role}-${launches}.err`);
     const child = Bun.spawn([process.execPath, join(root, ENTRY[role])], {
       // The keeper's children start where it runs, and OpenCode's server
       // writes `.opencode/` in its own directory: in the sandbox, never the
@@ -601,9 +579,10 @@ export async function scratchFleet(options: {
       cwd: role === "sessiond" ? sandbox : root,
       env,
       stdout: Bun.file(join(sandbox, `${role}-${launches}.log`)),
-      stderr: Bun.file(join(sandbox, `${role}-${launches}.err`)),
+      stderr: Bun.file(err),
     });
     procs[role] = child;
+    errs[role] = err;
     console.log(`… ${role} started, pid ${child.pid}`);
     return child;
   };
@@ -801,8 +780,51 @@ export async function scratchFleet(options: {
     }
   };
 
+  /**
+   * {@link until} for a service of the fleet to answer, failed at once when
+   * its process exits first; either failure carries the end of that launch's
+   * stderr (`<role>-<n>.err`), where a service that dies at start says why
+   * ("error: Cannot find package 'yjs' from …").
+   */
+  const answering = async <T>(
+    role: Role,
+    label: string,
+    read: () => T | Promise<T>,
+    accept: (value: T) => boolean,
+    ms: number
+  ): Promise<T> => {
+    const child = procs[role];
+    const died = child
+      ? child.exited.then((code): never => {
+          throw new Error(
+            `${label}: ${role} (pid ${child.pid}) exited ${code} first`
+          );
+        })
+      : Promise.reject(new Error(`${label}: ${role} was never launched`));
+    try {
+      return await Promise.race([until(label, read, accept, ms), died]);
+    } catch (error) {
+      const err = errs[role];
+      const tail = err
+        ? (
+            await Bun.file(err)
+              .text()
+              .catch(() => "")
+          )
+            .trimEnd()
+            .split("\n")
+            .slice(-30)
+            .join("\n")
+        : "";
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n${role}'s stderr (${err ?? "none"}), its last lines:\n${tail || "(empty)"}`,
+        { cause: error }
+      );
+    }
+  };
   const hubUp = async () => {
-    await until(
+    await answering(
+      "hub",
       "the hub answering",
       () => fetch(`${base}/health`).then((r) => r.ok),
       Boolean,
@@ -811,7 +833,8 @@ export async function scratchFleet(options: {
     socket = undefined;
   };
   const agentUp = () =>
-    until(
+    answering(
+      "agent",
       "the agent online with custody",
       () =>
         api<
@@ -827,7 +850,8 @@ export async function scratchFleet(options: {
       120_000
     );
   const sessiondUp = () =>
-    until(
+    answering(
+      "sessiond",
       "sessiond listening",
       () => existsSync(sessiondSocket),
       Boolean,

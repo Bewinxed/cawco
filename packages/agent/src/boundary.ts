@@ -2881,7 +2881,6 @@ export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
   // Its scratch dir, with whatever its commands left there.
   await rm(scratchOf(ref.id), { recursive: true, force: true });
   await signalAll((procId) => isJudgeOf(procId, ref.id));
-  // Its sockets' dir, once nothing listens there (`workspaceDoorDir`; on
-  // macOS the read-only dir, gone with the state dir).
+  // Its sockets' dir, once nothing listens there (`workspaceDoorDir`).
   await rm(workspaceDoorDir(ref.id), { recursive: true, force: true });
 };

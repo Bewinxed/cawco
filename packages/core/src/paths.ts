@@ -336,16 +336,20 @@ export const workspacesDir = (): string =>
 /**
  * The agent's socket that answers `cawco git-credential` outside a session:
  * this machine's credential for the hub's git remote, so a checkout whose
- * `origin` is the hub pulls and pushes from a terminal. Beside sessiond's
- * own socket (`sessiondEndpoint`): `$XDG_RUNTIME_DIR/cawco` on Linux, where
- * a deep HOME cannot push it past a socket path's length, else `~/.cawco`.
- * No workspace reads or connects into either.
+ * `origin` is the hub pulls and pushes from a terminal. Where a deep HOME
+ * cannot push it past a socket path's length: `$XDG_RUNTIME_DIR/cawco` on
+ * Linux, {@link darwinSocketRoot} on macOS, else `~/.cawco`. No workspace
+ * reads or connects into either.
  */
 export const hubCredentialSocket = (): string => {
   const runtime = process.env.XDG_RUNTIME_DIR;
-  return process.platform === "linux" && runtime
-    ? join(runtime, "cawco", "git-credential.sock")
-    : join(homedir(), ".cawco", "git-credential.sock");
+  if (process.platform === "linux" && runtime) {
+    return join(runtime, "cawco", "git-credential.sock");
+  }
+  if (process.platform === "darwin") {
+    return join(darwinSocketRoot(), "git-credential.sock");
+  }
+  return join(homedir(), ".cawco", "git-credential.sock");
 };
 
 /** One workspace's state dir: its executor, hook, policy and boundary record. */
@@ -394,8 +398,8 @@ export const scratchSocketProblem = (id: string): string | undefined =>
 
 /**
  * The part of a workspace's state dir a command inside its boundary reads:
- * the runner's FIFO, the empty git template, the tool door's socket and, on
- * macOS, the shims. Read-only inside, and never a parent of the scratch dir:
+ * the runner's FIFO, the empty git template, on Linux without a runtime dir
+ * the doors' sockets ({@link workspaceDoorDir}) and, on macOS, the shims. Read-only inside, and never a parent of the scratch dir:
  * srt binds a writable dir nested in a read carve-out back read-only (srt
  * #446).
  */
@@ -403,20 +407,49 @@ export const workspaceReadOnlyDir = (id: string): string =>
   join(workspaceStateDir(id), "ro");
 
 /**
+ * macOS's root for every workspace's sockets ({@link workspaceDoorDir}):
+ * `/private/tmp/cawco-<uid>`, this user's own (0700, made and checked by the
+ * agent before a socket goes in it, tool-door.ts `socketPlace`). A real path,
+ * as the Seatbelt profile matches paths (`/tmp` is a link to it), and one
+ * whose sockets a workspace reaches only by name: the profile denies every
+ * socket under `/private/tmp` (boundary.ts `LAUNCHD_SOCKETS`) but the doors
+ * it names, and a workspace writes nothing there.
+ */
+export const darwinSocketRoot = (): string => {
+  const uid = process.getuid?.();
+  if (uid === undefined) {
+    throw new Error("this process has no user id to name its socket dir by");
+  }
+  return join("/private/tmp", `cawco-${uid}`);
+};
+
+/**
  * Where a workspace's unix sockets are: its tool door, its git door and its
- * judges'. On Linux, a dir of its own under `$XDG_RUNTIME_DIR`, as srt keeps
- * its own sockets there: a socket's path holds at most
- * {@link UNIX_SOCKET_PATH_MAX} bytes, and one in the state dir under a deep
- * HOME passes that. Named by the id's first 8 characters, as its clone
- * (`<repo>-<id8>`) and branch (`ws/<id8>`) are. Elsewhere, and without a
- * runtime dir, the read-only dir. The doors are read inside the boundary
- * either way; the judges are asked from the host.
+ * judges'. A socket's path holds at most {@link UNIX_SOCKET_PATH_MAX} bytes,
+ * and one in the state dir passes that under a HOME longer than 17 bytes
+ * (`~/.cawco/workspaces/<id>/ro/judge-<16 hex>.sock` is HOME + 86), so never
+ * under home:
+ *  - on Linux, a dir of its own under `$XDG_RUNTIME_DIR`, as srt keeps its
+ *    own sockets there, named by the id's first 8 characters, as its clone
+ *    (`<repo>-<id8>`) and branch (`ws/<id8>`) are;
+ *  - on macOS, the id's own dir under {@link darwinSocketRoot}: the whole
+ *    id, so no two workspaces share one, and the judge's path is 86 bytes for
+ *    uid 501, 95 for the longest uid;
+ *  - on Linux without a runtime dir, the read-only dir.
+ * Each is read-only inside the boundary, as the read-only dir is (a
+ * workspace never binds a socket in its own door's place), and goes when the
+ * boundary closes. The doors are read inside the boundary; the judges are
+ * asked from the host.
  */
 export const workspaceDoorDir = (id: string): string => {
   const runtime = process.env.XDG_RUNTIME_DIR;
-  return process.platform === "linux" && runtime
-    ? join(runtime, "cawco-ws", id.slice(0, 8))
-    : workspaceReadOnlyDir(id);
+  if (process.platform === "linux" && runtime) {
+    return join(runtime, "cawco-ws", id.slice(0, 8));
+  }
+  if (process.platform === "darwin") {
+    return join(darwinSocketRoot(), id);
+  }
+  return workspaceReadOnlyDir(id);
 };
 
 /**
