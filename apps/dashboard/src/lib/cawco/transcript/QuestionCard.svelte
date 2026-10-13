@@ -11,6 +11,7 @@
     crossIn,
     dur,
     easeOut,
+    lifting,
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { fold } from "#lib/cawco/motion/fold.svelte.js";
@@ -171,19 +172,26 @@
   }
   /** An option not picked fades where it stood, out of the flow. */
   function leave(node: HTMLElement) {
-    const at = stood.get(node);
-    if (at) {
-      node.style.position = "absolute";
-      node.style.top = `${at.top}px`;
-      node.style.left = `${at.left}px`;
-      node.style.width = `${at.width}px`;
-      node.style.pointerEvents = "none";
-    }
-    return {
-      duration: dur("--dur-control"),
-      easing: easeOut,
-      css: (t: number) => `opacity: ${t}`,
-    };
+    return lifting(
+      node,
+      (): Record<string, string> => {
+        const at = stood.get(node);
+        return at
+          ? {
+              position: "absolute",
+              top: `${at.top}px`,
+              left: `${at.left}px`,
+              width: `${at.width}px`,
+              "pointer-events": "none",
+            }
+          : {};
+      },
+      {
+        duration: dur("--dur-control"),
+        easing: easeOut,
+        css: (t: number) => `opacity: ${t}`,
+      }
+    );
   }
   $effect(() => {
     if (!settled) {

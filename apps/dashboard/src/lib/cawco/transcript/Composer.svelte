@@ -69,6 +69,7 @@
     ease,
     easeDrawer,
     easeOut,
+    lifting as liftingOut,
     motionOk,
     popScale,
   } from "#lib/cawco/motion/curves.svelte.js";
@@ -2892,12 +2893,11 @@
    * anything standing on it moves.
    */
   function trayFade(node: HTMLElement): TransitionConfig {
-    node.style.gridArea = "1 / 1";
-    return {
+    return liftingOut(node, () => ({ "grid-area": "1 / 1" }), {
       duration: dur("--dur-exit"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
-    };
+    });
   }
 
   /** How high the grown ask stands over the composer's foot; 0 with none up. */

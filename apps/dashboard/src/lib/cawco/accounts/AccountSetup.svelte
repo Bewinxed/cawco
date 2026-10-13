@@ -39,7 +39,9 @@
     appear,
     dur,
     easeOut,
+    lifting,
     motionOk,
+    pinned,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
@@ -401,19 +403,11 @@
     if (!(node.classList.contains("picker") && toward === 1)) {
       return { duration: 0 };
     }
-    const { offsetTop, offsetLeft, offsetWidth } = node;
-    Object.assign(node.style, {
-      position: "absolute",
-      top: `${offsetTop}px`,
-      left: `${offsetLeft}px`,
-      width: `${offsetWidth}px`,
-      pointerEvents: "none",
-    });
-    return {
+    return lifting(node, pinned(node), {
       duration: dur("--dur-exit"),
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
-    };
+    });
   }
 </script>
 

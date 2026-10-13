@@ -19,7 +19,9 @@
     dur,
     easeDrawer,
     easeOut,
+    lifting,
     motionOk,
+    pinned,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import {
@@ -102,23 +104,15 @@
 
   /** The picker leaving: pinned where it stood, it slides away from the tab chosen. */
   function slideOut(node: HTMLElement): TransitionConfig {
-    const { offsetTop, offsetLeft, offsetWidth } = node;
-    Object.assign(node.style, {
-      position: "absolute",
-      top: `${offsetTop}px`,
-      left: `${offsetLeft}px`,
-      width: `${offsetWidth}px`,
-      pointerEvents: "none",
-    });
     const by = -32 * toward;
-    return {
+    return lifting(node, pinned(node), {
       duration: dur("--dur-exit"),
       easing: easeOut,
       css: (t) =>
         motionOk.current
           ? `opacity: ${t}; transform: translateX(${(1 - t) * by}px)`
           : `opacity: ${t}`,
-    };
+    });
   }
   /** The picker arriving from the side its tab stands on. */
   function slideIn(_node: HTMLElement): TransitionConfig {

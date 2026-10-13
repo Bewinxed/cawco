@@ -15,7 +15,11 @@
    * pane's either way — `draft` below.
    */
   import { untrack } from "svelte";
-  import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
+  import {
+    crossIn,
+    crossOut,
+    crossOutWith,
+  } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconAlert, IconChat, IconLaptop } from "#lib/icons.js";
@@ -503,8 +507,7 @@
    * area stays centred while it fades.
    */
   function leave(node: HTMLElement) {
-    node.style.height = `${node.offsetHeight}px`;
-    return crossOut(node);
+    return crossOutWith(node, () => ({ height: `${node.offsetHeight}px` }));
   }
 
   /** What a read failure is called: its machine away (on its way back, or offline), or the read failed. */

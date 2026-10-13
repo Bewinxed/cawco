@@ -29,7 +29,7 @@
     unwatchDelegate,
     watchDelegate,
   } from "./client.svelte";
-  import { dur, easeOut, motionOk } from "./motion/curves.svelte";
+  import { dur, easeOut, lifting, motionOk } from "./motion/curves.svelte";
   import { morph } from "./motion/morph.svelte";
 
   let {
@@ -170,13 +170,18 @@
    * straight to the new content's (morph), under both.
    */
   function swapOut(node: HTMLElement): TransitionConfig {
-    node.style.position = "absolute";
-    node.style.inset = "var(--space-3) var(--space-3) auto";
-    return {
-      duration: dur("--dur-control"),
-      easing: easeOut,
-      css: (t) => `opacity: ${t}`,
-    };
+    return lifting(
+      node,
+      () => ({
+        position: "absolute",
+        inset: "var(--space-3) var(--space-3) auto",
+      }),
+      {
+        duration: dur("--dur-control"),
+        easing: easeOut,
+        css: (t) => `opacity: ${t}`,
+      }
+    );
   }
 </script>
 

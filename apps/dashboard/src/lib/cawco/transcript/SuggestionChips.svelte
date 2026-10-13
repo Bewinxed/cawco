@@ -6,6 +6,7 @@
     dur,
     easeDrawer,
     easeOut,
+    lifting,
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
@@ -185,22 +186,29 @@
    * into the gap straight away instead of waiting for it to go.
    */
   function leave(node: HTMLElement) {
-    const box = node.getBoundingClientRect();
-    const frame = (
-      node.offsetParent ?? node.parentElement
-    )?.getBoundingClientRect();
-    node.style.position = "absolute";
-    node.style.insetInlineStart = `${box.left - (frame?.left ?? 0)}px`;
-    node.style.insetBlockStart = `${box.top - (frame?.top ?? 0)}px`;
-    node.style.inlineSize = `${box.width}px`;
-    return {
-      duration: dur("--dur-control"),
-      easing: easeOut,
-      css: (t: number) =>
-        motionOk.current
-          ? `opacity: ${t}; transform: scale(${0.96 + 0.04 * t});`
-          : `opacity: ${t}`,
-    };
+    return lifting(
+      node,
+      () => {
+        const box = node.getBoundingClientRect();
+        const frame = (
+          node.offsetParent ?? node.parentElement
+        )?.getBoundingClientRect();
+        return {
+          position: "absolute",
+          "inset-inline-start": `${box.left - (frame?.left ?? 0)}px`,
+          "inset-block-start": `${box.top - (frame?.top ?? 0)}px`,
+          "inline-size": `${box.width}px`,
+        };
+      },
+      {
+        duration: dur("--dur-control"),
+        easing: easeOut,
+        css: (t: number) =>
+          motionOk.current
+            ? `opacity: ${t}; transform: scale(${0.96 + 0.04 * t});`
+            : `opacity: ${t}`,
+      }
+    );
   }
 </script>
 

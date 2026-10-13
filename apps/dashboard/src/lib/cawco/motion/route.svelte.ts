@@ -9,7 +9,7 @@
  * Distances are percentages of the page's own box, so a phone and a desk
  * travel the same share of the screen.
  */
-import { dur, easeDrawer, motionOk } from "./curves.svelte";
+import { dur, easeDrawer, lifting, motionOk } from "./curves.svelte";
 
 type DurToken = `--dur-${string}`;
 
@@ -154,19 +154,25 @@ const STILL: End = { x: 0, y: 0, opacity: 0 };
 const STILL_OVER: DurToken = "--dur-control";
 
 export function pageOut(node: HTMLElement) {
-  const { leave, over, leavingOnTop } = route.travel;
-  const to = motionOk.current ? leave : STILL;
-  // The page going away takes no input and, on a pop, stays on top.
+  const { over } = route.travel;
+  // The page going away takes no input (Svelte makes a leaving node inert,
+  // and gives it back its own as it comes back) and, on a pop, stays on top.
+  // A page asked for again while it leaves is set back down (`lifting`), and
+  // its next leave reads the way it goes then: Svelte keeps these options.
   node.inert = true;
-  if (leavingOnTop) {
-    node.style.zIndex = "1";
-  }
-  return {
-    duration: dur(motionOk.current ? over : STILL_OVER),
-    easing: easeDrawer,
-    css: (_t: number, u: number) =>
-      `transform: translate(${to.x * u}%, ${to.y * u}%); opacity: ${1 - (1 - to.opacity) * u}`,
-  };
+  return lifting(
+    node,
+    (): Record<string, string> =>
+      route.travel.leavingOnTop ? { "z-index": "1" } : {},
+    {
+      duration: dur(motionOk.current ? over : STILL_OVER),
+      easing: easeDrawer,
+      css: (_t: number, u: number) => {
+        const to = motionOk.current ? route.travel.leave : STILL;
+        return `transform: translate(${to.x * u}%, ${to.y * u}%); opacity: ${1 - (1 - to.opacity) * u}`;
+      },
+    }
+  );
 }
 
 export function pageIn(_node: HTMLElement) {

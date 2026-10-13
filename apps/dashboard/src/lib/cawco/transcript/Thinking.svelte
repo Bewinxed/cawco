@@ -4,6 +4,7 @@
     CURVE,
     dur,
     easeOut,
+    lifting,
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { ThinkingIndicator } from "#lib/components/ui/thinking-indicator/index.js";
@@ -92,13 +93,15 @@
     };
   }
   function faceOut(node: HTMLElement) {
-    node.style.position = "absolute";
-    node.style.insetInlineStart = "0";
-    return {
-      duration: dur("--dur-control"),
-      easing: easeOut,
-      css: (t: number) => `opacity: ${t}`,
-    };
+    return lifting(
+      node,
+      () => ({ position: "absolute", "inset-inline-start": "0" }),
+      {
+        duration: dur("--dur-control"),
+        easing: easeOut,
+        css: (t: number) => `opacity: ${t}`,
+      }
+    );
   }
   /**
    * The chevron after the label travels with the label's width instead of

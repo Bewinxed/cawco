@@ -11,6 +11,7 @@
  * keeps its opacity and drops its travel.
  */
 import { MediaQuery } from "svelte/reactivity";
+import type { TransitionConfig } from "svelte/transition";
 
 export const motionOk = new MediaQuery(
   "(prefers-reduced-motion: no-preference)"
@@ -348,51 +349,132 @@ export function crossIn(_node: Element) {
  * fade to see, and reading where it stands would lay the skipped content out.
  */
 export function crossOut(node: HTMLElement) {
+  return crossOutWith(node);
+}
+
+/**
+ * {@link crossOut} with more of the lift, read with it (a height it is held
+ * at). Never a directive itself: Svelte calls a transition with its params,
+ * `{}` when none are given, as the second argument.
+ */
+export function crossOutWith(
+  node: HTMLElement,
+  more?: () => Record<string, string>
+) {
   if (!node.checkVisibility()) {
     return { duration: 0 };
   }
-  let lifted = false;
-  const lift = () => {
-    if (lifted) {
-      return;
-    }
-    lifted = true;
-    const { offsetTop, offsetLeft, offsetWidth } = node;
-    node.style.position = "absolute";
-    node.style.top = `${offsetTop}px`;
-    node.style.left = `${offsetLeft}px`;
-    node.style.width = `${offsetWidth}px`;
-    node.style.pointerEvents = "none";
-  };
-  const land = () => {
-    lifted = false;
-    for (const prop of ["position", "top", "left", "width", "pointer-events"]) {
-      node.style.removeProperty(prop);
-    }
-  };
-  lift();
-  return {
+  return lifting(node, pinned(node, more), {
     duration: dur("--dur-control"),
     easing: easeOut,
     css: (t: number) => `opacity: ${t}`,
-    /*
-     * Asked for again while it fades (an answer back sooner than the fade:
-     * a refused password), Svelte resumes this same node rather than making
-     * a new one, cancels the fade and ticks (1, 0) with nothing left playing
-     * on it: it is set back down in the flow and pressable, or it stood out
-     * of the flow and out of the pointer's way, its box (and a card sized by
-     * it) short of it and whatever lay behind it taking its presses. Svelte
-     * keeps these options for its next leave and does not call this again,
-     * so that leave lifts it on its first frame.
-     */
-    tick: (t: number) => {
-      if (t < 1) {
-        lift();
-      } else if (
-        !node.getAnimations().some((one) => one.playState === "running")
-      ) {
-        land();
+  });
+}
+
+/**
+ * Where a leaving node stands, pinned there out of the flow and out of the
+ * pointer's way (its offset parent is `position: relative`): {@link lifting}'s
+ * lift for every view that hands its place to another.
+ */
+export const pinned =
+  (node: HTMLElement, more?: () => Record<string, string>) =>
+  (): Record<string, string> => ({
+    position: "absolute",
+    top: `${node.offsetTop}px`,
+    left: `${node.offsetLeft}px`,
+    width: `${node.offsetWidth}px`,
+    "pointer-events": "none",
+    ...more?.(),
+  });
+
+/**
+ * An outro that lifts its node as it starts to leave: `lift` reads where it
+ * stands and answers the inline styles that take it out of the flow (or the
+ * pointer's way, or onto a stack of its own), by CSS property name.
+ *
+ * Svelte 5 resumes a branch still leaving when it is asked for again (a
+ * refused password answered sooner than the fade): the same node comes back
+ * (svelte/src/internal/client/dom/blocks/branches.js `resume_effect`), its
+ * outro aborted and reset, and reset ticks it (1, 0)
+ * (svelte/src/internal/client/dom/elements/transitions.js `animate`). That
+ * tick sets it down: each property takes back the inline value it had before
+ * the lift, so the node stands in the flow and takes presses again. Left
+ * lifted, it stood out of the flow and out of the pointer's way, its box (and
+ * a card sized by it) short of it and whatever lay behind it taking its
+ * presses.
+ *
+ * Svelte keeps these options for the node's next leave and does not call the
+ * factory again, so that leave lifts it as its keyframes are built (Svelte
+ * calls `css` then, before the first frame plays), read where it stands then.
+ *
+ * Reset and the first frame of a fade both tick (1, 0). A reset before this
+ * leave's keyframes were built (during Svelte's delay) or after a frame under
+ * 1 has played is told by that alone. Between the two, the fade's own
+ * animation tells them: Svelte starts it on the node just after building its
+ * keyframes, and a reset has cancelled it. The node's other animations (a
+ * row's reflow) were there before the keyframes and do not count.
+ */
+export function lifting(
+  node: HTMLElement,
+  lift: () => Record<string, string>,
+  config: TransitionConfig
+): TransitionConfig {
+  /** What each lifted property held inline before: its value and priority. */
+  let held: [string, string, string][] | null = null;
+  /** This leave's keyframes are built and no frame under 1 has played. */
+  let opening = false;
+  /** The node's animations as this leave's keyframes were built. */
+  let before = new Set<Animation>();
+  /** The fade Svelte started after the keyframes is still playing. */
+  const fading = () =>
+    node
+      .getAnimations()
+      .some((one) => !before.has(one) && one.playState === "running");
+  const up = () => {
+    if (held) {
+      return;
+    }
+    held = Object.entries(lift()).map(([prop, value]) => {
+      const was: [string, string, string] = [
+        prop,
+        node.style.getPropertyValue(prop),
+        node.style.getPropertyPriority(prop),
+      ];
+      node.style.setProperty(prop, value);
+      return was;
+    });
+  };
+  const down = () => {
+    for (const [prop, value, priority] of held ?? []) {
+      if (value) {
+        node.style.setProperty(prop, value, priority);
+      } else {
+        node.style.removeProperty(prop);
       }
+    }
+    held = null;
+  };
+  up();
+  const { css, tick } = config;
+  return {
+    ...config,
+    css: (t, u) => {
+      if (!(held && opening)) {
+        up();
+        opening = true;
+        before = new Set(node.getAnimations());
+      }
+      return css?.(t, u) ?? "";
+    },
+    tick: (t, u) => {
+      if (t < 1) {
+        opening = false;
+        up();
+      } else if (!(opening && fading())) {
+        opening = false;
+        down();
+      }
+      tick?.(t, u);
     },
   };
 }

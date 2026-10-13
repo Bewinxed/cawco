@@ -7,7 +7,12 @@
    * opened with its rows already read (a drill from its list) shows at once.
    */
   import type { Snippet } from "svelte";
-  import { crossIn, dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
+  import {
+    crossIn,
+    dur,
+    easeOut,
+    lifting,
+  } from "#lib/cawco/motion/curves.svelte.js";
   import EditorSkeleton from "./EditorSkeleton.svelte";
   import Missing from "./Missing.svelte";
   import type { ConfigSection } from "./sections";
@@ -42,16 +47,15 @@
    * when this runs, and the skeleton measured then is squeezed to its share.
    */
   function leave(node: HTMLElement) {
-    Object.assign(node.style, {
-      position: "absolute",
-      inset: "0",
-      pointerEvents: "none",
-    });
-    return {
-      duration: dur("--dur-control"),
-      easing: easeOut,
-      css: (t: number) => `opacity: ${t}`,
-    };
+    return lifting(
+      node,
+      () => ({ position: "absolute", inset: "0", "pointer-events": "none" }),
+      {
+        duration: dur("--dur-control"),
+        easing: easeOut,
+        css: (t: number) => `opacity: ${t}`,
+      }
+    );
   }
 </script>
 

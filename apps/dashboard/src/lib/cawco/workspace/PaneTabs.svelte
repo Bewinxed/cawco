@@ -44,7 +44,9 @@
     dur,
     ease,
     easeOut,
+    lifting,
     motionOk,
+    pinned as pinnedOut,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { land } from "#lib/cawco/motion/share.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -987,23 +989,20 @@
     if (renamedOut.delete(id)) {
       return { duration: 0 };
     }
-    const { offsetLeft, offsetTop, offsetWidth } = node;
-    node.style.position = "absolute";
-    node.style.left = `${offsetLeft}px`;
-    node.style.top = `${offsetTop}px`;
-    node.style.width = `${offsetWidth}px`;
-    node.style.pointerEvents = "none";
-    // A stack of its own while it fades: at its rank, as a sliding tab is.
-    node.style.zIndex = "calc(var(--z, 1) * 4 + 2)";
     const narrow = motionOk.current;
-    return {
-      duration: dur("--dur-exit"),
-      easing: easeOut,
-      css: (t) =>
-        narrow
-          ? `opacity: ${t}; clip-path: inset(${REACH} ${((1 - t) * 100).toFixed(2)}% ${REACH} ${REACH})`
-          : `opacity: ${t}`,
-    };
+    // A stack of its own while it fades: at its rank, as a sliding tab is.
+    return lifting(
+      node,
+      pinnedOut(node, () => ({ "z-index": "calc(var(--z, 1) * 4 + 2)" })),
+      {
+        duration: dur("--dur-exit"),
+        easing: easeOut,
+        css: (t) =>
+          narrow
+            ? `opacity: ${t}; clip-path: inset(${REACH} ${((1 - t) * 100).toFixed(2)}% ${REACH} ${REACH})`
+            : `opacity: ${t}`,
+      }
+    );
   }
 
   /* ── A tab's options, held or pulled down ─────────────────────────
