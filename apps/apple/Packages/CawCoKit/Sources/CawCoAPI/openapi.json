@@ -27889,6 +27889,10 @@
               "string"
             ]
           },
+          "customData": {
+            "description": "Ours on Excalidraw's element: `shape` names what a held stroke was read as when Excalidraw has no type for it (a triangle).",
+            "type": "object"
+          },
           "endBinding": {
             "type": "object",
             "properties": {
