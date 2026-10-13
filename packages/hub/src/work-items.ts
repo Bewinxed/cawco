@@ -60,6 +60,8 @@ import {
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_MIGRATE,
   handoffMarker,
+  installFor,
+  LOCKFILES,
   machineLabel,
   type WorkspaceLanding,
   withLandingLine,
@@ -1001,6 +1003,43 @@ interface CheckOutcome {
   /** Where a check that names another machine ran: `on Omars-MacBook-Pro at 1a2b3c4d5`. */
   where?: string;
 }
+
+/**
+ * Where a workspace's install records the lockfile it installed from: the
+ * lockfile's git blob hash, next to the dependencies.
+ */
+const DEPS_STAMP = "node_modules/.cawco-lockfile";
+
+/** What {@link depsScript} prints first when it installs, and only then. */
+const DEPS_INSTALLING = "installing: ";
+
+/**
+ * Installs a checkout's dependencies when its root lockfile no longer
+ * matches the one they were installed from ({@link DEPS_STAMP}), by the
+ * install core's `installFor` picks for that lockfile; then stamps it. No
+ * lockfile, or a matching stamp: nothing runs and nothing is printed.
+ */
+export const depsScript = (): string => {
+  const picks = LOCKFILES.map(
+    (lock, index) =>
+      `${index ? "elif" : "if"} [ -f ${lock} ]; then lock=${lock}; install=${quote(installFor(lock)?.command ?? "")}`
+  ).join("\n");
+  return [
+    `${picks}\nelse exit 0\nfi`,
+    `[ "$(cat ${DEPS_STAMP} 2>/dev/null)" = "$(git hash-object "$lock")" ] && exit 0`,
+    `echo "${DEPS_INSTALLING}$install ($lock changed since the dependencies were installed)"`,
+    "$install 2>&1 || exit $?",
+    `mkdir -p node_modules && git hash-object "$lock" > ${DEPS_STAMP}`,
+  ].join("\n");
+};
+
+/** The install step's line in the check log, named for what it ran. */
+const depsCheck = (stdout: string): WorkItemCheck => {
+  const command =
+    stdout.split("\n")[0]?.slice(DEPS_INSTALLING.length) ||
+    "dependency install";
+  return { name: `install dependencies: ${command}`, command };
+};
 
 /** A fenced block that no command output can close early. */
 const fenced = (text: string): string =>
@@ -2933,6 +2972,44 @@ export const createWorkItems = ({
     checks: WorkItemCheck[]
   ): Promise<CheckOutcome[]> => {
     let commit: Promise<WorkspaceCommit> | undefined;
+    /** The installs this run made, each a line of the check log ahead of the checks. */
+    const installs: CheckOutcome[] = [];
+    /**
+     * Installs `at`'s dependencies on `machineId`, inside its boundary, when
+     * its lockfile moved since they were installed ({@link depsScript}).
+     * Answers whether the checkout can be checked: false once its install
+     * failed. An install that ran is logged in {@link installs}, with `where`.
+     */
+    const install = async (
+      machineId: string,
+      at: WorkspaceRow,
+      where?: string
+    ): Promise<boolean> => {
+      const started = Date.now();
+      const complete = await command(
+        machineId,
+        at.path,
+        `${SAFE_GIT_SHELL}${depsScript()}`,
+        CHECK_TIMEOUT_SEC * 1000,
+        refOf(at)
+      );
+      if (
+        complete.exitCode === 0 &&
+        !complete.stdout.startsWith(DEPS_INSTALLING)
+      ) {
+        return true;
+      }
+      const result = checkTails(complete);
+      installs.push({
+        check: depsCheck(complete.stdout),
+        result,
+        where,
+        exitCode: result.exitCode,
+        durationMs: Date.now() - started,
+        passed: result.exitCode === 0,
+      });
+      return result.exitCode === 0;
+    };
     const placed = new Map<
       string,
       Promise<{ at: WorkspaceRow; head: string }>
@@ -2956,6 +3033,12 @@ export const createWorkItems = ({
             made,
             workspace.id,
           ]);
+          const where = `on ${machineName(machineId)} at ${made.head.slice(0, 9)}`;
+          if (!(await install(machineId, at, where))) {
+            throw new Error(
+              "its dependency install failed there; the install dependencies line has the installer's output"
+            );
+          }
           return { at, head: made.head };
         })();
       placed.set(machineId, ready);
@@ -2991,6 +3074,13 @@ export const createWorkItems = ({
         };
       }
     };
+    const local = checks.some(
+      (check) => !check.machine || check.machine === workspace.machineId
+    );
+    // A failed install is the run's one line: no check can pass without it.
+    if (local && !(await install(workspace.machineId, workspace))) {
+      return installs;
+    }
     const outcomes: CheckOutcome[] = [];
     for (const check of checks) {
       const started = Date.now();
@@ -3021,7 +3111,7 @@ export const createWorkItems = ({
           (check.expect === undefined || result.stdout.includes(check.expect)),
       });
     }
-    return outcomes;
+    return [...installs, ...outcomes];
   };
 
   /**
