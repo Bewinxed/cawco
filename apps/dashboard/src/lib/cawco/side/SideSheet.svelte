@@ -280,14 +280,20 @@
      between a top and a bottom is the fixed layer's container's, which
      WebKit walks through stale sizes for frames while a keyboard resizes the
      web view (Brave): a host held that way grew to 1106px and shrank by the
-     keyboard twice in one opening, throwing the sheet down and back. */
+     keyboard twice in one opening, throwing the sheet down and back.
+     What stands below the composer is clipped, and the host is no scroll
+     container: with `overflow: hidden` a page in the sheet that scrolled
+     something into view (an anchor, a focused field) scrolled the host too,
+     236px on a phone, throwing the sheet over the whole screen while vaul
+     still held it at the middle snap, so its grabber and its taps no longer
+     matched what was drawn. */
   .preview-sheet-host {
     position: fixed;
     top: env(safe-area-inset-top, 0px);
     left: 0;
     right: 0;
     z-index: 40;
-    overflow: hidden;
+    overflow: clip;
     pointer-events: none;
   }
   /* The sheet fills its host (the space above the composer) edge to edge,
