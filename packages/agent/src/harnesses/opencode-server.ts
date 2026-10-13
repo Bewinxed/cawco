@@ -3,7 +3,9 @@ import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
+  commandLines,
   processStart as osProcessStart,
+  processArgs,
   processStartMs,
 } from "@cawco/core/process-identity";
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
@@ -79,6 +81,80 @@ const recordStem = (): string =>
 const ACCOUNT_ID = /^[A-Za-z0-9_-]+$/;
 const ACCOUNT_RECORD =
   /^(opencode-server-[0-9a-f]{16})-account-([A-Za-z0-9_-]+)\.json$/;
+/** Every record file, of any keeper of this home, the machine's server's or an account's. */
+const ANY_RECORD =
+  /^opencode-server-[0-9a-f]{16}(-account-[A-Za-z0-9_-]+)?\.json$/;
+const PORT_ARG = /^--port=(\d+)$/;
+
+/**
+ * Every server a record in this home names, current or retired, as
+ * `pid/start`. A record that cannot be read proves no server unheld.
+ */
+const recordedServers = async (): Promise<Set<string>> => {
+  const dir = join(homedir(), ".cawco");
+  const files = (await readdir(dir).catch(() => [] as string[])).filter(
+    (file) => ANY_RECORD.test(file)
+  );
+  const named = new Set<string>();
+  for (const file of files) {
+    // biome-ignore lint/performance/noAwaitInLoops: a handful of small files, each one must be read
+    const record = await readJson<ServerRecord>(join(dir, file));
+    if (!record) {
+      throw new Error(
+        `OpenCode server record ${file} is unreadable: no server is taken for a stray.`
+      );
+    }
+    for (const row of [
+      ...(record.active ? [record.active] : []),
+      ...record.retired,
+    ]) {
+      named.add(`${row.pid}/${row.startedAt}`);
+    }
+  }
+  return named;
+};
+
+const launchEnv = (env: string[], name: string): string | undefined =>
+  env.find((entry) => entry.startsWith(`${name}=`))?.slice(name.length + 1);
+
+/**
+ * The `opencode serve` process `pid` is, as a generation with no keeper,
+ * when CawCo of this home started it: its launch config names `cawcoMcp`,
+ * this agent's own gateway, and its HOME is this one. Its environment is
+ * readable only to its own user, so no other user's server is ever one.
+ */
+const strayServer = async (
+  pid: number,
+  cawcoMcp: string
+): Promise<ServerIdentity | undefined> => {
+  const read = await processArgs(pid);
+  const port = read?.argv
+    .map((arg) => PORT_ARG.exec(arg)?.[1])
+    .find((found) => found !== undefined);
+  if (
+    !(read && port && read.argv.includes("serve")) ||
+    launchEnv(read.env, "HOME") !== homedir()
+  ) {
+    return;
+  }
+  let config: { mcp?: { cawco?: { url?: unknown } } } | null = null;
+  try {
+    config = JSON.parse(launchEnv(read.env, "OPENCODE_CONFIG_CONTENT") ?? "");
+  } catch {
+    return;
+  }
+  const startedAt = await processStart(pid);
+  if (config?.mcp?.cawco?.url !== cawcoMcp || !startedAt) {
+    return;
+  }
+  return {
+    epoch: "",
+    pid,
+    procId: `${OPENCODE_SERVER_PROC_ID}-stray-${pid}-${createHash("sha256").update(startedAt).digest("hex").slice(0, 12)}`,
+    startedAt,
+    url: `http://127.0.0.1:${port}`,
+  };
+};
 
 /**
  * The only launcher/adopter of one OpenCode server: the machine's own
@@ -169,15 +245,22 @@ export class OpencodeServerOwner {
     );
   }
 
-  /** Wall-clock birth is read from the same captured OS identity, never agent uptime. */
+  /**
+   * Wall-clock birth is read from the same captured OS identity, never agent
+   * uptime: its pid with the start the OS gave it ({@link #runs}), held by a
+   * keeper or not. Read through keeper custody, a generation whose keeper is
+   * gone had no birth, so its activity was never known and its retirement
+   * was deferred on every try for as long as it ran (two on the Mac,
+   * 575 tries each in one agent's log, 13 Oct).
+   */
   async startedAtMs(identity: ServerIdentity): Promise<number> {
-    if (!(await this.#matches(identity))) {
+    if (!(await this.#runs(identity))) {
       throw new Error(
         "OpenCode generation identity changed before birth read."
       );
     }
     const birth = await processStartMs(identity.pid);
-    if (birth === undefined || !(await this.#matches(identity))) {
+    if (birth === undefined || !(await this.#runs(identity))) {
       throw new Error("OpenCode generation process birth is unavailable.");
     }
     return birth;
@@ -455,6 +538,74 @@ export class OpencodeServerOwner {
     console.info(
       `[opencode] ${this.account ? `account ${this.account}'s` : "the machine's"} server ${active.procId}/${active.pid}: retiring`
     );
+    this.maintain();
+  }
+
+  /**
+   * CawCo's OpenCode servers that nothing holds, taken into the machine's
+   * record as retired, to be ended the way any retired generation is: once
+   * it reports nothing running ({@link #retire}). A server CawCo started is
+   * one whose launch config names `cawcoMcp`, this agent's own MCP gateway,
+   * in a process of this home (every server's since 20 Sep 2026 does). It
+   * is held while a keeper of this agent lists it or any record in this home
+   * names it, by pid and start. Before 732741b8 an active generation whose
+   * keeper was restarted was dropped from its record and ran on under init,
+   * and six of those were still running on the Mac on 13 Oct, 5 to 6 days
+   * old.
+   */
+  async adoptStrays(
+    cawcoMcp: string,
+    held: () => Promise<ReadonlySet<number>>
+  ): Promise<void> {
+    if (this.account !== undefined || !(await this.#mayManage())) {
+      return;
+    }
+    const found: ServerIdentity[] = [];
+    for (const { pid, command } of await commandLines()) {
+      if (
+        pid === process.pid ||
+        !(command.includes(" serve") && command.includes("--port="))
+      ) {
+        continue;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: only the few serve lines are read whole
+      const stray = await strayServer(pid, cawcoMcp);
+      if (stray) {
+        found.push(stray);
+      }
+    }
+    if (found.length === 0) {
+      return;
+    }
+    // Custody is read after the processes: a server started since was not
+    // listed, and one started before is on its keeper's list by now (the
+    // keeper lists a child as it spawns it) or in its record.
+    const recorded = await recordedServers();
+    const keeping = await held();
+    const record = await this.#load();
+    for (const row of [
+      ...(record.active ? [record.active] : []),
+      ...record.retired,
+    ]) {
+      recorded.add(`${row.pid}/${row.startedAt}`);
+    }
+    const adopted = found.filter(
+      (stray) =>
+        !(
+          keeping.has(stray.pid) ||
+          recorded.has(`${stray.pid}/${stray.startedAt}`)
+        )
+    );
+    if (adopted.length === 0) {
+      return;
+    }
+    this.#record = { ...record, retired: [...record.retired, ...adopted] };
+    await this.#save();
+    for (const stray of adopted) {
+      console.info(
+        `[opencode] stray server ${stray.pid} at ${stray.url} (started ${stray.startedAt}): no keeper holds it and no record names it; retiring`
+      );
+    }
     this.maintain();
   }
 

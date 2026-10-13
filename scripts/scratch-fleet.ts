@@ -500,8 +500,11 @@ export async function scratchFleet(options: {
   let launches = 0;
   const launch = (role: Role) => {
     launches += 1;
-    const child = Bun.spawn([process.execPath, ENTRY[role]], {
-      cwd: root,
+    const child = Bun.spawn([process.execPath, join(root, ENTRY[role])], {
+      // The keeper's children start where it runs, and OpenCode's server
+      // writes `.opencode/` in its own directory: in the sandbox, never the
+      // clone, whose `.opencode` a workspace boundary holds read-only (EROFS).
+      cwd: role === "sessiond" ? sandbox : root,
       env,
       stdout: Bun.file(join(sandbox, `${role}-${launches}.log`)),
       stderr: Bun.file(join(sandbox, `${role}-${launches}.err`)),

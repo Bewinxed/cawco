@@ -491,6 +491,13 @@ const serverSpec = (config: Record<string, unknown>) => ({
 const ACCOUNT_SERVER_IDLE_MS = 5 * 60_000;
 
 /**
+ * How often the machine is read for CawCo's OpenCode servers that nothing
+ * holds. Ours: one is left only when a keeper or a record is lost, which is
+ * rare, and each read lists every process on the machine.
+ */
+const STRAY_SWEEP_MS = 5 * 60_000;
+
+/**
  * The database every OpenCode server on the machine shares, in OpenCode's
  * own words (`opencode db path`, run as the machine's own server runs): an
  * account's server is pointed at it (`OPENCODE_DB`, an absolute path used as
@@ -5252,6 +5259,10 @@ export class OpencodeHarness implements Harness {
     for (const slot of this.#slots()) {
       slot.owner.maintain();
     }
+    if (Date.now() >= this.#straysSweptAt + STRAY_SWEEP_MS) {
+      this.#straysSweptAt = Date.now();
+      await this.#adoptStrays();
+    }
     await this.#retireIdleAccounts();
     // A keeper handover left the machine's server on the keeper before it:
     // nothing it runs is applied on the current keeper, so it is replaced
@@ -5324,6 +5335,29 @@ export class OpencodeHarness implements Harness {
     );
     // biome-ignore lint/complexity/noVoid: fire-and-forget; the attempt manages its own errors
     void this.#attemptConfigApply();
+  }
+
+  /** When the machine was last read for CawCo servers nothing holds ({@link #adoptStrays}). */
+  #straysSweptAt = 0;
+
+  /**
+   * The servers this agent started that no keeper of it holds and no record
+   * names, taken in to be retired ({@link OpencodeServerOwner.adoptStrays}).
+   */
+  async #adoptStrays(): Promise<void> {
+    await this.#serverOwner
+      .adoptStrays(
+        cawcoMcp().url,
+        async () =>
+          new Set(
+            (await this.#keepers.held())
+              .filter((proc) => proc.alive)
+              .map((proc) => proc.pid)
+          )
+      )
+      .catch((error: unknown) =>
+        console.warn(`[opencode] stray server sweep: ${errorText(error)}`)
+      );
   }
 
   /**
