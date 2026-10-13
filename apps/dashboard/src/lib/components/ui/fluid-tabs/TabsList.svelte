@@ -329,8 +329,6 @@
       if (p < 1) {
         frame = requestAnimationFrame(step);
       } else {
-        outgoing = null;
-        capFades();
         // A frame after the last depths land, so the style pass that takes
         // them still eases nothing (a host's own easing, back on with the
         // attribute gone, eased that last step instead).
@@ -558,6 +556,27 @@
       }
       lastChosen = now;
     });
+  });
+  /* A switch lands, on every track, once the sheets' fade has run its
+     course (`switchProgress`; 1 at once on a track that draws no sheets):
+     the tab it left is no longer drawn chosen, so the edges' fades stop
+     standing aside for it. Not under a gesture, whose landing is the
+     gesture's release. */
+  $effect(() => {
+    const { items } = rects;
+    const { travel } = tabs;
+    if (list.optimisticIndex === null || travel) {
+      return;
+    }
+    let frame = requestAnimationFrame(function step() {
+      if (switchProgress(items) < 1) {
+        frame = requestAnimationFrame(step);
+        return;
+      }
+      outgoing = null;
+      capFades();
+    });
+    return () => cancelAnimationFrame(frame);
   });
   /**
    * A scrolling track's edge fades never lie over a tab drawn chosen (the

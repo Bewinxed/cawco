@@ -940,14 +940,14 @@ async function projectStrip(kit: Kit, base: string, fleet: KitFleetLike) {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          path: `views/${name}.json`,
-          content: "{}\n",
+          path: `views/${name}.oui`,
+          content: 'root = Text("Kept")\n',
           message: `Keep the view ${name}`,
         }),
       }
     );
     if (!put.ok) {
-      throw new Error(`views/${name}.json: ${put.status} ${await put.text()}`);
+      throw new Error(`views/${name}.oui: ${put.status} ${await put.text()}`);
     }
   }
   for (const width of [390, 768]) {
@@ -961,6 +961,68 @@ async function projectStrip(kit: Kit, base: string, fleet: KitFleetLike) {
       }
     }
   }
+  await switchedBack(kit, `${base}/project/${project.id}`);
+}
+
+/**
+ * Board → Table → Board at a phone's 390: once the switches land, the end
+ * fade is capped only by the chosen Board, never by Table, the tab the last
+ * switch left. Board stands clear of the end edge, so the cap stands aside
+ * and the fade draws whole (`--fade-end`).
+ */
+async function switchedBack(kit: Kit, url: string) {
+  const page = await kit.page("phone");
+  page.setDefaultTimeout(60_000);
+  await open(page, url, `${PROJECT_TRACK} [role='tab']`);
+  await page.waitForFunction(
+    (sel) => document.querySelectorAll(`${sel} [role='tab']`).length >= 6,
+    PROJECT_TRACK
+  );
+  await page.waitForTimeout(600);
+  const tab = (name: string) =>
+    page.locator(`${PROJECT_TRACK} [role='tab']`, { hasText: name }).first();
+  for (const name of ["Table", "Board"]) {
+    await tab(name).click();
+    await page.waitForFunction(
+      ([sel, want]) =>
+        document
+          .querySelector(`${sel} [role='tab'][aria-selected='true']`)
+          ?.textContent?.includes(want as string) ?? false,
+      [PROJECT_TRACK, name] as const
+    );
+    await page.waitForTimeout(600);
+  }
+  const at = await page.evaluate((sel) => {
+    const el = document.querySelector<HTMLElement>(sel) as HTMLElement;
+    const style = getComputedStyle(el);
+    const px = (name: string) => {
+      const v = Number.parseFloat(style.getPropertyValue(name));
+      return Number.isFinite(v) ? v : Number.POSITIVE_INFINITY;
+    };
+    const board = el
+      .querySelector("[role='tab'][aria-selected='true']")
+      ?.getBoundingClientRect();
+    return {
+      fadeEnd: px("--fade-end"),
+      capEnd: px("--fade-cap-end"),
+      chosenToEnd: board
+        ? el.getBoundingClientRect().right - board.right
+        : Number.NaN,
+      hiddenEnd: el.scrollLeft + el.clientWidth < el.scrollWidth - 0.5,
+    };
+  }, PROJECT_TRACK);
+  const drawn = Math.min(at.fadeEnd, at.capEnd);
+  kit.check(
+    "project strip 390: Board → Table → Board, the end fade is capped by the chosen Board alone (cap = Board's room to the end edge)",
+    near(at.capEnd, Math.max(0, at.chosenToEnd)),
+    `--fade-cap-end ${at.capEnd}px; Board stands ${at.chosenToEnd.toFixed(1)}px from the end edge`
+  );
+  kit.check(
+    "project strip 390: Board → Table → Board, the end fade draws whole (16px, = --fade-end)",
+    at.hiddenEnd && at.fadeEnd === 16 && drawn === at.fadeEnd,
+    `--fade-end ${at.fadeEnd}px, --fade-cap-end ${at.capEnd}px, drawn ${drawn}px; tabs past the end: ${at.hiddenEnd}`
+  );
+  await page.close();
 }
 
 const PROJECT_TRACK = ".strip .ff-tabs-list";
