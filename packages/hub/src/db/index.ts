@@ -142,6 +142,7 @@ import {
   sessionIdentities,
   sessionLimits,
   sessionPlans,
+  sessionTaints,
   skills,
   spendSettings,
   supervisorConfig,
@@ -250,6 +251,8 @@ export type PushDeviceRow = Omit<
 > & { key: string; secret: string };
 export type ProjectOfferRow = typeof projectOffers.$inferSelect;
 export type SessionPlanRow = typeof sessionPlans.$inferSelect;
+/** What a session has done that taints its memory notes (memory.ts). */
+export type SessionTaintRow = typeof sessionTaints.$inferSelect;
 export type ThreadRow = typeof projectThreads.$inferSelect;
 export type ThreadMessageRow = typeof threadMessages.$inferSelect;
 /** A thread as its project's list shows it: with its newest message. */
@@ -1309,6 +1312,8 @@ export interface DbShape {
   readonly putSessionSpec: (instanceId: string, spec: string) => void;
   /** Replaces a session's own steps whole, its spec kept. */
   readonly putSessionSteps: (instanceId: string, steps: PlanStep[]) => void;
+  /** Stores what a session has done that taints its memory notes (memory.ts), replacing what it had. */
+  readonly putSessionTaint: (row: SessionTaintRow) => void;
   /** Upsert of a resolve's outcome: the files it read, or the sentence it failed with. */
   readonly putSkill: (skill: {
     name: string;
@@ -1566,6 +1571,8 @@ export interface DbShape {
   readonly sessionOwnership: (machineId?: string) => OwnedInstanceRow[];
   /** What a session last wrote of its own plan through `todo_write` (plans.ts). */
   readonly sessionPlan: (instanceId: string) => SessionPlanRow | undefined;
+  /** What a session has done that taints its memory notes; undefined for one that has done nothing the hub keeps. */
+  readonly sessionTaint: (instanceId: string) => SessionTaintRow | undefined;
   /** A machine's own account of what it came to, from the sync it just answered. */
   readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
   readonly setAgentToolCell: (machineId: string, status: ToolStatus) => void;
@@ -5660,6 +5667,19 @@ const make = async (path: string): Promise<DbShape> => {
     },
     dropLeadTurn: (instanceId) => {
       db.delete(leadTurns).where(eq(leadTurns.instanceId, instanceId)).run();
+    },
+    sessionTaint: (instanceId) =>
+      db
+        .select()
+        .from(sessionTaints)
+        .where(eq(sessionTaints.instanceId, instanceId))
+        .get(),
+    putSessionTaint: (row) => {
+      const { instanceId: _id, ...rest } = row;
+      db.insert(sessionTaints)
+        .values(row)
+        .onConflictDoUpdate({ target: sessionTaints.instanceId, set: rest })
+        .run();
     },
     bookCawTurn: ({ harness, projectId, threadId, usd }) => {
       db.insert(cawTurns)

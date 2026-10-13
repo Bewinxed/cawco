@@ -201,7 +201,10 @@ export const measureRoles = (): RoleSize[] => {
         folderChanged: () => undefined,
         park: () => undefined,
         settle: () => undefined,
-        watch: createTurnWatch(),
+        watch: createTurnWatch({
+          get: () => undefined,
+          put: () => undefined,
+        }),
       }).tools(actor),
     triageTools: (actor) =>
       createFleetWatch({

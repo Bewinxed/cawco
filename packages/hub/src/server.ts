@@ -2485,7 +2485,10 @@ export const createServer = (
    * What each session's turn has done that taints a memory note written in
    * it (memory.ts): the web read, a subagent running, a routine's wake.
    */
-  const memoryWatch = createTurnWatch();
+  const memoryWatch = createTurnWatch({
+    get: (instanceId) => db.sessionTaint(instanceId),
+    put: (row) => db.putSessionTaint(row),
+  });
   pending.onSettled((parked, outcome, why) => {
     if (!(parked.requestId && parked.instanceId)) {
       return;
@@ -21764,6 +21767,19 @@ export const createServer = (
               ) {
                 break;
               }
+              // What a memory note written now is tainted by (memory.ts): every
+              // admitted frame, before any path below leaves early, so a
+              // keep-alive's result ends its turn too.
+              if (kind === "frame" && message.instanceId) {
+                const admitted = message.payload as FramePayload & {
+                  kind: "frame";
+                };
+                memoryWatch.frame(
+                  message.instanceId,
+                  admitted.message,
+                  admitted.harness
+                );
+              }
               // Pings share admission and send receipts, then leave before every
               // consumer that makes a turn into work, attention or activity.
               if (
@@ -22091,7 +22107,6 @@ export const createServer = (
                   turnUnderWay(message.instanceId);
                 }
                 observeTurn(message.instanceId, frame);
-                memoryWatch.frame(message.instanceId, frame.message);
               }
               if (message.requestId && kind === "permission_request") {
                 const [owner] = db.getInstancesByIds([

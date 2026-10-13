@@ -2502,6 +2502,38 @@ export const leadTurns = sqliteTable("lead_turns", {
   started: integer("started", { mode: "boolean" }).notNull().default(false),
 });
 
+/** A harness subagent a session started and that has not ended: its task, and the call that started it. */
+export interface OpenSubagent {
+  call: string | null;
+  task: string;
+}
+
+/**
+ * What a session has done that taints a memory note it writes (memory.ts
+ * `TurnWatch`), one row per session that has done any, kept so a hub
+ * restart mid-turn keeps it. `web` and `fromRoutine` hold for the session's
+ * life; `delivered` and `routine` for its turn, until the turn's result;
+ * `subagents` until each ends on its own.
+ */
+export const sessionTaints = sqliteTable("session_taints", {
+  instanceId: text("instance_id")
+    .primaryKey()
+    .references(() => instances.id, { onDelete: "cascade" }),
+  /** It read the web: every later note of the session is tainted `web`. */
+  web: integer("web", { mode: "boolean" }).notNull().default(false),
+  /** The routine whose run started it: a session a routine-woken turn spawned. */
+  fromRoutine: text("from_routine"),
+  /** Since its last turn's result it read a send the hub delivered: its turn is not self-started. */
+  delivered: integer("delivered", { mode: "boolean" }).notNull().default(false),
+  /** The routine whose wake its turn read (a lead's). */
+  routine: text("routine"),
+  /** Its harness subagents still running. */
+  subagents: text("subagents", { mode: "json" })
+    .$type<OpenSubagent[]>()
+    .notNull(),
+  updatedAt: timestamp("updated_at").notNull(),
+});
+
 /** A conversation with a project's Caw (caw.ts). */
 export const projectThreads = sqliteTable(
   "project_threads",

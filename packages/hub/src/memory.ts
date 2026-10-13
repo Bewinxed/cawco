@@ -11,8 +11,9 @@
  * - **Notes** (`memory_note`, and `cawco tool memory_note`): an agent's words
  *   into the inbox, with who wrote them, in what role and kind of session,
  *   for which task and when. Their **taint** is the hub's word, never the
- *   caller's ({@link TurnWatch}): a routine's run, a heartbeat (a keep-alive
- *   turn), a harness subagent, or a turn that read the web. A tainted note
+ *   caller's ({@link TurnWatch}, kept in the database): a routine's run, a
+ *   heartbeat (a turn the hub did not deliver, a keep-alive's), a harness
+ *   subagent still running, or a session that read the web. A tainted note
  *   never becomes a candidate.
  * - **Rules first**: a note holding what reads as a credential is written
  *   with it hidden and marked `secret`; one AGENTS.md or `knowledge/`
@@ -58,7 +59,7 @@ import {
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
 import { tool } from "./admin-tools";
-import type { DbShape, ProjectRow } from "./db";
+import type { DbShape, ProjectRow, SessionTaintRow } from "./db";
 import { type JevAccess, jevAccess } from "./jev";
 import { askRow, offLine } from "./jev-placement";
 import { boardTitle } from "./labels";
@@ -161,10 +162,8 @@ export const personsTier = (rel: string): string | undefined => {
   return undefined;
 };
 
-// --- what a session's turn has been doing --------------------------------------
+// --- what a session has been doing ---------------------------------------------
 
-/** A tool that starts a harness's own subagent. */
-const SUBAGENT_TOOLS: ReadonlySet<string> = new Set(["Agent", "Task", "task"]);
 /** The harnesses' own web tools. */
 const WEB_TOOLS: ReadonlySet<string> = new Set([
   "WebFetch",
@@ -178,17 +177,20 @@ const WEB_NAME =
 /** A shell command that reaches a URL. */
 const SHELL_WEB = /\b(?:curl|wget|lynx|w3m)\b|https?:\/\//i;
 const SHELLS: ReadonlySet<string> = new Set(["Bash", "bash"]);
+/** CawCo's own tools as a harness names them: `mcp__cawco__<tool>` (Claude, pi), `cawco_<tool>` (OpenCode). */
+const CAWCO_TOOL = /^(?:mcp__cawco__|cawco_)/;
 
 /** Whether a tool call read the web: a web tool, a web-reading MCP server, a connection's tool, or a shell command naming a URL. */
 const readsWeb = (name: string, input: Record<string, unknown>): boolean => {
   if (WEB_TOOLS.has(name)) {
     return true;
   }
-  // A connection's tool (connections.ts): an outside service's words.
-  if (name.startsWith("conn__")) {
+  // A connection's tool (connections.ts), served by CawCo's own server as
+  // `conn__<connection>__<tool>`: an outside service's words.
+  if (name.replace(CAWCO_TOOL, "").startsWith("conn__")) {
     return true;
   }
-  if (name.startsWith("mcp__cawco__") || name.startsWith("cawco_")) {
+  if (CAWCO_TOOL.test(name)) {
     return false;
   }
   if (name.startsWith("mcp__")) {
@@ -201,115 +203,212 @@ const readsWeb = (name: string, input: Record<string, unknown>): boolean => {
   return name.includes("_") && WEB_NAME.test(name);
 };
 
-/**
- * What the hub saw of a session's turn so far. A heartbeat is not here: a
- * keep-alive turn is the row's own `keepAliveTurn`, which the hub sets and
- * clears around it (keep-alive.ts), and its frames never reach the watch.
- */
-interface Turn {
-  /** The routine whose wake started or joined it (a lead's turn). */
-  routine?: string;
-  /** Its harness subagents still running: their tool calls' ids. */
-  subagents: Set<string>;
-  /** The web-reading tools it called. */
-  web: Set<string>;
-}
-
 /** The origin a lead's wake carries when a routine woke it (caw.ts). */
 export const ROUTINE_ORIGIN = "routine:";
+/** A keep-alive's send (keep-alive.ts): the hub's heartbeat, not a delivery. */
+const KEEPALIVE = "keepalive";
+/**
+ * Harnesses whose subagent ends with its call's result (OpenCode's
+ * `subagent`). Claude's says it ended itself, in a `task_notification`: a
+ * background one's call answers at once and the subagent runs on.
+ */
+const ENDS_WITH_CALL: ReadonlySet<string> = new Set(["opencode"]);
+
+/** Where the watch keeps each session's state (db `session_taints`). */
+export interface TaintStore {
+  get: (instanceId: string) => SessionTaintRow | undefined;
+  put: (row: SessionTaintRow) => void;
+}
+
+const blank = (instanceId: string): SessionTaintRow => ({
+  instanceId,
+  web: false,
+  fromRoutine: null,
+  delivered: false,
+  routine: null,
+  subagents: [],
+  updatedAt: new Date(0),
+});
 
 /**
- * What every session's current turn has done, from the frames the hub admits
- * and the sends its harness reads: which taints a note written now carries.
- * Kept in memory: a hub that restarts mid-turn forgets the turn so far.
+ * What every session has done that taints a note it writes, from the frames
+ * the hub admits and the sends its harness reads, kept in the database so a
+ * hub restart mid-turn keeps it (db `session_taints`):
+ * - **Delivered** (heartbeat by its absence): since its last turn's result
+ *   the session read a send the hub delivered: a person's words, a hub or
+ *   peer message, a routine's wake, a work item's brief. A turn nothing
+ *   delivered started itself (a harness timer: ScheduleWakeup, CronCreate,
+ *   /loop, a background task's end), and a keep-alive is no delivery. A
+ *   note is written after its turn's input was read, so a delivery is
+ *   always seen before the note it precedes.
+ * - **Web**, sticky: once the session (or a subagent of it) called a tool
+ *   that reads the web, every later note of it is tainted.
+ * - **Subagents**, by their own start and end: Claude's `task_started` and
+ *   `task_notification`, OpenCode's `task_started` and its call's result.
+ *   A turn's end closes none of them.
+ * - **Routine**: the wake a lead's turn read, until its result; and a
+ *   session a routine-run turn started, for its life.
  */
-export const createTurnWatch = () => {
-  const turns = new Map<string, Turn>();
-  /** Sessions a routine-run's turn started: their own notes are the run's. */
-  const fromRoutine = new Set<string>();
+export const createTurnWatch = (store: TaintStore) => {
+  const held = new Map<string, SessionTaintRow>();
 
-  const turnOf = (instanceId: string): Turn => {
-    const held = turns.get(instanceId);
-    if (held) {
-      return held;
+  const stateOf = (instanceId: string): SessionTaintRow => {
+    const known = held.get(instanceId);
+    if (known) {
+      return known;
     }
-    const made: Turn = { subagents: new Set(), web: new Set() };
-    turns.set(instanceId, made);
-    return made;
+    const read = store.get(instanceId) ?? blank(instanceId);
+    held.set(instanceId, read);
+    return read;
   };
 
-  /** The tools a model's message calls: the web read, a subagent started (by the session itself, not a subagent). */
+  /** The session's state with `patch` over it, kept, and stored when it changed. */
+  const change = (
+    instanceId: string,
+    patch: Partial<Omit<SessionTaintRow, "instanceId" | "updatedAt">>
+  ): void => {
+    const before = stateOf(instanceId);
+    const after: SessionTaintRow = { ...before, ...patch };
+    if (
+      after.web === before.web &&
+      after.fromRoutine === before.fromRoutine &&
+      after.delivered === before.delivered &&
+      after.routine === before.routine &&
+      JSON.stringify(after.subagents) === JSON.stringify(before.subagents)
+    ) {
+      return;
+    }
+    after.updatedAt = new Date();
+    held.set(instanceId, after);
+    try {
+      store.put(after);
+    } catch (error) {
+      // A frame from a process the hub keeps no row for: it has no
+      // credential, so it writes no note, and its state stays in memory.
+      console.warn(
+        `[memory] ${instanceId}: its taint was not stored: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  };
+
+  /** The tools a model's message calls (the session's or a subagent's): the web read makes the session's taint stick. */
   const called = (
     instanceId: string,
     neutral: Extract<NeutralMessage, { type: "assistant" }>
   ): void => {
-    const own = !neutral.parent_tool_use_id;
-    for (const block of neutral.message.content) {
-      if (block.type !== "tool_use") {
-        continue;
-      }
-      if (readsWeb(block.name, block.input)) {
-        turnOf(instanceId).web.add(block.name);
-      }
-      if (own && SUBAGENT_TOOLS.has(block.name)) {
-        turnOf(instanceId).subagents.add(block.id);
-      }
+    if (
+      neutral.message.content.some(
+        (block) =>
+          block.type === "tool_use" && readsWeb(block.name, block.input)
+      )
+    ) {
+      change(instanceId, { web: true });
     }
   };
 
-  /** The session's own tool results: a subagent whose result came back has ended. */
-  const answered = (
+  /** A subagent's own start or end (system frames). */
+  const tasked = (
     instanceId: string,
-    neutral: Extract<NeutralMessage, { type: "user" }>
+    neutral: Extract<NeutralMessage, { type: "system" }>
   ): void => {
-    const open = turns.get(instanceId)?.subagents;
-    if (!open || neutral.parent_tool_use_id) {
+    const { subagents } = stateOf(instanceId);
+    const task = neutral.task_id;
+    if (!task) {
       return;
     }
-    const { content } = neutral.message;
-    for (const block of Array.isArray(content) ? content : []) {
-      if (block.type === "tool_result") {
-        open.delete(block.tool_use_id);
+    // Only a real subagent's start names its type; a background command's does not.
+    if (neutral.subtype === "task_started" && neutral.subagent_type) {
+      if (!subagents.some((open) => open.task === task)) {
+        change(instanceId, {
+          subagents: [
+            ...subagents,
+            { task, call: neutral.tool_use_id ?? null },
+          ],
+        });
       }
+    } else if (neutral.subtype === "task_notification" && neutral.status) {
+      change(instanceId, {
+        subagents: subagents.filter((open) => open.task !== task),
+      });
     }
+  };
+
+  /** The session's own tool results: on a harness whose subagent ends with its call, that call's result ends it. */
+  const answered = (
+    instanceId: string,
+    neutral: Extract<NeutralMessage, { type: "user" }>,
+    harness: string | undefined
+  ): void => {
+    const { subagents } = stateOf(instanceId);
+    const { content } = neutral.message;
+    if (
+      subagents.length === 0 ||
+      neutral.parent_tool_use_id ||
+      !(harness && ENDS_WITH_CALL.has(harness)) ||
+      !Array.isArray(content)
+    ) {
+      return;
+    }
+    const answers = new Set(
+      content.flatMap((block) =>
+        block.type === "tool_result" ? [block.tool_use_id] : []
+      )
+    );
+    change(instanceId, {
+      subagents: subagents.filter(
+        (open) => !(open.call && answers.has(open.call))
+      ),
+    });
   };
 
   return {
-    /** A frame the hub admitted from the session. */
-    frame(instanceId: string, neutral: NeutralMessage): void {
+    /** A frame the hub admitted from the session, on `harness`. */
+    frame(
+      instanceId: string,
+      neutral: NeutralMessage,
+      harness: string | undefined
+    ): void {
       if (neutral.type === "result") {
-        turns.delete(instanceId);
+        change(instanceId, { delivered: false, routine: null });
       } else if (neutral.type === "assistant") {
         called(instanceId, neutral);
+      } else if (neutral.type === "system") {
+        tasked(instanceId, neutral);
       } else if (neutral.type === "user") {
-        answered(instanceId, neutral);
+        answered(instanceId, neutral, harness);
       }
     },
 
-    /** A send the session's harness read: a routine's wake of a lead makes its turn the run's. */
+    /** A send the hub delivered, read by the session's harness: its turn is delivered; a routine's wake of a lead makes it the run's. */
     read(instanceId: string, origin: NeutralOrigin | undefined): void {
-      if (
-        origin?.kind === "system" &&
-        origin.name?.startsWith(ROUTINE_ORIGIN)
-      ) {
-        turnOf(instanceId).routine = origin.name.slice(ROUTINE_ORIGIN.length);
+      if (origin?.kind === "system" && origin.name === KEEPALIVE) {
+        return;
       }
+      const routine =
+        origin?.kind === "system" && origin.name?.startsWith(ROUTINE_ORIGIN)
+          ? origin.name.slice(ROUTINE_ORIGIN.length)
+          : undefined;
+      change(instanceId, {
+        delivered: true,
+        ...(routine ? { routine } : {}),
+      });
     },
 
-    /** A session a parent's turn started (work-items.ts): a routine-run turn's child is the run's. */
+    /** A session a parent's turn started (work-items.ts): a routine-run turn's child is the run's, for its life. */
     spawned(instanceId: string, parentId: string): void {
-      if (turns.get(parentId)?.routine || fromRoutine.has(parentId)) {
-        fromRoutine.add(instanceId);
+      const parent = stateOf(parentId);
+      const routine = parent.routine ?? parent.fromRoutine;
+      if (routine) {
+        change(instanceId, { fromRoutine: routine });
       }
     },
 
-    /** The session's process ended: its turn with it. */
+    /** The session's process ended: its turn and its subagents with it; what it read and where it came from stay. */
     ended(instanceId: string): void {
-      turns.delete(instanceId);
+      change(instanceId, { delivered: false, routine: null, subagents: [] });
     },
 
-    turn: (instanceId: string): Turn | undefined => turns.get(instanceId),
-    fromRoutine: (instanceId: string): boolean => fromRoutine.has(instanceId),
+    state: (instanceId: string): SessionTaintRow => stateOf(instanceId),
   };
 };
 
@@ -784,14 +883,21 @@ export const createMemory = ({
 
   // --- taint ---------------------------------------------------------------------
 
-  /** Whether the session runs for a routine: its run's session, one under it, or one a routine-woken turn started. */
+  /**
+   * Whether the session runs for a routine, as the hub stored it: its turn
+   * read a routine's wake, or it or a session above it is a routine run's
+   * (a parent `routine:<id>`) or was started by a routine-run turn.
+   */
   const routineRun = (actor: InstanceRow): boolean => {
-    if (watch.turn(actor.id)?.routine) {
+    if (watch.state(actor.id).routine) {
       return true;
     }
     let at: InstanceRow | undefined = actor;
     for (let depth = 0; at && depth < ANCESTRY; depth += 1) {
-      if (isRoutineParent(at.parentInstanceId) || watch.fromRoutine(at.id)) {
+      if (
+        isRoutineParent(at.parentInstanceId) ||
+        watch.state(at.id).fromRoutine
+      ) {
         return true;
       }
       const item = at.workItemId ? db.workItem(at.workItemId) : undefined;
@@ -805,19 +911,23 @@ export const createMemory = ({
 
   /** The hub's word on why a note `actor` writes now is no candidate. */
   const taintOf = (actor: InstanceRow): Taint[] => {
-    const turn = watch.turn(actor.id);
+    const state = watch.state(actor.id);
     const taint: Taint[] = [];
     if (routineRun(actor)) {
       taint.push("routine");
     }
-    // A keep-alive turn: the hub's own mark on the row, set and cleared around it.
-    if (db.getInstancesByIds([actor.id])[0]?.keepAliveTurn) {
+    // A turn the hub did not deliver started itself, and a keep-alive's turn
+    // is the hub's own heartbeat (its mark on the row).
+    if (
+      !state.delivered ||
+      db.getInstancesByIds([actor.id])[0]?.keepAliveTurn
+    ) {
       taint.push("heartbeat");
     }
-    if ((turn?.subagents.size ?? 0) > 0) {
+    if (state.subagents.length > 0) {
       taint.push("subagent");
     }
-    if ((turn?.web.size ?? 0) > 0) {
+    if (state.web) {
       taint.push("web");
     }
     return taint;

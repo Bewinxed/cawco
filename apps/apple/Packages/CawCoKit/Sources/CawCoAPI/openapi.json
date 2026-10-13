@@ -20337,6 +20337,10 @@
             "type": "string",
             "format": "date-time"
           },
+          "seenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "startedAt": {
             "type": "string",
             "format": "date-time"
@@ -20385,10 +20389,6 @@
           },
           "launchedBy": {
             "type": "string"
-          },
-          "seenAt": {
-            "type": "string",
-            "format": "date-time"
           },
           "edges": {
             "type": "object"
@@ -20488,6 +20488,10 @@
                 "type": "string",
                 "format": "date-time"
               },
+              "seenAt": {
+                "type": "string",
+                "format": "date-time"
+              },
               "startedAt": {
                 "type": "string",
                 "format": "date-time"
@@ -20536,10 +20540,6 @@
               },
               "launchedBy": {
                 "type": "string"
-              },
-              "seenAt": {
-                "type": "string",
-                "format": "date-time"
               }
             },
             "required": [
@@ -20830,28 +20830,6 @@
                   "string"
                 ]
               },
-              "cwd": {
-                "type": "string"
-              },
-              "launchDir": {
-                "$ref": "#/components/schemas/InstanceRowLaunchDir"
-              },
-              "delegateType": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "workItemId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "seenAt": {
-                "type": "string",
-                "format": "date-time"
-              },
               "lastRequestAt": {
                 "type": "string",
                 "format": "date-time"
@@ -20889,6 +20867,12 @@
                   "string"
                 ]
               },
+              "cwd": {
+                "type": "string"
+              },
+              "launchDir": {
+                "$ref": "#/components/schemas/InstanceRowLaunchDir"
+              },
               "titleSource": {
                 "$ref": "#/components/schemas/InstanceRowTitleSource"
               },
@@ -20898,11 +20882,21 @@
                   "string"
                 ]
               },
+              "seenAt": {
+                "type": "string",
+                "format": "date-time"
+              },
               "turnEndedAt": {
                 "type": "string",
                 "format": "date-time"
               },
               "permissionMode": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "delegateType": {
                 "type": [
                   "null",
                   "string"
@@ -20917,6 +20911,12 @@
               "spawnedAt": {
                 "type": "string",
                 "format": "date-time"
+              },
+              "workItemId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
               }
             },
             "required": [
@@ -21067,28 +21067,6 @@
                     "string"
                   ]
                 },
-                "cwd": {
-                  "type": "string"
-                },
-                "launchDir": {
-                  "$ref": "#/components/schemas/InstanceRowLaunchDir"
-                },
-                "delegateType": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "workItemId": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "seenAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
                 "lastRequestAt": {
                   "type": "string",
                   "format": "date-time"
@@ -21126,6 +21104,12 @@
                     "string"
                   ]
                 },
+                "cwd": {
+                  "type": "string"
+                },
+                "launchDir": {
+                  "$ref": "#/components/schemas/InstanceRowLaunchDir"
+                },
                 "titleSource": {
                   "$ref": "#/components/schemas/InstanceRowTitleSource"
                 },
@@ -21135,11 +21119,21 @@
                     "string"
                   ]
                 },
+                "seenAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
                 "turnEndedAt": {
                   "type": "string",
                   "format": "date-time"
                 },
                 "permissionMode": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "delegateType": {
                   "type": [
                     "null",
                     "string"
@@ -21154,6 +21148,12 @@
                 "spawnedAt": {
                   "type": "string",
                   "format": "date-time"
+                },
+                "workItemId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
                 },
                 "runningDelegates": {
                   "type": "number"
@@ -30775,6 +30775,10 @@
                 "type": "string",
                 "format": "date-time"
               },
+              "seenAt": {
+                "type": "string",
+                "format": "date-time"
+              },
               "startedAt": {
                 "type": "string",
                 "format": "date-time"
@@ -30823,10 +30827,6 @@
               },
               "launchedBy": {
                 "type": "string"
-              },
-              "seenAt": {
-                "type": "string",
-                "format": "date-time"
               }
             },
             "required": [

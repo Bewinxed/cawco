@@ -15,8 +15,20 @@
  * (e) An attempt's brief carries the knowledge file its task names.
  * Besides: a note written in a turn that reached a URL is tainted `web`.
  *
- * (a), (e), the delegate routine's run and the curator's run are work items:
- * each runs in a workspace boundary, which needs unprivileged user
+ * Taint the hub keeps past a turn (memory.ts `TurnWatch`, db
+ * `session_taints`), each across a hub restart:
+ * (t1) A turn the hub did not deliver (a CronCreate the session set fires)
+ *      is a heartbeat: its note is tainted `heartbeat`.
+ * (t2) A session that read the web stays tainted `web`: a note in a later,
+ *      delivered turn, after a hub restart, still carries it.
+ * (t3) A background subagent outlives its turn: the parent's note in a later
+ *      turn, after a hub restart, and the subagent's own note are tainted
+ *      `subagent`; once the subagent ends, the parent's next note is clean.
+ * (t4) A session a routine-woken Caw delegated is the routine's run: its note,
+ *      after a hub restart, is tainted `routine`.
+ *
+ * (a), (e), (t4), the delegate routine's run and the curator's run are work
+ * items: each runs in a workspace boundary, which needs unprivileged user
  * namespaces. Inside a workspace (a delegate's own) those are refused, and
  * those sections fail with the boundary's words; run it from a host shell.
  *
@@ -44,6 +56,12 @@ const SECOND_NOTE = "The API answers in UTC, always.";
 const WEB_NOTE = "The status page lives at status.example.test.";
 const ROUTINE_NOTE = "The staging database is reset every night.";
 const LEAD_NOTE = "Mornings are quiet on the board.";
+const WEB_LATER_NOTE = "The status page refreshes every minute.";
+const TIMER_NOTE = "The nightly timer checks the queue.";
+const PARENT_NOTE = "The worker pool has four slots.";
+const PARENT_AFTER_NOTE = "The worker pool drains before deploys.";
+const CHILD_NOTE = "The cache warms in thirty seconds.";
+const RCHILD_NOTE = "The morning routine rotates the logs.";
 /** Each session's opening marker: the earliest in its conversation says which it is. */
 const MARKERS = [
   "PROBE-MEMORY-ATTEMPT",
@@ -51,7 +69,22 @@ const MARKERS = [
   "PROBE-MEMORY-WORKER",
   "PROBE-MEMORY-SECOND",
   "PROBE-MEMORY-WEB",
+  "PROBE-MEMORY-TIMER",
+  "PROBE-MEMORY-PARENT",
+  "PROBE-MEMORY-CHILD",
+  "PROBE-MEMORY-RCHILD",
 ] as const;
+/** The prompt the timer session's CronCreate fires with: a turn no hub send started. */
+const TIMED = "PROBE-MEMORY-TIMED";
+/** The person's later asks to note, in order: each one more note. */
+const NOTE_NOW = "NOTE-NOW";
+const TAINT_FIELD = '"taint":';
+/** One-shot calls, made once per run. */
+const once: Record<"agent" | "cron" | "delegate", boolean> = {
+  agent: false,
+  cron: false,
+  delegate: false,
+};
 const CURATOR = "You are this project's memory curator";
 const CAW = "You are Caw, the lead of the project";
 const NOTE_ID = /^(n-\d{8}-\d{6}-[0-9a-f]{6})/;
@@ -98,18 +131,42 @@ const kindOf = (all: string): (typeof MARKERS)[number] | undefined =>
     .sort((a, b) => a.at - b.at)[0]?.marker;
 
 /** Whether the session's memory_note answered already. */
-const noted = (all: string): boolean => all.includes('"taint":');
+const noted = (all: string): boolean => all.includes(TAINT_FIELD);
+/** How many times `part` appears in `all`. */
+const count = (all: string, part: string): number => all.split(part).length - 1;
+/** A one-shot call: made the first time the tool is offered, never again. */
+const callOnce = (
+  request: Seen,
+  key: keyof typeof once,
+  name: string,
+  input: object
+): Reply => {
+  const reply = call(request, name, input);
+  if (reply.tool?.name === name) {
+    once[key] = true;
+  }
+  return reply;
+};
 const finished = (request: Seen): boolean =>
   request.last.includes("checks passed") || request.last.includes("The item");
 /** The text between two markers of a message, trimmed. */
 const between = (all: string, from: string, to: string): string =>
   all.split(from)[1]?.split(to)[0]?.trim() ?? "";
 
-/** Caw: a note when a routine wakes him; two proposals when the person asks. */
+/** Caw: a note and a delegate when a routine wakes him; two proposals when the person asks. */
 const caw = (request: Seen): Reply => {
   const { all } = request;
   if (all.includes("PROBE-MEMORY-LEAD") && !noted(all)) {
     return call(request, NOTE, { text: LEAD_NOTE });
+  }
+  if (all.includes("PROBE-MEMORY-LEAD") && !once.delegate) {
+    return callOnce(request, "delegate", "mcp__cawco__delegate", {
+      title: "Note the routine fact",
+      prompt:
+        "PROBE-MEMORY-RCHILD: take a while, then note what the routine taught.",
+      checks: [{ name: "Nothing to check", command: "true" }],
+      lands: "none",
+    });
   }
   const asked = CAW_ASK.exec(all);
   if (asked && !all.includes('"path":"AGENTS.md"')) {
@@ -184,30 +241,122 @@ const respond = (request: Seen): Reply => {
     return caw(request);
   }
   const kind = kindOf(all);
-  if (kind === "PROBE-MEMORY-ATTEMPT" || kind === "PROBE-MEMORY-ROUTINE") {
-    const routine = kind === "PROBE-MEMORY-ROUTINE";
-    if (!noted(all)) {
-      return call(request, NOTE, {
-        text: routine ? ROUTINE_NOTE : ATTEMPT_NOTE,
-      });
+  switch (kind) {
+    case "PROBE-MEMORY-ATTEMPT":
+      return briefed(request, ATTEMPT_NOTE, "noted");
+    case "PROBE-MEMORY-ROUTINE":
+      return briefed(request, ROUTINE_NOTE, "NO_REPLY");
+    case "PROBE-MEMORY-WEB":
+      return webReader(request);
+    case "PROBE-MEMORY-TIMER":
+      return timer(request);
+    case "PROBE-MEMORY-PARENT":
+      return parent(request);
+    case "PROBE-MEMORY-CHILD":
+      return sleeper(request, "CHILD-SLEPT", 45, CHILD_NOTE, undefined);
+    case "PROBE-MEMORY-RCHILD":
+      return sleeper(request, "RCHILD-SLEPT", 90, RCHILD_NOTE, "noted");
+    default: {
+      const words: Partial<Record<string, string>> = {
+        "PROBE-MEMORY-WORKER": WORKER_NOTE,
+        "PROBE-MEMORY-SECOND": SECOND_NOTE,
+      };
+      const note = kind ? words[kind] : undefined;
+      return note && !noted(all)
+        ? call(request, NOTE, { text: note })
+        : text("ok");
     }
-    return finished(request)
-      ? text("done")
-      : call(request, FINISH, { summary: routine ? "NO_REPLY" : "noted" });
   }
-  if (kind === "PROBE-MEMORY-WEB" && !all.includes("WEB-REACHED")) {
+};
+
+/** A work item (an attempt, a routine's run): notes `words`, then finishes with `summary`. */
+const briefed = (request: Seen, words: string, summary: string): Reply => {
+  if (!noted(request.all)) {
+    return call(request, NOTE, { text: words });
+  }
+  return finished(request) ? text("done") : call(request, FINISH, { summary });
+};
+
+/** The web reader: reaches a URL, notes; asked again later (NOTE-NOW), notes again without reading anything. */
+const webReader = (request: Seen): Reply => {
+  const { all } = request;
+  if (!all.includes("WEB-REACHED")) {
     return tool("Bash", {
       command: "curl -s -m 2 http://127.0.0.1:9/ ; echo WEB-REACHED",
       description: "Read a page",
     });
   }
-  const words: Partial<Record<string, string>> = {
-    "PROBE-MEMORY-WEB": WEB_NOTE,
-    "PROBE-MEMORY-WORKER": WORKER_NOTE,
-    "PROBE-MEMORY-SECOND": SECOND_NOTE,
-  };
-  const note = kind ? words[kind] : undefined;
-  return note && !noted(all) ? call(request, NOTE, { text: note }) : text("ok");
+  const notes = count(all, TAINT_FIELD);
+  if (notes === 0) {
+    return call(request, NOTE, { text: WEB_NOTE });
+  }
+  return count(all, NOTE_NOW) > notes - 1
+    ? call(request, NOTE, { text: WEB_LATER_NOTE })
+    : text("ok");
+};
+
+/** The timer: sets a one-shot CronCreate; the turn it fires (TIMED) notes. */
+const timer = (request: Seen): Reply => {
+  const { all } = request;
+  if (all.includes(TIMED)) {
+    return noted(all) ? text("ok") : call(request, NOTE, { text: TIMER_NOTE });
+  }
+  return once.cron
+    ? text("scheduled")
+    : callOnce(request, "cron", "CronCreate", {
+        cron: "* * * * *",
+        prompt: `${TIMED}: note what the timer checks.`,
+        recurring: false,
+      });
+};
+
+/** The parent: starts a background subagent, then notes once for each NOTE-NOW the person sends. */
+const parent = (request: Seen): Reply => {
+  const { all } = request;
+  if (!once.agent) {
+    const name =
+      ["Agent", "Task"].find((one) => request.toolNames.includes(one)) ??
+      "Agent";
+    return callOnce(request, "agent", name, {
+      description: "Warm the cache",
+      prompt: "PROBE-MEMORY-CHILD: take a while, then note what you learned.",
+      subagent_type: "general-purpose",
+      run_in_background: true,
+    });
+  }
+  const asks = count(all, NOTE_NOW);
+  const notes = count(all, TAINT_FIELD);
+  if (asks > notes) {
+    return call(request, NOTE, {
+      text: notes === 0 ? PARENT_NOTE : PARENT_AFTER_NOTE,
+    });
+  }
+  return text("ok");
+};
+
+/** A session that sleeps `seconds`, notes `words`, then (a work item) finishes. */
+const sleeper = (
+  request: Seen,
+  mark: string,
+  seconds: number,
+  words: string,
+  summary: string | undefined
+): Reply => {
+  const { all } = request;
+  if (!all.includes(mark)) {
+    return tool("Bash", {
+      command: `sleep ${seconds} && echo ${mark}`,
+      description: "Take a while",
+      timeout: (seconds + 30) * 1000,
+    });
+  }
+  if (!noted(all)) {
+    return call(request, NOTE, { text: words });
+  }
+  if (!summary || finished(request)) {
+    return text("done");
+  }
+  return call(request, FINISH, { summary });
 };
 
 interface Note {
@@ -316,6 +465,12 @@ const runsOf = (routineId: string) =>
     "SELECT state, outcome, reason FROM routine_runs WHERE routine_id = ? ORDER BY started_at DESC",
     routineId
   );
+/** A session's taint as the hub stored it (db `session_taints`). */
+const taintOf = (instanceId: string) =>
+  fleet.query<{ delivered: number; subagents: string; web: number }>(
+    "SELECT delivered, subagents, web FROM session_taints WHERE instance_id = ?",
+    instanceId
+  )[0];
 const settled = (run: RunRow | undefined) =>
   run !== undefined && ["ended", "skipped"].includes(run.state);
 
@@ -344,6 +499,14 @@ try {
     { name: "Memory", machineId: MACHINE, cwd: src, caw: false }
   );
   const projectId = made.project?.id ?? made.id ?? "";
+  // (t3) runs a harness subagent, which the fleet's default choice
+  // (delegates instead of subagents) denies every session.
+  const choices = await http("PUT", "/api/fleet/choices", {
+    delegates: false,
+  });
+  if (choices.status !== 200) {
+    throw new Error(`the fleet's choices were not set: ${choices.text}`);
+  }
 
   // ── (d) Make a note: the route, then a Caw thread message ──────────────
   await section("d: Make a note writes AGENTS.md directly", async () => {
@@ -472,6 +635,121 @@ try {
       !!leadNote?.content.includes("role: lead"),
     `routine ${leadRoutine.id}, run ${JSON.stringify(runsOf(leadRoutine.id)[0])}\n${leadNote?.content}`
   );
+
+  // ── (t1)–(t4): taint the hub keeps past a turn, across a hub restart ──
+  await section("t: taint past a turn", async () => {
+    // t1: a session sets a timer; the turn it fires, no one delivered.
+    const timed = await fleet.spawn("claude", "Probe timer", src, {
+      projectId,
+    });
+    await fleet.send(
+      timed,
+      "PROBE-MEMORY-TIMER: set a timer to check the queue."
+    );
+    // t3: a session starts a subagent in the background, which outlives its turn.
+    const parentId = await fleet.spawn("claude", "Probe parent", src, {
+      projectId,
+    });
+    await fleet.send(
+      parentId,
+      "PROBE-MEMORY-PARENT: start the helper in the background."
+    );
+    const before = await until(
+      "the parent's background subagent, kept open by the hub",
+      () => taintOf(parentId),
+      (row) => row !== undefined && row.subagents !== "[]",
+      120_000
+    );
+    // The hub restarts while the subagent, the timer and Caw's delegate (t4) wait.
+    console.log("restarting the hub mid-turn");
+    await fleet.stop("hub");
+    fleet.launch("hub");
+    await fleet.hubUp();
+
+    await fleet.send(parentId, `${NOTE_NOW}: note the pool size.`);
+    const parentNote = await until(
+      "the parent's note while its subagent runs",
+      async () => noteWith(await inbox(), PARENT_NOTE),
+      (found) => found !== undefined,
+      120_000
+    );
+    check(
+      "t3: after a hub restart, a note in a later delivered turn while a background subagent runs is tainted subagent",
+      !!parentNote?.content.includes("taint: [subagent]"),
+      `open before the restart: ${before?.subagents}\n${parentNote?.content}`
+    );
+    await fleet.send(webber, `${NOTE_NOW}: note how often the page refreshes.`);
+    const webLater = await until(
+      "the web reader's later note",
+      async () => noteWith(await inbox(), WEB_LATER_NOTE),
+      (found) => found !== undefined,
+      120_000
+    );
+    check(
+      "t2: after a hub restart, a session that read the web earlier is still tainted web in a later delivered turn",
+      !!webLater?.content.includes("taint: [web]"),
+      webLater?.content ?? "(none)"
+    );
+    const childNote = await until(
+      "the subagent's own note",
+      async () => noteWith(await inbox(), CHILD_NOTE),
+      (found) => found !== undefined,
+      180_000
+    );
+    const closed = await until(
+      "the subagent's end, by its own event",
+      () => taintOf(parentId),
+      (row) => row?.subagents === "[]",
+      180_000
+    );
+    await fleet.send(parentId, `${NOTE_NOW}: note it again.`);
+    const afterNote = await until(
+      "the parent's note once its subagent ended",
+      async () => noteWith(await inbox(), PARENT_AFTER_NOTE),
+      (found) => found !== undefined,
+      120_000
+    );
+    check(
+      "t3: the subagent's own note is tainted subagent; once it ends, the parent's next note is clean",
+      !!childNote?.content.includes("subagent") &&
+        closed?.subagents === "[]" &&
+        !afterNote?.content.includes("taint:"),
+      `${childNote?.content}\n${afterNote?.content}`
+    );
+    const timerNote = await until(
+      "the note of the turn the timer fired",
+      async () => noteWith(await inbox(), TIMER_NOTE),
+      (found) => found !== undefined,
+      180_000
+    );
+    check(
+      "t1: a turn the hub did not deliver (a CronCreate firing) is a heartbeat",
+      !!timerNote?.content.includes("taint: [heartbeat]"),
+      timerNote?.content ?? "(none)"
+    );
+  });
+  await section("t4: a session a routine-woken Caw delegated", async () => {
+    const [item] = await until(
+      "the work item Caw's routine-woken turn delegated",
+      () =>
+        fleet.query<{ id: string; state: string }>(
+          "SELECT id, state FROM work_items WHERE title = 'Note the routine fact'"
+        ),
+      (rows) => rows.length > 0,
+      60_000
+    );
+    const note = await until(
+      "the delegate's note, after the hub restarted under it",
+      async () => noteWith(await inbox(), RCHILD_NOTE),
+      (found) => found !== undefined,
+      240_000
+    );
+    check(
+      "t4: a session a routine-woken Caw delegated is the routine's run, across a hub restart",
+      !!note?.content.includes("taint: [routine]"),
+      `work item ${item?.id} (${item?.state})\n${note?.content}`
+    );
+  });
 
   // ── (c) Caw's proposals: Approve commits as the person, Deny archives ──
   await section("c: Caw's proposals", async () => {
