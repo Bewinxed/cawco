@@ -9,6 +9,10 @@
  * 1. Started on the same frame, the two runs are one clock, each with a
  *    start time.
  * 2. Started a frame apart, they are not: the reading names the start.
+ * 3. Two cards inside an open shadow root, started together: the clock
+ *    catches both through the shadow host, the page-side read (`kitRuns`)
+ *    holds both where `document.getAnimations()` holds neither, and they
+ *    are one clock.
  */
 import { Clock } from "../anim";
 import { type Kit, type Spec, settle } from "../kit";
@@ -22,7 +26,17 @@ const PAGE = `<!doctype html>
 <button class="apart">Apart</button>
 <div class="pair together"><div class="card"></div><div class="card"></div></div>
 <div class="pair apart"><div class="card"></div><div class="card"></div></div>
+<button class="shadowed">Shadowed</button>
+<div class="host"></div>
 <script>
+  const shadow = document.querySelector(".host").attachShadow({ mode: "open" });
+  shadow.innerHTML = \`<style>
+    .card { width: 120px; height: 80px; opacity: 0; transition: opacity 400ms linear; }
+    .card.in { opacity: 1; }
+  </style><div class="card"></div><div class="card"></div>\`;
+  document.querySelector("button.shadowed").addEventListener("click", () => {
+    for (const card of shadow.querySelectorAll(".card")) card.classList.add("in");
+  });
   const cards = (sel) => document.querySelectorAll(sel + " .card");
   document.querySelector("button.together").addEventListener("click", () => {
     for (const card of cards(".pair.together")) card.classList.add("in");
@@ -73,6 +87,35 @@ const probe = async (kit: Kit) => {
       "2: started a frame apart, the two runs are not one clock",
       apart.length === 2 && off.faults.length === 1,
       `starts ${apart.map((run) => run.start).join(", ")}; ${off.faults.join("; ") || "no faults"}`
+    );
+    await clock.release();
+    await settle(page);
+
+    const shadowed = await clock.catchRuns(
+      () => page.click("button.shadowed"),
+      ".host"
+    );
+    const read = await page.evaluate(() => {
+      const inHost = (runs: Animation[]) =>
+        runs.filter((run) =>
+          window.kitInside(
+            (run.effect as KeyframeEffect | null)?.target,
+            ".host"
+          )
+        ).length;
+      return {
+        kit: inHost(window.kitRuns()),
+        document: inHost(document.getAnimations()),
+      };
+    });
+    const inside = clock.oneClock();
+    kit.check(
+      "3: inside a shadow root, the clock catches both runs, the page-side read holds both, and they are one clock",
+      shadowed.length === 2 &&
+        read.kit === 2 &&
+        inside.faults.length === 0 &&
+        inside.runs === 2,
+      `caught ${shadowed.length}; kitRuns ${read.kit}, document.getAnimations() ${read.document}; starts ${shadowed.map((run) => run.start).join(", ")}; ${inside.faults.join("; ") || "no faults"}`
     );
     await clock.release();
   } finally {

@@ -188,9 +188,12 @@ export class Clock {
         const fresh = this.started.slice(read);
         read += fresh.length;
         for (const one of fresh) {
+          const run = runOf(one);
+          // A run of no length (a 0ms transition) is over as it starts: the
+          // page drops it at once, and it never stands on the clock.
           // biome-ignore lint/performance/noAwaitInLoops: each run is placed in turn
-          if ((await this.held.get(one.id))?.inside) {
-            kept.push(runOf(one));
+          if ((await this.held.get(one.id))?.inside && run.end > 0) {
+            kept.push(run);
           }
         }
         after += kept.length > 0 ? 1 : 0;
@@ -212,6 +215,36 @@ export class Clock {
       animations: kept.map((one) => one.id),
       currentTime: 0,
     });
+    // What a spec reads on the page (`kitRuns`) must hold every run the
+    // protocol caught: a read that sees fewer (a shadow tree's runs, left
+    // out of `document.getAnimations()`) would pass on what it never saw.
+    const seen = await this.page.evaluate(
+      (sel) =>
+        window
+          .kitRuns()
+          .filter(
+            (run) =>
+              run.playState === "paused" &&
+              window.kitInside(
+                (run.effect as KeyframeEffect | null)?.target,
+                sel
+              )
+          )
+          .map((run) => {
+            const named = run as Animation & {
+              animationName?: string;
+              transitionProperty?: string;
+            };
+            return `${run.constructor.name} ${named.animationName ?? named.transitionProperty ?? run.id}`;
+          }),
+      within
+    );
+    if (seen.length < kept.length) {
+      await this.release();
+      throw new Error(
+        `the page reads ${seen.length} held runs inside ${within} (${seen.join(", ")}), the protocol caught ${kept.length} (${kept.map((one) => `${one.type} ${one.name}`).join(", ")})`
+      );
+    }
     this.runs = kept;
     return kept;
   }
@@ -219,7 +252,8 @@ export class Clock {
   /**
    * Where a run's target node lies: whether in the page's own document (the
    * function runs in the node's own realm), and whether it (a
-   * pseudo-element's host) lies inside `within`. A run with no target, or
+   * pseudo-element's host) lies inside `within`, out through any shadow
+   * host (kit.ts `kitInside`). A run with no target, or
    * one whose node is gone, is the page's, outside.
    */
   private async place(
@@ -239,7 +273,7 @@ export class Clock {
     const { result } = (await this.cdp.send("Runtime.callFunctionOn", {
       objectId,
       functionDeclaration:
-        "function (sel) { const t = this instanceof Element ? this : this.element; return { own: window === window.top, inside: !!t && !!t.closest(sel) }; }",
+        "function (sel) { const t = this instanceof Element ? this : this.element; return { own: window === window.top, inside: window.kitInside(t, sel) }; }",
       arguments: [{ value: within }],
       returnByValue: true,
     })) as { result: { value: Place } };

@@ -95,6 +95,50 @@ const freePort = async (): Promise<number> => {
   return port;
 };
 
+declare global {
+  interface Window {
+    /**
+     * Whether `el` lies inside what `selector` names, out through every
+     * shadow host it sits in (`closest` stops at a shadow root).
+     */
+    kitInside: (el: Element | null | undefined, selector: string) => boolean;
+    /**
+     * Every animation on the page: the document's, and every open shadow
+     * root's at any depth. Chromium's `document.getAnimations()` leaves out
+     * a shadow tree's (an artifact's overlay runs in one), each shadow root
+     * answers its own.
+     */
+    kitRuns: () => Animation[];
+  }
+}
+
+/** Installs `kitRuns` and `kitInside` on every page and frame, before its own scripts. */
+function installRuns(): void {
+  const walk = (root: Document | ShadowRoot): Animation[] => {
+    const runs = [...root.getAnimations()];
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const shadow = (node as Element).shadowRoot;
+      if (shadow) {
+        runs.push(...walk(shadow));
+      }
+    }
+    return runs;
+  };
+  window.kitRuns = () => walk(document);
+  window.kitInside = (el, selector) => {
+    let at: Element | null = el ?? null;
+    while (at) {
+      if (at.closest(selector)) {
+        return true;
+      }
+      const root = at.getRootNode();
+      at = root instanceof ShadowRoot ? root.host : null;
+    }
+    return false;
+  };
+}
+
 /** The dashboard built once per run: `vite build`, as the probes' `vite preview` serves it. */
 export async function build(): Promise<void> {
   const child = Bun.spawn(["bunx", "vite", "build"], {
@@ -278,6 +322,7 @@ export class Run {
         await context.addInitScript((t) => {
           localStorage.setItem("cawco-theme", t);
         }, options.theme ?? "light");
+        await context.addInitScript(installRuns);
         for (const script of options.init ?? []) {
           // biome-ignore lint/performance/noAwaitInLoops: each script before the next, in order
           await context.addInitScript(script);
@@ -353,8 +398,8 @@ export async function settle(page: Page, ms = 150): Promise<void> {
   // A finite run still going after 10s will not land (a timeline held
   // still): named, as a failure, never waited on for ever.
   const stuck = await page.evaluate(() => {
-    const running = document
-      .getAnimations()
+    const running = window
+      .kitRuns()
       .filter(
         (run) =>
           run.playState === "running" &&

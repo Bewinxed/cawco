@@ -164,7 +164,7 @@ const column = (page: Page) =>
  */
 const seekCanvas = async (page: Page, fraction: number) => {
   await page.evaluate((f) => {
-    for (const run of document.getAnimations()) {
+    for (const run of window.kitRuns()) {
       if (run.id.startsWith("canvas-")) {
         const end = Number(run.effect?.getComputedTiming().endTime);
         run.currentTime = end * f;
@@ -182,8 +182,8 @@ const seekCanvas = async (page: Page, fraction: number) => {
 /** The runs a caught clock holds, read on the page: id, duration, easing, the properties they animate. */
 const runsOn = (page: Page) =>
   page.evaluate(() =>
-    document
-      .getAnimations()
+    window
+      .kitRuns()
       .filter((run) => run.id.startsWith("canvas-"))
       .map((run) => {
         const effect = run.effect as KeyframeEffect;

@@ -119,7 +119,7 @@ const probe = async (kit: Kit) => {
     const landed = await page.evaluate(() => ({
       opacity: getComputedStyle(document.querySelector(".card") as Element)
         .opacity,
-      running: document.getAnimations().length,
+      running: window.kitRuns().length,
     }));
     kit.check(
       "3: released, the card's run plays out to its end",

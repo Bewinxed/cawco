@@ -90,7 +90,7 @@ async function openBench(page: Page, base: string, theme: string) {
 /** Every endless run held at its start, so a capture never catches a pulse mid-way. */
 const holdLoops = (page: Page) =>
   page.evaluate(() => {
-    for (const run of document.getAnimations()) {
+    for (const run of window.kitRuns()) {
       if (run.effect?.getTiming().iterations === Number.POSITIVE_INFINITY) {
         run.pause();
         run.currentTime = 0;
