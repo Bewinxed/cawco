@@ -2001,10 +2001,10 @@ extension ComposerView {
     func undockCanvas() {
         guard let binding, let canvas = binding.canvas, canvas.docked, let host = binding.canvasHost, !canvasWorking else { return }
         // Where it is drawn now: over the panel's page, else the page's own box.
-        let room = canvasRoom
-        let from = room.flatMap { $0.docked ? $0.stage.convert($0.stage.bounds, to: nil) : nil } ?? host.panel(canvas.id)?.shown
+        let standing = canvasRoom
+        let from = standing.flatMap { $0.docked ? $0.stage.convert($0.stage.bounds, to: nil) : nil } ?? host.panel(canvas.id)?.shown
         // It stops following the panel, which is about to close under it.
-        room?.leaveDockHolding()
+        standing?.leaveDockHolding()
         canvasWorking = true
         setCanvasNote(nil)
         renderAction(animated: true)
@@ -2017,7 +2017,7 @@ extension ComposerView {
                 canvasWorking = false
                 renderAction(animated: true)
                 // Still docked: it stands over the panel again.
-                room?.standInPanel()
+                standing?.standInPanel()
                 return setCanvasNote("The canvas couldn't leave the panel: \(error.localizedDescription). It stays docked.")
             }
             guard let self, self.binding === binding, binding.canvas?.id == canvas.id else { return }
