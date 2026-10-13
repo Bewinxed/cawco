@@ -2,7 +2,7 @@
 # Builds the CawCo app on the Mac for an iPhone simulator, then for the Mac
 # (Mac Catalyst), and
 # proves each build starts and stays up for 8 s. A launch-time abort fails it.
-# Run from the repo root: bash apps/apple/scripts/build-both.sh [ios|macos] [--compile-only]
+# Run from anywhere in the repo: bash apps/apple/scripts/build-both.sh [ios|macos] [--compile-only]
 # With no argument it builds both and prints BUILT iOS, LAUNCHED iOS,
 # BUILT macOS, LAUNCHED macOS, BUILT iOS 18.5, LAUNCHED iOS 18.5.
 # `ios` proves both iOS runtimes; `macos` proves only macOS.
@@ -55,7 +55,10 @@ if [[ $ROOT == "$HOME/cockpit" ]]; then BUILD=main; fi
 [[ $BUILD =~ ^[a-zA-Z0-9._-]+$ ]] || { echo "invalid workspace name: $BUILD" >&2; exit 2; }
 REMOTE=build/cawco-apple/$BUILD/apps/apple
 
-[[ -f apps/apple/project.yml ]] || { echo "run from the repo root" >&2; exit 2; }
+# Every path below is the repo root's: a caller anywhere in the repo (a check
+# run from apps/apple) builds the same tree.
+cd "$ROOT"
+[[ -f apps/apple/project.yml ]] || { echo "no apps/apple/project.yml under $ROOT" >&2; exit 2; }
 PLATFORM=${1:-both}
 COMPILE_ONLY=${2:-}
 [[ -z $COMPILE_ONLY || $COMPILE_ONLY == --compile-only ]] || { echo "usage: build-both.sh [ios|macos|both] [--compile-only]" >&2; exit 2; }
