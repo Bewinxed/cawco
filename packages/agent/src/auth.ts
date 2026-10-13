@@ -64,6 +64,15 @@ export const claudeExecutableOptions = () =>
   standalone ? { pathToClaudeCodeExecutable: resolveClaudeExecutable() } : {};
 
 /**
+ * `errSecAuthFailed` (-25293), as `security` exits with it: the OSStatus's
+ * low byte, as errSecInteractionNotAllowed's -25308 exits 36
+ * (accounts.ts). Its message is "The user name or passphrase you entered is
+ * not correct." (SecBase.h), so the exit, not the words, says the password
+ * was wrong, in any system language.
+ */
+const SEC_AUTH_FAILED = 51;
+
+/**
  * Unlocks this machine's login keychain with the password the reader typed in
  * the dashboard; the caller then says what the machine can do afterwards.
  *
@@ -92,13 +101,15 @@ export const unlockKeychain = async (password: string): Promise<void> => {
     await Bun.$`security unlock-keychain -p ${password} ${keychain}`
       .quiet()
       .nothrow();
+  if (unlocked.exitCode === SEC_AUTH_FAILED) {
+    throw new Error("That password did not unlock the keychain.");
+  }
   if (unlocked.exitCode !== 0) {
-    // The tool's own words, minus anything that might echo the password back.
+    // The tool's own words: `security` prints the OSStatus's message and the
+    // keychain's path, never the password it was given.
     const said = unlocked.stderr.toString().trim();
     throw new Error(
-      said.includes("password")
-        ? "That password did not unlock the keychain."
-        : `The keychain refused to unlock: ${said || `exit ${unlocked.exitCode}`}`
+      `The keychain refused to unlock: ${said || `exit ${unlocked.exitCode}`}`
     );
   }
 };

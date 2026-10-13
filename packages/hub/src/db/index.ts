@@ -1573,6 +1573,12 @@ export interface DbShape {
   readonly sessionPlan: (instanceId: string) => SessionPlanRow | undefined;
   /** What a session has done that taints its memory notes; undefined for one that has done nothing the hub keeps. */
   readonly sessionTaint: (instanceId: string) => SessionTaintRow | undefined;
+  /**
+   * A machine's word on Claude, as a beat's Claude report says it (a keychain
+   * unlocked from the dashboard, a login gone under it). Answers whether the
+   * row moved.
+   */
+  readonly setAgentAuth: (machineId: string, auth: AgentAuth) => boolean;
   /** A machine's own account of what it came to, from the sync it just answered. */
   readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
   readonly setAgentToolCell: (machineId: string, status: ToolStatus) => void;
@@ -3445,6 +3451,13 @@ const make = async (path: string): Promise<DbShape> => {
         })
         .run();
     },
+    setAgentAuth: (machineId, auth) =>
+      db
+        .update(agents)
+        .set({ auth })
+        .where(and(eq(agents.machineId, machineId), ne(agents.auth, auth)))
+        .returning({ machineId: agents.machineId })
+        .all().length > 0,
     touchAgent: (machineId) => {
       db.update(agents)
         .set({ status: "online", lastSeenAt: new Date() })

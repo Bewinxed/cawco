@@ -65,7 +65,8 @@ import { announcingParts, clientLine } from "@cawco/core/wire";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
 import { accountStoreIds, forgetUnknownAccounts } from "./account-sweep";
-import { accountReports, claudeAuthNote } from "./accounts";
+import { accountReports, claudeAuth, claudeAuthNote } from "./accounts";
+import { unlockKeychain } from "./auth";
 import {
   BinaryUpdater,
   latestBinaryUpdate,
@@ -1376,10 +1377,11 @@ const attach = (
     );
 
     /**
-     * Claude's report with its sign-ins read again, when they moved since the
-     * last one this connection sent; the whole report read again when the
-     * announce could not read it, so its sign-ins still reach the hub.
-     * Nothing when there is nothing new to send.
+     * Claude's report with its sign-ins and the machine's word on Claude read
+     * again, when either moved since the last one this connection sent (a
+     * login gone, a keychain locked or unlocked under the agent); the whole
+     * report read again when the announce could not read it, so its sign-ins
+     * still reach the hub. Nothing when there is nothing new to send.
      */
     const rereadClaude = async (): Promise<HarnessReport | undefined> => {
       const old = reportedHarnesses.find(
@@ -1393,10 +1395,45 @@ const attach = (
         "the claude harness's sign-ins",
         accountReports
       );
-      return accounts && !Bun.deepEquals(accounts, old.accounts ?? [])
-        ? { ...old, accounts }
-        : undefined;
+      if (!accounts) {
+        return;
+      }
+      const auth = await claudeAuth(accounts);
+      return Bun.deepEquals(accounts, old.accounts ?? []) && auth === old.auth
+        ? undefined
+        : { ...old, accounts, auth };
     };
+
+    /**
+     * The machine's login keychain unlocked with the password the reader
+     * typed in the dashboard (auth.ts `unlockKeychain`), then Claude's report
+     * read again and sent at once: the hub's row moves on this answer (the
+     * machine's menu stops offering Unlock), not at the agent's next connect.
+     * Answers the machine's word on Claude, which the dashboard's step says.
+     */
+    supervisor.registerDaemonFunction("unlockKeychain", async (password) => {
+      await unlockKeychain(password as string);
+      const claude = harness("claude");
+      if (!claude) {
+        throw new Error(
+          "The keychain unlocked, but this machine has no Claude harness to read its logins."
+        );
+      }
+      const report = await claude.detect();
+      keepReport(report);
+      if (socket.readyState === WebSocket.OPEN) {
+        send(socket, {
+          verb: "heartbeat",
+          machineId: identity.machineId,
+          payload: {
+            at: Date.now(),
+            instances: supervisor.instanceIds,
+            harnesses: [report],
+          } satisfies HeartbeatPayload,
+        });
+      }
+      return report.auth;
+    });
 
     // Who each account dir is signed in as, read again on a cadence
     // (`claude auth status`, which reads and refreshes nothing): an account

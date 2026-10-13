@@ -113,11 +113,7 @@ import {
   probeAccount,
   projectMemoryRoot,
 } from "../accounts";
-import {
-  claudeExecutableOptions,
-  resolveClaudeExecutable,
-  unlockKeychain,
-} from "../auth";
+import { claudeExecutableOptions, resolveClaudeExecutable } from "../auth";
 import {
   claudeBoundaryOptions,
   hookFailsOpen,
@@ -3468,11 +3464,6 @@ export class ClaudeHarness implements Harness {
             args[2] as AccountIdentity
           )
         );
-      case "unlockKeychain": {
-        await unlockKeychain(args[0] as string);
-        this.auth = await claudeAuth(await accountReports());
-        return this.auth;
-      }
       default:
         return undefined;
     }
