@@ -162,6 +162,8 @@ export interface ArtifactRead {
   changedUnderYou?: string[];
   /** Elements an update deleted, and the ids it named that the canvas does not hold. */
   deleted?: string[];
+  /** A canvas the person opened in the composer and has not sent yet. */
+  draft?: boolean;
   id: string;
   kind: ArtifactKind;
   missing?: string[];
@@ -683,6 +685,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       outline: canvasOutline(entries.map((entry) => entry.el)),
       changed: personChangedAfter(row, since ?? row.deliveredSeq, present),
       pictureAt: (meta.get("pictureAt") as string | null | undefined) ?? null,
+      draft: meta.get("draft") === true,
       ...(png ? { png: pictureOf(row.id) } : {}),
     };
   };

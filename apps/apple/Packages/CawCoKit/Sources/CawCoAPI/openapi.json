@@ -26176,6 +26176,10 @@
               "type": "string"
             }
           },
+          "draft": {
+            "description": "A canvas the person opened in the composer and has not sent yet.",
+            "type": "boolean"
+          },
           "id": {
             "type": "string"
           },

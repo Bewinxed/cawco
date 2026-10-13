@@ -729,20 +729,31 @@ export class CanvasRoom {
       this.remove();
     }
     this.#stop();
-    const canvas: DraftCanvas = {
+    // It leaves the panel before the message takes it, standing where it is
+    // drawn: a canvas the message holds while the panel still stands it is
+    // one the panel took (the composer's `yielded`).
+    stage.pinned = from;
+    stage.at = null;
+    this.draft.canvas = {
       id: ask.id,
       name: ask.name,
       folded: ask.folded,
       thumb: null,
     };
-    this.draft.canvas = canvas;
+    // The draft keeps its own (reactive) copy: that is the one compared below.
+    const { canvas } = this.draft;
+    if (!canvas) {
+      return;
+    }
     this.#hold(canvas);
-    stage.pinned = from;
     try {
       await closePreview(session);
     } catch (error) {
       stage.pinned = null;
-      this.error = `The canvas couldn't leave the panel: ${errorOf(error)}.`;
+      this.draft.canvas = null;
+      this.#letGoStage();
+      stage.standAt("panel");
+      this.error = `The canvas couldn't leave the panel: ${errorOf(error)}. It stays docked.`;
       return;
     }
     if (canvas.folded) {

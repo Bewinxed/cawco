@@ -609,18 +609,24 @@
   $effect(() => {
     const canvas = isCanvas ? artifact : undefined;
     const slot = canvasSlot;
+    const session = instanceId;
     if (!(canvas && slot)) {
       return;
     }
-    const held = holdStage(holder, instanceId, canvas.id, canvas.name);
-    stage = held;
-    held.slots.panel = slot;
-    held.actions.panel = {
-      undock: () => giveBack(false),
-      done: () => giveBack(true),
-    };
-    held.standAt("panel");
-    held.changed();
+    // Held, placed and stood here once per canvas and slot: what this reads
+    // of the stages is what it writes, so none of it is a dependency.
+    const held = untrack(() => {
+      const one = holdStage(holder, session, canvas.id, canvas.name);
+      stage = one;
+      one.slots.panel = slot;
+      one.actions.panel = {
+        undock: () => giveBack(false),
+        done: () => giveBack(true),
+      };
+      one.standAt("panel");
+      one.changed();
+      return one;
+    });
     return () => {
       if (held.slots.panel === slot) {
         held.slots.panel = undefined;

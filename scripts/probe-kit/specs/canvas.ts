@@ -33,6 +33,8 @@ const COMMAND = /PROBE-CALL:(\d+)/g;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 const NO_SCREEN =
   "No screen is showing this canvas. Open it on a dashboard (artifact_show), then try again.";
+/** The panel's canvas: its one iframe, on the stage over the panel's well (dashboard canvas/). */
+const PANEL_CANVAS = ".canvas-stage.docked iframe";
 /** A path of Solar's pen-new-square, the canvas's glyph in the menu. */
 const CANVAS_GLYPH = "M1 12C1 6.81455";
 
@@ -109,15 +111,12 @@ const canvasFrame = async (on: Page): Promise<Frame> => {
   await until(
     "the panel's canvas",
     () =>
-      on
-        .frameLocator('iframe[title="Preview"]')
-        .locator(".canvas-host .excalidraw")
-        .count(),
+      on.frameLocator(PANEL_CANVAS).locator(".canvas-host .excalidraw").count(),
     (count) => count === 1,
     60_000
   );
   const frame = await (
-    await on.locator('iframe[title="Preview"]').elementHandle()
+    await on.locator(PANEL_CANVAS).elementHandle()
   )?.contentFrame();
   if (!frame) {
     throw new Error("the panel's frame has no document");
@@ -404,7 +403,7 @@ const penChecks = async (
   await frame.click('.rail-item:has-text("Zoom to fit")');
   await frame.click('.rail-box[aria-label^="Pen"]');
   await settle(page, 400);
-  const well = await page.locator('iframe[title="Preview"]').boundingBox();
+  const well = await page.locator(PANEL_CANVAS).boundingBox();
   if (!well) {
     throw new Error("the panel's frame has no box");
   }
