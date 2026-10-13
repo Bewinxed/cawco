@@ -20,6 +20,7 @@
  * send and a card's thumbnail carry.
  */
 import {
+  changedAnchor,
   type PageAnchor,
   type Pin,
   type PinnedElement,
@@ -161,7 +162,12 @@ export function startPins(deps: PinsDeps): Pins {
     };
   };
 
-  /** The anchors found by their source or text now, written back so the next look finds them by selector. */
+  /**
+   * The anchors whose element is found under another selector or text now
+   * (a revision moved or reworded it), written back so the next look finds
+   * it by its selector. One that still reads as it was is left alone: a
+   * write here draws the pins again.
+   */
   const reanchor = (pins: Pin[]) => {
     const moves: Pin[] = [];
     for (const pin of pins) {
@@ -169,8 +175,9 @@ export function startPins(deps: PinsDeps): Pins {
         continue;
       }
       const found = deps.locate(pin.anchor);
-      if (found && found.by !== "selector") {
-        moves.push({ ...pin, anchor: deps.anchorOf(found.el) });
+      const now = found && deps.anchorOf(found.el);
+      if (now && changedAnchor(pin.anchor, now)) {
+        moves.push({ ...pin, anchor: now });
       }
     }
     return moves;

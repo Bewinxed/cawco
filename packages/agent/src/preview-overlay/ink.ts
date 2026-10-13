@@ -28,6 +28,7 @@
  * (`cawco:stroke-end`) and the icon and its picks run on that element.
  */
 import {
+  changedAnchor,
   type PageAnchor,
   type Pin,
   type PinnedElement,
@@ -587,8 +588,9 @@ export function startInk(deps: InkDeps): Ink {
         gone.push(group);
         continue;
       }
-      if (at.by !== "selector") {
-        found.push({ ...group, anchor: deps.anchorOf(el) });
+      const reread = rereadOn(group, el);
+      if (reread) {
+        found.push(reread);
       }
       drawGroup(group, el, brand);
     }
@@ -596,6 +598,18 @@ export function startInk(deps: InkDeps): Ink {
       settleGroups(found, gone);
     }
     deps.pins().draw();
+  }
+
+  /**
+   * The group anchored again on `el` when `el` now reads otherwise than its
+   * anchor (moved, renamed, reworded); null when it reads as it was, since
+   * a write draws the ink again.
+   */
+  function rereadOn(group: InkGroup, el: Element): InkGroup | null {
+    const now = deps.anchorOf(el);
+    return "selector" in group.anchor && changedAnchor(group.anchor, now)
+      ? { ...group, anchor: now }
+      : null;
   }
 
   /** One group's strokes over `el`, where `el` stands now. */

@@ -14,6 +14,7 @@
   import { IconClose, IconReopen, IconSuccess } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import MessageBody from "../transcript/MessageBody.svelte";
+  import PinDisc from "./PinDisc.svelte";
   import { pinName } from "./pin-name";
 
   let {
@@ -106,9 +107,7 @@
   bind:offsetWidth={width}
 >
   <header class="head">
-    <span aria-hidden="true" class="disc" class:resolved={!!pin.resolvedAt}
-      >{pin.number}</span
-    >
+    <PinDisc number={pin.number} resolved={!!pin.resolvedAt} />
     <span class="anchor">
       <span class="name">{pinName(pin)}</span>
       {#if source}
@@ -122,15 +121,14 @@
         role="img"
       ></span>
     {/if}
-    <button
+    <Button
       aria-label="Close"
-      class="close"
+      icon={IconClose}
       onclick={onclose}
+      size="icon-sm"
       title="Close"
-      type="button"
-    >
-      <IconClose />
-    </button>
+      variant="ghost"
+    />
   </header>
   {#if thumb}
     <button
@@ -260,21 +258,6 @@
     align-items: center;
     gap: var(--space-2);
   }
-  .disc {
-    display: inline-grid;
-    place-items: center;
-    flex-shrink: 0;
-    width: var(--c-pin);
-    height: var(--c-pin);
-    border-radius: var(--radius-pill);
-    background: var(--action-solid);
-    color: var(--on-action);
-    font: var(--type-label);
-    font-variant-numeric: tabular-nums;
-  }
-  .disc.resolved {
-    opacity: 0.4;
-  }
   .anchor {
     display: flex;
     flex: 1;
@@ -310,28 +293,6 @@
   @keyframes pin-card-live {
     50% {
       opacity: 0.4;
-    }
-  }
-  .close {
-    display: inline-grid;
-    place-items: center;
-    flex-shrink: 0;
-    width: 28px;
-    height: 28px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--ink-muted);
-    cursor: pointer;
-
-    & :global(svg) {
-      width: 16px;
-      height: 16px;
-    }
-  }
-  @media (hover: hover) {
-    .close:hover {
-      background: var(--surface-hover);
     }
   }
   .thumb {

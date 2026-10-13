@@ -16,6 +16,7 @@
     TabsList,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { IconMapPoint } from "#lib/icons.js";
+  import PinDisc from "./PinDisc.svelte";
   import { pinName } from "./pin-name";
 
   let {
@@ -72,9 +73,7 @@
       onclick={() => onopen(pin.id)}
       type="button"
     >
-      <span aria-hidden="true" class="disc" class:resolved={!!pin.resolvedAt}
-        >{pin.number}</span
-      >
+      <PinDisc number={pin.number} resolved={!!pin.resolvedAt} />
       <span class="words">
         <span class="name">{pinName(pin)}</span>
         <span class="last">{lastLine(pin)}</span>
@@ -119,7 +118,7 @@
         <ul class="rows">
           {#each moved as pin (pin.id)}
             <li class="moved-row" data-moved-row={pin.number}>
-              <span aria-hidden="true" class="disc">{pin.number}</span>
+              <PinDisc moved number={pin.number} />
               <span class="words">
                 <span class="name">{pinName(pin)}</span>
                 <span class="last">Its element is gone from the page</span>
@@ -189,26 +188,6 @@
   .pin-row:focus-visible {
     outline: var(--focus-ring-width) solid var(--focus-ring);
     outline-offset: var(--focus-ring-inset);
-  }
-  /* tsk-3's pin, as the page draws it: a 20px coral disc, its number in on-action. */
-  .disc {
-    display: inline-grid;
-    place-items: center;
-    flex-shrink: 0;
-    width: var(--c-pin);
-    height: var(--c-pin);
-    border-radius: var(--radius-pill);
-    background: var(--action-solid);
-    color: var(--on-action);
-    font: var(--type-label);
-    font-variant-numeric: tabular-nums;
-  }
-  .disc.resolved {
-    opacity: 0.4;
-  }
-  .moved-row .disc {
-    background: var(--surface-fill);
-    color: var(--ink-muted);
   }
   .words {
     display: flex;

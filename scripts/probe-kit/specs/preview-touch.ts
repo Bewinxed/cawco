@@ -1,7 +1,7 @@
 /**
  * The preview pane on a phone, by touch (DESIGN.md Dialog, sheet and drawer;
  * Projects spec §5.10): a page in the pane is operable by a finger as in a
- * tab of its own, selecting an element is an explicit mode, the head's
+ * tab of its own, pinning a comment is an explicit mode, the head's
  * controls and the drawer's grabber answer taps, a grabber drag moves the
  * drawer, and a tap or scroll in the page never moves, closes or blocks
  * it. On a scratch fleet (real hub, agent and sessiond; Claude Code against
@@ -9,12 +9,12 @@
  * 390×844 (touch, mobile, 3×), real touches (`page.touchscreen.tap`, CDP
  * `Input.dispatchTouchEvent` for drags). Read from the DOM and the hub.
  *
- * 1. Select off: a tap on the page's counter adds one; its anchor scrolls
+ * 1. Comment off: a tap on the page's counter adds one; its anchor scrolls
  *    the page; a button in its fixed bar adds one.
- * 2. The head: the name menu opens, Reload loads the page again, Select
+ * 2. The head: the name menu opens, Reload loads the page again, Comment
  *    turns pressed, Close puts the drawer away.
- * 3. Select on: a tap on the counter adds nothing and the composer takes
- *    the pick; Select off, it adds one again.
+ * 3. Comment on: a tap on the counter adds nothing and opens the new pin's
+ *    card at the well's foot; Comment off, it adds one again.
  * 4. A grabber drag moves the drawer between its heights; a drag inside the
  *    page scrolls the page and leaves the drawer where it is.
  * 5. After a drawer drag and a viewport resize, (1) still holds.
@@ -285,7 +285,7 @@ const probe = async (kit: Kit) => {
     JSON.stringify(opened)
   );
 
-  // 1. Select off: the page is the finger's.
+  // 1. Comment off: the page is the finger's.
   await operable(on, "1");
 
   // 6. A tap in the page at the lower height leaves the drawer open, there.
@@ -349,7 +349,7 @@ const probe = async (kit: Kit) => {
 };
 
 /**
- * The iPhone's engine (WebKit, touch, 3×): taps in the page, Select, and
+ * The iPhone's engine (WebKit, touch, 3×): taps in the page, Comment, and
  * the head. Its own page on the session, the drawer standing as the
  * Chromium half left it.
  */
@@ -374,54 +374,55 @@ const iPhoneEngine = async (kit: Kit, url: string) => {
     `top ${lowTop} → ${await sheetTop(page)}`
   );
 
-  // 3. Select on: the overlay takes the tap; the composer takes the pick.
-  const select = page.locator(`${SHEET} button[title="Select"]`);
-  await page.touchscreen.tap(
-    ...((b) => [b.x + b.width / 2, b.y + b.height / 2] as const)(
-      (await select.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 }
-    )
-  );
+  // 3. Comment on: the overlay takes the tap; it pins a comment and opens its card.
+  const comment = page.locator(`${SHEET} button[aria-keyshortcuts="C"]`);
+  const tapBox = async (
+    box: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    } | null
+  ) => {
+    const b = box ?? { x: 0, y: 0, width: 0, height: 0 };
+    await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height / 2);
+  };
+  await tapBox(await comment.boundingBox());
   await page.waitForTimeout(300);
-  const pressed = await select.getAttribute("aria-pressed");
-  const picking = await pageFrame(page);
-  await picking.evaluate(() => window.scrollTo(0, 0));
-  const held = Number(await textIn(picking, "#count"));
-  await tapIn(on, picking, "#count");
-  const picked = await until(
-    "the pick on the composer",
-    () => page.locator(".selection-chip").count(),
+  const pressed = await comment.getAttribute("aria-pressed");
+  const pinning = await pageFrame(page);
+  await pinning.evaluate(() => window.scrollTo(0, 0));
+  const held = Number(await textIn(pinning, "#count"));
+  await tapIn(on, pinning, "#count");
+  const card = await until(
+    "the new pin's card",
+    () => page.locator(".pin-card.sheet").count(),
     (count) => count > 0,
     5000
   ).catch(() => 0);
-  const unchanged = Number(await textIn(picking, "#count")) === held;
+  const unchanged = Number(await textIn(pinning, "#count")) === held;
   kit.check(
-    "2: Select answers a tap and turns pressed",
+    "2: Comment answers a tap and turns pressed",
     pressed === "true",
     `aria-pressed ${pressed}`
   );
   kit.check(
-    "3: with Select on, a tap on the counter adds nothing and the composer takes the pick",
-    unchanged && picked > 0,
-    `counter unchanged ${unchanged}; chips ${picked}`
+    "3: with Comment on, a tap on the counter adds nothing and opens the new pin's card at the well's foot",
+    unchanged && card > 0,
+    `counter unchanged ${unchanged}; cards ${card}`
   );
-  const selectBox = (await select.boundingBox()) ?? {
-    x: 0,
-    y: 0,
-    width: 0,
-    height: 0,
-  };
-  await page.touchscreen.tap(
-    selectBox.x + selectBox.width / 2,
-    selectBox.y + selectBox.height / 2
+  await tapBox(
+    await page.locator('.pin-card button[aria-label="Close"]').boundingBox()
   );
+  await tapBox(await comment.boundingBox());
   await page.waitForTimeout(300);
-  const off = Number(await textIn(picking, "#count"));
-  await tapIn(on, picking, "#count");
+  const off = Number(await textIn(pinning, "#count"));
+  await tapIn(on, pinning, "#count");
   kit.check(
-    "3: Select off again, a tap on the counter adds one",
-    Number(await textIn(picking, "#count")) === off + 1 &&
-      (await select.getAttribute("aria-pressed")) === "false",
-    `aria-pressed ${await select.getAttribute("aria-pressed")}`
+    "3: Comment off again, a tap on the counter adds one",
+    Number(await textIn(pinning, "#count")) === off + 1 &&
+      (await comment.getAttribute("aria-pressed")) === "false",
+    `aria-pressed ${await comment.getAttribute("aria-pressed")}`
   );
 
   // 2. The head: the name menu, Reload, Close.

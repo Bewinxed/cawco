@@ -281,6 +281,16 @@ const standsOn = (pin: Pin, url: string): string[] => {
   ];
 };
 
+/**
+ * Whether the element an anchor finds now reads otherwise than the anchor
+ * says (another selector, source or text): the anchor is written again. Its
+ * box moving is no change, so placing a mark never writes it by itself.
+ */
+export const changedAnchor = (was: PageAnchor, now: PageAnchor): boolean =>
+  was.selector !== now.selector ||
+  (was.text ?? "") !== (now.text ?? "") ||
+  JSON.stringify(was.source) !== JSON.stringify(now.source);
+
 /** One pin's section of a send: what it stands on, where, and what the session has not heard of its thread. */
 export function pinSection(
   pin: Pin,

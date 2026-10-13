@@ -104,7 +104,7 @@ const respond = (request: Seen): Reply => {
     : text(`${ask.name} is not offered`);
 };
 
-interface On {
+export interface On {
   call: (tool: string, input: object) => Promise<string>;
   cdp: CDPSession;
   fleet: KitFleet;
@@ -120,7 +120,7 @@ interface Pt {
 }
 
 /** The browser's own pen: down at `from`, through `steps` moves, up at `to`; `force` from `p0` to `p1`. */
-const penStroke = async (
+export const penStroke = async (
   cdp: CDPSession,
   from: Pt,
   to: Pt,
@@ -157,7 +157,7 @@ const penStroke = async (
 };
 
 /** The pane's page and where an element of it stands on the screen. */
-const pageFrame = async (on: On): Promise<Frame> => {
+export const pageFrame = async (on: On): Promise<Frame> => {
   const frame = await until(
     "the page in the pane",
     async () =>
@@ -168,7 +168,7 @@ const pageFrame = async (on: On): Promise<Frame> => {
   );
   return frame as Frame;
 };
-const screenBox = async (on: On, frame: Frame, selector: string) => {
+export const screenBox = async (on: On, frame: Frame, selector: string) => {
   const outer = await on.page.locator(FRAME).boundingBox();
   const inner = await frame.locator(selector).evaluate((el) => {
     const r = el.getBoundingClientRect();
@@ -181,7 +181,7 @@ const screenBox = async (on: On, frame: Frame, selector: string) => {
 };
 
 /** A stroke across the middle line of `selector`, from a fifth of its width to four fifths. */
-const strokeOver = async (
+export const strokeOver = async (
   on: On,
   frame: Frame,
   selector: string,
@@ -195,7 +195,7 @@ const strokeOver = async (
 };
 
 /** The page's doc's maps as JSON. */
-const docOf = (frame: Frame) =>
+export const docOf = (frame: Frame) =>
   frame.evaluate(() => {
     const { doc } = (
       window as unknown as {
@@ -277,7 +277,7 @@ const iconPoint = async (on: On, frame: Frame, inFrame = FRAME) => {
 };
 
 /** A mouse press on the icon dragged to `angle` degrees (0 right, clockwise) `r` px out, released there. */
-const dragFromIcon = async (
+export const dragFromIcon = async (
   on: On,
   frame: Frame,
   angle: number,
@@ -580,10 +580,13 @@ const menuChecks = async (on: On, frame: Frame) => {
   await strokeOver(on, frame, "#para");
   await on.page.waitForTimeout(350);
   await dragFromIcon(on, frame, -90, 40);
-  // Comment on the second paragraph's group.
+  // Comment on the second paragraph's group: it opens the pin's card, which Esc puts away.
   await strokeOver(on, frame, "#second");
   await on.page.waitForTimeout(350);
   await dragFromIcon(on, frame, 0, 40);
+  await on.page.locator(".pin-card").waitFor({ timeout: 5000 });
+  await on.page.keyboard.press("Escape");
+  await settle(on.page, 300);
   // Erase the third.
   await strokeOver(on, frame, "#third");
   await on.page.waitForTimeout(350);
