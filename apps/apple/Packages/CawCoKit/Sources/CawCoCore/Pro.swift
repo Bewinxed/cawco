@@ -114,8 +114,10 @@ public final class Pro {
     @ObservationIgnored private var proof: String?
 
     /// Whether this install came from TestFlight: `AppTransaction` verified,
-    /// with the sandbox environment. Nil until it answered on this launch;
-    /// unverified, `.xcode`, `.production` or a throw are all false.
+    /// with the sandbox environment (TestFlight signs in the sandbox; the App
+    /// Store in production). Nil until a read came back verified on this
+    /// launch: a throw or an unverified answer leaves it undecided, and it is
+    /// read again (`readInstall`).
     public private(set) var testFlight: Bool?
 
     /// A Debug build started outside Xcode's StoreKit testing: the owner's
@@ -126,8 +128,8 @@ public final class Pro {
     /// nothing it can do unlocks it (owner: "the app is locked behind a trial
     /// thing"). Release builds (TestFlight, the App Store) never set this; a
     /// Debug run under Xcode's StoreKit configuration (`.xcode`) and a
-    /// paywall probe (`-paywall-access`, `-paywall-catalog`, `-paywall-env`)
-    /// keep the gate, so it is still exercised.
+    /// paywall probe (`-paywall-access`, `-paywall-catalog`, `-paywall-env`,
+    /// `-paywall-install`) keep the gate, so it is still exercised.
     public private(set) var developmentBuild = false
 
     /// The paywall isn't enforced: a TestFlight install (owner: "tesflight just
@@ -136,6 +138,13 @@ public final class Pro {
     /// whatever the catalogue holds; the sheet still opens on request, and
     /// buys as usual. App Store builds never get here.
     public var boardOpen: Bool { testFlight == true || developmentBuild }
+
+    /// The paywall is enforced: the install was decided as not TestFlight and
+    /// this isn't a development build. Undecided isn't enforced: the gate
+    /// never locks on an install StoreKit hasn't answered for (owner: "the
+    /// testflight still says "this app is locked""), however slowly or badly
+    /// StoreKit answers on this launch.
+    public var enforced: Bool { testFlight == false && !developmentBuild }
 
     /// Pro is on here, notifications included: an entitlement holds, or the board stands open.
     public var proOn: Bool { access?.entitled == true || boardOpen }
@@ -153,8 +162,17 @@ public final class Pro {
     @ObservationIgnored private var products: [ProProduct: Product] = [:]
     @ObservationIgnored private var updates: Task<Void, Never>?
     @ObservationIgnored private var trialClock: Task<Void, Never>?
+    /// The install's reads under way (a read and the waits after it); nil
+    /// between them, until the next foreground.
+    @ObservationIgnored private var installRead: Task<Void, Never>?
+    /// Reads of the install on this launch.
+    @ObservationIgnored private var installReads = 0
+    @ObservationIgnored private var foreground: NSObjectProtocol?
     private let log = Logger(subsystem: "dev.cawco.app", category: "Pro")
     private static let pendingKey = "paywall-pending"
+    /// The waits before the launch's second, third and fourth reads of the
+    /// install; past them, one read on each foreground until it's decided.
+    private static let installWaits: [Duration] = [.seconds(2), .seconds(5), .seconds(15)]
 
     /// The verified AppTransaction: its environment and its JWS.
     private struct Install: Sendable {
@@ -163,35 +181,103 @@ public final class Pro {
         let jws: String?
     }
 
-    /// The environment that signed this install, read once per launch:
-    /// nil unless `AppTransaction` is verified. A DEBUG build takes
-    /// `-paywall-env sandbox` to stand in for TestFlight.
-    private static let install = Task<Install?, Never> {
-        let log = Logger(subsystem: "dev.cawco.app", category: "Pro")
-        #if DEBUG
-        if UserDefaults.standard.string(forKey: "paywall-env") == "sandbox" {
-            log.notice("install: sandbox, forced by -paywall-env")
-            return Install(environment: .sandbox, jws: nil)
+    #if DEBUG
+    /// A paywall probe switch is on: the gate is exercised, not opened as a development build.
+    private static var probing: Bool {
+        ["paywall-access", "paywall-catalog", "paywall-env", "paywall-install"].contains { UserDefaults.standard.object(forKey: $0) != nil }
+    }
+    #endif
+
+    private init() {
+        pending = UserDefaults.standard.string(forKey: Self.pendingKey).flatMap(ProProduct.init(rawValue:))
+    }
+
+    /// Reads the install until it's decided: now, then after each of
+    /// `installWaits` while StoreKit throws or answers unverified; with
+    /// `waits` empty, this one read alone (a foreground's). Never
+    /// `AppTransaction.refresh()`: it puts an App Store sign-in in front of
+    /// the person, which Apple keeps for an explicit tap.
+    private func readInstall(waits: [Duration]) {
+        guard testFlight == nil, installRead == nil else { return }
+        installRead = Task {
+            var waits = waits[...]
+            while true {
+                installReads += 1
+                let install = await readInstallOnce(installReads)
+                #if DEBUG
+                // A throw or an unverified answer isn't Xcode's StoreKit
+                // testing either, so the first read settles a development build.
+                if installReads == 1 {
+                    let opened = boardOpen
+                    developmentBuild = install?.environment != .xcode && !Self.probing
+                    if !opened, boardOpen { announceOpen() }
+                }
+                #endif
+                if let install {
+                    decide(install)
+                    break
+                }
+                guard let wait = waits.popFirst() else {
+                    log.notice("install: undecided after \(self.installReads) reads; read again on the next foreground")
+                    break
+                }
+                try? await Task.sleep(for: wait)
+            }
+            installRead = nil
         }
-        #endif
+    }
+
+    /// One read of `AppTransaction`: the install when it's verified, nil
+    /// when StoreKit threw or the answer isn't verified. A DEBUG build takes
+    /// `-paywall-env sandbox|production` to stand in for TestFlight or the App
+    /// Store, and `-paywall-install fail` (every read) or `-paywall-install <n>`
+    /// (the first n reads) to make the read throw.
+    private func readInstallOnce(_ attempt: Int) async -> Install? {
         do {
+            #if DEBUG
+            if let failing = UserDefaults.standard.string(forKey: "paywall-install"),
+               failing == "fail" || Int(failing).map({ attempt <= $0 }) == true {
+                throw StoreKitError.unknown
+            }
+            switch UserDefaults.standard.string(forKey: "paywall-env") {
+            case "sandbox":
+                log.notice("install read \(attempt): sandbox, forced by -paywall-env")
+                return Install(environment: .sandbox, jws: nil)
+            case "production":
+                log.notice("install read \(attempt): production, forced by -paywall-env")
+                return Install(environment: .production, jws: nil)
+            default: break
+            }
+            #endif
             let result = try await AppTransaction.shared
             switch result {
             case let .verified(transaction):
-                log.notice("install: \(transaction.environment.rawValue, privacy: .public)")
+                log.notice("install read \(attempt): \(transaction.environment.rawValue, privacy: .public)")
                 return Install(environment: transaction.environment, jws: result.jwsRepresentation)
             case let .unverified(_, error):
-                log.error("install: AppTransaction unverified: \(String(describing: error), privacy: .public)")
+                log.error("install read \(attempt): AppTransaction unverified: \(String(describing: error), privacy: .public)")
                 return nil
             }
         } catch {
-            log.error("install: AppTransaction failed: \(String(describing: error), privacy: .public)")
+            log.error("install read \(attempt): AppTransaction failed: \(String(describing: error), privacy: .public)")
             return nil
         }
     }
 
-    private init() {
-        pending = UserDefaults.standard.string(forKey: Self.pendingKey).flatMap(ProProduct.init(rawValue:))
+    /// StoreKit answered verified: TestFlight (sandbox) or not, for the rest of the launch.
+    private func decide(_ install: Install) {
+        let opened = boardOpen
+        appTransaction = install.jws
+        testFlight = install.environment == .sandbox
+        log.notice("install: decided, TestFlight \(install.environment == .sandbox), enforced \(self.enforced)")
+        if !opened, boardOpen { announceOpen() }
+    }
+
+    /// The board just stood open: a device with its token enrols now, on the
+    /// purchase or the AppTransaction.
+    private func announceOpen() {
+        log.notice("\(self.developmentBuild ? "development build" : "TestFlight", privacy: .public): the paywall isn't enforced")
+        PushRegistry.shared.entitlementChanged()
     }
 
     /// At launch: the listener first, so nothing that arrives meanwhile is
@@ -210,18 +296,9 @@ public final class Pro {
             await refresh()
         }
         Task { await loadProducts() }
-        Task {
-            let install = await Self.install.value
-            appTransaction = install?.jws
-            testFlight = install?.environment == .sandbox
-            #if DEBUG
-            let probing = ["paywall-access", "paywall-catalog", "paywall-env"].contains { UserDefaults.standard.object(forKey: $0) != nil }
-            developmentBuild = install?.environment != .xcode && !probing
-            #endif
-            guard boardOpen else { return }
-            log.notice("\(self.developmentBuild ? "development build" : "TestFlight", privacy: .public): the paywall isn't enforced")
-            // A device with its token enrols now, on the purchase or the AppTransaction.
-            PushRegistry.shared.entitlementChanged()
+        readInstall(waits: Self.installWaits)
+        foreground = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.readInstall(waits: []) }
         }
     }
 

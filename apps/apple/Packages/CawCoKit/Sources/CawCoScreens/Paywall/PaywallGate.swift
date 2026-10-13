@@ -83,14 +83,17 @@ final class PaywallGate {
     /// once the hub's fleet was read.
     func update(onBoard: Bool, read: Bool) {
         let pro = Pro.shared
-        let state = "board \(onBoard) read \(read) access \(pro.access.map { String(describing: $0) } ?? "unread") shown \(UserDefaults.standard.bool(forKey: Self.shownKey)) open \(pro.boardOpen) locked \(locked)"
+        let install = pro.testFlight.map { $0 ? "testflight" : "store" } ?? "undecided"
+        let state = "board \(onBoard) read \(read) access \(pro.access.map { String(describing: $0) } ?? "unread") shown \(UserDefaults.standard.bool(forKey: Self.shownKey)) install \(install) open \(pro.boardOpen) enforced \(pro.enforced) locked \(locked)"
         if state != seen {
             seen = state
             log.notice("gate: \(state, privacy: .public)")
         }
-        // `Pro.boardOpen` (TestFlight, the paywall isn't enforced): the board
-        // stays open and nothing below shows; the sheet opens only on request.
-        guard onBoard, let access = pro.access, !pro.boardOpen else {
+        // Only `Pro.enforced` (the install decided as not TestFlight, not a
+        // development build) gates. TestFlight, a development build, or an
+        // install StoreKit hasn't answered for yet: the board stays open and
+        // nothing below shows; the sheet opens only on request.
+        guard onBoard, let access = pro.access, pro.enforced else {
             lock(false)
             bar.isHidden = true
             card.isHidden = true
