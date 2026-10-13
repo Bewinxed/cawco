@@ -3,6 +3,10 @@
  * The probe kit: every web UI proof, read from the engine, not the picture.
  *
  *   bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>]
+ *   bun scripts/probe-kit/run.ts <spec>
+ *
+ * The second form runs one spec of its own in `specs/<spec>.ts`, beside the
+ * web specs: a feature's probe (`artifacts`), on the same kit.
  *
  * Serves the dashboard as each spec needs it, once per run: the dev server
  * for the `/motion/` benches, the built dashboard (`vite preview`, built
@@ -20,24 +24,32 @@
  * what drawing alone decides. Runtime cadence (long tasks, painted frames)
  * is frames.ts.
  */
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { Run, type Spec } from "./kit";
 
 const args = process.argv.slice(2);
 const [kind, ...rest] = args;
-if (kind !== "web") {
+const own = kind ? join(import.meta.dir, "specs", `${kind}.ts`) : undefined;
+if (kind !== "web" && !(own && existsSync(own))) {
   console.error(
-    "usage: bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>]"
+    "usage: bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>]\n       bun scripts/probe-kit/run.ts <spec>  (a spec in specs/)"
   );
   process.exit(2);
 }
 const approveAt = rest.indexOf("--approve");
 const approve = approveAt === -1 ? null : (rest[approveAt + 1] ?? null);
-const named = rest.filter(
-  (one, i) => one !== "--approve" && (approveAt === -1 || i !== approveAt + 1)
-);
-const dir = join(import.meta.dir, "specs", "web");
+const named =
+  kind === "web"
+    ? rest.filter(
+        (one, i) =>
+          one !== "--approve" && (approveAt === -1 || i !== approveAt + 1)
+      )
+    : [kind];
+const dir =
+  kind === "web"
+    ? join(import.meta.dir, "specs", "web")
+    : join(import.meta.dir, "specs");
 const all = readdirSync(dir)
   .filter((file) => file.endsWith(".ts"))
   .map((file) => file.slice(0, -3))
