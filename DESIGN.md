@@ -486,17 +486,18 @@ All motion stands on three curves and a short duration scale (values in the side
 
 **The Interruptible Rule.** Every transition turns back from where it is drawn. Popovers transition on `data-state` rather than playing keyframes, folds animate from the drawn height, and a segmented thumb caught mid-glide restarts from where it stands.
 
-**The Stay In Context Rule.** A flow runs where it was asked for, on one surface that changes shape, from the question to the result. It never hands off to a second dialog, a new page, or a toast that stands in for the surface. The rules for that surface:
-- It leaves from the control that asked for it and goes back there.
-- Every state of the flow is drawn in that same surface at its own height, morphing between them: the question, what it will touch, armed, working, partly done, done, failed.
-- What a step will affect is listed before it is taken. Each item is named the way the rail names it, nested the way the rail nests it, with its status glyph and a link to it.
-- A destructive step arms in place: the button's words grow the warning ("Stop 3 and forget", then "Stop 3 mid-turn and forget").
-- A step shows done on the system's word, never on the ask. A row says Stopped when the hub confirms its machine ended it.
-- Progress is drawn in place. A row folds shut as its item finishes, and its tile lands in the button, where a ring fills a share per landing.
-- What can't happen now says when it will, on its own row ("Stops when <machine> is back").
-- A failure keeps the surface and its state, says why on the row it concerns, and offers Try again for what is left.
+**The Stay In Context Rule.** The reader stays where they are and knows what is true, from the moment they ask for something to the moment it is done. The owner: "This fluid ux is the bar for any part of this project. Keeps the user in context." Four questions shape every flow, and their answers decide its form:
+- **Where is their attention?** The flow happens there. The thing they acted on stays in view and becomes its own result. Nothing sends them to another page, stacks a second surface on the first, or leaves a toast for them to connect back to what they did.
+- **What do they need to know to decide?** The consequences this action really has, shown before they commit, and nothing more. A light, reversible action just happens where it was asked. One that reaches other things names those things where the decision is made.
+- **What is true right now?** The system's state as it changes, not the state the interface hopes for. Something is done when the system says it is. An action that takes time shows its progress on the things it is changing.
+- **What if it doesn't go to plan?** They are still where they were, with what they had, told what happened to which thing, and able to carry on from there.
 
-The recipe is `ForgetProjectDialog.svelte` (forgetting a project with sessions running). The owner: "This fluid ux is the bar for any part of this project. Keeps the user in context."
+The weight of the decision sets the shape, so flows differ:
+- Renaming edits the name where it stands.
+- Moving a session to another account says on that session's own row that it moves when its turn ends.
+- Forgetting a project with sessions running (`ForgetProjectDialog.svelte`) is a heavy decision, so the tray grows to name each running session, arms when stopping them would cut a turn short, shows each stop as its machine confirms it, and forgets the project only after that.
+
+The tray is one worked answer to the four questions, not a template. Carry its reasoning to every flow, and its parts only to a flow that asks the same questions.
 
 **Springs.** Surfaces released by a finger settle on one spring (`motion/spring.ts`): perceptual duration 0.4s, bounce 0, mass 1, stiffness `(2π / 0.4)²` ≈ 246.7, damping `4π / 0.4` ≈ 31.4 (critically damped). The spring is integrated once at release at 120Hz and handed to the compositor as keyframes about 8ms apart, carrying the finger's velocity. A tab track scrolled with a mouse wheel glides on a second, critically damped spring with a 0.3s response (stiffness `(2π / 0.3)²` ≈ 438.6, damping `4π / 0.3` ≈ 41.9).
 
@@ -907,7 +908,7 @@ A 34px raised control. Armed, its glyph and edge take `brand-ink`. While the sup
 - **Do** give every touch control a 44×44 area and every small pointer target a 24×24 area without changing the drawn size.
 - **Do** enter on ease-out over 260 to 280ms and leave over 160ms; move things already on screen on ease-in-out.
 - **Do** carry shared objects across a change, and reflow lists rather than letting rows jump.
-- **Do** run a flow on one surface that changes shape where it was asked for, list what it will touch before it acts, and mark each step done only when the system confirms it (The Stay In Context Rule).
+- **Do** design each flow from the four questions of The Stay In Context Rule, sized to the decision: in place for a light one, the affected things named for a heavy one, and every result taken from the system's word.
 - **Do** put every travelling motion under `prefers-reduced-motion: no-preference` (or `motionOk` in script), and keep fades for reduced motion.
 - **Do** show a skeleton at the real layout's size while data loads, and the empty state only once the data is known to be empty.
 - **Do** keep sound off until the reader turns it on, play every cue at the subtle emphasis for a gesture the reader made, and give touch only to a finger (The Quiet Feel Rule).
@@ -923,7 +924,7 @@ A 34px raised control. Armed, its glyph and edge take `brand-ink`. While the sup
 - **Don't** use `rgba(0,0,0,·)` shadows; shadows come from the warm ink tints.
 - **Don't** use an ease-in curve, or let an exit run longer than its entrance.
 - **Don't** keep an arrived surface moving: no pulse or attention loop on anything that is not live work.
-- **Don't** hand a flow off mid-way to a second dialog, a new page or a toast, show a step as done at the ask, or drop the flow's state when a step fails.
+- **Don't** send the reader away from where they asked, show a result the system hasn't confirmed, drop their state when something fails, or copy one flow's parts onto another that doesn't ask the same questions.
 - **Don't** play a sound or a tap to announce something, or make one the only sign that something happened.
 - **Don't** draw a focus indicator as a box-shadow, a border-colour change or a background, and don't stack a ring on a border.
 - **Don't** truncate on the control or link itself, which clips its hit area.
