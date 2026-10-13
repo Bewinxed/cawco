@@ -1,6 +1,6 @@
 <script lang="ts">
   import {
-    type CanvasChoices,
+    type ArtifactChoices,
     machineLabel,
     PREVIEW_DOWN_META,
     type PreviewDown,
@@ -19,18 +19,14 @@
     IconRefresh,
     IconSend,
   } from "#lib/icons.js";
-  import {
-    cawco,
-    changePreviewChoice,
-    closePreview,
-    previewChoices,
-    sendPreviewChoices,
-  } from "../client.svelte";
+  import { cawco, closePreview, sendArtifact } from "../client.svelte";
   import { conversationHref, resolveSessionTitle } from "../links";
   import { appear, dur } from "../motion/curves.svelte";
   import { closeInto, depart } from "../motion/share.svelte";
   import { watchInput } from "../reload.svelte";
   import SideSurface from "../side/SideSurface.svelte";
+  import ArtifactMenu from "./ArtifactMenu.svelte";
+  import { type ArtifactDoc, joinArtifact } from "./artifact-doc";
   import PlacePick from "./PlacePick.svelte";
   import {
     type CapturedSelection,
@@ -38,7 +34,7 @@
     selectionShare,
   } from "./selection";
   import { applySetupPicks, isSetupPage } from "./setup-page";
-  import { previewPlace, previewSourceKey } from "./source";
+  import { previewPlace } from "./source";
   import {
     type PreviewRpc,
     previewChoice,
@@ -155,17 +151,11 @@
   });
   let displayPath = $state("");
   /**
-   * A decision page names itself in its own heading, and it is served at the
-   * root of its own address: the header says what it is, with no path.
+   * A page is served at the root of its own address: the head names the
+   * artifact, with no path under it.
    */
-  const decision = $derived(!!source && "page" in source);
-  const title = $derived(
-    decision
-      ? "Decision page"
-      : preview?.title ||
-          (connected && source ? previewPlace(source) : "Preview") ||
-          "Preview"
-  );
+  const page = $derived(!!source && "page" in source);
+  const artifact = $derived(preview?.artifact);
   const frameKey = $derived(`${preview?.revision}:${reload}`);
   // The old paint bridges navigation only until the replacement finishes loading.
   let standing = $state<string | null>(null);
@@ -236,8 +226,6 @@
       connected = false;
       loaded = false;
       captured = false;
-      // A page's choices are what its own bridge reads; a page without one shows no send.
-      choices = null;
       // A pick the old page asked for has no page left to answer.
       picking = null;
     }
@@ -247,13 +235,15 @@
   }
 
   /*
-   * The choices bridge's host side (Projects spec §5.7): the page speaks MCP
-   * Apps' JSON-RPC (wire.ts `previewRpc`), and this answers from the hub's
-   * store. A change is shown to the page only once the hub has kept it, as
-   * a fresh `read_choices` result.
+   * The choices bridge's host side (Projects spec §5.10): the page speaks MCP
+   * Apps' JSON-RPC (wire.ts `previewRpc`), and this answers from the
+   * artifact's live document (artifact-doc.ts), which the hub checks, keeps
+   * and syncs. Every change to the doc, this page's, another screen's or the
+   * agent's, reaches the page as a fresh `artifact_read` result.
    */
-  let choices = $state<CanvasChoices | null>(null);
-  /** Picks the session has not heard yet: what Send picks would send. */
+  let doc: ArtifactDoc | null = null;
+  let choices = $state.raw<ArtifactChoices | null>(null);
+  /** Picks the session has not heard sent: what Send picks would send. */
   const unsent = $derived(
     !!choices &&
       Object.values(choices.choices).some(
@@ -261,11 +251,11 @@
       )
   );
   let sending = $state(false);
-  const toolResult = (state: CanvasChoices) => ({
+  const toolResult = (state: ArtifactChoices) => ({
     content: [{ type: "text", text: JSON.stringify(state) }],
     structuredContent: state,
   });
-  function heard(state: CanvasChoices) {
+  function heard(state: ArtifactChoices) {
     choices = state;
     post({
       jsonrpc: "2.0",
@@ -273,18 +263,50 @@
       params: toolResult(state),
     });
   }
+  const artifactId = $derived(artifact?.id);
+  $effect(() => {
+    const id = artifactId;
+    if (!id) {
+      return;
+    }
+    const joined = joinArtifact(instanceId, id, {
+      changed: heard,
+      refused: (reason) => toast.error(reason),
+    });
+    doc = joined;
+    choices = null;
+    return () => {
+      joined.destroy();
+      if (doc === joined) {
+        doc = null;
+      }
+    };
+  });
+  /** Writes one change into the doc; refused with the bridge's sentence. */
+  function write(change: Parameters<ArtifactDoc["write"]>[0]) {
+    if (!doc) {
+      throw new Error("This preview shows no artifact to keep picks in.");
+    }
+    const problem = doc.write(change);
+    if (problem) {
+      throw new Error(problem);
+    }
+  }
   async function send(text?: string) {
+    if (!artifact) {
+      return;
+    }
     sending = true;
     try {
       // A setup page's fleet choices and place are applied first (setup-page.ts).
-      await applySetupPicks(source, choices);
-      heard(await sendPreviewChoices(instanceId, text));
+      await applySetupPicks(artifact, owner?.projectId, choices);
+      await sendArtifact(instanceId, artifact.id, text);
     } finally {
       sending = false;
     }
     // The setup page is done once sent: on a phone its sheet stands over the
     // thread, where Caw answers with the files and "Open the board".
-    if (sheet && isSetupPage(source)) {
+    if (sheet && isSetupPage(artifact, owner?.projectId)) {
       await close();
     }
   }
@@ -295,13 +317,8 @@
     if (!asked) {
       return;
     }
-    heard(
-      await changePreviewChoice(instanceId, {
-        choice: "place",
-        pageHash: asked.pageHash,
-        value: place,
-      })
-    );
+    write({ choice: "place", pageHash: asked.pageHash, value: place });
+    await doc?.ready();
     picking = null;
     post({ jsonrpc: "2.0", id: asked.id, result: place });
   }
@@ -332,14 +349,17 @@
           reply({});
           break;
         case "tools/call": {
-          if (rpc.params.name !== "read_choices") {
-            refuse(-32_601, "A preview can call read_choices only.");
+          if (rpc.params.name !== "artifact_read") {
+            refuse(-32_601, "A preview can call artifact_read only.");
             break;
           }
-          // The fetched object, not the $state proxy: a proxy cannot be posted.
-          const state = await previewChoices(instanceId);
-          choices = state;
-          reply(toolResult(state));
+          if (!doc) {
+            refuse(-32_000, "This preview shows no artifact to read.");
+            break;
+          }
+          const joined = doc;
+          await joined.ready();
+          reply(toolResult(joined.choices()));
           break;
         }
         case "ui/update-model-context": {
@@ -348,7 +368,7 @@
             refuse(-32_602, "That change is not a choice the bridge keeps.");
             break;
           }
-          heard(await changePreviewChoice(instanceId, change));
+          write(change);
           reply({});
           break;
         }
@@ -556,15 +576,15 @@
   let shown = false;
   $effect(() => {
     const open = preview?.state === "open";
-    if (shown && !open && section && source) {
-      closeToRow(section, previewSourceKey(source));
+    if (shown && !open && section && artifact) {
+      closeToRow(section, artifact.id);
     }
     shown = open;
   });
-  function closeToRow(pane: HTMLElement, sourceKey: string) {
+  function closeToRow(pane: HTMLElement, id: string) {
     const row = [
       ...document.querySelectorAll<HTMLElement>(
-        `.preview-tool[data-share="preview:${CSS.escape(instanceId)}"][data-preview-source="${CSS.escape(sourceKey)}"]`
+        `.preview-tool[data-share="preview:${CSS.escape(instanceId)}"][data-artifact="${CSS.escape(id)}"]`
       ),
     ].at(-1);
     if (!row) {
@@ -670,6 +690,12 @@
 <!-- The card beside the conversation (SideSurface): the switch, the
      page's name and place (never "Preview" again under the switch that says
      it), the preview's own controls, Close; the page in the well. -->
+{#snippet artifactTitle()}
+  {#if artifact}
+    <ArtifactMenu {instanceId} shown={artifact} />
+  {/if}
+{/snippet}
+
 <SideSurface
   actions={controls}
   class={selecting ? "preview-pane selecting" : "preview-pane"}
@@ -677,9 +703,9 @@
   {closing}
   label="Preview"
   onclose={close}
-  subtitle={decision ? "" : displayPath || (source ? previewPlace(source) : "")}
+  subtitle={page ? "" : displayPath || (source ? previewPlace(source) : "")}
   {switcher}
-  title={switcher && title === "Preview" ? undefined : title}
+  titleControl={artifact ? artifactTitle : undefined}
   bind:section
   bind:well
 >

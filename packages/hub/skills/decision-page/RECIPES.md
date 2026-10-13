@@ -47,7 +47,7 @@ For values the person tunes rather than picks (a radius, a colour, a spring), ke
 </script>
 ```
 
-`cawcoDials(name, config, options)` takes DialKit's config ([control types](https://github.com/joshpuckett/dialkit#controls)) and returns its controller. Values go to the hub under the one id `dials` (`{ Card: { radius: 16, … } }`), restored on reload and revision; `read_choices` returns them as that entry's `value`. A set value stops at 2,000 characters of JSON, so keep panels small. Leave `{{DIALS}}` out of pages without dials: it adds about 330 KiB.
+`cawcoDials(name, config, options)` takes DialKit's config ([control types](https://github.com/joshpuckett/dialkit#controls)) and returns its controller. Values go to the hub under the one id `dials` (`{ Card: { radius: 16, … } }`), restored on reload and revision; `artifact_read` returns them as that entry's `value`. A set value stops at 2,000 characters of JSON, so keep panels small. Leave `{{DIALS}}` out of pages without dials: it adds about 330 KiB.
 
 ## The bridge, from your own script
 
@@ -57,8 +57,8 @@ For values the person tunes rather than picks (a radius, a colour, a spring), ke
 - `cawco.note(id, text)` — the card's note.
 - `cawco.set(key, value)` — any JSON value under a key of its own.
 - `cawco.send(text?)` — sends the picks to the session as one message, your text below them.
-- `cawco.on("picks", (picks) => …)` — the stored picks now and after every change: `{ [id]: { options, note, value, pageHash, at } }`. Returns a function that stops listening.
+- `cawco.on("picks", (picks) => …)` — the stored picks now and after every change, yours included (`artifact_update`'s patches arrive here too): `{ [id]: { options, note, value, pageHash, at } }`. Returns a function that stops listening.
 
-Each returns a promise that settles when the hub has kept the change. Underneath they are MCP Apps messages (`ui/update-model-context`, `ui/message`, `tools/call` → `read_choices`).
+Each returns a promise that settles when the change is in the page's artifact, which the hub keeps. Underneath they are MCP Apps messages (`ui/update-model-context`, `ui/message`, `tools/call` → `artifact_read`).
 
 Bounds: ids and options up to 200 characters with no spaces at either end, 50 options per multiple pick, notes up to 2,000 characters, 500 ids per page.

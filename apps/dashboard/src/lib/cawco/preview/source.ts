@@ -1,38 +1,48 @@
-import type { PreviewSource } from "@cawco/core";
-import { pathLeaf } from "@cawco/core/tool-presentation";
+import type { ArtifactKind, PreviewSource } from "@cawco/core";
+import { pathLeaf, resultField } from "@cawco/core/tool-presentation";
 
-/**
- * What a `show_preview` call asked for: a dev server, a folder, or a
- * decision page by name (published from `dir` when the call gave one). A
- * dev server or folder carries the page it opens at, `path`, when it names one.
- */
-export type PreviewAsk =
-  | { port: number; path?: string }
-  | { dir: string; path?: string }
-  | { page: string; dir?: string };
-
-/** What opening a call's preview again asks the hub for: a decision page is shown, never published again. */
-export const reopenAsk = (ask: PreviewAsk): PreviewAsk =>
-  "page" in ask ? { page: ask.page } : ask;
-
-/**
- * One string per thing a preview shows: the tool row that opened it carries
- * it (`data-preview-source`), so the pane can find that row again to close
- * into it.
- */
-export const previewSourceKey = (
-  source: PreviewSource | PreviewAsk
-): string => {
+/** A short name for where a preview's page is, for the panel's head. */
+export const previewPlace = (source: PreviewSource): string => {
   if ("page" in source) {
-    return `page:${source.page}`;
+    return source.page;
   }
-  return "port" in source ? `port:${source.port}` : `dir:${source.dir}`;
+  return "dir" in source ? pathLeaf(source.dir) : `localhost:${source.port}`;
 };
 
-/** A short name for where a preview's page is, for its header and tool row. */
-export const previewPlace = (source: PreviewSource | PreviewAsk): string => {
-  if ("page" in source) {
-    return `decisions/${source.page}`;
+/** The artifact a call made or showed (`artifact_create`, `artifact_show`), as its tool row names it. */
+export interface CalledArtifact {
+  id: string;
+  kind?: ArtifactKind;
+  name?: string;
+}
+
+const UUID = /^[0-9a-f-]{36}$/;
+
+/**
+ * The artifact a call names: `artifact_show`'s `id`, or the one
+ * `artifact_create` answered with; undefined until the call has one.
+ */
+export const calledArtifact = (
+  input: Record<string, unknown> | undefined,
+  result: unknown
+): CalledArtifact | undefined => {
+  if (typeof input?.id === "string" && UUID.test(input.id)) {
+    return { id: input.id };
   }
-  return "dir" in source ? pathLeaf(source.dir) : "";
+  const text = resultField(result)?.text;
+  if (!text) {
+    return;
+  }
+  try {
+    const answer = JSON.parse(text) as Partial<CalledArtifact>;
+    return typeof answer.id === "string" && UUID.test(answer.id)
+      ? {
+          id: answer.id,
+          ...(answer.kind ? { kind: answer.kind } : {}),
+          ...(answer.name ? { name: answer.name } : {}),
+        }
+      : undefined;
+  } catch {
+    // A result that is not the hub's JSON (a refusal's sentence) names no artifact.
+  }
 };

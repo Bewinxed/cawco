@@ -129,7 +129,7 @@ function ready() {
 }
 
 /*
- * The choices bridge (Projects spec §5.7). A page marks a choice in markup —
+ * The choices bridge (Projects spec §5.10). A page marks a choice in markup —
  * `data-cawco-choice="hero"` on the element (or a container), `data-option="b"`
  * on each option, `data-cawco-multiple` on the choice to allow several — or
  * calls `cawco.choose`, `cawco.note`, `cawco.set` and `cawco.on("picks", …)`.
@@ -139,11 +139,12 @@ function ready() {
  * host: `ui/initialize` then `ui/notifications/initialized`; each change is a
  * `ui/update-model-context` request whose `structuredContent` is one id's
  * change (CawCo keeps every id rather than overwriting); the picks are read
- * with `tools/call` → `read_choices` and arrive after every change as
- * `ui/notifications/tool-result`; `ui/message` sends the picks to the session.
- * The pane checks each message and stores it in the hub; the page hears the
- * stored picks back, so nothing here shows a pick the hub has not kept. The
- * bridge starts on first use, so a page without choices sends nothing.
+ * with `tools/call` → `artifact_read` and arrive after every change, the
+ * agent's included, as `ui/notifications/tool-result`; `ui/message` sends the
+ * picks to the session. The pane checks each message and writes it into the
+ * artifact's document, which the hub checks and keeps; the page hears the
+ * picks back from the document. The bridge starts on first use, so a page
+ * without choices sends nothing.
  */
 
 interface Pick {
@@ -228,7 +229,7 @@ function connect(): Promise<void> {
   })
     .then(() => {
       notify("ui/notifications/initialized", {});
-      return request("tools/call", { name: "read_choices", arguments: {} });
+      return request("tools/call", { name: "artifact_read", arguments: {} });
     })
     .then((result) => {
       const read = result as

@@ -5,7 +5,12 @@ import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
 import Icons from "unplugin-icons/vite";
-import { defineConfig, type Plugin } from "vite";
+import {
+  defineConfig,
+  type Plugin,
+  type PreviewServer,
+  type ViteDevServer,
+} from "vite";
 
 const PREVIEW_PREFIX = /^\/preview\/([^/]+)\/[^/]+\//;
 
@@ -92,13 +97,16 @@ const INLINE_FACES =
   /\/(?:figtree-latin-wght-normal|jetbrains-mono-latin-wght-normal)\.woff2$/;
 
 /**
- * Proxies the dashboard's `/preview/` paths to the hub. The hub's `/ws` socket
- * goes through `server.proxy` below.
+ * Proxies the dashboard's `/preview/` paths to the hub, on `vite dev` and on
+ * `vite preview` (the built dashboard the probes drive) alike, as serve.js
+ * does in production. The hub's `/ws` socket goes through `server.proxy`
+ * below.
  *
- * Preview requests (`/preview/<id>/…` and Referer-routed root-absolute fetches)
+ * Preview requests (`/preview/<id>/…` and Referer-routed root-absolute
+ * fetches, and their WebSockets: a dev server's HMR, an artifact's document)
  * are forwarded to the hub's preview listener on `CAWCO_PREVIEW_PORT`.
  *
- * Also the whole fix for a stray upgrade killing the dev server: `http.Server`
+ * Also the whole fix for a stray upgrade killing the server: `http.Server`
  * drops a socket's error handling the moment it emits `upgrade`, so an upgrade
  * no listener claims is left with no `error` handler and the eventual reset is a
  * process-level throw. Attaching an error listener to every upgrade socket keeps
@@ -106,35 +114,95 @@ const INLINE_FACES =
  */
 const hubProxy = (): Plugin => ({
   name: "cawco:hub-proxy",
-  configurePreviewServer() {
-    devHub();
+  configurePreviewServer(server) {
+    previewProxy(server);
   },
   configureServer(server) {
-    const HUB_URL = devHub();
-    const hubPort = Number(HUB_URL.port || 80);
-    const pvPort = Number(process.env.CAWCO_PREVIEW_PORT || hubPort + 1);
+    previewProxy(server);
+  },
+});
 
-    // HTTP middleware: intercept preview requests before Vite/SvelteKit.
-    server.middlewares.use((req, res, next) => {
-      const info = previewMatch(req);
-      if (!info) {
-        return next();
+function previewProxy(server: ViteDevServer | PreviewServer) {
+  const HUB_URL = devHub();
+  const hubPort = Number(HUB_URL.port || 80);
+  const pvPort = Number(process.env.CAWCO_PREVIEW_PORT || hubPort + 1);
+
+  // HTTP middleware: intercept preview requests before Vite/SvelteKit.
+  server.middlewares.use((req, res, next) => {
+    const info = previewMatch(req);
+    if (!info) {
+      return next();
+    }
+    // A Referer-routed read gets a 302 back under the prefix, so the URL
+    // the browser holds for it carries the prefix and so does the Referer
+    // of whatever it loads in turn, and it is never stored (serve.js,
+    // Preview routing).
+    if (info.viaReferer && (req.method === "GET" || req.method === "HEAD")) {
+      const { prefix } = info;
+      res.writeHead(302, {
+        location: `${prefix}${req.url}`,
+        "cache-control": "no-store",
+      });
+      res.end();
+      return;
+    }
+    const options: http.RequestOptions = {
+      hostname: HUB_URL.hostname,
+      port: pvPort,
+      path: info.stripped,
+      method: req.method,
+      headers: {
+        ...req.headers,
+        host: `${HUB_URL.hostname}:${pvPort}`,
+        "x-cawco-preview": info.id,
+      },
+    };
+    const pvPrefix = info.prefix;
+    const proxyReq = http.request(options, (proxyRes) => {
+      // Includes upstream errors: no preview response or validator is reusable.
+      proxyRes.headers["cache-control"] = "no-store";
+      for (const name of ["etag", "last-modified", "expires"]) {
+        delete proxyRes.headers[name];
       }
-      // A Referer-routed read gets a 302 back under the prefix, so the URL
-      // the browser holds for it carries the prefix and so does the Referer
-      // of whatever it loads in turn, and it is never stored (serve.js,
-      // Preview routing).
-      if (info.viaReferer && (req.method === "GET" || req.method === "HEAD")) {
-        const { prefix } = info;
-        res.writeHead(302, {
-          location: `${prefix}${req.url}`,
-          "cache-control": "no-store",
-        });
-        res.end();
-        return;
+      // A root-absolute Location must stay under the prefix so the browser
+      // does not leave /preview/<id>/ on a redirect.
+      const { location } = proxyRes.headers;
+      if (
+        typeof location === "string" &&
+        location.startsWith("/") &&
+        !location.startsWith(pvPrefix)
+      ) {
+        proxyRes.headers.location = `${pvPrefix}${location}`;
       }
-      const options: http.RequestOptions = {
-        hostname: HUB_URL.hostname,
+      res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
+      proxyRes.pipe(res);
+    });
+    proxyReq.on("error", (error: NodeJS.ErrnoException) => {
+      server.config.logger.warn(
+        `[cawco] preview proxy error for ${info.id}: ${error.code ?? error.message}`,
+        { timestamp: true }
+      );
+      if (!res.headersSent) {
+        res.writeHead(502, { "cache-control": "no-store" });
+      }
+      res.end();
+    });
+    req.pipe(proxyReq);
+  });
+
+  server.httpServer?.on("upgrade", (req, socket, head) => {
+    socket.on("error", (error: NodeJS.ErrnoException) => {
+      server.config.logger.warn(
+        `[cawco] websocket socket error on ${req.url}: ${error.code ?? error.message}`,
+        { timestamp: true }
+      );
+    });
+
+    // Preview WebSocket: /preview/<id>/…
+    const info = previewMatch(req);
+    if (info) {
+      const proxyReq = http.request({
+        host: HUB_URL.hostname,
         port: pvPort,
         path: info.stripped,
         method: req.method,
@@ -143,92 +211,36 @@ const hubProxy = (): Plugin => ({
           host: `${HUB_URL.hostname}:${pvPort}`,
           "x-cawco-preview": info.id,
         },
-      };
-      const pvPrefix = info.prefix;
-      const proxyReq = http.request(options, (proxyRes) => {
-        // Includes upstream errors: no preview response or validator is reusable.
-        proxyRes.headers["cache-control"] = "no-store";
-        for (const name of ["etag", "last-modified", "expires"]) {
-          delete proxyRes.headers[name];
+      });
+      proxyReq.on("upgrade", (proxyRes, proxySocket, proxyHead) => {
+        const lines = ["HTTP/1.1 101 Switching Protocols"];
+        for (let i = 0; i < proxyRes.rawHeaders.length; i += 2) {
+          lines.push(
+            `${proxyRes.rawHeaders[i]}: ${proxyRes.rawHeaders[i + 1]}`
+          );
         }
-        // A root-absolute Location must stay under the prefix so the browser
-        // does not leave /preview/<id>/ on a redirect.
-        const { location } = proxyRes.headers;
-        if (
-          typeof location === "string" &&
-          location.startsWith("/") &&
-          !location.startsWith(pvPrefix)
-        ) {
-          proxyRes.headers.location = `${pvPrefix}${location}`;
+        socket.write(`${lines.join("\r\n")}\r\n\r\n`);
+        if (proxyHead?.length) {
+          socket.write(proxyHead);
         }
-        res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
-        proxyRes.pipe(res);
+        if (head?.length) {
+          proxySocket.write(head);
+        }
+        proxySocket.pipe(socket).pipe(proxySocket);
+        proxySocket.on("error", () => socket.destroy());
+        socket.on("error", () => proxySocket.destroy());
       });
       proxyReq.on("error", (error: NodeJS.ErrnoException) => {
         server.config.logger.warn(
-          `[cawco] preview proxy error for ${info.id}: ${error.code ?? error.message}`,
+          `[cawco] preview ws proxy error for ${info.id}: ${error.code ?? error.message}`,
           { timestamp: true }
         );
-        if (!res.headersSent) {
-          res.writeHead(502, { "cache-control": "no-store" });
-        }
-        res.end();
+        socket.destroy();
       });
-      req.pipe(proxyReq);
-    });
-
-    server.httpServer?.on("upgrade", (req, socket, head) => {
-      socket.on("error", (error: NodeJS.ErrnoException) => {
-        server.config.logger.warn(
-          `[cawco] websocket socket error on ${req.url}: ${error.code ?? error.message}`,
-          { timestamp: true }
-        );
-      });
-
-      // Preview WebSocket: /preview/<id>/…
-      const info = previewMatch(req);
-      if (info) {
-        const proxyReq = http.request({
-          host: HUB_URL.hostname,
-          port: pvPort,
-          path: info.stripped,
-          method: req.method,
-          headers: {
-            ...req.headers,
-            host: `${HUB_URL.hostname}:${pvPort}`,
-            "x-cawco-preview": info.id,
-          },
-        });
-        proxyReq.on("upgrade", (proxyRes, proxySocket, proxyHead) => {
-          const lines = ["HTTP/1.1 101 Switching Protocols"];
-          for (let i = 0; i < proxyRes.rawHeaders.length; i += 2) {
-            lines.push(
-              `${proxyRes.rawHeaders[i]}: ${proxyRes.rawHeaders[i + 1]}`
-            );
-          }
-          socket.write(`${lines.join("\r\n")}\r\n\r\n`);
-          if (proxyHead?.length) {
-            socket.write(proxyHead);
-          }
-          if (head?.length) {
-            proxySocket.write(head);
-          }
-          proxySocket.pipe(socket).pipe(proxySocket);
-          proxySocket.on("error", () => socket.destroy());
-          socket.on("error", () => proxySocket.destroy());
-        });
-        proxyReq.on("error", (error: NodeJS.ErrnoException) => {
-          server.config.logger.warn(
-            `[cawco] preview ws proxy error for ${info.id}: ${error.code ?? error.message}`,
-            { timestamp: true }
-          );
-          socket.destroy();
-        });
-        proxyReq.end();
-      }
-    });
-  },
-});
+      proxyReq.end();
+    }
+  });
+}
 
 /* The commit this build was made from. The build bakes it into the page and
    writes it to `_app/version.json`, which the running server answers as

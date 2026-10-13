@@ -25,6 +25,7 @@
  *   work and tells you, with no posting, spawning or admin tools.
  */
 import type { InstanceRow, SessionRole } from "@cawco/core";
+import { ARTIFACT_TOOLS } from "./artifacts/tools";
 
 /** The role a session's row runs in: the one its spawn named, else derived from how it started. */
 export const roleOf = (row: InstanceRow): SessionRole => {
@@ -65,8 +66,6 @@ export const CAW_TOOLS = [
   "view_draft",
   "folder_read",
   "folder_write",
-  "page_show",
-  "page_choices",
 ] as const;
 
 /**
@@ -134,8 +133,7 @@ const DELEGATE_SESSION = [
   "interrupt_delegate",
   "answer_delegate",
   "show_image",
-  "show_preview",
-  "read_choices",
+  ...ARTIFACT_TOOLS,
 ] as const;
 
 /**
@@ -149,6 +147,8 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     ...TASK_READ,
     ...TASK_WRITE,
     ...CAW_TOOLS,
+    // Decision pages: Caw builds them from his folder's decisions/<name>/page.html.
+    ...ARTIFACT_TOOLS,
     ...ROUTINE,
     ...INGRESS,
     ...ACTION,

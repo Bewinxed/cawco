@@ -30,6 +30,9 @@ export const GIT_ROOT = resolve(dirname(DB_PATH), "git");
 /** The hub's LFS store: each large file once, by sha256. */
 export const LFS_ROOT = resolve(dirname(DB_PATH), "lfs");
 
+/** Each page artifact's built files, `artifacts/<id>/index.html`, served by the preview listener. */
+export const ARTIFACTS_ROOT = resolve(dirname(DB_PATH), "artifacts");
+
 /**
  * The server-wide body cap (Bun's `maxRequestBodySize`), which only the git
  * remote's routes reach: a pack pushed to it or a large file to its LFS store

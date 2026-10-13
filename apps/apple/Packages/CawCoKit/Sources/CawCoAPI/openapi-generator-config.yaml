@@ -13,6 +13,7 @@ typeOverrides:
     AccountKind: OpenEnums.AccountKind
     ActionState: OpenEnums.ActionState
     AgentRowAuth: OpenEnums.AgentRowAuth
+    ArtifactKind: OpenEnums.ArtifactKind
     AuthState: OpenEnums.AuthState
     BadgePropsTone: OpenEnums.BadgePropsTone
     BinaryUpdateLandingOutcome: OpenEnums.BinaryUpdateLandingOutcome

@@ -194,7 +194,6 @@ import {
   type PlacementPreview,
   type PlacementStrategy,
   PREVIEW_START,
-  PREVIEW_START_PATH,
   PREVIEW_STOP,
   PROVIDER_ACCOUNT_KINDS,
   PROVIDER_RETRY,
@@ -273,6 +272,11 @@ import { actionRoutes, createActions } from "./actions";
 import { createAdminAsks } from "./admin-asks";
 import { adminTools, isAdminWrite } from "./admin-tools";
 import { appleDiagnosticsRoutes } from "./apple-diagnostics";
+import { createArtifactDocs } from "./artifacts/docs";
+import { importLegacyCanvases } from "./artifacts/legacy";
+import { artifactRoutes } from "./artifacts/routes";
+import { type Artifacts, createArtifacts } from "./artifacts/service";
+import { artifactSocket } from "./artifacts/sync";
 import {
   answeredWithOriginal,
   clientCopy,
@@ -288,6 +292,7 @@ import { createBinaryUpdates } from "./binary-updates";
 import { bodyLimitRefusal } from "./body-limits";
 import { type Caw, cawRoutes, createCaw, withCawDenials } from "./caw";
 import {
+  ARTIFACTS_ROOT,
   DB_PATH,
   GIT_ROOT,
   HUB_VERSION,
@@ -396,13 +401,12 @@ import {
   pluginMarketplace,
   resolveMarketplacePlugins,
 } from "./plugins";
-import { previewFrame, previewTargets } from "./preview";
 import {
-  canvasChoices,
-  canvasId,
-  DECISION_PAGE,
-  previewChoicesRoutes,
-} from "./preview-choices";
+  type PreviewTarget,
+  previewFrame,
+  previewSourceKey,
+  previewTargets,
+} from "./preview";
 import { createCaps } from "./project-caps";
 import {
   makeProjectDelegateTypes,
@@ -516,37 +520,6 @@ interface SearchHitWire {
 
 /** A busy probe is polled in a loop before a restart, so it answers fast or not at all. */
 const BUSY_TIMEOUT_MS = 5000;
-
-/** What a `show_preview` ask may name, as the preview route reads it. */
-interface PreviewAsk {
-  dir?: string;
-  page?: string;
-  path?: string;
-  port?: number;
-}
-
-/** Why a preview ask names no one thing to show, or undefined when it does. */
-const previewAskRefusal = (ask: PreviewAsk): string | undefined => {
-  if (ask.page === undefined) {
-    return (ask.port === undefined) === (ask.dir === undefined)
-      ? "Pass exactly one of port or dir, or a page."
-      : undefined;
-  }
-  if (ask.port !== undefined) {
-    return "A page is shown from a folder, not a port.";
-  }
-  return ask.path === undefined
-    ? undefined
-    : "A decision page opens at its own root; path is for port or dir.";
-};
-
-/** A dev server or folder on the session's machine, opened at the page the ask names. */
-const machinePreviewSource = (ask: PreviewAsk): PreviewSource => {
-  const at = ask.path === undefined ? {} : { path: ask.path };
-  return ask.port === undefined
-    ? { dir: ask.dir as string, ...at }
-    : { port: ask.port, ...at };
-};
 
 /** A `Range: bytes=a-b` header (one range, either end open). */
 const BYTE_RANGE = /^bytes=(\d*)-(\d*)$/;
@@ -7548,15 +7521,14 @@ export const createServer = (
   const publishPreview = (
     instanceId: string,
     state: "open" | "closed",
-    source: PreviewSource,
-    revision: string
+    target: Pick<PreviewTarget, "artifact" | "revision" | "source">
   ) => {
-    const frame = previewFrame(instanceId, state, source, revision);
+    const frame = previewFrame(instanceId, state, target);
     streams.sequence(instanceId, frame);
     // A project's decision page is read in that project's threads, which
     // follow no session's stream (its Caw's setup page): the board carries
     // every open preview, so every dashboard hears it there too.
-    if ("project" in source) {
+    if ("page" in target.source) {
       publishInstances("");
     }
     return frame;
@@ -7578,8 +7550,8 @@ export const createServer = (
       return closed;
     }
     previewTargets.delete(instanceId);
-    publishPreview(instanceId, "closed", target.source, target.revision);
-    if ("project" in target.source) {
+    publishPreview(instanceId, "closed", target);
+    if ("page" in target.source) {
       return closed;
     }
     const answer = await callAgent(
@@ -7608,22 +7580,23 @@ export const createServer = (
   const openPreview = async (
     instanceId: string,
     machineId: string,
-    source: PreviewSource
+    source: PreviewSource,
+    artifact: PreviewTarget["artifact"]
   ): Promise<
     | { ok: true; frame: ReturnType<typeof previewFrame> }
     | { ok: false; code: 409 | 500 | 503 | 504; error: string }
   > => {
     const generation = nextPreviewGeneration(instanceId);
-    // The preview's canvas moves to the session now showing it.
-    db.touchCanvas({ id: canvasId(machineId, source), instanceId });
-    if ("project" in source) {
-      // A decision page is served from the hub's own folder (preview.ts).
-      const revision = crypto.randomUUID();
-      previewTargets.set(instanceId, { machineId, source, revision });
-      return {
-        ok: true,
-        frame: publishPreview(instanceId, "open", source, revision),
+    if ("page" in source) {
+      // A page is served from the hub's own folder (preview.ts).
+      const target = {
+        artifact,
+        machineId,
+        source,
+        revision: crypto.randomUUID(),
       };
+      previewTargets.set(instanceId, target);
+      return { ok: true, frame: publishPreview(instanceId, "open", target) };
     }
     const stopLate = () =>
       detach(
@@ -7664,17 +7637,15 @@ export const createServer = (
     if (!address) {
       return { ok: false, code: 503, error: "Machine is not connected" };
     }
-    const revision = crypto.randomUUID();
-    previewTargets.set(instanceId, {
+    const target = {
+      artifact,
       machineId,
       source,
-      revision,
+      revision: crypto.randomUUID(),
       upstream: { address, port: (answer.result as { port: number }).port },
-    });
-    return {
-      ok: true,
-      frame: publishPreview(instanceId, "open", source, revision),
     };
+    previewTargets.set(instanceId, target);
+    return { ok: true, frame: publishPreview(instanceId, "open", target) };
   };
 
   /**
@@ -7785,64 +7756,145 @@ export const createServer = (
     };
   };
 
-  const publishDecisionPage = async (
-    row: InstanceRow,
-    page: string,
-    dir?: string
-  ): Promise<{ project: string; page: string } | PageRefusal> => {
-    if (!row.projectId) {
-      return {
-        code: 409,
-        refused:
-          "This session belongs to no project, so it has no folder for decision pages.",
-      };
-    }
-    const folder = `decisions/${page}`;
-    const path = `${folder}/index.html`;
-    const read = await pageSources(
-      dir === undefined
-        ? { projectId: row.projectId, folder }
-        : { dir, machineId: row.machineId }
-    );
-    if (read === undefined) {
-      return (await folderText(row.projectId, path)) === undefined
-        ? {
-            code: 404,
-            refused: `${folder}/ has no page.html or published page yet; pass dir with your work folder, or write ${folder}/page.html into the project's folder.`,
-          }
-        : { project: row.projectId, page };
-    }
-    if ("refused" in read) {
-      return read;
-    }
-    const refusal = await commitPage(row, row.projectId, path, read);
-    return refusal ?? { project: row.projectId, page };
+  /** Inline HTML names nothing beside it: no mockups, no images but the kit's. */
+  const inlineSources: PageSources = {
+    mockup: () => Promise.resolve(undefined),
+    image: () => Promise.resolve(undefined),
   };
 
-  /** Builds page.html and commits it at `path`, by the session; the refusal when it cannot be. */
-  const commitPage = async (
+  /**
+   * A page artifact's HTML (artifacts/service.ts `page`), built as the
+   * decision-page skill builds one: from inline `html`, from page.html in
+   * `dir` on the session's machine, or from `decisions/<name>/page.html` in
+   * the session's project folder (Caw's, who has no shell), else the page
+   * already published there as it is. In a project, what was built is
+   * committed to `decisions/<name>/index.html` by the session, as before.
+   */
+  type BuiltArtifactPage =
+    | { html: string }
+    | { refused: string; status: PageRefusal["code"] };
+
+  /** page.html and what it names, for `from`; or the page already published, or why neither. */
+  const artifactPageSources = async (
     row: InstanceRow,
-    projectId: string,
-    path: string,
-    read: { source: string; sources: PageSources }
-  ): Promise<PageRefusal | undefined> => {
+    folder: string,
+    from: { html: string } | { dir: string } | { folder: true }
+  ): Promise<{ source: string; sources: PageSources } | BuiltArtifactPage> => {
+    if ("html" in from) {
+      return { source: from.html, sources: inlineSources };
+    }
+    const read =
+      "dir" in from
+        ? await pageSources({ dir: from.dir, machineId: row.machineId })
+        : row.projectId &&
+          (await folderPageSources({ projectId: row.projectId, folder }));
+    if (read && "refused" in read) {
+      return { status: read.code, refused: read.refused };
+    }
+    if (read) {
+      return read;
+    }
+    const published =
+      row.projectId && "folder" in from
+        ? await folderText(row.projectId, `${folder}/index.html`)
+        : undefined;
+    if (published !== undefined) {
+      return { html: published };
+    }
+    return row.projectId && "folder" in from
+      ? {
+          status: 404,
+          refused: `${folder}/ has no page.html or published page yet; pass dir with your work folder, or write ${folder}/page.html into the project's folder.`,
+        }
+      : {
+          status: 400,
+          refused:
+            "A page takes html, or dir with your work folder that holds page.html.",
+        };
+  };
+
+  const buildArtifactPage = async (
+    row: InstanceRow,
+    name: string,
+    from: { html: string } | { dir: string } | { folder: true }
+  ): Promise<BuiltArtifactPage> => {
+    const path = `decisions/${name}/index.html`;
+    const read = await artifactPageSources(row, `decisions/${name}`, from);
+    if (!("source" in read)) {
+      return read;
+    }
     const built = await buildDecisionPage(read.source, read.sources);
     if ("problem" in built) {
-      return { code: 422, refused: built.problem };
+      return { status: 422, refused: built.problem };
     }
-    try {
-      await writeFolderFile(projectId, path, built.html, {
-        author: { name: sessionLabel(row).name },
-        message: `decisions: ${path.split("/")[1]}`,
-      });
-      return undefined;
-    } catch (error) {
-      if (!(error instanceof FolderRefusal)) {
-        throw error;
+    if (row.projectId) {
+      try {
+        await writeFolderFile(row.projectId, path, built.html, {
+          author: { name: sessionLabel(row).name },
+          message: `decisions: ${name}`,
+        });
+      } catch (error) {
+        if (!(error instanceof FolderRefusal)) {
+          throw error;
+        }
+        return {
+          status: error.status === 413 ? 413 : 400,
+          refused: error.message,
+        };
       }
-      return { code: error.status === 413 ? 413 : 400, refused: error.message };
     }
+    return { html: built.html };
   };
+
+  // Artifacts (Projects spec §5.10): one Yjs doc each, synced on the preview
+  // listener, the person's changes delivered to the session (artifacts/).
+  const artifactDocs = createArtifactDocs({
+    db: db.artifacts,
+    // Called on a person's update, long after both are made.
+    personChanged: (id) => artifacts.personChanged(id),
+  });
+  const artifacts: Artifacts = createArtifacts({
+    db: db.artifacts,
+    docs: artifactDocs,
+    root: ARTIFACTS_ROOT,
+    deliver: (instance, content) =>
+      deliverSend({
+        verb: "send",
+        machineId: instance.machineId,
+        instanceId: instance.id,
+        payload: {
+          instanceId: instance.id,
+          message: {
+            type: "user",
+            uuid: crypto.randomUUID(),
+            message: { role: "user", content },
+            parent_tool_use_id: null,
+            origin: { kind: "human" },
+          },
+        },
+      }),
+    instance: (id) => db.getInstancesByIds([id])[0],
+    machines: () => db.listAgents(),
+    // A page is the hub's: its target names no machine.
+    open: (artifact) =>
+      openPreview(
+        artifact.instanceId,
+        artifact.machineId ?? "",
+        artifact.source,
+        { id: artifact.id, kind: artifact.kind, name: artifact.name }
+      ),
+    page: buildArtifactPage,
+    showing: (instanceId) => previewTargets.get(instanceId)?.artifact.id,
+    turnRunning: (instanceId) => pulses.get(instanceId)?.busy === true,
+    ownWorkspace: (instance) => workItems.workspaceOf(instance)?.id,
+    workspaces: (needle) => db.workspacesNamed(needle),
+  });
+  importLegacyCanvases({
+    db: db.artifacts,
+    hasInstance: (id) => db.getInstancesByIds([id]).length > 0,
+    projectRoot,
+    root: ARTIFACTS_ROOT,
+  });
 
   /**
    * Machines whose previews this hub process has an account of. The first
@@ -7871,7 +7923,7 @@ export const createServer = (
       serving.map((listener) => [listener.instanceId, listener])
     );
     for (const [instanceId, target] of previewTargets) {
-      if (target.machineId !== machineId || "project" in target.source) {
+      if (target.machineId !== machineId || "page" in target.source) {
         continue;
       }
       const listener = listeners.get(instanceId);
@@ -7882,7 +7934,7 @@ export const createServer = (
         });
         continue;
       }
-      openPreview(instanceId, machineId, target.source)
+      openPreview(instanceId, machineId, target.source, target.artifact)
         .then((started) => {
           // Not connected: the next register tries again. Superseded: a close
           // or a newer start already decided.
@@ -7897,7 +7949,7 @@ export const createServer = (
             `[hub] preview for ${instanceId} did not restart: ${started.error}`
           );
           previewTargets.delete(instanceId);
-          publishPreview(instanceId, "closed", target.source, target.revision);
+          publishPreview(instanceId, "closed", target);
         })
         .catch(console.error);
     }
@@ -7905,7 +7957,20 @@ export const createServer = (
       if (previewTargets.has(listener.instanceId)) {
         continue;
       }
-      if (known) {
+      // After a hub restart a listener is the panel's again only as the
+      // session's preview artifact that shows the same server or folder.
+      const shown = known
+        ? undefined
+        : db.artifacts
+            .ofInstance(listener.instanceId)
+            .find(
+              (artifact) =>
+                artifact.kind === "preview" &&
+                artifact.machineId === machineId &&
+                previewSourceKey(artifact.source) ===
+                  previewSourceKey(listener.source)
+            );
+      if (!shown) {
         callAgent(
           machineId,
           PREVIEW_STOP,
@@ -7914,14 +7979,15 @@ export const createServer = (
         ).catch(console.error);
         continue;
       }
-      const revision = crypto.randomUUID();
-      previewTargets.set(listener.instanceId, {
+      const target = {
+        artifact: { id: shown.id, kind: shown.kind, name: shown.name },
         machineId,
-        source: listener.source,
-        revision,
+        source: shown.source,
+        revision: crypto.randomUUID(),
         upstream: { address, port: listener.port },
-      });
-      publishPreview(listener.instanceId, "open", listener.source, revision);
+      };
+      previewTargets.set(listener.instanceId, target);
+      publishPreview(listener.instanceId, "open", target);
     }
   };
 
@@ -10930,7 +10996,7 @@ export const createServer = (
   const boardExtras = () => ({
     agents: withPresence(db.listAgents()),
     previews: [...previewTargets].map(([id, target]) =>
-      previewFrame(id, "open", target.source, target.revision)
+      previewFrame(id, "open", target)
     ),
     handoffs: Object.fromEntries(handoffs),
     // Carried on every publish, so a dashboard follows a continuation it
@@ -13749,45 +13815,6 @@ export const createServer = (
         ? onlineMachines().length > 0
         : Boolean(registry.agent(machineId)),
     leadHome,
-    pages: {
-      show: async (session, page) => {
-        const published = await publishDecisionPage(session, page);
-        if ("refused" in published) {
-          throw new Error(published.refused);
-        }
-        const started = await openPreview(
-          session.id,
-          session.machineId,
-          published
-        );
-        if (!started.ok) {
-          throw new Error(started.error);
-        }
-      },
-      choices: (session, page) => {
-        const canvas = session.projectId
-          ? db.canvas(canvasId("", { project: session.projectId, page }))
-          : undefined;
-        if (!canvas) {
-          throw new Error(
-            `Nobody has picked anything on decisions/${page} yet.`
-          );
-        }
-        // As read_choices answers a session: each entry with its id, and
-        // whether it was picked on an earlier revision of the page.
-        const state = canvasChoices(db, canvas);
-        return {
-          ...state,
-          choices: Object.entries(state.choices).map(([id, entry]) => ({
-            id,
-            ...entry,
-            ...(state.pageHash && entry.pageHash !== state.pageHash
-              ? { earlierRevision: true }
-              : {}),
-          })),
-        };
-      },
-    },
     folderChanged: (projectId) => tasks.touched(projectId),
     fleetChoicesSet: () => Boolean(db.getSupervisorConfig()?.choicesSetAt),
     // Thread rows and messages reach every dashboard on the ledger, as sessions do.
@@ -15753,7 +15780,13 @@ export const createServer = (
     publishInstances(message.machineId);
   };
 
-  return (
+  /** What the preview listener (index.ts) needs to serve artifacts' documents. */
+  const artifactListener = {
+    ownerOf: (artifactId: string) => db.artifacts.get(artifactId)?.instanceId,
+    socket: artifactSocket(artifactDocs),
+  };
+
+  return Object.assign(
     new Elysia()
       // Each route's body cap, met before a request is routed or its body
       // read (body-limits.ts).
@@ -15789,29 +15822,7 @@ export const createServer = (
         )
       )
       .use(taskRoutes(tasks))
-      .use(
-        previewChoicesRoutes({
-          db,
-          instance: (id) => db.getInstancesByIds([id])[0],
-          deliver: (instance, content) => {
-            deliverSend({
-              verb: "send",
-              machineId: instance.machineId,
-              instanceId: instance.id,
-              payload: {
-                instanceId: instance.id,
-                message: {
-                  type: "user",
-                  uuid: crypto.randomUUID(),
-                  message: { role: "user", content },
-                  parent_tool_use_id: null,
-                  origin: { kind: "human" },
-                },
-              },
-            });
-          },
-        })
-      )
+      .use(artifactRoutes(artifacts))
       .use(pushRoutes(db, push))
       .use(notificationRoutes(db, notifications))
       // The hub as a git remote and LFS server, for fleet machines and
@@ -16364,47 +16375,6 @@ export const createServer = (
               ? CONTINUATION_CANCELLED
               : (row.error ?? "the continuation failed")
           );
-        }
-      )
-      .post(
-        "/api/instances/:id/preview",
-        {
-          body: t.Object({
-            port: t.Optional(t.Integer({ minimum: 1, maximum: 65_535 })),
-            dir: t.Optional(t.String({ minLength: 1, pattern: "^/" })),
-            /** A decision page in the session's project folder, `decisions/<page>/`; with `dir`, that folder's index.html is published there first. */
-            page: t.Optional(t.String({ pattern: DECISION_PAGE.source })),
-            /** With `port` or `dir`: the page inside it the preview opens at, e.g. `/motion/mac-readiness`. */
-            path: t.Optional(t.String({ pattern: PREVIEW_START_PATH.source })),
-          }),
-        },
-        async ({ params, body, status }) => {
-          const refused = previewAskRefusal(body);
-          if (refused) {
-            return status(400, refused);
-          }
-          const [row] = db.getInstancesByIds([params.id]);
-          if (!row) {
-            return status(404, "Session not found.");
-          }
-          let source: PreviewSource;
-          if (body.page === undefined) {
-            source = machinePreviewSource(body);
-          } else {
-            const published = await publishDecisionPage(
-              row,
-              body.page,
-              body.dir
-            );
-            if ("refused" in published) {
-              return status(published.code, published.refused);
-            }
-            source = published;
-          }
-          const started = await openPreview(row.id, row.machineId, source);
-          return started.ok
-            ? started.frame
-            : status(started.code, started.error);
         }
       )
       .delete("/api/instances/:id/preview", async ({ params, status }) => {
@@ -21981,13 +21951,11 @@ export const createServer = (
           // starts one again (see `reconcilePreviews`). Nothing is published;
           // the panes keep the page they have until that "open" reloads them.
           for (const [instanceId, target] of previewTargets) {
-            // A decision page is the hub's own; no machine serves it.
-            if (
-              target.machineId === machineId &&
-              !("project" in target.source)
-            ) {
+            // A page is the hub's own; no machine serves it.
+            if (target.machineId === machineId && !("page" in target.source)) {
               nextPreviewGeneration(instanceId);
               previewTargets.set(instanceId, {
+                artifact: target.artifact,
                 machineId,
                 source: target.source,
                 revision: target.revision,
@@ -22182,6 +22150,7 @@ export const createServer = (
           // ack both die with the socket that asked for them.
           streams.dropSocket(ws.id);
         },
-      })
+      }),
+    { artifactListener }
   );
 };

@@ -645,6 +645,8 @@
     --c-nav-h: 40px;
     /* A Configure rail row; touch screens and narrow windows take the 44px row. */
     --c-rail-row-h: 38px;
+    /* A row of the artifact panel's list: the kind's glyph, the name, its age (DESIGN.md Artifact panel, canvas and ink). */
+    --c-artifact-row-h: 44px;
     --c-mark: 26px;
     --c-mark-glyph: 16px;
     --c-row-mark: 18px;

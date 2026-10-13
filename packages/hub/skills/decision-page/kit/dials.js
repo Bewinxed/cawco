@@ -30,7 +30,7 @@
   window.cawcoDials = (name, config, options) => {
     if (!window.cawco) {
       throw new Error(
-        "cawcoDials needs CawCo's bridge: open the page with show_preview."
+        "cawcoDials needs CawCo's bridge: publish the page with artifact_create."
       );
     }
     if (!rooted) {

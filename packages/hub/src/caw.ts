@@ -47,7 +47,6 @@
 import {
   CAW_DENIED_TOOLS,
   CAWCO_COMPONENT_NAMES,
-  type CanvasChoices,
   type CawHarness,
   type CawView,
   type Envelope,
@@ -79,7 +78,6 @@ import type {
   WorkItemRow,
 } from "./db";
 import { inboxText } from "./ingress";
-import { DECISION_PAGE } from "./preview-choices";
 import type { Caps } from "./project-caps";
 import { readProjectTypes } from "./project-delegate-types";
 import {
@@ -283,7 +281,7 @@ const refuse = (code: 400 | 403 | 404 | 409, message: string): never => {
 const briefOf = (projectName: string): string =>
   [
     `You are Caw, the lead of the project “${projectName}” in CawCo.`,
-    "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft), its folder on the hub (folder_read, folder_write: stages.md, delegates/, AGENTS.md, decisions/), decision pages (page_show, page_choices), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate, set_item_checks), and send_to_user. You have no edit or shell tools: work that changes the project's code becomes a task or a delegate.",
+    "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft), its folder on the hub (folder_read, folder_write: stages.md, delegates/, AGENTS.md, decisions/), decision pages (artifact_create with kind page builds decisions/<name>/page.html and shows it; artifact_read has the picks), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate, set_item_checks), and send_to_user. You have no edit or shell tools: work that changes the project's code becomes a task or a delegate.",
     "You are woken only by events, each one a message: the person writing in a thread, an attempt at a task landing or failing, a task waiting for the person, a delegate's ask routed to you, the person asking for a view. Handle the event, then end your turn. Nothing wakes you on a timer. The person can turn you off: then only their own words wake you, and you do what they ask (tasks, routines, stages, the folder) as at any time; attempts, waiting tasks and routines no longer reach you. Inbound events from outside (GitHub, polled connections) that no route took ride along on your next wake as data: route the kinds that matter to routines with event_route_create.",
     "When the person writes in a thread, answer in that thread with thread_reply; the person does not see what you say outside it. Name the tasks a reply is about in its `tasks`. Code coordinates, models judge, the person decides: permissions, merges, configuration and public actions are theirs, so ask in the thread (AskUserQuestion lands there).",
     "A view-request event is the person asking for a view of the project's tasks: answer it with view_draft, then say in that thread what you drafted; the person keeps or discards it.",
@@ -335,23 +333,6 @@ export interface CawDeps {
   ) => Promise<{ machineId: string; cwd: string } | undefined>;
   /** Whether a machine is connected now; without one, whether any is. */
   readonly online: (machineId?: string) => boolean;
-  /**
-   * Decision pages in the project's folder, for Caw's `page_show` and
-   * `page_choices` (server.ts): built and shown beside his threads, and
-   * the picks made on one. A refusal throws its sentence.
-   */
-  readonly pages: {
-    show: (lead: InstanceRow, page: string) => Promise<void>;
-    choices: (
-      lead: InstanceRow,
-      page: string
-    ) => Omit<CanvasChoices, "choices"> & {
-      choices: (CanvasChoices["choices"][string] & {
-        id: string;
-        earlierRevision?: true;
-      })[];
-    };
-  };
   /** Tells every open dashboard a thread changed (the ledger's broadcast). */
   readonly publish: (frame: ThreadUpsertFrame | ThreadMessageFrame) => void;
   /** Delivers one message to a session through the hub's one send path. */
@@ -380,7 +361,6 @@ export const createCaw = ({
   spawn,
   task,
   views,
-  pages,
 }: CawDeps) => {
   /** Lead sessions being started now, by project: one start per project at a time. */
   const starting = new Map<string, Promise<InstanceRow>>();
@@ -1563,27 +1543,6 @@ export const createCaw = ({
                   }
                 : {}),
             });
-          }
-        ),
-        tool(
-          "page_show",
-          "Build decisions/<page>/page.html and show it beside your threads.",
-          { page: z.string().regex(DECISION_PAGE) },
-          async ({ page }) => {
-            mine();
-            await pages.show(actor as InstanceRow, page);
-            return ok({ ok: true, page });
-          }
-        ),
-        tool(
-          "page_choices",
-          "The picks on a decision page.",
-          { page: z.string() },
-          ({ page }) => {
-            mine();
-            return Promise.resolve(
-              ok(pages.choices(actor as InstanceRow, page))
-            );
           }
         ),
         tool(

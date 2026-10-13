@@ -62,21 +62,6 @@ public enum PreviewKey {
 }
 
 public extension HubConnection {
-    /// Opens a `show_preview` call's page again (client.svelte.ts
-    /// `openPreview`, with `reopenAsk`: a decision page is shown, never
-    /// published again). The hub answers with the preview's frame.
-    func openPreview(_ instanceId: String, ask input: [String: Any]) async throws {
-        guard let client else { throw TaskRefusal(message: "No hub is connected.") }
-        let page = input["page"] as? String
-        let port = (input["port"] as? Int) ?? (input["port"] as? Double).map(Int.init)
-        let dir = page == nil ? input["dir"] as? String : nil
-        let at = page == nil ? input["path"] as? String : nil
-        let output = try await client.postApiInstancesByIdPreview(path: .init(id: instanceId),
-            body: .json(.init(port: page == nil ? port : nil, dir: dir, page: page, path: at)))
-        guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }
-        previews.adopt(try ok.body.json)
-    }
-
     func closePreview(_ instanceId: String) async throws {
         guard let client else { throw TaskRefusal(message: "No hub is connected.") }
         let output = try await client.deleteApiInstancesByIdPreview(path: .init(id: instanceId))

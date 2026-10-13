@@ -82,6 +82,7 @@ import { HubLifetime } from "../lifetime";
 import { workflowSkill } from "../workflows/skills";
 import { type AccountsDb, accountsDb } from "./accounts";
 import { type ActionsDb, actionsDb } from "./actions";
+import { type ArtifactsDb, artifactsDb } from "./artifacts";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
 import { type ConnectionsDb, connectionsDb } from "./connections";
 import { type IngressDb, ingressDb } from "./ingress";
@@ -90,8 +91,6 @@ import { type RoutinesDb, routinesDb } from "./routines";
 import {
   accountSignins,
   agents,
-  canvasChoices,
-  canvases,
   capabilityUsageDaily,
   cawTurns,
   claudeContextWindows,
@@ -242,9 +241,6 @@ export type PushDeviceRow = Omit<
 > & { key: string; secret: string };
 export type ProjectOfferRow = typeof projectOffers.$inferSelect;
 export type SessionPlanRow = typeof sessionPlans.$inferSelect;
-/** Where a preview's choices are kept (choices.ts). */
-export type CanvasRow = typeof canvases.$inferSelect;
-export type CanvasChoiceRow = typeof canvasChoices.$inferSelect;
 export type ThreadRow = typeof projectThreads.$inferSelect;
 export type ThreadMessageRow = typeof threadMessages.$inferSelect;
 /** A thread as its project's list shows it: with its newest message. */
@@ -434,6 +430,8 @@ export interface DbShape {
     answer: "accepted" | "dismissed",
     projectId?: string
   ) => void;
+  /** Artifacts and their documents' update logs (artifacts/). */
+  readonly artifacts: ArtifactsDb;
   /** Sessions held at their account's limit, summaries kept ahead of it, and the lines it wrote. */
   readonly atLimit: AtLimitDb;
   /** Records ownership before sending a create; a restart discards anything still unfiled. */
@@ -446,8 +444,6 @@ export interface DbShape {
     threadId: string | null;
     usd: number;
   }) => void;
-  readonly canvas: (id: string) => CanvasRow | undefined;
-  readonly canvasChoices: (canvasId: string) => CanvasChoiceRow[];
   /** Whether nothing has been counted yet — the backfill's cue. */
   readonly capabilityUsageEmpty: () => boolean;
   /** Every usage row on or after `day` (`YYYY-MM-DD`). */
@@ -747,8 +743,6 @@ export interface DbShape {
   readonly keepAliveInstances: () => PublicInstanceRow[];
   /** Keeps a pending send whole, as its machine was handed it. */
   readonly keepEnvelope: (uuid: string, envelope: string) => void;
-  /** The canvas a session showed last, for `read_choices` after its preview closed. */
-  readonly latestCanvasOf: (instanceId: string) => CanvasRow | undefined;
   /**
    * The directory a row was launched in, which every spawn of it uses;
    * `"unknown"` when its machine had no record of its conversation; undefined
@@ -864,7 +858,6 @@ export interface DbShape {
    * from is history, and history survives a restart. Only reachability is reset.
    */
   readonly markAllAgentsOffline: () => void;
-  readonly markCanvasSent: (id: string, at: Date) => void;
   /**
    * An attach to a process sessiond still holds is on its way: a row filed
    * asleep, failed or unknown is `starting` until its `init` or a beat lists
@@ -1206,8 +1199,6 @@ export interface DbShape {
     /** What Cawrier said to the last push for a device: taken (no error) or refused with a reason. */
     readonly noteResult: (pairingId: string, error: string | null) => void;
   };
-  /** Writes one id's entry whole, and the canvas's page hash with it, in one transaction. */
-  readonly putCanvasChoice: (row: CanvasChoiceRow) => void;
   readonly putCredential: (id: string, blob: Record<string, unknown>) => void;
   /** Upsert of one definition's file; the hash and the size are read off it. */
   readonly putFleetAgent: (agent: {
@@ -1697,12 +1688,6 @@ export interface DbShape {
   /** The hash of the tools a cawco MCP listing last answered, if it has. */
   readonly toolListing: (listing: string) => string | undefined;
   readonly touchAgent: (machineId: string) => void;
-  /** Files or moves a canvas onto the session showing it; a hash given becomes its page's. */
-  readonly touchCanvas: (canvas: {
-    id: string;
-    instanceId: string;
-    pageHash?: string;
-  }) => CanvasRow;
   /**
    * The session moved. This is the only write anywhere that means it: every
    * other `updatedAt` on the table is a status change, which is the hub
@@ -2352,7 +2337,7 @@ const make = async (path: string): Promise<DbShape> => {
     ["limit_events", "instance_id"],
     ["turn_usage", "instance_id"],
     ["supervisor_events", "instance_id"],
-    ["canvases", "instance_id"],
+    ["artifacts", "instance_id"],
     ["completed_turns", "instance_id", "once"],
     ["session_plans", "instance_id", "once"],
     ["project_offers", "instance_id", "once"],
@@ -5358,58 +5343,6 @@ const make = async (path: string): Promise<DbShape> => {
     setProjectRemote: (id, remote) => {
       db.update(projects).set({ remote }).where(eq(projects.id, id)).run();
     },
-    canvas: (id) => db.select().from(canvases).where(eq(canvases.id, id)).get(),
-    canvasChoices: (canvasId) =>
-      db
-        .select()
-        .from(canvasChoices)
-        .where(eq(canvasChoices.canvasId, canvasId))
-        .orderBy(asc(canvasChoices.choice))
-        .all(),
-    latestCanvasOf: (instanceId) =>
-      db
-        .select()
-        .from(canvases)
-        .where(eq(canvases.instanceId, instanceId))
-        .orderBy(desc(canvases.updatedAt))
-        .limit(1)
-        .get(),
-    touchCanvas: ({ id, instanceId, pageHash }) => {
-      const updatedAt = new Date();
-      return db
-        .insert(canvases)
-        .values({ id, instanceId, pageHash: pageHash ?? null, updatedAt })
-        .onConflictDoUpdate({
-          target: canvases.id,
-          set: { instanceId, updatedAt, ...(pageHash ? { pageHash } : {}) },
-        })
-        .returning()
-        .get();
-    },
-    putCanvasChoice: (row) => {
-      db.transaction((tx) => {
-        tx.insert(canvasChoices)
-          .values(row)
-          .onConflictDoUpdate({
-            target: [canvasChoices.canvasId, canvasChoices.choice],
-            set: {
-              options: row.options,
-              note: row.note,
-              value: row.value,
-              pageHash: row.pageHash,
-              updatedAt: row.updatedAt,
-            },
-          })
-          .run();
-        tx.update(canvases)
-          .set({ pageHash: row.pageHash, updatedAt: row.updatedAt })
-          .where(eq(canvases.id, row.canvasId))
-          .run();
-      });
-    },
-    markCanvasSent: (id, at) => {
-      db.update(canvases).set({ sentAt: at }).where(eq(canvases.id, id)).run();
-    },
     projectOffer: (instanceId) =>
       db
         .select()
@@ -6861,6 +6794,7 @@ const make = async (path: string): Promise<DbShape> => {
     connections: connectionsDb(db),
     ingress: ingressDb(db),
     relays: relaysDb(db),
+    artifacts: artifactsDb(db),
     actions: actionsDb(db),
     usageSpend: ({ harness, todayStart, weekStart }) => {
       const since = (start: number) =>

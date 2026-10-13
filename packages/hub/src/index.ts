@@ -28,14 +28,22 @@ const main = Effect.gen(function* () {
   // Before `listen`: every dashboard's first frame names this commit (see
   // `HubServices.build`), and two git calls are not worth a socket without it.
   const build = yield* Effect.promise(buildInfo);
-  createServer({ build, registry, db, pending, telegram, lifetime }).listen({
+  const server = createServer({
+    build,
+    registry,
+    db,
+    pending,
+    telegram,
+    lifetime,
+  });
+  server.listen({
     hostname,
     port: HUB_PORT,
     idleTimeout: 120,
     // A pack to the git remote and a large file to LFS stream through.
     maxRequestBodySize: MAX_REQUEST_BYTES,
   });
-  startPreviewListener(hostname);
+  startPreviewListener(hostname, server.artifactListener);
   yield* Effect.log(`cawco hub ${HUB_VERSION} listening on :${HUB_PORT}`);
   advertise(HUB_PORT);
   // After `listen`, so the first ask the bridge can be handed is one this hub

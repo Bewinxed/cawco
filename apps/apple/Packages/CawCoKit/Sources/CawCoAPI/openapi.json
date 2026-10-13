@@ -3595,7 +3595,7 @@
         }
       }
     },
-    "/api/instances/{id}/preview/choices": {
+    "/api/instances/{id}/artifacts": {
       "get": {
         "parameters": [
           {
@@ -3605,42 +3605,23 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
-              "type": "string"
-            }
           }
         ],
-        "operationId": "getApiInstancesByIdPreviewChoices",
+        "operationId": "getApiInstancesByIdArtifacts",
         "responses": {
           "200": {
-            "description": "getApiInstancesByIdPreviewChoices 200",
+            "description": "getApiInstancesByIdArtifacts 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CanvasChoices"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "getApiInstancesByIdPreviewChoices 422",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                  "$ref": "#/components/schemas/getApiInstancesByIdArtifacts200"
                 }
               }
             }
           }
         }
       },
-      "put": {
+      "post": {
         "parameters": [
           {
             "name": "id",
@@ -3658,51 +3639,70 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "choice": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "page",
+                      "preview"
+                    ]
+                  },
+                  "name": {
+                    "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
+                    "type": "string"
+                  },
+                  "html": {
+                    "minLength": 1,
+                    "maxLength": 524288,
+                    "type": "string"
+                  },
+                  "dir": {
+                    "minLength": 2,
+                    "maxLength": 4096,
+                    "pattern": "^/",
+                    "type": "string"
+                  },
+                  "port": {
+                    "minimum": 1,
+                    "maximum": 65535,
+                    "type": "integer"
+                  },
+                  "path": {
+                    "maxLength": 2000,
+                    "pattern": "^\\/(?!\\/)\\S*$",
+                    "type": "string"
+                  },
+                  "machine": {
                     "minLength": 1,
                     "maxLength": 200,
                     "type": "string"
                   },
-                  "pageHash": {
-                    "pattern": "^[0-9a-f]{64}$",
+                  "workspace": {
+                    "pattern": "^[0-9a-f][0-9a-f-]{7,35}$",
                     "type": "string"
-                  },
-                  "options": {
-                    "maxItems": 50,
-                    "type": "array",
-                    "items": {
-                      "maxLength": 200,
-                      "type": "string"
-                    }
-                  },
-                  "note": {
-                    "maxLength": 2000,
-                    "type": "string"
-                  },
-                  "value": {}
+                  }
                 },
                 "required": [
-                  "choice",
-                  "pageHash"
+                  "kind",
+                  "name"
                 ]
               }
             }
           }
         },
-        "operationId": "putApiInstancesByIdPreviewChoices",
+        "operationId": "postApiInstancesByIdArtifacts",
         "responses": {
           "200": {
-            "description": "putApiInstancesByIdPreviewChoices 200",
+            "description": "postApiInstancesByIdArtifacts 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CanvasChoices"
+                  "$ref": "#/components/schemas/Created"
                 }
               }
             }
           },
           "422": {
-            "description": "putApiInstancesByIdPreviewChoices 422",
+            "description": "postApiInstancesByIdArtifacts 422",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3714,11 +3714,209 @@
         }
       }
     },
-    "/api/instances/{id}/preview/choices/send": {
+    "/api/instances/{id}/artifacts/{artifact}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        ],
+        "operationId": "getApiInstancesByIdArtifactsByArtifact",
+        "responses": {
+          "200": {
+            "description": "getApiInstancesByIdArtifactsByArtifact 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiInstancesByIdArtifactsByArtifact 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "html": {
+                    "minLength": 1,
+                    "maxLength": 524288,
+                    "type": "string"
+                  },
+                  "patch": {
+                    "minItems": 1,
+                    "maxItems": 200,
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "op": {
+                          "type": "string",
+                          "enum": [
+                            "add",
+                            "remove",
+                            "replace",
+                            "move",
+                            "copy",
+                            "test"
+                          ]
+                        },
+                        "path": {
+                          "maxLength": 1000,
+                          "type": "string"
+                        },
+                        "from": {
+                          "maxLength": 1000,
+                          "type": "string"
+                        },
+                        "value": {}
+                      },
+                      "required": [
+                        "op",
+                        "path"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "patchApiInstancesByIdArtifactsByArtifact",
+        "responses": {
+          "200": {
+            "description": "patchApiInstancesByIdArtifactsByArtifact 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "patchApiInstancesByIdArtifactsByArtifact 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/instances/{id}/artifacts/{artifact}/show": {
       "post": {
         "parameters": [
           {
             "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiInstancesByIdArtifactsByArtifactShow",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdArtifactsByArtifactShow 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactShow200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/instances/{id}/artifacts/{artifact}/send": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifact",
             "in": "path",
             "required": true,
             "schema": {
@@ -3742,20 +3940,20 @@
             }
           }
         },
-        "operationId": "postApiInstancesByIdPreviewChoicesSend",
+        "operationId": "postApiInstancesByIdArtifactsByArtifactSend",
         "responses": {
           "200": {
-            "description": "postApiInstancesByIdPreviewChoicesSend 200",
+            "description": "postApiInstancesByIdArtifactsByArtifactSend 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CanvasChoices"
+                  "$ref": "#/components/schemas/ArtifactChoices"
                 }
               }
             }
           },
           "422": {
-            "description": "postApiInstancesByIdPreviewChoicesSend 422",
+            "description": "postApiInstancesByIdArtifactsByArtifactSend 422",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11787,146 +11985,6 @@
       }
     },
     "/api/instances/{id}/preview": {
-      "post": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "port": {
-                    "minimum": 1,
-                    "maximum": 65535,
-                    "type": "integer"
-                  },
-                  "dir": {
-                    "minLength": 1,
-                    "pattern": "^/",
-                    "type": "string"
-                  },
-                  "page": {
-                    "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
-                    "type": "string"
-                  },
-                  "path": {
-                    "pattern": "^\\/(?!\\/)\\S*$",
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "operationId": "postApiInstancesByIdPreview",
-        "responses": {
-          "200": {
-            "description": "postApiInstancesByIdPreview 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PreviewFrame"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "postApiInstancesByIdPreview 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "postApiInstancesByIdPreview 404",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "postApiInstancesByIdPreview 409",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "413": {
-            "description": "postApiInstancesByIdPreview 413",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "postApiInstancesByIdPreview 422",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              },
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "postApiInstancesByIdPreview 500",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "postApiInstancesByIdPreview 503",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "504": {
-            "description": "postApiInstancesByIdPreview 504",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      },
       "delete": {
         "parameters": [
           {
@@ -18277,6 +18335,23 @@
           "tracker"
         ]
       },
+      "getApiInstancesByIdArtifacts200": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/ArtifactSummary"
+        }
+      },
+      "postApiInstancesByIdArtifactsByArtifactShow200": {
+        "type": "object",
+        "properties": {
+          "opened": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "opened"
+        ]
+      },
       "getApiPush200": {
         "type": "object",
         "properties": {
@@ -19265,9 +19340,8 @@
           "id": {
             "type": "string"
           },
-          "seenAt": {
-            "type": "string",
-            "format": "date-time"
+          "workspace": {
+            "type": "string"
           },
           "state": {
             "type": "object"
@@ -19276,9 +19350,6 @@
           "endedAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "workspace": {
-            "type": "string"
           },
           "startedAt": {
             "type": "string",
@@ -19328,6 +19399,10 @@
           },
           "launchedBy": {
             "type": "string"
+          },
+          "seenAt": {
+            "type": "string",
+            "format": "date-time"
           },
           "edges": {
             "type": "object"
@@ -19416,9 +19491,8 @@
               "id": {
                 "type": "string"
               },
-              "seenAt": {
-                "type": "string",
-                "format": "date-time"
+              "workspace": {
+                "type": "string"
               },
               "state": {
                 "type": "object"
@@ -19427,9 +19501,6 @@
               "endedAt": {
                 "type": "string",
                 "format": "date-time"
-              },
-              "workspace": {
-                "type": "string"
               },
               "startedAt": {
                 "type": "string",
@@ -19479,6 +19550,10 @@
               },
               "launchedBy": {
                 "type": "string"
+              },
+              "seenAt": {
+                "type": "string",
+                "format": "date-time"
               }
             },
             "required": [
@@ -19741,6 +19816,56 @@
                   "string"
                 ]
               },
+              "parentInstanceId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "projectId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "lastError": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "threadId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "cwd": {
+                "type": "string"
+              },
+              "launchDir": {
+                "$ref": "#/components/schemas/InstanceRowLaunchDir"
+              },
+              "delegateType": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "workItemId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "seenAt": {
+                "type": "string",
+                "format": "date-time"
+              },
               "lastRequestAt": {
                 "type": "string",
                 "format": "date-time"
@@ -19760,18 +19885,6 @@
                   "string"
                 ]
               },
-              "threadId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "projectId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
               "accountId": {
                 "type": [
                   "null",
@@ -19784,23 +19897,11 @@
                   "string"
                 ]
               },
-              "parentInstanceId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
               "parentToolUseId": {
                 "type": [
                   "null",
                   "string"
                 ]
-              },
-              "cwd": {
-                "type": "string"
-              },
-              "launchDir": {
-                "$ref": "#/components/schemas/InstanceRowLaunchDir"
               },
               "titleSource": {
                 "$ref": "#/components/schemas/InstanceRowTitleSource"
@@ -19810,10 +19911,6 @@
                   "null",
                   "string"
                 ]
-              },
-              "seenAt": {
-                "type": "string",
-                "format": "date-time"
               },
               "turnEndedAt": {
                 "type": "string",
@@ -19825,19 +19922,7 @@
                   "string"
                 ]
               },
-              "delegateType": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
               "delegateTypeProject": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "lastError": {
                 "type": [
                   "null",
                   "string"
@@ -19862,19 +19947,9 @@
                   "updatedAt"
                 ]
               },
-              "updatedAt": {
-                "type": "string",
-                "format": "date-time"
-              },
               "spawnedAt": {
                 "type": "string",
                 "format": "date-time"
-              },
-              "workItemId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
               }
             },
             "required": [
@@ -19997,6 +20072,56 @@
                     "string"
                   ]
                 },
+                "parentInstanceId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "projectId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "updatedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "lastError": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "threadId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "cwd": {
+                  "type": "string"
+                },
+                "launchDir": {
+                  "$ref": "#/components/schemas/InstanceRowLaunchDir"
+                },
+                "delegateType": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "workItemId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "seenAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
                 "lastRequestAt": {
                   "type": "string",
                   "format": "date-time"
@@ -20016,18 +20141,6 @@
                     "string"
                   ]
                 },
-                "threadId": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "projectId": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
                 "accountId": {
                   "type": [
                     "null",
@@ -20040,23 +20153,11 @@
                     "string"
                   ]
                 },
-                "parentInstanceId": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
                 "parentToolUseId": {
                   "type": [
                     "null",
                     "string"
                   ]
-                },
-                "cwd": {
-                  "type": "string"
-                },
-                "launchDir": {
-                  "$ref": "#/components/schemas/InstanceRowLaunchDir"
                 },
                 "titleSource": {
                   "$ref": "#/components/schemas/InstanceRowTitleSource"
@@ -20066,10 +20167,6 @@
                     "null",
                     "string"
                   ]
-                },
-                "seenAt": {
-                  "type": "string",
-                  "format": "date-time"
                 },
                 "turnEndedAt": {
                   "type": "string",
@@ -20081,19 +20178,7 @@
                     "string"
                   ]
                 },
-                "delegateType": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
                 "delegateTypeProject": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "lastError": {
                   "type": [
                     "null",
                     "string"
@@ -20118,19 +20203,9 @@
                     "updatedAt"
                   ]
                 },
-                "updatedAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
                 "spawnedAt": {
                   "type": "string",
                   "format": "date-time"
-                },
-                "workItemId": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
                 },
                 "runningDelegates": {
                   "type": "number"
@@ -22282,6 +22357,14 @@
               }
             }
           },
+          "yours": {
+            "type": "object",
+            "properties": {
+              "pinnedAccountId": {
+                "type": "string"
+              }
+            }
+          },
           "atLimit": {
             "type": "object",
             "properties": {
@@ -22304,14 +22387,6 @@
               "prepareAtPct",
               "waitMinutes"
             ]
-          },
-          "yours": {
-            "type": "object",
-            "properties": {
-              "pinnedAccountId": {
-                "type": "string"
-              }
-            }
           },
           "provider": {
             "type": "string"
@@ -25785,18 +25860,155 @@
           "social"
         ]
       },
-      "CanvasChoices": {
-        "description": "A canvas's choices: what the pane hands the page, and `read_choices` reads.",
+      "ArtifactSummary": {
+        "description": "One artifact as the panel's list shows it, newest first.",
         "type": "object",
         "properties": {
-          "canvas": {
+          "createdAt": {
             "type": "string"
           },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ArtifactKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "shownAt": {
+            "description": "When it was last brought to the front of the panel.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "updatedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdAt",
+          "id",
+          "kind",
+          "name",
+          "shownAt",
+          "updatedAt"
+        ]
+      },
+      "ArtifactKind": {
+        "description": "The kinds of artifact (WORDS.md): HTML the agent wrote, a drawing, a dev server or folder shown live.",
+        "type": "string",
+        "enum": [
+          "canvas",
+          "page",
+          "preview"
+        ]
+      },
+      "Created": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ArtifactKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "opened": {
+            "description": "Whether the session's panel shows it now, or why not.",
+            "anyOf": [
+              {
+                "const": true,
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "route": {
+            "description": "Its live document on the hub's preview listener.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "opened",
+          "route"
+        ]
+      },
+      "ArtifactRead": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ArtifactKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pageHash": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "removed": {
+            "description": "Keys that changed since `since` and are no longer there.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "revision": {
+            "type": "number"
+          },
+          "sentAt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "seq": {
+            "description": "The cursor for the next read's `since`.",
+            "type": "number"
+          },
+          "state": {
+            "type": "object",
+            "description": "Every key, or with `since` only those changed after it."
+          },
+          "workspace": {
+            "description": "A port preview's workspace, whose dev server it is.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "pageHash",
+          "revision",
+          "sentAt",
+          "seq",
+          "state"
+        ]
+      },
+      "ArtifactChoices": {
+        "description": "An artifact's choices as the page reads them through the bridge (`cawco.on(\"picks\")`).",
+        "type": "object",
+        "properties": {
           "choices": {
             "type": "object"
           },
           "pageHash": {
-            "description": "The page's hash when it was last shown with the bridge.",
+            "description": "The page's hash when the hub last built it; null for a preview.",
             "type": [
               "null",
               "string"
@@ -25811,7 +26023,6 @@
           }
         },
         "required": [
-          "canvas",
           "choices",
           "pageHash",
           "sentAt"
@@ -30041,9 +30252,8 @@
               "id": {
                 "type": "string"
               },
-              "seenAt": {
-                "type": "string",
-                "format": "date-time"
+              "workspace": {
+                "type": "string"
               },
               "state": {
                 "type": "object"
@@ -30052,9 +30262,6 @@
               "endedAt": {
                 "type": "string",
                 "format": "date-time"
-              },
-              "workspace": {
-                "type": "string"
               },
               "startedAt": {
                 "type": "string",
@@ -30104,6 +30311,10 @@
               },
               "launchedBy": {
                 "type": "string"
+              },
+              "seenAt": {
+                "type": "string",
+                "format": "date-time"
               }
             },
             "required": [
@@ -31543,91 +31754,6 @@
           "snapshot",
           "start",
           "started"
-        ]
-      },
-      "PreviewFrame": {
-        "type": "object",
-        "properties": {
-          "instanceId": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "preview"
-            ]
-          },
-          "path": {
-            "description": "The path on the dashboard's own origin, e.g. `/preview/<id>/`.",
-            "type": "string"
-          },
-          "port": {
-            "description": "The hub's preview listener, on the hub's host: a client that is not a\npage (the Apple app) loads the preview from its root, naming the session\nin a `cawco-preview` cookie where the dashboard sends `x-cawco-preview`.",
-            "type": "number"
-          },
-          "revision": {
-            "description": "Identifies one successful open, including a rebuild of the same source.",
-            "type": "string"
-          },
-          "source": {
-            "description": "What a preview shows: a dev server or a folder on the session's machine, or\na decision page in a project's hub folder (`decisions/<page>/index.html`),\nwhich the hub serves itself. A dev server or folder may name `path`, the\npage inside it the preview opens at (`/motion/mac-readiness`); the root\nwhen absent.",
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "port": {
-                    "type": "number"
-                  },
-                  "path": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "port"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "dir": {
-                    "type": "string"
-                  },
-                  "path": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "dir"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "project": {
-                    "type": "string"
-                  },
-                  "page": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "page",
-                  "project"
-                ]
-              }
-            ]
-          },
-          "state": {
-            "$ref": "#/components/schemas/PreviewFrameState"
-          }
-        },
-        "required": [
-          "instanceId",
-          "kind",
-          "path",
-          "port",
-          "revision",
-          "state"
         ]
       },
       "KeepAlive": {
@@ -36329,6 +36455,112 @@
               }
             ]
           }
+        ]
+      },
+      "PreviewFrame": {
+        "type": "object",
+        "properties": {
+          "artifact": {
+            "description": "The artifact the session's panel shows (Projects spec §5.10).",
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/ArtifactKind"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "name"
+            ]
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "preview"
+            ]
+          },
+          "path": {
+            "description": "The path on the dashboard's own origin, e.g. `/preview/<id>/`.",
+            "type": "string"
+          },
+          "port": {
+            "description": "The hub's preview listener, on the hub's host: a client that is not a\npage (the Apple app) loads the preview from its root, naming the session\nin a `cawco-preview` cookie where the dashboard sends `x-cawco-preview`.",
+            "type": "number"
+          },
+          "revision": {
+            "description": "Identifies one successful open, including a rebuild of the same source.",
+            "type": "string"
+          },
+          "source": {
+            "description": "What an artifact shows (Projects spec §5.10): a dev server or a folder on\nthe session's machine (a preview), or a page the hub built and keeps under\nits data dir at `artifacts/<id>/` and serves itself, named by the page's\nname. A dev server or folder may name `path`, the page inside it the\npreview opens at (`/motion/mac-readiness`); the root when absent.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "port": {
+                    "type": "number"
+                  },
+                  "path": {
+                    "type": "string"
+                  },
+                  "workspace": {
+                    "description": "The workspace whose dev server it is: it runs in that workspace's own network.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "port"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "dir": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "dir"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "page": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "page"
+                ]
+              }
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/PreviewFrameState"
+          }
+        },
+        "required": [
+          "artifact",
+          "instanceId",
+          "kind",
+          "path",
+          "port",
+          "revision",
+          "state"
         ]
       },
       "SendRecord": {

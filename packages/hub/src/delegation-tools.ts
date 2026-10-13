@@ -2,16 +2,20 @@ import {
   IMAGE_GENERATION_DESCRIPTION,
   LANDS_MODES,
   type LandsMode,
-  PREVIEW_START_PATH,
 } from "@cawco/core";
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
+import {
+  artifactCreate,
+  artifactRead,
+  artifactShow,
+  artifactUpdate,
+} from "./artifacts/tools";
 import {
   type HandoffDeps,
   handoffActions,
   SPAWNING_TOOLS,
 } from "./delegation-actions";
-import { DECISION_PAGE } from "./preview-choices";
 import { budgetParameter, groupParameter, ownsParameter } from "./task-tools";
 import {
   SESSION_TITLE_DESCRIPTION,
@@ -150,6 +154,11 @@ const delegateTypeLine = (types: HandoffDeps["delegateTypes"]): string =>
     : "";
 
 /** The tools themselves, separated from the server so they can be exercised directly. */
+/** A tool's answer: the hub's JSON, as text. */
+const json = (answer: unknown) => ({
+  content: [{ type: "text" as const, text: JSON.stringify(answer) }],
+});
+
 export function handoffTools(deps: HandoffDeps) {
   const actions = handoffActions(deps);
   const all = [
@@ -1020,84 +1029,61 @@ export function handoffTools(deps: HandoffDeps) {
         })
     ),
     tool(
-      "show_preview",
-      "Show a page beside your transcript so the operator sees your work: when you start a dev server, change a page " +
-        "they will look at, they ask to see it, or before you say a UI change is done. `port` for a dev server, `dir` for a " +
-        "folder with an index.html; `path` with either opens that page (e.g. /motion/mac-readiness) instead of the root. They can click any element to send you its file:line with a note. A decision page " +
-        "(decision-page skill): `page` with `dir` (your folder with its page.html), or `page` alone (decisions/<page>/page.html " +
-        "in the project folder, or the page already there); the hub builds and shows it, keeping picks for ids it still has.",
-      {
-        port: z.number().int().min(1).max(65_535).optional(),
-        dir: z.string().startsWith("/").optional(),
-        page: z
-          .string()
-          .regex(DECISION_PAGE)
-          .optional()
-          .describe(
-            "A decision page's name, like onboarding: lowercase letters, digits and dashes."
-          ),
-        path: z
-          .string()
-          .regex(PREVIEW_START_PATH)
-          .optional()
-          .describe(
-            "With port or dir: the page to open, a path from the server's root like /motion/mac-readiness (query allowed). The root when left out."
-          ),
-      },
-      async ({ port, dir, page, path }) => {
-        if (page !== undefined && port !== undefined) {
-          throw new Error("A page is shown from a folder, not a port.");
-        }
-        if (page !== undefined && path !== undefined) {
-          throw new Error(
-            "A decision page opens at its own root; path is for port or dir."
-          );
-        }
-        if (
-          page === undefined &&
-          (port === undefined) === (dir === undefined)
-        ) {
-          throw new Error("Pass exactly one of port or dir, or a page.");
-        }
-        const at = path === undefined ? {} : { path };
-        let source: Parameters<typeof actions.showPreview>[0] = {
-          dir: dir as string,
-          ...at,
-        };
-        if (page !== undefined) {
-          source = { page, dir };
-        } else if (port !== undefined) {
-          source = { port, ...at };
-        }
-        return {
-          content: [
-            { type: "text" as const, text: await actions.showPreview(source) },
-          ],
-        };
-      }
+      artifactCreate.name,
+      artifactCreate.description,
+      artifactCreate.input,
+      async (input) => json(await actions.artifactCall("POST", "", input))
     ),
     tool(
-      "read_choices",
-      "Read the picks, notes and values the person made on the preview you show (or showed last), each with the hash of the " +
-        "page it was made on; `page` reads a decision page in your project's folder. Sent picks also arrive as one message.",
-      {
-        page: z
-          .string()
-          .regex(DECISION_PAGE)
-          .optional()
-          .describe("A decision page's name in your project's folder."),
+      artifactUpdate.name,
+      artifactUpdate.description,
+      artifactUpdate.input,
+      async ({ id, ...change }) =>
+        json(
+          await actions.artifactCall(
+            "PATCH",
+            `/${encodeURIComponent(id)}`,
+            change
+          )
+        )
+    ),
+    tool(
+      artifactRead.name,
+      artifactRead.description,
+      artifactRead.input,
+      async ({ id, since }) => {
+        const query = since === undefined ? "" : `?since=${since}`;
+        if (id !== undefined) {
+          return json(
+            await actions.artifactCall(
+              "GET",
+              `/${encodeURIComponent(id)}${query}`
+            )
+          );
+        }
+        const [newest] = (await actions.artifactCall("GET", "")) as {
+          id: string;
+        }[];
+        if (!newest) {
+          throw new Error("This session has made no artifact yet.");
+        }
+        return json(await actions.artifactCall("GET", `/${newest.id}${query}`));
       },
-      async ({ page }) => ({
-        content: [
-          { type: "text" as const, text: await actions.readChoices(page) },
-        ],
-      }),
       {
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
         openWorldHint: false,
       }
+    ),
+    tool(
+      artifactShow.name,
+      artifactShow.description,
+      artifactShow.input,
+      async ({ id }) =>
+        json(
+          await actions.artifactCall("POST", `/${encodeURIComponent(id)}/show`)
+        )
     ),
   ];
   return all.filter(

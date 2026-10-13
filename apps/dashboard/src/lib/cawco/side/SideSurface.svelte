@@ -23,6 +23,7 @@
     label,
     switcher,
     title,
+    titleControl,
     subtitle,
     actions,
     onclose,
@@ -40,6 +41,8 @@
     switcher?: Snippet;
     /** What is on show, past what the switch says; nothing when it says it all. */
     title?: string;
+    /** What is on show as a control (the artifact panel's menu), in the title's place. */
+    titleControl?: Snippet;
     subtitle?: string;
     /** The pane's own controls, before Close. */
     actions?: Snippet;
@@ -61,8 +64,10 @@
     {#if switcher}
       {@render switcher()}
     {/if}
-    <div class="identity">
-      {#if title}
+    <div class="identity" class:controlled={!!titleControl}>
+      {#if titleControl}
+        {@render titleControl()}
+      {:else if title}
         <span class="title">{title}</span>
       {/if}
       {#if subtitle}
@@ -126,6 +131,11 @@
   }
   .side-head:has(:global([role="tablist"])) .identity {
     padding-inline-start: var(--space-1);
+  }
+  /* A title control's own padding is its text's inset, as the controls'. */
+  .identity.controlled {
+    align-items: flex-start;
+    padding-inline-start: 0;
   }
   .title,
   .subtitle {

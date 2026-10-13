@@ -15,12 +15,12 @@ import type {
   AccountSigninResult,
   AgentRow,
   ApprovedActionView,
+  ArtifactChoices,
+  ArtifactSummary,
   AvailableCommand,
   BuildInfo,
-  CanvasChoices,
   CawHarness,
   CawView,
-  ChoiceChange,
   ClaudeLimits,
   CommandKind,
   ContinuationJob,
@@ -130,7 +130,6 @@ import { notices } from "./notices.svelte";
 import { unpickedMode } from "./permission-modes";
 import { type HeldPlan, handlePlanMessage } from "./plan";
 import { type PendingSelection, selectionExtras } from "./preview/selection";
-import type { PreviewAsk } from "./preview/source";
 import { send as askHub, json } from "./project-tasks";
 import { placedOn } from "./projects";
 import { type ReloadHold, reloadWhenIdle } from "./reload.svelte";
@@ -5164,69 +5163,44 @@ export function revealPreview(instanceId: string): void {
     (state.previewRequests[instanceId] ?? 0) + 1;
 }
 
-export async function openPreview(
-  instanceId: string,
-  source: PreviewAsk
-): Promise<void> {
-  const response = await fetch(
-    `/api/instances/${encodeURIComponent(instanceId)}/preview`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(source),
-    }
-  );
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-  handleFrame(await response.json());
-}
+const artifactsPath = (instanceId: string, id?: string) =>
+  `/api/instances/${encodeURIComponent(instanceId)}/artifacts${id ? `/${encodeURIComponent(id)}` : ""}`;
 
-/** The choices a session's open preview keeps (Projects spec §5.7). */
-export async function previewChoices(
+/** A session's artifacts, newest first (Projects spec §5.10): the panel's list. */
+export async function listArtifacts(
   instanceId: string
-): Promise<CanvasChoices> {
-  const response = await fetch(
-    `/api/instances/${encodeURIComponent(instanceId)}/preview/choices`
-  );
+): Promise<ArtifactSummary[]> {
+  const response = await fetch(artifactsPath(instanceId));
   if (!response.ok) {
     throw new Error(await response.text());
   }
   return response.json();
 }
 
-/** Stores one change the page asked for; answers the canvas's choices as the hub now keeps them. */
-export async function changePreviewChoice(
+/** Brings one of a session's artifacts to the front of its panel; the panel follows its frame. */
+export async function showArtifact(
   instanceId: string,
-  change: ChoiceChange
-): Promise<CanvasChoices> {
-  const response = await fetch(
-    `/api/instances/${encodeURIComponent(instanceId)}/preview/choices`,
-    {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(change),
-    }
-  );
+  id: string
+): Promise<void> {
+  const response = await fetch(`${artifactsPath(instanceId, id)}/show`, {
+    method: "POST",
+  });
   if (!response.ok) {
     throw new Error(await response.text());
   }
-  return response.json();
 }
 
 /** Sends the person's picks to the session, as one message; a page's own words go below them. */
-export async function sendPreviewChoices(
+export async function sendArtifact(
   instanceId: string,
+  id: string,
   text?: string
-): Promise<CanvasChoices> {
-  const response = await fetch(
-    `/api/instances/${encodeURIComponent(instanceId)}/preview/choices/send`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(text ? { text } : {}),
-    }
-  );
+): Promise<ArtifactChoices> {
+  const response = await fetch(`${artifactsPath(instanceId, id)}/send`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(text ? { text } : {}),
+  });
   if (!response.ok) {
     throw new Error(await response.text());
   }

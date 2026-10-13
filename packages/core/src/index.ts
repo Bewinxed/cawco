@@ -1196,16 +1196,38 @@ export const CAWCO_HUB_PORT = 3456;
 export const PREVIEW_START_PATH = /^\/(?!\/)\S*$/;
 
 /**
- * What a preview shows: a dev server or a folder on the session's machine, or
- * a decision page in a project's hub folder (`decisions/<page>/index.html`),
- * which the hub serves itself. A dev server or folder may name `path`, the
- * page inside it the preview opens at (`/motion/mac-readiness`); the root
- * when absent.
+ * What an artifact shows (Projects spec §5.10): a dev server or a folder on
+ * the session's machine (a preview), or a page the hub built and keeps under
+ * its data dir at `artifacts/<id>/` and serves itself, named by the page's
+ * name. A dev server or folder may name `path`, the page inside it the
+ * preview opens at (`/motion/mac-readiness`); the root when absent.
  */
 export type PreviewSource =
-  | { port: number; path?: string }
+  | {
+      port: number;
+      path?: string;
+      /** The workspace whose dev server it is: it runs in that workspace's own network. */
+      workspace?: string;
+    }
   | { dir: string; path?: string }
-  | { project: string; page: string };
+  | { page: string };
+
+/** The kinds of artifact (WORDS.md): HTML the agent wrote, a drawing, a dev server or folder shown live. */
+export type ArtifactKind = "page" | "canvas" | "preview";
+
+/** An artifact's name: lowercase letters, digits and dashes, like `onboarding`. */
+export const ARTIFACT_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
+
+/** One artifact as the panel's list shows it, newest first. */
+export interface ArtifactSummary {
+  createdAt: string;
+  id: string;
+  kind: ArtifactKind;
+  name: string;
+  /** When it was last brought to the front of the panel. */
+  shownAt: string | null;
+  updatedAt: string;
+}
 
 /**
  * A preview whose page nothing serves: the hop that did not answer, as the
@@ -1220,7 +1242,7 @@ export type PreviewDown = "server" | "machine";
 export const PREVIEW_DOWN_META = "cawco-preview-down";
 
 /**
- * One id's entry in a canvas's choices (Projects spec §5.7): the options
+ * One id's entry in an artifact's `state` (Projects spec §5.10): the options
  * picked for a choice, the person's note on it, or a value the page `set`.
  * `pageHash` is the page the person was looking at when it last changed, so
  * a pick made on an earlier revision can be told apart.
@@ -1249,8 +1271,8 @@ export const CHOICE_LIMITS = {
   note: 2000,
   /** A set value, as JSON. */
   value: 2000,
-  /** Ids one canvas keeps. */
-  perCanvas: 500,
+  /** Ids one artifact's `state` keeps. */
+  perArtifact: 500,
 } as const;
 /** An id or option: no control characters, no spaces at either end. */
 export const CHOICE_ID = /^[^\s\p{Cc}](?:[^\p{Cc}]*[^\s\p{Cc}])?$/u;
@@ -1263,15 +1285,72 @@ export type ChoiceChange = { choice: string; pageHash: string } & (
   | { value: unknown }
 );
 
-/** A canvas's choices: what the pane hands the page, and `read_choices` reads. */
-export interface CanvasChoices {
-  canvas: string;
+/** An artifact's choices as the page reads them through the bridge (`cawco.on("picks")`). */
+export interface ArtifactChoices {
   choices: Record<string, ChoiceEntry>;
-  /** The page's hash when it was last shown with the bridge. */
+  /** The page's hash when the hub last built it; null for a preview. */
   pageHash: string | null;
   /** When the person last sent their picks to the session. */
   sentAt: string | null;
 }
+
+const isChoiceId = (value: unknown, max: number): value is string =>
+  typeof value === "string" && value.length <= max && CHOICE_ID.test(value);
+
+/**
+ * Why `value` is not an entry an artifact's `state` may hold under `key`, or
+ * null when it is: the bounds of {@link CHOICE_LIMITS}, checked by the pane
+ * before it writes and by the hub before it keeps a write.
+ */
+export const choiceEntryProblem = (
+  key: string,
+  value: unknown
+): string | null => {
+  if (!isChoiceId(key, CHOICE_LIMITS.id)) {
+    return `A choice's id must be 1 to ${CHOICE_LIMITS.id} characters, with no control characters and no spaces at either end.`;
+  }
+  const entry = value as Partial<ChoiceEntry> | null;
+  if (
+    entry === null ||
+    typeof entry !== "object" ||
+    typeof entry.at !== "string" ||
+    typeof entry.pageHash !== "string" ||
+    !Array.isArray(entry.options) ||
+    !(entry.note === null || typeof entry.note === "string") ||
+    !("value" in entry)
+  ) {
+    return `${key} is not a choice entry: it holds options, note, value, pageHash and at.`;
+  }
+  if (!PAGE_HASH.test(entry.pageHash)) {
+    return `${key}'s pageHash must be the page's sha256, hex.`;
+  }
+  if (entry.options.length > CHOICE_LIMITS.options) {
+    return `A choice holds at most ${CHOICE_LIMITS.options} options.`;
+  }
+  if (!entry.options.every((one) => isChoiceId(one, CHOICE_LIMITS.option))) {
+    return `An option must be 1 to ${CHOICE_LIMITS.option} characters, with no control characters and no spaces at either end.`;
+  }
+  if ((entry.note ?? "").length > CHOICE_LIMITS.note) {
+    return `A note stops at ${CHOICE_LIMITS.note} characters.`;
+  }
+  if (JSON.stringify(entry.value ?? null).length > CHOICE_LIMITS.value) {
+    return `A set value stops at ${CHOICE_LIMITS.value} characters of JSON.`;
+  }
+  return null;
+};
+
+/** The entry `change` makes of `before` (absent: nothing kept yet), stamped `at`. */
+export const changedEntry = (
+  before: ChoiceEntry | undefined,
+  change: ChoiceChange,
+  at: string
+): ChoiceEntry => ({
+  options: "options" in change ? change.options : (before?.options ?? []),
+  note: "note" in change ? change.note || null : (before?.note ?? null),
+  value: "value" in change ? (change.value ?? null) : (before?.value ?? null),
+  pageHash: change.pageHash,
+  at,
+});
 
 export interface PreviewElement {
   classes: string[];

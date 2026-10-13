@@ -33,12 +33,16 @@ import type { Tasks } from "./tasks";
  * approved actions add three `action_*` tools of about 560 tokens to both
  * (lead 11,967, worker 20,792 measured). P3's relay adds three `relay_*`
  * tools of about 316 tokens, descriptions already cut to a line (lead
- * 12,283, worker 21,108 measured).
+ * 12,283, worker 21,108 measured). §5.10's four `artifact_*` tools take
+ * the place of the preview's two, about 456 tokens more for the worker and
+ * the delegate; the lead takes them in place of its two one-line decision
+ * page tools, about 852 more (worker 21,587, delegate 4,727, lead 13,158
+ * measured).
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 21_500,
-  delegate: 4600,
-  lead: 12_500,
+  worker: 22_000,
+  delegate: 5000,
+  lead: 13_500,
   overseer: 2800,
   "web-facing": 3400,
 };
@@ -113,12 +117,6 @@ export const measureRoles = (): RoleSize[] => {
         fleetChoicesSet: () => false,
         folderChanged: () => undefined,
         leadHome: () => Promise.resolve(undefined),
-        pages: {
-          show: () => Promise.reject(new Error("measuring")),
-          choices: () => {
-            throw new Error("measuring");
-          },
-        },
         online: () => false,
         publish: () => undefined,
         send: () => undefined,

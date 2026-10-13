@@ -2389,37 +2389,70 @@ export const sessionPlans = sqliteTable("session_plans", {
 });
 
 /**
- * A canvas (Projects spec §5.7): where a preview's choices are kept. Its id is
- * the preview's place, not the page's hash — `decisions:<project>/<page>` for
- * a decision page in a project's hub folder, `dir:<machine>:<path>` or
- * `port:<machine>:<port>` for a session's own preview — so a revised page
- * keeps every pick whose id it still carries.
+ * An artifact (Projects spec §5.10): a document a session made that the
+ * person works in — a page, a canvas or a preview — listed in the session's
+ * panel newest first. Its live state is one Yjs document, kept as
+ * {@link artifactUpdates}; this row is what lists it and serves it.
  */
-export const canvases = sqliteTable("canvases", {
-  id: text("id").primaryKey(),
-  /** The session that last showed it: the one a send goes to. */
-  instanceId: text("instance_id").notNull(),
-  /** The page's hash when the bridge last heard from it. */
-  pageHash: text("page_hash"),
-  /** When the person last sent their picks to the session. */
-  sentAt: timestamp("sent_at"),
-  updatedAt: timestamp("updated_at").notNull(),
-});
-
-/** One id's pick, note or value on a canvas (`ChoiceEntry`). */
-export const canvasChoices = sqliteTable(
-  "canvas_choices",
+export const artifacts = sqliteTable(
+  "artifacts",
   {
-    canvasId: text("canvas_id").notNull(),
-    choice: text("choice").notNull(),
-    options: text("options", { mode: "json" }).$type<string[]>().notNull(),
-    note: text("note"),
-    value: text("value", { mode: "json" }).$type<unknown>(),
-    /** The page the person was looking at when this last changed. */
-    pageHash: text("page_hash").notNull(),
+    id: text("id").primaryKey(),
+    instanceId: text("instance_id")
+      .notNull()
+      .references(() => instances.id, { onDelete: "cascade" }),
+    /** The session's project when it made it; a page there is also written to `decisions/<name>/`. */
+    projectId: text("project_id"),
+    kind: text("kind").$type<import("@cawco/core").ArtifactKind>().notNull(),
+    name: text("name").notNull(),
+    /** The machine a preview's dev server or folder is on; null for a page, which the hub serves. */
+    machineId: text("machine_id"),
+    /** What the panel shows: a page by name (served from `artifacts/<id>/`), a dev server or a folder. */
+    source: text("source", { mode: "json" })
+      .$type<import("@cawco/core").PreviewSource>()
+      .notNull(),
+    /** Moved by each new HTML; mirrored in the doc's `meta.revision`. */
+    revision: integer("revision").notNull().default(1),
+    /** Moved by every update the doc takes, from anyone: `artifact_read`'s `since` cursor. */
+    seq: integer("seq").notNull().default(0),
+    /** Each `state` key's last change: the seq it changed at and who changed it. */
+    changes: text("changes", { mode: "json" })
+      .$type<Record<string, { seq: number; by: "person" | "agent" }>>()
+      .notNull()
+      .default({}),
+    /** The last seq the session was told of: the person's changes after it are owed to it. */
+    deliveredSeq: integer("delivered_seq").notNull().default(0),
+    createdAt: timestamp("created_at").notNull(),
     updatedAt: timestamp("updated_at").notNull(),
+    shownAt: timestamp("shown_at"),
   },
-  (table) => [primaryKey({ columns: [table.canvasId, table.choice] })]
+  (table) => [
+    index("artifacts_instance").on(table.instanceId, table.createdAt),
+    uniqueIndex("artifacts_instance_name").on(
+      table.instanceId,
+      table.kind,
+      table.name
+    ),
+  ]
+);
+
+/**
+ * An artifact's Yjs document as its update log: every update appended in
+ * order; every {@link ARTIFACT_COMPACT_EVERY} updates the log is replaced by
+ * one snapshot (`Y.encodeStateAsUpdate`).
+ */
+export const artifactUpdates = sqliteTable(
+  "artifact_updates",
+  {
+    artifactId: text("artifact_id")
+      .notNull()
+      .references(() => artifacts.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    update: customType<{ data: Uint8Array; driverData: Uint8Array }>({
+      dataType: () => "blob",
+    })("update").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.artifactId, table.seq] })]
 );
 
 /** A conversation with a project's Caw (caw.ts). */

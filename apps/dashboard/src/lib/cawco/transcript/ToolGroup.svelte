@@ -11,17 +11,16 @@
   import { SvelteSet } from "svelte/reactivity";
   import {
     cawco,
-    openPreview,
     revealPreview,
+    showArtifact,
   } from "#lib/cawco/client.svelte.js";
   import { fleetMcpServers } from "#lib/cawco/fleet-mcp.svelte.js";
   import { mcpServerHost } from "#lib/cawco/mcp.js";
   import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import {
-    type PreviewAsk,
+    type CalledArtifact,
+    calledArtifact,
     previewPlace,
-    previewSourceKey,
-    reopenAsk,
   } from "#lib/cawco/preview/source.js";
   import { toast } from "#lib/cawco/toasts.js";
   import DiffView from "#lib/components/features/DiffView.svelte";
@@ -190,12 +189,12 @@
   const opening = new SvelteSet<string>();
   const openFailed = new SvelteSet<string>();
 
-  async function openArtifact(m: Message, input: PreviewAsk) {
+  async function openArtifact(m: Message, artifact: CalledArtifact) {
     const key = callId(m);
     opening.add(key);
     openFailed.delete(key);
     try {
-      await openPreview(m.instanceId, reopenAsk(input));
+      await showArtifact(m.instanceId, artifact.id);
       revealPreview(m.instanceId);
     } catch (error) {
       openFailed.add(key);
@@ -255,17 +254,14 @@
       }));
 
   /**
-   * Metadata belongs to its source, even when another artifact from the same
-   * session is the one currently showing.
+   * Metadata belongs to its artifact, even when another artifact from the
+   * same session is the one currently showing.
    */
-  function sameSource(
+  function sameArtifact(
     preview: (typeof cawco.previews)[string] | undefined,
-    wanted: PreviewAsk
+    wanted: CalledArtifact | undefined
   ): boolean {
-    return (
-      !!preview?.source &&
-      previewSourceKey(preview.source) === previewSourceKey(wanted)
-    );
+    return !!wanted && preview?.artifact?.id === wanted.id;
   }
 </script>
 
@@ -348,35 +344,41 @@
       {#snippet children()}
         <div class="row" class:err={failed}>
           {#if d.expanded === "preview"}
-            {@const input = m.metadata?.toolInput as PreviewAsk}
+            {@const called = calledArtifact(
+              m.metadata?.toolInput ?? undefined,
+              m.metadata?.toolResult
+            )}
             {@const current = cawco.previews[m.instanceId]}
-            {@const preview = sameSource(current, input) ? current : undefined}
+            {@const preview = sameArtifact(current, called)
+              ? current
+              : undefined}
             {@const opened = preview?.state === "open"}
             {@const busy = opening.has(callId(m))}
+            {@const name = called?.name ?? preview?.artifact.name ?? "Artifact"}
             <!-- The row is what travels: pressing its button departs it
-                 (motion/share's click capture), and the preview pane or
-                 sheet opens out of its box under `preview:<session>` —
-                 first open or repeat, thumbnail or not. Closing, the pane
-                 shrinks back into this row (PreviewPane.svelte). -->
+                 (motion/share's click capture), and the panel or sheet
+                 opens out of its box under `preview:<session>` — first open
+                 or repeat, thumbnail or not. Closing, the pane shrinks back
+                 into this row (PreviewPane.svelte). -->
             <div
               class="preview-tool"
-              data-preview-source={previewSourceKey(input)}
+              data-artifact={called?.id}
               data-share="preview:{m.instanceId}"
               data-share-ttl="10000"
               class:closed={!opened}
             >
               <button
                 aria-busy={busy || undefined}
-                aria-disabled={busy || undefined}
-                aria-label={preview?.title || "Preview"}
+                aria-disabled={busy || !called || undefined}
+                aria-label={preview?.title || name}
                 class="artifact-open"
                 onclick={whileIdle(
-                  () => busy,
+                  () => busy || !called,
                   () => {
                     if (opened) {
                       revealPreview(m.instanceId);
-                    } else {
-                      openArtifact(m, input);
+                    } else if (called) {
+                      openArtifact(m, called);
                     }
                   }
                 )}
@@ -387,12 +389,14 @@
                   ><span class="artifact-title"
                     ><PendingContent
                       failed={openFailed.has(callId(m))}
-                      label={preview?.title || "Preview"}
+                      label={preview?.title || name}
                       pending={busy}
                       pendingLabel="Opening…"
                     /></span
                   ><span class="artifact-path"
-                    >{preview?.path || previewPlace(input)}</span
+                    >{preview?.source
+                      ? previewPlace(preview.source)
+                      : (called?.kind ?? "")}</span
                   ></span
                 >
               </button>

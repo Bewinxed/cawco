@@ -1,6 +1,6 @@
 import { realpath, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
-import type { FramePayload, PreviewSource } from "@cawco/core";
+import type { PreviewFrame, PreviewSource } from "@cawco/core";
 import {
   downResponse,
   injectOverlay,
@@ -11,8 +11,10 @@ import {
   proxyHeaders,
   upgradePreview,
 } from "@cawco/core/preview-proxy";
-import { PREVIEW_PORT } from "./config";
-import { FolderRefusal, folderPath, projectRoot } from "./project-folder";
+import type { ServerWebSocket, WebSocketHandler } from "bun";
+import type { ArtifactSocket, artifactSocket } from "./artifacts/sync";
+import { ARTIFACTS_ROOT, PREVIEW_PORT } from "./config";
+import { FolderRefusal, folderPath } from "./project-folder";
 
 /**
  * Each preview target maps an instance id to the daemon address and port that
@@ -24,41 +26,50 @@ import { FolderRefusal, folderPath, projectRoot } from "./project-folder";
  * machine is away `upstream` is absent, and the register that brings the
  * machine back starts the listener again and fills it in.
  */
-export const previewTargets = new Map<
-  string,
-  {
-    machineId: string;
-    source: PreviewSource;
-    revision: string;
-    upstream?: { address: string; port: number };
+export interface PreviewTarget {
+  /** The artifact the panel shows (Projects spec §5.10). */
+  artifact: PreviewFrame["artifact"];
+  machineId: string;
+  revision: string;
+  source: PreviewSource;
+  upstream?: { address: string; port: number };
+}
+
+export const previewTargets = new Map<string, PreviewTarget>();
+
+/** One string per thing a preview shows: a page by name, a port, a folder. */
+export const previewSourceKey = (source: PreviewSource): string => {
+  if ("page" in source) {
+    return `page:${source.page}`;
   }
->();
+  return "port" in source ? `port:${source.port}` : `dir:${source.dir}`;
+};
 
 export function previewFrame(
   instanceId: string,
   state: "open" | "closed",
-  source: PreviewSource,
-  revision: string
-): Extract<FramePayload, { kind: "preview" }> {
+  target: Pick<PreviewTarget, "artifact" | "revision" | "source">
+): PreviewFrame {
   return {
     kind: "preview",
     instanceId,
     state,
-    path: `/preview/${encodeURIComponent(instanceId)}/${encodeURIComponent(revision)}/`,
+    artifact: target.artifact,
+    path: `/preview/${encodeURIComponent(instanceId)}/${encodeURIComponent(target.revision)}/`,
     port: PREVIEW_PORT,
-    source,
-    revision,
+    source: target.source,
+    revision: target.revision,
   };
 }
 
 /**
- * A file of a decision page, `decisions/<page>/…` in the project's hub
- * folder, served by the hub itself: no machine holds that folder. A path
- * that leaves the page's folder, by `..` or by a link, is refused; the HTML
- * gets the overlay like any other preview.
+ * A file of a page artifact, `artifacts/<id>/…` under the hub's data dir,
+ * served by the hub itself: no machine holds that folder. A path that leaves
+ * the page's folder, by `..` or by a link, is refused; the HTML gets the
+ * overlay like any other preview.
  */
 async function servePage(
-  source: { project: string; page: string },
+  artifactId: string,
   pathname: string
 ): Promise<Response> {
   if (pathname === OVERLAY_PATH) {
@@ -67,9 +78,7 @@ async function servePage(
   let file: string;
   let root: string;
   try {
-    root = await realpath(
-      join(projectRoot(source.project), "decisions", folderPath(source.page))
-    );
+    root = await realpath(join(ARTIFACTS_ROOT, artifactId));
     file = await realpath(
       join(
         root,
@@ -99,26 +108,79 @@ async function servePage(
     : new Response(body, { headers });
 }
 
-export function startPreviewListener(hostname: string) {
-  return Bun.serve<PreviewSocket>({
+/** Where an artifact's live document is synced on the listener (artifacts/sync.ts). */
+const ARTIFACT_SOCKET = /^\/__cawco\/artifact\/([0-9a-f-]{36})$/;
+
+type ListenerSocket = PreviewSocket | ArtifactSocket;
+
+const isArtifact = (
+  socket: ServerWebSocket<ListenerSocket>
+): socket is ServerWebSocket<ArtifactSocket> => "artifactId" in socket.data;
+
+/**
+ * The session a request is for. The dashboard names the preview in a header
+ * on every hop; a web view in the Apple app cannot put a header on the
+ * page's own loads, so it names it in a cookie on the hub's host, which they
+ * all carry.
+ */
+const sessionNamed = (request: Request): string | null | undefined =>
+  request.headers.get("x-cawco-preview") ??
+  new Bun.CookieMap(request.headers.get("cookie") ?? "").get("cawco-preview");
+
+/** An artifact's sync socket, for the session that owns it only. */
+const joinArtifact = (
+  request: Request,
+  server: Bun.Server<ListenerSocket>,
+  [, artifactId]: RegExpMatchArray,
+  instanceId: string | null | undefined,
+  artifacts: { ownerOf: (artifactId: string) => string | undefined }
+): Response | undefined => {
+  if (!instanceId || artifacts.ownerOf(artifactId) !== instanceId) {
+    return new Response("This session has no such artifact.", { status: 404 });
+  }
+  return server.upgrade(request, { data: { artifactId } })
+    ? undefined
+    : new Response("WebSocket upgrade failed", { status: 400 });
+};
+
+export function startPreviewListener(
+  hostname: string,
+  artifacts: {
+    /** The session that owns an artifact; undefined when there is none. */
+    ownerOf: (artifactId: string) => string | undefined;
+    socket: ReturnType<typeof artifactSocket>;
+  }
+) {
+  const proxy = previewWebSocket as unknown as WebSocketHandler<ListenerSocket>;
+  return Bun.serve<ListenerSocket>({
     hostname,
     port: PREVIEW_PORT,
-    websocket: previewWebSocket,
+    websocket: {
+      open: (socket) =>
+        isArtifact(socket)
+          ? artifacts.socket.open(socket)
+          : proxy.open?.(socket),
+      message: (socket, message) =>
+        isArtifact(socket)
+          ? artifacts.socket.message(socket, message)
+          : proxy.message(socket, message),
+      close: (socket, code, reason) =>
+        isArtifact(socket)
+          ? artifacts.socket.close(socket)
+          : proxy.close?.(socket, code, reason),
+    },
     async fetch(request, server) {
-      // The dashboard names the preview in a header on every hop; a web
-      // view in the Apple app cannot put a header on the page's own loads,
-      // so it names it in a cookie on the hub's host, which they all carry.
-      const instanceId =
-        request.headers.get("x-cawco-preview") ??
-        new Bun.CookieMap(request.headers.get("cookie") ?? "").get(
-          "cawco-preview"
-        );
+      const instanceId = sessionNamed(request);
+      const synced = new URL(request.url).pathname.match(ARTIFACT_SOCKET);
+      if (synced) {
+        return joinArtifact(request, server, synced, instanceId, artifacts);
+      }
       const target = instanceId ? previewTargets.get(instanceId) : undefined;
       if (!target) {
         return new Response("No preview selected.", { status: 404 });
       }
-      if ("project" in target.source) {
-        return servePage(target.source, new URL(request.url).pathname);
+      if ("page" in target.source) {
+        return servePage(target.artifact.id, new URL(request.url).pathname);
       }
       // Its machine is away: the register that brings it back serves it again.
       if (!target.upstream) {

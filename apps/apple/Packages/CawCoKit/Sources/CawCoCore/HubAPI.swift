@@ -59,7 +59,6 @@ public struct HubAPI: Sendable {
         public func continueSession(_ input: Operations.PostApiInstancesByIdContinue.Input) async throws -> Operations.PostApiInstancesByIdContinue.Output { try await client.postApiInstancesByIdContinue(input) }
         public func continuations(_ input: Operations.GetApiContinuations.Input = .init()) async throws -> Operations.GetApiContinuations.Output { try await client.getApiContinuations(input) }
         public func cancelContinuation(_ input: Operations.DeleteApiContinuationsById.Input) async throws -> Operations.DeleteApiContinuationsById.Output { try await client.deleteApiContinuationsById(input) }
-        public func openPreview(_ input: Operations.PostApiInstancesByIdPreview.Input) async throws -> Operations.PostApiInstancesByIdPreview.Output { try await client.postApiInstancesByIdPreview(input) }
         public func closePreview(_ input: Operations.DeleteApiInstancesByIdPreview.Input) async throws -> Operations.DeleteApiInstancesByIdPreview.Output { try await client.deleteApiInstancesByIdPreview(input) }
         public func generateImage(_ input: Operations.PostApiInstancesByIdGenerateImage.Input) async throws -> Operations.PostApiInstancesByIdGenerateImage.Output { try await client.postApiInstancesByIdGenerateImage(input) }
         public func media(_ input: Operations.GetApiMediaByName.Input) async throws -> Operations.GetApiMediaByName.Output { try await client.getApiMediaByName(input) }

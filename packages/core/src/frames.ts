@@ -8,6 +8,7 @@ import type {
 } from "./harness";
 import type {
   AgentRow,
+  ArtifactKind,
   BuildInfo,
   ContinuationJob,
   DelegateEvent,
@@ -37,6 +38,8 @@ export interface CacheInvalidatedFrame {
 }
 
 export interface PreviewFrame {
+  /** The artifact the session's panel shows (Projects spec §5.10). */
+  artifact: { id: string; kind: ArtifactKind; name: string };
   instanceId: string;
   kind: "preview";
   /** The path on the dashboard's own origin, e.g. `/preview/<id>/`. */

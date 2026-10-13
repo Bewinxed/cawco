@@ -132,7 +132,7 @@ function box(
 
 /**
  * The MCP Apps methods the choices bridge answers (spec 2026-01-26): the
- * handshake, a health check, `tools/call` (read_choices only), a change
+ * handshake, a health check, `tools/call` (artifact_read only), a change
  * (`ui/update-model-context`) and a send (`ui/message`); and CawCo's own
  * `cawco/pick-place` (`cawco.pickPlace`), which asks the person for a
  * machine and folder with the pane's own pickers.

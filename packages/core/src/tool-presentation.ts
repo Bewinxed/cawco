@@ -27,7 +27,7 @@ export type Renderer =
   | "prose"
   /** The picture the call put on screen, under its line; the fields body when opened. */
   | "image"
-  /** A card for the page the call opened in the session's preview, in place of the line. */
+  /** A card for the artifact the call opened in the session's panel, in place of the line. */
   | "preview";
 
 /** How a piece of the sentence is cut from the value it is read from. */
@@ -495,13 +495,18 @@ export const TOOL_KINDS: ToolKind[] = [
   },
   {
     id: "preview",
-    names: ["show_preview", "cawco_show_preview"],
+    names: [
+      "artifact_create",
+      "cawco_artifact_create",
+      "artifact_show",
+      "cawco_artifact_show",
+    ],
     glyph: "window-frame-bold-duotone",
     ink: "tool-mcp",
-    one: "call",
-    many: "calls",
+    one: "artifact",
+    many: "artifacts",
     renderer: "preview",
-    sentence: { label: "Preview" },
+    sentence: { label: "Artifact" },
   },
   {
     id: "screen",

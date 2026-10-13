@@ -64,6 +64,7 @@ export { default as IconWarningTriangle } from "~icons/solar/danger-triangle-bol
 // a menu's other glyphs' (an add mark inside a tile read smaller beside them).
 export { default as IconChatAdd } from "~icons/solar/dialog-2-bold-duotone";
 export {
+  default as IconArtifactPage,
   default as IconFileMarkdown,
   default as IconToolRead,
 } from "~icons/solar/document-text-bold-duotone";
@@ -121,6 +122,7 @@ export { default as IconPalette } from "~icons/solar/pallete-2-bold-duotone";
 export { default as IconPause } from "~icons/solar/pause-bold-duotone";
 export { default as IconToolEdit } from "~icons/solar/pen-2-bold-duotone";
 export {
+  default as IconArtifactCanvas,
   default as IconPenLine,
   default as IconToolWrite,
 } from "~icons/solar/pen-new-square-bold-duotone";

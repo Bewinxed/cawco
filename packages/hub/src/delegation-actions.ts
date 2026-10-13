@@ -10,7 +10,6 @@
  * `customTools`), and this file is the body they share.
  */
 import type {
-  CanvasChoices,
   DelegateType,
   Envelope,
   GeneratedImage,
@@ -19,7 +18,6 @@ import type {
   LandsMode,
   PermissionMode,
   PermissionResult,
-  PreviewSource,
   SendPayload,
   SpawnPayload,
   WorkflowAction,
@@ -646,6 +644,15 @@ export interface HandoffActions {
     deny?: boolean
   ): string;
   /**
+   * One of the session's artifact routes (artifacts/routes.ts), at `path`
+   * under its `/artifacts`: the hub's JSON answer, or its refusal thrown.
+   */
+  readonly artifactCall: (
+    method: "GET" | "POST" | "PATCH",
+    path: string,
+    body?: unknown
+  ) => Promise<unknown>;
+  /**
    * Summarises a session with the chosen summariser through the hub's own
    * continuation. Another session (`session`): a new session starts seeded
    * with the summary, and that one is only read. This one (`session`
@@ -735,8 +742,6 @@ export interface HandoffActions {
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   listSessions(): string;
   readonly listWorkflows: () => Promise<unknown>;
-  /** The person's choices on the session's preview, or on a decision page of its project. */
-  readonly readChoices: (page?: string) => Promise<string>;
   /** A window into one result of a run this session supervises. */
   readonly readWorkflow: (
     runId: string,
@@ -766,12 +771,6 @@ export interface HandoffActions {
   ) => Promise<string>;
   /** Names this session; refused, in the hub's words, once the owner has named it. */
   readonly setTitle: (title: string) => Promise<string>;
-  /** A dev server or folder; or a decision page in the session's project folder, published from `dir` first when given. */
-  readonly showPreview: (
-    source:
-      | Exclude<PreviewSource, { project: string }>
-      | { page: string; dir?: string }
-  ) => Promise<string>;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   startSession(
     cwd: string,
@@ -1229,42 +1228,23 @@ export const handoffActions = ({
     }
     return (await response.json()) as GeneratedImage;
   },
-  async showPreview(source) {
+  async artifactCall(method, path, body) {
     const response = await fetch(
-      `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/preview`,
+      `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/artifacts${path}`,
       {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(source),
+        method,
+        ...(body === undefined
+          ? {}
+          : {
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify(body),
+            }),
       }
     );
     if (!response.ok) {
       throw new Error(await response.text());
     }
-    if ("page" in source) {
-      return `Decision page decisions/${source.page}/ ${source.dir ? "published to your project's folder and " : ""}opened beside the transcript. The person's picks come back with read_choices, and as one message when they send them.`;
-    }
-    return `Preview opened beside the transcript: ${"port" in source ? `localhost:${source.port}` : source.dir}${source.path ?? ""}`;
-  },
-  async readChoices(page) {
-    const query = page ? `?${new URLSearchParams({ page })}` : "";
-    const response = await fetch(
-      `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/preview/choices${query}`
-    );
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-    const state = (await response.json()) as CanvasChoices;
-    return JSON.stringify({
-      ...state,
-      choices: Object.entries(state.choices).map(([id, entry]) => ({
-        id,
-        ...entry,
-        ...(state.pageHash && entry.pageHash !== state.pageHash
-          ? { earlierRevision: true }
-          : {}),
-      })),
-    });
+    return response.json();
   },
   async listDelegateTypes() {
     const types = await fetchDelegateTypes((message) => {

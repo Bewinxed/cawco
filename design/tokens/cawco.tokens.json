@@ -2296,6 +2296,11 @@
         }
       }
     },
+    "c-artifact-row-h": {
+      "$type": "dimension",
+      "$value": "44px",
+      "$description": "A row of the artifact panel's list: the kind's glyph, the name, its age (DESIGN.md Artifact panel, canvas and ink)."
+    },
     "c-mark": {
       "$type": "dimension",
       "$value": "26px"

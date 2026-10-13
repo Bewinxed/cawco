@@ -1,11 +1,13 @@
 /**
  * Builds a decision page (the `decision-page` skill, Projects spec §5.8): a
  * session's `page.html`, started from the skill's `kit/page.html`, becomes
- * one self-contained `index.html` the hub commits to the project's folder at
- * `decisions/<page>/`. The hub is the one builder, so a session with a shell
- * (its work folder on its machine, `show_preview` with `dir`) and Caw, who
- * has none (`decisions/<page>/page.html` written into the project folder,
- * `show_preview` with the page alone), publish the same way.
+ * one self-contained page artifact (§5.10), which in a project the hub also
+ * commits to the project's folder at `decisions/<page>/`. The hub is the one
+ * builder, so a session with a shell (its work folder on its machine,
+ * `artifact_create` with `dir`), Caw, who has none
+ * (`decisions/<page>/page.html` written into the project folder,
+ * `artifact_create` with the name alone), and inline `html` publish the same
+ * way.
  *
  * - `{{KIT_CSS}}`: the kit's tokens.css and page.css.
  * - `{{KIT_JS}}`: the kit's page.js.

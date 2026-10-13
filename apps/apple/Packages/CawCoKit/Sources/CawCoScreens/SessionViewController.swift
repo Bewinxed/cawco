@@ -353,17 +353,11 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     /// The preview's key the transcript's cards were last drawn against.
     private var drawnPreview: String?
 
-    /// A `show_preview` card was tapped: the hub opens its page (again), and
-    /// the frame it answers with puts the preview on screen.
+    /// A preview card was tapped: the open preview it shows comes into view.
     private func openPreview(_ input: [String: Any]) {
         if let shown = hub.previews.byInstance[sessionId], shown.state == .open,
            PreviewKey.of(shown) == PreviewKey.of(ask: input), let preview {
             reveal(preview)
-            return
-        }
-        Task { [weak self] in
-            guard let self else { return }
-            do { try await hub.openPreview(sessionId, ask: input) } catch { Toast.error(error.localizedDescription, in: view) }
         }
     }
 
