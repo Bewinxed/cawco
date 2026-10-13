@@ -534,11 +534,16 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_archive",
-      "Archive a task: off the board and lists, done for tasks that wait on it, kept with its history. Refused while an attempt is live.",
-      { id: taskRef() },
-      async ({ id }) => {
+      "Archive a task: off the board and lists, done for tasks that wait on it, kept with its history; not while an attempt is live. `archived: false` brings it back.",
+      { id: taskRef(), archived: z.boolean().optional() },
+      async ({ id, archived }) => {
         const { projectId, tasks, actor } = scope();
-        const done = await tasks.archive(projectId, id, actor);
+        const done = await tasks.archive(
+          projectId,
+          id,
+          actor,
+          archived ?? true
+        );
         return ok({
           id: done.id,
           path: done.path,

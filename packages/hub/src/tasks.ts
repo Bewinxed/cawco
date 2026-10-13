@@ -53,6 +53,7 @@ import {
   listFolder,
   moveFolderFile,
   readFolderFile,
+  readFolderFileAt,
   refused,
   turnTaker,
   writeFolderFile,
@@ -100,6 +101,7 @@ import {
   COMMENT_CHANGE,
   goneTasks,
   historyOf,
+  inArchive,
   lifeOf,
   NO_STAGE,
   type TaskHistory,
@@ -1064,8 +1066,8 @@ const stagesView = (
  * filed (`task tsk-3: create “…” in idea (by you)`), tasks merged from
  * another project (`tasks tsk-4, tsk-5: Old's tasks, merged in (by …)`), a
  * duplicate project's folder folded in (project-merge.ts, `Old's files,
- * merged in: …`), and a written-in task adopted at its start ({@link
- * adoptStart}). Caw's folder_write cannot set a commit's subject; the folder
+ * merged in: …`), and a written-in task adopted at its start (`settle`).
+ * Caw's folder_write cannot set a commit's subject; the folder
  * editor's message is yours.
  */
 const HUB_MADE =
@@ -1418,51 +1420,177 @@ export const createTasks = (store: TaskStore) => {
     return written === row.stage ? undefined : row;
   };
 
-  /** `content` with the indexed stage in place of the one written. */
-  const withStage = (path: string, content: string, stage: string): string => {
+  // --- comments written into the file, not through task comments ------------
+  //
+  // A task's `## Comments` entries are written only by tasks.comment, each
+  // one its own commit (history: `commented`). A write that reaches the file
+  // another way (a hand edit, folder_write, a push) and changes, adds or
+  // takes out an entry gets the hub's record back: the section as the
+  // file's last commit by the hub's task code held it. Every such commit
+  // either added one entry through a comment, or carried the entries as
+  // they stood (a stray edit is put back before any change commits, below),
+  // so that section is what the `commented` events wrote, and the entries a
+  // merge brought in. Any other edit to the file stands.
+
+  /**
+   * The hub's record of a task file's comments, when the entries `content`
+   * holds are not it: that record's section lines (undefined for none).
+   * Reads the file as the hub's last commit to it held it (once per commit).
+   */
+  const strayComments = async (
+    projectId: string,
+    path: string,
+    content: string
+  ): Promise<{ lines: string[] | undefined } | undefined> => {
+    const written = new TaskDoc(path, content).read().comments;
+    const { times } = await folderFileTimes(projectId, "tasks");
+    const entry = times.get(path);
+    const made = entry
+      ? historyOf(entry).findLast(
+          (event) => event.actor.mover !== null && event.kind !== "deleted"
+        )
+      : undefined;
+    const record = made
+      ? await readFolderFileAt(projectId, made.commit, made.path)
+      : undefined;
+    const kept = record === undefined ? undefined : new TaskDoc(path, record);
+    return JSON.stringify(written) ===
+      JSON.stringify(kept?.read().comments ?? [])
+      ? undefined
+      : { lines: kept?.commentsSection() };
+  };
+
+  /** What a file written around the hub needs put back; one of them at least. */
+  interface Unsettled {
+    /** The hub's record of its comments, when its entries are not that. */
+    comments?: { lines: string[] | undefined };
+    /** The indexed row, when the file says another stage than it holds. */
+    stage?: TaskIndexRow;
+    /** A new file written straight into a stage it may not start in: where it starts instead. */
+    start?: { start: string; who: string; written: string };
+  }
+
+  /** What `content` (the file at `path`, indexed as `row`, if at all) needs put back; undefined when it may stand. */
+  const unsettledOf = async (
+    projectId: string,
+    path: string,
+    content: string,
+    row: TaskIndexRow | undefined,
+    stagesNow: () => Promise<Stages | undefined>
+  ): Promise<Unsettled | undefined> => {
+    const [start, comments] = await Promise.all([
+      row ? undefined : strayStart(projectId, path, content, await stagesNow()),
+      strayComments(projectId, path, content),
+    ]);
+    const stage = strayStage(row, path, content);
+    return start || comments || stage ? { start, comments, stage } : undefined;
+  };
+
+  /**
+   * What a task file read now needs put back: nothing for an archived file
+   * (kept as it was), or one the index already holds as written (the hub's
+   * own last write, so no git is asked).
+   */
+  const fixFor = async (
+    projectId: string,
+    path: string,
+    content: string,
+    rows: TaskIndexRow[] = store.index(projectId)
+  ): Promise<Unsettled | undefined> => {
+    const row = rows.find((each) => each.path === path);
+    if (inArchive(path) || row?.hash === hashOf(content)) {
+      return;
+    }
+    return await unsettledOf(projectId, path, content, row, () =>
+      currentStages(projectId)
+    );
+  };
+
+  /** `content` as it reads once settled, with no notes: what a read shows before the turn puts it back. */
+  const settledView = (
+    path: string,
+    content: string,
+    fix: Unsettled
+  ): string => {
     const doc = new TaskDoc(path, content);
-    doc.setField("stage", stage);
+    const stage = fix.stage?.stage ?? fix.start?.start;
+    if (stage) {
+      doc.setField("stage", stage);
+    }
+    if (fix.comments) {
+      doc.setCommentsSection(fix.comments.lines);
+    }
     return doc.toString();
   };
 
   /**
-   * Puts the indexed stage back in the file, with a note on the task naming
-   * who edited it (the file's last commit's author: Caw for folder_write,
-   * you for the folder editor), as one commit by the hub; then indexes it.
-   * Runs inside the project's turn. Answers the restored content.
+   * Puts back what a write around the hub changed, as one commit by the hub
+   * with a note on the task naming who wrote it (the file's last commit's
+   * author: Caw for folder_write, you for the folder editor): the indexed
+   * stage, the stage a new task starts in, and the hub's record of its
+   * comments. Then indexes it. Runs inside the project's turn. Answers the
+   * restored content.
    */
-  const restoreStage = async (
+  const settle = async (
     projectId: string,
     path: string,
     number: number,
     content: string,
-    row: TaskIndexRow
+    fix: Unsettled
   ): Promise<string> => {
+    const id = taskId(number);
     const doc = new TaskDoc(path, content);
-    const written = doc.read().fields.stage || "(none)";
     const who =
-      (await folderHistory(projectId, path, 1).catch(() => undefined))
-        ?.commits[0]?.author || "someone";
+      fix.start?.who ??
+      ((await folderHistory(projectId, path, 1).catch(() => undefined))
+        ?.commits[0]?.author ||
+        "someone");
     const at = new Date().toISOString().slice(0, 16).replace("T", " ");
-    doc.setField("stage", row.stage);
-    doc.addNote(
-      `${at} UTC: stage changes go through task moves; ${who} edited the file to say stage ${written}, so it stays ${row.stage}.`
-    );
+    const said: string[] = [];
+    const why: string[] = [];
+    let moved: Did["stage"];
+    if (fix.start) {
+      const { start, written } = fix.start;
+      doc.setField("stage", start);
+      doc.addNote(
+        `${at} UTC: ${who} wrote this task straight into stage ${written}; tasks start in ${start}.`
+      );
+      said.push(`adopt at ${start}, written by ${who} into stage ${written}`);
+      why.push(`tasks start in ${start}`);
+      moved = { from: written === NO_STAGE ? "" : written, to: start };
+    } else if (fix.stage) {
+      const written = doc.read().fields.stage || NO_STAGE;
+      doc.setField("stage", fix.stage.stage);
+      doc.addNote(
+        `${at} UTC: stage changes go through task moves; ${who} edited the file to say stage ${written}, so it stays ${fix.stage.stage}.`
+      );
+      said.push(
+        `stage ${written} written by ${who} put back to ${fix.stage.stage}`
+      );
+      why.push("stage changes go through task moves");
+    }
+    if (fix.comments) {
+      doc.setCommentsSection(fix.comments.lines);
+      doc.addNote(
+        `${at} UTC: comments are added only as task comments; ${who} edited them in the file, so they are as the comments left them.`
+      );
+      said.push(`comments written by ${who} put back`);
+      why.push("comments are added only as task comments");
+    }
     const restored = doc.toString();
     stands(projectId);
-    const actor = hubActor("stage changes go through task moves");
+    const actor = hubActor(why.join("; "));
     await writeFolderFile(projectId, path, restored, {
       author: actor.author,
       message: commitMessage(
         actor,
-        `task ${row.id}: stage ${written} written by ${who} put back to ${row.stage}`
+        `task ${id}: ${said.join("; ")}`,
+        moved ? { stage: moved } : {}
       ),
     });
     store.put([indexRow(projectId, path, number, restored, hashOf(restored))]);
-    console.info(
-      `[tasks] ${projectId} ${row.id}: ${who} wrote stage ${written} into its file; it stays ${row.stage}`
-    );
-    emit({ kind: "changed", projectId, id: row.id });
+    console.info(`[tasks] ${projectId} ${id}: ${said.join("; ")}`);
+    emit({ kind: "changed", projectId, id });
     return restored;
   };
 
@@ -1502,51 +1630,15 @@ export const createTasks = (store: TaskStore) => {
     };
   };
 
-  /**
-   * A new file adopted at the stage tasks start in, with a note on the task
-   * naming who wrote it straight into its stage, as one commit by the hub
-   * (its subject one {@link HUB_MADE} reads); then indexed. Inside the turn.
-   */
-  const adoptStart = async (
-    projectId: string,
-    path: string,
-    number: number,
-    content: string,
-    stray: { start: string; who: string; written: string }
-  ): Promise<void> => {
-    const { start, who, written } = stray;
-    const doc = new TaskDoc(path, content);
-    const at = new Date().toISOString().slice(0, 16).replace("T", " ");
-    doc.setField("stage", start);
-    doc.addNote(
-      `${at} UTC: ${who} wrote this task straight into stage ${written}; tasks start in ${start}.`
-    );
-    const adopted = doc.toString();
-    stands(projectId);
-    const actor = hubActor(`tasks start in ${start}`);
-    await writeFolderFile(projectId, path, adopted, {
-      author: actor.author,
-      message: commitMessage(
-        actor,
-        `task ${taskId(number)}: adopt at ${start}, written by ${who} into stage ${written}`,
-        { stage: { from: written === NO_STAGE ? "" : written, to: start } }
-      ),
-    });
-    store.put([indexRow(projectId, path, number, adopted, hashOf(adopted))]);
-    console.info(
-      `[tasks] ${projectId} ${taskId(number)}: ${who} wrote it straight into stage ${written}; it starts in ${start}`
-    );
-    emit({ kind: "changed", projectId, id: taskId(number) });
-  };
-
   /** Files queued to settle, by project and path: one write is settled once however often it is read. */
   const settling = new Set<string>();
 
   /**
    * A read outside the project's turn found a file to settle (a stray stage
-   * on a known task, or a new task in a stage it may not start in): it is
-   * settled in the turn (a change under way finishes first), judged again
-   * there; the index does not take the written stage meanwhile.
+   * on a known task, a new task in a stage it may not start in, comments
+   * written around the hub): it is settled in the turn (a change under way
+   * finishes first), judged again there; the index does not take the file
+   * as written meanwhile.
    */
   const queueSettle = (projectId: string, path: string, number: number) => {
     const key = `${projectId}\0${path}`;
@@ -1559,18 +1651,11 @@ export const createTasks = (store: TaskStore) => {
         try {
           const { content } = await readFolderFile(projectId, path);
           const row = store.index(projectId).find((each) => each.path === path);
-          const start = row
-            ? undefined
-            : await strayStart(
-                projectId,
-                path,
-                content,
-                await currentStages(projectId)
-              );
-          if (strayStage(row, path, content) && row) {
-            await restoreStage(projectId, path, number, content, row);
-          } else if (start) {
-            await adoptStart(projectId, path, number, content, start);
+          const fix = await unsettledOf(projectId, path, content, row, () =>
+            currentStages(projectId)
+          );
+          if (fix) {
+            await settle(projectId, path, number, content, fix);
           } else if (row?.hash !== hashOf(content)) {
             stands(projectId);
             store.put([
@@ -1639,10 +1724,7 @@ export const createTasks = (store: TaskStore) => {
           if (row?.hash === hash) {
             return;
           }
-          const unsettled = row
-            ? strayStage(row, path, content)
-            : await strayStart(projectId, path, content, await stagesNow());
-          if (unsettled) {
+          if (await unsettledOf(projectId, path, content, row, stagesNow)) {
             queueSettle(projectId, path, number);
             return;
           }
@@ -2137,14 +2219,11 @@ export const createTasks = (store: TaskStore) => {
       const { path, number } = await locate(projectId, ref, true);
       const id = taskId(number);
       const read = (await readFolderFile(projectId, path)).content;
-      // A stage written into the file is put back before any change reads it.
-      const stray = strayStage(
-        store.index(projectId).find((each) => each.path === path),
-        path,
-        read
-      );
-      const content = stray
-        ? await restoreStage(projectId, path, number, read, stray)
+      // A stage or comments written into the file are put back before any
+      // change reads it, so no commit of the hub's carries them on.
+      const fix = await fixFor(projectId, path, read);
+      const content = fix
+        ? await settle(projectId, path, number, read, fix)
         : read;
       const doc = new TaskDoc(path, content);
       const applied = await apply(doc, id);
@@ -2274,6 +2353,70 @@ export const createTasks = (store: TaskStore) => {
       : { what: phrase };
   };
 
+  /** Moves a task's file to tasks/archive/ (what a write around the hub left settled first). Inside the turn. */
+  const archiveFile = async (
+    projectId: string,
+    ref: string,
+    actor: TaskActor
+  ): Promise<TaskView> => {
+    const { path, number } = await locate(projectId, ref, true);
+    const id = taskId(number);
+    if (
+      attemptsByTask(projectId)
+        .get(id)
+        ?.some((attempt) => isLive(attempt.state))
+    ) {
+      refuse(
+        409,
+        `An attempt at ${id} is live; stop it before archiving the task.`
+      );
+    }
+    const read = (await readFolderFile(projectId, path)).content;
+    const fix = await fixFor(projectId, path, read);
+    if (fix) {
+      await settle(projectId, path, number, read, fix);
+    }
+    const to = archivePath(path);
+    stands(projectId);
+    await moveFolderFile(projectId, path, to, {
+      author: actor.author,
+      message: commitMessage(actor, `task ${id}: archive`),
+    });
+    store.drop(projectId, [path]);
+    const { content } = await readFolderFile(projectId, to);
+    return view(projectId, to, number, content, await currentStages(projectId));
+  };
+
+  /** Moves an archived task's file back to tasks/ and indexes it. Inside the turn. */
+  const unarchiveFile = async (
+    projectId: string,
+    ref: string,
+    actor: TaskActor
+  ): Promise<TaskView> => {
+    const id = taskRef("task", ref);
+    const number = taskNumber(id) as number;
+    const board = (await sync(projectId)).rows.find(
+      (row) => row.number === number
+    );
+    if (board) {
+      refuse(409, `${id} is on the board (${board.path}), not archived.`);
+    }
+    const from = await archivedFile(projectId, number);
+    if (!from) {
+      return refuse(404, `${id} is not archived.`);
+    }
+    const to = `tasks/${from.slice(ARCHIVE_DIR.length + 1)}`;
+    stands(projectId);
+    await moveFolderFile(projectId, from, to, {
+      author: actor.author,
+      message: commitMessage(actor, `task ${id}: unarchive`),
+    });
+    const { content } = await readFolderFile(projectId, to);
+    stands(projectId);
+    store.put([indexRow(projectId, to, number, content, hashOf(content))]);
+    return view(projectId, to, number, content, await currentStages(projectId));
+  };
+
   /** A move's reason as given: one line, or nothing. */
   const reasonOf = (reason: string | undefined): string | undefined =>
     reason?.trim() ? oneLine("reason", reason, REASON_LIMIT) : undefined;
@@ -2353,17 +2496,16 @@ export const createTasks = (store: TaskStore) => {
       const { rows } = await sync(projectId);
       const { path, number } = await locate(projectId, ref);
       const { content } = await readFolderFile(projectId, path);
-      const row = rows.find((each) => each.path === path);
-      const stray = strayStage(row, path, content);
-      if (stray) {
-        // Shown at the stage it is in; the file gets it back in its turn.
+      const fix = await fixFor(projectId, path, content, rows);
+      if (fix) {
+        // Shown as it will be settled; the file gets it back in its turn.
         queueSettle(projectId, path, number);
       }
       return view(
         projectId,
         path,
         number,
-        stray ? withStage(path, content, stray.stage) : content,
+        fix ? settledView(path, content, fix) : content,
         await currentStages(projectId)
       );
     },
@@ -2639,44 +2781,24 @@ export const createTasks = (store: TaskStore) => {
     },
 
     /**
-     * Archives a task: its file moves to tasks/archive/ in one commit, off
-     * every list but `archived`, done for every task that waits on it, and
-     * kept with its history. Refused while an attempt at it is live.
+     * Archives a task (`archived`, the default): its file moves to
+     * tasks/archive/ in one commit, off every list but `archived`, done for
+     * every task that waits on it, and kept with its history; refused while
+     * an attempt at it is live. `archived: false` moves it back to tasks/ in
+     * one commit: it lists, its edges count by its stage, and it changes
+     * again.
      */
     archive(
       projectId: string,
       ref: string,
-      actor: TaskActor
+      actor: TaskActor,
+      archived = true
     ): Promise<TaskView> {
-      return inTurn(projectId, async () => {
+      return inTurn(projectId, () => {
         writable(projectId);
-        const { path, number } = await locate(projectId, ref, true);
-        const id = taskId(number);
-        if (
-          attemptsByTask(projectId)
-            .get(id)
-            ?.some((attempt) => isLive(attempt.state))
-        ) {
-          refuse(
-            409,
-            `An attempt at ${id} is live; stop it before archiving the task.`
-          );
-        }
-        const to = archivePath(path);
-        stands(projectId);
-        await moveFolderFile(projectId, path, to, {
-          author: actor.author,
-          message: commitMessage(actor, `task ${id}: archive`),
-        });
-        store.drop(projectId, [path]);
-        const { content } = await readFolderFile(projectId, to);
-        return view(
-          projectId,
-          to,
-          number,
-          content,
-          await currentStages(projectId)
-        );
+        return archived
+          ? archiveFile(projectId, ref, actor)
+          : unarchiveFile(projectId, ref, actor);
       }).then((task) =>
         told({ kind: "changed", projectId, id: task.id }, task)
       );
@@ -3042,13 +3164,29 @@ export const taskRoutes = (tasks: Tasks) =>
         }
       }
     )
-    .post("/api/projects/:id/tasks/:taskId/archive", async ({ params }) => {
-      try {
-        return await tasks.archive(params.id, params.taskId, YOU_ACTOR);
-      } catch (error) {
-        return refused(error);
+    .post(
+      "/api/projects/:id/tasks/:taskId/archive",
+      {
+        body: t.Optional(
+          t.Object({
+            /** false: move it back out of the archive. */
+            archived: t.Optional(t.Boolean()),
+          })
+        ),
+      },
+      async ({ params, body }) => {
+        try {
+          return await tasks.archive(
+            params.id,
+            params.taskId,
+            YOU_ACTOR,
+            body?.archived ?? true
+          );
+        } catch (error) {
+          return refused(error);
+        }
       }
-    })
+    )
     .get("/api/projects/:id/tasks/:taskId/history", async ({ params }) => {
       try {
         return await tasks.history(params.id, params.taskId);

@@ -81,8 +81,10 @@ export interface TaskHistoryActor {
  * `created`: its file added. `moved`: a stage move. `changed`: fields,
  * to-dos or edges, through the hub. `commented`: a comment added through the
  * hub. `edited`: its file changed by a commit the hub's task code did not
- * make. `archived`: its file moved into tasks/archive/. `renamed`,
- * `deleted`: its file.
+ * make (a hand edit, folder_write); the hub putting back what one wrote
+ * around it is `changed`, in words that say so. `archived`: its file moved
+ * into tasks/archive/; `unarchived`: back out of it. `renamed`, `deleted`:
+ * its file.
  */
 export type TaskHistoryKind =
   | "created"
@@ -91,6 +93,7 @@ export type TaskHistoryKind =
   | "commented"
   | "edited"
   | "archived"
+  | "unarchived"
   | "renamed"
   | "deleted";
 
@@ -215,7 +218,10 @@ const kindOf = (
     return "created";
   }
   if (change === "renamed") {
-    return inArchive(path) && !inArchive(from ?? "") ? "archived" : change;
+    if (inArchive(path) !== inArchive(from ?? "")) {
+      return inArchive(path) ? "archived" : "unarchived";
+    }
+    return change;
   }
   if (change === "deleted") {
     return change;

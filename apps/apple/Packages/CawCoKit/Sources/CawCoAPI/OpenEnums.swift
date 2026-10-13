@@ -4635,6 +4635,7 @@ public enum OpenEnums {
         case edited
         case moved
         case renamed
+        case unarchived
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -4648,6 +4649,7 @@ public enum OpenEnums {
             case "edited": self = .edited
             case "moved": self = .moved
             case "renamed": self = .renamed
+            case "unarchived": self = .unarchived
             default: self = .unrecognized(rawValue)
             }
         }
@@ -4662,6 +4664,7 @@ public enum OpenEnums {
             case .edited: "edited"
             case .moved: "moved"
             case .renamed: "renamed"
+            case .unarchived: "unarchived"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -4670,7 +4673,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.archived, .changed, .commented, .created, .deleted, .edited, .moved, .renamed]
+        public static let allCases: [Self] = [.archived, .changed, .commented, .created, .deleted, .edited, .moved, .renamed, .unarchived]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

@@ -677,6 +677,39 @@ export const readFolderFile = async (
   return { path: rel, content, size: bytes.byteLength };
 };
 
+const COMMIT_SHA = /^[0-9a-f]{40}$/;
+/** Files as a commit held them, by commit and path: a commit never changes, so neither does its reading. */
+const readAt = new Map<string, string | undefined>();
+/** How many past readings {@link readFolderFileAt} keeps. */
+const READ_AT_LIMIT = 2000;
+
+/**
+ * A text file as commit `sha` held it; undefined when that commit has no
+ * such file, or it is not text. Kept once read: a commit never changes.
+ */
+export const readFolderFileAt = async (
+  projectId: string,
+  sha: string,
+  rawPath: string
+): Promise<string | undefined> => {
+  const rel = folderPath(rawPath);
+  if (!(rel && COMMIT_SHA.test(sha))) {
+    throw new FolderRefusal(400, "Name a commit's full sha and a file in it.");
+  }
+  const key = `${projectId}\0${sha}\0${rel}`;
+  if (readAt.has(key)) {
+    return readAt.get(key);
+  }
+  const root = await forReading(projectId);
+  const shown = await run(root, ["show", `${sha}:${rel}`]);
+  const content = shown.code === 0 ? shown.stdout : undefined;
+  if (readAt.size >= READ_AT_LIMIT) {
+    readAt.delete(readAt.keys().next().value as string);
+  }
+  readAt.set(key, content);
+  return content;
+};
+
 export interface FolderWriteOptions {
   /** Who the commit is by; the operator when left out. */
   author?: FolderAuthor;

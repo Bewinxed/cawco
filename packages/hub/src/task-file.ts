@@ -1139,6 +1139,40 @@ export class TaskDoc {
     this.body.splice(end, 0, "", ...entry.slice(0, -1));
   }
 
+  /** The `## Comments` section's lines, its heading first and its trailing blank lines left off; undefined when there is none. */
+  commentsSection(): string[] | undefined {
+    const section = sectionsOf(this.body).find((each) =>
+      isComments(each.heading)
+    );
+    if (!section) {
+      return;
+    }
+    const lines = this.body.slice(section.at, section.end);
+    while (lines.length > 1 && lines.at(-1)?.trim() === "") {
+      lines.pop();
+    }
+    return lines;
+  }
+
+  /**
+   * Puts `lines` (a `## Comments` section, as {@link commentsSection} reads
+   * one) in place of this file's section, or at the end when it has none;
+   * undefined takes the section out. The hub's own record of the comments
+   * put back over an edit made around it (tasks.ts `settle`).
+   */
+  setCommentsSection(lines: string[] | undefined): void {
+    const section = sectionsOf(this.body).find((each) =>
+      isComments(each.heading)
+    );
+    const block = lines ? [...lines, ""] : [];
+    if (section) {
+      this.body.splice(section.at, section.end - section.at, ...block);
+    } else if (lines) {
+      this.endWithBlank();
+      this.body.push(...block);
+    }
+  }
+
   /** Makes the body end in one blank line before something is appended. */
   private endWithBlank(): void {
     while (this.body.length > 1 && this.body.at(-1)?.trim() === "") {
