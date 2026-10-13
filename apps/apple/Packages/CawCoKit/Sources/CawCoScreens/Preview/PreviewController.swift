@@ -40,6 +40,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private let selectingNote = UIView()
     private var selectingNoteHeight: NSLayoutConstraint!
     private let cover = UIView()
+    /// The cover's loading line, hidden once the cover has faded so its sweep stops.
+    private let coverLine = SkeletonView(height: 11)
     private let failure = KitAlert(tone: .destructive)
     /// What the band's failure is of (PreviewPane.svelte `failure.again`):
     /// "send" goes again from Send picks, "field" clears when the page keeps
@@ -153,7 +155,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         cover.translatesAutoresizingMaskIntoConstraints = false
         cover.backgroundColor = Palette.surfaceRecess
         cover.isUserInteractionEnabled = false
-        let line = SkeletonView(height: 11)
+        let line = coverLine
         cover.addSubview(line)
         failure.isHidden = true
         for part in [selectingNote, web!, cover, failure] as [UIView] { well.addSubview(part) }
@@ -247,6 +249,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         sendButton.isHidden = frame.artifact.kind != .page
         sendButton.isEnabled = false
         cover.alpha = 1
+        coverLine.isHidden = false
         let cookie = HTTPCookie(properties: [
             .name: "cawco-preview", .value: instanceId, .domain: origin.host() ?? "", .path: "/",
         ])
@@ -271,7 +274,13 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     func webView(_: WKWebView, didFinish _: WKNavigation!) {
-        Motion.easeOut.animator(Motion.durControl) { self.cover.alpha = 0 }.startAnimation()
+        let fade = Motion.easeOut.animator(Motion.durControl) { self.cover.alpha = 0 }
+        // Faded out, its line stops sweeping; a load since brought the cover back.
+        fade.addCompletion { [weak self] position in
+            guard position == .end, let self, cover.alpha < 0.01 else { return }
+            coverLine.isHidden = true
+        }
+        fade.startAnimation()
         // PreviewPane.svelte `announce`: the overlay answers with `cawco:ready`
         // and joins the artifact's doc on the listener's own origin, where
         // the page's cookie reaches it.
