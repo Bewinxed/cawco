@@ -3,6 +3,7 @@
   import type { ComponentProps, Snippet } from "svelte";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { pressable } from "#lib/components/ui/floating-presence.js";
   import { IconClose } from "#lib/icons.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import DialogPortal from "./dialog-portal.svelte";
@@ -16,6 +17,7 @@
     children,
     showCloseButton = true,
     bodyClass,
+    restoreScrollDelay = 0,
     ...restProps
   }: WithoutChildrenOrChild<DialogPrimitive.ContentProps> & {
     portalProps?: WithoutChildrenOrChild<ComponentProps<typeof DialogPortal>>;
@@ -37,39 +39,49 @@
 
 <DialogPortal {...portalProps}>
   <Dialog.Overlay />
+  <!-- Drawn through `child`: bits-ui then holds the body's lock only while it
+       is open, and clears it at once (floating-presence). -->
   <DialogPrimitive.Content
     class={cn(
       "kit-dialog fixed top-1/2 left-1/2 z-50 w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 outline-none sm:max-w-md",
       className
     )}
     data-slot="dialog-content"
+    {restoreScrollDelay}
     bind:ref
     {...restProps}
   >
-    <div
-      class={cn(
-        "kit-dialog-body relative grid gap-6 text-body text-foreground",
-        bodyClass
-      )}
-    >
-      {@render children?.()}
-      {#if showCloseButton}
-        <DialogPrimitive.Close data-slot="dialog-close">
-          {#snippet child({
-            props,
-          })}
-            <Button
-              class="absolute top-3 right-3"
-              size="icon-sm"
-              variant="ghost"
-              {...props}
-            >
-              <IconClose />
-              <span class="sr-only">Close</span>
-            </Button>
-          {/snippet}
-        </DialogPrimitive.Close>
-      {/if}
-    </div>
+    {#snippet child({
+      props,
+      open,
+    })}
+      <div {...props} style:pointer-events={pressable(open)}>
+        <div
+          class={cn(
+            "kit-dialog-body relative grid gap-6 text-body text-foreground",
+            bodyClass
+          )}
+        >
+          {@render children?.()}
+          {#if showCloseButton}
+            <DialogPrimitive.Close data-slot="dialog-close">
+              {#snippet child({
+                props: closeProps,
+              })}
+                <Button
+                  class="absolute top-3 right-3"
+                  size="icon-sm"
+                  variant="ghost"
+                  {...closeProps}
+                >
+                  <IconClose />
+                  <span class="sr-only">Close</span>
+                </Button>
+              {/snippet}
+            </DialogPrimitive.Close>
+          {/if}
+        </div>
+      </div>
+    {/snippet}
   </DialogPrimitive.Content>
 </DialogPortal>

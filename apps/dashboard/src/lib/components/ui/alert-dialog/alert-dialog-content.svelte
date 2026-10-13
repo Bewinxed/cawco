@@ -2,6 +2,7 @@
   import { AlertDialog as AlertDialogPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { pressable } from "#lib/components/ui/floating-presence.js";
   import {
     cn,
     type WithoutChild,
@@ -16,6 +17,7 @@
     size = "default",
     portalProps,
     overlayProps,
+    restoreScrollDelay = 0,
     children,
     ...restProps
   }: WithoutChild<AlertDialogPrimitive.ContentProps> & {
@@ -41,16 +43,26 @@
     )}
     data-size={size}
     data-slot="alert-dialog-content"
+    {restoreScrollDelay}
     bind:ref
     {...restProps}
   >
-    <!-- One column no wider than the tray: a row's unwrapping title is cut
-         to it, never pushes past it. -->
-    <div
-      class="kit-dialog-body grid grid-cols-[minmax(0,1fr)] gap-6 text-body text-foreground"
-      {@attach resize}
-    >
-      {@render children?.()}
-    </div>
+    <!-- Drawn through `child`: bits-ui then holds the body's lock only while
+         it is open, and clears it at once (floating-presence). -->
+    {#snippet child({
+      props,
+      open,
+    })}
+      <div {...props} style:pointer-events={pressable(open)}>
+        <!-- One column no wider than the tray: a row's unwrapping title is cut
+             to it, never pushes past it. -->
+        <div
+          class="kit-dialog-body grid grid-cols-[minmax(0,1fr)] gap-6 text-body text-foreground"
+          {@attach resize}
+        >
+          {@render children?.()}
+        </div>
+      </div>
+    {/snippet}
   </AlertDialogPrimitive.Content>
 </AlertDialogPortal>

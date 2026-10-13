@@ -2933,10 +2933,13 @@
      and takes it off after. pointer-events is inherited, so each write
      restyled every row under it: the pin scrolls the list on every streamed
      chunk, and each write cost a style recalculation of the whole
-     transcript (13,000 elements, ~140ms). Held at auto here, the inherited
-     value never changes and the rows are left alone. */
+     transcript (13,000 elements, ~140ms). `inherit` outranks virtua's inline
+     write, so its scrolling never changes the value and the rows are left
+     alone. Never `auto`: a re-declared `auto` let a press through the lock a
+     modal layer (an open menu, a dialog) sets on the body, so a click on a
+     row acted on it instead of only shutting the layer. */
   .listing > :global(:first-child) {
-    pointer-events: auto !important;
+    pointer-events: inherit !important;
   }
   .tr {
     flex: 1 1 auto;

@@ -44,7 +44,11 @@
   } from "#lib/cawco/motion/hang.js";
   import type { Morph } from "#lib/cawco/motion/morph.svelte.js";
   import type ContextMenuContent from "#lib/components/ui/context-menu/context-menu-content.svelte";
-  import { drawn, own } from "#lib/components/ui/floating-presence.js";
+  import {
+    drawn,
+    own,
+    pressable,
+  } from "#lib/components/ui/floating-presence.js";
   import PopoverContent from "#lib/components/ui/popover/popover-content.svelte";
   import { cn } from "#lib/utils.js";
 
@@ -255,10 +259,16 @@
   {#snippet child({
     props,
     wrapperProps,
+    open,
   })}
     {#if forceMount || drawn(props)}
       <div {...wrapperProps}>
-        <div {...own(props)} {@attach hung} {@attach kept}>
+        <div
+          {...own(props)}
+          style:pointer-events={pressable(open)}
+          {@attach hung}
+          {@attach kept}
+        >
           {#if glass}
             <!-- Its surface, over the shadow picture it wears as its border-image (motion/hung-shadow). -->
             <span aria-hidden="true" class="hung-surface"></span>

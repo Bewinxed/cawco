@@ -1,7 +1,11 @@
 <script lang="ts">
   import { Select as SelectPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
-  import { drawn, own } from "#lib/components/ui/floating-presence.js";
+  import {
+    drawn,
+    own,
+    pressable,
+  } from "#lib/components/ui/floating-presence.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import type { WithoutChildrenOrChild } from "#lib/utils.js";
   import { cn, type WithoutChild } from "#lib/utils.js";
@@ -50,10 +54,11 @@
     {#snippet child({
       props,
       wrapperProps,
+      open,
     })}
       {#if forceMount || drawn(props)}
         <div {...wrapperProps}>
-          <div {...own(props)}>
+          <div {...own(props)} style:pointer-events={pressable(open)}>
             <SelectScrollUpButton />
             <SelectPrimitive.Viewport
               class={cn(

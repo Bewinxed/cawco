@@ -3,7 +3,11 @@
   import type { ComponentProps } from "svelte";
   import { numberOf } from "#lib/cawco/motion/curves.svelte.js";
   import { type Morph, morph } from "#lib/cawco/motion/morph.svelte.js";
-  import { drawn, own } from "#lib/components/ui/floating-presence.js";
+  import {
+    drawn,
+    own,
+    pressable,
+  } from "#lib/components/ui/floating-presence.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import { browser } from "$app/env";
   import PopoverPortal from "./popover-portal.svelte";
@@ -68,7 +72,12 @@
           {@render callerChild(snippet)}
         {:else}
           <div {...snippet.wrapperProps}>
-            <div {...own(snippet.props)}>{@render children?.()}</div>
+            <div
+              {...own(snippet.props)}
+              style:pointer-events={pressable(snippet.open)}
+            >
+              {@render children?.()}
+            </div>
           </div>
         {/if}
       {/if}

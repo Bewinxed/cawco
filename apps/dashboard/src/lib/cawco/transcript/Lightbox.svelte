@@ -6,6 +6,8 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { CopyButton } from "#lib/components/ui/copy-button/index.js";
   import DialogRoot from "#lib/components/ui/dialog/dialog.svelte";
+  import DialogOverlay from "#lib/components/ui/dialog/dialog-overlay.svelte";
+  import { pressable } from "#lib/components/ui/floating-presence.js";
   /**
    * What a thumbnail opens into, one entry point (lightbox-state) for both
    * kinds of attachment.
@@ -215,9 +217,9 @@
   open={doc !== null}
 >
   <DialogPrimitive.Portal>
-    <DialogPrimitive.Overlay
-      class="kit-scrim fixed inset-0 isolate z-50 {leaving ? "leaving" : ""}"
-    />
+    <DialogOverlay class={leaving ? "leaving" : ""} />
+    <!-- Drawn through `child`: bits-ui then holds the body's lock only while
+         it is open, and clears it at once (floating-presence). -->
     <DialogPrimitive.Content
       class="doc-view"
       onEscapeKeydown={(event) => {
@@ -228,59 +230,71 @@
         event.preventDefault();
         dismiss();
       }}
+      restoreScrollDelay={0}
     >
-      {#if doc}
-        {@const extension = extensionOf(doc.name)}
-        <div
-          class="doc-sheet"
-          bind:this={sheet}
-          {@attach land(() => doc.share, {
-            mode: "grow",
-            anchor: ".doc-head",
-            ms: dur("--dur-panel"),
-          })}
-        >
-          <header class="doc-head">
-            <DialogPrimitive.Title class="doc-name"
-              >{doc.name}</DialogPrimitive.Title
-            >
-            <CopyButton
-              aria-label={`Copy ${doc.name}`}
-              class="touch-hit"
-              size="icon"
-              text={doc.content}
-            />
-            <Tip keys="Esc" label="Close document">
-              {#snippet children(
-                tip
-              )}
-                <Button
-                  {...tip}
-                  aria-label="Close document"
-                  class="touch-hit"
-                  onclick={dismiss}
-                  size="icon"
-                  variant="ghost"
-                >
-                  <IconClose />
-                </Button>
-              {/snippet}
-            </Tip>
-          </header>
-          <div class="doc-body">
-            {#if extension === "md" || extension === "markdown"}
-              <MessageBody source={doc.content} />
-            {:else if extension === "json"}
-              <OutputBlock language="json" text={pretty(doc.content)} />
-            {:else}
-              <OutputBlock language={extension} text={doc.content} />
-            {/if}
-          </div>
+      {#snippet child({
+        props,
+        open,
+      })}
+        <div {...props} style:pointer-events={pressable(open)}>
+          {@render docView()}
         </div>
-      {/if}
+      {/snippet}
     </DialogPrimitive.Content>
   </DialogPrimitive.Portal>
 </DialogRoot>
+
+{#snippet docView()}
+  {#if doc}
+    {@const extension = extensionOf(doc.name)}
+    <div
+      class="doc-sheet"
+      bind:this={sheet}
+      {@attach land(() => doc.share, {
+        mode: "grow",
+        anchor: ".doc-head",
+        ms: dur("--dur-panel"),
+      })}
+    >
+      <header class="doc-head">
+        <DialogPrimitive.Title class="doc-name"
+          >{doc.name}</DialogPrimitive.Title
+        >
+        <CopyButton
+          aria-label={`Copy ${doc.name}`}
+          class="touch-hit"
+          size="icon"
+          text={doc.content}
+        />
+        <Tip keys="Esc" label="Close document">
+          {#snippet children(
+            tip
+          )}
+            <Button
+              {...tip}
+              aria-label="Close document"
+              class="touch-hit"
+              onclick={dismiss}
+              size="icon"
+              variant="ghost"
+            >
+              <IconClose />
+            </Button>
+          {/snippet}
+        </Tip>
+      </header>
+      <div class="doc-body">
+        {#if extension === "md" || extension === "markdown"}
+          <MessageBody source={doc.content} />
+        {:else if extension === "json"}
+          <OutputBlock language="json" text={pretty(doc.content)} />
+        {:else}
+          <OutputBlock language={extension} text={doc.content} />
+        {/if}
+      </div>
+    </div>
+  {/if}
+{/snippet}
 
 <style>
   /* ── The document sheet. Content is only the centring box; the sheet is

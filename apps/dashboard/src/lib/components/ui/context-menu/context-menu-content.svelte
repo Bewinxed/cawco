@@ -1,7 +1,11 @@
 <script lang="ts">
   import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
-  import { drawn, own } from "#lib/components/ui/floating-presence.js";
+  import {
+    drawn,
+    own,
+    pressable,
+  } from "#lib/components/ui/floating-presence.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import type { WithoutChildrenOrChild } from "#lib/utils.js";
   import { cn } from "#lib/utils.js";
@@ -52,7 +56,12 @@
           {@render callerChild(snippet)}
         {:else}
           <div {...snippet.wrapperProps}>
-            <div {...own(snippet.props)}>{@render children?.()}</div>
+            <div
+              {...own(snippet.props)}
+              style:pointer-events={pressable(snippet.open)}
+            >
+              {@render children?.()}
+            </div>
           </div>
         {/if}
       {/if}

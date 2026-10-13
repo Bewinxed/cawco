@@ -7,6 +7,7 @@
   import type { ComponentProps, Snippet } from "svelte";
   import { dragToDismiss } from "#lib/cawco/motion/drag.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { pressable } from "#lib/components/ui/floating-presence.js";
   import { IconClose } from "#lib/icons.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import { closer } from "./sheet.svelte";
@@ -23,6 +24,7 @@
        <body> at every pointerdown, restyling the whole page in the frame
        the finger lands (17ms in Chromium at 390px). */
     preventOverflowTextSelection = false,
+    restoreScrollDelay = 0,
     portalProps,
     children,
     ...restProps
@@ -56,27 +58,37 @@
     data-side={side}
     data-slot="sheet-content"
     {preventOverflowTextSelection}
+    {restoreScrollDelay}
     bind:ref
     {...restProps}
   >
-    {@render children?.()}
-    {#if showCloseButton}
-      <SheetPrimitive.Close data-slot="sheet-close">
-        {#snippet child({
-          props,
-        })}
-          <Button
-            class="absolute top-4 right-4"
-            size="icon-sm"
-            variant="ghost"
-            {...props}
-          >
-            <IconClose />
-            <span class="sr-only">Close</span>
-          </Button>
-        {/snippet}
-      </SheetPrimitive.Close>
-    {/if}
+    <!-- Drawn through `child`: bits-ui then holds the body's lock only while
+         it is open, and clears it at once (floating-presence). -->
+    {#snippet child({
+      props,
+      open,
+    })}
+      <div {...props} style:pointer-events={pressable(open)}>
+        {@render children?.()}
+        {#if showCloseButton}
+          <SheetPrimitive.Close data-slot="sheet-close">
+            {#snippet child({
+              props: closeProps,
+            })}
+              <Button
+                class="absolute top-4 right-4"
+                size="icon-sm"
+                variant="ghost"
+                {...closeProps}
+              >
+                <IconClose />
+                <span class="sr-only">Close</span>
+              </Button>
+            {/snippet}
+          </SheetPrimitive.Close>
+        {/if}
+      </div>
+    {/snippet}
   </SheetPrimitive.Content>
 </SheetPortal>
 

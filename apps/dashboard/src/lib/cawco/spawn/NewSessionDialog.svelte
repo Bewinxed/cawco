@@ -34,6 +34,7 @@
     DrawerContent,
     DrawerTitle,
   } from "#lib/components/ui/drawer/index.js";
+  import { pressable } from "#lib/components/ui/floating-presence.js";
   import {
     machineHue,
     machineIcon,
@@ -1611,7 +1612,17 @@
     {open}
   >
     <DialogPortal>
-      <DialogPrimitive.Overlay class="session-scrim ns-theme" />
+      <!-- Drawn through `child`: bits-ui holds the body's lock only while it
+           is open and clears it at once, and the leaving card and scrim let
+           presses through (floating-presence). -->
+      <DialogPrimitive.Overlay class="session-scrim ns-theme">
+        {#snippet child({
+          props,
+          open: shown,
+        })}
+          <div {...props} style:pointer-events={pressable(shown)}></div>
+        {/snippet}
+      </DialogPrimitive.Overlay>
       <DialogPrimitive.Content
         aria-label="New Session"
         class="session-card ns-theme"
@@ -1625,10 +1636,18 @@
           event.preventDefault();
           card?.focus({ preventScroll: true });
         }}
+        restoreScrollDelay={0}
         bind:ref={card}
       >
-        <DialogTitle class="sr-only">New session</DialogTitle>
-        {@render formContent()}
+        {#snippet child({
+          props,
+          open: shown,
+        })}
+          <div {...props} style:pointer-events={pressable(shown)}>
+            <DialogTitle class="sr-only">New session</DialogTitle>
+            {@render formContent()}
+          </div>
+        {/snippet}
       </DialogPrimitive.Content>
     </DialogPortal>
   </Dialog>

@@ -14,7 +14,21 @@
  * own presence says it should be, open or still closing (`shouldRender`, which
  * bits-ui hands a forceMount child among its props), so the close plays as
  * before. What is left is bits-ui's own 24ms before it clears the body.
+ *
+ * A dialog, alert dialog or sheet needs no forceMount: bits-ui's dialog
+ * content mounts its lock only while open when it is drawn through `child`,
+ * and takes `restoreScrollDelay`, which the kit sets to 0.
  */
+
+/**
+ * A surface's `pointer-events` while it closes: none, so a press on the
+ * place it is leaving from lands on the page under it, as one anywhere else
+ * does. bits-ui writes `pointer-events: auto` inline on every content and
+ * overlay; a `style:` directive outranks that.
+ */
+export function pressable(open: boolean): "none" | undefined {
+  return open ? undefined : "none";
+}
 
 /** What bits-ui hands a forceMount content's `child` snippet as `props`. */
 type ContentProps = Record<string, unknown>;
