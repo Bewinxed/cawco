@@ -58,10 +58,12 @@ export async function overlayResponse(): Promise<Response> {
   });
 }
 
-const DOWN_WORDS: Record<PreviewDown, string> = {
+/** What a proxy's own page says of each hop that did not answer; a preview of a workspace no boundary runs is refused in its words too. */
+export const DOWN_WORDS: Record<PreviewDown, string> = {
   server: "The page's server stopped answering. Start it again, then reload.",
   machine:
     "The machine serving this preview isn't answering. Check that it is connected, then reload.",
+  workspace: "That workspace isn't running, so its server can't be reached.",
 };
 
 /**

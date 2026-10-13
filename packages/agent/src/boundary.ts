@@ -2630,6 +2630,36 @@ const isBwrap = async (pid: number): Promise<boolean> =>
     .split("\0")[0]
     ?.endsWith("bwrap") ?? false;
 
+/**
+ * Where a workspace's servers listen: on Linux each running boundary's own
+ * network, named by its sandbox's init (`inner`), the current boundary first,
+ * then each older one still running beside it ({@link handOver}), whose
+ * servers run on there; on macOS, which gives a boundary no network of its
+ * own, the host's (`host`) while its boundary runs. Empty when no boundary of
+ * the workspace runs on this machine.
+ */
+export const workspaceNetworks = async (
+  id: string
+): Promise<({ inner: number } | "host")[]> => {
+  const held = await readHeld(id).catch(() => undefined);
+  const boundaries = [...(held ? [held] : []), ...(await readRetiring(id))];
+  const networks: ({ inner: number } | "host")[] = [];
+  for (const boundary of boundaries) {
+    // biome-ignore lint/performance/noAwaitInLoops: one boundary at a time, current first
+    if (!(await running(id, boundary))) {
+      continue;
+    }
+    if (process.platform !== "linux") {
+      return ["host"];
+    }
+    const place = await readPlace(id, boundary.gen);
+    if (place && (await isBwrap(place.outer))) {
+      networks.push({ inner: place.inner });
+    }
+  }
+  return networks;
+};
+
 /** Every process a macOS workspace started, found by the marker its runner handed them all. */
 const killMarked = async (id: string): Promise<void> => {
   for (const { pid, command } of await commandLines({ environment: true })) {

@@ -37,12 +37,17 @@ export interface PreviewTarget {
 
 export const previewTargets = new Map<string, PreviewTarget>();
 
-/** One string per thing a preview shows: a page by name, a port, a folder. */
+/** One string per thing a preview shows: a page by name, a port in a workspace or on the host, a folder. */
 export const previewSourceKey = (source: PreviewSource): string => {
   if ("page" in source) {
     return `page:${source.page}`;
   }
-  return "port" in source ? `port:${source.port}` : `dir:${source.dir}`;
+  if ("port" in source) {
+    return source.workspace
+      ? `port:${source.port}@${source.workspace}`
+      : `port:${source.port}`;
+  }
+  return `dir:${source.dir}`;
 };
 
 export function previewFrame(

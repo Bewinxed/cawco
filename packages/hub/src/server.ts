@@ -7895,6 +7895,15 @@ export const createServer = (
     page: buildArtifactPage,
     showing: (instanceId) => previewTargets.get(instanceId)?.artifact.id,
     turnRunning: (instanceId) => pulses.get(instanceId)?.busy === true,
+    // Its parent's, or its project's lead's, as stop_delegate decides.
+    delegatesIn: (instance, workspaceId) =>
+      db
+        .workItemsIn(workspaceId)
+        .some(
+          (item) =>
+            item.parentInstanceId === instance.id ||
+            workItems.ledBy(item.instanceId, instance.id)
+        ),
     ownWorkspace: (instance) => workItems.workspaceOf(instance)?.id,
     workspaces: (needle) => db.workspacesNamed(needle),
   });

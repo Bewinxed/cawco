@@ -12,6 +12,12 @@ import {
   upgradePreview,
 } from "@cawco/core/preview-proxy";
 import type { Server } from "bun";
+import {
+  closeBridge,
+  reachWorkspace,
+  WorkspaceDown,
+  workspaceGone,
+} from "./preview-bridge";
 
 /**
  * The listeners this process serves, with the source each was asked for. They
@@ -27,8 +33,30 @@ const PREVIEW_PREFIX = /^\/preview\/[^/]+\/[^/]+\//;
 
 export function stopPreview({ instanceId }: { instanceId: string }): boolean {
   previews.get(instanceId)?.listener.stop(true);
+  closeBridge(instanceId);
   return previews.delete(instanceId);
 }
+
+/**
+ * Where a port preview's requests go: the host's loopback, or for a
+ * workspace's port the socket of the bridge into that workspace's network
+ * (`preview-bridge.ts`); a workspace with no boundary running throws
+ * {@link WorkspaceDown}.
+ */
+const upstreamOf = async (
+  instanceId: string,
+  source: { port: number; workspace?: string }
+): Promise<{ unix: string } | "host"> => {
+  if (source.workspace === undefined) {
+    return "host";
+  }
+  const reached = await reachWorkspace(
+    instanceId,
+    source.workspace,
+    source.port
+  );
+  return reached === "host" ? "host" : { unix: reached };
+};
 
 /** What the register tells the hub this process is serving. */
 export function servingPreviews(): {
@@ -53,10 +81,15 @@ export async function startPreview(options: {
   instanceId: string;
   port?: number;
   dir?: string;
+  /** The workspace whose network the port is in; none, the host's. */
+  workspace?: string;
 }): Promise<{ port: number }> {
-  const { instanceId, port, dir } = options;
+  const { instanceId, port, dir, workspace } = options;
   if ((port === undefined) === (dir === undefined)) {
     throw new Error("Pass exactly one of port or dir.");
+  }
+  if (workspace !== undefined && port === undefined) {
+    throw new Error("A workspace goes with a port, not a dir.");
   }
   if (
     port !== undefined &&
@@ -72,8 +105,14 @@ export async function startPreview(options: {
     throw new Error("Directory does not exist.");
   }
   const source: PreviewSource =
-    port === undefined ? { dir: root as string } : { port };
+    port === undefined
+      ? { dir: root as string }
+      : { port, ...(workspace === undefined ? {} : { workspace }) };
   stopPreview({ instanceId });
+  if ("port" in source) {
+    // A workspace no boundary runs refuses the preview in so many words.
+    await upstreamOf(instanceId, source);
+  }
   const listener = Bun.serve<PreviewSocket>({
     hostname: "0.0.0.0",
     port: 0,
@@ -109,18 +148,49 @@ export async function startPreview(options: {
           }
         }
         headers.set("accept-encoding", "identity");
-        const target = `127.0.0.1:${source.port}${url.pathname}${url.search}`;
+        let upstream: Awaited<ReturnType<typeof upstreamOf>>;
+        try {
+          upstream = await upstreamOf(instanceId, source);
+        } catch (error) {
+          if (error instanceof WorkspaceDown) {
+            return downResponse("workspace", 503);
+          }
+          throw error;
+        }
+        const at = `${url.pathname}${url.search}`;
         if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
-          return upgradePreview(request, server, `ws://${target}`, headers)
+          const ws =
+            upstream === "host"
+              ? `ws://127.0.0.1:${source.port}${at}`
+              : `ws+unix://${upstream.unix}:${at}`;
+          return upgradePreview(request, server, ws, headers)
             ? undefined
             : new Response("WebSocket upgrade failed", { status: 400 });
         }
-        response = await fetch(`http://${target}`, {
-          method: request.method,
-          headers,
-          body: request.body,
-          redirect: "manual",
-        });
+        try {
+          response = await fetch(
+            upstream === "host"
+              ? `http://127.0.0.1:${source.port}${at}`
+              : `http://localhost:${source.port}${at}`,
+            {
+              method: request.method,
+              headers,
+              body: request.body,
+              redirect: "manual",
+              ...(upstream === "host" ? {} : { unix: upstream.unix }),
+            }
+          );
+        } catch (error) {
+          // Nothing answered: the workspace closed under it, or its server is down.
+          if (
+            source.workspace !== undefined &&
+            (await workspaceGone(source.workspace))
+          ) {
+            closeBridge(instanceId);
+            return downResponse("workspace", 503);
+          }
+          throw error;
+        }
       } else {
         const filePath = resolve(
           source.dir,
@@ -205,7 +275,7 @@ export async function startPreview(options: {
   });
   previews.set(instanceId, {
     listener,
-    source: port === undefined ? { dir: dir as string } : { port },
+    source: "port" in source ? source : { dir: dir as string },
   });
   return { port: listener.port as number };
 }

@@ -58,12 +58,16 @@ export const artifactCreate = {
       .min(1)
       .max(200)
       .optional()
-      .describe("The machine a preview runs on; omitted, yours."),
+      .describe(
+        "The machine a preview runs on; omitted, yours. With a port, that machine's host port, outside any workspace."
+      ),
     workspace: z
       .string()
       .regex(WORKSPACE_ID)
       .optional()
-      .describe("The workspace whose server it is; omitted, your own."),
+      .describe(
+        "The workspace whose server a port is: yours, or a delegate's id as delegate returned it; omitted, your own."
+      ),
   },
 };
 

@@ -197,7 +197,9 @@
       const said = frame.contentDocument
         ?.querySelector(`meta[name="${PREVIEW_DOWN_META}"]`)
         ?.getAttribute("content");
-      return said === "server" || said === "machine" ? said : null;
+      return said === "server" || said === "machine" || said === "workspace"
+        ? said
+        : null;
     } catch {
       // A frame of another origin is a page, not the proxy's.
       return null;
@@ -220,6 +222,15 @@
       : "the session"
   );
   const downPort = $derived(source && "port" in source ? source.port : null);
+  const downTitle = $derived.by(() => {
+    if (down === "server") {
+      return "The page's server stopped answering";
+    }
+    if (down === "workspace") {
+      return "That workspace isn't running";
+    }
+    return `${ownerMachine} isn't answering`;
+  });
 
   $effect(() => {
     if (frameKey) {
@@ -759,14 +770,12 @@
   {#if down}
     <!-- What happened, why and the way back, where the page would be. -->
     <div class="down" role="alert" transition:appear>
-      <EmptyState
-        icon={IconAlert}
-        title={down === "server"
-          ? "The page's server stopped answering"
-          : `${ownerMachine} isn't answering`}
-      >
+      <EmptyState icon={IconAlert} title={downTitle}>
         {#snippet line()}
-          {#if down === "server"}
+          {#if down === "workspace"}
+            Its server can't be reached until the workspace runs again. Once a
+            session there is back, try again.
+          {:else if down === "server"}
             {downPort
               ? `Nothing is running on port ${downPort} on ${ownerMachine}, so the page can't load.`
               : `The page's server on ${ownerMachine} isn't running, so the page can't load.`}

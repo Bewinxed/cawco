@@ -1236,9 +1236,10 @@ export interface ArtifactSummary {
  * draw what happened instead of the proxy's page. `server`: the dev server
  * on the session's machine is not answering its port. `machine`: the
  * machine's preview listener is not answering the hub, or the machine is
- * away.
+ * away. `workspace`: the port is a workspace's, and no boundary of that
+ * workspace runs, so nothing in its network can answer.
  */
-export type PreviewDown = "server" | "machine";
+export type PreviewDown = "server" | "machine" | "workspace";
 export const PREVIEW_DOWN_META = "cawco-preview-down";
 
 /**

@@ -37,9 +37,9 @@ export const QUIET_MS = 3000;
 const MESSAGE_MAX = 8000;
 
 export class ArtifactRefusal extends Error {
-  readonly status: 400 | 404 | 409 | 413 | 422 | 503 | 504;
+  readonly status: 400 | 403 | 404 | 409 | 413 | 422 | 503 | 504;
   constructor(
-    status: 400 | 404 | 409 | 413 | 422 | 503 | 504,
+    status: 400 | 403 | 404 | 409 | 413 | 422 | 503 | 504,
     message: string
   ) {
     super(message);
@@ -60,7 +60,11 @@ export interface ArtifactInput {
   name: string;
   path?: string | undefined;
   port?: number | undefined;
-  /** The workspace whose dev server a port is; the caller's own when it runs in one. */
+  /**
+   * The workspace whose dev server a port is: the caller's own, or one of its
+   * delegates'. Omitted, the caller's own when it runs in one, unless
+   * `machine` names the host the port is on.
+   */
   workspace?: string | undefined;
 }
 
@@ -79,6 +83,20 @@ const strayFields = (input: ArtifactInput): string | null => {
   }
   const other = input.kind === "page" ? "a preview" : "a page";
   return `A ${input.kind} takes ${input.kind === "page" ? "html or dir" : "port or dir"}; ${stray.join(", ")} ${stray.length === 1 ? "is" : "are"} for ${other}.`;
+};
+
+/** Why a preview's fields do not go together, or nothing. */
+const previewProblem = (input: ArtifactInput): string | null => {
+  if ((input.port === undefined) === (input.dir === undefined)) {
+    return "A preview takes exactly one of port or dir.";
+  }
+  if (input.port === undefined && input.workspace !== undefined) {
+    return "workspace goes with a port, not a dir.";
+  }
+  if (input.machine !== undefined && input.workspace !== undefined) {
+    return "A workspace's port is on the workspace's machine: pass workspace for a workspace's server, or machine for a port on that machine's host.";
+  }
+  return null;
 };
 
 /** An entry as `artifact_read` answers it. */
@@ -231,6 +249,11 @@ export const legacyName = (place: string): string =>
 
 export interface ArtifactServiceDeps {
   db: ArtifactsDb;
+  /**
+   * Whether `workspaceId` holds a work item of the session's delegates: one it
+   * delegated, or one of a project it leads (as `stop_delegate` decides).
+   */
+  delegatesIn: (instance: InstanceRow, workspaceId: string) => boolean;
   /** Puts the person's message into the session. */
   deliver: (instance: InstanceRow, content: string) => void;
   docs: ArtifactDocs;
@@ -262,8 +285,8 @@ export interface ArtifactServiceDeps {
   showing: (instanceId: string) => string | undefined;
   /** Whether the session's turn is running now. */
   turnRunning: (instanceId: string) => boolean;
-  /** The workspaces an id or its prefix names. */
-  workspaces: (needle: string) => { id: string }[];
+  /** The workspaces an id or its prefix names, each with the machine it is on. */
+  workspaces: (needle: string) => { id: string; machineId: string }[];
 }
 
 export const createArtifacts = (deps: ArtifactServiceDeps) => {
@@ -396,16 +419,35 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     };
   };
 
-  /** The source a preview input names, on the machine it names (the session's when none). */
+  /**
+   * The source a preview input names, on the machine that serves it: a
+   * workspace's port on the workspace's machine, in its network; a port or a
+   * folder on the machine `machine` names, else the session's.
+   */
   const previewSource = (
     instance: InstanceRow,
     input: ArtifactInput
   ): { machineId: string; source: PreviewSource } => {
-    if ((input.port === undefined) === (input.dir === undefined)) {
-      throw new ArtifactRefusal(
-        400,
-        "A preview takes exactly one of port or dir."
-      );
+    const problem = previewProblem(input);
+    if (problem) {
+      throw new ArtifactRefusal(400, problem);
+    }
+    const at = input.path === undefined ? {} : { path: input.path };
+    // A machine named is its host's port; else the port is in the workspace
+    // named, or the session's own.
+    const workspace =
+      input.port === undefined || input.machine !== undefined
+        ? undefined
+        : workspaceFor(instance, input.workspace);
+    if (workspace) {
+      return {
+        machineId: workspace.machineId,
+        source: {
+          port: input.port as number,
+          ...at,
+          workspace: workspace.id,
+        },
+      };
     }
     const machineId =
       input.machine === undefined
@@ -417,41 +459,46 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         `No machine named ${input.machine} is known to this hub.`
       );
     }
-    const at = input.path === undefined ? {} : { path: input.path };
-    if (input.port === undefined) {
-      if (input.workspace !== undefined) {
-        throw new ArtifactRefusal(
-          400,
-          "workspace goes with a port, not a dir."
-        );
-      }
-      return { machineId, source: { dir: input.dir as string, ...at } };
-    }
-    const workspace = workspaceFor(instance, input.workspace);
     return {
       machineId,
-      source: { port: input.port, ...at, ...(workspace ? { workspace } : {}) },
+      source:
+        input.port === undefined
+          ? { dir: input.dir as string, ...at }
+          : { port: input.port, ...at },
     };
   };
 
-  /** The workspace a port preview's server runs in: the one named, else the session's own. */
+  /**
+   * The workspace a port preview's server runs in, with its machine: the one
+   * named, which must be the session's own or one of its delegates', else the
+   * session's own; none for a session outside a workspace that names none.
+   */
   const workspaceFor = (
     instance: InstanceRow,
     needle: string | undefined
-  ): string | undefined => {
-    if (needle === undefined) {
-      return deps.ownWorkspace(instance);
+  ): { id: string; machineId: string } | undefined => {
+    const mine = deps.ownWorkspace(instance);
+    const asked = needle ?? mine;
+    if (asked === undefined) {
+      return;
     }
-    const found = deps.workspaces(needle);
+    const found = deps.workspaces(asked);
     if (found.length !== 1) {
       throw new ArtifactRefusal(
         404,
         found.length === 0
-          ? `No workspace ${needle} on this hub.`
-          : `${needle} names ${found.length} workspaces; pass the full workspace id.`
+          ? `No workspace ${asked} on this hub.`
+          : `${asked} names ${found.length} workspaces; pass the full workspace id.`
       );
     }
-    return found[0].id;
+    const [workspace] = found;
+    if (workspace.id !== mine && !deps.delegatesIn(instance, workspace.id)) {
+      throw new ArtifactRefusal(
+        403,
+        `"${needle}" is not your delegate's workspace — you can only preview your own workspace or your delegates'.`
+      );
+    }
+    return workspace;
   };
 
   const pageHtml = async (
