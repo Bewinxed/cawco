@@ -83,7 +83,8 @@ export interface TaskHistoryActor {
  * hub. `edited`: its file changed by a commit the hub's task code did not
  * make (a hand edit, folder_write); the hub putting back what one wrote
  * around it is `changed`, in words that say so. `archived`: its file moved
- * into tasks/archive/; `unarchived`: back out of it. `renamed`, `deleted`:
+ * into tasks/archive/, or added there (a merged project's archived task);
+ * `unarchived`: back out of it. `renamed`, `deleted`:
  * its file.
  */
 export type TaskHistoryKind =
@@ -215,7 +216,8 @@ const kindOf = (
   mover: HistoryMover | null
 ): TaskHistoryKind => {
   if (change === "added") {
-    return "created";
+    // Added straight into the archive (a merged project's archived task): it arrives archived.
+    return inArchive(path) ? "archived" : "created";
   }
   if (change === "renamed") {
     if (inArchive(path) !== inArchive(from ?? "")) {

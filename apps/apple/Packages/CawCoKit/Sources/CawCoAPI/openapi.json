@@ -27217,7 +27217,7 @@
         ]
       },
       "TaskHistoryKind": {
-        "description": "`created`: its file added. `moved`: a stage move. `changed`: fields,\nto-dos or edges, through the hub. `commented`: a comment added through the\nhub. `edited`: its file changed by a commit the hub's task code did not\nmake (a hand edit, folder_write); the hub putting back what one wrote\naround it is `changed`, in words that say so. `archived`: its file moved\ninto tasks/archive/; `unarchived`: back out of it. `renamed`, `deleted`:\nits file.",
+        "description": "`created`: its file added. `moved`: a stage move. `changed`: fields,\nto-dos or edges, through the hub. `commented`: a comment added through the\nhub. `edited`: its file changed by a commit the hub's task code did not\nmake (a hand edit, folder_write); the hub putting back what one wrote\naround it is `changed`, in words that say so. `archived`: its file moved\ninto tasks/archive/, or added there (a merged project's archived task);\n`unarchived`: back out of it. `renamed`, `deleted`:\nits file.",
         "type": "string",
         "enum": [
           "archived",

@@ -1150,14 +1150,15 @@ export const deleteFolderFile = async (
 
 /**
  * Moves one file to another path (its folders made as needed, the old ones
- * pruned) and commits both sides as one change. A file already at `to` is
- * replaced. A failed commit puts both back as they were.
+ * pruned) and commits both sides as one change; with `content`, the file
+ * lands with that text instead of its own, in the same commit. A file
+ * already at `to` is replaced. A failed commit puts both back as they were.
  */
 export const moveFolderFile = async (
   projectId: string,
   rawFrom: string,
   rawTo: string,
-  options: FolderWriteOptions = {}
+  options: FolderWriteOptions & { content?: string } = {}
 ): Promise<FolderCommit> => {
   const from = folderPath(rawFrom);
   const to = folderPath(rawTo);
@@ -1179,7 +1180,14 @@ export const moveFolderFile = async (
     const before = new Map<string, Buffer | undefined>();
     const bytes = await readFile(source);
     try {
-      await putFile(root, to, bytes, before);
+      await putFile(
+        root,
+        to,
+        options.content === undefined
+          ? bytes
+          : Buffer.from(options.content, "utf8"),
+        before
+      );
       before.set(source, bytes);
       await unlink(source);
       const done = await commitPaths(
@@ -1388,11 +1396,53 @@ const applyLog = (
     const [header = "", ...changes] = record.split("\n");
     const made = commitOf(header);
     if (made) {
-      for (const change of changes) {
+      for (const change of movesByName(changes)) {
         applyChange(times, ever, own, change, made);
       }
     }
   }
+};
+
+/**
+ * One commit's `--name-status` lines, with a delete and an add of the same
+ * file name in two folders read as a move (`R000`): git pairs a rename only
+ * by content, and a file moved and rewritten in one commit (a task put back
+ * as it comes out of the archive) can fall under its threshold. A name
+ * deleted or added more than once in the commit is left as git said.
+ */
+const movesByName = (lines: string[]): string[] => {
+  const byName = (kind: string) => {
+    const paths = new Map<string, string[]>();
+    for (const line of lines) {
+      const [code = "", path = ""] = line.split("\t");
+      if (code.startsWith(kind) && path) {
+        const name = basename(path);
+        paths.set(name, [...(paths.get(name) ?? []), path]);
+      }
+    }
+    return paths;
+  };
+  const deleted = byName("D");
+  const added = byName("A");
+  const moved = new Map<string, string>();
+  for (const [name, [from, ...others]] of deleted) {
+    const to = added.get(name);
+    if (from && others.length === 0 && to?.length === 1) {
+      moved.set(from, to[0] as string);
+    }
+  }
+  if (moved.size === 0) {
+    return lines;
+  }
+  const to = new Set(moved.values());
+  return lines.flatMap((line) => {
+    const [code = "", path = ""] = line.split("\t");
+    if (code.startsWith("A") && to.has(path)) {
+      return [];
+    }
+    const target = code.startsWith("D") ? moved.get(path) : undefined;
+    return target ? [`R000\t${path}\t${target}`] : [line];
+  });
 };
 
 /** One `--name-status` line of the commit `made`, as {@link applyLog} reads it. */
