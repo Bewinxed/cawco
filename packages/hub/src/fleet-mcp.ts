@@ -17,11 +17,15 @@ import type { DbShape } from "./db";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 
 const SHARED_CLIENT_ID = `${CAWCO_OAUTH_URL}/client.json`;
+/**
+ * Every provider redirects to CawCo's hand-back page, which forwards the code
+ * to the hub origin the starting browser recorded on CawCo's start page. One
+ * https redirect is accepted by providers that refuse plain http off loopback,
+ * and it is the same whichever address a browser reached the dashboard by.
+ */
 const SHARED_REDIRECT = `${CAWCO_OAUTH_URL}/callback`;
-/** `via` says where the browser goes first: straight to the provider, or through CawCo's start page. */
 export interface SignInStart {
   authorizationUrl: string;
-  via: "install" | "cawco";
 }
 const MCP_HEADERS = [
   "Mcp-Session-Id",
@@ -332,19 +336,19 @@ export class FleetMcp {
     };
   }
 
-  start(name: string, redirectUri: string): Promise<SignInStart> {
+  start(name: string): Promise<SignInStart> {
     const running = this.#signingIn.get(name);
     if (running !== undefined) {
       return running;
     }
-    const starting = this.#start(name, redirectUri).finally(() =>
+    const starting = this.#start(name).finally(() =>
       this.#signingIn.delete(name)
     );
     this.#signingIn.set(name, starting);
     return starting;
   }
 
-  async #start(name: string, installRedirect: string): Promise<SignInStart> {
+  async #start(name: string): Promise<SignInStart> {
     await this.#probing.get(name);
     const server = this.#server(name);
     if (!server.enabled) {
@@ -357,26 +361,25 @@ export class FleetMcp {
       );
     }
     // A provider that names clients by a published document and has no
-    // registration is signed in to as CawCo's shared client, whose one redirect
-    // is CawCo's hand-back page; any other provider redirects to this install.
+    // registration is signed in to as CawCo's shared client; any other
+    // registers this install's own client once, kept for every later sign-in.
     const shared =
       !row.metadata.registration_endpoint &&
       row.metadata.client_id_metadata_document_supported === true;
-    const redirectUri = shared ? SHARED_REDIRECT : installRedirect;
     let { client } = row;
     if (shared) {
       client = {
         client_id: SHARED_CLIENT_ID,
         redirect_uris: [SHARED_REDIRECT],
       };
-      // A client registered for another origin cannot be redirected to this one.
-    } else if (!client?.redirect_uris.includes(redirectUri)) {
+      // A client registered for another redirect cannot be sent to this one.
+    } else if (!client?.redirect_uris.includes(SHARED_REDIRECT)) {
       try {
         client = await registerClient(row.issuer, {
           metadata: row.metadata,
           clientMetadata: {
             client_name: "CawCo fleet",
-            redirect_uris: [redirectUri],
+            redirect_uris: [SHARED_REDIRECT],
             grant_types: ["authorization_code", "refresh_token"],
             response_types: ["code"],
             token_endpoint_auth_method: "none",
@@ -395,7 +398,7 @@ export class FleetMcp {
       {
         metadata: row.metadata,
         clientInformation: client,
-        redirectUrl: redirectUri,
+        redirectUrl: SHARED_REDIRECT,
         state,
         scope: row.resource.scopes_supported?.join(" "),
         resource: new URL(row.resource.resource),
@@ -415,16 +418,13 @@ export class FleetMcp {
       lastOpenedAt: new Date(),
       pending: {
         client,
-        redirectUri,
+        redirectUri: SHARED_REDIRECT,
         state,
         verifier: codeVerifier,
         expiresAt: Date.now() + 10 * 60_000,
       },
     });
-    return {
-      authorizationUrl: authorizationUrl.toString(),
-      via: shared ? "cawco" : "install",
-    };
+    return { authorizationUrl: authorizationUrl.toString() };
   }
 
   async complete(

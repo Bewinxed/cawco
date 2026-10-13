@@ -394,30 +394,19 @@ export const removeMcpServer = (name: string): Promise<void> =>
 
 /**
  * Signs this browser in to a fleet MCP server: the hub answers with the
- * authorization page, which this window goes to, and the authorization server
- * sends it back to the hub under the address it is already using. That is what
- * lets a phone, or any browser, finish it, whichever machine runs the agent.
+ * authorization page, which this window reaches through CawCo's start page.
+ * That page records the address this browser reached the hub by, and CawCo's
+ * hand-back page forwards the provider's answer only there. That is what lets
+ * a phone, or any browser, finish it, whichever machine runs the agent.
  */
 export const signInToMcp = async (name: string): Promise<void> => {
   const { origin } = window.location;
-  const { authorizationUrl, via } = await send<{
-    authorizationUrl: string;
-    via: "install" | "cawco";
-  }>(
+  const { authorizationUrl } = await send<{ authorizationUrl: string }>(
     `/api/fleet/mcp/${encodeURIComponent(name)}/sign-in`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ origin }),
-    },
+    { method: "POST" },
     `start sign-in to ${name}`
   );
-  if (via === "install") {
-    window.location.assign(authorizationUrl);
-    return;
-  }
-  // CawCo's page hands the sign-in back to this install. The address rides in
-  // the fragment, which the browser never sends to a server.
+  // The address rides in the fragment, which the browser never sends to a server.
   const hop = btoa(JSON.stringify({ origin, auth: authorizationUrl }))
     .replaceAll("+", "-")
     .replaceAll("/", "_")

@@ -103,7 +103,6 @@ typeOverrides:
     SendMode: OpenEnums.SendMode
     SendState: OpenEnums.SendState
     SessionPulseActivity: OpenEnums.SessionPulseActivity
-    SignInStartVia: OpenEnums.SignInStartVia
     SigninKind: OpenEnums.SigninKind
     SigninState: OpenEnums.SigninState
     SlashCommandKind: OpenEnums.SlashCommandKind

@@ -4132,44 +4132,6 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/SignInStartVia`.
-    public enum SignInStartVia: OpenEnum {
-        case cawco
-        case install
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "cawco": self = .cawco
-            case "install": self = .install
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .cawco: "cawco"
-            case .install: "install"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.cawco, .install]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
     /// `#/components/schemas/SigninKind`.
     public enum SigninKind: OpenEnum {
         case apiKey

@@ -2,9 +2,8 @@
   import { onMount } from "svelte";
   import { completeMcpSignIn } from "#lib/cawco/fleet.js";
   /**
-   * Where a provider's sign-in comes back to. cawco.dev/oauth/callback (or the
-   * provider itself, when it can reach this address) brings the person here with
-   * a one-time code; the hub exchanges it, and the person lands on the MCP
+   * Where a provider's sign-in comes back to. cawco.dev/oauth/callback brings
+   * the person here with a one-time code; the hub exchanges it, and the person lands on the MCP
    * servers with the answer toasted. Nothing here holds a credential: the code
    * is spent once, by the hub, with the verifier only the hub has.
    */

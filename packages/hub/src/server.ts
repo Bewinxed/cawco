@@ -180,7 +180,6 @@ import {
   LIMITED_PROVIDERS,
   LIVE_CREDENTIAL_ENROLLMENT_REFUSAL,
   type MachineProviderLists,
-  MCP_OAUTH_RETURN_PATH,
   MESSAGES_HELD,
   MESSAGES_READ,
   MESSAGES_STORED,
@@ -17202,43 +17201,18 @@ export const createServer = (
         announceMcp();
         return { ok: true };
       })
-      .post(
-        "/api/fleet/mcp/:name/sign-in",
-        { body: t.Object({ origin: t.String({ minLength: 1 }) }) },
-        async ({ params, body, status }) => {
-          // The authorization server redirects the browser that signs in, so the
-          // redirect is under the origin that browser reached the dashboard by:
-          // a phone's tailnet address works where a loopback port never could.
-          let origin: URL;
-          try {
-            origin = new URL(body.origin);
-          } catch {
-            return status(
-              400,
-              "The browser did not say where it reached CawCo."
-            );
-          }
-          if (origin.protocol !== "http:" && origin.protocol !== "https:") {
-            return status(
-              400,
-              "Sign-in needs an HTTP or HTTPS dashboard address."
-            );
-          }
-          try {
-            return await fleetMcp.start(
-              params.name,
-              `${origin.origin}${MCP_OAUTH_RETURN_PATH}`
-            );
-          } catch (error) {
-            return status(
-              400,
-              error instanceof Error
-                ? error.message
-                : "Sign-in could not start. Save this server and retry sign-in."
-            );
-          }
+      .post("/api/fleet/mcp/:name/sign-in", async ({ params, status }) => {
+        try {
+          return await fleetMcp.start(params.name);
+        } catch (error) {
+          return status(
+            400,
+            error instanceof Error
+              ? error.message
+              : "Sign-in could not start. Save this server and retry sign-in."
+          );
         }
-      )
+      })
       .post(
         "/api/fleet/mcp/oauth/complete",
         {
