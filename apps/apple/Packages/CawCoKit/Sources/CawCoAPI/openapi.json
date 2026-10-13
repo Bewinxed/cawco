@@ -23011,6 +23011,9 @@
             "$ref": "#/components/schemas/StreamSubscribe"
           },
           {
+            "$ref": "#/components/schemas/StreamUnsubscribe"
+          },
+          {
             "$ref": "#/components/schemas/CommandEnvelope"
           },
           {
@@ -39027,6 +39030,25 @@
             "type": "string",
             "enum": [
               "stream.subscribe"
+            ]
+          }
+        },
+        "required": [
+          "sessionId",
+          "type"
+        ]
+      },
+      "StreamUnsubscribe": {
+        "description": "Client → hub: this socket no longer follows the session, so the hub sends\nit none of the session's events from here on. Sent when nothing the client\nshows on that socket follows the session any more (every pane, the peek,\na delegate card); a `stream.subscribe` follows it again. A session the\nsocket does not follow is no change. The session's plan, when the socket\nfollows it alone (`plan.follow`), is not this message's.",
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "stream.unsubscribe"
             ]
           }
         },

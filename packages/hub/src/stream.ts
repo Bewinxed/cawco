@@ -656,6 +656,28 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
   };
 
   /**
+   * The socket lets a session go: it is no follower of it from here on, and
+   * hears none of its events. Its plan, followed alone (`plan.follow`), is
+   * left as it is. A session it did not follow is no change.
+   */
+  const unsubscribe = (
+    socket: HubSocket,
+    raw: Record<string, unknown>
+  ): void => {
+    const { sessionId } = raw;
+    if (!nonEmpty(sessionId)) {
+      refuse(socket, raw, "stream.unsubscribe refused: `sessionId` is missing");
+      return;
+    }
+    sockets.get(socket.id)?.sessions.delete(sessionId);
+    const perSession = followers.get(sessionId);
+    perSession?.delete(socket.id);
+    if (perSession?.size === 0) {
+      followers.delete(sessionId);
+    }
+  };
+
+  /**
    * The sessions whose plan alone a socket follows, the whole set: each one
    * new to it is answered with its plan whole, and every frame after comes
    * as it comes to the session's followers.
@@ -696,6 +718,17 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     ports.planSnapshot(instanceId, (plan) => deliver(socket, plan));
   };
 
+  /** What a socket follows: each message that changes it, by its type. */
+  const FOLLOWS = new Map<
+    string,
+    (socket: HubSocket, raw: Record<string, unknown>) => void
+  >([
+    ["stream.subscribe", subscribeMessage],
+    ["stream.unsubscribe", unsubscribe],
+    ["plan.follow", followPlans],
+    ["plan.resync", resyncPlan],
+  ]);
+
   const handleClientMessage = (socket: HubSocket, raw: unknown): boolean => {
     if (!isRecord(raw) || typeof raw.type !== "string") {
       return false;
@@ -708,18 +741,9 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       return true;
     }
 
-    if (raw.type === "stream.subscribe") {
-      subscribeMessage(socket, raw);
-      return true;
-    }
-
-    if (raw.type === "plan.follow") {
-      followPlans(socket, raw);
-      return true;
-    }
-
-    if (raw.type === "plan.resync") {
-      resyncPlan(socket, raw);
+    const follow = FOLLOWS.get(raw.type);
+    if (follow) {
+      follow(socket, raw);
       return true;
     }
 
@@ -741,7 +765,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     refuse(
       socket,
       raw,
-      `unknown stream message type "${raw.type}": the stream takes heartbeat, stream.subscribe, plan.follow, plan.resync or command`
+      `unknown stream message type "${raw.type}": the stream takes heartbeat, stream.subscribe, stream.unsubscribe, plan.follow, plan.resync or command`
     );
     return true;
   };

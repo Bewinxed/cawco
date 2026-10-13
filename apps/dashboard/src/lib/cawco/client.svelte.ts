@@ -4198,8 +4198,10 @@ export function syncSubscriptions(): void {
     return;
   }
   lastSubscriptionKey = key;
-  forgetUnwatched(streamState, ids);
-  untrack(() => followHeld(ids, "follow"));
+  untrack(() => {
+    forgetUnwatched(streamState, streamHost, ids);
+    followHeld(ids, "follow");
+  });
 }
 
 /**
@@ -4432,7 +4434,7 @@ function rereadFollowed(): void {
   connections += 1;
   const ids = subscriptionIds().sort();
   lastSubscriptionKey = ids.join("\u0000");
-  forgetUnwatched(streamState, ids);
+  forgetUnwatched(streamState, streamHost, ids);
   followHeld(ids, "reconnect");
 }
 

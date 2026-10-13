@@ -89,6 +89,19 @@ export interface StreamSubscribe {
 }
 
 /**
+ * Client → hub: this socket no longer follows the session, so the hub sends
+ * it none of the session's events from here on. Sent when nothing the client
+ * shows on that socket follows the session any more (every pane, the peek,
+ * a delegate card); a `stream.subscribe` follows it again. A session the
+ * socket does not follow is no change. The session's plan, when the socket
+ * follows it alone (`plan.follow`), is not this message's.
+ */
+export interface StreamUnsubscribe {
+  sessionId: string;
+  type: "stream.unsubscribe";
+}
+
+/**
  * Hub → client when the requested gap is inside its ring: events contiguous
  * ascending from `afterSeq + 1`. The client applies them in order, then
  * follows live deltas.
@@ -188,6 +201,7 @@ export type StreamServerMessage =
   | import("./plan").PlanDelta;
 export type StreamClientMessage =
   | StreamSubscribe
+  | StreamUnsubscribe
   | StreamHeartbeat
   | CommandEnvelope
   | import("./plan").PlanFollow

@@ -50,13 +50,22 @@ interface Row {
   status: string;
 }
 
-/** The pane's rows, as drawn: each message's id and words, in order. */
-const rowsOf = (page: Page) =>
-  page.evaluate(() =>
-    [...document.querySelectorAll<HTMLElement>("[data-message]")].map(
-      (node) =>
-        `${node.dataset.message}: ${(node.innerText ?? "").replace(/\s+/g, " ").trim()}`
-    )
+/**
+ * One session's pane rows, as drawn: each message's id and words, in order.
+ * Its pane alone: another open session's pane is mounted beside it.
+ */
+const rowsOf = (page: Page, sessionId: string) =>
+  page.evaluate(
+    (pane) =>
+      [
+        ...document.querySelectorAll<HTMLElement>(
+          `[data-pane="${pane}"] [data-message]`
+        ),
+      ].map(
+        (node) =>
+          `${node.dataset.message}: ${(node.innerText ?? "").replace(/\s+/g, " ").trim()}`
+      ),
+    sessionId
   );
 
 const run = async (kit: Kit) => {
@@ -113,18 +122,26 @@ const run = async (kit: Kit) => {
     120_000
   );
 
-  const id = await fleet.spawn("claude", "Followed");
+  // In a project, so the sidebar lists its sessions (rows with hover cards).
+  const project = await fleet.api<{ id: string }>("/api/projects", {
+    name: "Follows",
+    machineId: MACHINE,
+    cwd: fleet.repo,
+    caw: false,
+  });
+  const inProject = { projectId: project.id };
+  const id = await fleet.spawn("claude", "Followed", fleet.repo, inProject);
   const row = () =>
     fleet.query<Row>(
       "SELECT account_id, session_id, spawned_at, status FROM instances WHERE id = ?",
       id
     )[0] as Row;
-  const answered = (tag: string) =>
+  const answered = (tag: string, of = id) =>
     until(
       `the hub's transcript answering ${tag}`,
       async () =>
         JSON.stringify(
-          await fleet.api(`/api/instances/${id}/transcript?limit=50`)
+          await fleet.api(`/api/instances/${of}/transcript?limit=50`)
         ),
       (read) => read.includes(`Answer to ${tag}`),
       120_000
@@ -134,6 +151,32 @@ const run = async (kit: Kit) => {
 
   const base = await fleet.dashboard();
   const page = await kit.page("desk");
+  /** Every session event the hub sent the page's dashboard socket: whose, and when. */
+  const heard: { at: number; sessionId: string }[] = [];
+  page.on("websocket", (socket) => {
+    if (!socket.url().includes("/ws/dashboard")) {
+      return;
+    }
+    socket.on("framereceived", ({ payload }) => {
+      let message: {
+        events?: { sessionId?: string }[];
+        event?: { sessionId?: string };
+        type?: string;
+      };
+      try {
+        message = JSON.parse(String(payload));
+      } catch {
+        return;
+      }
+      const events = [
+        ...(message.type === "stream.event" ? [message.event] : []),
+        ...(message.type === "stream.backlog" ? (message.events ?? []) : []),
+      ];
+      for (const event of events) {
+        heard.push({ at: Date.now(), sessionId: event?.sessionId ?? "" });
+      }
+    });
+  });
   const lines: string[] = [];
   page.on("console", (message) => {
     const text = message.text();
@@ -170,7 +213,7 @@ const run = async (kit: Kit) => {
     );
     // Its tail settles before the two are compared: the reply is whole.
     await page.waitForTimeout(1500);
-    const held = await rowsOf(page);
+    const held = await rowsOf(page, id);
     const fresh = await kit.page("desk");
     await open(fresh, url, "[data-message]");
     await fresh.waitForFunction(
@@ -179,9 +222,10 @@ const run = async (kit: Kit) => {
       { timeout: 30_000 }
     );
     await fresh.waitForTimeout(1500);
-    const loaded = await rowsOf(fresh);
+    const loaded = await rowsOf(fresh, id);
     await fresh.close();
-    const same = JSON.stringify(held) === JSON.stringify(loaded);
+    const same =
+      held.length > 0 && JSON.stringify(held) === JSON.stringify(loaded);
     kit.check(
       `${leg}: the open pane's rows are a fresh load's`,
       same,
@@ -210,20 +254,95 @@ const run = async (kit: Kit) => {
       () => (window as unknown as { probeLoad?: number }).probeLoad === 1
     );
 
+  /** What the page shows `words` within the wait: whether it did. */
+  const shows = (words: string) =>
+    page
+      .waitForFunction(
+        (want) => document.body.innerText.includes(want),
+        words,
+        {
+          timeout: 30_000,
+        }
+      )
+      .then(
+        () => true,
+        () => false
+      );
+  const closeFollowed = async () => {
+    await page.waitForSelector('button[aria-label="Close Followed"]', {
+      state: "attached",
+      timeout: 30_000,
+    });
+    await page.click('button[aria-label="Close Followed"]', { force: true });
+    await page.waitForSelector('button[aria-label="Close Followed"]', {
+      state: "detached",
+      timeout: 15_000,
+    });
+  };
+
   // ── 0. its tab closed while it talks, then opened again ──────────────
-  const other = await fleet.spawn("claude", "Elsewhere");
+  // Two sessions open on the one socket, the other in its own tab.
+  const other = await fleet.spawn("claude", "Elsewhere", fleet.repo, inProject);
   await visit(`/session/${other}`);
-  await page.waitForSelector('button[aria-label="Close Followed"]', {
+  await page.waitForSelector('button[aria-label="Close Elsewhere"]', {
     state: "attached",
     timeout: 30_000,
   });
-  await page.click('button[aria-label="Close Followed"]', { force: true });
+  // Two things on the socket show it: its tab, and its row's hover card in
+  // the sidebar. The tab closes under the card, the pointer kept on the row.
+  await page.locator(`[data-hover-session="${id}"]`).first().hover();
+  await page.waitForTimeout(1500);
+  await page.$eval('button[aria-label="Close Followed"]', (button) =>
+    (button as HTMLButtonElement).click()
+  );
   await page.waitForSelector('button[aria-label="Close Followed"]', {
     state: "detached",
     timeout: 15_000,
   });
-  // The socket goes while it is closed, as a hub restart or a dead link
-  // takes it: the hub follows nothing for the socket that replaces it.
+  await page.waitForTimeout(1000);
+  const heldFrom = Date.now();
+  await fleet.send(id, "PROBE-CARD: answer me.");
+  await answered("PROBE-CARD");
+  await page.waitForTimeout(1500);
+  const underCard = heard.filter(
+    (one) => one.at >= heldFrom && one.sessionId === id
+  ).length;
+  kit.check(
+    "0 still shown: its tab closed under its hover card, the hub still sends its events",
+    underCard > 0,
+    `${underCard} of its events`
+  );
+  // The card goes (released 2 s after the pointer leaves): nothing shows it.
+  await page.mouse.move(900, 450);
+  await page.waitForTimeout(3500);
+  const quietFrom = Date.now();
+  await fleet.send(id, "PROBE-QUIET: answer me.");
+  await fleet.send(other, "PROBE-ELSEWHERE: answer me.");
+  await answered("PROBE-QUIET");
+  await answered("PROBE-ELSEWHERE", other);
+  await page.waitForTimeout(1500);
+  const quiet = heard.filter((one) => one.at >= quietFrom);
+  const ofLetGo = quiet.filter((one) => one.sessionId === id).length;
+  const ofOther = quiet.filter((one) => one.sessionId === other).length;
+  kit.check(
+    "0 let go: the hub sends the socket none of its events, and the session still open on it streams",
+    ofLetGo === 0 && ofOther > 0,
+    `${ofLetGo} of the let-go session's events, ${ofOther} of the open one's`
+  );
+  // Followed again on the same socket.
+  await visit(`/session/${id}`);
+  const caught = await shows("Answer to PROBE-QUIET");
+  kit.check(
+    "0 followed again: what it said while let go is in the pane",
+    caught,
+    caught ? undefined : lines.slice(-12).join("\n")
+  );
+  await follows("0 followed again", "PROBE-AGAIN");
+
+  // Let go again, and the socket goes while it is: a hub restart or a dead
+  // link, so the hub follows nothing for the socket that replaces it.
+  await visit(`/session/${other}`);
+  await closeFollowed();
   await page.evaluate(() =>
     (
       globalThis as unknown as { __cawcoSocket: WebSocket }
@@ -239,16 +358,7 @@ const run = async (kit: Kit) => {
   await fleet.send(id, "PROBE-AWAY: answer me.");
   await answered("PROBE-AWAY");
   await visit(`/session/${id}`);
-  const back = await page
-    .waitForFunction(
-      () => document.body.innerText.includes("Answer to PROBE-AWAY"),
-      null,
-      { timeout: 30_000 }
-    )
-    .then(
-      () => true,
-      () => false
-    );
+  const back = await shows("Answer to PROBE-AWAY");
   kit.check(
     "0 reopened: what it said while its tab was closed is in the pane",
     back,
@@ -301,7 +411,7 @@ const run = async (kit: Kit) => {
     requestId: crypto.randomUUID(),
     payload: {
       instanceId: id,
-      cwd: fleet.workdir,
+      cwd: fleet.repo,
       harness: "claude",
       model: MODEL.claude,
       permissionMode: "bypassPermissions",

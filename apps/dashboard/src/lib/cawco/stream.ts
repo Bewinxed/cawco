@@ -309,17 +309,33 @@ export function subscribeSession(
  * Forgets every session the dashboard no longer watches, cursor and all, so
  * one opened again is read again. A watched session is subscribed by the read
  * that adopts its page ({@link adoptPage}): the pane, peek or card that shows
- * it is what reads it, and a reconnect reads it again.
+ * it is what reads it, and a reconnect reads it again. `sessionIds` is every
+ * session anything on this socket shows, so one is let go only when nothing
+ * shows it.
  */
 export function forgetUnwatched(
   state: StreamState,
+  host: StreamHost,
   sessionIds: string[]
 ): void {
   const wanted = new Set(sessionIds);
   for (const sessionId of Object.keys(state.cursors)) {
     if (!wanted.has(sessionId)) {
-      delete state.cursors[sessionId];
+      letGo(state, host, sessionId);
     }
+  }
+}
+
+/**
+ * Drops a session's cursor, and tells the hub when this socket follows it:
+ * the hub sends a follower every event until it hears otherwise. Events
+ * already on their way find no cursor and are dropped (`unfollowed`).
+ */
+function letGo(state: StreamState, host: StreamHost, sessionId: string): void {
+  const subscribed = state.cursors[sessionId]?.subscribed;
+  delete state.cursors[sessionId];
+  if (subscribed) {
+    dispatch(host, { type: "stream.unsubscribe", sessionId });
   }
 }
 
@@ -345,7 +361,7 @@ export function adoptPage(
   seq: number
 ): void {
   if (!host.follows(sessionId)) {
-    delete state.cursors[sessionId];
+    letGo(state, host, sessionId);
     return;
   }
   const cursor = cursorFor(state, sessionId);
