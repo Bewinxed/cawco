@@ -157,12 +157,18 @@
       return;
     }
     const { offsetTop, offsetLeft, offsetWidth, offsetHeight } = node;
+    // From the card's trailing side, where it is right-aligned: as the box
+    // tweens, its leading edge moves over the face and the face stays put.
+    const trailing =
+      (node.offsetParent?.clientWidth ?? offsetLeft + offsetWidth) -
+      offsetLeft -
+      offsetWidth;
     const from = getComputedStyle(node).opacity;
     fades.get(node)?.cancel();
     node.inert = true;
     node.style.position = "absolute";
     node.style.top = `${offsetTop}px`;
-    node.style.left = `${offsetLeft}px`;
+    node.style.right = `${trailing}px`;
     node.style.width = `${offsetWidth}px`;
     node.style.height = `${offsetHeight}px`;
     const face = faces.find((one) => one.card === card);
@@ -197,7 +203,7 @@
     const from = getComputedStyle(node).opacity;
     fades.get(node)?.cancel();
     node.inert = false;
-    for (const prop of ["position", "top", "left", "width", "height"]) {
+    for (const prop of ["position", "top", "right", "width", "height"]) {
       node.style.removeProperty(prop);
     }
     if (fade) {
@@ -490,12 +496,17 @@
 
 <style>
   /* One card's contents, as they stood straight in the card: a column that
-     gives its own scroller (Caw's list, Jump's results) the card's bounds. */
+     gives its own scroller (Caw's list, Jump's results) the card's bounds.
+     As wide as the card, and standing on its trailing edge: while the box
+     tweens (motion/morph holds the face at its own width) the card's
+     leading edge moves over it and clips it, and its rows never rewrap. */
   .glass-face {
     display: flex;
     min-block-size: 0;
     flex: 1 1 auto;
     flex-direction: column;
+    align-self: flex-end;
+    inline-size: 100%;
     border-radius: inherit;
   }
 </style>

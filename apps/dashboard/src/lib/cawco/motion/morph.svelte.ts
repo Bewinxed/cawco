@@ -32,9 +32,15 @@
  * comes: the container follows it frame by frame, with no tween of its own.
  *
  * For the tween's length the children hold their natural size (no flex
- * shrink, and their block size), so the container clips them instead of
- * squashing a scrolling list inside it, and a child sized by the container
- * (`height: 100%`, a Command list's root) does not follow the tween.
+ * shrink, their block size, and with `width` their inline size), so the
+ * container clips them instead of squashing a scrolling list inside it, and
+ * a child sized by the container (`height: 100%`, a Command list's root, a
+ * card's contents stretched across it) does not follow the tween. Laid out
+ * at the box's width frame by frame, a card's incoming rows rewrapped at
+ * every width it passed through, each row and its ✕ changing height until
+ * the box landed (owner: "the rows jump to half height then back"). Which
+ * side a child held wider than the box overflows on is the site's own
+ * (GlassCard's faces stand on its trailing edge).
  *
  * Every container changed in one turn of the event loop is measured
  * together: the sizes drawn now, then (tweens in flight cancelled, their
@@ -66,9 +72,9 @@ interface Size {
   w: number;
 }
 
-/** A container's natural size and its children's block sizes in it. */
+/** A container's natural size and its children's sizes in it. */
 interface Natural {
-  children: { child: HTMLElement; blockSize: number }[];
+  children: { child: HTMLElement; blockSize: number; inlineSize: number }[];
   /** The clock of the folds it was read past (`atFoldsEnd`), if any. */
   clock: { easing: string; ms: number } | null;
   size: Size;
@@ -275,10 +281,10 @@ export function morph({ width = false, ms, rows = false, still }: Morph = {}) {
                 child instanceof HTMLElement &&
                 getComputedStyle(child).position !== "absolute"
             )
-            .map((child) => ({
-              child,
-              blockSize: child.getBoundingClientRect().height,
-            })),
+            .map((child) => {
+              const rect = child.getBoundingClientRect();
+              return { child, blockSize: rect.height, inlineSize: rect.width };
+            }),
         }));
         return { ...value, clock };
       },
@@ -309,22 +315,30 @@ export function morph({ width = false, ms, rows = false, still }: Morph = {}) {
           frames[0].width = `${from.w}px`;
           frames[1].width = `${to.w}px`;
         }
-        const held = children.map(({ child, blockSize }) => ({
+        const held = children.map(({ child, blockSize, inlineSize }) => ({
           child,
           blockSize,
+          inlineSize,
           was: child.style.blockSize,
+          wasInline: child.style.inlineSize,
           shrink: child.style.flexShrink,
         }));
-        for (const { child, blockSize } of held) {
+        for (const { child, blockSize, inlineSize } of held) {
           child.style.flexShrink = "0";
           child.style.blockSize = `${blockSize}px`;
+          if (width) {
+            child.style.inlineSize = `${inlineSize}px`;
+          }
         }
         const animation = play(frames, moves(from, to), clock);
         running = animation;
         const letGo = () => {
-          for (const { child, was, shrink } of held) {
+          for (const { child, was, wasInline, shrink } of held) {
             child.style.flexShrink = shrink;
             child.style.blockSize = was;
+            if (width) {
+              child.style.inlineSize = wasInline;
+            }
           }
         };
         release = letGo;
