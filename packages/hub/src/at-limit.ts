@@ -5,6 +5,7 @@ import {
   type AccountProvider,
   type AccountReading,
   type AtLimit,
+  accountMoveWords,
   accountName,
   type ContinueStep,
   type LimitWindow,
@@ -567,9 +568,10 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     now + db.accounts.routing(current.provider).atLimit.waitMinutes * MINUTE_MS;
 
   /**
-   * Continuing `row` on `target` failed at `step`: it goes on in its
-   * conversation, still on `current`. Its transcript says so (once for the
-   * same failure, however often a retry meets it again; in place of the
+   * Moving `row` whole to `target`, or continuing it there (`action`),
+   * failed at `step`: it goes on in its conversation, still on `current`.
+   * Its transcript says so in the words of what failed (once for the same
+   * failure, however often a retry meets it again; in place of the
    * continuation's own "Summarising…" line, `line`, when it wrote one), and
    * it is held until its reset, each look deciding again whether to wait or
    * try once more. One whose credential was refused (`refused`) has no
@@ -579,7 +581,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     row: LimitRow,
     current: Account,
     target: Account,
-    step: ContinueStep,
+    failed: { action: "move" | "continue"; step: ContinueStep },
     reason: string,
     line?: string,
     refused = false
@@ -588,31 +590,35 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const last = events.filter((event) => event.id !== line).at(-1)?.move;
     const repeated =
       last?.kind === "unmoved" &&
-      last.step === step &&
+      last.action === failed.action &&
+      last.step === failed.step &&
       last.reason === reason &&
       last.to?.id === target.id;
     const move: AccountMove = {
       kind: "unmoved",
+      action: failed.action,
       from: namedAccount(current),
       to: namedAccount(target),
-      step,
+      step: failed.step,
       reason,
     };
-    if (!repeated) {
+    if (repeated) {
+      // The line written the first time logged itself; this says it again.
+      console.warn(
+        `[at-limit] ${row.id}: ${accountMoveWords(move, Date.now()).line} (again)`
+      );
+      if (line && events.some((event) => event.id === line)) {
+        // Its "Summarising…" line goes, the first telling of it stands.
+        ports.unnote(row, line);
+      }
+    } else {
       ports.note(row, move, line);
-    } else if (line && events.some((event) => event.id === line)) {
-      // The same failure again: its "Summarising…" line goes, the first
-      // telling of it stands.
-      ports.unnote(row, line);
     }
     db.atLimit.putHold({
       instanceId: row.id,
       accountId: current.id,
       until: refused ? null : holdUntil(row, current, Date.now()),
     });
-    console.warn(
-      `[at-limit] ${row.id}: continuing on ${accountName(target)} failed at ${step}: ${reason}`
-    );
     ports.changed();
     plan();
   };
@@ -634,7 +640,15 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const refused = cause === "refused";
     const why = await ports.move(row, target.id, refused ? "signin" : "limit");
     if (why) {
-      unmoved(row, current, target, "start", why, undefined, refused);
+      unmoved(
+        row,
+        current,
+        target,
+        { action: "move", step: "start" },
+        why,
+        undefined,
+        refused
+      );
       return;
     }
     db.atLimit.dropSummary(row.id);
@@ -800,7 +814,13 @@ export const createAtLimit = (ports: AtLimitPorts) => {
           holdUntil(row, current, now)
         );
       } catch (error) {
-        unmoved(row, current, target, "prepare", messageOf(error));
+        unmoved(
+          row,
+          current,
+          target,
+          { action: "continue", step: "prepare" },
+          messageOf(error)
+        );
       }
     } finally {
       acting.delete(row.id);
@@ -1176,7 +1196,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
           row,
           current,
           target,
-          failure.step,
+          { action: "continue", step: failure.step },
           failure.reason,
           failure.line
         );

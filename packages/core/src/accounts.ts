@@ -998,8 +998,14 @@ export type AccountMove =
       account: NamedAccount;
     }
   | {
-      /** Continuing it on `to` failed at `step`: it goes on in its conversation, still on `from`. */
+      /**
+       * Moving it whole to `to`, or continuing it there from a summary
+       * (`action`), failed at `step`: it goes on in its conversation, still
+       * on `from`.
+       */
       kind: "unmoved";
+      /** What failed: a move whole (`move`), or a continuation from a summary (`continue`). */
+      action: "move" | "continue";
       from: NamedAccount | null;
       to: NamedAccount | null;
       /** The session asked for it (`continue_session`), not its account's limit. */
@@ -1156,7 +1162,7 @@ export const accountMoveWords = (
       };
     case "unmoved":
       return {
-        line: `Couldn't continue${move.to ? ` on ${move.to.name}` : ""}: ${move.reason}`,
+        line: `${unmovedWords(move)}: ${move.reason}`,
         detail:
           move.asked || !move.from
             ? "It goes on in the conversation it has"
@@ -1170,6 +1176,16 @@ export const accountMoveWords = (
     default:
       return continuedWords(move);
   }
+};
+
+/** What failed, by its action: "Couldn't move to B", "Couldn't continue on B". */
+const unmovedWords = (
+  move: Extract<AccountMove, { kind: "unmoved" }>
+): string => {
+  if (move.action === "move") {
+    return `Couldn't move${move.to ? ` to ${move.to.name}` : ""}`;
+  }
+  return `Couldn't continue${move.to ? ` on ${move.to.name}` : ""}`;
 };
 
 /** A continuation in words: where it went on, what stayed behind, and where its summary was written. */

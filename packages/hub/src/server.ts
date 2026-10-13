@@ -10489,6 +10489,7 @@ export const createServer = (
         source,
         {
           kind: "unmoved",
+          action: "continue",
           from: move.from,
           to: move.to,
           ...(inPlace.atLimit ? {} : { asked: true as const }),

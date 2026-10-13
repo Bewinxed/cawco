@@ -33,8 +33,10 @@
  *       the at-limit controller holds it for that account and never
  *       continues it on C, then carries the move out. Either way its
  *       conversation is resumed there, no session row is added and its
- *       delegate keeps its parent. Each continuation's log line names who
- *       asked (the controller, a person).
+ *       delegate keeps its parent. The controller's own whole move, refused
+ *       by a process that holds a send unread, says "Couldn't move to …" in
+ *       its transcript and the hub log. Each continuation's log line names
+ *       who asked (the controller, a person).
  */
 import assert from "node:assert/strict";
 import { cpSync, existsSync, readdirSync, writeFileSync } from "node:fs";
@@ -53,6 +55,10 @@ const pathEnv = { PATH: process.env.PATH ?? "/usr/bin:/bin" };
 const hubRequire = createRequire(join(root, "packages/hub/package.json"));
 
 const delay = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
+/** A whole move the machine refused, as its transcript line says it (core `accountMoveWords`). */
+const MOVE_REFUSED = /^Couldn't move to (B|C): its process runs$/;
+/** Any wording of a continuation. */
+const CONTINUE_WORDS = /continu/i;
 
 async function until<T>(
   label: string,
@@ -619,10 +625,17 @@ if (role === "sessiond") {
     dispose: async () => closeStream(ctx.instanceId),
     // A background task it started, while `background-<id>` exists: at its
     // account's limit it holds nothing (agent `holding`).
-    holding: (atLimit?: boolean) =>
-      !atLimit && existsSync(join(scratch, `background-${ctx.instanceId}`))
+    // A send it holds unread, while `unread-held-<id>` exists: that holds it
+    // at its limit too.
+    holding: (atLimit?: boolean) => {
+      if (existsSync(join(scratch, `unread-held-${ctx.instanceId}`))) {
+        return "it holds 1 send(s) it has not read yet";
+      }
+      return !atLimit &&
+        existsSync(join(scratch, `background-${ctx.instanceId}`))
         ? "1 background task(s) it started are still running"
-        : undefined,
+        : undefined;
+    },
     send: (message: { uuid: string; message: { content: unknown } }) => {
       const { content } = message.message;
       const text =
@@ -1494,8 +1507,12 @@ if (role === "sessiond") {
     });
     const p = crypto.randomUUID();
     const o = crypto.randomUUID();
+    // R, small enough that the controller moves it whole at A's limit.
+    const r = crypto.randomUUID();
     await withHistory(p, a);
     await withHistory(o, a);
+    await withHistory(r, a);
+    await api("/proof/context", { id: r, tokens: 500 });
     const pChild = crypto.randomUUID();
     const oChild = crypto.randomUUID();
     spawn(pChild, b, p);
@@ -1629,6 +1646,35 @@ if (role === "sessiond") {
       JSON.stringify(await limitLines(p)),
       JSON.stringify(oLines),
     ]);
+
+    // (e3) The controller's own whole move refused by the machine: R's
+    // process holds a send it has not read, which holds it at its limit too.
+    // Its line says the move failed, not a continuation.
+    await writeFile(join(dir, `unread-held-${r}`), "a send it holds");
+    personSays(r, "Keep going on the small work.");
+    await until(
+      "R's move refused",
+      () => limitLines(r),
+      (seen) => seen.some((one) => one.kind === "unmoved")
+    );
+    const rPage = (await api(`/api/instances/${r}/transcript?limit=200`)) as {
+      blocks: { type: string; content: string }[];
+    };
+    const rDividers = rPage.blocks
+      .filter((block) => block.type === "system.account_move")
+      .map((block) => block.content);
+    const rLog = lines(await hubLog(), `[at-limit] ${r}`);
+    assert.ok(
+      rDividers.some((one) => MOVE_REFUSED.test(one)),
+      JSON.stringify(rDividers)
+    );
+    assert.ok(
+      rLog.some((one) => one.includes("Couldn't move to")) &&
+        !rLog.some((one) => CONTINUE_WORDS.test(one)),
+      JSON.stringify(rLog)
+    );
+    quote("(e3) R's move refused: its transcript's line", rDividers);
+    quote("(e3) R's move refused: the hub log", rLog);
     await rm(join(dir, `limit-${a}`));
     // A person's "Continue in new session" of P, as the dashboard asks it.
     const byPerson = (await api(`/api/instances/${p}/continue`, {

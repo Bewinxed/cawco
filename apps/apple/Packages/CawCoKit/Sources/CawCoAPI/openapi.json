@@ -32825,11 +32825,15 @@
                 "type": "object",
                 "properties": {
                   "kind": {
-                    "description": "Continuing it on `to` failed at `step`: it goes on in its conversation, still on `from`.",
+                    "description": "Moving it whole to `to`, or continuing it there from a summary\n(`action`), failed at `step`: it goes on in its conversation, still\non `from`.",
                     "type": "string",
                     "enum": [
                       "unmoved"
                     ]
+                  },
+                  "action": {
+                    "$ref": "#/components/schemas/BlockMetadataAction",
+                    "description": "What failed: a move whole (`move`), or a continuation from a summary (`continue`)."
                   },
                   "from": {
                     "$ref": "#/components/schemas/NamedAccount"
@@ -32851,6 +32855,7 @@
                   }
                 },
                 "required": [
+                  "action",
                   "kind",
                   "reason",
                   "step"
@@ -38388,11 +38393,15 @@
                 "type": "object",
                 "properties": {
                   "kind": {
-                    "description": "Continuing it on `to` failed at `step`: it goes on in its conversation, still on `from`.",
+                    "description": "Moving it whole to `to`, or continuing it there from a summary\n(`action`), failed at `step`: it goes on in its conversation, still\non `from`.",
                     "type": "string",
                     "enum": [
                       "unmoved"
                     ]
+                  },
+                  "action": {
+                    "$ref": "#/components/schemas/BlockMetadataAction",
+                    "description": "What failed: a move whole (`move`), or a continuation from a summary (`continue`)."
                   },
                   "from": {
                     "$ref": "#/components/schemas/NamedAccount"
@@ -38414,6 +38423,7 @@
                   }
                 },
                 "required": [
+                  "action",
                   "kind",
                   "reason",
                   "step"
@@ -41084,6 +41094,13 @@
         "enum": [
           "nightly",
           "stable"
+        ]
+      },
+      "BlockMetadataAction": {
+        "type": "string",
+        "enum": [
+          "continue",
+          "move"
         ]
       },
       "BlockMetadataCompactResult": {
