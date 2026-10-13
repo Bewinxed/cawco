@@ -6,7 +6,9 @@ import type { ChoiceChange } from "@cawco/core/choices";
 import { domToPng } from "modern-screenshot";
 import { artifact, NO_ARTIFACT, type State } from "./artifact";
 import { fillFields, trackFields } from "./fields";
+import { startInk } from "./ink";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
+import { inkChrome } from "./radial";
 
 const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/;
 const PNG_PREFIX = /^data:image\/png;base64,/;
@@ -113,6 +115,18 @@ highlight.hidden = true;
 label.hidden = true;
 shadow.append(sheet, layer, highlight, label);
 document.documentElement.append(host);
+
+/** The ink a pen draws on the page, and the icon and menu at a stroke's end (ink.ts, radial.ts). */
+const ink = startInk({
+  chrome: inkChrome(shadow),
+  capture: pageCapture,
+  describe,
+  elementAt,
+  post,
+  selecting: () => selecting,
+  selectorOf,
+  sourceOf,
+});
 
 /** Strip the preview prefix from a URL so the pane shows the app's own path. */
 function stripPrefix(href: string): string {
@@ -238,6 +252,7 @@ artifact.watch({
     told();
   },
   meta: () => republished(),
+  ink: () => ink.changed(),
   synced: () => {
     reflect();
     if (keepsFields()) {
@@ -270,6 +285,7 @@ if (document.readyState === "loading") {
  */
 const kept = (node: Node): boolean =>
   node === host ||
+  node === ink.layer ||
   (node instanceof HTMLScriptElement &&
     node.getAttribute("src") === "/__cawco/overlay.js");
 
@@ -287,6 +303,8 @@ function morphTo(html: string) {
   filled();
   told();
   navigated();
+  // The page moved under its ink: each group stands where its element is now.
+  ink.replace();
   if (held) {
     held.addEventListener(
       "focusout",
@@ -698,10 +716,15 @@ function scaleFor(el: Element): number {
   );
 }
 
+/** The whole page as a picture, its ink on it, at `scale` (the page's own, when none). */
+function pageCapture(scale?: number) {
+  return capture(document.documentElement, scale);
+}
+
 async function capture(
-  el: Element
+  el: Element,
+  scale = scaleFor(el)
 ): Promise<{ png: string | null; scale: number; error?: string }> {
-  const scale = scaleFor(el);
   try {
     const png = await domToPng(el, {
       scale,
@@ -858,6 +881,11 @@ window.addEventListener("message", async (event) => {
     mode(message.mode === "select");
   } else if (message?.type === "cawco:capture") {
     post("cawco:capture", await capture(document.documentElement));
+  } else if (message?.type === "cawco:ink-export") {
+    // The person sends: the pins as text and the page with its ink as a picture.
+    post("cawco:ink-exported", await ink.exported());
+  } else if (message?.type === "cawco:ink-sent") {
+    ink.sent();
   }
 });
 

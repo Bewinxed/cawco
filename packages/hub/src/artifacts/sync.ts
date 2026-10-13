@@ -5,11 +5,13 @@
  * awareness, auth and awareness queries are read and ignored, so a client
  * keeps its socket fresh with its own resync (`resyncInterval`).
  *
- * A page's client may write the doc's `state` only, within the bridge's
- * bounds (core `choiceEntryProblem`), the same the pane checks before it
- * writes. A canvas's screen may write its `elements` and `files`, its pen
- * mode in `meta`, and its claims and results on the agent's `requests`,
- * within the canvas's bounds (core `CANVAS_LIMITS`). An update that breaks
+ * A page's client may write the doc's `state`, within the bridge's bounds
+ * (core `choiceEntryProblem`), the same the pane checks before it writes. A
+ * canvas's screen may write its `elements` and `files`, its pen mode in
+ * `meta`, and its claims and results on the agent's `requests`, within the
+ * canvas's bounds (core `CANVAS_LIMITS`). Either may write the person's ink,
+ * its moved groups and its pins (`ink`, `moved`, `pins`), within core
+ * `INK_LIMITS`. An update that breaks
  * them is not applied: the socket is closed with {@link REFUSED} and the
  * reason, and the client joins again from the hub's doc.
  */
@@ -21,6 +23,7 @@ import {
   choiceEntryProblem,
 } from "@cawco/core";
 import { CANVAS_LIMITS } from "@cawco/core/canvas";
+import { inkProblem } from "@cawco/core/ink";
 import type { ServerWebSocket } from "bun";
 import { createDecoder, readVarUint, readVarUint8Array } from "lib0/decoding";
 import {
@@ -164,10 +167,21 @@ const filesProblem = (
     : null;
 };
 
+/** The maps a person's ink writes, on any artifact (core ink.ts). */
+const INK_MAPS = ["ink", "moved", "pins"];
+
+/** Why the ink, moved groups and pins in `trial` may not be kept; null when they may. */
+const inkMapsProblem = (trial: Doc): string | null =>
+  inkProblem(
+    [...trial.getMap("ink").entries()],
+    [...trial.getMap("moved").entries()],
+    [...trial.getMap("pins").entries()]
+  );
+
 /** Why `trial`, a canvas's doc after its screen's update, may not be kept; null when it may. */
 const canvasProblem = (doc: Doc, trial: Doc): string | null => {
   const untouched = MAPS.filter(
-    (name) => !["meta", "files", "requests"].includes(name)
+    (name) => !["meta", "files", "requests", ...INK_MAPS].includes(name)
   ).find((name) => !sameMap(trial.getMap(name), doc.getMap(name)));
   if (untouched) {
     return `A canvas's screen changes its elements, not its ${untouched}.`;
@@ -186,7 +200,8 @@ const canvasProblem = (doc: Doc, trial: Doc): string | null => {
     requestsProblem(
       doc.getMap("requests") as YMap<YMap<unknown>>,
       trial.getMap("requests") as YMap<YMap<unknown>>
-    )
+    ) ??
+    inkMapsProblem(trial)
   );
 };
 
@@ -196,9 +211,19 @@ const stateProblem = (doc: Doc, trial: Doc): string | null => {
     return canvasProblem(doc, trial);
   }
   for (const name of MAPS) {
-    if (name !== "state" && !sameMap(trial.getMap(name), doc.getMap(name))) {
-      return `A page changes its artifact's state only, not its ${name}.`;
+    if (
+      !(
+        name === "state" ||
+        INK_MAPS.includes(name) ||
+        sameMap(trial.getMap(name), doc.getMap(name))
+      )
+    ) {
+      return `A page changes its artifact's state and ink only, not its ${name}.`;
     }
+  }
+  const ink = inkMapsProblem(trial);
+  if (ink) {
+    return ink;
   }
   if (elementsOf(trial).length !== elementsOf(doc).length) {
     return "A page changes its artifact's state only, not its elements.";

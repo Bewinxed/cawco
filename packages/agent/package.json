@@ -34,6 +34,7 @@
     "effect": "^4.0.0",
     "idiomorph": "0.8.0",
     "modern-screenshot": "4.7.0",
+    "perfect-freehand": "1.2.3",
     "playwright-core": "^1.63.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
@@ -44,6 +45,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@iconify-json/solar": "1.2.13",
     "@types/bun": "^1.4.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",

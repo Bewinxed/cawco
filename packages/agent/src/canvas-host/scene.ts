@@ -300,6 +300,7 @@ export function bindScene(
     window.addEventListener(type, listener, true);
     stops.push(() => window.removeEventListener(type, listener, true));
   }
+  stops.push(tellStrokeEnds(api, later));
 
   /** Excalidraw's reconcile rule (`shouldDiscardRemoteElement`), kept here for every remote element. */
   const guarded: ExcalidrawImperativeAPI = {
@@ -539,6 +540,99 @@ export function bindScene(
     },
   };
 }
+
+/**
+ * Ink on a canvas is its own freedraw (preview-overlay ink.ts): when a pen
+ * lifts off a freedraw it drew, the overlay hears where the stroke ended
+ * (`cawco:stroke-end`: its id, its last point in the window, its box on the
+ * canvas, the elements whose boxes it crosses) and puts the stroke's icon
+ * there; Erase in its menu comes back as `cawco:erase`, which deletes it.
+ */
+const tellStrokeEnds = (
+  api: ExcalidrawImperativeAPI,
+  later: (run: () => void, ms: number) => void
+): (() => void) => {
+  let before: Set<string> | null = null;
+  const down = (event: PointerEvent) => {
+    if (event.pointerType === "pen") {
+      before = new Set(
+        api.getSceneElementsIncludingDeleted().map((el) => el.id)
+      );
+    }
+  };
+  const up = (event: PointerEvent) => {
+    const known = before;
+    before = null;
+    if (event.pointerType !== "pen" || !known) {
+      return;
+    }
+    // Excalidraw finishes the freedraw on this same pointerup: read it after.
+    later(() => {
+      const elements = api.getSceneElements();
+      const stroke = elements.findLast(
+        (el) => el.type === "freedraw" && !known.has(el.id)
+      );
+      if (!(stroke && "points" in stroke && stroke.points.length > 0)) {
+        return;
+      }
+      const [px, py] = stroke.points.at(-1) as readonly [number, number];
+      const state = api.getAppState();
+      const zoom = state.zoom.value;
+      const box = boxOf(stroke as Parameters<typeof boxOf>[0]);
+      const crosses = (other: ExcalidrawElement) => {
+        const b = boxOf(other as Parameters<typeof boxOf>[0]);
+        return (
+          b.x <= box.x + box.width &&
+          box.x <= b.x + b.width &&
+          b.y <= box.y + box.height &&
+          box.y <= b.y + b.height
+        );
+      };
+      window.dispatchEvent(
+        new CustomEvent("cawco:stroke-end", {
+          detail: {
+            id: stroke.id,
+            x: (stroke.x + px + state.scrollX) * zoom + state.offsetLeft,
+            y: (stroke.y + py + state.scrollY) * zoom + state.offsetTop,
+            box: {
+              x: Math.round(box.x),
+              y: Math.round(box.y),
+              w: Math.round(box.width),
+              h: Math.round(box.height),
+            },
+            under: elements
+              .filter((el) => el.id !== stroke.id && crosses(el))
+              .map((el) => el.id),
+          },
+        })
+      );
+    }, 0);
+  };
+  const erase = (event: Event) => {
+    const { id } = (event as CustomEvent<{ id: string }>).detail;
+    api.updateScene({
+      elements: api.getSceneElementsIncludingDeleted().map((el) =>
+        el.id === id
+          ? {
+              ...el,
+              isDeleted: true,
+              version: el.version + 1,
+              versionNonce: nonce(),
+            }
+          : el
+      ),
+      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+    });
+  };
+  window.addEventListener("pointerdown", down, true);
+  window.addEventListener("pointerup", up, true);
+  window.addEventListener("cawco:erase", erase);
+  return () => {
+    window.removeEventListener("pointerdown", down, true);
+    window.removeEventListener("pointerup", up, true);
+    window.removeEventListener("cawco:erase", erase);
+  };
+};
 
 /*
  * The agent's requests (hub artifacts/canvas.ts): claim each one, and

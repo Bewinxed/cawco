@@ -30,6 +30,7 @@ export const MAPS = [
   "meta",
   "state",
   "ink",
+  "moved",
   "pins",
   "comments",
   "files",

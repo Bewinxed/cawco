@@ -27,6 +27,7 @@
     "./preview-proxy": "./src/preview-proxy.ts",
     "./choices": "./src/choices.ts",
     "./canvas": "./src/canvas.ts",
+    "./ink": "./src/ink.ts",
     "./canvas-host": "./src/canvas-host.ts",
     "./paths": "./src/paths.ts",
     "./workspace-policy": "./src/workspace-policy.ts",

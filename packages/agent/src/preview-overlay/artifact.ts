@@ -60,6 +60,8 @@ export interface ArtifactRef {
 export type State = Record<string, ChoiceEntry>;
 
 export interface Watchers {
+  /** The ink, its moved groups or its pins changed, here or elsewhere; or the doc was replaced. */
+  ink: () => void;
   /** `meta` changed: a new revision, a send. */
   meta: () => void;
   /** The hub would not keep what this page wrote; the doc was joined again from the hub's. */
@@ -202,6 +204,13 @@ const observe = (own: Doc) => {
       watchers?.meta();
     }
   });
+  for (const name of ["ink", "moved", "pins"]) {
+    own.getMap(name).observe(() => {
+      if (own === doc) {
+        watchers?.ink();
+      }
+    });
+  }
 };
 observe(doc);
 
@@ -218,6 +227,7 @@ const replaceDoc = () => {
     whenSynced = resolve;
   });
   watchers?.state(null, true);
+  watchers?.ink();
   handed();
 };
 
@@ -321,6 +331,12 @@ export const artifact = {
 
   /** The kind of artifact this page is, once known. */
   kind: (): ArtifactRef["kind"] | null => joined?.kind ?? seededKind,
+
+  /** The doc as it is now: the ink (ink.ts) reads and writes its `ink`, `moved` and `pins`. */
+  doc: (): Doc => doc,
+
+  /** Whether there is a doc to keep ink in: the host named the artifact, or the hub embedded it. */
+  keeps: () => status === "joined" || seeded !== null,
 
   /** Whether the doc holds the hub's state: embedded, or synced. */
   known: () => synced || seeded !== null,
