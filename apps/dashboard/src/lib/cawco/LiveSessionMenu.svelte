@@ -6,12 +6,17 @@
    * appear on one (NEW.md §1). Fork and Stop decide as the peek header's menu
    * does: Fork needs a conversation and its machine, Stop a live process.
    *
+   * Every action keeps the person on the row they asked from (DESIGN.md, The
+   * Stay In Context Rule): Fork and Keep stay pending in the menu and say a
+   * refusal there; Stop and Archive say what is on its way and what did not
+   * go on the row itself (session-acts); Rename edits the row's title where
+   * it stands (`onrename`); a delete's question flies out of its item.
+   *
    * The row is the trigger itself: `children` is handed the trigger's props
    * and spreads them on its own root element, so a table row stays a `<tr>`.
    */
   import type { HarnessKind } from "@cawco/core";
   import type { Snippet } from "svelte";
-  import { toast } from "#lib/cawco/toasts.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import {
@@ -36,8 +41,6 @@
     type InstanceRow,
     keepSession,
     removeSession,
-    renameInstance,
-    stopSession,
   } from "./client.svelte";
   import { confirm } from "./confirm.svelte";
   import { continueInNewSession } from "./continue.svelte";
@@ -50,7 +53,7 @@
   } from "./home/home-state.svelte";
   import { conversationHref } from "./links";
   import { heldByMove } from "./move.svelte";
-  import RenameDialog from "./RenameDialog.svelte";
+  import { stopOnRow } from "./session-acts.svelte";
   import { sessionName } from "./session-name";
   import {
     canOpenBeside,
@@ -64,22 +67,20 @@
     instance: InstanceRow;
     /** Set only where the row is listed as finished: takes it off the list. */
     onarchive?: () => void;
+    /** The row's title becomes a field where it stands. */
+    onrename: () => void;
   }
 
-  let { instance, onarchive, children }: Props = $props();
-
-  let renaming = $state(false);
-  /**
-   * The rename dialog is built the first time it is asked for, then kept so
-   * it closes with its own motion: built for every row of a long list, it
-   * made opening a tree of sessions run past a frame.
-   */
-  let renameAsked = $state(false);
+  let { instance, onarchive, onrename, children }: Props = $props();
 
   const href = $derived(conversationHref(instance.id, cawco.instanceIndex));
   const scratch = $derived(instance.kind === "scratch");
   const running = $derived(
     instance.status === "running" || instance.status === "starting"
+  );
+  /** Stopping now cuts a turn short: the item says so. */
+  const midTurn = $derived(
+    running && cawco.activityOf(instance.id) === "working"
   );
 
   const session = $derived(cawco.session(instance.id) ?? null);
@@ -90,26 +91,40 @@
       null
   );
 
+  /** The question flies out of the item that asked it. */
+  const asking = $derived(`confirm:${instance.id}`);
+
+  /**
+   * Rename was chosen: the title's field opens once the menu has let go of
+   * focus (its close would hand focus back to the row and blur the field).
+   */
+  let renameAsked = false;
+  function closeFocus(event: Event): void {
+    if (renameAsked) {
+      renameAsked = false;
+      event.preventDefault();
+      onrename();
+      return;
+    }
+    focusAfterMenu(event);
+  }
+
+  /**
+   * The menu stays open, the item "Forking…", until the hub has made the
+   * fork; then the page leaves for it. A refusal stays in the item.
+   */
   async function fork() {
     if (!(forkable && machine)) {
       return;
     }
-    // The page leaves for the fork once the hub has taken it; a refusal stays
-    // here, with the hub's reason.
-    let forked: string;
-    try {
-      forked = await forkSession({
-        machineId: machine.machineId,
-        cwd: session?.cwd || instance.cwd,
-        sessionId: forkable,
-        harness: (session?.harness ??
-          instance.harness ??
-          "claude") as HarnessKind,
-      });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-      return;
-    }
+    const forked = await forkSession({
+      machineId: machine.machineId,
+      cwd: session?.cwd || instance.cwd,
+      sessionId: forkable,
+      harness: (session?.harness ??
+        instance.harness ??
+        "claude") as HarnessKind,
+    });
     await goto(conversationHref(forked, cawco.instanceIndex));
   }
 
@@ -143,6 +158,7 @@
       body: `“${sessionName(instance.id, {}, instance.cwd).label}” is removed from ${instance.cwd || "this machine"}, for good. Nothing else on the machine is touched.`,
       confirmLabel: "Delete transcript",
       destructive: true,
+      from: asking,
       pendingLabel: "Deleting…",
       run: () =>
         deleteTranscript(
@@ -160,6 +176,7 @@
       body: "It never started, so there is no transcript to lose.",
       confirmLabel: "Remove session",
       destructive: true,
+      from: asking,
       pendingLabel: "Removing…",
       run: () => removeSession(instance.id),
     });
@@ -171,6 +188,7 @@
       body: "The session stops, and whatever the spawn created for it — its worktree, its transcript — goes with it, for good.",
       confirmLabel: "Discard spin-off",
       destructive: true,
+      from: asking,
       pendingLabel: "Discarding…",
       run: () => discardSession(instance.id, instance.machineId),
     });
@@ -186,7 +204,7 @@
     {@render children(props)}
   {/snippet}
 
-  <ContextMenu.Content onCloseAutoFocus={focusAfterMenu}>
+  <ContextMenu.Content onCloseAutoFocus={closeFocus}>
     <ContextMenu.Item onSelect={() => goto(href)}>
       <IconExternal />
       Open
@@ -197,10 +215,13 @@
         Open in split view
       </ContextMenu.Item>
     {/if}
-    <ContextMenu.Item disabled={!(forkable && machine)} onSelect={fork}>
-      <IconFork />
-      Fork
-    </ContextMenu.Item>
+    <ContextMenu.PendingItem
+      disabled={!(forkable && machine)}
+      icon={IconFork}
+      label="Fork"
+      pendingLabel="Forking…"
+      run={fork}
+    />
     <ContextMenu.Item
       onSelect={() =>
         continueInNewSession({
@@ -218,10 +239,10 @@
     <AccountSubmenu {instance} />
     {#if running}
       <ContextMenu.Item
-        onSelect={() => stopSession(instance.id, instance.machineId)}
+        onSelect={() => stopOnRow(instance.id, instance.machineId)}
       >
         <IconStop />
-        Stop
+        {midTurn ? "Stop mid-turn" : "Stop"}
       </ContextMenu.Item>
     {/if}
     {#if onarchive}
@@ -244,16 +265,19 @@
     <ContextMenu.Item
       onSelect={() => {
         renameAsked = true;
-        renaming = true;
       }}
     >
       <IconPenLine />
-      Rename…
+      Rename
     </ContextMenu.Item>
 
     {#if asleepWithTranscript}
       <ContextMenu.Separator />
-      <ContextMenu.Item onSelect={askDeleteTranscript} variant="destructive">
+      <ContextMenu.Item
+        data-share={asking}
+        onSelect={askDeleteTranscript}
+        variant="destructive"
+      >
         <IconTrash />
         Delete transcript
       </ContextMenu.Item>
@@ -261,7 +285,11 @@
 
     {#if neverStarted}
       <ContextMenu.Separator />
-      <ContextMenu.Item onSelect={askRemove} variant="destructive">
+      <ContextMenu.Item
+        data-share={asking}
+        onSelect={askRemove}
+        variant="destructive"
+      >
         <IconTrash />
         Remove session
       </ContextMenu.Item>
@@ -275,7 +303,11 @@
         pendingLabel="Keeping…"
         run={() => keepSession(instance.id)}
       />
-      <ContextMenu.Item onSelect={askDiscard} variant="destructive">
+      <ContextMenu.Item
+        data-share={asking}
+        onSelect={askDiscard}
+        variant="destructive"
+      >
         <IconTrash />
         Discard
       </ContextMenu.Item>
@@ -295,11 +327,3 @@
     </ContextMenu.CopyItem>
   </ContextMenu.Content>
 </ContextMenu.Lazy>
-
-{#if renameAsked}
-  <RenameDialog
-    current={sessionName(instance.id, {}, instance.cwd).label}
-    onrename={(title) => renameInstance(instance.id, title)}
-    bind:open={renaming}
-  />
-{/if}

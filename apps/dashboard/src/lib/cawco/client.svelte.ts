@@ -3,6 +3,7 @@
  * session's transcript as the hub built it — a page fetched once, then the
  * changes its stream carries (NEW.md §6).
  */
+
 import type {
   Account,
   AccountBench,
@@ -103,6 +104,7 @@ import {
   WIRE_PROTOCOL,
 } from "@cawco/core";
 import { announcingParts, clientLine } from "@cawco/core/wire";
+import { SvelteMap } from "svelte/reactivity";
 import {
   CONTROL_TIMEOUT_MS,
   DISCARD_TIMEOUT_MS,
@@ -3217,6 +3219,11 @@ function rememberAnswerSurface(
       answerSurfaces.delete(known);
     }
   }
+  for (const [asked, known] of [...answers]) {
+    if (!streamState.commands[known]) {
+      answers.delete(asked);
+    }
+  }
   answerSurfaces.set(commandId, { instanceId, requestId });
 }
 
@@ -3237,13 +3244,11 @@ function rememberAnswerSurface(
  *   is the double report this rule exists to prevent, and it only works
  *   because the surface is now registered BEFORE the submit that can fail
  *   inside it; registered afterwards there was nothing here to find.
- * - STREAM. The dispatch's own `submitted` effect clears `pending` first, so
- *   by the time anything can fail the card is already leaving. This returns
- *   false and the toast IS the report — correctly, since there is no longer a
- *   card to read it on.
- *
- * So the rule is not inert on either dialect; it says "no surface" on the
- * stream dialect because on the stream dialect there is no surface.
+ * - STREAM. The answer's effect clears `pending` only once the hub has taken
+ *   it, so a refused answer leaves the ask parked: the session's card and the
+ *   Needs row (`answerFor`) both read the refusal off the record, and this
+ *   returns true. It returns false only when the ask has gone some other way
+ *   meanwhile, and then the toast is the report.
  */
 function answerCardStillParked(record: CommandRecord): boolean {
   const surface = answerSurfaces.get(record.commandId);
@@ -3289,6 +3294,20 @@ export type { CommandRecord, CommandStage } from "./stream";
 /** One command's record, by the id {@link submitCommand} returned. */
 export function commandRecord(commandId: string): CommandRecord | null {
   return streamState.commands[commandId] ?? null;
+}
+
+/**
+ * The last answer sent to each parked ask, by the ask's request id: any
+ * surface showing the ask (its session's card, its Needs row) reads that
+ * answer's stage, whichever of them sent it. Kept as long as the ledger
+ * keeps the record.
+ */
+const answers = new SvelteMap<string, string>();
+
+/** The record of the last answer sent to the ask `requestId`, if the ledger still keeps it. */
+export function answerFor(requestId: string): CommandRecord | null {
+  const commandId = answers.get(requestId);
+  return commandId ? commandRecord(commandId) : null;
 }
 
 /** Every command this tab has submitted for a session, oldest first. */
@@ -3448,6 +3467,7 @@ export function submitCommand<K extends CommandKind>(
   if (kind === "permission.answer") {
     const { requestId } = intent as CommandIntents["permission.answer"];
     rememberAnswerSurface(commandId, instanceId, requestId);
+    answers.set(requestId, commandId);
   }
 
   let payload: object;
@@ -4049,8 +4069,14 @@ function streamEffectsFor<K extends CommandKind>(
       };
     case "permission.answer": {
       const { requestId } = intent as CommandIntents["permission.answer"];
+      // The ask stands, its pressed answer pending, until the hub has taken
+      // the answer; refused, it stands still, the refusal under its buttons
+      // (the session's card, the Needs row), and can be answered again.
       return {
-        submitted: () => {
+        settled: (stage) => {
+          if (stage === "failed") {
+            return;
+          }
           target.pending = target.pending.filter(
             (p) => p.requestId !== requestId
           );
@@ -5006,29 +5032,26 @@ export async function ensureAlive(
   }
 }
 
-export function stopSession(instanceId: string, machineId: string): void {
-  const target = session(instanceId);
-  const before = {
-    busy: target.busy,
-    currentTool: target.currentTool,
-    openBlock: target.openBlock,
-    thinkingStream: target.thinkingStream,
-    thinkingClosing: target.thinkingClosing,
-    thinkingSince: target.thinkingSince,
-    pending: target.pending,
-    workingSince: target.workingSince,
-  };
+/**
+ * Stops a running session. Nothing about it changes here until its machine
+ * answers: then it is stopped (its turn, tool and parked asks settle), and a
+ * refusal is thrown in the machine's words for the row that asked to say.
+ */
+export async function stopSession(
+  instanceId: string,
+  machineId: string
+): Promise<void> {
   const requestId = newId();
   const payload: StopPayload = { instanceId, requestId };
-  settleStopped(instanceId);
-  ask<void>(requestId, "stop", CONTROL_TIMEOUT_MS, () =>
-    send({ verb: "stop", machineId, instanceId, requestId, payload })
-  )
-    .catch((error: unknown) => {
-      Object.assign(target, before);
-      toast.error(error instanceof Error ? error.message : String(error));
-    })
-    .finally(() => refresh());
+  try {
+    await ask<void>(requestId, "stop", CONTROL_TIMEOUT_MS, () =>
+      send({ verb: "stop", machineId, instanceId, requestId, payload })
+    );
+    settleStopped(instanceId);
+  } finally {
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the fleet list re-reads on its own
+    void refresh();
+  }
 }
 
 /**
@@ -5042,16 +5065,28 @@ export async function discardSession(
 ): Promise<void> {
   const requestId = newId();
   const payload: StopPayload = { instanceId, discard: true, requestId };
-  settleStopped(instanceId);
-
   try {
     await ask<void>(requestId, "discard", DISCARD_TIMEOUT_MS, () =>
       send({ verb: "stop", machineId, instanceId, requestId, payload })
     );
-  } finally {
+    // Gone on the machine's word, not before: a refused discard leaves the
+    // session as it was.
+    settleStopped(instanceId);
     delete state.sessions[instanceId];
+  } finally {
     await refresh();
   }
+}
+
+/**
+ * The hub's refusal in its own sentence when it gave one (a text body),
+ * else `fallback` naming its status.
+ */
+async function refusalOf(response: Response, fallback: string): Promise<Error> {
+  const said = response.headers.get("content-type")?.startsWith("text/")
+    ? (await response.text()).trim()
+    : "";
+  return new Error(said || fallback);
 }
 
 /**
@@ -5098,8 +5133,9 @@ export async function renameInstance(
     body: JSON.stringify({ title }),
   });
   if (!response.ok) {
-    throw new Error(
-      `Could not rename this session — the hub answered ${response.status}. Try again.`
+    throw await refusalOf(
+      response,
+      `Not renamed: the hub answered ${response.status}.`
     );
   }
 }
@@ -5117,8 +5153,9 @@ export async function keepSession(instanceId: string): Promise<void> {
     body: JSON.stringify({ kind: "mainline" }),
   });
   if (!response.ok) {
-    throw new Error(
-      `Could not keep this session — the hub answered ${response.status}. Try again.`
+    throw await refusalOf(
+      response,
+      `Not kept: the hub answered ${response.status}.`
     );
   }
 

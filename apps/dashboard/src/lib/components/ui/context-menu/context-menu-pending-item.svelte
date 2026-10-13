@@ -47,11 +47,11 @@
   bind:ref
 >
   <PendingContent
-    failed={select.failed}
     {icon}
     {label}
     pending={select.pending}
     {pendingLabel}
+    reason={select.reason}
   />
   {@render children?.()}
 </Item>

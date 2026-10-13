@@ -24,9 +24,9 @@
   import OsMark from "#lib/cawco/OsMark.svelte";
   import { unpickedMode } from "#lib/cawco/permission-modes.js";
   import { checkoutOf } from "#lib/cawco/projects.js";
+  import RowFault from "#lib/cawco/RowFault.svelte";
   import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
   import { rememberSpawn, spawnPrefs } from "#lib/cawco/spawnPrefs.svelte.js";
-  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
@@ -107,10 +107,24 @@
     };
   }
 
-  async function startSession(scratch: boolean) {
-    if (!primary) {
+  /**
+   * Which start is on its way (its button pending, the others held), and
+   * why the last one was refused: a start from the popover says it under
+   * the popover's form, which stays open with the prompt typed; a spin-off
+   * says it under the head's line, where the button stands.
+   */
+  let starting = $state<"start" | "empty" | "spin" | null>(null);
+  let startFault = $state<string | null>(null);
+  let spinFault = $state<string | null>(null);
+
+  async function startSession(way: "start" | "empty" | "spin") {
+    if (!primary || starting) {
       return;
     }
+    const scratch = way === "spin";
+    starting = way;
+    startFault = null;
+    spinFault = null;
     const remembered = spawnPrefs.permissionMode;
     const mod = spawnPrefs.model;
     // This start has no pickers of its own — it runs on what the new-session
@@ -118,7 +132,9 @@
     // with no form its warning is never read, so this start runs on Bypass.
     const perm = unpickedMode(remembered);
     const level = spawnPrefs.effort;
-    const prompt = spawnPrompt.trim() || undefined;
+    // Start empty is a session with no first prompt, whatever was typed.
+    const prompt =
+      way === "empty" ? undefined : spawnPrompt.trim() || undefined;
     let instanceId: string;
     try {
       instanceId = await spawnSession({
@@ -133,8 +149,14 @@
         scratch: scratch ? {} : undefined,
       });
     } catch (error) {
-      toast.error(message(error));
+      if (scratch) {
+        spinFault = message(error);
+      } else {
+        startFault = message(error);
+      }
       return;
+    } finally {
+      starting = null;
     }
     rememberSpawn({
       harness: spawnPrefs.harness,
@@ -210,6 +232,8 @@
           {/if}
         {/if}
       </p>
+      <!-- A spin-off the hub refused, under the line, by the button pressed. -->
+      <RowFault again={() => startSession("spin")} reason={spinFault} />
     </div>
   </div>
   <div class="acts">
@@ -236,7 +260,7 @@
             class="flex flex-col gap-3"
             onsubmit={(e) => {
               e.preventDefault();
-              startSession(false);
+              startSession("start");
             }}
           >
             <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child; Biome can't see through the component boundary -->
@@ -250,24 +274,30 @@
                 bind:value={spawnPrompt}
               />
             </label>
+            <RowFault again={() => startSession("start")} reason={startFault} />
             <div class="flex items-center justify-end gap-2">
               <Button
                 data-share="session:new"
                 data-share-ttl="8000"
-                onclick={() => startSession(false)}
+                disabled={starting !== null && starting !== "empty"}
+                label="Start empty"
+                onclick={() => startSession("empty")}
+                pending={starting === "empty"}
+                pendingLabel="Starting…"
                 size="sm"
                 type="button"
                 variant="ghost"
-              >
-                Start empty
-              </Button>
+              />
               <Button
                 data-share="session:new"
                 data-share-ttl="8000"
+                disabled={starting !== null && starting !== "start"}
+                label="Start"
+                pending={starting === "start"}
+                pendingLabel="Starting…"
                 size="sm"
                 type="submit"
-                >Start</Button
-              >
+              />
             </div>
           </form>
         </Popover.Content>
@@ -276,11 +306,13 @@
         class="pressable"
         data-share="session:new"
         data-share-ttl="8000"
-        onclick={() => startSession(true)}
+        disabled={starting !== null && starting !== "spin"}
+        label="Spin off"
+        onclick={() => startSession("spin")}
+        pending={starting === "spin"}
+        pendingLabel="Spinning off…"
         variant="outline"
-      >
-        Spin off
-      </Button>
+      />
     {/if}
     <DropdownMenu.Root>
       <DropdownMenu.Trigger>

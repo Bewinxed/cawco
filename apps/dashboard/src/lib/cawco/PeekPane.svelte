@@ -24,7 +24,6 @@
    * read between them, not two.
    */
   import { untrack } from "svelte";
-  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
@@ -60,7 +59,6 @@
     readTranscript,
     refreshContext,
     setPeeked,
-    stopSession,
     submitCommand,
   } from "./client.svelte";
   import { identityVar } from "./folder-prefs.svelte";
@@ -68,7 +66,9 @@
   import { echoBeat } from "./motion/echo.svelte";
   import OsMark from "./OsMark.svelte";
   import { plainMarkdown, plainStreaming } from "./plain-markdown";
+  import RowFault from "./RowFault.svelte";
   import SessionMark, { sessionStatus } from "./SessionMark.svelte";
+  import { sessionAct, stopOnRow } from "./session-acts.svelte";
   import TaskPanel from "./TaskPanel.svelte";
   import { refreshTasks, taskProgress, tasksOf } from "./tasks.svelte";
   import MessageRow from "./transcript/MessageRow.svelte";
@@ -123,7 +123,12 @@
     row?.status === "running" || row?.status === "starting"
   );
   const activity = $derived(cawco.activityOf(target.viewId));
+  /** What was asked of it and is on its way, or did not go (session-acts). */
+  const act = $derived(row ? sessionAct(row.id) : undefined);
   const stateLabel = $derived.by(() => {
+    if (act?.pending) {
+      return act.pending;
+    }
     if (failed) {
       return "Failed";
     }
@@ -162,20 +167,14 @@
     if (!(forkable && machine)) {
       return;
     }
-    // The page leaves for the fork once the hub has taken it; a refusal stays
-    // here, with the hub's reason.
-    let instanceId: string;
-    try {
-      instanceId = await forkSession({
-        machineId: machine.machineId,
-        cwd,
-        sessionId: forkable,
-        harness: session?.harness ?? "claude",
-      });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-      return;
-    }
+    // The item stays "Forking…" until the hub has made the fork, then the
+    // page leaves for it; a refusal stays in the item, in the hub's words.
+    const instanceId = await forkSession({
+      machineId: machine.machineId,
+      cwd,
+      sessionId: forkable,
+      harness: session?.harness ?? "claude",
+    });
     await goto(conversationHref(instanceId, cawco.instanceIndex));
   }
 
@@ -298,14 +297,17 @@
         <IconExternal />
         Open
       </ContextMenu.Item>
-      <ContextMenu.Item disabled={!(forkable && machine)} onSelect={fork}>
-        <IconFork />
-        Fork
-      </ContextMenu.Item>
+      <ContextMenu.PendingItem
+        disabled={!(forkable && machine)}
+        icon={IconFork}
+        label="Fork"
+        pendingLabel="Forking…"
+        run={fork}
+      />
       {#if running && row}
-        <ContextMenu.Item onSelect={() => stopSession(row.id, row.machineId)}>
+        <ContextMenu.Item onSelect={() => stopOnRow(row.id, row.machineId)}>
           <IconStop />
-          Stop
+          {activity === "working" ? "Stop mid-turn" : "Stop"}
         </ContextMenu.Item>
       {/if}
       <ContextMenu.Separator />
@@ -353,6 +355,13 @@
       </span>
     {/if}
   </div>
+  <!-- A stop asked from here that did not go, said where it was asked. -->
+  <RowFault
+    again={act?.fault?.again}
+    againLabel={act?.fault?.againLabel}
+    class="px-4 pb-3"
+    reason={act?.fault?.reason}
+  />
 
   <!-- What the session is parked on comes before what it was saying: the
        tail scrolls, and this must not be somewhere in it. -->

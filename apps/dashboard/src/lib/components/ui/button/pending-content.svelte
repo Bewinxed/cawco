@@ -42,6 +42,7 @@
   import type { Component, Snippet } from "svelte";
   import type { SVGAttributes } from "svelte/elements";
   import { CURVE, dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconTick } from "#lib/icons.js";
@@ -51,7 +52,8 @@
     icon: Icon,
     pending = false,
     pendingLabel,
-    failed = false,
+    failed: failedFlag = false,
+    reason = null,
     progress,
     arrivals,
   }: {
@@ -63,11 +65,18 @@
     pendingLabel?: string;
     /** The work that just ended failed: no check. */
     failed?: boolean;
+    /**
+     * Why the work just ended failed, said under the label (a menu item that
+     * runs something: PendingSelect's `reason`). Implies `failed`.
+     */
+    reason?: string | null;
     /** The share of the work done (0 to 1): above 0, the ring in the spinner's place. */
     progress?: number;
     /** Drawn in the slot over its icon: what lands there. */
     arrivals?: Snippet;
   } = $props();
+
+  const failed = $derived(failedFlag || Boolean(reason));
 
   /** The work ended well a moment ago: the check is up for --dur-hold. */
   let done = $state(false);
@@ -221,9 +230,29 @@
     block-size: 100%;
     pointer-events: none;
   }
+  /* The reason stands under the label, from where the label starts, in the
+     fail status's ink; it wraps rather than widening the menu past reading. */
+  .kit-label:has(> .kit-reason) {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: start;
+  }
+  .kit-reason {
+    display: block;
+    max-inline-size: 32ch;
+    font: var(--type-meta);
+    color: var(--status-fail-ink);
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 </style>
 {#if label === undefined}
   <!-- Icon only: nothing to morph. -->
 {:else}
-  <span class="kit-label"><MorphText {text} /></span>
+  <span class="kit-label"
+    ><MorphText {text} />
+    {#if reason}
+      <span class="kit-reason" role="alert" transition:unfold>{reason}</span>
+    {/if}</span
+  >
 {/if}

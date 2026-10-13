@@ -43,6 +43,7 @@
     IconWorking,
   } from "#lib/icons.js";
   import { formatDistanceToNow, formatTimestamp } from "#lib/utils/time.js";
+  import RowFault from "../RowFault.svelte";
   import TextSection from "./TextSection.svelte";
   import TodoList from "./TodoList.svelte";
 
@@ -392,12 +393,8 @@
           </button>
         </Sheet.Title>
       {/if}
-      {#if titleProblem}
-        <p class="problem" role="alert">{titleProblem}</p>
-      {/if}
-      {#if stageProblem}
-        <p class="problem" role="alert">{stageProblem}</p>
-      {/if}
+      <RowFault again={saveTitle} reason={titleProblem} />
+      <RowFault reason={stageProblem} />
       {#if shown?.needsYou ||
         flags.live ||
         flags.failed ||
@@ -504,9 +501,7 @@
 
         <section class="part">
           <h3 class="kit-section-head">Edges</h3>
-          {#if edgeProblem}
-            <p class="problem" role="alert">{edgeProblem}</p>
-          {/if}
+          <RowFault reason={edgeProblem} />
           <div class="edge">
             <span class="edge-name">After</span>
             <div class="edge-list">
@@ -553,21 +548,18 @@
                 <span class="count num">{shown.attempts.length}</span>
               {/if}
             </h3>
-            {#if flags.startProblem}
-              <p class="problem" role="alert">{flags.startProblem}</p>
-            {/if}
+            <RowFault reason={flags.startProblem} />
             {#if flags.failed && !flags.live}
               <div class="retry">
                 <Button
-                  disabled={retrying}
+                  label="Retry"
                   onclick={retry}
+                  pending={retrying}
+                  pendingLabel="Retrying…"
                   size="sm"
                   variant="outline"
-                  >Retry</Button
-                >
-                {#if retryProblem}
-                  <p class="problem" role="alert">{retryProblem}</p>
-                {/if}
+                />
+                <RowFault reason={retryProblem} />
               </div>
             {/if}
             <ol class="attempts">
@@ -757,9 +749,5 @@
     font-variant-ligatures: none;
     color: var(--ink-subtle);
     overflow-wrap: anywhere;
-  }
-  .problem {
-    font: var(--type-meta);
-    color: var(--error-11);
   }
 </style>

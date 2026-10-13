@@ -17,7 +17,6 @@
   import { untrack } from "svelte";
   import { SvelteMap } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
-  import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
@@ -34,6 +33,7 @@
   import { CURVE, dur, easeOut, motionOk } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
   import { land } from "../motion/share.svelte";
+  import RowFault from "../RowFault.svelte";
   import DelegateTail, { type TailNote } from "./DelegateTail.svelte";
   import { askDetailOf, askShortOf, matchesSession } from "./present";
   import {
@@ -902,11 +902,28 @@
     return null;
   };
 
+  /**
+   * Dismiss stays pending on its item until the hub has put it away (the
+   * chip then leaves on the hub's frame); a refusal is said under the
+   * item's actions, with Try again.
+   */
+  let dismissing = $state<string | null>(null);
+  let dismissFault = $state<{ id: string; reason: string } | null>(null);
   async function dismiss(item: WorkItemSummary): Promise<void> {
+    if (dismissing) {
+      return;
+    }
+    dismissing = item.id;
+    dismissFault = null;
     try {
       await dismissWorkItem(item.id);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
+      dismissFault = {
+        id: item.id,
+        reason: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      dismissing = null;
     }
   }
 </script>
@@ -1145,10 +1162,21 @@
               </div>
             {:else if tone === "failed"}
               <div class="acts">
-                <Button onclick={() => dismiss(item)} size="sm" variant="ghost"
-                  >Dismiss</Button
-                >
+                <Button
+                  label="Dismiss"
+                  onclick={() => dismiss(item)}
+                  pending={dismissing === item.id}
+                  pendingLabel="Dismissing…"
+                  size="sm"
+                  variant="ghost"
+                />
               </div>
+              <RowFault
+                again={() => dismiss(item)}
+                reason={dismissFault?.id === item.id
+                  ? dismissFault.reason
+                  : null}
+              />
             {/if}
           {/if}
         {/snippet}

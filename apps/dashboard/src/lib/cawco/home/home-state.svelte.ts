@@ -47,6 +47,7 @@ import { type MarkHue, markHue } from "../mark";
 import { heldOrder } from "../motion/held-order.svelte";
 import { folderOf } from "../projects";
 import { rail } from "../rail.svelte";
+import { onRow } from "../session-acts.svelte";
 import { threadIdOf, threadTabId } from "../thread-tabs";
 import { hasParent, rooted, tree } from "../tree";
 import { runHref, runIdOf } from "../workflow-runs";
@@ -71,10 +72,12 @@ interface SeenMark {
 }
 
 /**
- * What this dashboard marked seen and the hub has not yet echoed back: the
- * row leaves Finished in the click that archived it, not a round trip later.
- * Each goes once the row's `seenAt` reaches the hub's stamp of it, so a
- * later change on the hub (an unarchive on another device) is never masked.
+ * What this dashboard marked seen and the hub has not yet echoed back. A
+ * look is marked in the moment it happens; an archive once the hub has
+ * taken it, so the row leaves Finished on the hub's answer rather than a
+ * frame later. Each goes once the row's `seenAt` reaches the hub's stamp of
+ * it, so a later change on the hub (an unarchive on another device) is never
+ * masked.
  */
 const seenHere = $state<Record<string, SeenMark>>({});
 let seenMarks = 0;
@@ -115,105 +118,108 @@ function settleSeen(): void {
 }
 
 /**
- * Marks sessions (and runs, as `run:<id>`) seen on the hub: `look`, the
- * owner had it in front after it ended; `archive`, taken off Finished
- * without opening it, which the hub refuses for anything still doing
- * something (core `archiveRefusal`). A refusal puts the rows back. Here
- * it is seen through the end it shows now, on the hub's clock; a turn
- * that ends while the mark is on its way is news again.
+ * Tells the hub sessions (and runs, as `run:<id>`) were seen, archived or
+ * unarchived, and resolves with its stamp (null for an unarchive). A
+ * refusal is thrown in the hub's sentence, with the row's own id taken out
+ * of it: it is said on that row.
  */
-function markSeen(ids: string[], kind: "archive" | "look"): void {
-  if (ids.length === 0) {
-    return;
-  }
-  seenMarks += 1;
-  const mark = seenMarks;
-  for (const id of ids) {
-    const row = cawco.instanceIndex.byId.get(id);
-    seenHere[id] = { mark, through: (row && endedAt(row)) ?? 0 };
-    delete clearedHere[id];
-  }
-  const ours = (id: string) => seenHere[id]?.mark === mark;
-  postSeen(
-    ids,
-    kind,
-    () => {
-      for (const id of ids.filter(ours)) {
-        delete seenHere[id];
-      }
-    },
-    (at) => {
-      for (const id of ids.filter(ours)) {
-        (seenHere[id] as SeenMark).at = at;
-      }
-      settleSeen();
-    }
-  );
-}
-
-function postSeen(
+async function postSeen(
   ids: string[],
-  kind: string,
-  undo: () => void,
-  marked?: (at: number) => void
-): void {
-  fetch("/api/seen", {
+  kind: "archive" | "look" | "unarchive"
+): Promise<number | null> {
+  const response = await fetch("/api/seen", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ids, kind }),
-  })
-    .then(async (response) => {
-      if (!response.ok) {
-        undo();
-        console.error("[cawco] not marked seen:", await response.text());
-        return;
-      }
-      const { at } = (await response.json()) as { at: number | null };
-      if (at !== null) {
-        marked?.(at);
-      }
-    })
-    .catch((error) => {
-      undo();
-      console.error("[cawco] marking seen failed:", error);
-    });
+  });
+  if (!response.ok) {
+    let said = (await response.text()).trim();
+    for (const id of ids) {
+      said = said.replaceAll(`${id}: `, "");
+    }
+    throw new Error(said || `The hub answered ${response.status}.`);
+  }
+  const { at } = (await response.json()) as { at: number | null };
+  return at;
 }
 
 /**
- * Puts an archived session back in Finished: the hub clears its `seenAt`
- * and leaves keep-alive as it is. The row moves in the click, as archive's
- * does.
+ * Records that the reader has a conversation in front of them, ended: seen
+ * through the end it shows now, on the hub's clock, in the moment it is
+ * looked at (a turn that ends while the mark is on its way is news again).
+ * Nobody asked for it, so a refusal only takes the mark back.
  */
-export function unarchive(rows: InstanceRow[]): void {
-  const ids = rows.map((row) => row.id);
-  const before: Record<string, SeenMark | undefined> = {};
-  for (const row of rows) {
-    before[row.id] = seenHere[row.id];
-    clearedHere[row.id] = epochOf(row.seenAt);
-    delete seenHere[row.id];
-  }
-  postSeen(ids, "unarchive", () => {
-    for (const row of rows) {
-      delete clearedHere[row.id];
-      if (before[row.id] !== undefined) {
-        seenHere[row.id] = before[row.id] as SeenMark;
-      }
-    }
-  });
-}
-
-/** Records that the reader has a conversation in front of them, ended. */
 export function markOpened(id: string): void {
-  markSeen([id], "look");
+  seenMarks += 1;
+  const mark = seenMarks;
+  const row = cawco.instanceIndex.byId.get(id);
+  seenHere[id] = { mark, through: (row && endedAt(row)) ?? 0 };
+  delete clearedHere[id];
+  const ours = () => seenHere[id]?.mark === mark;
+  postSeen([id], "look").then(
+    (at) => {
+      if (ours() && at !== null) {
+        (seenHere[id] as SeenMark).at = at;
+      }
+      settleSeen();
+    },
+    (error: unknown) => {
+      if (ours()) {
+        delete seenHere[id];
+      }
+      console.error("[cawco] marking seen failed:", error);
+    }
+  );
 }
 
 /**
  * Takes sessions (and runs, as `run:<id>`) off Finished without opening
  * them, so each is listed again only when it ends another turn. Only what
- * `home.archivable` allows is ever offered; the hub holds the same rule.
+ * `home.archivable` allows is ever offered; the hub holds the same rule
+ * (core `archiveRefusal`). Each is asked on its own: its row says
+ * "Archiving…" and leaves Finished on the hub's answer, and one the hub
+ * refuses stays, its reason under it, while the others go.
  */
 export function archive(ids: string[]): void {
-  markSeen(ids, "archive");
+  for (const id of ids) {
+    const row = cawco.instanceIndex.byId.get(id);
+    const through = (row && endedAt(row)) ?? 0;
+    // biome-ignore lint/complexity/noVoid: the row is the report; nothing awaits it
+    void onRow(
+      id,
+      "Archiving…",
+      async () => {
+        const at = await postSeen([id], "archive");
+        seenMarks += 1;
+        seenHere[id] = { mark: seenMarks, through, at: at ?? undefined };
+        delete clearedHere[id];
+        settleSeen();
+      },
+      () => archive([id])
+    );
+  }
+}
+
+/**
+ * Puts an archived session back in Finished: the hub clears its `seenAt`
+ * and leaves keep-alive as it is. As archive's, the row moves on the hub's
+ * answer, and a refusal stays on it.
+ */
+export function unarchive(rows: InstanceRow[]): void {
+  for (const row of rows) {
+    // biome-ignore lint/complexity/noVoid: the row is the report; nothing awaits it
+    void onRow(
+      row.id,
+      "Unarchiving…",
+      async () => {
+        const was = epochOf(row.seenAt);
+        await postSeen([row.id], "unarchive");
+        clearedHere[row.id] = was;
+        delete seenHere[row.id];
+      },
+      () => unarchive([row])
+    );
+  }
 }
 
 /* ── One clock for every age on the home ──────────────────────────── */

@@ -4,12 +4,13 @@
    * Right-click on a stored session, wherever one is listed. The row itself stays
    * a link — the trigger only wraps it, so it keeps its place in the tab order and
    * the context-menu key still reaches this menu from the keyboard.
+   *
+   * As LiveSessionMenu: Fork stays pending in the menu and says a refusal
+   * there, Rename edits the row's title where it stands (`onrename`), and
+   * Delete transcript asks through the one confirm, out of its item, which
+   * keeps the machine's refusal under its question.
    */
   import type { Snippet } from "svelte";
-  import { toast } from "#lib/cawco/toasts.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
-  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import {
@@ -21,17 +22,10 @@
     IconTrash,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
-  import {
-    cawco,
-    deleteTranscript,
-    forkSession,
-    loadCatalog,
-    machineControl,
-    renameInstance,
-  } from "./client.svelte";
+  import { cawco, deleteTranscript, forkSession } from "./client.svelte";
+  import { confirm } from "./confirm.svelte";
   import { continueInNewSession } from "./continue.svelte";
   import { conversationHref, instanceForSession, sessionTitle } from "./links";
-  import RenameDialog from "./RenameDialog.svelte";
   import {
     canOpenBeside,
     focusAfterMenu,
@@ -41,9 +35,15 @@
   let {
     machineId,
     info,
+    onrename,
     children,
-  }: { machineId: string; info: NeutralSessionInfo; children: Snippet } =
-    $props();
+  }: {
+    machineId: string;
+    info: NeutralSessionInfo;
+    /** The row's title becomes a field where it stands. */
+    onrename: () => void;
+    children: Snippet;
+  } = $props();
 
   const href = $derived(
     conversationHref(info.sessionId, cawco.instanceIndex, {
@@ -51,20 +51,6 @@
       cwd: info.cwd,
     })
   );
-  /** Every mutation names the directory the session was recorded under. */
-  const where = $derived({ dir: info.cwd || undefined });
-
-  let renaming = $state(false);
-  /** Built the first time it is asked for, as LiveSessionMenu's is. */
-  let renameAsked = $state(false);
-  let confirmingDelete = $state(false);
-  /**
-   * The confirm is built the first time Delete transcript is chosen, then
-   * kept. Built with every row, its Root and Content were made for each
-   * stored row a list drew, and never opened for nearly all of them.
-   */
-  let deleteAsked = $state(false);
-  let busy = $state(false);
 
   /** The hub's row for this conversation, when the hub keeps one. */
   const row = $derived(
@@ -74,60 +60,47 @@
     })
   );
   const title = $derived(sessionTitle(info, row));
+  /** The question flies out of the item that asked it. */
+  const asking = $derived(`confirm:${info.sessionId}`);
 
-  /**
-   * A session the hub keeps is named there, the one place every listing
-   * reads; a transcript the hub never ran is named in the transcript itself.
-   */
-  async function rename(next: string) {
-    if (row) {
-      await renameInstance(row.id, next);
+  /** Rename opens the field once the menu has let go of focus (LiveSessionMenu). */
+  let renameAsked = false;
+  function closeFocus(event: Event): void {
+    if (renameAsked) {
+      renameAsked = false;
+      event.preventDefault();
+      onrename();
       return;
     }
-    await machineControl(
-      machineId,
-      "renameSession",
-      [info.sessionId, next, where],
-      undefined,
-      info.harness
-    );
-    await loadCatalog(machineId);
+    focusAfterMenu(event);
   }
 
-  /** The last delete went through (a failed one leaves the dialog open). */
-  let removed = $state(false);
-
-  async function remove() {
-    busy = true;
-    removed = false;
-    try {
-      await deleteTranscript(
-        machineId,
-        info.sessionId,
-        where.dir,
-        info.harness
-      );
-      removed = true;
-      confirmingDelete = false;
-    } finally {
-      busy = false;
-    }
+  async function askDelete() {
+    await confirm({
+      title: "Delete this transcript?",
+      body: `“${title}” is removed from ${info.cwd || "this machine"}, for good. Nothing else on the machine is touched.`,
+      confirmLabel: "Delete transcript",
+      destructive: true,
+      from: asking,
+      pendingLabel: "Deleting…",
+      run: () =>
+        deleteTranscript(
+          machineId,
+          info.sessionId,
+          info.cwd || undefined,
+          info.harness
+        ),
+    });
   }
 
-  /** The page leaves for the fork once the hub has taken it; a refusal stays here, with the hub's reason. */
+  /** The page leaves for the fork once the hub has made it; a refusal stays in the item. */
   async function fork() {
-    let instanceId: string;
-    try {
-      instanceId = await forkSession({
-        machineId,
-        cwd: info.cwd ?? "",
-        sessionId: info.sessionId,
-        harness: info.harness,
-      });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-      return;
-    }
+    const instanceId = await forkSession({
+      machineId,
+      cwd: info.cwd ?? "",
+      sessionId: info.sessionId,
+      harness: info.harness,
+    });
     await goto(conversationHref(instanceId, cawco.instanceIndex));
   }
 </script>
@@ -140,7 +113,7 @@
     <div {...props}>{@render children()}</div>
   {/snippet}
 
-  <ContextMenu.Content onCloseAutoFocus={focusAfterMenu}>
+  <ContextMenu.Content onCloseAutoFocus={closeFocus}>
     <ContextMenu.Item onSelect={() => goto(href)}>
       <IconExternal />
       Open
@@ -175,21 +148,22 @@
       <IconExternal />
       Open in new tab
     </ContextMenu.Item>
-    <ContextMenu.Item onSelect={fork}>
-      <IconFork />
-      Fork from here
-    </ContextMenu.Item>
+    <ContextMenu.PendingItem
+      icon={IconFork}
+      label="Fork from here"
+      pendingLabel="Forking…"
+      run={fork}
+    />
 
     <ContextMenu.Separator />
 
     <ContextMenu.Item
       onSelect={() => {
         renameAsked = true;
-        renaming = true;
       }}
     >
       <IconPenLine />
-      Rename…
+      Rename
     </ContextMenu.Item>
     <ContextMenu.CopyItem
       disabled={!info.cwd}
@@ -205,10 +179,8 @@
     <ContextMenu.Separator />
 
     <ContextMenu.Item
-      onSelect={() => {
-        deleteAsked = true;
-        confirmingDelete = true;
-      }}
+      data-share={asking}
+      onSelect={askDelete}
       variant="destructive"
     >
       <IconTrash />
@@ -216,39 +188,3 @@
     </ContextMenu.Item>
   </ContextMenu.Content>
 </ContextMenu.Lazy>
-
-{#if renameAsked}
-  <RenameDialog current={title} onrename={rename} bind:open={renaming} />
-{/if}
-
-{#if deleteAsked}
-  <AlertDialog.Root bind:open={confirmingDelete}>
-    <AlertDialog.Content>
-      <AlertDialog.Header>
-        <AlertDialog.Title>Delete this transcript?</AlertDialog.Title>
-        <AlertDialog.Description>
-          “{title}” is removed from {info.cwd || "this machine"}, for good.
-          Nothing else on the machine is touched.
-        </AlertDialog.Description>
-      </AlertDialog.Header>
-      <AlertDialog.Footer>
-        <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-        <AlertDialog.Action variant="destructive">
-          {#snippet child({
-            props,
-          })}
-            <Button
-              {...props}
-              failed={!removed}
-              label="Delete transcript"
-              onclick={remove}
-              pending={busy}
-              pendingLabel="Deleting…"
-              variant="destructive"
-            />
-          {/snippet}
-        </AlertDialog.Action>
-      </AlertDialog.Footer>
-    </AlertDialog.Content>
-  </AlertDialog.Root>
-{/if}

@@ -5,8 +5,9 @@
  *
  * Also the continuations this tab started. The hub carries each one to its
  * end whatever happens to the dialog; a dialog dismissed while it runs hands
- * it over here, and this tab then opens the new session once it starts, or
- * says why it failed with a way back into the same form.
+ * it over here, and this tab then says on the source session's rows that it
+ * started (with the new session to open), or why it failed, with a way back
+ * into the same form.
  */
 import type {
   ContinuationJob,
@@ -14,10 +15,9 @@ import type {
   HarnessKind,
   PermissionMode,
 } from "@cawco/core";
-import { goto } from "$app/navigation";
 import { cawco, followContinuations, type SendExtras } from "./client.svelte";
 import { conversationHref } from "./links";
-import { toast } from "./toasts";
+import { faultOn, noteOn, pendingOn } from "./session-acts.svelte";
 import { contextOf } from "./workspace/workspace.svelte";
 
 /** The session a continuation starts from, as the dialog shows and sends it. */
@@ -123,38 +123,54 @@ export function releaseContinuation(id: string): void {
   started.delete(id);
 }
 
-/** The dialog was dismissed while `id` runs: this tab sees it through. */
+/**
+ * The dialog was dismissed while `id` runs: this tab sees it through, on the
+ * source session's rows, where it was asked for (session-acts).
+ */
 export function detachContinuation(id: string): void {
   const entry = started.get(id);
   if (entry) {
     entry.detached = true;
+    pendingOn(entry.source.instanceId, "Continuing in a new session…");
     settleDetached(cawco.continuations);
   }
 }
 
+/**
+ * A dismissed continuation's end, said under its source's rows: started, a
+ * note with the new session to open (the person is left where they are);
+ * failed, the hub's reason with Reopen, which brings the same form back.
+ */
 function settleDetached(table: ContinuationJob[]): void {
   for (const [id, entry] of started) {
     const job = table.find((row) => row.id === id);
     if (!(entry.detached && job)) {
       continue;
     }
+    const from = entry.source.instanceId;
     if (job.stage === "started") {
       started.delete(id);
-      goto(conversationHref(job.targetInstanceId, cawco.instanceIndex));
+      pendingOn(from, undefined);
+      noteOn(from, {
+        text: "Continued in a new session.",
+        href: conversationHref(job.targetInstanceId, cawco.instanceIndex),
+      });
     } else if (job.stage === "failed") {
       started.delete(id);
-      // Kept until dismissed or used: it carries the form to recover with.
-      toast.error(`Couldn't continue "${entry.source.title}"`, {
-        id: `continuation-${id}`,
-        description: job.error,
-        duration: Number.POSITIVE_INFINITY,
-        action: {
-          label: "Reopen",
-          onClick: () => continueInNewSession(entry.source, entry.draft),
+      pendingOn(from, undefined);
+      faultOn(from, {
+        reason: job.error
+          ? `Couldn't continue: ${job.error}`
+          : "Couldn't continue.",
+        again: () => {
+          faultOn(from, undefined);
+          continueInNewSession(entry.source, entry.draft);
         },
+        againLabel: "Reopen",
       });
     } else if (job.stage === "cancelled") {
       started.delete(id);
+      pendingOn(from, undefined);
     }
   }
 }

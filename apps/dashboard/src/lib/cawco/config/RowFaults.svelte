@@ -13,6 +13,7 @@
     groupFaults,
     machineFaults,
   } from "../fleet-faults";
+  import RowFault from "../RowFault.svelte";
 
   let {
     kind,
@@ -46,5 +47,7 @@
   group.cause +
   (group.machineId ?? "") +
   (group.harness ?? ""))}
-  <div data-flip><FleetFault compact {group} {machines} {onresolved} /></div>
+  <RowFault data-flip
+    ><FleetFault compact {group} {machines} {onresolved} /></RowFault
+  >
 {/each}

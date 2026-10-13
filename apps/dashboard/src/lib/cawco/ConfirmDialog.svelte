@@ -14,6 +14,7 @@
   import { IconShield } from "#lib/icons.js";
   import { confirmHost } from "./confirm.svelte";
   import { unfold } from "./motion/fold.svelte";
+  import { land } from "./motion/share.svelte";
 
   const pending = $derived(confirmHost.pending);
   const paragraphs = $derived(
@@ -59,7 +60,12 @@
 >
   <!-- The one question stands over every other surface, the New Session
        dialog (81) and its pickers (90) included: it can be asked from them. -->
-  <AlertDialog.Content class="z-[95]" overlayProps={{ class: "z-[95]" }}>
+  <!-- Out of what asked, when it named itself (`from`). -->
+  <AlertDialog.Content
+    class="z-[95]"
+    overlayProps={{ class: "z-[95]" }}
+    {@attach land(() => pending?.from, { uniform: true })}
+  >
     <!-- Several paragraphs read from their start, at every width. -->
     <AlertDialog.Header
       class={paragraphs.length > 1 ? "place-items-start text-left" : undefined}

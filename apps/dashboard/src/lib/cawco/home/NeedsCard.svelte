@@ -44,6 +44,7 @@
   } from "#lib/icons.js";
   import { isTyping } from "#lib/utils/typing.js";
   import {
+    answerFor,
     cawco,
     decideAction,
     type PermissionAnswer,
@@ -203,10 +204,34 @@
     item.kind === "ask" && !item.isQuestion && choices.answer === "a"
   );
 
+  /**
+   * The last answer sent to this ask, from here or from its session's card:
+   * its stage is the row's truth. In flight, both peers hold and the pressed
+   * one spins; refused, the hub's words stand under them and either can be
+   * pressed again. The row leaves when the hub has taken the answer.
+   */
+  const sent = $derived(
+    item.kind === "ask" ? answerFor(item.request.requestId) : null
+  );
+  const answering = $derived(
+    sent !== null && sent.stage !== "failed" && sent.stage !== "applied"
+  );
+  const answerRefused = $derived.by(() => {
+    if (sent?.stage !== "failed") {
+      return null;
+    }
+    return sent.reason
+      ? `Couldn't send that answer. ${sent.reason}`
+      : "Couldn't send that answer.";
+  });
+  /** Which peer was pressed here, for its spinner. */
+  let pressed = $state<PermissionAnswer | null>(null);
+
   function answer(kind: PermissionAnswer): void {
-    if (item.kind !== "ask" || held) {
+    if (item.kind !== "ask" || held || answering) {
       return;
     }
+    pressed = kind;
     submitCommand(item.instanceId, item.machineId, "permission.answer", {
       requestId: item.request.requestId,
       result: permissionAnswer(item.request, kind),
@@ -375,30 +400,41 @@
   {/if}
   {#if item.kind === "ask" && answerable}
     <div class="peers">
+      {#if answerRefused}
+        <ErrorText
+          class="refusal"
+          message={answerRefused}
+          title="The hub refused that answer"
+        />
+      {/if}
       <Button
         aria-label="Deny {item.ask} on {item.title}"
         class="peer deny"
-        disabled={held}
+        disabled={held || (answering && pressed !== "deny")}
+        failed={answerRefused !== null && pressed === "deny"}
+        icon={IconClose}
+        label="Deny"
         onclick={() => answer("deny")}
         {onkeydown}
+        pending={answering && pressed === "deny"}
+        pendingLabel="Denying…"
         size="sm"
         variant="secondary"
-      >
-        <IconClose />
-        Deny
-      </Button>
+      />
       <Button
         aria-label="Approve {item.ask} on {item.title}"
         class="peer approve"
-        disabled={held}
+        disabled={held || (answering && pressed !== "allow")}
+        failed={answerRefused !== null && pressed === "allow"}
+        icon={IconTick}
+        label="Approve"
         onclick={() => answer("allow")}
         {onkeydown}
+        pending={answering && pressed === "allow"}
+        pendingLabel="Approving…"
         size="sm"
         variant="secondary"
-      >
-        <IconTick />
-        Approve
-      </Button>
+      />
     </div>
   {:else if item.kind === "action"}
     <div class="peers">

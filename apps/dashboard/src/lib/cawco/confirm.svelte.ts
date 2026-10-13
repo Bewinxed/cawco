@@ -21,7 +21,12 @@
  * `run` reports a failure by throwing, not by toasting and returning. A new
  * ask while one is open cancels the
  * first — there is a single dialog, so there is a single question at a time.
+ *
+ * `from` names what asked (DESIGN.md, The Stay In Context Rule): the dialog
+ * opens out of that row or item, so the question is seen to come from the
+ * thing it is about.
  */
+import { departBox } from "./motion/share.svelte";
 
 export interface ConfirmRequest {
   /**
@@ -35,6 +40,13 @@ export interface ConfirmRequest {
   /** Paints the confirm button as destructive. Defaults on for a delete-shaped verb. */
   destructive?: boolean;
   /**
+   * The share key (motion/share) the asking row or item departed under: the
+   * dialog flies out of it rather than appearing on its own. The caller
+   * departs it (`data-share` on the item clicked, or `departBox` from the
+   * row) before asking.
+   */
+  from?: string;
+  /**
    * Paints the confirm button as a consequential grant, shield and warning
    * tint (DESIGN.md, The Consequential Grant Rule): it allows more than a
    * person has allowed so far.
@@ -46,6 +58,18 @@ export interface ConfirmRequest {
   run: () => Promise<unknown>;
   /** The question, as a heading. Name the thing and its blast radius here. */
   title: string;
+}
+
+/**
+ * Asks from a row: the row departs under its own confirm key and the
+ * question flies out of it. Returns the key `from` names.
+ */
+export function departRow(row: Element | null | undefined, id: string): string {
+  const key = `confirm:${id}`;
+  if (row instanceof HTMLElement) {
+    departBox(key, row);
+  }
+  return key;
 }
 
 interface Pending extends ConfirmRequest {

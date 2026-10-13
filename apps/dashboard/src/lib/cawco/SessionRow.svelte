@@ -63,16 +63,26 @@
    */
   import type { NeutralSessionInfo } from "@cawco/core";
   import type { Attachment } from "svelte/attachments";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconArchive, IconMaximize } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
+  import { page } from "$app/state";
   import { shownAccount } from "./accounts/switch.svelte";
   import type { InstanceRow } from "./client.svelte";
   import { openPeek, peekable, peekTipOff } from "./home/peek.svelte";
   import { swipeToArchive } from "./home/swipe-archive";
   import LiveSessionMenu from "./LiveSessionMenu.svelte";
+  import { unfold } from "./motion/fold.svelte";
+  import RowFault from "./RowFault.svelte";
   import SessionMark, { sessionStatus, statusWord } from "./SessionMark.svelte";
   import StoredSessionMenu from "./StoredSessionMenu.svelte";
+  import {
+    noteOn,
+    type RenameTarget,
+    renameSession,
+    sessionAct,
+  } from "./session-acts.svelte";
   import { isThreadTab } from "./thread-tabs";
   import AccountDot from "./usage/AccountDot.svelte";
   import { runIdOf } from "./workflow-runs";
@@ -161,7 +171,150 @@
   const trailWidth: Attachment<HTMLElement> | undefined = $derived(
     showPeek || onarchive ? watchTrail : undefined
   );
+
+  /** What was asked of this session and is on its way, or did not go (session-acts). */
+  const act = $derived(sessionId ? sessionAct(sessionId) : undefined);
+
+  /**
+   * Renaming edits the name where it stands: the title becomes a field in
+   * this row, holding the name. Enter (or leaving it changed) sends it; the
+   * field stays, pending, until the row is named by it (the hub's frame, or
+   * the machine's catalog), and Escape puts the name back. A refusal leaves
+   * the field with what was typed and the reason under the row.
+   */
+  let draft = $state<string | null>(null);
+  let renaming = $state<string | null>(null);
+  let renameFault = $state<string | null>(null);
+  const renameTarget = $derived.by((): RenameTarget | null => {
+    if (instance) {
+      return { instanceId: instance.id };
+    }
+    return info ? { info, machineId } : null;
+  });
+
+  function editTitle(): void {
+    draft = title;
+    renameFault = null;
+  }
+
+  function stopEditing(): void {
+    draft = null;
+    renaming = null;
+    renameFault = null;
+  }
+
+  async function commitTitle(): Promise<void> {
+    const next = draft?.trim() ?? "";
+    if (renaming !== null || !renameTarget) {
+      return;
+    }
+    if (!next || next === title) {
+      stopEditing();
+      return;
+    }
+    renaming = next;
+    renameFault = null;
+    try {
+      await renameSession(renameTarget, next);
+    } catch (error) {
+      renaming = null;
+      renameFault = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  // The new session a continuation started is open now: the note has done
+  // its work.
+  $effect(() => {
+    if (act?.note && page.url.pathname === act.note.href) {
+      noteOn(sessionId, undefined);
+    }
+  });
+
+  // Named: the field gives way to the name it sent.
+  $effect.pre(() => {
+    if (renaming !== null && title === renaming) {
+      stopEditing();
+    }
+  });
 </script>
+
+{#snippet inner()}
+  <!-- On a parent, its mark says how many rows are under it and opens
+       them. -->
+  <SessionMark
+    count={fold?.count ?? 0}
+    id={sessionId}
+    ontoggle={fold?.ontoggle}
+    open={fold?.open ?? false}
+    {place}
+    {status}
+  />
+  <!-- The words (the title and, on two lines, what it is doing under
+       it), and at the row's end the age, on the title's line, flush
+       with the row's trailing edge. -->
+  <span class="words">
+    {#if draft !== null}
+      <!-- svelte-ignore a11y_autofocus -->
+      <input
+        aria-label="Session title"
+        autocomplete="off"
+        autofocus
+        class="cell title field focus-inset"
+        onblur={() => {
+          // Left after a refusal, it stays as typed, said under the row; Try
+          // again or Enter sends it.
+          if (renameFault === null) {
+            commitTitle();
+          }
+        }}
+        onkeydown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            event.stopPropagation();
+            stopEditing();
+          }
+        }}
+        readonly={renaming !== null}
+        spellcheck="false"
+        bind:value={draft}
+        {@attach (node) => node.select()}
+      >
+    {:else}
+      <span class="cell title"
+        ><span class="sr-only"
+          >{act?.pending ?? statusWord(instance, status)}:
+        </span>
+        {title}</span
+      >
+    {/if}
+    {#if !compact}
+      <span class="cell line">
+        {#if act?.pending || renaming !== null}
+          <span class="doing"
+            ><Spinner aria-hidden="true" />
+            {renaming === null ? act?.pending : "Renaming…"}</span
+          >
+        {:else}
+          <AccountDot
+            accountId={instance ? shownAccount(instance) : undefined}
+          />{line}
+        {/if}
+      </span>
+    {/if}
+  </span>
+  <span class="end" {@attach trailWidth}>
+    <span class="cell num trail" title={act?.pending ?? hint}>
+      {#if compact && (act?.pending || renaming !== null)}
+        <Spinner aria-hidden="true" class="size-3.5" />
+      {:else}
+        {trail}
+      {/if}
+    </span>
+    {#if !compact}
+      <span class="cell"></span>
+    {/if}
+  </span>
+{/snippet}
 
 {#snippet body(
   trigger: Record<string, unknown>
@@ -184,63 +337,48 @@
         ><IconArchive />Archive</span
       >
     {/if}
-    <a
-      {...trigger}
-      aria-current={active ? "page" : undefined}
-      class={cn(
-        "row press-tint focus-inset",
-        trigger.class as string | undefined
-      )}
-      data-hover-session={instance?.id}
-      data-rail-row
-      data-share="session:{sessionId}"
-      {href}
-      use:dragSession={{
-        sessionId,
-        from: null,
-        ctx: () =>
-          info
-            ? {
-                machine: machineId,
-                cwd: info.cwd ?? "",
-                harness: info.harness ?? "claude",
-              }
-            : null,
-      }}
-    >
-      <!-- On a parent, its mark says how many rows are under it and opens
-           them. -->
-      <SessionMark
-        count={fold?.count ?? 0}
-        id={sessionId}
-        ontoggle={fold?.ontoggle}
-        open={fold?.open ?? false}
-        {place}
-        {status}
-      />
-      <!-- The words (the title and, on two lines, what it is doing under
-           it), and at the row's end the age, on the title's line, flush
-           with the row's trailing edge. -->
-      <span class="words">
-        <span class="cell title"
-          ><span class="sr-only">{statusWord(instance, status)}: </span>
-          {title}</span
-        >
-        {#if !compact}
-          <span class="cell line"
-            ><AccountDot
-              accountId={instance ? shownAccount(instance) : undefined}
-            />{line}</span
-          >
-        {/if}
-      </span>
-      <span class="end" {@attach trailWidth}>
-        <span class="cell num trail" title={hint}>{trail}</span>
-        {#if !compact}
-          <span class="cell"></span>
-        {/if}
-      </span>
-    </a>
+    {#if draft !== null}
+      <!-- Being renamed: the row is the field's form, not a link, until the
+           name settles or Escape puts it back. -->
+      <form
+        class="row"
+        data-rail-row
+        onsubmit={(event) => {
+          event.preventDefault();
+          commitTitle();
+        }}
+      >
+        {@render inner()}
+      </form>
+    {:else}
+      <a
+        {...trigger}
+        aria-busy={act?.pending ? true : undefined}
+        aria-current={active ? "page" : undefined}
+        class={cn(
+          "row press-tint focus-inset",
+          trigger.class as string | undefined
+        )}
+        data-hover-session={instance?.id}
+        data-rail-row
+        data-share="session:{sessionId}"
+        {href}
+        use:dragSession={{
+          sessionId,
+          from: null,
+          ctx: () =>
+            info
+              ? {
+                  machine: machineId,
+                  cwd: info.cwd ?? "",
+                  harness: info.harness ?? "claude",
+                }
+              : null,
+        }}
+      >
+        {@render inner()}
+      </a>
+    {/if}
     {#if onarchive}
       <Tip label="Archive">
         {#snippet children(
@@ -287,7 +425,7 @@
        the row. -->
   {@render body({})}
 {:else if instance}
-  <LiveSessionMenu {instance} {onarchive}>
+  <LiveSessionMenu {instance} {onarchive} onrename={editTitle}>
     {#snippet children(
       trigger
     )}
@@ -295,7 +433,32 @@
     {/snippet}
   </LiveSessionMenu>
 {:else if info}
-  <StoredSessionMenu {info} {machineId}> {@render body({})} </StoredSessionMenu>
+  <StoredSessionMenu {info} {machineId} onrename={editTitle}>
+    {@render body({})}
+  </StoredSessionMenu>
+{/if}
+<!-- What did not go, under the row that asked: a rename's reason here, any
+     other action's on every row of this session (session-acts). -->
+<RowFault
+  again={commitTitle}
+  class="session-fault"
+  data-compact={compact || undefined}
+  reason={renameFault}
+/>
+<RowFault
+  again={act?.fault?.again}
+  againLabel={act?.fault?.againLabel}
+  class="session-fault"
+  data-compact={compact || undefined}
+  reason={act?.fault?.reason}
+/>
+{#if act?.note}
+  <p class="session-note" data-compact={compact || undefined} transition:unfold>
+    {act.note.text}
+    <a href={act.note.href} onclick={() => noteOn(sessionId, undefined)}
+      >Open</a
+    >
+  </p>
 {/if}
 
 <style>
@@ -551,5 +714,53 @@
   }
   .item[data-stale] {
     opacity: 0.55;
+  }
+  /* The title as a field, in the title's own type and place: no box of its
+     own beyond the input recipe's hairline, so the row keeps its height. */
+  .field {
+    inline-size: 100%;
+    margin-inline: calc(var(--space-1) * -1);
+    padding-inline: var(--space-1);
+    border: 1px solid var(--border-control);
+    border-radius: var(--radius-xs);
+    background: var(--surface-raised);
+    color: var(--ink-strong);
+  }
+  .field[readonly] {
+    color: var(--ink-muted);
+  }
+  /* What is on its way, in the meta line's place: the spinner, then the word. */
+  .doing {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    & :global(svg) {
+      inline-size: 12px;
+      block-size: 12px;
+    }
+  }
+  /* A row's fault and note start where its title does: past the row's own
+     padding, its mark and the gap after it. */
+  :global(.session-fault),
+  .session-note {
+    --fault-indent: calc(var(--space-3) + 18px + var(--space-2));
+    --fault-end: var(--space-3);
+  }
+  :global(.session-fault[data-compact]),
+  .session-note[data-compact] {
+    --fault-indent: calc(var(--row-compact-gap) * 2 + var(--mark-size, 18px));
+    --fault-end: var(--row-compact-pad-end);
+  }
+  .session-note {
+    margin: 0;
+    padding-block: var(--space-1);
+    padding-inline: var(--fault-indent) var(--fault-end);
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    & a {
+      color: var(--ink-strong);
+      text-decoration: underline;
+      text-underline-offset: 2px;
+    }
   }
 </style>

@@ -3,11 +3,13 @@
  * open and the item pending while the work runs (a second select is
  * swallowed), then the item selects itself once more, unprevented, and the
  * menu closes as it does on any select. Work that throws leaves the menu
- * open, with no check.
+ * open with the item saying why under its label (`reason`), where the
+ * person's attention already is; the failure ends there and is not thrown on.
  */
 export class PendingSelect {
   pending = $state(false);
-  failed = $state(false);
+  /** Why the last run failed, in the words it threw; null while none has. */
+  reason = $state<string | null>(null);
   /** The next select is the one this item makes to close its menu. */
   #closing = $state(false);
   readonly #run: () => Promise<unknown>;
@@ -28,12 +30,12 @@ export class PendingSelect {
       return;
     }
     this.pending = true;
-    this.failed = false;
+    this.reason = null;
     try {
       await this.#run();
     } catch (error) {
-      this.failed = true;
-      throw error;
+      this.reason = error instanceof Error ? error.message : String(error);
+      return;
     } finally {
       this.pending = false;
     }
