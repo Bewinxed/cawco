@@ -50,8 +50,19 @@ export interface Run {
   /** Delay plus duration: where it stands whole, ms. */
   end: number;
   id: string;
+  /** Whether it repeats for ever: a loop has no end to share. */
+  loop: boolean;
   /** A CSS transition's property, a CSS animation's name, a Web Animation's id. */
   name: string;
+  /** Whether it runs on a scroller's or a view's timeline, not on time. */
+  scroll: boolean;
+  /**
+   * Its start time on the page's document timeline, ms, as the protocol
+   * reported it starting; null where it reported none. Blink sends 0 for a
+   * run with no start time (inspector_animation_agent.cc,
+   * `NormalizedStartTime`: `if (!start_time) { return 0; }`), so 0 is none.
+   */
+  start: number | null;
   type: "CSSTransition" | "CSSAnimation" | "WebAnimation";
 }
 
@@ -67,8 +78,30 @@ interface Described {
     endDelay?: number;
     iterations?: number;
   };
+  startTime?: number;
   type: Run["type"];
+  /** Present for a scroll- or view-driven run. */
+  viewOrScrollTimeline?: unknown;
 }
+
+/** A started run as the clock keeps it. */
+const runOf = (one: Described): Run => {
+  const s = one.source;
+  return {
+    id: one.id,
+    name: one.name,
+    type: one.type,
+    easing: s?.easing ?? "",
+    start: one.startTime ? one.startTime : null,
+    // The protocol sends `iterations` only when it is finite.
+    loop: s !== undefined && s.iterations === undefined,
+    scroll: one.viewOrScrollTimeline !== undefined,
+    end:
+      (s?.delay ?? 0) +
+      (s?.duration ?? 0) * (s?.iterations ?? 1) +
+      (s?.endDelay ?? 0),
+  };
+};
 
 /** Where a held run's target lies: the page's own document, and inside the catch's `within`. */
 interface Place {
@@ -157,17 +190,7 @@ export class Clock {
         for (const one of fresh) {
           // biome-ignore lint/performance/noAwaitInLoops: each run is placed in turn
           if ((await this.held.get(one.id))?.inside) {
-            const s = one.source;
-            kept.push({
-              id: one.id,
-              name: one.name,
-              type: one.type,
-              easing: s?.easing ?? "",
-              end:
-                (s?.delay ?? 0) +
-                (s?.duration ?? 0) * (s?.iterations ?? 1) +
-                (s?.endDelay ?? 0),
-            });
+            kept.push(runOf(one));
           }
         }
         after += kept.length > 0 ? 1 : 0;
@@ -256,6 +279,41 @@ export class Clock {
     await frames(this.page);
   }
 
+  /**
+   * One clock: every caught run has the same start time, length and
+   * easing, the start time the protocol reported as it started (a held run's
+   * page-side `startTime` reads null). Only runs on the document's own time
+   * are read: a loop (a status's pulse) has no end to share, and a
+   * scroll-driven run (`animation-timeline: scroll()`, a track's edge fade)
+   * runs on its scroller, not on time. Returns a fault per run off the first
+   * and per run with no start time, the runs read (none read is a fault),
+   * and the first run's start time.
+   */
+  oneClock(): { faults: string[]; runs: number; start: number | null } {
+    const all = this.runs.filter((run) => !(run.loop || run.scroll));
+    const [first] = all;
+    if (!first) {
+      return {
+        faults: ["no caught run on the document's time"],
+        runs: 0,
+        start: null,
+      };
+    }
+    const what = (run: Run) =>
+      `${run.type} ${run.name} ${run.start ?? "no start"}+${run.end} ${run.easing}`;
+    const faults = all.flatMap((run) => {
+      if (run.start === null || first.start === null) {
+        return [`${what(run)}: no start time to compare`];
+      }
+      return Math.abs(run.start - first.start) > 0.5 ||
+        Math.abs(run.end - first.end) > 0.5 ||
+        run.easing !== first.easing
+        ? [`${what(run)} against ${what(first)}`]
+        : [];
+    });
+    return { faults, runs: all.length, start: first.start };
+  }
+
   /** Lets the clock run again: every held run plays out from where it stands. */
   async release(): Promise<void> {
     this.within = null;
@@ -270,61 +328,6 @@ export class Clock {
     }
     this.runs = [];
   }
-}
-
-/**
- * One clock: every animation running on the elements `selectors` name
- * (pseudo-elements' included) has the same start time, duration and easing,
- * from `getAnimations()`. Only runs on the document's own time are read: a
- * loop (infinite iterations, a status's pulse) has no end to share, and a
- * scroll-driven one (`animation-timeline: scroll()`, a track's edge fade)
- * runs on its scroller, not on time. Returns a fault per run off the first,
- * and the runs read (none read is a fault).
- */
-export function oneClock(
-  page: Page,
-  selectors: string[]
-): Promise<{ faults: string[]; runs: number }> {
-  return page.evaluate((sels) => {
-    const runs = sels
-      .flatMap((sel) =>
-        [...document.querySelectorAll(sel)].flatMap((el) =>
-          el.getAnimations({ subtree: true })
-        )
-      )
-      .filter(
-        (run) =>
-          run.timeline instanceof DocumentTimeline &&
-          run.effect?.getTiming().iterations !== Number.POSITIVE_INFINITY
-      );
-    const read = (run: Animation) => {
-      const timing = run.effect?.getTiming();
-      return {
-        what:
-          run instanceof CSSTransition
-            ? `transition ${run.transitionProperty}`
-            : `${run.constructor.name} ${run.id}`,
-        start: Number(run.startTime ?? Number.NaN),
-        duration: Number(timing?.duration ?? 0) + Number(timing?.delay ?? 0),
-        easing: timing?.easing ?? "",
-      };
-    };
-    const all = runs.map(read);
-    const [first] = all;
-    if (!first) {
-      return { faults: ["no animation running"], runs: 0 };
-    }
-    const faults = all.flatMap((r) =>
-      Math.abs(r.start - first.start) > 0.5 ||
-      Math.abs(r.duration - first.duration) > 0.5 ||
-      r.easing !== first.easing
-        ? [
-            `${r.what} ${r.start}+${r.duration} ${r.easing} against ${first.what} ${first.start}+${first.duration} ${first.easing}`,
-          ]
-        : []
-    );
-    return { faults, runs: all.length };
-  }, selectors);
 }
 
 /** A way of drawing what `selector` names: CSS properties and values. */

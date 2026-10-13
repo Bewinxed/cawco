@@ -31,7 +31,7 @@
  * its whole.
  */
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: each rule is read case by case, as the drawing has them.
-import { Clock, type Look, oneClock, overlay } from "../../anim";
+import { Clock, type Look, overlay } from "../../anim";
 import {
   at,
   capture,
@@ -1118,11 +1118,11 @@ async function readStrip(
   );
   // Everything moving in the strip as the switch starts: sheets, cards,
   // titles, rims, their lean and their glow (`.rim`'s filter).
-  const clockOf = await oneClock(page, [within]);
+  const clockOf = clock.oneClock();
   kit.check(
     `${where}: everything in the strip moves on the switch's one clock, the rims' glow with it`,
     clockOf.faults.length === 0,
-    `${clockOf.runs} runs${clockOf.faults.length ? `; ${clockOf.faults.slice(0, 3).join("; ")}` : ""}`
+    `${clockOf.runs} runs from ${clockOf.start ?? "no start"}${clockOf.faults.length ? `; ${clockOf.faults.slice(0, 3).join("; ")}` : ""}`
   );
   const series: { pct: number; L: Layout }[] = [];
   for (const pct of PCTS) {

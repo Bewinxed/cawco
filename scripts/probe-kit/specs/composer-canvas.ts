@@ -293,12 +293,11 @@ const openCheck = async (
   );
   const runs = await runsOn(page);
   const growth = runs.filter((one) => one.id === "canvas-grow");
-  const started = await page.evaluate(() =>
-    document
-      .getAnimations()
-      .filter((run) => run.id === "canvas-grow")
-      .map((run) => Number(run.startTime))
-  );
+  // Their start times as the protocol reported them starting: held, the
+  // runs' own `startTime` reads null.
+  const started = caught
+    .filter((run) => run.name === "canvas-grow")
+    .map((run) => run.start);
   // A fifth of the way (the rise eases out, nearly up by half-time): the
   // shape's outline, its edge the pill's border, is drawn part-way up,
   // whole, never cut by a clip of its own.
@@ -351,7 +350,8 @@ const openCheck = async (
     growth.length === 2 &&
       growth.every((one) => one.duration === grow) &&
       started.length === 2 &&
-      near(started[0], started[1], 0.5) &&
+      started.every((one) => one !== null) &&
+      near(Number(started[0]), Number(started[1]), 0.5) &&
       caught.length >= 2,
     `--dur-grow ${grow}; started ${started.join(", ")}; ${JSON.stringify(growth)}`
   );
