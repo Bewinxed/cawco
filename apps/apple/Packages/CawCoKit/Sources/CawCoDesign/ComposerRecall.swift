@@ -65,9 +65,10 @@ enum Recall {
     }
 
     /// The shoulders' inward curve at full growth: as much as the top row has
-    /// shrunk, `spread` rows of depth for each row the shape holds.
-    static func taper(width: Double, extra: Double, spread: Double) -> Double {
-        shrink * (max(0, (extra - 6) / row) * spread + 0.5) * width / 2
+    /// shrunk, `spread` rows of depth for each row the shape holds, at most
+    /// `rows` rows' worth (grown.ts `taperRows`: a canvas curves in by one).
+    static func taper(width: Double, extra: Double, spread: Double, rows: Double = .infinity) -> Double {
+        shrink * (min(rows, max(0, (extra - 6) / row) * spread) + 0.5) * width / 2
     }
 
     /// The grown composer at `p` (0: the composer's own pill, 1: grown), in
@@ -80,7 +81,7 @@ enum Recall {
         let r = Radius.radiusLg
         let up = extra * drawer(p * 1.25 - 0.075), height = geometry.base + up
         let pw = drawer((p - 0.25) / 0.75)
-        let k = taper(width: w, extra: extra, spread: geometry.spread)
+        let k = taper(width: w, extra: extra, spread: geometry.spread, rows: geometry.taperRows)
         let left = k * pw, right = w - k * pw
         // Each side runs straight up to the pill's top, then sweeps in to its rounded top corner.
         let s = max(r, up)
@@ -154,6 +155,9 @@ struct RecallGeometry {
     /// the wheel spreads its depth across however many rows it shows; the
     /// queued edit's one row is one row deep.
     var spread = 1.0
+    /// The most rows' worth the shoulders curve in by: all of them for the
+    /// wheel, one for the canvas (grown.ts `taperRows`).
+    var taperRows = Double.infinity
 }
 
 // MARK: The frame clock
@@ -212,10 +216,16 @@ final class RecallHalo: UIView {
     private let ticker = FrameTicker()
     private(set) var settled = false
     private var path = CGMutablePath() as CGPath
+    /// Its grown top fades out over the transcript, frosted (the wheel's);
+    /// a canvas's is solid to its edge (grown.ts `fade: false`).
+    private let fades: Bool
+    /// A morph is running.
+    var moving: Bool { ticker.running }
 
-    init(_ geometry: RecallGeometry, extra: Double) {
+    init(_ geometry: RecallGeometry, extra: Double, fades: Bool = true) {
         self.geometry = geometry
         self.extra = extra
+        self.fades = fades
         super.init(frame: .zero)
         isUserInteractionEnabled = false
         layer.addSublayer(body)
@@ -231,7 +241,7 @@ final class RecallHalo: UIView {
         body.shadowOpacity = 0
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (halo: RecallHalo, _: UITraitCollection) in
             halo.colour()
-            if halo.settled { halo.frost() }
+            if halo.settled, halo.fades { halo.frost() }
         }
         colour()
     }
@@ -260,7 +270,7 @@ final class RecallHalo: UIView {
             guard abs(newValue - geometry.base) > 0.25 else { return }
             geometry.base = newValue
             paint()
-            if settled { frost() }
+            if settled, fades { frost() }
         }
     }
 
@@ -268,8 +278,9 @@ final class RecallHalo: UIView {
         let traits = traitCollection
         let raised = Palette.surfaceRaised.resolvedColor(with: traits)
         let control = Palette.borderControl.resolvedColor(with: traits)
-        fill.colors = [raised.withAlphaComponent(0).cgColor, raised.cgColor, raised.cgColor]
-        edge.colors = [control.withAlphaComponent(0).cgColor, control.cgColor, control.cgColor]
+        let top = fades ? 0.0 : 1.0
+        fill.colors = [raised.withAlphaComponent(top).cgColor, raised.cgColor, raised.cgColor]
+        edge.colors = [control.withAlphaComponent(top).cgColor, control.cgColor, control.cgColor]
         // The far drop on the shape, then the near one on the shape and its far drop, as the filter chain falls.
         let far = Shadow.shadowDrop[0], close = Shadow.shadowDropNear[0]
         body.shadowColor = far.ink.color.resolvedColor(with: traits).cgColor
@@ -334,16 +345,27 @@ final class RecallHalo: UIView {
         ticker.stop()
     }
 
-    private func settle() {
+    /// Stands grown at `extra` this frame, with no morph (a canvas's height
+    /// under the grab): the drop and the frost step aside until `settle`.
+    func stand(extra next: Double) {
+        ticker.stop()
+        unsettle()
+        open = 1
+        extra = next
+        paint()
+    }
+
+    /// Standing still grown: the drop (and the frost, where it fades) come in.
+    func settle() {
         guard open == 1 else { return }
         settled = true
         fade(to: 1)
-        frost()
+        if fades { frost() }
         layer.rasterizationScale = traitCollection.displayScale
         layer.shouldRasterize = true
     }
 
-    private func unsettle() {
+    func unsettle() {
         guard settled else { return }
         settled = false
         layer.shouldRasterize = false

@@ -173,6 +173,18 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
     }
     /// An upward swipe that starts on the pill: the wheel comes up under the finger.
     private let swipeUp = SwipeUpRecognizer()
+    /// The same swipe made with a pencil: the pill grows into the canvas (The pen's swipe).
+    private let penSwipe = PenSwipeRecognizer()
+    /// The draft's canvas: its page, and its shape while it stands over the field.
+    private(set) var canvasRoom: CanvasRoom?
+    /// A canvas is being made, read for a send, docked or undocked.
+    private var canvasWorking = false
+    /// Why the canvas's last make, read, dock or send did not go, over the field.
+    private var canvasNote: String?
+    /// The canvas's chip, while it is folded or docked.
+    private(set) var canvasChip: AttachmentChip?
+    /// The chip is laid out but not shown: the canvas is folding or flying into it.
+    private var canvasChipHidden = false
     /// Whether the swipe being recognized started on the field's text.
     private var swipeFromField = false
     /// When the finger the swipe is watching came down.
@@ -327,10 +339,16 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         field.delegate = self
         field.accessibilityLabel = "Message the agent"
         field.accessibilityIdentifier = "steer-message"
-        // VoiceOver's way to the wheel, which a swipe or ↑ brings up otherwise.
-        field.accessibilityCustomActions = [UIAccessibilityCustomAction(name: Self.recallAction) { [weak self] _ in
-            self?.recallPressed() ?? false
-        }]
+        // VoiceOver's way to the wheel, which a swipe or ↑ brings up otherwise,
+        // and to the canvas, which a pencil's swipe or Attach → Draw opens.
+        field.accessibilityCustomActions = [
+            UIAccessibilityCustomAction(name: Self.recallAction) { [weak self] _ in
+                self?.recallPressed() ?? false
+            },
+            UIAccessibilityCustomAction(name: Self.drawAction) { [weak self] _ in
+                self?.drawPressed() ?? false
+            },
+        ]
         field.translatesAutoresizingMaskIntoConstraints = false
         field.onPaste = { [weak self] long in self?.attachPaste(long) }
         field.onPasteItems = { [weak self] items in self?.binding?.onPasteItems(items) }
@@ -387,13 +405,26 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         controls.setContentCompressionResistancePriority(.required, for: .horizontal)
 
         // A swipe up that starts on the pill brings the wheel up under the
-        // finger; a touch or a pen, never a pointer or a trackpad's scroll.
-        swipeUp.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue), NSNumber(value: UITouch.TouchType.pencil.rawValue)]
-        swipeUp.allowedScrollTypesMask = []
-        swipeUp.maximumNumberOfTouches = 1
-        swipeUp.delegate = self
+        // finger: a finger's only, never a pencil (whose swipe is the
+        // canvas's), a pointer or a trackpad's scroll.
+        swipeUp.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
+        penSwipe.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
+        #if DEBUG
+        if CanvasDebug.pencil {
+            // The simulator has no pencil: for this run a finger is one, and the wheel takes none.
+            swipeUp.allowedTouchTypes = []
+            penSwipe.allowedTouchTypes = [NSNumber(value: UITouch.TouchType.direct.rawValue)]
+            CanvasDebug.log.notice("probe pencil: a finger's swipe on the pill is the pencil's")
+        }
+        #endif
+        for recognizer in [swipeUp, penSwipe] as [UIPanGestureRecognizer] {
+            recognizer.allowedScrollTypesMask = []
+            recognizer.maximumNumberOfTouches = 1
+            recognizer.delegate = self
+            pill.addGestureRecognizer(recognizer)
+        }
         swipeUp.addTarget(self, action: #selector(swiped(_:)))
-        pill.addGestureRecognizer(swipeUp)
+        penSwipe.addTarget(self, action: #selector(penSwiped(_:)))
         field.onDeleteBackward = { [weak self] in self?.wheelBackspace() ?? true }
     }
 
@@ -424,6 +455,7 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         maskField()
         edit?.relayout()
         placeMenu()
+        canvasRoom?.relayout()
     }
 
     // MARK: The binding
@@ -447,6 +479,9 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         closeMenu(animated: false)
         menuWasOpen = false
         menuDismissed = false
+        // The canvas belongs to the conversation too: it goes at once, and
+        // the next one's stands again if it was standing.
+        closeCanvas()
         let shown = field.text ?? ""
         binding?.composer = nil
         binding = next
@@ -467,8 +502,10 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         }
         attachments = next.attachments
         render(next)
+        reopenCanvas()
         #if DEBUG
         RecallProbe.arm(self)
+        CanvasProbe.arm(self)
         #endif
     }
 
@@ -479,14 +516,9 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         action = source.action
         writable = source.writable
         block = source.sendBlock
-        attach.menu = source.attachMenu
+        attach.menu = attachMenu(source)
         attach.showsMenuAsPrimaryAction = true
-        let message = source.sendError ?? ""
-        if error.text != message || errorBox?.isHidden != message.isEmpty {
-            error.text = message
-            errorBox?.isHidden = message.isEmpty
-            onHeight()
-        }
+        showError(source.sendError ?? canvasNote)
         syncPrompts(source.prompts)
         renderAction(animated: window != nil)
         // An older page may have landed: the wheel takes in what it brought.
@@ -551,6 +583,8 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         }
         syncLift()
         let empty = cards.isEmpty
+        // An ask takes the composer: a canvas standing over the field folds to its chip at once.
+        if !empty, canvasRoom?.up == true { canvasStepsAside() }
         if prompts.isHidden != empty {
             prompts.isHidden = empty
             onHeight()
@@ -730,7 +764,7 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
     /// swipe is under way or the wheel is up, the field offers an empty menu,
     /// which is never shown. Otherwise nil, the system's own.
     public func textView(_: UITextView, editMenuForTextIn _: NSRange, suggestedActions _: [UIMenuElement]) -> UIMenu? {
-        let swiping = swipeUp.state == .began || swipeUp.state == .changed
+        let swiping = [swipeUp.state, penSwipe.state].contains { $0 == .began || $0 == .changed }
         return wheel != nil || swiping ? UIMenu(children: []) : nil
     }
 
@@ -835,7 +869,7 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
     // MARK: Send and Stop
 
     private var hasContent: Bool {
-        !field.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
+        !field.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty || binding?.canvas != nil
     }
 
     /// A file the hub does not have yet: nothing sends until it is there,
@@ -850,6 +884,8 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
     /// which queues the message as the web's Enter does (a phone has no
     /// Enter to send with); an empty field leaves it Stop.
     private var shownAction: Action {
+        // A canvas being made or read for a send: the box spins, as a send in flight does.
+        if canvasWorking { return .sending }
         if edit != nil { return .send }
         if action == .stop, hasContent { return .send }
         return action
@@ -904,7 +940,12 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
             }
             return
         }
-        guard let binding, writable, !held, action != .sending, hasContent, !unready, flight == nil else { return }
+        guard let binding, writable, !held, action != .sending, !canvasWorking, hasContent, !unready, flight == nil else { return }
+        // The canvas goes as its file, its outline and its picture, read now.
+        if let canvas = binding.canvas {
+            sendCanvas(canvas, binding)
+            return
+        }
         let words = field.text.trimmingCharacters(in: .whitespacesAndNewlines)
         binding.onSend(words, attachments)
     }
@@ -998,15 +1039,17 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
 
     private func renderAttachments() {
         if edit == nil { binding?.attachments = attachments }
-        let shown = chips.arrangedSubviews.compactMap { $0 as? AttachmentChip }
+        let shown = chips.arrangedSubviews.compactMap { $0 as? AttachmentChip }.filter { $0 !== canvasChip }
         // The same chips as before, a file's upload having moved along: each
         // takes its new state in place, so its ring fills rather than restarts.
         if shown.count == attachments.count, zip(shown, attachments).allSatisfy({ $0.attachment.sameChip(as: $1) }) {
             for (chip, attachment) in zip(shown, attachments) { chip.update(attachment) }
-            renderAction(animated: true)
+            syncCanvasChip()
             return
         }
         chips.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        // The canvas's chip comes back last, after the attachments.
+        canvasChip = nil
         for attachment in attachments {
             let chip = AttachmentChip(attachment) { [weak self] chip in
                 guard let self, let index = chips.arrangedSubviews.firstIndex(of: chip), index < attachments.count else { return }
@@ -1016,7 +1059,30 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
             }
             chips.addArrangedSubview(chip)
         }
-        let hide = attachments.isEmpty
+        syncCanvasChip()
+    }
+
+    /// The canvas's chip (the file chip recipe, named "Canvas", the export's
+    /// picture its thumbnail) while the canvas is folded or docked, last in
+    /// the row; the row shows while it holds any chip.
+    func syncCanvasChip() {
+        let canvas = binding?.canvas
+        if let canvas, canvas.folded || canvas.docked {
+            let face = ComposerAttachment.image(name: "Canvas", mediaType: "image/png", data: canvas.thumb ?? Data())
+            if canvasChip?.attachment != face {
+                canvasChip?.removeFromSuperview()
+                let chip = AttachmentChip(face) { [weak self] _ in self?.removeCanvas() } onRetry: { _ in }
+                chip.onOpen = { [weak self] in self?.canvasChipTapped() }
+                chips.addArrangedSubview(chip)
+                canvasChip = chip
+            }
+            canvasChip?.alpha = canvasChipHidden ? 0 : 1
+            canvasChip?.openHint = canvas.docked ? "Docked in the panel. Brings it back over the field." : "Opens the canvas over the field."
+        } else if let chip = canvasChip {
+            chip.removeFromSuperview()
+            canvasChip = nil
+        }
+        let hide = attachments.isEmpty && canvasChip == nil
         if chipsRow.isHidden != hide {
             chipsRow.isHidden = hide
             onHeight()
@@ -1128,7 +1194,7 @@ extension ComposerView {
     /// Brings the wheel up. `keys`: the field takes focus, so keys reach the
     /// wheel; a hold leaves the keyboard down.
     private func openWheel(keys: Bool) {
-        guard let binding, wheel == nil, edit == nil else { return }
+        guard let binding, wheel == nil, edit == nil, canvasRoom?.up != true else { return }
         endFlight()
         closeMenu(animated: false)
         // Focus first, so a folded draft opens to its height before anything is measured.
@@ -1189,7 +1255,7 @@ extension ComposerView {
     /// Lifts `entry`'s words into the field (↑, or a tap on its bubble). The
     /// draft, if there is one, steps aside until they go back.
     func editQueued(_ entry: RecallEntry) {
-        guard let binding, edit == nil, wheel == nil else { return }
+        guard let binding, edit == nil, wheel == nil, canvasRoom?.up != true else { return }
         endFlight()
         let words = binding.queuedWords(entry.id)
         let edit = QueuedEdit(entry, composer: self, binding: binding, draft: field.text ?? "", attachments: attachments, caret: field.selectedRange)
@@ -1239,19 +1305,30 @@ extension ComposerView {
 
     /// Only a swipe that starts on the pill, off the attach and send boxes,
     /// with nothing else up.
+    /// The wheel's swipe or the pencil's: the same rules, each told in its own log.
+    private func isSwipe(_ recognizer: UIGestureRecognizer) -> Bool {
+        recognizer === swipeUp || recognizer === penSwipe
+    }
+
+    private func note(_ recognizer: UIGestureRecognizer, _ line: @autoclosure () -> String) {
+        if recognizer === penSwipe { noteCanvas(line()) } else { noteSwipe(line()) }
+    }
+
     public func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        guard recognizer === swipeUp else { return true }
-        guard binding != nil, wheel == nil, edit == nil, let view = touch.view else {
-            noteSwipe("refused the touch: binding \(binding != nil), wheel \(wheel != nil), edit \(edit != nil)")
+        guard isSwipe(recognizer) else { return true }
+        let standing = canvasRoom?.up == true
+        let host = recognizer !== penSwipe || binding?.canvasHost != nil
+        guard binding != nil, host, wheel == nil, edit == nil, !standing, !canvasWorking, let view = touch.view else {
+            note(recognizer, "refused the touch: binding \(binding != nil), host \(host), wheel \(wheel != nil), edit \(edit != nil), canvas \(standing), working \(canvasWorking)")
             return false
         }
         if view.isDescendant(of: actionBox) || view.isDescendant(of: attach) {
-            noteSwipe("refused the touch: on \(type(of: view)) in the send or attach box")
+            note(recognizer, "refused the touch: on \(type(of: view)) in the send or attach box")
             return false
         }
         swipeFromField = view.isDescendant(of: field)
         swipeTouchedAt = CACurrentMediaTime()
-        noteSwipe("took the touch on \(type(of: view)), from the field \(swipeFromField), writing \(field.isFirstResponder)")
+        note(recognizer, "took the \(touch.type == .pencil ? "pencil's" : "finger's") touch on \(type(of: view)), from the field \(swipeFromField), writing \(field.isFirstResponder)")
         Feel.prepare()
         return true
     }
@@ -1266,27 +1343,27 @@ extension ComposerView {
     /// text's end rather than refusing the field outright keeps the whole
     /// pill a target: its chrome is a 6pt rim and the three boxes.)
     override public func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
-        guard recognizer === swipeUp else { return super.gestureRecognizerShouldBegin(recognizer) }
-        guard binding != nil, wheel == nil, edit == nil else { return false }
-        let velocity = swipeUp.velocity(in: self)
+        guard isSwipe(recognizer), let pan = recognizer as? UIPanGestureRecognizer else { return super.gestureRecognizerShouldBegin(recognizer) }
+        guard binding != nil, wheel == nil, edit == nil, canvasRoom?.up != true else { return false }
+        let velocity = pan.velocity(in: self)
         guard velocity.y < 0, abs(velocity.y) > abs(velocity.x) else {
-            noteSwipe("declined: velocity \(Int(velocity.x)),\(Int(velocity.y)) is not mostly up")
+            note(recognizer, "declined: velocity \(Int(velocity.x)),\(Int(velocity.y)) is not mostly up")
             return false
         }
         if swipeFromField, field.isScrollEnabled {
             let end = field.contentSize.height + field.adjustedContentInset.bottom - field.bounds.height
             if field.contentOffset.y < end - 1 {
-                noteSwipe("declined: the draft scrolls and its end is not in view")
+                note(recognizer, "declined: the draft scrolls and its end is not in view")
                 return false
             }
         }
-        // On text being written, a finger held still before it moved is
-        // dragging the caret (the field's loupe): that is the text's, not the wheel's.
+        // On text being written, a touch held still before it moved is
+        // dragging the caret (the field's loupe): that is the text's, not the swipe's.
         if swipeFromField, field.isFirstResponder, CACurrentMediaTime() - swipeTouchedAt > Motion.durPressHold {
-            noteSwipe("declined: held \(Int((CACurrentMediaTime() - swipeTouchedAt) * 1000))ms before moving, a caret drag")
+            note(recognizer, "declined: held \(Int((CACurrentMediaTime() - swipeTouchedAt) * 1000))ms before moving, a caret drag")
             return false
         }
-        noteSwipe("begins: velocity \(Int(velocity.x)),\(Int(velocity.y))")
+        note(recognizer, "begins: velocity \(Int(velocity.x)),\(Int(velocity.y))")
         return true
     }
 
@@ -1295,8 +1372,8 @@ extension ComposerView {
     /// one finger. Its taps and presses do not wait: placing the caret and
     /// selecting stay as quick as they are.
     public func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldBeRequiredToFailBy other: UIGestureRecognizer) -> Bool {
-        guard recognizer === swipeUp, other is UIPanGestureRecognizer, let view = other.view, view.isDescendant(of: field) else { return false }
-        noteSwipe("\(type(of: other)) on \(type(of: view)) waits for the swipe")
+        guard isSwipe(recognizer), other is UIPanGestureRecognizer, let view = other.view, view.isDescendant(of: field) else { return false }
+        note(recognizer, "\(type(of: other)) on \(type(of: view)) waits for the swipe")
         return true
     }
 
@@ -1305,9 +1382,9 @@ extension ComposerView {
     /// beside the swipe instead of shutting it out; a swipe that begins
     /// cancels it (`swiped`). Everything else keeps UIKit's rule: one wins.
     public func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
-        guard recognizer === swipeUp else { return false }
+        guard isSwipe(recognizer) else { return false }
         let beside = !(other is UIPanGestureRecognizer) && (other.view?.isDescendant(of: field) ?? false)
-        noteSwipe("meets \(type(of: other)) on \(other.view.map { "\(type(of: $0))" } ?? "nothing")\(beside ? ", side by side" : "")")
+        note(recognizer, "meets \(type(of: other)) on \(other.view.map { "\(type(of: $0))" } ?? "nothing")\(beside ? ", side by side" : "")")
         return beside
     }
 
@@ -1343,6 +1420,23 @@ extension ComposerView {
         #endif
     }
 
+    /// The canvas's decisions, as the wheel's swipe logs its own (the Canvas category).
+    fileprivate func noteCanvas(_ line: @autoclosure () -> String) {
+        #if DEBUG
+        let text = line()
+        CanvasDebug.log.notice("\(text, privacy: .public)")
+        #endif
+    }
+
+    /// Began: the pill grows into the canvas with the hold's feel.
+    @objc private func penSwiped(_ pan: UIPanGestureRecognizer) {
+        guard pan.state == .began, wheel == nil, edit == nil else { return }
+        cancelFieldTouches()
+        Feel.hold()
+        noteCanvas("the pen's swipe opens the canvas")
+        openCanvas()
+    }
+
     /// Began: the wheel comes up with the hold's feel and follows the
     /// finger from here; lifting leaves it up (RecallWheel `swipeEnded`).
     @objc private func swiped(_ pan: UIPanGestureRecognizer) {
@@ -1367,7 +1461,10 @@ extension ComposerView {
     /// which stand outside the composer's bounds, where a touch lands on them.
     fileprivate func grownHit(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         let menu: UIView? = commandMenu?.closing == false ? commandMenu : nil
-        for view in [menu, wheel?.ghostsView, edit?.keepButton].compactMap(\.self) where view.window != nil && !view.isHidden {
+        // The canvas standing over the field, its grab first (it stands over the page's top edge).
+        let canvas: [UIView] = canvasRoom.map { $0.up ? [$0.grab, $0.stage] : $0.docked ? [$0.stage] : [] } ?? []
+        for view in [menu, wheel?.ghostsView, edit?.keepButton].compactMap(\.self) + canvas
+            where view.window != nil && !view.isHidden && view.isUserInteractionEnabled {
             let inside = convert(point, to: view)
             if view.point(inside: inside, with: event), let hit = view.hitTest(inside, with: event) { return hit }
         }
@@ -1393,6 +1490,21 @@ extension ComposerView {
     /// What the session sent here, newest first.
     var probeEntries: [RecallEntry] {
         binding?.recall() ?? []
+    }
+
+    /// Why the canvas's last make, read or send did not go, and whether one is under way.
+    var probeCanvasNote: String? { canvasNote }
+    var probeCanvasWorking: Bool { canvasWorking }
+
+    /// The touch types the wheel's swipe and the pencil's take.
+    var probeTouchTypes: (wheel: [Int], pen: [Int]) {
+        ((swipeUp.allowedTouchTypes.map(\.intValue)), penSwipe.allowedTouchTypes.map(\.intValue))
+    }
+
+    /// Words in the field, as typing puts them there.
+    func probeType(_ words: String) {
+        field.text = words
+        textViewDidChange(field)
     }
 
     /// Every button in the pill, by what VoiceOver calls it.
@@ -1492,6 +1604,459 @@ extension ComposerView {
     @objc fileprivate func menuEscape() {
         menuDismissed = true
         syncMenu()
+    }
+}
+
+// MARK: The canvas
+
+/// A canvas's refusal, as one sentence's middle.
+struct CanvasRefusal: LocalizedError {
+    let message: String
+    var errorDescription: String? { message }
+}
+
+extension ComposerView {
+    /// The field's accessibility action that opens the canvas, as Attach → Draw does.
+    static let drawAction = "Draw"
+
+    /// Attach's menu (AttachButton.svelte): the session's files and photos,
+    /// then Draw, where the session's screen can hold a canvas.
+    fileprivate func attachMenu(_ source: SessionComposerBinding) -> UIMenu? {
+        guard source.canvasHost != nil else { return source.attachMenu }
+        var children: [UIMenuElement] = []
+        if let files = source.attachMenu { children.append(UIMenu(title: "", options: .displayInline, children: files.children)) }
+        children.append(UIAction(title: Self.drawAction, image: Glyph.toolWrite.image) { [weak self] _ in self?.openCanvas() })
+        return UIMenu(children: children)
+    }
+
+    /// The sentence over the field: the pane's send error, else the canvas's.
+    fileprivate func showError(_ text: String?) {
+        let message = text ?? ""
+        guard error.text != message || errorBox?.isHidden != message.isEmpty else { return }
+        error.text = message
+        errorBox?.isHidden = message.isEmpty
+        onHeight()
+    }
+
+    private func setCanvasNote(_ text: String?) {
+        canvasNote = text
+        showError(binding?.sendError ?? text)
+        if let text { UIAccessibility.post(notification: .announcement, argument: text) }
+    }
+
+    /// The page couldn't load (its web view's failure), said over the field.
+    func canvasFailed(_ sentence: String) {
+        setCanvasNote(sentence)
+    }
+
+    /// VoiceOver's "Draw": opens the canvas, or folds it when it stands.
+    func drawPressed() -> Bool {
+        guard binding?.canvasHost != nil else { return false }
+        if canvasRoom?.up == true { foldCanvas() } else { openCanvas() }
+        return true
+    }
+
+    /// The canvas stands over the field, or no longer does: while it stands
+    /// the grown shape is the composer (the pill's surface steps aside, as
+    /// for the wheel), and the chips and the error line stand over the shape.
+    func canvasStands(_ standing: Bool) {
+        grown = standing
+        if standing {
+            if let errorBox { column.bringSubviewToFront(errorBox) }
+            column.bringSubviewToFront(chipsRow)
+        } else {
+            column.bringSubviewToFront(ring)
+        }
+        renderAction(animated: true)
+    }
+
+    private func room(for canvas: DraftCanvas) -> CanvasRoom {
+        if let room = canvasRoom, room.id == canvas.id { return room }
+        canvasRoom?.close()
+        let room = CanvasRoom(composer: self, id: canvas.id)
+        canvasRoom = room
+        return room
+    }
+
+    /// A pen's swipe, Attach → Draw, VoiceOver's Draw, a tap on the chip:
+    /// the draft's canvas opens, a new one made when it has none; docked, it
+    /// comes back from the panel.
+    func openCanvas() {
+        guard let binding, let host = binding.canvasHost, wheel == nil, edit == nil, !canvasWorking, canvasRoom?.up != true else { return }
+        setCanvasNote(nil)
+        endFlight()
+        closeMenu(animated: false)
+        if let canvas = binding.canvas {
+            if canvas.docked { return undockCanvas() }
+            let chip = canvas.folded ? canvasChip.map { $0.convert($0.bounds, to: nil) } : nil
+            stand(canvas, in: binding, from: chip)
+            return
+        }
+        canvasWorking = true
+        renderAction(animated: true)
+        Task { [weak self] in
+            do {
+                let page = try await host.hub.createDraftCanvas(in: binding.sessionId)
+                guard let self, self.binding === binding, binding.canvas == nil else { return }
+                canvasWorking = false
+                let canvas = DraftCanvas(id: page.id, name: page.name, page: page, folded: false)
+                binding.canvas = canvas
+                noteCanvas("made the draft canvas \(page.id)")
+                stand(canvas, in: binding, from: nil)
+            } catch {
+                guard let self, self.binding === binding else { return }
+                canvasWorking = false
+                renderAction(animated: true)
+                setCanvasNote("The canvas couldn't be made: \(error.localizedDescription). Nothing changed in your message; try again.")
+            }
+        }
+    }
+
+    /// The canvas grows over the field out of the pill, or out of its chip's box (`chip`, in the window).
+    private func stand(_ canvas: DraftCanvas, in binding: SessionComposerBinding, from chip: CGRect?) {
+        guard let page = canvas.page else {
+            // A restored draft: where its page stands is read first.
+            return readPage(of: canvas, in: binding) { [weak self] in
+                guard let self, let canvas = binding.canvas else { return }
+                stand(canvas, in: binding, from: chip)
+            }
+        }
+        let room = room(for: canvas)
+        room.attach(page, instanceId: binding.sessionId).docked = false
+        binding.canvas?.folded = false
+        binding.canvas?.docked = false
+        syncCanvasChip()
+        (superview ?? self).layoutIfNeeded()
+        room.grow(from: chip)
+    }
+
+    /// Reads where a canvas's page stands, and its picture, then `then`.
+    private func readPage(of canvas: DraftCanvas, in binding: SessionComposerBinding, then: @escaping () -> Void) {
+        guard let host = binding.canvasHost else { return }
+        canvasWorking = true
+        renderAction(animated: true)
+        Task { [weak self] in
+            do {
+                let read = try await host.hub.exportCanvas(canvas.id, name: canvas.name)
+                guard let self, self.binding === binding, binding.canvas?.id == canvas.id else { return }
+                canvasWorking = false
+                binding.canvas?.page = read.page
+                if let png = read.png { binding.canvas?.thumb = png }
+                renderAction(animated: true)
+                then()
+            } catch {
+                guard let self, self.binding === binding else { return }
+                canvasWorking = false
+                renderAction(animated: true)
+                setCanvasNote("The canvas couldn't be read: \(error.localizedDescription). It stays in your message as its chip; try again.")
+            }
+        }
+    }
+
+    /// Done (the page's rail, VoiceOver's Draw): the canvas folds into its
+    /// chip over `durGrowExit`, and the chip takes its picture.
+    func foldCanvas() {
+        guard let binding, binding.canvas != nil, let room = canvasRoom, room.up, !room.moving else { return }
+        binding.canvas?.folded = true
+        canvasChipHidden = true
+        syncCanvasChip()
+        (superview ?? self).layoutIfNeeded()
+        let box = canvasChip.map { $0.convert($0.bounds, to: nil) }
+        noteCanvas("Done folds the canvas into its chip")
+        room.fold(into: box) { [weak self] in
+            guard let self else { return }
+            canvasChipHidden = false
+            syncCanvasChip()
+            refreshThumb(drawing: true)
+        }
+    }
+
+    /// An ask takes the composer: a standing canvas folds to its chip at once.
+    fileprivate func canvasStepsAside() {
+        guard let binding, binding.canvas != nil, let room = canvasRoom, room.up else { return }
+        binding.canvas?.folded = true
+        room.putAway()
+        syncCanvasChip()
+        refreshThumb(drawing: true)
+    }
+
+    /// The chip's picture: drawn now when `drawing` (the page draws and posts
+    /// it), then the export's PNG.
+    private func refreshThumb(drawing: Bool) {
+        guard let binding, let canvas = binding.canvas, let host = binding.canvasHost else { return }
+        let web = drawing ? canvasRoom?.web : nil
+        Task { [weak self] in
+            do {
+                if let web {
+                    try await web.ready()
+                    try await web.picture()
+                }
+                let read = try await host.hub.exportCanvas(canvas.id, name: canvas.name)
+                guard let self, self.binding === binding, binding.canvas?.id == canvas.id else { return }
+                binding.canvas?.page = read.page
+                binding.canvas?.thumb = read.png
+                syncCanvasChip()
+                noteCanvas("the chip's picture: \(read.png?.count ?? 0) bytes")
+            } catch {
+                guard let self, self.binding === binding, binding.canvas?.id == canvas.id else { return }
+                setCanvasNote("The canvas's picture couldn't be drawn: \(error.localizedDescription). The chip shows no picture; the canvas is kept.")
+            }
+        }
+    }
+
+    /// A tap on the chip: the canvas opens again out of it, or, docked, comes back from the panel.
+    private func canvasChipTapped() {
+        guard let canvas = binding?.canvas else { return }
+        if canvas.docked { undockCanvas() } else { openCanvas() }
+    }
+
+    /// The chip's remove: the canvas leaves the message (the panel still lists it).
+    private func removeCanvas() {
+        guard let binding, binding.canvas != nil, !canvasWorking else { return }
+        binding.canvas = nil
+        closeCanvas()
+        syncCanvasChip()
+    }
+
+    /// The canvas's page and shape go at once (another conversation, or the canvas left the message).
+    fileprivate func closeCanvas() {
+        canvasRoom?.close()
+        canvasRoom = nil
+        canvasNote = nil
+        canvasWorking = false
+        canvasChipHidden = false
+        canvasChip?.removeFromSuperview()
+        canvasChip = nil
+    }
+
+    /// A conversation bound again: its canvas stands again if it was
+    /// standing; folded or docked, its chip shows, with its picture.
+    fileprivate func reopenCanvas() {
+        guard let binding, let canvas = binding.canvas else { return }
+        syncCanvasChip()
+        if !canvas.folded, !canvas.docked {
+            // After the switch has laid the composer out.
+            DispatchQueue.main.async { [weak self] in self?.openCanvas() }
+            return
+        }
+        if canvas.docked { redockCanvas(canvas, in: binding) }
+        if canvas.thumb == nil { refreshThumb(drawing: false) }
+    }
+
+    /// The screen restored the draft's canvas: its chip, with its picture.
+    func canvasRestored(of source: SessionComposerBinding) {
+        guard source === binding else { return }
+        reopenCanvas()
+    }
+
+    /// The send that carried the canvas went: it is the session's now, no longer a draft.
+    func canvasWentOut(_ id: String, of source: SessionComposerBinding) {
+        guard source === binding else { return }
+        flyChipOut()
+        closeCanvas()
+        syncCanvasChip()
+        guard let host = source.canvasHost else { return }
+        Task { [weak self] in
+            do {
+                try await host.hub.canvasSent(id, in: source.sessionId)
+            } catch {
+                guard let self, self.binding === source else { return }
+                setCanvasNote("The canvas went out, but it is still marked as a draft: \(error.localizedDescription).")
+            }
+        }
+    }
+
+    /// Send flies the chip into the transcript (DESIGN.md, the canvas's
+    /// entrance): a copy of it rises from its place in the composer to the
+    /// transcript's foot, where the sent row lands a step above the
+    /// composer, fading as it goes, on the drawer curve over `durLift` (the
+    /// composer's flight between field and transcript). With Reduce Motion
+    /// it fades where it stands.
+    private func flyChipOut() {
+        guard let chip = canvasChip, chip.window != nil, chip.alpha > 0, let host = superview,
+              let copy = chip.snapshotView(afterScreenUpdates: false) else { return }
+        copy.frame = chip.convert(chip.bounds, to: host)
+        copy.isUserInteractionEnabled = false
+        host.addSubview(copy)
+        let still = UIAccessibility.isReduceMotionEnabled
+        let rise = still ? 0 : copy.frame.minY - (frame.minY - Space.space3 - copy.frame.height)
+        let flight = still
+            ? Motion.easeOut.animator(Motion.durFade)
+            : UIViewPropertyAnimator(duration: Motion.durLift, timingParameters: Motion.easeDrawer.parameters)
+        flight.addAnimations {
+            copy.transform = CGAffineTransform(translationX: 0, y: -rise)
+            copy.alpha = 0
+        }
+        flight.addCompletion { _ in copy.removeFromSuperview() }
+        flight.startAnimation()
+        noteCanvas("the chip flies \(Int(rise.rounded()))pt up into the transcript's foot")
+    }
+
+    /// Send with a canvas: its picture drawn now, then its `.excalidraw`
+    /// file and outline as texts and its PNG as an image, with the words and
+    /// the other attachments (canvas-room.svelte.ts `extras`). An empty
+    /// canvas sends nothing, and says so over the field.
+    private func sendCanvas(_ canvas: DraftCanvas, _ binding: SessionComposerBinding) {
+        guard let host = binding.canvasHost else { return }
+        canvasWorking = true
+        setCanvasNote(nil)
+        renderAction(animated: true)
+        Task { [weak self] in
+            do {
+                let read = try await self?.readForSend(canvas, binding, host)
+                guard let self, let read else { return }
+                canvasWorking = false
+                renderAction(animated: true)
+                guard self.binding === binding, binding.canvas?.id == canvas.id else { return }
+                guard read.drawn > 0 else {
+                    return setCanvasNote("Nothing is drawn on the canvas, so nothing was sent. Draw on it, or remove it from the message, then send again.")
+                }
+                guard let png = read.png else {
+                    return setCanvasNote("The canvas's picture isn't drawn yet, so nothing was sent. Send again in a moment.")
+                }
+                let words = field.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                let carried = attachments + [
+                    .text(name: "canvas.excalidraw", content: read.file),
+                    .text(name: "canvas.md", content: read.outline),
+                    .image(name: "canvas.png", mediaType: "image/png", data: png),
+                ]
+                noteCanvas("Send carries canvas.excalidraw (\(read.file.utf8.count) bytes), canvas.md (\(read.outline.utf8.count) bytes) and one image (\(png.count) bytes)")
+                binding.sendingCanvas = canvas.id
+                binding.onSend(words, carried)
+                binding.sendingCanvas = nil
+            } catch {
+                guard let self, self.binding === binding else { return }
+                canvasWorking = false
+                renderAction(animated: true)
+                setCanvasNote("The canvas couldn't be read for sending: \(error.localizedDescription). Nothing was sent; send again.")
+            }
+        }
+    }
+
+    /// The canvas as it stands now: its page loaded (out of sight, if it is
+    /// folded or docked), its picture drawn, then the hub's export.
+    private func readForSend(_ canvas: DraftCanvas, _ binding: SessionComposerBinding, _ host: CanvasHost) async throws -> CanvasExport {
+        var page = canvas.page
+        if page == nil {
+            page = try await host.hub.exportCanvas(canvas.id, name: canvas.name).page
+            binding.canvas?.page = page
+        }
+        guard let page, self.binding === binding else { throw CanvasRefusal(message: "the conversation changed") }
+        let web = room(for: canvas).attach(page, instanceId: binding.sessionId)
+        try await web.ready()
+        try await web.picture()
+        return try await host.hub.exportCanvas(canvas.id, name: canvas.name)
+    }
+
+    /// Dock (the page's rail): the panel shows the canvas (`artifact_show`),
+    /// and once it stands the canvas flies there; the composer keeps its chip.
+    func dockCanvas() {
+        guard let binding, let canvas = binding.canvas, let host = binding.canvasHost, let room = canvasRoom, room.up, !room.moving,
+              !canvasWorking else { return }
+        canvasWorking = true
+        setCanvasNote(nil)
+        renderAction(animated: true)
+        noteCanvas("Dock shows the canvas in the artifact panel")
+        Task { [weak self] in
+            do {
+                try await host.hub.dockCanvas(canvas.id, in: binding.sessionId)
+                // The panel stands once the hub's preview frame lands: up to 5 s (stage.svelte.ts `slotted`).
+                var box = host.panel(canvas.id)
+                var waited = 0.0
+                while box == nil, waited < 5 {
+                    try await Task.sleep(for: .milliseconds(50))
+                    waited += 0.05
+                    box = host.panel(canvas.id)
+                }
+                guard let self, self.binding === binding, binding.canvas?.id == canvas.id else { return }
+                canvasWorking = false
+                guard let box = box?.rest else {
+                    renderAction(animated: true)
+                    return setCanvasNote("The canvas couldn't dock: the artifact panel didn't open within 5 s. It stays over the field.")
+                }
+                binding.canvas?.docked = true
+                binding.canvas?.folded = false
+                room.web?.docked = true
+                canvasChipHidden = true
+                syncCanvasChip()
+                (superview ?? self).layoutIfNeeded()
+                room.flyToPanel(box) { [weak self] in
+                    guard let self else { return }
+                    canvasChipHidden = false
+                    syncCanvasChip()
+                    refreshThumb(drawing: true)
+                }
+            } catch {
+                guard let self, self.binding === binding else { return }
+                canvasWorking = false
+                renderAction(animated: true)
+                setCanvasNote("The canvas couldn't dock: \(error.localizedDescription). It stays over the field.")
+            }
+        }
+    }
+
+    /// Undock (the canvas's rail in the panel, or a tap on its chip): the
+    /// panel closes and the canvas flies back from where it stands in the
+    /// panel to stand over the field.
+    func undockCanvas() {
+        guard let binding, let canvas = binding.canvas, canvas.docked, let host = binding.canvasHost, !canvasWorking else { return }
+        // Where it is drawn now: over the panel's page, else the page's own box.
+        let room = canvasRoom
+        let from = room.flatMap { $0.docked ? $0.stage.convert($0.stage.bounds, to: nil) : nil } ?? host.panel(canvas.id)?.shown
+        // It stops following the panel, which is about to close under it.
+        room?.leaveDockHolding()
+        canvasWorking = true
+        setCanvasNote(nil)
+        renderAction(animated: true)
+        noteCanvas("Undock brings the canvas back over the field")
+        Task { [weak self] in
+            do {
+                try await host.hub.closePreview(binding.sessionId)
+            } catch {
+                guard let self, self.binding === binding else { return }
+                canvasWorking = false
+                renderAction(animated: true)
+                // Still docked: it stands over the panel again.
+                room?.standInPanel()
+                return setCanvasNote("The canvas couldn't leave the panel: \(error.localizedDescription). It stays docked.")
+            }
+            guard let self, self.binding === binding, binding.canvas?.id == canvas.id else { return }
+            canvasWorking = false
+            binding.canvas?.docked = false
+            binding.canvas?.folded = false
+            guard let page = binding.canvas?.page else { return openCanvas() }
+            let room = room(for: canvas)
+            room.attach(page, instanceId: binding.sessionId).docked = false
+            syncCanvasChip()
+            (superview ?? self).layoutIfNeeded()
+            if let from { room.flyFromPanel(from) } else { room.grow(from: nil) }
+        }
+    }
+
+    /// The panel closed under a docked canvas (its Close, its drawer swiped
+    /// away) or shows another artifact: the canvas stays in the message as its chip.
+    func canvasLeftPanel() {
+        guard let binding, binding.canvas?.docked == true else { return }
+        binding.canvas?.docked = false
+        binding.canvas?.folded = true
+        canvasRoom?.leaveDock()
+        noteCanvas("the panel let the docked canvas go: it is the message's chip")
+        syncCanvasChip()
+    }
+
+    /// A conversation bound again whose canvas is docked: it stands over the panel's page once more.
+    private func redockCanvas(_ canvas: DraftCanvas, in binding: SessionComposerBinding) {
+        guard let host = binding.canvasHost else { return }
+        guard let page = canvas.page else {
+            return readPage(of: canvas, in: binding) { [weak self] in
+                guard let self, let canvas = binding.canvas, canvas.docked else { return }
+                redockCanvas(canvas, in: binding)
+            }
+        }
+        guard host.panel(canvas.id) != nil else { return canvasLeftPanel() }
+        let room = room(for: canvas)
+        room.attach(page, instanceId: binding.sessionId).docked = true
+        room.standInPanel()
     }
 }
 
@@ -1810,6 +2375,22 @@ final class AttachmentChip: UIView {
     private let progress = ProgressRing()
     private let glyph = GlyphView(.document, size: Size.iconMd, tint: Palette.inkMuted)
     private let meta = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+    private let name = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
+    /// A tap on the chip opens what it stands for (the canvas's chip): its
+    /// name is then a button to VoiceOver, which `openHint` explains.
+    var onOpen: (() -> Void)? {
+        didSet {
+            guard onOpen != nil, oldValue == nil else { return }
+            addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(opened)))
+            name.isAccessibilityElement = true
+            name.accessibilityTraits = .button
+        }
+    }
+
+    var openHint: String? {
+        get { name.accessibilityHint }
+        set { name.accessibilityHint = newValue }
+    }
 
     init(_ attachment: ComposerAttachment, onRemove: @escaping (AttachmentChip) -> Void, onRetry: @escaping (String) -> Void) {
         self.attachment = attachment
@@ -1822,11 +2403,16 @@ final class AttachmentChip: UIView {
         let thumb: UIView
         switch attachment {
         case let .image(_, _, data):
-            let image = UIImageView(image: UIImage(data: data))
-            image.contentMode = .scaleAspectFill
-            image.clipsToBounds = true
-            image.layer.cornerRadius = Radius.radiusXs
-            thumb = image
+            if let picture = UIImage(data: data) {
+                let image = UIImageView(image: picture)
+                image.contentMode = .scaleAspectFill
+                image.clipsToBounds = true
+                image.layer.cornerRadius = Radius.radiusXs
+                thumb = image
+            } else {
+                // A canvas whose picture isn't drawn yet: its kind's glyph (pen-new-square).
+                thumb = GlyphView(Glyph.toolWrite, size: Size.iconMd, tint: Palette.inkMuted)
+            }
         case .text:
             thumb = glyph
         case .file:
@@ -1862,7 +2448,6 @@ final class AttachmentChip: UIView {
             thumb = slot
         }
         thumb.translatesAutoresizingMaskIntoConstraints = false
-        let name = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
         name.text = attachment.name
         name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         meta.tabular = true
@@ -1967,6 +2552,10 @@ final class AttachmentChip: UIView {
         guard isFailed, case let .file(id, _, _, _, _) = attachment else { return }
         Feel.prepare()
         onRetry(id)
+    }
+
+    @objc private func opened() {
+        onOpen?()
     }
 
     private func paint() {

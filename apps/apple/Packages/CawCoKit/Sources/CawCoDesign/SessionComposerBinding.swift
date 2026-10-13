@@ -129,11 +129,38 @@ public final class SessionComposerBinding {
         composer?.editQueued(entry)
     }
 
-    /// The message went: the draft clears.
+    /// The message went: the draft clears, and a canvas it carried is the session's now.
     public func sent() {
         draft = ""
         attachments = []
+        if let id = sendingCanvas, canvas?.id == id {
+            canvas = nil
+            composer?.canvasWentOut(id, of: self)
+        }
         composer?.loadDraft(of: self)
+    }
+
+    // MARK: The canvas
+
+    /// The draft's canvas (canvas-room.svelte.ts `draft.canvas`): standing
+    /// over the field, folded to its chip, or docked in the artifact panel.
+    public internal(set) var canvas: DraftCanvas?
+    /// What the canvas needs of the session's screen: the hub, the pane's
+    /// box, and the artifact panel's.
+    public var canvasHost: CanvasHost?
+    /// The canvas the send under way carries, until the pane says it went.
+    var sendingCanvas: String?
+
+    /// The artifact panel laid out or began to move: a docked canvas follows its page.
+    public func panelMoved() {
+        composer?.canvasRoom?.follow()
+    }
+
+    /// The draft's canvas as the screen kept it (a restored draft): back as its chip.
+    public func restoreCanvas(id: String, name: String) {
+        guard canvas == nil else { return }
+        canvas = DraftCanvas(id: id, name: name, folded: true)
+        composer?.canvasRestored(of: self)
     }
 }
 

@@ -7,6 +7,7 @@ import OSLog
 import PhotosUI
 import UIKit
 import UniformTypeIdentifiers
+import WebKit
 
 /// One conversation's pane (SessionPane.svelte under PaneLeaf.svelte): the
 /// transcript, running to the pane's foot. The pane draws no composer
@@ -77,6 +78,34 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         composerBinding.onReplaceQueued = { [weak self] id, text in self?.replaceQueued(id, with: text) }
         composerBinding.commands = { [weak self] in self?.availableCommands() ?? [] }
         composerBinding.onMenu = { [weak self] in self?.refreshCommands() }
+        // The composer's canvas: it stands in this pane's column and docks into its artifact panel.
+        composerBinding.canvasHost = CanvasHost(hub: hub, column: { [weak self] in self?.canvasColumn() },
+                                                panel: { [weak self] id in self?.canvasPanel(showing: id) })
+    }
+
+    // MARK: The composer's canvas
+
+    /// The pane's box in the window: the column the canvas stands in.
+    private func canvasColumn() -> CGRect? {
+        guard isViewLoaded, view.window != nil else { return nil }
+        return view.convert(view.bounds, to: nil)
+    }
+
+    /// The artifact panel's page (its web view, inside the well) in the
+    /// window while the panel shows the canvas `id`: at rest, and as drawn
+    /// this frame (the drawer's slide, settle or drag).
+    private func canvasPanel(showing id: String) -> CanvasPanel? {
+        guard let preview, preview.parent === self, preview.isViewLoaded, view.window != nil,
+              let frame = hub.previews.byInstance[sessionId], frame.state == .open, frame.artifact.id == id else { return nil }
+        var views: [UIView] = [preview.view]
+        var found: WKWebView?
+        while found == nil, let next = views.popLast() {
+            found = next as? WKWebView
+            views += next.subviews
+        }
+        guard let page = found else { return nil }
+        let drawn = page.layer.presentation() ?? page.layer
+        return CanvasPanel(rest: page.convert(page.bounds, to: nil), shown: drawn.convert(drawn.bounds, to: nil))
     }
 
     // MARK: The `/` menu
@@ -197,6 +226,8 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
 
     var restorationValues: [String: Any] {
         var values: [String: Any] = ["draft": composerBinding.draft]
+        // The draft's canvas comes back as its chip.
+        if let canvas = composerBinding.canvas { values["canvas"] = [canvas.id, canvas.name] }
         let position = transcriptView.restorationPosition
         Self.restoring.notice("place saved for \(self.sessionId.prefix(8), privacy: .public): following \(position.following), anchor \(position.anchor ?? "none", privacy: .public) +\(position.offset, format: .fixed(precision: 1))")
         if let data = try? JSONEncoder().encode(position) { values["transcriptPosition"] = data }
@@ -205,6 +236,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
 
     func restoreValues(_ values: [AnyHashable: Any]) {
         if let draft = values["draft"] as? String { composerBinding.setDraft(draft) }
+        if let canvas = values["canvas"] as? [String], canvas.count == 2 { composerBinding.restoreCanvas(id: canvas[0], name: canvas[1]) }
         if let data = values["transcriptPosition"] as? Data,
            let position = try? JSONDecoder().decode(TranscriptPosition.self, from: data) {
             transcriptView.restorePosition(position)
@@ -403,6 +435,8 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         placeDrawer()
+        // A docked canvas stands over the panel's page: it follows it as it moves.
+        composerBinding.panelMoved()
         // The group's composer stands over this share of the pane: all of it,
         // unless the preview stands beside the transcript.
         var share: CGFloat = 1
@@ -497,6 +531,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         animator.addAnimations { preview.view.transform = CGAffineTransform(translationX: 0, y: away) }
         animator.startAnimation()
         drawerSettle = animator
+        composerBinding.panelMoved()
         preview.close { [weak self, weak preview] in
             guard let self, let preview, preview === self.preview, preview.parent === self else { return }
             drawerLeaving = false
