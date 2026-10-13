@@ -425,7 +425,7 @@ xcrun simctl install ${udid} "${app}"`);
     "page loads in the drawer",
     page?.view === "table" && "tab-board" in page.at,
     page
-      ? `view=${page.view} selected=${page.selected} count=${page.count}; tab-board at ${page.at["tab-board"]?.x},${page.at["tab-board"]?.y}, button at ${page.at.button?.x},${page.at.button?.y}, web view at ${(() => {
+      ? `view=${page.view} selected=${page.selected} count=${page.count}; points ${JSON.stringify(page.at)}, web view at ${(() => {
           const web = headLast()?.web;
           return web ? frameText(web) : "unlogged";
         })()}`
