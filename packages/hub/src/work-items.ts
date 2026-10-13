@@ -2805,14 +2805,23 @@ export const createWorkItems = ({
     db.liveWorkItemsOf(row.id).length > 0;
 
   /**
+   * Whether an item that just ended keeps its report for its group's one
+   * report ({@link settleGroup}): a done item of a group not yet reported.
+   * A failure reports at once. The one rule for every way an item ends done.
+   */
+  const heldForGroup = (ended: WorkItemRow): boolean =>
+    ended.state === "done" && ended.group !== null && !ended.groupReportedAt;
+
+  /**
    * A turn of an item filed before checks existed: unless the session is
-   * busy, it ends the item with the turn's text, and the report carries it.
+   * busy, it ends the item with the turn's text, and the report carries it;
+   * a done item of a group says nothing now ({@link heldForGroup}).
    */
   const uncheckedTurn = (
     item: WorkItemRow,
     turn: { text: string; error?: string },
     busy: boolean
-  ): { body: string; failed: boolean } => {
+  ): { body: string; failed: boolean } | undefined => {
     const failed = turn.error !== undefined;
     const ended = busy
       ? item
@@ -2822,7 +2831,9 @@ export const createWorkItems = ({
             ? { state: "failed", error: turn.error, result: turn.text }
             : { state: "done", result: turn.text }
         );
-    return { body: `${turn.text}${reportLine(ended)}`, failed };
+    return heldForGroup(ended)
+      ? undefined
+      : { body: `${turn.text}${reportLine(ended)}`, failed };
   };
 
   /** A word from the hub about an item, to the item's session. */
@@ -3347,7 +3358,7 @@ export const createWorkItems = ({
     ended: WorkItemRow,
     body: string
   ): string => {
-    if (ended.state === "done" && ended.group && !ended.groupReportedAt) {
+    if (heldForGroup(ended)) {
       return `; your parent hears of it with the rest of group “${ended.group}”`;
     }
     report(row, `${body}${reportLine(ended)}`, ended.state === "failed");
