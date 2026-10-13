@@ -158,7 +158,7 @@ const column = (page: Page) =>
   }, DOCK);
 
 /**
- * The canvas's own runs, held still by the clock's rate of 0 (anim.ts), put
+ * The canvas's own runs, held still by the clock (anim.ts), put
  * at `fraction` of their length: they may start after the clock caught its
  * first runs (Dock's flight waits on the panel), so they are found by id.
  */
@@ -285,31 +285,7 @@ const openCheck = async (
   const pill = (await box(page, PILL)) as Box;
   const x = pill.left + pill.width * 0.3;
   const y = pill.top + pill.height / 2;
-  // The first swipe makes the canvas and loads its page, on a running clock:
-  // Chromium stops drawing frames while a same-origin frame first loads
-  // under the Animation domain's playback rate of 0 (main thread idle, no
-  // frame for 20 min; the same open with the clock running lands at once).
-  await pen([x, y], [x, y - 60], 6);
-  const made = await until(
-    "the canvas over the field",
-    () => box(page, STAGE),
-    (at) => !!at && at.height > 300,
-    20_000
-  ).catch(() => null);
-  await settle(page);
-  const firstRoom = await column(page);
-  const first = await box(page, FRAME);
-  await page.focus(FIELD);
-  await page.keyboard.press("Control+Shift+KeyD");
-  await settle(page, 300);
-  kit.check(
-    "1: a pen's swipe up on the pill makes the canvas and stands it over the field",
-    !!(made && first && firstRoom) &&
-      near(first.bottom, firstRoom.foot) &&
-      near(first.top, firstRoom.foot - firstRoom.max),
-    `frame ${JSON.stringify(first)}; column ${JSON.stringify(firstRoom)}`
-  );
-  // Folded to its chip, the next swipe grows it again: the motion, caught.
+  // The swipe makes the canvas and loads its page, its growth caught.
   const caught = await clock.catchRuns(
     () => pen([x, y], [x, y - 60], 6),
     MOTION,
@@ -352,6 +328,15 @@ const openCheck = async (
   );
   await clock.release();
   await settle(page);
+  const restRoom = await column(page);
+  const rest = await box(page, FRAME);
+  kit.check(
+    "1: a pen's swipe up on the pill makes the canvas and stands it over the field",
+    !!(rest && restRoom) &&
+      near(rest.bottom, restRoom.foot) &&
+      near(rest.top, restRoom.foot - restRoom.max),
+    `frame ${JSON.stringify(rest)}; column ${JSON.stringify(restRoom)}`
+  );
   kit.check(
     "1: a fifth of the way through, the grown shape's outline stands part-way up, its edge drawn whole (no clip on it)",
     !!halfway &&
@@ -724,19 +709,7 @@ const sendCheck = async (on: On, id: string) => {
 const reducedCheck = async (on: On, clock: Clock) => {
   const { kit, page } = on;
   await page.emulateMedia({ reducedMotion: "reduce" });
-  // A new canvas's page loads on a running clock (as in check 1), then folds.
-  await page.focus(FIELD);
-  await page.keyboard.press("Control+Shift+KeyD");
-  await until(
-    "the new canvas over the field",
-    () => box(page, STAGE),
-    (at) => !!at && at.height > 300,
-    20_000
-  );
-  await settle(page, 300);
-  await page.focus(FIELD);
-  await page.keyboard.press("Control+Shift+KeyD");
-  await settle(page, 300);
+  // ⌘⇧D makes a new canvas, its page loading inside the catch.
   await page.focus(FIELD);
   await clock.catchRuns(
     () => page.keyboard.press("Control+Shift+KeyD"),

@@ -3,11 +3,31 @@
  * protocol's Animation domain holds every animation still and seeks it to a
  * fraction of its run, and the engine's computed values are read there.
  *
- * `catchRuns` sets the document timeline's rate to 0 (`Animation.
- * setPlaybackRate`), so what an action starts (a class change's CSS
- * transitions, a component's Web Animations) starts and stands at its first
- * frame; the runs `Animation.animationStarted` reports whose target lies in
- * `within` are the clock. `seek` moves each with `Animation.seekAnimations`
+ * `catchRuns` holds each run the page starts from then on: as
+ * `Animation.animationStarted` reports it, `Animation.setPaused` pauses it by
+ * its id, so what an action starts (a class change's CSS transitions, a
+ * component's Web Animations) stands where it began; the runs whose target
+ * lies in `within` are the clock, put at their first frame. A run in a child
+ * frame's document is that frame's own and is let go.
+ *
+ * The clock never sets the document timeline's rate (`Animation.
+ * setPlaybackRate`): Blink's agent sets it on every same-process frame's
+ * document as it commits (inspector_animation_agent.cc,
+ * `DidClearDocumentOfWindowObject`: `frame->GetDocument()->Timeline().
+ * SetPlaybackRate(ReferenceTimeline().PlaybackRate())`), so at 0 a
+ * same-origin iframe's own intro never finished and its page, waiting on it,
+ * never came up.
+ *
+ * Nor does it ever call `Animation.resolveAnimation`: Blink reads the run's
+ * target there without a check (`To<KeyframeEffect>(animation->effect())->
+ * EffectTarget()`), and a run whose effect the page has since dropped (Svelte
+ * aborts a transition with `animation.cancel(); animation.effect = null`)
+ * crashes the renderer (SIGSEGV, SEGV_MAPERR 0x158, Chromium 153 and 156):
+ * every DevTools command after it waits for ever, so a spec saw a frame wait
+ * that never ended. A run is placed by the target node the protocol reports
+ * as it starts (`source.backendNodeId`), through `DOM.resolveNode`.
+ *
+ * `seek` moves each with `Animation.seekAnimations`
  * ("Seek a set of animations to a particular time within each animation"),
  * held at its own end once past it. The page's own Animation objects move
  * (TabsList reads its sheet's transition progress each frame and follows),
@@ -39,6 +59,8 @@ interface Described {
   id: string;
   name: string;
   source?: {
+    /** The run's target: an element, or a pseudo-element. */
+    backendNodeId?: number;
     delay: number;
     duration: number;
     easing: string;
@@ -48,9 +70,19 @@ interface Described {
   type: Run["type"];
 }
 
+/** Where a held run's target lies: the page's own document, and inside the catch's `within`. */
+interface Place {
+  inside: boolean;
+  own: boolean;
+}
+
 /** Every run on a page's clock from here on, held still once caught. */
 export class Clock {
   private readonly started: Described[] = [];
+  /** Each run held since the catch began, by id: where its target lies. */
+  private readonly held = new Map<string, Promise<Place>>();
+  /** The catch's `within` while the clock holds; null while it runs. */
+  private within: string | null = null;
   private readonly page: Page;
   private readonly cdp: CDPSession;
   runs: Run[] = [];
@@ -60,7 +92,34 @@ export class Clock {
     this.cdp = cdp;
     cdp.on("Animation.animationStarted", (event: { animation: Described }) => {
       this.started.push(event.animation);
+      if (this.within !== null) {
+        this.hold(event.animation, this.within);
+      }
     });
+  }
+
+  /**
+   * Pauses the run at once, the command sent before anything else is asked
+   * of the page; then finds where its target lies, and lets a child frame's
+   * run go.
+   */
+  private hold(run: Described, within: string): void {
+    this.cdp
+      .send("Animation.setPaused", { animations: [run.id], paused: true })
+      .catch(() => undefined);
+    this.held.set(run.id, this.letGoUnlessOwn(run, within));
+  }
+
+  /** Where the held run lies; a child frame's run is let go. */
+  private async letGoUnlessOwn(run: Described, within: string): Promise<Place> {
+    const at = await this.place(run.source?.backendNodeId, within);
+    if (!at.own) {
+      this.held.delete(run.id);
+      await this.cdp
+        .send("Animation.setPaused", { animations: [run.id], paused: false })
+        .catch(() => undefined);
+    }
+    return at;
   }
 
   static async on(page: Page): Promise<Clock> {
@@ -71,18 +130,19 @@ export class Clock {
   }
 
   /**
-   * Holds the timeline still, runs `action`, and keeps as the clock every
-   * run it started on an element inside `within` (a selector), frame by
-   * frame until one has (a component may start its run a frame after it is
-   * placed), then one frame more for any started beside it. Throws when it
-   * started none there within `ms`, the timeline running again.
+   * Holds every run the page starts from here on (until `release`), runs
+   * `action`, and keeps as the clock every run it started on an element
+   * inside `within` (a selector), frame by frame until one has (a component
+   * may start its run a frame after it is placed), then one frame more for
+   * any started beside it; those stand at their first frame. Throws when it
+   * started none there within `ms`, every held run let go.
    */
   async catchRuns(
     action: () => Promise<unknown>,
     within: string,
     ms = 3000
   ): Promise<Run[]> {
-    await this.cdp.send("Animation.setPlaybackRate", { playbackRate: 0 });
+    this.within = within;
     const from = this.started.length;
     let read = from;
     const kept: Run[] = [];
@@ -95,8 +155,8 @@ export class Clock {
         const fresh = this.started.slice(read);
         read += fresh.length;
         for (const one of fresh) {
-          // biome-ignore lint/performance/noAwaitInLoops: each run is resolved in turn
-          if (await this.targets(one.id, within)) {
+          // biome-ignore lint/performance/noAwaitInLoops: each run is placed in turn
+          if ((await this.held.get(one.id))?.inside) {
             const s = one.source;
             kept.push({
               id: one.id,
@@ -122,35 +182,44 @@ export class Clock {
         );
       }
     } catch (error) {
-      await this.cdp.send("Animation.setPlaybackRate", { playbackRate: 1 });
+      await this.release();
       throw error;
     }
-    await this.cdp.send("Animation.setPaused", {
+    await this.cdp.send("Animation.seekAnimations", {
       animations: kept.map((one) => one.id),
-      paused: true,
+      currentTime: 0,
     });
     this.runs = kept;
     return kept;
   }
 
-  /** Whether the run's target (a pseudo-element's host) lies inside `within`. */
-  private async targets(id: string, within: string): Promise<boolean> {
-    const { remoteObject } = (await this.cdp.send(
-      "Animation.resolveAnimation",
-      {
-        animationId: id,
-      }
-    )) as { remoteObject: { objectId?: string } };
-    if (!remoteObject.objectId) {
-      return false;
+  /**
+   * Where a run's target node lies: whether in the page's own document (the
+   * function runs in the node's own realm), and whether it (a
+   * pseudo-element's host) lies inside `within`. A run with no target, or
+   * one whose node is gone, is the page's, outside.
+   */
+  private async place(
+    backendNodeId: number | undefined,
+    within: string
+  ): Promise<Place> {
+    const resolved =
+      backendNodeId === undefined
+        ? null
+        : ((await this.cdp
+            .send("DOM.resolveNode", { backendNodeId })
+            .catch(() => null)) as { object: { objectId?: string } } | null);
+    const objectId = resolved?.object.objectId;
+    if (!objectId) {
+      return { own: true, inside: false };
     }
     const { result } = (await this.cdp.send("Runtime.callFunctionOn", {
-      objectId: remoteObject.objectId,
+      objectId,
       functionDeclaration:
-        "function (sel) { const t = this.effect && this.effect.target; return !!t && !!t.closest(sel); }",
+        "function (sel) { const t = this instanceof Element ? this : this.element; return { own: window === window.top, inside: !!t && !!t.closest(sel) }; }",
       arguments: [{ value: within }],
       returnByValue: true,
-    })) as { result: { value: boolean } };
+    })) as { result: { value: Place } };
     return result.value;
   }
 
@@ -187,16 +256,18 @@ export class Clock {
     await frames(this.page);
   }
 
-  /** Lets the clock run again: the caught runs play out from where they stand. */
+  /** Lets the clock run again: every held run plays out from where it stands. */
   async release(): Promise<void> {
-    for (const run of this.runs) {
+    this.within = null;
+    const ids = [...this.held.keys()];
+    this.held.clear();
+    for (const id of ids) {
       // A run the page has since replaced or cancelled has nothing to play out.
       // biome-ignore lint/performance/noAwaitInLoops: one run at a time
       await this.cdp
-        .send("Animation.setPaused", { animations: [run.id], paused: false })
+        .send("Animation.setPaused", { animations: [id], paused: false })
         .catch(() => undefined);
     }
-    await this.cdp.send("Animation.setPlaybackRate", { playbackRate: 1 });
     this.runs = [];
   }
 }

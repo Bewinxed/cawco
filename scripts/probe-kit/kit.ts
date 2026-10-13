@@ -282,7 +282,15 @@ export class Run {
           // biome-ignore lint/performance/noAwaitInLoops: each script before the next, in order
           await context.addInitScript(script);
         }
-        return context.newPage();
+        const page = await context.newPage();
+        // A crashed renderer answers no DevTools command again, and a CDP
+        // session's send waits on it for ever: closing the page rejects
+        // every send still waiting, so the crash fails the spec, never hangs it.
+        page.on("crash", () => {
+          kit.check("the page's renderer runs to the end", false, page.url());
+          page.close().catch(() => undefined);
+        });
+        return page;
       },
     };
     const started = performance.now();
