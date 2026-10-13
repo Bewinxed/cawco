@@ -232,12 +232,20 @@ export class OpencodeServerOwner {
     ];
   }
 
+  /**
+   * The recorded generations still running, by their OS identity
+   * ({@link #runs}), whether a keeper still holds them or not: a turn runs on
+   * in a server whose keeper was killed under it, and recovery after an
+   * agent restart reattaches the session there. Read through keeper custody,
+   * such a generation was not looked in, and its session was opened afresh
+   * on another server while its turn ran on unseen.
+   */
   async liveGenerations(): Promise<ServerIdentity[]> {
     await this.#load();
     const identities = this.generations;
     const live = await Promise.all(
       identities.map(async (identity) =>
-        (await this.#matches(identity)) ? identity : null
+        (await this.#runs(identity)) ? identity : null
       )
     );
     return live.filter(
@@ -327,6 +335,21 @@ export class OpencodeServerOwner {
       return false;
     }
     return this.#matches(active);
+  }
+
+  /**
+   * Whether the active generation is one no keeper holds any more, the
+   * current keeper answering: its keeper was killed or restarted under it, or
+   * it exited. The next {@link ensure} retires it and starts one on the
+   * current keeper.
+   */
+  async activeKeeperGone(): Promise<boolean> {
+    const active = this.#record?.active;
+    if (!active || this.#transition) {
+      return false;
+    }
+    await this.#sessiond();
+    return !(await this.#matches(active));
   }
 
   async #identify(

@@ -907,14 +907,14 @@ const readCustody = async (
 ): Promise<SessionCustody> => {
   const readStartedAt = Date.now();
   try {
-    return await withKeepers((keepers) => {
+    return await withKeepers(async (keepers) => {
       if (!keepers.some((keeper) => keeper.current)) {
         throw new Error(`no keeper answers at ${machineEndpoint()}`);
       }
       const held = keepers.flatMap(({ client }) =>
         client.procs.filter((proc) => proc.alive)
       );
-      return Promise.resolve({
+      return {
         state: "available" as const,
         readStartedAt,
         stopSequence,
@@ -929,10 +929,13 @@ const readCustody = async (
             })
           ),
         ],
-        opencode: held.some(
-          (proc) => parseProcId(proc.procId).kind === "opencode-server"
-        ),
-      });
+        // A server a keeper holds, or one of this agent's that runs on with
+        // its keeper gone: either holds its sessions' turns.
+        opencode:
+          held.some(
+            (proc) => parseProcId(proc.procId).kind === "opencode-server"
+          ) || (await harness("opencode")?.serversRunning?.()) === true,
+      };
     });
   } catch (error) {
     Effect.runFork(

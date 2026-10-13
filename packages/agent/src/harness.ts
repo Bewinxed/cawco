@@ -338,6 +338,14 @@ export interface Harness {
    */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods
   restartHolds?(): import("@cawco/core/binary-updates").RestartHold[];
+  /**
+   * Whether a server this adapter's sessions run in still runs, held by a
+   * keeper or not (OpenCode's): its sessions, and any turn in them, outlived
+   * the agent. Absent for an adapter whose sessions each run in a process of
+   * their own, which the keeper lists.
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: matches adapter methods
+  serversRunning?(): Promise<boolean>;
   /** Exact addresses retained by this adapter, never reconstructed by guessing. */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches adapter methods
   sessionAddresses?(): import("@cawco/core").SessionAddress[];

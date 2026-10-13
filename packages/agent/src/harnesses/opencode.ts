@@ -5259,6 +5259,7 @@ export class OpencodeHarness implements Harness {
     for (const slot of this.#slots()) {
       slot.owner.maintain();
     }
+    await this.#leaveUnkept();
     if (Date.now() >= this.#straysSweptAt + STRAY_SWEEP_MS) {
       this.#straysSweptAt = Date.now();
       await this.#adoptStrays();
@@ -5335,6 +5336,39 @@ export class OpencodeHarness implements Harness {
     );
     // biome-ignore lint/complexity/noVoid: fire-and-forget; the attempt manages its own errors
     void this.#attemptConfigApply();
+  }
+
+  /**
+   * A server in use whose active generation no keeper holds any more (its
+   * keeper killed or restarted under it) takes no new session: its slot's
+   * client is dropped and the server ensured again, which retires that
+   * generation and starts one on the current keeper
+   * ({@link OpencodeServerOwner.ensure}). Its sessions keep their own clients
+   * and turns; each moves over as it comes to rest, and the generation is
+   * ended once idle. Before, the cached client took every new session to it
+   * until the agent restarted.
+   */
+  async #leaveUnkept(): Promise<void> {
+    for (const slot of this.#slots()) {
+      if (
+        !(
+          slot.client &&
+          // biome-ignore lint/performance/noAwaitInLoops: one slot at a time; each read asks the keepers
+          (await slot.owner.activeKeeperGone().catch(() => false))
+        )
+      ) {
+        continue;
+      }
+      const gone = slot.owner.active;
+      console.info(
+        `[opencode] ${slot.account ? `account ${slot.account}'s` : "the machine's"} server ${gone?.procId}/${gone?.pid}: no keeper holds it; a server on the current keeper takes its new sessions`
+      );
+      slot.client = null;
+      slot.ready = null;
+      await (slot.account === undefined
+        ? this.#ensure()
+        : this.#ensureAccount(slot.account));
+    }
   }
 
   /** When the machine was last read for CawCo servers nothing holds ({@link #adoptStrays}). */
@@ -7333,6 +7367,16 @@ export class OpencodeHarness implements Harness {
       throw new Error("OpenCode ownership changed during its session reading.");
     }
     return readings.some(Boolean);
+  }
+
+  /**
+   * Whether a recorded generation of any of this agent's servers still runs,
+   * by its OS identity: a server whose keeper was killed under it runs on,
+   * and so does every turn in it, so the sessions it holds outlived the
+   * agent (the register's custody, daemon.ts `readCustody`).
+   */
+  async serversRunning(): Promise<boolean> {
+    return (await this.#liveGenerations()).length > 0;
   }
 
   sessionsOn(procId: string): string[] {
