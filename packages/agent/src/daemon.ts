@@ -140,7 +140,7 @@ import {
 } from "./session";
 import { serviceManaged, setSessionLimits } from "./sessiond-client";
 
-/** The hub's session limits, taken for every spawn from here; said once each time they change. */
+/** The hub's session limits, said to every keeper, which starts each child under them from here; said in the log once each time they change. */
 const takeSessionLimits = (
   limits: import("@cawco/core").SessionLimits | undefined
 ): void => {

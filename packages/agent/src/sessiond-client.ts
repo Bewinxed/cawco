@@ -285,10 +285,16 @@ export const ensureSessiond = async (
 
 /**
  * The fleet's session limits as the hub last said them (its register and
- * heartbeat acks): every spawn on every keeper carries them, so a change
- * applies to each process started after it. None until the hub says.
+ * heartbeat acks); undefined until it has. Every keeper holds them (sessiond
+ * `limits`) and starts each child under them: this agent says them on every
+ * connection it opens, before anything else it sends there, and to every
+ * open connection when they change. Until the hub has said them, a keeper
+ * keeps what it was told before (by this agent before a restart).
  */
-let sessionLimits: SessionLimits = {};
+let sessionLimits: SessionLimits | undefined;
+
+/** Every open keeper connection, which a change of the limits is said on. */
+const openClients = new Set<SessiondClient>();
 
 /** The hub said the fleet's session limits; true when they differ from what this agent held. */
 export const setSessionLimits = (
@@ -303,14 +309,17 @@ export const setSessionLimits = (
       : { cpuPercent: limits.cpuPercent }),
   };
   const changed =
+    sessionLimits === undefined ||
     next.memoryPercent !== sessionLimits.memoryPercent ||
     next.cpuPercent !== sessionLimits.cpuPercent;
   sessionLimits = next;
+  if (changed) {
+    for (const client of openClients) {
+      client.sayLimits(next);
+    }
+  }
   return changed;
 };
-
-/** The limits a spawn carries now. */
-export const currentSessionLimits = (): SessionLimits => sessionLimits;
 
 /**
  * Every keeper's word that one of its children reached a limit
@@ -405,6 +414,7 @@ export class SessiondClient {
     socket.on("data", (chunk: string) => this.#onData(chunk));
     socket.on("close", () => {
       this.#closed = true;
+      openClients.delete(this);
       for (const release of this.#holds.values()) {
         release();
       }
@@ -466,6 +476,12 @@ export class SessiondClient {
               )
             );
             return;
+          }
+          // The keeper holds the session limits before the connection carries
+          // anything else: a spawn sent on it after this is read after it.
+          openClients.add(client);
+          if (sessionLimits) {
+            client.sayLimits(sessionLimits);
           }
           resolve(client);
         },
@@ -645,20 +661,36 @@ export class SessiondClient {
 
   // -------------------------------------------------------------------- verbs
 
+  /**
+   * Tells this connection's keeper the session limits every child it starts
+   * from now runs under ({@link sessionLimits}). Sent at once, in order with
+   * everything after it on this socket; a refusal is said in the log, since
+   * nobody waits on it.
+   */
+  sayLimits(limits: SessionLimits): void {
+    if (this.retired) {
+      return;
+    }
+    this.#command({ type: "limits", commandId: crypto.randomUUID(), limits })
+      .then((settled) => {
+        if (settled.stage === "failed") {
+          console.warn(
+            `[sessiond] the keeper refused the hub's session limits, so its next children start without them: ${settled.reason ?? "no reason given"}`
+          );
+        }
+      })
+      .catch(() => {
+        /* the connection ended: the next one says them again */
+      });
+  }
+
   async spawnProc(
     procId: string,
     spec: ProcSpec,
     commandId = crypto.randomUUID()
   ): Promise<void> {
-    const limits = sessionLimits;
     assertApplied(
-      await this.#command({
-        type: "spawn",
-        commandId,
-        procId,
-        spec,
-        ...(Object.keys(limits).length > 0 ? { limits } : {}),
-      }),
+      await this.#command({ type: "spawn", commandId, procId, spec }),
       "spawn"
     );
   }

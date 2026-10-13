@@ -41,16 +41,23 @@ export interface ProcSpec {
  */
 export interface SessiondSpawn {
   commandId: string;
-  /**
-   * The fleet's session limits as the agent holds them at this spawn: the
-   * keeper writes them to the child's own cgroup before it execs (sessiond
-   * cgroup.ts). Absent, or a field absent, is no such limit. Not part of the
-   * opaque spec: the keeper reads these, and nothing else of the spawn's.
-   */
-  limits?: SessionLimits;
   procId: string;
   spec: ProcSpec;
   type: "spawn";
+}
+
+/**
+ * agent → sessiond: the fleet's session limits as the hub said them last.
+ * The keeper holds them and writes them to the cgroup of every child it
+ * starts from then on, whoever asks for the start (sessiond cgroup.ts), until
+ * the next `limits` replaces them. A field absent is no such limit; a keeper
+ * no agent has told yet holds none. The agent says them on every connection
+ * it opens, before anything else it sends there, and again on every change.
+ */
+export interface SessiondSetLimits {
+  commandId: string;
+  limits: SessionLimits;
+  type: "limits";
 }
 
 /** agent → sessiond: bytes on the child's stdin. Opaque — sessiond never parses them. */
@@ -250,6 +257,7 @@ export const processLimitSentence = (
 
 export type SessiondClientMessage =
   | SessiondSpawn
+  | SessiondSetLimits
   | SessiondWrite
   | SessiondSignal
   | SessiondStdinEnd

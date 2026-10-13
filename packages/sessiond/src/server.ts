@@ -209,6 +209,12 @@ export class SessiondServer {
   readonly #groups = new Map<string, Watched>();
   /** Names each child's group apart from every other this keeper made. */
   #groupSerial = 0;
+  /**
+   * The fleet's session limits as an agent last said them (`limits`): every
+   * child started from then on gets them in its cgroup, whoever asked for the
+   * start. None until an agent says.
+   */
+  #limits: SessionLimits = {};
   /** The clock the children's groups are read on ({@link LIMIT_WATCH_MS}). */
   #watching: ReturnType<typeof setInterval> | undefined;
   /** A reading of the groups is still out: the clock does not start a second. */
@@ -508,9 +514,11 @@ export class SessiondServer {
         settlement = this.#queueSpawn(
           commandId,
           String(msg.procId ?? ""),
-          msg.spec as ProcSpec,
-          msg.limits as SessionLimits | undefined
+          msg.spec as ProcSpec
         );
+        break;
+      case "limits":
+        settlement = this.#setLimits(commandId, msg.limits);
         break;
       case "write":
         settlement = this.#write(
@@ -573,6 +581,42 @@ export class SessiondServer {
   // -------------------------------------------------------------------- verbs
 
   /**
+   * THE KEEPER HOLDS THE SESSION LIMITS. What an agent says replaces what was
+   * held, at once (before any spawn read after it on the socket takes its
+   * turn), and every child started from then on runs under it, whoever asks
+   * for the start, until the next `limits`. A field absent is no such limit;
+   * a value outside 1 to 100 is refused, and what was held stays.
+   */
+  #setLimits(commandId: string, given: unknown): SessiondAck {
+    const raw = (given ?? {}) as Record<string, unknown>;
+    const next: SessionLimits = {};
+    for (const key of ["memoryPercent", "cpuPercent"] as const) {
+      const value = raw[key];
+      if (value === undefined || value === null) {
+        continue;
+      }
+      if (typeof value !== "number" || !(value >= 1 && value <= 100)) {
+        return ack(
+          commandId,
+          "failed",
+          `limits: ${key} is ${JSON.stringify(value)}, not a percent from 1 to 100`
+        );
+      }
+      next[key] = value;
+    }
+    if (
+      next.memoryPercent !== this.#limits.memoryPercent ||
+      next.cpuPercent !== this.#limits.cpuPercent
+    ) {
+      console.info(
+        `[sessiond] session limits: memory ${next.memoryPercent === undefined ? "unlimited" : `${next.memoryPercent}% of this machine's RAM`}, CPU ${next.cpuPercent === undefined ? "unlimited" : `${next.cpuPercent}% of its cores`}, for each child started from now`
+      );
+    }
+    this.#limits = next;
+    return ack(commandId, "applied");
+  }
+
+  /**
    * Spawns run one at a time, each after the one before has started or been
    * refused: a burst of starts (an update's held starts all released at once)
    * is weighed against the room left after the child before it, never all
@@ -581,11 +625,10 @@ export class SessiondServer {
   #queueSpawn(
     commandId: string,
     procId: string,
-    spec: ProcSpec | undefined,
-    limits: SessionLimits | undefined
+    spec: ProcSpec | undefined
   ): Promise<SessiondAck> {
     const next = this.#spawning.then(() =>
-      this.#spawn(commandId, procId, spec, limits)
+      this.#spawn(commandId, procId, spec)
     );
     this.#spawning = next.catch(() => undefined);
     return next;
@@ -603,8 +646,7 @@ export class SessiondServer {
   async #spawn(
     commandId: string,
     procId: string,
-    spec: ProcSpec | undefined,
-    limits: SessionLimits | undefined
+    spec: ProcSpec | undefined
   ): Promise<SessiondAck> {
     // Checked when the spawn's turn comes, not when it arrived: one queued
     // behind another as the drain began starts nothing either.
@@ -641,7 +683,8 @@ export class SessiondServer {
       });
     }
 
-    // Its own cgroup, its limits written before it is in it. One that cannot
+    // Its own cgroup, its limits written before it is in it: the session
+    // limits this keeper holds when the spawn's turn comes. One that cannot
     // be made starts nothing: a child is never started without its ceiling.
     let group: ChildGroup | undefined;
     if (this.#children) {
@@ -651,7 +694,7 @@ export class SessiondServer {
           this.#children,
           procId,
           `${this.epoch.slice(0, 8)}-${this.#groupSerial}`,
-          limits
+          this.#limits
         );
       } catch (error) {
         return ack(
