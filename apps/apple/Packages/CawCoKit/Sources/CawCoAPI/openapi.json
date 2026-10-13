@@ -3321,10 +3321,12 @@
                     "type": "string",
                     "enum": [
                       "code",
-                      "social",
-                      "outreach",
+                      "launch",
                       "seo",
-                      "design"
+                      "brand",
+                      "design",
+                      "social",
+                      "outreach"
                     ]
                   }
                 },

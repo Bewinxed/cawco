@@ -235,6 +235,8 @@ enum Frame {
     case preview(Components.Schemas.PreviewFrame)
     /// Every project move the hub is carrying, whole, on each change.
     case moves([Components.Schemas.MoveJob])
+    /// A project's tasks changed, by anyone: whatever shows them reads them again.
+    case tasksChanged(projectId: String)
     case ignored
 
     /// `answering`: the envelope's own `requestId`, which an error frame takes
@@ -271,6 +273,8 @@ enum Frame {
             self = .preview(frame)
         case .moves(let frame):
             self = .moves(frame.moves)
+        case .tasks_changed(let frame):
+            self = .tasksChanged(projectId: frame.projectId)
         default:
             self = .ignored
         }

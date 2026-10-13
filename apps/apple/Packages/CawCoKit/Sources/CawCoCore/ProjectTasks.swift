@@ -13,6 +13,9 @@ public typealias TaskSummary = Components.Schemas.TaskSummary
 public typealias TaskTodo = Components.Schemas.TaskTodo
 public typealias TaskAttempt = Components.Schemas.TaskAttempt
 public typealias StagesView = Components.Schemas.StagesView
+public typealias TaskList = Components.Schemas.TaskList
+public typealias TaskStage = Components.Schemas.Stage
+public typealias StagesTemplateView = Components.Schemas.StagesTemplateView
 
 /// The hub's refusal, in its own words (`said` in project-tasks.ts).
 public struct TaskRefusal: Error, LocalizedError {
@@ -61,9 +64,39 @@ public struct ProjectTasks: Sendable {
         throw await TaskRefusal.reading(output)
     }
 
-    public func list() async throws -> [TaskSummary] {
+    /// The project's tasks with what in their files could not be read.
+    public func list() async throws -> TaskList {
         let output = try await client.getApiProjectsByIdTasks(path: .init(id: projectId))
-        if case let .ok(ok) = output { return try ok.body.json.tasks }
+        if case let .ok(ok) = output { return try ok.body.json }
+        throw await TaskRefusal.reading(output)
+    }
+
+    /// A new task, titled, in `stage` (NewTaskForm: the board's column, or the stage picked).
+    public func create(title: String, stage: String) async throws -> TaskView {
+        let output = try await client.postApiProjectsByIdTasks(path: .init(id: projectId), body: .json(.init(title: title, stage: stage)))
+        if case let .ok(ok) = output { return try ok.body.json }
+        throw await TaskRefusal.reading(output)
+    }
+
+    /// The hub's sets of stages to pick from (StagesControl).
+    public func templates() async throws -> [StagesTemplateView] {
+        let output = try await client.getApiStageTemplates()
+        if case let .ok(ok) = output { return try ok.body.json }
+        throw await TaskRefusal.reading(output)
+    }
+
+    /// Writes the template's stages.md into the project folder; answers with
+    /// the project's stages now, and the tasks whose stage the set lacks.
+    public func applyTemplate(_ template: Components.Schemas.StagesTemplate) async throws -> (stages: StagesView, stranded: [String]) {
+        // A template a newer hub lists that this app's contract cannot send.
+        guard let named = Operations.PostApiProjectsByIdStagesTemplate.Input.Body.JsonPayload.TemplatePayload(rawValue: template.rawValue) else {
+            throw TaskRefusal(message: "This app can't apply the \(template.rawValue) stages. Update the app from TestFlight.")
+        }
+        let output = try await client.postApiProjectsByIdStagesTemplate(path: .init(id: projectId), body: .json(.init(template: named)))
+        if case let .ok(ok) = output {
+            let answer = try ok.body.json
+            return (answer.value1, answer.value2.stranded)
+        }
         throw await TaskRefusal.reading(output)
     }
 
@@ -137,6 +170,24 @@ public enum TaskWords {
         case .cancelled: "Stopped"
         case .unrecognized: "Unknown"
         }
+    }
+
+    /// A kind as its quiet label says it (`KIND_LABEL`; `you` is Needs you).
+    public static func kind(_ kind: Components.Schemas.StageKind) -> String {
+        switch kind {
+        case .todo: "to do"
+        case .active: "active"
+        case .waiting: "waiting"
+        case .you: "needs you"
+        case .done: "done"
+        case .dropped: "dropped"
+        case .unrecognized: "not in stages.md"
+        }
+    }
+
+    /// Where a new task starts (`firstTodoStage`): the first stage of kind todo, else the first stage.
+    public static func firstTodoStage(_ stages: [TaskStage]) -> TaskStage? {
+        stages.first { $0.kind == .todo } ?? stages.first
     }
 
     /// The stages you may move a task to from `from`, as the hub works them

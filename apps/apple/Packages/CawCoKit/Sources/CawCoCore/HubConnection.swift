@@ -144,6 +144,10 @@ public final class HubConnection {
     public private(set) var workflows: WorkflowsStore!
     /// The fleet's setup as Configure reads it.
     public private(set) var configuration: FleetConfig!
+    /// A count per project that moves each time the hub says its tasks
+    /// changed (`tasks.changed`), whoever changed them: what shows a
+    /// project's tasks reads them again when it moves.
+    public private(set) var tasksChanged: [String: Int] = [:]
 
     @ObservationIgnored private var run: Task<Void, Never>?
     @ObservationIgnored private var outageTimer: Task<Void, Never>?
@@ -1113,6 +1117,8 @@ public final class HubConnection {
             previews.adopt(frame)
         case let .moves(jobs):
             fleet.moves = jobs
+        case let .tasksChanged(projectId):
+            tasksChanged[projectId, default: 0] += 1
         case .ignored:
             break
         }

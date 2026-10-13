@@ -240,7 +240,7 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
             async let list = try? api.list()
             task = try await read
             self.stages = await stages
-            summaries = await list ?? []
+            summaries = await list?.tasks ?? []
         } catch {
             readProblem = error.localizedDescription
         }

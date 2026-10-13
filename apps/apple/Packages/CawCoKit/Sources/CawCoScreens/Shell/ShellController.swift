@@ -94,6 +94,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     var context: ShellContext {
         ShellContext(hub: hub, home: home, openSession: { [weak self] id in self?.openSession(id) }, go: { [weak self] place in self?.go(place) },
+                     openTask: { [weak self] projectId, taskId in self?.openTask(projectId: projectId, taskId: taskId, attempt: nil) },
                      forgetProject: { [weak self] project in self?.forgetProject(project) },
                      startSession: { [weak self] machineId, cwd, projectId in self?.startSession(machineId: machineId, cwd: cwd, projectId: projectId) },
                      sessionMenus: sessionMenus)

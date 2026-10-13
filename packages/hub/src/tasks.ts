@@ -2994,13 +2994,8 @@ const KIND = t.Union([
   t.Literal("done"),
   t.Literal("dropped"),
 ]);
-const TEMPLATE = t.Union([
-  t.Literal("code"),
-  t.Literal("social"),
-  t.Literal("outreach"),
-  t.Literal("seo"),
-  t.Literal("design"),
-]);
+/** Every template `/api/stage-templates` lists is one a project may take. */
+const TEMPLATE = t.Union(TEMPLATES.map((name) => t.Literal(name)));
 /** Where an attempt's work lands (`@cawco/core`'s `LandsMode`). */
 export const LANDS = t.Union([
   t.Literal("main"),
