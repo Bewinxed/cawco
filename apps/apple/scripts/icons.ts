@@ -142,6 +142,11 @@ const SOLAR_ICONS = [
   // The paywall's free-week rows (Today, Day 6; Day 7 is the lock above).
   "lock-keyhole-minimalistic-unlocked-bold-duotone",
   "bell-bold-duotone",
+  // Configure (config/sections.ts, updates/UpdateCell.svelte, updates/ReleaseNotes.svelte).
+  "smartphone-bold-duotone", // IconPhone
+  "clock-circle-bold-duotone", // IconClock
+  "graph-up-bold-duotone", // IconGraphUp
+  "bug-bold-duotone", // IconBug
 ];
 
 /**

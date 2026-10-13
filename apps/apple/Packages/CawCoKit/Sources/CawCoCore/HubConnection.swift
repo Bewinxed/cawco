@@ -140,6 +140,8 @@ public final class HubConnection {
     public private(set) var workflowRuns: WorkflowRunsStore!
     /// Every workflow, as the Workflows page lists and launches them.
     public private(set) var workflows: WorkflowsStore!
+    /// The fleet's setup as Configure reads it.
+    public private(set) var configuration: FleetConfig!
 
     @ObservationIgnored private var run: Task<Void, Never>?
     @ObservationIgnored private var outageTimer: Task<Void, Never>?
@@ -173,6 +175,7 @@ public final class HubConnection {
         }
         sessions = SessionsStore(hub: self)
         tasks = TasksStore(hub: self)
+        configuration = FleetConfig(hub: self)
         workItems = WorkItemsStore(hub: self)
         workflowRuns = WorkflowRunsStore(hub: self)
         workflows = WorkflowsStore(hub: self)
@@ -621,21 +624,63 @@ public final class HubConnection {
         }
     }
 
-    /// Reads the fleet's update policy; a failed read keeps what was there.
+    /// Reads the fleet's update policy (updates.svelte.ts `loadPolicy`); a
+    /// failed read keeps what was there and says why.
     func readUpdatePolicy() {
         guard let client else { return }
         Task { [weak self] in
-            guard let policy = try? await client.getApiBinaryUpdatesSettings().ok.body.json else { return }
-            self?.fleet.updatePolicy = Notice.Policy(autoUpdate: policy.autoUpdate)
+            do {
+                self?.fleet.updatePolicy = try await client.getApiBinaryUpdatesSettings().ok.body.json
+                self?.fleet.updatePolicyProblem = nil
+            } catch {
+                self?.fleet.updatePolicyProblem = "Could not read the update settings — \(error.localizedDescription)."
+            }
         }
+    }
+
+    /// The fleet's channel and auto-update, as one choice for every machine
+    /// (updates.svelte.ts `savePolicy`); the channels are read again after.
+    /// False when the hub did not take it, and nothing changed.
+    public func saveUpdatePolicy(channel: Components.Schemas.BinaryUpdatePolicyChannel, autoUpdate: Bool) async -> Bool {
+        guard let client else { return false }
+        let wire: Operations.PutApiBinaryUpdatesSettings.Input.Body.JsonPayload.ChannelPayload = channel == .nightly ? .nightly : .stable
+        guard let saved = try? await client.putApiBinaryUpdatesSettings(body: .json(.init(channel: wire, autoUpdate: autoUpdate))).ok.body.json else {
+            return false
+        }
+        fleet.updatePolicy = saved
+        await readUpdateChannels()
+        return true
+    }
+
+    /// Each channel's newest release as the hub last heard it (updates.svelte.ts `loadChannels`).
+    public func readUpdateChannels() async {
+        guard let client, let channels = try? await client.getApiBinaryUpdatesChannels().ok.body.json else { return }
+        fleet.updateChannels = channels
+    }
+
+    /// Asks the release host again (updates.svelte.ts `refreshChannels`). False when it could not be reached.
+    public func checkUpdateChannels() async -> Bool {
+        guard let client, let channels = try? await client.postApiBinaryUpdatesChannels().ok.body.json else { return false }
+        fleet.updateChannels = channels
+        return true
+    }
+
+    /// Takes back a queued install (updates.svelte.ts `cancel`).
+    public func cancelUpdate(machineId: String) {
+        fleet.commanded.remove(machineId)
+        guard let client else { return }
+        Task { _ = try? await client.postApiBinaryUpdatesMachinesByMachineIdCancel(path: .init(machineId: machineId)) }
     }
 
     /// Install now on one machine (updates.svelte.ts `installNow`): one
     /// command, acted on once, for the build it offers. A machine that is not
-    /// connected or could not start it is no longer counted as asked.
-    public func installUpdate(machineId: String) {
+    /// connected or could not start it is no longer counted as asked, and
+    /// `refused` is told why in the web's words.
+    public func installUpdate(machineId: String, refused: (@MainActor (String) -> Void)? = nil) {
         guard let client else { return }
-        let version = fleet.machines.first { $0.machineId == machineId }?.binaryUpdate?.availableVersion
+        let machine = fleet.machines.first { $0.machineId == machineId }
+        let version = machine?.binaryUpdate?.availableVersion
+        let name = machine?.name ?? machineId
         fleet.commanded.insert(machineId)
         Task { [weak self] in
             let answer = try? await client.postApiAgentsByMachineIdUpdate(
@@ -643,9 +688,15 @@ public final class HubConnection {
                 body: .json(.init(commandId: UUID().uuidString.lowercased(), version: version))
             )
             switch answer {
-            case .notFound, .internalServerError:
-                self?.log.error("install on \(machineId, privacy: .public) refused: \(String(describing: answer), privacy: .public)")
+            case .notFound:
+                self?.log.error("install on \(machineId, privacy: .public) refused: not connected")
                 self?.fleet.commanded.remove(machineId)
+                refused?("\(name) is not connected, so nothing was installed. Try again when it is back.")
+            case let .internalServerError(failed):
+                let said = await Wire.words(try? failed.body.plainText)
+                self?.log.error("install on \(machineId, privacy: .public) refused: \(said ?? "", privacy: .public)")
+                self?.fleet.commanded.remove(machineId)
+                refused?("\(name) could not start the update. \(said ?? "")")
             default:
                 break
             }

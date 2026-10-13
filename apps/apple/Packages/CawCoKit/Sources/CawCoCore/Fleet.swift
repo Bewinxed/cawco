@@ -258,8 +258,13 @@ public final class FleetStore {
     public internal(set) var noticesSeen: Set<String> = []
     /// The hub's record has arrived: until then no notice can know it was seen.
     public internal(set) var noticesKnown = false
-    /// The fleet's update policy (`/api/binary-updates/settings`); nil until read, and no update notice is said until it is.
-    public internal(set) var updatePolicy: Notice.Policy?
+    /// The fleet's update policy (`/api/binary-updates/settings`): its channel
+    /// and auto-update. Nil until read, and no update notice is said until it is.
+    public internal(set) var updatePolicy: Components.Schemas.BinaryUpdatePolicy?
+    /// Why the policy could not be read, while there is none (updates.svelte.ts `problem`).
+    public internal(set) var updatePolicyProblem: String?
+    /// What the hub knows of each channel's newest release (`/api/binary-updates/channels`); nil until read.
+    public internal(set) var updateChannels: Components.Schemas.BinaryUpdateChannels?
     /// The machines whose install this device asked for (updates.svelte.ts `commanded`).
     public internal(set) var commanded: Set<String> = []
 

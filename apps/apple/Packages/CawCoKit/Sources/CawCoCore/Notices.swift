@@ -118,7 +118,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
 
     /// Every row under Notices, in the panel's order: the update, the moved logins, the rebalances.
     static func unseen(machines: [MachineRow], accounts: Components.Schemas.GetApiAccounts200?, providers: [Components.Schemas.ProviderChoice],
-                       policy: Policy?, commanded: Set<String>, seen: Set<String>) -> [Notice] {
+                       policy: Components.Schemas.BinaryUpdatePolicy?, commanded: Set<String>, seen: Set<String>) -> [Notice] {
         var out: [Notice] = []
         let fleet = machines.compactMap(UpdateMachine.init)
         if let policy, let update = noticeFor(fleet, policy: policy, commanded: commanded, seen: seen) {
@@ -136,12 +136,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
 
     // MARK: The update notice (updates/model.ts)
 
-    /// The fleet's update policy (`/api/binary-updates/settings`).
-    public struct Policy: Equatable, Sendable {
-        public let autoUpdate: Bool
-    }
-
-    private nonisolated struct Hold: Decodable {
+    nonisolated struct Hold: Decodable {
         let reason: String
         let ids: [String]
     }
@@ -204,12 +199,12 @@ public struct Notice: Identifiable, Equatable, Sendable {
         return bare
     }
 
-    private static func plural(_ n: Int, _ noun: String) -> String { "\(n) \(noun)\(n == 1 ? "" : "s")" }
+    static func plural(_ n: Int, _ noun: String) -> String { "\(n) \(noun)\(n == 1 ? "" : "s")" }
 
     private static func counted(_ n: Int, _ one: String, _ many: String) -> String { "\(n) \(n == 1 ? one : many)" }
 
     /// core `holdPhrases`: `2 tool calls`, `1 image generation`.
-    private static func holdWords(_ hold: Hold) -> String {
+    static func holdWords(_ hold: Hold) -> String {
         let n = hold.ids.count
         switch hold.reason {
         case "custody": return "the takeover of this machine's sessions"
@@ -260,7 +255,7 @@ public struct Notice: Identifiable, Equatable, Sendable {
     /// The one update notice, or none: first match wins (updates/model.ts
     /// `noticeFor`). This app is never a tab older than the dashboard, so the
     /// reload notices do not apply; installs it asked for are `commanded`.
-    private static func noticeFor(_ all: [UpdateMachine], policy: Policy, commanded: Set<String>, seen: Set<String>) -> Notice? {
+    private static func noticeFor(_ all: [UpdateMachine], policy: Components.Schemas.BinaryUpdatePolicy, commanded: Set<String>, seen: Set<String>) -> Notice? {
         // The machines, with every landing someone has acknowledged taken off.
         let machines = all.map { machine -> UpdateMachine in
             var unseen = machine

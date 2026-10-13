@@ -1685,7 +1685,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// conversations showing (`onSession`), one in front and another to leave behind.
     func can(_ command: RootViewController.ShellCommand) -> Bool {
         switch command {
-        case .jump, .assistant, .startSession:
+        case .jump, .assistant, .startSession, .configure:
             return true
         case .splitRight, .splitDown:
             let showing = compact ? compactNav.topViewController === workspaceController : detail.shown === workspaceController
@@ -1705,6 +1705,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         case .jump: openJump(.key)
         case .assistant: toggleAssistant()
         case .startSession: startSession(machineId: nil, cwd: nil, projectId: nil)
+        case .configure: go(.configure)
         // The conversation in front goes into the new half (`mod+\` right,
         // `mod+shift+\` below), as VS Code binds it.
         case .splitRight, .splitDown:

@@ -130,11 +130,16 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             UIMenu(options: .displayInline, children: [newWindow]),
         ])
         builder.insertSibling(fleet, afterMenu: .view)
+        // The app menu's settings item, where a Mac app keeps it, on its standard ⌘, (HIG Settings).
+        let configure = UIKeyCommand(title: "Configure…", action: #selector(openConfigure), input: ",", modifierFlags: .command)
+        configure.discoverabilityTitle = "Configure"
+        configure.wantsPriorityOverSystemBehavior = true
+        builder.insertSibling(UIMenu(options: .displayInline, children: [configure]), afterMenu: .about)
     }
 
     private static let shellCommands: [Selector: RootViewController.ShellCommand] = [
         #selector(startNewSession): .startSession, #selector(jumpToSession): .jump, #selector(toggleAssistant): .assistant,
-        #selector(splitRight): .splitRight, #selector(splitDown): .splitDown,
+        #selector(splitRight): .splitRight, #selector(splitDown): .splitDown, #selector(openConfigure): .configure,
     ]
 
     override func validate(_ command: UICommand) {
@@ -183,6 +188,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     @objc private func toggleAssistant() { board?.run(.assistant) }
     @objc private func splitRight() { board?.run(.splitRight) }
     @objc private func splitDown() { board?.run(.splitDown) }
+    @objc private func openConfigure() { board?.run(.configure) }
 }
 
 /// Tap or Open opens what the push names; Approve, a question's options and

@@ -333,6 +333,15 @@ public final class PushRegistry {
         relay = .done
     }
 
+    /// This device's pairing id, the id its row carries in the hub's device
+    /// list (`/api/push`); nil while it has none.
+    public var pairingId: String? { (try? Pairing.stored())?.id }
+
+    /// Configure › Phone set this device's Quiet at the hub: the hub's answer is what shows here too.
+    public func heard(quiet next: Bool) {
+        quiet = next
+    }
+
     /// Quiet: registered, and sent nothing. The hub's answer is what shows.
     public func setQuiet(_ next: Bool) {
         guard let hub = HubConnection.keptAddress, relay == .done, !quietSending, let pairing = try? Pairing.kept() else { return }

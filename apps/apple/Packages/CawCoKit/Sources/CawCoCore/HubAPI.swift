@@ -19,6 +19,27 @@ public struct HubAPI: Sendable {
     public var delegates: Delegates { Delegates(client: client) }
     public var tools: Tools { Tools(client: client) }
     public var moves: Moves { Moves(client: client) }
+    public var push: Push { Push(client: client) }
+    public var updates: Updates { Updates(client: client) }
+
+    /// Configure › Phone (routes/config/phone): the devices the hub pushes to, and a test to every one.
+    public struct Push: Sendable {
+        let client: Client
+        public func devices(_ input: Operations.GetApiPush.Input = .init()) async throws -> Operations.GetApiPush.Output { try await client.getApiPush(input) }
+        public func test(_ input: Operations.PostApiPushTest.Input) async throws -> Operations.PostApiPushTest.Output { try await client.postApiPushTest(input) }
+        public func setQuiet(_ input: Operations.PutApiPushDevicesById.Input) async throws -> Operations.PutApiPushDevicesById.Output { try await client.putApiPushDevicesById(input) }
+        public func remove(_ input: Operations.DeleteApiPushDevicesById.Input) async throws -> Operations.DeleteApiPushDevicesById.Output { try await client.deleteApiPushDevicesById(input) }
+    }
+
+    /// Configure › Updates (updates/updates.svelte.ts): the fleet's channel and auto-update, each channel's release, and a queued install's cancel.
+    public struct Updates: Sendable {
+        let client: Client
+        public func settings(_ input: Operations.GetApiBinaryUpdatesSettings.Input = .init()) async throws -> Operations.GetApiBinaryUpdatesSettings.Output { try await client.getApiBinaryUpdatesSettings(input) }
+        public func save(_ input: Operations.PutApiBinaryUpdatesSettings.Input) async throws -> Operations.PutApiBinaryUpdatesSettings.Output { try await client.putApiBinaryUpdatesSettings(input) }
+        public func channels(_ input: Operations.GetApiBinaryUpdatesChannels.Input = .init()) async throws -> Operations.GetApiBinaryUpdatesChannels.Output { try await client.getApiBinaryUpdatesChannels(input) }
+        public func checkChannels(_ input: Operations.PostApiBinaryUpdatesChannels.Input = .init()) async throws -> Operations.PostApiBinaryUpdatesChannels.Output { try await client.postApiBinaryUpdatesChannels(input) }
+        public func cancel(_ input: Operations.PostApiBinaryUpdatesMachinesByMachineIdCancel.Input) async throws -> Operations.PostApiBinaryUpdatesMachinesByMachineIdCancel.Output { try await client.postApiBinaryUpdatesMachinesByMachineIdCancel(input) }
+    }
 
     /// Moving a project to a machine that has no checkout of it (core move.ts).
     public struct Moves: Sendable {
@@ -111,6 +132,7 @@ public struct HubAPI: Sendable {
         public func putSkill(_ input: Operations.PutApiFleetSkillsByName.Input) async throws -> Operations.PutApiFleetSkillsByName.Output { try await client.putApiFleetSkillsByName(input) }
         public func deleteSkill(_ input: Operations.DeleteApiFleetSkillsByName.Input) async throws -> Operations.DeleteApiFleetSkillsByName.Output { try await client.deleteApiFleetSkillsByName(input) }
         public func refreshSkill(_ input: Operations.PostApiFleetSkillsByNameRefresh.Input) async throws -> Operations.PostApiFleetSkillsByNameRefresh.Output { try await client.postApiFleetSkillsByNameRefresh(input) }
+        public func pushSkill(_ input: Operations.PostApiFleetSkillsByNamePush.Input) async throws -> Operations.PostApiFleetSkillsByNamePush.Output { try await client.postApiFleetSkillsByNamePush(input) }
         public func putAgent(_ input: Operations.PutApiFleetAgentsByName.Input) async throws -> Operations.PutApiFleetAgentsByName.Output { try await client.putApiFleetAgentsByName(input) }
         public func deleteAgent(_ input: Operations.DeleteApiFleetAgentsByName.Input) async throws -> Operations.DeleteApiFleetAgentsByName.Output { try await client.deleteApiFleetAgentsByName(input) }
         public func pushAgents(_ input: Operations.PostApiFleetAgentsPush.Input) async throws -> Operations.PostApiFleetAgentsPush.Output { try await client.postApiFleetAgentsPush(input) }

@@ -131,6 +131,11 @@ public enum Glyph: String, CaseIterable, Sendable {
     // The paywall's free-week rows: Today, Day 6 (Day 7 is `lock`).
     case unlock = "lock-keyhole-minimalistic-unlocked-bold-duotone"
     case bell = "bell-bold-duotone"
+    // Configure (config/sections.ts, updates/UpdateCell.svelte, updates/ReleaseNotes.svelte).
+    case phone = "smartphone-bold-duotone"
+    case clock = "clock-circle-bold-duotone"
+    case graphUp = "graph-up-bold-duotone"
+    case bug = "bug-bold-duotone"
 
     /// The web's names for glyphs the transcript already carries under its own.
     public static let send = Glyph.toolMessage // plain-2-bold-duotone (IconSend)

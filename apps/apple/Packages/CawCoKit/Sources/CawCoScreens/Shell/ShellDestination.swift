@@ -1,5 +1,4 @@
 import CawCoCore
-import CawCoDesign
 import UIKit
 
 /// The sidebar's places, one per web route the shell opens
@@ -102,9 +101,7 @@ public struct ShellContext {
     let sessionMenus: SessionMenuContext
 }
 
-/// The routing hook each track fills: the screen a destination opens.
-/// Workflows (Track 4), Configure (Track 3) and Usage (Track 4) replace
-/// their placeholder case here when their screen lands.
+/// The screen each destination opens.
 @MainActor
 enum ShellScreens {
     static func controller(for destination: ShellDestination, context: ShellContext) -> UIViewController {
@@ -118,36 +115,9 @@ enum ShellScreens {
         case let .workflow(id, program):
             WorkflowEditorController(context: context, workflowId: id, program: program)
         case .configure:
-            PlaceholderViewController(destination: destination)
+            ConfigureController(context: context)
         case .usage:
             UsageViewController(context: context)
         }
-    }
-}
-
-/// A place whose screen has not landed yet: its name on the page's ground.
-final class PlaceholderViewController: UIViewController {
-    private let destination: ShellDestination
-
-    init(destination: ShellDestination) {
-        self.destination = destination
-        super.init(nibName: nil, bundle: nil)
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("PlaceholderViewController is built in code")
-    }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        view.backgroundColor = Palette.surfaceRecess
-        let label = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted)
-        label.text = destination.crumb
-        view.addSubview(label)
-        NSLayoutConstraint.activate([
-            label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            label.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-        ])
     }
 }
