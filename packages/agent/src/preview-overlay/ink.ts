@@ -60,6 +60,19 @@ const PIN_R = 10;
 const PINNED_MAX = 20;
 /** A pen's pressure when it reports none (a pen that does not measure it). */
 const NO_PRESSURE = 0.5;
+/** The pen's eraser in Pointer Events: its `button`, and its bit in `buttons`. */
+const ERASER_BUTTON = 5;
+const ERASER_BUTTONS = 32;
+/** How far round its point the eraser reaches, px: the point and four around it. Our call. */
+const REACH = [
+  [0, 0],
+  [4, 0],
+  [-4, 0],
+  [0, 4],
+  [0, -4],
+] as const;
+/** A stroke the eraser has crossed, until it lifts. Our call. */
+const ERASING_OPACITY = "0.3";
 
 /** A point in the page, px, with its pressure. */
 type Point = [x: number, y: number, pressure: number];
@@ -212,6 +225,66 @@ export function startInk(deps: InkDeps): Ink {
     layer.style.touchAction = "";
   };
 
+  /** The pen's eraser (Pointer Events: button 5, buttons bit 32): it removes the whole strokes it crosses. */
+  const isEraser = (event: PointerEvent) =>
+    event.button === ERASER_BUTTON ||
+    // biome-ignore lint/suspicious/noBitwiseOperators: `buttons` is a bitmask
+    (event.buttons & ERASER_BUTTONS) !== 0;
+  /** The eraser down: the strokes it has crossed so far, by group. */
+  let erasing: { id: number; hits: Map<string, Set<number>> } | null = null;
+  /** The eraser at a point: each stroke whose outline lies within its reach is crossed, and drawn faint until it lifts. */
+  const rub = (event: PointerEvent) => {
+    if (!erasing) {
+      return;
+    }
+    const x = event.clientX + scrollX;
+    const y = event.clientY + scrollY;
+    for (const path of layer.querySelectorAll<SVGPathElement>(
+      "path[data-stroke]"
+    )) {
+      const crossed = REACH.some(([dx, dy]) =>
+        path.isPointInFill(new DOMPoint(x + dx, y + dy))
+      );
+      const group = path.parentElement?.getAttribute("data-ink-group");
+      if (!(crossed && group)) {
+        continue;
+      }
+      const hit = erasing.hits.get(group) ?? new Set<number>();
+      hit.add(Number(path.getAttribute("data-stroke")));
+      erasing.hits.set(group, hit);
+      path.style.opacity = ERASING_OPACITY;
+    }
+  };
+  /** The eraser lifts: the strokes it crossed go; a group left with none goes with its pins. */
+  const erase = (hits: Map<string, Set<number>>) => {
+    const { doc, ink, pins } = maps();
+    const at = new Date().toISOString();
+    doc.transact(() => {
+      for (const [id, crossed] of hits) {
+        const group = ink.get(id);
+        if (!group) {
+          continue;
+        }
+        const left = strokesInPage(group).filter(
+          (_, index) => !crossed.has(index)
+        );
+        if (left.length > 0) {
+          const kept = regroup(group, left, at);
+          ink.set(id, {
+            ...kept,
+            ...(group.sentAt ? { sentAt: group.sentAt } : {}),
+          });
+          continue;
+        }
+        ink.delete(id);
+        for (const pin of [...pins.values()].filter((one) => one.ink === id)) {
+          pins.delete(pin.id);
+        }
+      }
+    });
+    draw();
+  };
+
   window.addEventListener(
     "pointerdown",
     (event) => {
@@ -232,6 +305,11 @@ export function startInk(deps: InkDeps): Ink {
       } catch {
         // A pointer the page has already let go of: its moves still reach the window.
       }
+      if (isEraser(event)) {
+        erasing = { id: event.pointerId, hits: new Map() };
+        rub(event);
+        return;
+      }
       const path = document.createElementNS(SVG, "path");
       path.setAttribute("data-live", "");
       path.setAttribute("fill", chrome.token("--brand-solid"));
@@ -242,15 +320,28 @@ export function startInk(deps: InkDeps): Ink {
     },
     { capture: true }
   );
+  /** A move's points: its coalesced ones, or the move itself where the browser gives none (an untrusted event). */
+  const pointsOf = (event: PointerEvent) => {
+    const coalesced = event.getCoalescedEvents?.() ?? [];
+    return coalesced.length > 0 ? coalesced : [event];
+  };
   window.addEventListener(
     "pointermove",
     (event) => {
+      if (erasing?.id === event.pointerId) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        for (const one of pointsOf(event)) {
+          rub(one);
+        }
+        return;
+      }
       if (drawing?.id !== event.pointerId) {
         return;
       }
       event.preventDefault();
       event.stopImmediatePropagation();
-      for (const one of event.getCoalescedEvents?.() ?? [event]) {
+      for (const one of pointsOf(event)) {
         add(one);
       }
       drawLive(event.getPredictedEvents?.() ?? []);
@@ -258,6 +349,19 @@ export function startInk(deps: InkDeps): Ink {
     { capture: true }
   );
   const lifted = (event: PointerEvent) => {
+    if (erasing?.id === event.pointerId) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const { hits } = erasing;
+      erasing = null;
+      release();
+      if (event.type === "pointerup") {
+        erase(hits);
+      } else {
+        draw();
+      }
+      return;
+    }
     if (drawing?.id !== event.pointerId) {
       return;
     }
@@ -334,15 +438,22 @@ export function startInk(deps: InkDeps): Ink {
     return null;
   };
 
-  /** The group `open` with `points` added (a new one when there is none), anchored and kept as fractions of its element's box. */
+  /** The group `open` with `points` added (a new one when there is none). */
   const groupOf = (
     open: InkGroup | undefined,
     points: Point[],
     at: string
-  ): InkGroup => {
+  ): InkGroup =>
     // The group's strokes in the page: the open group's as it is drawn now, and this one.
-    const before = open ? strokesInPage(open) : [];
-    const all = [...before.map((one) => one.points), points];
+    regroup(open, [...(open ? strokesInPage(open) : []), { points, at }], at);
+
+  /** A group of `strokes` (the page's px), anchored and kept as fractions of its element's box; `open`'s id, time and mark kept. */
+  const regroup = (
+    open: InkGroup | undefined,
+    strokes: { at: string; points: Point[] }[],
+    at: string
+  ): InkGroup => {
+    const all = strokes.map((one) => one.points);
     const groupBox = all.map(boxOf).reduce(union);
     const anchor = anchorFor(groupBox);
     const ab = pageBox(anchor);
@@ -366,9 +477,9 @@ export function startInk(deps: InkDeps): Ink {
         w: Math.round(groupBox.w),
         h: Math.round(groupBox.h),
       },
-      strokes: all.map((stroke, index) => ({
-        points: stroke.map(fraction),
-        at: before[index]?.at ?? at,
+      strokes: strokes.map((stroke) => ({
+        points: stroke.points.map(fraction),
+        at: stroke.at,
       })),
       at: open?.at ?? at,
       ...(open?.illustration ? { illustration: true as const } : {}),
@@ -477,8 +588,9 @@ export function startInk(deps: InkDeps): Ink {
       const strokes = strokesInPage(group);
       const g = document.createElementNS(SVG, "g");
       g.setAttribute("data-ink-group", group.id);
-      for (const stroke of strokes) {
+      for (const [index, stroke] of strokes.entries()) {
         const path = document.createElementNS(SVG, "path");
+        path.setAttribute("data-stroke", String(index));
         path.setAttribute("d", pathOf(stroke.points));
         path.setAttribute("fill", brand);
         g.append(path);

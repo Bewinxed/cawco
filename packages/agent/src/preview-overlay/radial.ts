@@ -48,8 +48,17 @@ const DEAD = 20;
 const SLOP = 4;
 /** Where a sector's glyph stands, between the ring's edges. */
 const GLYPH_R = (INNER + OUTER) / 2;
-/** Where a sector's word stands: outside the ring, a step of the ladder past it. */
-const WORD_R = OUTER + 18;
+/** How far a sector's word stands outside the ring, by its nearest edge: a step of the ladder. */
+const WORD_GAP = 8;
+/** The menu stays this far inside the viewport, words and all. */
+const EDGE = 8;
+/** Each sector's word, by its edge nearest the ring: where it stands and which way it runs. */
+const WORDS_AT = [
+  { x: 0, y: -(OUTER + WORD_GAP), translate: "-50% -100%" },
+  { x: OUTER + WORD_GAP, y: 0, translate: "0 -50%" },
+  { x: 0, y: OUTER + WORD_GAP, translate: "-50% 0" },
+  { x: -(OUTER + WORD_GAP), y: 0, translate: "-100% -50%" },
+] as const;
 
 const svg = (body: string, size = 16) =>
   `<svg aria-hidden="true" viewBox="0 0 24 24" width="${size}" height="${size}">${body}</svg>`;
@@ -106,7 +115,7 @@ const CHROME = `
   .ink-sector[data-hot] { fill: var(--surface-fill); }
   .ink-glyph { color: var(--ink-strong); pointer-events: none; }
   .ink-word {
-    position: absolute; translate: -50% -50%; margin: 0; padding: 2px 6px;
+    position: absolute; margin: 0; padding: 2px 6px;
     border: 0; border-radius: var(--radius-xs); background: none;
     color: var(--ink-muted); font: var(--type-label); white-space: nowrap;
     cursor: pointer; transition: color var(--dur-control) var(--ease-out);
@@ -203,6 +212,7 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
     if (!going) {
       return;
     }
+    icon?.setAttribute("aria-expanded", "false");
     if (refocus) {
       icon?.focus();
     }
@@ -260,6 +270,36 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
     }
   };
 
+  /**
+   * A stroke that ends near the viewport's edge would put the ring or a word
+   * past it: the menu and its icon move in until all of it is EDGE inside.
+   * Picks read from the menu's own centre, so a drag still runs true.
+   */
+  const keepInView = (built: HTMLDivElement) => {
+    const parts = [built, ...built.querySelectorAll(".ink-word")].map((el) =>
+      el.getBoundingClientRect()
+    );
+    const left = Math.min(...parts.map((r) => r.left));
+    const right = Math.max(...parts.map((r) => r.right));
+    const top = Math.min(...parts.map((r) => r.top));
+    const bottom = Math.max(...parts.map((r) => r.bottom));
+    const shift = (low: number, high: number, size: number) => {
+      if (low < EDGE) {
+        return EDGE - low;
+      }
+      return high > size - EDGE ? size - EDGE - high : 0;
+    };
+    const dx = shift(left, right, innerWidth);
+    const dy = shift(top, bottom, innerHeight);
+    // The icon is the ring's centre: it moves in with it.
+    for (const el of [built, icon]) {
+      if (el) {
+        el.style.left = `${Number.parseFloat(el.style.left) + dx}px`;
+        el.style.top = `${Number.parseFloat(el.style.top) + dy}px`;
+      }
+    }
+  };
+
   const openMenu = (focusFirst = false) => {
     if (!icon || menu) {
       return;
@@ -283,7 +323,7 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
     built.innerHTML = `<svg aria-hidden="true" viewBox="${-OUTER} ${-OUTER} ${OUTER * 2} ${OUTER * 2}">${paths}</svg>`;
     built.prepend(ring);
     SECTORS.forEach((sector, index) => {
-      const [wx, wy] = point(WORD_R, centreOf(index));
+      const { x: wx, y: wy, translate } = WORDS_AT[index];
       const word = document.createElement("button");
       word.type = "button";
       word.className = "ink-word";
@@ -294,6 +334,7 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
       word.textContent = sector.word;
       word.style.left = `${OUTER + wx}px`;
       word.style.top = `${OUTER + wy}px`;
+      word.style.translate = translate;
       built.append(word);
     });
     built.addEventListener("keydown", (event) => {
@@ -336,6 +377,8 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
     });
     menu = built;
     shadow.append(built);
+    keepInView(built);
+    icon.setAttribute("aria-expanded", "true");
     if (!reduced()) {
       const run = built.animate(
         [
@@ -363,6 +406,7 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
     made.className = "ink-icon";
     made.setAttribute("aria-label", "Stroke options");
     made.setAttribute("aria-haspopup", "menu");
+    made.setAttribute("aria-expanded", "false");
     made.innerHTML = svg(GLYPHS.pen);
     made.style.left = `${x}px`;
     made.style.top = `${y}px`;
