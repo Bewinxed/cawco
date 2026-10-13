@@ -1889,15 +1889,10 @@ export const createCaw = ({
         ),
         tool(
           "view_draft",
-          "Draft a view for the person to keep or discard: an OpenUI Lang program over CawCo's components reading the project only by Query() on the view tools, as the view-request event says. A component outside them is dropped and named in the answer.",
+          "Draft a view for the person to keep or discard, written as the view-request event says. Components outside CawCo's library are dropped and named in the answer.",
           {
-            name: z
-              .string()
-              .describe("Lowercase words and dashes, like weekly-review."),
-            source: z
-              .string()
-              .min(1)
-              .describe("The program: openui-lang alone, no fences."),
+            name: z.string().describe("Like weekly-review."),
+            source: z.string().min(1).describe("openui-lang, no fences."),
           },
           async ({ name, source }) => {
             const projectId = mine();
@@ -1924,7 +1919,7 @@ export const createCaw = ({
         ),
         tool(
           "view_query",
-          `Run a view tool for your project: what a view's Query("<tool>", args) reads.`,
+          "What a view's Query(tool, args) reads, for your project.",
           {
             tool: z.enum(VIEW_TOOLS),
             args: z.record(z.string(), z.unknown()).optional(),
