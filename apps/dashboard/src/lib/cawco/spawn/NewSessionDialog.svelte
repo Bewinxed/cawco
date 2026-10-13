@@ -508,6 +508,17 @@
       : `${cwd.trim().replace(/\/+$/, "")}/${repoPath(repo).split("/").pop() ?? ""}`
   );
   const project = $derived(cawco.projects.find((row) => row.id === projectId));
+  /**
+   * The project of the session being continued: the hub starts the new
+   * session in it whatever the form says, so it is named, not picked. Null
+   * when the source has none, and the picker chooses one.
+   */
+  const sourceProject = $derived.by(() => {
+    const id = continueFrom
+      ? cawco.instanceIndex.byId.get(continueFrom.instanceId)?.projectId
+      : undefined;
+    return id ? cawco.project(id) : null;
+  });
   const locked = $derived(
     Boolean(
       (prefill?.machineId ||
@@ -1735,17 +1746,27 @@
               open={popover === "machines"}
               selected={machineIds}
             />
-            <ProjectChip
-              onchange={(value) => {
-                popover = value ? "project" : null;
-              }}
-              onclear={clearProject}
-              oncreate={createFromChip}
-              onpick={pickProject}
-              open={popover === "project"}
-              {projectId}
-              projects={projectItems}
-            />
+            {#if sourceProject}
+              <span
+                class="ns-chip-btn static"
+                title={`The new session starts in ${sourceProject.name}, the project of the session it continues`}
+              >
+                <Files style="color:var(--hue-amber-500)" />
+                <span class="chip-label">Starts in {sourceProject.name}</span>
+              </span>
+            {:else}
+              <ProjectChip
+                onchange={(value) => {
+                  popover = value ? "project" : null;
+                }}
+                onclear={clearProject}
+                oncreate={createFromChip}
+                onpick={pickProject}
+                open={popover === "project"}
+                {projectId}
+                projects={projectItems}
+              />
+            {/if}
             <LocationChip
               dir={moveTo ? moveDestination : cwd}
               informational={locationInformational}
