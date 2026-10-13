@@ -113,6 +113,8 @@ typeOverrides:
     StagesViewSource: OpenEnums.StagesViewSource
     SupervisorEventSource: OpenEnums.SupervisorEventSource
     SupervisorEventVerdict: OpenEnums.SupervisorEventVerdict
+    TaskHistoryActorMover: OpenEnums.TaskHistoryActorMover
+    TaskHistoryKind: OpenEnums.TaskHistoryKind
     TextPropsVariant: OpenEnums.TextPropsVariant
     ThreadStatus: OpenEnums.ThreadStatus
     ToolPlatform: OpenEnums.ToolPlatform

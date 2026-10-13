@@ -33,7 +33,7 @@ import {
   writeFolderFile,
 } from "./project-folder";
 import { TaskDoc } from "./task-file";
-import type { Tasks } from "./tasks";
+import type { TaskSummary, Tasks } from "./tasks";
 
 /** A view's name: what its file is called, and the tab it becomes. */
 const VIEW_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
@@ -52,6 +52,37 @@ const nameOf = (raw: string): string =>
           `“${raw}” is not a view name: lowercase letters, digits and dashes, like weekly-review.`
         );
       })();
+
+/** A task's dates as a view binds to them (ViewTask `dates`): its own, its newest attempt's, and its file's ISO date fields. */
+const datesOf = (
+  task: TaskSummary,
+  fields: Record<string, string>
+): Record<string, number> => {
+  const dates: Record<string, number> = {
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+  };
+  for (const key of ["startedAt", "completedAt", "droppedAt"] as const) {
+    const at = task[key];
+    if (at !== null) {
+      dates[key] = at;
+    }
+  }
+  const [newest] = task.attempts;
+  if (newest) {
+    dates.attemptStartedAt = newest.startedAt;
+    if (newest.endedAt !== null) {
+      dates.attemptEndedAt = newest.endedAt;
+    }
+  }
+  for (const [field, value] of Object.entries(fields)) {
+    const at = ISO_DATE.test(value) ? Date.parse(value) : Number.NaN;
+    if (!Number.isNaN(at)) {
+      dates[field] = at;
+    }
+  }
+  return dates;
+};
 
 const draftPath = (name: string) => `${DRAFTS}/${name}.json`;
 const keptPath = (name: string) => `${KEPT}/${name}.json`;
@@ -181,23 +212,6 @@ export const createViews = ({ projectName, tasks }: ViewsDeps) => {
       );
       const viewTasks = rows.map((row, index): ViewTask => {
         const fields = files[index] ?? {};
-        const [newest] = row.attempts;
-        const dates: Record<string, number> = {
-          createdAt: row.createdAt,
-          updatedAt: row.updatedAt,
-        };
-        if (newest) {
-          dates.attemptStartedAt = newest.startedAt;
-          if (newest.endedAt !== null) {
-            dates.attemptEndedAt = newest.endedAt;
-          }
-        }
-        for (const [field, value] of Object.entries(fields)) {
-          const at = ISO_DATE.test(value) ? Date.parse(value) : Number.NaN;
-          if (!Number.isNaN(at)) {
-            dates[field] = at;
-          }
-        }
         return {
           id: row.id,
           number: row.number,
@@ -212,7 +226,7 @@ export const createViews = ({ projectName, tasks }: ViewsDeps) => {
           blockedBy: row.blockedBy,
           todos: row.todos,
           fields,
-          dates,
+          dates: datesOf(row, fields),
         };
       });
       const byKind = Object.fromEntries(

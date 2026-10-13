@@ -142,7 +142,7 @@ export const CAWCO_COMPONENTS = {
     props: {
       date: {
         description:
-          'The path inside a task of the date that places it: "dates.createdAt", "dates.updatedAt", "dates.attemptEndedAt", or "dates.<field>" for a date the task file carries.',
+          'The path inside a task of the date that places it: "dates.createdAt", "dates.updatedAt", "dates.completedAt", "dates.attemptEndedAt", or "dates.<field>" for a date the task file carries.',
         schema: { type: "string" },
       },
       rows: {
@@ -418,7 +418,9 @@ export interface ViewTask {
   /**
    * Its dates, ms epoch, by name: `createdAt` and `updatedAt` always (the
    * commit that added its file, and its file's last change: its last commit,
-   * or an edit no commit has yet); `attemptStartedAt` and `attemptEndedAt` of its newest
+   * or an edit no commit has yet); `startedAt` (its first move into an active
+   * stage), `completedAt` and `droppedAt` (its move into the done or dropped
+   * stage it is in) once they happen; `attemptStartedAt` and `attemptEndedAt` of its newest
    * attempt when it has one; and every field its file carries whose value is
    * an ISO 8601 date, under the field's own name.
    */

@@ -1160,11 +1160,34 @@ export const folderFileNames = async (
   });
 };
 
-/** When the folder's history first added a file and last changed it, ms epoch, by commit time. */
+/** One commit as the folder's log pass reads it: shared by every path it touched. */
+export interface FolderLogCommit {
+  /** When it was made, ms epoch, by commit time. */
+  at: number;
+  /** Its author's name. */
+  author: string;
+  sha: string;
+  /** Its subject line. */
+  subject: string;
+  /** Its message's trailers (`Key: value` in the last paragraph), by key; the last of a key stands. */
+  trailers: Readonly<Partial<Record<string, string>>>;
+}
+
+/** What one commit did to one file. */
+export interface FolderFileChange {
+  change: "added" | "modified" | "renamed" | "deleted";
+  commit: FolderLogCommit;
+  /** For a rename, the path it came from. */
+  from?: string;
+}
+
+/** When the folder's history first added a file and last changed it, ms epoch, by commit time, and every commit that did. */
 export interface FolderFileTimes {
+  /** Every commit that touched it, oldest first, followed across renames; a delete is the last until it is added again. */
+  changes: readonly FolderFileChange[];
   /** The oldest commit that added it, followed across renames. */
   created: number;
-  /** The newest commit that touched it. */
+  /** The newest commit that added, changed or renamed it. */
   updated: number;
 }
 
@@ -1220,37 +1243,77 @@ const headCommit = async (root: string): Promise<string> => {
   return "";
 };
 
+const FIELD = "\x1f";
+const TRAILER = "\x1d";
 /**
- * Applies `git log --reverse --format=%x1e%ct -M --name-status` output to
- * `times`, oldest commit first: an add or change sets the file's last time
- * (its first stays once it has one, so a file deleted and added again keeps
- * its first add), a rename carries the old path's first time to the new
- * path, a delete leaves the times standing. Every path named goes in `ever`.
+ * One commit's header line in the log pass: sha, commit time, author,
+ * subject, and its trailers unfolded onto one line. `--name-status` lines
+ * follow it.
+ */
+const LOG_FORMAT = `${RECORD}%H${FIELD}%ct${FIELD}%an${FIELD}%s${FIELD}%(trailers:only,unfold,separator=%x1d)`;
+
+/** `Key: value` trailers as {@link LOG_FORMAT} prints them, by key. */
+const trailersOf = (line: string): Partial<Record<string, string>> => {
+  const trailers: Partial<Record<string, string>> = {};
+  for (const trailer of line.split(TRAILER)) {
+    const colon = trailer.indexOf(":");
+    if (colon > 0) {
+      trailers[trailer.slice(0, colon).trim()] = trailer
+        .slice(colon + 1)
+        .trim();
+    }
+  }
+  return trailers;
+};
+
+/** A commit's header line as {@link LOG_FORMAT} prints it; undefined for one that does not read. */
+const commitOf = (header: string): FolderLogCommit | undefined => {
+  const [sha = "", stamp = "", author = "", subject = "", trailers = ""] =
+    header.split(FIELD);
+  const at = Number(stamp.trim()) * 1000;
+  if (!(sha && stamp.trim() && Number.isFinite(at))) {
+    return;
+  }
+  return { sha, at, author, subject, trailers: trailersOf(trailers) };
+};
+
+/**
+ * Applies `git log --reverse --format=<LOG_FORMAT> -M --name-status` output
+ * to `times`, oldest commit first: an add or change sets the file's last
+ * time (its first stays once it has one, so a file deleted and added again
+ * keeps its first add), a rename carries the old path's times and changes to
+ * the new path, a delete leaves the times standing; every one is added to
+ * the file's changes. Every path named goes in `ever`. An entry `known`
+ * shares with an earlier read is copied before it changes, never changed in
+ * place.
  */
 const applyLog = (
   times: Map<string, FolderFileTimes>,
   ever: Set<string>,
   out: string
 ): void => {
+  /** The paths whose entry this pass made, so it may grow in place. */
+  const own = new Set<string>();
   for (const record of out.split(RECORD)) {
-    const [stamp = "", ...changes] = record.split("\n");
-    const at = Number(stamp.trim()) * 1000;
-    if (stamp.trim() && Number.isFinite(at)) {
+    const [header = "", ...changes] = record.split("\n");
+    const made = commitOf(header);
+    if (made) {
       for (const change of changes) {
-        applyChange(times, ever, change, at);
+        applyChange(times, ever, own, change, made);
       }
     }
   }
 };
 
-/** One `--name-status` line of a commit made at `at`, as {@link applyLog} reads it. */
+/** One `--name-status` line of the commit `made`, as {@link applyLog} reads it. */
 const applyChange = (
   times: Map<string, FolderFileTimes>,
   ever: Set<string>,
-  change: string,
-  at: number
+  own: Set<string>,
+  line: string,
+  made: FolderLogCommit
 ): void => {
-  const [kind = "", from = "", to] = change.split("\t");
+  const [kind = "", from = "", to] = line.split("\t");
   if (!from) {
     return;
   }
@@ -1258,16 +1321,40 @@ const applyChange = (
   if (to) {
     ever.add(to);
   }
-  if (kind.startsWith("D")) {
-    return;
-  }
   const path = to ?? from;
   const renamed = kind.startsWith("R");
-  const was = renamed ? times.get(from) : times.get(path);
+  const deleted = kind.startsWith("D");
+  const was = times.get(from);
+  if (deleted && !was) {
+    return;
+  }
+  let change: FolderFileChange;
+  if (renamed) {
+    change = { change: "renamed", commit: made, from };
+  } else if (deleted) {
+    change = { change: "deleted", commit: made };
+  } else {
+    change = {
+      change: kind.startsWith("A") ? "added" : "modified",
+      commit: made,
+    };
+  }
+  // An entry this pass made grows in place; one an earlier read holds is copied.
+  const changes =
+    was && own.has(from)
+      ? (was.changes as FolderFileChange[])
+      : [...(was?.changes ?? [])];
+  changes.push(change);
   if (renamed) {
     times.delete(from);
+    own.delete(from);
   }
-  times.set(path, { created: was?.created ?? at, updated: at });
+  own.add(path);
+  times.set(path, {
+    created: was?.created ?? made.at,
+    updated: deleted ? (was?.updated ?? made.at) : made.at,
+    changes,
+  });
 };
 
 /** The times at commit `tip`, read on from `known` when its commit is one of tip's ancestors, else from the start. */
@@ -1295,7 +1382,7 @@ const timesAt = async (
     await git(root, [
       "log",
       "--reverse",
-      `--format=${RECORD}%ct`,
+      `--format=${LOG_FORMAT}`,
       "-M",
       "--name-status",
       from ? `${from.head}..${tip}` : tip,
@@ -1311,7 +1398,8 @@ const timesRead = new Map<string, Promise<FolderTimes>>();
 
 /**
  * When each file under `rawDir` was first added and last changed by a
- * commit. Kept per project and folder at the commit it was read at: a read
+ * commit, and every commit that touched it (author, subject, trailers).
+ * Kept per project and folder at the commit it was read at: a read
  * while HEAD stands spawns no git, and a new commit reads only the commits
  * since.
  */

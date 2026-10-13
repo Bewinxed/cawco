@@ -6,7 +6,11 @@
  * - **Files are the truth.** Every change here reads the file, changes the
  *   lines it owns and writes it back through project-folder.ts, so it is a
  *   commit with an author and a message (`task tsk-12: stage draft → review
- *   (by you)`). A file changed by hand is read as it is.
+ *   (by you)`) whose trailers name who, as which mover, the stage move and
+ *   why. Those commits are the task's history (task-history.ts): who made
+ *   and last changed it, when it started, completed or was dropped, and why
+ *   it closed are read back from them, never written into the file. A file
+ *   changed by hand is read as it is.
  * - **The index** (`project_tasks`) holds what a list shows, per file, with
  *   the hash of the content it was read from. A list reads every task file
  *   and re-indexes the ones whose hash moved, so a hand edit shows on the
@@ -83,6 +87,17 @@ import {
   taskNumber,
   taskPath,
 } from "./task-file";
+import {
+  AUTHOR,
+  goneTasks,
+  historyOf,
+  lifeOf,
+  NO_STAGE,
+  type TaskHistory,
+  type TaskHistoryActor,
+  type TaskLife,
+  TRAILERS,
+} from "./task-history";
 import { budgetProblem, isLive, ownsProblem } from "./work-items";
 
 /**
@@ -109,7 +124,7 @@ export const YOU_ACTOR: TaskActor = { mover: "you", author: YOU };
 /** The hub's own code moving a task, and why. */
 export const hubActor = (reason: string): TaskActor => ({
   mover: "hub",
-  author: { name: "hub" },
+  author: { name: AUTHOR.hub },
   reason,
 });
 
@@ -122,7 +137,7 @@ export const hubActor = (reason: string): TaskActor => ({
 export const actionActor = (actionId: string, reason: string): TaskActor => ({
   mover: "action",
   actionId,
-  author: { name: "approved action" },
+  author: { name: AUTHOR.action },
   reason,
 });
 
@@ -133,7 +148,7 @@ export const actionActor = (actionId: string, reason: string): TaskActor => ({
  */
 export const sessionActor = (row: InstanceRow): TaskActor =>
   row.role === "lead"
-    ? { mover: "lead", instanceId: row.id, author: { name: "Caw" } }
+    ? { mover: "lead", instanceId: row.id, author: { name: AUTHOR.lead } }
     : {
         mover: "session",
         instanceId: row.id,
@@ -161,7 +176,12 @@ export interface TaskAttempt {
 export interface TaskFlags {
   /** Its attempts, newest first. */
   attempts: TaskAttempt[];
-  /** The tasks it waits for (`after`) that are not in a done stage; a task the project lacks counts. */
+  /**
+   * The tasks it waits for (`after`) that are not done. Done: in a stage of
+   * kind done, or dropped as a duplicate of a task that is done. A task the
+   * project lacks counts as waited for, unless the folder's history shows its
+   * file deleted or moved out of tasks/ (task-history.ts `goneTasks`).
+   */
   blockedBy: string[];
   /** Its newest attempt failed or was cancelled, and it is not done or dropped since: it waits for a person. */
   lastAttemptFailed: boolean;
@@ -240,22 +260,30 @@ export interface TaskStore {
 }
 
 /**
- * When a task was made and last changed, ms epoch, worked out from its file
- * and never written into it. Made: the commit that first added the file to
- * the project folder. Changed: the last commit that touched it, or, while
- * the file holds an edit no commit has, when the hub saw that edit. A file
- * no commit has yet holds the time the hub saw it for both.
+ * When a task was made and last changed and by whom, and when it started,
+ * completed or was dropped and why it closed: worked out from its file's
+ * commits (task-history.ts) and never written into it. Made: the commit that
+ * first added the file to the project folder. Changed: the last commit that
+ * touched it, or, while the file holds an edit no commit has, when the hub
+ * saw that edit. A file no commit has yet holds the time the hub saw it for
+ * both, and no one for either.
  */
-export interface TaskTimes {
+export interface TaskTimes extends TaskLife {
   /** When the commit that first added its file landed, ms epoch. */
   createdAt: number;
+  /** Who made the commit that first added its file; null while no commit has it. */
+  createdBy: TaskHistoryActor | null;
   /** When its file last changed, ms epoch: its last commit, or an edit no commit has yet. */
   updatedAt: number;
+  /** Who made its last commit; null while its file holds an edit no commit has. */
+  updatedBy: TaskHistoryActor | null;
 }
 
 /** One task as a list shows it: the index's row, and what its attempts and edges say. */
 export interface TaskSummary extends TaskFlags, TaskTimes {
   after: string[];
+  /** The task it repeats (`duplicate_of`); null when none. */
+  duplicateOf: string | null;
   /** The task it was found in (`found_in`); null when none. */
   foundIn: string | null;
   id: string;
@@ -322,6 +350,8 @@ export interface TaskView extends TaskFlags, TaskTimes {
   budget: WorkBudget | null;
   checks: string[];
   description: string;
+  /** The task it repeats (`duplicate_of`); null when none. */
+  duplicateOf: string | null;
   /** Front matter keys the file carries that a task file does not know; kept as written. */
   extra: string[];
   foundIn: string | null;
@@ -562,9 +592,12 @@ const attemptOf = (
   endedAt: item.endedAt?.getTime() ?? null,
 });
 
-/** Every indexed task's stage, by id. */
-const stagesById = (rows: TaskIndexRow[]): Map<string, string> =>
-  new Map(rows.map((row) => [row.id, row.stage]));
+/** What an edge to a task asks of it: its stage, and the task it repeats. */
+type EdgeEnd = Pick<TaskIndexRow, "duplicateOf" | "stage">;
+
+/** Every indexed task's stage and duplicate_of, by id. */
+const endsById = (rows: TaskIndexRow[]): Map<string, EdgeEnd> =>
+  new Map(rows.map((row) => [row.id, row]));
 
 /** Whether a task waits for a person: its stage is of kind `you`, or its last attempt failed. */
 const waitsForYou = (kind: StageKind | null, flags: TaskFlags): boolean =>
@@ -608,6 +641,7 @@ const summaryOf = (
     parent: row.parent,
     related: row.related,
     foundIn: row.foundIn,
+    duplicateOf: row.duplicateOf,
     rank: row.rank,
     labels: row.labels,
     todos: { done: row.todosDone, total: row.todosTotal },
@@ -639,6 +673,7 @@ const viewOf = (
   parent: parsed.fields.parent,
   related: parsed.fields.related,
   foundIn: parsed.fields.foundIn,
+  duplicateOf: parsed.fields.duplicateOf,
   checks: parsed.fields.checks,
   outputs: parsed.fields.outputs,
   lands: parsed.fields.lands,
@@ -675,12 +710,20 @@ const EDGE_PHRASE: Record<Edge, string> = {
   parent: "parent",
   related: "related to",
   found_in: "found in",
+  duplicate_of: "duplicate of",
 };
 
-/** Sets or clears a one-task edge (`parent`, `found_in`). */
+/** The one-task edges, by the field each is read into. */
+const ONE_EDGE_FIELD = {
+  parent: "parent",
+  found_in: "foundIn",
+  duplicate_of: "duplicateOf",
+} as const;
+
+/** Sets or clears a one-task edge (`parent`, `found_in`, `duplicate_of`). */
 const linkOne = (
   doc: TaskDoc,
-  edge: "parent" | "found_in",
+  edge: keyof typeof ONE_EDGE_FIELD,
   target: string,
   remove: boolean | undefined
 ): string => {
@@ -689,8 +732,7 @@ const linkOne = (
     doc.setField(edge, target);
     return phrase;
   }
-  const { fields } = doc.read();
-  if ((edge === "parent" ? fields.parent : fields.foundIn) === target) {
+  if (doc.read().fields[ONE_EDGE_FIELD[edge]] === target) {
     doc.setField(edge, null);
   }
   return `no longer ${phrase}`;
@@ -880,6 +922,52 @@ export const hubProblem = (
 const byWhom = (actor: TaskActor): string =>
   `(by ${actor.author.name}${actor.reason ? `: ${actor.reason}` : ""})`;
 
+/** What one change to a task did, for its commit: its words, and a stage move and its reason when there is one. */
+interface Did {
+  /** Why, given with the change; the actor's own reason when left out. */
+  reason?: string;
+  /** The move it made; `from` empty for a task that had no stage. */
+  stage?: { from: string; to: string };
+  what: string;
+}
+
+/** Who made a change, as the `CawCo-Actor` trailer names them: the session, the action, else the mover. */
+const actorTrailer = (actor: TaskActor): string => {
+  if (actor.instanceId) {
+    return actor.instanceId;
+  }
+  return actor.actionId ? `action:${actor.actionId}` : actor.mover;
+};
+
+const WHITESPACE = /\s+/g;
+
+/**
+ * A task commit's message: the subject as people read it (`task tsk-12:
+ * stage draft → review (by you)`), then the trailers task-history.ts reads
+ * back: who, the mover their stage rules were checked as, the stage move and
+ * the reason when there are.
+ */
+const commitMessage = (
+  actor: TaskActor,
+  subject: string,
+  did: Omit<Did, "what"> = {}
+): string => {
+  const reason = (did.reason ?? actor.reason)?.replace(WHITESPACE, " ").trim();
+  return [
+    `${subject} ${byWhom(actor)}`,
+    "",
+    `${TRAILERS.actor}: ${actorTrailer(actor)}`,
+    `${TRAILERS.mover}: ${actor.mover}`,
+    ...(did.stage
+      ? [`${TRAILERS.stage}: ${did.stage.from || NO_STAGE} -> ${did.stage.to}`]
+      : []),
+    ...(reason ? [`${TRAILERS.reason}: ${reason}`] : []),
+  ].join("\n");
+};
+
+/** The longest reason a move takes. */
+const REASON_LIMIT = 500;
+
 export const createTasks = (store: TaskStore) => {
   /** One change to a project's tasks at a time, around the folder's own commits. */
   const inTurn = turnTaker();
@@ -926,24 +1014,47 @@ export const createTasks = (store: TaskStore) => {
     task: { after: string[]; hash: string; id: string; stage: string },
     context: {
       attempts: Map<string, TaskAttempt[]>;
+      /** Every task's stage and duplicate_of, by id. */
+      ends: Map<string, EdgeEnd>;
+      /** The tasks the folder's history shows taken out of tasks/. */
+      gone: ReadonlySet<string>;
       /** The tasks whose hook start waits for a slot. */
       queued: Set<string>;
-      /** Every task's stage, by id. */
-      stageOf: Map<string, string>;
       stages: Stages | undefined;
     }
   ): TaskFlags => {
-    const { attempts: byTask, queued, stageOf, stages } = context;
+    const { attempts: byTask, queued, ends, gone, stages } = context;
     const attempts = byTask.get(task.id) ?? [];
     const [last] = attempts;
     const kind = kindIn(stages, task.stage);
+    /**
+     * Done: in a done stage, or dropped as a duplicate of a task that is
+     * done. A task the folder's history shows taken out of tasks/ is done
+     * with, whatever the index (a cache a single read does not catch up)
+     * still holds for it.
+     */
+    const done = (id: string, seen: Set<string>): boolean => {
+      if (gone.has(id)) {
+        return true;
+      }
+      const end = ends.get(id);
+      if (!end) {
+        return false;
+      }
+      const at = kindIn(stages, end.stage);
+      if (at === "done") {
+        return true;
+      }
+      if (at !== "dropped" || !end.duplicateOf || seen.has(id)) {
+        return false;
+      }
+      seen.add(id);
+      return done(end.duplicateOf, seen);
+    };
     return {
       attempts,
       liveAttempt: attempts.some((attempt) => isLive(attempt.state)),
-      blockedBy: task.after.filter((id) => {
-        const stage = stageOf.get(id);
-        return stage === undefined || kindIn(stages, stage) !== "done";
-      }),
+      blockedBy: task.after.filter((id) => !done(id, new Set())),
       lastAttemptFailed:
         (last?.state === "failed" || last?.state === "cancelled") &&
         kind !== "done" &&
@@ -963,16 +1074,20 @@ export const createTasks = (store: TaskStore) => {
 
   /**
    * Each row's {@link TaskTimes}: from the folder's history (one read per
-   * commit, folderFileTimes), and the index's time for an edit the file holds
-   * past its last commit. Only a row the index saw change after that commit
-   * can hold one, so git is asked about the working copy only then, once per
-   * commit and change.
+   * commit, folderFileTimes; its events read once per file's change,
+   * task-history.ts), and the index's time for an edit the file holds past
+   * its last commit. Only a row the index saw change after that commit can
+   * hold one, so git is asked about the working copy only then, once per
+   * commit and change. Also answers the tasks the history shows taken out of
+   * tasks/.
    */
   const timesOf = async (
     projectId: string,
-    rows: Pick<TaskIndexRow, "path" | "updatedAt">[]
-  ): Promise<Map<string, TaskTimes>> => {
-    const { head, times } = await folderFileTimes(projectId, "tasks");
+    rows: Pick<TaskIndexRow, "path" | "stage" | "updatedAt">[],
+    stages: Stages | undefined
+  ): Promise<{ gone: ReadonlySet<string>; times: Map<string, TaskTimes> }> => {
+    const folder = await folderFileTimes(projectId, "tasks");
+    const { head, times } = folder;
     const seen = (path: string, observed: number) => {
       const said = uncommittedSeen.get(`${projectId}\0${path}`);
       return said?.head === head && said.observed === observed
@@ -993,24 +1108,34 @@ export const createTasks = (store: TaskStore) => {
         });
       }
     }
-    return new Map(
-      rows.map((row): [string, TaskTimes] => {
-        const observed = row.updatedAt.getTime();
-        const committed = times.get(row.path);
-        if (!committed) {
-          return [row.path, { createdAt: observed, updatedAt: observed }];
-        }
-        return [
-          row.path,
-          {
-            createdAt: committed.created,
-            updatedAt: seen(row.path, observed)?.uncommitted
-              ? Math.max(committed.updated, observed)
-              : committed.updated,
-          },
-        ];
-      })
-    );
+    const recordOf = (row: (typeof rows)[number]): TaskTimes => {
+      const observed = row.updatedAt.getTime();
+      const committed = times.get(row.path);
+      if (!committed) {
+        return {
+          createdAt: observed,
+          createdBy: null,
+          updatedAt: observed,
+          updatedBy: null,
+          ...lifeOf([], stages, null),
+        };
+      }
+      const events = historyOf(committed);
+      const uncommitted = seen(row.path, observed)?.uncommitted === true;
+      return {
+        createdAt: committed.created,
+        createdBy: events[0]?.actor ?? null,
+        updatedAt: uncommitted
+          ? Math.max(committed.updated, observed)
+          : committed.updated,
+        updatedBy: uncommitted ? null : (events.at(-1)?.actor ?? null),
+        ...lifeOf(events, stages, kindIn(stages, row.stage)),
+      };
+    };
+    return {
+      gone: goneTasks(folder),
+      times: new Map(rows.map((row) => [row.path, recordOf(row)])),
+    };
   };
 
   /** The highest task number each project has handed out, once read from its history. */
@@ -1066,6 +1191,7 @@ export const createTasks = (store: TaskStore) => {
       parent: parsed.fields.parent,
       related: parsed.fields.related,
       foundIn: parsed.fields.foundIn,
+      duplicateOf: parsed.fields.duplicateOf,
       rank: parsed.fields.rank,
       labels: parsed.fields.labels,
       todosDone: parsed.todos.filter((todo) => todo.done).length,
@@ -1138,9 +1264,13 @@ export const createTasks = (store: TaskStore) => {
     );
     const restored = doc.toString();
     stands(projectId);
+    const actor = hubActor("stage changes go through task moves");
     await writeFolderFile(projectId, path, restored, {
-      author: { name: "hub" },
-      message: `task ${row.id}: stage ${written} written by ${who} put back to ${row.stage} (by hub: stage changes go through task moves)`,
+      author: actor.author,
+      message: commitMessage(
+        actor,
+        `task ${row.id}: stage ${written} written by ${who} put back to ${row.stage}`
+      ),
     });
     store.put([indexRow(projectId, path, number, restored, hashOf(restored))]);
     console.info(
@@ -1207,9 +1337,14 @@ export const createTasks = (store: TaskStore) => {
     );
     const adopted = doc.toString();
     stands(projectId);
+    const actor = hubActor(`tasks start in ${start}`);
     await writeFolderFile(projectId, path, adopted, {
-      author: { name: "hub" },
-      message: `task ${taskId(number)}: adopt at ${start}, written by ${who} into stage ${written} (by hub: tasks start in ${start})`,
+      author: actor.author,
+      message: commitMessage(
+        actor,
+        `task ${taskId(number)}: adopt at ${start}, written by ${who} into stage ${written}`,
+        { stage: { from: written === NO_STAGE ? "" : written, to: start } }
+      ),
     });
     store.put([indexRow(projectId, path, number, adopted, hashOf(adopted))]);
     console.info(
@@ -1544,9 +1679,12 @@ export const createTasks = (store: TaskStore) => {
     const rows = store.index(projectId);
     const observed =
       rows.find((row) => row.path === path)?.updatedAt ?? new Date();
-    const times = (
-      await timesOf(projectId, [{ path, updatedAt: observed }])
-    ).get(path) as TaskTimes;
+    const stage = parsed.fields.stage ?? "";
+    const { gone, times } = await timesOf(
+      projectId,
+      [{ path, stage, updatedAt: observed }],
+      stages
+    );
     return viewOf(
       path,
       number,
@@ -1556,20 +1694,16 @@ export const createTasks = (store: TaskStore) => {
       stages,
       flagsOf(
         projectId,
-        {
-          id: taskId(number),
-          after: parsed.fields.after,
-          stage: parsed.fields.stage ?? "",
-          hash,
-        },
+        { id: taskId(number), after: parsed.fields.after, stage, hash },
         {
           attempts: attemptsByTask(projectId),
           queued: queuedIn(projectId),
-          stageOf: stagesById(rows),
+          ends: endsById(rows),
+          gone,
           stages,
         }
       ),
-      times
+      times.get(path) as TaskTimes
     );
   };
 
@@ -1673,7 +1807,10 @@ export const createTasks = (store: TaskStore) => {
       written.map(({ path, content }) => ({ path, content })),
       {
         author: actor.author,
-        message: `tasks ${written.map((each) => taskId(each.number)).join(", ")}: ${from}'s ${written.length === 1 ? "task" : "tasks"}, merged in ${byWhom(actor)}`,
+        message: commitMessage(
+          actor,
+          `tasks ${written.map((each) => taskId(each.number)).join(", ")}: ${from}'s ${written.length === 1 ? "task" : "tasks"}, merged in`
+        ),
         exclusive: sameNumber,
       }
     );
@@ -1725,13 +1862,14 @@ export const createTasks = (store: TaskStore) => {
 
   /**
    * Reads a task's file, lets `apply` change it, and writes it back when it
-   * changed. `apply` answers what it did, for the commit message.
+   * changed. `apply` answers what it did (its words, or with the stage move
+   * and reason it made), for the commit message.
    */
   const change = (
     projectId: string,
     ref: string,
     actor: TaskActor,
-    apply: (doc: TaskDoc, id: string) => Promise<string> | string
+    apply: (doc: TaskDoc, id: string) => Promise<string | Did> | string | Did
   ): Promise<TaskView> =>
     inTurn(projectId, async () => {
       writable(projectId);
@@ -1748,7 +1886,9 @@ export const createTasks = (store: TaskStore) => {
         ? await restoreStage(projectId, path, number, read, stray)
         : read;
       const doc = new TaskDoc(path, content);
-      const did = await apply(doc, id);
+      const applied = await apply(doc, id);
+      const { what, ...did } =
+        typeof applied === "string" ? { what: applied } : applied;
       const next = doc.toString();
       if (next === content) {
         return view(
@@ -1765,9 +1905,117 @@ export const createTasks = (store: TaskStore) => {
         number,
         next,
         actor,
-        `task ${id}: ${did} ${byWhom(actor)}`
+        commitMessage(actor, `task ${id}: ${what}`, did)
       );
     });
+
+  /**
+   * Puts a task in stage `to`, checked against the moves for the actor's
+   * mover (the hub's own moves only need the stage to be one it may enter;
+   * an approved action's, its done action). Answers the move, or nothing
+   * when the task is in `to` already.
+   */
+  const moveTo = (
+    projectId: string,
+    doc: TaskDoc,
+    id: string,
+    stages: Stages,
+    to: string,
+    actor: TaskActor
+  ): { from: string; to: string } | undefined => {
+    const from = doc.read().fields.stage ?? "";
+    if (from === to) {
+      return;
+    }
+    if (
+      actor.mover === "action" &&
+      !(actor.actionId && store.actionMove?.(projectId, id, to, actor.actionId))
+    ) {
+      refuse(
+        403,
+        `${id} cannot go to ${to} as an approved action: only an action the owner approved, once its call is done, moves its own task to the stage it named.`
+      );
+    }
+    const problem =
+      actor.mover === "hub"
+        ? hubProblem(stages, to)
+        : moveProblem(stages, id, from, to, actor.mover);
+    if (problem) {
+      refuse(stageNamed(stages, to) ? 403 : 400, problem);
+    }
+    doc.setField("stage", to);
+    return { from, to };
+  };
+
+  /** The task an edge names, as `tsk-…`: one the project has, unless the edge is being taken out. */
+  const edgeTarget = async (
+    projectId: string,
+    request: { edge: Edge; to: string; remove?: boolean },
+    id: string
+  ): Promise<string> => {
+    const number = taskNumber(request.to);
+    if (number === undefined) {
+      return refuse(
+        400,
+        `“${request.to}” is not a task id; tasks are named like tsk-12.`
+      );
+    }
+    return request.remove
+      ? taskId(number)
+      : ((await targets(projectId, request.edge, [request.to], id))[0] ??
+          taskId(number));
+  };
+
+  /**
+   * Links a task's file `duplicate_of` `target` and drops it: it moves to
+   * the project's first stage of kind dropped, checked for the actor as any
+   * move, with the reason "duplicate of <target>". A task in a dropped stage
+   * already stays where it is. Refused when `target` is a duplicate of it,
+   * or the project has no dropped stage.
+   */
+  const markDuplicate = async (
+    projectId: string,
+    doc: TaskDoc,
+    id: string,
+    target: string,
+    actor: TaskActor
+  ): Promise<Did> => {
+    const rows = store.index(projectId);
+    if (
+      loops(rows, id, target, (row) =>
+        row.duplicateOf ? [row.duplicateOf] : []
+      )
+    ) {
+      refuse(
+        409,
+        `${target} is already a duplicate of ${id}, so ${id} cannot be a duplicate of it.`
+      );
+    }
+    const phrase = linkOne(doc, "duplicate_of", target, false);
+    const stages = await usableStages(projectId, "drop a duplicate");
+    const dropped = stages.stages.find((each) => each.kind === "dropped");
+    if (!dropped) {
+      return refuse(
+        409,
+        `The project has no stage of kind dropped, so ${id} cannot be closed as a duplicate of ${target}. Add one to stages.md.`
+      );
+    }
+    if (kindIn(stages, doc.read().fields.stage ?? "") === "dropped") {
+      return { what: phrase };
+    }
+    const stage = moveTo(projectId, doc, id, stages, dropped.name, actor);
+    return stage
+      ? {
+          what: `${phrase}; stage ${stage.from || NO_STAGE} → ${stage.to}`,
+          stage,
+          reason: phrase,
+        }
+      : { what: phrase };
+  };
+
+  /** A move's reason as given: one line, or nothing. */
+  const reasonOf = (reason: string | undefined): string | undefined =>
+    reason?.trim() ? oneLine("reason", reason, REASON_LIMIT) : undefined;
 
   /** Would `id` waiting on `target` (or having it as parent) close a loop? */
   const loops = (
@@ -1808,13 +2056,14 @@ export const createTasks = (store: TaskStore) => {
         stagesOf(projectId),
       ]);
       const stages = reading.ok ? reading.stages : undefined;
+      const { gone, times } = await timesOf(projectId, rows, stages);
       const context = {
         attempts: attemptsByTask(projectId),
         queued: queuedIn(projectId),
-        stageOf: stagesById(rows),
+        ends: endsById(rows),
+        gone,
         stages,
       };
-      const times = await timesOf(projectId, rows);
       const tasks = rows
         .map((row) =>
           summaryOf(
@@ -1870,8 +2119,9 @@ export const createTasks = (store: TaskStore) => {
       return inTurn(projectId, async () => {
         writable(projectId);
         const title = oneLine("title", draft.title, TITLE_LIMIT);
+        const stage = await startStage(projectId, draft.stage, actor);
         const fields: Partial<TaskFields> = {
-          stage: await startStage(projectId, draft.stage, actor),
+          stage,
           type: draft.type ? typeName(draft.type) : null,
           after: await targets(projectId, "after", draft.after ?? []),
           parent: await single(projectId, "parent", draft.parent),
@@ -1898,7 +2148,11 @@ export const createTasks = (store: TaskStore) => {
               acceptance,
               todos,
             }).toString(),
-            message: `task ${taskId(number)}: create “${title}” in ${fields.stage} ${byWhom(actor)}`,
+            message: commitMessage(
+              actor,
+              `task ${taskId(number)}: create “${title}” in ${stage}`,
+              { stage: { from: "", to: stage } }
+            ),
           };
         });
       }).then((task) =>
@@ -1968,72 +2222,64 @@ export const createTasks = (store: TaskStore) => {
 
     /**
      * Moves a task to another stage, checked against the moves for its mover;
-     * the hub's own moves are not, as the stage exists. Listeners hear of a
-     * move that happened.
+     * the hub's own moves are not, as the stage exists. `reason` says why
+     * (a close reason, most often); its commit carries it, and the task's
+     * history shows it. Listeners hear of a move that happened.
      */
     async move(
       projectId: string,
       ref: string,
       stage: string,
-      actor: TaskActor
+      actor: TaskActor,
+      reason?: string
     ): Promise<TaskView> {
+      const why = reasonOf(reason);
       let moved: { from: string; to: string } | undefined;
       const task = await change(projectId, ref, actor, async (doc, id) => {
         const stages = await usableStages(projectId, "check a stage change");
         const to = stageName(stage);
-        const from = doc.read().fields.stage ?? "";
-        if (from === to) {
+        moved = moveTo(projectId, doc, id, stages, to, actor);
+        if (!moved) {
           return `stage ${to}`;
         }
-        if (
-          actor.mover === "action" &&
-          !(
-            actor.actionId &&
-            store.actionMove?.(projectId, id, to, actor.actionId)
-          )
-        ) {
-          refuse(
-            403,
-            `${id} cannot go to ${to} as an approved action: only an action the owner approved, once its call is done, moves its own task to the stage it named.`
-          );
-        }
-        const problem =
-          actor.mover === "hub"
-            ? hubProblem(stages, to)
-            : moveProblem(stages, id, from, to, actor.mover);
-        if (problem) {
-          refuse(stageNamed(stages, to) ? 403 : 400, problem);
-        }
-        doc.setField("stage", to);
-        moved = { from, to };
-        return `stage ${from || "(none)"} → ${to}`;
+        return {
+          what: `stage ${moved.from || NO_STAGE} → ${to}`,
+          stage: moved,
+          ...(why ? { reason: why } : {}),
+        };
       });
       return moved
         ? told({ kind: "moved", projectId, id: task.id, actor, ...moved }, task)
         : task;
     },
 
-    /** Adds or removes one edge from a task to another. */
-    link(
+    /**
+     * Adds or removes one edge from a task to another. Linking
+     * `duplicate_of` also drops the task: it moves to the project's first
+     * stage of kind dropped, checked for the actor as any move, with the
+     * reason "duplicate of tsk-n"; listeners hear of the move.
+     */
+    async link(
       projectId: string,
       ref: string,
       request: { edge: Edge; to: string; remove?: boolean },
       actor: TaskActor
     ): Promise<TaskView> {
-      return change(projectId, ref, actor, async (doc, id) => {
+      let moved: { from: string; to: string } | undefined;
+      const task = await change(projectId, ref, actor, async (doc, id) => {
         const { edge, remove } = request;
-        const number = taskNumber(request.to);
-        if (number === undefined) {
-          return refuse(
-            400,
-            `“${request.to}” is not a task id; tasks are named like tsk-12.`
-          );
+        const target = await edgeTarget(projectId, request, id);
+        if (edge === "duplicate_of" && !remove) {
+          const marked = await markDuplicate(projectId, doc, id, target, actor);
+          moved = marked.stage;
+          return marked;
         }
-        const target = remove
-          ? taskId(number)
-          : (await targets(projectId, edge, [request.to], id))[0];
         const rows = store.index(projectId);
-        if (edge === "parent" || edge === "found_in") {
+        if (
+          edge === "parent" ||
+          edge === "found_in" ||
+          edge === "duplicate_of"
+        ) {
           if (
             !remove &&
             edge === "parent" &&
@@ -2057,7 +2303,28 @@ export const createTasks = (store: TaskStore) => {
           );
         }
         return linkMany(doc, edge, target, remove);
-      }).then((task) => told({ kind: "changed", projectId }, task));
+      });
+      return moved
+        ? told({ kind: "moved", projectId, id: task.id, actor, ...moved }, task)
+        : told({ kind: "changed", projectId }, task);
+    },
+
+    /**
+     * A task's history: every commit to its file, oldest first, followed
+     * across renames, each with who made it, what it did, the stage it moved
+     * and why (task-history.ts). Read from the folder's history as kept per
+     * commit, so it spawns no git while HEAD stands.
+     */
+    async history(projectId: string, ref: string): Promise<TaskHistory> {
+      known(projectId);
+      const { path, number } = await locate(projectId, ref);
+      const { times } = await folderFileTimes(projectId, "tasks");
+      const entry = times.get(path);
+      return {
+        id: taskId(number),
+        path,
+        events: entry ? [...historyOf(entry)] : [],
+      };
     },
 
     /** Ticks, unticks, adds and rewords to-dos, all in one commit. */
@@ -2188,6 +2455,7 @@ const EDGE = t.Union([
   t.Literal("parent"),
   t.Literal("related"),
   t.Literal("found_in"),
+  t.Literal("duplicate_of"),
 ]);
 const KIND = t.Union([
   t.Literal("todo"),
@@ -2314,16 +2582,30 @@ export const taskRoutes = (tasks: Tasks) =>
         }
       }
     )
+    .get("/api/projects/:id/tasks/:taskId/history", async ({ params }) => {
+      try {
+        return await tasks.history(params.id, params.taskId);
+      } catch (error) {
+        return refused(error);
+      }
+    })
     .post(
       "/api/projects/:id/tasks/:taskId/stage",
-      { body: t.Object({ stage: t.String() }) },
+      {
+        body: t.Object({
+          stage: t.String(),
+          /** Why: a close reason, kept in the move's commit and shown in the task's history. */
+          reason: t.Optional(t.String()),
+        }),
+      },
       async ({ params, body }) => {
         try {
           return await tasks.move(
             params.id,
             params.taskId,
             body.stage,
-            YOU_ACTOR
+            YOU_ACTOR,
+            body.reason
           );
         } catch (error) {
           return refused(error);

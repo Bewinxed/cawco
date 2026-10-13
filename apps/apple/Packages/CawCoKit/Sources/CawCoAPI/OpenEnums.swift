@@ -4575,6 +4575,106 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/TaskHistoryActorMover`.
+    public enum TaskHistoryActorMover: OpenEnum {
+        case action
+        case hub
+        case lead
+        case routine
+        case session
+        case you
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "action": self = .action
+            case "hub": self = .hub
+            case "lead": self = .lead
+            case "routine": self = .routine
+            case "session": self = .session
+            case "you": self = .you
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .action: "action"
+            case .hub: "hub"
+            case .lead: "lead"
+            case .routine: "routine"
+            case .session: "session"
+            case .you: "you"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.action, .hub, .lead, .routine, .session, .you]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/TaskHistoryKind`.
+    public enum TaskHistoryKind: OpenEnum {
+        case changed
+        case created
+        case deleted
+        case edited
+        case moved
+        case renamed
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "changed": self = .changed
+            case "created": self = .created
+            case "deleted": self = .deleted
+            case "edited": self = .edited
+            case "moved": self = .moved
+            case "renamed": self = .renamed
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .changed: "changed"
+            case .created: "created"
+            case .deleted: "deleted"
+            case .edited: "edited"
+            case .moved: "moved"
+            case .renamed: "renamed"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.changed, .created, .deleted, .edited, .moved, .renamed]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/TextPropsVariant`.
     public enum TextPropsVariant: OpenEnum {
         case body

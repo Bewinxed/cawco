@@ -1762,6 +1762,131 @@
         }
       }
     },
+    "/api/projects/{id}/tasks/{taskId}/history": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiProjectsByIdTasksByTaskIdHistory",
+        "responses": {
+          "200": {
+            "description": "getApiProjectsByIdTasksByTaskIdHistory 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskHistory"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiProjectsByIdTasksByTaskIdHistory 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiProjectsByIdTasksByTaskIdHistory 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiProjectsByIdTasksByTaskIdHistory 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiProjectsByIdTasksByTaskIdHistory 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "getApiProjectsByIdTasksByTaskIdHistory 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "getApiProjectsByIdTasksByTaskIdHistory 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiProjectsByIdTasksByTaskIdHistory 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiProjectsByIdTasksByTaskIdHistory 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "getApiProjectsByIdTasksByTaskIdHistory 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/tasks/{taskId}/stage": {
       "post": {
         "parameters": [
@@ -1790,6 +1915,9 @@
                 "type": "object",
                 "properties": {
                   "stage": {
+                    "type": "string"
+                  },
+                  "reason": {
                     "type": "string"
                   }
                 },
@@ -1943,7 +2071,8 @@
                       "after",
                       "parent",
                       "related",
-                      "found_in"
+                      "found_in",
+                      "duplicate_of"
                     ]
                   },
                   "to": {
@@ -24007,6 +24136,13 @@
               "type": "string"
             }
           },
+          "duplicateOf": {
+            "description": "The task it repeats (`duplicate_of`); null when none.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "foundIn": {
             "description": "The task it was found in (`found_in`); null when none.",
             "type": [
@@ -24098,7 +24234,7 @@
             }
           },
           "blockedBy": {
-            "description": "The tasks it waits for (`after`) that are not in a done stage; a task the project lacks counts.",
+            "description": "The tasks it waits for (`after`) that are not done. Done: in a stage of\nkind done, or dropped as a duplicate of a task that is done. A task the\nproject lacks counts as waited for, unless the folder's history shows its\nfile deleted or moved out of tasks/ (task-history.ts `goneTasks`).",
             "type": "array",
             "items": {
               "type": "string"
@@ -24127,16 +24263,56 @@
             "description": "When the commit that first added its file landed, ms epoch.",
             "type": "number"
           },
+          "createdBy": {
+            "description": "Who made the commit that first added its file; null while no commit has it.",
+            "$ref": "#/components/schemas/TaskHistoryActor"
+          },
           "updatedAt": {
             "description": "When its file last changed, ms epoch: its last commit, or an edit no commit has yet.",
             "type": "number"
+          },
+          "updatedBy": {
+            "description": "Who made its last commit; null while its file holds an edit no commit has.",
+            "$ref": "#/components/schemas/TaskHistoryActor"
+          },
+          "closeReason": {
+            "description": "The reason given with the move into the done or dropped stage it is in; null when none or open.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "completedAt": {
+            "description": "When it moved into the done stage it is in, ms epoch; null while it is not in one.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "droppedAt": {
+            "description": "When it moved into the dropped stage it is in, ms epoch; null while it is not in one.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "startedAt": {
+            "description": "When it first moved into a stage of kind active, ms epoch; null while it never has.",
+            "type": [
+              "null",
+              "number"
+            ]
           }
         },
         "required": [
           "after",
           "attempts",
           "blockedBy",
+          "closeReason",
+          "completedAt",
           "createdAt",
+          "droppedAt",
+          "duplicateOf",
           "foundIn",
           "id",
           "labels",
@@ -24152,6 +24328,7 @@
           "related",
           "stage",
           "startProblem",
+          "startedAt",
           "title",
           "todos",
           "type",
@@ -24203,6 +24380,31 @@
           "starting"
         ]
       },
+      "TaskHistoryActor": {
+        "description": "Who made a change.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "The session's instance id (a session, the lead), or the approved action's id; null when the commit names none.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "mover": {
+            "$ref": "#/components/schemas/TaskHistoryActorMover",
+            "description": "The mover the change was checked as; null for a commit the hub's task code did not make (a hand edit, folder_write, the folder editor)."
+          },
+          "name": {
+            "description": "The commit's author: you, Caw, the session's title as it was, hub, approved action.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      },
       "Tracker": {
         "description": "Where a project's tasks live: CawCo's files, or (later) an outside tracker.",
         "type": "string",
@@ -24244,6 +24446,13 @@
           },
           "description": {
             "type": "string"
+          },
+          "duplicateOf": {
+            "description": "The task it repeats (`duplicate_of`); null when none.",
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "extra": {
             "description": "Front matter keys the file carries that a task file does not know; kept as written.",
@@ -24378,7 +24587,7 @@
             }
           },
           "blockedBy": {
-            "description": "The tasks it waits for (`after`) that are not in a done stage; a task the project lacks counts.",
+            "description": "The tasks it waits for (`after`) that are not done. Done: in a stage of\nkind done, or dropped as a duplicate of a task that is done. A task the\nproject lacks counts as waited for, unless the folder's history shows its\nfile deleted or moved out of tasks/ (task-history.ts `goneTasks`).",
             "type": "array",
             "items": {
               "type": "string"
@@ -24407,9 +24616,45 @@
             "description": "When the commit that first added its file landed, ms epoch.",
             "type": "number"
           },
+          "createdBy": {
+            "description": "Who made the commit that first added its file; null while no commit has it.",
+            "$ref": "#/components/schemas/TaskHistoryActor"
+          },
           "updatedAt": {
             "description": "When its file last changed, ms epoch: its last commit, or an edit no commit has yet.",
             "type": "number"
+          },
+          "updatedBy": {
+            "description": "Who made its last commit; null while its file holds an edit no commit has.",
+            "$ref": "#/components/schemas/TaskHistoryActor"
+          },
+          "closeReason": {
+            "description": "The reason given with the move into the done or dropped stage it is in; null when none or open.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "completedAt": {
+            "description": "When it moved into the done stage it is in, ms epoch; null while it is not in one.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "droppedAt": {
+            "description": "When it moved into the dropped stage it is in, ms epoch; null while it is not in one.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "startedAt": {
+            "description": "When it first moved into a stage of kind active, ms epoch; null while it never has.",
+            "type": [
+              "null",
+              "number"
+            ]
           }
         },
         "required": [
@@ -24419,8 +24664,12 @@
           "attempts",
           "blockedBy",
           "checks",
+          "closeReason",
+          "completedAt",
           "createdAt",
           "description",
+          "droppedAt",
+          "duplicateOf",
           "extra",
           "foundIn",
           "group",
@@ -24442,6 +24691,7 @@
           "sections",
           "stage",
           "startProblem",
+          "startedAt",
           "title",
           "todos",
           "type",
@@ -24509,6 +24759,99 @@
           "promoted",
           "proposed",
           "text"
+        ]
+      },
+      "TaskHistory": {
+        "description": "A task's history as the API answers it: every commit to its file, oldest first.",
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskHistoryEvent"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "events",
+          "id",
+          "path"
+        ]
+      },
+      "TaskHistoryEvent": {
+        "description": "One commit to a task's file, as its history shows it.",
+        "type": "object",
+        "properties": {
+          "actor": {
+            "$ref": "#/components/schemas/TaskHistoryActor"
+          },
+          "at": {
+            "description": "When, ms epoch, by commit time.",
+            "type": "number"
+          },
+          "commit": {
+            "description": "The commit's sha.",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/TaskHistoryKind"
+          },
+          "reason": {
+            "description": "Why, when the change said: a close reason, the hub's cause (`attempt 5fd1e189 started`).",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "stage": {
+            "description": "The stage it went from and to; from is null for a new task. Null when the stage did not move.",
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "to": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ]
+          },
+          "what": {
+            "description": "What changed, in the commit's words: `stage draft → review`, `update title`, `tick td-2`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "actor",
+          "at",
+          "commit",
+          "kind",
+          "reason",
+          "what"
+        ]
+      },
+      "TaskHistoryKind": {
+        "description": "`created`: its file added. `moved`: a stage move. `changed`: fields,\nto-dos or edges, through the hub. `edited`: its file changed by a commit\nthe hub's task code did not make. `renamed`, `deleted`: its file.",
+        "type": "string",
+        "enum": [
+          "changed",
+          "created",
+          "deleted",
+          "edited",
+          "moved",
+          "renamed"
         ]
       },
       "StagesView": {
@@ -27727,7 +28070,7 @@
           },
           "dates": {
             "type": "object",
-            "description": "Its dates, ms epoch, by name: `createdAt` and `updatedAt` always (the\ncommit that added its file, and its file's last change: its last commit,\nor an edit no commit has yet); `attemptStartedAt` and `attemptEndedAt` of its newest\nattempt when it has one; and every field its file carries whose value is\nan ISO 8601 date, under the field's own name."
+            "description": "Its dates, ms epoch, by name: `createdAt` and `updatedAt` always (the\ncommit that added its file, and its file's last change: its last commit,\nor an edit no commit has yet); `startedAt` (its first move into an active\nstage), `completedAt` and `droppedAt` (its move into the done or dropped\nstage it is in) once they happen; `attemptStartedAt` and `attemptEndedAt` of its newest\nattempt when it has one; and every field its file carries whose value is\nan ISO 8601 date, under the field's own name."
           },
           "fields": {
             "type": "object",
@@ -39767,6 +40110,17 @@
           "reply",
           "silent",
           "skipped"
+        ]
+      },
+      "TaskHistoryActorMover": {
+        "type": "string",
+        "enum": [
+          "action",
+          "hub",
+          "lead",
+          "routine",
+          "session",
+          "you"
         ]
       },
       "TextPropsVariant": {

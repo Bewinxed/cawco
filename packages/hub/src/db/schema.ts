@@ -483,6 +483,8 @@ export const projectTasks = sqliteTable(
       .notNull()
       .default([]),
     foundIn: text("found_in"),
+    /** The task it repeats (`duplicate_of`): a task waiting on it waits on that one instead. */
+    duplicateOf: text("duplicate_of"),
     rank: text("rank"),
     labels: text("labels", { mode: "json" })
       .$type<string[]>()

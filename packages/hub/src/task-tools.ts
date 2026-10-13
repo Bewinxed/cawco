@@ -107,9 +107,16 @@ const taskLine = (task: TaskLine) => ({
     ? { todos: `${task.todos.done}/${task.todos.total}` }
     : {}),
   ...attemptFields(task),
+  ...(task.duplicateOf ? { duplicateOf: task.duplicateOf } : {}),
   ...(task.problem ? { problem: task.problem } : {}),
   createdAt: task.createdAt,
+  ...(task.createdBy ? { createdBy: task.createdBy.name } : {}),
   updatedAt: task.updatedAt,
+  ...(task.updatedBy ? { updatedBy: task.updatedBy.name } : {}),
+  ...(task.startedAt === null ? {} : { startedAt: task.startedAt }),
+  ...(task.completedAt === null ? {} : { completedAt: task.completedAt }),
+  ...(task.droppedAt === null ? {} : { droppedAt: task.droppedAt }),
+  ...(task.closeReason ? { closeReason: task.closeReason } : {}),
 });
 
 /** A list as a model reads it: the project's stages, then one short line of fields per task. */
@@ -278,18 +285,32 @@ export function taskTools(context: TaskToolContext | undefined) {
   return [
     tool(
       "task_read",
-      "Read your project's tasks. With `id`: that task's file, parsed — stage, edges, checks, description, acceptance criteria, to-dos with their ids (td-3) and positions (2.1), and its attempts. Without: the project's stages and every task, one line each; `stage` narrows the list. Every task carries createdAt and updatedAt (ms epoch, from its file's commits). needsYou marks a task waiting on the operator; attempt says one is live or the last one failed; blockedBy lists the tasks it still waits for.",
+      "Read your project's tasks. With `id`: that task's file, parsed — stage, edges, checks, description, acceptance criteria, to-dos with their ids (td-3) and positions (2.1), and its attempts; `history: true` adds its changes (when, who, what, why). Without: the project's stages and every task, one line each; `stage` narrows the list. Tasks carry createdAt/By, updatedAt/By, and once set startedAt, completedAt, droppedAt, closeReason (from its file's commits). needsYou marks a task waiting on the operator; attempt says one is live or the last one failed; blockedBy lists the tasks it still waits for.",
       {
         id: taskRef().optional(),
         stage: z
           .string()
           .optional()
           .describe("When listing, only the tasks in this stage."),
+        history: z.boolean().optional().describe("With `id`: add its history."),
       },
-      async ({ id, stage }) => {
+      async ({ id, stage, history }) => {
         const { projectId, tasks } = scope();
         if (id) {
-          return ok(await tasks.get(projectId, id));
+          const task = await tasks.get(projectId, id);
+          return ok(
+            history
+              ? {
+                  ...task,
+                  history: (await tasks.history(projectId, id)).events,
+                }
+              : task
+          );
+        }
+        if (history) {
+          throw new Error(
+            'Name the task whose history you want: task_read({ id: "tsk-12", history: true }).'
+          );
         }
         const [list, stages] = await Promise.all([
           tasks.list(projectId, { stage }),
@@ -338,10 +359,11 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_update",
-      "Change one of your project's tasks: move its `stage` (checked against the project's stages), or replace its title, description, acceptance criteria, type, checks, outputs, lands, group, owns, budget or labels. What you leave out stays as written.",
+      "Change one of your project's tasks: move its `stage` (checked against the project's stages; its `reason` is kept in its history), or replace its title, description, acceptance criteria, type, checks, outputs, lands, group, owns, budget or labels. What you leave out stays as written.",
       {
         id: taskRef(),
         stage: z.string().optional(),
+        reason: z.string().optional().describe("With `stage`: why, one line."),
         title: z.string().optional(),
         description: z.string().optional(),
         acceptance: z.string().optional(),
@@ -361,8 +383,13 @@ export function taskTools(context: TaskToolContext | undefined) {
         budget: budgetParameter().nullable().optional(),
         labels: lines("Replaces the labels."),
       },
-      async ({ id, stage, ...patch }) => {
+      async ({ id, stage, reason, ...patch }) => {
         const { projectId, tasks, actor } = scope();
+        if (reason !== undefined && stage === undefined) {
+          throw new Error(
+            "A reason goes with a stage move: give `stage` too, or leave `reason` out."
+          );
+        }
         const fields = Object.values(patch).some(
           (value) => value !== undefined
         );
@@ -370,14 +397,14 @@ export function taskTools(context: TaskToolContext | undefined) {
           ? await tasks.update(projectId, id, patch, actor)
           : undefined;
         if (stage !== undefined) {
-          task = await tasks.move(projectId, id, stage, actor);
+          task = await tasks.move(projectId, id, stage, actor, reason);
         }
         return ok(task ?? (await tasks.get(projectId, id)));
       }
     ),
     tool(
       "task_link",
-      "Add or remove an edge from one task to another: `after` (it waits for that task), `parent`, `related` (no effect on order), or `found_in` (turned up while working on that task).",
+      "Add or remove an edge from one task to another: `after` (it waits for that task), `parent`, `related` (no effect on order), `found_in` (turned up while working on that task), or `duplicate_of` (it repeats that task: it is dropped, if your moves allow, and its waiters wait on that task).",
       {
         id: taskRef(),
         edge: z.enum(EDGES),

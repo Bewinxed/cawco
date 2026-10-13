@@ -10,6 +10,7 @@
  * parent: 120
  * related: [131]
  * found_in: 140
+ * duplicate_of: 101
  * checks: ["bun test", "bun run lint"]
  * outputs: [post.md]
  * lands: pr
@@ -75,6 +76,7 @@ export const TASK_FIELDS = [
   "parent",
   "related",
   "found_in",
+  "duplicate_of",
   "checks",
   "outputs",
   "lands",
@@ -87,11 +89,25 @@ export const TASK_FIELDS = [
 ] as const;
 export type TaskField = (typeof TASK_FIELDS)[number];
 
-/** The four edges a task can have to another (beads'). */
-export const EDGES = ["after", "parent", "related", "found_in"] as const;
+/**
+ * The edges a task can have to another (beads'). `duplicate_of` names the
+ * task this one repeats: linking it drops this one, and a task waiting on it
+ * waits on that one's being done instead.
+ */
+export const EDGES = [
+  "after",
+  "parent",
+  "related",
+  "found_in",
+  "duplicate_of",
+] as const;
 export type Edge = (typeof EDGES)[number];
 /** The edges that name one task; the others name a list. */
-const SINGLE_EDGES: ReadonlySet<Edge> = new Set(["parent", "found_in"]);
+const SINGLE_EDGES: ReadonlySet<Edge> = new Set([
+  "parent",
+  "found_in",
+  "duplicate_of",
+]);
 export const isSingleEdge = (edge: Edge): boolean => SINGLE_EDGES.has(edge);
 
 export interface TaskFields {
@@ -101,6 +117,8 @@ export interface TaskFields {
   /** What an attempt may spend before the hub stops it; null: the project's default. */
   budget: WorkBudget | null;
   checks: string[];
+  /** The task this one repeats (`duplicate_of`); null when none. */
+  duplicateOf: string | null;
   foundIn: string | null;
   /** Its attempts' group under their parent: one combined report once all have ended. */
   group: string | null;
@@ -325,6 +343,7 @@ const FIELD_KEYS = {
   parent: "parent",
   related: "related",
   found_in: "foundIn",
+  duplicate_of: "duplicateOf",
   checks: "checks",
   outputs: "outputs",
   lands: "lands",
@@ -375,6 +394,7 @@ const emptyFields = (): TaskFields => ({
   parent: null,
   related: [],
   foundIn: null,
+  duplicateOf: null,
   checks: [],
   outputs: [],
   lands: null,
@@ -409,7 +429,7 @@ const readEdgeList = (
   return [...new Set(refs)];
 };
 
-/** One task id (`parent`, `found_in`); what is not one goes to `problems`. */
+/** One task id (`parent`, `found_in`, `duplicate_of`); what is not one goes to `problems`. */
 const readEdge = (
   field: string,
   line: FrontMatterLine,
@@ -520,6 +540,8 @@ const readField = (
     fields.parent = readEdge(field, line, problems);
   } else if (field === "found_in") {
     fields.foundIn = readEdge(field, line, problems);
+  } else if (field === "duplicate_of") {
+    fields.duplicateOf = readEdge(field, line, problems);
   } else if (LIST_FIELDS.has(field)) {
     fields[field as "checks" | "outputs" | "owns" | "labels" | "accounts"] =
       readList(field, line, problems);
