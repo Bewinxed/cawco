@@ -11469,6 +11469,10 @@
                   "inPlace": {
                     "type": "boolean"
                   },
+                  "askedBy": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
                   "images": {
                     "type": "array",
                     "items": {

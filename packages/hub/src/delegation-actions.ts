@@ -1066,6 +1066,7 @@ export const handoffActions = ({
             ...(fallbackPermissionMode ? { fallbackPermissionMode } : {}),
           },
           ...(inPlace ? { inPlace: true } : {}),
+          askedBy: instanceId,
           ...(input.note ? { note: input.note } : {}),
         }),
       }

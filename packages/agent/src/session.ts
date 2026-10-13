@@ -1459,7 +1459,9 @@ export class SessionSupervisor {
     session: HarnessSession,
     serverBusy?: string[],
     /** The hub's keep-alive is left out: {@link CONTROL_RESTLESS} asks for the rest alone. */
-    keepAliveAside = false
+    keepAliveAside = false,
+    /** Its account is at its limit: what it holds for later is not counted ({@link HarnessSession.holding}). */
+    atLimit = false
   ): Promise<{ why: string; unsure?: true } | undefined> {
     if (this.#adopting.has(instanceId)) {
       return { why: "its custody is still being decided", unsure: true };
@@ -1487,7 +1489,7 @@ export class SessionSupervisor {
     if (!keepAliveAside && this.#keptAwake?.has(instanceId)) {
       return { why: "the hub is keeping its prompt cache warm" };
     }
-    const held = session.holding?.();
+    const held = session.holding?.(atLimit);
     if (held) {
       return { why: held };
     }
@@ -1588,8 +1590,11 @@ export class SessionSupervisor {
    * ({@link CONTROL_CARRY_SESSIONS}). A session whose process runs is left
    * where it is, `live`, unless the request says `stop` and it is at rest:
    * then its process ends first, the way a relaunch ends it, and the hub
-   * starts it again on the account it moved to. A process sessiond still
-   * holds that no session here has taken back is live too.
+   * starts it again on the account it moved to. One whose account is at its
+   * limit (`atLimit`) is at rest with no turn running, ask parked or send
+   * unread: what it holds for later would only wake it into a refused turn.
+   * A process sessiond still holds that no session here has taken back is
+   * live too.
    */
   async carrySessions(
     requests: CarrySessionRequest[]
@@ -1618,7 +1623,13 @@ export class SessionSupervisor {
       }
       const running = this.#sessions.get(instanceId);
       if (running && request.stop) {
-        const awake = await this.#awake(instanceId, running, undefined, true);
+        const awake = await this.#awake(
+          instanceId,
+          running,
+          undefined,
+          true,
+          request.atLimit === true
+        );
         if (awake || this.#queues.has(instanceId)) {
           outcomes[instanceId] = { state: "live" };
           continue;

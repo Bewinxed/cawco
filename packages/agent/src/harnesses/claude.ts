@@ -2205,12 +2205,18 @@ class ClaudeSession implements HarnessSession {
     };
   }
 
-  holding(): string | undefined {
+  holding(atLimit = false): string | undefined {
     if (this.#unread.size > 0) {
       return `it holds ${this.#unread.size} send(s) it has not read yet`;
     }
     if (!this.#stored) {
       return "its conversation is not stored, so nothing could wake it";
+    }
+    // At its account's limit, a background task's notice or a wake-up only
+    // opens a turn the limit refuses, so neither holds the process there:
+    // the move ends them with it, its conversation goes whole.
+    if (atLimit) {
+      return undefined;
     }
     if (this.#background.size > 0) {
       return `${this.#background.size} background task(s) it started are still running`;

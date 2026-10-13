@@ -1345,6 +1345,14 @@ export const CONTROL_GET_TODOS = "getTodos";
 export interface CarrySessionRequest {
   /** The account it is to run on; null for none (the machine's own Claude Code dir). */
   accountId: string | null;
+  /**
+   * With `stop`: the account it runs on is at its limit, so every turn its
+   * process would start is refused there. What the process holds for later
+   * (background work, scheduled wake-ups) wakes it only into a refused turn,
+   * and does not keep it from being stopped; a turn running, an ask parked,
+   * or a send it has not read still does.
+   */
+  atLimit?: true;
   /** Its row, whose process the carry stops first when `stop` is set. */
   instanceId: string;
   sessionId: string;

@@ -251,6 +251,13 @@ export interface Summarised {
 export interface AtLimitPorts {
   /** The account `row` runs on now. */
   accountOf: (row: LimitRow) => string | undefined;
+  /**
+   * Carries out the move a person asked of `row` ({@link handMove}) now,
+   * between its turns: its conversation carried whole to that account, and
+   * once there it carries on past the limit that stopped it. Settled when
+   * the carry has: a process that still runs owes the move again.
+   */
+  carryHandMove: (row: LimitRow) => Promise<void>;
   changed: () => void;
   /**
    * Continues `row` on `accountId` from a summary: the same session goes on
@@ -270,6 +277,12 @@ export interface AtLimitPorts {
   /** Whether a continuation of `row` is under way: nothing else is done to it meanwhile. */
   continuing: (row: LimitRow) => boolean;
   db: DbShape;
+  /**
+   * The account a person moved `row` to and it has not reached yet (server.ts
+   * `moveByHand`, owed to its turn's end): while there is one, the move is
+   * the only thing done to it at its limit. Undefined when none is owed.
+   */
+  handMove: (row: LimitRow) => string | undefined;
   /** Whether `row` is between turns: nothing running and nothing waiting on it. */
   idle: (row: LimitRow) => Promise<boolean>;
   /** Runs the next look and each settling session's timer until the hub closes. */
@@ -656,7 +669,60 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       : undefined;
   };
 
-  /** Moves or continues `row` off `current`, or holds it, as {@link decideFor} says. */
+  /**
+   * The move a person asked of `row`, to `toId` ({@link AtLimitPorts.handMove}):
+   * carried out once it is between turns, while that account can take it;
+   * held until that account's reset while it cannot. Nothing else is done to
+   * it at its limit meanwhile: it is neither moved elsewhere nor continued
+   * from a summary, as the person chose a move.
+   */
+  const carryByHand = async (
+    row: LimitRow,
+    current: Account,
+    toId: string,
+    cause: Cause
+  ): Promise<void> => {
+    const now = Date.now();
+    const target = db.accounts.get(toId);
+    const full = refusedUntil(
+      db.accounts.bench(now),
+      readingOf(toId),
+      toId,
+      row.model,
+      now
+    );
+    if (full !== null) {
+      settling.delete(row.id);
+      // Held without a line of its own: its account's "waiting" line would
+      // name the wrong reset, and the person's move already says where it goes.
+      db.atLimit.putHold({
+        instanceId: row.id,
+        accountId: current.id,
+        until: full,
+      });
+      return;
+    }
+    // Only between turns: never inside a tool round, never over a turn
+    // someone started since.
+    if (!(await ports.idle(row))) {
+      settle(row, current, cause);
+      return;
+    }
+    const was = settling.get(row.id);
+    if (was) {
+      lifetime.cancel(was.timer);
+      settling.delete(row.id);
+    }
+    console.info(
+      `[at-limit] ${row.id}: carrying out the move a person asked, off ${accountName(current)} to ${target ? accountName(target) : toId}`
+    );
+    await ports.carryHandMove(row);
+  };
+
+  /**
+   * Moves or continues `row` off `current`, or holds it, as {@link decideFor}
+   * says; one a person moved, only as they asked ({@link carryByHand}).
+   */
   const act = async (
     row: LimitRow,
     current: Account,
@@ -667,6 +733,11 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     }
     acting.add(row.id);
     try {
+      const byHand = ports.handMove(row);
+      if (byHand) {
+        await carryByHand(row, current, byHand, cause);
+        return;
+      }
       const now = Date.now();
       const decision = decideFor(row, current, now, cause);
       if (!decision || decision.action === "wait") {
@@ -867,6 +938,26 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   };
 
   /**
+   * One held on its refused credential: it carries on where it is once its
+   * account is signed in there again, and until then moves as soon as
+   * another account can take it.
+   */
+  const lookAtSignedOut = async (
+    row: LimitRow,
+    current: Account
+  ): Promise<void> => {
+    if (!signedIn(row, current)) {
+      await act(row, current, "refused");
+    } else if (await ports.idle(row)) {
+      db.atLimit.dropHold(row.id);
+      console.info(
+        `[at-limit] ${row.id}: ${accountName(current)} is signed in again; carrying on`
+      );
+      ports.resume(row, "signin");
+    }
+  };
+
+  /**
    * One held session: past its reset, it carries on where it is once it is
    * between turns; before, another account may have come free for it. One
    * held on its refused credential (`until` null) carries on where it is
@@ -880,16 +971,13 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       db.atLimit.dropHold(held.instanceId);
       return;
     }
+    // A person moved it: its hold ends at that move, not at its reset.
+    if (ports.handMove(row)) {
+      await act(row, current, held.until === null ? "refused" : "limit");
+      return;
+    }
     if (held.until === null) {
-      if (!signedIn(row, current)) {
-        await act(row, current, "refused");
-      } else if (await ports.idle(row)) {
-        db.atLimit.dropHold(row.id);
-        console.info(
-          `[at-limit] ${row.id}: ${accountName(current)} is signed in again; carrying on`
-        );
-        ports.resume(row, "signin");
-      }
+      await lookAtSignedOut(row, current);
       return;
     }
     if (stays(row, current)) {
@@ -991,6 +1079,12 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       console.info(
         `[at-limit] ${instanceId}: turn refused at ${accountName(current)}'s limit`
       );
+      // A person moved it: that move is all that is done, whoever started
+      // the turn and whoever's work it is.
+      if (ports.handMove(row)) {
+        await act(row, current);
+        return;
+      }
       const origin = ports.startedBy(row);
       if (origin?.kind === "system" && noticeTurn(origin)) {
         console.info(

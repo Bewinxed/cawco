@@ -26,7 +26,15 @@
  *       the new conversation, after the opening;
  *   (b) an agent restart while a session's turn is parked on a question:
  *       what was queued for it is read by the restored process, nothing is
- *       failed as ended, and the turn handed back asks the question again.
+ *       failed as ended, and the turn handed back asks the question again;
+ *   (e) a person's move of a mainline session parked at A's limit, its
+ *       process holding a background task: held and at rest, it moves at
+ *       once; moved mid-turn while its target is briefly at its limit too,
+ *       the at-limit controller holds it for that account and never
+ *       continues it on C, then carries the move out. Either way its
+ *       conversation is resumed there, no session row is added and its
+ *       delegate keeps its parent. Each continuation's log line names who
+ *       asked (the controller, a person).
  */
 import assert from "node:assert/strict";
 import { cpSync, existsSync, readdirSync, writeFileSync } from "node:fs";
@@ -418,9 +426,35 @@ if (role === "sessiond") {
           { resumeWorkflows: false }
         )
           .post("/proof/limit", ({ body }) => {
-            // A's limit as the hub learns it: benched until four hours on.
-            const { account } = body as { account: string };
-            db.accounts.setBench(account, null, Date.now() + 4 * 3_600_000);
+            // An account's limit as the hub learns it: benched until four
+            // hours on, or for `ms`.
+            const { account, ms } = body as { account: string; ms?: number };
+            db.accounts.setBench(
+              account,
+              null,
+              Date.now() + (ms ?? 4 * 3_600_000)
+            );
+            return { ok: true };
+          })
+          .post("/proof/account", () => {
+            // A third account, signed in here like the first two.
+            const c = db.accounts.create({
+              kind: "subscription",
+              provider: CLAUDE_PROVIDER,
+              label: "C",
+              identity: { email: "c@fake.invalid", organization: "org-c" },
+            });
+            pinned.push(c.id);
+            return { id: c.id };
+          })
+          .post("/proof/routing", ({ body }) => {
+            // Moving at the limit on or off, for one step of the proof.
+            const { move } = body as { move: boolean };
+            const now = db.accounts.routing(CLAUDE_PROVIDER);
+            db.accounts.setRouting({
+              ...now,
+              atLimit: { ...now.atLimit, move },
+            });
             return { ok: true };
           })
           .post("/proof/context", ({ body }) => {
@@ -583,6 +617,12 @@ if (role === "sessiond") {
       ctx.busy(false);
     },
     dispose: async () => closeStream(ctx.instanceId),
+    // A background task it started, while `background-<id>` exists: at its
+    // account's limit it holds nothing (agent `holding`).
+    holding: (atLimit?: boolean) =>
+      !atLimit && existsSync(join(scratch, `background-${ctx.instanceId}`))
+        ? "1 background task(s) it started are still running"
+        : undefined,
     send: (message: { uuid: string; message: { content: unknown } }) => {
       const { content } = message.message;
       const text =
@@ -635,6 +675,12 @@ if (role === "sessiond") {
           });
           return;
         }
+        // A turn that takes its time before its answer: mid-turn meanwhile.
+        if (text.includes("slow-turn")) {
+          ctx.busy(true);
+          await delay(4000);
+          ctx.busy(false);
+        }
         if (await limited(account)) {
           await log(`REFUSED ${ctx.instanceId} on ${account}`);
           ctx.frame({
@@ -670,6 +716,8 @@ if (role === "sessiond") {
           is_error: false,
           uuid: crypto.randomUUID(),
           result: `done: ${text.slice(0, 40)}`,
+          // Each model's window, which Claude Code reports only here.
+          modelUsage: { "stand-in": { contextWindow: 200_000 } },
         } as never);
       })().catch(console.error);
     },
@@ -772,6 +820,14 @@ if (role === "sessiond") {
       }
       await appendFile(transcript(key), "");
       openStream(ctx.instanceId, ctx.sessionCredential);
+      // Its credential installed, as Claude Code's adapter says once its
+      // config holds it: the hub settles the launch on this word.
+      if (ctx.sessionCredential) {
+        const { acknowledgeSessionCredential } = await import(
+          "../packages/agent/src/session-identity"
+        );
+        await acknowledgeSessionCredential(ctx.sessionCredential);
+      }
       await log(
         `SPAWN ${ctx.instanceId} ${key} account=${spec.accountDir?.accountId ?? "none"}${spec.resume ? " resume" : " fresh"}`
       );
@@ -1426,6 +1482,170 @@ if (role === "sessiond") {
       JSON.stringify(qSends)
     );
     quote("the restore (hub log)", lines(await hubLog(), q).slice(-8));
+
+    // ── (e) a person's move of a session parked at its account's limit ───
+    // Two orchestrators on A, mainline, each a delegate's parent and each
+    // holding a background task in its process (a monitor, a background
+    // shell), then A at its limit. A third account, C, has room: one the
+    // at-limit controller could continue them on from a summary.
+    const { id: c } = (await api("/proof/account", {})) as { id: string };
+    await mkdir(join(dir, "home", ".cawco", "accounts", c, "claude"), {
+      recursive: true,
+    });
+    const p = crypto.randomUUID();
+    const o = crypto.randomUUID();
+    await withHistory(p, a);
+    await withHistory(o, a);
+    const pChild = crypto.randomUUID();
+    const oChild = crypto.randomUUID();
+    spawn(pChild, b, p);
+    spawn(oChild, b, o);
+    await running(pChild);
+    await running(oChild);
+    for (const id of [p, o]) {
+      // biome-ignore lint/performance/noAwaitInLoops: two marker files
+      await writeFile(join(dir, `background-${id}`), "a monitor");
+    }
+    const sessionsOf = async () =>
+      (await rows())
+        .filter((one) => one.kind !== "summariser")
+        .map((one) => one.id);
+    const before5 = await sessionsOf();
+    const pSession = (await row(p))?.sessionId;
+    const oSession = (await row(o))?.sessionId;
+    await writeFile(join(dir, `limit-${a}`), "at its limit");
+    await api("/proof/limit", { account: a });
+
+    // (e1) Parked and at rest: held at A's limit (moving there is off for
+    // this step, so it stays held as 8ddfd8a7 did), then moved by hand to C.
+    await api("/proof/routing", { move: false });
+    personSays(p, "Keep going on the work.");
+    await until(
+      "P held at A's limit",
+      () => limitLines(p),
+      (seen) => seen.some((one) => one.kind === "waiting")
+    );
+    const pMoved = (await api(`/api/instances/${p}/account`, {
+      accountId: c,
+    })) as { state: string; why: string };
+    await api("/proof/routing", { move: true });
+    assert.equal(pMoved.state, "moved", JSON.stringify(pMoved));
+    await until(
+      "P relaunched on C, its conversation resumed",
+      eventLog,
+      (text) =>
+        lines(text, `SPAWN ${p} `).some(
+          (one) =>
+            one.includes(`account=${c} resume`) && one.includes(`${pSession}`)
+        )
+    );
+    const pAfter = (await row(p)) as Row;
+    assert.equal(pAfter.account, c, "P runs on C");
+    assert.equal(pAfter.sessionId, pSession, "P's own conversation");
+    assert.equal(
+      (await row(pChild))?.parent,
+      p,
+      "P's delegate keeps its parent"
+    );
+
+    // (e2) A move owed mid-turn while its target is briefly at its limit too:
+    // the controller holds it for that account, never continues it on C.
+    await api("/proof/limit", { account: b, ms: 12_000 });
+    personSays(o, "slow-turn: one more piece of work.");
+    await until("O mid-turn", eventLog, (text) =>
+      lines(text, `TURN ${o}`).some((one) => one.includes("slow-turn"))
+    );
+    const oAsked = (await api(`/api/instances/${o}/account`, {
+      accountId: b,
+    })) as { state: string; why: string };
+    assert.equal(oAsked.state, "pending", JSON.stringify(oAsked));
+    await until("O's turn refused at A's limit", eventLog, (text) =>
+      text.includes(`REFUSED ${o} on ${a}`)
+    );
+    await delay(2000);
+    const whileOwed = await limitLines(o);
+    assert.ok(
+      !whileOwed.some((one) => ["continuing", "continued"].includes(one.kind)),
+      `O was not continued while its move was owed: ${JSON.stringify(whileOwed)}`
+    );
+    await until(
+      "O relaunched on B, its conversation resumed, once B came free",
+      eventLog,
+      (text) =>
+        lines(text, `SPAWN ${o} `).some(
+          (one) =>
+            one.includes(`account=${b} resume`) && one.includes(`${oSession}`)
+        ),
+      60_000
+    );
+    await until("O carried on, on B", eventLog, (text) =>
+      lines(text, `TURN ${o}`).some((one) =>
+        one.includes("The usage limit that stopped your last turn")
+      )
+    );
+    const oAfter = (await row(o)) as Row;
+    assert.equal(oAfter.account, b, "O runs on B");
+    assert.equal(oAfter.sessionId, oSession, "O's own conversation");
+    assert.equal(
+      (await row(oChild))?.parent,
+      o,
+      "O's delegate keeps its parent"
+    );
+    const oLines = await limitLines(o);
+    assert.ok(
+      !oLines.some((one) => ["continuing", "continued"].includes(one.kind)),
+      JSON.stringify(oLines)
+    );
+    assert.deepEqual(await sessionsOf(), before5, "no session row was added");
+    const log5 = await hubLog();
+    assert.ok(
+      !lines(log5, "[continuation]").some(
+        (one) => one.includes(p) || one.includes(o)
+      ),
+      "no continuation of P or O was started"
+    );
+    quote("(e) the hand moves (hub log)", [
+      ...lines(log5, `[accounts] ${p}`),
+      ...lines(log5, `[at-limit] ${p}`),
+      ...lines(log5, `[hub] ${p} relaunches`),
+      ...lines(log5, `[accounts] ${o}`),
+      ...lines(log5, `[at-limit] ${o}`),
+      ...lines(log5, `[hub] ${o} relaunches`),
+    ]);
+    quote(
+      "(e) the stand-in: what P's and O's processes did",
+      [...lines(await eventLog(), p), ...lines(await eventLog(), o)].filter(
+        (one) => !one.includes("Turn ")
+      )
+    );
+    quote("(e) P and O as rows, and their delegates", [
+      `P ${short(p)} account=${pAfter.account === c ? "C" : pAfter.account} session=${pAfter.sessionId} (before ${pSession})`,
+      `O ${short(o)} account=${oAfter.account === b ? "B" : oAfter.account} session=${oAfter.sessionId} (before ${oSession})`,
+      `P's delegate ${short(pChild)} parent=${short((await row(pChild))?.parent ?? "")}`,
+      `O's delegate ${short(oChild)} parent=${short((await row(oChild))?.parent ?? "")}`,
+      `sessions before ${before5.length}, after ${(await sessionsOf()).length}`,
+    ]);
+    quote("(e) P's and O's limit lines", [
+      JSON.stringify(await limitLines(p)),
+      JSON.stringify(oLines),
+    ]);
+    await rm(join(dir, `limit-${a}`));
+    // A person's "Continue in new session" of P, as the dashboard asks it.
+    const byPerson = (await api(`/api/instances/${p}/continue`, {
+      summarizer: { harness: "claude", model: "stand-in", account: c },
+      target: { harness: "claude", model: "stand-in", account: c },
+    })) as { targetInstanceId: string };
+    await until(
+      "P's continuation in a new session started",
+      () => row(byPerson.targetInstanceId),
+      (one) => one?.status === "running"
+    );
+    quote(
+      "who asked each continuation (hub log)",
+      lines(await hubLog(), "[continuation]").filter(
+        (one) => one.includes("asked by") || one.includes("took on from")
+      )
+    );
 
     if (hold) {
       // ── A session to watch in a browser ───────────────────────────────

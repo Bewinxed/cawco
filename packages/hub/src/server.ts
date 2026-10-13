@@ -906,6 +906,24 @@ const WORKSPACE_TIMEOUT_MS = 60_000;
  * hear how it ended, and keeps the table to the few jobs of the moment.
  */
 const CONTINUATION_KEPT_MS = 5 * 60_000;
+/**
+ * Who asked for a continuation: a person (the dashboard's "Continue in new
+ * session", or the API with no session named), a session's
+ * `continue_session`, or the at-limit controller.
+ */
+type ContinuationAsker =
+  | { kind: "person" }
+  | { kind: "session"; id: string }
+  | { kind: "at-limit" };
+/** Who asked, as a continuation's log line says it. */
+const askerWords = (by: ContinuationAsker): string => {
+  if (by.kind === "session") {
+    return `session ${by.id} (continue_session)`;
+  }
+  return by.kind === "at-limit"
+    ? "the at-limit controller"
+    : "a person (the dashboard or the API)";
+};
 /** The origin of the hub's word to a sender that its message did not arrive. */
 const UNDELIVERED_ORIGIN = "undelivered";
 /** The words a continuation stopped by its Cancel ends with. */
@@ -1032,6 +1050,9 @@ const continueBody = t.Object({
   // The session goes on itself, in a fresh conversation, rather than in a
   // new session: what `continue_session` asks when it names no session.
   inPlace: t.Optional(t.Boolean()),
+  // The session whose `continue_session` asked, for the hub's log line;
+  // absent, a person asked.
+  askedBy: t.Optional(t.String({ minLength: 1 })),
   // What rides the new session's opening message beside its words, as a
   // send carries it. The summariser is never handed them.
   images: t.Optional(
@@ -6571,6 +6592,11 @@ export const createServer = (
    */
   const limitRefused = new Set<string>();
   /**
+   * Sessions whose last turn their account's limit refused, until a turn of
+   * theirs ends any other way: parked there ({@link parkedAtLimit}).
+   */
+  const refusedLast = new Set<string>();
+  /**
    * Sessions whose turn in flight died on their account's credential and
    * whose end is the at-limit controller's to answer, not a failed turn to
    * hand back ({@link takeCredentialTurn}): a token refresh race it sends
@@ -6709,9 +6735,11 @@ export const createServer = (
    * once the machine answers that it all is: a reader with the row reads
    * that one dir. `stop` ends a session's process first when it is at rest,
    * for a move that relaunches it; without it a session whose process runs
-   * stays where it is. A row with no conversation yet, or of another
-   * harness, has nothing of Claude's to carry. Answers the rows that moved,
-   * and why each other did not.
+   * stays where it is. One whose account is at its limit is at rest with no
+   * turn running, ask parked or send unread ({@link parkedAtLimit}): what its
+   * process holds for later only wakes it into a refused turn. A row with no
+   * conversation yet, or of another harness, has nothing of Claude's to
+   * carry. Answers the rows that moved, and why each other did not.
    */
   const moveRowsToAccount = async (
     machineId: string,
@@ -6731,6 +6759,7 @@ export const createServer = (
               sessionId: row.sessionId,
               accountId,
               ...(stop ? { stop: true } : {}),
+              ...(stop && parkedAtLimit(row.id) ? { atLimit: true } : {}),
             },
           ]
         : []
@@ -6753,6 +6782,39 @@ export const createServer = (
       moved.push(row.id);
     }
     return { moved, kept };
+  };
+
+  /**
+   * Whether `instanceId` is parked at its account's limit: its last turn
+   * ended refused there ({@link refusedLast}), the at-limit controller holds
+   * it for a reset, or the hub reads its account at its limit for its model
+   * (a bench, or a window full until its reset). Every turn its process
+   * starts there is refused, whatever it holds for later.
+   */
+  const parkedAtLimit = (instanceId: string): boolean => {
+    if (
+      refusedLast.has(instanceId) ||
+      (db.atLimit.hold(instanceId)?.until ?? null) !== null
+    ) {
+      return true;
+    }
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (!row?.accountId) {
+      return false;
+    }
+    const now = Date.now();
+    const reading = db.accounts
+      .readings()
+      .find((one) => one.accountId === row.accountId);
+    return (
+      refusedUntil(
+        db.accounts.bench(now),
+        reading,
+        row.accountId,
+        row.model,
+        now
+      ) !== null
+    );
   };
 
   /** Why a carry left a row's data where it was ({@link moveRowsToAccount}); undefined when it is all in the new dir. */
@@ -9994,6 +10056,8 @@ export const createServer = (
   const startContinuation = (
     prepared: PreparedContinuation,
     request: ContinueRequest,
+    /** Who asked for it, as its log line names them. */
+    askedBy: ContinuationAsker,
     /** A summary already written (ahead of an account's limit): nothing is summarised. */
     written?: string
   ): ContinuationRow => {
@@ -10016,6 +10080,9 @@ export const createServer = (
       stage: summarise ? "summarising" : "starting",
       error: null,
     });
+    console.info(
+      `[continuation] ${row.id}: ${prepared.source.instanceId} goes on ${inPlace ? "in place, in a fresh conversation" : `in a new session ${row.targetInstanceId}`}${request.target.account ? ` on account ${request.target.account}` : ""}; asked by ${askerWords(askedBy)}`
+    );
     publishInstances(prepared.source.machineId);
     // The job runs on its own; its record is what anyone follows.
     detach(advanceContinuation(row.id), "continuation");
@@ -10251,6 +10318,9 @@ export const createServer = (
     );
     const why = kept.get(id);
     if (why === PROCESS_RUNS) {
+      // Between turns, yet holding work for later its machine will not end:
+      // asked again a beat later, not at once.
+      await lifetime.sleep(IN_PLACE_IDLE_LOOK_MS);
       return leaveConversation(job);
     }
     if (why) {
@@ -12503,7 +12573,12 @@ export const createServer = (
    */
   const relaunchAtTurnEnd = new Map<
     string,
-    { to?: string; move: AccountMove | null }
+    {
+      /** A person asked for it ({@link moveByHand}): the at-limit controller only carries it out. */
+      byHand?: true;
+      to?: string;
+      move: AccountMove | null;
+    }
   >();
 
   /**
@@ -12537,6 +12612,8 @@ export const createServer = (
    */
   const landSessionDir = (row: StoredRow, accountId: string | null): void => {
     launchClaims.delete(row.id);
+    // A new process: nothing of it has been refused yet.
+    refusedLast.delete(row.id);
     const owed = relaunchAtTurnEnd.get(row.id);
     if (owed?.to !== undefined && owed.to === accountId) {
       relaunchAtTurnEnd.delete(row.id);
@@ -12639,7 +12716,7 @@ export const createServer = (
       : null;
     const running = !["sleeping", "stopped", "error"].includes(row.status);
     const owe = () => {
-      relaunchAtTurnEnd.set(row.id, { to: account.id, move });
+      relaunchAtTurnEnd.set(row.id, { byHand: true, to: account.id, move });
       return {
         state: "pending" as const,
         accountId: account.id,
@@ -12705,36 +12782,13 @@ export const createServer = (
    * told to carry on, and answers there what that turn was asked.
    */
   const relaunchOnAccount = (instanceId: string, carry?: "limit"): void => {
-    const [stored] = db.getInstancesByIds([instanceId]);
-    const owed = stored ? relaunchAtTurnEnd.get(stored.id) : undefined;
-    if (stored && owed?.to !== undefined && registry.agent(stored.machineId)) {
-      const { to } = owed;
-      relaunchAtTurnEnd.delete(stored.id);
-      transcripts.noteRelaunch(stored.id);
+    const going = takeUpOwedMove(instanceId, carry);
+    if (going !== undefined) {
       // The carry runs on its own; the relaunch follows it.
-      detach(
-        moveRowsToAccount(stored.machineId, [stored], to, true).then(
-          ({ kept }) => {
-            const why = kept.get(stored.id);
-            if (why) {
-              if (why === PROCESS_RUNS) {
-                relaunchAtTurnEnd.set(stored.id, owed);
-              }
-              return;
-            }
-            db.atLimit.dropHold(stored.id);
-            publishInstances(stored.machineId);
-            if (owed.move) {
-              noteAtLimit(stored, owed.move);
-            }
-            relaunchOnAccount(stored.id, carry);
-            releaseOwed({ instanceId: stored.id });
-          }
-        ),
-        "account move"
-      );
+      detach(going, "account move");
       return;
     }
+    const [stored] = db.getInstancesByIds([instanceId]);
     const row = stored && takeOwedMove(stored);
     const agent = row ? registry.agent(row.machineId) : undefined;
     if (!(row?.sessionId && agent)) {
@@ -12753,6 +12807,49 @@ export const createServer = (
     if (carry) {
       carryOn(row, carry);
     }
+  };
+
+  /**
+   * The move `instanceId` owes ({@link relaunchAtTurnEnd}), carried now: its
+   * process ended at rest and its data carried into the account's dir, then
+   * its row names the account, the move's line is written, and it relaunches
+   * there (`carry`: told to carry on past the limit that stopped it). One
+   * whose process still runs owes it again; one whose carry cannot happen
+   * stays where it is. Undefined when it owes no move to an account, or its
+   * machine is away: nothing was taken up.
+   */
+  const takeUpOwedMove = (
+    instanceId: string,
+    carry?: "limit"
+  ): Promise<void> | undefined => {
+    const [stored] = db.getInstancesByIds([instanceId]);
+    const owed = stored ? relaunchAtTurnEnd.get(stored.id) : undefined;
+    if (
+      !(stored && owed?.to !== undefined && registry.agent(stored.machineId))
+    ) {
+      return undefined;
+    }
+    const { to } = owed;
+    relaunchAtTurnEnd.delete(stored.id);
+    transcripts.noteRelaunch(stored.id);
+    return moveRowsToAccount(stored.machineId, [stored], to, true).then(
+      ({ kept }) => {
+        const why = kept.get(stored.id);
+        if (why) {
+          if (why === PROCESS_RUNS) {
+            relaunchAtTurnEnd.set(stored.id, owed);
+          }
+          return;
+        }
+        db.atLimit.dropHold(stored.id);
+        publishInstances(stored.machineId);
+        if (owed.move) {
+          noteAtLimit(stored, owed.move);
+        }
+        relaunchOnAccount(stored.id, carry);
+        releaseOwed({ instanceId: stored.id });
+      }
+    );
   };
 
   /**
@@ -15582,6 +15679,7 @@ export const createServer = (
           },
         },
       },
+      { kind: "at-limit" },
       reused?.text
     );
   };
@@ -15732,6 +15830,15 @@ export const createServer = (
       );
     },
     owed: owedTargets,
+    handMove: (row) => {
+      const owed = relaunchAtTurnEnd.get(row.id);
+      return owed?.byHand && owed.to !== undefined && owed.to !== row.accountId
+        ? owed.to
+        : undefined;
+    },
+    carryHandMove: async (row) => {
+      await takeUpOwedMove(row.id, "limit");
+    },
     // A delegate's parent hears of it as a notice, the line its transcript has.
     refusedMove: (row, move) => {
       const [listed] = db.listedInstancesByIds([row.id]);
@@ -16476,7 +16583,7 @@ export const createServer = (
           },
         },
         async ({ params, body, status }) => {
-          const { inPlace: itself, ...asked } = body;
+          const { inPlace: itself, askedBy, ...asked } = body;
           let prepared: PreparedContinuation;
           let refusal: string | undefined;
           const request: ContinueRequest = itself
@@ -16496,7 +16603,11 @@ export const createServer = (
           if (refusal) {
             return status(409, refusal);
           }
-          const row = startContinuation(prepared, request);
+          const row = startContinuation(
+            prepared,
+            request,
+            askedBy ? { kind: "session", id: askedBy } : { kind: "person" }
+          );
           return {
             continuationId: row.id,
             targetInstanceId: row.targetInstanceId,
@@ -16889,6 +17000,9 @@ export const createServer = (
             };
           }
           const moved = await moveByHand(row, account);
+          console.info(
+            `[accounts] ${row.id}: asked by hand to move to ${accountName(account)}: ${"refusal" in moved ? `refused: ${moved.refusal}` : `${moved.state}: ${moved.why}`}`
+          );
           return "refusal" in moved ? status(409, moved.refusal) : moved;
         }
       )
@@ -21772,6 +21886,7 @@ export const createServer = (
                   const word = credentialTurns.get(ended);
                   credentialTurns.delete(ended);
                   limitRefused.delete(ended);
+                  refusedLast.delete(ended);
                   finalMessage.delete(ended);
                   if (word === "raced") {
                     atLimit.turnRaced(ended);
@@ -21793,6 +21908,7 @@ export const createServer = (
                   // the context is not the session's context.
                   finalMessage.delete(message.instanceId);
                   const refused = message.instanceId;
+                  refusedLast.add(refused);
                   // A move it owes to an account with room is its turn's
                   // end, as any turn's end is.
                   if (!moveOwedAtRefusal(refused)) {
@@ -21807,6 +21923,7 @@ export const createServer = (
                   // sends again: one waiting to go again went with it, and a
                   // second race fails as any turn does.
                   atLimit.turnWent(message.instanceId);
+                  refusedLast.delete(message.instanceId);
                   const [cacheRow] = db.getInstancesByIds([message.instanceId]);
                   if (cacheRow?.harness === "claude") {
                     db.updateKeepAlive(
