@@ -45,7 +45,7 @@ final class ProjectViewController: ObservedViewController {
     private let spinOffProblem = TaskSheetController.problemLabel()
     private var spinning = false
     /// The hub's refusal of a move, on the card it refused, until that card moves again.
-    private var refusals: [String: String] = [:]
+    private var refusals: [String: (reason: String, stage: String)] = [:]
     private var more: UIButton!
     private var headTop: NSLayoutConstraint!
     private var headLeading: NSLayoutConstraint!
@@ -248,6 +248,10 @@ final class ProjectViewController: ObservedViewController {
         tableForm.onOpenChange = { [weak self] open in self?.setAdding(open) }
         board.onOpen = { [weak self] id in self?.open(id) }
         board.onMove = { [weak self] id, stage in self?.move(id, to: stage) }
+        board.onRetry = { [weak self] id in
+            guard let self, let stage = refusals[id]?.stage else { return }
+            move(id, to: stage)
+        }
         board.allowed = { [weak self] stage in self?.store.allowed(from: stage) ?? [] }
         table.onOpen = { [weak self] id in self?.open(id) }
 
@@ -400,7 +404,7 @@ final class ProjectViewController: ObservedViewController {
                 boardForm.setOpen(adding, announce: false)
                 let kinds = Dictionary(tasks.map { ($0.id, $0.kind) }, uniquingKeysWith: { first, _ in first })
                 board.show(stages: shownStages, tasks: shownTasks, newIn: store.newIn, foot: boardForm, kindOf: kinds,
-                           settling: Set(store.moving.keys), refusals: refusals)
+                           moving: Set(store.moving.keys), refused: refusals.mapValues(\.reason))
             case .table:
                 what = "table"
                 if adding {
@@ -501,10 +505,11 @@ final class ProjectViewController: ObservedViewController {
         context.openTask(projectId, taskId)
     }
 
-    /// A drop or a Move to…: the card itself goes to its new column, where the
-    /// board brings it into view, and breathes there until the hub confirms the
-    /// move; then it settles. A refusal puts it back where it was, in view,
-    /// with the hub's sentence on it.
+    /// A drop or a Move to…: the card stands where it was put, in a column the
+    /// board brings into view, saying it moves, until the hub answers. A
+    /// refusal puts it back where it was, in view, with the hub's sentence
+    /// (which names the moves that are open) under it, and Try again makes
+    /// the same move.
     private func move(_ taskId: String, to stage: String) {
         let from = store.tasks.first { $0.id == taskId }?.stage
         refusals[taskId] = nil
@@ -514,10 +519,10 @@ final class ProjectViewController: ObservedViewController {
             do {
                 try await store.move(taskId, to: stage)
             } catch {
-                refusals[taskId] = "Not moved to \(TaskWords.stage(stage)): \(error.localizedDescription)"
+                refusals[taskId] = (error.localizedDescription, stage)
                 requestRefresh()
                 if let from { board.reveal(from) }
-                UIAccessibility.post(notification: .announcement, argument: refusals[taskId])
+                UIAccessibility.post(notification: .announcement, argument: error.localizedDescription)
             }
         }
     }
@@ -549,9 +554,9 @@ final class ProjectViewController: ObservedViewController {
     }
 
     private func pickStages() {
-        guard let tasks = try? ProjectTasks(hub: context.hub, projectId: projectId) else { return }
-        // The board changes in place under the popover; tasks the set lacks are named in it.
-        let control = StagesControl(tasks: tasks) { [weak self] stages in self?.store.applied(stages) }
+        guard let api = try? ProjectTasks(hub: context.hub, projectId: projectId) else { return }
+        // The board changes in place under the popover; a set that strands tasks names them before it is written.
+        let control = StagesControl(api: api, tasks: store.tasks) { [weak self] stages in self?.store.applied(stages) }
         KitPopover.present(control, from: more, in: self, align: .end)
     }
 

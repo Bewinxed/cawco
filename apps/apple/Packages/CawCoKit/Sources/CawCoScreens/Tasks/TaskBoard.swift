@@ -39,7 +39,6 @@ final class TaskCardView: UIControl {
     private let attnGlyph = GlyphView(.attention, size: Size.iconSm, tint: Palette.statusAttnGlyph)
     private let liveWords = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let foot = UIView()
-    private let refusalLabel = KitLabel(TypeScale.typeMeta, ink: Palette.error11, lines: 0)
     private let stack = UIStackView()
 
     static let mono = TypeScale.typeCode.with(points: TypeScale.typeMeta.points)
@@ -66,8 +65,7 @@ final class TaskCardView: UIControl {
         liveFoot.spacing = Space.space2
         liveFoot.alignment = .center
 
-        refusalLabel.isHidden = true
-        for part in [head, titleLabel, liveFoot, foot, refusalLabel] as [UIView] { stack.addArrangedSubview(part) }
+        for part in [head, titleLabel, liveFoot, foot] as [UIView] { stack.addArrangedSubview(part) }
         stack.axis = .vertical
         stack.spacing = Space.space1
         stack.alignment = .fill
@@ -200,45 +198,20 @@ final class TaskCardView: UIControl {
         didSet { alpha = lifted ? 0.4 : 1 }
     }
 
-    /// Moved, and the hub has not answered yet: it breathes in its new column
-    /// (Live work breathes, `--breath`), held faint under Reduce Motion, and
-    /// settles when the hub confirms.
-    var settling = false {
+    /// A move the hub has not answered: the card stands where it was put, quieter.
+    var moving = false {
         didSet {
-            guard settling != oldValue else { return }
-            layer.removeAnimation(forKey: "settle")
-            layer.opacity = 1
-            guard settling else { return }
-            guard !UIAccessibility.isReduceMotionEnabled else {
-                layer.opacity = 0.6
-                return
-            }
-            let breath = CABasicAnimation(keyPath: "opacity")
-            breath.fromValue = 1
-            breath.toValue = 0.6
-            breath.duration = Motion.breath / 2
-            breath.autoreverses = true
-            breath.repeatCount = .infinity
-            breath.timingFunction = Motion.easeInOut.function
-            layer.add(breath, forKey: "settle")
+            guard moving != oldValue else { return }
+            Motion.easeOut.animator(Motion.durControl) { self.stack.alpha = self.moving ? 0.6 : 1 }.startAnimation()
+            accessibilityValue = moving ? "Moving" : nil
         }
     }
 
-    /// The hub's refusal of this card's move, said on the card that stayed.
-    var refusal: String? {
-        didSet {
-            guard refusal != oldValue else { return }
-            refusalLabel.text = refusal
-            refusalLabel.isHidden = refusal == nil
-            relabel()
-        }
-    }
-
-    /// What VoiceOver reads: the card's words, then a refusal it carries.
+    /// What VoiceOver reads: the card's words.
     private var said = ""
 
     private func relabel() {
-        accessibilityLabel = [said, refusal].compactMap(\.self).joined(separator: ", ")
+        accessibilityLabel = said
     }
 
     override var isHighlighted: Bool {
@@ -247,6 +220,55 @@ final class TaskCardView: UIControl {
                 self.backgroundColor = self.isHighlighted ? Palette.surfaceHover : Palette.surfaceRaised
             }.startAnimation()
         }
+    }
+}
+
+/// A card where it stands in its column, with what its move says around it
+/// (TaskColumn.svelte's `li`): "Moving…" over it while the hub has not
+/// answered, and a refusal under it, the hub's sentence with Try again.
+final class TaskCardSlot: UIStackView {
+    let card = TaskCardView()
+    private let movingLine = UIStackView()
+    private let fault = UIStackView()
+    private let reason = KitLabel(TypeScale.typeMeta, ink: Palette.error11, lines: 0)
+    private var again: (() -> Void)?
+
+    init() {
+        super.init(frame: .zero)
+        axis = .vertical
+        spacing = Space.space1
+        let words = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+        words.text = "Moving…"
+        movingLine.addArrangedSubview(KitSpinner(side: 12))
+        movingLine.addArrangedSubview(words)
+        movingLine.spacing = Space.space1
+        movingLine.alignment = .center
+        movingLine.isLayoutMarginsRelativeArrangement = true
+        movingLine.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space1, leading: Space.space2, bottom: 0, trailing: Space.space2)
+        movingLine.isHidden = true
+        let retry = KitButton.make("Try again", variant: .ghost, height: .xs) { [weak self] in self?.again?() }
+        retry.setContentHuggingPriority(.required, for: .horizontal)
+        fault.addArrangedSubview(reason)
+        fault.addArrangedSubview(retry)
+        fault.spacing = Space.space2
+        fault.alignment = .firstBaseline
+        fault.isLayoutMarginsRelativeArrangement = true
+        fault.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: Space.space2, bottom: Space.space1, trailing: Space.space2)
+        fault.isHidden = true
+        for part in [movingLine, card, fault] as [UIView] { addArrangedSubview(part) }
+    }
+
+    @available(*, unavailable)
+    required init(coder _: NSCoder) {
+        fatalError("TaskCardSlot is built in code")
+    }
+
+    func show(moving: Bool, refused: (reason: String, again: () -> Void)?) {
+        card.moving = moving
+        movingLine.isHidden = !moving
+        again = refused?.again
+        reason.text = refused?.reason
+        fault.isHidden = refused == nil
     }
 }
 
@@ -332,7 +354,7 @@ final class TaskColumnView: UIView {
         fatalError("TaskColumnView is built in code")
     }
 
-    func configure(label: String, kind: Components.Schemas.StageKind?, cards next: [TaskCardView]) {
+    func configure(label: String, kind: Components.Schemas.StageKind?, cards next: [TaskCardSlot]) {
         self.kind = kind
         let you = kind == .you
         nameLabel.text = label
@@ -380,7 +402,8 @@ final class TaskBoardView: UIView, UIScrollViewDelegate, UIDragInteractionDelega
     private let row = UIStackView()
     private(set) var columns: [String: TaskColumnView] = [:]
     private var order: [String] = []
-    private var cards: [String: TaskCardView] = [:]
+    /// Each task's card in its slot, kept by task: a card that changes column is the same view.
+    private var slots: [String: TaskCardSlot] = [:]
     private var widths: [NSLayoutConstraint] = []
     private var heights: [NSLayoutConstraint] = []
 
@@ -388,6 +411,8 @@ final class TaskBoardView: UIView, UIScrollViewDelegate, UIDragInteractionDelega
     var inset = Space.space5 { didSet { if inset != oldValue { setNeedsLayout() } } }
     var onOpen: (String) -> Void = { _ in }
     var onMove: (_ taskId: String, _ stage: String) -> Void = { _, _ in }
+    /// A refused move's Try again: the same move, asked again.
+    var onRetry: (_ taskId: String) -> Void = { _ in }
     var allowed: (String) -> Set<String> = { _ in [] }
     /// The stage names, in order, a card's Move to… lists (the project's own).
     private var stageNames: [String: String] = [:]
@@ -433,9 +458,9 @@ final class TaskBoardView: UIView, UIScrollViewDelegate, UIDragInteractionDelega
     }
 
     /// The board for `stages` and `tasks`; `foot` stands under the cards of the `newIn` column.
-    /// `settling`: the cards whose move the hub has not answered yet; `refusals`: the hub's refusals, on the cards they refused.
+    /// `moving`: the cards whose move the hub has not answered yet; `refused`: the hub's refusals, under the cards they refused.
     func show(stages: [TaskStage], tasks: [TaskSummary], newIn: String?, foot: UIView, kindOf: [String: Components.Schemas.StageKind?],
-              settling: Set<String>, refusals: [String: String]) {
+              moving: Set<String>, refused: [String: String]) {
         let named = Set(stages.map(\.name))
         var byStage: [String: [TaskSummary]] = [:]
         for task in tasks { byStage[named.contains(task.stage) ? task.stage : "", default: []].append(task) }
@@ -445,21 +470,21 @@ final class TaskBoardView: UIView, UIScrollViewDelegate, UIDragInteractionDelega
 
         // The cards, kept by task: a card that changes column is the same view.
         let listed = Set(tasks.map(\.id))
-        for (id, card) in cards where !listed.contains(id) {
-            card.removeFromSuperview()
-            cards[id] = nil
+        for (id, slot) in slots where !listed.contains(id) {
+            slot.removeFromSuperview()
+            slots[id] = nil
         }
         for task in tasks {
-            let card = cards[task.id] ?? makeCard(task.id)
-            cards[task.id] = card
+            let slot = slots[task.id] ?? makeSlot(task.id)
+            slots[task.id] = slot
             // What it waits on that has not landed: the hub's word, else its `after` edges not in a done stage.
             let waits = task.blockedBy.isEmpty ? task.after.filter { id in
                 let kind = kindOf[id] ?? nil
                 return kind != .done && kind != .dropped
             } : task.blockedBy
-            card.configure(task, waitsOn: waits)
-            card.settling = settling.contains(task.id)
-            card.refusal = refusals[task.id]
+            slot.card.configure(task, waitsOn: waits)
+            let id = task.id
+            slot.show(moving: moving.contains(id), refused: refused[id].map { reason in (reason, { [weak self] in self?.onRetry(id) }) })
         }
 
         // The columns, kept by stage.
@@ -480,7 +505,7 @@ final class TaskBoardView: UIView, UIScrollViewDelegate, UIDragInteractionDelega
         }
         for lane in lanes {
             let column = columns[lane.name]
-            column?.configure(label: lane.label, kind: lane.kind, cards: (byStage[lane.name] ?? []).compactMap { cards[$0.id] })
+            column?.configure(label: lane.label, kind: lane.kind, cards: (byStage[lane.name] ?? []).compactMap { slots[$0.id] })
             if let column, lane.name == newIn, !lane.name.isEmpty {
                 if foot.superview !== column.foot {
                     foot.removeFromSuperview()
@@ -491,8 +516,9 @@ final class TaskBoardView: UIView, UIScrollViewDelegate, UIDragInteractionDelega
         if newIn == nil || !names.contains(newIn ?? "") { foot.removeFromSuperview() }
     }
 
-    private func makeCard(_ id: String) -> TaskCardView {
-        let card = TaskCardView()
+    private func makeSlot(_ id: String) -> TaskCardSlot {
+        let slot = TaskCardSlot()
+        let card = slot.card
         card.addAction(UIAction { [weak self] _ in self?.onOpen(id) }, for: .touchUpInside)
         let drag = UIDragInteraction(delegate: self)
         // Off by default on an iPhone: the board's cards move by drag there too.
@@ -502,7 +528,7 @@ final class TaskBoardView: UIView, UIScrollViewDelegate, UIDragInteractionDelega
             guard let self, let task = card?.task else { return nil }
             return moveMenu(task)
         }
-        return card
+        return slot
     }
 
     /// Move to…: only the stages the project allows from where the task is,

@@ -79,13 +79,23 @@ final class TaskTableView: UIView {
 
     private var shape: String { "\(phone):\(full):\(Int(bounds.width))" }
 
-    /// The fixed columns' share of their widths: whole while the title keeps
-    /// its room (`titleRoom`), less when the ledger is too narrow for all of
-    /// them. Header and rows take the same widths, so the columns line up.
-    private var scale = 1.0
+    /// What a ledger too narrow for every column gives up so the title keeps
+    /// its room (`titleRoom`): Labels first (the column the phone's rows
+    /// leave out too), then Stage down to `stageFloor`. Id, To-dos and the
+    /// times keep their widths. Header and rows read the same widths, so the
+    /// columns line up.
+    private var labelsShown = true
+    private var stageWidth = TaskTableView.stageWidth
     private static let titleRoom = 160.0
+    private static let stageFloor = 96.0
 
-    private func width(_ base: Double) -> Double { (base * scale).rounded(.down) }
+    private func fit(labelled: Bool, planned: Bool) {
+        let kept = Self.idWidth + (planned ? Self.todosWidth : 0) + Self.timeWidth * (full ? 2 : 1)
+        let short = kept + Self.stageWidth + (labelled ? Self.labelsWidth : 0) + Self.titleRoom - bounds.width
+        labelsShown = labelled && (bounds.width == 0 || short <= 0)
+        let left = labelsShown ? short : short - (labelled ? Self.labelsWidth : 0)
+        stageWidth = bounds.width == 0 || left <= 0 ? Self.stageWidth : max(Self.stageFloor, Self.stageWidth - left)
+    }
 
     /// Under 640pt of window: the rows are cards.
     private var phone: Bool { Double(window?.bounds.width ?? bounds.width) < 640 }
@@ -124,14 +134,12 @@ final class TaskTableView: UIView {
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         let labelled = tasks.contains { !$0.labels.isEmpty }
         let planned = tasks.contains { $0.todos.total > 0 }
-        let fixed = Self.idWidth + Self.stageWidth + (labelled ? Self.labelsWidth : 0) + (planned ? Self.todosWidth : 0)
-            + Self.timeWidth * (full ? 2 : 1)
-        scale = bounds.width > 0 ? min(1, max(0, (bounds.width - Self.titleRoom) / fixed)) : 1
+        fit(labelled: labelled, planned: planned)
         let now = Date.now.timeIntervalSince1970 * 1000
-        if !phone { stack.addArrangedSubview(header(labelled: labelled, planned: planned)) }
+        if !phone { stack.addArrangedSubview(header(labelled: labelsShown, planned: planned)) }
         let shown = rows
         for (index, task) in shown.enumerated() {
-            let row = phone ? cardRow(task, now: now) : ledgerRow(task, labelled: labelled, planned: planned, now: now)
+            let row = phone ? cardRow(task, now: now) : ledgerRow(task, labelled: labelsShown, planned: planned, now: now)
             row.addAction(UIAction { [weak self] _ in self?.onOpen(task.id) }, for: .touchUpInside)
             row.rule.isHidden = index == shown.count - 1
             stack.addArrangedSubview(row)
@@ -180,13 +188,13 @@ final class TaskTableView: UIView {
             button.accessibilityValue = state.map { $0 ? "newest first" : "oldest first" }
             button.contentHorizontalAlignment = .trailing
             button.heightAnchor.constraint(greaterThanOrEqualToConstant: Size.cToolbarCtl).isActive = true
-            return cell(button, width: width(Self.timeWidth), end: true)
+            return cell(button, width: Self.timeWidth, end: true)
         }
-        band.addArrangedSubview(head("Id", width: width(Self.idWidth)))
+        band.addArrangedSubview(head("Id", width: Self.idWidth))
         band.addArrangedSubview(head("Task", width: nil))
-        band.addArrangedSubview(head("Stage", width: width(Self.stageWidth)))
-        if labelled { band.addArrangedSubview(head("Labels", width: width(Self.labelsWidth))) }
-        if planned { band.addArrangedSubview(head("To-dos", width: width(Self.todosWidth))) }
+        band.addArrangedSubview(head("Stage", width: stageWidth))
+        if labelled { band.addArrangedSubview(head("Labels", width: Self.labelsWidth)) }
+        if planned { band.addArrangedSubview(head("To-dos", width: Self.todosWidth)) }
         if full { band.addArrangedSubview(sorter("Created", created: true)) }
         band.addArrangedSubview(sorter("Updated", created: false))
         return band
@@ -228,18 +236,18 @@ final class TaskTableView: UIView {
         title.text = task.title
         title.lineBreakMode = .byTruncatingTail
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        line.addArrangedSubview(cell(id, width: width(Self.idWidth)))
+        line.addArrangedSubview(cell(id, width: Self.idWidth))
         line.addArrangedSubview(cell(title, width: nil))
-        line.addArrangedSubview(cell(stageMark(task), width: width(Self.stageWidth)))
+        line.addArrangedSubview(cell(stageMark(task), width: stageWidth))
         if labelled {
             let labels = UIStackView(arrangedSubviews: task.labels.map { KitBadge($0, variant: .secondary) })
             labels.spacing = Space.space1
             labels.clipsToBounds = true
-            line.addArrangedSubview(cell(labels, width: width(Self.labelsWidth)))
+            line.addArrangedSubview(cell(labels, width: Self.labelsWidth))
         }
-        if planned { line.addArrangedSubview(cell(todos(task) ?? UIView(), width: width(Self.todosWidth))) }
-        if full { line.addArrangedSubview(cell(age(task.createdAt, now: now), width: width(Self.timeWidth), end: true)) }
-        line.addArrangedSubview(cell(age(task.updatedAt, now: now), width: width(Self.timeWidth), end: true))
+        if planned { line.addArrangedSubview(cell(todos(task) ?? UIView(), width: Self.todosWidth)) }
+        if full { line.addArrangedSubview(cell(age(task.createdAt, now: now), width: Self.timeWidth, end: true)) }
+        line.addArrangedSubview(cell(age(task.updatedAt, now: now), width: Self.timeWidth, end: true))
         row.hold(line, padded: false)
         row.heightAnchor.constraint(greaterThanOrEqualToConstant: Size.cBtnHLg).isActive = true
         row.accessibilityLabel = said(task, now: now)
