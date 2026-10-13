@@ -23,11 +23,24 @@
 /**
  * A surface's `pointer-events` while it closes: none, so a press on the
  * place it is leaving from lands on the page under it, as one anywhere else
- * does. bits-ui writes `pointer-events: auto` inline on every content and
- * overlay; a `style:` directive outranks that.
+ * does. Open: auto, said here and not left to bits-ui. A floating surface
+ * says it on its wrapper too (bits-ui's `wrapperProps`, the box floating-ui
+ * places): the wrapper is as large as the surface, and left at auto it took
+ * the press the closing surface let through.
+ *
+ * bits-ui writes `pointer-events: auto` inline on every content and
+ * overlay, which is what lets them take a press through the body's lock
+ * (`pointer-events: none` on <body> while a modal layer is open). A
+ * `style:` directive owns its property whatever its value: Svelte drops the
+ * property from the spread `style` string for any directive present
+ * (svelte/internal/shared/attributes.js `to_style`, its `reserved_names`),
+ * and writes nothing for an undefined value. Left undefined while open, the
+ * directive took bits-ui's auto away, every open sheet, dialog and menu
+ * inherited the body's none, and a press on any control in it fell through
+ * to <html> (owner, on a phone: "none of the buttons work nor hide").
  */
-export function pressable(open: boolean): "none" | undefined {
-  return open ? undefined : "none";
+export function pressable(open: boolean): "auto" | "none" {
+  return open ? "auto" : "none";
 }
 
 /** What bits-ui hands a forceMount content's `child` snippet as `props`. */

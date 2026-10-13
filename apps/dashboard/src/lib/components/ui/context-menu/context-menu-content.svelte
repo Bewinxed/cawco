@@ -55,7 +55,10 @@
         {#if callerChild}
           {@render callerChild(snippet)}
         {:else}
-          <div {...snippet.wrapperProps}>
+          <div
+            {...snippet.wrapperProps}
+            style:pointer-events={pressable(snippet.open)}
+          >
             <div
               {...own(snippet.props)}
               style:pointer-events={pressable(snippet.open)}

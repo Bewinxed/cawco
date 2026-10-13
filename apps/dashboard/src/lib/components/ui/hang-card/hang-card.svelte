@@ -262,7 +262,7 @@
     open,
   })}
     {#if forceMount || drawn(props)}
-      <div {...wrapperProps}>
+      <div {...wrapperProps} style:pointer-events={pressable(open)}>
         <div
           {...own(props)}
           style:pointer-events={pressable(open)}

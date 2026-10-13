@@ -1509,6 +1509,27 @@
   [data-vaul-drawer][data-state="closed"] {
     animation-fill-mode: forwards;
   }
+  /* A closing drawer and its scrim let presses through to the page, as a
+     closing dialog's and sheet's do (floating-presence `pressable`): left
+     catching them while they slid and faded out, the next tap after a close
+     was lost. vaul draws both through bits-ui with `pointer-events: auto`
+     inline and takes no `child` to say otherwise, so the rule is here. */
+  [data-slot="drawer-content"][data-state="closed"],
+  [data-slot="drawer-overlay"][data-state="closed"] {
+    pointer-events: none !important;
+  }
+  /* Nor does the page stay locked under one. bits-ui holds <body> at
+     `pointer-events: none` for as long as a dialog's content is drawn
+     unless it is drawn through `child`, which vaul-svelte (1.0.0-next.7,
+     the latest) does not take: the lock outlived vaul's slide out, 534ms
+     after a drawer closed on a phone, and the next tap was lost. While a
+     drawer is closing the body takes presses again. Every other modal
+     layer that could be open meanwhile has its own scrim over the page, and
+     a menu still closes on a press outside it. The drawer is portalled
+     straight into <body>, so the test reads only the body's children. */
+  body:has(> [data-slot="drawer-content"][data-state="closed"]) {
+    pointer-events: auto !important;
+  }
 
   /* A kit bottom sheet rests on the bottom of what the reader can see and is
      no taller than it: on the keyboard while one is up, on the screen's edge

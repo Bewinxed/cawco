@@ -8,6 +8,7 @@
   import { Popover as PopoverPrimitive } from "bits-ui";
   import type { Snippet } from "svelte";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { pressable } from "#lib/components/ui/floating-presence.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import PopoverRoot from "#lib/components/ui/popover/popover.svelte";
   import { type PopoverMember, popoverGroup } from "./popover-group.svelte";
@@ -173,12 +174,19 @@
         {#snippet child({
           props,
           wrapperProps,
+          open,
         })}
-          <div {...wrapperProps} class="ns-pop-shell">
+          <!-- Closing, it lets presses through to the page (floating-presence). -->
+          <div
+            {...wrapperProps}
+            class="ns-pop-shell"
+            style:pointer-events={pressable(open)}
+          >
             <div
               {...props}
               id={`${id}-popover`}
               role="presentation"
+              style:pointer-events={pressable(open)}
               {@attach rows ? highlight({ rows }) : undefined}
               {@attach morph()}
             >
