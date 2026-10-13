@@ -12,6 +12,7 @@ import {
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import type { AtLimitPorts, LimitRow } from "./at-limit";
+import { stoppedByCawOff } from "./caw-own";
 import type { DbShape } from "./db";
 import type { LimitHold } from "./db/at-limit";
 import type { TurnUsageRow } from "./db/turn-usage";
@@ -513,18 +514,12 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     };
   };
 
-  /** A work item's session in a project whose Caw is off: nothing moves it (at-limit `stays`). */
-  const cawOff = (row: LimitRow): boolean => {
-    const project = row.projectId ? db.project(row.projectId) : undefined;
-    return !!(row.workItemId && project && !project.caw);
-  };
-
-  /** `row` as it stands now, when it is still on `from`, running, and nothing else is acting on it. */
+  /** `row` as it stands now, when it is still on `from`, running, not Caw's own with Caw off (at-limit `stays`), and nothing else is acting on it. */
   const candidate = (row: LimitRow, from: Account): LimitRow | undefined => {
     const fresh = rowOf(row.id);
     if (
       fresh?.status !== "running" ||
-      cawOff(fresh) ||
+      stoppedByCawOff(db, fresh) ||
       fresh.accountId !== from.id ||
       acting.has(row.id) ||
       ports.continuing(fresh) ||

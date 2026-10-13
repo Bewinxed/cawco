@@ -16,6 +16,7 @@ import {
   windowWords,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
+import { stoppedByCawOff } from "./caw-own";
 import type { DbShape } from "./db";
 import type { LimitHold } from "./db/at-limit";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
@@ -809,16 +810,16 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   };
 
   /**
-   * Whether `row` stays at its limit with nothing carrying it on: a work
-   * item's session in a project whose Caw is off, as with Caw off nothing
-   * wakes a model for the project (Projects §5.3), neither a move to a free
-   * account nor a resume at the reset. Its hold goes, and its transcript
-   * says so once per limit: the line stands in for a wait written while Caw
-   * was on, which would otherwise read as carried on at the reset.
+   * Whether `row` stays at its limit with nothing carrying it on: Caw's own
+   * work in a project whose Caw is off ({@link stoppedByCawOff}), as with
+   * Caw off nothing wakes a model on his behalf (Projects §5.3), neither a
+   * move to a free account nor a resume at the reset. Its hold goes, and its
+   * transcript says so once per limit: the line stands in for a wait written
+   * while Caw was on, which would otherwise read as carried on at the reset.
    */
   const stays = (row: LimitRow, current: Account): boolean => {
-    const project = row.projectId ? db.project(row.projectId) : undefined;
-    if (!(row.workItemId && project && !project.caw)) {
+    const project = stoppedByCawOff(db, row);
+    if (!project) {
       return false;
     }
     const now = Date.now();
