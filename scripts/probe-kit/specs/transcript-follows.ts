@@ -12,8 +12,16 @@
  * 4. killed under its harness (a crash), which the hub relaunches.
  *
  * After each, a new turn is sent through the hub and its reply must appear in
- * the open pane, and the pane's rows (ids and words, in order) must be the
- * rows a fresh load of the same page draws.
+ * the open pane, the pane must stand on its tail, and the pane's rows (ids
+ * and words, in order) must be the rows a fresh load of the same page draws.
+ *
+ * The open page runs at a quarter of its CPU (CDP's CPU throttling), as on a
+ * loaded machine: its scroll events then land a frame or more after the list
+ * moved under them, which is where a pinned transcript let go of its tail
+ * after a continuation in place (1 run in 4 on main at a load average of
+ * 26–30; 3 in 4 with the page throttled 4x). A pane off its tail mounts other
+ * rows than a fresh load at its tail does (the list is virtualized a screen
+ * either side of the view), so that is what the row comparison caught first.
  *
  *   bun scripts/probe-kit/run.ts transcript-follows
  */
@@ -67,6 +75,17 @@ const rowsOf = (page: Page, sessionId: string) =>
       ),
     sessionId
   );
+
+/** How far one session's pane stands above the end of its scroll range, in px. */
+const shortOfTail = (page: Page, sessionId: string) =>
+  page.evaluate((pane) => {
+    const log = document.querySelector<HTMLElement>(
+      `[data-pane="${pane}"] [role="log"]`
+    );
+    return log
+      ? log.scrollHeight - log.clientHeight - log.scrollTop
+      : Number.POSITIVE_INFINITY;
+  }, sessionId);
 
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
@@ -151,6 +170,11 @@ const run = async (kit: Kit) => {
 
   const base = await fleet.dashboard();
   const page = await kit.page("desk");
+  // A quarter of the CPU, the fresh loads beside it at full speed: our own
+  // call. Before the fix the tail was lost in 3 runs of 4 at this rate (and
+  // in none of 8 unthrottled); traffic-tail forces the same race every time.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
   /** Every session event the hub sent the page's dashboard socket: whose, and when. */
   const heard: { at: number; sessionId: string }[] = [];
   page.on("websocket", (socket) => {
@@ -218,6 +242,12 @@ const run = async (kit: Kit) => {
     );
     // Its tail settles before the two are compared: the reply is whole.
     await page.waitForTimeout(1500);
+    const short = await shortOfTail(page, id);
+    kit.check(
+      `${leg}: the open pane stands on its tail`,
+      short <= 1,
+      `${short}px short of its end`
+    );
     const held = await rowsOf(page, id);
     const fresh = await kit.page("desk");
     await open(fresh, url, "[data-message]");

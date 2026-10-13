@@ -64,14 +64,12 @@
     });
   }
 
-  function assistant(text: string): void {
+  /** A settled answer; its id, for `remove`. */
+  function assistant(text: string): string {
     n += 1;
-    push({
-      id: `asst-${n}`,
-      type: "assistant",
-      content: text,
-      timestamp: now(),
-    });
+    const id = `asst-${n}`;
+    push({ id, type: "assistant", content: text, timestamp: now() });
+    return id;
   }
 
   function note(text: string): void {
@@ -283,6 +281,12 @@
         })),
       rows: () => session.messages.length,
       patch: (next: Partial<SessionState>) => Object.assign(session, next),
+      /** A row the hub takes out (`block.remove`): gone from the list in one flush. */
+      remove: (id: string) => {
+        session.messages = session.messages.filter(
+          (message) => message.id !== id
+        );
+      },
       user: (content: string) => {
         n += 1;
         push({ id: `user-${n}`, type: "user", content, timestamp: now() });

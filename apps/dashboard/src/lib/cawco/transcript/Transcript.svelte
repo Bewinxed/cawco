@@ -1402,6 +1402,20 @@
    * before the frame is painted. virtua writes it from inside its own
    * ResizeObserver callback, so the container is never observed for size
    * (THE PIN, below). A change the pin saw is already whole by then.
+   *
+   * A LIST THAT GOT SHORTER UNDER A VIEW AT ITS END IS NOT THE READER. The
+   * browser clamps the offset to the new end, and the scroll event that
+   * makes is dispatched a frame later, by when the list can have grown again
+   * (a row in at its estimate). So the clamp is tagged here, where the
+   * shrink is heard: read with the layout it clamped in, a view standing on
+   * the end is the clamp's, and its event is this component's own
+   * (`lastWrite`). Nothing is written. Left to `onscroll`'s own clamp test
+   * against the height at dispatch, that event read as the reader scrolling
+   * up, 21px short of an end that had moved on, and the tail was let go for
+   * good: after a continuation in place (its list shrinks by 1,350px at the
+   * tail as the next rows come in), the open pane stood a turn short of the
+   * reply after it and no longer followed the tail (the page's CPU
+   * throttled 4x or 6x, 3 runs of 6).
    */
   function wholeHeight(node: HTMLElement) {
     const inner = node.firstElementChild;
@@ -1409,9 +1423,21 @@
       return;
     }
     keepWhole();
+    let size = list?.getScrollSize() ?? 0;
     const watch = new MutationObserver(() => {
+      const now = list?.getScrollSize() ?? 0;
+      const shrank = now < size;
+      size = now;
       if (keepWhole() && pinned()) {
         pinBottom();
+      }
+      if (
+        shrank &&
+        scroller &&
+        scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <=
+          0.5
+      ) {
+        lastWrite = scroller.scrollTop;
       }
     });
     watch.observe(inner, { attributes: true, attributeFilter: ["style"] });

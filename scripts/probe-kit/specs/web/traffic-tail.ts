@@ -6,8 +6,10 @@
  *
  * Steps: land 14 rows; three rounds of five sends, each followed by a tool
  * call and an answer; six rows in one flush; a reasoning block, a tool
- * glance and streamed text settling into one row; two queued sends read;
- * the rows replaced in place by four; a remount on five.
+ * glance and streamed text settling into one row; two queued sends read; a
+ * tall row taken out at the pinned tail with a row in before the next frame,
+ * after which the view still stands on the tail and follows it; the rows
+ * replaced in place by four; a remount on five.
  */
 import { watch, watched } from "../../frames";
 import { open, type Spec } from "../../kit";
@@ -16,6 +18,16 @@ const landed = () =>
   (
     window as unknown as { __traffic: { landed: () => boolean } }
   ).__traffic.landed();
+
+/** How far the transcript's view stands above the end of its scroll range, in px. */
+const shortOfTail = () => {
+  const scroller = document.querySelector<HTMLElement>(
+    '[aria-label="Session transcript"]'
+  );
+  return scroller
+    ? scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop
+    : Number.POSITIVE_INFINITY;
+};
 
 const spec: Spec = {
   name: "traffic-tail",
@@ -84,6 +96,40 @@ const spec: Spec = {
       `(() => { for (const id of window.__queued) __traffic.read(id); __traffic.assistant("read both"); })()`
     );
     await step("queued sends read");
+
+    // A tall row taken out at the pinned tail, and a row in before the next
+    // frame: the browser clamps the offset to the shorter list, and the
+    // scroll event that clamp makes is dispatched after the list grew again.
+    // The view stays on the tail and follows the rows after it.
+    const tall = Array.from(
+      { length: 40 },
+      (_, i) => `Tall row, line ${i + 1}.`
+    ).join("\n\n");
+    await drive(`window.__tall = __traffic.assistant(${JSON.stringify(tall)})`);
+    await pause(600);
+    const before = await page.evaluate(shortOfTail);
+    kit.check(
+      "before the tall row goes: the view is on the tail",
+      before <= 1,
+      `${before}px short of its end`
+    );
+    await drive(`(async () => {
+      __traffic.remove(window.__tall);
+      for (let i = 0; i < 8; i += 1) await Promise.resolve();
+      // The layout the clamp is made in, in this task, before any frame.
+      void document.querySelector('[aria-label="Session transcript"]').scrollHeight;
+      __traffic.assistant("In before the clamp's scroll event.");
+    })()`);
+    await pause(600);
+    await drive(`__traffic.assistant("And the row after it.")`);
+    await pause(600);
+    const short = await page.evaluate(shortOfTail);
+    kit.check(
+      "a tall row out at the pinned tail, a row in before the frame: the view follows the tail",
+      short <= 1,
+      `${short}px short of its end`
+    );
+    await step("a tall row out at the tail, a row in before the frame");
     await drive(
       `__traffic.patch({ messages: Array.from({ length: 4 }, (_, i) => ({ id: "p" + i, instanceId: "traffic-bench", type: "assistant", content: "replaced " + i, timestamp: new Date().toISOString() })) })`
     );
