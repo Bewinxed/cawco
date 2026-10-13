@@ -1,9 +1,12 @@
 #!/usr/bin/env bun
 /**
  * iOS preview touch probe: in the app's preview drawer a tap reaches the
- * page unless the person turned Select on; while Select is on the page
- * takes no tap but picks, and that shows (Done, the line on the well's top
- * edge); Done, Reload and a drag of the grabber leave the page taking taps.
+ * page unless the person turned Comment on; while commenting a tap writes
+ * a numbered pin on the page instead, and that shows (Done, the line on the
+ * well's top edge); the pin's card and the Pins sheet carry it, a reply and
+ * Resolve go to the hub, Send 1 sends its section with its picture, and the
+ * app tells the hub it has the page on screen (`shown`); Done, Reload and a
+ * drag of the grabber leave the page taking taps.
  *
  *   bun scripts/probe-ios-preview-touch.ts [--keep] [--no-build]
  *
@@ -20,13 +23,17 @@
  *  3. on an iPhone 16 Pro simulator on iOS 18.5 (mac-slot.sh sim --runtime
  *     …iOS-18-5, the app's floor, as probe-ios-recall.ts and build-both.sh's
  *     floor launch) launches the app on that session with `-preview-probe`, which logs the preview's
- *     mode, documents, picks and the page's posts (PreviewController.swift)
- *     in the Probe category, each rect as its centre in window points, and
- *     the web view's frame in the window;
+ *     mode, documents, pins, card, list, sends and the page's posts
+ *     (PreviewController.swift, Pins.swift) in the Probe category, each
+ *     control and rect as its centre in window points, and the web view's
+ *     frame in the window;
  *  4. reads what stands in front with Maestro's runner (CawCo, or the run
- *     stops with a screenshot of what does), then taps and drags with that
- *     runner's touches at the places the app logs, each page point inside
- *     the web view's frame, and reads the page's answers from that log.
+ *     stops with a screenshot of what does), then taps, types and drags
+ *     with that runner's touches at the places the app logs, each page
+ *     point inside the web view's frame, and reads the page's answers from
+ *     that log and the hub's from its own routes (the pins through
+ *     `comment_read`'s, the send through the session's transcript, the
+ *     `shown` word through `artifact_show`'s `opened`).
  *
  * Not axe: every axe tap, touch and drag first reads the frontmost app
  * through the host's accessibility translator (OrientationAwareCoordinates
@@ -148,7 +155,9 @@ const button = document.getElementById("count");
 const rect = (el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; };
 function report() {
   const selected = document.querySelector("[role=tab][aria-selected=true]")?.id.slice(4) ?? "none";
-  const rects = { button: rect(button) };
+  const whole = rect(button);
+  // Its trailing end, clear of the pin a comment leaves at its centre (the disc takes presses).
+  const rects = { button: whole, "button-end": { x: whole.x + whole.width - 14, y: whole.y + 4, width: 8, height: whole.height - 8 } };
   for (const tab of document.querySelectorAll("[role=tab]")) rects[tab.id] = rect(tab);
   window.parent.postMessage({ type: "cawco:probe", state: "view=" + view + " selected=" + selected + " count=" + count, rects }, "*");
 }
@@ -164,7 +173,19 @@ const PROBE_PREFIX = /^.*\[dev\.cawco\.app:Probe\]\s*/;
 /** PreviewController's `preview page …` and `preview head …` lines. */
 const PAGE_LINE = /^preview page view=(\S+) selected=(\S+) count=(\d+)(.*)$/;
 const HEAD_LINE =
-  /^preview head select=(.+)@(-?\d+),(-?\d+) reload=(-?\d+),(-?\d+) grabber=(?:none|(-?\d+),(-?\d+)) note=(\d+) web=(-?\d+),(-?\d+),(\d+),(\d+)$/;
+  /^preview head comment=(.+)@(-?\d+),(-?\d+) pins=(\d+)@(none|-?\d+,-?\d+) send=(.+)@(none|-?\d+,-?\d+) reload=(-?\d+),(-?\d+) grabber=(?:none|(-?\d+),(-?\d+)) note=(\d+) web=(-?\d+),(-?\d+),(\d+),(\d+)$/;
+/** Pins.swift's `preview card …` line: the open pin's number and where its controls stand. */
+const CARD_LINE =
+  /^preview card pin=(\d+) field=(none|-?\d+,-?\d+) reply=(none|-?\d+,-?\d+) resolve=(\S+)@(none|-?\d+,-?\d+) close=(none|-?\d+,-?\d+) thread=(\d+) problem=(.*)$/;
+/** Pins.swift's `preview list …` line: the counts, the filter and each row's number and centre. */
+const LIST_LINE =
+  /^preview list open=(\d+) resolved=(\d+) moved=(\d+) filter=(\S+)@(none|-?\d+,-?\d+) rows=(.*)$/;
+const POINT = /^(-?\d+),(-?\d+)$/;
+/** "x,y" as a point; "none" (hidden, or not in a window) as none. */
+const pointOf = (text: string | undefined): Point | undefined => {
+  const m = text?.match(POINT);
+  return m ? { x: Number(m[1]), y: Number(m[2]) } : undefined;
+};
 const seen: string[] = [];
 
 interface Page {
@@ -224,12 +245,21 @@ interface Frame {
   x: number;
   y: number;
 }
-/** The header as the app logs it before each page post: Select's words and centre, Reload's, the grabber's, the selecting line's height, the web view's frame. */
+/**
+ * The header as the app logs it before each page post: Comment's words
+ * ("Comment" or "Done") and centre, the open pins' count and Pins' centre
+ * (none until there is a pin), Send's words and centre, Reload's, the
+ * grabber's, the commenting line's height, the web view's frame.
+ */
 interface Head {
+  comment: Point;
   grabber?: Point;
   note: number;
+  open: number;
+  pins?: Point;
   reload: Point;
-  select: Point;
+  send?: Point;
+  sendWords: string;
   web: Frame;
   words: string;
 }
@@ -240,17 +270,95 @@ const headOf = (line: string): Head | undefined => {
   }
   return {
     words: m[1],
-    select: { x: Number(m[2]), y: Number(m[3]) },
-    reload: { x: Number(m[4]), y: Number(m[5]) },
+    comment: { x: Number(m[2]), y: Number(m[3]) },
+    open: Number(m[4]),
+    pins: pointOf(m[5]),
+    sendWords: m[6],
+    send: pointOf(m[7]),
+    reload: { x: Number(m[8]), y: Number(m[9]) },
     grabber:
-      m[6] === undefined ? undefined : { x: Number(m[6]), y: Number(m[7]) },
-    note: Number(m[8]),
+      m[10] === undefined ? undefined : { x: Number(m[10]), y: Number(m[11]) },
+    note: Number(m[12]),
     web: {
-      x: Number(m[9]),
-      y: Number(m[10]),
-      width: Number(m[11]),
-      height: Number(m[12]),
+      x: Number(m[13]),
+      y: Number(m[14]),
+      width: Number(m[15]),
+      height: Number(m[16]),
     },
+  };
+};
+/** The open pin's card as the app logs it with each page post and each change. */
+interface Card {
+  close?: Point;
+  field?: Point;
+  number: number;
+  problem: string;
+  reply?: Point;
+  resolve?: Point;
+  resolveWords: string;
+  thread: number;
+}
+const cardOf = (line: string): Card | undefined => {
+  const m = line.match(CARD_LINE);
+  if (!m) {
+    return;
+  }
+  return {
+    number: Number(m[1]),
+    field: pointOf(m[2]),
+    reply: pointOf(m[3]),
+    resolveWords: m[4],
+    resolve: pointOf(m[5]),
+    close: pointOf(m[6]),
+    thread: Number(m[7]),
+    problem: m[8],
+  };
+};
+/** The newest card line after `from` that `match` takes, waited for. */
+const cardAfter = async (
+  what: string,
+  from: number,
+  match: (card: Card) => boolean = () => true,
+  ms = 15_000
+) => {
+  await lineAfter(
+    what,
+    from,
+    (line) => {
+      const card = cardOf(line);
+      return card !== undefined && match(card);
+    },
+    ms
+  );
+  return seen
+    .slice(from)
+    .map(cardOf)
+    .filter((card): card is Card => card !== undefined && match(card))
+    .at(-1);
+};
+/** The Pins sheet's rows as the app logs them when it draws the list. */
+interface List {
+  filter?: Point;
+  moved: number;
+  open: number;
+  resolved: number;
+  rows: Record<string, Point | undefined>;
+}
+const listOf = (line: string): List | undefined => {
+  const m = line.match(LIST_LINE);
+  if (!m) {
+    return;
+  }
+  const rows: List["rows"] = {};
+  for (const [, n, at] of m[6].matchAll(/(\d+)@(none|-?\d+,-?\d+)/g)) {
+    rows[n] = pointOf(at);
+  }
+  return {
+    open: Number(m[1]),
+    resolved: Number(m[2]),
+    moved: Number(m[3]),
+    filter: pointOf(m[5]),
+    rows,
   };
 };
 /** The newest header line so far. */
@@ -378,10 +486,31 @@ xcrun simctl install ${udid} "${app}"`);
       whole.children?.[0]?.attributes?.accessibilityText || "nothing named"
     );
   };
-  const runner = (route: string, body: Record<string, number>) =>
+  const runner = (route: string, body: Record<string, unknown>) =>
     sh(
-      `curl -sS --fail-with-body --max-time 30 -H 'Content-Type: application/json' -d '${JSON.stringify(body)}' http://127.0.0.1:${runnerPort}/${route}`
+      `curl -sS --fail-with-body --max-time 30 -H 'Content-Type: application/json' --data-binary @- http://127.0.0.1:${runnerPort}/${route} <<'BODY'\n${JSON.stringify(body)}\nBODY`
     );
+  /** Types into what has the keyboard, the runner's `POST /inputText` (InputTextRequest: `text`, `appIds`). */
+  const type = (text: string) =>
+    runner("inputText", { text, appIds: ["dev.cawco.app"] });
+  /** The artifact's pins as the hub has them (`comment_read`'s route). */
+  const pinsOnHub = async () =>
+    (
+      await fleet.api<{
+        artifacts: {
+          id: string;
+          pins: {
+            id: string;
+            number: number;
+            resolvedAt?: string;
+            sentAt?: string;
+            thread: { by: string; text: string }[];
+          }[];
+        }[];
+      }>(
+        `/api/instances/${id}/artifacts/comments?artifact=${made.id}&filter=all`
+      )
+    ).artifacts.find((one) => one.id === made.id)?.pins ?? [];
   /** One finger's tap, the runner's `POST /touch` (where every `tapOn` of Maestro's ends). */
   const tap = (point: Point) =>
     runner("touch", { x: Math.round(point.x), y: Math.round(point.y) });
@@ -437,6 +566,13 @@ xcrun simctl install ${udid} "${app}"`);
   }
   // The overlay's ready, the app's buttons enabled.
   await pause(1500);
+  // The simulator is in light appearance (step 4): the hello says so.
+  const hello = seen.find((l) => l.startsWith("preview hello "));
+  check(
+    "the hello carried theme",
+    hello === "preview hello theme=light",
+    hello ?? "no hello line"
+  );
   // What stands in front before the first tap: the app, or a system alert,
   // the paywall or SpringBoard, saved as a screenshot in the sandbox.
   const inFront = await front();
@@ -456,7 +592,7 @@ xcrun simctl install ${udid} "${app}"`);
   }
   const grabAt = await grabber();
 
-  // ── 5. Select off: a tab and the button reach the page ────────────────
+  // ── 5. Comment off: a tab and the button reach the page ───────────────
   let mark = seen.length;
   await tapPage("tab-board", page);
   const doc = await lineAfter(
@@ -500,60 +636,218 @@ xcrun simctl install ${udid} "${app}"`);
     `grabber at y ${grabAt?.y ?? "?"} then ${grabNow?.y ?? "?"}`
   );
 
-  // ── 6. Select on: the page takes no tap, one pick, and it shows ───────
-  let head = await headNow("the header with Select off");
+  // ── 6. Comment on: a tap writes pin 1 and does not reach the page ─────
+  let head = await headNow("the header with Comment off");
   check(
-    "Select rests off",
-    head.words === "Select" && head.note === 0,
-    `button "${head.words}", selecting line ${head.note}pt`
+    "Comment rests off",
+    head.words === "Comment" && head.note === 0 && head.pins === undefined,
+    `button "${head.words}", commenting line ${head.note}pt, Pins ${head.pins ? "shown" : "hidden"}`
   );
   mark = seen.length;
-  await tap(head.select);
+  await tap(head.comment);
   const on = await lineAfter(
-    "Select on",
+    "Comment on",
     mark,
-    (l) => l === "preview select on"
+    (l) => l === "preview comment on"
   );
-  head = await headNow("the header with Select on");
+  head = await headNow("the header with Comment on");
   check(
-    "Select turns on and shows",
+    "Comment turns on and shows",
     on !== undefined && head.words === "Done" && head.note === NOTE_HEIGHT,
-    `select ${on ? "on" : "not on"}; button "${head.words}"; selecting line ${head.note}pt`
+    `comment ${on ? "on" : "not on"}; button "${head.words}"; commenting line ${head.note}pt`
   );
   page = await pageNow("the page after the note");
   before = page.count;
   mark = seen.length;
   await tapPage("button", page);
-  await lineAfter(
-    "the pick",
-    mark,
-    (l) => l.startsWith("preview selected"),
-    8000
-  );
+  const pinned = await until(
+    "pin 1 on the hub",
+    pinsOnHub,
+    (pins) => pins.length > 0,
+    15_000
+  ).catch(() => [] as Awaited<ReturnType<typeof pinsOnHub>>);
   await pause(1500);
-  const picks = seen
-    .slice(mark)
-    .filter((l) => l.startsWith("preview selected"));
   const during = pageAfter(mark);
   check(
-    "while selecting a tap picks and does not reach the page",
-    picks.length === 1 && (during?.count ?? before) === before,
-    `${picks.length} pick(s) ${picks.join(" | ")}; count ${before} → ${during?.count ?? "no post"}`
+    "while commenting a tap writes pin 1 and does not reach the page",
+    pinned.length === 1 &&
+      pinned[0].number === 1 &&
+      (during?.count ?? before) === before,
+    `${pinned.length} pin(s) on the hub${pinned[0] ? ` (number ${pinned[0].number})` : ""}; count ${before} → ${during?.count ?? "no post"}`
+  );
+  let card = await cardAfter("pin 1's card", mark, (c) => c.number === 1);
+  check(
+    "the new pin's card opens",
+    card !== undefined && card.field !== undefined && card.thread === 0,
+    card
+      ? `card for pin ${card.number}, field at ${card.field?.x},${card.field?.y}, ${card.thread} entries`
+      : "no card line"
   );
 
-  // ── 7. Done: the page takes taps again ────────────────────────────────
+  // ── 7. The Pins sheet lists it; its row opens the card ────────────────
+  head = await until(
+    "Pins in the header",
+    () => headNow("the header with a pin"),
+    (h) => h.pins !== undefined && h.open === 1,
+    15_000
+  ).catch(() => headLast() as Head);
   mark = seen.length;
-  await tap(head.select);
-  const off = await lineAfter(
-    "Select off",
+  if (head.pins) {
+    await tap(head.pins);
+  }
+  const listLine = await lineAfter(
+    "the Pins sheet",
     mark,
-    (l) => l === "preview select off"
+    (l) => listOf(l) !== undefined
+  );
+  const list = listLine ? listOf(listLine) : undefined;
+  check(
+    "the Pins sheet lists pin 1 as open",
+    list?.open === 1 && list.resolved === 0 && list.rows["1"] !== undefined,
+    list
+      ? `open ${list.open}, resolved ${list.resolved}, moved ${list.moved}, rows ${JSON.stringify(list.rows)}`
+      : `no list line (Pins ${head.pins ? `at ${head.pins.x},${head.pins.y}` : "hidden"})`
+  );
+  await pause(800);
+  mark = seen.length;
+  const row = list?.rows["1"];
+  if (row) {
+    await tap(row);
+  }
+  card = await cardAfter("the card from its row", mark, (c) => c.number === 1);
+  check(
+    "a row of the sheet opens its card",
+    card !== undefined,
+    card ? `card for pin ${card.number}` : "no card line after the row"
+  );
+
+  // ── 8. Reply, Resolve, Send 1 ─────────────────────────────────────────
+  const REPLY = "Make the count bigger";
+  if (card?.field) {
+    await tap(card.field);
+  }
+  await pause(800);
+  await type(REPLY);
+  await pause(800);
+  // Where Reply stands once the keyboard moved the card.
+  card = await cardAfter("the card with words in it", seen.length);
+  mark = seen.length;
+  if (card?.reply) {
+    await tap(card.reply);
+  }
+  const replied = await lineAfter("the reply", mark, (l) =>
+    l.startsWith("preview reply ")
+  );
+  const thread = (await pinsOnHub())[0]?.thread ?? [];
+  check(
+    "Reply posts a thread entry the hub returns",
+    replied === "preview reply ok" &&
+      thread.some((entry) => entry.by === "person" && entry.text === REPLY),
+    `${replied ?? "no reply line"}; the hub's thread: ${JSON.stringify(thread)}`
+  );
+  card = await cardAfter(
+    "the card with its entry",
+    mark,
+    (c) => c.thread === 1
+  );
+  mark = seen.length;
+  if (card?.resolve) {
+    await tap(card.resolve);
+  }
+  const resolvedLine = await lineAfter(
+    "the resolve",
+    mark,
+    (l) => l === "preview resolve ok"
+  );
+  const [resolvedOnHub] = await pinsOnHub();
+  const resolvedPins = await lineAfter(
+    "the app's pins with pin 1 resolved",
+    mark,
+    (l) => l.startsWith("preview pins ") && l.includes(" 1=resolved:")
+  );
+  card = await cardAfter(
+    "the card reading Reopen",
+    mark,
+    (c) => c.resolveWords === "Reopen"
+  );
+  check(
+    "Resolve moves it to Resolved",
+    resolvedLine !== undefined &&
+      !!resolvedOnHub?.resolvedAt &&
+      resolvedPins !== undefined &&
+      card !== undefined,
+    `${resolvedLine ?? "no resolve line"}; hub resolvedAt ${resolvedOnHub?.resolvedAt ?? "none"}; ${resolvedPins ?? "no pins line"}; card reads ${card?.resolveWords ?? "?"}`
+  );
+  head = await until(
+    "Send 1 in the header",
+    () => headNow("the header with the reply unsent"),
+    (h) => h.sendWords === "Send 1" && h.send !== undefined,
+    15_000
+  ).catch(() => headLast() as Head);
+  mark = seen.length;
+  if (head.sendWords === "Send 1" && head.send) {
+    await tap(head.send);
+  }
+  const sent = await lineAfter(
+    "the send",
+    mark,
+    (l) => l.startsWith("preview send "),
+    30_000
+  );
+  const blocks = await until(
+    "the send in the session's transcript",
+    async () =>
+      (
+        await fleet.api<{
+          blocks?: {
+            content?: string;
+            metadata?: { images?: unknown[] };
+            type?: string;
+          }[];
+        }>(`/api/instances/${id}/transcript?limit=200`)
+      ).blocks ?? [],
+    (all) =>
+      all.some(
+        (block) =>
+          block.type === "user" && block.content?.includes("## 1. comment on")
+      ),
+    20_000
+  ).catch(() => []);
+  const message = blocks.find(
+    (block) =>
+      block.type === "user" && block.content?.includes("## 1. comment on")
+  );
+  const [sentPin] = await pinsOnHub();
+  check(
+    '"Send 1" posts one message carrying the pin\'s section and a picture',
+    head.sendWords === "Send 1" &&
+      sent?.startsWith("preview send ok") === true &&
+      message !== undefined &&
+      (message.metadata?.images?.length ?? 0) >= 1 &&
+      message.content?.includes(REPLY) === true &&
+      !!sentPin?.sentAt,
+    `header read "${head.sendWords}"; ${sent ?? "no send line"}; message ${message ? `with ${message.metadata?.images?.length ?? 0} picture(s): ${JSON.stringify(message.content?.slice(0, 160))}` : "not in the transcript"}; pin sentAt ${sentPin?.sentAt ?? "none"}`
+  );
+  card = await cardAfter("the card before it closes", seen.length);
+  if (card?.close) {
+    await tap(card.close);
+  }
+  await pause(1200);
+
+  // ── 9. Done: the page takes taps again ────────────────────────────────
+  head = await headNow("the header before Done");
+  mark = seen.length;
+  await tap(head.comment);
+  const off = await lineAfter(
+    "Comment off",
+    mark,
+    (l) => l === "preview comment off"
   );
   head = await headNow("the header after Done");
   page = await pageNow("the page after Done");
   before = page.count;
   mark = seen.length;
-  await tapPage("button", page);
+  await tapPage("button-end", page);
   page = await until(
     "the counter up",
     () => pageAfter(mark),
@@ -561,18 +855,18 @@ xcrun simctl install ${udid} "${app}"`);
     8000
   ).catch(() => pageAfter(mark));
   check(
-    "Done turns Select off and a tap reaches the page",
+    "Done turns Comment off and a tap reaches the page",
     off !== undefined &&
       (page?.count ?? 0) === before + 1 &&
-      head.words === "Select" &&
+      head.words === "Comment" &&
       head.note === 0,
-    `select ${off ? "off" : "still on"}; count ${before} → ${page?.count ?? "?"}; button "${head.words}"; selecting line ${head.note}pt`
+    `comment ${off ? "off" : "still on"}; count ${before} → ${page?.count ?? "?"}; button "${head.words}"; commenting line ${head.note}pt`
   );
 
-  // ── 8. Reload with Select on: it comes back off ───────────────────────
+  // ── 10. Reload with Comment on: it comes back off ─────────────────────
   mark = seen.length;
-  await tap(head.select);
-  await lineAfter("Select on again", mark, (l) => l === "preview select on");
+  await tap(head.comment);
+  await lineAfter("Comment on again", mark, (l) => l === "preview comment on");
   head = await headNow("the header before Reload");
   mark = seen.length;
   await tap(head.reload);
@@ -584,13 +878,13 @@ xcrun simctl install ${udid} "${app}"`);
   await pause(1500);
   const modeAfter = seen
     .slice(mark)
-    .filter((l) => l.startsWith("preview select "))
+    .filter((l) => l.startsWith("preview comment "))
     .at(-1);
   head = await headNow("the header after Reload");
   page = await pageNow("the page after Reload");
   before = page.count;
   const reloadMark = seen.length;
-  await tapPage("button", page);
+  await tapPage("button-end", page);
   page = await until(
     "the counter up",
     () => pageAfter(reloadMark),
@@ -598,17 +892,17 @@ xcrun simctl install ${udid} "${app}"`);
     8000
   ).catch(() => pageAfter(reloadMark));
   check(
-    "Reload turns Select off and a tap reaches the page",
+    "Reload turns Comment off and a tap reaches the page",
     reloaded !== undefined &&
-      modeAfter === "preview select off" &&
-      head.words === "Select" &&
+      modeAfter === "preview comment off" &&
+      head.words === "Comment" &&
       head.note === 0 &&
-      !seen.slice(mark).includes("preview select on") &&
+      !seen.slice(mark).includes("preview comment on") &&
       (page?.count ?? 0) === before + 1,
     `document ${reloaded ? "reloaded" : "not reloaded"}; last mode "${modeAfter ?? "none"}"; button "${head.words}"; count ${before} → ${page?.count ?? "?"}`
   );
 
-  // ── 9. The grabber moves the drawer; the page still takes taps ────────
+  // ── 11. The grabber moves the drawer; the page still takes taps ───────
   for (const [height, by] of [
     ["full", -260],
     ["middle", 260],
@@ -624,7 +918,7 @@ xcrun simctl install ${udid} "${app}"`);
     page = await pageNow(`the page at ${height} height`);
     before = page.count;
     mark = seen.length;
-    await tapPage("button", page);
+    await tapPage("button-end", page);
     page = await until(
       "the counter up",
       () => pageAfter(mark),
@@ -639,6 +933,23 @@ xcrun simctl install ${udid} "${app}"`);
       `grabber y ${from.y} → ${to?.y ?? "?"}; count ${before} → ${page?.count ?? "?"}`
     );
   }
+
+  // ── 12. Shown: the app says it has the page on screen ─────────────────
+  // artifact_show's route publishes the page afresh and answers `opened`
+  // from a view's `shown` word on that revision, within 10 s.
+  mark = seen.length;
+  const shown = await fleet.api<{ opened: boolean; why?: string }>(
+    `/api/instances/${id}/artifacts/${made.id}/show`,
+    {}
+  );
+  const said = await lineAfter("the app's shown word", mark, (l) =>
+    l.startsWith("preview shown ")
+  );
+  check(
+    "the shown route received ok: true for the frame's revision",
+    shown.opened && said?.startsWith("preview shown ok revision=") === true,
+    `artifact_show answered ${JSON.stringify(shown)}; the app logged ${said ?? "no shown line"}`
+  );
   await reader.cancel().catch(() => undefined);
 } catch (error) {
   check("probe", false, error instanceof Error ? error.message : String(error));
