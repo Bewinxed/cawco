@@ -1,5 +1,5 @@
 /**
- * `boundary-host.ts SETTINGS RUNNER FIFO CLONE READY DENIES`: a Linux workspace's boundary,
+ * `boundary-host.ts SETTINGS RUNNER FIFO CLONE READY DENIES [PLACE...]`: a Linux workspace's boundary,
  * as sessiond holds it, one process per workspace (`boundary.ts`). It hosts
  * @anthropic-ai/sandbox-runtime (srt) in library mode: `SandboxManager` is a
  * module-level singleton, one config and one proxy per process, so each
@@ -18,7 +18,8 @@
  * protected binds, it starts again, under the same pid and FIFO, so the
  * workspace's sessions run on ({@link guard}).
  *
- * Before each sandbox it makes every clone-side deny path the clone lacks
+ * Before each sandbox it makes every dir srt is to bind back from under the
+ * runtime dir (PLACE, {@link makePlaces}), and every clone-side deny path the clone lacks
  * (DENIES, `cloneDenies` in workspace-policy.ts) a real, empty one
  * ({@link standIn}): srt binds an existing path onto itself and leaves
  * nothing on the host, where an absent one gets a read-only empty file a
@@ -171,14 +172,38 @@ const ask: SandboxAskCallback = ({ host }) => {
   return Promise.resolve(allowed);
 };
 
-const [settingsFile, runnerFile, fifo, clone, readyLine, deniesFile] =
-  process.argv.slice(2);
+const [
+  settingsFile,
+  runnerFile,
+  fifo,
+  clone,
+  readyLine,
+  deniesFile,
+  ...places
+] = process.argv.slice(2);
 if (!(settingsFile && runnerFile && fifo && clone && readyLine && deniesFile)) {
   console.error(
-    "usage: boundary-host.ts SETTINGS RUNNER FIFO CLONE READY DENIES"
+    "usage: boundary-host.ts SETTINGS RUNNER FIFO CLONE READY DENIES [PLACE...]"
   );
   process.exit(64);
 }
+
+/**
+ * Makes each PLACE the host lacks, owner-only (0700, as a runtime dir is),
+ * before every sandbox: the dirs srt binds back from under the denied
+ * runtime dir (the workspace's door dir, srt's own temp dir). srt restores a
+ * read carve-out of a denied dir only if it exists as it wraps ("Not
+ * restoring … nothing there resolves (absent, dangling or unreadable)",
+ * `pushReadDenyDirMounts` in linux-sandbox-utils.js at 0.0.79), and this
+ * sandbox lives as long as the workspace, so a dir made after the wrap never
+ * shows inside: the door's sockets, made in it later, would be out of reach.
+ * A bound dir shows every entry made in it afterwards.
+ */
+const makePlaces = (): void => {
+  for (const place of places) {
+    mkdirSync(place, { recursive: true, mode: 0o700 });
+  }
+};
 const settings = JSON.parse(
   readFileSync(settingsFile, "utf8")
 ) as SandboxRuntimeConfig;
@@ -477,6 +502,7 @@ const runnerEnv = {
  * runner says is passed on.
  */
 const startSandbox = async (): Promise<Sandbox | undefined> => {
+  makePlaces();
   standIn();
   const protect = toProtect();
   const wrapped = await SandboxManager.wrapWithSandbox(

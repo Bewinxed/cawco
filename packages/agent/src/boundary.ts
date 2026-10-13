@@ -1564,11 +1564,8 @@ const LAUNCHD_SOCKETS = "/private/tmp";
  */
 const SIMULATOR_SOCKETS = "/private/var/tmp";
 
-/**
- * A Linux boundary generation's srt temp dir, short (a socket path is capped
- * at 108 bytes, srt #213) and its own (REPORT.md §5o).
- */
-const srtTmpOf = (id: string, gen: string | undefined): string => {
+/** Linux: the agent's runtime dir, where its sandbox's proxy socket and the workspace's door go. */
+const runtimeDirOf = (id: string): string => {
   const runtime = process.env.XDG_RUNTIME_DIR;
   if (!runtime) {
     throw refusal(
@@ -1576,14 +1573,35 @@ const srtTmpOf = (id: string, gen: string | undefined): string => {
       "the agent has no XDG_RUNTIME_DIR, where its sandbox's proxy socket goes"
     );
   }
-  return join(
-    runtime,
+  return runtime;
+};
+
+/**
+ * A Linux boundary generation's srt temp dir, short (a socket path is capped
+ * at 108 bytes, srt #213) and its own (REPORT.md §5o).
+ */
+const srtTmpOf = (id: string, gen: string | undefined): string =>
+  join(
+    runtimeDirOf(id),
     "cawco-srt",
     createHash("sha256")
       .update(gen ? `${id}/${gen}` : id)
       .digest("hex")
       .slice(0, 12)
   );
+
+/**
+ * Linux: what srt is to bind back from under the runtime dir, which the
+ * policy read-denies with the rest of `/run`: each read allow there, the
+ * workspace's door dir (`workspaceDoorDir`) and srt's own temp dir among
+ * them. srt binds one back only if it exists as it wraps the runner, and the
+ * runner's sandbox lives as long as the workspace, so the srt host makes each
+ * before every sandbox it starts (`boundary-host.ts` PLACE): the door's
+ * sockets, which the agent makes in that dir afterwards, then show inside.
+ */
+const runtimePlaces = (id: string, allowRead: readonly string[]): string[] => {
+  const runtime = runtimeDirOf(id);
+  return allowRead.filter((path) => path.startsWith(`${runtime}/`));
 };
 
 /**
@@ -1749,6 +1767,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         policy.clone,
         READY,
         files.denies,
+        ...runtimePlaces(id, [...policy.allowRead, srtTmp]),
       ],
       // The host starts here, never in the clone: Bun reads bunfig.toml and
       // .env from where it starts (boundary-host.ts). It names its sandbox

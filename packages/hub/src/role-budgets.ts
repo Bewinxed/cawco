@@ -167,7 +167,11 @@ export const measureRoles = (): RoleSize[] => {
   });
   try {
     return SESSION_ROLES.map((role) => {
-      const { tools } = mcp.list(role);
+      const listed = mcp.list(role);
+      if (!listed) {
+        throw new Error(`No measuring session for role ${role}.`);
+      }
+      const { tools } = listed;
       return {
         role,
         tools: tools.length,

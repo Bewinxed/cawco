@@ -15822,8 +15822,9 @@ export const createServer = (
             lister: t.Optional(t.Literal("pi")),
           }),
         },
-        ({ query }) =>
-          delegationMcp.list(query.instanceId, query.lister === "pi")
+        ({ query, status }) =>
+          delegationMcp.list(query.instanceId, query.lister === "pi") ??
+          status(404, `No session ${query.instanceId} on this hub.`)
       )
       // Preparation only: enforcement is a separate cutover after every live row ACKs.
       .get(

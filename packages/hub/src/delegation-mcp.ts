@@ -1018,10 +1018,11 @@ export function createDelegationMcp(options: {
   };
   /** What a session is listed, for the REST door (`cawco tools`); without one, the superset. */
   /** `own`: the session's own harness listing it (pi's host), remembered like a `tools/list`. */
+  /** Nothing when `instanceId` names no session on this hub. */
   const list = (instanceId?: string, own = false) => {
     const actor = instanceId ? options.instanceById(instanceId) : undefined;
     if (instanceId !== undefined && !actor) {
-      throw new Error(`No session ${instanceId} on this hub.`);
+      return;
     }
     const answered = toolsFor(actor).map(listed);
     if (own && actor) {
