@@ -10515,14 +10515,42 @@ export const createServer = (
     const { request, prepared } = row;
     const [target] = db.getInstancesByIds([row.targetInstanceId]);
     if (target?.status !== "running") {
+      const [source] = db.getInstancesByIds([prepared.source.instanceId]);
       await spawnFromHub(
         targetMachineOf(row),
-        targetSpawn(request, prepared.source, row.targetInstanceId),
+        targetSpawn(
+          request,
+          prepared.source,
+          row.targetInstanceId,
+          source?.projectId ?? request.target.projectId
+        ),
         request.target.scratch ? "scratch" : "mainline",
         request.target.fallbackPermissionMode
       );
     }
+    adoptChildren(prepared.source.instanceId, row.targetInstanceId);
     sendOpening(row);
+  };
+
+  /**
+   * The session a continuation started takes on the live work of the one it
+   * continues, before its opening turn: its unended delegates and their
+   * items, queued delegates and starts, and the asks waiting on an answer
+   * ({@link DbShape.adoptChildren}). Reports route by the moved rows.
+   */
+  const adoptChildren = (from: string, to: string): void => {
+    const adopted = db.adoptChildren(from, to);
+    console.log(
+      `[continuation] ${to} took on from ${from}: ${adopted.sessions.length} delegate(s), ${adopted.items} work item(s), ${adopted.queuedItems} queued delegate(s), ${adopted.queuedStarts} queued task start(s), ${adopted.asks} pending ask(s)`
+    );
+    const machines = new Set(
+      db
+        .getInstancesByIds([to, ...adopted.sessions])
+        .map((row) => row.machineId)
+    );
+    for (const machineId of machines) {
+      publishInstances(machineId);
+    }
   };
 
   /**
@@ -10643,7 +10671,9 @@ export const createServer = (
   const targetSpawn = (
     { target }: ContinueRequest,
     source: ContinuationSource,
-    instanceId: string
+    instanceId: string,
+    /** The project the source is in: the new session joins it. */
+    projectId: string | null | undefined
   ): SpawnPayload => ({
     instanceId,
     cwd: target.cwd ?? source.cwd,
@@ -10653,7 +10683,7 @@ export const createServer = (
     ...(target.permissionMode ? { permissionMode: target.permissionMode } : {}),
     ...(target.scratch ? { scratch: target.scratch } : {}),
     ...(target.bootstrap ? { bootstrap: target.bootstrap } : {}),
-    ...(target.projectId ? { projectId: target.projectId } : {}),
+    ...(projectId ? { projectId } : {}),
     ...(target.account ? { account: target.account } : {}),
     title: `${source.title} (continued)`,
     spawnedBy: { instanceId: source.instanceId },

@@ -317,6 +317,15 @@ export interface FoldedSession {
   owedAgain: string[];
 }
 
+/** What a continuation's new session took on from the session it continues ({@link DbShape.adoptChildren}). */
+export interface AdoptedChildren {
+  asks: number;
+  items: number;
+  queuedItems: number;
+  queuedStarts: number;
+  sessions: string[];
+}
+
 /** One superseded version of the fleet's memory, as a listing reads it. */
 export interface MemoryVersion {
   bytes: number;
@@ -419,6 +428,16 @@ export interface DbShape {
         >
       >
   ) => { thread: ThreadRow; message: ThreadMessageRow };
+  /**
+   * A session continued in a new session (`to`) hands it its live work, in
+   * one transaction: its delegates that have not ended, and the sessions of
+   * its live items, become `to`'s; so do its live work items, every item of
+   * those sessions, and every item of a group not yet reported that one of
+   * them is in (the group reports once, to one parent); its queued delegates
+   * and queued task starts; and the asks of the moved delegates still
+   * waiting on an answer. What `from` delegated and is over stays its own.
+   */
+  readonly adoptChildren: (from: string, to: string) => AdoptedChildren;
   /** A machine's last-known tool status by id; empty for one that never reported. */
   readonly agentAddressContract: (machineId: string) => boolean;
   readonly agentHarnesses: (machineId: string) => HarnessReport[] | undefined;
@@ -3857,6 +3876,119 @@ const make = async (path: string): Promise<DbShape> => {
           .where(eq(instances.id, id))
           .run();
         return true;
+      }),
+    adoptChildren: (from, to) =>
+      db.transaction((tx) => {
+        const items = tx
+          .select()
+          .from(workItems)
+          .where(eq(workItems.parentInstanceId, from))
+          .all();
+        const liveItems = items.filter(
+          (item) => item.state === "starting" || item.state === "running"
+        );
+        const sessions = [
+          ...new Set([
+            ...tx
+              .select({ id: instances.id })
+              .from(instances)
+              .where(
+                and(
+                  eq(instances.parentInstanceId, from),
+                  inArray(instances.status, [
+                    "moving",
+                    "starting",
+                    "running",
+                    "sleeping",
+                  ])
+                )
+              )
+              .all()
+              .map((row) => row.id),
+            ...liveItems.map((item) => item.instanceId),
+          ]),
+        ];
+        const carried = items.filter(
+          (item) =>
+            liveItems.includes(item) || sessions.includes(item.instanceId)
+        );
+        const groups = new Set(
+          carried.flatMap((item) => (item.group ? [item.group] : []))
+        );
+        const moved = items.filter(
+          (item) =>
+            carried.includes(item) ||
+            (item.group !== null &&
+              groups.has(item.group) &&
+              item.groupReportedAt === null)
+        );
+        if (sessions.length > 0) {
+          tx.update(instances)
+            .set({ parentInstanceId: to })
+            .where(
+              and(
+                eq(instances.parentInstanceId, from),
+                inArray(instances.id, sessions)
+              )
+            )
+            .run();
+        }
+        if (moved.length > 0) {
+          tx.update(workItems)
+            .set({ parentInstanceId: to })
+            .where(
+              inArray(
+                workItems.id,
+                moved.map((item) => item.id)
+              )
+            )
+            .run();
+        }
+        const queuedItems = tx
+          .select({ id: queuedWorkItems.id })
+          .from(queuedWorkItems)
+          .where(eq(queuedWorkItems.parentInstanceId, from))
+          .all().length;
+        tx.update(queuedWorkItems)
+          .set({ parentInstanceId: to })
+          .where(eq(queuedWorkItems.parentInstanceId, from))
+          .run();
+        const queuedStarts = tx
+          .select({ taskId: queuedTaskStarts.taskId })
+          .from(queuedTaskStarts)
+          .where(eq(queuedTaskStarts.parentInstanceId, from))
+          .all().length;
+        tx.update(queuedTaskStarts)
+          .set({ parentInstanceId: to })
+          .where(eq(queuedTaskStarts.parentInstanceId, from))
+          .run();
+        const pendingAsks = and(
+          eq(delegateEvents.parentInstanceId, from),
+          eq(delegateEvents.kind, "ask"),
+          eq(delegateEvents.status, "pending"),
+          inArray(delegateEvents.instanceId, sessions)
+        );
+        const asks =
+          sessions.length > 0
+            ? tx
+                .select({ id: delegateEvents.id })
+                .from(delegateEvents)
+                .where(pendingAsks)
+                .all().length
+            : 0;
+        if (asks > 0) {
+          tx.update(delegateEvents)
+            .set({ parentInstanceId: to })
+            .where(pendingAsks)
+            .run();
+        }
+        return {
+          sessions,
+          items: moved.length,
+          queuedItems,
+          queuedStarts,
+          asks,
+        };
       }),
     foldFormerSessions: (owedAgain) => {
       const open = db
