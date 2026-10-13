@@ -394,7 +394,35 @@ keeper_pid() { as_user "$1" systemctl --user show -p MainPID --value "${2:-$(cur
 # Asks the hub, from inside its own container, to stop a session, the way the dashboard does.
 stop_session() { as_user "$hubc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-stop-session.ts http://127.0.0.1:3456 "$1" "$2"; }
 untouched() { as_user "$1" sh -c 'test ! -e "$HOME/.local/share/cawco" && test ! -e "$HOME/.local/bin/cawco" && echo untouched'; }
-export -f as_user as_user_tty hub_api api_on spawn_child start_session stop_session start_loop keeper_list keeper_lists jsonl child_pids children_with children_total holder_of held_on current_endpoint endpoint_of unit_of current_unit session_running start_before survived starts_said accepted_ran_once keeper_pid untouched json machine_id build_version phase field retiring wait_until publish
+# A check ends what it started, on every way out, so no check inherits another's sessions: each starts from the
+# machine it found, not with the children an earlier one left (the run of 2026-10-13's joined machine held 247 when
+# the handover check began). on_exit adds a step, a command, to what the check runs as it exits, passed or failed; the
+# steps run last-added first, each undoing what was started after the one before it, and one that fails is passed
+# over, so the next still runs and the check's verdict stays its own. ROW_STATUS is the check's exit status there:
+# sessions a check hands to the checks after it are ended by the last of those, and by each of them only when it
+# fails, for none after a failed check runs (one that a failure elsewhere stops from running leaves them to the next
+# check's own guard, end_all_sessions).
+on_exit() {
+  EXIT_STEPS=("$1" ${EXIT_STEPS[@]+"${EXIT_STEPS[@]}"})
+  trap 'ROW_STATUS=$?; for step in "${EXIT_STEPS[@]}"; do eval "$step" || true; done' EXIT
+}
+# The pids of the live children every keeper on a machine holds under the ids given; an id ending in `-` is a prefix.
+pids_under() {
+  local container=$1 list
+  shift
+  list=$(printf '"%s",' "$@")
+  keeper_lists "$container" | jsonl "d => d.flatMap(k => k.procs).filter(p => p.alive && [${list%,}].some(i => i.endsWith('-') ? p.procId.startsWith(i) : p.procId === i)).map(p => p.pid).join(' ')"
+}
+# Ends what one check started on a machine, as end_all_sessions ends everything: every child a keeper holds under the
+# ids given (an id ending in `-` is a prefix) is killed, and it waits until none of them is alive.
+end_children() {
+  local container=$1 pids
+  shift
+  pids=$(pids_under "$container" "$@")
+  [[ -z $pids ]] || as_user "$container" kill $pids || true
+  wait_until 60 '[[ -z "$(pids_under "'"$container"'" '"$*"')" ]]'
+}
+export -f as_user as_user_tty hub_api api_on spawn_child start_session stop_session start_loop keeper_list keeper_lists jsonl child_pids children_with children_total holder_of held_on current_endpoint endpoint_of unit_of current_unit session_running start_before survived starts_said accepted_ran_once keeper_pid untouched json machine_id build_version phase field retiring wait_until publish on_exit pids_under end_children
 
 # boot CONTAINER IP HOSTNAME [linger|nolinger] [EXTRA PODMAN RUN OPTION...]
 # A machine has the task room of a real one. podman's default pids limit (2048) makes systemd's own defaults, which
@@ -789,6 +817,7 @@ export hid jid
 no_account_refused() {
   need_hub
   local rc=0 said
+  on_exit 'end_children "$joinerc" noaccount-1'
   said=$(start_session "$jid" noaccount-1 2>&1) || rc=$?
   echo "$said"
   [[ $rc != 0 ]] || { echo "ASSERTION FAILED: the start was not refused"; return 1; }
@@ -931,6 +960,8 @@ check "a joined machine is offered only the build its hub runs" joiner_not_ahead
 # machine no launch (its agent speaks the contract from before launches asked for their credential).
 joiner_sessions_before() {
   need_hub
+  # The checks through "a keeper from before keepers ran side by side ..." read these, and that one ends them.
+  on_exit '[[ $ROW_STATUS == 0 ]] || end_children "$joinerc" joinerpre-'
   start_before "$jid" "$joinerc" "$out/joiner-before.txt" joinerpre-1 joinerpre-2
 }
 export -f joiner_sessions_before
@@ -962,6 +993,9 @@ check "once the hub runs the newer build its joined machine is offered it" joine
 
 joiner_starts_held() {
   need_hub
+  on_exit '[[ $ROW_STATUS == 0 ]] || end_children "$joinerc" joinerpre-'
+  # Its own starts, the held one and every one the loop asked for, are read here only.
+  on_exit 'end_children "$joinerc" joinerheld-1 joinerstart-'
   rm -f "$out/stop-joiner" "$out/accepted-joiner.txt"
   # Sessions already running on the joined machine before its update begins (joiner_sessions_before).
   [[ "$(wc -l < "$out/joiner-before.txt")" == 2 ]]
@@ -975,6 +1009,8 @@ joiner_starts_held() {
   install_now_request "$jid" > /dev/null
   start_loop "$jid" joinerstart "$out/accepted-joiner.txt" "$out/stop-joiner" &
   loop=$!
+  # The loop stops before its starts are ended, or it would start more after.
+  on_exit 'touch "$out/stop-joiner"; wait "$loop"'
   # The machine's sessions are held by its session keeper, which no update restarts: the new build's keeper
   # starts beside it and the update is complete, installed, when the new build runs. It is not complete while
   # the phase is installing.
@@ -989,7 +1025,11 @@ joiner_starts_held() {
 export -f joiner_starts_held
 check "a session start requested while the joined machine installs runs once afterwards, one child, none lost" joiner_starts_held 1200 "Install now applies the newer build|sessions started on the joined machine while it and its hub run the same build run, one child each"
 
-joiner_survived() { need_hub; survived "$joinerc" "$out/joiner-before.txt"; }
+joiner_survived() {
+  need_hub
+  on_exit '[[ $ROW_STATUS == 0 ]] || end_children "$joinerc" joinerpre-'
+  survived "$joinerc" "$out/joiner-before.txt"
+}
 export -f joiner_survived
 check "a session already running on the joined machine before its update is the same process afterwards, re-attached and running" joiner_survived 600 "a session start requested while the joined machine installs runs once afterwards, one child, none lost"
 
@@ -1000,6 +1040,9 @@ check "a session already running on the joined machine before its update is the 
 legacy_handed_over() {
   need_hub
   local id pid
+  # The last check that reads the sessions from before the update: they end here, and the legacy keeper, holding
+  # nothing then, goes as every retiring keeper does.
+  on_exit 'end_children "$joinerc" joinerpre-'
   wait_until 180 '[[ "$(current_endpoint "$joinerc")" == "$(endpoint_of 0.0.1-test.2)" ]]'
   [[ "$(as_user "$joinerc" readlink /home/cawco/.local/share/cawco/binary/keeper)" == versions/0.0.1-test.2 ]]
   # The legacy keeper's socket was set aside under its build; it holds the sessions that ran before the update.
@@ -1043,6 +1086,8 @@ session_env_clean() {
 }
 sessions_env_after_handover() {
   need_hub
+  on_exit 'end_children "$joinerc" envjoiner-1'
+  on_exit 'end_children "$hubc" envhub-1'
   session_env_clean "$jid" "$joinerc" envjoiner-1 "$(endpoint_of 0.0.1-test.2)"
   session_env_clean "$hid" "$hubc" envhub-1 "$(endpoint_of 0.0.1-test.2)"
 }
@@ -1153,6 +1198,9 @@ auto_with_held_child() {
   # the other starts held children on the joined machine, each firing the moment that machine says installing.
   watch_install "$hubc" hub-start http://127.0.0.1:3456 "$hid" hubstart "$out/watch-hub.txt"
   watch_install "$joinerc" keeper-child "http://$hub_ip:3456" "$jid" during "$out/watch-joiner.txt"
+  # The joined machine's watcher outlives this check, and "a session started while an update is installing ..."
+  # reads and ends what it starts; when this check fails that one does not run, and the watcher stops here.
+  on_exit '[[ $ROW_STATUS == 0 ]] || { as_user "$joinerc" pkill -f stage2-during-install.ts; end_children "$joinerc" during-; }'
   put_policy nightly true
   wait_until 300 '[[ "$(build_version $hid)" == "0.0.1-nightly.3+333333333333" ]]'
   wait_until 120 'grep -q "^done " "$out/watch-hub.txt"'
@@ -1196,6 +1244,8 @@ check "a child held by the session keeper survives the update on that keeper, un
 
 session_during_update() {
   need_hub
+  # What the joined machine's watcher started is read here only: the watcher stops, if it still runs, and its children end.
+  on_exit 'as_user "$joinerc" pkill -f stage2-during-install.ts; end_children "$joinerc" during-'
   # The joined machine follows its hub to the new build. Its watcher (started in the check that updated the hub)
   # started a held child each time the hub reported the machine as installing, and recorded each answer.
   wait_until 600 '[[ "$(build_version $jid)" == "0.0.1-nightly.3+333333333333" ]]'
@@ -1304,7 +1354,7 @@ stub_when_staged() { as_user "$hubc" sh -c 'rm -f /tmp/stub.done; sh /shared/kee
 # keeper retiring, on the hub's machine.
 keeper_start_state() {
   need_hub
-  trap 'keeper_dropin remove > /dev/null 2>&1 || true' EXIT
+  on_exit 'keeper_dropin remove > /dev/null 2>&1'
   keeper_dropin remove
   end_all_sessions "$hubc"
   wait_until 60 '[[ "$(children_total "$hubc")" == 0 ]]'
@@ -1437,6 +1487,8 @@ check "a helper killed while the keeper it hands over to is starting leaves the 
 # of the handover too, and when they end the old keeper goes by itself.
 handover_on_joined_machine() {
   keeper_start_state
+  # The sessions before the update and the one on the new keeper, however far the check got.
+  on_exit 'end_children "$joinerc" handover-'
   # One update at a time from here, each asked for: the hub's machine, then the joined one.
   put_policy nightly false
   sleep 15
@@ -1615,10 +1667,19 @@ ws_hook_calls_answered() {
   (( inside >= 1 )) || { echo "ASSERTION FAILED: no call went through the hook between the agent's start and the handover"; return 1; }
   grep -qE '^done calls=[0-9]+ ran=[0-9]+ refused=0 failed=0$' "$out/ws-hook-calls.txt" || { echo "ASSERTION FAILED: a call through the workspace's hook was refused or did not run"; return 1; }
 }
-export -f ws_state ws_json ws_gen ws_exec ws_place ns_of ws_post ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered
+# Ends what the proof's workspace runs on the joined machine, as far as it got: the session that delegated, the work
+# item's session, and the workspace's boundaries and judges.
+ws_end() {
+  local id
+  id=$(cat "$out/ws-id" 2> /dev/null || true)
+  end_children "$joinerc" wsparent-1 $(cat "$out/ws-delegate" 2> /dev/null || true) ${id:+"boundary-$id" "boundary-$id-" "judge-$id-"}
+}
+export -f ws_state ws_json ws_gen ws_exec ws_place ns_of ws_post ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered ws_end
 
 workspace_opens() {
   need_hub
+  # The workspace checks after this one use what it opens, and "the proof's workspace is archived ..." ends it.
+  on_exit '[[ $ROW_STATUS == 0 ]] || ws_end'
   put_policy nightly false
   local answer body id gen outer inner
   # git, from the machine's own package source: a workspace is a git clone of a repository with an origin.
@@ -1691,6 +1752,7 @@ workspace_across_update() {
   # From before the install until the boundary is handed over, a shell call goes through the workspace's hook every
   # second: the window between the agent restarting and the new build's keeper taking the machine among them.
   ws_hook_calls_start
+  on_exit 'as_user "$joinerc" touch /tmp/ws-hook-calls.stop'
   install_now_request "$jid" > /dev/null
   wait_until 400 '[[ "$(build_version $jid)" == "$WS_BUILD" && "$(phase $jid)" == installed ]]'
   # The job ran through the update: the same process, in the sandbox it started in.
@@ -1753,6 +1815,8 @@ check "no stand-in leaves a broken file in the workspace's clone, and git status
 workspace_archived() {
   need_hub
   local id answer
+  # However far the archive got, nothing the workspace ran is left for the checks after this one.
+  on_exit 'as_user "$joinerc" pkill -x -f "sleep 2999"; ws_end'
   id=$(cat "$out/ws-id")
   as_user "$joinerc" pkill -x -f 'sleep 2999' || true
   # The work item's session stops, its item ends, and the workspace is archived through the hub.
