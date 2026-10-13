@@ -30,6 +30,8 @@ final class ProjectMemoryCard: TileView {
     private var draft = ""
     private var saving = false
     private var saveFailed = false
+    /// The project has no checkout on a machine: there is no CLAUDE.md to read, and none is coming.
+    private var noCheckout = false
 
     private let header = UIStackView()
     private let name = KitLabel(TypeScale.typeCode.with(points: TypeScale.typeLabel.points), ink: Palette.mutedForeground)
@@ -86,6 +88,7 @@ final class ProjectMemoryCard: TileView {
         defer { render() }
         guard loadedFor != projectId else { return }
         loadedFor = projectId
+        noCheckout = false
         self.machineId = machineId
         path = "\(cwd)/CLAUDE.md"
         content = nil
@@ -110,6 +113,18 @@ final class ProjectMemoryCard: TileView {
         }
     }
 
+    /// A project with no checkout: its CLAUDE.md lives in one, and none is open on a machine yet.
+    func showNoCheckout() {
+        guard !noCheckout else { return }
+        noCheckout = true
+        loadedFor = ""
+        content = nil
+        read = false
+        failure = nil
+        editing = false
+        render()
+    }
+
     /// Two lines of meta type: one size in every state.
     private static let boxHeight = (TypeScale.typeMeta.points * 1.35 * 2).rounded(.up) + Space.space2 * 2
 
@@ -127,6 +142,8 @@ final class ProjectMemoryCard: TileView {
             if saveFailed { save.configuration?.background.strokeColor = Palette.destructive }
             actions.addArrangedSubview(cancel)
             actions.addArrangedSubview(save)
+        } else if noCheckout {
+            // Nothing to read or write.
         } else if !read {
             let bar = SkeletonView(height: 24)
             bar.widthAnchor.constraint(equalToConstant: 40).isActive = true
@@ -135,10 +152,12 @@ final class ProjectMemoryCard: TileView {
             actions.addArrangedSubview(KitButton.make("Edit", variant: .outline, height: .xs) { [weak self] in self?.edit() })
         }
 
-        let key = editing ? "editing" : (!read ? "loading" : (content == nil ? "empty:\(online)" : "summary"))
+        let key = noCheckout ? "no-checkout" : (editing ? "editing" : (!read ? "loading" : (content == nil ? "empty:\(online)" : "summary")))
         guard key != bodyKey else { return }
         bodyKey = key
         switch key {
+        case "no-checkout":
+            body.show(box(line("No checkout yet — CLAUDE.md lives in one, and none is open on a machine yet.")))
         case "loading":
             let lines = UIStackView(arrangedSubviews: [SkeletonView(height: 12), SkeletonView(height: 12)])
             lines.axis = .vertical
