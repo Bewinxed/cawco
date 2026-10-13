@@ -29,6 +29,7 @@ import {
   FRESH_START_LINE,
   firstSentence,
   LIMIT_REACHED,
+  MCP_NOT_CONNECTED,
   MOVED_HERE,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
@@ -1039,6 +1040,18 @@ export function mapFrame(
                 exitCode: sdk.exit_code,
               }
             )
+          );
+          break;
+        // An MCP server that did not connect when the session started: the
+        // session runs without its tools, titled by the server, its error
+        // behind the line (core `MCP_NOT_CONNECTED`).
+        case MCP_NOT_CONNECTED:
+          mapping.blocks.push(
+            systemLine(base, "ui.system_note", sdk.content ?? "", {
+              subtype: MCP_NOT_CONNECTED,
+              noteKind: "MCP server",
+              noteTitle: `${sdk.mcp_server} didn't connect`,
+            })
           );
           break;
         // The agent stopped a session failing the same way again and again

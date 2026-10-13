@@ -19,7 +19,11 @@ import type {
   UserQuestion,
   UserQuestionResult,
 } from "@cawco/core";
-import { ASK_USER_QUESTION, REPEATED_FAILURE } from "@cawco/core";
+import {
+  ASK_USER_QUESTION,
+  MCP_NOT_CONNECTED,
+  REPEATED_FAILURE,
+} from "@cawco/core";
 import type {
   SessionInboxInfo,
   SessionMessageAssistant,
@@ -462,11 +466,34 @@ export function toTranscript(
       }
       case "synthetic": {
         // CawCo's own stop of a session failing the same way again and again
-        // (`noteStopped`), read back as the line the live stream drew. Any
+        // (`noteStopped`), and its word that an MCP server did not connect
+        // (`sayUnconnected`), read back as the lines the live stream drew. Any
         // other synthetic input is OpenCode's or a plugin's, not anyone's words.
         const meta = message.metadata as
-          | { cawco?: unknown; words?: unknown }
+          | {
+              cawco?: unknown;
+              words?: unknown;
+              server?: unknown;
+              line?: unknown;
+            }
           | undefined;
+        if (meta?.cawco === MCP_NOT_CONNECTED) {
+          entries.push(
+            entry(sessionKey, timestamp, {
+              type: "system",
+              uuid: message.id,
+              message: {
+                type: "system",
+                subtype: MCP_NOT_CONNECTED,
+                uuid: message.id,
+                session_id: sessionKey,
+                timestamp,
+                mcp_server: String(meta.server),
+                content: String(meta.line),
+              },
+            })
+          );
+        }
         if (meta?.cawco === REPEATED_FAILURE) {
           entries.push(
             entry(sessionKey, timestamp, {

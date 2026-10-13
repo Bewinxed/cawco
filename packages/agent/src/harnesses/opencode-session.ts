@@ -54,8 +54,10 @@ import {
   CONTROL_SUPPORTED_MODELS,
   EFFORT_READ,
   INSTALL_SESSION_CREDENTIAL,
+  MCP_NOT_CONNECTED,
   MESSAGES_READ,
   MESSAGES_STORED,
+  mcpNotConnectedLine,
   PROVIDER_LIMIT,
   PROVIDER_RETRY,
   REPEATED_FAILURE,
@@ -79,8 +81,10 @@ import { holdRestart, withRestartHold } from "../restart";
 import { acknowledgeSessionCredential } from "../session-identity";
 import {
   at,
+  CAWCO_MCP_SERVER,
   errorTag,
   errorText,
+  type McpNotConnected,
   type OpencodeClient,
 } from "./opencode-client";
 import {
@@ -300,7 +304,7 @@ const leadMcpFence = async (
     signal: AbortSignal.timeout(65_000),
   });
   return listed.data
-    .filter((server) => server.name !== "cawco")
+    .filter((server) => server.name !== CAWCO_MCP_SERVER)
     .map((server) => deny(`${server.name.replace(MCP_NAME_UNSAFE, "_")}_*`));
 };
 
@@ -566,11 +570,13 @@ export interface OpencodeSessionOptions {
   /** Whether the server says this session is running a turn now. */
   readActivity: () => Promise<boolean>;
   /**
-   * The location's readiness: CawCo's plugin loaded and every MCP server
-   * connected. No prompt or command reaches the server before it; a location
-   * that never gets there fails the session with why.
+   * The location's readiness: CawCo's plugin loaded, CawCo's MCP server
+   * connected and every other server settled. No prompt or command reaches
+   * the server before it; a location that never gets there fails the session
+   * with why. It answers the servers that did not connect, which the session
+   * says once, at its first dispatch.
    */
-  ready: Promise<void>;
+  ready: Promise<McpNotConnected[]>;
   registerChild: (childId: string, callID: string) => void;
   sessionId: string;
   workflowStepId?: string;
@@ -603,6 +609,8 @@ export class OpencodeSession implements HarnessSession {
   readonly #prepareDispatch: () => Promise<void>;
   readonly #liveSessions: () => ReadonlySet<string>;
   readonly #lifetime = new AbortController();
+  /** The MCP servers that did not connect, by name, said for this start of the session. */
+  readonly #mcpSaid = new Set<string>();
 
   #lastTokens = EMPTY_TOKENS;
   /** The tokens the session's last answered request sent: its context then. */
@@ -691,8 +699,10 @@ export class OpencodeSession implements HarnessSession {
     this.#readActivity = options.readActivity;
     this.#liveSessions = options.liveSessions;
     // No prompt or command reaches the server before its location is ready:
-    // a location whose plugin is missing or whose MCP servers never connect
-    // fails the session with why, and every send it was handed fails with it.
+    // a location whose plugin is missing or whose CawCo MCP server does not
+    // connect fails the session with why, and every send it was handed fails
+    // with it. Any other server that did not connect is said once, and the
+    // session runs without it.
     // Awaited at dispatch, never at publication (bb65de38: publishing must
     // not wait on cold MCP servers).
     const admitted = options.ready.catch((error: unknown) => {
@@ -706,8 +716,9 @@ export class OpencodeSession implements HarnessSession {
     // Its rejection is a send's, at dispatch; unawaited it is not unhandled.
     admitted.catch(() => undefined);
     this.#prepareDispatch = async () => {
-      await admitted;
+      const unconnected = await admitted;
       await options.prepareDispatch();
+      await this.#sayUnconnected(unconnected);
       await this.#applySettings();
       await this.#syncInstructions();
     };
@@ -2733,6 +2744,47 @@ export class OpencodeSession implements HarnessSession {
       metadata: { cawco: REPEATED_FAILURE, words },
       resume: false,
     });
+  }
+
+  /**
+   * Each MCP server that did not connect when the session started, said once
+   * per start: drawn on the live stream now, and written into the session as
+   * synthetic input that starts no turn (`resume: false`) under the same id,
+   * which {@link toTranscript} reads back as the same line and which reaches
+   * the model with its next turn, so it knows those tools are not there.
+   */
+  async #sayUnconnected(unconnected: McpNotConnected[]): Promise<void> {
+    const sessionID = this.#opencodeSessionId();
+    for (const server of unconnected) {
+      if (this.#mcpSaid.has(server.name)) {
+        continue;
+      }
+      const id = messageId();
+      const line = mcpNotConnectedLine(server.name, server.why);
+      // biome-ignore lint/performance/noAwaitInLoops: one note per server, in the order the server listed them
+      await this.#client.session.synthetic(
+        {
+          sessionID,
+          id,
+          text: line,
+          description: `${server.name} didn't connect`,
+          metadata: { cawco: MCP_NOT_CONNECTED, server: server.name, line },
+          resume: false,
+        },
+        { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+      );
+      console.warn(`[opencode] ${this.instanceId}: ${line}`);
+      this.#ctx.frame({
+        type: "system",
+        subtype: MCP_NOT_CONNECTED,
+        uuid: id,
+        session_id: sessionID,
+        timestamp: new Date().toISOString(),
+        mcp_server: server.name,
+        content: line,
+      });
+      this.#mcpSaid.add(server.name);
+    }
   }
 
   async stop(): Promise<void> {

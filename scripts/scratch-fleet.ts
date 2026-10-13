@@ -34,6 +34,8 @@ export interface Seen {
   /** Every user message's text, joined: the conversation so far. */
   all: string;
   at: number;
+  /** The request's body as sent: where a catalog tool (OpenCode's Code Mode) is named. */
+  body: string;
   /** The last user message's text: what started this request. */
   last: string;
   /** The names of the tools it offered, loaded ones only. */
@@ -432,6 +434,7 @@ export async function scratchFleet(options: {
               (block) => block.type === "tool_result"
             )),
         all: users.map((user) => textOf(user.content)).join("\n"),
+        body: JSON.stringify(body),
         last: textOf(users.at(-1)?.content),
         tools: (body.tools?.length ?? 0) > 0,
         // Anthropic names a tool at its top; chat completions, in `function`.

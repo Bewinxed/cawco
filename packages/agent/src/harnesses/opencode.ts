@@ -114,6 +114,7 @@ import {
   at,
   errorText,
   MCP_CONNECT_TIMEOUT_MS,
+  type McpNotConnected,
   notFound,
   OPENCODE_BIN,
   OPENCODE_VERSION,
@@ -977,7 +978,12 @@ const allSessions = async (
   return sessions;
 };
 
-/** Every projected message of a session, oldest first. */
+/**
+ * Every projected message of a session, oldest first. The order goes on the
+ * first page only: 2.0.28's cursor carries it, and a page asked with both
+ * answers 400 "Cursor cannot be combined with order". A page names a next
+ * cursor whenever it holds a message, so the read ends on an empty page.
+ */
 const allMessages = async (
   client: OpencodeClient,
   sessionID: string
@@ -989,9 +995,8 @@ const allMessages = async (
     const page = await client.message.list(
       {
         sessionID,
-        order: "asc",
         limit: 200,
-        ...(cursor ? { cursor } : {}),
+        ...(cursor ? { cursor } : { order: "asc" as const }),
       },
       { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
     );
@@ -3770,15 +3775,17 @@ export class OpencodeHarness implements Harness {
       ...(spec.denyTools ?? []),
     ]);
     // The location's readiness, awaited at the first dispatch, never at
-    // publication: CawCo's plugin loaded there (the gate, failing closed) and
-    // every MCP server connected (a prompt before then loses the tools of a
-    // server still connecting, anomalyco/opencode#54794).
-    const ready = existing?.running
-      ? Promise.resolve()
+    // publication: CawCo's plugin loaded there (the gate, failing closed),
+    // CawCo's MCP server connected, and no other server still connecting (a
+    // prompt before then loses the tools of a server still connecting,
+    // anomalyco/opencode#54794). It answers the servers that did not connect,
+    // which the session says once.
+    const ready: Promise<McpNotConnected[]> = existing?.running
+      ? Promise.resolve([])
       : (async () => {
           // Each wait has its own deadline, which says what it waited for.
           await assertPluginLoaded(client, ctx.cwd, this.#lifetimeSignal());
-          await waitForMcp(client, ctx.cwd, this.#lifetimeSignal());
+          return await waitForMcp(client, ctx.cwd, this.#lifetimeSignal());
         })();
     ready.catch(() => undefined);
     let sessionId: string;

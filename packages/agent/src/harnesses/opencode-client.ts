@@ -3,7 +3,8 @@
  * Promise client (pinned with the CLI at 2.0.28), its HTTP Basic
  * authentication, how its errors read, and the two checks a server must pass
  * before a session runs in a location there: CawCo's plugin loaded (the gate
- * fails closed), and every configured MCP server connected.
+ * fails closed), and CawCo's MCP server connected with every other server
+ * settled.
  *
  * 2.0.28's auth: user `opencode`, the password the server was launched with
  * (`OPENCODE_SERVER_PASSWORD`); an unauthenticated call answers 401
@@ -187,21 +188,40 @@ export const assertPluginLoaded = async (
  */
 export const MCP_CONNECT_TIMEOUT_MS = 60_000;
 
+/** CawCo's own MCP server, as every server's launch config names it (`mcp.servers.cawco`). */
+export const CAWCO_MCP_SERVER = "cawco";
+
+/** An MCP server that had not connected when a location took its first prompt, and why. */
+export interface McpNotConnected {
+  name: string;
+  why: string;
+}
+
 /**
- * Waits until every MCP server the location has configured is `connected`.
- * A prompt sent before then loses the tools of a server still connecting:
- * Code Mode's catalog drops them for the turn ("The following tools are no
- * longer available…", anomalyco/opencode#54794 and #51812, both open at
- * 2.0.28). A server that fails, needs auth, or is still pending at the
- * deadline ends the wait with its name and why. A disabled server is not
- * waited for.
+ * Waits until none of the location's MCP servers is still connecting, and
+ * answers the ones that did not connect. A prompt sent while a server is
+ * connecting loses its tools: Code Mode's catalog drops them for the turn
+ * ("The following tools are no longer available…", anomalyco/opencode#54794
+ * and #51812, both open at 2.0.28). So a `pending` server is waited for, up
+ * to the deadline.
+ *
+ * A server that `failed` or `needs_auth` is settled: it is not waited for,
+ * and the session runs without its tools, as a Claude session does; so is
+ * one still `pending` at the deadline. Each is answered with why, for the
+ * session to say. A `disabled` server is nobody's concern.
+ *
+ * CawCo's own server is the one that must connect: the session's hub tools
+ * come through it. One that failed, needs sign-in or is disabled refuses at
+ * once, and one not connected at the deadline refuses then, as Claude's
+ * harness refuses a launch whose CawCo slot never connects (claude.ts
+ * `#connectedCawcoSnapshot`).
  */
 export const waitForMcp = async (
   client: OpencodeClient,
   directory: string,
   signal: AbortSignal,
   timeoutMs = MCP_CONNECT_TIMEOUT_MS
-): Promise<void> => {
+): Promise<McpNotConnected[]> => {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     signal.throwIfAborted();
@@ -209,30 +229,44 @@ export const waitForMcp = async (
     const listed = await client.mcp.list(at(directory), {
       signal: oneRead(signal),
     });
-    const waiting = listed.data.filter(
-      (server) =>
-        server.status.status !== "connected" &&
-        server.status.status !== "disabled"
-    );
-    if (waiting.length === 0) {
-      return;
-    }
-    const broken = waiting.find(
-      (server) =>
-        server.status.status === "failed" ||
-        server.status.status === "needs_auth"
-    );
-    if (broken || Date.now() >= deadline) {
-      const named = (broken ? [broken] : waiting)
-        .map((server) => {
-          const status = server.status as { status: string; error?: string };
-          return `${server.name} (${status.status}${status.error ? `: ${status.error}` : ""})`;
-        })
-        .join(", ");
+    const cawco = listed.data.find(
+      (server) => server.name === CAWCO_MCP_SERVER
+    )?.status;
+    if (
+      cawco?.status === "failed" ||
+      cawco?.status === "needs_auth" ||
+      cawco?.status === "disabled"
+    ) {
       throw new Error(
-        broken
-          ? `OpenCode's MCP server ${named} at ${directory} did not connect.`
-          : `OpenCode's MCP servers ${named} at ${directory} were still not connected after ${timeoutMs / 1000} s.`
+        `CawCo's MCP server at ${directory} is not connected (${cawco.status}${"error" in cawco ? `: ${cawco.error}` : ""}).`
+      );
+    }
+    const over = Date.now() >= deadline;
+    const connecting = listed.data.some(
+      (server) => server.status.status === "pending"
+    );
+    if (cawco?.status === "connected" && (over || !connecting)) {
+      return listed.data.flatMap((server): McpNotConnected[] => {
+        const { status } = server;
+        switch (status.status) {
+          case "failed":
+          case "needs_auth":
+            return [{ name: server.name, why: status.error }];
+          case "pending":
+            return [
+              {
+                name: server.name,
+                why: `still connecting after ${timeoutMs / 1000} s`,
+              },
+            ];
+          default:
+            return [];
+        }
+      });
+    }
+    if (over) {
+      throw new Error(
+        `CawCo's MCP server at ${directory} did not connect within ${timeoutMs / 1000} seconds.`
       );
     }
     await Bun.sleep(250);

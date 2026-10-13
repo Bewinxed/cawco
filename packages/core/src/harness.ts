@@ -855,6 +855,21 @@ export const MESSAGES_READ = "read";
 export const PROVIDER_RETRY = "provider_retry";
 
 /**
+ * The `system` subtype saying one of the session's MCP servers did not
+ * connect when it started, so the session runs without that server's tools:
+ * the server's name in `mcp_server`, the line ({@link mcpNotConnectedLine})
+ * in `content`. CawCo's own server not connecting refuses the session
+ * instead; this is every other server's.
+ */
+export const MCP_NOT_CONNECTED = "mcp_not_connected";
+
+const FINAL_STOP = /\.$/;
+
+/** What a session's transcript and its model are told of a server that did not connect ({@link MCP_NOT_CONNECTED}). */
+export const mcpNotConnectedLine = (name: string, why: string): string =>
+  `${name} didn't connect: ${why.trim().replace(FINAL_STOP, "")}. This session runs without its tools.`;
+
+/**
  * The `system` subtype saying the agent stopped a session that failed the same
  * way {@link REPEATED_FAILURE_LIMIT} times in a row with no send in between —
  * a harness looping on its own (opencode's overflow compaction retried a
@@ -1078,6 +1093,8 @@ export interface NeutralSystemMessage {
   // transcript draws (its output is otherwise startup noise, and never stored)
   hook_name?: string;
   last_tool_name?: string;
+  // mcp_not_connected ({@link MCP_NOT_CONNECTED}) — the server that did not connect
+  mcp_server?: string;
   mcp_servers?: { name: string; status: string }[];
   // stream_so_far ({@link STREAM_SO_FAR}) — the id the harness stores the
   // message being written under, when it stores it while it is written
