@@ -52,6 +52,20 @@ export const hostEnvironment = (
   env: Readonly<Record<string, string | undefined>> = process.env
 ): Record<string, string> => defined(env, (name) => name !== EMBEDDED_PI_DIR);
 
+/**
+ * `env` as a harness server gets it (an OpenCode server, which runs many
+ * sessions): the host's, with no `CAWCO_*` at all. What a session's shell or
+ * MCP server needs of CawCo, the server's plugin sets for that session and
+ * location itself; anything inherited would reach every session's.
+ */
+export const serverEnvironment = (
+  env: Readonly<Record<string, string | undefined>>
+): Record<string, string> =>
+  defined(
+    env,
+    (name) => name !== EMBEDDED_PI_DIR && !name.startsWith("CAWCO_")
+  );
+
 /** `env` as a session gets it: the host's, with only the `CAWCO_*` its tools read. */
 export const sessionEnvironment = (
   env: Readonly<Record<string, string | undefined>>

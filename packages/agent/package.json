@@ -28,7 +28,7 @@
     "@earendil-works/pi-coding-agent": "1.0.1",
     "@excalidraw/excalidraw": "0.18.1",
     "@excalidraw/mermaid-to-excalidraw": "2.2.2",
-    "@opencode-ai/sdk": "1.18.34",
+    "@opencode/client": "2.0.28",
     "@vscode/ripgrep-universal": "1.18.0",
     "bonjour-service": "^1.4.4",
     "effect": "^4.0.0",

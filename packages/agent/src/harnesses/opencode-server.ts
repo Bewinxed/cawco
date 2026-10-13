@@ -1,9 +1,12 @@
-import { createHash } from "node:crypto";
-import { readdir } from "node:fs/promises";
+import { Database } from "bun:sqlite";
+import { createHash, randomBytes } from "node:crypto";
+import { existsSync } from "node:fs";
+import { chmod, mkdir, readdir, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   commandLines,
+  listeningPorts,
   processStart as osProcessStart,
   processArgs,
   processStartMs,
@@ -16,34 +19,163 @@ import {
 import { launchGateForm } from "../gate-form";
 import { OPENCODE_SERVER_PROC_ID } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
-import { readJson, writeJson } from "./fleet-common";
+import { readJson } from "./fleet-common";
 
 export const SERVER_CUTOVER_TIMEOUT_MS = 60_000;
+
+/**
+ * The environment variable an OpenCode 2.0 server takes its password from
+ * (HTTP Basic, user `opencode`). Each generation gets its own, minted when it
+ * is launched and kept in its record, which only this user reads; never in
+ * its argv.
+ */
+export const PASSWORD_ENV = "OPENCODE_SERVER_PASSWORD";
 
 export interface ServerIdentity {
   epoch: string;
   /**
    * The launch flags this generation was started with ({@link launchOf}),
-   * when this owner started it. A generation adopted from outside — an older
-   * agent's, or the stable-name server — carries none, and so matches no
-   * spec: its flags are unknown.
+   * when this owner started it. A generation adopted from outside carries
+   * none, and so matches no launch: its flags are unknown.
    */
   launch?: string;
+  /**
+   * The password it was launched with, as its HTTP Basic auth takes it: every
+   * 2.0 generation's, minted here. A 1.x server carries one only when it was
+   * launched with one, which its own environment says.
+   */
+  password?: string;
   pid: number;
   procId: string;
   startedAt: string;
   url: string;
+  /**
+   * An OpenCode 1.x server an earlier CawCo started (a record 1.x left, or a
+   * stray whose launch config is 1.x's). 2.0's client cannot reach it: it is
+   * read with 1.x's own API ({@link readV1Activity}) and retired once idle,
+   * before any 2.0 server converts the database it writes.
+   */
+  v1?: true;
 }
 
 /**
- * A spec's launch flags: its environment apart from the config content,
- * which is verified against the running server on its own. Two generations
- * with the same flags were started the same way.
+ * Whether a generation is an OpenCode 1.x server: one marked so, or one a 1.x
+ * record names, which never carried a password (every 2.0 generation has one).
  */
-export const launchOf = (spec: ProcSpec): string =>
+export const isV1 = (identity: ServerIdentity): boolean =>
+  identity.v1 === true || identity.password === undefined;
+
+/** What a 1.x server says it is running. */
+export type V1Activity =
+  | { kind: "read"; running: string[] }
+  | { kind: "refused"; reason: string }
+  | { kind: "unreachable"; reason: string };
+
+/** The `x-next-cursor` of a 1.x session inventory page. */
+const NEXT_CURSOR = "x-next-cursor";
+
+/** How long one read of a 1.x server may take. Ours: it boots each directory it reads, which can take a while on a cold one. */
+const V1_READ_TIMEOUT_MS = 60_000;
+
+/**
+ * What an OpenCode 1.x server runs, by its own API (1.18.34): a turn there is
+ * a directory's (`GET /session/status?directory=`, a session not `idle` is
+ * running; `/api/session/active` does not list a 1.x-style turn, observed),
+ * and the directories it can run one in are those of the sessions updated
+ * since it started (`GET /experimental/session?start=<its birth>`, paged by
+ * `x-next-cursor`): a turn updates its session as it starts. Reading only
+ * those keeps the read from booting every directory the database ever saw.
+ * An answer that is no answer (401, an error) is `refused`; no answer at all
+ * is `unreachable`.
+ */
+export const readV1Activity = async (
+  identity: ServerIdentity
+): Promise<V1Activity> => {
+  const born = await processStartMs(identity.pid);
+  if (born === undefined) {
+    return { kind: "unreachable", reason: "its process is gone" };
+  }
+  const headers: Record<string, string> = identity.password
+    ? {
+        authorization: `Basic ${Buffer.from(`opencode:${identity.password}`).toString("base64")}`,
+      }
+    : {};
+  const signal = AbortSignal.timeout(V1_READ_TIMEOUT_MS);
+  const get = async (path: string): Promise<Response> =>
+    await fetch(new URL(path, identity.url), { headers, signal });
+  try {
+    const directories = new Set<string>();
+    let cursor: string | null = null;
+    do {
+      const query: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
+      // biome-ignore lint/performance/noAwaitInLoops: each page names the next
+      const page: Response = await get(
+        `/experimental/session?limit=200&start=${born}${query}`
+      );
+      if (!page.ok) {
+        return {
+          kind: "refused",
+          reason: `its session inventory answered HTTP ${page.status}`,
+        };
+      }
+      for (const session of (await page.json()) as { directory?: unknown }[]) {
+        if (typeof session.directory === "string") {
+          directories.add(session.directory);
+        }
+      }
+      cursor = page.headers.get(NEXT_CURSOR);
+    } while (cursor);
+    const running: string[] = [];
+    for (const directory of directories) {
+      // biome-ignore lint/performance/noAwaitInLoops: one directory at a time; each read boots its instance on the server
+      const status = await get(
+        `/session/status?directory=${encodeURIComponent(directory)}`
+      );
+      if (!status.ok) {
+        return {
+          kind: "refused",
+          reason: `its status of ${directory} answered HTTP ${status.status}`,
+        };
+      }
+      const states = (await status.json()) as Record<string, { type?: string }>;
+      for (const [id, state] of Object.entries(states)) {
+        if (state.type !== "idle") {
+          running.push(id);
+        }
+      }
+    }
+    return { kind: "read", running };
+  } catch (error) {
+    return {
+      kind: "unreachable",
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+};
+
+/**
+ * How one generation is started: the process spec, and the launch flags it
+ * is started under, which name what it was started on (its gate form, its
+ * account's provider settings) without ever entering its environment, where
+ * every shell and MCP server it starts would read them.
+ */
+export interface ServerLaunch {
+  flags: Record<string, string>;
+  spec: ProcSpec;
+}
+
+/**
+ * A launch's identity: its flags and its environment apart from the config
+ * content, which is verified against the running server on its own, and the
+ * password, which is each generation's own. Two generations with the same
+ * identity were started the same way.
+ */
+export const launchOf = (launch: ServerLaunch): string =>
   JSON.stringify(
-    Object.entries(spec.env ?? {})
-      .filter(([name]) => name !== "OPENCODE_CONFIG_CONTENT")
+    Object.entries({ ...launch.spec.env, ...launch.flags })
+      .filter(
+        ([name]) => name !== "OPENCODE_CONFIG_CONTENT" && name !== PASSWORD_ENV
+      )
       .sort(([a], [b]) => a.localeCompare(b))
   );
 
@@ -95,7 +227,54 @@ const ACCOUNT_RECORD =
 /** Every record file, of any keeper of this home, the machine's server's or an account's. */
 const ANY_RECORD =
   /^opencode-server-[0-9a-f]{16}(-account-[A-Za-z0-9_-]+)?\.json$/;
-const PORT_ARG = /^--port=(\d+)$/;
+
+/**
+ * The OpenCode 1.x database in `dataHome` (`<dataHome>/opencode/opencode.db`,
+ * the same file 2.0 opens), copied whole beside itself before a 2.0 server
+ * first starts on it, and the copy's path; undefined when there is nothing of
+ * 1.x's to keep. 2.0 converts a 1.x database in place on its first start,
+ * once and one way, adding its own tables (`session_message`, …) beside 1.x's
+ * (settled #10): a file that has them is converted already, and a file 1.x
+ * never wrote (no `message` table) holds no 1.x history. The copy is SQLite's
+ * own `VACUUM INTO`, consistent whatever else has the file open.
+ */
+export const backupV1Database = (dataHome: string): string | undefined => {
+  const path = join(dataHome, "opencode", "opencode.db");
+  if (!existsSync(path)) {
+    return;
+  }
+  const db = new Database(path, { readonly: true });
+  try {
+    const tables = new Set(
+      db
+        .query<{ name: string }, []>(
+          "SELECT name FROM sqlite_master WHERE type = 'table'"
+        )
+        .all()
+        .map((row) => row.name)
+    );
+    if (tables.has("session_message") || !tables.has("message")) {
+      return;
+    }
+    const backup = `${path}.v1-backup-${new Date().toISOString().replaceAll(":", "-")}`;
+    db.run("VACUUM INTO ?", [backup]);
+    console.info(
+      `[opencode] ${path} is OpenCode 1.x's: backed up to ${backup} before OpenCode 2.0 converts it`
+    );
+    return backup;
+  } finally {
+    db.close();
+  }
+};
+
+/** A record holds each generation's password: written whole, owner-only. */
+const writeRecord = async (path: string, record: unknown): Promise<void> => {
+  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  const staged = `${path}.${process.pid}.tmp`;
+  await writeFile(staged, JSON.stringify(record, null, 2), { mode: 0o600 });
+  await chmod(staged, 0o600);
+  await rename(staged, path);
+};
 
 /**
  * Every server a record in this home names, current or retired, as
@@ -132,30 +311,44 @@ const launchEnv = (env: string[], name: string): string | undefined =>
  * The `opencode serve` process `pid` is, as a generation with no keeper,
  * when CawCo of this home started it: its launch config names `cawcoMcp`,
  * this agent's own gateway, and its HOME is this one. Its environment is
- * readable only to its own user, so no other user's server is ever one.
+ * readable only to its own user, so no other user's server is ever one. Its
+ * config says which OpenCode it is: 2.0's names the gateway under
+ * `mcp.servers.cawco`, 1.x's under `mcp.cawco`. Either is reached where the
+ * kernel says it listens, with the password its own launch environment
+ * carries, when it carries one (every 2.0 server CawCo starts does; a 1.x
+ * server CawCo started ran with none, unsecured).
  */
 const strayServer = async (
   pid: number,
   cawcoMcp: string
 ): Promise<ServerIdentity | undefined> => {
   const read = await processArgs(pid);
-  const port = read?.argv
-    .map((arg) => PORT_ARG.exec(arg)?.[1])
-    .find((found) => found !== undefined);
   if (
-    !(read && port && read.argv.includes("serve")) ||
+    !read?.argv.includes("serve") ||
     launchEnv(read.env, "HOME") !== homedir()
   ) {
     return;
   }
-  let config: { mcp?: { cawco?: { url?: unknown } } } | null = null;
+  let config: {
+    mcp?: {
+      cawco?: { url?: unknown };
+      servers?: { cawco?: { url?: unknown } };
+    };
+  } | null = null;
   try {
     config = JSON.parse(launchEnv(read.env, "OPENCODE_CONFIG_CONTENT") ?? "");
   } catch {
     return;
   }
   const startedAt = await processStart(pid);
-  if (config?.mcp?.cawco?.url !== cawcoMcp || !startedAt) {
+  const v2 = config?.mcp?.servers?.cawco?.url === cawcoMcp;
+  const v1 = config?.mcp?.cawco?.url === cawcoMcp;
+  const [port] = await listeningPorts(pid);
+  if (!((v1 || v2) && startedAt && port !== undefined)) {
+    return;
+  }
+  const password = launchEnv(read.env, PASSWORD_ENV);
+  if (v2 && !password) {
     return;
   }
   return {
@@ -164,6 +357,8 @@ const strayServer = async (
     procId: `${OPENCODE_SERVER_PROC_ID}-stray-${pid}-${createHash("sha256").update(startedAt).digest("hex").slice(0, 12)}`,
     startedAt,
     url: `http://127.0.0.1:${port}`,
+    ...(password ? { password } : {}),
+    ...(v2 ? {} : { v1: true as const }),
   };
 };
 
@@ -298,7 +493,7 @@ export class OpencodeServerOwner {
 
   #save(): Promise<void> {
     const record = this.#record;
-    const written = this.#writes.then(() => writeJson(this.#path, record));
+    const written = this.#writes.then(() => writeRecord(this.#path, record));
     this.#writes = written.catch(() => undefined);
     return written;
   }
@@ -366,7 +561,8 @@ export class OpencodeServerOwner {
   async #identify(
     client: SessiondClient,
     procId: string,
-    url: string
+    url: string,
+    password?: string
   ): Promise<ServerIdentity> {
     const listed = await client.list();
     const proc = listed.procs.find((row) => row.procId === procId && row.alive);
@@ -374,43 +570,57 @@ export class OpencodeServerOwner {
     if (!(proc && startedAt)) {
       throw new Error(`OpenCode generation ${procId} exited before adoption.`);
     }
-    return { procId, pid: proc.pid, epoch: listed.epoch, startedAt, url };
+    return {
+      procId,
+      pid: proc.pid,
+      epoch: listed.epoch,
+      startedAt,
+      url,
+      ...(password ? { password } : {}),
+    };
   }
 
-  async #launch(spec: ProcSpec, signal: AbortSignal): Promise<ServerIdentity> {
+  /**
+   * One generation started under the keeper: on `--port=0`, so the kernel
+   * picks a free port and the server says which on stdout, with a password
+   * of its own in its environment, and with none of the keeper's `CAWCO_*`
+   * (`inherit: "server"`).
+   */
+  async #launch(
+    launch: ServerLaunch,
+    signal: AbortSignal
+  ): Promise<ServerIdentity> {
     const client = await this.#sessiond();
     const procId = `${OPENCODE_SERVER_PROC_ID}-${this.account === undefined ? "" : `account-${this.account}-`}${crypto.randomUUID()}`;
-    const reservation = Bun.serve({
-      hostname: "127.0.0.1",
-      port: 0,
-      fetch: () => new Response(null, { status: 404 }),
-    });
-    const { port } = reservation;
-    await reservation.stop(true);
+    const password = randomBytes(24).toString("base64url");
     signal.throwIfAborted();
     try {
       const url = await this.#attach(
         client,
         procId,
         {
-          ...spec,
+          ...launch.spec,
           args: [
-            ...spec.args.filter((arg) => !arg.startsWith("--port=")),
-            `--port=${port}`,
+            ...launch.spec.args.filter((arg) => !arg.startsWith("--port=")),
+            "--port=0",
           ],
+          env: { ...launch.spec.env, [PASSWORD_ENV]: password },
+          inherit: "server",
         },
         signal
       );
       const identity = {
-        ...(await this.#identify(client, procId, url)),
-        launch: launchOf(spec),
+        ...(await this.#identify(client, procId, url, password)),
+        launch: launchOf(launch),
       };
       signal.throwIfAborted();
       return identity;
     } catch (error) {
       // A timed-out announcement may leave a real candidate. Capture it for
       // retirement; never reuse that procId or signal the active generation.
-      const orphan = await this.#identify(client, procId, "").catch(() => null);
+      const orphan = await this.#identify(client, procId, "", password).catch(
+        () => null
+      );
       if (orphan && this.#record) {
         this.#record = {
           ...this.#record,
@@ -423,7 +633,31 @@ export class OpencodeServerOwner {
     }
   }
 
-  ensure(spec: ProcSpec): Promise<ServerIdentity> {
+  /**
+   * The cutover, when the machine's binary moved to 2.0: every OpenCode 1.x
+   * generation this owner has a record of is retired, as any replaced
+   * generation is, ended once it runs nothing ({@link #retire}, read with
+   * 1.x's own API). Answers the 1.x generations still to end: the caller
+   * starts no 2.0 server before none is left, because what a 1.x server
+   * writes after 2.0 converts its database never reaches 2.0 (settled #10).
+   */
+  async retireV1(): Promise<ServerIdentity[]> {
+    if (!(await this.#mayManage())) {
+      return [];
+    }
+    const record = await this.#load();
+    if (record.active && isV1(record.active)) {
+      this.#record = {
+        active: null,
+        retired: [...record.retired, record.active],
+      };
+      await this.#save();
+    }
+    this.maintain();
+    return (this.#record?.retired ?? []).filter(isV1);
+  }
+
+  ensure(launch: ServerLaunch): Promise<ServerIdentity> {
     if (this.#transition) {
       return this.#transition;
     }
@@ -433,11 +667,20 @@ export class OpencodeServerOwner {
         this.#record = null;
       }
       const record = await this.#load();
-      if (record.active && (await this.#matches(record.active))) {
+      if (
+        record.active &&
+        !isV1(record.active) &&
+        (await this.#matches(record.active))
+      ) {
         if (manages) {
           this.maintain();
         }
         return record.active;
+      }
+      if (!manages) {
+        throw new Error(
+          "The machine's OpenCode lifecycle owner must start its server."
+        );
       }
       // An active generation the keeper no longer holds is one whose keeper
       // was restarted or killed under it: the process may well still run,
@@ -445,30 +688,9 @@ export class OpencodeServerOwner {
       // record here, so nothing ever ended it, and every keeper restart left
       // one more behind (26 on the Mac on 8 Oct). It is retired instead, the
       // same way a replaced generation is, once it is idle.
-      const stale = manages ? record.active : null;
-      const client = await this.#sessiond();
-      const listed = await client.list();
-      // Initial cutover adopts the existing server held under the stable name,
-      // which only ever was the machine's own.
-      const incumbent =
-        this.account === undefined &&
-        !record.active &&
-        listed.procs.some(
-          (proc) => proc.procId === OPENCODE_SERVER_PROC_ID && proc.alive
-        );
+      const stale = record.active;
       const signal = AbortSignal.timeout(SERVER_CUTOVER_TIMEOUT_MS);
-      if (!(manages || incumbent)) {
-        throw new Error(
-          "The machine's OpenCode lifecycle owner must start its server."
-        );
-      }
-      const identity = incumbent
-        ? await this.#identify(
-            client,
-            OPENCODE_SERVER_PROC_ID,
-            await this.#attach(client, OPENCODE_SERVER_PROC_ID, spec, signal)
-          )
-        : await this.#launch(spec, signal);
+      const identity = await this.#launch(launch, signal);
       const current = await this.#load();
       this.#record = {
         active: identity,
@@ -479,10 +701,8 @@ export class OpencodeServerOwner {
             ]
           : current.retired,
       };
-      if (manages) {
-        await this.#save();
-        this.maintain();
-      }
+      await this.#save();
+      this.maintain();
       return identity;
     })().finally(() => {
       this.#transition = null;
@@ -491,7 +711,7 @@ export class OpencodeServerOwner {
   }
 
   replace(
-    spec: ProcSpec,
+    launch: ServerLaunch,
     verify: (identity: ServerIdentity, signal: AbortSignal) => Promise<void>,
     activate: (identity: ServerIdentity) => void
   ): Promise<ServerIdentity> {
@@ -507,7 +727,7 @@ export class OpencodeServerOwner {
       const record = await this.#load();
       const old = record.active;
       const signal = AbortSignal.timeout(SERVER_CUTOVER_TIMEOUT_MS);
-      const candidate = await abortable(this.#launch(spec, signal), signal);
+      const candidate = await abortable(this.#launch(launch, signal), signal);
       this.#candidateProcId = candidate.procId;
       try {
         // An unselected candidate is durable cleanup work if the agent crashes.
@@ -664,16 +884,43 @@ export class OpencodeServerOwner {
     }
   }
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: custody, process identity and grace-period checks must guard the same retirement
   async #retire(identity: ServerIdentity): Promise<void> {
     if (this.active?.procId === identity.procId) {
       throw new Error("Refusing to retire the active OpenCode generation.");
     }
-    // Held by a keeper (current or retiring), it is ended through that
-    // keeper, which signals all it started. Held by none, its keeper is gone
-    // and it runs on under init: it is ended directly, with its own process
-    // group, which it leads (the keeper starts every child detached) and
-    // which holds its MCP servers.
+    if ((await this.#matches(identity)) || (await this.#runs(identity))) {
+      if (!(await this.#idle(identity))) {
+        throw new Error(
+          "OpenCode retirement deferred: generation activity is busy or unknown."
+        );
+      }
+      if (this.active?.procId === identity.procId) {
+        return;
+      }
+      await this.#end(identity, isV1(identity) ? "an idle 1.x server" : "idle");
+    }
+    if (this.#record) {
+      this.#record = {
+        ...this.#record,
+        retired: this.#record.retired.filter(
+          (row) => row.procId !== identity.procId
+        ),
+      };
+      await this.#save();
+      console.info(
+        `[opencode] retired ${identity.procId}/${identity.pid}: exit confirmed`
+      );
+    }
+  }
+
+  /**
+   * Ends one generation that is not the active one. Held by a keeper (current
+   * or retiring), it is ended through that keeper, which signals all it
+   * started. Held by none, its keeper is gone and it runs on under init: it
+   * is ended directly, with its own process group, which it leads (the
+   * keeper starts every child detached) and which holds its MCP servers.
+   */
+  async #end(identity: ServerIdentity, why: string): Promise<void> {
     const held = await this.#matches(identity);
     const client = held ? await this.#keeperOf(identity.epoch) : undefined;
     const present = () =>
@@ -691,53 +938,34 @@ export class OpencodeServerOwner {
         }
       }
     };
-    if (held || (await this.#runs(identity))) {
-      if (!(await this.#idle(identity))) {
-        throw new Error(
-          "OpenCode retirement deferred: generation activity is busy or unknown."
-        );
-      }
-      if (this.active?.procId === identity.procId || !(await present())) {
-        return;
-      }
-      const whose = held ? "" : " (its keeper is gone)";
-      console.info(
-        `[opencode] retire ${identity.procId}/${identity.pid} start=${identity.startedAt}${whose}: SIGTERM`
-      );
-      await signal("SIGTERM");
-      const deadline = Date.now() + 15_000;
-      // biome-ignore lint/performance/noAwaitInLoops: observe this exact retired identity during its grace period
-      while (Date.now() < deadline && (await present())) {
-        await Bun.sleep(200);
-      }
-      // dd1e4ca1 protects active work and live procId reuse. This generation is
-      // retired, has no bound sessions, and its unique procId is never reused.
-      if (this.active?.procId !== identity.procId && (await present())) {
-        await signal("SIGKILL");
-        console.info(
-          `[opencode] retire ${identity.procId}/${identity.pid}${whose}: retired-only SIGKILL after grace`
-        );
-        const killDeadline = Date.now() + 5000;
-        // biome-ignore lint/performance/noAwaitInLoops: verify exit of only the retired identity
-        while (Date.now() < killDeadline && (await present())) {
-          await Bun.sleep(100);
-        }
-        if (await present()) {
-          throw new Error("Retired generation remained alive after SIGKILL.");
-        }
-      }
+    if (this.active?.procId === identity.procId || !(await present())) {
+      return;
     }
-    if (this.#record) {
-      this.#record = {
-        ...this.#record,
-        retired: this.#record.retired.filter(
-          (row) => row.procId !== identity.procId
-        ),
-      };
-      await this.#save();
+    const whose = held ? "" : " (its keeper is gone)";
+    console.info(
+      `[opencode] retire ${identity.procId}/${identity.pid} start=${identity.startedAt}${whose}, ${why}: SIGTERM`
+    );
+    await signal("SIGTERM");
+    const deadline = Date.now() + 15_000;
+    // biome-ignore lint/performance/noAwaitInLoops: observe this exact retired identity during its grace period
+    while (Date.now() < deadline && (await present())) {
+      await Bun.sleep(200);
+    }
+    // dd1e4ca1 protects active work and live procId reuse. This generation is
+    // retired, has no bound sessions, and its unique procId is never reused.
+    if (this.active?.procId !== identity.procId && (await present())) {
+      await signal("SIGKILL");
       console.info(
-        `[opencode] retired ${identity.procId}/${identity.pid}: exit confirmed`
+        `[opencode] retire ${identity.procId}/${identity.pid}${whose}: retired-only SIGKILL after grace`
       );
+      const killDeadline = Date.now() + 5000;
+      // biome-ignore lint/performance/noAwaitInLoops: verify exit of only the retired identity
+      while (Date.now() < killDeadline && (await present())) {
+        await Bun.sleep(100);
+      }
+      if (await present()) {
+        throw new Error("Retired generation remained alive after SIGKILL.");
+      }
     }
   }
 }

@@ -32,6 +32,12 @@ export interface ProcSpec {
   command: string;
   cwd?: string;
   env?: Record<string, string>;
+  /**
+   * What of the keeper's own environment the child starts with, under `env`:
+   * a session's (`session-env.ts` `sessionEnvironment`, the default), or a
+   * harness server's (`serverEnvironment`: no `CAWCO_*` at all).
+   */
+  inherit?: "server" | "session";
 }
 
 /**

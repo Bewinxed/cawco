@@ -143,7 +143,7 @@ nonisolated enum ToolPresentation {
     static let kinds: [Kind] = [
         Kind(
             id: .bash,
-            names: ["bash"],
+            names: ["bash", "shell"],
             namePattern: nil,
             glyph: "code-square-bold-duotone",
             ink: "tool-run",
@@ -189,7 +189,7 @@ nonisolated enum ToolPresentation {
         ),
         Kind(
             id: .edit,
-            names: ["apply_patch", "edit", "multiedit", "str_replace_editor", "str_replace", "file_edit"],
+            names: ["apply_patch", "patch", "edit", "multiedit", "str_replace_editor", "str_replace", "file_edit"],
             namePattern: nil,
             glyph: "pen-2-bold-duotone",
             ink: "tool-edit",
@@ -224,7 +224,7 @@ nonisolated enum ToolPresentation {
                     secondLine: false
                 )
             ), Variant(
-                when: When(action: nil, names: ["apply_patch"], patch: nil, status: .pending),
+                when: When(action: nil, names: ["apply_patch", "patch"], patch: nil, status: .pending),
                 renderer: .fields,
                 sentence: Sentence(
                     label: .words("Applying patch"),
@@ -239,7 +239,7 @@ nonisolated enum ToolPresentation {
                     secondLine: false
                 )
             ), Variant(
-                when: When(action: nil, names: ["apply_patch"], patch: true, status: nil),
+                when: When(action: nil, names: ["apply_patch", "patch"], patch: true, status: nil),
                 renderer: nil,
                 sentence: Sentence(
                     label: .words("Applied patch"),
@@ -254,7 +254,7 @@ nonisolated enum ToolPresentation {
                     secondLine: false
                 )
             ), Variant(
-                when: When(action: nil, names: ["apply_patch"], patch: nil, status: nil),
+                when: When(action: nil, names: ["apply_patch", "patch"], patch: nil, status: nil),
                 renderer: .fields,
                 sentence: Sentence(
                     label: .words("Applied patch"),
@@ -440,7 +440,7 @@ nonisolated enum ToolPresentation {
         ),
         Kind(
             id: .task,
-            names: ["task", "agent"],
+            names: ["task", "agent", "subagent"],
             namePattern: nil,
             glyph: "users-group-rounded-bold-duotone",
             ink: "tool-agent",

@@ -17,7 +17,7 @@
  */
 
 import { dlopen, FFIType } from "bun:ffi";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, readlink } from "node:fs/promises";
 
 // ── macOS: libSystem ─────────────────────────────────────────────────────
 
@@ -945,6 +945,75 @@ export async function ownIdentity(): Promise<{
     ...(start ? { procStart: start } : {}),
     ...(boot ? { bootId: boot } : {}),
   };
+}
+
+/** A socket a process holds, as `/proc/<pid>/fd` links name it. */
+const SOCKET_LINK = /^socket:\[(\d+)\]$/;
+
+/** A `lsof -Fn` line naming a listening TCP address: `n127.0.0.1:43663`. */
+const LSOF_LISTEN = /^n.*:(\d+)$/;
+
+/** The whitespace between a `/proc/net/tcp` row's fields. */
+const PROC_NET_FIELDS = /\s+/;
+
+/**
+ * The TCP ports `pid` listens on: on Linux the LISTEN rows (`st` 0A) of its
+ * network namespace's `/proc/<pid>/net/tcp{,6}` whose socket inode is one of
+ * its own open descriptors; on macOS `lsof`'s listening TCP sockets of the
+ * process. Empty when it is gone, listens on nothing, or is not ours to read.
+ */
+export async function listeningPorts(pid: number): Promise<number[]> {
+  if (process.platform !== "linux") {
+    const ran = Bun.spawnSync([
+      "lsof",
+      "-nP",
+      "-a",
+      "-p",
+      String(pid),
+      "-iTCP",
+      "-sTCP:LISTEN",
+      "-Fn",
+    ]);
+    return [
+      ...new Set(
+        ran.stdout
+          .toString()
+          .split("\n")
+          .flatMap((line) => {
+            const port = LSOF_LISTEN.exec(line)?.[1];
+            return port ? [Number(port)] : [];
+          })
+      ),
+    ];
+  }
+  const fds = await readdir(`/proc/${pid}/fd`).catch(() => [] as string[]);
+  const inodes = new Set(
+    (
+      await Promise.all(
+        fds.map((fd) => readlink(`/proc/${pid}/fd/${fd}`).catch(() => ""))
+      )
+    ).flatMap((link) => {
+      const inode = SOCKET_LINK.exec(link)?.[1];
+      return inode ? [inode] : [];
+    })
+  );
+  const ports = new Set<number>();
+  for (const table of ["tcp", "tcp6"]) {
+    // biome-ignore lint/performance/noAwaitInLoops: two small tables, read in turn
+    const text = await readFile(`/proc/${pid}/net/${table}`, "utf8").catch(
+      () => ""
+    );
+    for (const line of text.split("\n").slice(1)) {
+      // sl, local_address, rem_address, st, …, inode (the tenth).
+      const [, local, , state, , , , , , inode] = line
+        .trim()
+        .split(PROC_NET_FIELDS);
+      if (state === "0A" && local && inodes.has(inode ?? "")) {
+        ports.add(Number.parseInt(local.slice(local.lastIndexOf(":") + 1), 16));
+      }
+    }
+  }
+  return [...ports];
 }
 
 /** Whether a marker's process is the one that wrote it and is still running. */

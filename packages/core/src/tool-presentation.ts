@@ -253,7 +253,7 @@ const dir = (piece: Piece): Piece => ({ ...piece, as: "path-dir" });
 export const TOOL_KINDS: ToolKind[] = [
   {
     id: "bash",
-    names: ["bash"],
+    names: ["bash", "shell"],
     glyph: "code-square-bold-duotone",
     ink: "tool-run",
     one: "command",
@@ -287,6 +287,7 @@ export const TOOL_KINDS: ToolKind[] = [
     id: "edit",
     names: [
       "apply_patch",
+      "patch",
       "edit",
       "multiedit",
       "str_replace_editor",
@@ -311,12 +312,12 @@ export const TOOL_KINDS: ToolKind[] = [
         sentence: { label: "Edit failed", object: leaf(filePath) },
       },
       {
-        when: { names: ["apply_patch"], status: "pending" },
+        when: { names: ["apply_patch", "patch"], status: "pending" },
         renderer: "fields",
         sentence: { label: "Applying patch" },
       },
       {
-        when: { names: ["apply_patch"], patch: true },
+        when: { names: ["apply_patch", "patch"], patch: true },
         sentence: {
           label: "Applied patch",
           fact: "patch-lines",
@@ -324,7 +325,7 @@ export const TOOL_KINDS: ToolKind[] = [
         },
       },
       {
-        when: { names: ["apply_patch"] },
+        when: { names: ["apply_patch", "patch"] },
         renderer: "fields",
         sentence: { label: "Applied patch" },
       },
@@ -441,7 +442,7 @@ export const TOOL_KINDS: ToolKind[] = [
   },
   {
     id: "task",
-    names: ["task", "agent"],
+    names: ["task", "agent", "subagent"],
     glyph: "users-group-rounded-bold-duotone",
     ink: "tool-agent",
     one: "delegation",

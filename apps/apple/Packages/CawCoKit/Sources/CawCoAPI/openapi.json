@@ -34283,6 +34283,10 @@
           "id": {
             "type": "string"
           },
+          "exactVersion": {
+            "description": "The one version this fleet runs, for a tool CawCo's own code is built\nagainst: every install puts exactly this one on the machine, whatever the\npolicy pins, and a probe that finds another reports it failed.",
+            "type": "string"
+          },
           "install": {
             "description": "Ordered by preference. Empty for a platform = unsupported there.",
             "type": "array",

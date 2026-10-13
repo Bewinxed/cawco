@@ -62,6 +62,12 @@ export interface ToolSpec {
    * only where they explain another tool's state.
    */
   dependencyOnly?: boolean;
+  /**
+   * The one version this fleet runs, for a tool CawCo's own code is built
+   * against: every install puts exactly this one on the machine, whatever the
+   * policy pins, and a probe that finds another reports it failed.
+   */
+  exactVersion?: string;
   homepage: string;
   id: string;
   /** Ordered by preference. Empty for a platform = unsupported there. */
@@ -129,50 +135,32 @@ export const TOOL_CATALOG: ToolSpec[] = [
     id: "opencode",
     name: "opencode",
     homepage: "https://opencode.ai",
-    bin: "opencode",
-    versionCommand: "opencode --version",
-    wellKnownPaths: ["~/.opencode/bin/opencode"],
+    // OpenCode 2.0's package (`@opencode/cli`) has two bins, `opencode` and
+    // `opencode2` (npm view @opencode/cli@2.0.28 bin); 1.x never had
+    // `opencode2`, so this name finds only 2.0, wherever a 1.x `opencode`
+    // still sits on the PATH.
+    bin: "opencode2",
+    versionCommand: "opencode2 --version",
+    // CawCo's OpenCode adapter speaks 2.0.28's server API and loads a plugin
+    // written for it, with `@opencode/client` pinned to the same release.
+    exactVersion: "2.0.28",
     install: [
-      // Verified against the docs and the install script's source, 2026-08-06
-      // (v1.18.14, repo anomalyco/opencode). The script hardcodes
-      // ~/.opencode/bin — the documented OPENCODE_INSTALL_DIR is ignored
-      // (anomalyco/opencode#7675) — and adds it to the user's shell rc PATH.
-      {
-        label: "curl script",
-        platforms: ["linux", "darwin"],
-        command: "curl -fsSL https://opencode.ai/install | bash",
-        pinnedCommand:
-          "curl -fsSL https://opencode.ai/install | bash -s -- --version {version}",
-      },
-      // Windows, by likelihood of already being there: scoop's main bucket
-      // carries opencode officially; winget ships with Windows 11 but the
-      // SST.opencode manifest is community-kept under the old org name; npm
-      // needs Node. The curl script under Git Bash is x64-only — not worth
-      // depending on when three real package managers cover the platform.
-      {
-        label: "scoop",
-        platforms: ["win32"],
-        needs: "scoop",
-        command: "scoop install opencode",
-        pinnedCommand: "scoop install opencode@{version}",
-      },
-      {
-        label: "winget",
-        platforms: ["win32"],
-        needs: "winget",
-        command:
-          "winget install -e --id SST.opencode --silent --accept-package-agreements --accept-source-agreements",
-        pinnedCommand:
-          "winget install -e --id SST.opencode --version {version} --silent --accept-package-agreements --accept-source-agreements",
-      },
+      // 2.0 is the `@opencode/cli` package, a native binary per platform in
+      // its optional dependencies. 1.x's npm package (`opencode-ai`) installs
+      // an `opencode` bin of its own, which npm refuses to overwrite: it goes
+      // first ("Remove a package-managed V1 installation before installing
+      // V2", opencode.ai/v2/docs/migrate-v1).
       {
         label: "npm",
         platforms: ["linux", "darwin", "win32"],
         needs: "npm",
-        command: "npm install -g opencode-ai@latest",
-        pinnedCommand: "npm install -g opencode-ai@{version}",
+        command:
+          "npm uninstall -g opencode-ai && npm install -g @opencode/cli@{version}",
+        pinnedCommand:
+          "npm uninstall -g opencode-ai && npm install -g @opencode/cli@{version}",
       },
     ],
+    requires: [{ id: "node" }],
   },
   {
     id: "antigravity",

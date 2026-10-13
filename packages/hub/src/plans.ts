@@ -36,7 +36,7 @@ import type { TaskEvent, Tasks } from "./tasks";
 const SETTLE_MS = 200;
 
 /** The harness tools whose result means the session's own list moved. */
-const LIST_TOOLS = new Set(["TaskCreate", "TaskUpdate", "todowrite"]);
+const LIST_TOOLS = new Set(["TaskCreate", "TaskUpdate"]);
 
 export interface PlansDeps extends HarnessPlanDeps {
   db: Pick<
@@ -99,10 +99,10 @@ export const createPlans = (deps: PlansDeps) => {
   /**
    * Whether the session keeps CawCo's list: "CawCo's to-dos" is on for it,
    * the fleet's choice or its delegate type's — the same read the agent
-   * makes at spawn. pi has no list of its own.
+   * makes at spawn. OpenCode 2.0 and pi have no list of their own.
    */
   const keepsCawcoList = (row: InstanceRow): boolean =>
-    (row.harness ?? "claude") === "pi" ||
+    (row.harness ?? "claude") !== "claude" ||
     (db.getSupervisorConfig()?.cawcoTodos ?? false) ||
     (!!row.delegateType &&
       deps.typeTodos(row.delegateTypeProject ?? null, row.delegateType));
@@ -219,7 +219,7 @@ export const createPlans = (deps: PlansDeps) => {
       if (written.steps) {
         if (!keepsCawcoList(row)) {
           throw new Error(
-            "This session keeps its steps in its harness's own list (CawCo's to-dos are off for it), so write them there: Claude Code's TaskCreate and TaskUpdate, OpenCode's todowrite. todo_write can still write its spec."
+            "This session keeps its steps in its harness's own list (CawCo's to-dos are off for it), so write them there: Claude Code's TaskCreate and TaskUpdate. todo_write can still write its spec."
           );
         }
         db.putSessionSteps(row.id, written.steps);

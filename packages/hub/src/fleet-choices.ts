@@ -4,14 +4,14 @@
  * - **delegates**: use CawCo's delegates instead of each harness's own
  *   subagents — kept on the denied-tools baseline
  *   (`supervisor_config.denied_tools`): Claude Code's `Task`/`Agent`,
- *   OpenCode's `task`.
+ *   OpenCode's `subagent`.
  * - **todos**: use CawCo's to-dos instead of each harness's own list — its
  *   own flag (`supervisor_config.cawco_todos`), never names in the baseline.
  *   On, every session is denied at spawn Claude Code's
- *   `TaskCreate`/`TaskUpdate`/`TaskList`/`TaskGet`, OpenCode's
- *   `todowrite`/`todoread`, and each one's built-in plan mode (Claude Code's
- *   `EnterPlanMode`/`ExitPlanMode`, OpenCode's `plan_enter`/`plan_exit`,
- *   and its `plan` agent), which the session's spec replaces; a delegate
+ *   `TaskCreate`/`TaskUpdate`/`TaskList`/`TaskGet` (OpenCode 2.0 has no list),
+ *   and each one's built-in plan mode (Claude Code's
+ *   `EnterPlanMode`/`ExitPlanMode`, OpenCode's `plan` agent), which the
+ *   session's spec replaces; a delegate
  *   type can turn it on for its own sessions (`cawcoTodos`). pi has neither,
  *   so neither choice changes it.
  *

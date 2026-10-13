@@ -57,19 +57,18 @@ export interface Call {
   readonly input: unknown;
   /**
    * OpenCode: the saved outputs this session may read back, each a file its
-   * server named in the hint it gave the session ("Full output saved to:
-   * <file>", tool/truncate.ts at 1.18.34) — the session's own and its parent
-   * sessions' (the hint can hand the file to a subagent: "Use the Task tool
-   * to have explore agent process this file"). The bridge plugin records
-   * them as each call ends.
+   * server named in the hint it gave the session ("full output saved to
+   * <file>", with the file as the result's `metadata.outputPath`, 2.0.28) —
+   * the session's own and its parent sessions' (the hint can hand the file
+   * to a subagent). The bridge plugin records them as each call ends.
    */
   readonly savedOutputs?: readonly string[];
   readonly tool: string;
   /**
    * OpenCode: the dir its server saves a truncated tool output to
-   * (`<data>/opencode/tool-output`, tool/truncation-dir.ts at 1.18.34). It
-   * holds every session's on that server, named by tool-call id alone, so
-   * the session reads none of it but {@link savedOutputs}.
+   * (`<data>/opencode/tool-output`, observed on 2.0.28). It holds every
+   * session's on that server, named by tool-call id alone, so the session
+   * reads none of it but {@link savedOutputs}.
    */
   readonly toolOutput?: string;
   /** Claude Code: the session's transcript, which says which `projects/<slug>/` dir is the session's own. */
@@ -299,7 +298,7 @@ interface Field {
   /** A glob pattern: its part before the first wildcard is the path. */
   readonly glob?: boolean;
   readonly key: string;
-  /** OpenCode's apply_patch: the paths its patch text names. */
+  /** OpenCode's patch: the paths its patch text names. */
   readonly patch?: boolean;
 }
 
@@ -317,7 +316,8 @@ const write = (key: string, extra: Partial<Field> = {}): Field => ({
 /**
  * Each harness's built-in file tools, by the path fields their schemas
  * document. Claude Code: code.claude.com/docs/en/tools-reference. OpenCode
- * 1.18.34: packages/opencode/src/tool/*.ts. pi 1.0.1: dist/core/tools/*.d.ts.
+ * 2.0.28: the input schemas its server sends the model (`patch` replaces
+ * `edit` and `write` for `gpt-` models). pi 1.0.1: dist/core/tools/*.d.ts.
  * A shell tool is judged by the boundary its command runs in, never here.
  * Every tool not in its harness's table is judged by {@link argumentPaths}.
  */
@@ -339,19 +339,15 @@ const BUILT_INS: Record<Call["harness"], Record<string, readonly Field[]>> = {
     LS: [read("path")],
   },
   opencode: {
-    bash: [],
-    read: [read("filePath")],
-    write: [write("filePath")],
-    edit: [write("filePath")],
-    multiedit: [write("filePath")],
-    lsp: [read("filePath")],
+    shell: [],
+    read: [read("path")],
+    write: [write("path")],
+    edit: [write("path")],
     glob: [
       read("path", { defaultsToCwd: true }),
       read("pattern", { glob: true }),
     ],
     grep: [read("path", { defaultsToCwd: true })],
-    list: [read("path", { defaultsToCwd: true })],
-    apply_patch: [write("patchText", { patch: true })],
     patch: [write("patchText", { patch: true })],
   },
   pi: {

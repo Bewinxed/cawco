@@ -167,12 +167,18 @@ export const probeTool = async (spec: ToolSpec): Promise<ToolStatus> => {
   if (!path) {
     return { id: spec.id, state: "missing", at: Date.now() };
   }
-  return {
-    id: spec.id,
-    state: "installed",
-    version: await probeVersion(spec, path),
-    at: Date.now(),
-  };
+  const version = await probeVersion(spec, path);
+  // A tool CawCo is built against is installed only at its one version.
+  if (spec.exactVersion && version !== spec.exactVersion) {
+    return {
+      id: spec.id,
+      state: "failed",
+      detail: `${spec.bin} ${version ?? "of no version it will say"} is installed; CawCo runs ${spec.name} ${spec.exactVersion}. Install it again to put that one on.`,
+      ...(version ? { version } : {}),
+      at: Date.now(),
+    };
+  }
+  return { id: spec.id, state: "installed", version, at: Date.now() };
 };
 
 /**
@@ -336,7 +342,8 @@ const install = async (
     return remember(noMethod(spec));
   }
 
-  const said = await runMethod(spec, method, version);
+  // A tool CawCo is built against goes on at its one version, whatever is pinned.
+  const said = await runMethod(spec, method, spec.exactVersion ?? version);
   const probed = await probeTool(spec);
   if (probed.state === "installed") {
     return remember({ ...probed, method: method.label });

@@ -37,7 +37,7 @@ import {
 import { detach } from "@cawco/core/detach";
 import { LineSplitter } from "@cawco/core/lines";
 import { PacedWriter } from "@cawco/core/paced-write";
-import { sessionEnvironment } from "@cawco/core/session-env";
+import { serverEnvironment, sessionEnvironment } from "@cawco/core/session-env";
 // The protocol lives behind its own subpath: `sessiond.ts` reaches for `node:os`
 // to derive the endpoint, and the core barrel is imported by the browser bundle.
 import {
@@ -128,6 +128,20 @@ interface Watched {
 
 const reasonOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+
+/**
+ * A child's environment: the spec's over this keeper's own as the child gets
+ * it. A session gets it as a session does: its socket, and the embedded pi's
+ * package dir its entry set, are CawCo's own and reach no child (core
+ * `sessionEnvironment`). A harness server, which runs many sessions, gets no
+ * `CAWCO_*` at all (`serverEnvironment`).
+ */
+const childEnvironment = (spec: ProcSpec): Record<string, string> => ({
+  ...(spec.inherit === "server"
+    ? serverEnvironment(process.env)
+    : sessionEnvironment(process.env)),
+  ...spec.env,
+});
 
 const signalPid = (pid: number, sig: NodeJS.Signals): void => {
   try {
@@ -728,10 +742,7 @@ export class SessiondServer {
         cwd: spec.cwd,
         // The spec is built entirely agent-side and handed over opaque (§3.2):
         // sessiond does not read, validate or enrich a single entry of it.
-        // Under it, this keeper's own environment as a session gets it: its
-        // socket, and the embedded pi's package dir its entry set, are
-        // CawCo's own and reach no child (core `sessionEnvironment`).
-        env: { ...sessionEnvironment(process.env), ...spec.env },
+        env: childEnvironment(spec),
         stdio: ["pipe", "pipe", "pipe"],
         // Its own process group, which it leads: what it starts stays findable
         // under its pid after it has exited ({@link #survey}).

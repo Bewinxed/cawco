@@ -5,8 +5,7 @@
  * - Claude Code: its task list, `tasks/<session>/` in the session's own dir
  *   (core paths.ts `sessionConfigDir`, the dir of the account its row runs
  *   on), so the row's account goes with the ask;
- * - OpenCode: its todo list;
- * - pi: none.
+ * - OpenCode (2.0 has no to-do tool) and pi: none.
  * Nothing here is stored: the harness's list is the truth.
  */
 import {
@@ -39,7 +38,7 @@ export const harnessTasks = async (
   row: Row
 ): Promise<NeutralTask[]> => {
   const harness = (row.harness ?? "claude") as HarnessKind;
-  if (harness === "pi" || !(row.sessionId && deps.online(row.machineId))) {
+  if (harness !== "claude" || !(row.sessionId && deps.online(row.machineId))) {
     return [];
   }
   const answer = await deps.control(
@@ -51,7 +50,7 @@ export const harnessTasks = async (
   return Array.isArray(answer) ? (answer as NeutralTask[]) : [];
 };
 
-/** The session's steps from its harness's own list; pi keeps none. */
+/** The session's steps from its harness's own list; OpenCode and pi keep none. */
 export const harnessSteps = async (
   deps: HarnessPlanDeps,
   row: Row

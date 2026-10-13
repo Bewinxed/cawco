@@ -9,10 +9,11 @@
  * (`ModelRuntime.getAuth`, which refreshes under the store's `modify`).
  * Every harness on the machine that speaks the provider uses this one
  * credential: pi sessions read it through their runtime's store, and the
- * account's own OpenCode server through the store the agent writes for it
- * from this one ({@link opencodeAuthOf}). Nothing holds a second copy of a
- * grant: refresh tokens rotate, so copies sign each other out, and OpenCode's
- * copy carries a marker where a rotating refresh token would be.
+ * account's own OpenCode server through the credential the agent puts on it
+ * ({@link opencodeCredentialOf}), again on every change. Nothing holds a
+ * second copy of a grant: refresh tokens rotate, so copies sign each other
+ * out, and OpenCode's copy carries a marker where a rotating refresh token
+ * would be.
  */
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -72,9 +73,28 @@ export const readHeld = (accountId: string): Held | undefined => {
 };
 
 /**
- * Written whole and moved into place, owner-only; then the account's OpenCode
- * store, so a sign-in, a key, a refresh and a sign-out reach its OpenCode
- * server the moment they are made.
+ * Who hears that an account's credential changed: the OpenCode harness, which
+ * puts it on the account's running server ({@link opencodeCredentialOf}).
+ */
+const credentialListeners = new Set<(accountId: string) => void>();
+
+/** Calls `listener` with the account each time its credential is written or gone. */
+export const onAccountCredential = (
+  listener: (accountId: string) => void
+): void => {
+  credentialListeners.add(listener);
+};
+
+const credentialChanged = (accountId: string): void => {
+  for (const listener of credentialListeners) {
+    listener(accountId);
+  }
+};
+
+/**
+ * Written whole and moved into place, owner-only; then said to whoever
+ * listens, so a sign-in, a key, a refresh and a sign-out reach the account's
+ * OpenCode server the moment they are made.
  */
 const writeHeld = async (
   accountId: string,
@@ -90,15 +110,17 @@ const writeHeld = async (
   );
   await chmod(staged, 0o600);
   await rename(staged, path);
-  await writeOpencodeAuth(accountId, held);
+  credentialChanged(accountId);
 };
 
 /**
  * The account's store here gone (any Claude session in it carried out
- * first, {@link removeAccountDir}), and its OpenCode server's data with it.
+ * first, {@link removeAccountDir}), and its OpenCode server's data with it:
+ * its database, which holds the credential the agent put on it.
  */
 const removeAccount = async (accountId: string): Promise<void> => {
   await removeAccountDir(accountId);
+  credentialChanged(accountId);
   await rm(opencodeAccountHome(accountId), { recursive: true, force: true });
 };
 
@@ -1291,126 +1313,117 @@ export const opencodeProviderOf = (provider: string): string =>
 
 /**
  * The data dir of the account's own OpenCode server, its `XDG_DATA_HOME`:
- * OpenCode reads its store at `Global.Path.data/auth.json`, `data` being
- * `xdgData/opencode` (v1.18.34 packages/opencode/src/auth/index.ts 10,
- * packages/core/src/global.ts 11), so this server's store holds this
- * account's credential and nothing else. Beside the session credentials,
- * hidden as they are from every workspace boundary.
+ * 2.0 keeps its database there (`<data>/opencode/opencode.db`, settled #6),
+ * so this server's sessions and its one credential are this account's and
+ * nothing else's. Beside the session credentials, hidden as they are from
+ * every workspace boundary.
  */
 export const opencodeAccountHome = (accountId: string): string =>
   join(sessionIdentityDir(), "opencode-accounts", accountId);
 
-/** The account's OpenCode store, in its server's data dir. */
-export const opencodeAccountStore = (accountId: string): string =>
-  join(opencodeAccountHome(accountId), "opencode", "auth.json");
-
 /**
- * Written in an account's OpenCode store where the refresh token of a sign-in
- * whose refresh token rotates would be: pi-ai stays its only refresher, and
- * the agent writes each fresh access token into the store ahead of its
- * expiry. A refresh OpenCode tried with it would fail at the provider.
+ * Put in an account's OpenCode credential where the refresh token of a
+ * sign-in whose refresh token rotates would be: pi-ai stays its only
+ * refresher, and the agent puts each fresh access token on the server ahead
+ * of its expiry. A refresh OpenCode tried with it would fail at the provider.
  */
 export const OPENCODE_MARKER = "cawco-account";
 
 /**
- * The OpenCode providers whose own sign-in plugin reads the store on every
- * request (v1.18.34: `const currentAuth = await getAuth()` inside the
- * loader's fetch, plugin/openai/codex.ts 363, github-copilot/copilot.ts 103,
- * xai.ts 225; `Auth.all` reads the file on each call, auth/index.ts 58-67):
- * a token the agent refreshes reaches their next request. Everything else
- * OpenCode reads once, when an instance starts (`provider.key`,
- * provider/provider.ts 1647-1656), so it is part of how the server was
- * launched ({@link opencodeLaunchCredential}).
+ * The OpenCode 2.0 sign-in method each sign-in OpenCode has its own provider
+ * code for is put under (`GET /api/integration` on 2.0.28: `openai`'s
+ * `chatgpt-browser`, the Codex sign-in pi-ai's is; `github-copilot`'s and
+ * `xai`'s `device`). Any other sign-in's access token goes in as a key, which
+ * is how OpenCode sends a key to a provider it has no sign-in code for.
  */
-const READS_EACH_REQUEST = new Set(["openai", "github-copilot", "xai"]);
+const OAUTH_METHODS: Readonly<Record<string, string>> = {
+  openai: "chatgpt-browser",
+  "github-copilot": "device",
+  xai: "device",
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+/** An OpenCode 2.0 credential (`Credential.CreateInput`'s `integrationID` and `value`). */
+export interface OpencodeCredential {
+  integrationID: string;
+  value:
+    | { type: "key"; key: string; metadata?: Record<string, unknown> }
+    | {
+        type: "oauth";
+        methodID: string;
+        access: string;
+        refresh: string;
+        expires: number;
+        metadata?: Record<string, unknown>;
+      };
+}
+
 /**
- * The account's credential as OpenCode's own sign-in would have stored it
- * (OpenCode's `Auth.Info` shapes, auth/index.ts 14-33), under OpenCode's id
- * for the provider:
- * - ChatGPT and xAI: the access token, its expiry and (ChatGPT) its account,
- *   as their sign-ins store them, with {@link OPENCODE_MARKER} for the
- *   refresh token they rotate;
- * - Copilot: the GitHub token as both, expiring never, as its own sign-in
- *   stores it (copilot.ts 294-299) and sends it (164);
+ * The account's credential as OpenCode 2.0 takes it, under OpenCode's id for
+ * the provider; undefined for a key the account holds none of:
  * - a key: the key, with what OpenCode kept beside it;
- * - any other sign-in: its access token as the key, which is how OpenCode
- *   sends a key to a provider it has no sign-in plugin for.
+ * - ChatGPT and xAI: the access token and its expiry (and ChatGPT's account),
+ *   with {@link OPENCODE_MARKER} for the refresh token they rotate;
+ * - Copilot: the GitHub token as both, which does not rotate, expiring never;
+ * - any other sign-in: its access token as the key.
  */
-export const opencodeAuthOf = (
+export const opencodeCredentialOf = (
   held: Held
-): Record<string, Record<string, unknown>> => {
-  const id = opencodeProviderOf(held.provider);
+): OpencodeCredential | undefined => {
+  const integrationID = opencodeProviderOf(held.provider);
   const { credential } = held;
   if (credential.type === "api_key") {
     const { metadata } = credential as { metadata?: unknown };
     return credential.key
       ? {
-          [id]: {
-            type: "api",
+          integrationID,
+          value: {
+            type: "key",
             key: credential.key,
             ...(isRecord(metadata) ? { metadata } : {}),
           },
         }
-      : {};
+      : undefined;
   }
-  if (!READS_EACH_REQUEST.has(id)) {
-    return { [id]: { type: "api", key: credential.access } };
+  const methodID = OAUTH_METHODS[integrationID];
+  if (!methodID) {
+    return { integrationID, value: { type: "key", key: credential.access } };
   }
-  if (id === "github-copilot") {
+  if (integrationID === "github-copilot") {
     const { enterpriseUrl } = credential as { enterpriseUrl?: unknown };
     return {
-      [id]: {
+      integrationID,
+      value: {
         type: "oauth",
+        methodID,
         refresh: credential.refresh,
         access: credential.refresh,
         expires: 0,
         ...(typeof enterpriseUrl === "string" && enterpriseUrl
-          ? { enterpriseUrl }
+          ? { metadata: { enterpriseUrl } }
           : {}),
       },
     };
   }
   const accountId =
-    id === "openai"
+    integrationID === "openai"
       ? ((typeof credential.accountId === "string"
           ? credential.accountId
           : null) ?? chatgptClaims(credential.access).accountId)
       : null;
   return {
-    [id]: {
+    integrationID,
+    value: {
       type: "oauth",
+      methodID,
       access: credential.access,
       refresh: OPENCODE_MARKER,
       expires: credential.expires,
-      ...(accountId ? { accountId } : {}),
+      ...(accountId ? { metadata: { accountId } } : {}),
     },
   };
-};
-
-/**
- * What of the account's credential its OpenCode server took when it started:
- * a fingerprint of a key, or of a sign-in OpenCode reads only then; for a
- * sign-in it reads on every request, only which provider. A server launched
- * on another is replaced at its next rest (opencode.ts).
- */
-export const opencodeLaunchCredential = (accountId: string): string => {
-  const held = readHeld(accountId);
-  if (!held) {
-    return "none";
-  }
-  const id = opencodeProviderOf(held.provider);
-  if (held.credential.type === "oauth" && READS_EACH_REQUEST.has(id)) {
-    return id;
-  }
-  const fingerprint = createHash("sha256")
-    .update(JSON.stringify(opencodeAuthOf(held)))
-    .digest("hex")
-    .slice(0, 16);
-  return `${id}:${fingerprint}`;
 };
 
 /**
@@ -1426,31 +1439,6 @@ export const opencodeAccountEnv = (
 ): Record<string, string> => {
   const credential = readHeld(accountId)?.credential;
   return credential?.type === "api_key" ? { ...credential.env } : {};
-};
-
-/** The account's OpenCode store made what its credential is now; gone with it. */
-const writeOpencodeAuth = async (
-  accountId: string,
-  held: Held | undefined
-): Promise<void> => {
-  if (!held) {
-    await rm(opencodeAccountHome(accountId), { recursive: true, force: true });
-    return;
-  }
-  await writeJson(opencodeAccountStore(accountId), opencodeAuthOf(held));
-};
-
-/** The account's OpenCode store written from its credential, for a server about to start on it. */
-export const prepareOpencodeAccount = async (
-  accountId: string
-): Promise<void> => {
-  const held = readHeld(accountId);
-  if (!held) {
-    throw new Error(
-      `CawCo account ${accountId} holds no sign-in on this machine, so no OpenCode server starts on it.`
-    );
-  }
-  await serial(accountId, () => writeOpencodeAuth(accountId, held));
 };
 
 /**

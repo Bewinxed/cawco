@@ -1,12 +1,17 @@
 import { existsSync, readdirSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
+import { toolSpec } from "@cawco/core";
 import type {
   MachineCapabilities,
   MachineCapability,
 } from "@cawco/core/capabilities";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { resolveBin } from "./tools";
+
+/** OpenCode as the tool catalog names it: 2.0's own bin name, at the release CawCo runs. */
+const opencodeBin = toolSpec("opencode")?.bin ?? "opencode2";
+const opencodeVersion = toolSpec("opencode")?.exactVersion ?? "2.0.28";
 
 export function browserExecutable(): string | undefined {
   const candidates =
@@ -133,9 +138,9 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
     },
     {
       id: "opencode",
-      available: !!resolveBin("opencode"),
-      path: resolveBin("opencode"),
-      installCommand: "curl -fsSL https://opencode.ai/install | bash",
+      available: !!resolveBin(opencodeBin),
+      path: resolveBin(opencodeBin),
+      installCommand: `npm uninstall -g opencode-ai && npm install -g @opencode/cli@${opencodeVersion}`,
     },
     {
       id: "pi",

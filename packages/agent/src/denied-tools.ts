@@ -205,53 +205,26 @@ export const convergeDeniedTools = async (
   }
 };
 
-/** OpenCode's permission keys a deny rule can name; its other tools ask under one of these. */
-const OPENCODE_PERMISSIONS: ReadonlySet<string> = new Set([
-  "bash",
-  "edit",
-  "glob",
-  "grep",
-  "list",
-  "lsp",
-  "plan_enter",
-  "plan_exit",
-  "read",
-  "skill",
-  "task",
-  "todoread",
-  "todowrite",
-  "webfetch",
-  "websearch",
-]);
-
-/** What an OpenCode session is given to deny tools. */
-export interface OpencodeDenySettings {
-  /**
-   * Rules for the session's own permission set (`session.create`'s
-   * `permission`): a call under one of these keys is refused without asking.
-   * Only OpenCode's permission keys; a tool that asks under another key
-   * (`write` asks as `edit`) is held off by `tools` alone.
-   */
-  permission: { action: "deny"; pattern: string; permission: string }[];
-  /** The per-prompt tool switch: these tools are not offered to the model. */
-  tools: Record<string, false>;
+/** One rule of an OpenCode 2.0 session's permission set. */
+export interface OpencodeRule {
+  action: string;
+  effect: "allow" | "ask" | "deny";
+  resource: string;
 }
 
 /**
- * OpenCode's session settings for a denied-tool list written in Claude's names
- * (the fleet baseline, a delegate type's, a spawn's): each name with an
- * OpenCode equivalent ({@link opencodeToolsFor}) is switched off on every
- * prompt and denied in the session's permission set. Names OpenCode has no
- * tool for are left out; the hub refuses them on an OpenCode type.
+ * OpenCode 2.0's denial of each tool a denied-tool list names (the fleet
+ * baseline, a delegate type's, a spawn's), written in Claude's names: one
+ * session rule per OpenCode action ({@link opencodeToolsFor}), `deny` over
+ * every resource. 2.0 drops a tool so denied from the model's list (and from
+ * Code Mode's catalog) and refuses a call to it (settled #9: "A rule
+ * `{action, resource:"*", effect:"deny"}` drops the tool from the list
+ * entirely"). Names OpenCode has no tool for are left out; the hub refuses
+ * them on an OpenCode type.
  */
-export const opencodeDenySettings = (
-  deny: readonly string[]
-): OpencodeDenySettings => {
-  const { tools } = opencodeToolsFor(deny);
-  return {
-    tools: Object.fromEntries(tools.map((tool) => [tool, false as const])),
-    permission: tools
-      .filter((tool) => OPENCODE_PERMISSIONS.has(tool))
-      .map((tool) => ({ permission: tool, pattern: "*", action: "deny" })),
-  };
-};
+export const opencodeDenyRules = (deny: readonly string[]): OpencodeRule[] =>
+  opencodeToolsFor(deny).tools.map((action) => ({
+    action,
+    resource: "*",
+    effect: "deny",
+  }));

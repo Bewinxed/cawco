@@ -121,9 +121,10 @@ export const delegateTypeProblem = (
  * turn off (Projects spec §5.2, §5.6): native subagents ("delegates instead
  * of subagents") and the native to-do list ("CawCo's to-dos instead of each
  * harness's own list"). "CawCo's to-dos" also denies each harness's built-in
- * plan mode (Claude Code's `EnterPlanMode`/`ExitPlanMode`, OpenCode's
- * `plan_enter`/`plan_exit`): the session's spec, written through CawCo
- * (`plan.ts`), replaces it. pi has neither.
+ * plan mode (Claude Code's `EnterPlanMode`/`ExitPlanMode`; OpenCode 2.0's is
+ * an agent, `plan`, which the OpenCode adapter turns off instead): the
+ * session's spec, written through CawCo (`plan.ts`), replaces it. OpenCode
+ * 2.0 has no to-do tool, and pi has neither.
  */
 /**
  * What a session is denied for "CawCo's to-dos", in Claude Code's names (the
@@ -135,7 +136,7 @@ export const cawcoTodosDenied = (on: boolean): readonly string[] =>
   on ? NATIVE_TOOLS.todos.claude : [];
 
 export const NATIVE_TOOLS = {
-  subagents: { claude: ["Task", "Agent"], opencode: ["task"], pi: [] },
+  subagents: { claude: ["Task", "Agent"], opencode: ["subagent"], pi: [] },
   todos: {
     claude: [
       "TaskCreate",
@@ -145,7 +146,7 @@ export const NATIVE_TOOLS = {
       "EnterPlanMode",
       "ExitPlanMode",
     ],
-    opencode: ["todowrite", "todoread", "plan_enter", "plan_exit"],
+    opencode: [],
     pi: [],
   },
 } as const satisfies Record<string, Record<HarnessKind, readonly string[]>>;
@@ -173,7 +174,8 @@ export type SessionRole = (typeof SESSION_ROLES)[number];
  * and delegates, and no subagent holds a tool the lead lacks. Claude's
  * `Monitor` runs a script and `EnterWorktree`/`ExitWorktree` make and remove
  * git worktrees; `Agent` (its old name `Task`) and `Workflow` start
- * subagents. OpenCode's `Agent` is its `task`. Every MCP server but CawCo's
+ * subagents. OpenCode's `Agent` is its `subagent`, and its `edit` covers
+ * `write` and `patch`, which ask as `edit`. Every MCP server but CawCo's
  * is held off by the spawn itself (`SpawnPayload.lead`), not by a name
  * here. pi cannot deny tools ({@link denyToolsProblem}), so Caw does not run
  * on pi.
@@ -192,35 +194,38 @@ export const CAW_DENIED_TOOLS = {
     "Task",
     "Workflow",
   ],
-  opencode: ["Bash", "Edit", "Write", "patch", "Agent"],
+  opencode: ["Bash", "Edit", "Write", "Agent"],
 } as const satisfies Partial<Record<HarnessKind, readonly string[]>>;
 
 /** The harnesses a project's Caw can run on: the ones that deny its edit and shell tools. */
 export type CawHarness = keyof typeof CAW_DENIED_TOOLS;
 
 /**
- * Claude Code's tool names that OpenCode has its own tool for. Denied-tool
+ * Claude Code's tool names as OpenCode 2.0's permission actions. Denied-tool
  * lists (the fleet baseline, a delegate type's, a spawn's) are written in
  * Claude's names — Claude Code refuses a lowercase rule in settings.json —
- * so the OpenCode adapter reads them through this.
+ * so the OpenCode adapter reads them through this. 2.0's file writers
+ * (`write`, `patch`) ask as `edit`, so `Write` denies `edit` too. Its to-do
+ * list, plan-mode tools and `LS` do not exist in 2.0 (a directory is read by
+ * `read`): those names deny nothing there, and are no tool to refuse.
  */
 const OPENCODE_EQUIVALENTS: Record<string, readonly string[]> = {
-  Agent: ["task"],
-  Task: ["task"],
-  TaskCreate: ["todowrite"],
-  TaskUpdate: ["todowrite"],
-  TaskList: ["todoread"],
-  TaskGet: ["todoread"],
-  TodoWrite: ["todowrite"],
-  EnterPlanMode: ["plan_enter"],
-  ExitPlanMode: ["plan_exit"],
-  Bash: ["bash"],
+  Agent: ["subagent"],
+  Task: ["subagent"],
+  TaskCreate: [],
+  TaskUpdate: [],
+  TaskList: [],
+  TaskGet: [],
+  TodoWrite: [],
+  EnterPlanMode: [],
+  ExitPlanMode: [],
+  Bash: ["shell"],
   Edit: ["edit"],
-  Write: ["write"],
+  Write: ["edit"],
   Read: ["read"],
   Glob: ["glob"],
   Grep: ["grep"],
-  LS: ["list"],
+  LS: [],
   WebFetch: ["webfetch"],
   WebSearch: ["websearch"],
   Skill: ["skill"],
