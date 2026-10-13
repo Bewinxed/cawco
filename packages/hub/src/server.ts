@@ -21057,11 +21057,22 @@ export const createServer = (
               if (reported) {
                 db.mergeAgentHarnesses(message.machineId, reported);
                 capabilityReports.delete(message.machineId);
+                const claudeReport = reported.find(
+                  (report) => report.harness === "claude"
+                );
+                // The machine's word on Claude moves with its Claude report,
+                // not only at its register: a keychain unlocked from the
+                // dashboard clears the machine's row (its Unlock offer) now.
+                if (
+                  claudeReport &&
+                  AUTH_STATES.includes(claudeReport.auth) &&
+                  db.setAgentAuth(message.machineId, claudeReport.auth)
+                ) {
+                  publishInstances(message.machineId);
+                }
                 // Where each Claude account is signed in on this machine, as
                 // its Claude Code config dirs say.
-                const claudeAccounts = reported.find(
-                  (report) => report.harness === "claude"
-                )?.accounts;
+                const claudeAccounts = claudeReport?.accounts;
                 if (claudeAccounts) {
                   syncAccounts(message.machineId, "claude", claudeAccounts);
                 }
