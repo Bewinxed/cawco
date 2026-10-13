@@ -78,8 +78,7 @@ final class UpdatesSectionController: ConfigSectionController {
         switchButton.accessibilityIdentifier = "updates.switch"
         switchProblem.onRetry = { [weak self] in self?.switchChannel() }
 
-        let channelHeader = nsSectionHeader(.download, hue: Palette.hueBlue500, "Channel") as! UIStackView
-        channelHeader.addArrangedSubview(switchButton)
+        let channelHeader = nsSectionHeader(.download, hue: Palette.hueBlue500, "Channel")
         followsText.accessibilityIdentifier = "updates.follows"
         follows.spacing = 8
         follows.alignment = .center
@@ -106,7 +105,9 @@ final class UpdatesSectionController: ConfigSectionController {
         notesButton.contentHorizontalAlignment = .leading
         notesButton.addAction(UIAction { [weak self] _ in self?.toggleNotes() }, for: .primaryActionTriggered)
         notes.isHidden = true
-        let channelGroup = UIStackView(arrangedSubviews: [channelHeader, row(segments), card, pending, switchProblem, notesButton, notes])
+        // The switch stands under what it will do, where the decision is read.
+        let switchRow = row(switchButton)
+        let channelGroup = UIStackView(arrangedSubviews: [channelHeader, row(segments), card, pending, switchRow, switchProblem, notesButton, notes])
         channelGroup.axis = .vertical
         channelGroup.spacing = 8
 
@@ -205,7 +206,7 @@ final class UpdatesSectionController: ConfigSectionController {
         KitButton.setTitle(switching ? "Switching…" : holding ? "Switched" : "Switch to \(Self.name(chosen))", of: switchButton, variant: .action, height: .sm)
         switchButton.configuration?.showsActivityIndicator = switching
         switchButton.configuration?.image = holding ? Glyph.check.image.resized(to: 16) : nil
-        switchButton.isHidden = !(differs || switching || holding)
+        switchButton.superview?.isHidden = !(differs || switching || holding)
         switchButton.isEnabled = hub.writesBlocked == nil && !switching
         switchButton.accessibilityHint = hub.writesBlocked
 

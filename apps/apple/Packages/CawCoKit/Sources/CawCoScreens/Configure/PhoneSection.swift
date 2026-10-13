@@ -77,7 +77,8 @@ final class PhoneSectionController: ConfigSectionController {
         testButton.isEnabled = !devices.testing && count > 0
         testProblem.text = devices.testError
         testProblem.superview?.isHidden = devices.testError == nil
-        empty.isHidden = !devices.loaded || count > 0
+        // Empty only when no row stands, a dropped device's included.
+        empty.isHidden = !devices.loaded || !devices.devices.isEmpty
         drawRows()
     }
 
@@ -205,7 +206,11 @@ private final class DeviceRow: UIStackView {
         actions.setContentHuggingPriority(.required, for: .horizontal)
         top.spacing = 12
         top.alignment = .center
+        // The room between who and Remove is the spacer's, never Remove's.
+        let room = UIView()
+        room.setContentHuggingPriority(UILayoutPriority(1), for: .horizontal)
         top.addArrangedSubview(who)
+        top.addArrangedSubview(room)
         top.addArrangedSubview(actions)
 
         armedNote.isHidden = true
