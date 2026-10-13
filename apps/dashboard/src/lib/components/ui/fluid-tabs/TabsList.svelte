@@ -140,15 +140,16 @@
       );
     return new Map(order.map(({ item }, at) => [item, at + 1]));
   }
-  /** Each tab's depth as last written, with its neighbours'. */
+  /** How far back a tab stands now, as it is written: 0 chosen to 1 receded. */
+  const depthText = (item: HTMLElement) =>
+    String(Math.round((depthNow.get(item) ?? 1) * 1000) / 1000);
+  /** Each tab's depth as last written. */
   const depthWritten = new WeakMap<HTMLElement, string>();
   /**
    * Ranks the stack from each tab's depth now, and hands each tab its depth
-   * and its two neighbours' (`--depth`, `--depth-prev`, `--depth-next`, 0
-   * chosen to 1 receded, its own where it has no neighbour), so a host can
-   * draw what follows the choice on the switch's own clock (PaneTabs'
-   * rims, whose strength does, and whose sides at a gliding seam meet
-   * their neighbour's).
+   * (`--depth`), so a host can draw what follows the choice on the switch's
+   * own clock (PaneTabs' rims, whose strength does). Its neighbours' are
+   * handed over with the seams they share (`placeSeams`).
    */
   function rank(track: HTMLElement, items: HTMLElement[], chosen: number) {
     const ranks = ranksBy(items, (item) => depthNow.get(item) ?? 1, chosen);
@@ -158,21 +159,13 @@
         laidOf(item, track).style.setProperty("--z", String(z));
       }
     }
-    const depth = (item: HTMLElement | undefined) =>
-      item ? String(Math.round((depthNow.get(item) ?? 1) * 1000) / 1000) : null;
-    items.forEach((item, i) => {
-      const own = depth(item) as string;
-      const prev = depth(items[i - 1]) ?? own;
-      const next = depth(items[i + 1]) ?? own;
-      const key = `${own} ${prev} ${next}`;
-      if (depthWritten.get(item) !== key) {
-        depthWritten.set(item, key);
-        const laid = laidOf(item, track);
-        laid.style.setProperty("--depth", own);
-        laid.style.setProperty("--depth-prev", prev);
-        laid.style.setProperty("--depth-next", next);
+    for (const item of items) {
+      const own = depthText(item);
+      if (depthWritten.get(item) !== own) {
+        depthWritten.set(item, own);
+        laidOf(item, track).style.setProperty("--depth", own);
       }
-    });
+    }
   }
 
   /* ── Where two tabs meet: one edge, gliding ─────────────────────────
@@ -242,10 +235,24 @@
       const [start, end] = cuts[i];
       const [startUnder, endUnder] = under[i];
       const [glideStart, glideEnd] = glides[i];
-      const key = `${start} ${end} ${startUnder} ${endUnder} ${glideStart} ${glideEnd}`;
+      // Each neighbour's depth (`--depth-prev`, `--depth-next`), while the
+      // seam between them glides: a host weighs it by that glide (PaneTabs'
+      // seam sides, which meet the neighbour's strength at the handover),
+      // so at rest it draws nothing with it. Left as it was there, a tab
+      // beside a switch is not styled again, every element in it, for each
+      // frame of a neighbour's depth.
+      const prev = glideStart === 0 ? "" : depthText(items[i - 1]);
+      const next = glideEnd === 0 ? "" : depthText(items[i + 1]);
+      const key = `${start} ${end} ${startUnder} ${endUnder} ${glideStart} ${glideEnd} ${prev} ${next}`;
       if (cutNow.get(item) !== key) {
         cutNow.set(item, key);
         const laid = laidOf(item, track);
+        if (prev) {
+          laid.style.setProperty("--depth-prev", prev);
+        }
+        if (next) {
+          laid.style.setProperty("--depth-next", next);
+        }
         laid.style.setProperty("--cut-start", String(start));
         laid.style.setProperty("--cut-end", String(end));
         // The seams' glide (`--glide-start`, `--glide-end`), on the tab in
