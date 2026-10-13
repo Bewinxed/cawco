@@ -4,15 +4,19 @@
  * and OpenCode sessions: in the background, and before a search.
  */
 
-import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { listClaudeFiles, transcriptIndexPath } from "@cawco/core/paths";
-import { type SearchHit, TranscriptIndex } from "@cawco/jsonl-parser/fts5";
 import {
-  defaultOpenCodePath,
-  readOpenCodeDocs,
-} from "@cawco/jsonl-parser/opencode";
+  listClaudeFiles,
+  opencodeDatabases,
+  transcriptIndexPath,
+} from "@cawco/core/paths";
+import type { TranscriptDoc } from "@cawco/jsonl-parser";
+import { type SearchHit, TranscriptIndex } from "@cawco/jsonl-parser/fts5";
+import { readOpenCodeDocs } from "@cawco/jsonl-parser/opencode";
+
+/** The `meta` key prefix of each OpenCode database's watermark, followed by its path. */
+const WATERMARK = "opencode_watermark:";
 
 /**
  * How often the index takes in what the transcripts gained when nobody is
@@ -56,7 +60,8 @@ export class TranscriptSearchService {
   #syncing: Promise<void> | null = null;
   /** When the last sync that ended without error began. */
   #syncedAt = 0;
-  #openCodeWatermark = 0;
+  /** Each OpenCode database's watermark, under its `meta` key ({@link WATERMARK} and its path). */
+  readonly #openCodeWatermarks = new Map<string, number>();
   /** The last failed sync's reason, logged once; null once a sync succeeds. */
   #failing: string | null = null;
   readonly #firstSync = Promise.withResolvers<void>();
@@ -72,15 +77,13 @@ export class TranscriptSearchService {
     await mkdir(dirname(dbPath), { recursive: true });
     const index = new TranscriptIndex(dbPath);
     const svc = new TranscriptSearchService(index);
-    svc.#openCodeWatermark = svc.#loadWatermark();
+    const rows = index.db
+      .query("SELECT key, value FROM meta WHERE key LIKE ?")
+      .all(`${WATERMARK}%`) as { key: string; value: string }[];
+    for (const row of rows) {
+      svc.#openCodeWatermarks.set(row.key, Number(row.value));
+    }
     return svc;
-  }
-
-  #loadWatermark(): number {
-    const row = this.#index.db
-      .query("SELECT value FROM meta WHERE key = 'opencode_watermark'")
-      .get() as { value: string } | null;
-    return row ? Number(row.value) : 0;
   }
 
   /**
@@ -121,23 +124,26 @@ export class TranscriptSearchService {
 
   async #syncOnce(): Promise<void> {
     const startedAt = Date.now();
-    // OpenCode — skip silently when the db does not exist.
-    const ocPath = defaultOpenCodePath();
-    const openCode = existsSync(ocPath)
-      ? readOpenCodeDocs(ocPath, { since: this.#openCodeWatermark })
-      : undefined;
+    // Every OpenCode server's database: the machine's and each account's.
+    const docs: TranscriptDoc[] = [];
+    const meta: Record<string, string> = {};
+    const watermarks = new Map<string, number>();
+    for (const dbPath of opencodeDatabases()) {
+      const key = `${WATERMARK}${dbPath}`;
+      const read = readOpenCodeDocs(dbPath, {
+        since: this.#openCodeWatermarks.get(key) ?? 0,
+      });
+      docs.push(...read.docs);
+      meta[key] = String(read.watermark);
+      watermarks.set(key, read.watermark);
+    }
     const claudeFiles = await listClaudeFiles();
     await this.#index.sync(
       claudeFiles.map((f) => f.path),
-      openCode
-        ? {
-            docs: openCode.docs,
-            meta: { opencode_watermark: String(openCode.watermark) },
-          }
-        : {}
+      { docs, meta }
     );
-    if (openCode) {
-      this.#openCodeWatermark = openCode.watermark;
+    for (const [key, watermark] of watermarks) {
+      this.#openCodeWatermarks.set(key, watermark);
     }
     this.#syncedAt = startedAt;
   }

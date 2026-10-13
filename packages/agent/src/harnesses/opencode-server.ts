@@ -104,27 +104,10 @@ export const readV1Activity = async (
   const get = async (path: string): Promise<Response> =>
     await fetch(new URL(path, identity.url), { headers, signal });
   try {
-    const directories = new Set<string>();
-    let cursor: string | null = null;
-    do {
-      const query: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
-      // biome-ignore lint/performance/noAwaitInLoops: each page names the next
-      const page: Response = await get(
-        `/experimental/session?limit=200&start=${born}${query}`
-      );
-      if (!page.ok) {
-        return {
-          kind: "refused",
-          reason: `its session inventory answered HTTP ${page.status}`,
-        };
-      }
-      for (const session of (await page.json()) as { directory?: unknown }[]) {
-        if (typeof session.directory === "string") {
-          directories.add(session.directory);
-        }
-      }
-      cursor = page.headers.get(NEXT_CURSOR);
-    } while (cursor);
+    const directories = await v1Directories(get, born);
+    if (typeof directories === "string") {
+      return { kind: "refused", reason: directories };
+    }
     const running: string[] = [];
     for (const directory of directories) {
       // biome-ignore lint/performance/noAwaitInLoops: one directory at a time; each read boots its instance on the server
@@ -138,11 +121,11 @@ export const readV1Activity = async (
         };
       }
       const states = (await status.json()) as Record<string, { type?: string }>;
-      for (const [id, state] of Object.entries(states)) {
-        if (state.type !== "idle") {
-          running.push(id);
-        }
-      }
+      running.push(
+        ...Object.entries(states)
+          .filter(([, state]) => state.type !== "idle")
+          .map(([id]) => id)
+      );
     }
     return { kind: "read", running };
   } catch (error) {
@@ -151,6 +134,37 @@ export const readV1Activity = async (
       reason: error instanceof Error ? error.message : String(error),
     };
   }
+};
+
+/**
+ * The directories of a 1.x server's sessions updated since it was born, by
+ * its own inventory (`GET /experimental/session?start=`, paged by
+ * `x-next-cursor`); why not, as a sentence, when it answers with an error.
+ */
+const v1Directories = async (
+  get: (path: string) => Promise<Response>,
+  born: number
+): Promise<Set<string> | string> => {
+  const directories = new Set<string>();
+  let cursor: string | null = null;
+  do {
+    const query: string = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
+    // biome-ignore lint/performance/noAwaitInLoops: each page names the next
+    const page: Response = await get(
+      `/experimental/session?limit=200&start=${born}${query}`
+    );
+    if (!page.ok) {
+      return `its session inventory answered HTTP ${page.status}`;
+    }
+    const sessions = (await page.json()) as { directory?: unknown }[];
+    for (const session of sessions) {
+      if (typeof session.directory === "string") {
+        directories.add(session.directory);
+      }
+    }
+    cursor = page.headers.get(NEXT_CURSOR);
+  } while (cursor);
+  return directories;
 };
 
 /**
@@ -793,6 +807,49 @@ export class OpencodeServerOwner {
       `[opencode] ${this.account ? `account ${this.account}'s` : "the machine's"} server ${active.procId}/${active.pid}: retiring`
     );
     this.maintain();
+  }
+
+  /**
+   * Every generation of this slot ended now, the active one retired first:
+   * each is ended once it runs nothing, as any retired generation is
+   * ({@link #retire}). One that still runs something stays retired, for the
+   * sweep to end once idle, and this throws naming it.
+   */
+  async endAll(): Promise<void> {
+    if (this.#transition) {
+      throw new Error("Its server is being replaced; try again.");
+    }
+    const record = await this.#load();
+    if (record.active) {
+      this.#record = {
+        active: null,
+        retired: [...record.retired, record.active],
+      };
+      await this.#save();
+    }
+    const left: string[] = [];
+    for (const identity of this.#record?.retired ?? []) {
+      const ending =
+        this.#retiring.get(identity.procId) ??
+        this.#retire(identity).finally(() =>
+          this.#retiring.delete(identity.procId)
+        );
+      this.#retiring.set(identity.procId, ending);
+      try {
+        // biome-ignore lint/performance/noAwaitInLoops: one end at a time; each reads the keeper
+        await ending;
+      } catch (error) {
+        left.push(`${identity.procId}/${identity.pid}: ${String(error)}`);
+      }
+    }
+    const still = (await this.#load()).retired.filter(
+      (identity) => !left.some((line) => line.startsWith(`${identity.procId}/`))
+    );
+    if (left.length > 0 || still.length > 0) {
+      throw new Error(
+        `${this.account ? `Account ${this.account}'s` : "The machine's"} OpenCode server did not end: ${[...left, ...still.map((identity) => `${identity.procId}/${identity.pid} is still running`)].join("; ")}`
+      );
+    }
   }
 
   /**

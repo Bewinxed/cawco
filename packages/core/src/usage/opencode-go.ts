@@ -1,5 +1,3 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
 import type { LimitWindow, OpenCodeGoLimits } from "./types";
 
 /**
@@ -44,19 +42,6 @@ const MAPPED = [
   { key: "weekly", kind: "weekly", group: "weekly" },
   { key: "monthly", kind: "monthly", group: "monthly" },
 ] as const;
-
-/**
- * The machine's own OpenCode data dir, where it keeps `auth.json`:
- * `$XDG_DATA_HOME/opencode`, else `~/.local/share/opencode`. OpenCode 1.18
- * reads `path.join(Global.Path.data, "auth.json")`, its data dir from
- * xdg-basedir; it has no `OPENCODE_DATA_DIR` (anomalyco/opencode#8963 is
- * still open).
- */
-export const opencodeDataDir = (): string =>
-  join(
-    process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"),
-    "opencode"
-  );
 
 /** What one key's reads came to: the last answer, the last good one, and a failure cooling down. */
 interface KeyState {

@@ -25,7 +25,7 @@ export interface UsageBucket {
   lastTs: number; // ms epoch of the latest record in the bucket
   messages: number;
   model: string;
-  project: string; // Claude: dir name after `projects/`. opencode: basename(path.root)
+  project: string; // Claude: dir name after `projects/`. opencode: basename of the session's worktree
   projectPath: string | null;
   provider: string | null; // opencode only
   sessionId: string;
@@ -219,25 +219,4 @@ export interface RawClaudeUsage {
   output_tokens: number;
   service_tier?: string;
   speed?: string;
-}
-
-/**
- * The opencode `message.data` JSON (USAGE-SPEC.md §2.3). Mind the capitalized
- * `sessionID` / `providerID` / `modelID` — they are not the neutral casing.
- */
-export interface RawOpenCodeMessage {
-  cost?: number;
-  id: string;
-  modelID?: string;
-  path?: { cwd?: string; root?: string };
-  providerID?: string;
-  role: string;
-  sessionID: string;
-  time?: { created?: number };
-  tokens?: {
-    input?: number;
-    output?: number;
-    reasoning?: number;
-    cache?: { read?: number; write?: number };
-  };
 }

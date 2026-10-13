@@ -307,6 +307,36 @@ const xdgConfigHome = (): string =>
 export const xdgDataHome = (): string =>
   process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share");
 
+/**
+ * The machine's own OpenCode data dir, `$XDG_DATA_HOME/opencode`: the
+ * machine's OpenCode server's database (`opencode.db`, where the owner's own
+ * sign-ins are kept too) and the snapshot dir every server's undo history
+ * lives in.
+ */
+export const opencodeDataDir = (): string => join(xdgDataHome(), "opencode");
+
+/**
+ * The data home (`XDG_DATA_HOME`) of an account's own OpenCode server: 2.0
+ * keeps its database there (`<data>/opencode/opencode.db`), so this server's
+ * sessions and its one credential are this account's and nothing else's.
+ * Beside the session credentials, hidden as they are from every workspace
+ * boundary.
+ */
+export const opencodeAccountHome = (accountId: string): string =>
+  join(sessionIdentityDir(), "opencode-accounts", accountId);
+
+/** Every OpenCode database on the machine: the machine server's, then each account server's. */
+export const opencodeDatabases = (): string[] => {
+  const accounts = join(sessionIdentityDir(), "opencode-accounts");
+  const homes = existsSync(accounts) ? readdirSync(accounts) : [];
+  return [
+    join(opencodeDataDir(), "opencode.db"),
+    ...homes.map((account) =>
+      join(opencodeAccountHome(account), "opencode", "opencode.db")
+    ),
+  ].filter((path) => existsSync(path));
+};
+
 /** CawCo's config dir: the CLI's `config.json`, the hub's env file, the release signing key. */
 export const cawcoConfigDir = (): string => join(xdgConfigHome(), "cawco");
 

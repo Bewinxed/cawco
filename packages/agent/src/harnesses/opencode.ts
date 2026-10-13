@@ -20,6 +20,7 @@
  * (`opencode-session.ts` turns them into frames).
  */
 
+import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import {
@@ -31,7 +32,6 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
   FleetConfig,
@@ -58,11 +58,14 @@ import {
 import type { RestartHold } from "@cawco/core/binary-updates";
 import {
   credentialAccountIds,
+  opencodeAccountHome,
+  opencodeDatabases,
+  opencodeDataDir,
   workspaceScratchDir,
   workspaceStateDir,
+  xdgDataHome,
 } from "@cawco/core/paths";
 import type { ProcSpec } from "@cawco/core/sessiond";
-import { opencodeDataDir } from "@cawco/core/usage/opencode-go";
 import type {
   CredentialCreateInput,
   SessionInfo,
@@ -90,12 +93,13 @@ import { isMachineAgent } from "../machine-agent";
 import { gaugeTables } from "../memory";
 import { OPENCODE_SERVER_PROC_ID, parseProcId } from "../proc-id";
 import {
+  type OpencodeOwnCredential,
   onAccountCredential,
   opencodeAccountEnv,
-  opencodeAccountHome,
   opencodeCredentialOf,
   opencodeProviderOf,
   readHeld,
+  setOpencodeAccountsHost,
 } from "../provider-accounts";
 import { readAccountSoon } from "../provider-usage";
 import { fenced } from "../restart";
@@ -249,21 +253,23 @@ const ACCOUNT_SERVER_IDLE_MS = 5 * 60_000;
  */
 const STRAY_SWEEP_MS = 5 * 60_000;
 
-/** The machine's own OpenCode data dir: the machine's server's, and the one every server's undo history is kept in. */
-const MACHINE_DATA_HOME = (): string =>
-  process.env.XDG_DATA_HOME || join(homedir(), ".local", "share");
-
 /**
  * An account's server data dir made ready to start in: its snapshot dir the
  * machine's, where OpenCode keeps each project's undo history, so a
  * session's undo follows it to any server it moves to (settled #7: a
  * modification reverts across servers only with one shared snapshot dir).
+ * The account's credential as 1.x kept it there (`auth.json`, written by the
+ * agent for 1.x's own sign-in code) is removed: 2.0 takes it through its API
+ * ({@link OpencodeHarness.#putCredential}), and a database 2.0 makes new
+ * never reads that file. A 1.x account server kept no database here; it
+ * used the machine's.
  */
 const prepareAccountServer = async (account: string): Promise<void> => {
   const snapshots = join(opencodeDataDir(), "snapshot");
   await mkdir(snapshots, { recursive: true });
   const dir = join(opencodeAccountHome(account), "opencode");
   await mkdir(dir, { recursive: true, mode: 0o700 });
+  await rm(join(dir, "auth.json"), { force: true });
   const link = join(dir, "snapshot");
   const found = await lstat(link).catch(() => undefined);
   if (!found?.isSymbolicLink()) {
@@ -835,16 +841,95 @@ const writeTag = async (
  */
 const SESSION_HOMES = join(OPENCODE_DIR, "cawco-session-homes.json");
 
+/** A root session as its server's database keeps it (2.0's `session_v2` row). */
+interface StoredSession {
+  directory: string;
+  id: string;
+  time_created: number;
+  time_updated: number;
+  title: string | null;
+}
+
+/**
+ * The root sessions in one OpenCode database, read-only, as the session list
+ * reads them: every server's database is read in place, so listing never
+ * starts a server (an account's that is not running stays stopped). `query`
+ * narrows them to one directory, or names one session, root or not.
+ */
+const storedSessions = (
+  dbPath: string,
+  query: { directory?: string; id?: string }
+): StoredSession[] => {
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    return db
+      .query<StoredSession, [string | null, string | null]>(
+        `SELECT id, title, directory, time_created, time_updated FROM session_v2
+         WHERE (CASE WHEN ?2 IS NULL THEN parent_id IS NULL ELSE id = ?2 END)
+           AND (?1 IS NULL OR directory = ?1)`
+      )
+      .all(query.directory ?? null, query.id ?? null);
+  } finally {
+    db.close();
+  }
+};
+
+/** Every database's sessions `query` names, each once (a session a move left half-way is in two). */
+/**
+ * One read of an OpenCode 1.x server ({@link readV1Activity}), said through
+ * `say`: false while it is out of reach or runs something, true when it will
+ * not say (decided by proof, {@link OpencodeHarness.#v1Idle}), undefined
+ * when it runs nothing.
+ */
+const v1Decision = async (
+  identity: ServerIdentity,
+  say: (line: string) => void
+): Promise<boolean | undefined> => {
+  const read = await readV1Activity(identity);
+  if (read.kind === "unreachable") {
+    say(`out of reach (${read.reason}); read again later`);
+    return false;
+  }
+  if (read.kind === "refused") {
+    say(
+      `will not say what it runs (${read.reason}); no session of this agent is on it, so it is ended`
+    );
+    return true;
+  }
+  if (read.running.length > 0) {
+    say(
+      `runs ${read.running.join(", ")}; ended once that is done, and no OpenCode 2.0 server starts before`
+    );
+    return false;
+  }
+  return undefined;
+};
+
+const sessionsOnMachine = (query: {
+  directory?: string;
+  id?: string;
+}): StoredSession[] => {
+  const seen = new Map<string, StoredSession>();
+  for (const dbPath of opencodeDatabases()) {
+    for (const session of storedSessions(dbPath, query)) {
+      if (!seen.has(session.id)) {
+        seen.set(session.id, session);
+      }
+    }
+  }
+  return [...seen.values()];
+};
+
 const sessionToInfo = (
-  session: SessionInfo,
+  session: StoredSession,
   tag?: string
 ): NeutralSessionInfo => ({
   sessionId: session.id,
   harness: "opencode",
   ...(session.title ? { customTitle: session.title } : {}),
-  lastModified: session.time.updated,
-  ...(session.time.created ? { createdAt: session.time.created } : {}),
-  cwd: session.location.directory,
+  lastModified: session.time_updated,
+  createdAt: session.time_created,
+  cwd: session.directory,
   ...(tag ? { tag } : {}),
 });
 
@@ -1134,6 +1219,66 @@ export class OpencodeHarness implements Harness {
         )
       );
     });
+    setOpencodeAccountsHost({
+      carryOut: (account) => this.#carryOut(account),
+      ownCredentials: () => this.#ownCredentials(),
+      removeOwnCredential: async (id) => {
+        await (await this.#ensure()).credential.remove(
+          { credentialID: id },
+          { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+        );
+      },
+    });
+  }
+
+  /**
+   * OpenCode's own sign-ins on this machine: the credential each provider
+   * uses on the machine's server (`GET /api/credential`, its active one per
+   * integration). CawCo's own (`cred_cawco_…`) are on account servers only,
+   * and never listed.
+   */
+  async #ownCredentials(): Promise<OpencodeOwnCredential[]> {
+    const stored = await (await this.#ensure()).credential.list({
+      signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
+    });
+    return stored.flatMap((entry) =>
+      entry.active &&
+      entry.integrationID &&
+      !entry.id.startsWith(CREDENTIAL_PREFIX)
+        ? [
+            {
+              id: entry.id,
+              integrationID: entry.integrationID,
+              value: entry.value as Record<string, unknown>,
+            },
+          ]
+        : []
+    );
+  }
+
+  /**
+   * Before an account goes from this machine: every root session in its
+   * server's database moved to the machine's server with its subagent
+   * sessions ({@link #bringHome}), whatever the homes record says, then the
+   * account's server ended. A session running there, or a move or an end
+   * that fails, throws, and the account stays as it is.
+   */
+  async #carryOut(account: string): Promise<void> {
+    const client = await this.#ensureAccount(account);
+    const roots = await allSessions(client, {});
+    for (const root of roots) {
+      // biome-ignore lint/performance/noAwaitInLoops: one move at a time; each exports, imports and removes in order
+      await this.#setHome([root.id], account);
+      await this.#bringHome(root.id, undefined);
+    }
+    const slot = this.#accountSlot(account);
+    slot.client = null;
+    slot.ready = null;
+    slot.applied = null;
+    await slot.owner.endAll();
+    console.info(
+      `[opencode] account ${account}: ${roots.length} session(s) carried to the machine's server, and its server ended, before the account goes`
+    );
   }
 
   // ---------------------------------------------------- config convergence
@@ -1916,28 +2061,14 @@ export class OpencodeHarness implements Harness {
         console.info(`[opencode] 1.x server ${name}: ${line}`);
       }
     };
-    for (const pass of [0, 1]) {
-      if (pass === 1) {
-        await Bun.sleep(2000);
-      }
-      // biome-ignore lint/performance/noAwaitInLoops: the second read must come after a real gap
-      const read = await readV1Activity(identity);
-      if (read.kind === "unreachable") {
-        say(`out of reach (${read.reason}); read again later`);
-        return false;
-      }
-      if (read.kind === "refused") {
-        say(
-          `will not say what it runs (${read.reason}); no session of this agent is on it, so it is ended`
-        );
-        return true;
-      }
-      if (read.running.length > 0) {
-        say(
-          `runs ${read.running.join(", ")}; ended once that is done, and no OpenCode 2.0 server starts before`
-        );
-        return false;
-      }
+    const first = await v1Decision(identity, say);
+    if (first !== undefined) {
+      return first;
+    }
+    await Bun.sleep(2000);
+    const second = await v1Decision(identity, say);
+    if (second !== undefined) {
+      return second;
     }
     say("runs nothing; ended");
     return true;
@@ -2256,16 +2387,16 @@ export class OpencodeHarness implements Harness {
         this.#straysSweptAt = Date.now();
       }
       for (;;) {
-        const left = (
-          // biome-ignore lint/performance/noAwaitInLoops: the 1.x servers are read again until none is left
-          await Promise.all(this.#slots().map((slot) => slot.owner.retireV1()))
-        ).flat();
-        if (left.length === 0) {
+        // biome-ignore lint/performance/noAwaitInLoops: the 1.x servers are read again until none is left
+        const reads = await Promise.all(
+          this.#slots().map((slot) => slot.owner.retireV1())
+        );
+        if (reads.flat().length === 0) {
           break;
         }
         await Bun.sleep(5000);
       }
-      backupV1Database(MACHINE_DATA_HOME());
+      backupV1Database(xdgDataHome());
       await retireV1Plugins();
     })().catch((error: unknown) => {
       this.#cutover = null;
@@ -2380,7 +2511,6 @@ export class OpencodeHarness implements Harness {
       await this.#ensure();
       const { revision, launch } = await this.#accountRevision(account);
       await prepareAccountServer(account);
-      backupV1Database(opencodeAccountHome(account));
       const identity = await slot.owner.ensure(launch);
       if (identity.launch === launchOf(launch)) {
         const adopted = this.#adopt(slot, identity);
@@ -3881,9 +4011,11 @@ export class OpencodeHarness implements Harness {
   }
 
   /**
-   * The sessions OpenCode holds, root sessions only: the machine's server's,
-   * and every running account's server's. A server that is not running is
-   * not started to list its sessions (one holds 0.7 GiB or more).
+   * The sessions OpenCode holds on this machine, root sessions only: every
+   * server's database, the machine's and each account's, read in place
+   * ({@link sessionsOnMachine}), so a stopped account server's sessions are
+   * listed without starting it. The machine's server is up first: it is
+   * what converts a 1.x database before anything reads it as 2.0's.
    */
   async listSessions(dir?: string): Promise<NeutralSessionInfo[]> {
     if (resolveBin(OPENCODE_BIN) === undefined) {
@@ -3891,24 +4023,9 @@ export class OpencodeHarness implements Harness {
     }
     await this.#ensure();
     const tags = await readTags();
-    const clients = [
-      this.#client,
-      ...[...this.#accounts.values()].map((slot) => slot.client),
-    ].filter((client): client is OpencodeClient => client !== null);
-    const lists = await Promise.all(
-      clients.map((client) =>
-        allSessions(client, dir ? { directory: dir } : {})
-      )
+    return sessionsOnMachine(dir ? { directory: dir } : {}).map((session) =>
+      sessionToInfo(session, tags[session.id])
     );
-    const seen = new Set<string>();
-    const merged: SessionInfo[] = [];
-    for (const session of lists.flat()) {
-      if (!seen.has(session.id)) {
-        seen.add(session.id);
-        merged.push(session);
-      }
-    }
-    return merged.map((session) => sessionToInfo(session, tags[session.id]));
   }
 
   async getSessionInfo(
@@ -3923,19 +4040,11 @@ export class OpencodeHarness implements Harness {
     if (!OPENCODE_SESSION_ID.test(sessionKey)) {
       return;
     }
-    const client = await this.#homeClient(sessionKey);
-    try {
-      const session = await client.session.get(
-        { sessionID: sessionKey },
-        { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
-      );
-      return sessionToInfo(session, (await readTags())[sessionKey]);
-    } catch (error) {
-      if (notFound(error)) {
-        return;
-      }
-      throw error;
-    }
+    await this.#ensure();
+    const [session] = sessionsOnMachine({ id: sessionKey });
+    return session
+      ? sessionToInfo(session, (await readTags())[sessionKey])
+      : undefined;
   }
 
   /**

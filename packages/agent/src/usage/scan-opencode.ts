@@ -1,161 +1,161 @@
 import { Database } from "bun:sqlite";
-import { readdir } from "node:fs/promises";
-import { basename, join } from "node:path";
-import type { RawOpenCodeMessage, UsageTokens } from "@cawco/core";
+import { basename } from "node:path";
+import type { UsageTokens } from "@cawco/core";
 import { clockFactor, costForUsage, totalTokens } from "@cawco/core";
-import { opencodeDataDir } from "@cawco/core/usage/opencode-go";
 import type { ScannedRecord } from "./types";
 
 /**
- * opencode scanner (USAGE-SPEC.md §2.3, §5.2). Reads the live SQLite database
- * **read-only** — the running opencode process owns it (573 MB, WAL mode), so
- * this must never write, open read-write, or checkpoint it. The database is
- * in OpenCode's data dir, `$XDG_DATA_HOME/opencode` else
- * `~/.local/share/opencode` ({@link opencodeDataDir}).
+ * opencode scanner (USAGE-SPEC.md §2.3, §5.2). Reads one OpenCode 2.0
+ * database **read-only**: a running OpenCode server owns it (WAL mode), so
+ * this never writes, opens read-write, or checkpoints it. The machine has one
+ * per OpenCode server: the machine's and each account's
+ * ({@link opencodeDatabases}).
+ *
+ * What a request cost is on its message (`session_message.data`): an
+ * assistant message's `model`, `cost` and `tokens`, filled when it completes
+ * (`time.completed`); a compaction's, once it ended (`completed` or
+ * `failed`), its model its own when it names one, else its session's. A 1.x
+ * database is converted into these rows the first time 2.0 opens it, every
+ * message with its id, times, tokens and cost.
  */
-
-/** `opencode.db` else the first `opencode-*.db`; null when neither exists. */
-export const openDbPath = async (): Promise<string | null> => {
-  const dir = opencodeDataDir();
-  const primary = join(dir, "opencode.db");
-  if (await Bun.file(primary).exists()) {
-    return primary;
-  }
-
-  let entries: string[];
-  try {
-    entries = await readdir(dir);
-  } catch {
-    return null;
-  }
-  const rotated = entries
-    .filter((n) => n.startsWith("opencode-") && n.endsWith(".db"))
-    .sort();
-  return rotated.length > 0 ? join(dir, rotated[0]) : null;
-};
 
 interface MessageRow {
   data: string;
+  directory: string;
   id: string;
   session_id: string;
+  session_model: string | null;
   time_created: number;
+  time_updated: number;
+  type: "assistant" | "compaction";
+  worktree: string | null;
 }
 
+interface ModelRef {
+  id?: string;
+  providerID?: string;
+}
+
+/** The part of a message's `data` the scan reads. */
+interface MessageData {
+  cost?: number;
+  model?: ModelRef;
+  status?: string;
+  time?: { created?: number; completed?: number };
+  tokens?: {
+    input?: number;
+    output?: number;
+    reasoning?: number;
+    cache?: { read?: number; write?: number };
+  };
+}
+
+const parse = <T>(text: string | null): T | undefined => {
+  if (!text) {
+    return undefined;
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return undefined;
+  }
+};
+
+/** A message whose cost is final: an answer that completed, a compaction that ended. */
+const settled = (row: MessageRow, data: MessageData): boolean =>
+  row.type === "assistant"
+    ? data.time?.completed !== undefined
+    : data.status === "completed" || data.status === "failed";
+
+/** The session's project: its git worktree, else the dir it runs in (OpenCode's global project is `/`). */
 const projectOf = (
-  data: RawOpenCodeMessage
-): { project: string; projectPath: string | null } => {
-  const root = data.path?.root ?? null;
-  const cwd = data.path?.cwd ?? null;
-  const fromRoot = root ? basename(root) : "";
-  const project = fromRoot || (cwd ? basename(cwd) : "") || "opencode";
-  return { project, projectPath: root };
+  row: MessageRow
+): { project: string; projectPath: string } => {
+  const root =
+    row.worktree && row.worktree !== "/" ? row.worktree : row.directory;
+  return { project: basename(root) || "opencode", projectPath: root };
+};
+
+/** What one settled message spent, as a record; undefined when it spent nothing. */
+const recordOf = (
+  row: MessageRow,
+  data: MessageData
+): ScannedRecord | undefined => {
+  const t = data.tokens ?? {};
+  const tokens: UsageTokens = {
+    input: t.input ?? 0,
+    output: t.output ?? 0,
+    cacheCreation: t.cache?.write ?? 0,
+    cacheRead: t.cache?.read ?? 0,
+    reasoning: t.reasoning ?? 0,
+  };
+  const own =
+    typeof data.cost === "number" && !Number.isNaN(data.cost) ? data.cost : 0;
+  if (totalTokens(tokens) === 0 && own === 0) {
+    return undefined;
+  }
+  const model = data.model ?? parse<ModelRef>(row.session_model);
+  if (!model?.id) {
+    return undefined;
+  }
+  const provider = model.providerID ?? null;
+  const ts = data.time?.created ?? row.time_created;
+  const priced = provider ? `${provider}/${model.id}` : model.id;
+  // OpenCode prices a message at its catalog's rates (models.dev's, the
+  // off-peak ones for DeepSeek), so the provider's clock is applied to it.
+  const costUsd =
+    own === 0
+      ? costForUsage(priced, tokens, ts)
+      : own * clockFactor(priced, ts);
+  return {
+    harness: "opencode",
+    ts,
+    sessionId: row.session_id,
+    ...projectOf(row),
+    model: model.id,
+    provider,
+    tokens,
+    costUsd,
+    messageId: row.id,
+    requestId: null,
+    isSidechain: false,
+  };
 };
 
 /**
- * Hands `onRecord` every assistant message with `time_created >
- * maxTimeCreated`, a row at a time, in read-only mode, and answers the highest
- * `time_created` seen: the next incremental watermark. Rows whose
- * `role !== 'assistant'` or whose every token field is zero are skipped.
- * `data.cost` (it knows the catalog's long-context tiers) times the
- * provider's clock ({@link clockFactor}) is the message's cost; CawCo's own
- * pricing applies only when cost is absent/zero and tokens are non-zero.
+ * Hands `onRecord` every settled assistant message and compaction updated
+ * after `since`, a row at a time, and answers the highest `time_updated`
+ * seen: the next watermark. A message still streaming is read again once it
+ * completes, since completing updates it.
  */
 export const scanOpencode = (
   dbPath: string,
-  maxTimeCreated: number,
+  since: number,
   onRecord: (record: ScannedRecord) => void
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one pass filtering the four ways a row can be skipped, then shaping the record
 ): number => {
   const db = new Database(dbPath, { readonly: true });
   try {
     const rows = db
       .query<MessageRow, [number]>(
-        "SELECT id, session_id, time_created, data FROM message WHERE time_created > ?1"
+        `SELECT m.id, m.session_id, m.type, m.time_created, m.time_updated, m.data,
+                s.directory, s.model AS session_model, p.worktree
+         FROM session_message m
+         JOIN session_v2 s ON s.id = m.session_id
+         LEFT JOIN project p ON p.id = s.project_id
+         WHERE m.time_updated > ?1 AND m.type IN ('assistant', 'compaction')`
       )
-      .iterate(maxTimeCreated);
-
-    let nextMax = maxTimeCreated;
-
+      .iterate(since);
+    let next = since;
     for (const row of rows) {
-      if (row.time_created > nextMax) {
-        nextMax = row.time_created;
+      next = Math.max(next, row.time_updated);
+      const data = parse<MessageData>(row.data);
+      const record =
+        data && settled(row, data) ? recordOf(row, data) : undefined;
+      if (record) {
+        onRecord(record);
       }
-
-      let data: RawOpenCodeMessage;
-      try {
-        data = JSON.parse(row.data) as RawOpenCodeMessage;
-      } catch {
-        continue;
-      }
-      if (data.role !== "assistant") {
-        continue;
-      }
-
-      const t = data.tokens ?? {};
-      const input = t.input ?? 0;
-      const output = t.output ?? 0;
-      const reasoning = t.reasoning ?? 0;
-      const cacheRead = t.cache?.read ?? 0;
-      const cacheWrite = t.cache?.write ?? 0;
-      if (
-        input === 0 &&
-        output === 0 &&
-        reasoning === 0 &&
-        cacheRead === 0 &&
-        cacheWrite === 0
-      ) {
-        continue;
-      }
-
-      const model = data.modelID ?? "";
-      if (!model) {
-        continue;
-      }
-      const { id, session_id: sessionId } = row;
-      if (!(id && sessionId)) {
-        continue;
-      }
-
-      const provider = data.providerID ?? null;
-      const tokens: UsageTokens = {
-        input,
-        output,
-        cacheCreation: cacheWrite,
-        cacheRead,
-        reasoning,
-      };
-
-      const ts = data.time?.created ?? row.time_created;
-      const priced = provider ? `${provider}/${model}` : model;
-      const own =
-        typeof data.cost === "number" && !Number.isNaN(data.cost)
-          ? data.cost
-          : 0;
-      // OpenCode prices a message at its catalog's rates (models.dev's, the
-      // off-peak ones for DeepSeek), so the provider's clock is applied to it.
-      const cost =
-        own === 0 && totalTokens(tokens) > 0
-          ? costForUsage(priced, tokens, ts)
-          : own * clockFactor(priced, ts);
-
-      const { project, projectPath } = projectOf(data);
-      onRecord({
-        harness: "opencode",
-        ts,
-        sessionId,
-        project,
-        projectPath,
-        model,
-        provider,
-        tokens,
-        costUsd: cost,
-        messageId: id,
-        requestId: null,
-        isSidechain: false,
-      });
     }
-
-    return nextMax;
+    return next;
   } finally {
     db.close();
   }

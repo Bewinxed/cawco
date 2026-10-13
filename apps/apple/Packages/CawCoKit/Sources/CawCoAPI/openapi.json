@@ -34277,14 +34277,14 @@
             "description": "True for tools that exist only to satisfy a `requires` — they stay out of\nthe policy list until something needs them, and the dashboard shows them\nonly where they explain another tool's state.",
             "type": "boolean"
           },
+          "exactVersion": {
+            "description": "The one version this fleet runs, for a tool CawCo's own code is built\nagainst: every install puts exactly this one on the machine, whatever the\npolicy pins, and a probe that finds another reports it failed.",
+            "type": "string"
+          },
           "homepage": {
             "type": "string"
           },
           "id": {
-            "type": "string"
-          },
-          "exactVersion": {
-            "description": "The one version this fleet runs, for a tool CawCo's own code is built\nagainst: every install puts exactly this one on the machine, whatever the\npolicy pins, and a probe that finds another reports it failed.",
             "type": "string"
           },
           "install": {

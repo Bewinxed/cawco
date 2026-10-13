@@ -10,17 +10,21 @@ import {
   refreshPricing,
   totalTokens,
 } from "@cawco/core";
-import { cawcoDataDir, listClaudeFiles } from "@cawco/core/paths";
+import {
+  cawcoDataDir,
+  listClaudeFiles,
+  opencodeDatabases,
+} from "@cawco/core/paths";
 import { gauge } from "../memory";
 import { parseClaudeLine } from "./scan-claude";
-import { openDbPath, scanOpencode } from "./scan-opencode";
+import { scanOpencode } from "./scan-opencode";
 import type { ScannedRecord } from "./types";
 
 /**
  * The per-machine usage scanner (USAGE-SPEC.md §5). Folds every transcript's
  * usage into absolute bucket totals the hub upserts by bucket id. Incremental
- * scans compare `(mtimeMs, size)` per Claude transcript and a `time_created`
- * watermark for opencode; a full rebuild re-heals and re-costs the store when
+ * scans compare `(mtimeMs, size)` per Claude transcript and a `time_updated`
+ * watermark per OpenCode database; a full rebuild re-heals and re-costs the store when
  * its result could differ ({@link UsageScanner.scan}).
  *
  * Its state lives on disk, in `usage.db` under the agent's data dir: the dedup
@@ -54,7 +58,7 @@ const PAGE_CACHE_KIB = 8192;
  * dedups and costs them. Bump it with any change to those: a store made by
  * other code is dropped on open and the next scan rebuilds it.
  */
-const SCANNER_VERSION = 1;
+const SCANNER_VERSION = 2;
 
 /**
  * The longest a store goes between full rebuilds. A rebuild heals what
@@ -654,15 +658,20 @@ export class UsageScanner {
     this.#putFile.run(path, info.mtimeMs, info.size, next);
   }
 
-  /** Folds opencode's messages after `since` in; the watermark is written only when it moved. */
-  async #scanOpencode(since: number): Promise<void> {
-    const dbPath = await openDbPath();
-    if (!dbPath) {
-      return;
-    }
-    const latest = scanOpencode(dbPath, since, (rec) => this.#ingest(rec));
-    if (latest !== since) {
-      this.#setMeta.run("opencode_max_time_created", latest);
+  /**
+   * Folds in the messages each OpenCode database on the machine settled since
+   * its own watermark (all of them when `fresh`); a watermark is written only
+   * when it moved. A session that moved between servers has the same message
+   * ids in both, and the seen set counts each once.
+   */
+  #scanOpencode(fresh: boolean): void {
+    for (const dbPath of opencodeDatabases()) {
+      const key = `opencode_max_time_updated:${dbPath}`;
+      const since = fresh ? 0 : (this.#meta(key) ?? 0);
+      const latest = scanOpencode(dbPath, since, (rec) => this.#ingest(rec));
+      if (latest !== since) {
+        this.#setMeta.run(key, latest);
+      }
     }
   }
 
@@ -691,8 +700,8 @@ export class UsageScanner {
         this.#scanFile(file.path, file.project, 0, info)
       );
     }
-    await this.#inTransaction(async () => {
-      await this.#scanOpencode(0);
+    await this.#inTransaction(() => {
+      this.#scanOpencode(true);
       this.#setMeta.run("last_full_rebuild", Date.now());
       this.#setMeta.run("rates", ratesFingerprint());
       this.#setMeta.run("version", SCANNER_VERSION);
@@ -727,7 +736,7 @@ export class UsageScanner {
         failure ??= error;
       }
     }
-    await this.#scanOpencode(this.#meta("opencode_max_time_created") ?? 0);
+    this.#scanOpencode(false);
     return failure;
   }
 
