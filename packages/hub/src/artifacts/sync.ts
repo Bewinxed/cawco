@@ -109,9 +109,10 @@ export const ARTIFACT_PATH = /^\/__cawco\/artifact\/([0-9a-f-]{36})(\/send)?$/;
 const SEND_BODY_MAX = 4 * CHOICE_LIMITS.note;
 
 /**
- * The person sends (`cawco.send`, and the panel's Send): the session hears
- * every pick as one message, at once, with the page's text below them.
- * `instanceId` already owns `artifactId` (the listener checked).
+ * The person sends (`cawco.send`, and the panel's Send): what the send
+ * applies first (a project's setup page: its fleet choices and place), then
+ * the session hears every pick as one message, at once, with the page's text
+ * below them. `instanceId` already owns `artifactId` (the listener checked).
  */
 export const artifactSend =
   (
@@ -119,7 +120,7 @@ export const artifactSend =
       instanceId: string,
       artifactId: string,
       text?: string
-    ) => ArtifactChoices
+    ) => Promise<ArtifactChoices>
   ) =>
   async (
     request: Request,
@@ -155,7 +156,7 @@ export const artifactSend =
       );
     }
     try {
-      return Response.json(send(instanceId, artifactId, text?.trim()));
+      return Response.json(await send(instanceId, artifactId, text?.trim()));
     } catch (error) {
       if (error instanceof ArtifactRefusal) {
         return new Response(error.message, { status: error.status });

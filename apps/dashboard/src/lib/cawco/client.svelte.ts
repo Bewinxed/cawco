@@ -5382,46 +5382,6 @@ export async function projectAtFolder(project: {
   return created;
 }
 
-/** A checkout of the project, by machine and folder (`POST /api/projects/:id/places`); the first is its primary. */
-export async function addProjectPlace(
-  projectId: string,
-  checkout: { machineId: string; path: string }
-): Promise<void> {
-  const response = await fetch(
-    `/api/projects/${encodeURIComponent(projectId)}/places`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(checkout),
-    }
-  );
-  if (!response.ok) {
-    throw new Error(
-      (await response.text()) ||
-        `The hub answered ${response.status}, so the place was not added.`
-    );
-  }
-  await refresh();
-}
-
-/** Sets the fleet's two choices (`PUT /api/fleet/choices`): delegates instead of subagents, CawCo's to-dos. */
-export async function setFleetChoices(choices: {
-  delegates?: boolean;
-  todos?: boolean;
-}): Promise<void> {
-  const response = await fetch("/api/fleet/choices", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(choices),
-  });
-  if (!response.ok) {
-    throw new Error(
-      (await response.text()) ||
-        `The hub answered ${response.status}, so the fleet's choices were not set.`
-    );
-  }
-}
-
 /**
  * A session's plan, read now (`GET /api/instances/:id/plan`); its followers
  * hear the same plan live through {@link cawco.planOf}.

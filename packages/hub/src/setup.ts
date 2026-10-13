@@ -2,8 +2,8 @@
  * A new project's setup (Projects spec §5.6, §5.8): what Caw is woken with
  * when New project (or an accepted project offer) makes a project with Caw.
  * He shows the person one decision page, `decisions/setup/`, and on their
- * picks writes the project's files; the dashboard applies the fleet's
- * choices and adds the place they picked when they send.
+ * picks writes the project's files; the hub applies the fleet's choices and
+ * adds the place they picked when they send ({@link applySetupPicks}).
  *
  * The page's cards, by their ids:
  * - `fleet-delegates`, `fleet-todos`: the fleet's two choices, asked once,
@@ -12,6 +12,7 @@
  * - `delegates`: delegate types suggested for the template, several picks.
  * - `place`: the machine and folder its work happens in (`cawco.pickPlace`).
  */
+import type { ChoiceEntry } from "@cawco/core";
 import { type StagesTemplate, templateText } from "./stages";
 
 /** The delegate types a template's work suggests, the ones its stages run first. */
@@ -27,6 +28,74 @@ export const TEMPLATE_DELEGATES: Record<StagesTemplate, readonly string[]> = {
 
 /** The decision page's name, and its folder in the project's. */
 export const SETUP_PAGE = "setup";
+
+/** What a sent setup page changes beyond the project's files, which Caw writes. */
+export interface SetupApply {
+  /** Sets the fleet's choices named (fleet-choices.ts `setFleetChoices`). */
+  fleet: (choices: { delegates?: boolean; todos?: boolean }) => void;
+  /** Adds the place picked as the project's checkout; a refusal throws. */
+  place: (
+    projectId: string,
+    place: { machineId: string; path: string }
+  ) => Promise<void>;
+}
+
+const onOff = (
+  state: Record<string, ChoiceEntry>,
+  id: string
+): boolean | undefined => {
+  const [option] = state[id]?.options ?? [];
+  if (option === "on") {
+    return true;
+  }
+  return option === "off" ? false : undefined;
+};
+
+const placeOf = (
+  state: Record<string, ChoiceEntry>
+): { machineId: string; path: string } | undefined => {
+  const entry: ChoiceEntry | undefined = state.place;
+  const value = entry?.value as
+    | { machineId?: unknown; path?: unknown }
+    | null
+    | undefined;
+  return typeof value?.machineId === "string" &&
+    typeof value.path === "string" &&
+    value.path.startsWith("/")
+    ? { machineId: value.machineId, path: value.path }
+    : undefined;
+};
+
+/**
+ * When the person sends a project's setup page, by any path (the page's own
+ * `cawco.send`, the panel's Send): the fleet's choices (`fleet-delegates`,
+ * `fleet-todos`, `on` or `off`) and the place picked (`place`, from
+ * `cawco.pickPlace`, added as the project's checkout) are applied before
+ * Caw hears the picks, so he writes only the project's files. Any other
+ * artifact is left alone.
+ */
+export const applySetupPicks = async (
+  artifact: { kind: string; name: string },
+  projectId: string | null | undefined,
+  state: Record<string, ChoiceEntry>,
+  apply: SetupApply
+): Promise<void> => {
+  if (!projectId || artifact.kind !== "page" || artifact.name !== SETUP_PAGE) {
+    return;
+  }
+  const delegates = onOff(state, "fleet-delegates");
+  const todos = onOff(state, "fleet-todos");
+  if (delegates !== undefined || todos !== undefined) {
+    apply.fleet({
+      ...(delegates === undefined ? {} : { delegates }),
+      ...(todos === undefined ? {} : { todos }),
+    });
+  }
+  const place = placeOf(state);
+  if (place) {
+    await apply.place(projectId, place);
+  }
+};
 
 export interface SetupAsk {
   /** Whether the fleet's two choices were never set, so the page asks for them. */

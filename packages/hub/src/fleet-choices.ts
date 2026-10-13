@@ -87,23 +87,48 @@ export const readChoices = ({
   };
 };
 
-/**
- * `GET /api/fleet/choices` and `PUT /api/fleet/choices`. A PUT names the
- * choices it changes; they are stored and every machine is sent them
- * (`synced`), so the next session on each starts under them and each
- * machine's own harness config follows at once.
- */
-export const fleetChoicesRoutes = (deps: {
+/** Where the fleet's choices are kept, and how every machine hears them. */
+export interface FleetChoicesStore {
   read: () => StoredChoices;
+  synced: () => void;
   write: (choices: {
     deniedTools?: string[];
     cawcoTodos?: boolean;
     choicesSetAt: Date;
   }) => void;
-  synced: () => void;
-}) =>
+}
+
+/**
+ * Sets the choices named, stores them and sends every machine them
+ * (`synced`), so the next session on each starts under them and each
+ * machine's own harness config follows at once: the PUT, and a new
+ * project's setup page when the person sends it (setup.ts).
+ */
+export const setFleetChoices = (
+  store: FleetChoicesStore,
+  choices: { delegates?: boolean; todos?: boolean }
+): FleetChoices => {
+  const stored = store.read();
+  store.write({
+    ...(choices.delegates === undefined
+      ? {}
+      : {
+          deniedTools: withDelegates(
+            stored.deniedTools ?? DEFAULT_DENIED_TOOLS,
+            choices.delegates
+          ),
+        }),
+    ...(choices.todos === undefined ? {} : { cawcoTodos: choices.todos }),
+    choicesSetAt: new Date(),
+  });
+  store.synced();
+  return readChoices(store.read());
+};
+
+/** `GET /api/fleet/choices` and `PUT /api/fleet/choices`; a PUT names the choices it changes. */
+export const fleetChoicesRoutes = (store: FleetChoicesStore) =>
   new Elysia()
-    .get("/api/fleet/choices", () => readChoices(deps.read()))
+    .get("/api/fleet/choices", () => readChoices(store.read()))
     .put(
       "/api/fleet/choices",
       {
@@ -112,21 +137,5 @@ export const fleetChoicesRoutes = (deps: {
           todos: t.Optional(t.Boolean()),
         }),
       },
-      ({ body }) => {
-        const stored = deps.read();
-        deps.write({
-          ...(body.delegates === undefined
-            ? {}
-            : {
-                deniedTools: withDelegates(
-                  stored.deniedTools ?? DEFAULT_DENIED_TOOLS,
-                  body.delegates
-                ),
-              }),
-          ...(body.todos === undefined ? {} : { cawcoTodos: body.todos }),
-          choicesSetAt: new Date(),
-        });
-        deps.synced();
-        return readChoices(deps.read());
-      }
+      ({ body }) => setFleetChoices(store, body)
     );

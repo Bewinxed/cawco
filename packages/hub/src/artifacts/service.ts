@@ -281,6 +281,15 @@ export interface ArtifactServiceDeps {
   >;
   /** Where page artifacts' files are kept: `<root>/<id>/index.html`. */
   root: string;
+  /**
+   * What a send applies before the session hears it (setup.ts
+   * `applySetupPicks`); a refusal throws and nothing is sent.
+   */
+  sending: (
+    instance: InstanceRow,
+    artifact: ArtifactRow,
+    state: Record<string, ChoiceEntry>
+  ) => Promise<void>;
   /** The artifact a session's panel shows now, if any. */
   showing: (instanceId: string) => string | undefined;
   /** Whether the session's turn is running now. */
@@ -719,8 +728,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     show: async (instanceId: string, id: string): Promise<true | string> =>
       await show(own(sessionOf(instanceId), id)),
 
-    /** The person sends: every pick to the session as one message, at once; `sentAt` kept in the doc. */
-    send: (instanceId: string, id: string, text?: string): ArtifactChoices => {
+    /**
+     * The person sends, by any path: what the send applies first (`sending`),
+     * then every pick to the session as one message, at once; `sentAt` kept
+     * in the doc.
+     */
+    send: async (
+      instanceId: string,
+      id: string,
+      text?: string
+    ): Promise<ArtifactChoices> => {
       const instance = sessionOf(instanceId);
       const row = own(instance, id);
       const doc = docs.doc(row.id);
@@ -728,6 +745,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (Object.keys(state).length === 0) {
         throw new ArtifactRefusal(409, "Nothing is picked yet.");
       }
+      await deps.sending(instance, row, state);
       clearTimeout(timers.get(id));
       timers.delete(id);
       const current = metaOf(doc).pageHash ?? newestHash(state);

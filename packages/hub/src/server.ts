@@ -276,7 +276,11 @@ import { appleDiagnosticsRoutes } from "./apple-diagnostics";
 import { createArtifactDocs } from "./artifacts/docs";
 import { importLegacyCanvases } from "./artifacts/legacy";
 import { artifactRoutes } from "./artifacts/routes";
-import { type Artifacts, createArtifacts } from "./artifacts/service";
+import {
+  ArtifactRefusal,
+  type Artifacts,
+  createArtifacts,
+} from "./artifacts/service";
 import { artifactSend, artifactSocket } from "./artifacts/sync";
 import {
   answeredWithOriginal,
@@ -343,7 +347,11 @@ import { createDelegationMcp } from "./delegation-mcp";
 import { createDelegationTree } from "./delegation-tree";
 import { createDispatcher, dispatchRoutes } from "./dispatch";
 import { faviconRoutes } from "./favicon";
-import { fleetChoicesRoutes } from "./fleet-choices";
+import {
+  type FleetChoicesStore,
+  fleetChoicesRoutes,
+  setFleetChoices,
+} from "./fleet-choices";
 import { FleetMcp } from "./fleet-mcp";
 import { accountForecasts, carrySequence } from "./forecast";
 import { gitRemoteRoutes } from "./git-remote";
@@ -451,6 +459,7 @@ import { RuleEngine } from "./rules";
 import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
 import { sessionLimitRoutes } from "./session-limits";
+import { applySetupPicks } from "./setup";
 import { resolveSkill } from "./skills";
 import { type StagesTemplate, TEMPLATES, templateText } from "./stages";
 import { createStreamHub } from "./stream";
@@ -7859,6 +7868,71 @@ export const createServer = (
     return { html: built.html };
   };
 
+  /**
+   * Why a place was not added: the route's status and its sentence, which a
+   * setup page's send answers as it answers any refusal of its own.
+   */
+  class PlaceRefusal extends ArtifactRefusal {
+    declare readonly status: 400 | 404;
+  }
+
+  /** The fleet's two choices as the supervisor config keeps them (fleet-choices.ts). */
+  const fleetChoices: FleetChoicesStore = {
+    read: () => {
+      const config = db.getSupervisorConfig();
+      return {
+        deniedTools: config?.deniedTools ?? null,
+        cawcoTodos: config?.cawcoTodos ?? false,
+        choicesSetAt: config?.choicesSetAt ?? null,
+      };
+    },
+    write: (choices) => db.putSupervisorConfig(choices),
+    synced: () => fanOutFleet(),
+  };
+
+  /**
+   * Another checkout of a project's repository: named by hand
+   * (`POST /api/projects/:id/places`) or picked on its setup page. A
+   * refusal throws a {@link PlaceRefusal}.
+   */
+  const addProjectPlace = async (
+    projectId: string,
+    machineId: string,
+    asked: string
+  ) => {
+    const project = db.project(projectId);
+    if (!project) {
+      throw new PlaceRefusal(404, "No project with that id on this hub.");
+    }
+    if (!db.listAgents().some((row) => row.machineId === machineId)) {
+      throw new PlaceRefusal(404, "No machine with that id on this hub.");
+    }
+    const path = placePath(asked);
+    if (!path.startsWith("/")) {
+      throw new PlaceRefusal(
+        400,
+        "A place is a folder's absolute path on its machine. Pass a path that starts with /."
+      );
+    }
+    const { place, added } = db.addPlace({
+      projectId: project.id,
+      machineId,
+      path,
+      kind: "checkout",
+    });
+    if (added) {
+      placesChanged(machineId, project.id);
+    }
+    if (!project.remote) {
+      await learnRemote(project.id, machineId, path);
+    }
+    return {
+      ...projectOut(db.project(project.id) ?? project),
+      place,
+      placeAdded: added,
+    };
+  };
+
   // Artifacts (Projects spec §5.10): one Yjs doc each, synced on the preview
   // listener, the person's changes delivered to the session (artifacts/).
   const artifactDocs = createArtifactDocs({
@@ -7897,6 +7971,14 @@ export const createServer = (
         { id: artifact.id, kind: artifact.kind, name: artifact.name }
       ),
     page: buildArtifactPage,
+    sending: (instance, artifact, state) =>
+      applySetupPicks(artifact, instance.projectId, state, {
+        fleet: (choices) => setFleetChoices(fleetChoices, choices),
+        // A refusal is an ArtifactRefusal too: the send answers it.
+        place: async (projectId, place) => {
+          await addProjectPlace(projectId, place.machineId, place.path);
+        },
+      }),
     showing: (instanceId) => previewTargets.get(instanceId)?.artifact.id,
     turnRunning: (instanceId) => pulses.get(instanceId)?.busy === true,
     // Its parent's, or its project's lead's, as stop_delegate decides.
@@ -15928,20 +16010,7 @@ export const createServer = (
           db.listProjects().some((project) => project.id === id)
         )
       )
-      .use(
-        fleetChoicesRoutes({
-          read: () => {
-            const config = db.getSupervisorConfig();
-            return {
-              deniedTools: config?.deniedTools ?? null,
-              cawcoTodos: config?.cawcoTodos ?? false,
-              choicesSetAt: config?.choicesSetAt ?? null,
-            };
-          },
-          write: (choices) => db.putSupervisorConfig(choices),
-          synced: () => fanOutFleet(),
-        })
-      )
+      .use(fleetChoicesRoutes(fleetChoices))
       .use(
         projectFolderRoutes(
           (id) => db.listProjects().some((project) => project.id === id),
@@ -18949,39 +19018,14 @@ export const createServer = (
         "/api/projects/:id/places",
         { body: t.Object({ machineId: t.String(), path: t.String() }) },
         async ({ params, body, status }) => {
-          const project = db.project(params.id);
-          if (!project) {
-            return status(404, "No project with that id on this hub.");
+          try {
+            return await addProjectPlace(params.id, body.machineId, body.path);
+          } catch (error) {
+            if (error instanceof PlaceRefusal) {
+              return status(error.status, error.message);
+            }
+            throw error;
           }
-          if (
-            !db.listAgents().some((row) => row.machineId === body.machineId)
-          ) {
-            return status(404, "No machine with that id on this hub.");
-          }
-          const path = placePath(body.path);
-          if (!path.startsWith("/")) {
-            return status(
-              400,
-              "A place is a folder's absolute path on its machine. Pass a path that starts with /."
-            );
-          }
-          const { place, added } = db.addPlace({
-            projectId: project.id,
-            machineId: body.machineId,
-            path,
-            kind: "checkout",
-          });
-          if (added) {
-            placesChanged(body.machineId, project.id);
-          }
-          if (!project.remote) {
-            await learnRemote(project.id, body.machineId, path);
-          }
-          return {
-            ...projectOut(db.project(project.id) ?? project),
-            place,
-            placeAdded: added,
-          };
         }
       )
       // The accounts the project's sessions may run on; null: every account.

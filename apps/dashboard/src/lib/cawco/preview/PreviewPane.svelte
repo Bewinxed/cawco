@@ -33,7 +33,7 @@
     type SelectionShot,
     selectionShare,
   } from "./selection";
-  import { applySetupPicks, isSetupPage } from "./setup-page";
+  import { isSetupPage } from "./setup-page";
   import { previewPlace } from "./source";
   import {
     previewElement,
@@ -286,9 +286,9 @@
     return () => joined.destroy();
   });
   /**
-   * Send: the setup page's fleet choices and place first (setup-page.ts),
-   * then every pick to the session. A refusal stands in the band over the
-   * page, its way back sending again.
+   * Send: every pick to the session, through the hub's send, which applies
+   * a setup page's fleet choices and place first. A refusal stands in the
+   * band over the page, its way back sending again.
    */
   async function send() {
     if (!artifact) {
@@ -296,7 +296,6 @@
     }
     sending = true;
     try {
-      await applySetupPicks(artifact, owner?.projectId, choices);
       await sendArtifact(previewBase, artifact.id);
       if (failure?.again === "send") {
         failure = null;
