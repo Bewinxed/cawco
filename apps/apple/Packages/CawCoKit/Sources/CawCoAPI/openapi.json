@@ -3716,6 +3716,9 @@
                   "workspace": {
                     "pattern": "^[0-9a-f][0-9a-f-]{7,35}$",
                     "type": "string"
+                  },
+                  "draft": {
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -3995,6 +3998,41 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactShow200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/instances/{id}/artifacts/{artifact}/sent": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiInstancesByIdArtifactsByArtifactSent",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdArtifactsByArtifactSent 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactSent200"
                 }
               }
             }
@@ -18452,6 +18490,20 @@
         },
         "required": [
           "opened"
+        ]
+      },
+      "postApiInstancesByIdArtifactsByArtifactSent200": {
+        "type": "object",
+        "properties": {
+          "draft": {
+            "type": "boolean",
+            "enum": [
+              false
+            ]
+          }
+        },
+        "required": [
+          "draft"
         ]
       },
       "getApiArtifactsByArtifact200": {

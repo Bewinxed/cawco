@@ -177,9 +177,55 @@ const joinArtifact = (
     : new Response("WebSocket upgrade failed", { status: 400 });
 };
 
+/**
+ * A canvas by its id, whichever artifact the panel shows: the composer's
+ * canvas stands outside the panel, at `/__cawco/canvas/<id>/` under the
+ * session's preview prefix, its bundle and fonts under that.
+ */
+const CANVAS_PATH = /^\/__cawco\/canvas\/([0-9a-f-]{36})(\/.*)$/;
+
+/** A canvas by its id, for the session that owns it only. */
+const canvasById = (
+  [, artifactId, rest]: RegExpMatchArray,
+  instanceId: string | null | undefined,
+  artifacts: {
+    kindOf: (artifactId: string) => ArtifactKind | undefined;
+    ownerOf: (artifactId: string) => string | undefined;
+    state: (artifactId: string) => string;
+  }
+): Promise<Response> | Response =>
+  instanceId &&
+  artifacts.ownerOf(artifactId) === instanceId &&
+  artifacts.kindOf(artifactId) === "canvas"
+    ? serveCanvas(artifactId, rest, artifacts.state)
+    : new Response("This session has no such canvas.", { status: 404 });
+
+/**
+ * What the hub serves itself: the shown page or canvas; with none shown,
+ * only the overlay, which a composer's canvas loads.
+ */
+const hubServed = (
+  target: PreviewTarget | undefined,
+  pathname: string,
+  state: (artifactId: string) => string
+): Promise<Response> | Response => {
+  if (target) {
+    return HUB_SERVES[target.artifact.kind](
+      target.artifact.id,
+      pathname,
+      state
+    );
+  }
+  return pathname === OVERLAY_PATH
+    ? overlayResponse()
+    : new Response("No preview selected.", { status: 404 });
+};
+
 export function startPreviewListener(
   hostname: string,
   artifacts: {
+    /** An artifact's kind; undefined when there is none. */
+    kindOf: (artifactId: string) => ArtifactKind | undefined;
     /** The session that owns an artifact; undefined when there is none. */
     ownerOf: (artifactId: string) => string | undefined;
     picture: ReturnType<typeof artifactPicture>;
@@ -213,16 +259,14 @@ export function startPreviewListener(
       if (synced) {
         return joinArtifact(request, server, synced, instanceId, artifacts);
       }
-      const target = instanceId ? previewTargets.get(instanceId) : undefined;
-      if (!target) {
-        return new Response("No preview selected.", { status: 404 });
+      const { pathname } = new URL(request.url);
+      const canvas = pathname.match(CANVAS_PATH);
+      if (canvas) {
+        return canvasById(canvas, instanceId, artifacts);
       }
-      if ("page" in target.source) {
-        return HUB_SERVES[target.artifact.kind](
-          target.artifact.id,
-          new URL(request.url).pathname,
-          artifacts.state
-        );
+      const target = instanceId ? previewTargets.get(instanceId) : undefined;
+      if (!target || "page" in target.source) {
+        return hubServed(target, pathname, artifacts.state);
       }
       // Its machine is away: the register that brings it back serves it again.
       if (!target.upstream) {

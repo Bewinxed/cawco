@@ -67,6 +67,12 @@ export class ArtifactRefusal extends Error {
  */
 export interface ArtifactInput {
   dir?: string | undefined;
+  /**
+   * A canvas the person opened in the composer (a pen's swipe, Draw, ⌘⇧D,
+   * the panel's +): always a new one, `meta.draft` until its first send,
+   * and not shown in the panel by being made.
+   */
+  draft?: boolean | undefined;
   /** A canvas's skeleton elements (Excalidraw's `convertToExcalidrawElements`). */
   elements?: SkeletonElement[] | undefined;
   html?: string | undefined;
@@ -709,6 +715,56 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   /**
+   * The person's own canvas, opened in the composer: always a new artifact,
+   * named `name`, or `name-2`, `name-3`… when the session has that one,
+   * marked `draft` until its first send, and not shown in the panel.
+   */
+  const createDraft = (
+    instance: InstanceRow,
+    input: ArtifactInput
+  ): Created => {
+    if (input.elements !== undefined || input.mermaid !== undefined) {
+      throw new ArtifactRefusal(
+        400,
+        "A draft canvas starts empty: it takes no elements or mermaid."
+      );
+    }
+    const { name } = input;
+    let free = name;
+    for (let n = 2; db.byName(instance.id, "canvas", free); n += 1) {
+      free = `${name.slice(0, 63 - String(n).length - 1)}-${n}`;
+    }
+    const now = new Date();
+    const row = db.create({
+      id: crypto.randomUUID(),
+      instanceId: instance.id,
+      projectId: instance.projectId ?? null,
+      kind: "canvas",
+      name: free,
+      machineId: null,
+      source: { page: free },
+      revision: 1,
+      seq: 0,
+      changes: {},
+      deliveredSeq: 0,
+      createdAt: now,
+      updatedAt: now,
+      shownAt: null,
+    });
+    stampMeta(row, null);
+    docs.transact(row.id, "hub", (doc) =>
+      doc.getMap("meta").set("draft", true)
+    );
+    return {
+      id: row.id,
+      kind: row.kind,
+      name: row.name,
+      route: routeOf(row.id),
+      opened: "It stands in the composer until it is docked.",
+    };
+  };
+
+  /**
    * Makes a canvas (or opens the one of that name) and shows it; with
    * elements or Mermaid, waits for a screen to join and draws them.
    */
@@ -867,7 +923,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         throw new ArtifactRefusal(400, stray);
       }
       if (input.kind === "canvas") {
-        return await createCanvas(instance, input);
+        return input.draft
+          ? createDraft(instance, input)
+          : await createCanvas(instance, input);
       }
       let source: PreviewSource = { page: input.name };
       let machineId: string | null = null;
@@ -1043,6 +1101,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         outline: canvasOutline(elements),
         png: pictureOf(id),
       };
+    },
+
+    /** A draft canvas went out with a send: it is the session's to hold now. */
+    sent: (instanceId: string, id: string): { draft: false } => {
+      const row = own(sessionOf(instanceId), id);
+      if (row.kind !== "canvas") {
+        throw new ArtifactRefusal(
+          409,
+          `${row.name} is a ${row.kind}: only a canvas is sent from the composer.`
+        );
+      }
+      docs.transact(row.id, "hub", (doc) =>
+        doc.getMap("meta").set("draft", false)
+      );
+      return { draft: false };
     },
 
     /** Brings an artifact to the front of its session's panel: true, or why not. */

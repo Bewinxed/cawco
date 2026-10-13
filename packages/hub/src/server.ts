@@ -16323,6 +16323,7 @@ export const createServer = (
   /** What the preview listener (index.ts) needs to serve artifacts' documents. */
   const artifactListener = {
     ownerOf: (artifactId: string) => db.artifacts.get(artifactId)?.instanceId,
+    kindOf: (artifactId: string) => db.artifacts.get(artifactId)?.kind,
     picture: artifactPicture(ARTIFACTS_ROOT, artifactDocs),
     send: artifactSend(artifacts.send),
     socket: artifactSocket(artifactDocs),

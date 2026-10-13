@@ -116,10 +116,14 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           ),
           machine: t.Optional(t.String({ minLength: 1, maxLength: 200 })),
           workspace: t.Optional(t.String({ pattern: WORKSPACE_ID.source })),
+          draft: t.Optional(t.Boolean()),
         }),
       },
       async ({ params, body }) => {
         try {
+          if (body.draft && body.kind !== "canvas") {
+            throw new ArtifactRefusal(400, "Only a canvas is a draft.");
+          }
           return await artifacts.create(params.id, body);
         } catch (error) {
           return refused(error);
@@ -183,6 +187,14 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         return opened === true
           ? { opened: true }
           : new Response(opened, { status: 503 });
+      } catch (error) {
+        return refused(error);
+      }
+    })
+    // A draft canvas went out with the composer's send: no longer a draft.
+    .post("/api/instances/:id/artifacts/:artifact/sent", ({ params }) => {
+      try {
+        return artifacts.sent(params.id, params.artifact);
       } catch (error) {
         return refused(error);
       }
