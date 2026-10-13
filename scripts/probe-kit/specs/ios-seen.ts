@@ -56,7 +56,9 @@ const TITLE = "Seen probe";
 const LOG_HEAD = /^.*\] /;
 const TRAILING_SLASH = /\/$/;
 /** The app's socket: `heard <s> seconds after the heartbeat`. */
-const HEARD_AFTER = /heard ([\d.]+) seconds after the heartbeat/;
+const HEARD_AFTER = /heard [\d.]+ seconds after the heartbeat/;
+/** HubConnection `heartbeatDeadline`: how long it sleeps before reading what it heard. */
+const HEARTBEAT_DEADLINE_S = 10;
 /** A SQLite column type that takes a number. */
 const NUMERIC = /INT|REAL|NUM/i;
 
@@ -114,6 +116,40 @@ const respond = (request: Seen): Reply =>
         everyMs: 200,
       }
     : { words: ["Done."], everyMs: 20 };
+
+/**
+ * The app's main actor kept up: its socket asks the hub for a heartbeat and
+ * reads what it heard after sleeping HEARTBEAT_DEADLINE_S on the main actor
+ * (HubConnection `keepAlive`), so the gap between its two lines is that sleep
+ * plus however long the main actor was held. A stall there holds the beat's
+ * timer with it.
+ */
+function heartbeatReads(
+  lines: { at: number; line: string }[],
+  from: number
+): { longest: number; stalls: string[] } {
+  const stalls: string[] = [];
+  let longest = 0;
+  let asked: number | undefined;
+  for (const h of lines) {
+    if (h.line.includes("hub socket: heartbeat asked")) {
+      asked = h.at;
+      continue;
+    }
+    if (asked === undefined || !HEARD_AFTER.test(h.line)) {
+      continue;
+    }
+    const gap = (h.at - asked) / 1000;
+    longest = Math.max(longest, gap);
+    if (gap > HEARTBEAT_DEADLINE_S + 5) {
+      stalls.push(
+        `${gap.toFixed(0)}s at +${((asked - from) / 1000).toFixed(0)}s`
+      );
+    }
+    asked = undefined;
+  }
+  return { longest, stalls };
+}
 
 async function run(kit: Kit): Promise<void> {
   const app = appPath();
@@ -460,23 +496,11 @@ async function run(kit: Kit): Promise<void> {
         during.every((l) => !(l.includes("inactive") || l.includes("lapsed"))),
       [...all.slice(-3), ...during].join(" | ") || "no [presence] line"
     );
-    // The app's main run loop kept up: its socket's own heartbeat was heard
-    // within seconds (a stall there stops the beat's timer with it).
-    const answers = heard
-      .slice(appFrom)
-      .map((h) => ({ h, s: Number(HEARD_AFTER.exec(h.line)?.[1]) }))
-      .filter(({ s }) => Number.isFinite(s));
-    const slowest = Math.max(0, ...answers.map(({ s }) => s));
+    const { longest, stalls } = heartbeatReads(heard.slice(appFrom), readStart);
     kit.check(
-      "the app's main run loop kept up through it",
-      slowest < 5,
-      `${answers.length} heartbeats, the slowest heard ${slowest.toFixed(1)}s after${answers
-        .filter(({ s }) => s >= 5)
-        .map(
-          ({ h, s }) =>
-            `; ${s.toFixed(0)}s at +${((h.at - readStart) / 1000).toFixed(0)}s`
-        )
-        .join("")}`
+      "the app's main actor kept up through it",
+      longest > 0 && stalls.length === 0,
+      `the longest heartbeat read took ${longest.toFixed(1)}s (its sleep is ${HEARTBEAT_DEADLINE_S}s)${stalls.length ? `; held: ${stalls.join(", ")}` : ""}`
     );
     kit.check(
       "the app's beat went out every 30 s through it",
