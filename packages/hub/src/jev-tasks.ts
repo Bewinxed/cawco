@@ -112,20 +112,20 @@ export const createJevTasks = ({
   const key = () => jevKey(db);
 
   /**
-   * The open tasks filed before `filed`, newest changed first, as their
+   * The open tasks filed before `newTask`, newest changed first, as their
    * files read: a task is a duplicate of one that was there first, never of
    * one filed after it (two filed together are each judged once, the later
    * against the earlier).
    */
   const openTasks = async (
     projectId: string,
-    filed: TaskView
+    newTask: TaskView
   ): Promise<TaskView[]> => {
     const { tasks: all } = await tasks.list(projectId);
     const open = all
       .filter(
         (task) =>
-          task.number < filed.number &&
+          task.number < newTask.number &&
           task.kind !== "done" &&
           task.kind !== "dropped" &&
           task.duplicateOf === null

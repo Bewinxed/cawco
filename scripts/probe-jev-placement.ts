@@ -39,6 +39,8 @@ const keep = process.argv.includes("--keep");
 const REPO = "probe/app";
 const FINISH = "mcp__cawco__finish_item";
 const TOKEN = `ghp_probe_${crypto.randomUUID().replaceAll("-", "")}`;
+/** The hub log lines a run prints at its end. */
+const LOGGED = /\[jev|\[dispatch\]|\[ingress\]|\[phone\]|work-items|error/i;
 
 const results: Record<string, string> = {};
 let failed = false;
@@ -454,9 +456,7 @@ try {
   console.log(
     (await fleet.logs("hub"))
       .split("\n")
-      .filter((line) =>
-        /\[jev|\[dispatch\]|\[ingress\]|\[phone\]|work-items|error/i.test(line)
-      )
+      .filter((line) => LOGGED.test(line))
       .slice(-80)
       .join("\n")
   );
