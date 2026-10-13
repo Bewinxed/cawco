@@ -295,6 +295,19 @@ const ENTRY = {
 } as const;
 export type Role = keyof typeof ENTRY;
 
+/** A machine `launchMachine` added to the fleet. */
+export interface Machine {
+  agent: ReturnType<typeof Bun.spawn>;
+  /** Its agent's and sessiond's environment. */
+  env: Record<string, string>;
+  home: string;
+  /** Its agent's and sessiond's stdout and stderr so far, read whole. */
+  logs: () => Promise<string>;
+  machineId: string;
+  runtime: string;
+  sessiond: ReturnType<typeof Bun.spawn>;
+}
+
 /** A row of `instances`, as the probes read it. */
 export interface InstanceSnapshot {
   last_error: string | null;
@@ -455,84 +468,90 @@ export async function scratchFleet(options: {
   // ── The harnesses' config, pointed at the mock ────────────────────────
   // A Claude account dir signed in with a fake login: Claude Code reports it
   // signed in as the probe's identity and sends the fake token to the mock.
+  // Every machine of the fleet gets the same, in its own HOME (`furnish`).
   const accountDir = join(home, ".cawco", "accounts", ACCOUNT, "claude");
-  await mkdir(accountDir, { recursive: true });
-  await writeFile(
-    join(accountDir, ".credentials.json"),
-    JSON.stringify({
-      claudeAiOauth: {
-        accessToken: "sk-ant-oat01-fake-scratch-fleet",
-        refreshToken: "sk-ant-ort01-fake-scratch-fleet",
-        expiresAt: Date.now() + 365 * 24 * 60 * 60_000,
-        scopes: ["user:inference", "user:profile"],
-        subscriptionType: "max",
-      },
-    })
-  );
-  await writeFile(
-    join(accountDir, CLAUDE_JSON_NAME),
-    JSON.stringify({
-      hasCompletedOnboarding: true,
-      oauthAccount: {
-        emailAddress: "probe@scratch-fleet.test",
-        organizationName: "Scratch Fleet",
-        accountUuid: "00000000-0000-4000-8000-000000000001",
-        organizationUuid: "00000000-0000-4000-8000-000000000002",
-      },
-    })
-  );
-  await writeFile(
-    join(home, ".config", "cawco", "config.json"),
-    JSON.stringify({ hubUrl: base })
-  );
-  const mockModel = (name: string) => ({
-    name,
-    tool_call: true,
-    limit: { context: 100_000, output: 4000 },
-  });
-  await mkdir(join(home, ".config", "opencode"), { recursive: true });
-  await writeFile(
-    join(home, ".config", "opencode", "opencode.json"),
-    JSON.stringify({
-      $schema: "https://opencode.ai/config.json",
-      autoupdate: false,
-      share: "disabled",
-      model: MODEL.opencode,
-      small_model: MODEL.opencode,
-      provider: {
-        mockoc: {
-          name: "Mock",
-          npm: "@ai-sdk/openai-compatible",
-          options: { baseURL: `${mockBase}/v1`, apiKey: "fake-opencode-key" },
-          models: { "mock-oc": mockModel("Mock OC") },
+  const furnish = async (dir: string) => {
+    const account = join(dir, ".cawco", "accounts", ACCOUNT, "claude");
+    await mkdir(account, { recursive: true });
+    await mkdir(join(dir, ".config", "cawco"), { recursive: true });
+    await writeFile(
+      join(account, ".credentials.json"),
+      JSON.stringify({
+        claudeAiOauth: {
+          accessToken: "sk-ant-oat01-fake-scratch-fleet",
+          refreshToken: "sk-ant-ort01-fake-scratch-fleet",
+          expiresAt: Date.now() + 365 * 24 * 60 * 60_000,
+          scopes: ["user:inference", "user:profile"],
+          subscriptionType: "max",
         },
-      },
-    })
-  );
-  await mkdir(join(home, ".pi", "agent"), { recursive: true });
-  await writeFile(
-    join(home, ".pi", "agent", "models.json"),
-    JSON.stringify({
-      providers: {
-        mockpi: {
-          baseUrl: `${mockBase}/v1`,
-          api: "openai-completions",
-          apiKey: "fake-pi-key",
-          models: [
-            {
-              id: "mock-pi",
-              name: "Mock PI",
-              reasoning: false,
-              input: ["text"],
-              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-              contextWindow: 100_000,
-              maxTokens: 4000,
-            },
-          ],
+      })
+    );
+    await writeFile(
+      join(account, CLAUDE_JSON_NAME),
+      JSON.stringify({
+        hasCompletedOnboarding: true,
+        oauthAccount: {
+          emailAddress: "probe@scratch-fleet.test",
+          organizationName: "Scratch Fleet",
+          accountUuid: "00000000-0000-4000-8000-000000000001",
+          organizationUuid: "00000000-0000-4000-8000-000000000002",
         },
-      },
-    })
-  );
+      })
+    );
+    await writeFile(
+      join(dir, ".config", "cawco", "config.json"),
+      JSON.stringify({ hubUrl: base })
+    );
+    const mockModel = (name: string) => ({
+      name,
+      tool_call: true,
+      limit: { context: 100_000, output: 4000 },
+    });
+    await mkdir(join(dir, ".config", "opencode"), { recursive: true });
+    await writeFile(
+      join(dir, ".config", "opencode", "opencode.json"),
+      JSON.stringify({
+        $schema: "https://opencode.ai/config.json",
+        autoupdate: false,
+        share: "disabled",
+        model: MODEL.opencode,
+        small_model: MODEL.opencode,
+        provider: {
+          mockoc: {
+            name: "Mock",
+            npm: "@ai-sdk/openai-compatible",
+            options: { baseURL: `${mockBase}/v1`, apiKey: "fake-opencode-key" },
+            models: { "mock-oc": mockModel("Mock OC") },
+          },
+        },
+      })
+    );
+    await mkdir(join(dir, ".pi", "agent"), { recursive: true });
+    await writeFile(
+      join(dir, ".pi", "agent", "models.json"),
+      JSON.stringify({
+        providers: {
+          mockpi: {
+            baseUrl: `${mockBase}/v1`,
+            api: "openai-completions",
+            apiKey: "fake-pi-key",
+            models: [
+              {
+                id: "mock-pi",
+                name: "Mock PI",
+                reasoning: false,
+                input: ["text"],
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                contextWindow: 100_000,
+                maxTokens: 4000,
+              },
+            ],
+          },
+        },
+      })
+    );
+  };
+  await furnish(home);
 
   // A repository with a remote, for delegates' workspaces.
   const origin = join(sandbox, "origin.git");
@@ -674,7 +693,10 @@ export async function scratchFleet(options: {
     return out;
   };
   /** Sends `signal` to `pid` and every process under it. */
-  const killTree = async (pid: number, signal: "SIGTERM" | "SIGKILL") => {
+  const killTree = async (
+    pid: number,
+    signal: "SIGTERM" | "SIGKILL" | "SIGCONT"
+  ) => {
     const tree = [pid, ...(await descendants(pid))];
     for (const one of tree) {
       try {
@@ -786,25 +808,34 @@ export async function scratchFleet(options: {
    * stderr (`<role>-<n>.err`), where a service that dies at start says why
    * ("error: Cannot find package 'yjs' from …").
    */
-  const answering = async <T>(
+  const answering = <T>(
     role: Role,
     label: string,
     read: () => T | Promise<T>,
     accept: (value: T) => boolean,
     ms: number
+  ): Promise<T> =>
+    waitingOn(role, procs[role], errs[role], label, read, accept, ms);
+  /** {@link answering} for any process of the fleet, named `name`, its stderr at `err`. */
+  const waitingOn = async <T>(
+    name: string,
+    child: ReturnType<typeof Bun.spawn> | undefined,
+    err: string | undefined,
+    label: string,
+    read: () => T | Promise<T>,
+    accept: (value: T) => boolean,
+    ms: number
   ): Promise<T> => {
-    const child = procs[role];
     const died = child
       ? child.exited.then((code): never => {
           throw new Error(
-            `${label}: ${role} (pid ${child.pid}) exited ${code} first`
+            `${label}: ${name} (pid ${child.pid}) exited ${code} first`
           );
         })
-      : Promise.reject(new Error(`${label}: ${role} was never launched`));
+      : Promise.reject(new Error(`${label}: ${name} was never launched`));
     try {
       return await Promise.race([until(label, read, accept, ms), died]);
     } catch (error) {
-      const err = errs[role];
       const tail = err
         ? (
             await Bun.file(err)
@@ -817,7 +848,7 @@ export async function scratchFleet(options: {
             .join("\n")
         : "";
       throw new Error(
-        `${error instanceof Error ? error.message : String(error)}\n${role}'s stderr (${err ?? "none"}), its last lines:\n${tail || "(empty)"}`,
+        `${error instanceof Error ? error.message : String(error)}\n${name}'s stderr (${err ?? "none"}), its last lines:\n${tail || "(empty)"}`,
         { cause: error }
       );
     }
@@ -832,23 +863,114 @@ export async function scratchFleet(options: {
     );
     socket = undefined;
   };
+  /** The hub's row for `machineId` says its agent is online, with custody. */
+  const online = async (machineId: string) =>
+    (
+      await api<
+        { machineId: string; status: string; custody?: { state: string } }[]
+      >("/api/agents")
+    ).some(
+      (row) =>
+        row.machineId === machineId &&
+        row.status === "online" &&
+        row.custody?.state === "available"
+    );
   const agentUp = () =>
     answering(
       "agent",
       "the agent online with custody",
-      () =>
-        api<
-          { machineId: string; status: string; custody?: { state: string } }[]
-        >("/api/agents"),
-      (rows) =>
-        rows.some(
-          (row) =>
-            row.machineId === MACHINE &&
-            row.status === "online" &&
-            row.custody?.state === "available"
-        ),
+      () => online(MACHINE),
+      Boolean,
       120_000
     );
+
+  /** What {@link launchMachine} started, agents first, for `close`; and made, for `clean`. */
+  const machineProcs: ReturnType<typeof Bun.spawn>[] = [];
+  const machineDirs: string[] = [];
+  /**
+   * One more machine on this fleet, beside {@link MACHINE}: its own agent and
+   * sessiond under machine id `machineId`, with a HOME of its own (furnished
+   * as the first machine's is: the probe's Claude account, the mock-pointed
+   * harness configs, the hub's address), its own runtime dir (its tool door
+   * and preview sockets), its own sessiond socket and its own MCP gateway
+   * port, the one listener two agents on one host would otherwise both bind
+   * ("MCP gateway port 127.0.0.1:<port> is held by pid …"). Answers once the
+   * hub holds it online with custody. Every machine runs on this host, so
+   * the hub names them all by its hostname.
+   */
+  const launchMachine = async (machineId: string): Promise<Machine> => {
+    const machineHome = await shortDir(shortRoot);
+    const machineRuntime = await shortDir(shortRoot);
+    machineDirs.push(machineHome, machineRuntime);
+    await furnish(machineHome);
+    const socketPath = join(machineRuntime, "sessiond.sock");
+    const machineEnv: Record<string, string> = {
+      ...env,
+      HOME: machineHome,
+      XDG_CONFIG_HOME: join(machineHome, ".config"),
+      XDG_DATA_HOME: join(machineHome, ".local", "share"),
+      XDG_CACHE_HOME: join(machineHome, ".cache"),
+      XDG_STATE_HOME: join(machineHome, ".local", "state"),
+      XDG_RUNTIME_DIR: machineRuntime,
+      CAWCO_MACHINE_ID: machineId,
+      CAWCO_SESSIOND_ENDPOINT: socketPath,
+      CAWCO_MCP_PORT: String(await freePort()),
+    };
+    const start = (role: "agent" | "sessiond") => {
+      const err = join(sandbox, `${machineId}-${role}.err`);
+      const child = Bun.spawn([process.execPath, join(root, ENTRY[role])], {
+        cwd: role === "sessiond" ? sandbox : root,
+        env: machineEnv,
+        stdout: Bun.file(join(sandbox, `${machineId}-${role}.log`)),
+        stderr: Bun.file(err),
+      });
+      console.log(`… ${machineId}'s ${role} started, pid ${child.pid}`);
+      return { child, err };
+    };
+    const sessiond = start("sessiond");
+    machineProcs.push(sessiond.child);
+    await waitingOn(
+      `${machineId}'s sessiond`,
+      sessiond.child,
+      sessiond.err,
+      `${machineId}'s sessiond listening`,
+      () => existsSync(socketPath),
+      Boolean,
+      30_000
+    );
+    const agent = start("agent");
+    // Stopped before its sessiond, as the first machine's is.
+    machineProcs.unshift(agent.child);
+    await waitingOn(
+      `${machineId}'s agent`,
+      agent.child,
+      agent.err,
+      `${machineId}'s agent online with custody`,
+      () => online(machineId),
+      Boolean,
+      120_000
+    );
+    return {
+      machineId,
+      home: machineHome,
+      runtime: machineRuntime,
+      env: machineEnv,
+      agent: agent.child,
+      sessiond: sessiond.child,
+      logs: async () =>
+        (
+          await Promise.all(
+            ["agent", "sessiond"].flatMap((role) =>
+              ["log", "err"].map((ext) =>
+                Bun.file(join(sandbox, `${machineId}-${role}.${ext}`))
+                  .text()
+                  .catch(() => "")
+              )
+            )
+          )
+        ).join("\n"),
+    };
+  };
   const sessiondUp = () =>
     answering(
       "sessiond",
@@ -1005,6 +1127,21 @@ export async function scratchFleet(options: {
   /** Stops everything this fleet started and its mock. */
   const close = async () => {
     socket?.close();
+    // The added machines', agents first: a frozen one is thawed to hear it,
+    // and a sessiond takes the processes under it along.
+    for (const child of machineProcs) {
+      if (child.exitCode !== null) {
+        continue;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: one machine's process at a time, as `stop` does
+      await killTree(child.pid, "SIGCONT");
+      await killTree(child.pid, "SIGTERM");
+      if (!(await exited(child, 10_000))) {
+        await killTree(child.pid, "SIGKILL");
+        await child.exited;
+      }
+      console.log(`… pid ${child.pid} of an added machine stopped`);
+    }
     await stop("agent");
     await stop("hub");
     await killSessiond();
@@ -1021,6 +1158,10 @@ export async function scratchFleet(options: {
     await rm(sandbox, { recursive: true, force: true });
     await rm(home, { recursive: true, force: true });
     await rm(runtime, { recursive: true, force: true });
+    for (const dir of machineDirs) {
+      // biome-ignore lint/performance/noAwaitInLoops: a handful of dirs
+      await rm(dir, { recursive: true, force: true });
+    }
   };
 
   return {
@@ -1049,6 +1190,7 @@ export async function scratchFleet(options: {
     hubUp,
     agentUp,
     sessiondUp,
+    launchMachine,
     fileAccount,
     accountSignedIn,
     instance,
