@@ -9,11 +9,11 @@
     "a2ui:check": "bun scripts/a2ui-conformance.ts",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
-    "dev": "bun --watch src/index.ts",
+    "dev": "CAWCO_NO_MDNS=1 bun --watch src/index.ts",
     "openapi": "bun scripts/openapi.ts",
     "openapi:check": "bun scripts/openapi.ts --check",
     "roles:check": "bun scripts/role-budgets.ts",
-    "start": "bun src/index.ts",
+    "start": "CAWCO_NO_MDNS=1 bun src/index.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
