@@ -341,7 +341,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_create",
-      "File a task: work that must outlive this conversation or run without you. Returns it with its id (tsk-12) and `duplicates`: Jev's verdict, or open tasks to compare (link `duplicate_of` if it repeats one). `stage` defaults to the first stage.",
+      "File a task: work that must outlive this conversation or run without you. Returns it with its id (tsk-12) and `duplicates` to act on. `stage` defaults to the first stage.",
       {
         title: z.string().describe("One line, verb first."),
         description: z.string().optional(),

@@ -582,7 +582,7 @@ export function handoffTools(deps: HandoffDeps) {
           .describe(
             "A named delegate type — see the types listed above. Sets harness/model/effort/skills " +
               "for you; an explicit harness/model/skills below still overrides what the type says. " +
-              "Omitted with no harness or model: Jev picks from the catalog when the hub has Jev, else 'medium'; with a harness other than medium's and no type, `model` is required. " +
+              "Default: Jev's pick when the hub has Jev, else 'medium'; with a harness other than medium's and no type, `model` is required. " +
               "The description below is a startup snapshot; execution reads the current hub definition. " +
               "Use list_delegate_types to see edits made since this session started."
           ),
