@@ -483,7 +483,12 @@ import { createSessionLifecycle } from "./session-lifecycle";
 import { sessionLimitRoutes } from "./session-limits";
 import { applySetupPicks } from "./setup";
 import { resolveSkill } from "./skills";
-import { type StagesTemplate, TEMPLATES, templateText } from "./stages";
+import {
+  type StagesTemplate,
+  TEMPLATES,
+  templateOfStages,
+  templateText,
+} from "./stages";
 import { createStreamHub } from "./stream";
 import { suggest } from "./suggest";
 import { SupervisorEngine } from "./supervisor";
@@ -13947,6 +13952,7 @@ export const createServer = (
       ...(checkout ? { checkout } : {}),
       remote,
       caw: asked.caw ?? false,
+      template: asked.template ?? null,
     });
     projectsChanged();
     // The place it was made from: its checkout, else its folder on the hub.
@@ -13977,6 +13983,8 @@ export const createServer = (
         { message: `stages: the ${asked.template} template` }
       );
       tasks.touched(created.id);
+      // Its template's starter skills reach the checkout it was made from.
+      fanOutFleet();
     }
     // Your prompt sets the project up whether its Caw is on or off.
     return asked.setup
@@ -14271,11 +14279,40 @@ export const createServer = (
     put: db.putTaskIndex,
     drop: db.dropTaskIndex,
     setTracker: db.setProjectTracker,
+    // The template's starter skills go to the project's places, and the old one's leave.
+    setTemplate: (id, template) => {
+      db.setProjectTemplate(id, template);
+      fanOutFleet();
+    },
     attempts: db.projectAttempts,
     startProblem: (projectId, task) => dispatcher.problemOf(projectId, task),
     queuedStarts: (projectId) =>
       db.queuedTaskStarts(projectId).map((row) => row.taskId),
   });
+  // A project made from a template before the hub recorded which one is
+  // known by its stages.md, stage for stage, so its starter skills reach it.
+  detach(
+    (async () => {
+      let found = false;
+      for (const project of db.listProjects()) {
+        if (project.template) {
+          continue;
+        }
+        // biome-ignore lint/performance/noAwaitInLoops: one project's folder at a time, once per boot
+        const view = await tasks.stages(project.id).catch(() => undefined);
+        const template =
+          view?.source === "file" ? templateOfStages(view.stages) : undefined;
+        if (template) {
+          db.setProjectTemplate(project.id, template);
+          found = true;
+        }
+      }
+      if (found) {
+        fanOutFleet();
+      }
+    })(),
+    "project templates"
+  );
   // Attempts at tasks: started by a session, a stage's `runs:` hook, or the
   // dispatcher itself for a project that dispatches (dispatch.ts).
   // A project's views: drafts Caw writes, kept when you approve (views.ts).

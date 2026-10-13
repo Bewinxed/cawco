@@ -526,8 +526,10 @@ dropped    dropped
 moves
   * → *                you
   ready → working      lead, session
+  ready → review       lead, session
   working → review     lead, session
   review → working     lead
+  review → ready       lead, session
   * → dropped          lead
 views
   board      by stage
@@ -546,9 +548,11 @@ dropped    dropped
 moves
   * → *                you
   plan → make          lead, session
+  plan → review        lead, session
   make → review        lead, session
   review → make        lead
-  scheduled → live     lead, session
+  review → plan        lead, session
+  scheduled → live     lead, session, action
   live → measured      routine
   * → dropped          lead
 views
@@ -566,8 +570,10 @@ dropped    dropped
 moves
   * → *                you
   source → extract     lead, session
+  source → review      lead, session
   extract → review     lead, session
   review → extract     lead
+  review → source      lead, session
   * → dropped          lead
 views
   board      by stage`,
@@ -585,9 +591,11 @@ dropped    dropped
 moves
   * → *                you
   idea → draft         lead, session
+  idea → review        lead, session
   draft → review       lead, session
   review → draft       lead
-  scheduled → posted   lead, session
+  review → idea        lead, session
+  scheduled → posted   lead, session, action
   posted → measured    routine
   * → dropped          lead
 views
@@ -605,10 +613,14 @@ won        done
 lost       dropped
 moves
   * → *                  you
-  prospect → contacted   lead, session
+  prospect → contacted   lead, session, action
+  prospect → meeting     lead, session
+  prospect → lost        lead
   contacted → replied    routine, lead, session
   contacted → lost       routine
   replied → meeting      lead, session
+  replied → lost         lead, session
+  meeting → prospect     lead, session
 views
   pipeline   by stage
   table      by rank`,
@@ -627,10 +639,12 @@ dropped    dropped
 moves
   * → *                  you
   topic → brief          lead, session
+  topic → review         lead, session
   brief → draft          lead, session
   draft → review         lead, session
   review → draft         lead
-  approved → published   lead, session
+  review → topic         lead, session
+  approved → published   lead, session, action
   published → measured   routine
   * → dropped            lead
 views
@@ -650,8 +664,10 @@ dropped    dropped
 moves
   * → *                you
   brief → explore      lead, session
+  brief → review       lead, session
   explore → review     lead, session
   review → explore     lead
+  review → brief       lead, session
   picked → build       lead, session
   build → shipped      lead, session
   * → dropped          lead
@@ -666,6 +682,22 @@ export const templateText = (name: StagesTemplate): string => {
   const { block, about } = TEMPLATE_TEXT[name];
   return `---\n${block}\n---\n\n${about}\n\n${NOTES}`;
 };
+
+/** The template whose stages these are, name and kind in order; moves and hooks may differ. */
+export const templateOfStages = (
+  stages: readonly Stage[]
+): StagesTemplate | undefined =>
+  TEMPLATES.find((name) => {
+    const own = templateStages(name).stages;
+    return (
+      own.length === stages.length &&
+      own.every(
+        (stage, index) =>
+          stage.name === stages[index]?.name &&
+          stage.kind === stages[index]?.kind
+      )
+    );
+  });
 
 /** A template, read: every template reads cleanly, or the hub would not start. */
 export const templateStages = (name: StagesTemplate): Stages => {

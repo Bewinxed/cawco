@@ -22019,6 +22019,9 @@
               "type": "string",
               "format": "date-time"
             },
+            "template": {
+              "$ref": "#/components/schemas/StagesTemplate"
+            },
             "createdAt": {
               "type": "string",
               "format": "date-time"
@@ -22207,6 +22210,9 @@
           "moveDeclinedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "template": {
+            "$ref": "#/components/schemas/StagesTemplate"
           },
           "createdAt": {
             "type": "string",
@@ -22431,6 +22437,9 @@
             "type": "string",
             "format": "date-time"
           },
+          "template": {
+            "$ref": "#/components/schemas/StagesTemplate"
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -22578,6 +22587,9 @@
           "moveDeclinedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "template": {
+            "$ref": "#/components/schemas/StagesTemplate"
           },
           "createdAt": {
             "type": "string",

@@ -275,6 +275,8 @@ export interface TaskStore {
   readonly put: (rows: TaskIndexRow[]) => void;
   /** The tasks whose hook start waits for a slot (dispatch.ts). */
   readonly queuedStarts?: (projectId: string) => string[];
+  /** Records the template a project's stages came from: its starter skills follow it. */
+  readonly setTemplate: (id: string, template: StagesTemplate) => void;
   readonly setTracker: (id: string, tracker: Tracker) => void;
   /** Why the hub last could not start an attempt at a task, while that stands (dispatch.ts). */
   readonly startProblem?: (
@@ -2903,6 +2905,7 @@ export const createTasks = (store: TaskStore) => {
           author: actor.author,
           message: `stages: apply the ${template} template ${byWhom(actor)}`,
         });
+        store.setTemplate(projectId, template);
         const stages = templateStages(template);
         const { rows } = await sync(projectId);
         return {

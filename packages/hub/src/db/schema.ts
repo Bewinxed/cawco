@@ -395,6 +395,12 @@ export const projects = sqliteTable("projects", {
    * instead of asking again. Null: never declined.
    */
   moveDeclinedAt: timestamp("move_declined_at"),
+  /**
+   * The stage template it was made from, or last had applied (stages.ts):
+   * its starter skills are placed at every place of it (bundled-skills.ts).
+   * Null: none.
+   */
+  template: text("template").$type<import("../stages").StagesTemplate>(),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),

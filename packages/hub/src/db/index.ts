@@ -75,10 +75,11 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 import type { AnySQLiteColumn, AnySQLiteTable } from "drizzle-orm/sqlite-core";
 import { Context, Effect, Layer } from "effect";
-import { bundledSkills } from "../bundled-skills";
+import { bundledSkills, starterSkills } from "../bundled-skills";
 import { DB_PATH } from "../config";
 import { sessionLabel } from "../labels";
 import { HubLifetime } from "../lifetime";
+import type { StagesTemplate } from "../stages";
 import { workflowSkill } from "../workflows/skills";
 import { type AccountsDb, accountsDb } from "./accounts";
 import { type ActionsDb, actionsDb } from "./actions";
@@ -524,6 +525,8 @@ export interface DbShape {
     remote: string | null;
     /** Made with Caw: its Caw starts on. */
     caw?: boolean;
+    /** The stage template it is made from. */
+    template?: StagesTemplate | null;
   }) => ProjectRow;
   /** Files a thread with its first message: yours, or an event that had no thread to go to. */
   readonly createThread: (thread: {
@@ -1608,6 +1611,8 @@ export interface DbShape {
   readonly setProjectMoveDeclined: (id: string, at: Date | null) => void;
   /** The repository a project's checkouts are of, once a machine has read it. */
   readonly setProjectRemote: (id: string, remote: string) => void;
+  /** The stage template a project last had applied: its starter skills follow it. */
+  readonly setProjectTemplate: (id: string, template: StagesTemplate) => void;
   /** Where the project's tasks live; tasks.ts refuses a tracker not built yet. */
   readonly setProjectTracker: (id: string, tracker: Tracker) => void;
   /** The fleet's session limits, whole: a field absent is no limit. */
@@ -4613,7 +4618,16 @@ const make = async (path: string): Promise<DbShape> => {
                 .all()
                 .map(({ name }) => name)
             );
-            return bundledSkills().filter((skill) => !named.has(skill.name));
+            return [
+              ...bundledSkills(),
+              // Each template's starter skills, bound to the projects made from it.
+              ...starterSkills(
+                db
+                  .select({ id: projects.id, template: projects.template })
+                  .from(projects)
+                  .all()
+              ),
+            ].filter((skill) => !named.has(skill.name));
           })(),
         ],
         // Only the rows a resolve filled in. A plugin the hub could not fetch is
@@ -5483,6 +5497,9 @@ const make = async (path: string): Promise<DbShape> => {
     setProjectRemote: (id, remote) => {
       db.update(projects).set({ remote }).where(eq(projects.id, id)).run();
     },
+    setProjectTemplate: (id, template) => {
+      db.update(projects).set({ template }).where(eq(projects.id, id)).run();
+    },
     projectOffer: (instanceId) =>
       db
         .select()
@@ -6001,9 +6018,11 @@ const make = async (path: string): Promise<DbShape> => {
         )
         .run();
     },
-    createProject: ({ id, name, checkout, remote, caw = false }) =>
+    createProject: ({ id, name, checkout, remote, caw = false, template }) =>
       db.transaction((tx) => {
-        tx.insert(projects).values({ id, name, remote, caw }).run();
+        tx.insert(projects)
+          .values({ id, name, remote, caw, template: template ?? null })
+          .run();
         tx.insert(projectPlaces)
           .values({
             id: crypto.randomUUID(),
