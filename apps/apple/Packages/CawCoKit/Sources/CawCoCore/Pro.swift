@@ -1,4 +1,5 @@
 public import Foundation
+import Network
 import Observation
 import OSLog
 public import StoreKit
@@ -56,8 +57,12 @@ public enum ProCatalog: Equatable, Sendable {
 /// with StoreKit's error. Restore purchase reads it again with
 /// `AppTransaction.refresh()`, the one call that may sign the person in.
 public enum InstallProblem: Equatable, Sendable {
-    /// StoreKit threw: no Apple Account signed in to the App Store, no
-    /// network, or the record isn't there yet.
+    /// StoreKit threw for a reason the network explains (`Pro.transient`):
+    /// the read is tried again on its own (`Pro.retryInstall`).
+    case network(String)
+    /// StoreKit threw for any other reason: no Apple Account signed in to the
+    /// App Store, a cancelled sign-in, or an error StoreKit doesn't name.
+    /// Settled until a StoreKit update or Restore purchase.
     case unavailable(String)
     /// The record came back, but its signature doesn't hold.
     case unverified(String)
@@ -182,8 +187,20 @@ public final class Pro {
     @ObservationIgnored private var installRead: Task<Void, Never>?
     /// Reads of the install on this launch.
     @ObservationIgnored private var installReads = 0
+    /// The wait before the next read after a network failure.
+    @ObservationIgnored private var installRetry: Task<Void, Never>?
+    /// Network failures in a row on this launch: they pick the wait (`installRetryWaits`).
+    @ObservationIgnored private var networkFailures = 0
+    /// Past the waits, the network's path: a change to a usable path reads again.
+    @ObservationIgnored private var pathMonitor: NWPathMonitor?
+    /// The path the monitor last delivered; nil until its first, which is the path as it stands.
+    @ObservationIgnored private var lastPath: NWPath?
     private let log = Logger(subsystem: "dev.cawco.app", category: "Pro")
     private static let pendingKey = "paywall-pending"
+    private nonisolated static let pathQueue = DispatchQueue(label: "dev.cawco.pro.path")
+    /// The waits before the reads after the first, second and third network
+    /// failures in a row; past them, the next change of network path.
+    private static let installRetryWaits: [Duration] = [.seconds(5), .seconds(30), .seconds(120)]
 
     /// The verified AppTransaction: its environment and its JWS.
     private struct Install: Sendable {
@@ -243,13 +260,13 @@ public final class Pro {
     /// One read of `AppTransaction.shared`. A DEBUG build takes
     /// `-paywall-env sandbox|production` to stand in for TestFlight or the App
     /// Store, and `-paywall-install fail` (every read) or `-paywall-install <n>`
-    /// (the first n reads) to make the read throw.
+    /// (the first n reads) to make the read fail as it does with the network down.
     private func readInstallOnce(_ attempt: Int) async -> InstallOutcome {
         do {
             #if DEBUG
             if let failing = UserDefaults.standard.string(forKey: "paywall-install"),
                failing == "fail" || Int(failing).map({ attempt <= $0 }) == true {
-                throw StoreKitError.unknown
+                throw StoreKitError.networkError(URLError(.notConnectedToInternet))
             }
             switch UserDefaults.standard.string(forKey: "paywall-env") {
             case "sandbox":
@@ -264,7 +281,29 @@ public final class Pro {
             return outcome(of: try await AppTransaction.shared, read: "install read \(attempt)")
         } catch {
             log.error("install read \(attempt): AppTransaction failed: \(String(describing: error), privacy: .public)")
-            return .problem(.unavailable(String(describing: error)))
+            return .problem(Self.problem(error))
+        }
+    }
+
+    /// A failed read, by what StoreKit threw. `.network` only for what the
+    /// network explains, StoreKitError's one such case ("networkError: A
+    /// network error occurred.") or a URLError, bare or in a `systemError`:
+    /// it's read again on its own. Every other case (`userCancelled`,
+    /// `notEntitled`, `notAvailableInStorefront`, `unsupported`, `unknown`,
+    /// any other `systemError`) is `.unavailable`, settled: with no Apple
+    /// Account signed in, StoreKit throws `systemError(noAccount)` (iOS 27)
+    /// or `unknown` (iOS 18.5), and reading again there can put the App
+    /// Store's sign-in in front of the person. StoreKit names no server
+    /// error, so one arrives as `unknown` or `systemError` and is settled too.
+    private nonisolated static func problem(_ error: any Error) -> InstallProblem {
+        let said = String(describing: error)
+        switch error {
+        case StoreKitError.networkError, is URLError:
+            return .network(said)
+        case let StoreKitError.systemError(inner) where inner is URLError:
+            return .network(said)
+        default:
+            return .unavailable(said)
         }
     }
 
@@ -282,19 +321,82 @@ public final class Pro {
 
     /// Verified, the install is decided for the rest of the launch: TestFlight
     /// (sandbox) or not. Otherwise it stays undecided, and so not enforced
-    /// (`enforced`), with the reason kept for the paywall.
+    /// (`enforced`), with the reason kept for the paywall; a network failure
+    /// is read again on its own (`retryInstall`), any other waits for a
+    /// StoreKit update or Restore purchase.
     private func settleInstall(_ outcome: InstallOutcome) {
         guard case let .verified(install) = outcome else {
-            if case let .problem(problem) = outcome { installProblem = problem }
-            log.notice("install: undecided; read again on a StoreKit update or Restore purchase")
+            guard case let .problem(problem) = outcome else { return }
+            installProblem = problem
+            if case .network = problem {
+                retryInstall()
+            } else {
+                stopRetrying()
+                log.notice("install: undecided; read again on a StoreKit update or Restore purchase")
+            }
             return
         }
+        stopRetrying()
         let opened = boardOpen
         installProblem = nil
         appTransaction = install.jws
         testFlight = install.environment == .sandbox
         log.notice("install: decided, TestFlight \(install.environment == .sandbox), enforced \(self.enforced)")
         if !opened, boardOpen { announceOpen() }
+    }
+
+    /// After a network failure: the install is read again after the next of
+    /// `installRetryWaits`, and past them on the next change to a usable
+    /// network path. Never on a foreground (`readInstall`).
+    private func retryInstall() {
+        guard installRetry == nil, pathMonitor == nil else { return }
+        guard networkFailures < Self.installRetryWaits.count else {
+            log.notice("install: network failure; read again on the next network change")
+            watchPath()
+            return
+        }
+        let wait = Self.installRetryWaits[networkFailures]
+        networkFailures += 1
+        log.notice("install: network failure; read again in \(wait, privacy: .public)")
+        installRetry = Task { [weak self] in
+            try? await Task.sleep(for: wait)
+            guard !Task.isCancelled, let self else { return }
+            installRetry = nil
+            readInstall()
+        }
+    }
+
+    /// Reads the install once the path changes to a usable one. The monitor's
+    /// first delivery is the path as it stands, which the failed read already had.
+    private func watchPath() {
+        let monitor = NWPathMonitor()
+        pathMonitor = monitor
+        lastPath = nil
+        monitor.pathUpdateHandler = { [weak self, weak monitor] path in
+            Task { @MainActor in
+                guard let self, let monitor, self.pathMonitor === monitor else { return }
+                self.pathChanged(path)
+            }
+        }
+        monitor.start(queue: Self.pathQueue)
+    }
+
+    private func pathChanged(_ path: NWPath) {
+        defer { lastPath = path }
+        guard let lastPath, path != lastPath, path.status == .satisfied else { return }
+        log.notice("install: the network changed; read again")
+        pathMonitor?.cancel()
+        pathMonitor = nil
+        readInstall()
+    }
+
+    /// The install is decided, or settled on a failure the network doesn't explain.
+    private func stopRetrying() {
+        installRetry?.cancel()
+        installRetry = nil
+        pathMonitor?.cancel()
+        pathMonitor = nil
+        networkFailures = 0
     }
 
     /// The board just stood open: a device with its token enrols now, on the
@@ -417,7 +519,7 @@ public final class Pro {
                 settleInstall(outcome(of: try await AppTransaction.refresh(), read: "restore"))
             } catch {
                 log.error("restore: AppTransaction refresh failed: \(String(describing: error), privacy: .public)")
-                installProblem = .unavailable(String(describing: error))
+                settleInstall(.problem(Self.problem(error)))
                 return .failed
             }
         } else {

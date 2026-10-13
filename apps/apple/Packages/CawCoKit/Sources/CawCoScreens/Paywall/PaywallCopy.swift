@@ -68,6 +68,7 @@ enum PaywallCopy {
         /// purchase asks the App Store again, and signs in if it must.
         static func install(_ problem: InstallProblem) -> String {
             switch problem {
+            case .network: "The App Store couldn't be reached to check your purchase. Check this device's connection; the app checks again on its own."
             case .unavailable: "The App Store couldn't check your purchase: this device may not be signed in to it. Restore purchase to sign in and check again."
             case .unverified: "The App Store's record of this install couldn't be verified. Restore purchase to check it again."
             }
