@@ -20,12 +20,5 @@
     "**/build/**",
     "**/.svelte-kit/**",
     "apps/**"
-  ],
-  "references": [
-    { "path": "./packages/core" },
-    { "path": "./packages/hub" },
-    { "path": "./packages/agent" },
-    { "path": "./packages/auth" },
-    { "path": "./packages/cli" }
   ]
 }
