@@ -6,7 +6,12 @@
  * wheel's, and the canvas resizes, folds to its chip and goes out with a
  * send as its file, outline and picture.
  *
- *   bun scripts/probe-ios-composer-canvas.ts [--keep] [--no-build]
+ *   bun scripts/probe-ios-composer-canvas.ts [--keep] [--no-build] [--draw]
+ *
+ * `--draw` runs what needs no simulator input (inside a workspace boundary,
+ * which refuses it): Attach → Draw opens the canvas and every check after
+ * the opening runs, then Reduce Motion; it prints CANVAS_PROBE_DRAW_OK,
+ * never CANVAS_PROBE_OK, since neither swipe ran.
  *
  * Run from the repo root on the Mac, outside a workspace boundary (simctl's
  * input and the simulator's log need the host). It:
@@ -36,6 +41,7 @@ import { scratchFleet, until } from "./scratch-fleet";
 
 const keep = process.argv.includes("--keep");
 const build = !process.argv.includes("--no-build");
+const drawOnly = process.argv.includes("--draw");
 const root = resolve(import.meta.dir, "..");
 const AXE = "/opt/homebrew/bin/axe";
 const DEVICE = "iPad Pro 11-inch (M4)";
@@ -44,6 +50,8 @@ const RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-18-5";
 const PROBE_PREFIX = /^.*\[dev\.cawco\.app:Probe\]\s*/;
 /** The app asking for the finger's drag: where it goes down, in points. */
 const SWIPE_AT = /canvas swipe at (\d+),(\d+)/;
+/** An element's label in axe's `describe-ui`. */
+const LABELLED = /"AXLabel" : "([^"]+)"/g;
 /** One of the app's checks. */
 const CHECK_LINE = /^canvas (PASS|FAIL) /;
 console.log(
@@ -114,6 +122,39 @@ const fleet = await scratchFleet({
 });
 let sim: MacSim | undefined;
 
+/**
+ * One finger moving up from (x, y), in points (axe `drag`: down, moves, up),
+ * as probe-ios-composer.ts drags. A refused drag fails the pass at once,
+ * rather than leaving the app waiting for it; answers whether it went.
+ */
+async function dragUp(
+  udid: string,
+  label: string,
+  x: number,
+  y: number
+): Promise<boolean> {
+  const refusal = await sh(
+    `${AXE} drag --start-x ${x} --start-y ${y} --end-x ${x} --end-y ${y - 160} --duration 0.4 --steps 30 --udid ${udid}`
+  ).then(
+    () => null,
+    (error: Error) => error.message
+  );
+  if (refusal !== null) {
+    fail(`${label}: the drag up from ${x},${y} was refused: ${refusal}`);
+    // What axe reads on the screen then: whatever stands over the point.
+    const screen = await sh(`${AXE} describe-ui --udid ${udid}`).catch(
+      (error: Error) => error.message
+    );
+    const labels = [...screen.matchAll(LABELLED)].map((match) => match[1]);
+    console.log(
+      `  ${label}: on screen then: ${labels.slice(0, 30).join(" | ") || screen.slice(0, 400)}`
+    );
+    return false;
+  }
+  console.log(`  ${label}: dragged up from ${x},${y}`);
+  return true;
+}
+
 /** One launch of the app on `id` with `args`, its Probe lines as they come, swipes answered. */
 async function launchPass(
   udid: string,
@@ -138,6 +179,8 @@ async function launchPass(
     { stdout: "pipe", stderr: "ignore" }
   );
   const lines: string[] = [];
+  /** The pass's drag was refused: it is over. */
+  let refused = false;
   // Cancelled when the pass is done: the simulator's own `log` keeps the pipe open.
   const reader = stream.stdout.getReader();
   const heard = (async () => {
@@ -160,14 +203,9 @@ async function launchPass(
         lines.push(line);
         console.log(`  ${label}: ${line}`);
         const at = line.match(SWIPE_AT);
-        if (at) {
-          const [x, y] = [Number(at[1]), Number(at[2])];
-          // One finger moving up (axe `drag`: down, moves, up), as probe-ios-composer.ts drags.
-          // biome-ignore lint/performance/noAwaitInLoops: one swipe at a time, as the app asks
-          await sh(
-            `${AXE} drag --start-x ${x} --start-y ${y} --end-x ${x} --end-y ${y - 160} --duration 0.4 --steps 30 --udid ${udid}`
-          );
-          console.log(`  ${label}: dragged up from ${x},${y}`);
+        // biome-ignore lint/performance/noAwaitInLoops: one swipe at a time, as the app asks
+        if (at && !(await dragUp(udid, label, Number(at[1]), Number(at[2])))) {
+          refused = true;
         }
       }
     }
@@ -179,6 +217,7 @@ async function launchPass(
     `${label}: the canvas probe done`,
     async () => lines,
     (got) =>
+      refused ||
       got.some((l) => l.startsWith("canvas done")) ||
       got.some((l) => l.startsWith("canvas FAIL probe")),
     240_000
@@ -235,11 +274,18 @@ try {
 xcrun simctl ui ${udid} appearance light
 xcrun simctl spawn ${udid} defaults write com.apple.Accessibility ReduceMotionEnabled -bool false
 xcrun simctl install ${udid} "${app}"`);
-  const pen = await launchPass(udid, id, port, "pencil", [
-    "-canvas-probe",
-    "-cawcoProbePencil",
-  ]);
-  await launchPass(udid, id, port, "finger", ["-canvas-probe-wheel"]);
+  // `--draw`: the passes that need no input from outside the app (inside a
+  // workspace boundary, which refuses the simulator's input): Attach → Draw
+  // opens the canvas, and every check after the opening runs the same.
+  const pen = drawOnly
+    ? await launchPass(udid, id, port, "draw", ["-canvas-probe-draw"])
+    : await launchPass(udid, id, port, "pencil", [
+        "-canvas-probe",
+        "-cawcoProbePencil",
+      ]);
+  if (!drawOnly) {
+    await launchPass(udid, id, port, "finger", ["-canvas-probe-wheel"]);
+  }
   // Reduce Motion: the app reads it at launch.
   await sh(
     `xcrun simctl spawn ${udid} defaults write com.apple.Accessibility ReduceMotionEnabled -bool true`
@@ -295,6 +341,9 @@ xcrun simctl install ${udid} "${app}"`);
 
 console.log(`${passes} passed, ${failures} failed`);
 if (failures === 0 && passes > 0) {
-  console.log("CANVAS_PROBE_OK");
+  // The swipes are only proven by the whole run: `--draw` says so.
+  console.log(
+    drawOnly ? "CANVAS_PROBE_DRAW_OK (the swipes not run)" : "CANVAS_PROBE_OK"
+  );
 }
 process.exit(failures === 0 && passes > 0 ? 0 : 1);

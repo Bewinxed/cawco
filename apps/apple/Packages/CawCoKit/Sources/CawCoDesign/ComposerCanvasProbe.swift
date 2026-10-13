@@ -25,10 +25,11 @@ import UIKit
 ///   Done folds it with opacity animations only, nothing travelling.
 @MainActor
 enum CanvasProbe {
-    private enum Pass { case pen, wheel, still }
+    private enum Pass { case pen, draw, wheel, still }
     private static var pass: Pass? = {
         let arguments = ProcessInfo.processInfo.arguments
         if arguments.contains("-canvas-probe") { return .pen }
+        if arguments.contains("-canvas-probe-draw") { return .draw }
         if arguments.contains("-canvas-probe-wheel") { return .wheel }
         if arguments.contains("-canvas-probe-still") { return .still }
         return nil
@@ -77,7 +78,8 @@ enum CanvasProbe {
         let types = composer.probeTouchTypes
         say("begin \(pass) window \(f(window.bounds.width, 0))x\(f(window.bounds.height, 0)), wheel takes \(types.wheel), pen takes \(types.pen) (direct \(UITouch.TouchType.direct.rawValue), pencil \(UITouch.TouchType.pencil.rawValue))")
         switch pass {
-        case .pen: await penPass(composer, window)
+        case .pen: await penPass(composer, window, draw: false)
+        case .draw: await penPass(composer, window, draw: true)
         case .wheel: await wheelPass(composer, window)
         case .still: await stillPass(composer)
         }
@@ -87,16 +89,34 @@ enum CanvasProbe {
     /// Where the script's finger goes down: the pill's middle, in the window's points.
     private static func askForSwipe(_ composer: ComposerView, _ window: UIWindow) {
         let pill = composer.pill.convert(composer.pill.bounds, to: window)
+        // What could stand over the pill: every window of the scene and what each presents.
+        for shown in window.windowScene?.windows ?? [] where !shown.isHidden {
+            var chain: [String] = []
+            var presented = shown.rootViewController?.presentedViewController
+            while let next = presented {
+                chain.append("\(type(of: next))")
+                presented = next.presentedViewController
+            }
+            say("window \(type(of: shown)) level \(f(shown.windowLevel.rawValue, 0)) root \(shown.rootViewController.map { "\(type(of: $0))" } ?? "none") presents \(chain.isEmpty ? "nothing" : chain.joined(separator: " > "))")
+        }
         say("swipe at \(Int(pill.midX.rounded())),\(Int(pill.midY.rounded()))")
     }
 
     // MARK: The pencil's pass
 
-    private static func penPass(_ composer: ComposerView, _ window: UIWindow) async {
+    /// The canvas's pass: opened by the pencil's swipe, or (`draw`) by Attach → Draw, then read.
+    private static func penPass(_ composer: ComposerView, _ window: UIWindow, draw: Bool) async {
         guard let binding = composer.binding, let host = binding.canvasHost else { return }
-        askForSwipe(composer, window)
+        if draw {
+            // Attach's menu holds Draw beside the session's files and photos.
+            let menu = composer.probeAttachMenu
+            check("Attach is a menu with Draw", menu.last == ComposerView.drawAction, "Attach offers \(menu.joined(separator: " | "))")
+            composer.openCanvas()
+        } else {
+            askForSwipe(composer, window)
+        }
         let opened = await until(30) { composer.canvasRoom?.up == true && composer.canvasRoom?.moving == false }
-        check("a pencil's swipe up on the pill opens the canvas", opened && composer.wheel == nil,
+        check(draw ? "Attach → Draw opens the canvas" : "a pencil's swipe up on the pill opens the canvas", opened && composer.wheel == nil,
               "canvas up \(composer.canvasRoom?.up == true), wheel up \(composer.wheel != nil), note \(composer.probeCanvasNote ?? "none")")
         guard opened, let room = composer.canvasRoom, let sizes = room.sizes, let column = host.column() else { return }
 
@@ -176,7 +196,7 @@ enum CanvasProbe {
               "sends \(carried.count), over the field: \(empty)")
 
         // Drawn on, as the agent draws: through the hub, onto this canvas.
-        guard let canvas = binding.canvas, await draw(on: canvas.id, in: binding.sessionId, hub: host.hub) else {
+        guard let canvas = binding.canvas, await drawAsAgent(on: canvas.id, in: binding.sessionId, hub: host.hub) else {
             return check("the canvas takes a drawing", false, "the hub refused the drawing")
         }
         var count = 0
@@ -211,7 +231,7 @@ enum CanvasProbe {
     }
 
     /// Draws a rectangle with a word in it on the canvas, as `artifact_update` does.
-    private static func draw(on id: String, in instanceId: String, hub: HubConnection) async -> Bool {
+    private static func drawAsAgent(on id: String, in instanceId: String, hub: HubConnection) async -> Bool {
         guard let address = hub.address else { return false }
         var request = URLRequest(url: address.appending(path: "api/instances/\(instanceId)/artifacts/\(id)"))
         request.httpMethod = "PATCH"

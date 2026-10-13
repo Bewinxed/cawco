@@ -1501,6 +1501,14 @@ extension ComposerView {
         ((swipeUp.allowedTouchTypes.map(\.intValue)), penSwipe.allowedTouchTypes.map(\.intValue))
     }
 
+    /// What Attach's menu offers, its inline groups opened out, in order.
+    var probeAttachMenu: [String] {
+        func titles(_ elements: [UIMenuElement]) -> [String] {
+            elements.flatMap { element in (element as? UIMenu).map { titles($0.children) } ?? [element.title] }
+        }
+        return titles(attach.menu?.children ?? [])
+    }
+
     /// Words in the field, as typing puts them there.
     func probeType(_ words: String) {
         field.text = words
