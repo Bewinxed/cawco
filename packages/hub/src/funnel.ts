@@ -18,6 +18,10 @@
  *   then the port will be completely public." So a port already served
  *   privately is refused, never funnelled over.
  * - `tailscale funnel --https=443 --set-path=/foo off` removes one mount.
+ * - A mount's handlers are a map keyed by mount point: `SetWebHandler` does
+ *   `mak.Set(&webCfg.Handlers, mount, handler)` (ipn/serve.go), so applying
+ *   `/hooks/` again with the receiver's new port replaces the old target in
+ *   place; it never adds a second mount beside it.
  * - The CLI trims the mount from the path before proxying ("Trim the mount
  *   point from the URL path before proxying. (#6571)", ipn/ipnlocal/serve.go
  *   v1.98.10), so the target carries `/hooks` back on and the receiver sees
@@ -193,8 +197,10 @@ export const createFunnel = ({ bin = "tailscale" }: FunnelDeps = {}) => {
 
     /**
      * Makes `/hooks/` on port 10000 public, proxied to the receiver on
-     * `port`, unless it already is; answers what Funnel then is, read back
-     * from its status. A port served privately is refused.
+     * `port`, unless it already is; a mount left pointing at another port
+     * (the receiver's port before a hub restart) is re-pointed in place.
+     * Answers what Funnel then is, read back from its status. A port served
+     * privately is refused.
      */
     async apply(port: number): Promise<FunnelState> {
       const before = await status();

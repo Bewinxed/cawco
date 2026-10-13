@@ -25,9 +25,14 @@
  *    ends); the 61st request in a minute is 429; an unknown id is 404, the
  *    same as any other path; GET /hooks/<id> is 404; the hub API's routes
  *    aren't on this listener.
- * 4. Funnel: the apply and off command lines; status read back into the
- *    public URL; needs-owner for "no operator" and "Funnel not enabled" with
- *    their remedies; a Serve on 10000 is refused.
+ * 0. The receiver: no listener while no relay exists; the first relay opens
+ *    one port the system picks (no CAWCO_RELAY_PORT); the last one off
+ *    closes it.
+ * 4. Funnel: the apply and off command lines, the target the port the
+ *    receiver bound; status read back into the public URL; needs-owner for
+ *    "no operator" and "Funnel not enabled" with their remedies; a Serve on
+ *    10000 is refused; a hub restart re-points the one /hooks/ mount at the
+ *    new receiver's port.
  * 5. GitHub registration: the hook made with the secret, the ping lands,
  *    the hook deleted on remove; a refused registration says what to paste.
  * 6. A session's relay_create parks for the owner with what goes public;
@@ -38,7 +43,13 @@
  */
 import { createHmac } from "node:crypto";
 import { appendFileSync, chmodSync } from "node:fs";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readdir,
+  readFile,
+  readlink,
+  writeFile,
+} from "node:fs/promises";
 import { connect } from "node:net";
 import { join } from "node:path";
 import { RELAY_BODY_MAX } from "../packages/hub/src/relay";
@@ -53,6 +64,9 @@ const SOURCE = "github:probe/app";
 const TS_HOST = "probe-host.tail-probe.ts.net";
 const LOGGED = /relay|error/i;
 const CREDENTIAL = /Bearer ([A-Za-z0-9_-]{43})/;
+const SOCKET = /^socket:\[(\d+)\]$/;
+const WHITESPACE = /\s+/;
+const TARGET_PORT = /^http:\/\/127\.0\.0\.1:(\d+)\/hooks$/;
 
 const results: Record<string, string> = {};
 let failed = false;
@@ -75,17 +89,44 @@ const section = async (name: string, body: () => Promise<void>) => {
 const hmac = (secret: string, payload: string) =>
   createHmac("sha256", secret).update(payload).digest("hex");
 
-const freePort = () => {
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch: () => new Response(),
-  });
-  const { port } = server;
-  server.stop(true);
-  return port;
+/**
+ * The receiver's port: the system picks it (no CAWCO_RELAY_PORT), and the
+ * probe learns it as the internet would, from where Funnel points.
+ */
+let relayPort = 0;
+
+/** The TCP ports a process listens on, from /proc: its socket inodes matched in the LISTEN rows. */
+const listeningPorts = async (pid: number): Promise<number[]> => {
+  const fds = await readdir(`/proc/${pid}/fd`).catch(() => [] as string[]);
+  const links = await Promise.all(
+    fds.map((fd) => readlink(`/proc/${pid}/fd/${fd}`).catch(() => ""))
+  );
+  const inodes = new Set(
+    links.map((link) => SOCKET.exec(link)?.[1]).filter(Boolean)
+  );
+  const tables = await Promise.all(
+    ["/proc/net/tcp", "/proc/net/tcp6"].map((table) =>
+      readFile(table, "utf8").catch(() => "")
+    )
+  );
+  const ports = tables
+    .flatMap((text) => text.split("\n").slice(1))
+    .map((line) => line.trim().split(WHITESPACE))
+    .filter((cols) => cols[3] === "0A" && inodes.has(cols[9]))
+    .map((cols) => Number.parseInt(cols[1]?.split(":").at(-1) ?? "", 16));
+  return [...new Set(ports)].sort((a, b) => a - b);
 };
-const RELAY_PORT = freePort();
+const minus = (a: number[], b: number[]) => a.filter((one) => !b.includes(one));
+/** Whether anything accepts a TCP connection on a loopback port. */
+const accepts = (port: number) =>
+  new Promise<boolean>((resolve) => {
+    const socket = connect(port, "127.0.0.1");
+    socket.on("connect", () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.on("error", () => resolve(false));
+  });
 
 // ── The fake GitHub API ─────────────────────────────────────────────────────
 const iso = (ms = Date.now()) => new Date(ms).toISOString();
@@ -123,7 +164,7 @@ const signedGitHub = (secret: string, event: string, body: string) => ({
   "x-github-delivery": crypto.randomUUID(),
   "x-hub-signature-256": `sha256=${hmac(secret, body)}`,
 });
-const receiver = (path: string) => `http://127.0.0.1:${RELAY_PORT}${path}`;
+const receiver = (path: string) => `http://127.0.0.1:${relayPort}${path}`;
 let hookIds = 4241;
 
 const githubFetch = async (request: Request): Promise<Response> => {
@@ -242,8 +283,14 @@ if (args[0] === "funnel" && args.includes("--bg")) {
     await Bun.write(Bun.stdout, "\\nFunnel is not enabled on your tailnet.\\nTo enable, visit:\\n\\n         https://login.tailscale.com/f/funnel?node=nPROBE\\n\\n");
     setInterval(() => {}, 1000);
   } else {
+    // As ipn/serve.go SetWebHandler: the handler set by mount point, into the config already there.
     const target = args.at(-1);
-    writeFileSync(file, JSON.stringify({ TCP: { "10000": { HTTPS: true } }, Web: { [HP]: { Handlers: { "/hooks/": { Proxy: target } } } }, AllowFunnel: { [HP]: true } }));
+    const mount = args.find((arg) => arg.startsWith("--set-path=")).slice("--set-path=".length);
+    const config = read() ?? {};
+    config.TCP = { ...config.TCP, "10000": { HTTPS: true } };
+    config.Web = { ...config.Web, [HP]: { Handlers: { ...config.Web?.[HP]?.Handlers, [mount]: { Proxy: target } } } };
+    config.AllowFunnel = { ...config.AllowFunnel, [HP]: true };
+    writeFileSync(file, JSON.stringify(config));
     console.log("Available on the internet:\\n\\nhttps://" + HP + "/hooks/\\n|-- proxy " + target + "\\n\\nFunnel started and running in the background.");
     process.exit(0);
   }
@@ -256,7 +303,6 @@ await writeFile(join(bin, "tailscale"), FAKE_TAILSCALE);
 chmodSync(join(bin, "tailscale"), 0o755);
 fleet.env.PATH = `${bin}:${fleet.env.PATH}`;
 fleet.env.CAWCO_GITHUB_API = API;
-fleet.env.CAWCO_RELAY_PORT = String(RELAY_PORT);
 
 const setMode = (mode: string) => writeFile(join(tsDir, "mode"), `${mode}\n`);
 const tsCalls = async () =>
@@ -264,6 +310,22 @@ const tsCalls = async () =>
     .split("\n")
     .filter(Boolean);
 appendFileSync(join(tsDir, "calls.log"), "");
+/** Funnel's handlers on port 10000, by mount, as the fake's serve config holds them. */
+type Handlers = Partial<Record<string, { Proxy?: string }>>;
+const funnelHandlers = async (): Promise<Handlers> => {
+  const config = JSON.parse(
+    await readFile(join(tsDir, "serve.json"), "utf8").catch(() => "null")
+  ) as {
+    Web?: Partial<Record<string, { Handlers?: Handlers }>>;
+  } | null;
+  return config?.Web?.[`${TS_HOST}:10000`]?.Handlers ?? {};
+};
+/** The port Funnel's /hooks/ mount proxies to, or 0. */
+const funnelPort = async () =>
+  Number(
+    TARGET_PORT.exec((await funnelHandlers())["/hooks/"]?.Proxy ?? "")?.[1] ?? 0
+  );
+let hub = 0;
 
 interface RelayView {
   hasSecret: boolean;
@@ -344,7 +406,7 @@ const setSecret = (id: string, secret: string) =>
 /** A chunked POST whose body passes the cap and never ends: the status line, or what happened. */
 const unendingChunked = (path: string) =>
   new Promise<string>((resolve) => {
-    const socket = connect(RELAY_PORT, "127.0.0.1");
+    const socket = connect(relayPort, "127.0.0.1");
     let got = "";
     const done = (said: string) => {
       resolve(said);
@@ -381,7 +443,7 @@ const unendingChunked = (path: string) =>
 /** A request with a declared length over the cap, and no body sent. */
 const declaredOver = (path: string) =>
   new Promise<string>((resolve) => {
-    const socket = connect(RELAY_PORT, "127.0.0.1");
+    const socket = connect(relayPort, "127.0.0.1");
     let got = "";
     const timer = setTimeout(() => {
       resolve("no answer in 10 s");
@@ -410,7 +472,7 @@ let mintedSecret = "";
 try {
   fleet.launch("sessiond");
   await fleet.sessiondUp();
-  fleet.launch("hub");
+  hub = fleet.launch("hub").pid;
   await fleet.hubUp();
   fleet.fileAccount();
   fleet.launch("agent");
@@ -464,12 +526,26 @@ try {
     (await tsCalls()).length === 0,
     `${(await tsCalls()).length} calls`
   );
+  const relayFree = await listeningPorts(hub);
+  check(
+    "0: with no relay, the receiver opens no port: the hub listens on its API port and never logs a receiver",
+    relayFree.includes(Number(new URL(fleet.base).port)) &&
+      !(await fleet.logs("hub")).includes("receiver listening"),
+    `hub ${hub} listens on ${JSON.stringify(relayFree)}`
+  );
 
   // ── 4: Funnel's states ───────────────────────────────────────────────────
   await section("4: Funnel", async () => {
     await setMode("serve10000");
     const made = await make({ provider: "stripe" });
     stripe = made.relay.id;
+    const opened = minus(await listeningPorts(hub), relayFree);
+    relayPort = opened[0] ?? 0;
+    check(
+      "0: the first relay opens exactly one new port, picked by the system",
+      opened.length === 1 && relayPort > 0,
+      `new listeners ${JSON.stringify(opened)}`
+    );
     const calls = await tsCalls();
     check(
       "4: a private Serve on port 10000 is refused: needs-owner, and no funnel command runs",
@@ -505,10 +581,11 @@ try {
     await setMode("ok");
     view = await setSecret(stripe, STRIPE_SECRET);
     const applied = (await tsCalls()).filter((call) => call.includes("--bg"));
-    const expected = `funnel --bg --https=10000 --set-path=/hooks/ http://127.0.0.1:${RELAY_PORT}/hooks`;
+    const expected = `funnel --bg --https=10000 --set-path=/hooks/ http://127.0.0.1:${relayPort}/hooks`;
     check(
-      "4: applied with the exact command line, and status read back into the public URL",
+      "4: applied with the exact command line, at the port the receiver bound, and status read back into the public URL",
       applied.at(-1) === expected &&
+        (await funnelPort()) === relayPort &&
         view.state === "live" &&
         view.publicUrl === `https://${TS_HOST}:10000/hooks/${stripe}`,
       `last apply “${applied.at(-1)}”; ${view.state} ${view.publicUrl}`
@@ -879,10 +956,68 @@ try {
     await send("DELETE", `/api/relays/${refused.relay.id}`);
   });
 
+  // ── 4c: a hub restart re-points Funnel at the receiver's new port ────────
+  await section("4c: restart", async () => {
+    const oldPort = relayPort;
+    const bgBefore = (await tsCalls()).filter((call) =>
+      call.includes("--bg")
+    ).length;
+    await fleet.stop("hub");
+    hub = fleet.launch("hub").pid;
+    await fleet.hubUp();
+    const newPort = await until(
+      "Funnel pointing at the restarted receiver",
+      async () => {
+        const target = await funnelPort();
+        return (await listeningPorts(hub)).includes(target) ? target : 0;
+      },
+      (port) => port > 0,
+      60_000
+    );
+    relayPort = newPort;
+    const views = await until(
+      "the relays live again",
+      relays,
+      (all) =>
+        all
+          .filter((one) => one.id === stripe || one.id === generic)
+          .every((one) => one.state === "live"),
+      60_000
+    );
+    const bgAfter = (await tsCalls()).filter((call) => call.includes("--bg"));
+    const handlers = await funnelHandlers();
+    const now = Math.floor(Date.now() / 1000);
+    const body = JSON.stringify({
+      id: "evt_after_restart",
+      object: "event",
+      type: "invoice.paid",
+      created: now,
+    });
+    const landed = await deliver(`/hooks/${stripe}`, body, {
+      "content-type": "application/json",
+      "stripe-signature": `t=${now},v1=${hmac(STRIPE_SECRET, `${now}.${body}`)}`,
+    });
+    check(
+      "4c: after a hub restart Funnel's one /hooks/ mount points at the port the new receiver bound (re-applied in place when it moved), and a delivery through it lands",
+      JSON.stringify(Object.keys(handlers)) === JSON.stringify(["/hooks/"]) &&
+        handlers["/hooks/"]?.Proxy === `http://127.0.0.1:${newPort}/hooks` &&
+        bgAfter.length - bgBefore === (newPort === oldPort ? 0 : 1) &&
+        views
+          .filter((one) => one.id === stripe)
+          .every(
+            (one) =>
+              one.publicUrl === `https://${TS_HOST}:10000/hooks/${stripe}`
+          ) &&
+        landed.status === 202,
+      `port ${oldPort} → ${newPort}; handlers ${JSON.stringify(handlers)}; applies after restart ${JSON.stringify(bgAfter.slice(bgBefore))}; delivery ${landed.status}`
+    );
+  });
+
   // ── 4b: the last relay off takes Funnel's mount down ────────────────────
   await section("4b: off", async () => {
     await send("DELETE", `/api/relays/${stripe}`);
     const middle = (await tsCalls()).filter((call) => call.endsWith(" off"));
+    const stillOpen = (await listeningPorts(hub)).includes(relayPort);
     await send("DELETE", `/api/relays/${generic}`);
     const offs = (await tsCalls()).filter((call) => call.endsWith(" off"));
     const served = JSON.parse(
@@ -895,6 +1030,12 @@ try {
         offs[0] === "funnel --https=10000 --set-path=/hooks/ off" &&
         !served.AllowFunnel?.[`${TS_HOST}:10000`],
       `offs ${JSON.stringify(offs)}; funnel ${JSON.stringify(served.AllowFunnel)}`
+    );
+    const after = await listeningPorts(hub);
+    check(
+      "0: the receiver stays open while a relay is on and closes with the last one: the hub no longer listens on it and nothing accepts there",
+      stillOpen && !after.includes(relayPort) && !(await accepts(relayPort)),
+      `while one relay on: ${stillOpen}; after the last: hub listens on ${JSON.stringify(after)}, ${relayPort} accepts ${await accepts(relayPort)}`
     );
   });
 

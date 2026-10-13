@@ -1337,7 +1337,7 @@ export const CAWCO_ENV = {
   telegramApi: "CAWCO_TELEGRAM_API",
   /** GitHub's REST API origin the hub's pollers call, for pointing them at a proxy. */
   githubApi: "CAWCO_GITHUB_API",
-  /** The loopback port the hub's relay receiver listens on (default: the hub's port + 2). */
+  /** The loopback port the hub's relay receiver listens on (default: one the OS picks free). */
   relayPort: "CAWCO_RELAY_PORT",
   telegramAsrUrl: "CAWCO_TELEGRAM_ASR_URL",
   telegramAsrModel: "CAWCO_TELEGRAM_ASR_MODEL",

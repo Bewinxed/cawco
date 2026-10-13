@@ -6,7 +6,10 @@
  * THE INVARIANTS:
  * - **One path, its own listener.** The receiver is a listener of its own in
  *   the hub process, on 127.0.0.1 and a port of its own (never the hub API's,
- *   never the hub's router). It answers `POST /hooks/<id>` and nothing else:
+ *   never the hub's router): `CAWCO_RELAY_PORT`, else one the OS picks free.
+ *   It listens only while a relay is active and closes with the last one, and
+ *   Funnel always points at the port it bound (re-pointed in place at each
+ *   start). It answers `POST /hooks/<id>` and nothing else:
  *   any other method or path, an unknown id and a relay that is off all get
  *   the same empty 404. It is write-only: a delivery that lands gets 202 and
  *   an empty body, and nothing is ever read back through it.
@@ -51,7 +54,6 @@ import {
 } from "node:crypto";
 import {
   CAWCO_ENV,
-  CAWCO_HUB_PORT,
   type InstanceRow,
   RELAY_PROVIDERS,
   type RelayProvider,
@@ -92,10 +94,12 @@ const HEADER = /^[A-Za-z0-9-]{1,64}$/;
 const HEX = /^[0-9a-f]{64}$/;
 const SHA256_PREFIX = "sha256=";
 
-/** The receiver's loopback port: `CAWCO_RELAY_PORT`, else the hub's port + 2 (+1 is the preview's). */
-export const relayPort = (): number =>
-  Number(readEnv(CAWCO_ENV.relayPort)) ||
-  Number(readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT) + 2;
+/**
+ * The port the receiver asks for: `CAWCO_RELAY_PORT`, else 0, so the OS
+ * hands it a free one and it never takes a port anything else uses. Funnel
+ * always points at the port it actually bound.
+ */
+const wantedPort = (): number => Number(readEnv(CAWCO_ENV.relayPort)) || 0;
 
 /** What a route answers and a tool says when the relay refuses. */
 export class RelayRefusal extends Error {
@@ -312,7 +316,6 @@ export const createRelay = ({
 }: RelayDeps) => {
   const store = db.relays;
   const api = readEnv(CAWCO_ENV.githubApi) ?? "https://api.github.com";
-  const port = relayPort();
   /** The hub's machine: the host whose Tailscale serves every relay. Read once, when first needed. */
   let hostId: Promise<string> | undefined;
   const hostOf = (): Promise<string> => {
@@ -328,9 +331,10 @@ export const createRelay = ({
   const buckets = new Map<string, { at: number; tokens: number }>();
   /** When GitHub last refused to register a relay's webhook. */
   const refusedAt = new Map<string, number>();
+  /** The receiver, while at least one relay is active; nothing listens otherwise. */
   let listening: ReturnType<typeof Bun.serve> | undefined;
-  /** Why the receiver isn't listening, when it isn't. */
-  let receiverProblem: string | null = "The relay's receiver hasn't started.";
+  /** Why the receiver couldn't listen, when its last try failed. */
+  let receiverProblem: string | null = null;
   let timer: HubTimer | undefined;
   /** The pass under way, and the one asked for while it runs. */
   let applying: Promise<void> | undefined;
@@ -497,25 +501,42 @@ export const createRelay = ({
     return empty(deliver(row, request.headers, body));
   };
 
-  const listen = (): void => {
+  /** The receiver opened when it isn't: the port it bound, or undefined with `receiverProblem` saying why. */
+  const listen = (): number | undefined => {
     if (listening) {
-      return;
+      return listening.port;
     }
+    const asked = wantedPort();
     try {
       listening = Bun.serve({
         hostname: "127.0.0.1",
-        port,
+        port: asked,
         // Bun refuses a body past this itself; readCapped is the cap that counts.
         maxRequestBodySize: RELAY_BODY_MAX,
         fetch: receive,
         error: () => empty(500),
       });
       receiverProblem = null;
-      console.log(`[relay] receiver listening on 127.0.0.1:${port}`);
+      console.log(`[relay] receiver listening on 127.0.0.1:${listening.port}`);
+      return listening.port;
     } catch (error) {
-      receiverProblem = `The relay's receiver couldn't listen on 127.0.0.1:${port} (${wordsOf(error)}); set ${CAWCO_ENV.relayPort} to a free port and restart the hub.`;
+      receiverProblem = asked
+        ? `The relay's receiver couldn't listen on 127.0.0.1:${asked} (${wordsOf(error)}); set ${CAWCO_ENV.relayPort} to a free port, or unset it to let the system pick one, and restart the hub.`
+        : `The relay's receiver couldn't listen on 127.0.0.1 (${wordsOf(error)}); the hub tries again within a minute.`;
       console.error(`[relay] ${receiverProblem}`);
     }
+  };
+
+  /** The receiver closed once no relay is active: a hub with no relay holds no extra port. */
+  const close = (): void => {
+    if (!listening) {
+      return;
+    }
+    const was = listening.port;
+    listening.stop(true);
+    listening = undefined;
+    receiverProblem = null;
+    console.log(`[relay] receiver on 127.0.0.1:${was} closed: no relay is on`);
   };
 
   // --- GitHub ----------------------------------------------------------------------
@@ -698,16 +719,27 @@ export const createRelay = ({
     return { ...(await register(row, publicUrl)), publicUrl };
   };
 
-  /** One pass: Funnel applied (or removed with the last relay), each relay's state kept. */
+  /**
+   * One pass, the receiver's one owner: with a relay active the receiver
+   * listens and Funnel's mount points at the port it bound (re-pointed in
+   * place when that port changed); with none, the receiver closes and the
+   * mount comes down. Each relay's state kept.
+   */
   const applyOnce = async (registerNow: boolean): Promise<void> => {
     const active = store.active();
     if (active.length === 0) {
+      close();
       await removeMount();
       return;
     }
-    const state = receiverProblem
-      ? ({ state: "wanted", reason: receiverProblem } as const)
-      : await tailscale().apply(port);
+    const bound = listen();
+    const state =
+      bound === undefined
+        ? ({
+            state: "wanted",
+            reason: receiverProblem ?? "The relay's receiver isn't listening.",
+          } as const)
+        : await tailscale().apply(bound);
     for (const row of active) {
       // biome-ignore lint/performance/noAwaitInLoops: one relay at a time, each maybe one GitHub call
       keep(row.id, await settle(row, state, registerNow));
@@ -781,9 +813,8 @@ export const createRelay = ({
     });
   };
 
-  /** Hub start: the receiver listens, and the wanted state is applied. */
+  /** Hub start: the wanted state applied, which opens the receiver only when a relay is active. */
   const start = (): void => {
-    listen();
     detach(apply(true), "relay apply at start");
     lifetime.cancel(timer);
     tickAgain();
@@ -990,7 +1021,6 @@ export const createRelay = ({
     console.log(
       `[relay] ${row.id}: ${row.provider} relay for project ${row.projectId}, by ${by}`
     );
-    listen();
     await apply(true);
     const now = relayOf(row.id);
     if (now.provider === "github" && now.hookId) {
@@ -1172,7 +1202,6 @@ export const createRelay = ({
     checked,
     create,
     list,
-    port,
     publicText,
     remove,
     runApproved,
