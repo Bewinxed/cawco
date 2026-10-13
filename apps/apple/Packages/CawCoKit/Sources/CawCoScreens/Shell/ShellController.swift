@@ -1346,11 +1346,12 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// ported: a finished conversation is seen when it is in front where the
     /// owner can see it (its group's chosen tab on a wide screen, the one
     /// shown on a phone), with the conversations the page in front and the
-    /// window's scene active. Only one that ended since it was last seen
-    /// (`endedUnseen`, the rule Finished lists by) is marked, so a turn that
-    /// ends while it is watched is seen as it ends, and the hub then sends no
-    /// push for it (push.ts `turnEnded`); a working one is never marked ahead
-    /// of its end, and nothing is sent twice.
+    /// window's scene active. Only one a turn of which ended since it was
+    /// last seen (`turnEndedUnseen`: its row's turn end past its seen mark)
+    /// is marked, so a turn that ends while it is watched is seen as it ends,
+    /// with its delegates still running or its next turn begun, in whatever
+    /// order the row and the pulse arrive; a turn is never marked ahead of its
+    /// end, and nothing is sent twice.
     private func lookAtFront() {
         // A group's tabs and the one in front change in place (PaneLeaf is a
         // plain class); `version` is the workspace's only observed mark of
@@ -1365,7 +1366,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         // Read before the checks below, so the watcher wakes when a turn in front ends.
         let unseen = front.filter { id in
             guard let row = hub.fleet.byId[id] else { return false }
-            return home.endedUnseen(row) && !picked.contains(id)
+            return home.turnEndedUnseen(row) && !picked.contains(id)
         }
         guard isViewLoaded, let scene = view.window?.windowScene else { return }
         let shown = compact

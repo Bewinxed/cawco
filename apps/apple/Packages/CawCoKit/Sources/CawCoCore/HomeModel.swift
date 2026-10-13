@@ -299,13 +299,13 @@ public final class HomeModel {
         }
     }
 
-    /// When a session (or run) last ended, on the hub's clock as `seenMs` is
-    /// (home-state.svelte.ts `endedAt`); nil while it works or waits. A
-    /// session: the end of its turn as the hub took it (`turnEndedMs`), or
-    /// for a failed one the hub's last change to its row. A pulse's time is
-    /// its machine's clock, so it is never read here. A run: its own last
-    /// move, which the hub stamps.
-    private func endedAt(_ row: InstanceRow) -> Double? {
+    /// When a session (or run) last ended, on the hub's clock as `seenMs` is,
+    /// whatever it does since: a session's latest turn end as the hub took it
+    /// (`turnEndedMs`), with its delegates still running or its next turn
+    /// begun, or for a failed one the hub's last change to its row. A pulse's
+    /// time is its machine's clock, so it is never read here. A run: its own
+    /// last move, which the hub stamps, once it has stopped.
+    private func lastEnded(_ row: InstanceRow) -> Double? {
         if fleet.run(row.id) != nil {
             if row.isFailed {
                 return fleet.lastAt(row)
@@ -315,15 +315,36 @@ public final class HomeModel {
         if row.isFailed {
             return row.updatedMs
         }
-        guard activity(row.id) == .idle, row.turnEndedMs > 0 else {
-            return nil
-        }
-        return row.turnEndedMs
+        return row.turnEndedMs > 0 ? row.turnEndedMs : nil
     }
 
-    /// It ended after the owner last saw it, on any device: both times the hub's.
-    public func endedUnseen(_ row: InstanceRow) -> Bool {
-        guard let ended = endedAt(row) else {
+    /// When a session (or run) ended, as Finished counts it
+    /// (home-state.svelte.ts `endedAt`): its last end, nil while it works or
+    /// waits, delegates running under it included.
+    private func endedAt(_ row: InstanceRow) -> Double? {
+        if fleet.run(row.id) == nil, !row.isFailed, activity(row.id) != .idle {
+            return nil
+        }
+        return lastEnded(row)
+    }
+
+    /// It ended after the owner last saw it, on any device, and is not at
+    /// work again: what Finished lists. Both times the hub's.
+    private func endedUnseen(_ row: InstanceRow) -> Bool {
+        unseen(row, since: endedAt(row))
+    }
+
+    /// A turn of it ended after the owner last saw it, on any device: what a
+    /// look marks when he has it in front. Its row alone says so (its
+    /// `turnEndedAt` against its `seenAt`), so the look goes the moment the
+    /// hub's end reaches this device, whatever its pulse says by then: its
+    /// delegates still running, or its next turn already begun.
+    public func turnEndedUnseen(_ row: InstanceRow) -> Bool {
+        unseen(row, since: lastEnded(row))
+    }
+
+    private func unseen(_ row: InstanceRow, since ended: Double?) -> Bool {
+        guard let ended else {
             return false
         }
         return ended > max(row.seenMs, seenHere[row.id]?.through ?? 0)
@@ -335,7 +356,7 @@ public final class HomeModel {
     private struct SeenMark {
         /// Tells this mark from a later one on the same row.
         let mark: Int
-        /// The end it marked seen, on the hub's clock (`endedAt`).
+        /// The end it marked seen, on the hub's clock (`lastEnded`).
         let through: Double
         /// The hub's stamp of the mark, once its answer is in: the `seenAt` its echo carries.
         var at: Double?
@@ -485,7 +506,7 @@ public final class HomeModel {
         let mark = seenMarks
         for id in ids {
             let row = fleet.byId[id] ?? fleet.runRows.first { $0.id == id }
-            seenHere[id] = SeenMark(mark: mark, through: row.flatMap { endedAt($0) } ?? 0)
+            seenHere[id] = SeenMark(mark: mark, through: row.flatMap { lastEnded($0) } ?? 0)
         }
         let said = "\(kind.rawValue) \(ids.joined(separator: ","))"
         Task { [weak self] in

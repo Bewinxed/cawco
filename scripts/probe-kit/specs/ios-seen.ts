@@ -1,0 +1,473 @@
+/**
+ * iOS: a turn that ends while the owner has its session in front is marked
+ * seen on the hub (`POST /api/seen` with `look`) within a few seconds, every
+ * time; and while he reads it, scrolling, with the keyboard up or a sheet
+ * open, the app's presence beat keeps saying active on that session.
+ *
+ * A scratch fleet (real hub, agent and sessiond, Claude Code against the
+ * mock model) and the built app on an iPhone simulator of its own (a
+ * mac-slot.sh slot, deleted at the end), in order:
+ *
+ * 1. One session ends a first turn; the app opens it (`-open-session`): the
+ *    opening look marks it seen.
+ * 2. Three turns end with it in front, each a few seconds long, as the
+ *    owner's do: after each, the hub's `seen_at` reaches its
+ *    `turn_ended_at` within LOOK_MS, and the app logs `seen look <id>: marked`.
+ * 3. He reads it for READ_MS (past the hub's 60 s presence TTL): scrolling,
+ *    then the keyboard up (a turn ends then too), then its details card
+ *    open over it from its tab (and another turn ends). The hub logged `[presence] ios <id8>: active on
+ *    <session>` and no `inactive` or `lapsed` line for the client until he
+ *    leaves; the app's beat went out every 30 s through it; each turn that
+ *    ended was looked at.
+ * 4. He leaves (Home): the hub logs the client inactive.
+ *
+ *   bash apps/apple/scripts/build-both.sh ios
+ *   bun scripts/probe-kit/run.ts ios-seen
+ *
+ * The app is this checkout's simulator build (`PROBE_IOS_APP` names another).
+ */
+import { existsSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import type { Subprocess } from "bun";
+import { type MacSim, macSim } from "../../lib/mac-sim";
+import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { type Kit, ROOT, type Spec } from "../kit";
+
+const AXE = "/opt/homebrew/bin/axe";
+/**
+ * iOS 18.5, where axe reaches the simulator from a workspace (on iOS 27 its
+ * automation socket is refused there). Its app is build-both.sh's own
+ * 18.5 build: `--compile-only` builds for any simulator and leaves out the
+ * Swift libraries a newer OS ships (libswiftWebKit), and does not launch here.
+ */
+const SIM = {
+  runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
+  device: "iPhone 16 Pro",
+};
+/** The invariant's "within a few seconds": the hub's mark after the turn's end. */
+const LOOK_MS = 5000;
+/** How long he reads the session: past the hub's 60 s presence TTL. */
+const READ_MS = 90_000;
+/** A prompt the mock answers slowly: a turn of a few seconds, watched as it runs. */
+const SLOW = "SLOW";
+/** The session's title: its tab says it. */
+const TITLE = "Seen probe";
+/** A log line's stamp, process and category, up to what it says. */
+const LOG_HEAD = /^.*\] /;
+const TRAILING_SLASH = /\/$/;
+/** A SQLite column type that takes a number. */
+const NUMERIC = /INT|REAL|NUM/i;
+
+const pause = (ms: number) => Bun.sleep(ms);
+
+async function sh(script: string): Promise<string> {
+  const child = Bun.spawn(["bash", "-s"], {
+    stdin: new TextEncoder().encode(`set -euo pipefail\n${script}\n`),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [text, err, code] = await Promise.all([
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+    child.exited,
+  ]);
+  if (code !== 0) {
+    throw new Error(`exited ${code}: ${err.trim() || text.trim()}`);
+  }
+  return text;
+}
+
+/** The session's row as the hub keeps it: when it was seen, when its turn ended. */
+interface Marks {
+  seen_at: number | null;
+  turn_ended_at: number | null;
+}
+
+interface Node {
+  frame?: { x: number; y: number; width: number; height: number };
+  id?: string;
+  label?: string;
+  role?: string;
+}
+
+function appPath(): string {
+  if (process.env.PROBE_IOS_APP) {
+    return process.env.PROBE_IOS_APP;
+  }
+  const home = process.env.HOME ?? "";
+  const top = ROOT.replace(TRAILING_SLASH, "");
+  const name = top === join(home, "cockpit") ? "main" : top.split("/").at(-1);
+  return join(
+    process.env.XDG_CACHE_HOME ?? join(home, "Library", "Caches"),
+    "cawco-apple",
+    name ?? "main",
+    "DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app"
+  );
+}
+
+const respond = (request: Seen): Reply =>
+  request.tools && request.last.startsWith(SLOW)
+    ? {
+        words: Array.from({ length: 24 }, (_, i) => `step ${i + 1}. `),
+        everyMs: 200,
+      }
+    : { words: ["Done."], everyMs: 20 };
+
+async function run(kit: Kit): Promise<void> {
+  const app = appPath();
+  if (!kit.check("the app is built", existsSync(app), app)) {
+    return;
+  }
+  const fleet = await kit.fleet(respond);
+  fleet.launch("sessiond");
+  await fleet.sessiondUp();
+  fleet.launch("hub");
+  await fleet.hubUp();
+  fleet.fileAccount();
+  fleet.launch("agent");
+  await fleet.agentUp();
+  await fleet.accountSignedIn();
+
+  const marks = (): Marks =>
+    fleet.query<Marks>(
+      "SELECT seen_at, turn_ended_at FROM instances WHERE id = ?",
+      session
+    )[0] ?? {
+      seen_at: null,
+      turn_ended_at: null,
+    };
+  /**
+   * A work item running under `parent`, as a delegate's is, with a workspace
+   * row for it: each column the schema requires and gives no default is
+   * filled, so the row stands whatever columns a migration adds.
+   */
+  const delegateUnder = (parent: string) => {
+    const fill = (table: string, given: Record<string, string | number>) => {
+      const columns = fleet.query<{
+        name: string;
+        type: string;
+        notnull: number;
+        dflt_value: string | null;
+      }>(`PRAGMA table_info(${table})`);
+      const row = Object.fromEntries(
+        Object.entries(given).filter(([name]) =>
+          columns.some((column) => column.name === name)
+        )
+      );
+      for (const column of columns) {
+        if (
+          column.notnull &&
+          column.dflt_value === null &&
+          !(column.name in row)
+        ) {
+          row[column.name] = NUMERIC.test(column.type)
+            ? Date.now()
+            : `probe-${column.name}`;
+        }
+      }
+      const names = Object.keys(row);
+      fleet.write(
+        `INSERT INTO ${table} (${names.map((n) => `"${n}"`).join(", ")}) VALUES (${names.map(() => "?").join(", ")})`,
+        ...names.map((n) => row[n] as string | number)
+      );
+    };
+    const workspace = `probe-ws-${crypto.randomUUID().slice(0, 8)}`;
+    fill("workspaces", {
+      id: workspace,
+      machine_id: "scratch-fleet",
+      state: "active",
+    });
+    fill("work_items", {
+      id: `probe-item-${crypto.randomUUID().slice(0, 8)}`,
+      workspace_id: workspace,
+      parent_instance_id: parent,
+      instance_id: crypto.randomUUID(),
+      harness: "claude",
+      state: "running",
+    });
+  };
+  const session = await fleet.spawn("claude", TITLE);
+  await fleet.send(session, "Say hello.");
+  await until(
+    "the first turn ended",
+    () => marks().turn_ended_at ?? 0,
+    (at) => at > 0,
+    120_000
+  );
+
+  let sim: MacSim | undefined;
+  let stream: Subprocess | undefined;
+  const heard: { at: number; line: string }[] = [];
+  try {
+    sim = await macSim(SIM);
+    const { udid } = sim;
+    console.log(`  simulator ${udid}`);
+    // Booted is not ready: SpringBoard refuses a launch until boot finishes.
+    await sh(`xcrun simctl bootstatus ${udid} -b >/dev/null`);
+    await sh(`xcrun simctl install ${udid} "${app}"`);
+    const child = Bun.spawn(
+      [
+        "bash",
+        "-c",
+        `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "Seen" OR category == "Presence" OR category == "Hub")'`,
+      ],
+      { stdout: "pipe", stderr: "ignore" }
+    );
+    stream = child;
+    (async () => {
+      const decoder = new TextDecoder();
+      const reader = child.stdout.getReader();
+      let rest = "";
+      for (;;) {
+        // biome-ignore lint/performance/noAwaitInLoops: the stream is read in order
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        rest += decoder.decode(value, { stream: true });
+        const split = rest.split("\n");
+        rest = split.pop() ?? "";
+        for (const line of split) {
+          if (line.includes("dev.cawco.app")) {
+            heard.push({ at: Date.now(), line: line.replace(LOG_HEAD, "") });
+          }
+        }
+      }
+    })().catch(() => undefined);
+    await pause(1500);
+
+    const tree = async (): Promise<Node[]> => {
+      const out: Node[] = [];
+      const walk = (node: Record<string, unknown>) => {
+        out.push({
+          id: node.AXUniqueId as string | undefined,
+          label: (node.AXLabel ?? node.label) as string | undefined,
+          role: node.role as string | undefined,
+          frame: node.frame as Node["frame"],
+        });
+        for (const kid of (node.children as
+          | Record<string, unknown>[]
+          | undefined) ?? []) {
+          walk(kid);
+        }
+      };
+      const roots = JSON.parse(
+        await sh(`${AXE} describe-ui --udid ${udid}`)
+      ) as Record<string, unknown>[];
+      for (const root of roots) {
+        walk(root);
+      }
+      return out;
+    };
+    const tap = async (node: Node | undefined, what: string) => {
+      const f = node?.frame;
+      if (!f) {
+        throw new Error(`nothing to tap for ${what}`);
+      }
+      await sh(
+        `${AXE} tap -x ${Math.round(f.x + f.width / 2)} -y ${Math.round(f.y + f.height / 2)} --udid ${udid}`
+      );
+    };
+    const swipe = (fromY: number, toY: number) =>
+      sh(
+        `${AXE} swipe --start-x 200 --start-y ${fromY} --end-x 200 --end-y ${toY} --duration 0.6 --udid ${udid}`
+      );
+
+    // SpringBoard can still refuse the first launch just after boot: asked again.
+    await until(
+      "the app launched",
+      () =>
+        sh(
+          `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${fleet.base} -open-session ${session} >/dev/null`
+        ).then(() => true),
+      Boolean,
+      60_000
+    );
+    // The session in front, as the app tells the hub (its presence), read
+    // from the app's own log: the turns below need nothing on screen.
+    await until(
+      "the app has the session in front",
+      () =>
+        heard.find((h) =>
+          h.line.includes(`presence front: active true session ${session}`)
+        ),
+      Boolean,
+      120_000
+    );
+
+    const marked = (from: number) =>
+      heard
+        .slice(from)
+        .find((h) => h.line.includes(`seen look ${session}: marked`));
+    const opened = await until(
+      "the opening look",
+      () =>
+        (marks().seen_at ?? 0) >=
+          (marks().turn_ended_at ?? Number.POSITIVE_INFINITY) || undefined,
+      Boolean,
+      30_000
+    ).catch(() => false);
+    kit.check(
+      "opening the finished session marks it seen",
+      opened === true && marked(0) !== undefined,
+      JSON.stringify(marks())
+    );
+
+    /** What the board says runs under the session now. */
+    const delegatesRunning = async () =>
+      (
+        await fleet.api<{ id: string; runningDelegates?: number }[]>(
+          "/api/instances"
+        )
+      ).find((row) => row.id === session)?.runningDelegates ?? 0;
+
+    /**
+     * One turn ending with the session in front: the hub's mark follows
+     * within LOOK_MS. With `delegate`, a delegate runs under the session as
+     * the turn ends, as the owner's sessions end theirs with work handed off
+     * (the board counts the session working, `runningDelegates`), and the
+     * check holds only if the board counted it at the end.
+     */
+    const turnInFront = async (label: string, delegate = false) => {
+      if (delegate) {
+        delegateUnder(session);
+      }
+      const before = marks().turn_ended_at ?? 0;
+      const from = heard.length;
+      await fleet.send(session, `${SLOW}: ${label}, count the steps.`);
+      const ended = await until(
+        `${label}: the turn ended`,
+        () => marks().turn_ended_at ?? 0,
+        (at) => at > before,
+        120_000
+      );
+      const endedAt = Date.now();
+      const running = delegate ? await delegatesRunning() : 0;
+      const seen = await until(
+        `${label}: seen on the hub`,
+        () => marks().seen_at ?? 0,
+        (at) => at >= ended,
+        LOOK_MS
+      ).catch(() => undefined);
+      const line = marked(from);
+      kit.check(
+        `${label}: the turn that ended in front is marked seen within ${LOOK_MS / 1000}s`,
+        seen !== undefined && line !== undefined && (!delegate || running > 0),
+        `turn_ended_at=${ended} seen_at=${marks().seen_at}${seen ? ` (+${seen - ended}ms)` : ""}${delegate ? `; runningDelegates=${running} at its end` : ""}; app: ${line?.line ?? `no "seen look" line in ${((Date.now() - endedAt) / 1000).toFixed(1)}s`}`
+      );
+    };
+
+    for (const n of [1, 2, 3]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one turn after another, as the owner's go
+      await turnInFront(`turn ${n}`);
+    }
+    for (const n of [1, 2, 3]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one turn after another, as the owner's go
+      await turnInFront(`turn ${n} with a delegate running`, true);
+    }
+
+    // ── Reading it: scrolling, the keyboard up, a sheet open ─────────────
+    const shown = await tree();
+    await writeFile(
+      join(kit.out, "session-tree.json"),
+      JSON.stringify(shown, null, 2)
+    );
+    const field = shown.find((n) => n.id === "steer-message");
+    const hubFrom = (await fleet.logs("hub")).split("\n").length;
+    const appFrom = heard.length;
+    const readStart = Date.now();
+    const scrollUntil = readStart + READ_MS / 3;
+    while (Date.now() < scrollUntil) {
+      // biome-ignore lint/performance/noAwaitInLoops: one gesture after another
+      await swipe(300, 650);
+      await swipe(650, 300);
+    }
+    await tap(field, "the composer");
+    await pause(1500);
+    const keyboard = (await tree()).some(
+      (n) =>
+        n.role === "AXKeyboard" || n.label === "space" || n.label === "Return"
+    );
+    kit.check("the keyboard is up", keyboard, "the composer tapped");
+    const keyboardTurn = turnInFront("keyboard up", true);
+    await pause(Math.max(0, readStart + (2 * READ_MS) / 3 - Date.now()));
+    await keyboardTurn;
+    await sh(`${AXE} key 41 --udid ${udid}`).catch(() => undefined);
+    // The keyboard down: the session's details card over it, from its tab
+    // in the bar (TabDetails: the chosen tab's tap opens it).
+    const nodes = await tree();
+    await writeFile(
+      join(kit.out, "keyboard-tree.json"),
+      JSON.stringify(nodes, null, 2)
+    );
+    const opener = nodes.find(
+      (n) => n.label?.includes(TITLE) && (n.frame?.y ?? 999) < 200
+    );
+    await tap(opener, "the session's tab");
+    await pause(1500);
+    await writeFile(
+      join(kit.out, "sheet-tree.json"),
+      JSON.stringify(await tree(), null, 2)
+    );
+    await turnInFront("details card open", true);
+    await pause(Math.max(0, readStart + READ_MS - Date.now()));
+    const readFor = Date.now() - readStart;
+
+    const client = (lines: string[]) =>
+      lines.filter((l) => l.includes("[presence] ios "));
+    const during = client((await fleet.logs("hub")).split("\n").slice(hubFrom));
+    const all = client((await fleet.logs("hub")).split("\n"));
+    const beats = heard
+      .slice(appFrom)
+      .filter(
+        (h) =>
+          h.line.includes("presence beat:") && h.line.includes("answered 200")
+      );
+    kit.check(
+      `the hub said the client active on the session, and nothing else in ${(readFor / 1000).toFixed(0)}s of reading`,
+      all.some((l) => l.endsWith(`active on ${session}`)) &&
+        during.every((l) => !(l.includes("inactive") || l.includes("lapsed"))),
+      [...all.slice(-3), ...during].join(" | ") || "no [presence] line"
+    );
+    kit.check(
+      "the app's beat went out every 30 s through it",
+      beats.length >= Math.floor(readFor / 30_000) - 1 && beats.length >= 2,
+      `${beats.length} beats in ${(readFor / 1000).toFixed(0)}s: ${beats.map((b) => `+${((b.at - readStart) / 1000).toFixed(0)}s`).join(", ")}`
+    );
+
+    // ── Leaving ──────────────────────────────────────────────────────────
+    const leftFrom = (await fleet.logs("hub")).split("\n").length;
+    await sh(`${AXE} button home --udid ${udid}`);
+    const left = await until(
+      "the hub hears him leave",
+      async () =>
+        client((await fleet.logs("hub")).split("\n").slice(leftFrom)).find(
+          (l) => l.includes("inactive")
+        ),
+      Boolean,
+      15_000
+    ).catch(() => undefined);
+    kit.check(
+      "leaving, the hub says the client inactive",
+      left !== undefined,
+      left ?? "no inactive line"
+    );
+  } finally {
+    await writeFile(
+      join(kit.out, "app-log.txt"),
+      heard.map((h) => `${new Date(h.at).toISOString()} ${h.line}`).join("\n")
+    );
+    await writeFile(
+      join(kit.out, "hub-presence.txt"),
+      (await fleet.logs("hub"))
+        .split("\n")
+        .filter((l) => l.includes("[presence]") || l.includes("[notify]"))
+        .join("\n")
+    );
+    stream?.kill();
+    await sim?.release();
+  }
+}
+
+export default { name: "ios-seen", run } satisfies Spec;
