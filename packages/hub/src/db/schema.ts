@@ -490,6 +490,11 @@ export const projectTasks = sqliteTable(
       .$type<string[]>()
       .notNull()
       .default([]),
+    /** The front matter fields a task file does not know that hold one scalar (`priority`, `due`), as written: what lists filter and sort on. */
+    fields: text("fields", { mode: "json" })
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
     todosDone: integer("todos_done").notNull().default(0),
     todosTotal: integer("todos_total").notNull().default(0),
     /** What in the file could not be read, in a sentence; null when all of it could. */

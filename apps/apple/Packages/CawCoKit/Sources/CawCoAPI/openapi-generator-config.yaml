@@ -115,6 +115,7 @@ typeOverrides:
     SupervisorEventVerdict: OpenEnums.SupervisorEventVerdict
     TaskHistoryActorMover: OpenEnums.TaskHistoryActorMover
     TaskHistoryKind: OpenEnums.TaskHistoryKind
+    TaskHistoryState: OpenEnums.TaskHistoryState
     TextPropsVariant: OpenEnums.TextPropsVariant
     ThreadStatus: OpenEnums.ThreadStatus
     ToolPlatform: OpenEnums.ToolPlatform

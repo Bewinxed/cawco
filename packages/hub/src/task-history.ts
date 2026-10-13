@@ -28,7 +28,7 @@ import type {
   FolderTimes,
 } from "./project-folder";
 import { MOVERS, type StageKind, type Stages, stageNamed } from "./stages";
-import { fileTaskNumber, taskId } from "./task-file";
+import { ARCHIVE_DIR, fileTaskNumber, taskId } from "./task-file";
 
 /** The trailers the hub writes under a task commit's subject. */
 export const TRAILERS = {
@@ -36,7 +36,16 @@ export const TRAILERS = {
   mover: "CawCo-Mover",
   stage: "CawCo-Stage",
   reason: "CawCo-Reason",
+  /** What kind of change it was, when the words alone do not say: `comment`. */
+  change: "CawCo-Change",
 } as const;
+
+/** The `CawCo-Change` a comment's commit carries. */
+export const COMMENT_CHANGE = "comment";
+
+/** Whether a path is in the tasks archive (`tasks/archive/…`). */
+export const inArchive = (path: string): boolean =>
+  path.startsWith(`${ARCHIVE_DIR}/`);
 
 /** How a commit names "no stage": a new task's move in, `(none) -> idea`. */
 export const NO_STAGE = "(none)";
@@ -47,6 +56,7 @@ export const AUTHOR = {
   lead: "Caw",
   hub: "hub",
   action: "approved action",
+  routine: "routine",
 } as const;
 
 /** Who moves a task, as the hub checks it: a stages.md mover or the hub. */
@@ -69,14 +79,18 @@ export interface TaskHistoryActor {
 
 /**
  * `created`: its file added. `moved`: a stage move. `changed`: fields,
- * to-dos or edges, through the hub. `edited`: its file changed by a commit
- * the hub's task code did not make. `renamed`, `deleted`: its file.
+ * to-dos or edges, through the hub. `commented`: a comment added through the
+ * hub. `edited`: its file changed by a commit the hub's task code did not
+ * make. `archived`: its file moved into tasks/archive/. `renamed`,
+ * `deleted`: its file.
  */
 export type TaskHistoryKind =
   | "created"
   | "moved"
   | "changed"
+  | "commented"
   | "edited"
+  | "archived"
   | "renamed"
   | "deleted";
 
@@ -88,6 +102,8 @@ export interface TaskHistoryEvent {
   /** The commit's sha. */
   commit: string;
   kind: TaskHistoryKind;
+  /** The file's path once the commit was made: a rename's or an archive's new path. */
+  path: string;
   /** Why, when the change said: a close reason, the hub's cause (`attempt 5fd1e189 started`). */
   reason: string | null;
   /** The stage it went from and to; from is null for a new task. Null when the stage did not move. */
@@ -100,11 +116,16 @@ export interface TaskHistoryEvent {
 export interface TaskHistory {
   events: TaskHistoryEvent[];
   id: string;
+  /** Its file's path, or the last one it had. */
   path: string;
+  /** `live`: on the board; `archived`: in tasks/archive/; `deleted`: its file deleted, its history kept. */
+  state: "live" | "archived" | "deleted";
 }
 
-/** When a task started, completed and was dropped, and why it closed, from its moves. */
+/** When a task started, completed, was dropped and was archived, and why it closed, from its commits. */
 export interface TaskLife {
+  /** When its file moved into tasks/archive/, ms epoch; null while it is not archived. */
+  archivedAt: number | null;
   /** The reason given with the move into the done or dropped stage it is in; null when none or open. */
   closeReason: string | null;
   /** When it moved into the done stage it is in, ms epoch; null while it is not in one. */
@@ -156,6 +177,8 @@ const moverByName = (author: string): HistoryMover => {
       return "hub";
     case AUTHOR.action:
       return "action";
+    case AUTHOR.routine:
+      return "routine";
     default:
       return "session";
   }
@@ -184,24 +207,31 @@ const stageSaid = (
 };
 
 const kindOf = (
-  change: FolderFileChange["change"],
+  { change, commit, from, path }: FolderFileChange,
   moved: boolean,
   mover: HistoryMover | null
 ): TaskHistoryKind => {
   if (change === "added") {
     return "created";
   }
-  if (change === "deleted" || change === "renamed") {
+  if (change === "renamed") {
+    return inArchive(path) && !inArchive(from ?? "") ? "archived" : change;
+  }
+  if (change === "deleted") {
     return change;
   }
   if (moved) {
     return "moved";
   }
+  if (commit.trailers[TRAILERS.change] === COMMENT_CHANGE) {
+    return "commented";
+  }
   return mover ? "changed" : "edited";
 };
 
 /** One commit to a task's file as its history shows it. */
-const eventOf = ({ change, commit }: FolderFileChange): TaskHistoryEvent => {
+const eventOf = (change: FolderFileChange): TaskHistoryEvent => {
+  const { commit } = change;
   const { trailers } = commit;
   const by = byPart(commit.subject, commit.author);
   const said = TASK_SUBJECT.exec(by?.what ?? "")?.[1];
@@ -231,6 +261,7 @@ const eventOf = ({ change, commit }: FolderFileChange): TaskHistoryEvent => {
     commit: commit.sha,
     actor: { mover, id, name: commit.author },
     kind: kindOf(change, stage !== null && stage.from !== stage.to, mover),
+    path: change.path,
     what: said ?? commit.subject,
     stage,
     reason: trailers[TRAILERS.reason] || by?.reason || null,
@@ -269,7 +300,13 @@ export const lifeOf = (
   let closed: { at: number; kind: StageKind; reason: string | null } | null =
     null;
   let was: StageKind | null = null;
+  let archivedAt: number | null = null;
   for (const event of events) {
+    if (event.kind === "archived") {
+      archivedAt = event.at;
+    } else if (!inArchive(event.path)) {
+      archivedAt = null;
+    }
     if (!event.stage) {
       continue;
     }
@@ -287,11 +324,54 @@ export const lifeOf = (
   }
   const stands = closed?.kind === kind ? closed : null;
   return {
+    archivedAt,
     startedAt,
     completedAt: stands?.kind === "done" ? stands.at : null,
     droppedAt: stands?.kind === "dropped" ? stands.at : null,
     closeReason: stands?.reason ?? null,
   };
+};
+
+/** Where the folder's history last had a task's file, and what became of it. */
+export interface TaskFileFound {
+  entry: FolderFileTimes;
+  path: string;
+  /** `live`: at the top of tasks/; `archived`: in tasks/archive/; `deleted`: its last commit deleted it. */
+  state: "live" | "archived" | "deleted";
+}
+
+const STATE_ORDER = { live: 0, archived: 1, deleted: 2 } as const;
+
+/**
+ * The file the folder's history holds for task `number`: the live one at
+ * the top of tasks/, else the archived one, else the one deleted last.
+ * Undefined when no commit ever named it.
+ */
+export const taskFileIn = (
+  folder: FolderTimes,
+  number: number
+): TaskFileFound | undefined => {
+  let best: TaskFileFound | undefined;
+  for (const [path, entry] of folder.times) {
+    if (fileTaskNumber(path) !== number) {
+      continue;
+    }
+    let state: TaskFileFound["state"] = "live";
+    if (entry.changes.at(-1)?.change === "deleted") {
+      state = "deleted";
+    } else if (path.split("/").length !== 2) {
+      state = "archived";
+    }
+    const found = { entry, path, state };
+    if (
+      !best ||
+      STATE_ORDER[state] < STATE_ORDER[best.state] ||
+      (state === best.state && entry.updated > best.entry.updated)
+    ) {
+      best = found;
+    }
+  }
+  return best;
 };
 
 /** Each history's gone tasks, read once per commit. */

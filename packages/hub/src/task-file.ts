@@ -144,13 +144,37 @@ export interface TaskSection {
   text: string;
 }
 
+/** Who wrote a comment, as its entry's heading says: the hub's actor. */
+export interface TaskCommentAuthor {
+  /** The session's instance id, or the approved action's; null when none. */
+  id: string | null;
+  /** The mover they wrote as (`you`, `lead`, `session`, …); null when the heading names none it knows. */
+  mover: string | null;
+  /** The commit author's name: you, Caw, the session's title. */
+  name: string;
+}
+
+/** One entry of a task's `## Comments`, written only by the hub (tasks.ts `comment`). */
+export interface TaskComment {
+  /** When it was written, ms epoch. */
+  at: number;
+  author: TaskCommentAuthor;
+  /** Its markdown, as written. */
+  text: string;
+}
+
+/** A front matter value a task file does not know: one scalar, or a list. */
+export type ExtraValue = string | string[];
+
 export interface ParsedTask {
   /** The `## Acceptance criteria` section's text; empty when there is none. */
   acceptance: string;
+  /** The `## Comments` section's entries, oldest first. */
+  comments: TaskComment[];
   /** The text between the title and the first `## ` section. */
   description: string;
-  /** Front matter keys this file carries that a task file does not know; kept as written. */
-  extra: string[];
+  /** Front matter fields this file carries that a task file does not know, with their values; kept as written. */
+  extra: Record<string, ExtraValue>;
   fields: TaskFields;
   /** What in the file could not be read, one sentence each. */
   problems: string[];
@@ -228,6 +252,13 @@ export const slugOf = (title: string): string => {
   const lastDash = cut.lastIndexOf("-");
   return lastDash > 8 ? cut.slice(0, lastDash) : cut;
 };
+
+/** Where archived task files go: off every list and board, out of every edge's way, kept with their history. */
+export const ARCHIVE_DIR = "tasks/archive";
+
+/** A task file's place in the archive: its own name under {@link ARCHIVE_DIR}. */
+export const archivePath = (path: string): string =>
+  `${ARCHIVE_DIR}/${path.split("/").at(-1) ?? path}`;
 
 export const taskPath = (number: number, title: string): string => {
   const slug = slugOf(title);
@@ -557,21 +588,33 @@ const readField = (
   return true;
 };
 
+/** A field a task file does not know, as its value reads: a list when written as one, else its scalar. */
+const extraOf = (line: FrontMatterLine): ExtraValue => {
+  const value = withoutComment(line.value);
+  if (value.startsWith("[") || (value === "" && line.under.length > 0)) {
+    return listOf(line) ?? [];
+  }
+  return scalarOf(line) ?? "";
+};
+
 /** Reads the known fields of a front matter block; what it cannot read goes to `problems`. */
 const readFields = (
   lines: FrontMatterLine[],
   problems: string[]
-): { fields: TaskFields; extra: string[] } => {
+): { fields: TaskFields; extra: Record<string, ExtraValue> } => {
   const fields = emptyFields();
-  const extra: string[] = [];
+  const extra: Record<string, ExtraValue> = {};
   for (const line of lines) {
     const field = line.key;
     if (field !== undefined && !readField(fields, field, line, problems)) {
-      extra.push(field);
+      extra[field] = extraOf(line);
     }
   }
   return { fields, extra };
 };
+
+/** A front matter key a task file may carry beyond its own: what YAML reads bare. */
+export const EXTRA_KEY = /^[A-Za-z_][A-Za-z0-9_-]{0,63}$/;
 
 // --- the body ------------------------------------------------------------------
 
@@ -590,6 +633,77 @@ const isAcceptance = (heading: string): boolean =>
   sectionName(heading).startsWith("acceptance");
 const isTodos = (heading: string): boolean =>
   ["todos", "todo"].includes(sectionName(heading));
+const isComments = (heading: string): boolean =>
+  sectionName(heading) === "comments";
+
+/** A comment entry's heading: `### <name> · <mover>[ · <id>] · <ISO time>`. */
+const COMMENT_HEADING = /^###\s+(.+)$/;
+const COMMENT_SEPARATOR = " · ";
+const MIDDLE_DOT = /·/g;
+const COMMENT_MOVERS: ReadonlySet<string> = new Set([
+  "you",
+  "lead",
+  "session",
+  "action",
+  "routine",
+  "hub",
+]);
+
+/** A comment heading's author and time; undefined when it is not one the hub wrote. */
+const commentHeading = (
+  heading: string
+): Pick<TaskComment, "at" | "author"> | undefined => {
+  const parts = heading.split(COMMENT_SEPARATOR).map((part) => part.trim());
+  const at = Date.parse(parts.at(-1) ?? "");
+  if (parts.length < 3 || Number.isNaN(at)) {
+    return;
+  }
+  const mover = parts[1] ?? "";
+  return {
+    at,
+    author: {
+      name: parts[0] ?? "",
+      mover: COMMENT_MOVERS.has(mover) ? mover : null,
+      id: parts.length > 3 ? (parts[2] ?? null) : null,
+    },
+  };
+};
+
+/** The entries of a `## Comments` section, oldest first, skipping anything inside a code fence. */
+const commentsOf = (
+  lines: string[],
+  section: BodySection | undefined
+): TaskComment[] => {
+  const comments: TaskComment[] = [];
+  if (!section) {
+    return comments;
+  }
+  let open:
+    | { head: Pick<TaskComment, "at" | "author">; lines: string[] }
+    | undefined;
+  const close = () => {
+    if (open) {
+      comments.push({ ...open.head, text: textOf(open.lines) });
+    }
+  };
+  let fenced = false;
+  for (let at = section.at + 1; at < section.end; at += 1) {
+    const raw = (lines[at] ?? "").replace(CR, "");
+    if (FENCE.test(raw)) {
+      fenced = !fenced;
+    }
+    const heading = fenced ? undefined : COMMENT_HEADING.exec(raw)?.[1];
+    const head = heading === undefined ? undefined : commentHeading(heading);
+    if (head) {
+      close();
+      open = { head, lines: [] };
+    } else {
+      open?.lines.push(raw);
+    }
+  }
+  close();
+  return comments;
+};
 
 /** The body's `## ` sections, skipping anything inside a code fence. */
 const sectionsOf = (lines: string[]): BodySection[] => {
@@ -796,10 +910,18 @@ export class TaskDoc {
       todos: this.todoLines().map(
         ({ indent: _indent, line: _line, ...todo }) => todo
       ),
+      comments: commentsOf(
+        this.body,
+        sections.find((section) => isComments(section.heading))
+      ),
       sections: sections
         .filter(
           (section) =>
-            !(isAcceptance(section.heading) || isTodos(section.heading))
+            !(
+              isAcceptance(section.heading) ||
+              isTodos(section.heading) ||
+              isComments(section.heading)
+            )
         )
         .map((section) => ({
           heading: section.heading,
@@ -873,6 +995,38 @@ export class TaskDoc {
       }
     }
     lines.splice(after + 1, 0, written);
+  }
+
+  /**
+   * Sets one field a task file does not know (`priority`, `due`): its line
+   * rewritten in place, added at the end of the front matter, or removed
+   * when the value is empty. A list is written `[a, b]`.
+   */
+  setExtra(key: string, value: ExtraValue): void {
+    const lines = this.front ?? [];
+    this.front = lines;
+    const at = lines.findIndex((each) => each.key === key);
+    const empty = Array.isArray(value) ? value.length === 0 : value === "";
+    if (empty) {
+      if (at !== -1) {
+        lines.splice(at, 1);
+      }
+      return;
+    }
+    const rendered = Array.isArray(value)
+      ? `[${value.map(renderItem).join(", ")}]`
+      : renderScalar(value);
+    const written: FrontMatterLine = {
+      key,
+      value: rendered,
+      raw: `${key}: ${rendered}`,
+      under: [],
+    };
+    if (at === -1) {
+      lines.push(written);
+    } else {
+      lines[at] = written;
+    }
   }
 
   // --- body ---
@@ -953,6 +1107,36 @@ export class TaskDoc {
       at -= 1;
     }
     this.body.splice(at, 0, line);
+  }
+
+  /**
+   * Adds one entry to the `## Comments` section, making the section at the
+   * end when there is none: a `### <name> · <mover>[ · <id>] · <time>`
+   * heading and the text under it. Only the hub writes one (tasks.ts
+   * `comment`); entries are never changed or taken out.
+   */
+  addComment(author: TaskCommentAuthor, at: Date, text: string): void {
+    const name = author.name.replace(MIDDLE_DOT, "-").replace(SPACES, " ");
+    const heading = `### ${[
+      name.trim() || "someone",
+      author.mover ?? "someone",
+      ...(author.id ? [author.id] : []),
+      at.toISOString(),
+    ].join(COMMENT_SEPARATOR)}`;
+    const entry = [heading, "", text.trim(), ""];
+    const section = sectionsOf(this.body).find((each) =>
+      isComments(each.heading)
+    );
+    if (!section) {
+      this.endWithBlank();
+      this.body.push("## Comments", "", ...entry);
+      return;
+    }
+    let { end } = section;
+    while (end > section.at + 1 && this.body[end - 1]?.trim() === "") {
+      end -= 1;
+    }
+    this.body.splice(end, 0, "", ...entry.slice(0, -1));
   }
 
   /** Makes the body end in one blank line before something is appended. */

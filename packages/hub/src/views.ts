@@ -32,7 +32,6 @@ import {
   refused,
   writeFolderFile,
 } from "./project-folder";
-import { TaskDoc } from "./task-file";
 import type { TaskSummary, Tasks } from "./tasks";
 
 /** A view's name: what its file is called, and the tab it becomes. */
@@ -203,15 +202,8 @@ export const createViews = ({ projectName, tasks }: ViewsDeps) => {
         tasks.list(projectId),
         tasks.stages(projectId),
       ]);
-      const files = await Promise.all(
-        rows.map((row) =>
-          readFolderFile(projectId, row.path)
-            .then(({ content }) => new TaskDoc(row.path, content).extraFields())
-            .catch((): Record<string, string> => ({}))
-        )
-      );
-      const viewTasks = rows.map((row, index): ViewTask => {
-        const fields = files[index] ?? {};
+      const viewTasks = rows.map((row): ViewTask => {
+        const { fields } = row;
         return {
           id: row.id,
           number: row.number,

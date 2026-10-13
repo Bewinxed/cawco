@@ -472,6 +472,7 @@ import { turnUsageOf } from "./turn-usage";
 import { unwatchedMode } from "./unwatched-mode";
 import { UsageCounter } from "./usage-count";
 import { createViews, viewRoutes } from "./views";
+import { createWaits } from "./waits";
 import {
   closeLine,
   drainLine,
@@ -483,6 +484,7 @@ import {
 import {
   createWorkItems,
   type ItemPlacement,
+  isLive,
   LEAF_DELEGATE_REFUSAL,
   SESSION_TITLE_DESCRIPTION,
   titleProblem,
@@ -13794,6 +13796,55 @@ export const createServer = (
       streams.planToFollowers(instanceId, message),
   });
   tasks.listen(plans.taskChanged);
+  // A routine moves a task on once its stage's hold is over (waits.ts).
+  const waits = createWaits({
+    lifetime,
+    tasks,
+    projectIds: () => db.listProjects().map((project) => project.id),
+  });
+  tasks.listen(waits.taskChanged);
+  // Your comment on a task reaches its live attempt's session, as any
+  // message of yours does.
+  tasks.listen((event) => {
+    if (
+      event.kind !== "changed" ||
+      event.comment?.actor.mover !== "you" ||
+      !event.id
+    ) {
+      return;
+    }
+    const live = db
+      .projectAttempts(event.projectId)
+      .find((item) => item.taskId === event.id && isLive(item.state));
+    const [row] = live ? db.getInstancesByIds([live.instanceId]) : [];
+    if (!row) {
+      return;
+    }
+    try {
+      deliverSend({
+        verb: "send",
+        machineId: row.machineId,
+        instanceId: row.id,
+        payload: {
+          instanceId: row.id,
+          message: {
+            type: "user",
+            uuid: crypto.randomUUID(),
+            message: {
+              role: "user",
+              content: `A comment on ${event.id}, your task:\n\n${event.comment.text}`,
+            },
+            parent_tool_use_id: null,
+            origin: { kind: "human" },
+          },
+        },
+      });
+    } catch (error) {
+      console.warn(
+        `[tasks] the comment on ${event.id} did not reach ${row.id}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  });
   /**
    * What `handoff`'s cold check reads of a session (`/api/followup-state`):
    * its recorded turns, whether one is under way, and when the last ended.
@@ -13883,6 +13934,8 @@ export const createServer = (
   if (resumeWorkflows) {
     // The dispatcher's safety net: a slow look at every dispatching project.
     dispatcher.watch();
+    // Stage holds (`until:`, `after:`) over: their tasks move on (waits.ts).
+    waits.start();
     // Runs a stopped hub left live settle, then the catch-up: each routine's
     // newest missed slot, once.
     routines.start();

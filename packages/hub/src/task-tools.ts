@@ -39,6 +39,8 @@ export const TASK_TOOLS: ReadonlySet<string> = new Set([
   "task_start",
   "task_retry",
   "todo_write",
+  "task_comment",
+  "task_archive",
 ]);
 
 export interface TaskToolContext {
@@ -117,6 +119,8 @@ const taskLine = (task: TaskLine) => ({
   ...(task.completedAt === null ? {} : { completedAt: task.completedAt }),
   ...(task.droppedAt === null ? {} : { droppedAt: task.droppedAt }),
   ...(task.closeReason ? { closeReason: task.closeReason } : {}),
+  ...(task.archivedAt === null ? {} : { archivedAt: task.archivedAt }),
+  ...(Object.keys(task.fields).length > 0 ? { fields: task.fields } : {}),
 });
 
 /** A list as a model reads it: the project's stages, then one short line of fields per task. */
@@ -135,9 +139,17 @@ const landsParameter = () =>
   z
     .enum(LANDS_MODES as [LandsMode, ...LandsMode[]])
     .describe(
-      "Where an attempt's work goes once its checks pass: main (onto the default branch), branch (cawco/<task> on origin), pr (that branch and a pull request), or none (nothing pushed; its outputs are the deliverable). Left out, the project's default."
+      "Where passing work goes: main (the default branch), branch (cawco/<task> on origin), pr (that branch and a pull request), none (nothing pushed; outputs are the deliverable). Left out: the project's default."
     );
 const lines = (what: string) => z.array(z.string()).optional().describe(what);
+/** The project's own fields a task file carries beyond its known ones: task_create's and task_update's one shape. */
+const fieldsParameter = () =>
+  z
+    .record(z.string(), z.union([z.string(), z.array(z.string())]))
+    .optional()
+    .describe(
+      "The project's own fields, like {priority: 'high'}; '' or [] takes one out."
+    );
 
 /** A step as `todo_write` takes it: ACP's entry, its id and depth optional. */
 const stepParameter = () =>
@@ -149,9 +161,7 @@ const stepParameter = () =>
       .int()
       .min(0)
       .optional()
-      .describe(
-        "Nesting: 0 (default) top level, one more than the step it is part of."
-      ),
+      .describe("0: top level; one more than its parent step."),
     id: z
       .string()
       .trim()
@@ -196,9 +206,7 @@ export const budgetParameter = () =>
         .number()
         .positive()
         .optional()
-        .describe(
-          "Dollars its session may spend, by the usage its machine reports (Claude and OpenCode)."
-        ),
+        .describe("Dollars, by the usage its machine reports."),
       turns: z
         .number()
         .int()
@@ -210,10 +218,10 @@ export const budgetParameter = () =>
         .int()
         .min(1)
         .optional()
-        .describe("Minutes of wall time from its start."),
+        .describe("Wall time from its start."),
     })
     .describe(
-      "Limits the hub holds the work to. At one, the hub stops the session, fails the item with a sentence naming the budget, and tells the parent. Fields left out fall back to the task's, then the project's."
+      "Limits for the work: at one the hub stops the session, fails the item naming the budget, and tells the parent. Fields left out fall back to the task's, then the project's."
     );
 
 /** Globs of the repository's files a work item owns: `delegate`'s and the task tools' one shape. */
@@ -221,7 +229,7 @@ export const ownsParameter = () =>
   z
     .array(z.string())
     .describe(
-      "Globs of the repository's files the work owns, from the repository's root, like ['src/theme/**', 'docs/theme.md']. The hub never runs two live items whose globs overlap in one repository: a later one waits, queued, until the earlier ends. Overlap is judged on each glob's literal part before its first wildcard, so it errs towards waiting."
+      "Globs of the repository's files the work owns, from its root, like ['src/theme/**']. Two live items whose globs overlap in one repository never run at once: the later waits, queued. Overlap is judged on each glob's part before its first wildcard, so it errs towards waiting."
     );
 
 /** A group of work items under one parent: `delegate`'s and the task tools' one shape. */
@@ -232,7 +240,7 @@ export const groupParameter = () =>
     .min(1)
     .max(64)
     .describe(
-      "A name for work that belongs together, like 'theme'. Items in one group under one parent report once, together, when every one of them has ended (each one's summary and where it landed); a failure still reports at once."
+      "Work that belongs together, like 'theme': items in one group under one parent report once, together, when all have ended (each one's summary and where it landed); a failure still reports at once."
     );
 
 /**
@@ -257,26 +265,27 @@ export function taskTools(context: TaskToolContext | undefined) {
     };
   };
 
-  /** The task todo_write may change: the work item's own, or any one a mainline session names. */
-  const todoTask = (asked: string | undefined): string => {
+  /** The task todo_write or task_comment may change: the work item's own, or any one a mainline session names. */
+  const ownTask = (
+    name: "todo_write" | "task_comment",
+    asked: string | undefined
+  ): string => {
     const own = context?.workItemTask ?? null;
     if (context?.mainline) {
       const named = asked ?? own;
       if (!named) {
-        throw new Error(
-          'Name the task whose to-dos you are writing: todo_write({ task: "tsk-12", … }).'
-        );
+        throw new Error(`Name the task: ${name}({ task: "tsk-12", … }).`);
       }
       return named;
     }
     if (!own) {
       throw new Error(
-        "todo_write writes to-dos on your work item's task, and your work item has none. Say what you did in finish_item instead."
+        `${name} works on your work item's task, and your work item has none. Say what you did in finish_item instead.`
       );
     }
     if (asked !== undefined && normaliseTaskRef(asked) !== own) {
       throw new Error(
-        `You can write to-dos only on ${own}, your work item's task.`
+        `You can use ${name} only on ${own}, your work item's task.`
       );
     }
     return own;
@@ -285,16 +294,21 @@ export function taskTools(context: TaskToolContext | undefined) {
   return [
     tool(
       "task_read",
-      "Read your project's tasks. With `id`: that task's file, parsed — stage, edges, checks, description, acceptance criteria, to-dos with their ids (td-3) and positions (2.1), and its attempts; `history: true` adds its changes (when, who, what, why). Without: the project's stages and every task, one line each; `stage` narrows the list. Tasks carry createdAt/By, updatedAt/By, and once set startedAt, completedAt, droppedAt, closeReason (from its file's commits). needsYou marks a task waiting on the operator; attempt says one is live or the last one failed; blockedBy lists the tasks it still waits for.",
+      "Your project's tasks. With `id`: its file parsed (to-dos by id td-3 or position 2.1, comments) and attempts; `history: true` adds its changes. Without: the stages and a line per task, filtered by the other parameters. needsYou: waits on the operator; blockedBy: tasks it waits for.",
       {
         id: taskRef().optional(),
-        stage: z
-          .string()
-          .optional()
-          .describe("When listing, only the tasks in this stage."),
-        history: z.boolean().optional().describe("With `id`: add its history."),
+        history: z.boolean().optional(),
+        stage: z.string().optional(),
+        q: z.string().optional().describe("In id, title or description."),
+        label: z.string().optional(),
+        type: z.string().optional(),
+        parent: z.string().optional(),
+        fields: z.record(z.string(), z.string()).optional(),
+        blocked: z.boolean().optional(),
+        needsYou: z.boolean().optional(),
+        archived: z.boolean().optional().describe("Archived tasks instead."),
       },
-      async ({ id, stage, history }) => {
+      async ({ id, history, ...filter }) => {
         const { projectId, tasks } = scope();
         if (id) {
           const task = await tasks.get(projectId, id);
@@ -313,7 +327,7 @@ export function taskTools(context: TaskToolContext | undefined) {
           );
         }
         const [list, stages] = await Promise.all([
-          tasks.list(projectId, { stage }),
+          tasks.list(projectId, filter),
           tasks.stages(projectId),
         ]);
         return ok(compact(list, stages));
@@ -321,7 +335,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_create",
-      "File a task in your project: work that must outlive this conversation or run without you. Returns it, with its id (tsk-12). `stage` defaults to the project's first stage; `after` names the tasks it waits for.",
+      "File a task: work that must outlive this conversation or run without you. Returns it with its id (tsk-12). `stage` defaults to the first stage; `after` names tasks it waits for.",
       {
         title: z.string().describe("One line, verb first."),
         description: z.string().optional(),
@@ -349,6 +363,7 @@ export function taskTools(context: TaskToolContext | undefined) {
         owns: ownsParameter().optional(),
         budget: budgetParameter().optional(),
         labels: lines("Short labels."),
+        fields: fieldsParameter(),
       },
       async ({ found_in, ...draft }) => {
         const { projectId, tasks, actor } = scope();
@@ -359,7 +374,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_update",
-      "Change one of your project's tasks: move its `stage` (checked against the project's stages; its `reason` is kept in its history), or replace its title, description, acceptance criteria, type, checks, outputs, lands, group, owns, budget or labels. What you leave out stays as written.",
+      "Change a task: move its `stage` (checked against the project's moves; `reason` is kept in its history), or replace any other field you give. What you leave out stays as written.",
       {
         id: taskRef(),
         stage: z.string().optional(),
@@ -382,6 +397,7 @@ export function taskTools(context: TaskToolContext | undefined) {
         owns: ownsParameter().optional(),
         budget: budgetParameter().nullable().optional(),
         labels: lines("Replaces the labels."),
+        fields: fieldsParameter(),
       },
       async ({ id, stage, reason, ...patch }) => {
         const { projectId, tasks, actor } = scope();
@@ -418,7 +434,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_start",
-      "Start an attempt at one of your project's tasks: a delegate in a new workspace cut from a checkout of the project on a machine that is online, briefed from the task file (description, acceptance criteria, open to-dos, checks), reporting to you like any delegate. The task moves to its active stage, and runs the type that stage names, else the task's type. Refused while it has a live attempt or is done.",
+      "Start an attempt at a task: a delegate in a new workspace from a checkout of the project on an online machine, briefed from the task file (description, acceptance, open to-dos, checks), reporting to you. The task moves to its active stage and runs that stage's type, else its own. Refused while an attempt is live or it is done.",
       { id: taskRef() },
       async ({ id }) => {
         const { projectId } = scope();
@@ -430,7 +446,7 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "task_retry",
-      "Retry one of your project's tasks whose last attempt failed or was cancelled: a fresh session in that attempt's workspace (its commits and files as it left them) when the clone is still there, else in a new workspace, briefed from the task file with the last attempt's failure and the to-dos done so far, reporting to you like any delegate. Refused while it has a live attempt, or when its last attempt did not fail.",
+      "Retry a task whose last attempt failed or was cancelled: a fresh session in that attempt's workspace as it was left (a new one if the clone is gone), briefed from the task file with the failure and the to-dos done so far, reporting to you. Refused while an attempt is live or the last did not fail.",
       { id: taskRef() },
       async ({ id }) => {
         const { projectId } = scope();
@@ -442,20 +458,17 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "todo_write",
-      "Two scopes. Your own plan, on any session: `steps` replaces your step list whole (each pending, in_progress or completed; `depth` nests), `spec` replaces your spec (markdown: what you are building and how); returns your plan. A task's to-dos: tick, untick, add or reword them on your work item's task (a session the operator started names any task of its project), naming a to-do by its id (td-3) or position (2.1); all land together; returns the task's to-dos.",
+      "Two scopes. Your plan: `steps` replaces your step list (pending, in_progress or completed; `depth` nests), `spec` your spec (markdown: what you build and how); returns your plan. A task's to-dos: tick, untick, add or reword them by id (td-3) or position (2.1) on your work item's task (a session the operator started names any); all land together.",
       {
         steps: z
           .array(stepParameter())
           .optional()
-          .describe("Your plan's steps, the whole list, in order."),
-        spec: z
-          .string()
-          .optional()
-          .describe("Your spec, the whole document, markdown."),
+          .describe("The whole list, in order."),
+        spec: z.string().optional().describe("The whole document."),
         task: z
           .string()
           .optional()
-          .describe("The task, like tsk-12. Defaults to your work item's."),
+          .describe("Like tsk-12. Defaults to your work item's."),
         tick: lines("To-dos done."),
         untick: lines("To-dos not done after all."),
         add: z
@@ -497,11 +510,40 @@ export function taskTools(context: TaskToolContext | undefined) {
         const { projectId, tasks, actor } = scope();
         const done = await tasks.todos(
           projectId,
-          todoTask(task),
+          ownTask("todo_write", task),
           changes,
           actor
         );
         return ok({ id: done.id, todos: done.todos });
+      }
+    ),
+    tool(
+      "task_comment",
+      "Comment on your work item's task (a session the operator started names any): an entry with your name and the time, never changed.",
+      { task: z.string().optional(), text: z.string() },
+      async ({ task, text }) => {
+        const { projectId, tasks, actor } = scope();
+        const done = await tasks.comment(
+          projectId,
+          ownTask("task_comment", task),
+          text,
+          actor
+        );
+        return ok({ id: done.id, comments: done.comments });
+      }
+    ),
+    tool(
+      "task_archive",
+      "Archive a task: off the board and lists, done for tasks that wait on it, kept with its history. Refused while an attempt is live.",
+      { id: taskRef() },
+      async ({ id }) => {
+        const { projectId, tasks, actor } = scope();
+        const done = await tasks.archive(projectId, id, actor);
+        return ok({
+          id: done.id,
+          path: done.path,
+          archivedAt: done.archivedAt,
+        });
       }
     ),
   ];

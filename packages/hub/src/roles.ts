@@ -43,7 +43,7 @@ export const roleOf = (row: InstanceRow): SessionRole => {
 const CORE = ["handoff", "send_to_user", "set_title"] as const;
 
 /** The task tools every role but the worker's and the lead's is limited to. */
-const TASK_READ = ["task_read", "todo_write"] as const;
+const TASK_READ = ["task_read", "todo_write", "task_comment"] as const;
 
 /** The tools that file, change or start tasks. */
 const TASK_WRITE = [
@@ -52,6 +52,7 @@ const TASK_WRITE = [
   "task_link",
   "task_start",
   "task_retry",
+  "task_archive",
 ] as const;
 
 /**

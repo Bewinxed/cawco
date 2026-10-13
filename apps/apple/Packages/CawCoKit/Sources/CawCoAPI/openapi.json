@@ -1078,6 +1078,74 @@
                 "dropped"
               ]
             }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "label",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "parent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "blocked",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0"
+              ]
+            }
+          },
+          {
+            "name": "needsYou",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0"
+              ]
+            }
+          },
+          {
+            "name": "archived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1",
+                "0"
+              ]
+            }
           }
         ],
         "operationId": "getApiProjectsByIdTasks",
@@ -1297,6 +1365,24 @@
                     "type": "array",
                     "items": {
                       "type": "string"
+                    }
+                  },
+                  "fields": {
+                    "type": "object",
+                    "patternProperties": {
+                      "^.*$": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      }
                     }
                   }
                 },
@@ -1646,6 +1732,24 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "fields": {
+                    "type": "object",
+                    "patternProperties": {
+                      "^.*$": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        ]
+                      }
+                    }
                   }
                 }
               }
@@ -1751,6 +1855,402 @@
           },
           "503": {
             "description": "patchApiProjectsByIdTasksByTaskId 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "deleteApiProjectsByIdTasksByTaskId",
+        "responses": {
+          "200": {
+            "description": "deleteApiProjectsByIdTasksByTaskId 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/deleteApiProjectsByIdTasksByTaskId200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "deleteApiProjectsByIdTasksByTaskId 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "deleteApiProjectsByIdTasksByTaskId 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deleteApiProjectsByIdTasksByTaskId 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "deleteApiProjectsByIdTasksByTaskId 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "deleteApiProjectsByIdTasksByTaskId 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "deleteApiProjectsByIdTasksByTaskId 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "deleteApiProjectsByIdTasksByTaskId 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "deleteApiProjectsByIdTasksByTaskId 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "deleteApiProjectsByIdTasksByTaskId 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/tasks/{taskId}/comments": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiProjectsByIdTasksByTaskIdComments",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdTasksByTaskIdComments 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdTasksByTaskIdComments 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdTasksByTaskIdComments 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdTasksByTaskIdComments 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdTasksByTaskIdComments 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectsByIdTasksByTaskIdComments 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectsByIdTasksByTaskIdComments 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdTasksByTaskIdComments 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdTasksByTaskIdComments 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdTasksByTaskIdComments 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/tasks/{taskId}/archive": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "taskId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiProjectsByIdTasksByTaskIdArchive",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdTasksByTaskIdArchive 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiProjectsByIdTasksByTaskIdArchive 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiProjectsByIdTasksByTaskIdArchive 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiProjectsByIdTasksByTaskIdArchive 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiProjectsByIdTasksByTaskIdArchive 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiProjectsByIdTasksByTaskIdArchive 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiProjectsByIdTasksByTaskIdArchive 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiProjectsByIdTasksByTaskIdArchive 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiProjectsByIdTasksByTaskIdArchive 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiProjectsByIdTasksByTaskIdArchive 503",
             "content": {
               "text/plain": {
                 "schema": {
@@ -17630,6 +18130,21 @@
           "ok"
         ]
       },
+      "deleteApiProjectsByIdTasksByTaskId200": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "path"
+        ]
+      },
       "postApiProjectsByIdStagesTemplate200": {
         "allOf": [
           {
@@ -24143,6 +24658,10 @@
               "string"
             ]
           },
+          "fields": {
+            "type": "object",
+            "description": "The fields its file carries beyond a task file's own that hold one scalar (`priority: high`), as written."
+          },
           "foundIn": {
             "description": "The task it was found in (`found_in`); null when none.",
             "type": [
@@ -24275,6 +24794,13 @@
             "description": "Who made its last commit; null while its file holds an edit no commit has.",
             "$ref": "#/components/schemas/TaskHistoryActor"
           },
+          "archivedAt": {
+            "description": "When its file moved into tasks/archive/, ms epoch; null while it is not archived.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
           "closeReason": {
             "description": "The reason given with the move into the done or dropped stage it is in; null when none or open.",
             "type": [
@@ -24306,6 +24832,7 @@
         },
         "required": [
           "after",
+          "archivedAt",
           "attempts",
           "blockedBy",
           "closeReason",
@@ -24313,6 +24840,7 @@
           "createdAt",
           "droppedAt",
           "duplicateOf",
+          "fields",
           "foundIn",
           "id",
           "labels",
@@ -24444,6 +24972,13 @@
               "type": "string"
             }
           },
+          "comments": {
+            "description": "Its `## Comments`, oldest first: each written by the hub with who and when.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskComment"
+            }
+          },
           "description": {
             "type": "string"
           },
@@ -24455,11 +24990,8 @@
             ]
           },
           "extra": {
-            "description": "Front matter keys the file carries that a task file does not know; kept as written.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+            "type": "object",
+            "description": "The fields its file carries that a task file does not know, with their values (a scalar or a list); kept as written."
           },
           "foundIn": {
             "type": [
@@ -24628,6 +25160,13 @@
             "description": "Who made its last commit; null while its file holds an edit no commit has.",
             "$ref": "#/components/schemas/TaskHistoryActor"
           },
+          "archivedAt": {
+            "description": "When its file moved into tasks/archive/, ms epoch; null while it is not archived.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
           "closeReason": {
             "description": "The reason given with the move into the done or dropped stage it is in; null when none or open.",
             "type": [
@@ -24661,10 +25200,12 @@
           "acceptance",
           "accounts",
           "after",
+          "archivedAt",
           "attempts",
           "blockedBy",
           "checks",
           "closeReason",
+          "comments",
           "completedAt",
           "createdAt",
           "description",
@@ -24712,6 +25253,57 @@
             "type": "number"
           }
         }
+      },
+      "TaskComment": {
+        "description": "One entry of a task's `## Comments`, written only by the hub (tasks.ts `comment`).",
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "When it was written, ms epoch.",
+            "type": "number"
+          },
+          "author": {
+            "$ref": "#/components/schemas/TaskCommentAuthor"
+          },
+          "text": {
+            "description": "Its markdown, as written.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "author",
+          "text"
+        ]
+      },
+      "TaskCommentAuthor": {
+        "description": "Who wrote a comment, as its entry's heading says: the hub's actor.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "The session's instance id, or the approved action's; null when none.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "mover": {
+            "description": "The mover they wrote as (`you`, `lead`, `session`, …); null when the heading names none it knows.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "name": {
+            "description": "The commit author's name: you, Caw, the session's title.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "mover",
+          "name"
+        ]
       },
       "TaskTodo": {
         "description": "One to-do of a task file (`## To-dos`), as a task read parses it.",
@@ -24775,13 +25367,19 @@
             "type": "string"
           },
           "path": {
+            "description": "Its file's path, or the last one it had.",
             "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/TaskHistoryState",
+            "description": "`live`: on the board; `archived`: in tasks/archive/; `deleted`: its file deleted, its history kept."
           }
         },
         "required": [
           "events",
           "id",
-          "path"
+          "path",
+          "state"
         ]
       },
       "TaskHistoryEvent": {
@@ -24801,6 +25399,10 @@
           },
           "kind": {
             "$ref": "#/components/schemas/TaskHistoryKind"
+          },
+          "path": {
+            "description": "The file's path once the commit was made: a rename's or an archive's new path.",
+            "type": "string"
           },
           "reason": {
             "description": "Why, when the change said: a close reason, the hub's cause (`attempt 5fd1e189 started`).",
@@ -24838,15 +25440,18 @@
           "at",
           "commit",
           "kind",
+          "path",
           "reason",
           "what"
         ]
       },
       "TaskHistoryKind": {
-        "description": "`created`: its file added. `moved`: a stage move. `changed`: fields,\nto-dos or edges, through the hub. `edited`: its file changed by a commit\nthe hub's task code did not make. `renamed`, `deleted`: its file.",
+        "description": "`created`: its file added. `moved`: a stage move. `changed`: fields,\nto-dos or edges, through the hub. `commented`: a comment added through the\nhub. `edited`: its file changed by a commit the hub's task code did not\nmake. `archived`: its file moved into tasks/archive/. `renamed`,\n`deleted`: its file.",
         "type": "string",
         "enum": [
+          "archived",
           "changed",
+          "commented",
           "created",
           "deleted",
           "edited",
@@ -26399,13 +27004,13 @@
               "resources": {
                 "type": "object",
                 "properties": {
+                  "comments": {
+                    "$ref": "#/components/schemas/GitHubCursor"
+                  },
                   "issues": {
                     "$ref": "#/components/schemas/GitHubCursor"
                   },
                   "pulls": {
-                    "$ref": "#/components/schemas/GitHubCursor"
-                  },
-                  "comments": {
                     "$ref": "#/components/schemas/GitHubCursor"
                   },
                   "issueEvents": {
@@ -40110,6 +40715,14 @@
           "reply",
           "silent",
           "skipped"
+        ]
+      },
+      "TaskHistoryState": {
+        "type": "string",
+        "enum": [
+          "archived",
+          "deleted",
+          "live"
         ]
       },
       "TaskHistoryActorMover": {

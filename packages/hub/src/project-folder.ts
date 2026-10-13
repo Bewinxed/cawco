@@ -1179,6 +1179,8 @@ export interface FolderFileChange {
   commit: FolderLogCommit;
   /** For a rename, the path it came from. */
   from?: string;
+  /** The file's path once the commit was made (a rename's new path). */
+  path: string;
 }
 
 /** When the folder's history first added a file and last changed it, ms epoch, by commit time, and every commit that did. */
@@ -1330,13 +1332,14 @@ const applyChange = (
   }
   let change: FolderFileChange;
   if (renamed) {
-    change = { change: "renamed", commit: made, from };
+    change = { change: "renamed", commit: made, from, path };
   } else if (deleted) {
-    change = { change: "deleted", commit: made };
+    change = { change: "deleted", commit: made, path };
   } else {
     change = {
       change: kind.startsWith("A") ? "added" : "modified",
       commit: made,
+      path,
     };
   }
   // An entry this pass made grows in place; one an earlier read holds is copied.

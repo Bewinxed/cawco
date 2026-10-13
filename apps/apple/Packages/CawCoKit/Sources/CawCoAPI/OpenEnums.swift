@@ -4627,7 +4627,9 @@ public enum OpenEnums {
 
     /// `#/components/schemas/TaskHistoryKind`.
     public enum TaskHistoryKind: OpenEnum {
+        case archived
         case changed
+        case commented
         case created
         case deleted
         case edited
@@ -4638,7 +4640,9 @@ public enum OpenEnums {
 
         public init(rawValue: String) {
             switch rawValue {
+            case "archived": self = .archived
             case "changed": self = .changed
+            case "commented": self = .commented
             case "created": self = .created
             case "deleted": self = .deleted
             case "edited": self = .edited
@@ -4650,7 +4654,9 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
+            case .archived: "archived"
             case .changed: "changed"
+            case .commented: "commented"
             case .created: "created"
             case .deleted: "deleted"
             case .edited: "edited"
@@ -4664,7 +4670,48 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.changed, .created, .deleted, .edited, .moved, .renamed]
+        public static let allCases: [Self] = [.archived, .changed, .commented, .created, .deleted, .edited, .moved, .renamed]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/TaskHistoryState`.
+    public enum TaskHistoryState: OpenEnum {
+        case archived
+        case deleted
+        case live
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "archived": self = .archived
+            case "deleted": self = .deleted
+            case "live": self = .live
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .archived: "archived"
+            case .deleted: "deleted"
+            case .live: "live"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.archived, .deleted, .live]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

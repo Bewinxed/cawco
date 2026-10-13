@@ -39,6 +39,7 @@ import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
 import type { Tracker, WorkBudget, WorkItemState } from "./db/schema";
 import {
+  deleteFolderFile,
   type Exclusive,
   type FolderAuthor,
   FolderRefusal,
@@ -50,6 +51,7 @@ import {
   HISTORY_LIMIT,
   hasProjectFolder,
   listFolder,
+  moveFolderFile,
   readFolderFile,
   refused,
   turnTaker,
@@ -77,9 +79,15 @@ import {
   templateText,
 } from "./stages";
 import {
+  ARCHIVE_DIR,
+  archivePath,
   type Edge,
+  EXTRA_KEY,
+  type ExtraValue,
   fileTaskNumber,
   type ParsedTask,
+  TASK_FIELDS,
+  type TaskComment,
   TaskDoc,
   type TaskFields,
   type Todo,
@@ -89,6 +97,7 @@ import {
 } from "./task-file";
 import {
   AUTHOR,
+  COMMENT_CHANGE,
   goneTasks,
   historyOf,
   lifeOf,
@@ -97,6 +106,7 @@ import {
   type TaskHistoryActor,
   type TaskLife,
   TRAILERS,
+  taskFileIn,
 } from "./task-history";
 import { budgetProblem, isLive, ownsProblem } from "./work-items";
 
@@ -116,10 +126,20 @@ export interface TaskActor {
   mover: TaskMover;
   /** Why, when the hub says: `(by hub: attempt 5fd1e189 started)`. */
   reason?: string;
+  /** The routine making the move, for the mover `routine` (waits.ts: `waits`). */
+  routineId?: string;
 }
 
 /** The operator, at the dashboard. */
 export const YOU_ACTOR: TaskActor = { mover: "you", author: YOU };
+
+/** A routine of the hub's moving a task on (waits.ts), and why; the stages' moves bind it as `routine`. */
+export const routineActor = (routineId: string, reason: string): TaskActor => ({
+  mover: "routine",
+  routineId,
+  author: { name: AUTHOR.routine },
+  reason,
+});
 
 /** The hub's own code moving a task, and why. */
 export const hubActor = (reason: string): TaskActor => ({
@@ -215,6 +235,8 @@ export type TaskEvent =
       stage: string;
     }
   | {
+      /** A comment added to the task, by whom: the hub hands yours to its live attempt (server.ts). */
+      comment?: { actor: TaskActor; text: string };
       /** The one task that changed, when one did (its to-dos ticked); absent: any of them. */
       id?: string;
       kind: "changed";
@@ -284,6 +306,8 @@ export interface TaskSummary extends TaskFlags, TaskTimes {
   after: string[];
   /** The task it repeats (`duplicate_of`); null when none. */
   duplicateOf: string | null;
+  /** The fields its file carries beyond a task file's own that hold one scalar (`priority: high`), as written. */
+  fields: Record<string, string>;
   /** The task it was found in (`found_in`); null when none. */
   foundIn: string | null;
   id: string;
@@ -349,11 +373,13 @@ export interface TaskView extends TaskFlags, TaskTimes {
   /** What an attempt may spend before the hub stops it; null: the project's default. */
   budget: WorkBudget | null;
   checks: string[];
+  /** Its `## Comments`, oldest first: each written by the hub with who and when. */
+  comments: TaskComment[];
   description: string;
   /** The task it repeats (`duplicate_of`); null when none. */
   duplicateOf: string | null;
-  /** Front matter keys the file carries that a task file does not know; kept as written. */
-  extra: string[];
+  /** The fields its file carries that a task file does not know, with their values (a scalar or a list); kept as written. */
+  extra: Record<string, ExtraValue>;
   foundIn: string | null;
   /** Its attempts' group: their parent hears one combined report once all have ended. */
   group: string | null;
@@ -391,6 +417,8 @@ export interface TaskDraft {
   budget?: WorkBudget;
   checks?: string[];
   description?: string;
+  /** Fields a task file does not know (`priority`, `due`): a scalar or a list each. */
+  fields?: Record<string, ExtraValue>;
   foundIn?: string;
   group?: string;
   labels?: string[];
@@ -414,6 +442,8 @@ export interface TaskPatch {
   budget?: WorkBudget | null;
   checks?: string[];
   description?: string;
+  /** Fields a task file does not know, each set (a scalar or a list) or taken out ("" or []); the others stay. */
+  fields?: Record<string, ExtraValue>;
   /** Its attempts' group; null: none. */
   group?: string | null;
   labels?: string[];
@@ -424,6 +454,31 @@ export interface TaskPatch {
   rank?: string | null;
   title?: string;
   type?: string | null;
+}
+
+/**
+ * What a list keeps: every condition given must hold. Archived tasks are
+ * listed only with `archived`, and then only they are.
+ */
+export interface TaskFilter {
+  /** Only tasks archived in tasks/archive/, instead of the board's. */
+  archived?: boolean;
+  /** true: only tasks still waiting for another; false: only tasks that are not. */
+  blocked?: boolean;
+  /** Fields a task file does not know, each to equal the value given (as written). */
+  fields?: Record<string, string>;
+  kind?: StageKind;
+  /** A label the task carries. */
+  label?: string;
+  /** true: only tasks that need you; false: only tasks that do not. */
+  needsYou?: boolean;
+  /** The parent task (`tsk-12`). */
+  parent?: string;
+  /** Words to find, case aside, in its id, title or description. */
+  q?: string;
+  stage?: string;
+  /** Its delegate type. */
+  type?: string;
 }
 
 /** To-do changes made together, in one commit. A to-do is named by id (`td-3`) or position (`2.1`). */
@@ -575,6 +630,66 @@ const stageName = (stage: string): string => {
   return name;
 };
 
+const OWN_FIELDS: ReadonlySet<string> = new Set(TASK_FIELDS);
+
+/**
+ * Fields a caller gave for keys a task file does not know: each key a bare
+ * YAML key outside a task file's own, each value one line or a list of them
+ * ("" or [] takes the field out).
+ */
+const extraFieldsOf = (
+  fields: Record<string, ExtraValue>
+): [string, ExtraValue][] => {
+  const entries = Object.entries(fields);
+  if (entries.length > LIST_LIMIT) {
+    refuse(
+      400,
+      `fields holds ${entries.length} fields; it stops at ${LIST_LIMIT}.`
+    );
+  }
+  return entries.map(([key, value]): [string, ExtraValue] => {
+    if (!EXTRA_KEY.test(key)) {
+      refuse(
+        400,
+        `“${key}” is not a field name: letters, digits, "_" and "-", starting with a letter or "_".`
+      );
+    }
+    if (OWN_FIELDS.has(key)) {
+      refuse(
+        400,
+        `${key} is one of a task file's own fields; set it through its own parameter, not fields.`
+      );
+    }
+    if (Array.isArray(value)) {
+      return [key, value.length > 0 ? items(key, value) : []];
+    }
+    return [key, value.trim() ? oneLine(key, value, ITEM_LIMIT) : ""];
+  });
+};
+
+const COMMENT_ENTRY_LINE = /^###\s/m;
+
+/** A comment's text: markdown that opens neither a section nor a comment entry of its own. */
+const commentText = (text: string): string => {
+  const written = block("comment", text);
+  if (!written) {
+    refuse(400, "The comment is empty; write a few words.");
+  }
+  if (COMMENT_ENTRY_LINE.test(written)) {
+    refuse(
+      400,
+      'The comment holds a "### " heading, which would start a comment entry of its own; use "#### " inside it.'
+    );
+  }
+  return written;
+};
+
+/** A comment's first line, cut short, for its commit's subject. */
+const commentGist = (text: string): string => {
+  const first = text.split("\n")[0]?.trim() ?? "";
+  return first.length > 60 ? `${first.slice(0, 59)}…` : first;
+};
+
 // --- the service --------------------------------------------------------------
 
 /** A stage's kind in the project's stages; null for a stage it lacks, or while stages.md does not read. */
@@ -644,6 +759,7 @@ const summaryOf = (
     duplicateOf: row.duplicateOf,
     rank: row.rank,
     labels: row.labels,
+    fields: row.fields,
     todos: { done: row.todosDone, total: row.todosTotal },
     ...times,
     problem: [row.problem, stray].filter(Boolean).join(" ") || null,
@@ -686,12 +802,72 @@ const viewOf = (
   description: parsed.description,
   acceptance: parsed.acceptance,
   todos: parsed.todos,
+  comments: parsed.comments,
   sections: parsed.sections,
   extra: parsed.extra,
   problems: parsed.problems,
   hash,
   ...times,
 });
+
+/** A task reference a caller gave, as `tsk-12`; refused when it names none. */
+const taskRef = (what: string, ref: string): string => {
+  const number = taskNumber(ref);
+  return number === undefined
+    ? refuse(
+        400,
+        `${what}: “${ref}” is not a task id; tasks are named like tsk-12.`
+      )
+    : taskId(number);
+};
+
+/** Whether a flag the filter sets (`blocked`, `needsYou`) matches; one it leaves out always does. */
+const flagHolds = (asked: boolean | undefined, is: boolean): boolean =>
+  asked === undefined || asked === is;
+
+/** Whether a task's stage, labels, type and parent hold to the filter's. */
+const placeHolds = (
+  task: TaskSummary,
+  filter: TaskFilter,
+  parent: string | null
+): boolean =>
+  (!filter.stage || task.stage === filter.stage) &&
+  (!filter.kind || task.kind === filter.kind) &&
+  (!filter.label || task.labels.includes(filter.label)) &&
+  (!filter.type || task.type === filter.type) &&
+  (!parent || task.parent === parent);
+
+/** Whether a task holds to every condition of a list's filter but its words (`q`, read from files). */
+const holds = (
+  task: TaskSummary,
+  filter: TaskFilter,
+  parent: string | null
+): boolean =>
+  placeHolds(task, filter, parent) &&
+  flagHolds(filter.blocked, task.blockedBy.length > 0) &&
+  flagHolds(filter.needsYou, task.needsYou) &&
+  Object.entries(filter.fields ?? {}).every(
+    ([key, value]) => task.fields[key] === value
+  );
+
+/** Ids joined with what they do: `tsk-4 waits`, `tsk-4, tsk-5 wait`. */
+const named = (rows: TaskIndexRow[], one: string, many: string): string =>
+  `${rows.map((row) => row.id).join(", ")} ${rows.length === 1 ? one : many}`;
+
+/**
+ * Who holds on to task `id`, in a sentence: the tasks waiting for it
+ * (`after`) and the tasks under it (`parent`); empty when none does.
+ */
+const holders = (rows: TaskIndexRow[], id: string): string => {
+  const waiting = rows.filter((row) => row.after.includes(id));
+  const under = rows.filter((row) => row.parent === id);
+  return [
+    ...(waiting.length > 0
+      ? [`${named(waiting, "waits", "wait")} for it`]
+      : []),
+    ...(under.length > 0 ? [`${named(under, "is", "are")} under it`] : []),
+  ].join(", and ");
+};
 
 /** A list's sort: ranked tasks by rank, then the rest by number. */
 const byRank = (a: TaskSummary, b: TaskSummary): number => {
@@ -809,6 +985,9 @@ const applyPatch = (doc: TaskDoc, patch: TaskPatch): string => {
       set(field, () => doc.setField(field, items(field, list)));
     }
   }
+  for (const [key, value] of extraFieldsOf(patch.fields ?? {})) {
+    set(key, () => doc.setExtra(key, value));
+  }
   return `update ${changed.join(", ") || "nothing"}`;
 };
 
@@ -924,6 +1103,8 @@ const byWhom = (actor: TaskActor): string =>
 
 /** What one change to a task did, for its commit: its words, and a stage move and its reason when there is one. */
 interface Did {
+  /** What kind of change it was when its words do not say (`CawCo-Change`): a comment. */
+  change?: typeof COMMENT_CHANGE;
   /** Why, given with the change; the actor's own reason when left out. */
   reason?: string;
   /** The move it made; `from` empty for a task that had no stage. */
@@ -936,7 +1117,10 @@ const actorTrailer = (actor: TaskActor): string => {
   if (actor.instanceId) {
     return actor.instanceId;
   }
-  return actor.actionId ? `action:${actor.actionId}` : actor.mover;
+  if (actor.actionId) {
+    return `action:${actor.actionId}`;
+  }
+  return actor.routineId ? `routine:${actor.routineId}` : actor.mover;
 };
 
 const WHITESPACE = /\s+/g;
@@ -962,6 +1146,7 @@ const commitMessage = (
       ? [`${TRAILERS.stage}: ${did.stage.from || NO_STAGE} -> ${did.stage.to}`]
       : []),
     ...(reason ? [`${TRAILERS.reason}: ${reason}`] : []),
+    ...(did.change ? [`${TRAILERS.change}: ${did.change}`] : []),
   ].join("\n");
 };
 
@@ -1194,6 +1379,7 @@ export const createTasks = (store: TaskStore) => {
       duplicateOf: parsed.fields.duplicateOf,
       rank: parsed.fields.rank,
       labels: parsed.fields.labels,
+      fields: doc.extraFields(),
       todosDone: parsed.todos.filter((todo) => todo.done).length,
       todosTotal: parsed.todos.length,
       problem: parsed.problems.join(" ") || null,
@@ -1491,10 +1677,28 @@ export const createTasks = (store: TaskStore) => {
     return { rows, problems };
   };
 
+  /** The archived files in tasks/archive/, by name; none while there is no archive. */
+  const archivedNames = async (projectId: string): Promise<string[]> =>
+    (await folderFileNames(projectId, ARCHIVE_DIR)).filter(
+      (name) => fileTaskNumber(name) !== undefined
+    );
+
+  /** The archived file of task `number`, as the disk holds it; undefined when it is not archived. */
+  const archivedFile = async (
+    projectId: string,
+    number: number
+  ): Promise<string | undefined> => {
+    const name = (await archivedNames(projectId)).find(
+      (each) => fileTaskNumber(each) === number
+    );
+    return name ? `${ARCHIVE_DIR}/${name}` : undefined;
+  };
+
   /**
    * The file a reference names, catching up the index when it does not know
-   * it yet. Two files claiming one id read as the first; a change to it is
-   * refused until one is renamed.
+   * it yet; an archived task's file in tasks/archive/ when the board has none,
+   * which a change is refused. Two files claiming one id read as the first; a
+   * change to it is refused until one is renamed.
    */
   const locate = async (
     projectId: string,
@@ -1516,7 +1720,16 @@ export const createTasks = (store: TaskStore) => {
     }
     const [first] = claims;
     if (!first) {
-      return refuse(404, `The project has no task ${taskId(number)}.`);
+      const archived = await archivedFile(projectId, number);
+      if (archived && forChange) {
+        refuse(
+          409,
+          `${taskId(number)} is archived (${archived}), so it does not change; it is kept as it was.`
+        );
+      }
+      return archived
+        ? { path: archived, number }
+        : refuse(404, `The project has no task ${taskId(number)}.`);
     }
     if (forChange && claims.length > 1) {
       refuse(
@@ -1525,6 +1738,54 @@ export const createTasks = (store: TaskStore) => {
       );
     }
     return { path: first.path, number };
+  };
+
+  /**
+   * The archived tasks' rows, read from their files in tasks/archive/ as the
+   * index would hold them; kept out of the index, which is the board's.
+   */
+  const archivedRows = async (projectId: string): Promise<TaskIndexRow[]> => {
+    const read = await Promise.all(
+      (await archivedNames(projectId)).map(async (name) => {
+        const path = `${ARCHIVE_DIR}/${name}`;
+        const { content } = await readFolderFile(projectId, path);
+        return indexRow(
+          projectId,
+          path,
+          fileTaskNumber(name) as number,
+          content,
+          hashOf(content)
+        );
+      })
+    );
+    return read;
+  };
+
+  /** The tasks whose id, title or description holds `q`, case aside; descriptions read from the files. */
+  const saying = async (
+    projectId: string,
+    tasks: TaskSummary[],
+    q: string
+  ): Promise<TaskSummary[]> => {
+    const words = q.trim().toLowerCase();
+    const kept = await Promise.all(
+      tasks.map(async (task) => {
+        if (
+          task.id.includes(words) ||
+          task.title.toLowerCase().includes(words)
+        ) {
+          return true;
+        }
+        const { content } = await readFolderFile(projectId, task.path).catch(
+          () => ({ content: "" })
+        );
+        return new TaskDoc(task.path, content)
+          .read()
+          .description.toLowerCase()
+          .includes(words);
+      })
+    );
+    return tasks.filter((_, index) => kept[index]);
   };
 
   /** Every task id the project's index knows, for edge checks. */
@@ -2046,25 +2307,24 @@ export const createTasks = (store: TaskStore) => {
 
   return {
     /** The project's tasks from the index, caught up with the files first. */
-    async list(
-      projectId: string,
-      filter: { kind?: StageKind; stage?: string } = {}
-    ): Promise<TaskList> {
+    async list(projectId: string, filter: TaskFilter = {}): Promise<TaskList> {
       const tracker = known(projectId);
-      const [{ rows, problems }, { reading }] = await Promise.all([
+      const parent = filter.parent ? taskRef("parent", filter.parent) : null;
+      const [{ rows: board, problems }, { reading }] = await Promise.all([
         sync(projectId),
         stagesOf(projectId),
       ]);
+      const rows = filter.archived ? await archivedRows(projectId) : board;
       const stages = reading.ok ? reading.stages : undefined;
       const { gone, times } = await timesOf(projectId, rows, stages);
       const context = {
         attempts: attemptsByTask(projectId),
         queued: queuedIn(projectId),
-        ends: endsById(rows),
+        ends: endsById(board),
         gone,
         stages,
       };
-      const tasks = rows
+      const kept = rows
         .map((row) =>
           summaryOf(
             row,
@@ -2073,12 +2333,10 @@ export const createTasks = (store: TaskStore) => {
             times.get(row.path) as TaskTimes
           )
         )
-        .filter(
-          (task) =>
-            (!filter.stage || task.stage === filter.stage) &&
-            (!filter.kind || task.kind === filter.kind)
-        )
-        .sort(byRank);
+        .filter((task) => holds(task, filter, parent));
+      const tasks = (
+        filter.q?.trim() ? await saying(projectId, kept, filter.q) : kept
+      ).sort(byRank);
       return {
         tracker,
         tasks,
@@ -2090,17 +2348,16 @@ export const createTasks = (store: TaskStore) => {
     /** One task, its file read and parsed; the index catches up if the file moved. */
     async get(projectId: string, ref: string): Promise<TaskView> {
       known(projectId);
+      // The index caught up first, as a list does: the other tasks this one's
+      // edges name read as their files are now.
+      const { rows } = await sync(projectId);
       const { path, number } = await locate(projectId, ref);
       const { content } = await readFolderFile(projectId, path);
-      const hash = hashOf(content);
-      const row = store.index(projectId).find((each) => each.path === path);
+      const row = rows.find((each) => each.path === path);
       const stray = strayStage(row, path, content);
       if (stray) {
         // Shown at the stage it is in; the file gets it back in its turn.
         queueSettle(projectId, path, number);
-      } else if (row?.hash !== hash) {
-        stands(projectId);
-        store.put([indexRow(projectId, path, number, content, hash)]);
       }
       return view(
         projectId,
@@ -2137,17 +2394,22 @@ export const createTasks = (store: TaskStore) => {
         const description = block("description", draft.description ?? "");
         const acceptance = block("acceptance criteria", draft.acceptance ?? "");
         const todos = (draft.todos ?? []).map(todoText);
+        const extra = extraFieldsOf(draft.fields ?? {});
         return await fileNew(projectId, actor, (number) => {
           const path = taskPath(number, title);
+          const doc = TaskDoc.create(path, {
+            title,
+            fields,
+            description,
+            acceptance,
+            todos,
+          });
+          for (const [key, value] of extra) {
+            doc.setExtra(key, value);
+          }
           return {
             path,
-            content: TaskDoc.create(path, {
-              title,
-              fields,
-              description,
-              acceptance,
-              todos,
-            }).toString(),
+            content: doc.toString(),
             message: commitMessage(
               actor,
               `task ${taskId(number)}: create “${title}” in ${stage}`,
@@ -2317,14 +2579,149 @@ export const createTasks = (store: TaskStore) => {
      */
     async history(projectId: string, ref: string): Promise<TaskHistory> {
       known(projectId);
-      const { path, number } = await locate(projectId, ref);
-      const { times } = await folderFileTimes(projectId, "tasks");
-      const entry = times.get(path);
-      return {
-        id: taskId(number),
-        path,
-        events: entry ? [...historyOf(entry)] : [],
-      };
+      const id = taskRef("task", ref);
+      const number = taskNumber(id) as number;
+      const filed = taskFileIn(
+        await folderFileTimes(projectId, "tasks"),
+        number
+      );
+      if (filed) {
+        return {
+          id,
+          path: filed.path,
+          state: filed.state,
+          events: [...historyOf(filed.entry)],
+        };
+      }
+      // A file no commit has yet: the task stands, with no history.
+      const { path } = await locate(projectId, ref);
+      return { id, path, state: "live", events: [] };
+    },
+
+    /**
+     * Adds a comment to a task: one entry at the end of its `## Comments`,
+     * headed with who wrote it and when, as one commit (its history shows it
+     * as `commented`). Entries are only ever added. Listeners hear it with
+     * its words: yours reach the task's live attempt (server.ts).
+     */
+    comment(
+      projectId: string,
+      ref: string,
+      text: string,
+      actor: TaskActor
+    ): Promise<TaskView> {
+      const written = commentText(text);
+      return change(projectId, ref, actor, (doc) => {
+        doc.addComment(
+          {
+            name: actor.author.name,
+            mover: actor.mover,
+            id: actor.instanceId ?? actor.actionId ?? actor.routineId ?? null,
+          },
+          new Date(),
+          written
+        );
+        return {
+          what: `comment “${commentGist(written)}”`,
+          change: COMMENT_CHANGE,
+        };
+      }).then((task) =>
+        told(
+          {
+            kind: "changed",
+            projectId,
+            id: task.id,
+            comment: { actor, text: written },
+          },
+          task
+        )
+      );
+    },
+
+    /**
+     * Archives a task: its file moves to tasks/archive/ in one commit, off
+     * every list but `archived`, done for every task that waits on it, and
+     * kept with its history. Refused while an attempt at it is live.
+     */
+    archive(
+      projectId: string,
+      ref: string,
+      actor: TaskActor
+    ): Promise<TaskView> {
+      return inTurn(projectId, async () => {
+        writable(projectId);
+        const { path, number } = await locate(projectId, ref, true);
+        const id = taskId(number);
+        if (
+          attemptsByTask(projectId)
+            .get(id)
+            ?.some((attempt) => isLive(attempt.state))
+        ) {
+          refuse(
+            409,
+            `An attempt at ${id} is live; stop it before archiving the task.`
+          );
+        }
+        const to = archivePath(path);
+        stands(projectId);
+        await moveFolderFile(projectId, path, to, {
+          author: actor.author,
+          message: commitMessage(actor, `task ${id}: archive`),
+        });
+        store.drop(projectId, [path]);
+        const { content } = await readFolderFile(projectId, to);
+        return view(
+          projectId,
+          to,
+          number,
+          content,
+          await currentStages(projectId)
+        );
+      }).then((task) =>
+        told({ kind: "changed", projectId, id: task.id }, task)
+      );
+    },
+
+    /**
+     * Deletes a task's file, as one commit; its history stays in the
+     * folder's. Refused while another task waits for it (`after`) or sits
+     * under it (`parent`), naming them: archive it instead, which they take
+     * as done, or take their edges out first.
+     */
+    remove(
+      projectId: string,
+      ref: string,
+      actor: TaskActor
+    ): Promise<{ id: string; path: string }> {
+      return inTurn(projectId, async () => {
+        writable(projectId);
+        const { rows } = await sync(projectId);
+        const { path, number } = await locate(projectId, ref);
+        const id = taskId(number);
+        const held = holders(
+          rows.filter((row) => row.path !== path),
+          id
+        );
+        if (held) {
+          refuse(
+            409,
+            `${id} cannot be deleted: ${held}. Archive it instead, which they take as done, or take those edges out first.`
+          );
+        }
+        const { content } = await readFolderFile(projectId, path);
+        stands(projectId);
+        await deleteFolderFile(projectId, path, {
+          author: actor.author,
+          message: commitMessage(
+            actor,
+            `task ${id}: delete “${new TaskDoc(path, content).title()}”`
+          ),
+        });
+        store.drop(projectId, [path]);
+        return { id, path };
+      }).then((gone) =>
+        told({ kind: "changed", projectId, id: gone.id }, gone)
+      );
     },
 
     /** Ticks, unticks, adds and rewords to-dos, all in one commit. */
@@ -2485,6 +2882,23 @@ export const BUDGET = t.Object({
   turns: t.Optional(t.Integer()),
   minutes: t.Optional(t.Integer()),
 });
+/** A list filter's yes or no: `1` or `0`. */
+const FLAG = t.Union([t.Literal("1"), t.Literal("0")]);
+const flagOf = (flag: "1" | "0" | undefined): boolean | undefined =>
+  flag === undefined ? undefined : flag === "1";
+/** Fields a task file does not know, each a scalar or a list (`TaskDraft.fields`). */
+const FIELDS = t.Record(t.String(), t.Union([t.String(), t.Array(t.String())]));
+const FIELD_PARAM = "field.";
+/** A list's `field.<key>=<value>` query parameters, by key. */
+const fieldParams = (params: URLSearchParams): Record<string, string> => {
+  const fields: Record<string, string> = {};
+  for (const [name, value] of params) {
+    if (name.startsWith(FIELD_PARAM) && name.length > FIELD_PARAM.length) {
+      fields[name.slice(FIELD_PARAM.length)] = value;
+    }
+  }
+  return fields;
+};
 const TRACKER = t.Union([
   t.Literal("cawco"),
   t.Literal("github"),
@@ -2504,13 +2918,34 @@ export const taskRoutes = (tasks: Tasks) =>
         query: t.Object({
           stage: t.Optional(t.String()),
           kind: t.Optional(KIND),
+          /** Words to find in a task's id, title or description. */
+          q: t.Optional(t.String()),
+          label: t.Optional(t.String()),
+          type: t.Optional(t.String()),
+          /** The parent task, like tsk-12. */
+          parent: t.Optional(t.String()),
+          /** 1: only tasks still waiting for another; 0: only tasks that are not. */
+          blocked: t.Optional(FLAG),
+          /** 1: only tasks that need you; 0: only tasks that do not. */
+          needsYou: t.Optional(FLAG),
+          /** 1: the archived tasks instead of the board's. */
+          archived: t.Optional(FLAG),
         }),
       },
-      async ({ params, query }) => {
+      async ({ params, query, request }) => {
         try {
           return await tasks.list(params.id, {
             stage: query.stage,
             kind: query.kind,
+            q: query.q,
+            label: query.label,
+            type: query.type,
+            parent: query.parent,
+            blocked: flagOf(query.blocked),
+            needsYou: flagOf(query.needsYou),
+            archived: query.archived === "1",
+            // `field.<key>=<value>`: a field a task file does not know, to equal the value.
+            fields: fieldParams(new URL(request.url).searchParams),
           });
         } catch (error) {
           return refused(error);
@@ -2539,6 +2974,7 @@ export const taskRoutes = (tasks: Tasks) =>
           description: t.Optional(t.String()),
           acceptance: t.Optional(t.String()),
           todos: t.Optional(t.Array(t.String())),
+          fields: t.Optional(FIELDS),
         }),
       },
       async ({ params, body }) => {
@@ -2572,6 +3008,7 @@ export const taskRoutes = (tasks: Tasks) =>
           checks: t.Optional(t.Array(t.String())),
           outputs: t.Optional(t.Array(t.String())),
           labels: t.Optional(t.Array(t.String())),
+          fields: t.Optional(FIELDS),
         }),
       },
       async ({ params, body }) => {
@@ -2582,6 +3019,36 @@ export const taskRoutes = (tasks: Tasks) =>
         }
       }
     )
+    .delete("/api/projects/:id/tasks/:taskId", async ({ params }) => {
+      try {
+        return await tasks.remove(params.id, params.taskId, YOU_ACTOR);
+      } catch (error) {
+        return refused(error);
+      }
+    })
+    .post(
+      "/api/projects/:id/tasks/:taskId/comments",
+      { body: t.Object({ text: t.String() }) },
+      async ({ params, body }) => {
+        try {
+          return await tasks.comment(
+            params.id,
+            params.taskId,
+            body.text,
+            YOU_ACTOR
+          );
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    .post("/api/projects/:id/tasks/:taskId/archive", async ({ params }) => {
+      try {
+        return await tasks.archive(params.id, params.taskId, YOU_ACTOR);
+      } catch (error) {
+        return refused(error);
+      }
+    })
     .get("/api/projects/:id/tasks/:taskId/history", async ({ params }) => {
       try {
         return await tasks.history(params.id, params.taskId);
