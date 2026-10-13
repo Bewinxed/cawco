@@ -57,4 +57,8 @@ done
 git archive origin/main | "${SSH[@]}" 'tar -xf - -C ~/build/cawco-testflight/source'
 REV=$(git rev-parse origin/main)
 echo "ARCHIVING origin/main $REV ${PLATFORM[*]:-ios}"
-"${SSH[@]}" '/usr/bin/python3 - --notes' "$REMOTE_NOTES" "${PLATFORM[@]}" < apps/apple/scripts/testflight.py
+# The archive is an Xcode build: it holds the Mac build slot every build-both.sh
+# and mac-slot.sh caller shares. Export, upload and App Store Connect's
+# processing run after, with the slot free.
+"${SSH[@]}" 'bash ~/build/cawco-testflight/source/apps/apple/scripts/mac-slot.sh build -- /usr/bin/python3 - --archive' "${PLATFORM[@]}" < apps/apple/scripts/testflight.py
+"${SSH[@]}" '/usr/bin/python3 - --upload-archive --notes' "$REMOTE_NOTES" "${PLATFORM[@]}" < apps/apple/scripts/testflight.py

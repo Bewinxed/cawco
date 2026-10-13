@@ -15,6 +15,11 @@
 # and logs. Mac-side locks cover retirement, rsync and both builds; a
 # second build of the same workspace, and builds from different
 # workspaces, wait their turn.
+# The Mac build slot (one Xcode build at a time) is one lock for every caller,
+# in ~/.cawco/workspace-cache/xdg/cawco-apple/.locks: workspaces, a person's
+# or the orchestrator's SSH, and TestFlight's archive all wait on it. Each
+# launch boots its simulator in one of the Mac's two simulator slots.
+# Simulators and builds outside build-both.sh go through mac-slot.sh.
 # Only processes this script starts are stopped: the Mac-side build runs in
 # its own process group, which ends (TERM, then KILL) when the SSH link drops.
 # Run on the Mac itself, the Mac side runs here through the same steps and
@@ -26,6 +31,10 @@
 # hub runs this script in a workspace on it.
 set -euo pipefail
 
+if [[ -n ${CAWCO_MAC_SLOT:-} ]]; then
+  echo "build-both.sh takes the Mac build slot itself; inside a mac-slot.sh $CAWCO_MAC_SLOT slot it would wait on its own caller. Run it on its own." >&2
+  exit 2
+fi
 if [[ $(uname -s) == Darwin ]]; then
   MAC=(bash --norc -c)
   APPLE_ROOT=${XDG_CACHE_HOME:-$HOME/Library/Caches}/cawco-apple
@@ -74,8 +83,11 @@ ROOT=${APPLE_ROOT:-$HOME/build/cawco-apple}
 mkdir -p "$ROOT/.locks"
 LOCK="$ROOT/.locks/$BUILD"
 command -v shlock >/dev/null || { echo "shlock is required for Apple workspace builds" >&2; exit 2; }
-MACHINE_LOCK="$ROOT/.locks/.machine"
-MACHINE_OWNER="$ROOT/.locks/.machine.owner"
+# The one build slot every caller shares (mac-slot.sh holds the same lock).
+SLOTS="$HOME/.cawco/workspace-cache/xdg/cawco-apple/.locks"
+mkdir -p "$SLOTS"
+MACHINE_LOCK="$SLOTS/.machine"
+MACHINE_OWNER="$SLOTS/.machine.owner"
 WAIT_PID=
 BUILD_PID=
 GO=
@@ -134,7 +146,7 @@ until shlock -p $$ -f "$MACHINE_LOCK"; do
     holder=unknown
     held_since=$now
     if [[ -f $MACHINE_OWNER ]]; then
-      read -r holder held_since <"$MACHINE_OWNER" || true
+      read -r held_since holder <"$MACHINE_OWNER" || true
     fi
     [[ $held_since =~ ^[0-9]+$ ]] || held_since=$now
     echo "WAITING for the Mac build slot: $holder has held it for $((now - held_since)) s"
@@ -142,7 +154,7 @@ until shlock -p $$ -f "$MACHINE_LOCK"; do
   fi
   sleep 5
 done
-printf '%s %s\n' "$BUILD" "$(date +%s)" >"$MACHINE_OWNER"
+printf '%s %s\n' "$(date +%s)" "$BUILD build-both.sh (pid $$)" >"$MACHINE_OWNER"
 
 retire() {
   local directory=$1 lock=$2 size
@@ -194,15 +206,9 @@ DD="$5/$BUILD/DerivedData"
 LOGS="$5/$BUILD/logs"
 mkdir -p "$LOGS"
 SETTLE=8
-UDID=
-end_ios() {
-  [[ -n $UDID ]] || return 0
-  xcrun simctl terminate "$UDID" dev.cawco.app >/dev/null 2>&1 || true
-  xcrun simctl shutdown "$UDID" >/dev/null 2>&1 || true
-  xcrun simctl delete "$UDID"
-  UDID=
-}
-trap end_ios EXIT
+# This build holds the Mac build slot: mac-slot.sh may take a simulator slot
+# inside it.
+export CAWCO_MAC_SLOT=build DD LOGS SETTLE
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 XCODEGEN=$(command -v xcodegen || echo /opt/homebrew/bin/xcodegen)
@@ -230,46 +236,30 @@ build() { # <destination> <label> [signed]
 }
 
 # Build for each runtime: Xcode omits Swift compatibility libraries when the
-# destination OS already supplies them. Each launch owns its simulator.
+# destination OS already supplies them. Each launch builds and runs in a
+# simulator slot (scripts/mac-slot.sh), whose simulator it boots and, when the
+# launch ends however it ends, deletes.
 ios() {
-  local LABEL=${1:-iOS} RUNTIME TYPE NAME LOG
+  local LABEL=${1:-iOS}
   # Compiling needs no simulator: the generic destination builds for any.
   if [[ $COMPILE_ONLY == --compile-only ]]; then
     build "generic/platform=iOS Simulator" "$LABEL"
     return
   fi
   if [[ $LABEL == 'iOS 18.5' ]]; then
-    RUNTIME=com.apple.CoreSimulator.SimRuntime.iOS-18-5
-    TYPE=com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro
-    NAME='iPhone 16 Pro (iOS 18.5)'
+    bash scripts/mac-slot.sh sim --runtime com.apple.CoreSimulator.SimRuntime.iOS-18-5 \
+      --device com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro \
+      -- bash --norc -c 'set -euo pipefail; ios_launch "$1"' ios-launch "$LABEL"
   else
-  MIN_IOS=$(sed -n 's/^ *iOS: "\([0-9.]*\)"$/\1/p' project.yml | head -1)
-  read -r RUNTIME TYPE NAME < <(xcrun simctl list devices available -j | python3 -c '
-import json, re, sys
-need = tuple(int(p) for p in sys.argv[1].split("."))
-best = None
-for runtime, devices in json.load(sys.stdin)["devices"].items():
-    m = re.search(r"\.iOS-(\d+)-(\d+)$", runtime)
-    if not m or (int(m[1]), int(m[2])) < need:
-        continue
-    for d in devices:
-        pro = re.fullmatch(r"iPhone (\d+) Pro", d["name"])
-        if pro:
-            key = (int(pro[1]), int(m[1]), int(m[2]))
-            if best is None or key > best[0]:
-                best = (key, runtime, d["deviceTypeIdentifier"], d["name"] + " (iOS " + m[1] + "." + m[2] + ")")
-if best is None:
-    sys.exit("no iPhone Pro simulator on iOS >= " + sys.argv[1])
-print(best[1], best[2], best[3])
-' "$MIN_IOS")
+    # The newest iPhone Pro whose runtime meets project.yml's iOS target.
+    bash scripts/mac-slot.sh sim -- bash --norc -c 'set -euo pipefail; ios_launch "$1"' ios-launch "$LABEL"
   fi
-  UDID=$(xcrun simctl create "CawCo build $BUILD $LABEL" "$TYPE" "$RUNTIME")
-  echo "iOS simulator: $NAME $UDID"
-  build "platform=iOS Simulator,id=$UDID" "$LABEL"
-  if [[ $COMPILE_ONLY == --compile-only ]]; then end_ios; return; fi
+}
 
-  xcrun simctl boot "$UDID"
-  xcrun simctl bootstatus "$UDID" -b >/dev/null
+# Runs inside the simulator slot, on CAWCO_SIM_UDID.
+ios_launch() {
+  local LABEL=$1 UDID=$CAWCO_SIM_UDID LOG
+  build "platform=iOS Simulator,id=$UDID" "$LABEL"
   xcrun simctl install "$UDID" "$DD/Build/Products/Debug-iphonesimulator/CawCo.app"
   LOG="$LOGS/launch-$LABEL.log"
   : >"$LOG"
@@ -281,14 +271,12 @@ print(best[1], best[2], best[3])
       tail -20 "$LOG" || true
     fi
     echo "FAILED launch $LABEL"
-    end_ios
     exit 1
   fi
   sleep "$SETTLE"
   if xcrun simctl spawn "$UDID" launchctl list |
     awk '$3 ~ /^UIKitApplication:dev\.cawco\.app/ && $1 ~ /^[0-9]+$/ { up = 1 } END { exit !up }'; then
     echo "LAUNCHED $LABEL"
-    end_ios
   else
     if grep -q -E "dyld|abort|Library not loaded|Reason|Fatal" "$LOG"; then
       grep -E "dyld|abort|Library not loaded|Reason|Fatal" "$LOG" | head -20 || true
@@ -298,10 +286,10 @@ print(best[1], best[2], best[3])
     find "$HOME/Library/Logs/DiagnosticReports" -name 'CawCo*.ips' -newer "$LOG" 2>/dev/null |
       head -1 | xargs -I{} grep -m3 -E '"(indicator|namespace|reasons)"' {} || true
     echo "FAILED launch $LABEL"
-    end_ios
     exit 1
   fi
 }
+export -f build ios_launch
 
 # macOS: the same UIKit app through Mac Catalyst. Start the executable
 # directly, so its PID and stderr are ours.

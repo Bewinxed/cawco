@@ -56,6 +56,26 @@ on the newest iPhone Pro simulator whose runtime meets the deployment target
 The `.xcodeproj` and `CawCo/Info.plist` come from `project.yml`; change that
 file and regenerate.
 
+## The Mac's slots
+
+Simulators and builds outside build-both.sh go through mac-slot.sh. The Mac
+runs at most one Xcode build (the build slot, which build-both.sh and
+TestFlight's archive also hold) and at most two booted simulators (two
+simulator slots, which build-both.sh's launches also take). The locks are
+in `~/.cawco/workspace-cache/xdg/cawco-apple/.locks`, one folder for every
+caller. A waiter prints `WAITING ...` every 60 s.
+
+```sh
+bash apps/apple/scripts/mac-slot.sh build -- xcodebuild ...
+bash apps/apple/scripts/mac-slot.sh sim [--runtime <id>] [--device <type>] -- <cmd>   # $CAWCO_SIM_UDID is booted
+bash apps/apple/scripts/mac-slot.sh build -- bash apps/apple/scripts/mac-slot.sh sim -- sh -c 'xcodebuild test -destination "id=$CAWCO_SIM_UDID" ...'
+```
+
+The simulator ("CawCo slot 1" or "2") is created and booted for the command,
+then shut down and deleted when it ends, or when its caller dies (SIGKILL
+too). Nest the build slot outside the simulator slot; the other order is
+refused, since it could wait on a slot its own caller holds.
+
 ## TestFlight
 
 From the repository on obelisk:
