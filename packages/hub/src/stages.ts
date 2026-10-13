@@ -683,21 +683,57 @@ export const templateText = (name: StagesTemplate): string => {
   return `---\n${block}\n---\n\n${about}\n\n${NOTES}`;
 };
 
-/** The template whose stages these are, name and kind in order; moves and hooks may differ. */
-export const templateOfStages = (
-  stages: readonly Stage[]
-): StagesTemplate | undefined =>
-  TEMPLATES.find((name) => {
-    const own = templateStages(name).stages;
+/** A move by the positions of its stages, which a rename leaves as they are: `0>2`, `*>4`. */
+const placedMove = (stages: Stages, move: StageMove): string => {
+  const at = (end: string) =>
+    end === "*"
+      ? "*"
+      : String(stages.stages.findIndex((stage) => stage.name === end));
+  return `${at(move.from)}>${at(move.to)}`;
+};
+
+/** Whether every move of `own` is one `template` allows, by position and by whom. */
+const movesWithin = (own: Stages, template: Stages): boolean =>
+  own.moves.every((move) =>
+    template.moves.some(
+      (allowed) =>
+        placedMove(template, allowed) === placedMove(own, move) &&
+        move.who.every((who) => allowed.who.includes(who))
+    )
+  );
+
+/**
+ * Which template a project's stages came from, through any renames: the
+ * templates with the same kinds in the same order whose moves cover the
+ * project's, by position. Two such (code and brand, launch and social) are
+ * told apart by how many stage names still match; a tie stays a tie.
+ */
+export const templateOf = (
+  own: Stages
+): { template: StagesTemplate } | { candidates: StagesTemplate[] } => {
+  const kinds = own.stages.map((stage) => stage.kind).join(" ");
+  const candidates = TEMPLATES.filter((name) => {
+    const template = templateStages(name);
     return (
-      own.length === stages.length &&
-      own.every(
-        (stage, index) =>
-          stage.name === stages[index]?.name &&
-          stage.kind === stages[index]?.kind
-      )
+      template.stages.map((stage) => stage.kind).join(" ") === kinds &&
+      movesWithin(own, template)
     );
   });
+  if (candidates.length < 2) {
+    return candidates[0] ? { template: candidates[0] } : { candidates: [] };
+  }
+  const named = candidates.map(
+    (name) =>
+      templateStages(name).stages.filter(
+        (stage, index) => stage.name === own.stages[index]?.name
+      ).length
+  );
+  const best = Math.max(...named);
+  const winners = candidates.filter((_, index) => named[index] === best);
+  return best > 0 && winners.length === 1
+    ? { template: winners[0] as StagesTemplate }
+    : { candidates };
+};
 
 /** A template, read: every template reads cleanly, or the hub would not start. */
 export const templateStages = (name: StagesTemplate): Stages => {

@@ -1,8 +1,8 @@
 <script lang="ts">
   /**
    * The project has no stages.md, so the code stages stand in. This picks a
-   * set of stages for it from the hub's templates (code, social, outreach,
-   * SEO, design): the hub writes stages.md into the project folder as a
+   * set of stages for it from the hub's templates (code, launch, SEO, brand,
+   * design, social, outreach): the hub writes stages.md into the project folder as a
    * commit, and the board takes its columns from it from then on. Tasks in a
    * stage the new set lacks keep their stage and stand in "Other stages"
    * until they are moved.
@@ -53,10 +53,12 @@
 
   const NAMES: Record<StagesTemplate, string> = {
     code: "Code",
+    launch: "Launch campaign",
+    seo: "SEO",
+    brand: "Brand kit",
+    design: "Design",
     social: "Social posts",
     outreach: "Outreach",
-    seo: "SEO",
-    design: "Design",
   };
 
   $effect(() => {
@@ -188,7 +190,7 @@
           </li>
         {/each}
       {:else if !problem}
-        {#each [0, 1, 2, 3, 4] as row (row)}
+        {#each [0, 1, 2, 3, 4, 5, 6] as row (row)}
           <li class="template-skeleton">
             <Skeleton class="h-3.5 w-24" />
             <Skeleton class="h-3 w-full" />

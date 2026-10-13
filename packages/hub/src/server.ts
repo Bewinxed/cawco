@@ -486,7 +486,7 @@ import { resolveSkill } from "./skills";
 import {
   type StagesTemplate,
   TEMPLATES,
-  templateOfStages,
+  templateOf,
   templateText,
 } from "./stages";
 import { createStreamHub } from "./stream";
@@ -14290,7 +14290,8 @@ export const createServer = (
       db.queuedTaskStarts(projectId).map((row) => row.taskId),
   });
   // A project made from a template before the hub recorded which one is
-  // known by its stages.md, stage for stage, so its starter skills reach it.
+  // known by its stages.md (stages.ts `templateOf`: kinds and moves, through
+  // renames), so its starter skills reach it. A tie is left to Apply template.
   detach(
     (async () => {
       let found = false;
@@ -14300,11 +14301,17 @@ export const createServer = (
         }
         // biome-ignore lint/performance/noAwaitInLoops: one project's folder at a time, once per boot
         const view = await tasks.stages(project.id).catch(() => undefined);
-        const template =
-          view?.source === "file" ? templateOfStages(view.stages) : undefined;
-        if (template) {
-          db.setProjectTemplate(project.id, template);
+        if (!(view?.source === "file" && view.problems.length === 0)) {
+          continue;
+        }
+        const match = templateOf(view);
+        if ("template" in match) {
+          db.setProjectTemplate(project.id, match.template);
           found = true;
+        } else if (match.candidates.length > 1) {
+          console.log(
+            `[templates] ${project.id}: stages match no single template (${match.candidates.join(", ")})`
+          );
         }
       }
       if (found) {

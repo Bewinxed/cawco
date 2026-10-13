@@ -54,7 +54,15 @@ export interface StagesView {
   views: { by: string | null; name: string }[];
 }
 
-export type StagesTemplate = "code" | "social" | "outreach" | "seo" | "design";
+/** The hub's stage templates (stages.ts `TEMPLATES`), in its order. */
+export type StagesTemplate =
+  | "code"
+  | "launch"
+  | "seo"
+  | "brand"
+  | "design"
+  | "social"
+  | "outreach";
 
 export interface StagesTemplateView {
   name: StagesTemplate;
