@@ -80,7 +80,8 @@ function wordsOf(
 /**
  * Read user and settled assistant messages from an OpenCode database into
  * normalized transcript documents. An answer still streaming is left for the
- * read after it completes, which updates it.
+ * read after it completes, which updates it. A 1.x database 2.0 has not
+ * converted yet (no `session_v2`) holds no 2.0 rows: it is read once it is.
  */
 export function readOpenCodeDocs(
   dbPath: string,
@@ -89,6 +90,13 @@ export function readOpenCodeDocs(
   const db = new Database(dbPath, { readonly: true });
   try {
     const since = options.since ?? 0;
+    if (
+      !db
+        .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_v2'")
+        .get()
+    ) {
+      return { docs: [], watermark: since };
+    }
     const rows = db
       .prepare(
         `SELECT m.id, m.session_id, m.type, m.time_created, m.time_updated, m.data, s.directory

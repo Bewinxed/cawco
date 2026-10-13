@@ -247,10 +247,13 @@ const ANY_RECORD =
  * the same file 2.0 opens), copied whole beside itself before a 2.0 server
  * first starts on it, and the copy's path; undefined when there is nothing of
  * 1.x's to keep. 2.0 converts a 1.x database in place on its first start,
- * once and one way, adding its own tables (`session_message`, …) beside 1.x's
- * (settled #10): a file that has them is converted already, and a file 1.x
- * never wrote (no `message` table) holds no 1.x history. The copy is SQLite's
- * own `VACUUM INTO`, consistent whatever else has the file open.
+ * once and one way, adding its own tables beside 1.x's (settled #10). Its
+ * sessions table, `session_v2`, is the one a 1.x database lacks: 1.18.34's
+ * own schema already has `session_message`, `credential` and `event`
+ * (observed on a database 1.18.34 made fresh), so a file with `session_v2`
+ * is converted already, and a file 1.x never wrote (no `message` table)
+ * holds no 1.x history. The copy is SQLite's own `VACUUM INTO`, consistent
+ * whatever else has the file open.
  */
 export const backupV1Database = (dataHome: string): string | undefined => {
   const path = join(dataHome, "opencode", "opencode.db");
@@ -267,7 +270,7 @@ export const backupV1Database = (dataHome: string): string | undefined => {
         .all()
         .map((row) => row.name)
     );
-    if (tables.has("session_message") || !tables.has("message")) {
+    if (tables.has("session_v2") || !tables.has("message")) {
       return;
     }
     const backup = `${path}.v1-backup-${new Date().toISOString().replaceAll(":", "-")}`;

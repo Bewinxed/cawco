@@ -862,6 +862,17 @@ const storedSessions = (
 ): StoredSession[] => {
   const db = new Database(dbPath, { readonly: true });
   try {
+    // A database 2.0 is still making (an account server's first start) has
+    // no sessions table yet, and so no session.
+    if (
+      !db
+        .query(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_v2'"
+        )
+        .get()
+    ) {
+      return [];
+    }
     return db
       .query<StoredSession, [string | null, string | null]>(
         `SELECT id, title, directory, time_created, time_updated FROM session_v2

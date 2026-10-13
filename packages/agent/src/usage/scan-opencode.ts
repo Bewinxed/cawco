@@ -126,7 +126,8 @@ const recordOf = (
  * Hands `onRecord` every settled assistant message and compaction updated
  * after `since`, a row at a time, and answers the highest `time_updated`
  * seen: the next watermark. A message still streaming is read again once it
- * completes, since completing updates it.
+ * completes, since completing updates it. A 1.x database 2.0 has not
+ * converted yet (no `session_v2`) holds no 2.0 rows: it is read once it is.
  */
 export const scanOpencode = (
   dbPath: string,
@@ -135,6 +136,15 @@ export const scanOpencode = (
 ): number => {
   const db = new Database(dbPath, { readonly: true });
   try {
+    if (
+      !db
+        .query(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'session_v2'"
+        )
+        .get()
+    ) {
+      return since;
+    }
     const rows = db
       .query<MessageRow, [number]>(
         `SELECT m.id, m.session_id, m.type, m.time_created, m.time_updated, m.data,
