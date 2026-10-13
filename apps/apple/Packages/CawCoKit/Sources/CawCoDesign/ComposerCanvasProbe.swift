@@ -273,14 +273,21 @@ enum CanvasProbe {
             return check("Draw opens the canvas with Reduce Motion", false, "note \(composer.probeCanvasNote ?? "none")")
         }
         let opening = await watch(room, for: Motion.durFade + 0.1)
-        check("Reduce Motion: the canvas fades in, nothing travels", opening.travelled == 0 && opening.keys.subtracting(["opacity"]).isEmpty && opening.faded,
-              "animated keys \(opening.keys.sorted()), the shape grown from the first look \(opening.travelled == 0), faded \(opening.faded)")
+        check("Reduce Motion: the canvas fades in, nothing travels", opening.travelled == 0 && travels(opening.keys).isEmpty && opening.faded,
+              "animated keys \(opening.keys.sorted()), travelling \(travels(opening.keys).sorted()), the shape grown from the first look \(opening.travelled == 0), faded \(opening.faded)")
         _ = await until(5) { !room.moving }
         composer.foldCanvas()
         let folding = await watch(room, for: Motion.durFade + 0.1)
-        check("Reduce Motion: Done fades it out, nothing travels", folding.travelled == 0 && folding.keys.subtracting(["opacity"]).isEmpty,
-              "animated keys \(folding.keys.sorted()), the shape held still \(folding.travelled == 0)")
+        check("Reduce Motion: Done fades it out, nothing travels", folding.travelled == 0 && travels(folding.keys).isEmpty,
+              "animated keys \(folding.keys.sorted()), travelling \(travels(folding.keys).sorted()), the shape held still \(folding.travelled == 0)")
         _ = await until(10) { room.up == false }
+    }
+
+    /// The keys that move a layer (`position.y`, `transform.scale` and the like
+    /// too). Anything else, opacity or UIKit's own bookkeeping
+    /// (`UIViewPropertyAnimator`'s `uiFractionalProgress`), travels nowhere.
+    private static func travels(_ keys: Set<String>) -> Set<String> {
+        keys.filter { key in ["position", "bounds", "transform", "frame"].contains { key == $0 || key.hasPrefix("\($0).") } }
     }
 
     /// The animations on the page and the shape for `seconds`: their keys,

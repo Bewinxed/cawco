@@ -145,6 +145,10 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     private let instanceId: String
     /// The page has joined its document (`cawco:ready`).
     private(set) var connected = false
+    /// Its last load failed: the next attach loads it again.
+    private(set) var broken = false
+    /// This load's answer was refused by status: WebKit's own word for the cancel is not the reason.
+    private var refused = false
     /// Where the canvas stands, told to the page (`cawco:place`): the rail's Dock reads Undock while docked.
     var docked = false {
         didSet { if docked != oldValue { tellPlace() } }
@@ -162,6 +166,9 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         configuration.userContentController.addUserScript(WKUserScript(source: Self.host, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        #if DEBUG
+        configuration.userContentController.addUserScript(WKUserScript(source: Self.errors, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        #endif
         web = WKWebView(frame: .zero, configuration: configuration)
         super.init()
         configuration.userContentController.add(CanvasMessages(self), name: "cawco")
@@ -176,6 +183,9 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
     }
 
     func load() {
+        broken = false
+        refused = false
+        connected = false
         guard let cookie = HTTPCookie(properties: [
             .name: "cawco-preview", .value: instanceId, .domain: page.origin.host() ?? "", .path: "/",
         ]) else {
@@ -184,7 +194,13 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         }
         let web = web
         let url = page.url
+        #if DEBUG
+        CanvasDebug.log.notice("canvas page sets its cookie for \(url.absoluteString, privacy: .public), domain \(cookie.domain, privacy: .public)")
+        #endif
         web.configuration.websiteDataStore.httpCookieStore.setCookie(cookie, completionHandler: {
+            #if DEBUG
+            CanvasDebug.log.notice("canvas page loads \(url.absoluteString, privacy: .public)")
+            #endif
             web.load(URLRequest(url: url))
         })
     }
@@ -236,7 +252,26 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
 
     // MARK: The page's words
 
+    /// The listener's answer for the page: anything but the page itself (its
+    /// refusal of the session, a missing canvas) is not loaded, and says so
+    /// now rather than leaving a send to wait out `ready`.
+    func webView(_: WKWebView, decidePolicyFor navigationResponse: WKNavigationResponse,
+                 decisionHandler: @escaping @MainActor @Sendable (WKNavigationResponsePolicy) -> Void) {
+        let status = (navigationResponse.response as? HTTPURLResponse)?.statusCode ?? 0
+        #if DEBUG
+        CanvasDebug.log.notice("canvas page answered \(status) for \(navigationResponse.response.url?.absoluteString ?? "?", privacy: .public)")
+        #endif
+        guard navigationResponse.isForMainFrame, status != 200 else { return decisionHandler(.allow) }
+        // The cancel ends the navigation with WebKit's own "interrupted": this sentence stands.
+        refused = true
+        decisionHandler(.cancel)
+        fail("the hub answered \(status) for its page")
+    }
+
     func webView(_: WKWebView, didFinish _: WKNavigation!) {
+        #if DEBUG
+        CanvasDebug.log.notice("canvas page didFinish \(self.web.url?.absoluteString ?? "?", privacy: .public); hello for \(self.page.id, privacy: .public)")
+        #endif
         connected = false
         // stage.svelte.ts `hello`: which artifact it is, where its doc is, where it stands.
         deliver([
@@ -245,14 +280,45 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             "sync": page.sync,
         ])
         tellPlace()
+        #if DEBUG
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            self?.web.evaluateJavaScript(Self.status) { value, error in
+                let said = (value as? String) ?? error?.localizedDescription ?? "nothing"
+                CanvasDebug.log.notice("canvas page holds \(said, privacy: .public)")
+            }
+        }
+        #endif
     }
 
     func webView(_: WKWebView, didFail _: WKNavigation!, withError error: any Error) {
-        onFailed(error.localizedDescription)
+        failed(error)
     }
 
     func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError error: any Error) {
-        onFailed(error.localizedDescription)
+        failed(error)
+    }
+
+    func webViewWebContentProcessDidTerminate(_: WKWebView) {
+        fail("its page stopped")
+    }
+
+    private func failed(_ error: any Error) {
+        guard !refused else { return }
+        fail(error.localizedDescription)
+    }
+
+    /// The page isn't there: whoever waits on it hears why now, and the next attach loads it again.
+    private func fail(_ reason: String) {
+        #if DEBUG
+        CanvasDebug.log.error("canvas page failed at \(self.page.url.absoluteString, privacy: .public): \(reason, privacy: .public)")
+        #endif
+        connected = false
+        broken = true
+        let waiters = readyWaiters.values
+        readyWaiters = [:]
+        for waiter in waiters { waiter.resume(throwing: CanvasRefusal(message: "the canvas page didn't load: \(reason)")) }
+        onFailed(reason)
     }
 
     /// What the page posted (CanvasStages.svelte `receive`). The page is the
@@ -261,6 +327,16 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         guard let text = message.body as? String, let data = text.data(using: .utf8),
               let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let type = body["type"] as? String else { return }
+        #if DEBUG
+        if type == "cawco:debug" {
+            return CanvasDebug.log.error("canvas page says \(String(describing: body["message"] ?? "?").prefix(600), privacy: .public)")
+        }
+        if type == "cawco:error" {
+            CanvasDebug.log.error("canvas page posted cawco:error \(String(describing: body["of"] ?? "?"), privacy: .public): \(String(describing: body["message"] ?? "?").prefix(300), privacy: .public)")
+        } else if type != "cawco:ink" {
+            CanvasDebug.log.notice("canvas page posted \(type, privacy: .public)")
+        }
+        #endif
         switch type {
         case "cawco:ready":
             connected = true
@@ -288,6 +364,35 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
               let json = String(data: data, encoding: .utf8) else { return }
         web.evaluateJavaScript("window.__cawcoDeliver && window.__cawcoDeliver(\(json))", completionHandler: nil)
     }
+
+    #if DEBUG
+    /// The page's failures, to the Canvas log: a script's error, a file that
+    /// didn't load, a rejection nobody caught, `console.error`.
+    private static let errors = """
+    (() => {
+      const say = (message) => { try { window.webkit.messageHandlers.cawco.postMessage(JSON.stringify({ type: "cawco:debug", message: String(message) })); } catch {} };
+      window.addEventListener("error", (event) => {
+        const target = event.target;
+        if (target && target !== window && (target.src || target.href)) say(`file didn't load: ${target.src || target.href}`);
+        else say(`error: ${event.message} at ${event.filename}:${event.lineno}:${event.colno}`);
+      }, true);
+      window.addEventListener("unhandledrejection", (event) => say(`unhandled: ${event.reason && (event.reason.stack || event.reason.message) || event.reason}`));
+      const error = console.error;
+      console.error = function (...parts) { say(`console.error: ${parts.map((part) => part && part.stack || String(part)).join(" ")}`); return error.apply(this, parts); };
+    })();
+    """
+
+    /// What the page holds a few seconds after it loaded.
+    private static let status = """
+    JSON.stringify({
+      root: document.getElementById("canvas-root")?.childElementCount ?? null,
+      excalidraw: !!document.querySelector(".excalidraw"),
+      artifact: typeof window.cawcoArtifact,
+      size: [innerWidth, innerHeight],
+      files: performance.getEntriesByType("resource").map((entry) => `${entry.name.split("/").slice(-2).join("/")}:${entry.responseStatus ?? "?"}`),
+    })
+    """
+    #endif
 
     /// PreviewController's host script: what the page posts goes to the app,
     /// and what the app hands the page arrives at its message listeners from
@@ -450,7 +555,10 @@ final class CanvasRoom: NSObject {
 
     /// The page, loaded once its place on the listener is known.
     func attach(_ page: CanvasPage, instanceId: String) -> CanvasWeb {
-        if let web, web.page == page { return web }
+        if let web, web.page == page {
+            if web.broken { web.load() }
+            return web
+        }
         web?.close()
         web?.web.removeFromSuperview()
         let made = CanvasWeb(page: page, instanceId: instanceId)

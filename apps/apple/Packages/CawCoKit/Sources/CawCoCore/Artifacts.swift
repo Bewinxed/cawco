@@ -12,9 +12,11 @@ public struct CanvasPage: Sendable, Equatable {
     /// The preview listener's root, on the hub's host.
     public let origin: URL
 
-    /// The canvas's own page.
+    /// The canvas's own page, `/__cawco/canvas/<id>/`: one closing slash,
+    /// which the directory hint writes (a path ending in one gets a second,
+    /// and the listener serves `//` nothing).
     public var url: URL {
-        origin.appending(path: "__cawco/canvas/\(id)/", directoryHint: .isDirectory)
+        origin.appending(components: "__cawco", "canvas", id, directoryHint: .isDirectory)
     }
 
     /// Where its page joins its live document (the overlay's `sync`).

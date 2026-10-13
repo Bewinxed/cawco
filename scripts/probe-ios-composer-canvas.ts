@@ -48,6 +48,8 @@ const DEVICE = "iPad Pro 11-inch (M4)";
 const RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-18-5";
 /** What `log stream --style compact` puts before a Probe line's own words. */
 const PROBE_PREFIX = /^.*\[dev\.cawco\.app:Probe\]\s*/;
+/** The same before a Canvas line's: the page's load, answer and posts, printed, never a check. */
+const CANVAS_PREFIX = /^.*\[dev\.cawco\.app:Canvas\]\s*/;
 /** The app asking for the finger's drag: where it goes down, in points. */
 const SWIPE_AT = /canvas swipe at (\d+),(\d+)/;
 /** An element's label in axe's `describe-ui`. */
@@ -174,7 +176,7 @@ async function launchPass(
       "--style",
       "compact",
       "--predicate",
-      'subsystem == "dev.cawco.app" AND category == "Probe"',
+      'subsystem == "dev.cawco.app" AND (category == "Probe" OR category == "Canvas")',
     ],
     { stdout: "pipe", stderr: "ignore" }
   );
@@ -183,6 +185,23 @@ async function launchPass(
   let refused = false;
   // Cancelled when the pass is done: the simulator's own `log` keeps the pipe open.
   const reader = stream.stdout.getReader();
+  /** One line of the log: a Canvas line printed, a Probe line kept and its swipe answered. */
+  const hear = async (part: string) => {
+    if (CANVAS_PREFIX.test(part)) {
+      console.log(`  ${label} [Canvas]: ${part.replace(CANVAS_PREFIX, "")}`);
+      return;
+    }
+    const line = part.replace(PROBE_PREFIX, "");
+    if (!line.startsWith("canvas ")) {
+      return;
+    }
+    lines.push(line);
+    console.log(`  ${label}: ${line}`);
+    const at = line.match(SWIPE_AT);
+    if (at && !(await dragUp(udid, label, Number(at[1]), Number(at[2])))) {
+      refused = true;
+    }
+  };
   const heard = (async () => {
     const decoder = new TextDecoder();
     let rest = "";
@@ -196,17 +215,8 @@ async function launchPass(
       const parts = rest.split("\n");
       rest = parts.pop() ?? "";
       for (const part of parts) {
-        const line = part.replace(PROBE_PREFIX, "");
-        if (!line.startsWith("canvas ")) {
-          continue;
-        }
-        lines.push(line);
-        console.log(`  ${label}: ${line}`);
-        const at = line.match(SWIPE_AT);
         // biome-ignore lint/performance/noAwaitInLoops: one swipe at a time, as the app asks
-        if (at && !(await dragUp(udid, label, Number(at[1]), Number(at[2])))) {
-          refused = true;
-        }
+        await hear(part);
       }
     }
   })();
@@ -239,13 +249,24 @@ async function launchPass(
   return lines;
 }
 
-/** Every block in the hub's transcript of `id`, as JSON objects. */
-const blocksOf = async (id: string): Promise<Record<string, unknown>[]> => {
-  const page = await fleet.api<{ blocks?: Record<string, unknown>[] }>(
+/** A transcript block as the hub sends it: a user message's files and pictures are in its metadata (core transcript-rules.ts `userBody`). */
+interface Block {
+  metadata?: { attachments?: { name?: string }[]; images?: unknown[] };
+}
+
+/** Every block in the hub's transcript of `id`. */
+const blocksOf = async (id: string): Promise<Block[]> => {
+  const page = await fleet.api<{ blocks?: Block[] }>(
     `/api/instances/${id}/transcript?limit=200`
   );
   return page.blocks ?? [];
 };
+
+/** Whether a block's message carries the canvas's file. */
+const carriesCanvas = (block: Block) =>
+  (block.metadata?.attachments ?? []).some(
+    (file) => file.name === "canvas.excalidraw"
+  );
 
 try {
   fleet.launch("sessiond");
@@ -301,22 +322,15 @@ xcrun simctl install ${udid} "${app}"`);
     ? await until(
         "the canvas's message in the hub's transcript",
         () => blocksOf(id),
-        (blocks) =>
-          blocks.some((block) =>
-            JSON.stringify(block.attachments ?? []).includes(
-              "canvas.excalidraw"
-            )
-          ),
+        (blocks) => blocks.some(carriesCanvas),
         60_000
-      ).catch(() => [] as Record<string, unknown>[])
+      ).catch(() => [] as Block[])
     : [];
-  const message = carried.find((block) =>
-    JSON.stringify(block.attachments ?? []).includes("canvas.excalidraw")
+  const message = carried.find(carriesCanvas);
+  const names = (message?.metadata?.attachments ?? []).map(
+    (a) => a.name ?? "?"
   );
-  const names = (
-    (message?.attachments as { name?: string }[] | undefined) ?? []
-  ).map((a) => a.name ?? "?");
-  const images = (message?.images as unknown[] | undefined)?.length ?? 0;
+  const images = message?.metadata?.images?.length ?? 0;
   const detail = `attachments ${names.join(", ") || "none"}, images ${images}`;
   if (
     names.includes("canvas.excalidraw") &&
