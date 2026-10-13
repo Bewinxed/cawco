@@ -11,10 +11,11 @@
  * it does over MCP. Anything else is answered 403. The executor names the
  * socket to every command (`CAWCO_TOOL_SOCKET`).
  */
-import { lstat, mkdir, rm } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   darwinSocketRoot,
+  ownSocketRoot,
   socketPathProblem,
   workspaceDoorDir,
 } from "@cawco/core/paths";
@@ -25,37 +26,10 @@ export const toolDoorOf = (id: string): string =>
   join(workspaceDoorDir(id), "tools.sock");
 
 /**
- * macOS's socket root ({@link darwinSocketRoot}), made if it is not there and
- * then taken only as this user's own: a dir, not a link, owned by this uid,
- * with no group or other bits. `/private/tmp` is every local user's to write,
- * so a root someone else made first (to read or stand in for a workspace's
- * doors) is refused in words that say what to remove.
- */
-const ownSocketRoot = async (): Promise<void> => {
-  const root = darwinSocketRoot();
-  await mkdir(root, { mode: 0o700 }).catch((error: NodeJS.ErrnoException) => {
-    if (error.code !== "EEXIST") {
-      throw error;
-    }
-  });
-  const found = await lstat(root);
-  const uid = process.getuid?.();
-  // biome-ignore lint/suspicious/noBitwiseOperators: a mode's permission bits
-  const mode = found.mode & 0o777;
-  // Its group and other bits: none.
-  const open = mode % 0o100 !== 0;
-  if (!found.isDirectory() || found.uid !== uid || open) {
-    throw new Error(
-      `${root} is not this user's own dir (a ${found.isDirectory() ? "dir" : "link or file"} owned by uid ${found.uid}, mode ${mode.toString(8)}): remove it, and the agent makes it again`
-    );
-  }
-};
-
-/**
  * A workspace socket's place: refused up front when its path is longer than
  * a unix socket's holds (the listen would fail, or bind a cut name that no
  * caller reaches), and its dir made (0700, as a runtime dir is), on macOS in
- * this user's own socket root ({@link ownSocketRoot}).
+ * this user's own socket root (paths.ts `ownSocketRoot`).
  */
 export const socketPlace = async (
   path: string,
@@ -69,7 +43,7 @@ export const socketPlace = async (
     process.platform === "darwin" &&
     path.startsWith(`${darwinSocketRoot()}/`)
   ) {
-    await ownSocketRoot();
+    ownSocketRoot();
   }
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
 };

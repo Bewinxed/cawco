@@ -140,7 +140,11 @@ const KEYCHAIN_MACH_SERVICES = [
 
 /** What a macOS profile names besides the policy. */
 export interface SeatbeltPlace {
-  /** The tool door's and the git door's sockets, the unix sockets under CawCo's dirs a command connects to. */
+  /**
+   * The tool door's and the git door's sockets, the unix sockets under
+   * CawCo's dirs a command connects to, and its `TMPDIR`'s short name
+   * (paths.ts `workspaceTmpDir`), through which a tool reaches its own socket.
+   */
   readonly doors: readonly string[];
   /**
    * Where a host's key agents, apps and CawCo's own sockets are (CawCo's

@@ -15,13 +15,23 @@ import { readKeeperVersion } from "@cawco/core/binary-installation";
 import { detach } from "@cawco/core/detach";
 import { MACHINE_ENDPOINT, publishKeeper } from "@cawco/core/keepers";
 import { runtimeVersion } from "@cawco/core/runtime";
-import { sessiondEndpoint } from "@cawco/core/sessiond";
+import {
+  sessiondEndpoint,
+  sessiondHomePath,
+  sessiondLinkDir,
+} from "@cawco/core/sessiond";
 import { placeChildren } from "./cgroup";
 import { SessiondServer } from "./server";
 
 const main = async (): Promise<void> => {
   // Read directly: `CAWCO_ENV` has no key for sessiond's own override.
   const endpoint = process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint();
+  // A unit names the endpoint by its short name on macOS; after a restart
+  // cleared `/private/tmp`, the keeper may be the first to start, so it makes
+  // the name again before it binds through it.
+  if (sessiondHomePath(endpoint) !== endpoint) {
+    sessiondLinkDir();
+  }
   // The machine's endpoint as a symlink is a build's keeper's: one started on
   // it (a legacy keeper's unit, restarted after its keeper was retired) would
   // take it over, or refuse it again every two seconds. Nothing here is

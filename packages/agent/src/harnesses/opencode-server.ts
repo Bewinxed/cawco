@@ -8,7 +8,11 @@ import {
   processArgs,
   processStartMs,
 } from "@cawco/core/process-identity";
-import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
+import {
+  type ProcSpec,
+  sessiondEndpoint,
+  sessiondHomePath,
+} from "@cawco/core/sessiond";
 import { launchGateForm } from "../gate-form";
 import { OPENCODE_SERVER_PROC_ID } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
@@ -70,10 +74,17 @@ function abortable<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
 const processStart = async (pid: number): Promise<string> =>
   (await osProcessStart(pid)) ?? "";
 
-/** The record files' common start: one keeper (sessiond endpoint), one file per server it keeps. */
+/**
+ * The record files' common start: one keeper (sessiond endpoint, as it lies
+ * on disk, whichever name reached it), one file per server it keeps.
+ */
 const recordStem = (): string =>
   `opencode-server-${createHash("sha256")
-    .update(process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint())
+    .update(
+      sessiondHomePath(
+        process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
+      )
+    )
     .digest("hex")
     .slice(0, 16)}`;
 

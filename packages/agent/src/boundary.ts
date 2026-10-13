@@ -86,6 +86,7 @@ import {
 import {
   AGENT_SOCKET_ENV,
   darwinUserDirs,
+  linkWorkspaceTmp,
   scratchSocketProblem,
   sessionIdentityDir,
   workspaceAccountsFile,
@@ -99,6 +100,7 @@ import {
   workspaceScratchRoot,
   workspaceStateDir,
   workspacesDir,
+  workspaceTmpDir,
 } from "@cawco/core/paths";
 import {
   commandLine as commandLineOf,
@@ -156,7 +158,7 @@ export interface Boundary {
   readonly pid: number;
   /** The workspace's policy file, which every harness judges its file tools by (`workspace-policy.ts`). */
   readonly policy: string;
-  /** The workspace's scratch dir, its `TMPDIR`: `~/.cawco/tmp/<id8>` (`workspaceScratchDir`), on disk and outside the clone. */
+  /** The workspace's scratch dir, its commands' `TMPDIR` (on macOS by its short name, `workspaceTmpDir`): `~/.cawco/tmp/<id8>` (`workspaceScratchDir`), on disk and outside the clone. */
   readonly scratch: string;
 }
 
@@ -1671,7 +1673,9 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
   const hash = createHash("sha256");
   if (process.platform === "darwin") {
     const profile = seatbeltProfile(policy, {
-      doors: [toolDoorOf(id), gitDoorOf(id)],
+      // With the scratch dir's short name, its `TMPDIR`: a tool's socket
+      // there (Chromium's singleton) is reached by that name too.
+      doors: [toolDoorOf(id), gitDoorOf(id), workspaceTmpDir(id)],
       hostSockets: await Promise.all(
         [
           dirname(workspacesDir()),
@@ -1721,7 +1725,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         env: {
           CAWCO_WORKSPACE: id,
           [BOUNDARY_MARKER]: gen,
-          TMPDIR: policy.scratch,
+          TMPDIR: workspaceTmpDir(id),
         },
       },
     };
@@ -2416,18 +2420,19 @@ fi`
 
 /**
  * What every command runs with besides its caller's environment: the
- * workspaces' own cache (`workspaceCacheEnv`), its scratch dir as `TMPDIR`,
+ * workspaces' own cache (`workspaceCacheEnv`), its scratch dir as `TMPDIR`
+ * (by its short name on macOS, `workspaceTmpDir`),
  * the empty git template, gh's empty config dir ({@link ghConfigOf}), git's
  * system config naming gh's helper ({@link gitSystemConfigOf}), the tool and
  * git doors (hub-git.ts `gitDoorEnv`), and `CAWCO_WORKSPACE`, by which a
  * script tells that it runs inside one; never a key agent's socket
  * ({@link AGENT_SOCKET_ENV}).
  */
-const commandEnv = (id: string, scratch: string, clone: string): string[] => [
+const commandEnv = (id: string, clone: string): string[] => [
   `unset ${AGENT_SOCKET_ENV.join(" ")}`,
   ...Object.entries({
     ...workspaceCacheEnv(),
-    TMPDIR: scratch,
+    TMPDIR: workspaceTmpDir(id),
     GIT_TEMPLATE_DIR: gitTemplateOf(id),
     GH_CONFIG_DIR: ghConfigOf(id),
     GIT_CONFIG_SYSTEM: gitSystemConfigOf(id),
@@ -2530,7 +2535,7 @@ printf '%s' "$1" > "$req/cmd"
 pwd -P > "$req/cwd"
 {
   export -p
-${commandEnv(id, held.scratch, held.path)
+${commandEnv(id, held.path)
   .map((line) => `  echo ${shellQuote(line)}`)
   .join("\n")}
   ${path}
@@ -2582,6 +2587,8 @@ const makeDirs = async (id: string): Promise<void> => {
       ...workspaceCaches(),
     ].map((path) => mkdir(path, { recursive: true }))
   );
+  // Its `TMPDIR`'s short name on macOS, made again after a restart cleared it.
+  linkWorkspaceTmp(id);
 };
 
 /** How many files {@link ownInodes} copies at once. */
@@ -2878,8 +2885,10 @@ export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
     );
   }
   await rm(stateDir(ref.id), { recursive: true, force: true });
-  // Its scratch dir, with whatever its commands left there.
+  // Its scratch dir, with whatever its commands left there, and its short
+  // name on macOS (the link alone: `rm` takes a link, not what it names).
   await rm(scratchOf(ref.id), { recursive: true, force: true });
+  await rm(workspaceTmpDir(ref.id), { force: true });
   await signalAll((procId) => isJudgeOf(procId, ref.id));
   // Its sockets' dir, once nothing listens there (`workspaceDoorDir`).
   await rm(workspaceDoorDir(ref.id), { recursive: true, force: true });

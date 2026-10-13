@@ -1,4 +1,13 @@
-import { type Dirent, existsSync, readdirSync } from "node:fs";
+import {
+  type Dirent,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readlinkSync,
+  symlinkSync,
+  unlinkSync,
+} from "node:fs";
 import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -388,11 +397,30 @@ export const SCRATCH_SOCKET_SUFFIX =
 export const workspaceScratchDir = (id: string): string =>
   join(workspaceScratchRoot(), id.slice(0, 8));
 
-/** Why a socket in workspace `id`'s scratch dir would not fit, or nothing ({@link socketPathProblem}). */
+/**
+ * The name a workspace's commands are given for its scratch dir, their
+ * `TMPDIR`: on macOS its short name, `/private/tmp/cawco-<uid>/t-<id8>`
+ * ({@link shortLink}, made by {@link linkWorkspaceTmp} before the boundary
+ * starts), so a socket a tool binds there (Chromium's process singleton,
+ * {@link SCRATCH_SOCKET_SUFFIX}) fits whatever the username, while its files
+ * stay on disk in {@link workspaceScratchDir}; elsewhere the scratch dir.
+ */
+export const workspaceTmpDir = (id: string): string =>
+  process.platform === "darwin"
+    ? join(darwinSocketRoot(), scratchLinkName(id))
+    : workspaceScratchDir(id);
+
+/** {@link workspaceTmpDir}, its short name made or made again first on macOS. */
+export const linkWorkspaceTmp = (id: string): string =>
+  process.platform === "darwin"
+    ? shortLink(scratchLinkName(id), workspaceScratchDir(id))
+    : workspaceScratchDir(id);
+
+/** Why a socket in workspace `id`'s `TMPDIR` would not fit, or nothing ({@link socketPathProblem}). */
 export const scratchSocketProblem = (id: string): string | undefined =>
   socketPathProblem(
-    join(workspaceScratchDir(id), SCRATCH_SOCKET_SUFFIX),
-    `A socket in workspace ${id}'s scratch dir, as Chromium makes one,`,
+    join(workspaceTmpDir(id), SCRATCH_SOCKET_SUFFIX),
+    `A socket in workspace ${id}'s TMPDIR, as Chromium makes one,`,
     "run the agent with a shorter HOME"
   );
 
@@ -422,6 +450,93 @@ export const darwinSocketRoot = (): string => {
   }
   return join("/private/tmp", `cawco-${uid}`);
 };
+
+/**
+ * {@link darwinSocketRoot}, made if it is not there (a restart clears
+ * `/private/tmp`) and then taken only as this user's own: a dir, not a link,
+ * owned by this uid, with no group or other bits. `/private/tmp` is every
+ * local user's to write, so a root someone else made first (to read or stand
+ * in for a workspace's doors, or to point a short name elsewhere) is refused
+ * in words that say what to remove. Its path.
+ */
+export const ownSocketRoot = (): string => {
+  const root = darwinSocketRoot();
+  try {
+    mkdirSync(root, { mode: 0o700 });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      throw error;
+    }
+  }
+  const found = lstatSync(root);
+  // biome-ignore lint/suspicious/noBitwiseOperators: a mode's permission bits
+  const mode = found.mode & 0o777;
+  // Its group and other bits: none.
+  const open = mode % 0o100 !== 0;
+  if (!found.isDirectory() || found.uid !== process.getuid?.() || open) {
+    throw new Error(
+      `${root} is not this user's own dir (a ${found.isDirectory() ? "dir" : "link or file"} owned by uid ${found.uid}, mode ${mode.toString(8)}): remove it, and the agent makes it again`
+    );
+  }
+  return root;
+};
+
+/**
+ * macOS's short name for a dir whose path is too long to hold a socket's:
+ * `<root>/<name>` in {@link ownSocketRoot}, a link to `target`, the dir
+ * itself staying where it is. A socket bound or reached through it is the
+ * file in `target`; only the path string handed to bind() and connect() is
+ * short. Made, or made again (a restart clears `/private/tmp`), or pointed
+ * back at `target`, before its path is returned, by whichever side asks
+ * first. macOS's tmp_cleaner never takes it: it deletes regular files and
+ * empty dirs three days old (`find … -type f … -delete`, `-type d … -empty`,
+ * https://jrb.nz/posts/tmp-macos/), and a link is neither.
+ */
+export const shortLink = (name: string, target: string): string => {
+  const link = join(ownSocketRoot(), name);
+  const pointsAt = (): string | undefined => {
+    try {
+      return readlinkSync(link);
+    } catch (error) {
+      const { code } = error as NodeJS.ErrnoException;
+      if (code === "ENOENT") {
+        return;
+      }
+      if (code === "EINVAL") {
+        throw new Error(
+          `${link} is not a link (only this user writes ${darwinSocketRoot()}): remove it, and the agent makes the link again`,
+          { cause: error }
+        );
+      }
+      throw error;
+    }
+  };
+  const found = pointsAt();
+  if (found === target) {
+    return link;
+  }
+  if (found !== undefined) {
+    unlinkSync(link);
+  }
+  try {
+    symlinkSync(target, link);
+  } catch (error) {
+    // Another process made it first: it is right if it names the same dir.
+    if (
+      (error as NodeJS.ErrnoException).code !== "EEXIST" ||
+      pointsAt() !== target
+    ) {
+      throw error;
+    }
+  }
+  return link;
+};
+
+/** The short name of sessiond's dir (`~/.cawco`) on macOS ({@link shortLink}). */
+export const SESSIOND_LINK = "c";
+
+/** The short name of workspace `id`'s scratch dir on macOS ({@link shortLink}). */
+const scratchLinkName = (id: string): string => `t-${id.slice(0, 8)}`;
 
 /**
  * Where a workspace's unix sockets are: its tool door, its git door and its

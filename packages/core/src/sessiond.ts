@@ -12,10 +12,12 @@
  * (endpoint derivation) for the reasoning behind every shape below.
  */
 
+import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ChildLimit } from "./harness";
 import type { BuildInfo, SessionLimits } from "./index";
+import { darwinSocketRoot, SESSIOND_LINK, shortLink } from "./paths";
 
 /**
  * Capability string a sessiond speaks, exchanged in `attach`/`welcome`
@@ -274,9 +276,12 @@ export type SessiondServerMessage =
  *   `XDG_RUNTIME_DIR` is safe here because the install path already requires
  *   lingering, which keeps the runtime dir alive across logout; `~/.cawco`
  *   covers ad-hoc runs.
- * - darwin: `~/.cawco/sessiond.sock` always — `sun_path` is 104 bytes on
- *   darwin, so a long `XDG_RUNTIME_DIR`-style path is a real risk; a fixed,
- *   short home-relative path avoids it.
+ * - darwin: `~/.cawco/sessiond.sock` always, reached by its short name
+ *   `/private/tmp/cawco-<uid>/c-<home hash>/sessiond.sock`
+ *   ({@link sessiondLinkDir}):
+ *   `sun_path` is 104 bytes on darwin, and `~/.cawco/sessiond-<version>.sock`
+ *   under a long username passes it. The socket file stays in `~/.cawco`, so
+ *   a keeper and a launchd unit of an earlier build are where they were.
  * - win32 : `\\.\pipe\cawco-sessiond-<user>` — a name reservation. Windows
  *   implementation is out of scope for this leaf; only the string is fixed
  *   so nothing downstream has to change when it lands.
@@ -288,7 +293,7 @@ export const sessiondEndpoint = (): string => {
       return `\\\\.\\pipe\\cawco-sessiond-${user}`;
     }
     case "darwin":
-      return join(homedir(), ".cawco", "sessiond.sock");
+      return join(sessiondLinkDir(), "sessiond.sock");
     default: {
       // linux, and every other platform Node reports: same derivation as
       // linux's documented case, since XDG_RUNTIME_DIR is the same signal
@@ -299,4 +304,42 @@ export const sessiondEndpoint = (): string => {
         : join(homedir(), ".cawco", "sessiond.sock");
     }
   }
+};
+
+/**
+ * macOS: sessiond's dir `~/.cawco` by its short name
+ * (`/private/tmp/cawco-<uid>/c-<home hash>`, paths.ts `shortLink`), made or made again
+ * first. Every derivation of the endpoint passes here, and sessiond itself
+ * calls it for an endpoint its unit names there, so after a restart clears
+ * `/private/tmp` whichever side starts first makes the name again.
+ */
+export const sessiondLinkDir = (): string =>
+  shortLink(sessiondLinkName(), join(homedir(), ".cawco"));
+
+/**
+ * The short name's own name: `c-` and its HOME's first 8 hex of sha256, as
+ * every agent of this user shares the socket root and a probe's scratch
+ * fleet runs one under a HOME of its own; one name for all would be pointed
+ * at whichever HOME asked last.
+ */
+const sessiondLinkName = (): string =>
+  `${SESSIOND_LINK}-${createHash("sha256").update(homedir()).digest("hex").slice(0, 8)}`;
+
+/** {@link sessiondLinkDir}'s path alone, nothing made. */
+export const sessiondLinkPath = (): string =>
+  join(darwinSocketRoot(), sessiondLinkName());
+
+/**
+ * `path` as it lies on disk under `~/.cawco` when it is named through
+ * {@link sessiondLinkDir}, else as it is: what a record keyed by the
+ * endpoint is keyed by, the same whichever name reached it.
+ */
+export const sessiondHomePath = (path: string): string => {
+  if (process.platform !== "darwin") {
+    return path;
+  }
+  const short = `${sessiondLinkPath()}/`;
+  return path.startsWith(short)
+    ? join(homedir(), ".cawco", path.slice(short.length))
+    : path;
 };
