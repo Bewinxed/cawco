@@ -97,6 +97,7 @@
   import CawFace from "../home/CawFace.svelte";
   import { newId } from "../id";
   import { minimizedAsks } from "../minimized-asks.svelte";
+  import { inkExtras, inks } from "../preview/ink.svelte";
   import SelectionChip from "../preview/SelectionChip.svelte";
   import SelectionPopover from "../preview/SelectionPopover.svelte";
   import {
@@ -1154,7 +1155,7 @@
       sendBlock = "Finish switching conversations before sending.";
       return;
     }
-    if (!draft.hasContent) {
+    if (!(draft.hasContent || inkWaiting)) {
       sendBlock = "Write a message before sending.";
       return;
     }
@@ -1189,8 +1190,8 @@
       return;
     }
     awaiting = null;
-    if (draft.canvas) {
-      sendWithCanvas(via);
+    if (draft.canvas || inkWaiting) {
+      sendWithArtifacts(via);
       return;
     }
     // The text leaves the field for the one row it becomes (motion/share),
@@ -1204,25 +1205,49 @@
   }
 
   /**
-   * A message carrying the canvas: the canvas's picture is drawn now and
-   * its file, outline and picture join the send through the attachments
-   * and images it already carries. The chip flies into the row the message
-   * becomes when no words go with it; the words do otherwise. A canvas that
-   * cannot go says why under the chip and nothing is sent.
+   * The ink's pins and picture for a send: null with no ink waiting, false
+   * when the page could not give them (said under the chips).
    */
-  async function sendWithCanvas(
+  async function readInk(): Promise<
+    Awaited<ReturnType<typeof inkExtras>> | false
+  > {
+    if (!(recallOf && inkWaiting)) {
+      return null;
+    }
+    inking = true;
+    try {
+      return await inkExtras(recallOf);
+    } catch (error) {
+      room.error = `The ink couldn't be read for sending: ${error instanceof Error ? error.message : String(error)}. Nothing was sent; send again.`;
+      return false;
+    } finally {
+      inking = false;
+    }
+  }
+
+  /**
+   * A message carrying the canvas or the person's ink: the canvas's picture
+   * is drawn now and its file, outline and picture join the send; the ink's
+   * pins go as `pins.md` and the page with its ink as a picture
+   * (preview/ink.svelte.ts); all of it through the attachments and images
+   * the send already carries. The canvas's chip flies into the row the
+   * message becomes when no words go with it; the words do otherwise. What
+   * cannot go says why under the chips and nothing is sent.
+   */
+  async function sendWithArtifacts(
     via: (text: string, extras: SendExtras, id: string) => void
   ): Promise<void> {
     const writing = draft;
     const { canvas } = draft;
-    if (!canvas) {
+    const extra = canvas ? await room.extras() : null;
+    if (canvas && !extra) {
       return;
     }
-    const extra = await room.extras();
-    if (!extra || draft !== writing || draft.canvas !== canvas) {
+    const ink = await readInk();
+    if (ink === false || draft !== writing || draft.canvas !== canvas) {
       return;
     }
-    const chip = canvas.folded ? canvasChip : undefined;
+    const chip = canvas?.folded ? canvasChip : undefined;
     const id = newId();
     if (draft.text.trim() || !chip) {
       departBox(`sent:${id}`, field as HTMLTextAreaElement);
@@ -1231,10 +1256,21 @@
     }
     const { text, extras } = draft.take();
     dismissed = true;
-    extras.attachments = [...(extras.attachments ?? []), ...extra.attachments];
-    extras.images = [...(extras.images ?? []), ...extra.images];
+    extras.attachments = [
+      ...(extras.attachments ?? []),
+      ...(extra?.attachments ?? []),
+      ...(ink?.extras.attachments ?? []),
+    ];
+    extras.images = [
+      ...(extras.images ?? []),
+      ...(extra?.images ?? []),
+      ...(ink?.extras.images ?? []),
+    ];
     via(text, extras, id);
-    room.sent(canvas.id);
+    if (canvas) {
+      room.sent(canvas.id);
+    }
+    ink?.sent();
   }
 
   /**
@@ -1418,8 +1454,12 @@
   }
   /** The canvas is being made, or read for a send: Send waits, pending. */
   function canvasWorking(): boolean {
-    return room.working;
+    return room.working || inking;
   }
+  /** The person's unsent ink on this session's artifact: the next Send carries it. */
+  const inkWaiting = $derived(recallOf ? inks.get(recallOf) : undefined);
+  /** The ink's pins and picture are being read for a send. */
+  let inking = $state(false);
   /** The canvas stands over the field, or is on its way up or down: the grown shape is the composer. */
   const canvasUp = $derived(room.up);
   /** Its box over the field is laid out while the draft's canvas stands there. */
@@ -2976,6 +3016,7 @@
       canvasHidden={room.chipHidden}
       {draft}
       hasNotes={draft.selections.length > 0}
+      ink={inkWaiting}
       onopencanvas={() => room.open()}
       onremovecanvas={() => room.remove()}
       bind:canvasChip
@@ -3290,7 +3331,7 @@
             disabled={!(
               busy ||
               pending ||
-              (draft.hasContent && !draft.uploading)
+              ((draft.hasContent || !!inkWaiting) && !draft.uploading)
             )}
             onclick={whileIdle(() => pending, onaction)}
             type="button"

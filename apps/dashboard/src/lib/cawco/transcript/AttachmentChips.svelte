@@ -12,7 +12,8 @@
   import type { Snippet } from "svelte";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
-  import { IconArtifactCanvas, IconClose } from "#lib/icons.js";
+  import { IconArtifactCanvas, IconClose, IconPen } from "#lib/icons.js";
+  import type { InkWaiting } from "../preview/ink.svelte";
   import type { ComposerDraft } from "./composer-draft.svelte";
   import DocThumb from "./DocThumb.svelte";
 
@@ -24,6 +25,7 @@
     canvasHidden = false,
     onopencanvas,
     onremovecanvas,
+    ink,
   }: {
     draft: ComposerDraft;
     /** Chips that lead the row, the composer's element notes. */
@@ -36,6 +38,11 @@
     canvasHidden?: boolean;
     onopencanvas?: () => void;
     onremovecanvas?: () => void;
+    /**
+     * The person's unsent ink on the session's artifact (preview/ink.svelte.ts):
+     * the next Send carries it, its picture this chip's thumbnail.
+     */
+    ink?: InkWaiting;
   } = $props();
   const folded = $derived(draft.canvas?.folded ? draft.canvas : null);
 
@@ -51,6 +58,7 @@
 </script>
 
 {#if folded ||
+  ink ||
   hasNotes ||
   draft.images.length ||
   draft.texts.length ||
@@ -86,6 +94,27 @@
         >
           <IconClose />
         </button>
+      </span>
+    {/if}
+    {#if ink}
+      <!-- The person's ink on the artifact: the next Send carries its pins
+           and the page with the ink on it. It is the artifact's, so it has
+           no remove here; Erase in the stroke's menu takes it away. -->
+      <span
+        aria-label={ink.pins > 0
+          ? `Ink, ${ink.pins} ${ink.pins === 1 ? "pin" : "pins"}`
+          : "Ink"}
+        class="att ink-chip"
+        data-artifact={ink.artifactId}
+        data-flip="pop"
+        role="img"
+      >
+        {#if ink.thumb}
+          <img alt="" src="data:image/png;base64,{ink.thumb}">
+        {:else}
+          <IconPen aria-hidden="true" />
+        {/if}
+        <span class="att-name">Ink</span>
       </span>
     {/if}
     {@render notes?.()}

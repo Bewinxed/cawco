@@ -40,6 +40,7 @@
   import SideSurface from "../side/SideSurface.svelte";
   import ArtifactMenu from "./ArtifactMenu.svelte";
   import { artifactSyncPath, joinArtifact, sendArtifact } from "./artifact-doc";
+  import { heardInk } from "./ink.svelte";
   import PlacePick from "./PlacePick.svelte";
   import {
     type CapturedSelection,
@@ -504,6 +505,12 @@
       case "cawco:resolved":
         if (failure && failure.again === null) {
           failure = null;
+        }
+        break;
+      case "cawco:ink":
+        // The person's unsent ink, which the composer's Send carries.
+        if (artifact && iframe?.contentWindow) {
+          heardInk(instanceId, artifact.id, iframe.contentWindow, message);
         }
         break;
       default:

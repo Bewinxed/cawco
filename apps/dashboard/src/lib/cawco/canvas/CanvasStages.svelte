@@ -8,6 +8,7 @@
    * the slot it stands in.
    */
   import { Portal } from "bits-ui";
+  import { heardInk } from "../preview/ink.svelte";
   import { watchInput } from "../reload.svelte";
   import { type Stage, slotSizes, stages } from "./stage.svelte";
 
@@ -30,6 +31,17 @@
         break;
       case "cawco:pictured":
         stage.pictured?.();
+        break;
+      case "cawco:ink":
+        // The person's unsent ink on the canvas, which the composer's Send carries.
+        if (stage.frame?.contentWindow) {
+          heardInk(
+            stage.instanceId,
+            stage.id,
+            stage.frame.contentWindow,
+            event.data
+          );
+        }
         break;
       case "cawco:dock":
         actions?.dock?.();

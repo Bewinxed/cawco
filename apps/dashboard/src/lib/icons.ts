@@ -123,6 +123,8 @@ export { default as IconPaperclip } from "~icons/solar/paperclip-bold-duotone";
 /** Caw holds still while his lead works (the sidebar's motion switch). */
 export { default as IconPause } from "~icons/solar/pause-bold-duotone";
 export { default as IconToolEdit } from "~icons/solar/pen-2-bold-duotone";
+/** The person's ink on an artifact: the composer's Ink chip, the pen of the stroke's icon. */
+export { default as IconPen } from "~icons/solar/pen-bold-duotone";
 export {
   default as IconArtifactCanvas,
   default as IconPenLine,
