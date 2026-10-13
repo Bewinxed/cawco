@@ -21,6 +21,9 @@
    * a session tab and `window.__ft.work.choose(id)` Working or Finished, as
    * a click does; `ids` and `chosen()` on each say the rest: what
    * scripts/probe-kit/specs/web/folder-tabs.ts drives.
+   * `window.__ft.ride(id, fraction)` carries the session strip's choice
+   * toward a tab as the phone's pane swipe does, and `land(id)` ends it
+   * there: what scripts/probe-kit/specs/web/tab-switch-cost.ts drives.
    *
    * A click on a tab chooses it here, in the bench's own group; the strip's
    * own choice goes to the workspace, which holds no such group and would
@@ -34,6 +37,7 @@
   import { workflowState } from "#lib/cawco/workflow-state.svelte.js";
   import PaneTabs from "#lib/cawco/workspace/PaneTabs.svelte";
   import type { LeafNode } from "#lib/cawco/workspace/workspace.svelte.js";
+  import type { TabsTravel } from "#lib/components/ui/fluid-tabs/index.js";
   import { theme } from "#lib/theme.svelte.js";
   import { page } from "$app/state";
 
@@ -214,6 +218,21 @@
   }
 
   /**
+   * A swipe carrying the session strip's choice, as the phone's pane swipe
+   * hands it (gesture.svelte.ts `travel`): a new object each frame, toward
+   * a tab by a fraction; null at rest. `land` ends it on a tab, both in one
+   * change, as the gesture's landing does.
+   */
+  let travel = $state<TabsTravel | null>(null);
+  function ride(toward: string | null, fraction = 0) {
+    travel = toward === null ? null : { toward, fraction };
+  }
+  function land(id: string) {
+    travel = null;
+    choose(id);
+  }
+
+  /**
    * A click that would choose a tab (its link, its empty details slot) or
    * close one is the bench's: the strip's own would act on the workspace.
    * The chosen tab's own click (its details card) is left to the strip.
@@ -253,6 +272,8 @@
     const bench = {
       ids,
       choose,
+      ride,
+      land,
       chosen: () => leaf.active,
       work: {
         ids: [...WORK_IDS],
@@ -296,7 +317,7 @@
 >
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="group" data-strip="session" onclickcapture={benchClick(leaf)}>
-    <PaneTabs {leaf} />
+    <PaneTabs {leaf} {travel} />
     <div class="page"></div>
   </div>
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->

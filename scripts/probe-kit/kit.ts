@@ -188,9 +188,11 @@ export class Run {
       process.platform === "linux"
         ? { ...process.env, FONTCONFIG_FILE: FONTS_CONF }
         : process.env;
+    // `PROBE_WEBKIT` names a WebKit build to run (its `pw_run.sh`) where the
+    // one this playwright-core expects is not installed.
     const launched =
       engine === "webkit"
-        ? webkit.launch({ env })
+        ? webkit.launch({ env, executablePath: process.env.PROBE_WEBKIT })
         : chromium.launch({
             headless: true,
             args: ["--no-sandbox", "--disable-gpu"],

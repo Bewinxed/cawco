@@ -65,6 +65,28 @@
   inherits: false;
   initial-value: 0px;
 }
+/* Where a tab track's edge fades are cut short (TabsList `capFades`) and
+   the run each fade takes from it (PaneTabs' phone row): read by the
+   track's own mask alone, and moved as the track scrolls under a swipe,
+   so none of it is handed down to the tabs, which would all be styled
+   again for it each frame. Any value, none at first (the fades' own
+   `100vw` fallback stands). */
+@property --fade-cap-start {
+  syntax: "*";
+  inherits: false;
+}
+@property --fade-cap-end {
+  syntax: "*";
+  inherits: false;
+}
+@property --fade-run-start {
+  syntax: "*";
+  inherits: false;
+}
+@property --fade-run-end {
+  syntax: "*";
+  inherits: false;
+}
 /* How far clear of each edge's fade a scrolling tab track brings a chosen
    tab (TabsList `inView`), registered so script reads it as one length
    whatever expression set it. */
