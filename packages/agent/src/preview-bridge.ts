@@ -59,6 +59,12 @@ interface Bridge {
 const bridges = new Map<string, Bridge>();
 /** Each preview's bridge while it opens: one open, however many requests ask. */
 const opening = new Map<string, Promise<string | "host">>();
+/**
+ * How many times each preview was stopped: an open that finds the count
+ * changed once its spawn settles was stopped under it, and takes down what it
+ * made instead of registering it (a stop wins).
+ */
+const stops = new Map<string, number>();
 /** The previews (macOS) whose workspace's network is the host's. */
 const onHost = new Set<string>();
 
@@ -137,34 +143,60 @@ const inGroup = (pgid: number): number[] =>
  * for each connection, a browser's open HMR socket among them, is in it. The
  * whole group is killed at once, so the caller that cannot wait (the agent's
  * own detach) still takes all of it; the promise settles once none of it
- * runs.
+ * runs. A bridge still opening is stopped too: its open sees the stop once
+ * its spawn settles and takes down what it made, and this waits for that.
  */
 export const closeBridge = async (instanceId: string): Promise<void> => {
+  stops.set(instanceId, (stops.get(instanceId) ?? 0) + 1);
+  await opening.get(instanceId)?.catch(() => {
+    // Its open was stopped, or failed: nothing of it stands.
+  });
+  await teardown(instanceId);
+};
+
+/** Kills `instanceId`'s registered bridge, its whole group, and removes its socket. */
+const teardown = async (instanceId: string): Promise<void> => {
   onHost.delete(instanceId);
   const bridge = bridges.get(instanceId);
   if (!bridge) {
     return;
   }
   bridges.delete(instanceId);
+  await killGroup(instanceId, bridge.proc, bridge.socket);
+};
+
+/** Kills the process group `proc` leads and removes `socket`; settles once none of the group runs. */
+const killGroup = async (
+  instanceId: string,
+  proc: Bridge["proc"],
+  socket: string
+): Promise<void> => {
   try {
-    process.kill(-bridge.proc.pid, "SIGKILL");
+    process.kill(-proc.pid, "SIGKILL");
   } catch {
     // The group is gone already.
   }
-  await rm(bridge.socket, { force: true });
-  await bridge.proc.exited;
+  await rm(socket, { force: true });
+  await proc.exited;
   const deadline = Date.now() + BRIDGE_STOP_MS;
-  while (inGroup(bridge.proc.pid).length > 0 && Date.now() < deadline) {
+  while (inGroup(proc.pid).length > 0 && Date.now() < deadline) {
     // biome-ignore lint/performance/noAwaitInLoops: polls until the group's last connection is gone, or the deadline passes
     await Bun.sleep(10);
   }
-  const left = inGroup(bridge.proc.pid);
+  const left = inGroup(proc.pid);
   if (left.length > 0) {
     console.warn(
       `[preview] the bridge for ${instanceId} left ${left.join(", ")} running ${BRIDGE_STOP_MS / 1000}s after it was stopped`
     );
   }
 };
+
+/** The preview was stopped while its bridge opened; nothing of the bridge stands. */
+class BridgeStopped extends Error {
+  constructor() {
+    super("The preview was stopped while its way into the workspace opened.");
+  }
+}
 
 const alive = (bridge: Bridge): boolean =>
   bridge.proc.exitCode === null &&
@@ -180,8 +212,13 @@ const open = async (
   workspace: string,
   port: number
 ): Promise<string | "host"> => {
-  await closeBridge(instanceId);
+  const stop = stops.get(instanceId);
+  const stopped = () => stops.get(instanceId) !== stop;
+  await teardown(instanceId);
   const networks = await workspaceNetworks(workspace);
+  if (stopped()) {
+    throw new BridgeStopped();
+  }
   const [first] = networks;
   if (!first) {
     throw new WorkspaceDown();
@@ -260,6 +297,11 @@ const open = async (
     throw new Error(
       `The way into workspace ${workspace}'s network did not open within ${BRIDGE_START_MS / 1000}s.`
     );
+  }
+  if (stopped()) {
+    // Stopped while it spawned: the stop waits on this open, so what it made goes now.
+    await killGroup(instanceId, proc, socket);
+    throw new BridgeStopped();
   }
   bridges.set(instanceId, { inner, net, proc, socket });
   return socket;
