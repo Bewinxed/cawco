@@ -377,17 +377,18 @@
   /**
    * The send/stop glyph that is being replaced goes out as the new one comes
    * in (`icon-swap`), the two sharing the button's one grid cell: it shrinks
-   * to 0.25 into a 4px blur as it fades. Reduced motion lets it go at once.
+   * to 0.25 into a 4px blur as it fades. Reduced motion keeps the fade, with
+   * no scale and no blur (DESIGN.md's Reduced Motion Rule).
    */
   function glyphOut(_node: Element): TransitionConfig {
-    if (!motionOk.current) {
-      return { duration: 0 };
-    }
+    const still = !motionOk.current;
     return {
       duration: dur("--dur-control"),
       easing: easeOut,
       css: (t, u) =>
-        `opacity: ${t}; scale: ${1 - u * 0.75}; filter: blur(${u * 4}px)`,
+        still
+          ? `opacity: ${t}`
+          : `opacity: ${t}; scale: ${1 - u * 0.75}; filter: blur(${u * 4}px)`,
     };
   }
   function fade(_node: Element): TransitionConfig {
@@ -3915,6 +3916,18 @@
     place-items: center;
     @media (prefers-reduced-motion: no-preference) {
       animation: icon-swap var(--dur-control) var(--ease-out) both;
+    }
+    /* Reduced motion keeps the fade: no scale, no blur. */
+    @media (prefers-reduced-motion: reduce) {
+      animation: icon-swap-still var(--dur-control) var(--ease-out) both;
+    }
+  }
+  @keyframes icon-swap-still {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
     }
   }
   @keyframes icon-swap {

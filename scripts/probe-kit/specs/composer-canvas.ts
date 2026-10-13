@@ -26,6 +26,10 @@
  * 8. With prefers-reduced-motion: reduce, opening and Done run opacity
  *    animations only.
  *
+ * 11. Send/Stop's glyph swap: with prefers-reduced-motion: reduce, pressing
+ *    Send runs opacity-only keyframes over --dur-control, scrubbed 0 → ½ → 1;
+ *    without, the incoming glyph's keys are opacity, transform and filter.
+ *
  * (9: `canvas` and `artifacts` are their own specs, run beside this one.)
  */
 import type { CDPSession, Page } from "playwright-core";
@@ -216,6 +220,7 @@ const probe = async (kit: Kit) => {
   const on = await setUp(kit);
   await touchCheck(on);
   const clock = await Clock.on(on.page);
+  await swapCheck(on, clock);
   const cdp = await on.page.context().newCDPSession(on.page);
   const pen = penOf(cdp);
   await openCheck(on, clock, pen);
@@ -233,6 +238,220 @@ const probe = async (kit: Kit) => {
     "the page said no error",
     on.said.length === 0,
     on.said.slice(0, 6).join(" | ") || "none"
+  );
+};
+
+/** The Send/Stop button and the glyph carriers it swaps. */
+const SEND = ".ctrls .stop";
+const SWAP = ".stop .swap";
+
+/**
+ * Each glyph carrier in the button as the engine draws it, by the run that
+ * moves it now: `out` for one the Svelte transition takes away (its Web
+ * Animation; the carrier's own finished keyframes in are not what moves it),
+ * else `in` for one its CSS keyframes bring in (Svelte scopes their name:
+ * `svelte-<hash>-icon-swap`, `…-icon-swap-still`). Svelte's 0 ms bookkeeping
+ * run, with no keys, is no run. Carriers with neither are left out.
+ */
+const swapNow = (page: Page) =>
+  page.evaluate((sel) => {
+    const meta = ["offset", "easing", "composite", "computedOffset"];
+    return [...document.querySelectorAll(sel)].flatMap((el) => {
+      const runs = el
+        .getAnimations()
+        .map((run) => {
+          const effect = run.effect as KeyframeEffect;
+          const named = run as Animation & {
+            animationName?: string;
+            transitionProperty?: string;
+          };
+          let name = "svelte";
+          if (named.animationName !== undefined) {
+            name = named.animationName;
+          } else if (named.transitionProperty !== undefined) {
+            name = `transition:${named.transitionProperty}`;
+          }
+          return {
+            name,
+            duration: Number(effect.getTiming().duration),
+            at: Number(run.currentTime),
+            props: [
+              ...new Set(
+                effect
+                  .getKeyframes()
+                  .flatMap((frame) =>
+                    Object.keys(frame).filter((key) => !meta.includes(key))
+                  )
+              ),
+            ].sort(),
+          };
+        })
+        .filter((run) => run.duration > 0 && run.props.length > 0);
+      const out = runs.find((run) => run.name === "svelte");
+      const into = runs.find((run) => run.name.includes("icon-swap"));
+      const moving = out ?? into;
+      if (!moving) {
+        return [];
+      }
+      const s = getComputedStyle(el);
+      return [
+        {
+          side: out ? ("out" as const) : ("in" as const),
+          run: moving,
+          others: runs
+            .filter((one) => one !== moving)
+            .map((one) => `${one.name} [${one.props.join()}]`),
+          opacity: Number(s.opacity),
+          transform: s.transform,
+          scale: s.scale,
+          filter: s.filter,
+        },
+      ];
+    });
+  }, SWAP);
+
+/**
+ * 11. Send/Stop's glyph swap (DESIGN.md's Reduced Motion Rule: "opacity and
+ * colour fades still run … It does not mean an instant swap"): pressing Send
+ * swaps the glyph over --dur-control. With reduced motion every run animates
+ * opacity alone, scrubbed 0 → ½ → 1 with no scale, transform or blur; without,
+ * the incoming glyph's keys are opacity, transform and filter and the
+ * outgoing's opacity, scale and filter.
+ */
+const swapCheck = async (on: On, clock: Clock) => {
+  const { kit, page } = on;
+  const control = await ms(page, "--dur-control");
+  const press = async (motion: "reduce" | "no-preference") => {
+    await page.emulateMedia({ reducedMotion: motion });
+    await until(
+      "the button back on Send",
+      () => page.locator(SEND).getAttribute("aria-label"),
+      (label) => label === "Send message",
+      60_000
+    );
+    await page.focus(FIELD);
+    await page.keyboard.type("Swap");
+    const kept = await clock.catchRuns(() => page.click(SEND), SWAP, 5000);
+    // The swap's own length: the pending spinner's endless turn is caught too.
+    const of = kept.find((run) => run.name.includes("icon-swap"))?.name;
+    const looks: Awaited<ReturnType<typeof swapNow>>[] = [];
+    for (const fraction of [0, 0.5, 1]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one fraction at a time, each read where it lands
+      await clock.seek(fraction, of);
+      // The carriers the clock moved: a later swap's held runs stand at 0.
+      looks.push(
+        (await swapNow(page)).filter(
+          (one) => Math.abs(one.run.at - one.run.duration * fraction) <= 1
+        )
+      );
+    }
+    await clock.release();
+    // A later swap's outro (the spinner's, Stop's) holds Svelte's 0 ms first
+    // run, which builds the real keyframes as it finishes, from the options
+    // its press made: let each finish now, so none builds in the next press.
+    await page.evaluate((sel) => {
+      for (const run of window.kitRuns()) {
+        const target = (run.effect as KeyframeEffect | null)?.target;
+        if (
+          run.playState === "paused" &&
+          window.kitInside(target, sel) &&
+          Number.isFinite(Number(run.effect?.getComputedTiming().endTime))
+        ) {
+          run.finish();
+        }
+      }
+    }, SWAP);
+    await until(
+      "every swap of this press played out",
+      () =>
+        page.evaluate(
+          (sel) =>
+            window
+              .kitRuns()
+              .filter(
+                (run) =>
+                  run.playState !== "finished" &&
+                  window.kitInside(
+                    (run.effect as KeyframeEffect | null)?.target,
+                    sel
+                  ) &&
+                  Number.isFinite(
+                    Number(run.effect?.getComputedTiming().endTime)
+                  )
+              ).length,
+          SWAP
+        ),
+      (left) => left === 0,
+      10_000
+    );
+    return looks;
+  };
+  const [still0, stillHalf, still1] = await press("reduce");
+  const [moving0, movingHalf, moving1] = await press("no-preference");
+  await until(
+    "the button back on Send",
+    () => page.locator(SEND).getAttribute("aria-label"),
+    (label) => label === "Send message",
+    60_000
+  ).catch(() => undefined);
+  await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
+
+  const runsOf = (looks: Awaited<ReturnType<typeof swapNow>>) =>
+    looks.map((one) => ({ side: one.side, ...one.run }));
+  const stillRuns = runsOf([...still0, ...stillHalf, ...still1]);
+  const movingRuns = runsOf([...moving0, ...movingHalf, ...moving1]);
+  const side = (
+    looks: Awaited<ReturnType<typeof swapNow>>,
+    which: "in" | "out"
+  ) => looks.filter((one) => one.side === which);
+  const flat = (looks: Awaited<ReturnType<typeof swapNow>>) =>
+    looks.every(
+      (one) =>
+        one.transform === "none" &&
+        one.scale === "none" &&
+        one.filter === "none"
+    );
+  const fades =
+    side(still0, "in").every((one) => one.opacity === 0) &&
+    side(stillHalf, "in").every((one) => one.opacity > 0 && one.opacity < 1) &&
+    side(still1, "in").every((one) => one.opacity === 1) &&
+    side(stillHalf, "out").every((one) => one.opacity > 0 && one.opacity < 1);
+  kit.check(
+    "11: with reduced motion pressing Send swaps the glyph over --dur-control by opacity alone, scrubbed 0 → ½ → 1 with no scale, transform or blur",
+    stillRuns.length > 0 &&
+      stillRuns.some((run) => run.name.endsWith("icon-swap-still")) &&
+      stillRuns.some((run) => run.side === "out") &&
+      stillRuns.every(
+        (run) => run.duration === control && run.props.join() === "opacity"
+      ) &&
+      fades &&
+      [still0, stillHalf, still1].every(flat),
+    `--dur-control ${control} ms; runs ${JSON.stringify(stillRuns)}; ½ ${JSON.stringify(stillHalf)}; 1 ${JSON.stringify(still1)}`
+  );
+  const incoming = movingRuns.filter((run) => run.side === "in");
+  const outgoing = movingRuns.filter((run) => run.side === "out");
+  kit.check(
+    "11: without reduced motion the incoming glyph's keys are opacity, transform and filter, the outgoing's opacity, scale and filter, over --dur-control, and they travel at ½",
+    incoming.length > 0 &&
+      outgoing.length > 0 &&
+      incoming.every(
+        (run) =>
+          run.name.endsWith("-icon-swap") &&
+          run.props.join() === "filter,opacity,transform" &&
+          run.duration === control
+      ) &&
+      outgoing.every(
+        (run) =>
+          run.props.join() === "filter,opacity,scale" &&
+          run.duration === control
+      ) &&
+      side(movingHalf, "in").every(
+        (one) => one.transform !== "none" && one.filter !== "none"
+      ) &&
+      side(movingHalf, "out").every(
+        (one) => one.scale !== "none" && one.filter !== "none"
+      ),
+    `runs ${JSON.stringify(movingRuns)}; ½ ${JSON.stringify(movingHalf)}; 1 ${JSON.stringify(moving1)}`
   );
 };
 
