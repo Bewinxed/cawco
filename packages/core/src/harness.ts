@@ -204,6 +204,14 @@ export const CUSTODY_HELD = "custody_held";
  */
 export const LIMIT_REACHED = "limit_reached";
 
+/**
+ * CawCo stopped a session's process, and says why in `content`, in the
+ * error formula (WORDS.md: what happened, why, what starts it again): the
+ * agent's frame, a line of the session's transcript. Drawn as an error
+ * titled by its first sentence, the rest under it.
+ */
+export const SESSION_STOPPED = "session_stopped";
+
 /** Which limit a keeper's child reached: its task limit, or its memory limit (an OOM kill inside it). */
 export type ChildLimit = "tasks" | "memory";
 

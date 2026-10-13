@@ -1981,47 +1981,119 @@ export class SessionSupervisor {
   }
 
   /**
-   * THE CREDENTIAL GATE, for every harness. A session is published only once
-   * the hub has acknowledged its own credential, the one its CawCo tools
-   * send: a process this agent launched installs the credential the hub
-   * granted as it started ({@link #granted}), and one it attached to proves
-   * the one it already holds. Nothing has been sent to the session yet, so a
-   * session that cannot is stopped before its first turn, and the throw is
-   * its spawn's failure with the reason.
+   * THE CREDENTIAL GATE OF A LAUNCH, for every harness. A process this agent
+   * launched is published only once it has installed the credential the hub
+   * granted as it started ({@link #granted}) and the hub has acknowledged it.
+   * Nothing has been sent to it yet, so one that cannot is stopped before its
+   * first turn, and the throw is its spawn's failure with the reason. A child
+   * this agent attached to proves the credential it already holds after it
+   * is published ({@link #settleAttached}).
    */
   async #admit(
-    instanceId: string,
     session: HarnessSession,
-    launched: { credential: string } | undefined
+    launched: { credential: string }
   ): Promise<void> {
     try {
-      if (launched) {
-        // Remembered for redaction as it was granted ({@link #granted}).
-        await session.control(INSTALL_SESSION_CREDENTIAL, [
-          launched.credential,
-          "initial",
-        ]);
-      } else {
-        // A harness that can read the credential its held process carries
-        // says it, so this agent redacts it too (a pi host's was recorded
-        // when this agent installed it).
-        const held = (await session.control(VERIFY_SESSION_CREDENTIAL, [])) as
-          | { credential?: string }
-          | undefined;
-        if (held?.credential) {
-          rememberCredential(instanceId, held.credential);
-        }
-      }
+      // Remembered for redaction as it was granted ({@link #granted}).
+      await session.control(INSTALL_SESSION_CREDENTIAL, [
+        launched.credential,
+        "initial",
+      ]);
     } catch (problem) {
-      const message =
-        problem instanceof Error ? problem.message : String(problem);
       // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the refusal below is the outcome either way
       await session.stop().catch(() => {});
       throw new HeldProcessRefused(
-        launched
-          ? `The session's CawCo MCP credential could not be installed, so it was stopped before its first turn: ${message}`
-          : `The session's CawCo MCP credential could not be verified after the agent attached to it, so it was stopped: ${message}`,
+        `The session's CawCo MCP credential could not be installed, so it was stopped before its first turn: ${errorText(problem)}`,
         { cause: problem }
+      );
+    }
+  }
+
+  /**
+   * WHAT AN ATTACHED CHILD MUST ANSWER GOES AHEAD OF WHAT IS SENT TO IT, NOT
+   * AHEAD OF ITS ATTACH. The child is published the moment its `Query` is on
+   * it: a live process, this session's, running, its turn under way. Its
+   * stored mode and its credential are then asked of it, from the job that
+   * attached it at the head of its session's queue, so every send behind
+   * that job reaches the child only once it is in its mode and its
+   * credential is proved. The child answers when it can: Claude Code reads
+   * its input while a tool runs, but answers its control requests one at a
+   * time, behind the `initialize` every attach sends first, which waits on
+   * the session's start and its command listing (CLI 2.1.296, `YL`); a
+   * child that answered nothing for minutes (c56c678f on a Mac at load
+   * 150-650, 2026-10-13) once left its session unattached and unowned.
+   *
+   * A harness that can read the credential its held process carries says
+   * it, so this agent redacts it too (a pi host's was recorded when this
+   * agent installed it). A child refused here (no credential) is stopped,
+   * and that is its failure. One whose process ended meanwhile was said by
+   * its closing; a stop cut it short and says itself.
+   */
+  async #settleAttached(
+    instanceId: string,
+    session: HarnessSession,
+    adapter: Harness,
+    mode: SpawnPayload["permissionMode"],
+    processGeneration: string | undefined,
+    stopped: AbortSignal | undefined
+  ): Promise<void> {
+    try {
+      let refused = false;
+      await this.#answers(
+        session,
+        (async () => {
+          await this.#applyStoredPermissionMode(session, mode);
+          const held = (await session.control(VERIFY_SESSION_CREDENTIAL, [])) as
+            | { credential?: string; refused?: boolean }
+            | undefined;
+          if (held?.credential) {
+            rememberCredential(instanceId, held.credential);
+          }
+          refused = held?.refused === true;
+        })(),
+        stopped
+      );
+      // Refused by the hub: the harness stopped it and said why.
+      if (refused) {
+        return;
+      }
+      console.info(
+        `[custody] ${instanceId}: answered after its attach: ${mode === undefined ? "no stored mode" : `in its stored mode (${mode})`}, its credential proved`
+      );
+    } catch (problem) {
+      if (stopped?.aborted || this.#sessions.get(instanceId) !== session) {
+        return;
+      }
+      // Its process ending refuses what it was asked: its closing says so.
+      const alive = await (adapter as Partial<SessiondAdoption>)
+        .custodyCandidates?.()
+        .then(({ procs }) =>
+          procs.some((held) => {
+            const id = parseProcId(held.procId);
+            return (
+              held.alive &&
+              (id.kind === "claude" || id.kind === "pi") &&
+              id.instanceId === instanceId
+            );
+          })
+        )
+        .catch(() => undefined);
+      if (alive === false || this.#sessions.get(instanceId) !== session) {
+        return;
+      }
+      this.#ending.add(session);
+      this.#sessions.delete(instanceId);
+      this.#busy.delete(instanceId);
+      this.#forgetPulse(instanceId);
+      // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the refusal below is the outcome either way
+      await session.stop().catch(() => {});
+      this.#fail(
+        instanceId,
+        new HeldProcessRefused(
+          `The session's CawCo MCP credential could not be verified after the agent attached to it, so it was stopped: ${errorText(problem)}`,
+          { cause: problem }
+        ),
+        processGeneration
       );
     }
   }
@@ -2288,21 +2360,13 @@ export class SessionSupervisor {
         return;
       }
       holder.session = session;
-      // A reattach waits on its held child's answers until a stop cuts it
-      // short ({@link #answers}); a launch on its own new process's.
-      await this.#answers(
-        session,
-        (async () => {
-          await this.#applyStoredPermissionMode(session, spec.permissionMode);
-          // A reattach attaches to a process that already holds its credential.
-          await this.#admit(
-            instanceId,
-            session,
-            grant ? { credential: grant.sessionCredential } : undefined
-          );
-        })(),
-        spec.reattachOnly ? stopped : undefined
-      );
+      // A launch is in its mode and holds its credential before it is
+      // published; a reattach is published at once, and its held child
+      // answers behind that ({@link #settleAttached}).
+      if (grant) {
+        await this.#applyStoredPermissionMode(session, spec.permissionMode);
+        await this.#admit(session, { credential: grant.sessionCredential });
+      }
       // Refused its input while it was starting: it is not a session to
       // hand work to, and the refusal has said so.
       const refused = this.#keeperRefused.get(instanceId);
@@ -2337,6 +2401,18 @@ export class SessionSupervisor {
           requestId: ack,
           ok: true,
         });
+      }
+      if (spec.reattachOnly) {
+        this.#adopting.delete(instanceId);
+        settleClaim();
+        await this.#settleAttached(
+          instanceId,
+          session,
+          adapter,
+          spec.permissionMode,
+          spec.processGeneration,
+          stopped
+        );
       }
     } catch (error) {
       // A stop cut the attach short: the stop behind it ends the child and
@@ -2667,7 +2743,19 @@ export class SessionSupervisor {
           error: `its process was ended by ${signal} from outside CawCo`,
         });
       },
-      refused: (error) => this.#fail(instanceId, error, processGeneration),
+      // Refused for good (its boundary hook, its credential): no longer one
+      // this daemon carries, from now, not once its `Query` has closed. A
+      // beat that still listed it read it running again over its failure.
+      refused: (error) => {
+        const { session } = holder;
+        if (session && this.#sessions.get(instanceId) === session) {
+          this.#ending.add(session);
+          this.#sessions.delete(instanceId);
+          this.#busy.delete(instanceId);
+          this.#forgetPulse(instanceId);
+        }
+        this.#fail(instanceId, error, processGeneration);
+      },
       keeperRefused: (error) =>
         this.#refusedInput(instanceId, error, processGeneration),
       rejected: (uuid, error) => this.#reject(instanceId, uuid, error),
@@ -3041,11 +3129,11 @@ export class SessionSupervisor {
   }
 
   /**
-   * What a session's child must answer before the session is this agent's to
-   * hand work to, waited for until it is answered or the child ends (its
-   * `Query` then refuses every request it left open). `stopped` cuts it
-   * short: the half-built `Query` lets go of the child, and the stop behind
-   * it ends the child.
+   * What an attached child must answer before what is sent to it goes to
+   * it, waited for until it is answered or the child ends (its `Query` then
+   * refuses every request it left open). `stopped` cuts it short: the
+   * `Query` lets go of the child, its closing says nothing (the stop does),
+   * and the stop behind it ends the child.
    */
   async #answers(
     session: HarnessSession,
@@ -3056,6 +3144,7 @@ export class SessionSupervisor {
       await custodyProbe(answered, stopped);
     } catch (problem) {
       if (stopped?.aborted) {
+        this.#ending.add(session);
         // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — the stop behind it ends the child either way
         await session.dispose().catch(() => {});
       }
@@ -3118,24 +3207,30 @@ export class SessionSupervisor {
       permissionMode: row.permissionMode,
     });
     holder.session = session;
-    // Asked of the child, which answers when it can ({@link #holdChild}).
-    await this.#answers(
-      session,
-      (async () => {
-        await this.#applyStoredPermissionMode(session, row.permissionMode);
-        await this.#admit(row.instanceId, session, undefined);
-      })(),
-      stopped
-    );
+    // Attached: the live child is this session's process from here, running.
     this.#sessions.set(row.instanceId, session);
     // biome-ignore lint/complexity/noVoid: the catalog read dates a rest already under way; nothing waits on it
     void this.#dateActivity(row.instanceId, claude, session, row.cwd);
     session.attached?.();
+    if (this.#busy.has(row.instanceId)) {
+      this.#emitPulse(row.instanceId, true);
+    }
     this.#adopting.delete(row.instanceId);
     settle();
+    console.info(`[custody] ${row.instanceId}: attached to its live process`);
+    // Asked of the child, which answers when it can, ahead of what is sent
+    // to it ({@link #settleAttached}).
+    await this.#settleAttached(
+      row.instanceId,
+      session,
+      claude,
+      row.permissionMode,
+      row.processGeneration,
+      stopped
+    );
   }
 
-  /** Restore policy before publishing the handle or replaying its permission snapshot. */
+  /** A session's stored mode, asked of its process before anything is sent to it. */
   async #applyStoredPermissionMode(
     session: HarnessSession,
     mode: SpawnPayload["permissionMode"]

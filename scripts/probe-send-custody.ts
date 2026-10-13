@@ -41,14 +41,18 @@
  *              the custody log naming that generation, and a send to one is
  *              failed with its reason or owed;
  *   stopped  — a Claude session mid-tool (a long `sleep` in a Bash call), its
- *              Claude Code frozen (SIGSTOP), the agent restarted, kept frozen
- *              past the custody bound, then thawed: the agent took custody of
- *              it and never let it go undecided, a send made while it was
- *              frozen is read once, its row reads running, and the hub said
+ *              Claude Code frozen (SIGSTOP: it answers no control request),
+ *              the agent restarted, kept frozen past the custody bound, then
+ *              thawed: the agent attached it at once and it read running
+ *              while frozen, its stored mode was applied once it answered, a
+ *              send made while it was frozen is read once, and the hub said
  *              that send came back at most once;
- *   stopped-dies — the same, its process killed while frozen: it is let go
- *              as at rest, and the send made meanwhile starts it afresh and
- *              is read once;
+ *   stopped-dies — the same, its process killed while frozen: the send made
+ *              meanwhile starts it afresh and is read once;
+ *   needs-auth — a running Claude session whose credential the hub stops
+ *              knowing, the hub and agent restarted: its slot reads
+ *              `needs-auth`, and the session is stopped, the reason said in
+ *              its transcript, the agent's log and its row;
  *   mcp-late — a Claude session mid-tool whose CawCo MCP slot reaches the hub
  *              through a proxy; the hub and the agent restarted while the
  *              proxy holds every new MCP connection, for 50 s past the
@@ -94,6 +98,7 @@ type Case =
   | "stuck-opencode"
   | "stopped"
   | "stopped-dies"
+  | "needs-auth"
   | "mcp-late";
 const CASES: Record<Harness, Case[]> = {
   claude: [
@@ -110,6 +115,7 @@ const CASES: Record<Harness, Case[]> = {
     "stuck-opencode",
     "stopped",
     "stopped-dies",
+    "needs-auth",
     "mcp-late",
   ],
   opencode: ["exit", "restart"],
@@ -138,24 +144,33 @@ const KILLED = "Your process was killed (SIGKILL)";
 const TOOL_SLEEP = "CUSTODY-TOOL-SLEEP";
 /** How long that `sleep` runs, in seconds: past the custody bound and the restart around it. */
 const TOOL_SLEEP_S = 240;
+/** A turn whose Bash `sleep` outlasts up to three hub outages ({@link mcpLateCase}). */
+const LONG_TOOL = "CUSTODY-LONG-TOOL";
+const LONG_TOOL_S = 480;
+/** The seconds a turn's Bash `sleep` runs, when the message that started it asks for one. */
+const sleepAsked = (last: string): number | undefined => {
+  if (last.includes(LONG_TOOL)) {
+    return LONG_TOOL_S;
+  }
+  return last.includes(TOOL_SLEEP) ? TOOL_SLEEP_S : undefined;
+};
 const fleet = await scratchFleet({
   name: "send-custody-probe",
   respond: (request) => {
-    if (request.tools && request.last.includes(TOOL_SLEEP)) {
-      return request.afterTool
-        ? { words: ["custody-ok"], everyMs: 5 }
-        : {
-            words: [],
-            everyMs: 5,
-            tool: {
-              name: "Bash",
-              input: {
-                command: `sleep ${TOOL_SLEEP_S}`,
-                description: "Wait",
-                timeout: 600_000,
-              },
-            },
-          };
+    const seconds = sleepAsked(request.last);
+    if (request.tools && seconds !== undefined && !request.afterTool) {
+      return {
+        words: [],
+        everyMs: 5,
+        tool: {
+          name: "Bash",
+          input: {
+            command: `sleep ${seconds}`,
+            description: "Wait",
+            timeout: 600_000,
+          },
+        },
+      };
     }
     return request.tools &&
       (request.last.includes(SLOW) ||
@@ -981,8 +996,10 @@ const hubSaid = async (uuid: string, words: string) =>
 
 /**
  * The agent restarted while the session's Claude Code is frozen mid-tool,
- * kept frozen past the custody bound (90 s), then thawed, or killed when
- * `dies`. A send made while it is frozen is read once either way.
+ * so it answers no control request, kept frozen past the custody bound
+ * (90 s), then thawed, or killed when `dies`. It is attached at once and
+ * reads running while frozen; its stored mode is applied once it answers.
+ * A send made while it is frozen is read once either way.
  */
 const frozenCase = async (label: string, dies: boolean) => {
   const name = dies ? "stopped-dies" : "stopped";
@@ -1028,6 +1045,8 @@ const frozenCase = async (label: string, dies: boolean) => {
         (await agentSaid(id, "let go undecided")) +
         (await agentSaid(id, "left for the hub to attach again")),
       taken: await agentSaid(id, "took custody of"),
+      attached: await agentSaid(id, "attached to its live process"),
+      answered: await agentSaid(id, "answered after its attach"),
       stoppedWaiting: await agentSaid(id, "stopped waiting"),
     };
     if (dies) {
@@ -1036,37 +1055,139 @@ const frozenCase = async (label: string, dies: boolean) => {
       process.kill(pid, "SIGCONT");
     }
     frozen = false;
+    const answered = dies
+      ? 0
+      : await until(
+          "its stored mode applied once it answers",
+          () => agentSaid(id, "in its stored mode (bypassPermissions)"),
+          (n) => n >= 1,
+          120_000
+        ).catch(() => 0);
     const read = await readOnce(uuid, queued);
     const outcome = {
       whileFrozen,
+      answered,
       read,
       row: fleet.instance(id),
       cameBack: await hubSaid(uuid, "came back"),
-      letGoAsEnded: await agentSaid(id, "ended before it was attached"),
       toolTurns: turnsOf(tool),
     };
     const ok =
       whileFrozen.letGo === 0 &&
       whileFrozen.taken >= 1 &&
+      whileFrozen.attached >= 1 &&
+      whileFrozen.answered === 0 &&
+      whileFrozen.row?.status === "running" &&
       whileFrozen.stoppedWaiting === 0 &&
       read.turns === 1 &&
       read.send?.state === "read" &&
       outcome.row?.status === "running" &&
       outcome.cameBack <= (dies ? 2 : 1) &&
-      (dies ? outcome.letGoAsEnded >= 1 : outcome.letGoAsEnded === 0);
+      (dies
+        ? outcome.row?.spawned_at !== whileFrozen.row?.spawned_at
+        : answered >= 1);
     report(
       label,
       ok,
       outcome,
       dies
-        ? `let go when its process died ${Math.round(whileFrozen.frozenForMs / 1000)} s into the freeze; the send made meanwhile started it afresh and was read once (hub: ${outcome.cameBack} hand-back line)`
-        : `held through a ${Math.round(whileFrozen.frozenForMs / 1000)} s freeze, attached when thawed; the send made meanwhile read once (hub: ${outcome.cameBack} hand-back lines)`
+        ? `attached and running while frozen; its process killed ${Math.round(whileFrozen.frozenForMs / 1000)} s into the freeze, the send made meanwhile started it afresh and was read once (hub: ${outcome.cameBack} hand-back line)`
+        : `attached and running through a ${Math.round(whileFrozen.frozenForMs / 1000)} s freeze; its stored mode applied once thawed, and the send made meanwhile read once after it (hub: ${outcome.cameBack} hand-back lines)`
     );
   } finally {
     if (frozen) {
       process.kill(pid, "SIGCONT");
     }
   }
+};
+
+/**
+ * The hub and the agent down for 45 s, then back. Claude Code's cawco slot
+ * reads `connected` through the first hub outage after its launch, its
+ * dropped connection unnoticed until it next uses it, and `failed` or
+ * `needs-auth` through the next (2.1.296, measured on this rig): a case
+ * whose session must meet a slot that knows it lost the hub has it through
+ * one of these first.
+ */
+const outage = async () => {
+  await fleet.stop("agent", "SIGKILL");
+  await fleet.stop("hub", "SIGKILL");
+  await Bun.sleep(45_000);
+  fleet.launch("hub");
+  await fleet.hubUp();
+  fleet.launch("agent");
+  await fleet.agentUp();
+};
+
+/** What the agent says, in the transcript, its log and the row, when it stops a session the hub no longer knows. */
+const CREDENTIAL_GONE = "the hub no longer knows the credential";
+
+/**
+ * A running Claude session whose credential the hub stops knowing (its
+ * hash replaced while the hub and the agent are down), both back: its
+ * slot's reconnect is refused (401, `needs-auth`), and the session is
+ * stopped, the reason said in its transcript, the agent's log and its row.
+ */
+const needsAuthCase = async (label: string) => {
+  const id = await fleet.spawn("claude", "Custody claude needs-auth");
+  const first = mark("claude", "needs-auth", "first");
+  await fleet.send(id, `${first}: say ok.`);
+  await until(
+    `${first} answered`,
+    () => turnsOf(first),
+    (n) => n >= 1
+  );
+  await Bun.sleep(3000);
+  await outage();
+  const pidBefore = await fleet.sessionPid(id);
+  await fleet.stop("agent", "SIGKILL");
+  await fleet.stop("hub", "SIGKILL");
+  await Bun.sleep(45_000);
+  fleet.write(
+    "UPDATE session_identities SET credential_hash = NULL, pending_hash = ? WHERE instance_id = ?",
+    createHash("sha256").update(crypto.randomUUID()).digest("hex"),
+    id
+  );
+  fleet.launch("hub");
+  await fleet.hubUp();
+  fleet.launch("agent");
+  await fleet.agentUp();
+  const said = await until(
+    "stopped for its credential",
+    () => agentSaid(id, CREDENTIAL_GONE),
+    (n) => n >= 1,
+    240_000
+  ).catch(() => 0);
+  const row = await until(
+    "its row failed",
+    () => fleet.instance(id),
+    (one) => one?.status === "error",
+    60_000
+  ).catch(() => fleet.instance(id));
+  const transcript = JSON.stringify(
+    await fleet
+      .api<unknown>(`/api/instances/${id}/transcript`)
+      .catch((error: unknown) => String(error))
+  );
+  await Bun.sleep(8000);
+  const outcome = {
+    said,
+    row,
+    inTranscript: transcript.includes(CREDENTIAL_GONE),
+    pidBefore,
+    pidAfter: (await fleet.sessionPid(id)) ?? null,
+    attachedConnecting: await agentSaid(id, "attached while its CawCo MCP is"),
+  };
+  report(
+    label,
+    said >= 1 &&
+      row?.status === "error" &&
+      (row.last_error ?? "").includes(CREDENTIAL_GONE) &&
+      outcome.inTranscript &&
+      outcome.pidAfter === null,
+    outcome,
+    "stopped once its slot read needs-auth; the reason is in its transcript, the agent's log and its row, and its process is gone"
+  );
 };
 
 /**
@@ -1123,7 +1244,7 @@ const endSide = (sock: Socket<Side> | undefined) => {
  * now on `hubPort`: every connection goes through as it is, but while `hold`
  * is on (it starts on), a new one that asks for `/mcp/cawco` is taken and
  * left unanswered, as a hub out of reach leaves a connect, until `hold` goes
- * off and it goes through.
+ * off and it goes through. `down` and `up` stop and start its listening.
  */
 const hubProxy = (listenPort: number, hubPort: number) => {
   let holding = true;
@@ -1193,12 +1314,19 @@ const hubProxy = (listenPort: number, hubPort: number) => {
       endSide(sock.data.peer);
     },
   };
-  Bun.listen<Side>({
-    hostname: "127.0.0.1",
-    port: listenPort,
-    socket: listening,
-  });
+  const listen = () =>
+    Bun.listen<Side>({
+      hostname: "127.0.0.1",
+      port: listenPort,
+      socket: listening,
+    });
+  let server = listen();
   return {
+    /** Stops listening and drops what it carries: a connect is refused, as a hub that is down refuses it. */
+    down: () => server.stop(true),
+    up: () => {
+      server = listen();
+    },
     hold: (on: boolean) => {
       holding = on;
       if (!on) {
@@ -1213,111 +1341,169 @@ const hubProxy = (listenPort: number, hubPort: number) => {
   };
 };
 
+/** Each session's count of agent lines that name it and say `words`. */
+const eachSaid = async (ids: string[], words: string) =>
+  new Map(
+    await Promise.all(
+      ids.map(async (id) => [id, await agentSaid(id, words)] as const)
+    )
+  );
+
+/** What the agent says of a child it attached while its cawco slot was not connected. */
+const ATTACHED_CONNECTING = "attached while its CawCo MCP is";
+
 /**
- * A Claude session mid-tool while the hub and the agent go down for 45 s
- * (its CawCo MCP slot's connects refused, so Claude Code's own reconnects
- * give up), then come back, the hub on a new port behind {@link hubProxy}
- * on its old one, every new MCP connection held for 50 s past the agent's
- * return (past the 30 s a launch's slot is given): attached anyway, its
- * turn runs to its end, and its slot connects once let through.
+ * Three Claude sessions mid-tool while the hub and the agent go down for
+ * 45 s (their CawCo MCP slots' connects refused), then come back, the hub on
+ * a new port behind {@link hubProxy} on its old one, every new MCP
+ * connection held for 50 s past the agent's return (past the 30 s a
+ * launch's slot is given). Whether Claude Code notices its slot dropped
+ * varies from one session and outage to the next (2.1.296 on this rig), so
+ * the outage runs up to three times until at least one session is attached
+ * while its slot is not connected. Each one that was is attached anyway,
+ * never refused, its turn runs to its end, and its slot connects once let
+ * through.
  */
 const mcpLateCase = async (label: string) => {
   let proxy: ReturnType<typeof hubProxy> | undefined;
   try {
-    const id = await fleet.spawn("claude", "Custody claude mcp-late");
-    const first = mark("claude", "mcp-late", "first");
-    await fleet.send(id, `${first}: say ok.`);
-    await until(
-      `${first} answered`,
-      () => turnsOf(first),
-      (n) => n >= 1
-    );
+    const ids: string[] = [];
+    const tools = new Map<string, string>();
+    for (const n of [1, 2, 3]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one session at a time, each with its first turn answered
+      const id = await fleet.spawn("claude", `Custody claude mcp-late ${n}`);
+      const first = mark("claude", "mcp-late", `first${n}`);
+      await fleet.send(id, `${first}: say ok.`);
+      await until(
+        `${first} answered`,
+        () => turnsOf(first),
+        (count) => count >= 1
+      );
+      const tool = mark("claude", "mcp-late", `tool${n}`);
+      await fleet.send(id, `${LONG_TOOL} ${tool}: wait in a tool.`);
+      await until(
+        `${tool} asked`,
+        () => turnsOf(tool),
+        (count) => count >= 1,
+        120_000
+      );
+      ids.push(id);
+      tools.set(id, tool);
+    }
     await Bun.sleep(3000);
-    const tool = mark("claude", "mcp-late", "tool");
-    await fleet.send(id, `${TOOL_SLEEP} ${tool}: wait in a tool.`);
-    await until(
-      `${tool} asked`,
-      () => turnsOf(tool),
-      (n) => n >= 1,
-      120_000
-    );
-    await Bun.sleep(3000);
-    // The hub goes down: its slot's connection drops and its reconnects
-    // are refused, until Claude Code's own retries give up. It comes back on
-    // a port of its own, behind a proxy on the one the slot dials, which
-    // holds every new MCP connection.
-    await fleet.stop("agent", "SIGKILL");
-    await fleet.stop("hub", "SIGKILL");
-    await Bun.sleep(45_000);
-    const lease = Bun.serve({
-      hostname: "127.0.0.1",
-      port: 0,
-      fetch: () => new Response(null),
-    });
-    const movedTo = lease.port as number;
-    await lease.stop(true);
-    proxy = hubProxy(Number(new URL(fleet.base).port), movedTo);
-    fleet.env.CAWCO_HUB_PORT = String(movedTo);
-    fleet.launch("hub");
-    await fleet.hubUp();
-    fleet.launch("agent");
-    await fleet.agentUp();
-    const upAt = Date.now();
-    const attachedConnecting = await until(
-      "attached while its slot connects",
-      () => agentSaid(id, "attached while its CawCo MCP is"),
-      (n) => n >= 1,
-      60_000
-    ).catch(() => 0);
+    let taken: string[] = [];
+    let upAt = 0;
+    let outages = 0;
+    while (taken.length === 0 && outages < 3) {
+      outages += 1;
+      // biome-ignore lint/performance/noAwaitInLoops: each outage follows the one before it
+      const before = await eachSaid(ids, ATTACHED_CONNECTING);
+      // The hub, and the address the slots dial, go down; it comes back
+      // on a port of its own, behind the proxy on the one they dial.
+      proxy?.down();
+      await fleet.stop("agent", "SIGKILL");
+      await fleet.stop("hub", "SIGKILL");
+      await Bun.sleep(45_000);
+      if (proxy) {
+        proxy.hold(true);
+        proxy.up();
+      } else {
+        const lease = Bun.serve({
+          hostname: "127.0.0.1",
+          port: 0,
+          fetch: () => new Response(null),
+        });
+        const movedTo = lease.port as number;
+        await lease.stop(true);
+        proxy = hubProxy(Number(new URL(fleet.base).port), movedTo);
+        fleet.env.CAWCO_HUB_PORT = String(movedTo);
+      }
+      fleet.launch("hub");
+      await fleet.hubUp();
+      fleet.launch("agent");
+      await fleet.agentUp();
+      upAt = Date.now();
+      await Bun.sleep(20_000);
+      const after = await eachSaid(ids, ATTACHED_CONNECTING);
+      taken = ids.filter((id) => (after.get(id) ?? 0) > (before.get(id) ?? 0));
+      if (taken.length === 0) {
+        proxy.hold(false);
+      }
+    }
+    const holding = proxy;
+    if (!holding) {
+      throw new Error(`${label}: no outage ran`);
+    }
     await Bun.sleep(Math.max(0, upAt + 50_000 - Date.now()));
+    const connectedBefore = await eachSaid(
+      taken,
+      "connected after it was attached"
+    );
     const whileHeld = {
       heldForMs: Date.now() - upAt,
-      attachedConnecting,
-      verifiedAtAttach: await agentSaid(id, "held credential verified"),
-      dialsHeld: proxy.heldSoFar(),
-      refused:
-        (await agentSaid(id, "did not connect within")) +
-        (await agentSaid(id, "could not be verified")),
-      row: fleet.instance(id),
-      toolFinishedYet: toolResults(tool),
+      outages,
+      taken,
+      dialsHeld: holding.heldSoFar(),
+      refused: await Promise.all(
+        taken.map(
+          async (id) =>
+            (await agentSaid(id, "did not connect within")) +
+            (await agentSaid(id, "could not be verified")) +
+            (await agentSaid(id, CREDENTIAL_GONE))
+        )
+      ),
+      rows: taken.map((id) => fleet.instance(id)?.status),
+      toolsFinishedYet: taken.map((id) => toolResults(tools.get(id) ?? "")),
     };
-    proxy.hold(false);
-    const connected = await until(
-      "its slot connected",
-      () => agentSaid(id, "connected after it was attached"),
-      (n) => n >= 1,
-      180_000
-    ).catch(() => 0);
-    const toolFinished = await until(
-      `${tool} ran to its end`,
-      () => toolResults(tool),
-      (n) => n >= 1,
-      180_000
-    ).catch(() => 0);
-    const next = mark("claude", "mcp-late", "next");
-    const read = await readOnce(await fleet.send(id, `${next}: say ok.`), next);
+    holding.hold(false);
+    const connected = await Promise.all(
+      taken.map((id) =>
+        until(
+          `${id} slot connected`,
+          () => agentSaid(id, "connected after it was attached"),
+          (n) => n > (connectedBefore.get(id) ?? 0),
+          180_000
+        ).catch(() => 0)
+      )
+    );
+    const toolsFinished = await Promise.all(
+      taken.map((id) =>
+        until(
+          `${id} tool ran to its end`,
+          () => toolResults(tools.get(id) ?? ""),
+          (n) => n >= 1,
+          (LONG_TOOL_S + 60) * 1000
+        ).catch(() => 0)
+      )
+    );
+    const reads = await Promise.all(
+      taken.map(async (id) => {
+        const next = mark("claude", "mcp-late", "next");
+        return await readOnce(await fleet.send(id, `${next}: say ok.`), next);
+      })
+    );
     const outcome = {
       whileHeld,
       connected,
-      toolFinished,
-      read,
-      row: fleet.instance(id),
+      toolsFinished,
+      reads,
+      rows: taken.map((id) => fleet.instance(id)?.status),
     };
     report(
       label,
-      whileHeld.attachedConnecting >= 1 &&
-        whileHeld.verifiedAtAttach === 0 &&
+      taken.length >= 1 &&
         whileHeld.dialsHeld >= 1 &&
-        whileHeld.refused === 0 &&
-        whileHeld.row?.status === "running" &&
-        whileHeld.toolFinishedYet === 0 &&
-        connected >= 1 &&
-        toolFinished >= 1 &&
-        read.turns === 1 &&
-        read.send?.state === "read" &&
-        outcome.row?.status === "running",
+        whileHeld.refused.every((n) => n === 0) &&
+        whileHeld.rows.every((status) => status === "running") &&
+        whileHeld.toolsFinishedYet.every((n) => n === 0) &&
+        connected.every((n) => n >= 1) &&
+        toolsFinished.every((n) => n >= 1) &&
+        reads.every(
+          (read) => read.turns === 1 && read.send?.state === "read"
+        ) &&
+        outcome.rows.every((status) => status === "running"),
       outcome,
-      `attached while its MCP slot was held ${Math.round(whileHeld.heldForMs / 1000)} s past the agent's return; its tool turn ran to its end and its slot connected once let through`
+      `${taken.length} session(s) attached while their MCP slot was held ${Math.round(whileHeld.heldForMs / 1000)} s past the agent's return (outage ${outages}); each tool turn ran to its end and each slot connected once let through`
     );
   } finally {
     // The hub stays on its new port behind the proxy, which lets all through.
@@ -1326,6 +1512,10 @@ const mcpLateCase = async (label: string) => {
 };
 
 const runCase = async (harness: Harness, name: Case) => {
+  if (name === "needs-auth") {
+    await needsAuthCase(`${harness} ${name}`);
+    return;
+  }
   if (name === "mcp-late") {
     await mcpLateCase(`${harness} ${name}`);
     return;

@@ -90,6 +90,7 @@ import {
   READ_SKILL_FILES,
   resumeCursor,
   SESSION_DIR_READ,
+  SESSION_STOPPED,
   settledQuestionResult,
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
@@ -167,7 +168,10 @@ import { parseProcId, procIdFor } from "../proc-id";
 // Type-only, and deliberately so: `session.ts` imports the harness registry
 // this file is part of, so a value import here would close a module cycle.
 import type { SessiondAwareContext } from "../session";
-import { acknowledgeSessionCredential } from "../session-identity";
+import {
+  acknowledgeSessionCredential,
+  CredentialUnknown,
+} from "../session-identity";
 import {
   type BridgeRing,
   endProc,
@@ -943,6 +947,15 @@ class Turn {
 }
 
 const SETTLE_TIMEOUT_MS = 5000;
+
+/**
+ * Why a held child the hub no longer knows was stopped, in the error formula
+ * (WORDS.md): what happened, why, what is safe, what starts it again. A
+ * person's message starts a failed session afresh, on a credential the hub
+ * grants as it starts.
+ */
+const CREDENTIAL_REFUSED_WORDS =
+  "CawCo stopped this session: the hub no longer knows the credential its Claude Code was started with, so its CawCo tools (reports, handoffs, finishing its work) could not reach the hub. Its conversation is kept. Send it a message to start it again on a fresh credential.";
 
 /** How long the CLI waits on the `Stop` hook this adapter registers, in seconds. */
 const STOP_HOOK_TIMEOUT_S = 5;
@@ -2030,9 +2043,32 @@ class ClaudeSession implements HarnessSession {
   }
 
   /**
-   * Stops the session for good because its boundary hook cannot hold, and
-   * says why: its row and work item fail with `refusal`, and every send after
-   * it is refused ({@link #hookGone}).
+   * A HELD CHILD THE HUB NO LONGER KNOWS IS STOPPED, AND SAYS SO. Its cawco
+   * slot reads `needs-auth`, or the hub answers its credential's ACK 401:
+   * the hub refused the credential it was launched with, so none of its
+   * CawCo tools reach the hub, and a delegate could no
+   * longer report or finish its item, silently. That was the attach's
+   * refusal (HeldProcessRefused, the credential gate), and it is the same
+   * now when the slot is refused after the attach: the session is stopped,
+   * the words go in its transcript ({@link SESSION_STOPPED}) and the agent's
+   * log, and its row and work item fail with them ({@link #refuse}).
+   */
+  #credentialRefused(): void {
+    this.#ctx.frame({
+      type: "system",
+      subtype: SESSION_STOPPED,
+      uuid: `session-stopped-${this.instanceId}-credential`,
+      session_id: this.sessionId ?? "",
+      content: CREDENTIAL_REFUSED_WORDS,
+    } as unknown as NeutralMessage);
+    this.#refuse(new HeldProcessRefused(CREDENTIAL_REFUSED_WORDS));
+  }
+
+  /**
+   * Stops the session for good because its boundary hook cannot hold, or the
+   * hub refused its credential ({@link #credentialRefused}), and says why:
+   * its row and work item fail with `refusal`, and every send after it is
+   * refused ({@link #hookGone}).
    */
   #refuse(refusal: HeldProcessRefused): HeldProcessRefused {
     if (this.#hookRefusal) {
@@ -2047,7 +2083,7 @@ class ClaudeSession implements HarnessSession {
       .then(() => (held ? endProc(held.client, held.procId) : undefined))
       .catch((error: unknown) =>
         console.warn(
-          `[claude] ${this.instanceId}: stopping after its boundary hook went: ${String(error)}`
+          `[claude] ${this.instanceId}: stopping after its refusal: ${String(error)}`
         )
       );
     return refusal;
@@ -2438,9 +2474,9 @@ class ClaudeSession implements HarnessSession {
    * again with the header it was launched with, so no credential changes,
    * at a wait that doubles to 30 s. Once connected, the hub has taken that
    * header as this session, and the ACK, authenticated by it, says so. A
-   * slot that reads anything else (`needs-auth`: the hub no longer knows the
-   * credential) is not dialled again, and the session runs on without CawCo
-   * tools, as its CLI says.
+   * slot that reads `needs-auth` (the hub no longer knows the credential)
+   * stops the session and says why ({@link #credentialRefused}); one that
+   * reads anything else (`disabled`) is not dialled again.
    */
   async #dialCawco(credential: string): Promise<void> {
     let over = false;
@@ -2452,22 +2488,7 @@ class ClaudeSession implements HarnessSession {
     for (let wait = 1000; !over; wait = Math.min(wait * 2, 30_000)) {
       try {
         // biome-ignore lint/performance/noAwaitInLoops: one reading of the slot at a time, each after the wait before it
-        const cawco = (await this.#handle.mcpServerStatus()).find(
-          (server) => server.name === MCP_SERVER_NAME
-        );
-        if (cawco?.status === "connected") {
-          await acknowledgeSessionCredential(credential);
-          console.info(
-            `[claude] held credential verified ${this.instanceId}: its CawCo MCP connected after it was attached`
-          );
-          return;
-        }
-        if (cawco?.status === "failed") {
-          await this.#handle.reconnectMcpServer(MCP_SERVER_NAME);
-        } else if (cawco?.status !== "pending") {
-          console.warn(
-            `[claude] ${this.instanceId}: its CawCo MCP reads ${cawco?.status ?? "missing"}; it is not dialled again`
-          );
+        if ((await this.#dialOnce(credential)) === "done") {
           return;
         }
       } catch (error) {
@@ -2479,6 +2500,54 @@ class ClaudeSession implements HarnessSession {
         );
       }
       await Bun.sleep(wait);
+    }
+  }
+
+  /** One reading of the cawco slot for {@link #dialCawco}: whether the dial is done. */
+  async #dialOnce(credential: string): Promise<"done" | "again"> {
+    const cawco = (await this.#handle.mcpServerStatus()).find(
+      (server) => server.name === MCP_SERVER_NAME
+    );
+    if (cawco?.status === "connected") {
+      if (await this.#acknowledged(credential)) {
+        console.info(
+          `[claude] held credential verified ${this.instanceId}: its CawCo MCP connected after it was attached`
+        );
+      }
+      return "done";
+    }
+    if (cawco?.status === "needs-auth") {
+      this.#credentialRefused();
+      return "done";
+    }
+    if (cawco?.status === "failed") {
+      await this.#handle.reconnectMcpServer(MCP_SERVER_NAME);
+      return "again";
+    }
+    if (cawco?.status === "pending") {
+      return "again";
+    }
+    console.warn(
+      `[claude] ${this.instanceId}: its CawCo MCP reads ${cawco?.status ?? "missing"}; it is not dialled again`
+    );
+    return "done";
+  }
+
+  /**
+   * The held credential ACKed: true once the hub has it. One the hub does
+   * not know ({@link CredentialUnknown}) stops the session and says why
+   * ({@link #credentialRefused}): false. Anything else is thrown as it was.
+   */
+  async #acknowledged(credential: string): Promise<boolean> {
+    try {
+      await acknowledgeSessionCredential(credential);
+      return true;
+    } catch (error) {
+      if (!(error instanceof CredentialUnknown)) {
+        throw error;
+      }
+      this.#credentialRefused();
+      return false;
     }
   }
 
@@ -2557,7 +2626,9 @@ class ClaudeSession implements HarnessSession {
    * while the agent and the hub restarted, and on a loaded machine it can
    * take far longer than any deadline to come back. The child is attached as
    * it is, a live process this agent holds, and its slot is dialled until it
-   * connects ({@link #dialCawco}). Any other status is the hub's refusal.
+   * connects ({@link #dialCawco}). `needs-auth` is the hub's refusal of the
+   * credential, which stops the session and says why
+   * ({@link #credentialRefused}); any other status is refused as before.
    */
   async #verifyHeldCredential() {
     const cawco = (await this.#handle.mcpServerStatus()).find(
@@ -2574,7 +2645,11 @@ class ClaudeSession implements HarnessSession {
     }
     const credential = header.slice("Bearer ".length);
     if (cawco?.status === "connected") {
-      await acknowledgeSessionCredential(credential);
+      // A slot can read connected for a while after the hub it reached went:
+      // the ACK is the hub's own word on the credential.
+      if (!(await this.#acknowledged(credential))) {
+        return { credential, refused: true };
+      }
       console.info(`[claude] held credential verified ${this.instanceId}`);
     } else if (cawco?.status === "pending" || cawco?.status === "failed") {
       console.info(
@@ -2582,6 +2657,10 @@ class ClaudeSession implements HarnessSession {
       );
       // biome-ignore lint/complexity/noVoid: the attach does not wait on the slot; the dial runs as long as the child does
       void this.#dialCawco(credential);
+    } else if (cawco?.status === "needs-auth") {
+      // The refusal stops it and says why; what asked hears it was refused.
+      this.#credentialRefused();
+      return { credential, refused: true };
     } else {
       throw new Error(
         `CawCo MCP is not connected (${cawco?.status ?? "missing"}).`

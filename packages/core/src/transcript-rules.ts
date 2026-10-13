@@ -31,6 +31,7 @@ import {
   MOVED_HERE,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
+  SESSION_STOPPED,
 } from "./harness";
 import {
   parseDelegateAsk,
@@ -1028,6 +1029,18 @@ export function mapFrame(
         // The agent stopped a session failing the same way again and again
         // with nobody sending: a failure card, titled by the stop, with the
         // failure's own words under it.
+        // CawCo stopped the session's process: titled by what happened, why
+        // and what starts it again under it (core `SESSION_STOPPED`).
+        case SESSION_STOPPED: {
+          const [title, rest] = firstSentence(sdk.content ?? "");
+          mapping.blocks.push(
+            systemLine(base, "ui.error", rest, {
+              subtype: SESSION_STOPPED,
+              errorTitle: title,
+            })
+          );
+          break;
+        }
         case REPEATED_FAILURE:
           mapping.blocks.push(
             systemLine(base, "ui.error", sdk.content ?? "", {
