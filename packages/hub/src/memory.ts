@@ -59,7 +59,8 @@ import { Elysia, status, t } from "elysia";
 import { z } from "zod";
 import { tool } from "./admin-tools";
 import type { DbShape, ProjectRow } from "./db";
-import { askRow, jevKey, offLine } from "./jev-placement";
+import { type JevAccess, jevAccess } from "./jev";
+import { askRow, offLine } from "./jev-placement";
 import { boardTitle } from "./labels";
 import {
   changeFolderFiles,
@@ -748,6 +749,7 @@ export interface MemoryDeps {
   readonly db: Pick<
     DbShape,
     | "getInstancesByIds"
+    | "getJevSettings"
     | "getOpenRouterConnection"
     | "listProjects"
     | "project"
@@ -950,7 +952,7 @@ export const createMemory = ({
 
   /** Jev's sort of the inbox's unsorted notes, by note id. Throws Jev's own words. */
   const jevSorts = async (
-    key: string,
+    key: JevAccess,
     project: ProjectRow,
     notes: Note[]
   ): Promise<Map<string, Verdict>> => {
@@ -994,7 +996,7 @@ export const createMemory = ({
 
   /** Jev's sort of the unsorted notes: lasting facts marked, the rest settled. Jev failing throws its words (JevFailed). */
   const sortByJev = async (
-    key: string,
+    key: JevAccess,
     project: ProjectRow,
     unsorted: Note[]
   ): Promise<{ marked: Note[]; settled: Settled[] }> => {
@@ -1032,7 +1034,7 @@ export const createMemory = ({
       await knownOf(projectId)
     );
     const unsorted = waiting.filter((each) => each.verdict === null);
-    const key = jevKey(db);
+    const key = jevAccess(db);
     const jev =
       key && unsorted.length > 0
         ? await sortByJev(key, project, unsorted)
@@ -1412,7 +1414,7 @@ export const createMemory = ({
 
   /** Jev's pick of the knowledge files a task needs, best first. Jev failing throws its words (JevFailed). */
   const jevPicks = async (
-    key: string,
+    key: JevAccess,
     projectId: string,
     task: {
       acceptance: string;
@@ -1483,7 +1485,7 @@ export const createMemory = ({
     const named = task.context.map((path) => path.replace(LEADING_SLASHES, ""));
     let picked: string[];
     let how: string;
-    const key = jevKey(db);
+    const key = jevAccess(db);
     if (key && files.length > 0) {
       // Jev failing throws (JevFailed): the attempt does not start, with Jev's words.
       const ranked = await jevPicks(key, projectId, task, files);
