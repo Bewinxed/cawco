@@ -88,7 +88,16 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// What went wrong with the open card's reply, resolve or send.
     private var cardError: String?
     private var replying = false
+    private var resolving = false
     private weak var list: PinListController?
+    /// The overlay's answers waited on, by what was asked and of which pin
+    /// ("reply:<id>", "resolve:<id>"): nil when it was kept, else why not.
+    private var answers: [String: CheckedContinuation<String?, Never>] = [:]
+    /// How long the page has to answer a reply or a resolve. Our call: the overlay writes its doc at once.
+    private static let answerWithin = Duration.seconds(10)
+    /// Whether the session's turn runs now (its activity pulse), and the pins the agent works on.
+    private var sessionWorking = false
+    private var live: Set<String> = []
 
     // This view's word to the hub that the artifact is on screen (`shown`).
     /// The revision the hub has heard about, and what this view has to say of the current one.
@@ -295,6 +304,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         NotificationCenter.default.addObserver(self, selector: #selector(cameForward), name: UIApplication.didBecomeActiveNotification, object: nil)
         paintWell()
         paintPins()
+        watchWorking()
         show()
     }
 
@@ -325,6 +335,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             paintPins()
         }
         placeCard()
+        #if DEBUG
+        probeLayout()
+        #endif
     }
 
     /// As the phone's drawer it wears the grabber, and its header stands
@@ -475,6 +488,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         case "cawco:resolved":
             // The page kept the field it refused: its word leaves the band.
             if failureOf == "field" { clearFailure() }
+        case "cawco:reply-result":
+            answered("reply", body)
+        case "cawco:resolve-result":
+            answered("resolve", body)
         #if DEBUG
         case "cawco:probe":
             probePage(body)
@@ -645,8 +662,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private func adopt(_ read: ArtifactComments) {
         guard read != comments else { return }
         comments = read
+        live = read.live(working: sessionWorking)
         paintPins()
-        list?.show(read.pins)
+        list?.show(read.pins, live: live)
         if let openPin, !read.pins.contains(where: { $0.id == openPin }) { closeCard() }
         paintCard()
         #if DEBUG
@@ -658,6 +676,27 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             send()
         }
         #endif
+    }
+
+    /// Whether the session's turn runs, read from its activity pulse (as the
+    /// web's `activityOf` prefers it) and read again when the pulse changes.
+    private func watchWorking() {
+        var working = withObservationTracking {
+            hub.fleet.activityPulse(instanceId)?.activity == .working
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.watchWorking() }
+        }
+        #if DEBUG
+        // `-preview-working`: the probe's mock session ends its turns at once.
+        if PreviewProbe.workingAtLaunch { working = true }
+        #endif
+        guard working != sessionWorking else { return }
+        sessionWorking = working
+        let next = comments.live(working: working)
+        guard next != live else { return }
+        live = next
+        list?.show(comments.pins, live: live)
+        paintCard()
     }
 
     /// The head's Pins (shown once there is a pin), its badge the open pins, and Send N.
@@ -686,7 +725,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private func openList() {
         let content = PinListController()
         content.placing = placing
-        content.show(comments.pins)
+        content.show(comments.pins, live: live)
         content.onOpen = { [weak self, weak content] id in
             content?.dismiss(animated: true)
             self?.openCard(id)
@@ -741,7 +780,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         }
         let arriving = card.isHidden
         card.isHidden = false
-        card.show(pin, thumbnail: thumbs[openPin], problem: cardError, replying: replying)
+        card.show(pin, live: live.contains(openPin), thumbnail: thumbs[openPin], problem: cardError, replying: replying)
         placeCard()
         if arriving {
             // It arrives as a floating card does: rising `popRise` from 0.96 over `durPop`.
@@ -830,8 +869,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         if cardTop.constant != top { cardTop.constant = top }
     }
 
-    /// The person's words in the open pin's thread, through the hub; a
-    /// refusal stays under the field with the words still in it.
+    /// The person's words in the open pin's thread: the page's overlay writes
+    /// them into the artifact's doc, as every person's reply is written
+    /// (`cawco:reply`). A refusal stays under the field with the words still in it.
     private func reply(_ text: String) {
         guard let pin = openPin, !replying else { return }
         replying = true
@@ -839,40 +879,65 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         paintCard()
         Task { [weak self] in
             guard let self else { return }
-            do {
-                try await hub.reply(text, to: pin, in: instanceId)
-                if openPin == pin { card.replied() }
-                #if DEBUG
-                PreviewProbe.say("preview reply ok")
-                #endif
-            } catch {
-                cardError = "Couldn't keep the reply: \(error.localizedDescription)"
-                #if DEBUG
-                PreviewProbe.say("preview reply failed: \(error.localizedDescription)")
-                #endif
-            }
+            let refused = await ask("reply", pin: pin, ["type": "cawco:reply", "pin": pin, "text": text],
+                                    silent: "The page didn't answer, so the reply wasn't kept. Try again.")
+            if refused == nil, openPin == pin { card.replied() }
+            cardError = refused
             replying = false
             paintCard()
-            refresh()
+            // The thread as the hub has it now, at once.
+            if refused == nil { refresh() }
         }
     }
 
+    /// Resolve or Reopen, written by the page's overlay (`cawco:resolve`).
     private func resolve(_ resolved: Bool) {
-        guard let pin = openPin else { return }
+        guard let pin = openPin, !resolving else { return }
+        resolving = true
         cardError = nil
         Task { [weak self] in
             guard let self else { return }
-            do {
-                try await hub.resolve(pin, resolved, in: instanceId)
-                #if DEBUG
-                PreviewProbe.say("preview \(resolved ? "resolve" : "reopen") ok")
-                #endif
-            } catch {
-                cardError = "Couldn't \(resolved ? "resolve" : "reopen") the pin: \(error.localizedDescription)"
-                paintCard()
-            }
-            refresh()
+            let refused = await ask("resolve", pin: pin, ["type": "cawco:resolve", "pin": pin, "resolved": resolved],
+                                    silent: "The page didn't answer, so the pin wasn't \(resolved ? "resolved" : "reopened"). Try again.")
+            cardError = refused
+            resolving = false
+            paintCard()
+            if refused == nil { refresh() }
         }
+    }
+
+    /// Hands the page `message` and waits for its overlay's answer
+    /// (`cawco:<what>-result` for `pin`): nil when it was kept, else the
+    /// page's own sentence; `silent` when no answer came within `answerWithin`.
+    private func ask(_ what: String, pin: String, _ message: [String: Any], silent: String) async -> String? {
+        guard connected else { return silent }
+        let key = "\(what):\(pin)"
+        // An ask still out for the same pin hears that a newer one took its place.
+        answers.removeValue(forKey: key)?.resume(returning: silent)
+        return await withCheckedContinuation { (answer: CheckedContinuation<String?, Never>) in
+            answers[key] = answer
+            deliver(message)
+            Task { [self] in
+                try? await Task.sleep(for: Self.answerWithin)
+                guard let unanswered = answers.removeValue(forKey: key) else { return }
+                #if DEBUG
+                PreviewProbe.say("preview \(what)-result none")
+                #endif
+                unanswered.resume(returning: silent)
+            }
+        }
+    }
+
+    /// The overlay's answer to an ask (`cawco:reply-result`, `cawco:resolve-result`).
+    private func answered(_ what: String, _ body: [String: Any]) {
+        guard let pin = Self.pinId(body["pin"]), let answer = answers.removeValue(forKey: "\(what):\(pin)") else { return }
+        let kept = body["ok"] as? Bool == true
+        let refused = kept ? nil : Self.text(body["error"], 300) ?? "The page didn't keep it. Try again."
+        #if DEBUG
+        let number = comments.pins.first { $0.id == pin }?.label ?? 0
+        PreviewProbe.say("preview \(what)-result pin=\(number) \(refused.map { "refused: \($0)" } ?? "ok")")
+        #endif
+        answer.resume(returning: refused)
     }
 
     /// The open pin's picture full size: the page draws it, and it opens in the lightbox.
@@ -1028,6 +1093,31 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     #if DEBUG
     // MARK: The simulator probe (scripts/probe-ios-preview-touch.ts)
 
+    /// The header as the probe reads it: Comment's words and centre, the open
+    /// pins and Pins' centre, Send's words and centre, Reload's, the
+    /// grabber's, the commenting line's height, and the web view's frame.
+    private func headLine() -> String {
+        let centre = PreviewProbe.centre
+        let words = commentButton.accessibilityLabel ?? "?"
+        let sendWords = sendButton.configuration?.attributedTitle.map { String($0.characters) } ?? "?"
+        let grab = grabArea.isHidden ? "none" : centre(grabber)
+        let page = web.convert(web.bounds, to: nil)
+        return "preview head comment=\(words)@\(centre(commentButton)) pins=\(comments.open)@\(centre(pinsButton)) send=\(sendWords)@\(centre(sendButton)) reload=\(centre(reloadButton)) grabber=\(grab) note=\(Int(commentingNote.bounds.height)) web=\(Int(page.minX.rounded())),\(Int(page.minY.rounded())),\(Int(page.width.rounded())),\(Int(page.height.rounded()))"
+    }
+
+    /// The header as last logged on a layout: logged again only when it moved.
+    private var laidHead = ""
+
+    /// A layout that moved the header (a drawer drag, a mode) says so at once,
+    /// whatever the page's own posts do.
+    private func probeLayout() {
+        guard PreviewProbe.on, view.window != nil else { return }
+        let line = headLine()
+        guard line != laidHead else { return }
+        laidHead = line
+        PreviewProbe.say(line)
+    }
+
     /// The probe's page posts `cawco:probe` with its state and the viewport
     /// rects of what the probe taps: logged with each rect's centre in the
     /// window's points, where a simulator touch lands, after the header's own
@@ -1036,12 +1126,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// the window), so every post says where everything is now.
     private func probePage(_ body: [String: Any]) {
         guard PreviewProbe.on, let web else { return }
-        let centre = PreviewProbe.centre
-        let words = { (button: UIButton) in button.accessibilityLabel ?? "?" }
-        let sendWords = sendButton.configuration?.attributedTitle.map { String($0.characters) } ?? "?"
-        let grab = grabArea.isHidden ? "none" : centre(grabber)
-        let page = web.convert(web.bounds, to: nil)
-        PreviewProbe.say("preview head comment=\(words(commentButton))@\(centre(commentButton)) pins=\(comments.open)@\(centre(pinsButton)) send=\(sendWords)@\(centre(sendButton)) reload=\(centre(reloadButton)) grabber=\(grab) note=\(Int(commentingNote.bounds.height)) web=\(Int(page.minX.rounded())),\(Int(page.minY.rounded())),\(Int(page.width.rounded())),\(Int(page.height.rounded()))")
+        PreviewProbe.say(headLine())
         if openPin != nil, !card.isHidden { PreviewProbe.say(card.probeLine()) }
         var parts = [Self.text(body["state"], 200) ?? ""]
         let rects = body["rects"] as? [String: Any] ?? [:]

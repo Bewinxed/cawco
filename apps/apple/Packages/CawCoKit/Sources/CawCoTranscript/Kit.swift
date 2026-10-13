@@ -309,32 +309,6 @@ func railLine(_ views: [UIView], spacing: Double = Columns.gap) -> UIStackView {
     return line
 }
 
-/// A still dot: a branch's live beat, an ask's mark.
-final class Dot: UIView {
-    init(_ side: Double, color: UIColor) {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        backgroundColor = color
-        layer.cornerRadius = side / 2
-        NSLayoutConstraint.activate([widthAnchor.constraint(equalToConstant: side), heightAnchor.constraint(equalToConstant: side)])
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) { fatalError("built in code") }
-
-    /// The dot beats (opacity to 0.3 at half) on --breath, --ease-in-out, unless motion is reduced.
-    func beat() {
-        layer.removeAnimation(forKey: "beat")
-        guard !UIAccessibility.isReduceMotionEnabled else { return }
-        let beat = CAKeyframeAnimation(keyPath: "opacity")
-        beat.values = [1, 0.3, 1]
-        beat.keyTimes = [0, 0.5, 1]
-        beat.duration = Motion.breath
-        beat.timingFunctions = [Motion.easeInOut.function, Motion.easeInOut.function]
-        beat.repeatCount = .infinity
-        layer.add(beat, forKey: "beat")
-    }
-}
 
 /// `formatDuration` (lib/utils/time.ts).
 func formatDuration(_ seconds: TimeInterval) -> String {

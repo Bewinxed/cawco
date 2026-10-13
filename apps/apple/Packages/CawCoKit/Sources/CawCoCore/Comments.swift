@@ -4,9 +4,9 @@ import OpenAPIRuntime
 
 /// A person's numbered pin on an artifact, with its thread (core comments.ts
 /// `Pin`; Projects spec §5.7, §5.10). The page's overlay draws the pins and
-/// writes the new ones into the artifact's doc; the app reads them through
-/// the hub (`comment_read`'s route) and writes the person's words, resolve
-/// and reopen through the hub's person routes, having no doc of its own.
+/// writes them into the artifact's doc, the person's words, resolve and
+/// reopen too, as the app asks it (`cawco:reply`, `cawco:resolve`); the app
+/// reads them through the hub (`comment_read`'s route).
 public typealias Pin = Components.Schemas.Pin
 public typealias PinEntry = Components.Schemas.ThreadEntry
 
@@ -51,13 +51,25 @@ public struct ArtifactComments: Sendable, Equatable {
     /// By number.
     public let pins: [Pin]
     public let unsentPicks: Int
+    /// When the person last sent from it; nil until they have.
+    public let sentAt: String?
 
     /// An artifact with no pins and nothing unsent, until the hub is read.
-    public static let empty = ArtifactComments(pins: [], unsentPicks: 0)
+    public static let empty = ArtifactComments(pins: [], unsentPicks: 0, sentAt: nil)
 
     public var owed: Int { unsentPicks + pins.count { $0.unsent } }
     /// Open pins on the page: the Pins button's badge.
     public var open: Int { pins.count { !$0.moved && !$0.resolved } }
+
+    /// The pins the agent is working on (PreviewPane.svelte `live`): while
+    /// the session works, the open pins the last send carried, the pin
+    /// itself or an entry of its thread.
+    public func live(working: Bool) -> Set<String> {
+        guard working, let sentAt else { return [] }
+        return Set(pins.filter { pin in
+            !pin.resolved && (pin.sentAt == sentAt || pin.thread.contains { $0.sentAt == sentAt })
+        }.map(\.id))
+    }
 }
 
 /// What a view's word to the hub says when it could not load an artifact (core `ShownFailure`).
@@ -83,20 +95,7 @@ public extension HubConnection {
             guard let at = (entry as? [String: (any Sendable)?])?["at"] as? String else { return false }
             return held.sentAt.map { at > $0 } ?? true
         }
-        return ArtifactComments(pins: pins.sorted { $0.number < $1.number }, unsentPicks: picks)
-    }
-
-    /// The person's words in pin `pin`'s thread (the hub's person reply);
-    /// a refusal's sentence is the error's.
-    func reply(_ text: String, to pin: String, in instanceId: String) async throws {
-        let output = try await api.instances.personReply(.init(path: .init(id: instanceId, pin: pin), body: .json(.init(text: text))))
-        guard case .ok = output else { throw await TaskRefusal.reading(output) }
-    }
-
-    /// The person resolves pin `pin`, or reopens it.
-    func resolve(_ pin: String, _ resolved: Bool, in instanceId: String) async throws {
-        let output = try await api.instances.personResolve(.init(path: .init(id: instanceId, pin: pin), body: .json(.init(resolved: resolved))))
-        guard case .ok = output else { throw await TaskRefusal.reading(output) }
+        return ArtifactComments(pins: pins.sorted { $0.number < $1.number }, unsentPicks: picks, sentAt: held.sentAt)
     }
 
     /// This view's word that it has the artifact on screen at `revision`, or

@@ -4,9 +4,11 @@
  * page unless the person turned Comment on; while commenting a tap writes
  * a numbered pin on the page instead, and that shows (Done, the line on the
  * well's top edge); the pin's card and the Pins sheet carry it, a reply and
- * Resolve go to the hub, Send 1 sends its section with its picture, and the
- * app tells the hub it has the page on screen (`shown`); Done, Reload and a
- * drag of the grabber leave the page taking taps.
+ * Resolve go to the page's overlay, which writes the doc and answers, Send 1
+ * sends its section with its picture, the pin then wears the live dot while
+ * the session works (`-preview-working` holds it working) until it is
+ * resolved, and the app tells the hub it has the page on screen (`shown`);
+ * Done, Reload and a drag of the grabber leave the page taking taps.
  *
  *   bun scripts/probe-ios-preview-touch.ts [--keep] [--no-build]
  *
@@ -174,12 +176,15 @@ const PROBE_PREFIX = /^.*\[dev\.cawco\.app:Probe\]\s*/;
 const PAGE_LINE = /^preview page view=(\S+) selected=(\S+) count=(\d+)(.*)$/;
 const HEAD_LINE =
   /^preview head comment=(.+)@(-?\d+),(-?\d+) pins=(\d+)@(none|-?\d+,-?\d+) send=(.+)@(none|-?\d+,-?\d+) reload=(-?\d+),(-?\d+) grabber=(?:none|(-?\d+),(-?\d+)) note=(\d+) web=(-?\d+),(-?\d+),(\d+),(\d+)$/;
-/** Pins.swift's `preview card …` line: the open pin's number and where its controls stand. */
+/** Pins.swift's `preview card …` line: the open pin's number, where its controls stand, whether it wears the live dot. */
 const CARD_LINE =
-  /^preview card pin=(\d+) field=(none|-?\d+,-?\d+) reply=(none|-?\d+,-?\d+) resolve=(\S+)@(none|-?\d+,-?\d+) close=(none|-?\d+,-?\d+) thread=(\d+) problem=(.*)$/;
-/** Pins.swift's `preview list …` line: the counts, the filter and each row's number and centre. */
+  /^preview card pin=(\d+) field=(none|-?\d+,-?\d+) reply=(none|-?\d+,-?\d+) resolve=(\S+)@(none|-?\d+,-?\d+) close=(none|-?\d+,-?\d+) live=(yes|no) thread=(\d+) problem=(.*)$/;
+/** Pins.swift's `preview list …` line, logged once the sheet is in its window: the counts, the filter, each row's number and centre, the live rows. */
 const LIST_LINE =
-  /^preview list open=(\d+) resolved=(\d+) moved=(\d+) filter=(\S+)@(none|-?\d+,-?\d+) rows=(.*)$/;
+  /^preview list open=(\d+) resolved=(\d+) moved=(\d+) filter=(\S+)@(none|-?\d+,-?\d+) rows=(\S*) live=(\S*)$/;
+/** The overlay's answer to the app's reply or resolve, as the app logs it. */
+const RESULT_LINE =
+  /^preview (reply|resolve)-result (?:pin=(\d+) (ok|refused: .*)|none)$/;
 const POINT = /^(-?\d+),(-?\d+)$/;
 /** "x,y" as a point; "none" (hidden, or not in a window) as none. */
 const pointOf = (text: string | undefined): Point | undefined => {
@@ -291,6 +296,7 @@ const headOf = (line: string): Head | undefined => {
 interface Card {
   close?: Point;
   field?: Point;
+  live: boolean;
   number: number;
   problem: string;
   reply?: Point;
@@ -310,8 +316,9 @@ const cardOf = (line: string): Card | undefined => {
     resolveWords: m[4],
     resolve: pointOf(m[5]),
     close: pointOf(m[6]),
-    thread: Number(m[7]),
-    problem: m[8],
+    live: m[7] === "yes",
+    thread: Number(m[8]),
+    problem: m[9],
   };
 };
 /** The newest card line after `from` that `match` takes, waited for. */
@@ -339,6 +346,8 @@ const cardAfter = async (
 /** The Pins sheet's rows as the app logs them when it draws the list. */
 interface List {
   filter?: Point;
+  /** The numbers of the rows that wear the live dot. */
+  live: string[];
   moved: number;
   open: number;
   resolved: number;
@@ -359,7 +368,23 @@ const listOf = (line: string): List | undefined => {
     moved: Number(m[3]),
     filter: pointOf(m[5]),
     rows,
+    live: m[7].split(";").filter(Boolean),
   };
+};
+/** The newest list line after `from`, waited for: the sheet logs it once it stands in its window. */
+const listAfter = async (what: string, from: number, ms = 15_000) => {
+  const line = await lineAfter(what, from, (l) => listOf(l) !== undefined, ms);
+  return line ? listOf(line) : undefined;
+};
+/** The overlay's answer to a reply or resolve after `from`, waited for (the app gives up after 10 s). */
+const resultAfter = async (what: "reply" | "resolve", from: number) => {
+  const line = await lineAfter(
+    `the ${what}'s result`,
+    from,
+    (l) => RESULT_LINE.exec(l)?.[1] === what,
+    15_000
+  );
+  return line;
 };
 /** The newest header line so far. */
 const headLast = () =>
@@ -547,8 +572,11 @@ xcrun simctl install ${udid} "${app}"`);
   };
   const grabber = async () => (await headNow("the grabber")).grabber;
 
+  // `-preview-working`: the session counts as mid-turn for the live dot; the
+  // probe's mock model ends every turn within milliseconds, so a real
+  // turn would leave no window to read the dot in.
   await sh(
-    `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${port} -open-session ${id} -preview-probe >/dev/null`
+    `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url http://127.0.0.1:${port} -open-session ${id} -preview-probe -preview-working >/dev/null`
   );
   let page = await freshPage("the page loaded in the preview", 0, 120_000);
   check(
@@ -685,43 +713,53 @@ xcrun simctl install ${udid} "${app}"`);
   );
 
   // ── 7. The Pins sheet lists it; its row opens the card ────────────────
-  head = await until(
-    "Pins in the header",
-    () => headNow("the header with a pin"),
-    (h) => h.pins !== undefined && h.open === 1,
-    15_000
-  ).catch(() => headLast() as Head);
-  mark = seen.length;
-  if (head.pins) {
-    await tap(head.pins);
+  // The card goes first, so the row is what opens it again.
+  if (card?.close) {
+    await tap(card.close);
   }
-  const listLine = await lineAfter(
-    "the Pins sheet",
-    mark,
-    (l) => listOf(l) !== undefined
-  );
-  const list = listLine ? listOf(listLine) : undefined;
+  await pause(1200);
+  /** The Pins sheet opened from the header, as it lists the pins once it stands. */
+  const openSheet = async (what: string) => {
+    const now = await until(
+      "Pins in the header",
+      () => headNow(`the header before ${what}`),
+      (h) => h.pins !== undefined,
+      15_000
+    ).catch(() => headLast() as Head);
+    const from = seen.length;
+    if (now.pins) {
+      await tap(now.pins);
+    }
+    return { list: await listAfter(what, from), pins: now.pins };
+  };
+  let sheet = await openSheet("the Pins sheet");
   check(
     "the Pins sheet lists pin 1 as open",
-    list?.open === 1 && list.resolved === 0 && list.rows["1"] !== undefined,
-    list
-      ? `open ${list.open}, resolved ${list.resolved}, moved ${list.moved}, rows ${JSON.stringify(list.rows)}`
-      : `no list line (Pins ${head.pins ? `at ${head.pins.x},${head.pins.y}` : "hidden"})`
+    sheet.list?.open === 1 &&
+      sheet.list.resolved === 0 &&
+      sheet.list.rows["1"] !== undefined,
+    sheet.list
+      ? `open ${sheet.list.open}, resolved ${sheet.list.resolved}, moved ${sheet.list.moved}, rows ${JSON.stringify(sheet.list.rows)}`
+      : `no list line (Pins ${sheet.pins ? `at ${sheet.pins.x},${sheet.pins.y}` : "hidden"})`
   );
   await pause(800);
   mark = seen.length;
-  const row = list?.rows["1"];
+  const row = sheet.list?.rows["1"];
   if (row) {
     await tap(row);
   }
   card = await cardAfter("the card from its row", mark, (c) => c.number === 1);
   check(
     "a row of the sheet opens its card",
-    card !== undefined,
-    card ? `card for pin ${card.number}` : "no card line after the row"
+    row !== undefined && card !== undefined,
+    card
+      ? `card for pin ${card.number} after a tap on its row at ${row?.x},${row?.y}`
+      : "no card line after the row"
   );
 
-  // ── 8. Reply, Resolve, Send 1 ─────────────────────────────────────────
+  // ── 8. Reply, Send 1, the live dot, Resolve ───────────────────────────
+  // The card's Reply and Resolve go to the page's overlay (`cawco:reply`,
+  // `cawco:resolve`), which writes the doc and answers with its result.
   const REPLY = "Make the count bigger";
   if (card?.field) {
     await tap(card.field);
@@ -735,48 +773,19 @@ xcrun simctl install ${udid} "${app}"`);
   if (card?.reply) {
     await tap(card.reply);
   }
-  const replied = await lineAfter("the reply", mark, (l) =>
-    l.startsWith("preview reply ")
-  );
-  const thread = (await pinsOnHub())[0]?.thread ?? [];
+  const replied = await resultAfter("reply", mark);
+  const thread = await until(
+    "the reply on the hub",
+    async () => (await pinsOnHub())[0]?.thread ?? [],
+    (entries) =>
+      entries.some((entry) => entry.by === "person" && entry.text === REPLY),
+    10_000
+  ).catch(async () => (await pinsOnHub())[0]?.thread ?? []);
   check(
-    "Reply posts a thread entry the hub returns",
-    replied === "preview reply ok" &&
+    "Reply reaches the overlay, whose result the app hears, and the hub's read shows the entry",
+    replied === "preview reply-result pin=1 ok" &&
       thread.some((entry) => entry.by === "person" && entry.text === REPLY),
-    `${replied ?? "no reply line"}; the hub's thread: ${JSON.stringify(thread)}`
-  );
-  card = await cardAfter(
-    "the card with its entry",
-    mark,
-    (c) => c.thread === 1
-  );
-  mark = seen.length;
-  if (card?.resolve) {
-    await tap(card.resolve);
-  }
-  const resolvedLine = await lineAfter(
-    "the resolve",
-    mark,
-    (l) => l === "preview resolve ok"
-  );
-  const [resolvedOnHub] = await pinsOnHub();
-  const resolvedPins = await lineAfter(
-    "the app's pins with pin 1 resolved",
-    mark,
-    (l) => l.startsWith("preview pins ") && l.includes(" 1=resolved:")
-  );
-  card = await cardAfter(
-    "the card reading Reopen",
-    mark,
-    (c) => c.resolveWords === "Reopen"
-  );
-  check(
-    "Resolve moves it to Resolved",
-    resolvedLine !== undefined &&
-      !!resolvedOnHub?.resolvedAt &&
-      resolvedPins !== undefined &&
-      card !== undefined,
-    `${resolvedLine ?? "no resolve line"}; hub resolvedAt ${resolvedOnHub?.resolvedAt ?? "none"}; ${resolvedPins ?? "no pins line"}; card reads ${card?.resolveWords ?? "?"}`
+    `${replied ?? "no reply-result line"}; the hub's thread: ${JSON.stringify(thread)}`
   );
   head = await until(
     "Send 1 in the header",
@@ -827,6 +836,52 @@ xcrun simctl install ${udid} "${app}"`);
       message.content?.includes(REPLY) === true &&
       !!sentPin?.sentAt,
     `header read "${head.sendWords}"; ${sent ?? "no send line"}; message ${message ? `with ${message.metadata?.images?.length ?? 0} picture(s): ${JSON.stringify(message.content?.slice(0, 160))}` : "not in the transcript"}; pin sentAt ${sentPin?.sentAt ?? "none"}`
+  );
+  // The send stamped the frame's sentAt on the pin; the session counts as
+  // working (-preview-working): its card and its row wear the live dot.
+  const liveCard = await cardAfter(
+    "the card with the live dot",
+    mark,
+    (c) => c.number === 1 && c.live,
+    15_000
+  );
+  sheet = await openSheet("the Pins sheet after the send");
+  await pause(800);
+  mark = seen.length;
+  const liveRow = sheet.list?.rows["1"];
+  if (liveRow) {
+    await tap(liveRow);
+  }
+  card = await cardAfter("the card again", mark, (c) => c.number === 1);
+  check(
+    "with the frame's sentAt set and the session working, the pin's row and card show the live dot",
+    liveCard !== undefined && sheet.list?.live.includes("1") === true,
+    `card ${liveCard ? "live" : "not live"}; the sheet's live rows ${JSON.stringify(sheet.list?.live ?? null)}`
+  );
+  mark = seen.length;
+  if (card?.resolve) {
+    await tap(card.resolve);
+  }
+  const resolvedLine = await resultAfter("resolve", mark);
+  const [resolvedOnHub] = await pinsOnHub();
+  const resolvedPins = await lineAfter(
+    "the app's pins with pin 1 resolved",
+    mark,
+    (l) => l.startsWith("preview pins ") && l.includes(" 1=resolved:")
+  );
+  card = await cardAfter(
+    "the card reading Reopen",
+    mark,
+    (c) => c.resolveWords === "Reopen"
+  );
+  check(
+    "Resolve reaches the overlay, moves it to Resolved, and the live dot goes",
+    resolvedLine === "preview resolve-result pin=1 ok" &&
+      !!resolvedOnHub?.resolvedAt &&
+      resolvedPins !== undefined &&
+      card !== undefined &&
+      !card.live,
+    `${resolvedLine ?? "no resolve-result line"}; hub resolvedAt ${resolvedOnHub?.resolvedAt ?? "none"}; ${resolvedPins ?? "no pins line"}; card reads ${card?.resolveWords ?? "?"}, ${card?.live ? "still live" : "not live"}`
   );
   card = await cardAfter("the card before it closes", seen.length);
   if (card?.close) {
@@ -907,14 +962,17 @@ xcrun simctl install ${udid} "${app}"`);
     ["full", -260],
     ["middle", 260],
   ] as const) {
-    // biome-ignore lint/performance/noAwaitInLoops: one drag, then its tap, in order
-    const from = await grabber();
+    // Where the grabber stands now: the newest header so far (the app logs
+    // one whenever a layout moves it), since nothing new need be logged
+    // between the last tap and this drag.
+    const from = headLast()?.grabber;
     if (!from) {
       throw new Error("no grabber on the drawer");
     }
+    // biome-ignore lint/performance/noAwaitInLoops: one drag, then its tap, in order
     await drag(from, { x: from.x, y: from.y + by });
     await pause(1500);
-    const to = await grabber();
+    const to = headLast()?.grabber;
     page = await pageNow(`the page at ${height} height`);
     before = page.count;
     mark = seen.length;

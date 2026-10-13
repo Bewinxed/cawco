@@ -58,6 +58,18 @@ private func pinWords(_ name: KitLabel, _ under: KitLabel) -> UIStackView {
     return words
 }
 
+/// The activity dot's Working form (DESIGN.md "Activity dot"; PinList.svelte
+/// `.live`): 8pt, `status-live-glyph`, pulsing on the one loop, on a pin the
+/// agent is working on.
+private func liveDot() -> Dot {
+    let dot = Dot(8, color: Palette.statusLiveGlyph)
+    dot.working()
+    dot.isAccessibilityElement = true
+    dot.accessibilityLabel = "The agent is working on it"
+    dot.accessibilityTraits = .image
+    return dot
+}
+
 // MARK: The list
 
 /// The pins' list, the content of the house sheet the head's Pins opens
@@ -128,12 +140,34 @@ final class PinListController: UIViewController {
         render()
     }
 
-    /// The pins as the hub has them now; the list keeps its filter.
-    func show(_ pins: [Pin]) {
+    /// The pins as the hub has them now, and those the agent is working on;
+    /// the list keeps its filter.
+    func show(_ pins: [Pin], live: Set<String>) {
         self.pins = pins
+        self.live = live
         guard isViewLoaded else { return }
         render()
     }
+
+    private var live: Set<String> = []
+
+    #if DEBUG
+    /// The sheet is in its window and laid out: where its rows stand now.
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        probeLine()
+    }
+
+    /// The counts, the filter and each row's number and centre, with the live
+    /// ones; only once in a window, where a centre is a place a touch lands.
+    private func probeLine() {
+        guard view.window != nil else { return }
+        view.layoutIfNeeded()
+        let placed = pins.filter { !$0.moved }
+        let shown = rows.arrangedSubviews.compactMap { $0 as? PinRow }
+        PreviewProbe.say("preview list open=\(placed.count { !$0.resolved }) resolved=\(placed.count(where: \.resolved)) moved=\(pins.count(where: \.moved)) filter=\(resolvedShown ? "resolved" : "open")@\(PreviewProbe.centre(filter)) rows=\(shown.map { "\($0.number)@\(PreviewProbe.centre($0))" }.joined(separator: ";")) live=\(shown.filter(\.live).map { "\($0.number)" }.joined(separator: ";"))")
+    }
+    #endif
 
     /// The filter a focused pin stands in (PinList.svelte: J and K never land on a hidden row).
     func reveal(_ id: String) {
@@ -152,7 +186,7 @@ final class PinListController: UIViewController {
         filter.superview?.isHidden = placed.isEmpty
         for row in rows.arrangedSubviews + movedRows.arrangedSubviews { row.removeFromSuperview() }
         for pin in resolvedShown ? resolved : open {
-            let row = PinRow(pin)
+            let row = PinRow(pin, live: live.contains(pin.id))
             row.addAction(UIAction { [weak self] _ in self?.onOpen(pin.id) }, for: .touchUpInside)
             rows.addArrangedSubview(row)
         }
@@ -161,20 +195,21 @@ final class PinListController: UIViewController {
         }
         moved.isHidden = away.isEmpty
         #if DEBUG
-        view.layoutIfNeeded()
-        PreviewProbe.say("preview list open=\(open.count) resolved=\(resolved.count) moved=\(away.count) filter=\(resolvedShown ? "resolved" : "open")@\(PreviewProbe.centre(filter)) rows=\(rows.arrangedSubviews.compactMap { ($0 as? PinRow).map { "\($0.number)@\(PreviewProbe.centre($0))" } }.joined(separator: ";"))")
+        probeLine()
         #endif
     }
 }
 
 /// A pin's row (PinList.svelte `.pin-row`): 44pt, `space-2` in, its disc,
-/// what it stands on in the label role and its thread's last line in meta;
-/// the press tints it.
+/// what it stands on in the label role and its thread's last line in meta,
+/// and the live dot after them while the agent works on it; the press tints it.
 private final class PinRow: UIControl {
     let number: Int
+    let live: Bool
 
-    init(_ pin: Pin) {
+    init(_ pin: Pin, live: Bool) {
         number = pin.label
+        self.live = live
         super.init(frame: .zero)
         layer.cornerRadius = Radius.radiusSm
         layer.cornerCurve = .continuous
@@ -184,7 +219,9 @@ private final class PinRow: UIControl {
         name.text = pin.name
         let last = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
         last.text = pin.lastLine
-        let row = UIStackView(arrangedSubviews: [disc, pinWords(name, last)])
+        var parts: [UIView] = [disc, pinWords(name, last)]
+        if live { parts.append(liveDot()) }
+        let row = UIStackView(arrangedSubviews: parts)
         row.spacing = Space.space2
         row.alignment = .center
         row.isUserInteractionEnabled = false
@@ -198,7 +235,7 @@ private final class PinRow: UIControl {
             row.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
         isAccessibilityElement = true
-        accessibilityLabel = "Pin \(pin.label), \(pin.name)\(pin.resolved ? ", resolved" : ""). \(pin.lastLine)"
+        accessibilityLabel = "Pin \(pin.label), \(pin.name)\(pin.resolved ? ", resolved" : "")\(live ? ", the agent is working on it" : ""). \(pin.lastLine)"
         accessibilityTraits = .button
         addInteraction(UIPointerInteraction(delegate: nil))
     }
@@ -268,6 +305,8 @@ final class PinCard: UIView, UITextViewDelegate {
     private let scroll = Resizing()
     private let column = UIStackView()
     private let disc = PinDisc()
+    /// The live dot (PinCard.svelte `.live`), while the agent works on the pin.
+    private let liveMark = liveDot()
     private let name = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
     private let source = KitLabel(TypeScale.typeCode.with(points: TypeScale.typeMeta.points), ink: Palette.inkMuted)
     private let thumb = UIButton(type: .custom)
@@ -304,7 +343,8 @@ final class PinCard: UIView, UITextViewDelegate {
         closeRoom.translatesAutoresizingMaskIntoConstraints = false
         closeRoom.widthAnchor.constraint(equalToConstant: Size.cBtnHSm).isActive = true
         closeRoom.heightAnchor.constraint(equalToConstant: Size.cBtnHSm).isActive = true
-        let head = UIStackView(arrangedSubviews: [disc, pinWords(name, source), closeRoom])
+        liveMark.isHidden = true
+        let head = UIStackView(arrangedSubviews: [disc, pinWords(name, source), liveMark, closeRoom])
         head.spacing = Space.space2
         head.alignment = .center
 
@@ -376,7 +416,8 @@ final class PinCard: UIView, UITextViewDelegate {
     /// The card's pin as the hub has it now, its thumbnail when drawn, and
     /// what went wrong with the last reply, resolve or send. The reply
     /// being written stays as it is.
-    func show(_ pin: Pin, thumbnail: Data?, problem said: String?, replying: Bool) {
+    func show(_ pin: Pin, live: Bool, thumbnail: Data?, problem said: String?, replying: Bool) {
+        liveMark.isHidden = !live
         let fresh = pin.id != pinId
         pinId = pin.id
         number = pin.label
@@ -527,7 +568,7 @@ final class PinCard: UIView, UITextViewDelegate {
 
     func probeLine() -> String {
         let words = resolveButton.configuration?.attributedTitle.map { String($0.characters) } ?? "?"
-        return "preview card pin=\(number) field=\(PreviewProbe.centre(field)) reply=\(PreviewProbe.centre(replyButton)) resolve=\(words)@\(PreviewProbe.centre(resolveButton)) close=\(PreviewProbe.centre(closeButton)) thread=\(shownThread.count) problem=\(problem.isHidden ? "none" : problem.text ?? "")"
+        return "preview card pin=\(number) field=\(PreviewProbe.centre(field)) reply=\(PreviewProbe.centre(replyButton)) resolve=\(words)@\(PreviewProbe.centre(resolveButton)) close=\(PreviewProbe.centre(closeButton)) live=\(liveMark.isHidden ? "no" : "yes") thread=\(shownThread.count) problem=\(problem.isHidden ? "none" : problem.text ?? "")"
     }
     #endif
 }
@@ -615,6 +656,8 @@ enum PreviewProbe {
     static let commentAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-comment")
     /// `-preview-comment-tap`: with it, the page's first button takes one click at its centre, as a tap would land.
     static let tapAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-comment-tap")
+    /// `-preview-working`: the session counts as mid-turn, for the live dot (the probe's mock session ends its turns at once).
+    static let workingAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-working")
     /// `-preview-send`: Send N runs once, the first time something is owed.
     static let sendAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-send")
     /// The click, in the page: what the overlay's Comment mode hears from a mouse.
