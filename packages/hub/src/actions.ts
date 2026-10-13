@@ -237,10 +237,6 @@ export const createActions = ({
         row.state === "proposed" || row.state === "failed"
           ? row.state
           : "unknown",
-      waiting: () => {
-        const now = store.get(row.id);
-        return now?.state === row.state && now.checkedAt === null;
-      },
     });
 
   // --- proposing -----------------------------------------------------------------

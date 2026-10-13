@@ -1,8 +1,9 @@
 #!/usr/bin/env bun
 /**
- * Notification gate probe (hub notifications.ts): a notification about a
- * session the owner is reading goes nowhere else, and one that is over comes
- * down everywhere.
+ * Notification gate probe (hub notifications.ts): nothing that lands in a
+ * session while the owner has it in front is ever sent anywhere, not then and
+ * not after he leaves; what lands while nobody is in front goes at once; and
+ * one that is over comes down everywhere.
  *
  *   bun scripts/probe-notification-gate.ts [--dashboard <dir>] [--keep]
  *
@@ -11,26 +12,31 @@
  * Cawrier and the Telegram Bot API are local stand-ins that record every
  * request (`CAWCO_CAWRIER_ORIGIN`, `CAWCO_TELEGRAM_API`). One registered
  * device; a built dashboard served by `vite preview` with the session open in
- * Chromium (playwright-core); a second raw dashboard socket.
+ * Chromium (playwright-core); a second raw dashboard socket; a scripted iOS
+ * client that beats through the API and never posts a look.
  *
  * Headless Chromium reports every page focused and visible, so the tab's blur
  * is the page's own: `document.hasFocus()` answers false and a real `blur`
  * event reaches the dashboard's listener. Leaving is a real `pagehide`
  * (the tab navigates away), and expiry is a client that stops beating.
  *
- *  (b) a turn ending while the tab is active on the session, then looked at:
- *      never pushed, before or after the blur;
- *  (a) an ask while the tab is active: no push, no Telegram; the blur sends
- *      both at once;
+ *  (b) a turn ending while the tab is active on the session: never pushed,
+ *      before or after the blur;
+ *  (a) an ask while the tab is active: no push, no Telegram, and none after
+ *      the blur either; the hub logs it dropped on both outlets;
+ *  (s) an ask while nobody is in front: push and Telegram at once;
  *  (c) dismissing it through the API: the `notificationsCleared` frame on the
  *      second socket, one background push with the whole set, the next
  *      visible push carrying the id, a second clear coalesced;
  *  (d) Telegram: the ask's message deleted on the clear;
- *  (e) an iOS client that stops beating: held until it expires;
  *  (f) a late dismissal (`deliveredAt`): one delivered before the id's latest
- *      send leaves it standing (the pending ask, and the turn id re-pushed by
+ *      send leaves it standing (a pending ask, and the turn id re-pushed by
  *      the next turn), one delivered after clears it, and one without
- *      `deliveredAt` clears as given.
+ *      `deliveredAt` clears as given;
+ *  (e) the iOS client active on the session, no look from anyone: a turn that
+ *      ends is dropped, and its leaving beat sends nothing; then an ask while
+ *      it is active, and it stops beating: it lapses at 60 s and the ask is
+ *      never sent. The hub's `[presence]` lines show each change.
  *
  * Captures go to $TMPDIR/notification-gate/ (or .probe/ outside a workspace).
  */
@@ -145,8 +151,9 @@ const telegram = Bun.serve({
 });
 
 // ── The fleet ──────────────────────────────────────────────────────────
+// An ASK- prompt calls Bash once, which parks for the owner; its result ends the turn.
 const respond = (request: Seen): Reply => {
-  if (request.tools && request.last.includes("ASK-")) {
+  if (request.tools && !request.afterTool && request.last.includes("ASK-")) {
     return {
       everyMs: 1,
       words: [],
@@ -203,6 +210,11 @@ const askOf = async (instanceId: string, not: string[] = []) =>
       !not.includes(parked.requestId)
   )?.requestId;
 const hubLog = () => fleet.logs("hub");
+/** The hub's log lines naming `id` and saying `word`. */
+const logged = async (id: string, word: string) =>
+  (await hubLog())
+    .split("\n")
+    .filter((line) => line.includes(id) && line.includes(word));
 /** `until` for a read that finds one thing: what it found. */
 const found = <T>(
   label: string,
@@ -243,6 +255,28 @@ try {
   );
   const turnId = `turn-${session}`;
   console.log(`  session ${session}`);
+  const turnEnded = (after: number) =>
+    until(
+      "the turn ended",
+      () =>
+        fleet.query<{ turn_ended_at: number | null }>(
+          "SELECT turn_ended_at FROM instances WHERE id = ?",
+          session
+        )[0],
+      (row) => (row?.turn_ended_at ?? 0) > after,
+      120_000
+    );
+  const allow = (requestId: string) =>
+    fleet.control(session, "resolvePermission", [
+      requestId,
+      {
+        behavior: "allow",
+        updatedInput: {
+          command: "touch gate-probe.txt",
+          description: "Make a file",
+        },
+      },
+    ]);
 
   // A second client on the dashboard socket.
   const { port } = new URL(fleet.base);
@@ -329,29 +363,11 @@ try {
       | { active?: boolean; sessionId?: string | null }
       | undefined;
 
-  // ── (b) A turn ends while the tab is active; it is looked at ─────────
+  // ── (b) A turn ends while the tab is active ──────────────────────────
   const turnStart = Date.now();
   await fleet.send(session, "TURN-1: say done");
-  await until(
-    "the turn ended",
-    () =>
-      fleet.query<{ turn_ended_at: number | null; seen_at: number | null }>(
-        "SELECT turn_ended_at, seen_at FROM instances WHERE id = ?",
-        session
-      )[0],
-    (row) => (row?.turn_ended_at ?? 0) > turnStart,
-    120_000
-  );
+  await turnEnded(turnStart);
   await pause(9000);
-  const [seen] = fleet.query<{
-    turn_ended_at: number;
-    seen_at: number | null;
-  }>("SELECT turn_ended_at, seen_at FROM instances WHERE id = ?", session);
-  check(
-    "(b) looked at as the turn ended",
-    (seen?.seen_at ?? 0) >= (seen?.turn_ended_at ?? Number.POSITIVE_INFINITY),
-    `turn_ended_at=${seen?.turn_ended_at} seen_at=${seen?.seen_at}`
-  );
   check(
     "(b) no turn push while active",
     pushesFor(turnId).length === 0,
@@ -372,7 +388,7 @@ try {
     10_000
   );
 
-  // ── (a) An ask while the tab is active; the blur sends it ────────────
+  // ── (a) An ask while the tab is active: never sent ───────────────────
   const telegramBefore = askMessages().length;
   await fleet.send(session, "ASK-1: run the command");
   const ask1 = await found("the ask parked", () => askOf(session), 120_000);
@@ -384,48 +400,84 @@ try {
     `${pushesFor(ask1Id).length} pushes under ${ask1Id} 8s after it parked`
   );
   check(
-    "(d) no Telegram message while active",
+    "(a) no Telegram message while active",
     askMessages().length === telegramBefore,
     `${askMessages().length - telegramBefore} ask messages sent`
   );
-  const held = (await hubLog())
-    .split("\n")
-    .filter((line) => line.includes(ask1Id) && line.includes("held"));
-  check("(a) held by the gate", held.length >= 2, held.join(" | "));
-  const blurAt = Date.now();
+  const dropped1 = await logged(ask1Id, "dropped");
+  check(
+    "(a) dropped by the gate on push and Telegram",
+    dropped1.some((line) => line.includes("push")) &&
+      dropped1.some((line) => line.includes("telegram")),
+    dropped1.join(" | ")
+  );
   await setFocus(page, false);
-  const askPush = await until(
-    "the ask's push after the blur",
-    () => pushesFor(ask1Id)[0],
+  await pause(12_000);
+  check(
+    "(a) nothing sent once the tab blurred",
+    pushesFor(ask1Id).length === 0 && askMessages().length === telegramBefore,
+    `${pushesFor(ask1Id).length} pushes, ${askMessages().length - telegramBefore} ask messages 12s after the blur (last beat ${JSON.stringify(lastBeat())})`
+  );
+
+  // The tab leaves (a real pagehide); the ask is answered and the turn
+  // that ends is nobody's in front: sent.
+  await page.goto("about:blank");
+  await until(
+    "the tab's leaving beat",
+    () => lastBeat()?.active,
+    (active) => active === false,
+    10_000
+  );
+  await allow(ask1);
+  const turnPush = await until(
+    "the turn's visible push, nobody in front",
+    () => pushesFor(turnId)[0],
+    Boolean,
+    120_000
+  );
+  check(
+    "(s) a turn that ends with nobody in front is pushed",
+    turnPush !== undefined,
+    `${turnId} pushed at ${clock()}`
+  );
+
+  // ── (s) An ask while nobody is in front goes at once ─────────────────
+  const telegramBefore2 = askMessages().length;
+  const ask2Start = Date.now();
+  await fleet.send(session, "ASK-2: run it again");
+  const ask2 = await found(
+    "the second ask parked",
+    () => askOf(session, [ask1]),
+    120_000
+  );
+  const ask2Id = `ask-${ask2}`;
+  const ask2Push = await until(
+    "the second ask's push",
+    () => pushesFor(ask2Id)[0],
     Boolean,
     30_000
   );
   const askTelegram = await until(
-    "the ask's Telegram message after the blur",
-    () => askMessages()[telegramBefore],
+    "the second ask's Telegram message",
+    () => askMessages()[telegramBefore2],
     Boolean,
     30_000
   );
   check(
-    "(a) pushed once the tab blurred",
-    askPush.at - blurAt < 10_000,
-    `${askPush.at - blurAt}ms after the blur (last beat ${JSON.stringify(lastBeat())})`
-  );
-  check(
-    "(d) Telegram sent once the tab blurred",
-    askTelegram.at - blurAt < 10_000,
-    `${askTelegram.at - blurAt}ms after the blur`
+    "(s) push and Telegram at once",
+    ask2Push.at - ask2Start < 60_000 && askTelegram.at - ask2Start < 60_000,
+    `push ${ask2Push.at - ask2Start}ms, Telegram ${askTelegram.at - ask2Start}ms after the prompt`
   );
 
   // ── (c) Dismissed through the API ────────────────────────────────────
   const dismissAt = Date.now();
   await fleet.api("/api/notifications/dismiss", {
-    collapseIds: [ask1Id],
+    collapseIds: [ask2Id],
     via: "dismiss",
   });
   const frame = await found(
     "the cleared frame on the second socket",
-    () => frames.find((one) => one.collapseIds.includes(ask1Id)),
+    () => frames.find((one) => one.collapseIds.includes(ask2Id)),
     10_000
   );
   check(
@@ -443,7 +495,7 @@ try {
     "(c) one background push with the whole set",
     backgrounds().length === 1 &&
       firstBackground.body.payload.aps["content-available"] === 1 &&
-      (firstBackground.body.payload.cawco?.cleared ?? []).includes(ask1Id) &&
+      (firstBackground.body.payload.cawco?.cleared ?? []).includes(ask2Id) &&
       firstBackground.body.collapseId === undefined,
     JSON.stringify(firstBackground.body)
   );
@@ -459,35 +511,20 @@ try {
     `deleteMessage ${JSON.stringify(deleted.body)} (the ask was message ${askMessageId})`
   );
 
-  // The next visible push carries the id: the tab leaves (a real pagehide),
-  // the ask is answered, and the turn that ends is nobody's in front.
-  await page.goto("about:blank");
-  await until(
-    "the tab's leaving beat",
-    () => lastBeat()?.active,
-    (active) => active === false,
-    10_000
-  );
-  await fleet.control(session, "resolvePermission", [
-    ask1,
-    {
-      behavior: "allow",
-      updatedInput: {
-        command: "touch gate-probe.txt",
-        description: "Make a file",
-      },
-    },
-  ]);
-  const turnPush = await until(
-    "the turn's visible push",
-    () => pushesFor(turnId)[0],
+  // The next visible push carries the id: the ask is answered and its turn,
+  // nobody's in front, is pushed again under the turn's id.
+  const turnsBefore = pushesFor(turnId).length;
+  await allow(ask2);
+  const turnPush2 = await until(
+    "the next turn's visible push",
+    () => pushesFor(turnId)[turnsBefore],
     Boolean,
     120_000
   );
   check(
     "(c) the next visible push carries the cleared id",
-    (turnPush.body.payload.cawco?.cleared ?? []).includes(ask1Id),
-    `${turnId} cawco.cleared=${JSON.stringify(turnPush.body.payload.cawco?.cleared)}`
+    (turnPush2.body.payload.cawco?.cleared ?? []).includes(ask2Id),
+    `${turnId} cawco.cleared=${JSON.stringify(turnPush2.body.payload.cawco?.cleared)}`
   );
 
   // A second clear inside 20 minutes: its frame goes, its background waits.
@@ -513,43 +550,8 @@ try {
   check(
     "(c) the launch sweep reads both",
     read.cleared.map((row) => row.collapseId).join(",") ===
-      `${turnId},${ask1Id}`,
+      `${turnId},${ask2Id}`,
     JSON.stringify(read)
-  );
-
-  // ── (e) An iOS client that stops beating ─────────────────────────────
-  await fleet.api("/api/presence", {
-    clientId: "probe-ios",
-    client: "ios",
-    sessionId: session,
-    active: true,
-  });
-  const beatAt = Date.now();
-  await fleet.send(session, "ASK-2: run it again");
-  const ask2 = await until(
-    "the second ask parked",
-    () => askOf(session, [ask1]),
-    Boolean,
-    120_000
-  );
-  const ask2Id = `ask-${ask2}`;
-  await pause(5000);
-  check(
-    "(e) held while the iOS client is active",
-    pushesFor(ask2Id).length === 0,
-    `${pushesFor(ask2Id).length} pushes under ${ask2Id}`
-  );
-  const expired = await until(
-    "the ask's push once the client expired",
-    () => pushesFor(ask2Id)[0],
-    Boolean,
-    120_000
-  );
-  const silent = expired.at - beatAt;
-  check(
-    "(e) sent once the client went 60s without a beat",
-    silent >= 60_000 && silent < 72_000,
-    `${silent}ms after its only beat; visible push cleared=${JSON.stringify(expired.body.payload.cawco?.cleared)}`
   );
 
   // ── (f) A late dismissal never clears a newer send under its id ──────
@@ -578,55 +580,125 @@ try {
     await pause(4000);
     return framed(collapseId, since);
   };
-  const ask2Sent = sentAt(ask2Id);
-  const ask2Stale = await dismissed(ask2Id, expired.at - 5 * 60_000);
+  await fleet.send(session, "ASK-3: once more");
+  const ask3 = await found(
+    "the third ask parked",
+    () => askOf(session, [ask1, ask2]),
+    120_000
+  );
+  const ask3Id = `ask-${ask3}`;
+  const ask3Push = await until(
+    "the third ask's push",
+    () => pushesFor(ask3Id)[0],
+    Boolean,
+    30_000
+  );
+  const ask3Sent = sentAt(ask3Id);
+  const ask3Stale = await dismissed(ask3Id, ask3Push.at - 5 * 60_000);
   check(
     "(f) a deliveredAt older than the latest send leaves it standing",
-    !ask2Stale && sentAt(ask2Id) === ask2Sent && ask2Sent !== undefined,
-    `${ask2Id} deliveredAt=sent-5min: frame=${ask2Stale}, sent_at ${ask2Sent} → ${sentAt(ask2Id)}`
+    !ask3Stale && sentAt(ask3Id) === ask3Sent && ask3Sent !== undefined,
+    `${ask3Id} deliveredAt=sent-5min: frame=${ask3Stale}, sent_at ${ask3Sent} → ${sentAt(ask3Id)}`
   );
-  const ask2Plain = await dismissed(ask2Id, undefined);
+  const ask3Plain = await dismissed(ask3Id, undefined);
   check(
     "(f) no deliveredAt clears it",
-    ask2Plain && sentAt(ask2Id) === undefined,
-    `${ask2Id} frame=${ask2Plain}, sent_at now ${sentAt(ask2Id)}`
+    ask3Plain && sentAt(ask3Id) === undefined,
+    `${ask3Id} frame=${ask3Plain}, sent_at now ${sentAt(ask3Id)}`
   );
 
   // The real case: the turn id was cleared in (c); the next turn re-sends it.
-  const turnsBefore = pushesFor(turnId).length;
-  await fleet.control(session, "resolvePermission", [
-    ask2,
-    {
-      behavior: "allow",
-      updatedInput: {
-        command: "touch gate-probe.txt",
-        description: "Make a file",
-      },
-    },
-  ]);
+  const turnsBefore3 = pushesFor(turnId).length;
+  await allow(ask3);
   const resent = await until(
     "the next turn's push under the same id",
-    () => pushesFor(turnId)[turnsBefore],
+    () => pushesFor(turnId)[turnsBefore3],
     Boolean,
     120_000
   );
   const turnSent = sentAt(turnId);
-  // This device had the first turn's push; past the 120 s skew margin, the
+  // This device had the earlier turn's push; past the 120 s skew margin, the
   // earlier of that delivery and three minutes before the re-send.
   const turnStale = await dismissed(
     turnId,
-    Math.min(turnPush.at, resent.at - 180_000)
+    Math.min(turnPush2.at, resent.at - 180_000)
   );
   check(
     "(f) a late dismissal of the earlier turn keeps the re-pushed one",
     !turnStale && sentAt(turnId) === turnSent && turnSent !== undefined,
-    `${turnId} first delivered ${turnPush.at}, re-sent ${turnSent} (push ${resent.at}): frame=${turnStale}, sent_at → ${sentAt(turnId)}`
+    `${turnId} first delivered ${turnPush2.at}, re-sent ${turnSent} (push ${resent.at}): frame=${turnStale}, sent_at → ${sentAt(turnId)}`
   );
   const turnFresh = await dismissed(turnId, Date.now());
   check(
     "(f) a deliveredAt after the send clears it",
     turnFresh && sentAt(turnId) === undefined,
     `${turnId} frame=${turnFresh}, sent_at now ${sentAt(turnId)}`
+  );
+
+  // ── (e) The iOS client in front, no look from anyone ─────────────────
+  const ios = (active: boolean) =>
+    fleet.api("/api/presence", {
+      clientId: "probe-ios-client",
+      client: "ios",
+      sessionId: session,
+      active,
+    });
+  await ios(true);
+  const turnsBefore4 = pushesFor(turnId).length;
+  const turn4Start = Date.now();
+  await fleet.send(session, "TURN-4: say done");
+  await turnEnded(turn4Start);
+  await pause(9000);
+  const [unlooked] = fleet.query<{
+    turn_ended_at: number;
+    seen_at: number | null;
+  }>("SELECT turn_ended_at, seen_at FROM instances WHERE id = ?", session);
+  check(
+    "(e) nobody looked: the gate alone decides",
+    (unlooked?.seen_at ?? 0) < (unlooked?.turn_ended_at ?? 0),
+    `turn_ended_at=${unlooked?.turn_ended_at} seen_at=${unlooked?.seen_at}`
+  );
+  const dropped4 = await logged(turnId, "dropped");
+  check(
+    "(e) the turn that ended while iOS was active is dropped",
+    pushesFor(turnId).length === turnsBefore4 && dropped4.length > 0,
+    `${pushesFor(turnId).length - turnsBefore4} new pushes; ${dropped4.at(-1)}`
+  );
+  await ios(false);
+  await pause(15_000);
+  check(
+    "(e) its leaving beat sends nothing",
+    pushesFor(turnId).length === turnsBefore4,
+    `${pushesFor(turnId).length - turnsBefore4} new pushes under ${turnId} 15s after the iOS client left`
+  );
+
+  // An ask while it is active; then it stops beating and lapses.
+  await ios(true);
+  const beatAt = Date.now();
+  const telegramBefore5 = askMessages().length;
+  await fleet.send(session, "ASK-5: and again");
+  const ask5 = await found(
+    "the fifth ask parked",
+    () => askOf(session, [ask1, ask2, ask3]),
+    120_000
+  );
+  const ask5Id = `ask-${ask5}`;
+  const lapsed = await until(
+    "the iOS client lapsed",
+    async () =>
+      (await hubLog())
+        .split("\n")
+        .find((line) => line.includes("probe-io") && line.includes("lapsed")),
+    Boolean,
+    100_000
+  );
+  await pause(10_000);
+  check(
+    "(e) an ask while iOS was active is never sent, through its lapse",
+    pushesFor(ask5Id).length === 0 &&
+      askMessages().length === telegramBefore5 &&
+      (await logged(ask5Id, "dropped")).length === 2,
+    `${pushesFor(ask5Id).length} pushes, ${askMessages().length - telegramBefore5} ask messages ${Math.round((Date.now() - beatAt) / 1000)}s after its only beat; ${lapsed}`
   );
 
   await writeFile(
@@ -636,7 +708,7 @@ try {
   console.log(`  captures: ${join(out, "captures.json")}`);
   const notify = (await hubLog())
     .split("\n")
-    .filter((line) => line.includes("[notify]"));
+    .filter((line) => line.includes("[notify]") || line.includes("[presence]"));
   await writeFile(join(out, "hub-notify.log"), notify.join("\n"));
   console.log(notify.map((line) => `  hub: ${line}`).join("\n"));
 } catch (error) {

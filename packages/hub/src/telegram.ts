@@ -46,10 +46,10 @@ export interface TelegramBridge {
     text: string,
     attachments: string[]
   ) => Promise<string[]>;
-  /** A session is blocked on the reader; put it in their pocket, unless they are reading it (the gate holds it). */
+  /** A session is blocked on the reader; put it in their pocket, unless they had it in front since it parked (the gate drops it). */
   readonly onAsk: (envelope: Envelope) => void;
   readonly onError: (instanceId: string, message: string) => void;
-  /** The supervisor wants the operator's attention — escalation or question; held like an ask. */
+  /** The supervisor wants the operator's attention — escalation or question; gated like an ask. */
   readonly onSupervisor: (instanceId: string, text: string) => void;
   /** A session's own words to the owner — no ask, no buttons, no answer. */
   readonly onUserMessage: (envelope: Envelope) => void;
@@ -757,7 +757,7 @@ export const createTelegramBridge = ({
       outlet: "telegram",
       collapseId,
       instanceId: request.instanceId || null,
-      due: () => pending.get(requestId) !== undefined,
+      landedAt: Date.now(),
       send: () =>
         detach(
           send(text, buttons).then((message) => {
@@ -819,16 +819,11 @@ export const createTelegramBridge = ({
     ];
     const text = fit(lines);
     const collapseId = supervisorCollapseId(instanceId);
-    const at = Date.now();
     gate().offer({
       outlet: "telegram",
       collapseId,
       instanceId,
-      // Still news unless the session was looked at since it was raised.
-      due: () => {
-        const [now] = db.getInstancesByIds([instanceId]);
-        return !(now?.seenAt && now.seenAt.getTime() >= at);
-      },
+      landedAt: Date.now(),
       send: () =>
         detach(
           send(text).then((sent) => {

@@ -1,10 +1,10 @@
 /**
  * This tab's presence (`POST /api/presence`): which session it has in front
- * and whether the owner is reading it. The hub holds every notification
- * about a session some client is active on (hub notifications.ts), so a tab
- * counts only while its page is visible and focused and a session is in
- * front; it goes inactive the moment the tab blurs, hides or unloads, and
- * the hold lifts at once. The web shows no notifications itself.
+ * and whether the owner is reading it. The hub sends no notification about
+ * what landed in a session while some client was active on it (hub
+ * notifications.ts), so a tab counts only while its page is visible and
+ * focused and a session is in front; it goes inactive the moment the tab
+ * blurs, hides or unloads. The web shows no notifications itself.
  */
 import { PRESENCE_BEAT_MS, type PresenceBeat } from "@cawco/core";
 import { newId } from "#lib/cawco/id.js";

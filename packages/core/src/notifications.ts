@@ -2,10 +2,10 @@
  * Where the owner is, and which notifications are over: the shapes the hub,
  * the dashboard and the apps share (hub notifications.ts).
  *
- * A notification about a session is held while a client has that session in
- * front, foreground and focused, and goes when none does (Zulip's rule: hold,
- * then re-check the item still needs you). One that is over is cleared on
- * every device, by its collapse id.
+ * A notification about a session is dropped when a client had that session
+ * in front, foreground and focused, at any moment since it landed: the owner
+ * saw it there. One that is over is cleared on every device, by its collapse
+ * id.
  */
 
 /** Which client reports presence. */

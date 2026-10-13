@@ -11,8 +11,9 @@ public import UIKit
 /// own rule for what the person looks at (`ShellController.lookAtFront`,
 /// the focused group's chosen tab). Inactive is said at once on resigning
 /// active, going to the background, or leaving the session. While active,
-/// a beat goes every 30 s from a main run loop timer, which runs only while
-/// the app does; the hub counts a client gone 60 s after its last beat.
+/// a beat goes every 30 s from a main run loop timer in the common modes, so
+/// it fires through a scroll's tracking too, and only while the app runs;
+/// the hub counts a client gone 60 s after its last beat.
 @MainActor
 public final class Presence {
     public static let shared = Presence()
@@ -114,9 +115,13 @@ public final class Presence {
         }
         if now.active {
             guard beat == nil else { return }
-            beat = Timer.scheduledTimer(withTimeInterval: Self.beatEvery, repeats: true) { _ in
+            // `.common`, not the default mode alone: a scroll runs the main
+            // run loop in its tracking mode, where a default-mode timer waits.
+            let timer = Timer(timeInterval: Self.beatEvery, repeats: true) { _ in
                 MainActor.assumeIsolated { Presence.shared.beatNow() }
             }
+            RunLoop.main.add(timer, forMode: .common)
+            beat = timer
         } else {
             beat?.invalidate()
             beat = nil

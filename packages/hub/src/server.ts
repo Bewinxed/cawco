@@ -2348,13 +2348,13 @@ export const createServer = (
     { outcome?: "answered" | "cancelled" }
   >();
   // The one gate every notification about a session goes through, and the
-  // ledger of the ones that are over (notifications.ts): held while a client
-  // has the session in front, cleared on every device once it is over.
+  // ledger of the ones that are over (notifications.ts): dropped when a
+  // client had the session in front since it landed, cleared on every device
+  // once it is over.
   const notifications = createNotifications({ db, lifetime, registry });
   telegram?.setNotifications(notifications);
   // Pushes to the iOS app when something newly needs you (push.ts).
   const push = createPush({
-    askOpen: (requestId) => pending.get(requestId) !== undefined,
     db,
     lifetime,
     notifications,

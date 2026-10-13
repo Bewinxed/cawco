@@ -23,8 +23,9 @@
  *   that moves its task into a `you` stage is one push, not two.
  *
  * - **The gate** (notifications.ts): every push about a session is offered
- *   there and held while a client has that session in front; it goes when
- *   none does and the item still needs you. Every visible push carries the
+ *   there and dropped when a client had that session in front at any moment
+ *   since the item landed, so nothing the owner saw there reaches a device
+ *   afterwards. Every visible push carries the
  *   last day's cleared collapse ids (`cawco.cleared`), and each clear queues
  *   one background push per device, at most one per device every
  *   {@link BACKGROUND_GAP_MS}, carrying the whole set: APNs keeps only the
@@ -343,8 +344,6 @@ export interface PushOutcome {
 }
 
 export interface PushServices {
-  /** Whether an ask is still parked, waiting on its answer. */
-  readonly askOpen: (requestId: string) => boolean;
   readonly db: DbShape;
   readonly lifetime: HubLifetimeShape;
   /** The one gate every push about a session goes through. */
@@ -496,7 +495,6 @@ const removeDevice = async (
 };
 
 export const createPush = ({
-  askOpen,
   db,
   lifetime,
   notifications,
@@ -590,20 +588,20 @@ export const createPush = ({
   };
 
   /**
-   * Offers a push about a session to the gate (notifications.ts): sent now,
-   * or held while a client has `instanceId` in front and sent when none does
-   * if `due` still holds.
+   * Offers a push about a session to the gate (notifications.ts): dropped
+   * when a client had `instanceId` in front at some moment since `landedAt`,
+   * sent now otherwise.
    */
   const offer = (
     notification: Notification,
     instanceId: string | null,
-    due: () => boolean | Promise<boolean>
+    landedAt: Date
   ): void => {
     notifications.offer({
       outlet: "push",
       collapseId: notification.collapseId,
       instanceId,
-      due,
+      landedAt: landedAt.getTime(),
       send: () => replace(notification),
     });
   };
@@ -617,7 +615,7 @@ export const createPush = ({
   const moment = (
     notification: Notification,
     instanceId: string | null,
-    due: () => boolean | Promise<boolean>
+    landedAt: Date
   ): void => {
     const now = Date.now();
     for (const [id, at] of recent) {
@@ -628,7 +626,7 @@ export const createPush = ({
     if (recent.has(notification.collapseId)) {
       return;
     }
-    offer(notification, instanceId, due);
+    offer(notification, instanceId, landedAt);
   };
 
   /** Nobody has looked at the session since `at`: what it pushed about then still needs you. */
@@ -778,7 +776,7 @@ export const createPush = ({
           },
         },
         instanceId || null,
-        () => askOpen(requestId)
+        new Date()
       );
     },
 
@@ -803,11 +801,10 @@ export const createPush = ({
      * no result and never comes here). Pushes when the session is one the
      * owner started: top level, not a delegate, a workflow's step, a
      * project's lead or a continuation's worker; and not stopped by them.
-     * It waits {@link LOOK_GRACE_MS} first: a dashboard or an app that has
-     * the session in front marks it looked at as the turn ends (`/api/seen`
-     * `look`), and then nothing goes. Then the gate holds it while a client
-     * has the session in front, and lets it go once none does unless the
-     * session was looked at since the turn ended. One collapse id per
+     * It waits {@link LOOK_GRACE_MS} first: a dashboard or an app that
+     * opens the session marks it looked at (`/api/seen` `look`), and then
+     * nothing goes. Then the gate drops it if a client had the session in
+     * front at any moment since the turn ended. One collapse id per
      * session, never deduplicated: a newer turn's push replaces the older on
      * the device however soon after it comes.
      */
@@ -856,7 +853,7 @@ export const createPush = ({
             },
           },
           instanceId,
-          () => unseenSince(instanceId, endedAt)
+          endedAt
         );
       }, LOOK_GRACE_MS);
     },
@@ -871,14 +868,6 @@ export const createPush = ({
       }
       const { projectId, id } = event;
       const at = new Date();
-      /** The task still sits in a stage of kind `you`. */
-      const stillYours = async (): Promise<boolean> => {
-        try {
-          return (await task(projectId, id))?.kind === "you";
-        } catch {
-          return false;
-        }
-      };
       task(projectId, id)
         .then((view) => {
           if (view?.kind !== "you") {
@@ -910,9 +899,7 @@ export const createPush = ({
               },
             },
             row?.id ?? null,
-            // Still waiting on you, in a session nobody has looked at since.
-            async () =>
-              (await stillYours()) && (row ? unseenSince(row.id, at) : true)
+            at
           );
         })
         .catch(() => undefined);
@@ -958,8 +945,7 @@ export const createPush = ({
               },
             },
             row ? item.instanceId : null,
-            // The failed session nobody has looked at since it failed.
-            () => unseenSince(item.instanceId, at)
+            at
           );
         });
       detach(alerted, "attempt push");
@@ -1008,7 +994,7 @@ export const createPush = ({
           },
         },
         row?.id ?? null,
-        () => true
+        new Date()
       );
       console.log(
         `[push] routine ${run.routineId} run ${run.runId}: ${run.failed ? "needs you" : "delivered"}`
@@ -1020,7 +1006,7 @@ export const createPush = ({
      * it failed, or its call may or may not have happened. The permission
      * push's shape, Open only; the visible words say "Approved action" and
      * the state, the sealed ones the connection and `said` (the proposer's
-     * reason, or why it failed). Sent while `waiting` holds.
+     * reason, or why it failed).
      */
     action(action: {
       connection: string;
@@ -1028,7 +1014,6 @@ export const createPush = ({
       projectId: string;
       said: string;
       state: "proposed" | "failed" | "unknown";
-      waiting: () => boolean;
     }): void {
       const project = projectName(action.projectId);
       const { body, ask } = {
@@ -1054,7 +1039,7 @@ export const createPush = ({
           },
         },
         null,
-        action.waiting
+        new Date()
       );
       console.log(`[push] action ${action.id}: ${action.state}`);
     },
