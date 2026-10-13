@@ -195,7 +195,7 @@ SETTLE_EVERY=15   # s between looks at the template's data folder
 SETTLE_FLOOR=720  # s settling (after boot finishes) before a look can count as quiet: past the second wave
 SETTLE_TRICKLE=3  # files written in a look that still count as quiet
 SETTLE_QUIET=4    # quiet looks in a row: settled
-SETTLE_LIMIT=1800 # s: a template still writing then fails the slot
+SETTLE_LIMIT=2700 # s: a template still writing then fails the slot (iOS 27.2 took 1185 s at load 600+)
 fail() {
   echo "mac-slot: $*" >&2
   exit 1
