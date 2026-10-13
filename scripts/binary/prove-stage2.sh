@@ -397,10 +397,18 @@ untouched() { as_user "$1" sh -c 'test ! -e "$HOME/.local/share/cawco" && test !
 export -f as_user as_user_tty hub_api api_on spawn_child start_session stop_session start_loop keeper_list keeper_lists jsonl child_pids children_with children_total holder_of held_on current_endpoint endpoint_of unit_of current_unit session_running start_before survived starts_said accepted_ran_once keeper_pid untouched json machine_id build_version phase field retiring wait_until publish
 
 # boot CONTAINER IP HOSTNAME [linger|nolinger] [EXTRA PODMAN RUN OPTION...]
+# A machine has the task room of a real one. podman's default pids limit (2048) makes systemd's own defaults, which
+# are percents of it (DefaultTasksMax= "Defaults to 15% of the minimum of kernel.pid_max=, kernel.threads-max= and
+# root cgroup pids.max", systemd-system.conf(5)), give every unit of the user's, the keeper's among them, 307 tasks:
+# the keeper's children then share 243, under one session's own limit of 8,192, so one session that forks fills
+# the pool and no other session starts. So each machine holds 65,536 tasks, and the image's drop-ins give each unit
+# of the user's 49,152 (DefaultTasksMax= in user.conf.d), with no lower limit on the user's slice or manager: the
+# keeper's own unit binds its children as on a real machine (obelisk: 15% of its threads-max), at 49,088, far
+# above one session's 8,192.
 boot() {
   local c=$1 ip=$2 name=$3 linger=${4:-linger}
   shift $(( $# < 4 ? $# : 4 ))
-  $P run -d --name "$c" --hostname "$name" --systemd=always --network "$net" --ip "$ip" \
+  $P run -d --name "$c" --hostname "$name" --systemd=always --pids-limit=65536 --network "$net" --ip "$ip" \
     --mount "type=bind,src=$out/shared,dst=/shared,ro" "$@" "localhost/$prefix-machine:latest" /sbin/init > /dev/null
   wait_until 90 "[[ \$($P exec $c systemctl is-system-running 2>/dev/null) =~ ^(running|degraded)\$ ]]"
   [[ $linger == nolinger ]] && return 0
@@ -437,7 +445,11 @@ RUN apt-get update \
  && echo 'deb [trusted=yes] file:/debs ./' > /etc/apt/sources.list \
  && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb \
  && usermod -l cawco -d /home/cawco -m ubuntu && groupmod -n cawco ubuntu \
- && echo 'cawco ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/cawco
+ && echo 'cawco ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/cawco \
+ && mkdir -p /etc/systemd/system/user@.service.d /etc/systemd/system/user-.slice.d /etc/systemd/user.conf.d \
+ && printf '[Service]\nTasksMax=infinity\n' > /etc/systemd/system/user@.service.d/proof-tasks.conf \
+ && printf '[Slice]\nTasksMax=infinity\n' > /etc/systemd/system/user-.slice.d/proof-tasks.conf \
+ && printf '[Manager]\nDefaultTasksMax=49152\n' > /etc/systemd/user.conf.d/proof-tasks.conf
 EOF
 echo "building images (network on for this step only)"
 setup "pull the base image" "$out/logs/pull.log" $P pull docker.io/library/ubuntu:24.04
@@ -1875,12 +1887,24 @@ agent_said_limits() { as_user "$hubc" journalctl --user --no-pager -o cat -u caw
 group_of() { echo "/sys/fs/cgroup$(cgroup_of "$hubc" "$(child_pids "$hubc" "$1")")"; }
 # A counter in a flat-keyed cgroup file (pids.events, memory.events), 0 when absent.
 counter_in() { as_user "$hubc" sh -c 'sed -n "s/^$2 //p" "$1" 2> /dev/null' sh "$1" "$2" | awk '{ n = $1 } END { print n + 0 }'; }
+# The runaway's end, whatever ended its check: its process group, which everything it forked is in, is killed,
+# and its cgroup ($runaway_group, once known) holds no task. The machine's sh is dash, whose kill takes no `--`
+# ("kill: Illegal number: -", and nothing killed: the run of 2026-10-13 left all 243 of its tasks for the next
+# check), so the group is the one argument after the signal.
+runaway_gone() {
+  as_user "$hubc" sh -c 'kill -KILL -"$(cat /tmp/limit-runaway.pid)" 2> /dev/null; rm -f /tmp/limit-runaway.pid' || true
+  [[ -z ${runaway_group:-} ]] && return 0
+  wait_until 60 '(( $(as_user "$hubc" sh -c "cat \"\$1/pids.current\" 2> /dev/null || echo 0" sh "$runaway_group") == 0 ))' \
+    || echo "the runaway's cgroup still holds $(as_user "$hubc" cat "$runaway_group/pids.current") tasks"
+}
+# The hub machine's current keeper's children: their pool, under the keeper's delegated cgroup.
+keeper_children_of_hub() { echo "/sys/fs/cgroup$(dirname "$(cgroup_of "$hubc" "$(keeper_pid "$hubc")")")/children"; }
 
 runaway_stays_its_own() {
   need_hub
   local a=limit-tasks-a b=limit-tasks-b ack group children current pool top token
-  # Whatever happens below, the runaway goes: its process group, which everything it forked is in.
-  trap 'as_user "$hubc" sh -c "kill -KILL -- -\$(cat /tmp/limit-runaway.pid) 2> /dev/null; rm -f /tmp/limit-runaway.pid" || true' EXIT
+  # Whatever happens below, the runaway goes, and the check ends once nothing of it is left (runaway_gone).
+  trap runaway_gone EXIT
   start_session "$hid" "$a" > /dev/null
   wait_until 60 "session_running $a"
   # The session's process becomes a command that starts processes without end, under the session's id, as a
@@ -1891,11 +1915,13 @@ runaway_stays_its_own() {
   [[ $ack == *'"stage":"applied"'* ]]
   as_user "$hubc" sh -c 'echo "$1" > /tmp/limit-runaway.pid' sh "$(child_pids "$hubc" "$a")"
   group=$(group_of "$a")
+  runaway_group=$group
   echo "its cgroup: $group"
   [[ $group == */cawco-sessiond-*.service/children/"$a"-* ]]
   [[ "$(as_user "$hubc" cat "$group/pids.max")" == 8192 ]]
   # It stops at its own limit: the kernel refused its forks there, and it never held more than 8,192 tasks.
-  wait_until 120 '(( $(counter_in "'"$group"'/pids.events" max) > 0 ))'
+  wait_until 120 '(( $(counter_in "'"$group"'/pids.events" max) > 0 ))' \
+    || { echo "its pids.current $(as_user "$hubc" cat "$group/pids.current"); all children: pids.current $(as_user "$hubc" cat "$(dirname "$group")/pids.current"), pids.max $(as_user "$hubc" cat "$(dirname "$group")/pids.max"), pids.events $(as_user "$hubc" cat "$(dirname "$group")/pids.events")"; return 1; }
   top=$(highest_pids "$hubc" "$group")
   echo "its highest pids.current over ten seconds: $top; pids.events max $(counter_in "$group/pids.events" max)"
   (( top <= 8192 ))
@@ -1924,9 +1950,19 @@ runaway_stays_its_own() {
 
 memory_limit_stays_its_own() {
   need_hub
-  local m=limit-mem-a n=limit-mem-b since ack holder group max expected others
+  local m=limit-mem-a n=limit-mem-b since ack holder group max expected others pid pool
   # Whatever happens below, the setting is cleared again: it applies to every machine's next process.
   trap 'put_session_limits "{\"memoryPercent\":null,\"cpuPercent\":null}" > /dev/null 2>&1 || true' EXIT
+  # It starts from a keeper whose children hold nothing an earlier check left running: every live child goes with
+  # its process group (a runaway's forks are in it), and the children's pool drains. A runaway left over filled
+  # that pool in the run of 2026-10-13, and this check's session was refused ("process-limit: its cgroup's task
+  # limit (274 of 307 …)").
+  for pid in $(keeper_lists "$hubc" | jsonl "d => d.flatMap(k => k.procs).filter(p => p.alive).map(p => p.pid).join(' ')"); do
+    as_user "$hubc" kill -KILL -- "-$pid" || true
+  done
+  pool=$(keeper_children_of_hub)
+  wait_until 60 '(( $(as_user "$hubc" cat "'"$pool"'/pids.current") < 64 ))' \
+    || { echo "the keeper's children still hold $(as_user "$hubc" cat "$pool/pids.current") tasks in $pool"; return 1; }
   # Set on the hub: each session's process may use 1% of its machine's RAM. The machine's agent takes it on its next
   # heartbeat (every 15 s), and every process the keeper starts from then runs under it.
   since=$(as_user "$hubc" date +%s)
@@ -1971,7 +2007,7 @@ memory_limit_stays_its_own() {
   stop_session "$hid" "$n" > /dev/null
   wait_until 60 '[[ -z "$(child_pids "$hubc" '"$n"')" ]]'
 }
-export -f transcript_of send_message put_session_limits agent_said_limits group_of counter_in runaway_stays_its_own memory_limit_stays_its_own
+export -f transcript_of send_message put_session_limits agent_said_limits group_of counter_in runaway_gone keeper_children_of_hub runaway_stays_its_own memory_limit_stays_its_own
 check "a session whose command starts processes without end stops at its own limit of 8,192, the hub says so on it, another session still starts and answers, and its cgroup goes when it ends" runaway_stays_its_own 600 "Install now applies the newer build|each machine that runs the proof's sessions is signed in to a CawCo account in its own dir"
 check "with a session memory limit set on the hub, a session that allocates past it loses only the process that did, the hub says so on it, and once the limit is cleared a new session runs with no memory limit" memory_limit_stays_its_own 600 "Install now applies the newer build|each machine that runs the proof's sessions is signed in to a CawCo account in its own dir"
 
