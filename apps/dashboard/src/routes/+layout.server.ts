@@ -185,7 +185,9 @@ export const load: LayoutServerLoad = async ({
       leaves.find((l) => l.id === focusedLeaf) ??
       leaves[0];
     if (!leaf.tabs.includes(urlId)) {
-      leaf.tabs.push(urlId);
+      // Just after the tab in front, else at the end (workspace `place`).
+      const at = leaf.active ? leaf.tabs.indexOf(leaf.active) : -1;
+      leaf.tabs.splice(at === -1 ? leaf.tabs.length : at + 1, 0, urlId);
     }
     leaf.active = urlId;
     workspace.focusedLeaf = leaf.id;

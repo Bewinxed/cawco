@@ -180,9 +180,14 @@ const run = async (kit: Kit) => {
   const lines: string[] = [];
   page.on("console", (message) => {
     const text = message.text();
-    if (text.startsWith("[cawco]")) {
+    if (text.startsWith("[cawco]") || message.type() === "error") {
       lines.push(`${new Date().toISOString().slice(11, 23)} ${text}`);
     }
+  });
+  page.on("pageerror", (error) => {
+    lines.push(
+      `${new Date().toISOString().slice(11, 23)} pageerror ${error.message} ${error.stack?.split("\n").slice(1, 4).join(" | ") ?? ""}`
+    );
   });
   const url = `${base}/session/${id}`;
   await open(page, url, "[data-message]");
@@ -231,7 +236,7 @@ const run = async (kit: Kit) => {
       same,
       same
         ? `${held.length} rows`
-        : `open:\n${held.join("\n")}\nfresh:\n${loaded.join("\n")}`
+        : `open:\n${held.join("\n")}\nfresh:\n${loaded.join("\n")}\nthe client's last lines:\n${lines.slice(-40).join("\n")}`
     );
   };
 
@@ -268,13 +273,17 @@ const run = async (kit: Kit) => {
         () => true,
         () => false
       );
+  /** A tab's close X, by the session's title (the tab's name opens with it). */
+  const tabClose = (title: string) =>
+    `.session-tabs .tab:has([role="tab"][aria-label^="${title},"]) .tclose`;
+  const CLOSE_FOLLOWED = tabClose("Followed");
   const closeFollowed = async () => {
-    await page.waitForSelector('button[aria-label="Close Followed"]', {
+    await page.waitForSelector(CLOSE_FOLLOWED, {
       state: "attached",
       timeout: 30_000,
     });
-    await page.click('button[aria-label="Close Followed"]', { force: true });
-    await page.waitForSelector('button[aria-label="Close Followed"]', {
+    await page.click(CLOSE_FOLLOWED, { force: true });
+    await page.waitForSelector(CLOSE_FOLLOWED, {
       state: "detached",
       timeout: 15_000,
     });
@@ -284,7 +293,7 @@ const run = async (kit: Kit) => {
   // Two sessions open on the one socket, the other in its own tab.
   const other = await fleet.spawn("claude", "Elsewhere", fleet.repo, inProject);
   await visit(`/session/${other}`);
-  await page.waitForSelector('button[aria-label="Close Elsewhere"]', {
+  await page.waitForSelector(tabClose("Elsewhere"), {
     state: "attached",
     timeout: 30_000,
   });
@@ -292,10 +301,10 @@ const run = async (kit: Kit) => {
   // the sidebar. The tab closes under the card, the pointer kept on the row.
   await page.locator(`[data-hover-session="${id}"]`).first().hover();
   await page.waitForTimeout(1500);
-  await page.$eval('button[aria-label="Close Followed"]', (button) =>
+  await page.$eval(CLOSE_FOLLOWED, (button) =>
     (button as HTMLButtonElement).click()
   );
-  await page.waitForSelector('button[aria-label="Close Followed"]', {
+  await page.waitForSelector(CLOSE_FOLLOWED, {
     state: "detached",
     timeout: 15_000,
   });

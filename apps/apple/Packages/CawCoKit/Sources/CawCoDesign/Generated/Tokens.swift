@@ -297,6 +297,10 @@ public enum Palette {
     public static let shadowTint = Palette.named("shadow-tint")
     public static let shadowTint2 = Palette.named("shadow-tint-2")
     public static let shadowTint3 = Palette.named("shadow-tint-3")
+    /// What a folder tab casts on the tab behind it (shadow-tab-start, shadow-tab-end): warm ink by day; at night the ink lit, since the tabs are the darkest surfaces and no shadow shows on them.
+    public static let tabShade = Palette.named("tab-shade")
+    /// What the chosen folder tab casts on the tabs behind it: tab-shade by day; nothing at night, where its sheet is the lightest of them and lit ink beside it would only blur its edge (its rim draws it).
+    public static let tabShadeChosen = Palette.named("tab-shade-chosen")
     /// At night every raised shadow adds a 1px inner ring of ink.
     public static let nightRing = Palette.named("night-ring")
 }
@@ -319,6 +323,14 @@ public enum Shadow {
     /// A drawn shape's drop (the grown composer), drawn as the SVG's own feDropShadow filters so it follows the shape, not a box, and is painted once rather than reapplied as the shape moves (grown.ts): this far layer, then shadow-drop-near.
     public static let shadowDrop: [ShadowLayer] = [ShadowLayer(x: 0, y: 14, blur: 28, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.1400), dark: P3(0.0759, 0.0714, 0.0656, 0.6600)), inset: false)]
     public static let shadowDropNear: [ShadowLayer] = [ShadowLayer(x: 0, y: 2, blur: 4, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false)]
+    /// A folder tab's edge on the tab behind it, at its leading side: one-sided, never above its top (PaneTabs .shade).
+    public static let shadowTabStart: [ShadowLayer] = [ShadowLayer(x: -2, y: 0, blur: 5, spread: -1, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.2400), dark: P3(0.9247, 0.9128, 0.8883, 0.1400)), inset: false)]
+    /// A folder tab's edge on the tab behind it, at its trailing side (PaneTabs .shade).
+    public static let shadowTabEnd: [ShadowLayer] = [ShadowLayer(x: 2, y: 0, blur: 5, spread: -1, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.2400), dark: P3(0.9247, 0.9128, 0.8883, 0.1400)), inset: false)]
+    /// The chosen folder tab's edge on the tab behind it, at its leading side (PaneTabs .shade).
+    public static let shadowTabStartChosen: [ShadowLayer] = [ShadowLayer(x: -2, y: 0, blur: 5, spread: -1, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.2400), dark: P3(0.0000, 0.0000, 0.0000, 0.0000)), inset: false)]
+    /// The chosen folder tab's edge on the tab behind it, at its trailing side (PaneTabs .shade).
+    public static let shadowTabEndChosen: [ShadowLayer] = [ShadowLayer(x: 2, y: 0, blur: 5, spread: -1, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.2400), dark: P3(0.0000, 0.0000, 0.0000, 0.0000)), inset: false)]
     public static let shadowInsetSel: [ShadowLayer] = [ShadowLayer(x: 0, y: 1, blur: 1, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: true)]
     /// Shadow per surface level, paired with --surface-1…8.
     public static let surfaceShadow1: [ShadowLayer] = []

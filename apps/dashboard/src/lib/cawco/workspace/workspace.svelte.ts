@@ -39,6 +39,12 @@ export interface LeafNode {
   /** `null` is the fleet board: a leaf holding nothing is where you start. */
   active: string | null;
   id: string;
+  /**
+   * The tab in front and the tab it was opened from, while that holds: kept
+   * from the open until another tab is shown, so closing it goes back to
+   * where it came from (a browser's opener). Absent once forgotten.
+   */
+  opened?: { from: string; id: string } | null;
   t: "l";
   tabs: string[];
 }
@@ -265,6 +271,49 @@ function leafHolding(sessionId: string): LeafNode | null {
   return (
     leavesOf(held.root).find((leaf) => leaf.tabs.includes(sessionId)) ?? null
   );
+}
+
+/* ── Where a tab opens, and where closing it goes back to ─────────────
+   A browser's rule: a tab opened from the tab you are on opens just after
+   it, not at the strip's end, and closing it goes back to that tab while
+   both are open and nothing else has been shown in between; showing any
+   other tab forgets where it came from (owner: "if i open a tab from the
+   tab i'm already on it should open next to it not at the end, and closing
+   it returns me to the tab i was on"). */
+
+/**
+ * Puts a conversation in a group's strip if it is not there yet: just after
+ * the tab in front, which it was opened from, else (the board in front) at
+ * the end.
+ */
+function place(leaf: LeafNode, sessionId: string): void {
+  if (leaf.tabs.includes(sessionId)) {
+    return;
+  }
+  const from = leaf.active;
+  const at = from ? leaf.tabs.indexOf(from) : -1;
+  if (!from || at === -1) {
+    leaf.tabs.push(sessionId);
+    leaf.opened = null;
+    return;
+  }
+  leaf.tabs.splice(at + 1, 0, sessionId);
+  leaf.opened = { id: sessionId, from };
+}
+
+/** Puts a tab in front of its group; any other tab than the one just opened forgets its opener. */
+function show(leaf: LeafNode, sessionId: string | null): void {
+  if (leaf.opened && leaf.opened.id !== sessionId) {
+    leaf.opened = null;
+  }
+  leaf.active = sessionId;
+}
+
+/** A tab that left a group takes the group's opener with it, as the tab opened or the one it came from. */
+function forget(leaf: LeafNode, sessionId: string): void {
+  if (leaf.opened?.id === sessionId || leaf.opened?.from === sessionId) {
+    leaf.opened = null;
+  }
 }
 
 /** The focused leaf, or the first one — `focusedLeaf` can name a closed leaf. */
@@ -518,10 +567,10 @@ export const workspace = {
   activate(sessionId: string | null, leafId?: string): void {
     const leaf =
       (leafId ? leafById(leafId) : leafHolding(sessionId ?? "")) ?? focused();
-    if (sessionId && !leaf.tabs.includes(sessionId)) {
-      leaf.tabs.push(sessionId);
+    if (sessionId) {
+      place(leaf, sessionId);
     }
-    leaf.active = sessionId;
+    show(leaf, sessionId);
     held.focusedLeaf = leaf.id;
     save();
     project(sessionId, "push");
@@ -539,14 +588,16 @@ export const workspace = {
   },
 
   /**
-   * Open a conversation, adding it to the focused group if it is not already
-   * held somewhere. `ctx` is the machine/folder a STORED session is known to
-   * live on — a hint that names the pane before the transcript answers, not
-   * an address: the URL is the bare id either way, and the hub resolves it.
+   * Open a conversation, adding it to a group (`into`, else the focused one)
+   * if it is not already held somewhere. `ctx` is the machine/folder a
+   * STORED session is known to live on — a hint that names the pane before
+   * the transcript answers, not an address: the URL is the bare id either
+   * way, and the hub resolves it.
    */
   open(
     sessionId: string,
-    ctx?: { machine?: string | null; cwd?: string; harness?: string }
+    ctx?: { machine?: string | null; cwd?: string; harness?: string },
+    into?: string
   ): void {
     remember(sessionId, ctx);
     if (ctx) {
@@ -554,7 +605,7 @@ export const workspace = {
     } else {
       workingSet.visit(sessionId);
     }
-    this.activate(sessionId, leafHolding(sessionId)?.id);
+    this.activate(sessionId, leafHolding(sessionId)?.id ?? into);
   },
 
   /**
@@ -576,10 +627,10 @@ export const workspace = {
       }
     }
     const leaf = (sessionId ? leafHolding(sessionId) : null) ?? focused();
-    if (sessionId && !leaf.tabs.includes(sessionId)) {
-      leaf.tabs.push(sessionId);
+    if (sessionId) {
+      place(leaf, sessionId);
     }
-    leaf.active = sessionId;
+    show(leaf, sessionId);
     held.focusedLeaf = leaf.id;
     save();
   },
@@ -605,6 +656,13 @@ export const workspace = {
     if (leaf.active === from) {
       leaf.active = to;
     }
+    // Still the same conversation: where it was opened from holds.
+    if (leaf.opened?.id === from) {
+      leaf.opened.id = to;
+    }
+    if (leaf.opened?.from === from) {
+      leaf.opened.from = to;
+    }
     workingSet.forget(from);
     workingSet.visit(to);
     if (held.ctx) {
@@ -617,9 +675,12 @@ export const workspace = {
   },
 
   /**
-   * Close a tab. The group falls back to its neighbour rather than to the
-   * board — closing the third of four conversations should leave you in the
-   * strip, not back at the fleet.
+   * Close a tab. The tab in front goes back to the tab it was opened from
+   * (`opened`), while that is still open and nothing else was shown since;
+   * otherwise the group falls back to its neighbour, the right one, else the
+   * left, rather than to the board — closing the third of four
+   * conversations should leave you in the strip, not back at the fleet.
+   * Closing a tab that is not in front changes nothing about what is shown.
    */
   close(sessionId: string): void {
     const leaf = leafHolding(sessionId);
@@ -627,13 +688,22 @@ export const workspace = {
       return;
     }
     const at = leaf.tabs.indexOf(sessionId);
+    const back =
+      leaf.active === sessionId && leaf.opened?.id === sessionId
+        ? leaf.opened.from
+        : null;
     leaf.tabs.splice(at, 1);
+    forget(leaf, sessionId);
     workingSet.forget(sessionId);
     if (held.ctx) {
       delete held.ctx[sessionId];
     }
     if (leaf.active === sessionId) {
-      leaf.active = leaf.tabs[at] ?? leaf.tabs[at - 1] ?? null;
+      leaf.active =
+        (back && leaf.tabs.includes(back) ? back : null) ??
+        leaf.tabs[at] ??
+        leaf.tabs[at - 1] ??
+        null;
     }
     // Closing the last tab of a split half closes the half: a group with
     // nothing in it is a divider with a blank on one side, which is not a
@@ -652,10 +722,8 @@ export const workspace = {
   land(sessionId: string): void {
     workingSet.visit(sessionId);
     const leaf = leafHolding(sessionId) ?? focused();
-    if (!leaf.tabs.includes(sessionId)) {
-      leaf.tabs.push(sessionId);
-    }
-    leaf.active = sessionId;
+    place(leaf, sessionId);
+    show(leaf, sessionId);
     held.focusedLeaf = leaf.id;
     save();
     project(sessionId, "replace");
@@ -672,7 +740,7 @@ export const workspace = {
     let changed = false;
     for (const leaf of leavesOf(held.root)) {
       if (leaf.active === null && leaf.tabs.length > 0) {
-        leaf.active = leaf.tabs[0];
+        show(leaf, leaf.tabs[0]);
         changed = true;
       }
     }
@@ -701,7 +769,7 @@ export const workspace = {
         }
       }
       if (extra.id === held.focusedLeaf) {
-        into.active = extra.active ?? into.active;
+        show(into, extra.active ?? into.active);
         held.focusedLeaf = into.id;
       }
       extra.tabs = [];
@@ -735,8 +803,9 @@ export const workspace = {
     }
     if (from) {
       from.tabs.splice(from.tabs.indexOf(sessionId), 1);
+      forget(from, sessionId);
       if (from.active === sessionId) {
-        from.active = from.tabs[0] ?? null;
+        show(from, from.tabs[0] ?? null);
       }
     }
     const made: LeafNode = {
@@ -767,8 +836,9 @@ export const workspace = {
     const from = leafHolding(sessionId);
     if (from) {
       from.tabs.splice(from.tabs.indexOf(sessionId), 1);
+      forget(from, sessionId);
       if (from.active === sessionId) {
-        from.active = from.tabs[0] ?? null;
+        show(from, from.tabs[0] ?? null);
       }
     }
     const at =
@@ -776,7 +846,7 @@ export const workspace = {
         ? target.tabs.length
         : Math.max(0, Math.min(index, target.tabs.length));
     target.tabs.splice(at, 0, sessionId);
-    target.active = sessionId;
+    show(target, sessionId);
     held.focusedLeaf = target.id;
     settle();
     project(sessionId, "push");

@@ -1781,6 +1781,26 @@
         }
       }
     },
+    "tab-shade": {
+      "$type": "color",
+      "$value": "oklch(from {color.neutral-12} l c h / 0.24)",
+      "$description": "What a folder tab casts on the tab behind it (shadow-tab-start, shadow-tab-end): warm ink by day; at night the ink lit, since the tabs are the darkest surfaces and no shadow shows on them.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(from {color.neutral-12} l c h / 0.14)"
+        }
+      }
+    },
+    "tab-shade-chosen": {
+      "$type": "color",
+      "$value": "{color.tab-shade}",
+      "$description": "What the chosen folder tab casts on the tabs behind it: tab-shade by day; nothing at night, where its sheet is the lightest of them and lit ink beside it would only blur its edge (its rim draws it).",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "transparent"
+        }
+      }
+    },
     "night-ring": {
       "$type": "color",
       "$value": "transparent",
@@ -1851,6 +1871,26 @@
     "shadow-drop-near": {
       "$type": "shadow",
       "$value": "0 2px 4px {color.shadow-tint}"
+    },
+    "shadow-tab-start": {
+      "$type": "shadow",
+      "$value": "-2px 0 5px -1px {color.tab-shade}",
+      "$description": "A folder tab's edge on the tab behind it, at its leading side: one-sided, never above its top (PaneTabs .shade)."
+    },
+    "shadow-tab-end": {
+      "$type": "shadow",
+      "$value": "2px 0 5px -1px {color.tab-shade}",
+      "$description": "A folder tab's edge on the tab behind it, at its trailing side (PaneTabs .shade)."
+    },
+    "shadow-tab-start-chosen": {
+      "$type": "shadow",
+      "$value": "-2px 0 5px -1px {color.tab-shade-chosen}",
+      "$description": "The chosen folder tab's edge on the tab behind it, at its leading side (PaneTabs .shade)."
+    },
+    "shadow-tab-end-chosen": {
+      "$type": "shadow",
+      "$value": "2px 0 5px -1px {color.tab-shade-chosen}",
+      "$description": "The chosen folder tab's edge on the tab behind it, at its trailing side (PaneTabs .shade)."
     },
     "shadow-inset-sel": {
       "$type": "shadow",

@@ -20,6 +20,7 @@
 </script>
 
 <script lang="ts">
+  import type { HarnessKind } from "@cawco/core";
   import { Popover } from "bits-ui";
   /**
    * One group's tabs: a segmented control (the Fluid Functionalism tabs,
@@ -56,7 +57,15 @@
     type TabsTravel,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
-  import { IconArrowRight, IconChevronDown, IconClose } from "#lib/icons.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
+  import {
+    IconAddLine,
+    IconArrowRight,
+    IconChevronDown,
+    IconClose,
+  } from "#lib/icons.js";
   import { page } from "$app/state";
   import AccountSubmenu from "../accounts/AccountSubmenu.svelte";
   import {
@@ -65,13 +74,15 @@
     FAILED_LABEL,
     UNKNOWN_LABEL,
   } from "../activity";
-  import { cawco, isFailed, isStale } from "../client.svelte";
+  import { cawco, isFailed, isStale, spawnSession } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
   import CawFace from "../home/CawFace.svelte";
   import type { HubRead } from "../hub-read";
   import { conversationHref } from "../links";
   import { integrate, type Sample, sampleAt } from "../motion/spring";
   import { sessionName } from "../session-name";
+  import { newSession } from "../spawn/new-session.svelte";
+  import { spawnPrefs } from "../spawnPrefs.svelte";
   import { isThreadTab } from "../thread-tabs";
   import { runIdOf } from "../workflow-runs";
   import { workingSet } from "../working-set.svelte";
@@ -193,6 +204,9 @@
   let present = new Set<string>();
   const tabs = $derived.by(() => {
     const ids = leaf.tabs;
+    // The strip's first word of a new order, before its each block lays it
+    // out (`noteOrder`).
+    untrack(() => noteOrder([...ids]));
     for (const id of ids) {
       if (!present.has(id)) {
         arrivals.set(id, (arrivals.get(id) ?? 0) + 1);
@@ -592,6 +606,118 @@
       closeDetails();
     }
   });
+
+  /**
+   * A middle click on a tab (its link, which spans it, or its close)
+   * closes it, as its close button does (owner:
+   * "need middle click to close a tab"). Its press takes no default either:
+   * not the browser's autoscroll, not a paste of the selection, and not the
+   * tab's link opening in a browser tab of its own.
+   */
+  function middleDown(event: MouseEvent) {
+    if (event.button === 1) {
+      event.preventDefault();
+    }
+  }
+  /* ── A tab from the keyboard (WAI-ARIA APG, Tabs) ─────────────────
+     The tablist holds tabs alone (axe, aria-required-children): a tab's
+     close X and details chevron are a pointer's, out of the tree and the
+     tab order, and the tab itself does what they do. Delete closes it
+     (APG: "Delete (Optional): If deletion is allowed, deletes (closes) the
+     current tab element … sets focus on the tab following the tab that was
+     closed … If there is not a tab that followed … sets focus on … the tab
+     that preceded"); which tab comes to the front stays the strip's rule
+     (workspace `close`). Shift+F10 or the menu key opens its menu (APG:
+     "Shift + F10: If the tab has an associated popup menu, opens the
+     menu"), the menu a finger holds or pulls down; ArrowDown or Space its
+     details. w3.org/WAI/ARIA/apg/patterns/tabs/ */
+  function closeByKey(id: string) {
+    const at = leaf.tabs.indexOf(id);
+    const next = leaf.tabs[at + 1] ?? leaf.tabs[at - 1] ?? null;
+    closeDetails();
+    workspace.close(id);
+    requestAnimationFrame(() => {
+      const tab = next ? anchorOf(next) : null;
+      tab?.querySelector<HTMLElement>('[role="tab"]')?.focus();
+    });
+  }
+  function menuByKey(id: string, event: KeyboardEvent) {
+    if (
+      !(event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey))
+    ) {
+      return false;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const node = anchorOf(id);
+    if (node) {
+      openMenu(node);
+    }
+    return true;
+  }
+  function middleClose(id: string, event: MouseEvent) {
+    if (event.button !== 1) {
+      return;
+    }
+    event.preventDefault();
+    closeDetails();
+    workspace.close(id);
+  }
+
+  /* ── A new session, from the strip's end ──────────────────────────
+     The "+" after the last tab starts a session in the place of the tab in
+     front (its machine, folder and harness), on the spawn the project
+     head's Start empty sends (ProjectHead `startSession`): the new-session
+     form's last settings, its model and effort where the harness is the
+     same. The new tab opens just after the one it came from (workspace
+     `place`). With nothing in front, or a tab with no place of its own (a
+     thread, a workflow run), it opens the New Session form instead.
+
+     It stands outside the tablist, after the track, so the tablist holds
+     tabs alone and the keyboard reaches it after them. It wears the tabs'
+     close X's look: the X's glyph grammar, its resting ink, the strong ink
+     only under the pointer. While the hub takes the spawn it spins in its
+     place. A spawn the hub refuses stays on the "+" (DESIGN.md, The Stay In
+     Context Rule): its glyph turns the failed status ink, its tooltip opens
+     with the hub's reason, and the reason is its description; the next
+     press clears it. */
+  let starting = $state(false);
+  /** Why the hub refused the last start from here, until the next press. */
+  let refused = $state<string | null>(null);
+  let newTip = $state(false);
+  const refusedId = $props.id();
+  async function startHere() {
+    refused = null;
+    const here = leaf.active;
+    const ctx =
+      here && !(runIdOf(here) || isThreadTab(here)) ? contextOf(here) : null;
+    if (!(here && ctx?.machine && ctx.cwd)) {
+      newSession(ctx?.machine ? { machineId: ctx.machine } : undefined);
+      return;
+    }
+    const harness = ctx.harness as HarnessKind;
+    const same = spawnPrefs.harness === harness;
+    const projectId = cawco.instanceIndex.byId.get(here)?.projectId;
+    starting = true;
+    let instanceId: string;
+    try {
+      instanceId = await spawnSession({
+        machineId: ctx.machine,
+        cwd: ctx.cwd,
+        harness,
+        ...(same ? { model: spawnPrefs.model } : {}),
+        ...(same && spawnPrefs.effort ? { effort: spawnPrefs.effort } : {}),
+        ...(projectId ? { projectId } : {}),
+      });
+    } catch (error) {
+      refused = error instanceof Error ? error.message : String(error);
+      newTip = true;
+      return;
+    } finally {
+      starting = false;
+    }
+    workspace.open(instanceId, ctx, leaf.id);
+  }
   onMount(() => () => {
     clearTimeout(timer);
     holdMove();
@@ -638,30 +764,39 @@
   /** The id of a tab's slide to its new place, so a later slide can take over from it. */
   const SLIDE = "tab-slide";
 
-  // Before the strip changes: where every tab stands, read while the layout
-  // is still the one on screen.
-  $effect.pre(() => {
-    const next = [...leaf.tabs];
-    untrack(() => {
-      const prev = lastTabs;
-      lastTabs = next;
-      if (prev.length === next.length) {
-        const moved = prev.flatMap((id, i) => (next[i] === id ? [] : [i]));
-        if (moved.length === 1 && !prev.includes(next[moved[0]])) {
-          renamedOut.add(prev[moved[0]]);
-          renamedIn.add(next[moved[0]]);
-        }
+  /**
+   * Before the strip changes: where every tab stands, read while the layout
+   * is still the one on screen. Read where the strip first hears the new
+   * order (the `tabs` derived, which its each block reads before it lays
+   * the change out), not in an `$effect.pre`: Svelte commits the each
+   * block's change, a closing tab already out of the flow (`leavingTab`)
+   * and an opening one already in it, before the pre effects run, so the
+   * tabs were read where they had already landed, no tab slid, and the
+   * closing tab faded over neighbours that had jumped (owner: "it seems the
+   * tab bar crossfades to the state where the tab isn't there").
+   */
+  function noteOrder(next: string[]) {
+    const prev = lastTabs;
+    if (prev.length === next.length && prev.every((id, i) => id === next[i])) {
+      return;
+    }
+    lastTabs = next;
+    if (prev.length === next.length) {
+      const moved = prev.flatMap((id, i) => (next[i] === id ? [] : [i]));
+      if (moved.length === 1 && !prev.includes(next[moved[0]])) {
+        renamedOut.add(prev[moved[0]]);
+        renamedIn.add(next[moved[0]]);
       }
-      if (!(ready && motionOk.current) || flip) {
-        return;
-      }
-      const from = new Map<string, number>();
-      for (const [id, el] of tabEls) {
-        from.set(id, el.getBoundingClientRect().left);
-      }
-      flip = { from, added: false, removed: false, frame: 0 };
-    });
-  });
+    }
+    if (!(ready && motionOk.current) || flip) {
+      return;
+    }
+    const from = new Map<string, number>();
+    for (const [id, el] of tabEls) {
+      from.set(id, el.getBoundingClientRect().left);
+    }
+    flip = { from, added: false, removed: false, frame: 0 };
+  }
 
   // After the strip has its new shape, with any closing tab already out of
   // the flow: every tab that was there before starts where it stood. The
@@ -780,8 +915,9 @@
         if (!ready || renamed) {
           return forget(id, node, frame);
         }
-        // A new tab opens at the strip's end, often past its scrolled edge:
-        // it is brought into view now, before a flight measures where it is.
+        // A new tab can open past the strip's scrolled edge (after the tab
+        // in front, or at the end): it is brought into view now, before a
+        // flight measures where it is.
         node.scrollIntoView({
           block: "nearest",
           inline: "nearest",
@@ -1309,6 +1445,8 @@
         onpointerleave={leaveDetails}
         style:--full-next={RIM[tabs[i + 1]?.tone ?? tab.tone].full}
         style:--full-prev={RIM[tabs[i - 1]?.tone ?? tab.tone].full}
+        style:--lone-end={Number(i === tabs.length - 1)}
+        style:--lone-start={Number(i === 0)}
         style:--pick={pickOf(i)}
         style:--rest-next={RIM[tabs[i + 1]?.tone ?? tab.tone].rest}
         style:--rest-prev={RIM[tabs[i - 1]?.tone ?? tab.tone].rest}
@@ -1328,6 +1466,11 @@
         {@attach attachmentsOf(tab.id).enter}
         {@attach attachmentsOf(tab.id).land}
       >
+        <!-- Its shadow on the tab behind it, first so its own card covers
+             what casts it. -->
+        <span aria-hidden="true" class="shade"
+          ><span class="s"></span><span class="e"></span></span
+        >
         <!-- The tab's options: a finger's hanging menu and a mouse's both. -->
         {#snippet options()}
           {#if !(runIdOf(tab.id) || isThreadTab(tab.id))}
@@ -1402,14 +1545,19 @@
         <ContextMenu.Root
           bind:open={() => menuFor === tab.id, (open) => setMenu(tab.id, open)}
         >
-          <ContextMenu.Trigger class="contents">
+          <!-- No tabindex of its own: the box is `display: contents` and
+               never takes focus, and one made it a focusable child of the
+               tablist that is not a tab (axe, aria-required-children). -->
+          <ContextMenu.Trigger class="contents" tabindex={null}>
             <TabItem
-              aria-expanded={detailsOpen && detailId === tab.id}
-              aria-haspopup="dialog"
+              aria-expanded={menuFor === tab.id}
+              aria-haspopup="menu"
+              aria-keyshortcuts="Delete Shift+F10"
               aria-label={`${tab.label}, ${tab.statusLabel}${chosen ? " — open session details" : ""}`}
               data-session-tab={tab.id}
               href={tab.href}
               label={tab.label}
+              onauxclick={(event) => middleClose(tab.id, event)}
               onclick={(event) => clickTab(tab.id, event)}
               onkeydown={(event) => {
                 if (event.key === "ArrowDown" || event.key === " ") {
@@ -1419,8 +1567,15 @@
                   if (anchor) {
                     showDetails(tab.id, anchor, true);
                   }
+                } else if (event.key === "Delete") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  closeByKey(tab.id);
+                } else {
+                  menuByKey(tab.id, event);
                 }
               }}
+              onmousedown={middleDown}
               onpointerdown={() => rebuildScheduler.prepare(tab.id)}
               value={tab.id}
             >
@@ -1445,16 +1600,17 @@
                      only. The empty slot on another tab is part of that
                      tab, and a click there chooses it. A workflow run's tab
                      has no details card, and so no slot. A phone draws no
-                     slot at all: the tab's menu is its long press. -->
+                     slot at all: the tab's menu is its long press. It is a
+                     pointer's alone, as the close is: a tablist holds tabs
+                     (axe, aria-required-children), and the tab itself opens
+                     its details (ArrowDown or Space, and its name says so). -->
                 {#if !(runIdOf(tab.id) || isThreadTab(tab.id))}
                   <button
-                    aria-expanded={chosen
-                      ? detailsOpen && detailId === tab.id
-                      : undefined}
-                    aria-haspopup={chosen ? "dialog" : undefined}
-                    aria-hidden={chosen ? undefined : "true"}
-                    aria-label="Session details for {tab.label}"
+                    aria-hidden="true"
                     class="tdetails touch-hit pointer-hit pressable"
+                    data-open={chosen && detailsOpen && detailId === tab.id
+                      ? ""
+                      : undefined}
                     onclick={(event) => {
                       if (chosen) {
                         clickTab(tab.id, event);
@@ -1462,7 +1618,7 @@
                         workspace.activate(tab.id, leaf.id);
                       }
                     }}
-                    tabindex={chosen ? undefined : -1}
+                    tabindex="-1"
                     type="button"
                     class:idle={!chosen}
                   >
@@ -1471,37 +1627,23 @@
                 {/if}
                 <!-- A mouse's close. A finger's is in the tab's options,
                      held or pulled down from the tab, and the phone's row
-                     draws none. -->
+                     draws none. The keyboard's and a screen reader's is the
+                     tab's own Delete (`closeByKey`), so this one is not in
+                     the tablist's tree. -->
                 <button
-                  aria-label="Close {tab.label}"
+                  aria-hidden="true"
                   class="tclose touch-hit pointer-hit pressable"
+                  onauxclick={(event) => middleClose(tab.id, event)}
                   onclick={() => {
                     closeDetails();
                     workspace.close(tab.id);
                   }}
+                  onmousedown={middleDown}
+                  tabindex="-1"
                   type="button"
                 >
                   <IconClose />
                 </button>
-                <!-- The options as an action a screen reader reaches
-                     (VoiceOver, TalkBack): the same menu a held or pulled
-                     finger opens. Out of the tab order, which the strip's
-                     arrows own; a keyboard has the menu key. -->
-                <button
-                  aria-haspopup="menu"
-                  aria-label="Options for {tab.label}"
-                  class="sr-only"
-                  onclick={(event) => {
-                    const node = (event.currentTarget as HTMLElement).closest(
-                      ".tab"
-                    );
-                    if (node instanceof HTMLElement) {
-                      openMenu(node);
-                    }
-                  }}
-                  tabindex={-1}
-                  type="button"
-                ></button>
               {/snippet}
             </TabItem>
           </ContextMenu.Trigger>
@@ -1569,6 +1711,54 @@
       </div>
     {/each}
   </TabsList>
+  <!-- A new session in the front tab's place: after the tabs, outside the
+       tablist (`startHere`). -->
+  <div class="strip-new">
+    <Tooltip.Root bind:open={newTip}>
+      <Tooltip.Trigger>
+        {#snippet child({
+          props,
+        })}
+          <button
+            {...props}
+            aria-busy={starting || undefined}
+            aria-describedby={refused ? refusedId : undefined}
+            aria-label="New session"
+            class="tnew touch-hit pointer-hit pressable"
+            data-refused={refused ? "" : undefined}
+            onclick={() => {
+              if (!starting) {
+                startHere();
+              }
+            }}
+            type="button"
+          >
+            {#if starting}
+              <Spinner aria-label="Starting a session" />
+            {:else}
+              <IconAddLine />
+            {/if}
+          </button>
+        {/snippet}
+      </Tooltip.Trigger>
+      <!-- 8px clear of the viewport's edges, as every tooltip (Tip). -->
+      <Tooltip.Content collisionPadding={8} side="bottom">
+        <span class="whitespace-pre-line"
+          >{#if refused}
+            <strong class="block font-medium">Couldn't start a session</strong>
+            {refused}
+          {:else}
+            New session
+          {/if}</span
+        >
+      </Tooltip.Content>
+    </Tooltip.Root>
+    {#if refused}
+      <span class="sr-only" id={refusedId}
+        >Couldn't start a session: {refused}</span
+      >
+    {/if}
+  </div>
 </Tabs>
 
 <Popover.Root
@@ -1788,6 +1978,11 @@
      shelf. (A tab switch is not a navigation at all — the segment
      simply slides.) */
   :global(.session-tabs) {
+    /* A tab's height, its inner pad and its flared foot's room at the
+       track's end, shared by the track and the "+" after it (`.strip-new`). */
+    --strip-item: 32px;
+    --strip-px: 12px;
+    --strip-flare: var(--radius-sm);
     display: flex;
     align-items: flex-end;
     flex: 0 0 auto;
@@ -1828,6 +2023,8 @@
      between them and never under. */
   @media (max-width: 899px) {
     :global(.session-tabs:not(.hosted)) {
+      --strip-item: var(--c-tab-row-h);
+      --strip-flare: var(--radius-lg);
       min-block-size: var(--c-top-bar-h);
       padding-block-start: 0;
       padding-inline: calc(var(--c-bar-phone-edge) + var(--c-bar-toggle-glyph))
@@ -1847,9 +2044,9 @@
      card (surface-recess-deep, by day surface-hover's own step) toward
      the chosen sheet's surface; by night it is the hover step. */
   :global(.session-tabs[data-slot="tabs"] .ff-tabs-list) {
-    --px: 12px;
+    --px: var(--strip-px);
     --text: var(--text-label);
-    --item: 32px;
+    --item: var(--strip-item);
     /* The chosen tab's sheet: the transcript's head dissolves into the same
        token (HeadFade), so the two are one fill at the shelf's line. */
     --sheet: var(--tab-sheet);
@@ -1882,7 +2079,7 @@
     :global(
       .session-tabs:not(.hosted)[data-slot="tabs"] .ff-tabs-list.scrollable
     ) {
-      --item: var(--c-tab-row-h);
+      --item: var(--strip-item);
       --pad: 0px;
       --fade-len: 16px;
       --edge-room-start: calc(var(--fade-len) * 1.5);
@@ -1918,6 +2115,10 @@
      title past the cap ends in an ellipsis, and a strip that will not fit
      scrolls (TabsList) rather than squeezing its tabs. */
   .tab {
+    /* The tab's end pad, a pixel short of the kit's: the width every tab
+       has had (a hidden options button stood in its flow and took the
+       pixel; the tab's own Shift+F10 does its work now). */
+    --px-end: calc(var(--px) - 1px);
     position: relative;
     display: flex;
     flex: 0 0 auto;
@@ -1961,6 +2162,83 @@
      tab's (`pullMenu`), never the page's. */
   .tab {
     touch-action: pan-x;
+  }
+
+  /* ── Each tab's shadow on the tab behind it ───────────────────────
+     Where two tabs overlap, the one in front casts its edge on the one
+     behind (`shadow-tab-start`, `shadow-tab-end`, in `tab-shade`), so each
+     reads as its own folder, rimmed or not (owner: "tabs should cast
+     shadows on each other because now the tab that is inactive between
+     two tabs that are active has no silhouette"). Only sideways, and only
+     from a side that stands in front of a neighbour: a side under its
+     neighbour's card (TabsList `--under-start`/`--under-end`) casts none,
+     nor does the strip's first tab's leading side or its last tab's
+     trailing side (`--lone-start`/`--lone-end`), and nothing is cast above
+     a tab's top or below the shelf's line. By day it is warm ink; at night
+     the tabs are the darkest surfaces, where no shadow shows, so it is the
+     ink lit (`tab-shade`), and the chosen tab casts none: its sheet is the
+     lightest of them, lit ink beside it only blurred its edge (1.09:1 to
+     1.02:1 against the tab behind), and its rim draws it
+     (`tab-shade-chosen`); its cast changes with the choice, on the
+     switch's duration and curve. (Following the sheet frame by frame,
+     `--sheet-now`, cost WebKit's swipe a quarter more per frame.) A side
+     changes hands at a seam's handover on a switch, where the two tabs
+     stand alike.
+
+     The card is cut to its outline by a clip-path, which would cut a
+     shadow of its own away, so the edge is cast by boxes of their own
+     under the card: the card's outline less its 1px slope, square sides
+     and rounded shoulders at the tab radius, filled opaque, one casting
+     each side's `box-shadow`. A `drop-shadow()` filter on a shape cut to
+     the outline drew it too, but WebKit drew it again offscreen every frame
+     of a switch, and the switch's frames grew half as long again; these
+     are painted, never filtered, on a layer of their own. They stand at
+     the tab's rank, the card's own layer, before the card in the tree, so
+     the card covers them whole and every tab behind lies under the cast,
+     every tab in front over it. They never lean: their top stands where a
+     leaning card's top falls (`--lean`), under the card at every lean, so
+     a switch moves nothing of them but a gliding seam's cut. */
+  .shade {
+    --shade-top: calc(var(--item) * (1 - cos(var(--lean))));
+    position: absolute;
+    inset: 0;
+    z-index: calc(var(--z, var(--z-rest, 1)) * 4);
+    pointer-events: none;
+    clip-path: inset(var(--shade-top) -12px 0);
+    will-change: transform;
+
+    & > span {
+      position: absolute;
+      inset-block: var(--shade-top) 0;
+      inset-inline: calc(
+          var(--seam-tuck) *
+          var(--cut-start, 0) +
+          var(--slope-start)
+        )
+        calc(var(--seam-tuck) * var(--cut-end, 0) + var(--slope-end));
+      border-radius: var(--radius) var(--radius) 0 0;
+      background: var(--surface-recess-deep);
+
+      /* The chosen tab's cast (`data-chosen`) comes and goes with the
+         choice, on its clock. */
+      @media (prefers-reduced-motion: no-preference) {
+        transition: box-shadow var(--choose-dur) var(--choose-ease);
+      }
+    }
+    & > .s {
+      box-shadow: var(--shadow-tab-start);
+      opacity: calc((1 - var(--under-start, 0)) * (1 - var(--lone-start, 0)));
+    }
+    & > .e {
+      box-shadow: var(--shadow-tab-end);
+      opacity: calc((1 - var(--under-end, 0)) * (1 - var(--lone-end, 0)));
+    }
+    :global([data-chosen]) > & > .s {
+      box-shadow: var(--shadow-tab-start-chosen);
+    }
+    :global([data-chosen]) > & > .e {
+      box-shadow: var(--shadow-tab-end-chosen);
+    }
   }
 
   /* ── The status rim, on every width ───────────────────────────────
@@ -2477,7 +2755,7 @@
        overlap at its start and gave it up when the choice passed it. */
     .tab {
       --px-start: calc(var(--overlap) + var(--c-tab-lead));
-      --px-end: calc(var(--overlap) + var(--radius-lg));
+      --px-end: calc(var(--overlap) + var(--radius-lg) - 1px);
     }
   }
 
@@ -2587,7 +2865,9 @@
     );
   }
 
-  .tclose {
+  /* A tab's close, and the "+" after the tabs in its look. */
+  .tclose,
+  .tnew {
     display: grid;
     place-items: center;
     flex: 0 0 auto;
@@ -2599,15 +2879,6 @@
     border-radius: var(--radius-xs);
     color: var(--ink-muted);
     cursor: pointer;
-    /* 4px from the title's end to the glyph: the 16px glyph stands 2px
-       inside its 20px box. */
-    margin-inline-start: 2px;
-
-    /* A finger closes a tab from its options (owner: "remove the x make
-       it close on hold menu then close"). */
-    @media (max-width: 899px), (pointer: coarse) {
-      display: none;
-    }
 
     & :global(svg) {
       display: block;
@@ -2633,7 +2904,33 @@
       }
     }
   }
-  .tdetails[aria-expanded="true"] :global(svg) {
+  .tclose {
+    /* 4px from the title's end to the glyph: the 16px glyph stands 2px
+       inside its 20px box. */
+    margin-inline-start: 2px;
+
+    /* A finger closes a tab from its options (owner: "remove the x make
+       it close on hold menu then close"). */
+    @media (max-width: 899px), (pointer: coarse) {
+      display: none;
+    }
+  }
+  /* The "+": a tab's inner pad after the last tab's edge (the track keeps
+     its flared foot's room at its end), centred on the tabs' row. A start
+     the hub refused leaves it in the failed status ink until the next
+     press. */
+  .strip-new {
+    display: flex;
+    flex: none;
+    align-items: center;
+    align-self: flex-end;
+    block-size: var(--strip-item);
+    margin-inline-start: calc(var(--strip-px) - var(--strip-flare));
+  }
+  .tnew[data-refused] {
+    color: var(--status-fail-glyph);
+  }
+  .tdetails[data-open] :global(svg) {
     transform: rotate(180deg);
   }
 </style>

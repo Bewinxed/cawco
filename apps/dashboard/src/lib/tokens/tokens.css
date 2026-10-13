@@ -446,6 +446,13 @@
       oklch(from var(--neutral-12) l c h / 0.2),
       oklch(from var(--neutral-1) l c h / 0.76)
     );
+    /* What a folder tab casts on the tab behind it (shadow-tab-start, shadow-tab-end): warm ink by day; at night the ink lit, since the tabs are the darkest surfaces and no shadow shows on them. */
+    --tab-shade: light-dark(
+      oklch(from var(--neutral-12) l c h / 0.24),
+      oklch(from var(--neutral-12) l c h / 0.14)
+    );
+    /* What the chosen folder tab casts on the tabs behind it: tab-shade by day; nothing at night, where its sheet is the lightest of them and lit ink beside it would only blur its edge (its rim draws it). */
+    --tab-shade-chosen: light-dark(var(--tab-shade), transparent);
     /* At night every raised shadow adds a 1px inner ring of ink. */
     --night-ring: light-dark(
       transparent,
@@ -490,6 +497,14 @@
     /* A drawn shape's drop (the grown composer), drawn as the SVG's own feDropShadow filters so it follows the shape, not a box, and is painted once rather than reapplied as the shape moves (grown.ts): this far layer, then shadow-drop-near. */
     --shadow-drop: 0 14px 28px var(--shadow-tint-2);
     --shadow-drop-near: 0 2px 4px var(--shadow-tint);
+    /* A folder tab's edge on the tab behind it, at its leading side: one-sided, never above its top (PaneTabs .shade). */
+    --shadow-tab-start: -2px 0 5px -1px var(--tab-shade);
+    /* A folder tab's edge on the tab behind it, at its trailing side (PaneTabs .shade). */
+    --shadow-tab-end: 2px 0 5px -1px var(--tab-shade);
+    /* The chosen folder tab's edge on the tab behind it, at its leading side (PaneTabs .shade). */
+    --shadow-tab-start-chosen: -2px 0 5px -1px var(--tab-shade-chosen);
+    /* The chosen folder tab's edge on the tab behind it, at its trailing side (PaneTabs .shade). */
+    --shadow-tab-end-chosen: 2px 0 5px -1px var(--tab-shade-chosen);
     --shadow-inset-sel: inset 0 1px 1px var(--shadow-tint);
     /* Shadow per surface level, paired with --surface-1…8. */
     --surface-shadow-1: none;

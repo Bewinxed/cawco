@@ -134,7 +134,11 @@
          soft), so its ink travels on the compositor. -->
     <span class="label">
       <span class="text">{label}</span>
-      <span aria-hidden="true" class="text strong">{label}</span>
+      <!-- Its words drawn, not written (`::before`): as a second copy of
+           the name in the link's text, the tab's visible text was the name
+           twice, which its accessible name does not hold (axe,
+           label-content-name-mismatch). -->
+      <span aria-hidden="true" class="text strong" data-text={label}></span>
     </span>
   </svelte:element>
   {#if trail}
@@ -189,6 +193,11 @@
   .ff-tab > :global(*) {
     position: relative;
     z-index: 3;
+  }
+  /* The name's strong ink layer draws its words (`data-text`): they are no
+     second copy of the name in the tab's text. */
+  .strong::before {
+    content: attr(data-text);
   }
   .hit {
     display: flex;

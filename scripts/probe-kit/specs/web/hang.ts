@@ -107,13 +107,21 @@ function cardsAt(touch: boolean): Card[] {
       route: TABS_ROUTE,
       card: "[data-slot='context-menu-content'][data-state='open']",
       anchor: ".session-tabs .tab[data-chosen]",
+      // Shift+F10 on the chosen tab, as a keyboard and a screen reader
+      // open its menu (WAI-ARIA APG, Tabs).
       open: (page) =>
         page.evaluate(() =>
           document
-            .querySelector<HTMLButtonElement>(
-              ".session-tabs .tab[data-chosen] button[aria-label^='Options for']"
+            .querySelector<HTMLElement>(
+              ".session-tabs .tab[data-chosen] [role='tab']"
             )
-            ?.click()
+            ?.dispatchEvent(
+              new KeyboardEvent("keydown", {
+                key: "F10",
+                shiftKey: true,
+                bubbles: true,
+              })
+            )
         ),
       close: esc,
       // A mouse's menu opens beside the pointer, a plain kit menu.

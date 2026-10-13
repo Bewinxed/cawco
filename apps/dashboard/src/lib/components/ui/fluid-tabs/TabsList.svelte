@@ -561,9 +561,14 @@
   });
   /**
    * A scrolling track's edge fades never lie over a tab drawn chosen (the
-   * chosen tab, and the one a switch is leaving): each edge's fade is cut
-   * short at the nearest of them (`--fade-cap-start`, `--fade-cap-end`,
-   * read by the fade's mask). Kept as the track scrolls.
+   * chosen tab, and the one a switch is leaving) while it stands clear of
+   * that edge: the edge's fade is cut short at the nearest of them
+   * (`--fade-cap-start`, `--fade-cap-end`, read by the fade's mask). One the
+   * track has been scrolled past, cut by the edge, caps nothing there: that
+   * edge's fade is drawn whole, the cue that the strip goes on that way
+   * (a phone that swiped its views on showed none, its chosen tab half cut
+   * at the edge with nothing to say the strip scrolls). Kept as the track
+   * scrolls.
    */
   function capFades() {
     const track = node;
@@ -577,8 +582,14 @@
     for (const i of [list.optimisticIndex, outgoing]) {
       const r = i === null ? undefined : rects.at(i);
       if (r) {
-        start = Math.min(start, r.left - at);
-        end = Math.min(end, at + width - (r.left + r.width));
+        const before = r.left - at;
+        const after = at + width - (r.left + r.width);
+        if (before >= -0.5) {
+          start = Math.min(start, before);
+        }
+        if (after >= -0.5) {
+          end = Math.min(end, after);
+        }
       }
     }
     const write = (name: string, value: number) => {

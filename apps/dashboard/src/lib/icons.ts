@@ -5,6 +5,12 @@ export { default as IconClose } from "#lib/components/icons/Close.svelte";
 export { default as IconMinus } from "#lib/components/icons/Minus.svelte";
 export { default as IconPlus } from "#lib/components/icons/Plus.svelte";
 export { default as IconTick } from "#lib/components/icons/Tick.svelte";
+/*
+ * The session strip's "+", beside the tabs' close X: Solar's bare add in its
+ * line-duotone cut, the X's own grammar (24px grid, 1.5 stroke, round caps)
+ * with its upright stroke at half ink.
+ */
+export { default as IconAddLine } from "~icons/solar/add-line-duotone";
 export { default as IconAlignLeft } from "~icons/solar/align-left-bold-duotone";
 /*
  * Glyphs, not marks: the chevrons and arrows stay in Solar's linear cut, as
