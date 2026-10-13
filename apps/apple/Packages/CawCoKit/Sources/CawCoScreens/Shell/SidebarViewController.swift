@@ -609,8 +609,9 @@ final class SidebarViewController: ObservedViewController {
             let days = Int((endsAt.timeIntervalSince(Date(timeIntervalSince1970: home.now / 1000)) / 86400).rounded(.up))
             line = PaywallCopy.Trial.line(daysLeft: days)
             last = days <= 2
-        } else if Pro.shared.boardOpen, let access, access != .owned {
-            // TestFlight, the paywall isn't enforced: the sheet opens from here for demos.
+        } else if Pro.shared.boardOpen || Pro.shared.installProblem != nil, let access, access != .owned {
+            // The paywall isn't enforced (TestFlight, a development build, or an install the
+            // App Store couldn't check): the sheet opens from here, for demos and for Restore purchase.
             line = PaywallCopy.Links.included
         }
         if trialLine.text != line { trialLine.text = line }

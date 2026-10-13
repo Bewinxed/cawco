@@ -270,7 +270,7 @@ final class PaywallController: ObservedViewController {
         switch screen {
         case .offer:
             let price = pro.displayPrice(.pro) ?? "-"
-            return "offer|\(form)|\(pro.catalog)|\(retrying)|\(pro.canMakePayments.map { "\($0)" } ?? "unread")|\(price)"
+            return "offer|\(form)|\(pro.catalog)|\(retrying)|\(pro.canMakePayments.map { "\($0)" } ?? "unread")|\(price)|\(installLine ?? "")"
         case .late:
             return "late|\(PushRegistry.shared.testProblem ?? "")"
         case .asking:
@@ -390,12 +390,21 @@ final class PaywallController: ObservedViewController {
             if form == .trial { parts.append(timeline()) }
             parts.append(store)
         }
+        // The install is undecided: what the App Store said, and that Restore purchase asks again.
+        if let installLine { parts.append(muted(installLine)) }
         let fail = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
         failLabel = fail
         parts.append(fail)
         parts.append(links([restoreLinkMade(), LinkButton(PaywallCopy.Links.terms) { UIApplication.shared.open(Self.terms) },
                             LinkButton(PaywallCopy.Links.privacy) { UIApplication.shared.open(Self.privacy) }]))
         return parts
+    }
+
+    /// The launch's read of the install didn't decide it (no Apple Account
+    /// signed in, or a record that doesn't verify): the line that says so.
+    private var installLine: String? {
+        guard Pro.shared.testFlight == nil, let problem = Pro.shared.installProblem else { return nil }
+        return PaywallCopy.Store.install(problem)
     }
 
     /// P1c: the App Store didn't answer, or Try again is asking it again.

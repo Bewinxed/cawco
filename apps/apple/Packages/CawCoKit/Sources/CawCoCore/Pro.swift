@@ -52,6 +52,17 @@ public enum ProCatalog: Equatable, Sendable {
     case failed
 }
 
+/// Why the install's `AppTransaction` read on this launch didn't decide it,
+/// with StoreKit's error. Restore purchase reads it again with
+/// `AppTransaction.refresh()`, the one call that may sign the person in.
+public enum InstallProblem: Equatable, Sendable {
+    /// StoreKit threw: no Apple Account signed in to the App Store, no
+    /// network, or the record isn't there yet.
+    case unavailable(String)
+    /// The record came back, but its signature doesn't hold.
+    case unverified(String)
+}
+
 /// The signed proof Cawrier enrols a device on (`Pro.enrolmentProof`).
 public enum EnrolmentProof: Equatable, Sendable {
     /// Pro's, else the live free week's transaction JWS.
@@ -116,9 +127,14 @@ public final class Pro {
     /// Whether this install came from TestFlight: `AppTransaction` verified,
     /// with the sandbox environment (TestFlight signs in the sandbox; the App
     /// Store in production). Nil until a read came back verified on this
-    /// launch: a throw or an unverified answer leaves it undecided, and it is
-    /// read again (`readInstall`).
+    /// launch: a throw or an unverified answer leaves it undecided
+    /// (`installProblem` says why) until `Transaction.updates` delivers or
+    /// Restore purchase reads it again (`readInstall`).
     public private(set) var testFlight: Bool?
+
+    /// Why the install is still undecided after a read; nil before the
+    /// launch's read answers and once a read came back verified.
+    public private(set) var installProblem: InstallProblem?
 
     /// A Debug build started outside Xcode's StoreKit testing: the owner's
     /// Mac app built from main and opened from /Applications, or a device or
@@ -162,23 +178,28 @@ public final class Pro {
     @ObservationIgnored private var products: [ProProduct: Product] = [:]
     @ObservationIgnored private var updates: Task<Void, Never>?
     @ObservationIgnored private var trialClock: Task<Void, Never>?
-    /// The install's reads under way (a read and the waits after it); nil
-    /// between them, until the next foreground.
+    /// The install's read under way; nil between reads.
     @ObservationIgnored private var installRead: Task<Void, Never>?
     /// Reads of the install on this launch.
     @ObservationIgnored private var installReads = 0
-    @ObservationIgnored private var foreground: NSObjectProtocol?
     private let log = Logger(subsystem: "dev.cawco.app", category: "Pro")
     private static let pendingKey = "paywall-pending"
-    /// The waits before the launch's second, third and fourth reads of the
-    /// install; past them, one read on each foreground until it's decided.
-    private static let installWaits: [Duration] = [.seconds(2), .seconds(5), .seconds(15)]
 
     /// The verified AppTransaction: its environment and its JWS.
     private struct Install: Sendable {
         let environment: AppStore.Environment
         /// Nil only when a DEBUG launch forced the environment.
         let jws: String?
+    }
+
+    /// What one read of the install came to.
+    private enum InstallOutcome: Sendable {
+        case verified(Install)
+        case problem(InstallProblem)
+
+        var install: Install? {
+            if case let .verified(install) = self { install } else { nil }
+        }
     }
 
     #if DEBUG
@@ -192,47 +213,38 @@ public final class Pro {
         pending = UserDefaults.standard.string(forKey: Self.pendingKey).flatMap(ProProduct.init(rawValue:))
     }
 
-    /// Reads the install until it's decided: now, then after each of
-    /// `installWaits` while StoreKit throws or answers unverified; with
-    /// `waits` empty, this one read alone (a foreground's). Never
-    /// `AppTransaction.refresh()`: it puts an App Store sign-in in front of
-    /// the person, which Apple keeps for an explicit tap.
-    private func readInstall(waits: [Duration]) {
+    /// Reads the install from `AppTransaction.shared` while it's undecided:
+    /// once at launch, and again only when `Transaction.updates` delivers
+    /// (a purchase, a restore or a sign-in elsewhere). Never on a foreground:
+    /// on a device with no Apple Account signed in, StoreKit answers the read
+    /// with an App Store sign-in sheet, and closing that sheet activates the
+    /// app again, so a read per activation brought the sheet back in a loop.
+    /// Never `AppTransaction.refresh()` either: that one is Restore
+    /// purchase's, on the person's tap.
+    private func readInstall() {
         guard testFlight == nil, installRead == nil else { return }
         installRead = Task {
-            var waits = waits[...]
-            while true {
-                installReads += 1
-                let install = await readInstallOnce(installReads)
-                #if DEBUG
-                // A throw or an unverified answer isn't Xcode's StoreKit
-                // testing either, so the first read settles a development build.
-                if installReads == 1 {
-                    let opened = boardOpen
-                    developmentBuild = install?.environment != .xcode && !Self.probing
-                    if !opened, boardOpen { announceOpen() }
-                }
-                #endif
-                if let install {
-                    decide(install)
-                    break
-                }
-                guard let wait = waits.popFirst() else {
-                    log.notice("install: undecided after \(self.installReads) reads; read again on the next foreground")
-                    break
-                }
-                try? await Task.sleep(for: wait)
+            installReads += 1
+            let outcome = await readInstallOnce(installReads)
+            #if DEBUG
+            // A throw or an unverified answer isn't Xcode's StoreKit
+            // testing either, so the first read settles a development build.
+            if installReads == 1 {
+                let opened = boardOpen
+                developmentBuild = outcome.install?.environment != .xcode && !Self.probing
+                if !opened, boardOpen { announceOpen() }
             }
+            #endif
+            settleInstall(outcome)
             installRead = nil
         }
     }
 
-    /// One read of `AppTransaction`: the install when it's verified, nil
-    /// when StoreKit threw or the answer isn't verified. A DEBUG build takes
+    /// One read of `AppTransaction.shared`. A DEBUG build takes
     /// `-paywall-env sandbox|production` to stand in for TestFlight or the App
     /// Store, and `-paywall-install fail` (every read) or `-paywall-install <n>`
     /// (the first n reads) to make the read throw.
-    private func readInstallOnce(_ attempt: Int) async -> Install? {
+    private func readInstallOnce(_ attempt: Int) async -> InstallOutcome {
         do {
             #if DEBUG
             if let failing = UserDefaults.standard.string(forKey: "paywall-install"),
@@ -242,31 +254,43 @@ public final class Pro {
             switch UserDefaults.standard.string(forKey: "paywall-env") {
             case "sandbox":
                 log.notice("install read \(attempt): sandbox, forced by -paywall-env")
-                return Install(environment: .sandbox, jws: nil)
+                return .verified(Install(environment: .sandbox, jws: nil))
             case "production":
                 log.notice("install read \(attempt): production, forced by -paywall-env")
-                return Install(environment: .production, jws: nil)
+                return .verified(Install(environment: .production, jws: nil))
             default: break
             }
             #endif
-            let result = try await AppTransaction.shared
-            switch result {
-            case let .verified(transaction):
-                log.notice("install read \(attempt): \(transaction.environment.rawValue, privacy: .public)")
-                return Install(environment: transaction.environment, jws: result.jwsRepresentation)
-            case let .unverified(_, error):
-                log.error("install read \(attempt): AppTransaction unverified: \(String(describing: error), privacy: .public)")
-                return nil
-            }
+            return outcome(of: try await AppTransaction.shared, read: "install read \(attempt)")
         } catch {
             log.error("install read \(attempt): AppTransaction failed: \(String(describing: error), privacy: .public)")
-            return nil
+            return .problem(.unavailable(String(describing: error)))
         }
     }
 
-    /// StoreKit answered verified: TestFlight (sandbox) or not, for the rest of the launch.
-    private func decide(_ install: Install) {
+    /// What StoreKit's answer for the install came to.
+    private func outcome(of result: VerificationResult<AppTransaction>, read: String) -> InstallOutcome {
+        switch result {
+        case let .verified(transaction):
+            log.notice("\(read, privacy: .public): \(transaction.environment.rawValue, privacy: .public)")
+            return .verified(Install(environment: transaction.environment, jws: result.jwsRepresentation))
+        case let .unverified(_, error):
+            log.error("\(read, privacy: .public): AppTransaction unverified: \(String(describing: error), privacy: .public)")
+            return .problem(.unverified(String(describing: error)))
+        }
+    }
+
+    /// Verified, the install is decided for the rest of the launch: TestFlight
+    /// (sandbox) or not. Otherwise it stays undecided, and so not enforced
+    /// (`enforced`), with the reason kept for the paywall.
+    private func settleInstall(_ outcome: InstallOutcome) {
+        guard case let .verified(install) = outcome else {
+            if case let .problem(problem) = outcome { installProblem = problem }
+            log.notice("install: undecided; read again on a StoreKit update or Restore purchase")
+            return
+        }
         let opened = boardOpen
+        installProblem = nil
         appTransaction = install.jws
         testFlight = install.environment == .sandbox
         log.notice("install: decided, TestFlight \(install.environment == .sandbox), enforced \(self.enforced)")
@@ -281,12 +305,15 @@ public final class Pro {
     }
 
     /// At launch: the listener first, so nothing that arrives meanwhile is
-    /// missed, then whatever was left unfinished, the entitlements and the catalogue.
+    /// missed, then whatever was left unfinished, the entitlements, the
+    /// catalogue and the install's one read. An update means StoreKit has an
+    /// account to answer for, so an undecided install is read again on it.
     public func start() {
         guard updates == nil else { return }
         updates = Task { [weak self] in
             for await result in Transaction.updates {
                 await self?.settle(result)
+                self?.readInstall()
             }
         }
         Task {
@@ -296,10 +323,7 @@ public final class Pro {
             await refresh()
         }
         Task { await loadProducts() }
-        readInstall(waits: Self.installWaits)
-        foreground = NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.readInstall(waits: []) }
-        }
+        readInstall()
     }
 
     /// The price StoreKit gives, or nil until it arrives. Never a price of our own.
@@ -380,13 +404,29 @@ public final class Pro {
         }
     }
 
-    /// Restore purchase: the App Store is asked again, then the entitlements are read.
+    /// Restore purchase, on the person's tap, then the entitlements are read.
+    /// Both of StoreKit's calls for it put up an App Store sign-in of their
+    /// own, so one tap makes one of them: while the install is undecided,
+    /// `AppTransaction.refresh()`, which signs the person in and decides the
+    /// install; once it's decided, `AppStore.sync()`.
     public func restore() async -> ProRestoreOutcome {
-        do {
-            try await AppStore.sync()
-        } catch {
-            log.error("restore failed: \(String(describing: error), privacy: .public)")
-            return .failed
+        // The launch's read may still be out: its answer decides which call this is.
+        await installRead?.value
+        if testFlight == nil {
+            do {
+                settleInstall(outcome(of: try await AppTransaction.refresh(), read: "restore"))
+            } catch {
+                log.error("restore: AppTransaction refresh failed: \(String(describing: error), privacy: .public)")
+                installProblem = .unavailable(String(describing: error))
+                return .failed
+            }
+        } else {
+            do {
+                try await AppStore.sync()
+            } catch {
+                log.error("restore failed: \(String(describing: error), privacy: .public)")
+                return .failed
+            }
         }
         let unverified = await refresh()
         guard let access else { return .failed }

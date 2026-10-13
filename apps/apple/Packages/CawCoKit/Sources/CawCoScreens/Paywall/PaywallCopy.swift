@@ -63,6 +63,15 @@ enum PaywallCopy {
         static let unavailable = "The App Store didn't answer."
         static let tryAgain = "Try again"
         static let failed = "The App Store didn't complete that. Nothing was charged."
+
+        /// The launch's read of the install didn't decide it: only Restore
+        /// purchase asks the App Store again, and signs in if it must.
+        static func install(_ problem: InstallProblem) -> String {
+            switch problem {
+            case .unavailable: "The App Store couldn't check your purchase: this device may not be signed in to it. Restore purchase to sign in and check again."
+            case .unverified: "The App Store's record of this install couldn't be verified. Restore purchase to check it again."
+            }
+        }
     }
 
     /// G: the bar over the locked board.
