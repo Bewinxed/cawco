@@ -153,18 +153,44 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
 
     override func widthChanged() {
         if reveal.isOpen { fillBody(force: true) }
+        if !preview.isHidden { previewChanged() }
     }
 
     private var block: Block?
 
-    /// A `show_preview` card: full presence while the session's open preview
-    /// shows this call's page. Called again when the preview changes.
+    /// An `artifact_create` or `artifact_show` card (ToolGroup.svelte
+    /// `.preview-tool`): full presence while the session's open preview shows
+    /// this call's artifact. Called again when the preview changes.
     func previewChanged() {
         guard let block, Self.describe(block).renderer == .preview else { return }
         let input = block.toolInput
-        let shown = env.hub?.previews.byInstance[env.sessionId]
-        let opened = shown?.state == .open && shown.flatMap(PreviewKey.of) == PreviewKey.of(ask: input)
-        preview.configure(input, opened: opened) { [weak self] in self?.env.openPreview(input) }
+        let artifact = PreviewKey.of(ask: input, result: ToolDescriptor.resultField(block.meta["toolResult"])?.text)
+        let previews = env.hub?.previews
+        let current = previews?.byInstance[env.sessionId]
+        let shown = artifact != nil && current.flatMap(PreviewKey.of) == artifact ? current : nil
+        let opened = shown?.state == .open
+        preview.configure(input, shown: shown, opened: opened, openable: artifact != nil,
+                          opening: artifact.map { previews?.opening.contains($0) == true } ?? false,
+                          failure: artifact.flatMap { previews?.openFailed[$0] }, width: bodyWidth) { [weak self] in
+            self?.openArtifact(input, artifact: artifact, opened: opened)
+        }
+    }
+
+    /// ToolGroup.svelte's card press: an artifact the preview shows comes
+    /// into view; another one the hub opens first (`artifact_show`'s route),
+    /// and why it could not stands under the card, which is still the way to
+    /// try again.
+    private func openArtifact(_ input: [String: Any], artifact: String?, opened: Bool) {
+        if opened {
+            env.openPreview(input)
+            return
+        }
+        guard let artifact, let hub = env.hub else { return }
+        hub.openArtifact(artifact, in: env.sessionId) { [weak self] didOpen in
+            self?.previewChanged()
+            if didOpen { self?.env.openPreview(input) }
+        }
+        previewChanged()
     }
 
     func configure(_ item: Item) {
@@ -452,14 +478,19 @@ final class CappedText: UIView {
     private var remeasuredAt: CGFloat?
 }
 
-/// A `show_preview` call (ToolGroup `.preview-tool`): the artifact's card,
-/// its mark, title and path. A tap opens its page in the session's preview;
-/// while that preview shows something else, or nothing, the card stands at
-/// half presence, as the web draws a preview this tab has not opened.
+/// An `artifact_create` or `artifact_show` call (ToolGroup `.preview-tool`):
+/// the artifact's card, its mark, name and place. A tap opens it in the
+/// session's preview; while that preview shows something else, or nothing,
+/// the card stands at half presence, as the web draws a preview this tab
+/// has not opened. A failed open is said under the card (`.open-fault`).
 final class PreviewCard: UIView {
+    private let card = UIView()
     private let title = LineLabel()
     private let path = LineLabel()
+    private let fault = WrapLabel(wrap: .pretty)
     private var onOpen: () -> Void = {}
+    private var cardBottom: NSLayoutConstraint!
+    private var faultBottom: NSLayoutConstraint!
 
     init() {
         super.init(frame: .zero)
@@ -468,7 +499,6 @@ final class PreviewCard: UIView {
         isAccessibilityElement = true
         accessibilityTraits = .button
         accessibilityHint = "Opens the preview"
-        let card = UIView()
         card.translatesAutoresizingMaskIntoConstraints = false
         card.backgroundColor = Palette.surfaceRaised
         card.layer.cornerRadius = Radius.radiusMd
@@ -485,6 +515,22 @@ final class PreviewCard: UIView {
         let row = railLine([mark, words])
         card.pin(row, insets: UIEdgeInsets(top: Space.space2 * 2, left: Space.space2 * 2, bottom: Space.space2 * 2, right: Space.space2 * 2))
         addSubview(card)
+        // `.open-fault`: `margin: calc(-1 * --space-1) 0 --space-2` under the
+        // card's own `--space-2`, at most the card's width.
+        fault.translatesAutoresizingMaskIntoConstraints = false
+        fault.isHidden = true
+        addSubview(fault)
+        cardBottom = card.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Space.space2)
+        faultBottom = fault.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Space.space2)
+        let faultFills = fault.trailingAnchor.constraint(equalTo: trailingAnchor)
+        faultFills.priority = .defaultHigh
+        NSLayoutConstraint.activate([
+            fault.topAnchor.constraint(equalTo: card.bottomAnchor, constant: Space.space1),
+            fault.leadingAnchor.constraint(equalTo: leadingAnchor),
+            fault.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
+            fault.widthAnchor.constraint(lessThanOrEqualToConstant: Size.txPreviewMax),
+            faultFills,
+        ])
         NSLayoutConstraint.activate([
             mark.widthAnchor.constraint(equalToConstant: Size.rowMark),
             mark.heightAnchor.constraint(equalToConstant: Size.rowMark),
@@ -494,15 +540,15 @@ final class PreviewCard: UIView {
             card.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
             card.widthAnchor.constraint(lessThanOrEqualToConstant: Size.txPreviewMax),
             card.topAnchor.constraint(equalTo: topAnchor, constant: Space.space2),
-            card.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Space.space2),
+            cardBottom,
             card.heightAnchor.constraint(greaterThanOrEqualToConstant: Size.txPreviewMin),
         ])
         card.boxShadow = Shadow.shadowTile
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: PreviewCard, _: UITraitCollection) in view.paint(card) }
-        paint(card)
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: PreviewCard, _: UITraitCollection) in view.paint() }
+        paint()
     }
 
-    private func paint(_ card: UIView) {
+    private func paint() {
         card.layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
     }
 
@@ -511,16 +557,52 @@ final class PreviewCard: UIView {
 
     @objc private func open() { onOpen() }
 
-    func configure(_ input: [String: Any], opened: Bool, onOpen: @escaping () -> Void) {
-        self.onOpen = onOpen
-        alpha = opened ? 1 : 0.5
-        title.attributedText = Styled.string("Preview", TypeScale.typeLabel, color: Palette.inkStrong, leading: TypeScale.leadingRoot)
-        // source.ts `previewPlace`: a decision page by name, a folder by its leaf.
-        let place = (input["page"] as? String).map { "decisions/\($0)" }
-            ?? (input["dir"] as? String).map(ToolDescriptor.pathLeaf) ?? ""
+    /// `shown`: the session's preview frame when it is this call's artifact;
+    /// `openable`: the call names an artifact (an `artifact_create` still
+    /// running, or refused, names none); `width`: the row's body width.
+    func configure(_ input: [String: Any], shown: PreviewFrame?, opened: Bool, openable: Bool, opening: Bool,
+                   failure: String?, width: CGFloat?, onOpen: @escaping () -> Void) {
+        self.onOpen = openable && !opening ? onOpen : {}
+        card.alpha = opened ? 1 : 0.5
+        // ToolGroup's `name`: the call's own (`artifact_create`'s), else the shown artifact's.
+        let name = (input["name"] as? String) ?? shown?.artifact.name ?? "Artifact"
+        title.attributedText = Styled.string(opening ? "Opening…" : name, TypeScale.typeLabel, color: Palette.inkStrong, leading: TypeScale.leadingRoot)
+        let place = Self.place(input, shown: shown)
         path.attributedText = Styled.string(place, TypeScale.typeMeta, color: Palette.inkMuted, size: TypeScale.textMeta, leading: TypeScale.leadingRoot, mono: true)
         path.isHidden = place.isEmpty
-        accessibilityLabel = place.isEmpty ? "Preview" : "Preview, \(place)"
+        accessibilityLabel = place.isEmpty ? name : "\(name), \(place)"
+        accessibilityTraits = openable && !opening ? .button : [.button, .notEnabled]
+        accessibilityValue = opening ? "Opening" : nil
+        let said = failure.map { "Couldn't open \(name): \($0) Press it to try again." }
+        accessibilityHint = said ?? "Opens the preview"
+        fault.fitWidth = width.map { min($0, CGFloat(Size.txPreviewMax)) }
+        guard said != saying else { return }
+        saying = said
+        fault.attributedText = Styled.string(said ?? "", TypeScale.typeMeta, color: Palette.dataBad, size: TypeScale.textMeta,
+                                             weight: TypeScale.weightBody, leading: TypeScale.leadingRoot)
+        fault.isHidden = said == nil
+        cardBottom.isActive = said == nil
+        faultBottom.isActive = said != nil
+        // `role="alert"`: said as it appears.
+        if let said, window != nil { UIAccessibility.post(notification: .announcement, argument: said) }
+        if window != nil { remeasureRow() }
+    }
+
+    /// The fault the card says now.
+    private var saying: String?
+
+    /// Where the artifact is (source.ts `previewPlace`, the call's kind before
+    /// it is shown): the shown preview's source; else the call's folder, its
+    /// dev server, or its kind.
+    private static func place(_ input: [String: Any], shown: PreviewFrame?) -> String {
+        if let source = shown?.source {
+            if let page = source.value3?.page { return page }
+            if let dir = source.value2?.dir { return ToolDescriptor.pathLeaf(dir) }
+            if let port = source.value1?.port { return "localhost:\(Int(port))" }
+        }
+        if let dir = input["dir"] as? String { return ToolDescriptor.pathLeaf(dir) }
+        if let port = (input["port"] as? Int) ?? (input["port"] as? Double).map(Int.init) { return "localhost:\(port)" }
+        return input["kind"] as? String ?? ""
     }
 }
 

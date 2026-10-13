@@ -3,14 +3,15 @@ import CawCoDesign
 import UIKit
 import WebKit
 
-/// A session's preview (preview/PreviewPane.svelte): its header (title and
-/// path, Select, Reload, Close) over the page, which a web view loads from
-/// the hub's preview listener, naming the session in its `cawco-preview`
-/// cookie. The page carries the agent's overlay, which talks to its host as
-/// an iframe talks to the dashboard: the script injected here stands in for
-/// that parent window, so the overlay and its element picker run unchanged.
-/// The page keeps its own state in its artifact's document, which the
-/// overlay joins itself.
+/// A session's preview (preview/PreviewPane.svelte): its header (the
+/// artifact's name and path, Send picks, Select, Reload, Close) over the
+/// page, which a web view loads from the hub's preview listener, naming the
+/// session in its `cawco-preview` cookie. The page carries the agent's
+/// overlay, which talks to its host as an iframe talks to the dashboard: the
+/// script injected here stands in for that parent window, so the overlay and
+/// its element picker run unchanged. The page keeps its own state in its
+/// artifact's document, which the overlay joins itself on the path the
+/// hello names (Projects spec §5.10).
 final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate {
     private let hub: HubConnection
     let instanceId: String
@@ -20,6 +21,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var web: WKWebView!
     private let titleLabel = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
     private let pathLabel = KitLabel(TypeScale.typeCode.with(points: TypeScale.typeMeta.points), ink: Palette.inkMuted)
+    /// Send picks: a page's only (a dev server's app keeps its own state).
+    private var sendButton: UIButton!
+    private var sending = false
     private var selectButton: UIButton!
     private var reloadButton: UIButton!
     private var closeButton: UIButton!
@@ -33,6 +37,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private let well = UIView()
     private let cover = UIView()
     private let failure = KitAlert(tone: .destructive)
+    /// What the band's failure is of (PreviewPane.svelte `failure.again`):
+    /// "send" goes again from Send picks, "field" clears when the page keeps
+    /// the field after all; nil, anything else, goes again from Reload.
+    private var failureOf: String?
     private var revision: String?
     private var origin: URL?
     private var selecting = false
@@ -67,6 +75,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             part.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             part.setContentHuggingPriority(.defaultLow, for: .horizontal)
         }
+        sendButton = KitButton.make("Send picks", glyph: Glyph.send, variant: .ghost, height: .sm) { [weak self] in self?.send() }
+        sendButton.isHidden = true
+        sendButton.isEnabled = false
         selectButton = KitButton.make("Select", glyph: .toolScreen, variant: .ghost, height: .sm) { [weak self] in
             guard let self else { return }
             select(!selecting)
@@ -90,12 +101,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         closeButton = KitButton.make("", glyph: .close, variant: .ghost, height: .sm) { [weak self] in self?.close() }
         closeButton.accessibilityLabel = "Close"
         selectButton.isEnabled = false
-        let head = UIStackView(arrangedSubviews: [identity, selectButton, reload, closeButton])
+        let head = UIStackView(arrangedSubviews: [identity, sendButton, selectButton, reload, closeButton])
         head.spacing = Space.space1
         head.alignment = .center
         head.translatesAutoresizingMaskIntoConstraints = false
         dragArea = head
-        for button in [selectButton!, reload, closeButton!] {
+        for button in [sendButton!, selectButton!, reload, closeButton!] {
             button.setContentHuggingPriority(.required, for: .horizontal)
             button.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
@@ -132,7 +143,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // The grabber, `space-1` from the top, centred, 100×6 in the control
         // edge; its hit area is 44pt tall about it (vaul's handle hit area),
         // over the header, which yields to the header's actions.
-        grabArea.yields = [selectButton, reload, closeButton]
+        grabArea.yields = [sendButton, selectButton, reload, closeButton]
         grabber.translatesAutoresizingMaskIntoConstraints = false
         grabber.backgroundColor = Palette.borderControl
         grabber.layer.cornerRadius = 3
@@ -195,18 +206,20 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     /// The preview as the hub says it now: a new revision (another page, or
-    /// the same rebuilt) loads afresh, named by its source until the page
+    /// the same rebuilt) loads afresh, named by its artifact until the page
     /// says its own title and path. The same revision keeps what the page said.
     func show() {
         guard isViewLoaded, let frame = hub.previews.byInstance[instanceId], frame.state == .open,
               let origin = hub.previewOrigin(frame) else { return }
         guard frame.revision != revision else { return }
         revision = frame.revision
-        titleLabel.text = frame.source?.value3.map { _ in "Decision page" } ?? "Preview"
+        titleLabel.text = frame.artifact.name
         pathLabel.text = Self.place(frame)
         self.origin = origin
         connected = false
         selectButton.isEnabled = false
+        sendButton.isHidden = frame.artifact.kind != .page
+        sendButton.isEnabled = false
         cover.alpha = 1
         let cookie = HTTPCookie(properties: [
             .name: "cawco-preview", .value: instanceId, .domain: origin.host() ?? "", .path: "/",
@@ -223,12 +236,20 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     func webView(_: WKWebView, didFinish _: WKNavigation!) {
         Motion.easeOut.animator(Motion.durControl) { self.cover.alpha = 0 }.startAnimation()
-        // The overlay answers its host's hello with `cawco:ready`.
-        deliver(["type": "cawco:hello"])
+        // PreviewPane.svelte `announce`: the overlay answers with `cawco:ready`
+        // and joins the artifact's doc on the listener's own origin, where
+        // the page's cookie reaches it.
+        guard let frame = hub.previews.byInstance[instanceId], frame.state == .open else { return }
+        let artifact = frame.artifact
+        deliver([
+            "type": "cawco:hello",
+            "artifact": ["id": artifact.id, "kind": artifact.kind.rawValue, "name": artifact.name],
+            "sync": "/__cawco/artifact/\(artifact.id)",
+        ])
     }
 
-    func webView(_: WKWebView, didFail _: WKNavigation!, withError error: any Error) { failed(error.localizedDescription) }
-    func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError error: any Error) { failed(error.localizedDescription) }
+    func webView(_: WKWebView, didFail _: WKNavigation!, withError error: any Error) { failed(error.localizedDescription, of: nil) }
+    func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError error: any Error) { failed(error.localizedDescription, of: nil) }
 
     /// What the page posted to its host: the overlay's messages (wire.ts
     /// reads them the same way). The page is code an agent wrote: every
@@ -245,6 +266,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             if body["type"] as? String == "cawco:ready" {
                 connected = true
                 selectButton.isEnabled = true
+                sendButton.isEnabled = true
                 select(selecting)
             }
         case "cawco:selected":
@@ -255,14 +277,46 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             }
             UISelectionFeedbackGenerator().selectionChanged()
             onSelect(attachments)
-            if let error = Self.text(body["error"], 300) { failed(error) }
+            if let error = Self.text(body["error"], 300) { failed(error, of: nil) }
         case "cawco:escape":
             select(false)
         case "cawco:error":
-            failed(Self.text(body["message"], 300) ?? "The preview reported an error.")
+            // wire.ts `previewErrorOf`: a send or a field carry their own way back.
+            let of = Self.text(body["of"], 20).flatMap { ["send", "field"].contains($0) ? $0 : nil }
+            failed(Self.text(body["message"], 300) ?? "The preview reported an error.", of: of)
+        case "cawco:resolved":
+            // The page kept the field it refused: its word leaves the band.
+            if failureOf == "field" { clearFailure() }
         default:
             break
         }
+    }
+
+    /// Send picks (PreviewPane.svelte `send`): the page's own `cawco.send`,
+    /// which sends every pick to the session as one message. A refusal
+    /// arrives as `cawco:error {of: "send"}` and stands in the band, Send
+    /// still reachable; the overlay posts nothing when it lands, so the
+    /// send's own promise says when it is done.
+    private func send() {
+        guard !sending, connected else { return }
+        sending = true
+        paintSend()
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                _ = try await web.callAsyncJavaScript("await window.cawco.send();", contentWorld: .page)
+                if failureOf == "send" { clearFailure() }
+            } catch {
+                // Its sentence came first, as `cawco:error`.
+            }
+            sending = false
+            paintSend()
+        }
+    }
+
+    private func paintSend() {
+        sendButton.configuration?.showsActivityIndicator = sending
+        KitButton.setTitle(sending ? "Sending…" : "Send picks", of: sendButton, variant: .ghost, height: .sm)
     }
 
     private func select(_ on: Bool) {
@@ -274,14 +328,20 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     private func reload() {
-        failure.isHidden = true
+        clearFailure()
         revision = nil
         show()
     }
 
-    private func failed(_ message: String) {
+    private func failed(_ message: String, of: String?) {
+        failureOf = of
         failure.label.text = message
         failure.isHidden = false
+    }
+
+    private func clearFailure() {
+        failureOf = nil
+        failure.isHidden = true
     }
 
     private func paintWell() {
@@ -310,7 +370,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             do {
                 try await hub.closePreview(instanceId)
             } catch {
-                failed(error.localizedDescription)
+                failed(error.localizedDescription, of: nil)
                 refused()
             }
             closing = false
@@ -371,10 +431,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         """
     }
 
-    /// source.ts `previewPlace`.
+    /// source.ts `previewPlace`: a page by its name, a folder by its leaf, a dev server by its port.
     private static func place(_ frame: PreviewFrame) -> String {
-        if let page = frame.source?.value3?.page { return "decisions/\(page)" }
+        if let page = frame.source?.value3?.page { return page }
         if let dir = frame.source?.value2?.dir { return (dir as NSString).lastPathComponent }
+        if let port = frame.source?.value1?.port { return "localhost:\(Int(port))" }
         return ""
     }
 

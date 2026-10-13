@@ -353,12 +353,12 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     /// The preview's key the transcript's cards were last drawn against.
     private var drawnPreview: String?
 
-    /// A preview card was tapped: the open preview it shows comes into view.
-    private func openPreview(_ input: [String: Any]) {
-        if let shown = hub.previews.byInstance[sessionId], shown.state == .open,
-           PreviewKey.of(shown) == PreviewKey.of(ask: input), let preview {
-            reveal(preview)
-        }
+    /// A preview card was pressed while the preview shows its artifact, or
+    /// once the hub opened it (the card's `artifact_show` route, ToolGroup's
+    /// `revealPreview` after `showArtifact`): the open preview comes into view.
+    private func openPreview(_: [String: Any]) {
+        guard hub.previews.byInstance[sessionId]?.state == .open, let preview else { return }
+        reveal(preview)
     }
 
     /// The preview as the hub says it: open, beside the transcript on a

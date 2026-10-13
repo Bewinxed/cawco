@@ -12,6 +12,10 @@ public typealias PreviewFrame = Components.Schemas.PreviewFrame
 @Observable
 public final class PreviewStore {
     public private(set) var byInstance: [String: PreviewFrame] = [:]
+    /// Artifacts whose open request is out (ToolGroup.svelte `opening`).
+    public private(set) var opening: Set<String> = []
+    /// Why an artifact's last open failed, said under the call that asked (ToolGroup.svelte `openFailed`).
+    public private(set) var openFailed: [String: String] = [:]
 
     public init() {}
 
@@ -30,6 +34,16 @@ public final class PreviewStore {
         for frame in frames { adopt(frame) }
     }
 
+    func began(_ artifactId: String) {
+        opening.insert(artifactId)
+        openFailed[artifactId] = nil
+    }
+
+    func ended(_ artifactId: String, failure: String?) {
+        opening.remove(artifactId)
+        openFailed[artifactId] = failure
+    }
+
     func closed(_ instanceId: String) {
         guard var frame = byInstance[instanceId] else { return }
         frame.state = .closed
@@ -38,30 +52,61 @@ public final class PreviewStore {
 
     func reset() {
         byInstance = [:]
+        opening = []
+        openFailed = [:]
     }
 }
 
-/// One string per thing a preview shows (source.ts `previewSourceKey`): a
-/// call's card is "opened" when the session's open preview shows the same.
+/// What a preview shows is an artifact, named by its id (ToolGroup.svelte
+/// `sameArtifact`): a call's card is "opened" when the session's open
+/// preview shows the artifact the call made or showed.
 public enum PreviewKey {
-    public static func of(ask input: [String: Any]) -> String? {
-        if let page = input["page"] as? String { return "page:\(page)" }
-        if let port = input["port"] as? Int { return "port:\(port)" }
-        if let port = input["port"] as? Double { return "port:\(Int(port))" }
-        if let dir = input["dir"] as? String { return "dir:\(dir)" }
-        return nil
+    /// The artifact a call names (source.ts `calledArtifact`): `artifact_show`'s
+    /// `id`, or the one `artifact_create` answered with (`{id, kind, name, route, opened}`);
+    /// nil until the call has one, and for a refusal's sentence.
+    public static func of(ask input: [String: Any], result: String?) -> String? {
+        if let id = input["id"] as? String, id.wholeMatch(of: /[0-9a-f-]{36}/) != nil { return id }
+        guard let data = result?.data(using: .utf8),
+              let answer = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let id = answer["id"] as? String, id.wholeMatch(of: /[0-9a-f-]{36}/) != nil else { return nil }
+        return id
     }
 
     public static func of(_ frame: PreviewFrame) -> String? {
-        guard let source = frame.source else { return nil }
-        if let page = source.value3?.page { return "page:\(page)" }
-        if let port = source.value1?.port { return "port:\(Int(port))" }
-        if let dir = source.value2?.dir { return "dir:\(dir)" }
-        return nil
+        frame.artifact.id
     }
 }
 
 public extension HubConnection {
+    /// Brings one of a session's artifacts to the front of its panel
+    /// (ToolGroup.svelte `openArtifact`, `artifact_show`'s route). The hub
+    /// sends the preview's frame when it opens; until it answers the artifact
+    /// is `opening`, and a refusal's sentence stays in `openFailed` until the
+    /// next try. `done` hears whether it opened.
+    func openArtifact(_ id: String, in instanceId: String, done: @escaping @MainActor (Bool) -> Void = { _ in }) {
+        guard !previews.opening.contains(id) else { return }
+        previews.began(id)
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do {
+                let output = try await api.instances.showArtifact(.init(path: .init(id: instanceId, artifact: id)))
+                guard case .ok = output else { throw await TaskRefusal.reading(output) }
+                previews.ended(id, failure: nil)
+                done(true)
+            } catch {
+                previews.ended(id, failure: Self.sentence(error))
+                done(false)
+            }
+        }
+    }
+
+    /// An error as the formula's middle sentence: a refusal's words, a lost connection's.
+    private static func sentence(_ error: any Error) -> String {
+        if let refusal = error as? TaskRefusal { return refusal.message }
+        if error is URLError { return "The hub could not be reached." }
+        return error.localizedDescription
+    }
+
     func closePreview(_ instanceId: String) async throws {
         guard let client else { throw TaskRefusal(message: "No hub is connected.") }
         let output = try await client.deleteApiInstancesByIdPreview(path: .init(id: instanceId))
@@ -78,7 +123,7 @@ public extension HubConnection {
         return parts.url
     }
 
-    /// The page a preview opens at: the one its `show_preview` named
+    /// The page a preview opens at: the one its `artifact_create` named
     /// (`path`, on a dev server or folder), else the listener's root.
     func previewStart(_ frame: PreviewFrame) -> URL? {
         guard let origin = previewOrigin(frame) else { return nil }

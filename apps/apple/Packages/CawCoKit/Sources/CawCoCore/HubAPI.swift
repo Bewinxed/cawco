@@ -60,6 +60,7 @@ public struct HubAPI: Sendable {
         public func continuations(_ input: Operations.GetApiContinuations.Input = .init()) async throws -> Operations.GetApiContinuations.Output { try await client.getApiContinuations(input) }
         public func cancelContinuation(_ input: Operations.DeleteApiContinuationsById.Input) async throws -> Operations.DeleteApiContinuationsById.Output { try await client.deleteApiContinuationsById(input) }
         public func closePreview(_ input: Operations.DeleteApiInstancesByIdPreview.Input) async throws -> Operations.DeleteApiInstancesByIdPreview.Output { try await client.deleteApiInstancesByIdPreview(input) }
+        public func showArtifact(_ input: Operations.PostApiInstancesByIdArtifactsByArtifactShow.Input) async throws -> Operations.PostApiInstancesByIdArtifactsByArtifactShow.Output { try await client.postApiInstancesByIdArtifactsByArtifactShow(input) }
         public func generateImage(_ input: Operations.PostApiInstancesByIdGenerateImage.Input) async throws -> Operations.PostApiInstancesByIdGenerateImage.Output { try await client.postApiInstancesByIdGenerateImage(input) }
         public func media(_ input: Operations.GetApiMediaByName.Input) async throws -> Operations.GetApiMediaByName.Output { try await client.getApiMediaByName(input) }
         public func markSeen(_ input: Operations.PostApiSeen.Input) async throws -> Operations.PostApiSeen.Output { try await client.postApiSeen(input) }
