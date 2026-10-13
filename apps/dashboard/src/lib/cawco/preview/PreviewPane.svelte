@@ -579,13 +579,14 @@
     closeCard();
     comment(true, id);
   }
-  function reply(text: string) {
+  function reply(text: string): boolean {
     if (!openPin) {
-      return;
+      return false;
     }
     cardError = doc
       ? doc.reply(openPin, text)
       : "The pane lost the page's document, so the reply wasn't kept. Reload, then reply again.";
+    return cardError === null;
   }
   function resolvePin(resolved: boolean) {
     if (openPin) {

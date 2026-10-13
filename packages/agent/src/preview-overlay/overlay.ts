@@ -172,7 +172,6 @@ const ink = startInk({
   anchorOf,
   chrome,
   capture: pageCapture,
-  commenting: () => commenting,
   describe,
   elementAt,
   locate,

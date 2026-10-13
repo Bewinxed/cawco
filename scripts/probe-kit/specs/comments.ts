@@ -181,6 +181,26 @@ const pinNumbered = (pins: Pins, number: number) =>
       })
     | undefined;
 
+/**
+ * Until the page has heard the pane's mode: the overlay's layer takes the
+ * page's presses in Comment mode. A person's next tap comes long after the
+ * message; the probe's comes in the same frame unless it waits.
+ */
+const pageInComment = (frame: Frame, on: boolean) =>
+  until(
+    `the page's Comment mode ${on ? "on" : "off"}`,
+    () =>
+      frame.evaluate(
+        () =>
+          document
+            .querySelector("cawco-overlay")
+            ?.shadowRoot?.querySelector(".layer")
+            ?.classList.contains("comment") ?? false
+      ),
+    (mode) => mode === on,
+    5000
+  );
+
 /** The overlay's outline over the page, in the frame's viewport. */
 const outlineOf = (frame: Frame) =>
   frame.evaluate(() => {
@@ -251,6 +271,7 @@ const commentChecks = async (on: On, frame: Frame) => {
   );
   await comment.focus();
   await on.page.keyboard.press("c");
+  await pageInComment(frame, true);
   // The edge comes in over --dur-control: read once it has.
   await settle(on.page, 300);
   const edge = await on.page.evaluate(() => {
@@ -326,21 +347,41 @@ const commentChecks = async (on: On, frame: Frame) => {
 
 /** 2. The radial's Comment on a stroke, the list's two rows, J and K. */
 const inkCommentChecks = async (on: On, frame: Frame) => {
+  // What reaches the page past the overlay's capture listeners: a pen the ink took never does.
+  await frame.evaluate(() => {
+    const seen: string[] = [];
+    (window as unknown as { __pens: string[] }).__pens = seen;
+    for (const type of ["pointerdown", "pointerup"]) {
+      addEventListener(
+        type,
+        (event) => {
+          const e = event as PointerEvent;
+          seen.push(
+            `${type} ${e.pointerType} ${(e.target as Element).localName}`
+          );
+        },
+        true
+      );
+    }
+  });
   const { from } = await strokeOver(on, frame, "#second");
   const drawn = Object.keys((await docOf(frame)).ink).length;
   if (drawn === 0) {
     const outer = await on.page
       .locator('iframe[title="Preview"]')
       .boundingBox();
-    const hit = await frame.evaluate(
+    const state = await frame.evaluate(
       ([x, y]) => {
         const el = document.elementFromPoint(x, y);
-        return `${el?.localName}${el?.id ? `#${el.id}` : ""} pe=${el ? getComputedStyle(el).pointerEvents : ""}`;
+        const layer = document
+          .querySelector("cawco-overlay")
+          ?.shadowRoot?.querySelector(".layer");
+        return `hit ${el?.localName}${el?.id ? `#${el.id}` : ""}; layer ${layer?.className}; past the overlay ${(window as unknown as { __pens: string[] }).__pens.join(", ") || "nothing"}`;
       },
       [from.x - (outer?.x ?? 0), from.y - (outer?.y ?? 0)]
     );
     on.kit.note(
-      `the stroke over #second kept no group: the page hit ${hit} at its start; said ${on.said.join(" | ") || "nothing"}`
+      `the stroke over #second kept no group: ${state}; the pane's well ${JSON.stringify(outer)}; said ${on.said.join(" | ") || "nothing"}`
     );
   }
   await dragFromIcon(on, frame, 0, 40);
@@ -626,6 +667,7 @@ const anchorChecks = async (on: On, frame: Frame, id: string, one: string) => {
   );
   const modeBefore = await commentButton.getAttribute("aria-pressed");
   await tray.getByRole("button", { name: "Place again" }).click();
+  await pageInComment(frame, true);
   const during = await commentButton.getAttribute("aria-pressed");
   const b = await screenBox(on, frame, "#third");
   await on.page.mouse.click(b.x + b.w * 0.5, b.y + b.h / 2);

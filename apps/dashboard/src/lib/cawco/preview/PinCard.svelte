@@ -43,7 +43,8 @@
     thumb: string | null;
     /** What went wrong with the last reply, resolve or send, in the error formula. */
     problem: string | null;
-    onreply: (text: string) => void;
+    /** Keeps the person's words in the thread: true once kept, false when refused (its reason is `problem`). */
+    onreply: (text: string) => boolean;
     onresolve: (resolved: boolean) => void;
     onclose: () => void;
     onpicture: (from: HTMLElement) => void;
@@ -83,8 +84,10 @@
     if (!text) {
       return;
     }
-    onreply(text);
-    draft = "";
+    // A refused reply stays in the field, its reason under it.
+    if (onreply(text)) {
+      draft = "";
+    }
   }
 
   $effect(() => {

@@ -2,8 +2,8 @@
 
 /**
  * Ink on any artifact (Projects spec §5.10, D27; DESIGN.md, Artifact panel,
- * canvas and ink: "Ink on any artifact"). A pen inks at once; a finger and a
- * mouse never do (Comment is its own mode, and while it is on nothing inks).
+ * canvas and ink: "Ink on any artifact"). A pen inks at once, in Comment
+ * mode too; a finger and a mouse never do (in Comment mode they pin).
  *
  * The ink is an `<svg>` in the page's own document, at its origin and as big
  * as its scroll, so it scrolls with the page and never shifts; it takes the
@@ -91,8 +91,6 @@ export interface InkDeps {
   /** The page as a picture at `scale`, ink and all, the overlay's own UI left out. */
   capture: (scale?: number) => Promise<{ png: string | null; error?: string }>;
   chrome: InkChrome;
-  /** Whether Comment mode is on: nothing inks while it is. */
-  commenting: () => boolean;
   describe: (el: Element) => PinnedElement;
   elementAt: (x: number, y: number) => Element | null;
   /** Where a page's anchor stands now, and by what; null when nothing on the page matches it. */
@@ -201,8 +199,8 @@ export function startInk(deps: InkDeps): Ink {
   document.documentElement.append(layer);
 
   const onCanvas = () => artifact.kind() === "canvas";
-  /** Whether a pen inks here now: a page with a doc to keep it, not in Comment mode. */
-  const inks = () => !(onCanvas() || deps.commenting()) && artifact.keeps();
+  /** Whether a pen inks here now: a page with a doc to keep it. */
+  const inks = () => !onCanvas() && artifact.keeps();
   const maps = () => {
     const doc = artifact.doc();
     return {
