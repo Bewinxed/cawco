@@ -13,8 +13,8 @@
  * WHEN A PEER FALLS TOO FAR BEHIND. A socket owing more than
  * `WIRE_MESSAGE_LIMIT_BYTES` is closed (1013, try again later). A dashboard
  * reconnects by itself and is sent the whole board on open (server.ts
- * `/ws/dashboard` open: `instancesFrame("")`), and each session it follows
- * again from its own cursor (stream.ts `subscribe`, `afterSeq`). An agent
+ * `/ws/dashboard` open: `instancesFrame("")`), and reads each session it
+ * follows again, whose page subscribes it (stream.ts `subscribe`). An agent
  * reconnects, registers, and the register ack's ledger tells it where every
  * session's frames resume (server.ts `registerAck`).
  */

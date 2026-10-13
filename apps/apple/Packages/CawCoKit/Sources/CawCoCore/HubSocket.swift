@@ -30,6 +30,7 @@ struct HubSocket: Sendable {
 
     let events: AsyncThrowingStream<Event, any Error>
     private let task: URLSessionWebSocketTask
+    private let continuation: AsyncThrowingStream<Event, any Error>.Continuation
 
     /// `hub` is the hub's http(s) address; the socket is its `/ws/dashboard`.
     init(hub: URL) {
@@ -80,6 +81,15 @@ struct HubSocket: Sendable {
         task.resume()
         self.events = events
         self.task = task
+        self.continuation = continuation
+    }
+
+    /// Ends a socket the heartbeat found dead, now: its stream finishes
+    /// throwing `timedOut`, and that termination cancels the task. The
+    /// close is not waited for: its handshake needs an answer from the peer
+    /// that went silent.
+    func dead() {
+        continuation.finish(throwing: URLError(.timedOut))
     }
 
     /// Puts one message on the socket, as one frame or, past one frame, as

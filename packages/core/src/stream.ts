@@ -74,7 +74,13 @@ export interface SessionStreamEvent {
 /**
  * Client → hub. `afterSeq` present is a resume ("I have up to here — replay the
  * rest"): a client sends it with the `seq` its transcript page was read at, and
- * again after a reconnect. Absent is a fresh join ("start me from now").
+ * when a delta skips a seq on the same socket. Absent is a fresh join ("start
+ * me from now").
+ *
+ * Never across a connection: the hub numbers a session's stream in memory,
+ * from 1 again when its process restarts, so a cursor from the socket before
+ * may name another process's events. A client that reconnects reads each
+ * transcript it follows again, and that read's page subscribes it.
  */
 export interface StreamSubscribe {
   afterSeq?: number;
@@ -151,16 +157,38 @@ export interface CommandAck {
   type: "command.ack";
 }
 
+/**
+ * Client → hub, and the hub's answer, the same shape: "are you there?" and
+ * "yes", sent at once. A client sends one every
+ * {@link HEARTBEAT_INTERVAL_MS}; when nothing at all arrives on the socket
+ * within {@link HEARTBEAT_DEADLINE_MS} of it, the socket is dead though open
+ * (a frozen hub, a dropped route that sent no FIN), and the client closes it,
+ * reconnects and reads again. Application messages, not WebSocket pings:
+ * URLSession rejects the pong Bun sends on a permessage-deflate socket
+ * (NSPOSIXErrorDomain 100, "Protocol error"), so no client sends a ping.
+ */
+export interface StreamHeartbeat {
+  type: "heartbeat";
+}
+
+/** How often a client asks the hub whether the socket is alive. */
+export const HEARTBEAT_INTERVAL_MS = 20_000;
+
+/** How long after asking a client waits for anything at all before calling the socket dead. */
+export const HEARTBEAT_DEADLINE_MS = 10_000;
+
 /** Everything the stream protocol can put on the dashboard socket. */
 export type StreamServerMessage =
   | StreamBacklog
   | StreamReset
   | StreamDelta
   | CommandAck
+  | StreamHeartbeat
   | import("./plan").PlanSnapshot
   | import("./plan").PlanDelta;
 export type StreamClientMessage =
   | StreamSubscribe
+  | StreamHeartbeat
   | CommandEnvelope
   | import("./plan").PlanFollow
   | import("./plan").PlanResync;

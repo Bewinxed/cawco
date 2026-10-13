@@ -239,11 +239,6 @@ function cursorFor(state: StreamState, sessionId: string): SessionCursor {
  * ------------------------------------------------------------------ */
 
 /**
- * Subscribes a session's stream: a resume when this client already has a
- * cursor (the hub replays the middle out of its ring, or refuses honestly with
- * a reset), a fresh join when it does not.
- */
-/**
  * Puts one message on the wire and answers with the REASON it did not go,
  * or `null` when it did. The one door out of this file, and it never throws.
  *
@@ -271,13 +266,27 @@ function dispatch(
   }
 }
 
+/**
+ * Subscribes a session's stream on the socket that is open now: from
+ * `afterSeq`, the `seq` of a transcript page this connection's hub answered
+ * (the hub replays what came after out of its ring, or refuses honestly with
+ * a reset), or, without it, from the next event on (a session this tab just
+ * started).
+ *
+ * Never from a cursor a connection before left behind: the hub numbers a
+ * session's stream in memory, from 1 again when its process restarts, so
+ * that cursor may sit inside another process's numbering, and a resume from
+ * it would replay that process's events onto rows they do not follow. A
+ * reconnect reads each followed transcript again instead, and that read
+ * subscribes it ({@link adoptPage}).
+ */
 export function subscribeSession(
   state: StreamState,
   host: StreamHost,
-  sessionId: string
+  sessionId: string,
+  afterSeq?: number
 ): void {
   const cursor = cursorFor(state, sessionId);
-  const afterSeq = cursor.seen ? cursor.lastSeq : undefined;
   const refusal = dispatch(host, {
     type: "stream.subscribe",
     sessionId,
@@ -287,35 +296,29 @@ export function subscribeSession(
     return;
   }
   cursor.subscribed = true;
+  // A fresh join has no origin: the hub's first event is it.
+  if (afterSeq === undefined) {
+    cursor.seen = false;
+  }
   // A resume IS an outstanding resync: a delta that lands ahead of the replay
   // must not send a second one for the same hole.
   cursor.resyncAfter = afterSeq ?? null;
 }
 
 /**
- * Brings the subscribed set into line with what the dashboard is watching:
- * resumes what it has followed before and forgets what has been closed. A
- * session it has not read yet is followed once its transcript page lands
- * ({@link adoptPage}) — the pane that shows it is what reads it.
- *
- * Forgetting drops the cursor with it, so a session re-opened later is read
- * again rather than resumed from a seq the ring has long since dropped.
+ * Forgets every session the dashboard no longer watches, cursor and all, so
+ * one opened again is read again. A watched session is subscribed by the read
+ * that adopts its page ({@link adoptPage}): the pane, peek or card that shows
+ * it is what reads it, and a reconnect reads it again.
  */
-export function syncStreamSubscriptions(
+export function forgetUnwatched(
   state: StreamState,
-  host: StreamHost,
   sessionIds: string[]
 ): void {
   const wanted = new Set(sessionIds);
   for (const sessionId of Object.keys(state.cursors)) {
     if (!wanted.has(sessionId)) {
       delete state.cursors[sessionId];
-    }
-  }
-  for (const sessionId of wanted) {
-    const cursor = state.cursors[sessionId];
-    if (cursor?.seen && !cursor.subscribed && !cursor.reading) {
-      subscribeSession(state, host, sessionId);
     }
   }
 }
@@ -332,7 +335,7 @@ export function beginRead(state: StreamState, sessionId: string): void {
  * A transcript page landed, read at `seq`: the session's stream resumes from
  * there when the dashboard follows it. The hub replays what came after out of
  * its ring, or resets honestly when the page took longer than the ring holds.
- * One it does not follow keeps the place, for whenever it does.
+ * One it does not follow is read again when it is followed.
  */
 export function adoptPage(
   state: StreamState,
@@ -347,16 +350,19 @@ export function adoptPage(
   cursor.resyncFailures = 0;
   cursor.warned = false;
   if (host.follows(sessionId)) {
-    subscribeSession(state, host, sessionId);
+    subscribeSession(state, host, sessionId, seq);
   }
 }
 
 /**
  * The socket dropped.
  *
- * Cursors keep their `lastSeq` — that number is the whole point of the ring,
- * and the reconnect resumes from it — but every subscription and every resume
- * died with the connection, and so did any acknowledgement still owed.
+ * Every subscription and every resume died with the connection, and so did
+ * any acknowledgement still owed. The cursors stay only as a session's place
+ * on this side: nothing resumes from them, because the next socket may reach
+ * another hub process that numbers its streams from 1 again. The next
+ * connection reads each followed transcript again, and that read subscribes
+ * it ({@link adoptPage}).
  *
  * `host` is optional for the same reason it is on {@link sweepCommands}, and
  * carries the same warning: without it these failures are recorded but not

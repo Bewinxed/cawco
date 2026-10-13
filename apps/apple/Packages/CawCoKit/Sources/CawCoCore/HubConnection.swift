@@ -46,6 +46,11 @@ public final class HubConnection {
     static let reconnectMaxAttempts = 10
     static let reconnectMax = 30.0
     static let controlTimeout: Duration = .seconds(15)
+    /// How often the hub is asked whether the socket is alive, and how long
+    /// after asking anything at all must arrive (core stream.ts
+    /// `HEARTBEAT_INTERVAL_MS`, `HEARTBEAT_DEADLINE_MS`).
+    static let heartbeatInterval: Duration = .seconds(20)
+    static let heartbeatDeadline: Duration = .seconds(10)
     private static let addressKey = "cawco-hub-url"
 
     /// The hub's address, as the operator entered it; nil until then.
@@ -140,6 +145,9 @@ public final class HubConnection {
     @ObservationIgnored private var outageTimer: Task<Void, Never>?
     @ObservationIgnored private var fleetRead: Task<Void, Never>?
     @ObservationIgnored private var live: HubSocket?
+    /// The open socket's heartbeat (`keepAlive`), and when anything last arrived on it.
+    @ObservationIgnored private var heartbeat: Task<Void, Never>?
+    @ObservationIgnored private var lastHeard = ContinuousClock.now
     @ObservationIgnored private var attempts = 0
     /// The socket was closed because the app went to the background.
     @ObservationIgnored private var suspended = false
@@ -286,6 +294,7 @@ public final class HubConnection {
     /// reads have the same lifetime as that scene, including pending RPCs.
     public func disconnect() {
         run?.cancel(); run = nil
+        heartbeat?.cancel(); heartbeat = nil
         fleetRead?.cancel(); fleetRead = nil
         outageTimer?.cancel(); outageTimer = nil
         sessions.reset()
@@ -347,7 +356,9 @@ public final class HubConnection {
                     switch event {
                     case .opened:
                         opened()
+                        keepAlive(hubSocket)
                     case let .message(message):
+                        lastHeard = .now
                         receive(message)
                     }
                 }
@@ -396,7 +407,49 @@ public final class HubConnection {
         if let address { PushRegistry.shared.connected(to: address) }
     }
 
+    /// A socket can be dead while it reads open: a frozen hub, a route that
+    /// dropped without a FIN. Nothing arrives, and the transcript on screen
+    /// silently stops. So every `heartbeatInterval` the hub is asked
+    /// (`heartbeat`, answered at once), and when nothing at all has arrived
+    /// `heartbeatDeadline` after asking, the socket is ended as dead: the
+    /// loop reconnects, the board reads `connecting` meanwhile, and the new
+    /// connection reads every watched transcript again
+    /// (`SessionsStore.reconnected`). Any message is proof of life, so a
+    /// large board still arriving in parts is never taken for silence.
+    /// Application messages, not WebSocket pings: URLSession rejects the pong
+    /// Bun sends on this permessage-deflate socket (NSPOSIXErrorDomain 100).
+    private func keepAlive(_ hubSocket: HubSocket) {
+        heartbeat?.cancel()
+        lastHeard = .now
+        let ask: Data
+        do {
+            ask = try Wire.encoder().encode(Components.Schemas.StreamHeartbeat(_type: .heartbeat))
+        } catch {
+            log.fault("hub socket: heartbeat cannot be encoded: \(String(describing: error), privacy: .public)")
+            return
+        }
+        heartbeat = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.heartbeatInterval)
+                guard !Task.isCancelled else { return }
+                let asked = ContinuousClock.now
+                hubSocket.post(ask)
+                self?.log.debug("hub socket: heartbeat asked")
+                try? await Task.sleep(for: Self.heartbeatDeadline)
+                guard !Task.isCancelled, let heard = self?.lastHeard else { return }
+                if heard < asked {
+                    self?.log.notice("hub socket: nothing heard 10 s after a heartbeat; reconnecting")
+                    hubSocket.dead()
+                    return
+                }
+                self?.log.debug("hub socket: heard \(String(describing: heard - asked), privacy: .public) after the heartbeat")
+            }
+        }
+    }
+
     private func closed() {
+        heartbeat?.cancel()
+        heartbeat = nil
         socket = .closed
         synced = false
         fleetRead?.cancel()

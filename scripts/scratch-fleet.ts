@@ -530,13 +530,21 @@ export async function scratchFleet(options: {
   /**
    * Freezes a role's process where it stands (SIGSTOP), or lets it run on
    * (SIGCONT): what reaches it meanwhile waits at its door, read when it runs.
+   *
+   * Through `process.kill`, not the subprocess's own `kill`: on macOS, Bun
+   * 1.4.2's `Subprocess.kill("SIGSTOP")` leaves the child running (measured:
+   * a child ticking every 100 ms printed 15 lines through a 1.5 s "stop"),
+   * while `process.kill(pid, "SIGSTOP")` stops it (0 lines). Bun maps a
+   * signal name to the Linux number on every platform, and 19 is SIGCONT on
+   * macOS (oven-sh/bun#35296); `process.kill` maps names per platform. Back to
+   * `child.kill` once the fix (oven-sh/bun#39970, open as of Bun 1.4.3) ships.
    */
   const freeze = (role: Role, frozen: boolean) => {
     const child = procs[role];
     if (!child || child.exitCode !== null) {
       throw new Error(`${role} is not running`);
     }
-    child.kill(frozen ? "SIGSTOP" : "SIGCONT");
+    process.kill(child.pid, frozen ? "SIGSTOP" : "SIGCONT");
     console.log(`… ${role} (pid ${child.pid}) ${frozen ? "frozen" : "thawed"}`);
   };
   /** The log files a role's launches wrote so far, read whole, oldest first. */

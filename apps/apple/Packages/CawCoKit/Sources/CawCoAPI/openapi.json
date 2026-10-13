@@ -21943,6 +21943,9 @@
           },
           {
             "$ref": "#/components/schemas/CommandAck"
+          },
+          {
+            "$ref": "#/components/schemas/StreamHeartbeat"
           }
         ]
       },
@@ -21959,6 +21962,9 @@
           },
           {
             "$ref": "#/components/schemas/CommandEnvelope"
+          },
+          {
+            "$ref": "#/components/schemas/StreamHeartbeat"
           }
         ]
       },
@@ -37011,6 +37017,21 @@
           "type"
         ]
       },
+      "StreamHeartbeat": {
+        "description": "Client → hub, and the hub's answer, the same shape: \"are you there?\" and\n\"yes\", sent at once. A client sends one every\n{@link HEARTBEAT_INTERVAL_MS}; when nothing at all arrives on the socket\nwithin {@link HEARTBEAT_DEADLINE_MS} of it, the socket is dead though open\n(a frozen hub, a dropped route that sent no FIN), and the client closes it,\nreconnects and reads again. Application messages, not WebSocket pings:\nURLSession rejects the pong Bun sends on a permessage-deflate socket\n(NSPOSIXErrorDomain 100, \"Protocol error\"), so no client sends a ping.",
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "heartbeat"
+            ]
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
       "PlanFollow": {
         "description": "Client → hub: the sessions whose plan this socket follows beside the ones\nit streams (a thread showing its lead's plan), the whole set each time.\nOne newly in the set is answered with its snapshot; deltas follow.",
         "type": "object",
@@ -37053,7 +37074,7 @@
         ]
       },
       "StreamSubscribe": {
-        "description": "Client → hub. `afterSeq` present is a resume (\"I have up to here — replay the\nrest\"): a client sends it with the `seq` its transcript page was read at, and\nagain after a reconnect. Absent is a fresh join (\"start me from now\").",
+        "description": "Client → hub. `afterSeq` present is a resume (\"I have up to here — replay the\nrest\"): a client sends it with the `seq` its transcript page was read at, and\nwhen a delta skips a seq on the same socket. Absent is a fresh join (\"start\nme from now\").\n\nNever across a connection: the hub numbers a session's stream in memory,\nfrom 1 again when its process restarts, so a cursor from the socket before\nmay name another process's events. A client that reconnects reads each\ntranscript it follows again, and that read's page subscribes it.",
         "type": "object",
         "properties": {
           "afterSeq": {

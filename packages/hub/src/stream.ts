@@ -45,6 +45,7 @@ import {
   type SessionStreamFrame,
   type StreamBacklog,
   type StreamDelta,
+  type StreamHeartbeat,
   type StreamReset,
   type StreamSubscribe,
 } from "@cawco/core";
@@ -677,6 +678,13 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       return false;
     }
 
+    // Answered at once, through the socket's outbox like every frame: a
+    // client that hears nothing within its deadline calls the socket dead.
+    if (raw.type === "heartbeat") {
+      deliver(socket, { type: "heartbeat" } satisfies StreamHeartbeat);
+      return true;
+    }
+
     if (raw.type === "stream.subscribe") {
       subscribeMessage(socket, raw);
       return true;
@@ -710,7 +718,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     refuse(
       socket,
       raw,
-      `unknown stream message type "${raw.type}": the stream takes stream.subscribe, plan.follow, plan.resync or command`
+      `unknown stream message type "${raw.type}": the stream takes heartbeat, stream.subscribe, plan.follow, plan.resync or command`
     );
     return true;
   };

@@ -65,6 +65,7 @@ import type {
   SlashCommand,
   SpawnPayload,
   StopPayload,
+  StreamHeartbeat,
   SupervisorEvent,
   SupportedCommands,
   ThreadMessage,
@@ -92,6 +93,8 @@ import {
   CONTROL_SUPPORTED_COMMANDS,
   capHolds,
   classifyCommand,
+  HEARTBEAT_DEADLINE_MS,
+  HEARTBEAT_INTERVAL_MS,
   isEffortLevel,
   questionsOf,
   RESOLVE_PERMISSION,
@@ -145,6 +148,7 @@ import {
   createStreamState,
   disarmCommandSweep,
   failLocally,
+  forgetUnwatched,
   handleStreamMessage,
   latestCommand,
   noteDisconnect,
@@ -155,7 +159,6 @@ import {
   submitCommand as submitTrackedCommand,
   subscribeSession,
   sweepCommands,
-  syncStreamSubscriptions,
 } from "./stream";
 import {
   invalidateTasks,
@@ -1003,6 +1006,7 @@ function teardown(): void {
   // design, so it is the one thing a teardown has to cancel by hand — an HMR
   // reload that left it armed would fire a sweep into a module nobody renders.
   disarmCommandSweep(streamState, streamHost);
+  stopHeartbeat();
   cancelFleetRead();
   if (globalThis.__cawcoReconnectTimeout) {
     clearTimeout(globalThis.__cawcoReconnectTimeout);
@@ -4132,29 +4136,24 @@ function subscriptionIds(): string[] {
   return [...ids].filter((id) => !(runIdOf(id) || isThreadTab(id)));
 }
 
-/** The last subscription set sent, so an unchanged set of tabs stays quiet. */
+/** The last watched set synced, so an unchanged set of tabs stays quiet. */
 let lastSubscriptionKey = "";
 
 /**
- * Follows the streams of every session the dashboard watches, and only those.
- * A no-op when the set is unchanged since the last sync, and nothing at all
- * when the socket is not open — the reconnect path syncs again. The ids are
- * read before the socket is checked: the route layout's effect calls this, and
- * a first run that found the socket still connecting would otherwise track no
- * tabs at all, so closing one never shrank the set.
+ * Forgets the stream of every session the dashboard no longer watches, so
+ * one opened again is read again. A watched one is followed by the read that
+ * shows it ({@link readTranscript}: a tab, the peek, a delegate card), whose
+ * page subscribes it; a reconnect reads each again ({@link hubReached}). A
+ * no-op when the set is unchanged since the last sync.
  */
 export function syncSubscriptions(): void {
   const ids = subscriptionIds().sort();
-  const socket = globalThis.__cawcoSocket;
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-    return;
-  }
   const key = ids.join("\u0000");
   if (key === lastSubscriptionKey) {
     return;
   }
   lastSubscriptionKey = key;
-  syncStreamSubscriptions(streamState, streamHost, ids);
+  forgetUnwatched(streamState, ids);
 }
 
 /** The board peeking a session subscribes it for frames; `null` closes the peek. */
@@ -4337,6 +4336,45 @@ function connect(): void {
   globalThis.__cawcoSocket = socket;
 }
 
+/**
+ * A new connection: every transcript the dashboard follows is read again,
+ * joined to the rows held ({@link readBackToHeld}), with this tab's own
+ * sends kept in `local` until the hub places them, and the read's page
+ * subscribes it on this socket ({@link adoptPage}). Never resumed from the
+ * cursor the last connection left: the hub numbers a session's stream in
+ * memory, from 1 again after a restart, so that cursor may sit inside
+ * another hub process's numbering, and a resume from it would replay that
+ * process's events onto rows they do not follow (iOS does the same,
+ * `SessionsStore.reconnected`).
+ *
+ * The followed sessions this tab has read, is reading, or failed to read:
+ * an open tab never read yet waits for its pane's own read. On a reconnect a
+ * read in flight was asked of the connection before, so it is ended and read
+ * again (`fresh`); on this page's first connection there was none before, and
+ * the read in flight is the one this joins.
+ */
+function rereadFollowed(): void {
+  connections += 1;
+  const fresh = connections > 1;
+  lastSubscriptionKey = "";
+  syncSubscriptions();
+  for (const id of subscriptionIds()) {
+    const held = state.sessions[id];
+    if (
+      streamState.cursors[id] ||
+      held?.loading ||
+      held?.readFault ||
+      held?.behind
+    ) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and subscribes the stream when it lands
+      void readTranscript(id, "reconnect", fresh);
+    }
+  }
+}
+
+/** How many times this page has reached the hub: past one, a connection is a reconnect. */
+let connections = 0;
+
 /** The hub answered on the socket `connect` opened: everything a connection is owed. */
 function hubReached(): void {
   state.status = "connected";
@@ -4347,19 +4385,7 @@ function hubReached(): void {
   state.outage = false;
   globalThis.__cawcoReconnectAttempts = 0;
   readFleet();
-  // Re-state the subscription on every (re)connect — the hub's registry forgot
-  // this dashboard the moment the socket dropped.
-  lastSubscriptionKey = "";
-  syncSubscriptions();
-  // A followed transcript whose last read failed waits on a read (its stream
-  // cursor stays `reading`): the hub that answers now may answer that too.
-  for (const id of subscriptionIds()) {
-    const held = state.sessions[id];
-    if (held && !held.loading && (held.readFault || held.behind)) {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and resumes the stream when it lands
-      void readTranscript(id, "reconnect");
-    }
-  }
+  rereadFollowed();
   lastPlanFollowKey = "";
   syncPlanFollows();
   resumePendingSends(streamState, streamHost);
@@ -4414,7 +4440,11 @@ function bind(socket: WebSocket): void {
   // per turn, so a large board (sent as parts) never holds the page; the
   // handler is this module's, replacing whatever an earlier module bound.
   const line = clientLine(socket);
-  socket.onmessage = (event) => line.receive(String(event.data));
+  socket.onmessage = (event) => {
+    lastHeard = Date.now();
+    line.receive(String(event.data));
+  };
+  startHeartbeat(socket);
   line.listen((message) => {
     if (olderThanHub(message)) {
       return;
@@ -4448,27 +4478,7 @@ function bind(socket: WebSocket): void {
     sweepOnTraffic();
   });
 
-  socket.onclose = () => {
-    state.status = "disconnected";
-    // A socket that closed is an attempt that is over, one way or the other.
-    state.failed = true;
-    cancelFleetRead();
-    if (!(state.outage || outageTimer)) {
-      outageTimer = setTimeout(() => {
-        outageTimer = undefined;
-        state.outage = true;
-      }, OUTAGE_GRACE);
-    }
-    abandonInflight("The connection to the hub dropped before that finished.");
-    // Subscriptions, resumes and unanswered commands all died with the socket;
-    // the cursors do not — resuming from them is what the hub's ring is for.
-    // With the host, for the same reason the traffic sweep passes it: a socket
-    // that dies mid-command must SAY so, not merely record it.
-    noteDisconnect(streamState, Date.now(), streamHost);
-    if (!globalThis.__cawcoDisposing) {
-      scheduleReconnect();
-    }
-  };
+  socket.onclose = socketClosed;
 
   socket.onerror = () => {
     // Always followed by `onclose`, which schedules the retry — this only
@@ -4476,6 +4486,93 @@ function bind(socket: WebSocket): void {
     state.status = "error";
     state.failed = true;
   };
+}
+
+/** The socket is gone, closed by either side or dropped as dead: everything that went with it. */
+function socketClosed(): void {
+  stopHeartbeat();
+  state.status = "disconnected";
+  // A socket that closed is an attempt that is over, one way or the other.
+  state.failed = true;
+  cancelFleetRead();
+  if (!(state.outage || outageTimer)) {
+    outageTimer = setTimeout(() => {
+      outageTimer = undefined;
+      state.outage = true;
+    }, OUTAGE_GRACE);
+  }
+  abandonInflight("The connection to the hub dropped before that finished.");
+  // Subscriptions, resumes and unanswered commands all died with the socket,
+  // and the next one reads every followed transcript again (`rereadFollowed`).
+  // With the host, for the same reason the traffic sweep passes it: a socket
+  // that dies mid-command must SAY so, not merely record it.
+  noteDisconnect(streamState, Date.now(), streamHost);
+  if (!globalThis.__cawcoDisposing) {
+    scheduleReconnect();
+  }
+}
+
+/** When anything last arrived on the socket: the heartbeat's proof of life. */
+let lastHeard = 0;
+let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+let heartbeatDeadline: ReturnType<typeof setTimeout> | undefined;
+
+function stopHeartbeat(): void {
+  clearInterval(heartbeatTimer);
+  clearTimeout(heartbeatDeadline);
+  heartbeatTimer = undefined;
+  heartbeatDeadline = undefined;
+}
+
+/**
+ * A socket can be dead while it reads open: a frozen hub, a route that
+ * dropped without a FIN. Nothing arrives, the status stays `connected`, and
+ * the transcript on screen silently stops. So every
+ * {@link HEARTBEAT_INTERVAL_MS} the dashboard asks the hub (`heartbeat`,
+ * answered at once), and when nothing at all has arrived
+ * {@link HEARTBEAT_DEADLINE_MS} after asking, the socket is dropped as dead:
+ * the reconnect and its reads follow as for any close. Any message is proof
+ * of life, so a large board still arriving in parts is never mistaken for
+ * silence. Application messages, not WebSocket pings: no client sends those
+ * (`StreamHeartbeat`).
+ */
+function startHeartbeat(socket: WebSocket): void {
+  stopHeartbeat();
+  lastHeard = Date.now();
+  heartbeatTimer = setInterval(() => {
+    if (
+      socket !== globalThis.__cawcoSocket ||
+      socket.readyState !== WebSocket.OPEN
+    ) {
+      return;
+    }
+    const asked = Date.now();
+    clientLine(socket).send({ type: "heartbeat" } satisfies StreamHeartbeat);
+    clearTimeout(heartbeatDeadline);
+    heartbeatDeadline = setTimeout(() => {
+      if (lastHeard >= asked || socket !== globalThis.__cawcoSocket) {
+        return;
+      }
+      console.warn(
+        `[cawco] hub socket: nothing heard ${Date.now() - asked} ms after a heartbeat; reconnecting`
+      );
+      dropDeadSocket(socket);
+    }, HEARTBEAT_DEADLINE_MS);
+  }, HEARTBEAT_INTERVAL_MS);
+}
+
+/**
+ * Closes a socket the heartbeat found dead, and goes on at once as for any
+ * close. Its own `close` event is not waited for: the closing handshake needs
+ * an answer from the peer that went silent, and a browser waits for it far
+ * longer than the reader should.
+ */
+function dropDeadSocket(socket: WebSocket): void {
+  socket.onclose = null;
+  socket.onmessage = null;
+  socket.onerror = null;
+  socket.close(4000, "heartbeat unanswered");
+  socketClosed();
 }
 
 /** What routes call on mount: the socket is app-scoped, not page-scoped. */
