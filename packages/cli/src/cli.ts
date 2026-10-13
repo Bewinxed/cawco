@@ -118,7 +118,7 @@ Signing in
   Claude sessions run on CawCo's own accounts: add one in the dashboard's
   Configure → Accounts and sign it in there on each machine. Each keeps its
   login in its own folder on the machine (~/.cawco/accounts/<id>/claude); the
-  machine's own ~/.claude login is not used.
+  login Claude Code keeps on the machine itself is not used.
 
   On macOS, run the daemon as a service — \`cawco service install\` — so it
   inherits your desktop session and can read the login keychain. A daemon
