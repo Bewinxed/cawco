@@ -8,6 +8,12 @@ import type { UserAnswers, UserQuestion } from "./harness";
 
 /** A project's Caw, as `GET`/`PATCH /api/projects/:id/caw` answer it. */
 export interface CawView {
+  /**
+   * What his turn answers when no thread woke it ("Answering a report from
+   * site#4f2a"): shown on his panel, as no thread is working on it; null
+   * when he is at rest or a thread's turn.
+   */
+  answering: string | null;
   harness: CawHarness;
   /** Caw's session, once the hub has started one. */
   leadInstanceId: string | null;

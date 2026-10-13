@@ -2480,6 +2480,31 @@ export const artifactUpdates = sqliteTable(
   (table) => [primaryKey({ columns: [table.artifactId, table.seq] })]
 );
 
+/**
+ * The turn a project's Caw is in, one row per lead session while it lasts
+ * (caw.ts `turns`, its working copy): whose it is, so what he starts in it
+ * after a hub restart is still that work's (work_items.origin). Written when
+ * the turn is woken and when its first frame is noted, cleared at its end;
+ * read back as the hub starts. (`caw_turns` is what each turn cost.)
+ */
+export const leadTurns = sqliteTable("lead_turns", {
+  /** The lead session. */
+  instanceId: text("instance_id").primaryKey(),
+  projectId: text("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  /** Whose turn it is: `you`, `kept` or `event`. */
+  origin: text("origin").$type<WorkOrigin>().notNull(),
+  /** The thread it answers; null for a turn no thread woke. */
+  threadId: text("thread_id").references(() => projectThreads.id, {
+    onDelete: "set null",
+  }),
+  /** What it answers when no thread does: "a report from site#4f2a1c". */
+  what: text("what"),
+  /** Its first frame was noted: the idle after it ends it. */
+  started: integer("started", { mode: "boolean" }).notNull().default(false),
+});
+
 /** A conversation with a project's Caw (caw.ts). */
 export const projectThreads = sqliteTable(
   "project_threads",

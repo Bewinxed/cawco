@@ -26418,6 +26418,13 @@
         "description": "A project's Caw, as `GET`/`PATCH /api/projects/:id/caw` answer it.",
         "type": "object",
         "properties": {
+          "answering": {
+            "description": "What his turn answers when no thread woke it (\"Answering a report from\nsite#4f2a\"): shown on his panel, as no thread is working on it; null\nwhen he is at rest or a thread's turn.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "harness": {
             "$ref": "#/components/schemas/CawHarness"
           },
@@ -26458,6 +26465,7 @@
           }
         },
         "required": [
+          "answering",
           "harness",
           "leadInstanceId",
           "model",

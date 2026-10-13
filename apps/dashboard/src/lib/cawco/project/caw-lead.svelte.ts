@@ -354,8 +354,9 @@ export class CawLead {
           ? `Off · ${finishing} of his still finishing`
           : "Off · answers when you write";
       }
+      // A turn no thread woke works here, on his panel: what it answers.
       case "working":
-        return `Awake · ${this.#said?.text ?? "working"}`;
+        return `Awake · ${this.view?.answering ?? this.#said?.text ?? "working"}`;
       case "needs-you":
         return "Awake · waiting on you";
       case "trying":

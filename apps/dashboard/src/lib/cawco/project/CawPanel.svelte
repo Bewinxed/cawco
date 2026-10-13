@@ -7,6 +7,7 @@
    * when you write to him: no event wakes him (WORDS.md, Caw on and off).
    */
   import type { CawHarness, CawInitiated, CawRunning } from "@cawco/core";
+  import { untrack } from "svelte";
   import { askCawOff } from "#lib/cawco/caw-off.svelte.js";
   import {
     cawco,
@@ -110,6 +111,17 @@
 
   $effect(() => {
     lead.readSpend();
+  });
+
+  // A turn begins: his view is read again, so the panel says what it answers
+  // (a turn no thread woke works here, not on a thread).
+  let wasWorking = false;
+  $effect(() => {
+    const working = lead.status === "working";
+    if (working && !wasWorking) {
+      untrack(() => lead.read());
+    }
+    wasWorking = working;
   });
 </script>
 

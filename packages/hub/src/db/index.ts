@@ -108,6 +108,7 @@ import {
   fleetSkillHistory,
   instanceAliases,
   instances,
+  leadTurns,
   limitEvents,
   limitHolds,
   limitSummaries,
@@ -436,7 +437,6 @@ export interface DbShape {
   readonly atLimit: AtLimitDb;
   /** Records ownership before sending a create; a restart discards anything still unfiled. */
   readonly beginWorkspaceCreate: (id: string, machineId: string) => void;
-  /** Adds what a Caw turn the thread woke cost to the thread's spend. */
   /** Books what one Caw turn cost, to the thread that woke it (null: none did). */
   readonly bookCawTurn: (turn: {
     harness: string;
@@ -561,6 +561,8 @@ export interface DbShape {
   readonly deleteWorkflow: (id: string) => void;
   /** A kept supervisor notice that has now been sent. */
   readonly deleteWorkflowNotice: (id: number) => void;
+  /** His turn is over: its row goes. */
+  readonly dropLeadTurn: (instanceId: string) => void;
   /** A cancelled move's held row leaves the board, while no spawn has taken it on. True when it went. */
   readonly dropMovingInstance: (id: string) => boolean;
   /** Forgets a task's queued start, if it had one. */
@@ -751,6 +753,9 @@ export interface DbShape {
   readonly launchDirOf: (
     id: string
   ) => { cwd: string } | { unknown: true } | undefined;
+  /** Adds what a Caw turn the thread woke cost to the thread's spend. */
+  /** The turn each project's Caw is in now, as stored (caw.ts reads them back on start). */
+  readonly leadTurns: () => (typeof leadTurns.$inferSelect)[];
   /** The limit lines kept on the session's row, oldest first. */
   readonly limitNotesOf: (id: string) => LimitNote[];
   /** Keys a send to the id its harness stores it under. */
@@ -1216,6 +1221,8 @@ export interface DbShape {
     path: string;
     content: string;
   }) => MemoryDocRow;
+  /** Stores the turn a project's Caw is in, replacing what his session had. */
+  readonly putLeadTurn: (turn: typeof leadTurns.$inferInsert) => void;
   readonly putMarketplace: (marketplace: FleetMarketplace) => FleetMarketplace;
   readonly putMcpOauth: (row: typeof fleetMcpOauth.$inferInsert) => void;
   /**
@@ -5489,6 +5496,17 @@ const make = async (path: string): Promise<DbShape> => {
           )
         )
         .get()?.usd ?? 0),
+    leadTurns: () => db.select().from(leadTurns).all(),
+    putLeadTurn: (turn) => {
+      const { instanceId: _id, ...rest } = turn;
+      db.insert(leadTurns)
+        .values(turn)
+        .onConflictDoUpdate({ target: leadTurns.instanceId, set: rest })
+        .run();
+    },
+    dropLeadTurn: (instanceId) => {
+      db.delete(leadTurns).where(eq(leadTurns.instanceId, instanceId)).run();
+    },
     bookCawTurn: ({ harness, projectId, threadId, usd }) => {
       db.insert(cawTurns)
         .values({

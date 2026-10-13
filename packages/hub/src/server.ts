@@ -3698,6 +3698,7 @@ export const createServer = (
     ask: { requestId?: string; payload: unknown }
   ): void => {
     const { name, tag: label } = sessionLabel(delegate);
+    lead?.heard(parent.id, delegate, `a question from ${label}`);
     const body = renderDelegateAsk(ask.payload);
     const instruction =
       "Answer it with the answer_delegate tool: answer_delegate(target, requestId, answers) — " +
@@ -3789,6 +3790,9 @@ export const createServer = (
     notice = false
   ): void => {
     const { name, tag: label } = sessionLabel(delegate);
+    // To a project's Caw: the turn it wakes is the delegate's work's, and
+    // answers this report, on his panel (caw.ts `heard`).
+    lead?.heard(parent.id, delegate, `a report from ${label}`);
     deliverSend({
       verb: "send",
       machineId: parent.machineId,

@@ -298,13 +298,16 @@ export interface CawDeps {
     | "allThreads"
     | "bookCawTurn"
     | "createThread"
+    | "dropLeadTurn"
     | "getInstancesByIds"
     | "cawSpentSince"
     | "ingress"
+    | "leadTurns"
     | "newestThread"
     | "project"
     | "projectSpend"
     | "projectThreads"
+    | "putLeadTurn"
     | "setProjectCaw"
     | "spendOnCap"
     | "thread"
@@ -401,19 +404,50 @@ export const createCaw = ({
   /** Lead sessions being started now, by project: one start per project at a time. */
   const starting = new Map<string, Promise<InstanceRow>>();
   /**
-   * The thread each lead's current turn was woken by, by lead session; kept
-   * in memory: it is the process's state, read off its pulses. `started`
-   * once the turn's first busy pulse came, so the idle one after ends it.
-   * `by` is whose turn it is: `you` once your words are in it, `kept` once
-   * you let his own turn finish as you turned him off, else `event`. What he
-   * starts in it is that work's (work-items `origin`), and turning him off
-   * asks about his own turn while yours runs to its end. A turn kept with no
-   * thread to follow (one no thread woke) has none.
+   * The turn each lead is in, by lead session: the working copy of the
+   * `lead_turns` rows ({@link keep} writes both), read back from them as the
+   * hub starts, so a turn outlives a hub restart. `started` once the turn's
+   * first busy pulse came, so the idle one after ends it. `by` is whose turn
+   * it is: `you` once your words are in it, `kept` once you let his own turn
+   * finish as you turned him off, else `event`. What he starts in it is that
+   * work's (work-items `origin`), and turning him off asks about his own
+   * turn while yours runs to its end. `threadId` is the thread it answers,
+   * which then reads `working`; a turn no thread woke (a report or a
+   * question reaching him as the lead) has none and says `what` it answers,
+   * on his panel rather than on any thread.
    */
-  const turns = new Map<
-    string,
-    { by: WorkOrigin; projectId: string; started: boolean; threadId?: string }
-  >();
+  interface Turn {
+    by: WorkOrigin;
+    projectId: string;
+    started: boolean;
+    threadId?: string;
+    what?: string;
+  }
+  const turns = new Map<string, Turn>(
+    db.leadTurns().map((stored) => [
+      stored.instanceId,
+      {
+        by: stored.origin,
+        projectId: stored.projectId,
+        started: stored.started,
+        ...(stored.threadId ? { threadId: stored.threadId } : {}),
+        ...(stored.what ? { what: stored.what } : {}),
+      },
+    ])
+  );
+
+  /** A lead's turn as it now stands, in memory and stored. */
+  const keep = (instanceId: string, turn: Turn): void => {
+    turns.set(instanceId, turn);
+    db.putLeadTurn({
+      instanceId,
+      projectId: turn.projectId,
+      origin: turn.by,
+      threadId: turn.threadId ?? null,
+      what: turn.threadId ? null : (turn.what ?? null),
+      started: turn.started,
+    });
+  };
 
   /** Whose a turn is when `next` joins it: yours over his kept own over an event's. */
   const RANK: Record<WorkOrigin, number> = { event: 0, kept: 1, you: 2 };
@@ -489,7 +523,8 @@ export const createCaw = ({
   /**
    * The lead's turn now answers `threadId`: it is `working`, and the thread
    * before it no longer. A turn your words are in stays yours when an event
-   * joins it ({@link joined}).
+   * joins it ({@link joined}); a wake that joins a turn already under way
+   * keeps its start, so the idle after it still ends it.
    */
   const follow = (
     lead: InstanceRow,
@@ -499,11 +534,11 @@ export const createCaw = ({
   ) => {
     answered.set(lead.id, threadId);
     const before = turns.get(lead.id);
-    turns.set(lead.id, {
+    keep(lead.id, {
       by: joined(before?.by, by),
       projectId,
       threadId,
-      started: false,
+      started: before?.started ?? false,
     });
     if (before?.threadId && before.threadId !== threadId) {
       upsert(db.thread(before.threadId));
@@ -511,12 +546,17 @@ export const createCaw = ({
     upsert(db.thread(threadId));
   };
 
-  /** A lead's turn is over without an idle pulse: its session ended. */
+  /** A lead's turn is over: its idle came, or its session ended. */
   const unfollow = (instanceId: string): void => {
+    // Every stored turn is in the working copy: one it lacks has no row.
     const turn = turns.get(instanceId);
-    if (turn) {
-      turns.delete(instanceId);
-      upsert(turn.threadId ? db.thread(turn.threadId) : undefined);
+    if (!turn) {
+      return;
+    }
+    turns.delete(instanceId);
+    db.dropLeadTurn(instanceId);
+    if (turn.threadId) {
+      upsert(db.thread(turn.threadId));
     }
   };
 
@@ -794,6 +834,15 @@ export const createCaw = ({
    * woken by a report or an ask reaching him as the lead). Your turn is not
    * his own: it runs to its end whatever becomes of him.
    */
+  /** What a turn answers, in words: its thread, else who woke it; undefined when unknown. */
+  const answering = (turn: Turn | undefined): string | undefined => {
+    const thread = turn?.threadId ? db.thread(turn.threadId) : undefined;
+    if (thread) {
+      return `Answering “${thread.title}”`;
+    }
+    return turn?.what ? `Answering ${turn.what}` : undefined;
+  };
+
   const eventTurn = (
     project: ReturnType<typeof projectOf>
   ): CawRunning | undefined => {
@@ -802,11 +851,10 @@ export const createCaw = ({
     if (!(lead && inTurn(lead.id)) || turn?.by === "you") {
       return;
     }
-    const thread = turn?.threadId ? db.thread(turn.threadId) : undefined;
     return {
       id: lead.id,
       kind: "turn",
-      title: thread ? `Answering “${thread.title}”` : "Answering an event",
+      title: answering(turn) ?? "Answering an event",
       cwd: lead.cwd,
       machineId: lead.machineId,
       offline: false,
@@ -905,9 +953,9 @@ export const createCaw = ({
   };
 
   /**
-   * His own turn is kept as you turn him off: followed when it was not (a
-   * report or an ask woke it), on the thread his last turn answered, so the
-   * idle after it ends it.
+   * His own turn is kept as you turn him off, where it stands: on its
+   * thread, or, woken by none, on his panel. A busy turn the hub had no
+   * record of is recorded now, under way, so the idle after it ends it.
    */
   const keepTurn = (project: ReturnType<typeof projectOf>): void => {
     const lead = standing(project);
@@ -915,18 +963,12 @@ export const createCaw = ({
       return;
     }
     const turn = turns.get(lead.id);
-    if (turn) {
-      turn.by = joined(turn.by, "kept");
-      return;
-    }
-    const threadId = answered.get(lead.id) ?? db.newestThread(project.id)?.id;
-    turns.set(lead.id, {
-      by: "kept",
-      projectId: project.id,
-      started: true,
-      ...(threadId ? { threadId } : {}),
-    });
-    upsert(threadId ? db.thread(threadId) : undefined);
+    keep(
+      lead.id,
+      turn
+        ? { ...turn, by: joined(turn.by, "kept") }
+        : { by: "kept", projectId: project.id, started: true }
+    );
   };
 
   /** What an item's end reads in a thread: its report, or why it failed. */
@@ -978,30 +1020,14 @@ export const createCaw = ({
     }
   };
 
-  /**
-   * A delegate of Caw's ended where he hears it: its report reaches him as
-   * its parent, and the turn it starts follows the thread his last turn
-   * answered, as `by`'s.
-   */
-  const delegateEnded = (
-    project: ReturnType<typeof projectOf>,
-    item: WorkItemRow,
-    by: Origin
-  ): void => {
-    const lead = standing(project);
-    if (!lead || item.parentInstanceId !== lead.id) {
-      return;
-    }
-    const thread = answered.get(lead.id) ?? db.newestThread(project.id)?.id;
-    if (thread) {
-      follow(lead, project.id, thread, by);
-    }
-  };
-
   const view = (projectId: string): CawView => {
     const project = projectOf(projectId);
+    const turn = project.leadInstanceId
+      ? turns.get(project.leadInstanceId)
+      : undefined;
     return {
       on: project.caw,
+      answering: turn && !turn.threadId ? (answering(turn) ?? null) : null,
       harness: project.cawHarness,
       model: project.cawModel,
       leadInstanceId: project.leadInstanceId,
@@ -1525,8 +1551,8 @@ export const createCaw = ({
      *   With a Caw session, its report reaches him as the lead (work-items
      *   `reportees`), and that thread follows the turn; with none yet, he
      *   starts and hears it here.
-     * - A delegate of his that is your work: the turn its report starts is
-     *   yours, so what he starts in it is too.
+     * - A delegate's report reaches him through the send path, which says
+     *   whose turn it starts ({@link heard}).
      * - His own work you let finish as you turned him off (`kept`), ending
      *   while he is off: noted in its thread, waking nobody.
      */
@@ -1537,18 +1563,33 @@ export const createCaw = ({
       }
       const by: Origin = item.origin === "you" ? "you" : "event";
       const hears = by === "you" || project.caw;
-      if (!(hears || item.origin === "kept")) {
-        return;
-      }
-      if (!(hears || item.taskId)) {
-        noteIn(project.id, undefined, endNote(item));
-        return;
-      }
-      if (item.taskId) {
+      if (item.taskId && (hears || item.origin === "kept")) {
         attemptEnded(project, item, hears, by);
+      } else if (!hears && item.origin === "kept") {
+        noteIn(project.id, undefined, endNote(item));
+      }
+    },
+
+    /**
+     * A report or a question from `from` reached `leadId` (server.ts
+     * `reportTo`, `deliverDelegateAsk`): when `leadId` is a project's Caw,
+     * the turn it starts, or joins, is that work's (its item's origin; a
+     * session's own ask is yours). Woken by no thread, it says `what` it
+     * answers on his panel, never on a thread it would only be guessed from.
+     */
+    heard(leadId: string, from: InstanceRow, what: string): void {
+      const project = leadOf(row(leadId));
+      if (!project) {
         return;
       }
-      delegateEnded(project, item, by);
+      const item = from.workItemId ? db.workItem(from.workItemId) : undefined;
+      const before = turns.get(leadId);
+      keep(leadId, {
+        by: joined(before?.by, item?.origin ?? "you"),
+        projectId: project.id,
+        started: before?.started ?? false,
+        ...(before?.threadId ? { threadId: before.threadId } : { what }),
+      });
     },
 
     /**
@@ -1613,9 +1654,11 @@ export const createCaw = ({
       if (!turn) {
         return;
       }
-      if (busy) {
-        turn.started = true;
-      } else if (turn.started) {
+      if (busy && !turn.started) {
+        // Its first frame: stored as under way, so a hub that starts again
+        // ends it at the idle that follows.
+        keep(instanceId, { ...turn, started: true });
+      } else if (!busy && turn.started) {
         unfollow(instanceId);
       }
     },

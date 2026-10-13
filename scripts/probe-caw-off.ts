@@ -22,12 +22,20 @@
  * g. Caw on: both wake him.
  * h. Off with a delegate he started running: without a choice, 409; `stop`
  *    ends it (its item cancelled, a `project.stop` frame); `finish` (his own
- *    delegate, from an event) lets it complete, noted in his thread, no wake.
+ *    delegate, from an event) lets it complete, noted in his thread, no wake;
+ *    a delegate your words began stays yours under `finish`, and its report
+ *    reaches him and wakes him.
+ * i. A turn your words began is stored (lead_turns) as yours and under way,
+ *    is read back after the hub restarts mid-turn, and is cleared at its end;
+ *    with workspaces, the delegate he starts after the restart is yours.
+ * j. A question from a session under him wakes him on no thread: none reads
+ *    working, and his view says what he answers.
  *
  * Run from the repo root, on a host (f to h need workspaces):
  *   bun scripts/probe-caw-off.ts [--keep]
  * Inside a CawCo workspace, where no nested workspace can start, `--no-workspaces`
- * runs a to e and reports f to h skipped.
+ * runs a to e, i and j, and reports f to h skipped. `--only a,f` runs just
+ * the sections with those letters.
  */
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -38,6 +46,7 @@ import {
   type Seen,
   scratchFleet,
   until,
+  untilGone,
 } from "./scratch-fleet";
 
 const keep = process.argv.includes("--keep");
@@ -56,11 +65,16 @@ const OFF_REASON = "Caw is off, so only your words wake him";
 /** Your ask that Caw start an attempt at a task: `PROBE-CAW-START tsk-4`. */
 const START_ASK = /PROBE-CAW-START (tsk-\d+)/;
 /** Your ask (or a routine's) that Caw delegate: `PROBE-CAW-DELEGATE-STOP`. */
-const DELEGATE_ASK = /PROBE-CAW-DELEGATE-(STOP|FINISH)/;
+const DELEGATE_ASK = /PROBE-CAW-DELEGATE-(STOP|FINISH|YOURS)/;
 /** A worker's brief: an attempt's task title, or Caw's delegate's prompt. */
 const WORKER_TAG = /PROBE-(?:ATTEMPT|DELEGATE)-([A-Z]+)/;
 /** How long each worker sleeps before it finishes, by tag; absent: none. */
-const SLEEPS: Record<string, number> = { DISPATCH: 25, STOP: 120, FINISH: 25 };
+const SLEEPS: Record<string, number> = {
+  DISPATCH: 25,
+  STOP: 120,
+  FINISH: 25,
+  YOURS: 25,
+};
 
 const results: Record<string, string> = {};
 let failed = false;
@@ -69,7 +83,20 @@ const check = (name: string, ok: boolean, detail: string) => {
   results[name] = `${ok ? "PASS" : "FAIL"} — ${detail}`;
   console.log(`${ok ? "PASS" : "FAIL"} ${name}: ${detail}`);
 };
+/**
+ * `--only a,f`: run just the sections with those letters (a sets the
+ * project's first thread up, so keep it).
+ */
+const onlyAt = process.argv.indexOf("--only");
+const only =
+  onlyAt === -1
+    ? undefined
+    : new Set((process.argv[onlyAt + 1] ?? "").split(","));
 const section = async (name: string, body: () => Promise<void>) => {
+  if (only && !only.has(name.charAt(0))) {
+    console.log(`SKIP ${name}: --only`);
+    return;
+  }
   try {
     await body();
   } catch (error) {
@@ -113,21 +140,44 @@ const call = (
 const slowFrom: Record<string, number> = {};
 /** The one-shot calls Caw has made, by what asked for them: each is made once. */
 const made = new Set<string>();
+/** What each one-shot call answered, by its key. */
+const answers: Record<string, string> = {};
 
-/** One call Caw makes once for `key`: loaded first when deferred, then done. */
-const once = (request: Seen, key: string, name: string, input: object) => {
+/**
+ * One call made once for `key`: loaded first when deferred, then done.
+ * `everyMs` paces its stream: a slow call keeps the turn going.
+ */
+const once = (
+  request: Seen,
+  key: string,
+  name: string,
+  input: object,
+  everyMs = 5
+) => {
   if (made.has(key)) {
+    // The call's answer, as its tool result came back: a failure says why.
+    answers[key] ??= request.last.slice(0, 600);
     return text("ok");
   }
-  const reply = call(request, name, input);
+  const reply = call(request, name, input, everyMs);
   if (reply.tool?.name === name) {
     made.add(key);
+    slowFrom[key] = Date.now();
   }
   return reply;
 };
 
+/** The question a session under Caw asks him (j). */
+const QUESTION = "PROBE-WHICH-WAY: left or right?";
+
 /** Caw's side: what he does for the event his conversation ends with. */
 const caw = (request: Seen): Reply => {
+  // A question from a session under him (j): a turn no thread woke, kept
+  // going for forty seconds.
+  if (request.last.includes("PROBE-WHICH-WAY")) {
+    slowFrom.question ??= Date.now();
+    return { everyMs: 2000, words: Array.from({ length: 20 }, () => "… ") };
+  }
   const starts = [...request.all.matchAll(EVENT_START)];
   const event = request.all.slice(starts.at(-1)?.index ?? 0);
   const thread = [...event.matchAll(THREAD_ID)][0]?.[1] ?? "";
@@ -136,6 +186,23 @@ const caw = (request: Seen): Reply => {
   const start = START_ASK.exec(event);
   if (start?.[1]) {
     return once(request, `start ${start[1]}`, TASK_START, { id: start[1] });
+  }
+  // Your ask (i): a delegate call streamed over ~50 s, so the hub can restart
+  // while the turn your words began is under way, and the item it starts
+  // is filed after.
+  if (event.includes("PROBE-RESTART-DELEGATE")) {
+    return once(
+      request,
+      "restart",
+      DELEGATE,
+      {
+        title: "Probe delegate restart",
+        prompt: "PROBE-DELEGATE-RESTART: finish.",
+        checks: [{ name: "Probe check passes", command: "true" }],
+        lands: "none",
+      },
+      8000
+    );
   }
   const delegate = DELEGATE_ASK.exec(event)?.[1];
   if (delegate) {
@@ -218,6 +285,22 @@ const respond = (request: Seen): Reply => {
   if (request.all.includes(CAW)) {
     return caw(request);
   }
+  // A session under Caw (j): it asks him its question, once.
+  if (request.all.includes("PROBE-ASK-CAW")) {
+    return once(request, "ask", "AskUserQuestion", {
+      questions: [
+        {
+          question: QUESTION,
+          header: "Way",
+          multiSelect: false,
+          options: [
+            { label: "Left", description: "Go left." },
+            { label: "Right", description: "Go right." },
+          ],
+        },
+      ],
+    });
+  }
   const tag = WORKER_TAG.exec(request.all)?.[1];
   return tag ? worker(request, tag) : text("ok");
 };
@@ -258,9 +341,21 @@ interface Running {
 }
 const cawView = async (projectId: string) =>
   (await hub("GET", `/api/projects/${projectId}/caw`)).body as {
+    answering: string | null;
     on: boolean;
     running: Running[];
   };
+/** The stored turn a lead session is in (lead_turns), or undefined. */
+const leadTurn = (instanceId: string) =>
+  fleet.query<{
+    origin: string;
+    started: number;
+    thread_id: string | null;
+    what: string | null;
+  }>(
+    "SELECT origin, started, thread_id, what FROM lead_turns WHERE instance_id = ?",
+    instanceId
+  )[0];
 const cawSaid = (threadId: string) =>
   fleet
     .query<{ body: string }>(
@@ -365,11 +460,16 @@ try {
       body,
     });
   /** Caw's session has no turn in flight. */
+  /**
+   * Caw's session is between turns: the hub holds no turn for him
+   * (lead_turns, cleared at a turn's idle). Not his view's `running`, which
+   * leaves out a turn your words began: a wake sent then would join its tail
+   * and be yours.
+   */
   const cawIdle = () =>
-    until(
+    untilGone(
       "Caw at rest",
-      () => cawView(project.id),
-      (view) => !view.running.some((one) => one.kind === "turn"),
+      () => leadTurn(lead()?.lead_instance_id ?? ""),
       120_000
     );
 
@@ -555,7 +655,12 @@ try {
       () => itemOf(task.id),
       Boolean,
       180_000
-    );
+    ).catch((error: unknown) => {
+      // What task_start answered him: the start's own refusal, or nothing.
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}; task_start ${made.has(`start ${task.id}`) ? `answered: ${answers[`start ${task.id}`] ?? "(no answer yet)"}` : "was never called"}`
+      );
+    });
     // A report reads "[Work item <id> is …]": his request with it is its wake.
     const woke = await until(
       "Caw woken by its report",
@@ -738,6 +843,125 @@ try {
           woke.length === 0 &&
           noted.length > 0,
         `origin ${item.origin} → ${ended.origin}; off HTTP ${off.status}; item ${ended.state}; Caw requests since off ${woke.length}; notes ${JSON.stringify(noted)}`
+      );
+    }
+  );
+
+  // ── h: off with your delegate (your words began it), `finish` ──────────
+  await workspaceSection("h: your delegate, then off with finish", async () => {
+    await turn(project.id, true);
+    await cawIdle();
+    await say("PROBE-CAW-DELEGATE-YOURS");
+    const item = await until(
+      "your delegate running",
+      () => itemTitled("Probe delegate yours"),
+      live,
+      180_000
+    );
+    await cawIdle();
+    const off = await turn(project.id, false, "finish");
+    const offAt = Date.now();
+    const ended = await until(
+      "your delegate ended",
+      () => itemTitled("Probe delegate yours"),
+      over,
+      180_000
+    );
+    const woke = await until(
+      "Caw woken by its report",
+      () => cawRequests(offAt, `Work item ${item.id}`),
+      (requests) => requests.length > 0,
+      120_000
+    );
+    check(
+      "h: your delegate is yours under `finish` too: off, its report reaches him and wakes him",
+      item.origin === "you" &&
+        off.status === 200 &&
+        ended.origin === "you" &&
+        lead()?.caw === 0 &&
+        woke.length > 0,
+      `origin ${item.origin} → ${ended.origin}; off HTTP ${off.status}; item ${ended.state}; caw ${lead()?.caw}; Caw requests with its report ${woke.length}`
+    );
+  });
+
+  // ── i: the turn your words began outlives a hub restart ─────────────────
+  await section("i: a turn's origin outlives a hub restart", async () => {
+    await cawIdle();
+    const leadId = lead()?.lead_instance_id ?? "";
+    const before = Date.now();
+    await say("PROBE-RESTART-DELEGATE: start a delegate.");
+    await until(
+      "his slow delegate call began",
+      () => slowFrom.restart,
+      (at) => at !== undefined && at >= before,
+      180_000
+    );
+    const stored = await until(
+      "his turn stored as under way",
+      () => leadTurn(leadId),
+      (row) => row?.started === 1,
+      30_000
+    );
+    await fleet.stop("hub");
+    fleet.launch("hub");
+    await fleet.hubUp();
+    const after = leadTurn(leadId);
+    // Where workspaces start, the delegate he files after the restart.
+    const item = workspaces
+      ? await until(
+          "the delegate he started after the restart",
+          () => itemTitled("Probe delegate restart"),
+          Boolean,
+          180_000
+        )
+      : undefined;
+    await untilGone(
+      "his turn cleared at the idle after it",
+      () => leadTurn(leadId),
+      180_000
+    );
+    check(
+      `i: his turn is stored as yours, read back after a hub restart, and cleared at its end${workspaces ? "; the delegate he starts after the restart is yours" : ""}`,
+      stored.origin === "you" &&
+        after?.origin === "you" &&
+        after.started === 1 &&
+        (!workspaces || item?.origin === "you"),
+      `before ${JSON.stringify(stored)}; after ${JSON.stringify(after)}; item ${item ? item.origin : "(no workspaces: not filed)"}`
+    );
+  });
+
+  // ── j: a question from a session under him: no thread is working ───────
+  await section(
+    "j: a turn no thread woke marks no thread working",
+    async () => {
+      await cawIdle();
+      const leadId = lead()?.lead_instance_id ?? "";
+      const asker = await fleet.spawn("claude", "Asker", src, {
+        projectId: project.id,
+        parent: { instanceId: leadId },
+      });
+      const before = Date.now();
+      await fleet.send(asker, "PROBE-ASK-CAW: ask Caw.");
+      await until(
+        "Caw answering the question",
+        () => slowFrom.question,
+        (at) => at !== undefined && at >= before,
+        180_000
+      );
+      await delay(3000);
+      const stored = leadTurn(leadId);
+      const threads = await fleet.api<{ status: string; title: string }[]>(
+        `/api/projects/${project.id}/threads`
+      );
+      const view = await cawView(project.id);
+      check(
+        "j: a question wakes him on no thread: none reads working, and his panel says what he answers",
+        stored !== undefined &&
+          stored.thread_id === null &&
+          (stored.what ?? "").startsWith("a question from") &&
+          !threads.some((each) => each.status === "working") &&
+          (view.answering ?? "").startsWith("Answering a question from"),
+        `stored ${JSON.stringify(stored)}; threads ${threads.map((each) => `${each.title}: ${each.status}`).join(", ")}; answering “${view.answering}”`
       );
     }
   );

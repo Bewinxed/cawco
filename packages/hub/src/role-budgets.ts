@@ -110,7 +110,8 @@ export const measureRoles = (): RoleSize[] => {
       createCaw({
         asks: () => [],
         caps: {} as never,
-        db: {} as never,
+        // Caw reads back the turns his leads are in as he is made: none here.
+        db: { leadTurns: () => [] } as never,
         end: () => undefined,
         inTurn: () => false,
         interrupt: () => undefined,
