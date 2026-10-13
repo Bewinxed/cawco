@@ -271,6 +271,8 @@ final class ProjectViewController: ObservedViewController {
             docsView.load(machineId: home.machineId, cwd: home.path, projectId: project.id)
             memory.load(machineId: home.machineId, cwd: home.path, projectId: project.id, online: online,
                         machineName: machine?.name ?? home.machineId)
+        } else if home == nil {
+            docsView.showNoCheckout()
         }
         inventory.isHidden = machine == nil
         if let machine { inventory.configure(machines: [machine]) }

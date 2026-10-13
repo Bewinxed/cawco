@@ -64,6 +64,8 @@ final class ProjectDocsView: UIStackView {
     private var docError: String?
     private var saving = false
     private var expanded = false
+    /// The project has no checkout on a machine: there are no docs to read, and none are coming.
+    private var noCheckout = false
 
     private let picker = UIStackView()
     private let card = TileView(radius: Radius.radiusLg)
@@ -128,6 +130,7 @@ final class ProjectDocsView: UIStackView {
     func load(machineId: String, cwd: String, projectId: String) {
         guard loadedFor != projectId else { return }
         loadedFor = projectId
+        noCheckout = false
         self.machineId = machineId
         self.cwd = cwd
         docs = nil
@@ -148,6 +151,20 @@ final class ProjectDocsView: UIStackView {
                 self?.render()
             }
         }
+    }
+
+    /// A project with no checkout: its docs live in one, and none is open on a machine yet.
+    func showNoCheckout() {
+        guard !noCheckout else { return }
+        noCheckout = true
+        loadedFor = ""
+        docs = nil
+        open = nil
+        shown = nil
+        draft = nil
+        docsError = nil
+        docError = nil
+        render()
     }
 
     /// The document on screen stays until the next is read, then the two cross-fade.
@@ -222,6 +239,8 @@ final class ProjectDocsView: UIStackView {
     private func renderPicker() {
         picker.arrangedSubviews.forEach { $0.removeFromSuperview() }
         picker.axis = pickerMode == .column ? .vertical : .horizontal
+        picker.isHidden = noCheckout
+        guard !noCheckout else { return }
         guard let docs else {
             if docsError == nil, pickerMode == .column {
                 // The well the list will stand in, five rows of it.
@@ -302,6 +321,12 @@ final class ProjectDocsView: UIStackView {
 
     private func renderHeader() {
         headerActions.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        if noCheckout {
+            nameLabel.text = "Docs"
+            nameLabel.font = TypeScale.typeLabel.withWeight(.regular).font
+            errorLabel.isHidden = true
+            return
+        }
         if let open, docsRead {
             nameLabel.text = open.name
             nameLabel.font = TypeScale.typeCode.with(points: TypeScale.typeLabel.points).font
@@ -347,7 +372,7 @@ final class ProjectDocsView: UIStackView {
 
     private func renderBody() {
         let state: String
-        if docsError != nil { state = "unlisted" } else if docs?.isEmpty == true { state = "none" } else if shown == nil { state = "reading" } else { state = "\(shown ?? ""):\(draft == nil ? "read" : "edit"):\(expanded)" }
+        if noCheckout { state = "no-checkout" } else if docsError != nil { state = "unlisted" } else if docs?.isEmpty == true { state = "none" } else if shown == nil { state = "reading" } else { state = "\(shown ?? ""):\(draft == nil ? "read" : "edit"):\(expanded)" }
         let key = "\(state):\(phone)"
         if key == bodyKey, draft == nil, shown != nil {
             document.setSource(content)
@@ -355,7 +380,9 @@ final class ProjectDocsView: UIStackView {
         }
         bodyKey = key
         let next: UIView
-        if let docsError {
+        if noCheckout {
+            next = noCheckoutState()
+        } else if let docsError {
             let alert = KitAlert(docsError, tone: .warning)
             next = padded(alert)
         } else if docs?.isEmpty == true {
@@ -397,6 +424,19 @@ final class ProjectDocsView: UIStackView {
         stack.alignment = .center
         stack.spacing = Space.space2
         let box = padded(stack)
+        box.heightAnchor.constraint(greaterThanOrEqualToConstant: Self.clamp + 36).isActive = true
+        return box
+    }
+
+    /// The kit's EmptyState for a project with no checkout, at the card's resting height.
+    private func noCheckoutState() -> UIView {
+        let state = KitEmptyState(icon: .document, title: "No checkout yet",
+                                  line: "The docs live in a checkout of this project, and none is open on a machine yet.")
+        // At its own height at the card's top; the card's resting height is the space under it.
+        state.setContentHuggingPriority(.required, for: .vertical)
+        let column = UIStackView(arrangedSubviews: [state, UIView()])
+        column.axis = .vertical
+        let box = padded(column)
         box.heightAnchor.constraint(greaterThanOrEqualToConstant: Self.clamp + 36).isActive = true
         return box
     }
