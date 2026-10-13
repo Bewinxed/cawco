@@ -63,6 +63,7 @@ import type {
   SessionCredentialInstall,
   SessionCustody,
   SessionEndIntent,
+  SessionLimits,
   SessionMessage,
   SessionPulse,
   SessionTooling,
@@ -177,6 +178,7 @@ import {
   interruptLine,
   isEffortLevel,
   joinProviders,
+  LIMIT_REACHED,
   LIMITED_PROVIDERS,
   LIVE_CREDENTIAL_ENROLLMENT_REFUSAL,
   type MachineProviderLists,
@@ -441,6 +443,7 @@ import { createRoutines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
 import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
+import { sessionLimitRoutes } from "./session-limits";
 import { resolveSkill } from "./skills";
 import { type StagesTemplate, TEMPLATES, templateText } from "./stages";
 import { createStreamHub } from "./stream";
@@ -1160,7 +1163,8 @@ const registerAck = (
   ingested: Record<string, IngestMark>,
   unknownAccounts: string[] | undefined,
   sessions: CarrySessionRequest[],
-  machineCredential: string
+  machineCredential: string,
+  sessionLimits: SessionLimits
 ): Envelope<RegisterAckPayload> => ({
   verb: envelope.verb,
   machineId: envelope.machineId,
@@ -1170,6 +1174,7 @@ const registerAck = (
     addressContract: true,
     hubEpoch: HUB_EPOCH,
     machineCredential,
+    sessionLimits,
     ...(unknownAccounts ? { unknownAccounts } : {}),
     sessions,
   },
@@ -1587,6 +1592,23 @@ const custodyLine = (
   uuid: `custody-held-${row.id}`,
   session_id: row.sessionId ?? "",
   content: reason,
+});
+
+/**
+ * A limit its keeper held a session to (core `LIMIT_REACHED`), as the row
+ * keeps it: the same on the live stream and a later transcript read, titled
+ * by its first sentence.
+ */
+const limitReachedLine = (
+  row: { sessionId: string | null },
+  note: { at: number; id: string; content: string }
+): NeutralSystemMessage => ({
+  type: "system",
+  subtype: LIMIT_REACHED,
+  uuid: note.id,
+  session_id: row.sessionId ?? "",
+  content: note.content,
+  timestamp: new Date(note.at).toISOString(),
 });
 
 /** Why a held session was not taken back, said on its row and in its transcript. */
@@ -13043,6 +13065,7 @@ export const createServer = (
         limitEntry(row, event)
       );
     }
+    placeLimitNotes(row, transcript);
     const held = heldSessions.get(row.id);
     if (
       held &&
@@ -13060,6 +13083,28 @@ export const createServer = (
     }
     placeFreshStart(row, transcript);
     placeMovedHere(row, transcript);
+  };
+
+  /** The limits its keeper held the session to ({@link noteLimitReached}), each where it happened. */
+  const placeLimitNotes = (
+    row: InstanceRow,
+    transcript: SessionMessage[]
+  ): void => {
+    for (const note of db.limitNotesOf(row.id)) {
+      const at = transcript.findIndex(
+        (entry) =>
+          entry.timestamp !== undefined && Date.parse(entry.timestamp) > note.at
+      );
+      transcript.splice(at < 0 ? transcript.length : at, 0, {
+        type: "system",
+        uuid: note.id,
+        session_id: row.sessionId ?? "",
+        parent_tool_use_id: null,
+        parent_agent_id: null,
+        message: limitReachedLine(row, note),
+        timestamp: new Date(note.at).toISOString(),
+      });
+    }
   };
 
   /** Where the session's project was moved to its machine for it: the transcript's first row. */
@@ -14951,6 +14996,41 @@ export const createServer = (
    * transcript opens on the move's ready line, kept on its row and said now.
    * Once: a Start retried after the line was written says nothing new.
    */
+  /**
+   * A session's keeper held it at a limit (core `LIMIT_REACHED`): its
+   * machine's line, kept on its row once under its id and folded into what
+   * its screens show now. One from a machine that does not run the session
+   * is nobody's.
+   */
+  const noteLimitReached = (
+    machineId: string,
+    instanceId: string,
+    harness: HarnessKind,
+    said: unknown
+  ): void => {
+    const { uuid, content } = said as { uuid?: unknown; content?: unknown };
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (
+      !row ||
+      row.machineId !== machineId ||
+      typeof uuid !== "string" ||
+      typeof content !== "string"
+    ) {
+      return;
+    }
+    const note = { at: Date.now(), id: uuid, content };
+    if (!db.noteLimit(row.id, note)) {
+      return;
+    }
+    console.warn(`[hub] ${row.id}: ${content}`);
+    transcripts.ingest(row.id, {
+      kind: "frame",
+      instanceId: row.id,
+      harness,
+      message: limitReachedLine(row, note),
+    });
+  };
+
   const noteMovedHere = (
     instanceId: string,
     line: { at: number; moved: string; stayed?: string }
@@ -15737,6 +15817,7 @@ export const createServer = (
       .use(relayRoutes(relays))
       .use(actionRoutes(actions))
       .use(caps.routes())
+      .use(sessionLimitRoutes(db))
       .use(viewRoutes(views))
       .use(noticesSeen.routes)
       .use(
@@ -20204,7 +20285,8 @@ export const createServer = (
                   claudeSessionsOn(message.machineId),
                   // This connection's credential for the hub's git remote;
                   // the one its last connection held stops working.
-                  machineCredentials.mint(message.machineId)
+                  machineCredentials.mint(message.machineId),
+                  db.sessionLimits()
                 )
               );
               for (const row of toEnd) {
@@ -20430,6 +20512,7 @@ export const createServer = (
                 payload: {
                   ok: true,
                   keepAwake: keptWarm(message.machineId, beatIds),
+                  sessionLimits: db.sessionLimits(),
                 } satisfies HeartbeatAckPayload,
               });
               break;
@@ -20743,6 +20826,21 @@ export const createServer = (
                   transcripts.ingest(
                     row.id,
                     message.payload as TranscriptPayload
+                  );
+                  break;
+                }
+                // A limit its keeper held the session to: kept on its row and
+                // said in its transcript, before the ingest ledger, which it
+                // has no ring line in.
+                if (
+                  frame.message.type === "system" &&
+                  frame.message.subtype === LIMIT_REACHED
+                ) {
+                  noteLimitReached(
+                    message.machineId,
+                    message.instanceId,
+                    frame.harness,
+                    frame.message
                   );
                   break;
                 }

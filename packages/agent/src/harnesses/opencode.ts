@@ -7288,6 +7288,12 @@ export class OpencodeHarness implements Harness {
     return readings.some(Boolean);
   }
 
+  sessionsOn(procId: string): string[] {
+    return [...this.#sessionOwners]
+      .filter(([, owner]) => owner.procId === procId)
+      .map(([instanceId]) => instanceId);
+  }
+
   sessionAddresses(): import("@cawco/core").SessionAddress[] {
     const addresses = new Map(this.#pendingSessionAddresses);
     for (const [instanceId, session] of this.#sessions) {

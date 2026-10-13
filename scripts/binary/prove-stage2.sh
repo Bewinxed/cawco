@@ -19,6 +19,59 @@ bins=$(realpath "$2")
 TERM_SOCKET=/tmp/conmon-term.XXXXXX
 (( ${#out} + ${#TERM_SOCKET} <= 107 )) || { echo "the output path is ${#out} characters; podman's console socket under it, $out$TERM_SOCKET, must fit 107, so it may be at most $(( 107 - ${#TERM_SOCKET} ))" >&2; exit 2; }
 here=$(dirname "$(realpath "$0")")
+
+# ---------------------------------------------------------------- which checks run
+# Every check's name and the checks it depends on, read off this script's own `check` lines (the same record a NOT
+# RUN line names), with nothing run: `check` here only prints its first and fourth arguments.
+declare -A NEEDS=() SELECTED=() DIRECT=() PULLED_BY=()
+declare -a ROWS=()
+while IFS=$'\t' read -r row needs; do
+  ROWS+=("$row")
+  NEEDS[$row]=$needs
+done < <(
+  set +u
+  check() { printf '%s\t%s\n' "$1" "${4:-}"; }
+  eval "$(grep -E '^check ' "$(realpath "$0")")"
+)
+# A check PROOF_ONLY names runs with every check it depends on, and theirs, all the way down: a later check cannot
+# be proven on a machine the checks before it never set up.
+select_with_needs() {
+  local row=$1 by=$2 need
+  [[ -z ${SELECTED[$row]:-} ]] || return 0
+  SELECTED[$row]=1
+  [[ -z $by ]] || PULLED_BY[$row]=$by
+  local -a needed=()
+  [[ -z ${NEEDS[$row]:-} ]] || IFS='|' read -r -a needed <<< "${NEEDS[$row]}"
+  for need in "${needed[@]}"; do
+    [[ -n ${NEEDS[$need]+set} ]] || { echo "\"$row\" depends on \"$need\", which is no check's name" >&2; exit 2; }
+    select_with_needs "$need" "$row"
+  done
+}
+if [[ -n ${PROOF_ONLY:-} ]]; then
+  for row in "${ROWS[@]}"; do
+    if [[ $row =~ $PROOF_ONLY ]]; then
+      DIRECT[$row]=1
+      select_with_needs "$row" ""
+    fi
+  done
+  (( ${#DIRECT[@]} > 0 )) || { echo "PROOF_ONLY matches no check's name: $PROOF_ONLY" >&2; exit 2; }
+fi
+# Whether a check runs in this run: every check, or under PROOF_ONLY those it names and those they depend on.
+selected() { [[ -z ${PROOF_ONLY:-} || -n ${SELECTED[$1]:-} ]]; }
+# PROOF_LIST=1: say which checks this run would run, in the order it runs them, and why each, then stop before
+# anything is built or started.
+if [[ -n ${PROOF_LIST:-} ]]; then
+  for row in "${ROWS[@]}"; do
+    selected "$row" || continue
+    if [[ -n ${DIRECT[$row]:-} || -z ${PROOF_ONLY:-} ]]; then
+      echo "run: $row"
+    else
+      echo "run, needed by \"${PULLED_BY[$row]}\": $row"
+    fi
+  done
+  exit 0
+fi
+
 python3 -c 'import pexpect' 2> /dev/null || { echo "python3 with pexpect is needed to answer the installer's prompts (pip install pexpect)" >&2; exit 2; }
 for need in cawco-1 cawco-2 cawco-3 cawco-4 cawco-5 cawco-6 cawco-7 cawco-8 cawco-9 cawco-10 keys/test-release-private.pem keys/test-release-public.pem; do
   [[ -e "$bins/$need" ]] || { echo "missing $bins/$need: run build-stage2.ts first" >&2; exit 2; }
@@ -76,26 +129,31 @@ export -f setup 2>/dev/null || true
 # (third argument, seconds, default 600), keeps its output in a log, prints one line.
 # A check that runs out of time fails and the next one runs.
 declare -A VERDICT
-# check NAME FUNCTION [LIMIT_SECONDS=600] [DEPENDS_ON_CHECK_NAME] [HUB_GOOD_VERSION_AFTER_PASS]
-# A third verdict beside PASS and FAIL: NOT RUN, when the check it depends on did not pass.
+# check NAME FUNCTION [LIMIT_SECONDS=600] [DEPENDS_ON_CHECK_NAMES] [HUB_GOOD_VERSION_AFTER_PASS]
+# A third verdict beside PASS and FAIL: NOT RUN, when a check it depends on did not pass. DEPENDS_ON_CHECK_NAMES is
+# one check's name, or several joined by `|`: every one of them, each an earlier check, must have passed.
 check() {
-  local name=$1 fn=$2 limit=${3:-600} needs=${4:-} good=${5:-} log rc=0
+  local name=$1 fn=$2 limit=${3:-600} needs=${4:-} good=${5:-} log rc=0 need
   log="$out/logs/$(echo "$name" | tr -cs 'A-Za-z0-9' '-').log"
   LAST_LOG=$log
-  # PROOF_ONLY (an extended regex) runs only the checks whose names match it: a check being worked on, with the
-  # checks it builds on. Every other check says SKIPPED, never PASS, so a partial run never reads as a whole one.
-  if [[ -n ${PROOF_ONLY:-} ]] && ! [[ $name =~ $PROOF_ONLY ]]; then
+  # PROOF_ONLY (an extended regex) runs only the checks whose names match it, with every check they depend on
+  # (SELECTED, below). Every other check says SKIPPED, never PASS, so a partial run never reads as a whole one.
+  if ! selected "$name"; then
     echo "$name: SKIPPED (PROOF_ONLY)"
     VERDICT[$name]=SKIPPED
     return
   fi
-  if [[ -n $needs && ${VERDICT[$needs]:-} != PASS ]]; then
-    echo "$name: NOT RUN (depends on \"$needs\", which did not pass)"
-    echo "not run: depends on \"$needs\", which did not pass" > "$log"
-    VERDICT[$name]=NOTRUN
-    status=1
-    return
-  fi
+  local -a needed=()
+  [[ -z $needs ]] || IFS='|' read -r -a needed <<< "$needs"
+  for need in "${needed[@]}"; do
+    if [[ ${VERDICT[$need]:-} != PASS ]]; then
+      echo "$name: NOT RUN (depends on \"$need\", which did not pass)"
+      echo "not run: depends on \"$need\", which did not pass" > "$log"
+      VERDICT[$name]=NOTRUN
+      status=1
+      return
+    fi
+  done
   {
     echo "check: $name"
     echo "function: $fn"
@@ -395,7 +453,7 @@ setup "publish the bad-signature release" "$out/logs/fixture-badsig.log" publish
 setup "publish the unsigned release" "$out/logs/fixture-nosig.log" publish nosig stable 0.0.1-test.1 $sha1111 "$bins/cawco-1" "$key" 10 "$schema" no-signature
 setup "write the broken build" "$out/logs/fixture-broken.log" fixture broken-binary "$out/broken-cawco"
 setup "write the workflow the hub keeps" "$out/logs/fixture-workflow.log" bun -e "await Bun.write('$out/shared/workflow.json', JSON.stringify({name: 'kept-through-rollback', program: 'import { z } from \"zod\"; export const inputs=z.object({name:z.string()}); export default async function(w:Workflow<typeof inputs>){await w.checkpoint(\"binary\",w.inputs);return {name:w.inputs.name};}'}))"
-setup "put the session starter where the machines can read it" "$out/logs/starter.log" cp "$here/stage2-start-session.ts" "$here/stage2-stop-session.ts" "$here/stage2-during-install.ts" "$here/stage2-hook-calls.ts" "$out/shared/"
+setup "put the session starter where the machines can read it" "$out/logs/starter.log" cp "$here/stage2-start-session.ts" "$here/stage2-stop-session.ts" "$here/stage2-send.ts" "$here/stage2-during-install.ts" "$here/stage2-hook-calls.ts" "$out/shared/"
 cat > "$out/shared/reset-hub.sh" <<'EOF'
 # Puts the hub machine back on a known working build. $1 is the last good one: used when its directory is
 # still on disk, otherwise the build `current` names (provided the hub answers on it after the cleanup below).
@@ -633,9 +691,11 @@ install_hub() {
 }
 export -f install_hub
 check "pristine container installs the hub, and the hub answers" install_hub 600 "" 0.0.1-test.1
-grep -q "command: sudo apt-get install -y openssl" "$LAST_LOG" \
-  && echo "the installer showed the openssl install command and ran it: PASS" \
-  || { echo "the installer showed the openssl install command and ran it: FAIL (see $LAST_LOG)"; status=1; }
+export install_log=$LAST_LOG
+# Read off the install's own log, as a check of its own: it runs, skips and says NOT RUN as every check does.
+openssl_shown() { grep -q "command: sudo apt-get install -y openssl" "$install_log"; }
+export -f openssl_shown
+check "the installer showed the openssl install command and ran it" openssl_shown 30 "pristine container installs the hub, and the hub answers"
 
 join_machine() {
   need_hub
@@ -651,7 +711,7 @@ join_machine() {
   [[ "$(hub_api /api/agents | json 'd => d.filter(a => a.status === "online").length')" == 2 ]]
 }
 export -f join_machine
-check "a second container joins the hub" join_machine
+check "a second container joins the hub" join_machine 600 "pristine container installs the hub, and the hub answers"
 export join_log=$LAST_LOG
 
 declined() {
@@ -661,7 +721,7 @@ declined() {
   grep -q "cawco-install: joined as " "$join_log"
 }
 export -f declined
-check "declining the optional tools still completes the install" declined
+check "declining the optional tools still completes the install" declined 600 "a second container joins the hub"
 
 # The installer run against a feed that must be refused, inside the spare hub machine
 # (a real systemd machine the installer gets past its service-manager check on, and which stays
@@ -703,7 +763,7 @@ rerun() {
   [[ -n "$before" && "$before" == "$after" ]]
 }
 export -f rerun
-check "running the installer again reports the install and changes nothing" rerun
+check "running the installer again reports the install and changes nothing" rerun 600 "pristine container installs the hub, and the hub answers"
 
 # ---------------------------------------------------------------- the install script on machines nothing is installed on
 
@@ -727,7 +787,7 @@ no_account_refused() {
   [[ "$(children_with "$joinerc" noaccount-)" == 0 ]]
 }
 export -f no_account_refused
-check "on a machine with no CawCo account a session start is refused with the sentence, and nothing runs" no_account_refused
+check "on a machine with no CawCo account a session start is refused with the sentence, and nothing runs" no_account_refused 600 "a second container joins the hub"
 
 # The machines whose sessions the proof starts are set up as a real machine is: one CawCo account, made through
 # the hub's API, signed in on each in its own dir. The hub records each sign-in before the first session starts.
@@ -750,7 +810,7 @@ sign_in_machines() {
   wait_until 60 '[[ "$(hub_api /api/agents | json "d => d.filter(a => a.status === \"online\" && (a.machineId === \"$hid\" || a.machineId === \"$jid\")).length")" == 2 ]]'
 }
 export -f sign_in_machines
-check "each machine that runs the proof's sessions is signed in to a CawCo account in its own dir" sign_in_machines
+check "each machine that runs the proof's sessions is signed in to a CawCo account in its own dir" sign_in_machines 600 "a second container joins the hub"
 
 truncated_script() {
   as_user "$freshc" true
@@ -804,7 +864,7 @@ moves_to_another_hub() {
   wait_until 90 '[[ "$(hub_api /api/agents | json "d => d.find(a => a.machineId === \"$jid\")?.status")" == online ]]'
 }
 export -f moves_to_another_hub
-check "running a hub's install script on a machine joined elsewhere moves it" moves_to_another_hub
+check "running a hub's install script on a machine joined elsewhere moves it" moves_to_another_hub 600 "a second container joins the hub"
 
 # ---------------------------------------------------------------- updates, all through the hub's API
 
@@ -829,7 +889,7 @@ older_refused() {
   put_policy stable false
 }
 export -f older_refused
-check "an older signed build is refused on the automatic path and on Install now" older_refused
+check "an older signed build is refused on the automatic path and on Install now" older_refused 600 "pristine container installs the hub, and the hub answers"
 
 waits_when_off() {
   need_hub
@@ -842,7 +902,7 @@ waits_when_off() {
   [[ "$(phase $hid)" == available ]]
 }
 export -f waits_when_off
-check "with auto-update off a newer build is reported and waits" waits_when_off
+check "with auto-update off a newer build is reported and waits" waits_when_off 600 "pristine container installs the hub, and the hub answers"
 
 joiner_not_ahead() {
   need_hub
@@ -852,7 +912,7 @@ joiner_not_ahead() {
   [[ "$(build_version $jid)" == 0.0.1-test.1 ]]
 }
 export -f joiner_not_ahead
-check "a joined machine is offered only the build its hub runs" joiner_not_ahead
+check "a joined machine is offered only the build its hub runs" joiner_not_ahead 600 "a second container joins the hub"
 
 # Sessions running on the joined machine before its update begins, started while it and its hub both run build 1, as
 # a fleet's are: from the hub's own update until the joined machine installs the hub's build, the hub sends that
@@ -862,7 +922,7 @@ joiner_sessions_before() {
   start_before "$jid" "$joinerc" "$out/joiner-before.txt" joinerpre-1 joinerpre-2
 }
 export -f joiner_sessions_before
-check "sessions started on the joined machine while it and its hub run the same build run, one child each" joiner_sessions_before
+check "sessions started on the joined machine while it and its hub run the same build run, one child each" joiner_sessions_before 600 "each machine that runs the proof's sessions is signed in to a CawCo account in its own dir"
 
 install_now() {
   need_hub
@@ -878,7 +938,7 @@ install_now() {
   wait_until 60 '[[ -z "$(retiring $hid)" && "$(field $hid sessiondVersion)" == 0.0.1-test.2 ]]'
 }
 export -f install_now
-check "Install now applies the newer build" install_now 600 "" 0.0.1-test.2
+check "Install now applies the newer build" install_now 600 "with auto-update off a newer build is reported and waits" 0.0.1-test.2
 
 joiner_follows() {
   need_hub
@@ -886,7 +946,7 @@ joiner_follows() {
   [[ "$(build_version $jid)" == 0.0.1-test.1 ]]
 }
 export -f joiner_follows
-check "once the hub runs the newer build its joined machine is offered it" joiner_follows 600 "Install now applies the newer build"
+check "once the hub runs the newer build its joined machine is offered it" joiner_follows 600 "Install now applies the newer build|a second container joins the hub"
 
 joiner_starts_held() {
   need_hub
@@ -915,7 +975,7 @@ joiner_starts_held() {
   [[ "$(child_pids "$joinerc" joinerheld-1)" =~ ^[0-9]+$ ]]
 }
 export -f joiner_starts_held
-check "a session start requested while the joined machine installs runs once afterwards, one child, none lost" joiner_starts_held 1200 "Install now applies the newer build"
+check "a session start requested while the joined machine installs runs once afterwards, one child, none lost" joiner_starts_held 1200 "Install now applies the newer build|sessions started on the joined machine while it and its hub run the same build run, one child each"
 
 joiner_survived() { need_hub; survived "$joinerc" "$out/joiner-before.txt"; }
 export -f joiner_survived
@@ -1089,7 +1149,7 @@ auto_with_held_child() {
   watched_ids "$out/watch-hub.txt" > "$out/accepted-hub.txt"
 }
 export -f auto_with_held_child
-check "with auto-update on the build is applied when the machine is idle" auto_with_held_child 600 "changing the channel takes effect" "0.0.1-nightly.3+333333333333"
+check "with auto-update on the build is applied when the machine is idle" auto_with_held_child 600 "changing the channel takes effect|each machine that runs the proof's sessions is signed in to a CawCo account in its own dir" "0.0.1-nightly.3+333333333333"
 
 hub_starts_held() {
   need_hub
@@ -1190,7 +1250,7 @@ capability_report() {
   [[ "$(hub_api /api/agents | json "d => d.find(a => a.machineId === '$jid')?.machineCapabilities?.items?.find(i => i.id === 'opencode')?.available")" == false ]]
 }
 export -f capability_report
-check "the capability report lists what each container has, with versions" capability_report
+check "the capability report lists what each container has, with versions" capability_report 600 "a second container joins the hub"
 
 
 # ---------------------------------------------------------------- the session keeper's own checks
@@ -1266,7 +1326,7 @@ full_update_keeper_cannot_start() {
   [[ "$(holder_of "$hubc" keeperlive-4)" == "$(endpoint_of "${before#versions/}")" ]]
 }
 export -f full_update_keeper_cannot_start
-check "in a full update a keeper that cannot start does not undo a healthy build, and the keeper before stays the machine's" full_update_keeper_cannot_start 900 "Install now applies the newer build" "$(printf '0.0.1-nightly.4+%s' 444444444444)"
+check "in a full update a keeper that cannot start does not undo a healthy build, and the keeper before stays the machine's" full_update_keeper_cannot_start 900 "Install now applies the newer build|each machine that runs the proof's sessions is signed in to a CawCo account in its own dir" "$(printf '0.0.1-nightly.4+%s' 444444444444)"
 
 trial_keeps_what_it_restores() {
   keeper_start_state
@@ -1284,7 +1344,7 @@ trial_keeps_what_it_restores() {
   wait_until 60 '! has_version "$hubc" "${previous#versions/}"'
 }
 export -f trial_keeps_what_it_restores
-check "the build a pending trial would restore is still on disk, and is removed after the trial is confirmed" trial_keeps_what_it_restores 900 "Install now applies the newer build" "$(printf '0.0.1-nightly.5+%s' 555555555555)"
+check "the build a pending trial would restore is still on disk, and is removed after the trial is confirmed" trial_keeps_what_it_restores 900 "Install now applies the newer build|each machine that runs the proof's sessions is signed in to a CawCo account in its own dir" "$(printf '0.0.1-nightly.5+%s' 555555555555)"
 
 keeper_cannot_start_with_held() {
   keeper_start_state
@@ -1318,7 +1378,7 @@ keeper_cannot_start_with_held() {
   [[ "$(keeper_link "$hubc")" == "$before" ]]
 }
 export -f keeper_cannot_start_with_held
-check "with a child held, a build whose keeper cannot start leaves the child and its keeper as they were, sessions still start, and it is not tried again" keeper_cannot_start_with_held 1500 "Install now applies the newer build" "$(printf '0.0.1-nightly.6+%s' 666666666666)"
+check "with a child held, a build whose keeper cannot start leaves the child and its keeper as they were, sessions still start, and it is not tried again" keeper_cannot_start_with_held 1500 "Install now applies the newer build|each machine that runs the proof's sessions is signed in to a CawCo account in its own dir" "$(printf '0.0.1-nightly.6+%s' 666666666666)"
 
 helper_killed_mid_handover() {
   keeper_start_state
@@ -1358,7 +1418,7 @@ helper_killed_mid_handover() {
   keeper_dropin remove
 }
 export -f helper_killed_mid_handover
-check "a helper killed while the keeper it hands over to is starting leaves the machine whole, and the decider that resumes finishes the handover" helper_killed_mid_handover 1200 "Install now applies the newer build" "$(printf '0.0.1-nightly.7+%s' 777777777777)"
+check "a helper killed while the keeper it hands over to is starting leaves the machine whole, and the decider that resumes finishes the handover" helper_killed_mid_handover 1200 "Install now applies the newer build|each machine that runs the proof's sessions is signed in to a CawCo account in its own dir" "$(printf '0.0.1-nightly.7+%s' 777777777777)"
 
 # The brief's case: a joined machine with sessions running on its keeper installs a build. The new build's keeper
 # takes a new session at once, the old sessions run on and stay answerable, through an agent restart in the middle
@@ -1445,7 +1505,7 @@ handover_on_joined_machine() {
   wait_until 90 '[[ "$(as_user "$joinerc" systemctl --user list-unit-files --no-legend "cawco-sessiond*.service" | awk "{print \$1}")" == "$(unit_of "'"$new"'")" ]]'
 }
 export -f handover_on_joined_machine
-check "a joined machine installs a build with sessions on its keeper: the new keeper takes a new session at once, the old sessions run on and answer through an agent restart, and the old keeper goes when they end" handover_on_joined_machine 1800 "Install now applies the newer build"
+check "a joined machine installs a build with sessions on its keeper: the new keeper takes a new session at once, the old sessions run on and answer through an agent restart, and the old keeper goes when they end" handover_on_joined_machine 1800 "Install now applies the newer build|each machine that runs the proof's sessions is signed in to a CawCo account in its own dir"
 
 agent_cannot_start_whole_recovery() {
   keeper_start_state
@@ -1478,7 +1538,7 @@ agent_cannot_start_whole_recovery() {
   wait_until 60 'session_running keeperlive-9'
 }
 export -f agent_cannot_start_whole_recovery
-check "a helper killed after the swap of a build whose agent cannot start is put back whole, though its hub runs" agent_cannot_start_whole_recovery 900 "Install now applies the newer build"
+check "a helper killed after the swap of a build whose agent cannot start is put back whole, though its hub runs" agent_cannot_start_whole_recovery 900 "Install now applies the newer build|each machine that runs the proof's sessions is signed in to a CawCo account in its own dir"
 
 # ---------------------------------------------------------------- a delegate workspace's boundary across an update
 # A delegate's workspace on the joined machine, opened the product's own way: a session there delegates through the
@@ -1653,7 +1713,7 @@ workspace_across_update() {
   [[ "$(ws_exec 'readlink /proc/self/ns/pid')" == "$(ns_of "$new_inner")" ]]
 }
 export -f workspace_across_update
-check "a workspace open across an update keeps its job running, its next command runs in the new build's boundary, and the old boundary closes once the job ends" workspace_across_update 1500 "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential" "$WS_BUILD"
+check "a workspace open across an update keeps its job running, its next command runs in the new build's boundary, and the old boundary closes once the job ends" workspace_across_update 1500 "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential|changing the channel takes effect" "$WS_BUILD"
 
 workspace_clean_clone() {
   need_hub
@@ -1700,9 +1760,10 @@ export -f workspace_archived
 check "the proof's workspace is archived through the hub, and nothing of it is left on the joined machine" workspace_archived 300 "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential"
 
 # ---------------------------------------------------------------- the keeper's children cgroup
-# A keeper's unit delegates the pids controller (Delegate=pids, DelegateSubgroup=keeper): systemd starts the
-# keeper in …/cawco-sessiond-<build>.service/keeper, and the keeper puts every child in …/children, whose pids.max
-# is the tightest task limit above it less the 64 tasks it keeps for itself (packages/sessiond/src/cgroup.ts).
+# A keeper's unit delegates the pids, memory and cpu controllers (Delegate=pids memory cpu, DelegateSubgroup=keeper):
+# systemd starts the keeper in …/cawco-sessiond-<build>.service/keeper, and the keeper puts every child in a cgroup
+# of its own, …/children/<procId>-<serial>, under pids.max 8192, all of them under …/children, whose pids.max is the
+# tightest task limit above it less the 64 tasks it keeps for itself (packages/sessiond/src/cgroup.ts).
 #
 # The limit is a known one, set before the keeper starts: TasksMax on the keepers' units, in an administrator's
 # drop-in for every unit named cawco-sessiond-* (/etc/systemd/user/cawco-sessiond-.service.d), not on the user's
@@ -1713,7 +1774,7 @@ check "the proof's workspace is archived through the hub, and nothing of it is l
 # last, so the limit changes nothing for the checks before it; the current keeper is restarted after the limit is
 # set, holding nothing.
 export KEEPER_TASKS=200
-export PLACED_RE='^\[sessiond\] children run in (/sys/fs/cgroup/.+/cawco-sessiond-[^/]+\.service/children) under pids\.max ([0-9]+) \(([0-9]+), less 64 kept for the keeper\)$'
+export PLACED_RE='^\[sessiond\] each child runs in a cgroup of its own under (/sys/fs/cgroup/.+/cawco-sessiond-[^/]+\.service/children), under pids\.max 8192, all of them under pids\.max ([0-9]+) \(([0-9]+), less 64 kept for the keeper\); memory and CPU limits apply when they are set on the hub$'
 # The keeper's last word on where its children run, since a moment (unix seconds): one of the lines cgroup.ts says.
 keeper_said() { as_user "$1" journalctl --user --no-pager -o cat -u "$(current_unit "$1")" --since "@$2" | grep '^\[sessiond\] ' | grep -v ' listening on \|^\[sessiond\] SIGTERM\| names this keeper$\|not the machine.s keeper' | tail -n 1; }
 # Asks the keeper to start a child (container, procId, command, JSON args) and prints its ack for it. The keeper
@@ -1731,7 +1792,7 @@ highest_pids() {
   as_user "$1" sh -c 'top=0; n=0; while [ $n -lt 200 ]; do i=0; while [ $i -lt 50 ]; do read v < "$1/pids.current"; [ "$v" -gt "$top" ] && top=$v; i=$((i + 1)); done; sleep 0.05; n=$((n + 1)); done; echo $top' sh "$2"
 }
 keeper_children_capped_on() {
-  local c=$1 since said group max limit keeper pid forker ack top events
+  local c=$1 since said group max limit keeper pid own forker ack top events
   echo "======== $c"
   $P exec "$c" sh -c "mkdir -p /etc/systemd/user/cawco-sessiond-.service.d && printf '[Service]\nTasksMax=%s\n' $KEEPER_TASKS > /etc/systemd/user/cawco-sessiond-.service.d/proof-tasks.conf"
   as_user "$c" systemctl --user daemon-reload
@@ -1747,7 +1808,8 @@ keeper_children_capped_on() {
   group=${BASH_REMATCH[1]} max=${BASH_REMATCH[2]} limit=${BASH_REMATCH[3]}
   [[ $limit == "$KEEPER_TASKS" && $max == $((KEEPER_TASKS - 64)) ]] || { echo "FAIL: the cap is $max of $limit, not $((KEEPER_TASKS - 64)) of $KEEPER_TASKS"; return 1; }
   [[ "$(as_user "$c" cat "$group/pids.max")" == "$max" ]]
-  # 2. A child it starts is in children; the keeper itself is in keeper.
+  # 2. A child it starts is in a cgroup of its own in children, under its own pids.max; children holds no process of
+  # its own; the keeper itself is in keeper.
   keeper=$(keeper_pid "$c")
   echo "keeper $keeper is in $(cgroup_of "$c" "$keeper")"
   [[ "$(cgroup_of "$c" "$keeper")" == */cawco-sessiond-*.service/keeper ]]
@@ -1755,8 +1817,11 @@ keeper_children_capped_on() {
   echo "spawn cg-child: $ack"
   [[ $ack == *'"stage":"applied"'* ]]
   pid=$(child_pids "$c" cg-child)
-  echo "child $pid is in $(cgroup_of "$c" "$pid")"
-  [[ "$(cgroup_of "$c" "$pid")" == */cawco-sessiond-*.service/children && "/sys/fs/cgroup$(cgroup_of "$c" "$pid")" == "$group" ]]
+  own="/sys/fs/cgroup$(cgroup_of "$c" "$pid")"
+  echo "child $pid is in $own"
+  [[ $own == "$group"/cg-child-* ]]
+  [[ "$(as_user "$c" cat "$own/pids.max")" == 8192 ]]
+  [[ -z "$(as_user "$c" cat "$group/cgroup.procs")" ]]
   # 3. A child that forks without end stops at the cap: children never holds more than pids.max, and the kernel
   # refused its forks there (pids.events counts each refusal).
   # A forker that never gives up: dash exits at its first refused fork and bash after a few retries, and the
@@ -1794,7 +1859,123 @@ keeper_children_capped() {
   keeper_children_capped_on "$joinerc"
 }
 export -f keeper_said keeper_spawn cgroup_of highest_pids keeper_children_capped_on keeper_children_capped
-check "the keeper's children run in its delegated pids cgroup, capped below the keeper's reserve" keeper_children_capped 600 "a second container joins the hub"
+
+# ---------------------------------------------------------------- one session's runaway is its own
+# No single session can take a machine down: each child the keeper starts runs in a cgroup of its own, under
+# pids.max 8192 (cgroup.ts CHILD_TASKS) and, when the hub sets one, a memory limit (/api/session-limits). A
+# runaway is refused or killed inside its own child; the keeper says so (`proc.limit`), and the agent says it on
+# the session, where the hub keeps it. These run on the hub's machine before the check above, whose keeper task
+# limit (TasksMax=200) would cap every child below its own limit.
+transcript_of() { hub_api "/api/instances/$1/transcript"; }
+send_message() { as_user "$hubc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-send.ts http://127.0.0.1:3456 "$1" "$2" "$3"; }
+put_session_limits() { hub_api /api/session-limits -X PUT -H 'content-type: application/json' -d "$1"; }
+# The hub machine's agent's word that it holds the hub's session limits, since a moment (unix seconds).
+agent_said_limits() { as_user "$hubc" journalctl --user --no-pager -o cat -u cawco-agent.service --since "@$1" | grep -F "[sessiond] session limits from the hub: $2" || true; }
+# A child's own cgroup, by the pid the keeper holds under its id.
+group_of() { echo "/sys/fs/cgroup$(cgroup_of "$hubc" "$(child_pids "$hubc" "$1")")"; }
+# A counter in a flat-keyed cgroup file (pids.events, memory.events), 0 when absent.
+counter_in() { as_user "$hubc" sh -c 'sed -n "s/^$2 //p" "$1" 2> /dev/null' sh "$1" "$2" | awk '{ n = $1 } END { print n + 0 }'; }
+
+runaway_stays_its_own() {
+  need_hub
+  local a=limit-tasks-a b=limit-tasks-b ack group children current pool top token
+  # Whatever happens below, the runaway goes: its process group, which everything it forked is in.
+  trap 'as_user "$hubc" sh -c "kill -KILL -- -\$(cat /tmp/limit-runaway.pid) 2> /dev/null; rm -f /tmp/limit-runaway.pid" || true' EXIT
+  start_session "$hid" "$a" > /dev/null
+  wait_until 60 "session_running $a"
+  # The session's process becomes a command that starts processes without end, under the session's id, as a
+  # harness's tool runs inside the session's own cgroup. Bounded so the proof can never be the runaway: at most
+  # 20,000 children, for at most 90 s, each asleep for 300 s; a refused fork waits 10 ms and tries again.
+  ack=$(keeper_spawn "$hubc" "$a" /usr/bin/perl '["-e","my ($n, $end) = (0, time + 90); while ($n < 20000 && time < $end) { my $p = fork(); if (!defined $p) { select(undef, undef, undef, 0.01); next } if ($p == 0) { sleep 300; exit 0 } $n++ } sleep 300"]')
+  echo "the runaway: $ack"
+  [[ $ack == *'"stage":"applied"'* ]]
+  as_user "$hubc" sh -c 'echo "$1" > /tmp/limit-runaway.pid' sh "$(child_pids "$hubc" "$a")"
+  group=$(group_of "$a")
+  echo "its cgroup: $group"
+  [[ $group == */cawco-sessiond-*.service/children/"$a"-* ]]
+  [[ "$(as_user "$hubc" cat "$group/pids.max")" == 8192 ]]
+  # It stops at its own limit: the kernel refused its forks there, and it never held more than 8,192 tasks.
+  wait_until 120 '(( $(counter_in "'"$group"'/pids.events" max) > 0 ))'
+  top=$(highest_pids "$hubc" "$group")
+  echo "its highest pids.current over ten seconds: $top; pids.events max $(counter_in "$group/pids.events" max)"
+  (( top <= 8192 ))
+  # The machine's: all the keeper's children together stay far below their pool's cap.
+  children=$(dirname "$group")
+  current=$(as_user "$hubc" cat "$children/pids.current")
+  pool=$(as_user "$hubc" cat "$children/pids.max")
+  echo "all children: pids.current $current, pids.max $pool"
+  (( current <= 8192 + 512 ))
+  [[ $pool == max ]] || (( current * 2 < pool ))
+  # Another session still starts, and answers a turn: its message reaches its process through the keeper, and its
+  # answer reaches the hub.
+  start_session "$hid" "$b" > /dev/null
+  wait_until 60 "session_running $b"
+  token="limit-proof-$RANDOM$RANDOM"
+  send_message "$hid" "$b" "$token"
+  wait_until 60 '[[ "$(transcript_of '"$b"')" == *"proof answered: '"$token"'"* ]]'
+  # The hub shows the limit on the first session, in the words the agent said it in.
+  wait_until 60 '[[ "$(transcript_of '"$a"')" == *"This session hit its limit of 8,192 processes: something it ran keeps starting processes."* ]]'
+  # Once the session ends, its cgroup goes with it.
+  stop_session "$hid" "$a" > /dev/null
+  wait_until 120 '! as_user "$hubc" test -e "'"$group"'"'
+  stop_session "$hid" "$b" > /dev/null
+  wait_until 60 '[[ -z "$(child_pids "$hubc" '"$b"')" ]]'
+}
+
+memory_limit_stays_its_own() {
+  need_hub
+  local m=limit-mem-a n=limit-mem-b since ack holder group max expected others
+  # Whatever happens below, the setting is cleared again: it applies to every machine's next process.
+  trap 'put_session_limits "{\"memoryPercent\":null,\"cpuPercent\":null}" > /dev/null 2>&1 || true' EXIT
+  # Set on the hub: each session's process may use 1% of its machine's RAM. The machine's agent takes it on its next
+  # heartbeat (every 15 s), and every process the keeper starts from then runs under it.
+  since=$(as_user "$hubc" date +%s)
+  put_session_limits '{"memoryPercent":1,"cpuPercent":null}'
+  [[ "$(hub_api /api/session-limits | json 'd => `${d.memoryPercent}/${d.cpuPercent}`')" == 1/null ]]
+  wait_until 60 '[[ -n "$(agent_said_limits "'"$since"'" "memory 1% of this machine")" ]]'
+  start_session "$hid" "$m" > /dev/null
+  wait_until 60 "session_running $m"
+  # The session's process becomes one that hands a child more memory than its limit, bounded at the limit plus
+  # 256 MiB, and waits on it: the limit is read off the group a process of this session runs in now.
+  max=$(as_user "$hubc" cat "$(group_of "$m")/memory.max")
+  expected=$(( $(as_user "$hubc" awk '/^MemTotal:/ { print $2 }' /proc/meminfo) * 1024 / 100 ))
+  echo "memory.max $max; 1% of the machine's MemTotal is $expected"
+  [[ $max =~ ^[0-9]+$ ]]
+  (( max - expected <= expected / 100 && expected - max <= expected / 100 ))
+  ack=$(keeper_spawn "$hubc" "$m" /usr/bin/perl '["-e","my $n = $ARGV[0] + 268435456; my $p = fork(); if (defined $p && $p == 0) { my $s = q(x) x $n; sleep 300; exit 0 } sleep 300","'"$max"'"]')
+  echo "the allocation: $ack"
+  [[ $ack == *'"stage":"applied"'* ]]
+  holder=$(child_pids "$hubc" "$m")
+  group=$(group_of "$m")
+  echo "its cgroup: $group, memory.max $(as_user "$hubc" cat "$group/memory.max")"
+  # The kernel killed for memory in that group, and only there: the process holding it is alive, and every other
+  # child's group reads no kill.
+  wait_until 60 '(( $(counter_in "'"$group"'/memory.events" oom_kill) > 0 ))'
+  echo "memory.events: $(as_user "$hubc" cat "$group/memory.events" | tr '\n' ' ')"
+  as_user "$hubc" kill -0 "$holder"
+  others=$(as_user "$hubc" sh -c 'for g in "$1"/*/; do g=${g%/}; [ "$g" = "$2" ] || sed -n "s/^oom_kill //p" "$g/memory.events" 2> /dev/null; done' sh "$(dirname "$group")" "$group" | awk '{ n += $1 } END { print n + 0 }')
+  echo "oom_kill in every other child's group: $others"
+  [[ $others == 0 ]]
+  # The hub shows it on the session.
+  wait_until 60 '[[ "$(transcript_of '"$m"')" == *"This session hit its memory limit of"* ]]'
+  stop_session "$hid" "$m" > /dev/null
+  wait_until 120 '! as_user "$hubc" test -e "'"$group"'"'
+  # Cleared on the hub, the next session runs with no memory limit.
+  since=$(as_user "$hubc" date +%s)
+  put_session_limits '{"memoryPercent":null,"cpuPercent":null}'
+  [[ "$(hub_api /api/session-limits | json 'd => `${d.memoryPercent}/${d.cpuPercent}`')" == null/null ]]
+  wait_until 60 '[[ -n "$(agent_said_limits "'"$since"'" "memory unlimited")" ]]'
+  start_session "$hid" "$n" > /dev/null
+  wait_until 60 "session_running $n"
+  [[ "$(as_user "$hubc" cat "$(group_of "$n")/memory.max")" == max ]]
+  stop_session "$hid" "$n" > /dev/null
+  wait_until 60 '[[ -z "$(child_pids "$hubc" '"$n"')" ]]'
+}
+export -f transcript_of send_message put_session_limits agent_said_limits group_of counter_in runaway_stays_its_own memory_limit_stays_its_own
+check "a session whose command starts processes without end stops at its own limit of 8,192, the hub says so on it, another session still starts and answers, and its cgroup goes when it ends" runaway_stays_its_own 600 "Install now applies the newer build|each machine that runs the proof's sessions is signed in to a CawCo account in its own dir"
+check "with a session memory limit set on the hub, a session that allocates past it loses only the process that did, the hub says so on it, and once the limit is cleared a new session runs with no memory limit" memory_limit_stays_its_own 600 "Install now applies the newer build|each machine that runs the proof's sessions is signed in to a CawCo account in its own dir"
+
+check "the keeper's children run each in a cgroup of its own in its delegated cgroup, all of them capped below the keeper's reserve" keeper_children_capped 600 "a session start requested while the joined machine installs runs once afterwards, one child, none lost"
 
 echo "Evidence: $out"
 exit $status

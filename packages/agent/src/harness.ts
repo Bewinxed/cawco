@@ -342,6 +342,14 @@ export interface Harness {
     sessionKey: string,
     dir: string
   ) => Promise<boolean>;
+  /**
+   * The sessions whose work runs inside the keeper's child `procId`: an
+   * adapter whose sessions share one server process (OpenCode's) names those
+   * that server holds now. Absent for an adapter that runs each session in a
+   * process of its own, whose procId names it.
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: matches adapter methods
+  sessionsOn?(procId: string): string[];
   /** Lifecycle guards read the supervisor's one machine recovery barrier. */
   readonly setCustodyReadiness?: (read: () => boolean) => void;
   /** Start a session; resolves once the runtime handle is in place. */

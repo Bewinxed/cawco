@@ -25,7 +25,10 @@ import {
   type SessiondClient,
 } from "../../packages/agent/src/sessiond-client";
 import { CONTROL_PROBE_ACCOUNT } from "../../packages/core/src/accounts";
-import { CAPABILITIES_NONE } from "../../packages/core/src/harness";
+import {
+  CAPABILITIES_NONE,
+  MESSAGES_READ,
+} from "../../packages/core/src/harness";
 import {
   CAWCO_ENV,
   type HarnessKind,
@@ -62,7 +65,43 @@ function session(
     holding: () => undefined,
     interrupt: () => Promise.resolve(),
     resolvePermission: () => undefined,
-    send: () => undefined,
+    // A turn, as far as a session with no model takes one: the message goes
+    // to its process through the keeper that holds it (the write is acked
+    // only by a keeper that answers and holds that child alive), and the
+    // session answers with the words it was sent, and ends the turn.
+    send: (message) => {
+      const text =
+        typeof message.message.content === "string"
+          ? message.message.content
+          : "";
+      ctx.busy(true);
+      client
+        .write(procId, `${text}\n`)
+        .then(
+          () => {
+            ctx.frame({
+              type: "system",
+              subtype: MESSAGES_READ,
+              read: [message.uuid],
+            });
+            const answer = `proof answered: ${text}`;
+            ctx.frame({
+              type: "assistant",
+              uuid: crypto.randomUUID(),
+              message: { content: [{ type: "text", text: answer }] },
+            });
+            ctx.frame({
+              type: "result",
+              uuid: crypto.randomUUID(),
+              subtype: "success",
+              is_error: false,
+              result: answer,
+            });
+          },
+          (error: unknown) => ctx.failed(error)
+        )
+        .finally(() => ctx.busy(false));
+    },
     stop: async () => {
       await endProc(client, procId);
       ctx.closed?.();

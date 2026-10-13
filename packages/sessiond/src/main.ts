@@ -41,7 +41,7 @@ const main = async (): Promise<void> => {
   }
   const server = new SessiondServer({
     build: { version: runtimeVersion, startedAt: Date.now() },
-    ...(placement?.children ? { children: placement.children.procs } : {}),
+    ...(placement?.children ? { children: placement.children } : {}),
   });
   await server.listen(endpoint);
   console.log(

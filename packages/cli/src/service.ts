@@ -752,14 +752,18 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       // The keeper's children count against the unit's task limit, and a Bun
       // process that cannot create a thread aborts, taking every child with
       // it. With the pids controller delegated, the keeper keeps its children
-      // in a cgroup of their own whose limit stops short of its reserve
-      // (sessiond/src/cgroup.ts). systemd.resource-control(5), Delegate=:
+      // in a cgroup of their own whose limit stops short of its reserve, and
+      // each child in a cgroup of its own under its own task limit, so one
+      // runaway stops inside its own child (sessiond/src/cgroup.ts). memory
+      // and cpu are delegated for the session limits an operator sets on the
+      // hub, which the keeper turns on only when one is set.
+      // systemd.resource-control(5), Delegate=:
       // "Units where this is enabled may create and manage their own private
       // subhierarchy of control groups below the control group of the unit
       // itself"; DelegateSubgroup= (systemd 254+): "it's almost always
       // necessary to run the main ("supervising") process of a unit that has
       // delegation turned on in a subgroup".
-      delegate: { controllers: "pids", subgroup: "keeper" },
+      delegate: { controllers: "pids memory cpu", subgroup: "keeper" },
       // Every session's welcome and every turn's bytes pass through the
       // keeper, so a throttled keeper is a stalled board. Measured on the Mac
       // (load-matched A/B, 2026-10-09, three counted pairs): the worst welcome

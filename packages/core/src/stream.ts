@@ -251,6 +251,12 @@ export interface RegisterAckPayload {
   machineCredential: string;
   ok: true;
   /**
+   * The fleet's session limits ({@link import("./index").SessionLimits}), so
+   * the first process the machine starts after it connects runs under them.
+   * Every heartbeat's ack carries them again.
+   */
+  sessionLimits?: import("./index").SessionLimits;
+  /**
    * Every Claude session this hub has a row for on the machine, each with
    * the account its row runs on (null for none). The machine carries each
    * one's data into that account's dir (core paths.ts `sessionConfigDir`)

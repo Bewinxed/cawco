@@ -30,16 +30,18 @@ import { Socket } from "node:net";
 import { dirname, join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
+// The protocol lives behind its own subpath on purpose: `sessiond.ts` reaches
+// for `node:os`, and the core barrel is imported by the browser bundle.
+import type { SessionLimits } from "@cawco/core";
 import { LineSplitter } from "@cawco/core/lines";
 import { PacedWriter } from "@cawco/core/paced-write";
 import { standalone } from "@cawco/core/runtime";
-// The protocol lives behind its own subpath on purpose: `sessiond.ts` reaches
-// for `node:os`, and the core barrel is imported by the browser bundle.
 import {
   type ProcSpec,
   SESSIOND_V1,
   type SessiondAck,
   type SessiondClientMessage,
+  type SessiondLimit,
   type SessiondLine,
   type SessiondProcInfo,
   type SessiondServerMessage,
@@ -279,6 +281,58 @@ export const ensureSessiond = async (
   throw new Error(
     `[sessiond] spawned ${command} ${args.join(" ")} but it never bound ${endpoint}`
   );
+};
+
+/**
+ * The fleet's session limits as the hub last said them (its register and
+ * heartbeat acks): every spawn on every keeper carries them, so a change
+ * applies to each process started after it. None until the hub says.
+ */
+let sessionLimits: SessionLimits = {};
+
+/** The hub said the fleet's session limits; true when they differ from what this agent held. */
+export const setSessionLimits = (
+  limits: SessionLimits | undefined
+): boolean => {
+  const next: SessionLimits = {
+    ...(limits?.memoryPercent === undefined
+      ? {}
+      : { memoryPercent: limits.memoryPercent }),
+    ...(limits?.cpuPercent === undefined
+      ? {}
+      : { cpuPercent: limits.cpuPercent }),
+  };
+  const changed =
+    next.memoryPercent !== sessionLimits.memoryPercent ||
+    next.cpuPercent !== sessionLimits.cpuPercent;
+  sessionLimits = next;
+  return changed;
+};
+
+/** The limits a spawn carries now. */
+export const currentSessionLimits = (): SessionLimits => sessionLimits;
+
+/**
+ * Every keeper's word that one of its children reached a limit
+ * (`proc.limit`), once however many connections heard it: the supervisor
+ * says it on the sessions it touches (session.ts).
+ */
+export const keeperLimits = new EventEmitter<{ limit: [SessiondLimit] }>();
+
+/** The reports already passed on, by group, limit and count. Bounded: a report is said within seconds of its first hearing. */
+const heardLimits = new Set<string>();
+const HEARD_LIMITS_KEPT = 512;
+
+const hearLimit = (message: SessiondLimit): void => {
+  const key = `${message.group}/${message.limit}/${message.count}`;
+  if (heardLimits.has(key)) {
+    return;
+  }
+  if (heardLimits.size >= HEARD_LIMITS_KEPT) {
+    heardLimits.clear();
+  }
+  heardLimits.add(key);
+  keeperLimits.emit("limit", message);
 };
 
 /** What the agent learns the moment it attaches (design §7's epoch and heads). */
@@ -530,6 +584,9 @@ export class SessiondClient {
         }
         return;
       }
+      case "proc.limit":
+        hearLimit(message);
+        return;
       default:
         return;
     }
@@ -593,8 +650,15 @@ export class SessiondClient {
     spec: ProcSpec,
     commandId = crypto.randomUUID()
   ): Promise<void> {
+    const limits = sessionLimits;
     assertApplied(
-      await this.#command({ type: "spawn", commandId, procId, spec }),
+      await this.#command({
+        type: "spawn",
+        commandId,
+        procId,
+        spec,
+        ...(Object.keys(limits).length > 0 ? { limits } : {}),
+      }),
       "spawn"
     );
   }

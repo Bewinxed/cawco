@@ -636,6 +636,14 @@ export const instances = sqliteTable("instances", {
     moved: string;
     stayed?: string;
   }>(),
+  /**
+   * The limits its keeper held the session to (core `LIMIT_REACHED`): when,
+   * and the line its machine said, newest last and the last few kept
+   * (db `LIMIT_NOTES_KEPT`). Its transcript says each where it happened.
+   */
+  limitNotes: text("limit_notes", { mode: "json" }).$type<
+    { at: number; id: string; content: string }[]
+  >(),
   keepAliveEnabled: integer("keep_alive", { mode: "boolean" })
     .notNull()
     .default(false),
@@ -2153,6 +2161,19 @@ export const spendSettings = sqliteTable("spend_settings", {
   /** Always `'spend'`. */
   id: text("id").primaryKey(),
   onCap: text("on_cap").$type<OnCap>().notNull().default("both"),
+});
+
+/**
+ * The fleet's session limits (core `SessionLimits`) — one row, keyed
+ * `'session'`, following the {@link spendSettings} precedent: the memory and
+ * CPU each session's process may use, as a percent of its machine's RAM and
+ * cores. Null is no limit, and no row reads as none.
+ */
+export const sessionLimits = sqliteTable("session_limits", {
+  /** Always `'session'`. */
+  id: text("id").primaryKey(),
+  memoryPercent: integer("memory_percent"),
+  cpuPercent: integer("cpu_percent"),
 });
 
 /**

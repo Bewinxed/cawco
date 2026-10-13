@@ -60,6 +60,9 @@ import {
   FLEET_SYNC,
   GENERATE_IMAGE,
   INSTALL_SESSION_CREDENTIAL,
+  LIMIT_REACHED,
+  type LimitHolder,
+  limitSentence,
   MESSAGES_READ,
   MOVE_STEPS,
   machineLabel,
@@ -89,6 +92,7 @@ import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import {
   processLimitSentence,
   SESSIOND_PROCESS_LIMIT,
+  type SessiondLimit,
 } from "@cawco/core/sessiond";
 import { Effect } from "effect";
 import { withFiles } from "./attachments";
@@ -118,7 +122,7 @@ import { parseProcId, type SESSION_PROC_KINDS } from "./proc-id";
 import { type PromptWriteNotice, withPromptWrites } from "./prompt-writes";
 import { rememberCredential } from "./redaction";
 import { fenced } from "./restart";
-import { endProc, procEpoch } from "./sessiond-client";
+import { endProc, keeperLimits, procEpoch } from "./sessiond-client";
 import { installTool, probeTools } from "./tools";
 import { runWorkflowCommand } from "./workflow-command";
 import { workspaceHolding } from "./workspace-records";
@@ -621,6 +625,7 @@ export class SessionSupervisor {
       titles: this.#titles,
       failures: this.#failures,
       generations: this.#generations,
+      placed: this.#placed,
       activeAt: this.#activeAt,
       pulseAt: this.#pulseAt,
       keepAlive: this.#keepAlive,
@@ -638,6 +643,7 @@ export class SessionSupervisor {
     this.#adapter("opencode").setCustodyReadiness?.(() =>
       this.harnessCustodyReady("opencode")
     );
+    keeperLimits.on("limit", (message) => this.#limitReached(message));
     setInterval(() => {
       this.#sweepIdle().catch((error: unknown) =>
         warn(`the idle sweep failed: ${error}`)
@@ -689,6 +695,16 @@ export class SessionSupervisor {
    */
   readonly #ending = new WeakSet<HarnessSession>();
   readonly #generations = new Map<string, string>();
+  /**
+   * Each session's harness, and the pid of the workspace boundary its
+   * commands run in when it has one, as its last start or attach set them:
+   * how a keeper child's limit finds the sessions it touched
+   * ({@link #limitReached}).
+   */
+  readonly #placed = new Map<
+    string,
+    { harness: HarnessKind; boundaryPid?: number }
+  >();
   readonly #addressWaiting = new Map<
     string,
     {
@@ -2326,6 +2342,10 @@ export class SessionSupervisor {
       throw new Error("The hub did not supply this process's generation.");
     }
     this.#generations.set(instanceId, processGeneration);
+    this.#placed.set(instanceId, {
+      harness: adapter.kind,
+      ...(boundary ? { boundaryPid: boundary.pid } : {}),
+    });
     const launchOf = (message: NeutralMessage) =>
       accountReading(message) ? { processGeneration } : {};
     return {
@@ -3000,6 +3020,63 @@ export class SessionSupervisor {
    * sentence a person reads, naming the machine and the session; the keeper's
    * own words about which limit stay in the agent's log.
    */
+  /**
+   * A KEEPER'S CHILD REACHED ITS LIMIT, AND THE SESSIONS IT TOUCHED ARE TOLD.
+   * The child is a session's own process (its procId names the session), a
+   * workspace's boundary (every session whose commands run in it, by its
+   * pid), or OpenCode's server (every session it holds). Each gets the line in
+   * its transcript ({@link LIMIT_REACHED}), which the hub keeps on its row; a
+   * child no session runs in (a judge) is said in this agent's log alone.
+   */
+  #limitReached(message: SessiondLimit): void {
+    const proc = parseProcId(message.procId);
+    let holder: LimitHolder;
+    let instanceIds: string[];
+    switch (proc.kind) {
+      case "claude":
+      case "pi":
+        holder = "session";
+        instanceIds = [proc.instanceId];
+        break;
+      case "boundary":
+        holder = "workspace";
+        instanceIds = [...this.#placed]
+          .filter(([, placed]) => placed.boundaryPid === message.pid)
+          .map(([instanceId]) => instanceId);
+        break;
+      case "opencode-server":
+        holder = "opencode-server";
+        instanceIds =
+          this.#adapter("opencode").sessionsOn?.(message.procId) ?? [];
+        break;
+      default:
+        holder = "session";
+        instanceIds = [];
+    }
+    const content = limitSentence(holder, message.limit, message.max);
+    warn(
+      `${message.procId}: ${content} (${message.group}, ${message.limit} ${message.count}; told ${instanceIds.length ? instanceIds.join(", ") : "no session"})`
+    );
+    // In order with what else is owed the hub, and on the next connection
+    // when this one is down ({@link #sayGone}).
+    for (const instanceId of instanceIds) {
+      this.#sayGone({
+        kind: "frame",
+        instanceId,
+        harness:
+          this.#placed.get(instanceId)?.harness ??
+          (proc.kind === "pi" ? "pi" : "claude"),
+        message: {
+          type: "system",
+          subtype: LIMIT_REACHED,
+          uuid: `limit-${message.group}-${message.limit}-${message.count}`,
+          session_id: "",
+          content,
+        } as unknown as NeutralMessage,
+      });
+    }
+  }
+
   /**
    * The keeper refused this session's process its input. Said here with the
    * session and the keeper's reason; the session fails with it, as a start

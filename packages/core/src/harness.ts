@@ -195,6 +195,43 @@ export const MOVED_HERE = "moved_here";
  */
 export const CUSTODY_HELD = "custody_held";
 
+/**
+ * A session's process, its workspace or its OpenCode server reached a limit
+ * its keeper holds it to: the agent's frame to the hub (`content` says which
+ * and what happened, {@link limitSentence}), and the hub's line in the
+ * session's transcript, kept on its row. Drawn as a note titled by its first
+ * sentence, the rest under it.
+ */
+export const LIMIT_REACHED = "limit_reached";
+
+/** Which limit a keeper's child reached: its task limit, or its memory limit (an OOM kill inside it). */
+export type ChildLimit = "tasks" | "memory";
+
+/** What ran into the limit, as a session's own transcript names it. */
+export type LimitHolder = "session" | "workspace" | "opencode-server";
+
+const LIMIT_SUBJECT: Record<LimitHolder, string> = {
+  session: "This session",
+  workspace: "This session's workspace",
+  "opencode-server": "The OpenCode server this session runs on",
+};
+
+/** A limit's size as a person reads it: `8,192 processes`, `47 GB`. */
+const limitSize = (limit: ChildLimit, max: number): string =>
+  limit === "tasks"
+    ? `${max.toLocaleString("en-US")} processes`
+    : `${(max / 1024 ** 3).toLocaleString("en-US", { maximumFractionDigits: 1 })} GB`;
+
+/** The words for a session whose keeper held it at a limit ({@link LIMIT_REACHED}). */
+export const limitSentence = (
+  holder: LimitHolder,
+  limit: ChildLimit,
+  max: number
+): string =>
+  limit === "tasks"
+    ? `${LIMIT_SUBJECT[holder]} hit its limit of ${limitSize(limit, max)}: something it ran keeps starting processes. CawCo stopped it there, and the rest of the machine is fine. Stop the command that keeps starting them, or stop the session.`
+    : `${LIMIT_SUBJECT[holder]} hit its memory limit of ${limitSize(limit, max)}: something it ran kept taking memory, so the system ended the largest process in it. The rest of the machine is fine. Check what the session was running before it runs that again.`;
+
 const SENTENCE_END = /[.?!](\s|$)/;
 
 /** A text's first sentence, its full stop kept, and the rest; the whole as the first when it is one sentence. */

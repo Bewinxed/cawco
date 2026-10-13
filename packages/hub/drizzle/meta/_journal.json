@@ -995,6 +995,13 @@
       "when": 1791885328016,
       "tag": "0141_task_index_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 142,
+      "version": "6",
+      "when": 1791886964659,
+      "tag": "0142_session_limits",
+      "breakpoints": true
     }
   ]
 }

@@ -27,6 +27,7 @@ import {
   FRESH_START,
   FRESH_START_LINE,
   firstSentence,
+  LIMIT_REACHED,
   MOVED_HERE,
   REPEATED_FAILURE,
   REPEATED_FAILURE_LIMIT,
@@ -966,6 +967,19 @@ export function mapFrame(
             systemLine(base, "ui.system_note", rest, {
               subtype: CUSTODY_HELD,
               noteKind: "Held",
+              noteTitle: title,
+            })
+          );
+          break;
+        }
+        // A limit the session's keeper held it to: titled by what happened,
+        // the rest under it (core `limitSentence`).
+        case LIMIT_REACHED: {
+          const [title, rest] = firstSentence(sdk.content ?? "");
+          mapping.blocks.push(
+            systemLine(base, "ui.system_note", rest, {
+              subtype: LIMIT_REACHED,
+              noteKind: "Limit",
               noteTitle: title,
             })
           );

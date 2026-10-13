@@ -29,6 +29,7 @@ import type {
   RuleStats,
   SessionEffort,
   SessionEndIntent,
+  SessionLimits,
   SessionTooling,
   SkillFile,
   SupervisorEvent,
@@ -135,6 +136,7 @@ import {
   rules,
   sentMessages,
   sessionIdentities,
+  sessionLimits,
   sessionPlans,
   skills,
   spendSettings,
@@ -208,8 +210,15 @@ export type PublicInstanceRow = Omit<
   | "freshStartAt"
   | "turnOpenAt"
   | "movedHere"
+  | "limitNotes"
   | "conversations"
 >;
+/** A limit line kept on a session's row ({@link DbShape.noteLimit}). */
+export type LimitNote = NonNullable<
+  (typeof instances.$inferSelect)["limitNotes"]
+>[number];
+/** How many of a session's limit lines its row keeps. */
+export const LIMIT_NOTES_KEPT = 20;
 /** A session's move line ({@link DbShape.noteMovedHere}). */
 export type MovedHere = NonNullable<
   (typeof instances.$inferSelect)["movedHere"]
@@ -748,6 +757,8 @@ export interface DbShape {
   readonly launchDirOf: (
     id: string
   ) => { cwd: string } | { unknown: true } | undefined;
+  /** The limit lines kept on the session's row, oldest first. */
+  readonly limitNotesOf: (id: string) => LimitNote[];
   /** Keys a send to the id its harness stores it under. */
   readonly linkSend: (uuid: string, harnessId: string) => void;
   /**
@@ -954,6 +965,8 @@ export interface DbShape {
     harness?: string,
     tooling?: SessionTooling
   ) => void;
+  /** Keeps a limit line on the session's row, the last {@link LIMIT_NOTES_KEPT}; false when one under its id is already kept. */
+  readonly noteLimit: (id: string, note: LimitNote) => boolean;
   /** Records that a session started where its project was moved to for it: the move's ready line. */
   readonly noteMovedHere: (id: string, line: MovedHere) => void;
   /**
@@ -1517,6 +1530,8 @@ export interface DbShape {
     error: string | null,
     rejectPending?: boolean
   ) => void;
+  /** The fleet's session limits; none set reads as `{}`. */
+  readonly sessionLimits: () => SessionLimits;
   /** Unfiltered ownership, including hidden deletes and discarded rows. */
   readonly sessionOwnership: (machineId?: string) => OwnedInstanceRow[];
   /** What a session last wrote of its own plan through `todo_write` (plans.ts). */
@@ -1578,6 +1593,8 @@ export interface DbShape {
   readonly setProjectRemote: (id: string, remote: string) => void;
   /** Where the project's tasks live; tasks.ts refuses a tracker not built yet. */
   readonly setProjectTracker: (id: string, tracker: Tracker) => void;
+  /** The fleet's session limits, whole: a field absent is no limit. */
+  readonly setSessionLimits: (limits: SessionLimits) => void;
   /** What reaching a cap does where a project sets nothing. */
   readonly setSpendOnCap: (onCap: OnCap) => void;
   /** Turn composer suggestions on or off. Only meaningful while connected. */
@@ -2105,6 +2122,7 @@ const make = async (path: string): Promise<DbShape> => {
     freshStartAt: _freshStartAt,
     turnOpenAt: _turnOpenAt,
     movedHere: _movedHere,
+    limitNotes: _limitNotes,
     tooling: _tooling,
     conversations: _conversations,
     ...publicColumns
@@ -5492,6 +5510,29 @@ const make = async (path: string): Promise<DbShape> => {
         .onConflictDoUpdate({ target: spendSettings.id, set: { onCap } })
         .run();
     },
+    setSessionLimits: (limits) => {
+      const values = {
+        memoryPercent: limits.memoryPercent ?? null,
+        cpuPercent: limits.cpuPercent ?? null,
+      };
+      db.insert(sessionLimits)
+        .values({ id: "session", ...values })
+        .onConflictDoUpdate({ target: sessionLimits.id, set: values })
+        .run();
+    },
+    sessionLimits: () => {
+      const row = db
+        .select()
+        .from(sessionLimits)
+        .where(eq(sessionLimits.id, "session"))
+        .get();
+      const memoryPercent = row?.memoryPercent ?? undefined;
+      const cpuPercent = row?.cpuPercent ?? undefined;
+      return {
+        ...(memoryPercent === undefined ? {} : { memoryPercent }),
+        ...(cpuPercent === undefined ? {} : { cpuPercent }),
+      };
+    },
     spendOnCap: () =>
       db
         .select({ onCap: spendSettings.onCap })
@@ -6324,6 +6365,28 @@ const make = async (path: string): Promise<DbShape> => {
         .from(instances)
         .where(eq(instances.id, id))
         .get()?.line ?? null,
+    noteLimit: (id, note) => {
+      const kept =
+        db
+          .select({ notes: instances.limitNotes })
+          .from(instances)
+          .where(eq(instances.id, id))
+          .get()?.notes ?? [];
+      if (kept.some((each) => each.id === note.id)) {
+        return false;
+      }
+      db.update(instances)
+        .set({ limitNotes: [...kept, note].slice(-LIMIT_NOTES_KEPT) })
+        .where(eq(instances.id, id))
+        .run();
+      return true;
+    },
+    limitNotesOf: (id) =>
+      db
+        .select({ notes: instances.limitNotes })
+        .from(instances)
+        .where(eq(instances.id, id))
+        .get()?.notes ?? [],
     takeOwedSend: (uuid) => {
       const owed = db
         .select({ owed: sentMessages.owed })

@@ -471,6 +471,28 @@ export interface HeartbeatPayload {
 export interface HeartbeatAckPayload {
   keepAwake: string[];
   ok: true;
+  /**
+   * The fleet's session limits as the hub holds them now ({@link SessionLimits}),
+   * on every beat: the machine replaces what it held, and the next process
+   * its keeper starts runs under them.
+   */
+  sessionLimits?: SessionLimits;
+}
+
+/**
+ * The memory and CPU each session's process may use, set on the hub
+ * (`/api/session-limits`) for every machine. Each is a percent of the machine
+ * it runs on: its RAM, and its cores. Absent is no limit, which is the
+ * default; the task limit every session runs under is the keeper's own and is
+ * not set here (sessiond cgroup.ts `CHILD_TASKS`). Linux only: a keeper
+ * writes them to the process's cgroup (`memory.max`, `cpu.max`) when it
+ * starts it, and macOS has no cgroups.
+ */
+export interface SessionLimits {
+  /** Of the machine's cores, 1 to 100. */
+  cpuPercent?: number;
+  /** Of the machine's RAM, 1 to 100. */
+  memoryPercent?: number;
 }
 
 /** `stop`: interrupt and close a live session. */

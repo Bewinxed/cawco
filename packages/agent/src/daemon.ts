@@ -138,7 +138,28 @@ import {
   resumableSessions,
   SessionSupervisor,
 } from "./session";
-import { serviceManaged } from "./sessiond-client";
+import { serviceManaged, setSessionLimits } from "./sessiond-client";
+
+/** The hub's session limits, taken for every spawn from here; said once each time they change. */
+const takeSessionLimits = (
+  limits: import("@cawco/core").SessionLimits | undefined
+): void => {
+  if (!setSessionLimits(limits)) {
+    return;
+  }
+  const said = [
+    limits?.memoryPercent === undefined
+      ? "memory unlimited"
+      : `memory ${limits.memoryPercent}% of this machine's RAM`,
+    limits?.cpuPercent === undefined
+      ? "CPU unlimited"
+      : `CPU ${limits.cpuPercent}% of its cores`,
+  ].join(", ");
+  console.info(
+    `[sessiond] session limits from the hub: ${said}, for each process started from now`
+  );
+};
+
 import { probeTools } from "./tools";
 import { UsageScanner } from "./usage/scanner";
 import { abandonCommands, runWorkflowCommand } from "./workflow-command";
@@ -1836,6 +1857,9 @@ const attach = (
             .addressContract === true
         );
         awaitingRegisterAck = false;
+        takeSessionLimits(
+          (envelope.payload as RegisterAckPayload).sessionLimits
+        );
         // This connection's credential for the hub's git remote, in memory only.
         setHubCredential(
           identity.machineId,
@@ -1910,10 +1934,11 @@ const attach = (
       }
       // The hub's answer to a beat: the sessions it keeps awake.
       if (envelope.verb === "heartbeat") {
-        supervisor.keepAwake(
-          (envelope.payload as Partial<HeartbeatAckPayload> | undefined)
-            ?.keepAwake
-        );
+        const beat = envelope.payload as
+          | Partial<HeartbeatAckPayload>
+          | undefined;
+        supervisor.keepAwake(beat?.keepAwake);
+        takeSessionLimits(beat?.sessionLimits);
         return;
       }
       if (!waitsForCustody(envelope)) {

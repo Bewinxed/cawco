@@ -14,7 +14,8 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { BuildInfo } from "./index";
+import type { ChildLimit } from "./harness";
+import type { BuildInfo, SessionLimits } from "./index";
 
 /**
  * Capability string a sessiond speaks, exchanged in `attach`/`welcome`
@@ -38,6 +39,13 @@ export interface ProcSpec {
  */
 export interface SessiondSpawn {
   commandId: string;
+  /**
+   * The fleet's session limits as the agent holds them at this spawn: the
+   * keeper writes them to the child's own cgroup before it execs (sessiond
+   * cgroup.ts). Absent, or a field absent, is no such limit. Not part of the
+   * opaque spec: the keeper reads these, and nothing else of the spawn's.
+   */
+  limits?: SessionLimits;
   procId: string;
   spec: ProcSpec;
   type: "spawn";
@@ -174,6 +182,28 @@ export interface SessiondExit {
 }
 
 /**
+ * sessiond → every attached agent: a child reached a limit its cgroup holds
+ * it to. `tasks`: a fork or clone in it was refused at its `pids.max`
+ * (`pids.events` max rose); `memory`: the kernel's OOM killer ended a process
+ * in it at its `memory.max` (`memory.events` oom_kill rose). Said once per
+ * run of refusals: a fork loop refused every moment is one report, and it is
+ * said again only after a quiet reading. `count` is the counter's value then,
+ * which, with `group`, names the report: every connection hears it, and an
+ * agent holding several says it once.
+ */
+export interface SessiondLimit {
+  count: number;
+  /** The child's cgroup, by its name under the keeper's `children`. */
+  group: string;
+  limit: ChildLimit;
+  /** The limit: tasks, or bytes. */
+  max: number;
+  pid: number;
+  procId: string;
+  type: "proc.limit";
+}
+
+/**
  * sessiond → agent, the lifecycle of a mutating command. Unknown message
  * types are answered, never fatal (design §5): sessiond replies `failed`
  * with `reason: 'unsupported: <type>'` and keeps the connection; the agent
@@ -230,6 +260,7 @@ export type SessiondServerMessage =
   | SessiondBacklog
   | SessiondReset
   | SessiondExit
+  | SessiondLimit
   | SessiondAck
   | SessiondDraining;
 

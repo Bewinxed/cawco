@@ -28,7 +28,12 @@ import {
   type Socket,
 } from "node:net";
 import { dirname } from "node:path";
-import { type BuildInfo, SessionRing } from "@cawco/core";
+import {
+  type BuildInfo,
+  type ChildLimit,
+  type SessionLimits,
+  SessionRing,
+} from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { LineSplitter } from "@cawco/core/lines";
 import { PacedWriter } from "@cawco/core/paced-write";
@@ -45,7 +50,16 @@ import {
   type SessiondProcInfo,
   type SessiondServerMessage,
 } from "@cawco/core/sessiond";
-import { JOIN_CHILDREN } from "./cgroup";
+import {
+  type ChildGroup,
+  type Children,
+  JOIN_CHILDREN,
+  LIMITS,
+  OWN_LIMIT_SHARE,
+  openChildGroup,
+  readGroup,
+  removeGroup,
+} from "./cgroup";
 import { type Listed, processTable } from "./table";
 import { capChildTasks, START_ROOM, TASK_RESERVE, taskHeadroom } from "./tasks";
 
@@ -92,6 +106,25 @@ export const SWEEP_GRACE_MS = 2000;
  * is the only one a sweep can miss.
  */
 export const SURVEY_INTERVAL_MS = 30_000;
+
+/**
+ * How often each child's cgroup is read for a limit it reached, and for
+ * whether an ended child's group is empty and can go. Our choice: three small
+ * reads per child every two seconds is nothing next to what a runaway costs,
+ * and two seconds is soon enough that the operator reads it while the
+ * session is still in the turn that ran it.
+ */
+export const LIMIT_WATCH_MS = 2000;
+
+/** A child's cgroup, watched for its limits until it is empty and removed ({@link SessiondServer.watchGroups}). */
+interface Watched {
+  group: ChildGroup;
+  proc: Proc;
+  /** A counter rose at the last reading: the run of refusals it began is already said. */
+  rising: Record<ChildLimit, boolean>;
+  /** The counters at the last reading. */
+  seen: Record<ChildLimit, number>;
+}
 
 const reasonOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -147,8 +180,8 @@ export interface Conn {
 export interface SessiondOptions {
   /** Reported in `welcome` so the agent can surface skew as a board notice. */
   build?: BuildInfo;
-  /** The children's cgroup's `cgroup.procs`, which each child joins before it execs (cgroup.ts). */
-  children?: string;
+  /** Where each child's own cgroup is made, which it joins before it execs (cgroup.ts). */
+  children?: Children;
 }
 
 const DEFAULT_BUILD: BuildInfo = { version: "0.1.0", startedAt: Date.now() };
@@ -170,8 +203,16 @@ export class SessiondServer {
   #surveyInFlight = false;
   /** The spawn in progress; the next waits for it ({@link #queueSpawn}). */
   #spawning: Promise<unknown> = Promise.resolve();
-  /** The children's cgroup's `cgroup.procs`, when the keeper has one. */
-  readonly #children: string | undefined;
+  /** Where each child's own cgroup is made, when the keeper has delegation. */
+  readonly #children: Children | undefined;
+  /** Each child's cgroup still on this machine, by its path. */
+  readonly #groups = new Map<string, Watched>();
+  /** Names each child's group apart from every other this keeper made. */
+  #groupSerial = 0;
+  /** The clock the children's groups are read on ({@link LIMIT_WATCH_MS}). */
+  #watching: ReturnType<typeof setInterval> | undefined;
+  /** A reading of the groups is still out: the clock does not start a second. */
+  #watchInFlight = false;
   /** The sweeps still giving an ended child's tree its grace ({@link #sweep}). */
   readonly #sweeps = new Set<ReturnType<typeof setTimeout>>();
   /** The clock every live child's tree is read on ({@link #survey}). */
@@ -254,6 +295,103 @@ export class SessiondServer {
           this.#surveyInFlight = false;
         });
     }, SURVEY_INTERVAL_MS);
+    if (this.#children) {
+      this.#watching = setInterval(() => {
+        // biome-ignore lint/suspicious/noUnnecessaryConditions: set true below and false in the reading's `finally`; biome's inference sees only the initializer
+        if (this.#watchInFlight || this.#groups.size === 0) {
+          return;
+        }
+        this.#watchInFlight = true;
+        this.watchGroups()
+          .catch((error: unknown) => {
+            console.error(
+              `[sessiond] the children's cgroups could not be read: ${reasonOf(error)}`
+            );
+          })
+          .finally(() => {
+            this.#watchInFlight = false;
+          });
+      }, LIMIT_WATCH_MS);
+    }
+  }
+
+  /**
+   * EACH CHILD IS TOLD OF ITS OWN LIMIT. Every child's group is read: a
+   * counter that rose since the reading before is a limit the kernel held it
+   * to (a fork refused at its `pids.max`, a process killed at its
+   * `memory.max`), and every attached agent hears it once per run of
+   * refusals (`proc.limit`), which it says on the session. An ended child's
+   * group goes once nothing is left in it, read one last time first: a
+   * harness the OOM killer ended is reported too.
+   */
+  async watchGroups(): Promise<void> {
+    const watched = [...this.#groups.entries()];
+    const readings = await Promise.all(
+      watched.map(([path]) => readGroup(path))
+    );
+    for (const [index, [path, watch]] of watched.entries()) {
+      const reading = readings[index];
+      for (const limit of LIMITS) {
+        const rose = reading[limit] > watch.seen[limit];
+        // A run of refusals is said once; one not said (a limit above the
+        // child's own) leaves the next reading to say it, should the child
+        // reach its own limit within the same run.
+        watch.rising[limit] =
+          rose &&
+          (watch.rising[limit] ||
+            this.#reportLimit(watch, limit, reading[limit], reading.current));
+        watch.seen[limit] = reading[limit];
+      }
+      if (
+        !(watch.proc.alive || reading.populated) &&
+        // biome-ignore lint/performance/noAwaitInLoops: one removal at a time, each after its own last reading
+        (await removeGroup(path))
+      ) {
+        this.#groups.delete(path);
+      }
+    }
+  }
+
+  #reportLimit(
+    watch: Watched,
+    limit: ChildLimit,
+    count: number,
+    current: number
+  ): boolean {
+    const { group, proc } = watch;
+    const max = limit === "tasks" ? group.limits.tasks : group.limits.memory;
+    if (limit === "tasks" && current < group.limits.tasks * OWN_LIMIT_SHARE) {
+      // Refused by a limit above it (the keeper's pool, the user's): not this
+      // child's own, and not said as one (cgroup.ts GroupReading.tasks).
+      console.warn(
+        `[sessiond] ${proc.procId}: a fork in ${group.name} was refused at a limit above it, with ${current} of its own ${group.limits.tasks} tasks in use (pids.events max ${count})`
+      );
+      return false;
+    }
+    if (max === undefined) {
+      // A kill by the machine's own OOM killer in a group with no memory.max
+      // of its own (memory.events counts "any kind of OOM killer"): not this
+      // child's limit, and not said as one.
+      console.warn(
+        `[sessiond] ${proc.procId}: the machine's OOM killer ended a process in ${group.name} (${count} so far); it has no memory limit of its own`
+      );
+      return true;
+    }
+    console.warn(
+      `[sessiond] ${proc.procId}: ${group.name} reached its ${limit === "tasks" ? `task limit (pids.max ${max}); pids.events max` : `memory limit (memory.max ${max}); memory.events oom_kill`} reads ${count}`
+    );
+    for (const conn of this.#conns) {
+      this.#send(conn, {
+        type: "proc.limit",
+        procId: proc.procId,
+        pid: proc.child.pid ?? -1,
+        group: group.name,
+        limit,
+        max,
+        count,
+      });
+    }
+    return true;
   }
 
   #bind(endpoint: string): Promise<void> {
@@ -370,7 +508,8 @@ export class SessiondServer {
         settlement = this.#queueSpawn(
           commandId,
           String(msg.procId ?? ""),
-          msg.spec as ProcSpec
+          msg.spec as ProcSpec,
+          msg.limits as SessionLimits | undefined
         );
         break;
       case "write":
@@ -442,10 +581,11 @@ export class SessiondServer {
   #queueSpawn(
     commandId: string,
     procId: string,
-    spec: ProcSpec | undefined
+    spec: ProcSpec | undefined,
+    limits: SessionLimits | undefined
   ): Promise<SessiondAck> {
     const next = this.#spawning.then(() =>
-      this.#spawn(commandId, procId, spec)
+      this.#spawn(commandId, procId, spec, limits)
     );
     this.#spawning = next.catch(() => undefined);
     return next;
@@ -463,7 +603,8 @@ export class SessiondServer {
   async #spawn(
     commandId: string,
     procId: string,
-    spec: ProcSpec | undefined
+    spec: ProcSpec | undefined,
+    limits: SessionLimits | undefined
   ): Promise<SessiondAck> {
     // Checked when the spawn's turn comes, not when it arrived: one queued
     // behind another as the drain began starts nothing either.
@@ -500,17 +641,45 @@ export class SessiondServer {
       });
     }
 
+    // Its own cgroup, its limits written before it is in it. One that cannot
+    // be made starts nothing: a child is never started without its ceiling.
+    let group: ChildGroup | undefined;
+    if (this.#children) {
+      this.#groupSerial += 1;
+      try {
+        group = await openChildGroup(
+          this.#children,
+          procId,
+          `${this.epoch.slice(0, 8)}-${this.#groupSerial}`,
+          limits
+        );
+      } catch (error) {
+        return ack(
+          commandId,
+          "failed",
+          `spawn: its cgroup under ${this.#children.group} could not be made (${reasonOf(error)})`
+        );
+      }
+      if (group.unapplied.length > 0) {
+        console.warn(
+          `[sessiond] ${procId}: the hub's ${group.unapplied.join(" and ")} limit is not applied on this machine`
+        );
+      }
+    }
+
     let child: ChildProcessWithoutNullStreams;
     // biome-ignore lint/suspicious/noUnnecessaryConditions: spec is agent-side and opaque (§3.2) — the ProcSpec type promises args, the wire does not
     const args = spec.args ?? [];
-    // With a children's cgroup, the child starts in a shell that joins it and
+    // With a cgroup of its own, the child starts in a shell that joins it and
     // execs the command in place (same pid): capped from its first instruction.
-    const [command, argv] = this.#children
-      ? [
-          "/bin/sh",
-          ["-c", JOIN_CHILDREN, this.#children, spec.command, ...args],
-        ]
+    const [command, argv] = group
+      ? ["/bin/sh", ["-c", JOIN_CHILDREN, group.procs, spec.command, ...args]]
       : [spec.command, args];
+    const unmade = (): void => {
+      if (group) {
+        removeGroup(group.path).catch(() => undefined);
+      }
+    };
     try {
       child = spawn(command, argv, {
         cwd: spec.cwd,
@@ -526,6 +695,7 @@ export class SessiondServer {
         detached: true,
       }) as ChildProcessWithoutNullStreams;
     } catch (error) {
+      unmade();
       return refusedSpawn(commandId, error);
     }
 
@@ -563,7 +733,16 @@ export class SessiondServer {
       if (this.#procs.get(procId) === proc) {
         this.#procs.delete(procId);
       }
+      unmade();
       return refusedSpawn(commandId, started);
+    }
+    if (group) {
+      this.#groups.set(group.path, {
+        group,
+        proc,
+        seen: { tasks: 0, memory: 0 },
+        rising: { tasks: false, memory: false },
+      });
     }
     child.on("error", () => this.#reap(proc, null, null));
     child.on("exit", (code, signal) => this.#reap(proc, code, signal));
@@ -948,6 +1127,7 @@ export class SessiondServer {
   /** Stop listening and drop the socket file. Children are drain's business. */
   async close(): Promise<void> {
     clearInterval(this.#surveying);
+    clearInterval(this.#watching);
     this.#listenerClosed ??= this.#closeListener();
     for (const conn of this.#conns) {
       conn.socket.destroy();
