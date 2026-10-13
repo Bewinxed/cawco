@@ -39,7 +39,16 @@
  *              OpenCode sessions: a held Claude session's send is read
  *              within seconds; each OpenCode session is settled unattached,
  *              the custody log naming that generation, and a send to one is
- *              failed with its reason or owed.
+ *              failed with its reason or owed;
+ *   stopped  — a Claude session mid-tool (a long `sleep` in a Bash call), its
+ *              Claude Code frozen (SIGSTOP), the agent restarted, kept frozen
+ *              past the custody bound, then thawed: the agent took custody of
+ *              it and never let it go undecided, a send made while it was
+ *              frozen is read once, its row reads running, and the hub said
+ *              that send came back at most once;
+ *   stopped-dies — the same, its process killed while frozen: it is let go
+ *              as at rest, and the send made meanwhile starts it afresh and
+ *              is read once.
  *
  * Claude runs every case; opencode and pi run exit and restart. A case whose
  * session is left failed rather than asleep is woken by a person's next
@@ -75,7 +84,9 @@ type Case =
   | "killed"
   | "stale-credential"
   | "held-restart"
-  | "stuck-opencode";
+  | "stuck-opencode"
+  | "stopped"
+  | "stopped-dies";
 const CASES: Record<Harness, Case[]> = {
   claude: [
     "sleep",
@@ -89,6 +100,8 @@ const CASES: Record<Harness, Case[]> = {
     "stale-credential",
     "held-restart",
     "stuck-opencode",
+    "stopped",
+    "stopped-dies",
   ],
   opencode: ["exit", "restart"],
   pi: ["exit", "restart"],
@@ -112,17 +125,38 @@ const SLOW = "CUSTODY-SLOW";
 const SLOW_AGAIN = "CUSTODY-SLOW-AGAIN";
 /** The text of the hand-back of a turn a kill cut (server.ts `killedWords`). */
 const KILLED = "Your process was killed (SIGKILL)";
+/** A turn that runs one long Bash `sleep`, then answers. */
+const TOOL_SLEEP = "CUSTODY-TOOL-SLEEP";
+/** How long that `sleep` runs, in seconds: past the custody bound and the restart around it. */
+const TOOL_SLEEP_S = 110;
 const fleet = await scratchFleet({
   name: "send-custody-probe",
-  respond: (request) =>
-    request.tools &&
-    (request.last.includes(SLOW) ||
-      (request.last.includes(KILLED) && request.all.includes(SLOW_AGAIN)))
+  respond: (request) => {
+    if (request.tools && request.last.includes(TOOL_SLEEP)) {
+      return request.afterTool
+        ? { words: ["custody-ok"], everyMs: 5 }
+        : {
+            words: [],
+            everyMs: 5,
+            tool: {
+              name: "Bash",
+              input: {
+                command: `sleep ${TOOL_SLEEP_S}`,
+                description: "Wait",
+                timeout: 600_000,
+              },
+            },
+          };
+    }
+    return request.tools &&
+      (request.last.includes(SLOW) ||
+        (request.last.includes(KILLED) && request.all.includes(SLOW_AGAIN)))
       ? {
           words: Array.from({ length: 120 }, (_, i) => `w${i} `),
           everyMs: 500,
         }
-      : { words: ["custody-ok"], everyMs: 5 },
+      : { words: ["custody-ok"], everyMs: 5 };
+  },
 });
 
 /** Requests a session's turn started with `marker` in the message that started it. */
@@ -930,7 +964,107 @@ const stuckOpencodeCase = async (label: string) => {
   );
 };
 
+/** How many lines of every hub log so far name `uuid` and say `words`. */
+const hubSaid = async (uuid: string, words: string) =>
+  (await fleet.logs("hub"))
+    .split("\n")
+    .filter((line) => line.includes(uuid) && line.includes(words)).length;
+
+/**
+ * The agent restarted while the session's Claude Code is frozen mid-tool,
+ * kept frozen past the custody bound (90 s), then thawed, or killed when
+ * `dies`. A send made while it is frozen is read once either way.
+ */
+const frozenCase = async (label: string, dies: boolean) => {
+  const name = dies ? "stopped-dies" : "stopped";
+  const id = await fleet.spawn("claude", `Custody claude ${name}`);
+  const first = mark("claude", name, "first");
+  await fleet.send(id, `${first}: say ok.`);
+  await until(
+    `${first} answered`,
+    () => turnsOf(first),
+    (n) => n >= 1
+  );
+  await Bun.sleep(3000);
+  const tool = mark("claude", name, "tool");
+  await fleet.send(id, `${TOOL_SLEEP} ${tool}: wait in a tool.`);
+  await until(
+    `${tool} asked`,
+    () => turnsOf(tool),
+    (n) => n >= 1,
+    120_000
+  );
+  // Its Bash call is running.
+  await Bun.sleep(3000);
+  const pid = await fleet.sessionPid(id);
+  if (!pid) {
+    throw new Error(`${label}: sessiond holds no process for ${id}`);
+  }
+  process.kill(pid, "SIGSTOP");
+  const frozenAt = Date.now();
+  let frozen = true;
+  try {
+    await fleet.stop("agent", "SIGKILL");
+    fleet.launch("agent");
+    await fleet.agentUp();
+    const queued = mark("claude", name, "queued");
+    const uuid = await fleet.send(id, `${queued}: say ok.`);
+    // Frozen past the custody bound, from the restart on.
+    await Bun.sleep(Math.max(0, frozenAt + 100_000 - Date.now()));
+    const whileFrozen = {
+      frozenForMs: Date.now() - frozenAt,
+      row: fleet.instance(id),
+      send: fleet.sendRow(uuid),
+      letGo:
+        (await agentSaid(id, "let go undecided")) +
+        (await agentSaid(id, "left for the hub to attach again")),
+      taken: await agentSaid(id, "took custody of"),
+      stoppedWaiting: await agentSaid(id, "stopped waiting"),
+    };
+    if (dies) {
+      await fleet.killTree(pid, "SIGKILL");
+    } else {
+      process.kill(pid, "SIGCONT");
+    }
+    frozen = false;
+    const read = await readOnce(uuid, queued);
+    const outcome = {
+      whileFrozen,
+      read,
+      row: fleet.instance(id),
+      cameBack: await hubSaid(uuid, "came back"),
+      letGoAsEnded: await agentSaid(id, "ended before it was attached"),
+      toolTurns: turnsOf(tool),
+    };
+    const ok =
+      whileFrozen.letGo === 0 &&
+      whileFrozen.taken >= 1 &&
+      whileFrozen.stoppedWaiting === 0 &&
+      read.turns === 1 &&
+      read.send?.state === "read" &&
+      outcome.row?.status === "running" &&
+      outcome.cameBack <= (dies ? 2 : 1) &&
+      (dies ? outcome.letGoAsEnded >= 1 : outcome.letGoAsEnded === 0);
+    report(
+      label,
+      ok,
+      outcome,
+      dies
+        ? `let go when its process died ${Math.round(whileFrozen.frozenForMs / 1000)} s into the freeze; the send made meanwhile started it afresh and was read once (hub: ${outcome.cameBack} hand-back line)`
+        : `held through a ${Math.round(whileFrozen.frozenForMs / 1000)} s freeze, attached when thawed; the send made meanwhile read once (hub: ${outcome.cameBack} hand-back lines)`
+    );
+  } finally {
+    if (frozen) {
+      process.kill(pid, "SIGCONT");
+    }
+  }
+};
+
 const runCase = async (harness: Harness, name: Case) => {
+  if (name === "stopped" || name === "stopped-dies") {
+    await frozenCase(`${harness} ${name}`, name === "stopped-dies");
+    return;
+  }
   if (name === "killed") {
     await killedCase(`${harness} ${name}`);
     return;

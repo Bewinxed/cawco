@@ -506,7 +506,7 @@ import {
   type HubSocket,
   openLine,
   receiveFrame,
-  sendFrame,
+  sendFrame as writeFrame,
 } from "./wire-socket";
 import {
   createWorkItems,
@@ -2309,6 +2309,34 @@ export const createServer = (
   // a `sqlite3` session at 3am. A column nobody has to remember to distrust is
   // worth one write at startup.
   db.markAllAgentsOffline();
+
+  /**
+   * A SEND NO PROCESS TOOK WAITS FOR THE SESSION'S NEXT PROCESS, NOT A TIMER.
+   * When each session last had a process event: a start or attach sent to
+   * its machine, its launch up, its machine listing it attached, or its
+   * process ended (asleep, or settled by a beat). A send its machine hands
+   * back ({@link takeBack}) is owed; when no such event has come since it
+   * was handed over, the session waits in {@link waitingForProcess} and
+   * nothing owed to it goes until one does. Handed straight back out, one
+   * send to a session no agent held went round 7,300 times in 40 minutes
+   * (2026-10-13).
+   */
+  const processAt = new Map<string, number>();
+  const waitingForProcess = new Set<string>();
+  /** A process event for `instanceId`; whether its owed sends were waiting on one. */
+  const processEvent = (instanceId: string): boolean => {
+    processAt.set(instanceId, Date.now());
+    return waitingForProcess.delete(instanceId);
+  };
+  /** The one way a frame leaves this hub: a start or attach sent is a process event. */
+  const sendFrame = (socket: HubSocket, frame: unknown): void => {
+    const envelope = frame as Partial<Envelope<Partial<SpawnPayload>>>;
+    const instanceId = envelope.instanceId ?? envelope.payload?.instanceId;
+    if (envelope.verb === "spawn" && instanceId) {
+      processEvent(instanceId);
+    }
+    writeFrame(socket, frame);
+  };
 
   // An ask that leaves the hub's pending list is over on every screen: one
   // frame, whichever path settled it (an answer from any device, Telegram, a
@@ -4289,12 +4317,44 @@ export const createServer = (
   };
 
   /**
+   * One send handed back, decided ({@link takeBack}): read when the session's
+   * transcript shows it taken up, owed otherwise. The time it was handed over
+   * when it is owed; infinity when it is not.
+   */
+  const holdBack = (
+    instanceId: string,
+    one: Envelope<SendPayload>,
+    stored: Map<string, boolean> | undefined
+  ): number => {
+    const { uuid } = one.payload.message;
+    if (!currentHandOff(instanceId, one.payload)) {
+      return Number.POSITIVE_INFINITY;
+    }
+    const now = db.sendRecord(uuid);
+    if (now && stored?.get(uuid)) {
+      readSend(now, false);
+      return Number.POSITIVE_INFINITY;
+    }
+    db.holdSend(uuid, JSON.stringify(one));
+    console.log(
+      `[hub] send ${uuid} to ${instanceId} came back: no process took it; owed to the session's next process`
+    );
+    const owed = db.sendRecord(uuid);
+    if (owed) {
+      publishSend(owed);
+    }
+    return now ? now.acceptedAt.getTime() : Number.POSITIVE_INFINITY;
+  };
+
+  /**
    * A send its machine hands back whole ({@link HeldSendFrame}): no process
    * took it — it found none, or the one it was handed to went away. The
    * hand-off it names must be its current one: a later hand-off overtook any
    * other, and owing that again would hand it twice. Once per session, what
    * its transcript shows taken up is read, and the rest is owed to the
-   * session's next process ({@link releaseOwed}), as it was handed.
+   * session's next process ({@link releaseOwed}), as it was handed: at once
+   * when a process event came after the hand-off, else when the next one
+   * comes ({@link waitingForProcess}).
    */
   const takeBack = (
     machineId: string,
@@ -4324,26 +4384,17 @@ export const createServer = (
       handedBack.delete(instanceId);
       detach(
         storedIn(instanceId).then((stored) => {
+          // The earliest hand-off among them: a process event since then is
+          // a process that may take them ({@link processAt}).
+          let handedAt = Number.POSITIVE_INFINITY;
           for (const one of back) {
-            const { uuid } = one.payload.message;
-            if (!currentHandOff(instanceId, one.payload)) {
-              continue;
-            }
-            const now = db.sendRecord(uuid);
-            if (now && stored?.get(uuid)) {
-              readSend(now, false);
-              continue;
-            }
-            db.holdSend(uuid, JSON.stringify(one));
-            console.log(
-              `[hub] send ${uuid} to ${instanceId} came back: no process took it; owed to the session's next process`
-            );
-            const owed = db.sendRecord(uuid);
-            if (owed) {
-              publishSend(owed);
-            }
+            handedAt = Math.min(handedAt, holdBack(instanceId, one, stored));
           }
-          releaseOwed({ instanceId });
+          if ((processAt.get(instanceId) ?? 0) > handedAt) {
+            releaseOwed({ instanceId });
+          } else if (Number.isFinite(handedAt)) {
+            waitingForProcess.add(instanceId);
+          }
         }),
         "sends handed back"
       );
@@ -4995,6 +5046,7 @@ export const createServer = (
   /** The launch of `instanceId` is up: what was kept for it meanwhile goes to it now. */
   const launchStarted = (instanceId: string, why: string): void => {
     if (launchSettled(instanceId, why)) {
+      processEvent(instanceId);
       releaseOwed({ instanceId });
     }
   };
@@ -5502,6 +5554,7 @@ export const createServer = (
     // Asks its delegates had routed to it and it never answered are the
     // reader's from here, as when any parent's process goes.
     escalateRoutedAsks(instanceId);
+    processEvent(instanceId);
     releaseOwed({ instanceId });
     publishInstances(machineId);
   };
@@ -6523,7 +6576,13 @@ export const createServer = (
     const [row] = db.getInstancesByIds([send.instanceId]);
     const agent = row ? registry.agent(row.machineId) : undefined;
     // Kept for a session nothing owed may wake: it waits for a send that may.
-    if (!(row && agent) || keptAsleep(row)) {
+    // Handed back by a machine with no process for it: it waits for the
+    // session's next one ({@link waitingForProcess}).
+    if (
+      !(row && agent) ||
+      keptAsleep(row) ||
+      waitingForProcess.has(send.instanceId)
+    ) {
       return;
     }
     const envelope = JSON.parse(send.owed ?? "{}") as Envelope<SendPayload>;
@@ -20765,6 +20824,18 @@ export const createServer = (
                 // one (core `relaunchOf`).
                 losePending(row.id, relaunchOf(row).kind !== "refused");
                 escalateRoutedAsks(row.id);
+                // Settled at rest: what was handed back and waited for a
+                // process wakes it, as a session put to sleep is woken.
+                if (processEvent(row.id)) {
+                  releaseOwed({ instanceId: row.id });
+                }
+              }
+              // A session its machine lists attached has a process to take
+              // what was handed back meanwhile.
+              for (const id of peekInstances(message.payload)) {
+                if (waitingForProcess.has(id) && processEvent(id)) {
+                  releaseOwed({ instanceId: id });
+                }
               }
               // A restored process up before it said a word (Claude's CLI
               // speaks its `init` only once it has input) is handed back the
@@ -21162,6 +21233,9 @@ export const createServer = (
                   message.instanceId,
                   relaunchOf(process).kind !== "refused"
                 );
+                // Its held process is no longer this session's: what waited
+                // for one goes to its next start.
+                processEvent(message.instanceId);
                 publishInstances(message.machineId);
                 break;
               }

@@ -1602,14 +1602,18 @@ const attach = (
     /**
      * THE CUSTODY TRANSACTION, ONE HARNESS AT A TIME. What sessiond hands
      * back is taken by one unit per harness, Claude's held children in one
-     * reattach and pi's in another, each built here, fresh, and bounded by
-     * {@link CUSTODY_BOUND_MS}; each session is let go ({@link release}) the
-     * moment its own custody is known. A unit that fails or runs out of time
-     * settles only its own sessions: a held child stays for the hub to attach
-     * again (`session-lifecycle.ts`), and a session with no child starts.
-     * Custody is complete once every unit has settled, and nothing waits past
-     * that on any one of them. An OpenCode reattach is no unit of it: it is
-     * its own session's ({@link reattaching}).
+     * reattach and pi's in another, each built here, fresh. A unit reads what
+     * the keepers hold, bounded by {@link CUSTODY_BOUND_MS}, and takes every
+     * held child into custody at once: from then each is this agent's, its
+     * attach the first thing in its session's queue, however long its child
+     * takes to answer (`SessionSupervisor.#holdChild`). So each session is let
+     * go ({@link release}) the moment it is taken, and what waited for it
+     * waits behind its attach, never on a timer. A unit that fails or runs
+     * out of time reading its keepers settles only its own sessions: a held
+     * child stays for the hub to attach again (`session-lifecycle.ts`), and a
+     * session with no child starts. Custody is complete once every unit has
+     * settled, and nothing waits past that on any one of them. An OpenCode
+     * reattach is no unit of it: it is its own session's ({@link reattaching}).
      */
     const takeCustody = (ackPayload: unknown, spawns: Envelope[]): void => {
       clearTimeout(registrationDeadline);
@@ -1651,7 +1655,7 @@ const attach = (
           supervisor.dispatch(envelope);
         }
       };
-      /** A unit that ended without deciding all its sessions, said once with why. */
+      /** A unit that could not read what its keepers hold, said once with why. */
       const sayUndecided = (
         unit: string,
         signal: AbortSignal,
@@ -1659,11 +1663,11 @@ const attach = (
         ids: string[]
       ): void => {
         const why = signal.aborted
-          ? `did not settle within ${CUSTODY_BOUND_MS / 1000} s`
-          : `failed: ${errorWords(problem)}`;
+          ? `got no listing from its keepers within ${CUSTODY_BOUND_MS / 1000} s`
+          : `could not read its keepers: ${errorWords(problem)}`;
         Effect.runFork(
           Effect.logWarning(
-            `custody: ${unit} ${why}; let go undecided: ${ids.join(", ")}`
+            `custody: ${unit} ${why}; left for the hub to attach again: ${ids.join(", ")}`
           )
         );
       };
@@ -1726,7 +1730,7 @@ const attach = (
         if (adopted.length > 0) {
           Effect.runFork(
             Effect.logInfo(
-              `attached to ${adopted.length} surviving session(s): ${adopted.join(", ")}`
+              `took custody of ${adopted.length} surviving session(s), each attached as it answers: ${adopted.join(", ")}`
             )
           );
         }
@@ -1740,7 +1744,7 @@ const attach = (
         if (supervisor.completeCustody(epoch)) {
           Effect.runFork(
             Effect.logInfo(
-              `custody recovered: ${supervisor.instanceIds.length} session(s) held`
+              `custody recovered: ${supervisor.instanceIds.length} session(s) attached, ${adopted.length} taken back this time`
             )
           );
         }
