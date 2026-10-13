@@ -52,6 +52,9 @@ import { createRebalancer, readForecast, reReadCost } from "./rebalance";
 
 export type LimitRow = ReturnType<DbShape["getInstancesByIds"]>[number];
 
+/** Why a carry left a session's data where it was: its process runs there (server.ts `moveRowsToAccount`). */
+export const PROCESS_RUNS = "its process runs";
+
 export type AtLimitDecision =
   /** Held until `until`: the reset, or the next look when none was named. */
   | { action: "wait"; until: number; why: WaitReason }
@@ -289,6 +292,14 @@ export interface AtLimitPorts {
   note: (row: LimitRow, move: AccountMove, id?: string) => void;
   /** What adding an account set moving, for the Accounts page. */
   noticed: (notice: RebalanceNotice) => void;
+  /**
+   * Owes `row` a move to `accountId` at its turn's end, or its next start
+   * (server.ts `relaunchAtTurnEnd`, the way a person's move mid-turn waits):
+   * `move` is the line written once it has moved.
+   */
+  owe: (row: LimitRow, accountId: string, move: AccountMove) => void;
+  /** The account each session owing a move, or with a launch on its way, goes to, by session. */
+  owed: () => ReadonlyMap<string, string>;
   /** A move off a refused sign-in, said to whoever hears `row`'s reports. */
   refusedMove: (row: LimitRow, move: AccountMove) => void;
   /**

@@ -538,7 +538,9 @@ public struct Notice: Identifiable, Equatable, Sendable {
     private static func runningLine(_ group: Running) -> String {
         let on = group.organization.map { "\(group.from.name) (\($0))" } ?? group.from.name
         let why = group.cacheKept ? "cache shared" : "re-read on the move"
-        let left = group.left > 0 ? "; \(group.left) not yet (mid-turn)" : ""
+        let left = group.left > 0
+            ? "; \(group.left) more when \(group.left == 1 ? "its turn ends" : "their turns end")"
+            : ""
         return "\(counted(group.moved + group.left, "session", "sessions")) on \(on) forecast to run out at \(clockWords(group.runsOutAt)); \(group.moved) moved to \(group.to.name) between turns (\(why))\(left)"
     }
 

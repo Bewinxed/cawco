@@ -1225,7 +1225,7 @@ export interface RebalanceNotice {
     /** The cache came along (one organization, and a carry there keeps it). */
     cacheKept: boolean;
     moved: number;
-    /** Planned but not moved: mid-turn or failed when looked at. */
+    /** Planned and owed to their turn's end: mid-turn, or their process still running, when looked at. */
     left: number;
   }[];
 }
@@ -1243,7 +1243,10 @@ const runningLine = (group: RebalanceNotice["running"][number]): string => {
     ? `${group.from.name} (${group.organization})`
     : group.from.name;
   const why = group.cacheKept ? "cache shared" : "re-read on the move";
-  const left = group.left > 0 ? `; ${group.left} not yet (mid-turn)` : "";
+  const left =
+    group.left > 0
+      ? `; ${group.left} more when ${group.left === 1 ? "its turn ends" : "their turns end"}`
+      : "";
   return `${sessionsWords(group.moved + group.left)} on ${on} forecast to run out at ${clockWords(group.runsOutAt)}; ${group.moved} moved to ${group.to.name} between turns (${why})${left}`;
 };
 

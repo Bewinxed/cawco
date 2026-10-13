@@ -175,6 +175,7 @@ import {
   sessiondBridge,
 } from "../sessiond-client";
 import { ChildActivity, type RingLine, readRing } from "../sessiond-custody";
+import { forgetWakeups, keepWakeups, keptWakeups, writtenAt } from "../wakeups";
 import {
   hookFailureId,
   readSessionContext,
@@ -892,6 +893,31 @@ const SETTLE_TIMEOUT_MS = 5000;
 const STOP_HOOK_TIMEOUT_S = 5;
 
 /**
+ * How long an attached session whose scheduled wake-ups are not known must
+ * have been at rest before it counts as having none: a day and an hour. A
+ * self-paced wake-up fires within an hour (`ScheduleWakeup` clamps its delay
+ * to 3600s), and a recurring task at an interval of a day or less fires
+ * within the day; one scheduled further out is kept by the conversation
+ * ("Resuming with `--resume` or `--continue` brings back any task that
+ * hasn't expired", code.claude.com/docs/en/scheduled-tasks), so a session
+ * put to sleep runs it once it is woken.
+ */
+const WAKEUPS_DECIDED_MS = 25 * 3_600_000;
+
+/**
+ * When an attached session whose wake-ups neither the ring nor the record
+ * kept says last wrote its conversation: since then no turn of it has ended
+ * to say them. Undefined when its conversation is not found.
+ */
+const restingSince = async (
+  sessionId: string | null,
+  cwd: string
+): Promise<number | undefined> => {
+  const transcript = sessionId ? await claudeSessionFile(sessionId, cwd) : null;
+  return transcript ? await writtenAt(transcript) : undefined;
+};
+
+/**
  * How many wake-ups a `Stop` hook's input says the session has scheduled
  * (`session_crons`: "Session-scoped cron tasks (CronCreate, ScheduleWakeup,
  * /loop) that will wake this session later. Empty array when none are
@@ -1296,6 +1322,12 @@ class ClaudeSession implements HarnessSession {
    * ({@link adoptWakeups}): not known until its next turn ends.
    */
   #crons: number | undefined = 0;
+  /**
+   * When an attached session whose wake-ups are not known last wrote its
+   * conversation: its turns' ends since then would have said them. Undefined
+   * while they are known, or when the conversation was not found.
+   */
+  #restingSince: number | undefined;
   /** Whether the CLI writes this conversation down (`persistSession`). */
   readonly #stored: boolean;
   readonly instanceId: string;
@@ -1384,7 +1416,7 @@ class ClaudeSession implements HarnessSession {
               hooks: [
                 // biome-ignore lint/suspicious/useAwait: the SDK's HookCallback returns a promise
                 async (stopping: unknown) => {
-                  this.#crons = scheduledWakeups(stopping) ?? this.#crons;
+                  this.#wakeupsKnown(scheduledWakeups(stopping));
                   return {};
                 },
               ],
@@ -2145,8 +2177,23 @@ class ClaudeSession implements HarnessSession {
    * had scheduled as its last turn there ended, or `undefined` when the ring
    * holds no turn's end.
    */
-  adoptWakeups(count: number | undefined): void {
+  adoptWakeups(count: number | undefined, since?: number): void {
     this.#crons = count;
+    this.#restingSince = since;
+    this.#wakeupsKnown(count);
+  }
+
+  /** A turn's end said how many wake-ups it scheduled: kept, so an agent that attaches later knows too. */
+  #wakeupsKnown(count: number | undefined): void {
+    if (count === undefined) {
+      return;
+    }
+    this.#crons = count;
+    keepWakeups(this.instanceId, count).catch((error: unknown) =>
+      console.warn(
+        `[claude] ${this.instanceId}: keeping its wake-ups failed: ${error instanceof Error ? error.message : String(error)}`
+      )
+    );
   }
 
   tables(): Record<string, number> {
@@ -2169,7 +2216,13 @@ class ClaudeSession implements HarnessSession {
       return `${this.#background.size} background task(s) it started are still running`;
     }
     if (this.#crons === undefined) {
-      return "its scheduled wake-ups are not known until its next turn ends";
+      // At rest past {@link WAKEUPS_DECIDED_MS}: nothing it scheduled at an
+      // interval that short is pending, and what it scheduled further out
+      // comes back when it is resumed.
+      return this.#restingSince !== undefined &&
+        Date.now() - this.#restingSince >= WAKEUPS_DECIDED_MS
+        ? undefined
+        : "its scheduled wake-ups are not known until its next turn ends";
     }
     return this.#crons > 0
       ? `it has scheduled itself ${this.#crons} wake-up(s)`
@@ -2513,6 +2566,7 @@ class ClaudeSession implements HarnessSession {
     this.#handle.close();
     // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — stop() already tore everything down; only a pump that was still mid-await needs waiting for
     await this.#pump.catch(() => {});
+    await forgetWakeups(this.instanceId);
   }
 
   // biome-ignore lint/suspicious/useAwait: HarnessSession.dispose returns Promise<void>; dropping async would need an explicit Promise.resolve() wrapper instead
@@ -3021,7 +3075,11 @@ export class ClaudeHarness implements Harness {
     if (turnRunning) {
       session.adoptTurn();
     }
-    session.adoptWakeups(wakeups);
+    const known = wakeups ?? (await keptWakeups(instanceId));
+    session.adoptWakeups(
+      known,
+      known === undefined ? await restingSince(sessionId, ctx.cwd) : undefined
+    );
     return session;
   }
 

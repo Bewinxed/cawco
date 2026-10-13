@@ -1,17 +1,19 @@
 import {
   type Account,
   type AccountForecast,
+  type AccountMove,
   type AccountProvider,
   accountName,
   clockWords,
   LIMITED_PROVIDERS,
+  modelScope,
   namedAccount,
   type RebalanceNotice,
   type WindowForecast,
   windowWords,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
-import type { AtLimitPorts, LimitRow } from "./at-limit";
+import { type AtLimitPorts, type LimitRow, PROCESS_RUNS } from "./at-limit";
 import { stoppedByCawOff } from "./caw-own";
 import type { DbShape } from "./db";
 import type { LimitHold } from "./db/at-limit";
@@ -25,7 +27,14 @@ import {
   weightedTokens,
 } from "./forecast";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
-import { SESSION_WINDOW_MS } from "./placement";
+import {
+  type Arrival,
+  arrivingBurn,
+  type CarryWindow,
+  runsOutWith,
+  SESSION_WINDOW_MS,
+  WINDOW_MS,
+} from "./placement";
 
 /**
  * Rebalancing a provider's accounts on a machine before any limit (at-limit
@@ -48,18 +57,14 @@ const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
 /** How far back a pass reads: a weekly window, and a day over for its opening reading. */
 const LOOKBACK_MS = 8 * DAY_MS;
-/** How long each window kind runs: when the current one opened, from its reset. */
-const WINDOW_MS: Record<string, number> = {
-  session: SESSION_WINDOW_MS,
-  weekly_all: 7 * DAY_MS,
-  weekly_scoped: 7 * DAY_MS,
-};
 /** The shortest span a burn is measured over, so one turn just taken is not an hour's rate. */
 const MIN_BURN_SPAN_MS = 15 * 60_000;
 
 /** A provider's accounts as one pass reads them. */
 export interface ForecastRead {
   accounts: Account[];
+  /** The sessions running on each account, or owed to it, with their expected burn ({@link Arrival}). */
+  arrivals: Arrival[];
   forecasts: AccountForecast[];
   history: HistoryPoint[];
   paces: AccountPaces;
@@ -69,11 +74,17 @@ export interface ForecastRead {
   turns: ReadonlyMap<string, TurnUsageRow[]>;
 }
 
-/** Reads `provider`'s accounts, their history and their turns, once, for one pass. */
+/**
+ * Reads `provider`'s accounts, their history and their turns, once, for one
+ * pass. `owed`: the sessions a move at their turn's end, or a launch on its
+ * way, takes to an account (server.ts `relaunchAtTurnEnd`, `launchClaims`),
+ * by session: each arrives there now.
+ */
 export const readForecast = (
   db: DbShape,
   provider: AccountProvider,
-  now: number
+  now: number,
+  owed: ReadonlyMap<string, string> = new Map()
 ): ForecastRead => {
   const accounts = db.accounts
     .list()
@@ -96,24 +107,68 @@ export const readForecast = (
     ])
   );
   const ids = new Set(accounts.map((account) => account.id));
+  const rows = db.listInstances();
   const running = new Set(
-    db
-      .listInstances()
-      .flatMap((row) =>
-        row.status === "running" && row.accountId && ids.has(row.accountId)
-          ? [row.accountId]
-          : []
-      )
+    rows.flatMap((row) =>
+      row.status === "running" && row.accountId && ids.has(row.accountId)
+        ? [row.accountId]
+        : []
+    )
   );
   const readings = db.accounts.readings();
   return {
     accounts,
+    arrivals: arrivalsOf(rows, ids, turns, owed, now),
     history,
     turns,
     running,
     forecasts: accountForecasts(accounts, readings, history, running, now),
     paces: accountPaces(accounts, readings, history, turns, running, now),
   };
+};
+
+/**
+ * Each session running on one of `ids`, or owed to one, as it arrives there
+ * ({@link Arrival}): since its launch (now, for one owed), burning what its
+ * own turns of the last 5 hours burn on any of the provider's accounts, else
+ * what its kind's sessions with turns then burn ({@link kindBurn}). One with
+ * neither burns nothing anyone can say.
+ */
+const arrivalsOf = (
+  rows: readonly LimitRow[],
+  ids: ReadonlySet<string>,
+  turns: ReadonlyMap<string, TurnUsageRow[]>,
+  owed: ReadonlyMap<string, string>,
+  now: number
+): Arrival[] => {
+  const all = [...turns.values()].flat();
+  const parents = new Map(rows.map((row) => [row.id, row.parentInstanceId]));
+  const isDelegate = (id: string) => !!parents.get(id);
+  const ofKind = (delegate: boolean) =>
+    kindBurn({ turns }, (id) => isDelegate(id) === delegate, now);
+  const kinds = { delegates: ofKind(true), yours: ofKind(false) };
+  return rows.flatMap((row) => {
+    const to = owed.get(row.id);
+    const accountId =
+      to ??
+      (["running", "starting"].includes(row.status) ? row.accountId : null);
+    if (!(accountId && ids.has(accountId))) {
+      return [];
+    }
+    const burn =
+      sessionBurn(all, row.id, now) ??
+      (row.parentInstanceId ? kinds.delegates : kinds.yours);
+    return burn
+      ? [
+          {
+            accountId,
+            instanceId: row.id,
+            burn,
+            since: to ? now : (row.spawnedAt?.getTime() ?? now),
+          },
+        ]
+      : [];
+  });
 };
 
 /**
@@ -146,7 +201,7 @@ export const sessionBurn = (
  * provider's accounts, their burn averaged. Null when none had turns.
  */
 export const kindBurn = (
-  forecast: ForecastRead,
+  forecast: Pick<ForecastRead, "turns">,
   isKind: (instanceId: string) => boolean,
   now: number
 ): number | null => {
@@ -277,51 +332,6 @@ export const sessionShares = (
 };
 
 /**
- * When an account would run out before a window resets with `added` percent
- * an hour on top of its pace, by window kind; null when it lasts. A window
- * not open yet is a fresh 5-hour one (resetting 5 hours from now) or no limit.
- */
-export const runsOutWith = (
-  forecast: AccountForecast | undefined,
-  added: (window: { kind: string; scopeLabel: string | null }) => number,
-  now: number
-): number | null => {
-  const windows: Pick<
-    WindowForecast,
-    "kind" | "pace" | "resetsAt" | "scopeLabel" | "utilization"
-  >[] = forecast?.windows.length
-    ? forecast.windows
-    : [
-        {
-          kind: "session",
-          scopeLabel: null,
-          pace: null,
-          resetsAt: null,
-          utilization: 0,
-        },
-      ];
-  let soonest: number | null = null;
-  for (const window of windows) {
-    const at = window.resetsAt ? Date.parse(window.resetsAt) : null;
-    const open = at !== null && at > now;
-    if (!open && window.kind !== "session") {
-      continue;
-    }
-    const reset = open && at !== null ? at : now + SESSION_WINDOW_MS;
-    const used = open ? window.utilization : 0;
-    const rate = (window.pace ?? 0) + added(window);
-    if (rate <= 0) {
-      continue;
-    }
-    const out = now + (Math.max(100 - used, 0) / rate) * HOUR_MS;
-    if (out < reset && (soonest === null || out < soonest)) {
-      soonest = out;
-    }
-  }
-  return soonest;
-};
-
-/**
  * What re-reading `row`'s context on `target` costs, as a percent of its
  * 5-hour window, where what a percent of it costs is measured
  * (forecast.ts `tokensPerPercent`); undefined when it is not, or the
@@ -395,17 +405,14 @@ export interface RebalancerDeps {
     | "move"
     | "note"
     | "noticed"
+    | "owe"
+    | "owed"
     | "target"
     | "warm"
   >;
   /** At-limit arms its next look again: what can be balanced changed. */
   replan: () => void;
 }
-
-/** A pass with sessions left mid-turn is run again this often… */
-const RETRY_MS = 30_000;
-/** …until this long after it began. */
-const RETRY_FOR_MS = 10 * 60_000;
 
 /** The burn already moved onto each target in a pass, percent an hour by window kind. */
 type Added = Map<string, (kind: string) => number>;
@@ -414,6 +421,7 @@ type Added = Map<string, (kind: string) => number>;
 interface MovedOff {
   cacheKept: boolean;
   from: Account;
+  /** Moves owed to their sessions' turn's end ({@link AtLimitPorts.owe}). */
   left: number;
   moved: number;
   runsOutAt: number;
@@ -468,8 +476,8 @@ const burnTo =
     return share.share * pace;
   };
 
-/** What one planned move came to: stop the account's moves, skip this one, left mid-turn, or moved. */
-type Step = "stop" | "skip" | "left" | "moved";
+/** What one planned move came to: stop the account's moves, skip this one, owed to its turn's end, or moved. */
+type Step = "stop" | "skip" | "owed" | "moved";
 
 export const createRebalancer = (deps: RebalancerDeps) => {
   const { db, lifetime, ports, acting, cacheCarries } = deps;
@@ -514,13 +522,14 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     };
   };
 
-  /** `row` as it stands now, when it is still on `from`, running, not Caw's own with Caw off (at-limit `stays`), and nothing else is acting on it. */
+  /** `row` as it stands now, when it is still on `from`, running, not Caw's own with Caw off (at-limit `stays`), owing no move, and nothing else is acting on it. */
   const candidate = (row: LimitRow, from: Account): LimitRow | undefined => {
     const fresh = rowOf(row.id);
     if (
       fresh?.status !== "running" ||
       stoppedByCawOff(db, fresh) ||
       fresh.accountId !== from.id ||
+      ports.owed().has(row.id) ||
       acting.has(row.id) ||
       ports.continuing(fresh) ||
       db.atLimit.hold(row.id)
@@ -530,33 +539,22 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     return fresh;
   };
 
-  /** Moves `row` to `target` between turns and writes its line; a session mid-turn is left for the next pass. */
+  /**
+   * Moves `row` to `target` between turns and writes its line. One mid-turn,
+   * or whose process still runs, owes the move to its turn's end (or its
+   * next start), the line written as it lands, as a person's move mid-turn
+   * does; one whose move failed otherwise stays, and says why.
+   */
   const carry = async (
     source: Source,
     row: LimitRow,
     target: Account,
     warm: boolean
-  ): Promise<"left" | "moved"> => {
-    if (!(await ports.idle(row))) {
-      return "left";
-    }
-    acting.add(row.id);
-    let why: string | undefined;
-    try {
-      why = await ports.move(row, target.id, false);
-    } finally {
-      acting.delete(row.id);
-    }
-    if (why) {
-      console.warn(
-        `[rebalance] ${row.id}: did not move to ${accountName(target)}: ${why}`
-      );
-      return "left";
-    }
+  ): Promise<"owed" | "skip" | "moved"> => {
     const { from, stress } = source;
     const kept = cacheCarries(from, target);
     const cost = kept ? undefined : reReadCost(source.forecast, row, target);
-    ports.note(row, {
+    const move: AccountMove = {
       kind: "moved",
       from: namedAccount(from),
       to: namedAccount(target),
@@ -568,9 +566,36 @@ export const createRebalancer = (deps: RebalancerDeps) => {
         ? { kind: "forecast", runsOutAt: stress.runsOutAt }
         : { kind: "cold", wake: false },
       ...(cost ? { cost } : {}),
-    });
-    source.out.to = target;
-    source.out.cacheKept = kept;
+    };
+    const going = (): void => {
+      source.out.to = target;
+      source.out.cacheKept = kept;
+    };
+    if (!(await ports.idle(row))) {
+      ports.owe(row, target.id, move);
+      going();
+      return "owed";
+    }
+    acting.add(row.id);
+    let why: string | undefined;
+    try {
+      why = await ports.move(row, target.id, false);
+    } finally {
+      acting.delete(row.id);
+    }
+    if (why === PROCESS_RUNS) {
+      ports.owe(row, target.id, move);
+      going();
+      return "owed";
+    }
+    if (why) {
+      console.warn(
+        `[rebalance] ${row.id}: did not move to ${accountName(target)}: ${why}`
+      );
+      return "skip";
+    }
+    ports.note(row, move);
+    going();
     return "moved";
   };
 
@@ -616,10 +641,37 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     const before = added.get(target.id) ?? (() => 0);
     const mine = burnTo(source, share, target);
     const withIt = (kind: string) => before(kind) + mine(kind);
+    const now = Date.now();
+    const scope = modelScope(fresh.model ?? undefined);
+    const perPct = (window: CarryWindow) =>
+      forecast.paces
+        .get(target.id)
+        ?.find(
+          (one) =>
+            one.kind === window.kind && one.scopeLabel === window.scopeLabel
+        )?.tokensPerPct;
+    // What is already arriving there counts, as placement counts it.
+    const arriving = (window: CarryWindow): number => {
+      const cost = perPct(window);
+      return cost
+        ? arrivingBurn(
+            forecast.arrivals.filter((one) => one.instanceId !== fresh.id),
+            target.id,
+            window,
+            now
+          ) / cost
+        : 0;
+    };
     const out = runsOutWith(
-      forecast.forecasts.find((one) => one.accountId === target.id),
-      (window) => withIt(window.kind),
-      Date.now()
+      (
+        forecast.forecasts.find((one) => one.accountId === target.id)
+          ?.windows ?? []
+      ).filter(
+        (window) =>
+          window.kind !== "weekly_scoped" || window.scopeLabel === scope
+      ),
+      (window) => withIt(window.kind) + arriving(window),
+      now
     );
     if (out !== null) {
       console.info(
@@ -629,7 +681,8 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     }
     console.info(`${head}; moves to ${accountName(target)}: ${allowed.why}`);
     const done = await carry(source, fresh, target, warm);
-    if (done === "moved") {
+    // Owed or moved, its burn leaves `from` for `target`.
+    if (done !== "skip") {
       source.relieved += share.share;
       added.set(target.id, withIt);
     }
@@ -699,8 +752,10 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       if (done === "stop") {
         break;
       }
-      if (done === "left" || done === "moved") {
-        source.out[done] += 1;
+      if (done === "owed") {
+        source.out.left += 1;
+      } else if (done === "moved") {
+        source.out.moved += 1;
       }
     }
     return source.out.moved + source.out.left > 0 ? source.out : null;
@@ -868,7 +923,7 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     machineId: string,
     cause: RebalanceCause | null,
     looks: boolean
-  ): Promise<{ left: number }> => {
+  ): Promise<void> => {
     const signed = signedInOn(provider, machineId);
     const held = db.atLimit.holds().filter((one) => signed.has(one.accountId));
     const heldRows = db
@@ -878,7 +933,7 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     const holdsBefore = held.filter((one) => tokens.has(one.instanceId));
     const running: MovedOff[] = [];
     if (db.accounts.routing(provider).atLimit.move && signed.size >= 2) {
-      const forecast = readForecast(db, provider, Date.now());
+      const forecast = readForecast(db, provider, Date.now(), ports.owed());
       const added: Added = new Map();
       for (const [accountId, rows] of runningOn(machineId, signed)) {
         const from = db.accounts.get(accountId);
@@ -896,7 +951,6 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       notify(cause, machineId, running, heldOutcomes(holdsBefore, tokens));
     }
     ports.changed();
-    return { left: running.reduce((sum, one) => sum + one.left, 0) };
   };
 
   /** Passes running now, by provider and machine, with the trigger that came meanwhile (undefined: none). */
@@ -904,31 +958,8 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     string,
     { again: RebalanceCause | null | undefined }
   >();
-  const retries = new Map<string, { since: number; timer: HubTimer }>();
   const passKey = (provider: string, machineId: string) =>
     `${provider}\u0000${machineId}`;
-
-  /** Runs the pair again shortly when its pass left sessions mid-turn, for {@link RETRY_FOR_MS} from the first. */
-  const retryLater = (
-    provider: AccountProvider,
-    machineId: string,
-    left: number
-  ): void => {
-    const key = passKey(provider, machineId);
-    const was = retries.get(key);
-    lifetime.cancel(was?.timer);
-    retries.delete(key);
-    const since = was?.since ?? Date.now();
-    if (left === 0 || Date.now() - since >= RETRY_FOR_MS) {
-      return;
-    }
-    retries.set(key, {
-      since,
-      timer: lifetime.after(RETRY_MS, () => {
-        detach(rebalance(provider, machineId), "rebalance retry");
-      }),
-    });
-  };
 
   /**
    * Rebalances `provider`'s accounts on `machineId`, one pass at a time per
@@ -956,18 +987,12 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     try {
       while (next !== undefined) {
         // biome-ignore lint/performance/noAwaitInLoops: passes on one pair run one after another
-        const { left } = await pass(
-          provider,
-          machineId,
-          next,
-          looks || next !== null
-        );
+        await pass(provider, machineId, next, looks || next !== null);
         const self = passes.get(key);
         next = self?.again;
         if (self) {
           self.again = undefined;
         }
-        retryLater(provider, machineId, next === undefined ? left : 0);
       }
     } finally {
       passes.delete(key);

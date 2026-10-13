@@ -287,6 +287,8 @@ import {
   cacheCarries,
   createAtLimit,
   type KeptSummary,
+  PROCESS_RUNS,
+  refusedUntil,
   type Summarised,
 } from "./at-limit";
 import { createBinaryUpdates } from "./binary-updates";
@@ -851,8 +853,6 @@ const NO_PROCESS_STATUSES: ReadonlySet<string> = new Set([
   "error",
 ]);
 
-/** Why a carry left a session's data where it was: its process runs there. */
-const PROCESS_RUNS = "its process runs";
 /**
  * An account sign-in step on a machine: Claude Code printing its link (the
  * agent waits up to 30 s), or exchanging the code (up to 60 s) and reading
@@ -8290,20 +8290,47 @@ export const createServer = (
   };
 
   /**
-   * What soonest-reset's carry test reads (placement `paces` and `burn`):
-   * each of `provider`'s accounts' paces, and the burn the session brings.
+   * What soonest-reset's carry test reads (placement `paces`, `burn` and
+   * `arrivals`): each of `provider`'s accounts' paces, the burn the session
+   * brings, and the sessions already arriving on each account but `self`.
    * Read only for soonest-reset, which alone asks.
    */
   const carryTestFor = (
     provider: AccountProvider,
     strategy: PlacementStrategy,
-    burnOf: (forecast: ForecastRead) => number | null
-  ): Pick<PlacementInput, "burn" | "paces"> => {
+    burnOf: (forecast: ForecastRead) => number | null,
+    self?: string
+  ): Pick<PlacementInput, "arrivals" | "burn" | "paces"> => {
     if (strategy !== "soonest-reset") {
       return {};
     }
-    const forecast = readForecast(db, provider, Date.now());
-    return { paces: forecast.paces, burn: burnOf(forecast) };
+    const forecast = readForecast(db, provider, Date.now(), owedTargets());
+    return {
+      paces: forecast.paces,
+      burn: burnOf(forecast),
+      arrivals: forecast.arrivals.filter((one) => one.instanceId !== self),
+    };
+  };
+
+  /**
+   * The account each session is on its way to and not on yet, by session: a
+   * move owed to its turn's end ({@link relaunchAtTurnEnd}), or a launch
+   * placed and still carrying its conversation there ({@link launchClaims}).
+   */
+  const owedTargets = (): Map<string, string> => {
+    const owed = new Map<string, string>();
+    for (const [id, one] of relaunchAtTurnEnd) {
+      if (one.to !== undefined) {
+        owed.set(id, one.to);
+      }
+    }
+    for (const id of launchClaims.keys()) {
+      const to = heldClaim(id);
+      if (to) {
+        owed.set(id, to);
+      }
+    }
+    return owed;
   };
 
   /** Whether a session with turns in `forecast` is of `kind`: a person's, or a session's delegate. */
@@ -12538,9 +12565,11 @@ export const createServer = (
    * into that account's server. A person's move it owes ({@link
    * relaunchAtTurnEnd}) is carried first, its process ended at rest for it,
    * and its row names the account only once its data is there; one whose
-   * carry cannot happen stays on its account and in place.
+   * carry cannot happen stays on its account and in place. `carry`: the turn
+   * that ended was refused at its account's limit, so once relaunched it is
+   * told to carry on, and answers there what that turn was asked.
    */
-  const relaunchOnAccount = (instanceId: string): void => {
+  const relaunchOnAccount = (instanceId: string, carry?: "limit"): void => {
     const [stored] = db.getInstancesByIds([instanceId]);
     const owed = stored ? relaunchAtTurnEnd.get(stored.id) : undefined;
     if (stored && owed?.to !== undefined && registry.agent(stored.machineId)) {
@@ -12563,7 +12592,7 @@ export const createServer = (
             if (owed.move) {
               noteAtLimit(stored, owed.move);
             }
-            relaunchOnAccount(stored.id);
+            relaunchOnAccount(stored.id, carry);
             releaseOwed({ instanceId: stored.id });
           }
         ),
@@ -12586,6 +12615,40 @@ export const createServer = (
       { ...row, sessionId: row.sessionId },
       true
     );
+    if (carry) {
+      carryOn(row, carry);
+    }
+  };
+
+  /**
+   * A turn refused at its account's limit by a session that owes a move
+   * ({@link relaunchAtTurnEnd}: a person's, or rebalance's) to an account
+   * that can take it now: the move is made, as at any turn's end, and the
+   * session carries on there. True when it was; false leaves the refusal to
+   * the at-limit controller.
+   */
+  const moveOwedAtRefusal = (instanceId: string): boolean => {
+    const owed = relaunchAtTurnEnd.get(instanceId);
+    const [row] = db.getInstancesByIds([instanceId]);
+    const to = owed?.to ? db.accounts.get(owed.to) : undefined;
+    if (!(row && to) || to.id === row.accountId) {
+      return false;
+    }
+    const now = Date.now();
+    const reading = db.accounts
+      .readings()
+      .find((one) => one.accountId === to.id);
+    if (
+      refusedUntil(db.accounts.bench(now), reading, to.id, row.model, now) !==
+      null
+    ) {
+      return false;
+    }
+    console.info(
+      `[at-limit] ${row.id}: its turn was refused at its account's limit; the move it owes to ${accountName(to)} goes now, and it carries on there`
+    );
+    relaunchOnAccount(row.id, "limit");
+    return true;
   };
 
   /**
@@ -15199,10 +15262,14 @@ export const createServer = (
       machineName: machineName(row.machineId),
       ...(row.model ? { model: row.model } : {}),
       ...asks,
-      ...carryTestFor(provider, routing[asks.kind].strategy, (forecast) =>
-        sessionBurn(forecast.turns.get(accountId) ?? [], row.id, now)
+      ...carryTestFor(
+        provider,
+        routing[asks.kind].strategy,
+        (forecast) =>
+          sessionBurn(forecast.turns.get(accountId) ?? [], row.id, now),
+        row.id
       ),
-      ...(exclude ? { exclude } : {}),
+      ...(exclude ? { exclude } : { current: accountId }),
       now,
     });
     return placed.ok ? placed.accountId : null;
@@ -15520,6 +15587,15 @@ export const createServer = (
       }
     },
     resume: carryOn,
+    // Rebalance's move of a session mid-turn waits for its turn's end, as a
+    // person's does; its line is written once it lands.
+    owe: (row, accountId, move) => {
+      relaunchAtTurnEnd.set(row.id, { to: accountId, move });
+      console.info(
+        `[rebalance] ${row.id}: moves to ${move.kind === "moved" ? move.to.name : accountId} when its turn ends`
+      );
+    },
+    owed: owedTargets,
     // A delegate's parent hears of it as a notice, the line its transcript has.
     refusedMove: (row, move) => {
       const [listed] = db.listedInstancesByIds([row.id]);
@@ -21541,11 +21617,15 @@ export const createServer = (
                   // the context is not the session's context.
                   finalMessage.delete(message.instanceId);
                   const refused = message.instanceId;
-                  atLimit.turnRefused(refused).catch((error: unknown) => {
-                    console.error(
-                      `[at-limit] ${refused}: ${error instanceof Error ? error.message : String(error)}`
-                    );
-                  });
+                  // A move it owes to an account with room is its turn's
+                  // end, as any turn's end is.
+                  if (!moveOwedAtRefusal(refused)) {
+                    atLimit.turnRefused(refused).catch((error: unknown) => {
+                      console.error(
+                        `[at-limit] ${refused}: ${error instanceof Error ? error.message : String(error)}`
+                      );
+                    });
+                  }
                 } else if (neutral.type === "result") {
                   // A turn that ended on anything but a refresh race the hub
                   // sends again: one waiting to go again went with it, and a
