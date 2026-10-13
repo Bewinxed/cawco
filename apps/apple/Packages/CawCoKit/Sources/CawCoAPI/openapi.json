@@ -39003,6 +39003,9 @@
           "last_tool_name": {
             "type": "string"
           },
+          "mcp_server": {
+            "type": "string"
+          },
           "mcp_servers": {
             "type": "array",
             "items": {
