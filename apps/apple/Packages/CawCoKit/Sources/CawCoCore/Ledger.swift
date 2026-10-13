@@ -79,6 +79,24 @@ public final class Ledger {
         var warned = false
     }
 
+    /// One event on a session's stream, read by the protocol's own fields
+    /// alone. Its frame is kept as the bytes the hub sent: an absent field and
+    /// an explicit null differ in the transcript's partial tail/facts updates,
+    /// and what the frame says is the transcript's to read (`applyFrame`).
+    struct Event {
+        let seq: Double
+        let sessionId: String
+        let frame: Data
+
+        init?(_ raw: [String: Any]) {
+            guard let seq = (raw["seq"] as? NSNumber)?.doubleValue, let sessionId = raw["sessionId"] as? String,
+                  let frame = raw["frame"], let bytes = try? JSONSerialization.data(withJSONObject: frame) else { return nil }
+            self.seq = seq
+            self.sessionId = sessionId
+            self.frame = bytes
+        }
+    }
+
     public private(set) var commands: [String: Command] = [:]
     @ObservationIgnored var cursors: [String: Cursor] = [:]
     @ObservationIgnored private var effects: [String: Effects] = [:]
@@ -88,9 +106,6 @@ public final class Ledger {
     @ObservationIgnored var send: (Data) -> String? = { _ in "Not connected to the hub." }
     /// Applies one sequenced frame (a transcript change or a preview's state) to its session.
     @ObservationIgnored var applyFrame: (String, Data) -> Void = { _, _ in }
-    // Keep the original bytes for patch fields: an absent field and an explicit
-    // null differ in the transcript's partial tail/facts updates.
-    @ObservationIgnored private var frameBytes: [Double: Data] = [:]
     /// Re-reads a session's history through the path that already exists.
     @ObservationIgnored var rereadHistory: (String, SessionsStore.ReadCause) -> Void = { _, _ in }
     /// Heard exactly once for every command that reaches `failed`.
@@ -126,13 +141,14 @@ public final class Ledger {
         cursors[sessionId] = cursor
     }
 
-    /// Subscribes what is new and forgets what is no longer watched, cursor and all.
-    func sync(_ sessionIds: Set<String>) {
+    /// Forgets what is no longer watched, cursor and all. A watched session
+    /// is subscribed by the read that adopts its page (`adoptPage`), never
+    /// resumed from a cursor across a connection: the hub numbers a session's
+    /// stream in memory, from 1 again after it restarts, so a cursor from the
+    /// connection before may name events of another hub process.
+    func forget(except sessionIds: Set<String>) {
         for id in cursors.keys where !sessionIds.contains(id) {
             cursors[id] = nil
-        }
-        for id in sessionIds where cursors[id]?.seen == true && cursors[id]?.subscribed != true && cursors[id]?.reading == false {
-            subscribe(id)
         }
     }
 
@@ -152,8 +168,9 @@ public final class Ledger {
         subscribe(id)
     }
 
-    /// The socket dropped: cursors keep `lastSeq`, every subscription and
-    /// every unanswered command died with it.
+    /// The socket dropped: every subscription and every unanswered command
+    /// died with it. The next connection reads each watched transcript again
+    /// (`SessionsStore.reconnected`), and that read subscribes it.
     func noteDisconnect() {
         for id in cursors.keys {
             cursors[id]?.subscribed = false
@@ -168,38 +185,78 @@ public final class Ledger {
     // MARK: Ingestion
 
     /// Takes one Ledger Protocol message off the socket.
+    ///
+    /// ROUTED BY THE PROTOCOL'S OWN FIELDS: a message's `type`, and an
+    /// event's `seq` and `sessionId`. What a frame says is never decoded
+    /// here: decoded whole, one frame this app could not read (a send's
+    /// record it does not draw, a field a newer hub added) failed the whole
+    /// message, its seq was never applied, every event after it was a hole,
+    /// and the one replay asked for carried the same frame and failed too.
+    /// The stream then dropped everything after it, silently, for as long as
+    /// the transcript stayed open. A message of a session's stream that still
+    /// cannot be read is a read of that session again (`unreadable`), which
+    /// the dock says.
     func handle(_ data: Data) {
-        let decoder = Wire.decoder()
-        do {
-            let raw = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-            let events = (raw?["events"] as? [[String: Any]]) ?? (raw?["event"].map { [$0 as? [String: Any] ?? [:]] } ?? [])
-            frameBytes = [:]
-            for event in events {
-                if let seq = event["seq"] as? Double, let frame = event["frame"] {
-                    frameBytes[seq] = try JSONSerialization.data(withJSONObject: frame)
-                }
+        guard let raw = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any], let type = raw["type"] as? String else {
+            log.error("stream: unreadable message: \(String(decoding: data.prefix(300), as: UTF8.self), privacy: .public)")
+            return
+        }
+        switch type {
+        case "stream.event":
+            let event = raw["event"] as? [String: Any]
+            guard let read = event.flatMap(Event.init) else {
+                unreadable(event?["sessionId"] as? String, type)
+                return
             }
-            defer { frameBytes = [:] }
-            if let delta = try? decoder.decode(Components.Schemas.StreamDelta.self, from: data) {
-                apply(delta.event)
-            } else if let backlog = try? decoder.decode(Components.Schemas.StreamBacklog.self, from: data) {
-                apply(backlog)
-            } else if let reset = try? decoder.decode(Components.Schemas.StreamReset.self, from: data) {
-                apply(reset)
-            } else {
-                let ack = try decoder.decode(Components.Schemas.CommandAck.self, from: data)
+            apply(read)
+        case "stream.backlog":
+            let events = raw["events"] as? [[String: Any]]
+            let read = events?.compactMap(Event.init)
+            guard let sessionId = raw["sessionId"] as? String, let read, read.count == events?.count else {
+                unreadable(raw["sessionId"] as? String, type)
+                return
+            }
+            apply(backlog: read, of: sessionId)
+        case "stream.reset":
+            guard let sessionId = raw["sessionId"] as? String else {
+                unreadable(nil, type)
+                return
+            }
+            reset(sessionId, nextSeq: (raw["nextSeq"] as? NSNumber)?.doubleValue)
+        case "command.ack":
+            do {
+                let ack = try Wire.decoder().decode(Components.Schemas.CommandAck.self, from: data)
                 guard commands[ack.commandId] != nil else {
                     return
                 }
                 advance(ack.commandId, to: Stage(rawValue: ack.stage.rawValue) ?? .failed, reason: ack.reason,
                         outcome: ack.outcome?.rawValue)
+            } catch {
+                log.error("stream: unreadable command.ack: \(String(describing: error), privacy: .public)")
             }
-        } catch {
-            log.error("stream: unreadable message: \(String(describing: error), privacy: .public)")
+        default:
+            log.error("stream: unknown message type \(type, privacy: .public)")
         }
     }
 
-    private func apply(_ event: Components.Schemas.SessionStreamEvent) {
+    /// A message of a session's stream that cannot be read: the events it
+    /// carried can never be applied, so the history is read again, as a
+    /// broken replay is. One that names no session names nothing to read.
+    private func unreadable(_ sessionId: String?, _ type: String) {
+        guard let sessionId else {
+            log.error("stream: unreadable \(type, privacy: .public) naming no session")
+            return
+        }
+        log.error("stream: unreadable \(type, privacy: .public) for \(sessionId.prefix(8), privacy: .public): read again")
+        var cursor = cursors[sessionId] ?? Cursor()
+        cursor.reading = true
+        cursor.resyncAfter = nil
+        cursor.resyncFailures = 0
+        cursors[sessionId] = cursor
+        rereadHistory(sessionId, .streamUnreadable)
+    }
+
+    private func apply(_ event: Event) {
         var cursor = cursors[event.sessionId] ?? Cursor()
         let session = event.sessionId.prefix(8)
         guard !cursor.reading else {
@@ -226,10 +283,8 @@ public final class Ledger {
         cursors[event.sessionId] = cursor
     }
 
-    private func applyEvent(_ event: Components.Schemas.SessionStreamEvent, to cursor: inout Cursor) {
-        if let data = frameBytes[event.seq] {
-            applyFrame(event.sessionId, data)
-        }
+    private func applyEvent(_ event: Event, to cursor: inout Cursor) {
+        applyFrame(event.sessionId, event.frame)
         cursor.lastSeq = event.seq
         cursor.seen = true
         cursor.subscribed = true
@@ -250,22 +305,22 @@ public final class Ledger {
         cursors[sessionId] = cursor
     }
 
-    private func apply(_ backlog: Components.Schemas.StreamBacklog) {
-        var cursor = cursors[backlog.sessionId] ?? Cursor()
-        log.info("stream: backlog for \(backlog.sessionId.prefix(8), privacy: .public): \(backlog.events.count) events from \(backlog.events.first?.seq ?? -1), at \(cursor.lastSeq)\(cursor.reading ? ", dropped while reading" : "", privacy: .public)")
+    private func apply(backlog events: [Event], of sessionId: String) {
+        var cursor = cursors[sessionId] ?? Cursor()
+        log.info("stream: backlog for \(sessionId.prefix(8), privacy: .public): \(events.count) events from \(events.first?.seq ?? -1), at \(cursor.lastSeq)\(cursor.reading ? ", dropped while reading" : "", privacy: .public)")
         guard !cursor.reading else { return }
         cursor.subscribed = true
-        guard let first = backlog.events.first else {
+        guard let first = events.first else {
             cursor.resyncAfter = nil
             cursor.resyncFailures = 0
-            cursors[backlog.sessionId] = cursor
+            cursors[sessionId] = cursor
             return
         }
         if !cursor.seen {
             cursor.lastSeq = first.seq - 1
         }
         var broken = false
-        for event in backlog.events where event.seq > cursor.lastSeq {
+        for event in events where event.seq > cursor.lastSeq {
             guard event.seq == cursor.lastSeq + 1 else {
                 broken = true
                 break
@@ -276,12 +331,12 @@ public final class Ledger {
             cursor.resyncAfter = nil
             cursor.resyncFailures = 0
             cursor.warned = false
-            cursors[backlog.sessionId] = cursor
+            cursors[sessionId] = cursor
             return
         }
         if !cursor.warned {
             cursor.warned = true
-            log.error("stream: non-contiguous backlog for \(backlog.sessionId, privacy: .public) after \(cursor.lastSeq)")
+            log.error("stream: non-contiguous backlog for \(sessionId, privacy: .public) after \(cursor.lastSeq)")
         }
         cursor.resyncFailures += 1
         cursor.resyncAfter = nil
@@ -289,24 +344,24 @@ public final class Ledger {
             // The ring cannot heal this: read the truth, as a reset would.
             cursor.resyncFailures = 0
             cursor.reading = true
-            cursors[backlog.sessionId] = cursor
-            rereadHistory(backlog.sessionId, .backlogBroken)
+            cursors[sessionId] = cursor
+            rereadHistory(sessionId, .backlogBroken)
             return
         }
-        cursors[backlog.sessionId] = cursor
-        resync(backlog.sessionId)
+        cursors[sessionId] = cursor
+        resync(sessionId)
     }
 
-    private func apply(_ reset: Components.Schemas.StreamReset) {
-        var cursor = cursors[reset.sessionId] ?? Cursor()
+    private func reset(_ sessionId: String, nextSeq: Double?) {
+        var cursor = cursors[sessionId] ?? Cursor()
         cursor.reading = true
         cursor.subscribed = true
         cursor.resyncAfter = nil
         cursor.resyncFailures = 0
         cursor.warned = false
-        cursors[reset.sessionId] = cursor
-        log.info("stream: reset for \(reset.sessionId.prefix(8), privacy: .public), next seq \(reset.nextSeq)")
-        rereadHistory(reset.sessionId, .streamReset)
+        cursors[sessionId] = cursor
+        log.info("stream: reset for \(sessionId.prefix(8), privacy: .public), next seq \(nextSeq ?? -1)")
+        rereadHistory(sessionId, .streamReset)
     }
 
     // MARK: Commands

@@ -9,6 +9,13 @@ public final class SessionTranscript {
     public let id: String
     public internal(set) var blocks: [Components.Schemas.TranscriptBlock] = []
     public internal(set) var queued: [Components.Schemas.TranscriptBlock] = []
+    /// The reader's own sends from this device that the hub has not taken
+    /// yet (local.ts `localUserMessage`, client.svelte.ts `local`), oldest
+    /// first, drawn after `queued`. Each goes the moment `blocks` or `queued`
+    /// holds its id: the hub's row for it takes its place, under the same id.
+    /// Nothing the hub sends replaces this list, so a send stays on screen
+    /// from the composer until the hub's own row for it is there.
+    public internal(set) var local: [LocalSend] = []
     public internal(set) var branches: [Components.Schemas.TranscriptPageBranch] = []
     public internal(set) var tail: Components.Schemas.TranscriptTail?
     public internal(set) var facts: Components.Schemas.TranscriptFacts?
@@ -58,6 +65,41 @@ public final class SessionTranscript {
     /// stream (arrivals.svelte.ts: a history path replaces, a live path pushes).
     public internal(set) var historyRevision = 0
     init(_ id: String) { self.id = id }
+}
+
+/// A message this device sent that the hub has not taken yet: what its row
+/// draws until the hub's row for it arrives under the same id (local.ts
+/// `localUserMessage`). Its pictures are drawn from the bytes that went out,
+/// as `data:` addresses: nothing comes back to draw them from until then.
+public struct LocalSend: Sendable, Equatable {
+    public enum State: String, Sendable {
+        /// On its way: the hub has not answered, or has and its row is not here yet.
+        case sending
+        /// The hub never took it (the socket was down or went down, or nothing
+        /// answered): sent again from this device, under its own id.
+        case unreached
+    }
+
+    public struct Image: Sendable, Equatable {
+        public let src: String
+        public let mediaType: String
+    }
+
+    public let id: String
+    public let text: String
+    public let timestamp: String
+    public let texts: [SentText]
+    public let files: [SentFile]
+    public let images: [Image]
+    public internal(set) var state: State = .sending
+    /// Why it was not taken, while `unreached`.
+    public internal(set) var reason: String?
+}
+
+/// A pasted or attached text a send carried.
+public struct SentText: Sendable, Equatable {
+    public let name: String
+    public let content: String
 }
 
 /// A transcript read that failed (client.svelte.ts `pageFault`): the machine
@@ -149,7 +191,8 @@ public final class SessionsStore {
         readers.removeValue(forKey: id)?.cancel()
         failedReads.removeValue(forKey: id)?.timer?.cancel()
         transcripts[id] = nil
-        hub.ledger.sync(watched)
+        for (uuid, held) in outbox where held.sessionId == id { outbox[uuid] = nil }
+        hub.ledger.forget(except: watched)
         log.info("stopped watching \(id, privacy: .public): \(self.watches.count) sessions watched")
     }
 
@@ -161,12 +204,21 @@ public final class SessionsStore {
         transcripts = [:]
         watches = [:]
         peeked = nil
-        hub.ledger.sync([])
+        outbox = [:]
+        hub.ledger.forget(except: [])
     }
 
+    /// The socket is back: every watched transcript is read again, quietly,
+    /// joined to the rows held (`read`), and the read's page subscribes it.
+    /// Never resumed from the cursor the last connection left: the hub
+    /// numbers a session's stream in memory, from 1 again after a restart,
+    /// so that cursor may sit inside another hub process's numbering, and a
+    /// resume from it would replay that process's events onto rows they do
+    /// not follow. A read in flight is read again here: it was asked of the
+    /// connection before.
     func reconnected() {
-        for id in watched where transcripts[id]?.fault != nil || transcripts[id]?.behind != nil { read(id, because: .reconnect) }
-        hub.ledger.sync(watched)
+        hub.ledger.forget(except: watched)
+        for id in watched { read(id, because: .reconnect) }
     }
 
     /// The app is active again, maybe back from Settings with Local Network
@@ -252,9 +304,11 @@ public final class SessionsStore {
         case streamReset
         /// The replay came back broken `Ledger.maxResyncAttempts` times.
         case backlogBroken
+        /// A message of the session's stream could not be read (`Ledger.unreadable`).
+        case streamUnreadable
         /// The reader asked again after a failed read.
         case retry
-        /// The socket came back while the last read had failed.
+        /// The socket came back: the stream it carried is followed again from a read.
         case reconnect
         /// A moved session started, and its first read found nothing.
         case moveStarted
@@ -267,7 +321,7 @@ public final class SessionsStore {
 
         /// The hub asked for it: the rows drawn are behind what it holds, a
         /// catch-up the dock says. Every other read catches up quietly.
-        var catchesUp: Bool { self == .transcriptReset || self == .streamReset || self == .backlogBroken }
+        var catchesUp: Bool { self == .transcriptReset || self == .streamReset || self == .backlogBroken || self == .streamUnreadable }
     }
 
     /// Reads the newest page, and makes it what the transcript holds.
@@ -385,6 +439,7 @@ public final class SessionsStore {
                 transcript.blocks = whole.blocks + (notes[id] ?? [])
                 transcript.branches = branches
                 transcript.queued = page.queued ?? []
+                settleLocal(transcript)
                 transcript.tail = page.tail
                 transcript.facts = page.facts
                 transcript.location = page._where
@@ -613,6 +668,7 @@ public final class SessionsStore {
                 default: break
                 }
             }
+            settleLocal(transcript)
         } catch {
             // The rows may now miss what the event said: read again, on the backoff.
             log.error("transcript event unreadable: \(String(describing: error).prefix(500), privacy: .public)")
@@ -668,7 +724,68 @@ public final class SessionsStore {
                 + files.map { ["kind": "file", "name": $0.name, "mediaType": $0.mediaType, "size": $0.size, "ref": $0.ref] as [String: any Sendable] }
         }
         let payload = try! OpenAPIValueContainer(unvalidatedValue: body)
-        return hub.ledger.submit(kind: .send, sessionId: sessionId, machineId: machineId, payload: payload, settlesAt: .accepted)
+        let id = submitSend(uuid, sessionId: sessionId, machineId: machineId, payload: payload)
+        // Drawn at once (client.svelte.ts `noteSendSubmitted`), unless it never
+        // left this device: then its words are still the composer's. A send in
+        // place of another draws nothing of its own: the one it replaces stands
+        // until the hub retires it as it takes this one.
+        if replaces == nil, let transcript = transcripts[sessionId], hub.ledger.commands[id]?.undelivered != true {
+            let sources = images.map { LocalSend.Image(src: "data:\($0.mediaType);base64,\($0.data.base64EncodedString())", mediaType: $0.mediaType) }
+            transcript.local.append(LocalSend(id: uuid, text: text, timestamp: ISO8601DateFormatter().string(from: Date()),
+                                              texts: texts.map { SentText(name: $0.name, content: $0.content) }, files: files, images: sources))
+            outbox[uuid] = (sessionId, machineId, payload)
+            transcript.blockRevision += 1
+        }
+        return id
+    }
+
+    /// A send's command, under the message's own uuid (client.svelte.ts: the
+    /// command id is the uuid), so the hub's record of it and the row this
+    /// device drew are one id. Should the hub never take it, its row says so.
+    private func submitSend(_ uuid: String, sessionId: String, machineId: String, payload: OpenAPIValueContainer) -> String {
+        hub.ledger.submit(kind: .send, sessionId: sessionId, machineId: machineId, payload: payload, settlesAt: .accepted,
+                          effects: Ledger.Effects(settled: { [weak self] stage, reason in
+                              guard stage == .failed else { return }
+                              self?.unreached(uuid, in: sessionId, reason: reason)
+                          }), commandId: uuid)
+    }
+
+    /// What each send drawn from this device went out with, by its uuid,
+    /// until the hub has its row: what Send again sends (client.svelte.ts `sendOutbox`).
+    @ObservationIgnored private var outbox: [String: (sessionId: String, machineId: String, payload: OpenAPIValueContainer)] = [:]
+
+    /// The hub never took the send `uuid`: its row says it did not go, and why (client.svelte.ts `markUnreached`).
+    private func unreached(_ uuid: String, in sessionId: String, reason: String?) {
+        guard let transcript = transcripts[sessionId], let at = transcript.local.firstIndex(where: { $0.id == uuid }) else { return }
+        transcript.local[at].state = .unreached
+        transcript.local[at].reason = reason ?? "The hub never took it."
+        transcript.blockRevision += 1
+    }
+
+    /// Sends again a message the hub never took, under its own uuid, on its
+    /// own row, which goes back to sending where it stands (client.svelte.ts
+    /// `retrySend`). A hub that did take it after all answers with its record,
+    /// and hands the machine nothing twice.
+    public func resend(_ uuid: String) {
+        guard let held = outbox[uuid], let transcript = transcripts[held.sessionId],
+              let at = transcript.local.firstIndex(where: { $0.id == uuid }) else { return }
+        transcript.local[at].state = .sending
+        transcript.local[at].reason = nil
+        transcript.blockRevision += 1
+        _ = submitSend(uuid, sessionId: held.sessionId, machineId: held.machineId, payload: held.payload)
+    }
+
+    /// The sends this device drew that the hub's rows now hold go: the hub's
+    /// row for each stands in its place, under the same id.
+    private func settleLocal(_ transcript: SessionTranscript) {
+        guard !transcript.local.isEmpty else { return }
+        var held = Set(transcript.queued.map(\.id))
+        held.formUnion(transcript.blocks.lazy.map(\.id))
+        let taken = transcript.local.filter { held.contains($0.id) }.map(\.id)
+        guard !taken.isEmpty else { return }
+        transcript.local.removeAll { held.contains($0.id) }
+        for uuid in taken { outbox[uuid] = nil }
+        transcript.blockRevision += 1
     }
 
     /// Takes back a send the session has not read yet (`send.withdraw`,

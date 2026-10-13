@@ -52,6 +52,23 @@ nonisolated struct Block: @unchecked Sendable {
         self.signature = signature
     }
 
+    /// A send this device drew that the hub has not taken (local.ts
+    /// `localUserMessage`): the reader's turn, its state `sending` or
+    /// `unreached`, carrying what went out with it.
+    init(_ local: LocalSend) {
+        var meta: [String: Any] = [:]
+        let attachments = local.texts.map { ["kind": "text", "name": $0.name, "content": $0.content] as [String: Any] }
+            + local.files.map { ["kind": "file", "name": $0.name, "mediaType": $0.mediaType, "size": $0.size, "ref": $0.ref] as [String: Any] }
+        if !attachments.isEmpty { meta["attachments"] = attachments }
+        if !local.images.isEmpty { meta["images"] = local.images.map { ["src": $0.src, "mediaType": $0.mediaType] } }
+        if let reason = local.reason { meta["sendFailed"] = reason }
+        var raw: [String: Any] = ["id": local.id, "type": "user", "content": local.text, "timestamp": local.timestamp,
+                                  "state": local.state.rawValue]
+        if !meta.isEmpty { raw["metadata"] = meta }
+        let signature = (try? JSONSerialization.data(withJSONObject: raw, options: .sortedKeys)) ?? Data()
+        self.init(raw, signature: signature)
+    }
+
     func string(_ key: String) -> String? {
         meta[key] as? String
     }

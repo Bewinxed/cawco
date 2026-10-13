@@ -708,7 +708,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: String] } ?? [:]
         wanted = TranscriptPrep.Input(revision: transcript.blockRevision, history: transcript.historyRevision,
                                       blocks: transcript.blocks, branches: transcript.branches, queued: transcript.queued,
-                                      streams: streams, agentName: env.agentName, keys: keys)
+                                      local: transcript.local, streams: streams, agentName: env.agentName, keys: keys)
         pump()
     }
 
@@ -747,8 +747,39 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         // Caw's file is read now, while his row is still being laid out (compaction-mark.ts `warmCompactionMark`).
         if next.compacts, !Self.markWarmed { Self.markWarmed = true; CawMark.warm(.compacted) }
+        #if DEBUG
+        saySends()
+        #endif
         dirty = true
     }
+
+    #if DEBUG
+    /// Every send this view has drawn waiting (this device's, or the hub's
+    /// queue), oldest first, for a simulator pass to follow (probe-ios-queued.ts).
+    private var sendsSeen: [String] = []
+    private var sendsSaid = ""
+
+    /// Where each send drawn waiting stands in the generation applied: this
+    /// device's row (`local`), the hub's queue (`queue`), among the blocks
+    /// (`blocks`), or nowhere (`absent`); its state; and how many rows hold
+    /// its id. Said when it changes.
+    private func saySends() {
+        guard let transcript else { return }
+        for block in queued where !sendsSeen.contains(block.id) { sendsSeen.append(block.id) }
+        guard !sendsSeen.isEmpty else { return }
+        let said = sendsSeen.map { id -> String in
+            let rows = queued.filter { $0.id == id } + blocks.filter { $0.id == id }
+            guard let row = rows.first else { return "\(id.prefix(8))=absent" }
+            // A row this device drew wears its own states (`Block(LocalSend)`).
+            let local = row.state == LocalSend.State.sending.rawValue || row.state == LocalSend.State.unreached.rawValue
+            let place = queued.contains { $0.id == id } ? (local ? "local" : "queue") : "blocks"
+            return "\(id.prefix(8))=\(place):\(row.state ?? "-")x\(rows.count)"
+        }.joined(separator: " ")
+        guard said != sendsSaid else { return }
+        sendsSaid = said
+        Self.dockLog.notice("probe sends \(transcript.id.prefix(8), privacy: .public): \(said, privacy: .public)")
+    }
+    #endif
 
     /// The settled rows' items as applied, what they were prepared from, and
     /// which of them read the fleet (`fleetPrint`). A landed answer's live key

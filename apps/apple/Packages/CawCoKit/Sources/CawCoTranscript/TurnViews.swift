@@ -313,7 +313,11 @@ final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDele
             retrying = nil
         }
         self.block = block
-        let failed = block.state == "failed"
+        // Drawn by this device, not taken by the hub yet (MessageRow.svelte `ghost`).
+        let ghost = block.state == "sending"
+        // Never reached the hub: this device's to send again (MessageRow.svelte `unreached`).
+        let unreached = block.state == "unreached"
+        let failed = block.state == "failed" || unreached
         // A failed send going again says so, not the failure (MessageRow.svelte).
         let sending = retried != nil || retrying != nil
         let waiting = block.state == "pending" || block.queued
@@ -321,8 +325,9 @@ final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDele
         // On a touch screen, a queued message that can be edited says how.
         let tappable = waiting && !taken && Self.touch && env.canEditQueued(block.id)
         let queuedNote = tappable ? "queued · \(env.agentName) is still working · tap to edit" : "queued"
-        let note: String? = taken ? nil : failed ? (sending ? "sending…" : "not sent") : waiting ? queuedNote : block.meta["urgent"] as? Bool == true ? "urgent" : nil
-        let clock = failed || waiting ? nil : Item.clock(block.date)
+        let note: String? = taken ? nil : ghost ? "sending…" : failed ? (sending ? "sending…" : "not sent") : waiting ? queuedNote
+            : block.meta["urgent"] as? Bool == true ? "urgent" : nil
+        let clock = failed || waiting || ghost ? nil : Item.clock(block.date)
         who.isHidden = turn.grouped
         who.configure(.init(name: "You", clock: clock, note: note, you: true))
         well.grouped = turn.grouped
@@ -332,9 +337,9 @@ final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDele
         float.set(floated?.isEmpty == false ? floated : nil)
         body.floatSize = float.isHidden ? .zero : FloatNote.size(floated ?? "")
         body.configure(env.replacement(block.id) ?? block.content, style: .well)
-        let ghost = waiting && !taken ? Effect.ghostPresence : 1
-        who.alpha = ghost
-        words.alpha = ghost
+        let presence = (waiting || ghost) && !taken ? Effect.ghostPresence : 1
+        who.alpha = presence
+        words.alpha = presence
         configureChips(block)
         takenTag.attributedText = Styled.string("Queued · editing it below", TypeScale.typeMeta, color: Palette.statusAttnInk, weight: .medium)
         fold(taken)
@@ -457,6 +462,11 @@ final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDele
     /// one, so the hub retires this row as the retry is taken.
     private func tryAgain() {
         guard retrying == nil, let block, let hub = env.hub, hub.state == .connected, let row = hub.fleet.byId[env.sessionId], row.isListed else { return }
+        // One the hub never took goes again from this device, under its own id, on this row.
+        if block.state == "unreached" {
+            hub.sessions.resend(block.id)
+            return
+        }
         let extras = SentMessages.extras(of: block)
         showSendingAgain()
         retry.setAttributedTitle(Styled.string("Sending again…", TypeScale.typeLabel, color: Palette.inkStrong), for: .normal)

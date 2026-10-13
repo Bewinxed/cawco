@@ -1,4 +1,5 @@
 import CawCoAPI
+import CawCoCore
 import Foundation
 
 /// One generation of a transcript's settled rows, prepared off the main
@@ -41,6 +42,8 @@ actor TranscriptPrep {
         let blocks: [Components.Schemas.TranscriptBlock]
         let branches: [Components.Schemas.TranscriptPageBranch]
         let queued: [Components.Schemas.TranscriptBlock]
+        /// This device's sends the hub has not taken, drawn after `queued`.
+        let local: [LocalSend]
         /// What each running subagent is streaming, by its spawning call's id.
         let streams: [String: String]
         let agentName: String
@@ -80,7 +83,7 @@ actor TranscriptPrep {
             let streaming = input.streams[page.value1.toolUseId] ?? ""
             if let branch = Branch(page, blocks: inner, streaming: streaming) { branches[branch.toolUseId] = branch }
         }
-        let queued = take(input.queued)
+        let queued = take(input.queued) + input.local.map(Block.init)
         read = kept
 
         // The rows the reader sees: settled first (rows.ts `drawnOf` — an
