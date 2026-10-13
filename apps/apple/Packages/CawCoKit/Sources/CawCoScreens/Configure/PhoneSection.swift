@@ -146,13 +146,6 @@ final class PhoneSectionController: ConfigSectionController {
     }
 }
 
-private extension UIViewPropertyAnimator {
-    func addingCompletion(_ done: @escaping @MainActor () -> Void) -> UIViewPropertyAnimator {
-        addCompletion { _ in MainActor.assumeIsolated { done() } }
-        return self
-    }
-}
-
 /// One registered device (the page's `.device`): who it is and its last
 /// push, its Quiet switch, Remove, and one status line for what is on its
 /// way, the test's answer, or why a step was refused with Try again.

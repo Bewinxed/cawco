@@ -2,7 +2,6 @@
 import CawCoCore
 import CawCoDesign
 import OSLog
-import SafariServices
 import UIKit
 
 /// `-acts-probe` (DEBUG only): the Stay In Context proof against a scratch
@@ -251,9 +250,9 @@ enum ActsProbe {
         log.notice("machine menu [probe-mac]: \(probe.probeItems.joined(separator: " | "), privacy: .public)")
         probe.probeAccounts()
         await wait(3)
-        let web = controllers(SFSafariViewController.self, from: shell)
-        log.notice("machine menu [probe-mac] sign in: \(web.count, privacy: .public) web page(s) over the app")
-        web.first?.dismiss(animated: true)
+        let accounts = controllers(AccountsSectionController.self, from: shell).filter { $0.view.window != nil }
+        log.notice("machine menu [probe-mac] sign in: \(accounts.count, privacy: .public) Accounts section(s) on screen")
+        shell.go(.fleet)
         await wait(1.5)
 
         // 8. The delegate tray: Dismiss taken, then refused for an item the hub no longer has.

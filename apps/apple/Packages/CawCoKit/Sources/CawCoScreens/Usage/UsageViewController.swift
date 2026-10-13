@@ -96,7 +96,7 @@ final class UsageViewController: ObservedViewController, UIDocumentPickerDelegat
         errorSlot.axis = .vertical
 
         // "Sign in an account": where accounts are signed in (`/config/accounts`).
-        limits.onSignIn = { [weak self] in self?.context.go(.configure) }
+        limits.onSignIn = { [weak self] in self?.context.openConfigure("accounts") }
         limits.presenter = self
         whereCard.onOpen = { [weak self] session in
             guard let self else { return }

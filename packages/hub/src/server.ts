@@ -16678,16 +16678,13 @@ export const createServer = (
         }
       )
       // The hub's own build rides along (NEW.md §12), so a machine's can be read
-      // against something rather than taken on faith. `dashboard` is where the
-      // web dashboard is reached (the one a Telegram link opens): the app
-      // takes a person there for what it has no screen of its own for yet.
+      // against something rather than taken on faith.
       .get("/health", hidden, async () => ({
         ok: true,
         version: HUB_VERSION,
         build: hubBuild,
         // Which hub this is, whatever address answered (hub-id.ts).
         hubId: hubId(),
-        dashboard: dashboardUrl(registry),
       }))
       .get("/api/agents", () => withPresence(db.listAgents()))
       .post(

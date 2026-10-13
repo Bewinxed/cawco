@@ -147,6 +147,11 @@ const SOLAR_ICONS = [
   "clock-circle-bold-duotone", // IconClock
   "graph-up-bold-duotone", // IconGraphUp
   "bug-bold-duotone", // IconBug
+  // Configure → Accounts (accounts/AccountEditor.svelte, AccountMachines.svelte, KeyPanel.svelte).
+  "logout-2-bold-duotone", // IconLogout
+  "eye-bold-duotone", // IconEye
+  "eye-closed-bold-duotone", // IconEyeClosed
+  "chart-2-bold-duotone", // IconUsage
 ];
 
 /**
@@ -168,6 +173,21 @@ const BRANDS: Record<string, [set: string, name: string]> = {
   "logo-minimax": ["thesvg-color", "minimax"],
   "logo-nvidia": ["thesvg-color", "nvidia-nemotron"],
   "logo-zhipu": ["thesvg-color", "zhipu"],
+  // An account provider's mark (accounts/marks.ts) the models' marks above don't cover.
+  "logo-copilot": ["thesvg-color", "github-copilot-light"],
+  "logo-openrouter": ["thesvg-color", "openrouter-light"],
+  "logo-groq": ["thesvg-color", "groq"],
+  "logo-cerebras": ["logos", "cerebras-icon"],
+  "logo-huggingface": ["logos", "hugging-face-icon"],
+  "logo-perplexity": ["logos", "perplexity-icon"],
+  "logo-together": ["logos", "togetherai-icon"],
+  "logo-baseten": ["thesvg-color", "baseten"],
+  "logo-bedrock": ["thesvg-color", "bedrock-aws"],
+  "logo-cloudflare": ["thesvg-color", "cloudflare"],
+  "logo-fireworks": ["thesvg-color", "fireworks"],
+  "logo-kimi": ["thesvg-color", "kimi"],
+  "logo-vercel": ["thesvg-color", "vercel-light"],
+  "logo-xiaomi": ["thesvg-color", "xiaomi"],
 };
 
 /** OpenCodeLogo.svelte's official favicon geometry, in its own colours. */
@@ -237,6 +257,11 @@ const INK_BRANDS = new Set([
   "logo-grok",
   "logo-moonshot",
   "logo-github",
+  // marks.ts draws a mark with no chromatic paint in one ink.
+  "logo-copilot",
+  "logo-openrouter",
+  "logo-bedrock",
+  "logo-vercel",
 ]);
 
 /** Brand marks keep their colours: their SVGs go in as drawn, not as templates, but for the one-ink marks. */

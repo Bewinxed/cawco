@@ -93,6 +93,8 @@ public struct ShellContext {
     public let openSession: (String) -> Void
     /// Goes to another place in the shell.
     public let go: (ShellDestination) -> Void
+    /// Goes to Configure, at the section of this slug.
+    let openConfigure: (String) -> Void
     /// Asks to forget a project (the confirm, then the hub).
     let forgetProject: (ProjectRow) -> Void
     /// Starts a session, at a place when one is given (the New Session flow).

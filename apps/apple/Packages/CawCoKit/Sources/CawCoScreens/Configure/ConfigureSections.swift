@@ -47,7 +47,20 @@ enum ConfigSections {
     /// The groups the list is drawn in, in this order (`GROUPS`).
     static let groupOrder = ["Automation", "Agents", "Tools", "Memory", "Hub"]
 
-    static let all: [ConfigSection] = [phone, updates]
+    static let all: [ConfigSection] = [accounts, phone, updates]
+
+    static let accounts = ConfigSection(
+        slug: "accounts", group: "Hub", label: "Accounts",
+        purpose: "Provider sign-ins, and which one a session runs on",
+        glyph: .toolTask, hue: Palette.hueCyan500,
+        count: { hub in FleetAccounts.view(hub)?.accounts.count },
+        // The accounts a machine signed in as somebody else, or signed in nowhere (counts.svelte.ts `accountFaults`).
+        badge: { _, hub in
+            let faults = FleetAccounts.view(hub).map(FleetAccounts.faults) ?? 0
+            return faults > 0 ? ConfigBadge(count: faults, waiting: false) : nil
+        },
+        make: { section, context in AccountsSectionController(section: section, context: context) }
+    )
 
     static let phone = ConfigSection(
         slug: "phone", group: "Hub", label: "Phone",

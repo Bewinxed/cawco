@@ -136,6 +136,11 @@ public enum Glyph: String, CaseIterable, Sendable {
     case clock = "clock-circle-bold-duotone"
     case graphUp = "graph-up-bold-duotone"
     case bug = "bug-bold-duotone"
+    // Configure → Accounts (AccountEditor.svelte, AccountMachines.svelte, KeyPanel.svelte).
+    case logout = "logout-2-bold-duotone"
+    case eye = "eye-bold-duotone"
+    case eyeClosed = "eye-closed-bold-duotone"
+    case usage = "chart-2-bold-duotone"
 
     /// The web's names for glyphs the transcript already carries under its own.
     public static let send = Glyph.toolMessage // plain-2-bold-duotone (IconSend)
@@ -181,10 +186,61 @@ public enum BrandLogo: String, Sendable {
     case nvidia = "logo-nvidia"
     case zhipu = "logo-zhipu"
     case opencode = "logo-opencode"
+    case copilot = "logo-copilot"
+    case openrouter = "logo-openrouter"
+    case groq = "logo-groq"
+    case cerebras = "logo-cerebras"
+    case huggingface = "logo-huggingface"
+    case perplexity = "logo-perplexity"
+    case together = "logo-together"
+    case baseten = "logo-baseten"
+    case bedrock = "logo-bedrock"
+    case cloudflare = "logo-cloudflare"
+    case fireworks = "logo-fireworks"
+    case kimi = "logo-kimi"
+    case vercel = "logo-vercel"
+    case xiaomi = "logo-xiaomi"
 
-    /// ProviderLogo.svelte's `INK`: upstream these carry a fixed dark fill
-    /// that vanishes on the dark theme; they follow the ink, as glyphs do.
-    public var inked: Bool { [.openai, .github, .grok, .moonshot].contains(self) }
+    /// ProviderLogo.svelte's `INK` and accounts/marks.ts: upstream these carry
+    /// a fixed dark fill that vanishes on the dark theme, or no colour of
+    /// their own; they follow the ink, as glyphs do.
+    public var inked: Bool { [.openai, .github, .grok, .moonshot, .copilot, .openrouter, .bedrock, .vercel].contains(self) }
+
+    /// An account provider's mark (accounts/marks.ts `SOURCES`), by the
+    /// account's provider id (pi-ai's, or OpenCode's own); nil when nobody
+    /// draws one for it.
+    public static func account(_ provider: String) -> BrandLogo? {
+        switch provider {
+        case "anthropic": .claude
+        case "openai-codex", "openai", "azure-openai-responses": .openai
+        case "github-copilot": .copilot
+        case "openrouter": .openrouter
+        case "zai", "zai-coding-cn", "zai-coding-plan": .zhipu
+        case "xai": .grok
+        case "groq": .groq
+        case "cerebras": .cerebras
+        case "google", "google-vertex", "google-gemini-cli": .gemini
+        case "mistral": .mistral
+        case "deepseek": .deepseek
+        case "kimi-coding": .kimi
+        case "moonshotai", "moonshotai-cn": .moonshot
+        case "minimax", "minimax-cn": .minimax
+        case "fireworks": .fireworks
+        case "together": .together
+        case "vercel-ai-gateway": .vercel
+        case "amazon-bedrock": .bedrock
+        case "opencode", "opencode-go": .opencode
+        case "huggingface": .huggingface
+        case "nvidia": .nvidia
+        case "qwen-token-plan", "qwen-token-plan-cn", "qwen-token-plan-individual": .qwen
+        case "meta": .meta
+        case "perplexity": .perplexity
+        case "baseten": .baseten
+        case "cloudflare-workers-ai", "cloudflare-ai-gateway": .cloudflare
+        case "xiaomi", "xiaomi-token-plan-cn", "xiaomi-token-plan-ams", "xiaomi-token-plan-sgp": .xiaomi
+        default: nil
+        }
+    }
 
     public var image: UIImage {
         guard let image = UIImage(named: rawValue, in: .module, with: nil) else {
