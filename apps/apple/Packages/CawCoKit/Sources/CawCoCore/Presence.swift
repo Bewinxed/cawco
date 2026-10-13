@@ -33,8 +33,9 @@ public final class Presence {
     private static let beatEvery: TimeInterval = 30
     private static let clientKey = "cawco-presence-client"
     private let log = Logger(subsystem: "dev.cawco.app", category: "Presence")
-    /// Stable per install.
-    private let clientId: String
+    /// Stable per install: this app's name to the hub, in its presence beats
+    /// and in a view's word that it has an artifact on screen (`shown`).
+    public let clientId: String
     private var windows: [ObjectIdentifier: Window] = [:]
     /// Between the app's will-resign-active and its next did-become-active.
     private var appResigned = false

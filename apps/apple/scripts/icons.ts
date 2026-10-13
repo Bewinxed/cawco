@@ -148,6 +148,10 @@ const SOLAR_ICONS = [
   "bug-bold-duotone", // IconBug
   // Forget's tray (StopTray.svelte `Away`): a session whose machine is away.
   "cloud-cross-bold-duotone",
+  // The preview's pins (preview/PreviewPane.svelte, PinCard.svelte, PinList.svelte).
+  "chat-round-dots-bold-duotone", // IconComment
+  "restart-bold-duotone", // IconReopen
+  "map-point-bold-duotone", // IconMapPoint: the moved tray
 ];
 
 /**

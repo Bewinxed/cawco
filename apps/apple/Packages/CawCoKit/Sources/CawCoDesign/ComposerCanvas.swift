@@ -139,7 +139,7 @@ final class PenSwipeRecognizer: UIPanGestureRecognizer {
 /// `cawco-preview` cookie, and the host script standing in for the
 /// dashboard's window, so the page's overlay posts to the app and hears it.
 @MainActor
-final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
+final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, UIPencilInteractionDelegate {
     let page: CanvasPage
     let web: WKWebView
     private let instanceId: String
@@ -180,6 +180,35 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
         web.scrollView.contentInsetAdjustmentBehavior = .never
         web.isInspectable = true
         web.accessibilityLabel = "Canvas"
+        // The canvas's theme follows the app's (DESIGN.md: "its theme follows ours").
+        web.registerForTraitChanges([UITraitUserInterfaceStyle.self]) { [weak self] (_: WKWebView, _: UITraitCollection) in
+            guard let self else { return }
+            deliver(["type": "cawco:theme", "theme": theme])
+        }
+        // The pencil's double-tap toggles the eraser (DESIGN.md, Pen rules on the canvas).
+        let pencil = UIPencilInteraction()
+        pencil.delegate = self
+        web.addInteraction(pencil)
+        // A held stroke snapping to its shape ticks (`selection`); the engine
+        // is readied as the pen touches down, so the tick lands on the snap.
+        web.addGestureRecognizer(PenDown { [weak self] in self?.snapTick.prepare() })
+    }
+
+    private let snapTick = UISelectionFeedbackGenerator()
+
+    private var theme: String { web.traitCollection.userInterfaceStyle == .dark ? "dark" : "light" }
+
+    /// The pencil's double-tap, as the person set it in Settings: only
+    /// switching to the eraser or to the tool before act; the canvas host
+    /// toggles its eraser on it.
+    func pencilInteraction(_: UIPencilInteraction, didReceiveTap _: UIPencilInteraction.Tap) {
+        let action: String
+        switch UIPencilInteraction.preferredTapAction {
+        case .switchEraser: action = "eraser"
+        case .switchPrevious: action = "previous"
+        default: return
+        }
+        deliver(["type": "cawco:pencil-double-tap", "action": action])
     }
 
     func load() {
@@ -278,6 +307,7 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             "type": "cawco:hello",
             "artifact": ["id": page.id, "kind": "canvas", "name": page.name],
             "sync": page.sync,
+            "theme": theme,
         ])
         tellPlace()
         #if DEBUG
@@ -347,6 +377,9 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate {
             let waiter = pictureWaiter
             pictureWaiter = nil
             waiter?.continuation.resume()
+        case "cawco:snap":
+            // DESIGN.md, Pen rules on the canvas: "a `selection` tick under a finger".
+            snapTick.selectionChanged()
         case "cawco:dock": onDock()
         case "cawco:undock": onUndock()
         case "cawco:done": onDone()
@@ -433,6 +466,29 @@ private final class CanvasMessages: NSObject, WKScriptMessageHandler {
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         target?.userContentController(controller, didReceive: message)
     }
+}
+
+/// Hears a pen touch down on the canvas and lets it through untouched: it
+/// never recognizes, so the page's own pointer events and WebKit's
+/// gestures carry on as before.
+private final class PenDown: UIGestureRecognizer {
+    private let down: () -> Void
+
+    init(_ down: @escaping () -> Void) {
+        self.down = down
+        super.init(target: nil, action: nil)
+        cancelsTouchesInView = false
+        delaysTouchesBegan = false
+        delaysTouchesEnded = false
+        allowedTouchTypes = [NSNumber(value: UITouch.TouchType.pencil.rawValue)]
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        down()
+        state = .failed
+    }
+
+    override func canPrevent(_: UIGestureRecognizer) -> Bool { false }
 }
 
 // MARK: The grab

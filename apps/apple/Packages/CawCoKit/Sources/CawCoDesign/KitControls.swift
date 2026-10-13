@@ -229,6 +229,17 @@ public final class KitAlert: UIView {
 public final class KitBadge: UIView {
     public enum Variant: Sendable { case plain, secondary, outline, attn, done, fail, live }
 
+    private var label: KitLabel!
+
+    /// Its words, said anew (a count that changed).
+    public var text: String {
+        get { label.text ?? "" }
+        set {
+            label.text = newValue
+            accessibilityLabel = newValue
+        }
+    }
+
     /// `glyph`: the icon a badge leads with (`[&>svg]:size-3`, `gap-1`).
     public init(_ text: String, variant: Variant = .plain, glyph: Glyph? = nil) {
         super.init(frame: .zero)
@@ -246,6 +257,7 @@ public final class KitBadge: UIView {
         backgroundColor = ground
         let label = KitLabel(TypeScale.typeLabel, ink: ink)
         label.text = text
+        self.label = label
         let row = UIStackView(arrangedSubviews: [label])
         row.spacing = Space.space1
         row.alignment = .center

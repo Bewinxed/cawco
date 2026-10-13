@@ -137,6 +137,12 @@ public enum Glyph: String, CaseIterable, Sendable {
     case bug = "bug-bold-duotone"
     /// StopTray.svelte's `Away`: a session whose machine is away stops when it is back.
     case away = "cloud-cross-bold-duotone"
+    /// The preview's Comment (PreviewPane.svelte `IconComment`).
+    case comment = "chat-round-dots-bold-duotone"
+    /// A pin's Reopen (PinCard.svelte `IconReopen`).
+    case reopen = "restart-bold-duotone"
+    /// The pins' moved tray (PinList.svelte `IconMapPoint`).
+    case mapPoint = "map-point-bold-duotone"
 
     /// The web's names for glyphs the transcript already carries under its own.
     public static let send = Glyph.toolMessage // plain-2-bold-duotone (IconSend)

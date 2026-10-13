@@ -573,10 +573,6 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
 
     private func makePreview() -> PreviewController {
         let controller = PreviewController(hub: hub, instanceId: sessionId)
-        controller.onSelect = { [weak self] attachments in
-            guard let self else { return }
-            for attachment in attachments { composerBinding.attach(attachment) }
-        }
         preview = controller
         return controller
     }
@@ -584,8 +580,8 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     /// The web's wide layout: the preview beside the transcript, its share of
     /// the pane's width, never under its 320pt floor. On a compact width the
     /// phone's drawer (PreviewSheet): over the transcript, its floor the top
-    /// of the composer, so a picked element goes to a composer still there
-    /// to write and send in; 60% of the room above the composer, or all of it.
+    /// of the composer, so the conversation's composer stays there to write
+    /// and send in; 60% of the room above the composer, or all of it.
     private func embed(_ controller: PreviewController, drawer: Bool) {
         addChild(controller)
         controller.view.translatesAutoresizingMaskIntoConstraints = false

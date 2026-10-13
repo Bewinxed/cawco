@@ -97,6 +97,13 @@ public final class KitSegmented: UIControl {
         glide.startAnimation()
     }
 
+    /// Names the segment at `index` anew (a count in it changed); the thumb follows its new width.
+    public func setTitle(_ title: String, at index: Int) {
+        guard cells.indices.contains(index) else { return }
+        cells[index].title = title
+        setNeedsLayout()
+    }
+
     /// Chooses the segment at `index`, as a tap does.
     public func choose(_ index: Int) {
         guard index != selectedIndex, cells.indices.contains(index) else { return }
@@ -110,6 +117,15 @@ public final class KitSegmented: UIControl {
             didSet {
                 label.ink = chosen ? Palette.inkStrong : Palette.inkMuted
                 accessibilityTraits = chosen ? [.button, .selected] : .button
+            }
+        }
+
+        var title: String {
+            get { label.text ?? "" }
+            set {
+                label.text = newValue
+                accessibilityLabel = newValue
+                toolTip = newValue
             }
         }
 
