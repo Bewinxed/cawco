@@ -856,7 +856,10 @@ try {
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
-  const id = await fleet.spawn("claude", "Question card probe");
+  // In the fleet's repository, a clone of its bare origin with a commit
+  // pushed: a delegate's workspace is cut from the project's origin (agent
+  // clone.ts `remoteDefault` reads origin's HEAD).
+  const id = await fleet.spawn("claude", "Question card probe", fleet.repo);
   await fleet.send(id, `${marker}: ask me the read-in question.`);
   const parked = await until(
     "the question parked on the hub",
@@ -878,12 +881,7 @@ try {
   if (!parked) {
     throw new Error("no parked question to probe");
   }
-  // One delegate of the asking session, so its chip fills the tray row. A
-  // workspace is cut from the project's origin: the scratch workdir gets a
-  // commit and a bare origin of its own beside it, whose HEAD names the
-  // `main` pushed to it (agent clone.ts `remoteDefault` reads origin's HEAD).
-  const origin = join(fleet.workdir, "..", "origin.git");
-  await Bun.$`git -C ${fleet.workdir} init -q -b main && git -C ${fleet.workdir} -c user.name=probe -c user.email=probe@localhost commit -q --allow-empty -m seed && git init -q --bare -b main ${origin} && git -C ${fleet.workdir} remote add origin ${origin} && git -C ${fleet.workdir} push -q origin HEAD:main`.quiet();
+  // One delegate of the asking session, so its chip fills the tray row.
   const delegated = await fetch(`${fleet.base}/api/work-items`, {
     method: "POST",
     headers: { "content-type": "application/json" },

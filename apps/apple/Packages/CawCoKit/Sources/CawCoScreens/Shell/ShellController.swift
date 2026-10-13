@@ -872,7 +872,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private func scrubMorph(_ label: String, say: (String) -> Void, snap: (String) -> Void, start: () -> Void) async {
         let card = glassCard
         let layer = card.layer
-        let begun = layer.convertTime(CACurrentMediaTime(), from: nil)
         let from = card.showing?.name ?? "nothing"
         // The size it tweens from: as drawn the moment before the switch.
         let startSize = (layer.presentation() ?? layer).frame.size
@@ -886,6 +885,14 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             cawPanel.probeRebuild()
             card.place(animated: true)
         }
+        // The tween's begin is stamped on the layer's clock when the transaction
+        // carrying it commits, not when it starts: committed here, so the begin
+        // read below is the tween's own. Left to the run loop, the commit can
+        // come after this reads it (Jump's field raising the keyboard holds the
+        // main thread, 4-127ms seen); the scrub then held a tween not yet begun,
+        // which draws the size it tweens to ("panel-to-jump holds half the size
+        // at time 0.000: … h 160.0 (63.0 to 160.0)").
+        CATransaction.flush()
         let keys = Self.animationKeys(layer)
         let tween = (layer.animation(forKey: "bounds.size") ?? layer.animation(forKey: "bounds")) as? CABasicAnimation
         let curve: String = tween?.timingFunction.map { function in
@@ -900,9 +907,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         let drawer = [Motion.easeDrawer.x1, Motion.easeDrawer.y1, Motion.easeDrawer.x2, Motion.easeDrawer.y2].map { String(format: "%.3f", $0) }.joined(separator: ",")
         say("\(label) card \(ObjectIdentifier(card)) from \(from) to \(card.showing?.name ?? "nothing") tween \(tween.map { String(format: "%.3f", $0.duration) } ?? "none") morph \(String(format: "%.3f", Motion.durMorph)) curve \(curve) drawer \(drawer) clock \(tween.map { abs($0.duration - Motion.durMorph) < 0.001 } ?? false && curve == drawer) keys \(keys) slide \(keys.contains("transform"))")
         guard let tween, let glass = card.glass else { return }
-        try? await Task.sleep(for: .milliseconds(20))
-        let begin = (layer.animation(forKey: "bounds.size") ?? layer.animation(forKey: "bounds"))?.beginTime ?? 0
-        let at = begin > 0 ? begin : begun
+        let at = (layer.animation(forKey: "bounds.size") ?? layer.animation(forKey: "bounds"))?.beginTime ?? 0
+        guard at > 0 else { return say("\(label) tween has no begin once committed") }
         // Half the size, not half the time: the drawer curve is front-loaded,
         // so at half its time the box has come ~97% of the way and reads as
         // the end. The time the curve reaches half its travel, by bisection.
