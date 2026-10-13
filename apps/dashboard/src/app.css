@@ -87,21 +87,6 @@
   syntax: "*";
   inherits: false;
 }
-/* A folder tab's rank in its track's stack (TabsList `--z`) and its rank
-   at rest until the track has ranked it (`--z-rest`): read only by the
-   tab's own layers (TabItem's card, sheet and contents, a host's rim), each
-   of which takes them by name (`inherit`). A switch re-ranks tabs that do
-   not move, and handed down, every element in each of them (the rims'
-   masked pieces most) was styled again in the switch's first frame. Any
-   value, none at first (the `var()` fallbacks stand). */
-@property --z {
-  syntax: "*";
-  inherits: false;
-}
-@property --z-rest {
-  syntax: "*";
-  inherits: false;
-}
 /* How far clear of each edge's fade a scrolling tab track brings a chosen
    tab (TabsList `inView`), registered so script reads it as one length
    whatever expression set it. */

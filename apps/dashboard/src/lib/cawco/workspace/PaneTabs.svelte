@@ -1953,13 +1953,6 @@
       inset-inline-end: -2px;
     }
   }
-  /* The tab's rank (`--z`, `--z-rest`) is not handed down (app.css): what
-     stands at it takes it by name, the kit's tab inside the menu's trigger
-     (TabItem), the rim and the neck. */
-  .tab > :global(*) {
-    --z: inherit;
-    --z-rest: inherit;
-  }
   /* The tab being carried recedes; it is somewhere else now. */
   :global(.tab[data-dragging]) {
     opacity: 0.4;

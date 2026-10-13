@@ -254,16 +254,6 @@
      fades in where it stands while the old one fades out), the card under
      them from the receded fill to the sheet's (background-color), and the
      title's strong ink (opacity). No sheet slides or wipes. */
-  /* The rank (`--z`, `--z-rest`) is not handed down (app.css): the tab, its
-     card and sheet and what is written on it take it by name, from the
-     item the track lays out (the tab, or a host's box round it). */
-  :global([data-variant="folder"]) .ff-tab,
-  :global([data-variant="folder"]) .ff-tab::before,
-  :global([data-variant="folder"]) .ff-tab::after,
-  :global([data-variant="folder"]) .ff-tab > :global(*) {
-    --z: inherit;
-    --z-rest: inherit;
-  }
   :global([data-variant="folder"]) .ff-tab {
     --lean-now: calc(
       var(--lean) *

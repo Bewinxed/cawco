@@ -16,17 +16,14 @@
  * Pixels (Chromium): the strip at rest and at 25, 50 and 75% of a swipe and
  * of a tap, against the baselines `--approve` wrote from main's rendering,
  * 0 px allowed. Endless runs (a working glyph's pulse) are held at their
- * start for every capture. WebKit's strip at rest and at 25, 50 and 75% of
- * a swipe, against its own baselines, the same way.
+ * start for every capture.
  *
  * Cadence (WebKit, `PROBE_WEBKIT` naming its `pw_run.sh` where the build
  * this playwright-core wants is not installed): ten swipes on the phone,
  * ten taps on the phone and ten on the desk, every requestAnimationFrame
  * interval from the switch's start to 200ms past its end; p50, p95, max and
- * how many are over 20ms, and for each tap (an in-page `el.click()`, as the
- * owner's Safari reading makes it) its first intervals after the click, its
- * longest and its count over 20ms, written to `cadence.json` in the spec's
- * out folder (notes: supporting, never a pass).
+ * how many are over 20ms, written to `cadence.json` in the spec's out
+ * folder (notes: supporting, never a pass).
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one page, one frame, one capture at a time, each with the machine to itself
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: each switch is driven and read step by step, as a finger makes it
@@ -163,39 +160,6 @@ async function stripClip(page: Page) {
   };
 }
 
-/**
- * Safari's engine draws the strip too: WebKit's strip at rest and at 25, 50
- * and 75% of a swipe, against its own baselines, 0 px allowed. Its tap
- * cannot be held part-way (the clock is seeked through Chromium's protocol),
- * so only the swipe's fractions are read.
- */
-async function webkitPixels(kit: Kit, base: string) {
-  for (const view of ["desk", "phone"] as View[]) {
-    for (const theme of ["light", "dark"]) {
-      const tag = `webkit-${view}-${theme}`;
-      const page = await kit.page(view, {
-        engine: "webkit",
-        theme: theme as "light" | "dark",
-      });
-      const ids = await openBench(page, base, theme);
-      const to = ids[2] as string;
-      const clip = await stripClip(page);
-      await holdLoops(page);
-      await diff(kit, page, `${tag}-rest`, { clip });
-      for (const f of DIFF_AT) {
-        await page.evaluate(
-          ([t, fr]) => (window as unknown as Bench).__ft.ride(t, fr),
-          [to, f] as const
-        );
-        await frames(page);
-        await holdLoops(page);
-        await diff(kit, page, `${tag}-swipe-${f * 100}`, { clip });
-      }
-      await page.close();
-    }
-  }
-}
-
 async function engineAndPixels(kit: Kit, base: string) {
   for (const view of ["desk", "phone"] as View[]) {
     for (const theme of ["light", "dark"]) {
@@ -317,13 +281,6 @@ function stats(all: number[]) {
 
 async function cadence(kit: Kit, base: string) {
   const results: Record<string, ReturnType<typeof stats>> = {};
-  const perTap: {
-    first: number[];
-    max: number;
-    maxAt: number;
-    over20: number;
-    view: View;
-  }[] = [];
   for (const view of ["phone", "desk"] as View[]) {
     const page = await kit.page(view, { engine: "webkit", init: [recorder] });
     const ids = await openBench(page, base, "light");
@@ -371,55 +328,18 @@ async function cadence(kit: Kit, base: string) {
       results["phone swipe"] = stats(swipes);
     }
 
-    // A tap as the owner's Safari reading makes it: `el.click()` on the tab
-    // in the page, every frame stamped from a few before it to TAP_WATCH
-    // past it. Each tap's own reading: its first intervals after the
-    // click (the click's task and the frames that start the switch), its
-    // longest, and how many are over SLOW_MS.
     const taps: number[] = [];
     for (let n = 0; n < RUNS; n += 1) {
       const toward = pair[(n + 1) % 2] as string;
-      const { ts, at } = await page.evaluate(
-        ({ sel, watch }) =>
-          new Promise<{ at: number; ts: number[] }>((done) => {
-            const rec = (
-              window as unknown as {
-                __rec: { start: () => void; stop: () => number[] };
-              }
-            ).__rec;
-            rec.start();
-            // Three frames of lead, then the click in a task of its own.
-            let lead = 0;
-            const wait = () => {
-              lead += 1;
-              if (lead < 3) {
-                requestAnimationFrame(wait);
-                return;
-              }
-              setTimeout(() => {
-                const clicked = performance.now();
-                document.querySelector<HTMLElement>(sel)?.click();
-                setTimeout(() => done({ at: clicked, ts: rec.stop() }), watch);
-              });
-            };
-            requestAnimationFrame(wait);
-          }),
-        {
-          sel: `${STRIP} [data-session-tab="${toward}"]`,
-          watch: TAP_WATCH,
-        }
+      await page.evaluate(() =>
+        (window as unknown as { __rec: { start: () => void } }).__rec.start()
       );
-      // The intervals that end after the click: the first spans the click.
-      const after = deltas(ts).filter((_, i) => (ts[i + 1] ?? 0) > at);
-      taps.push(...after);
-      const r = (x: number) => Math.round(x * 10) / 10;
-      perTap.push({
-        view,
-        first: after.slice(0, 3).map(r),
-        max: r(Math.max(...after)),
-        maxAt: after.indexOf(Math.max(...after)),
-        over20: after.filter((d) => d > SLOW_MS).length,
-      });
+      await page.click(`${STRIP} [data-session-tab="${toward}"]`);
+      await page.waitForTimeout(TAP_WATCH);
+      const ts = await page.evaluate(() =>
+        (window as unknown as { __rec: { stop: () => number[] } }).__rec.stop()
+      );
+      taps.push(...deltas(ts));
       await settle(page, 300);
     }
     results[`${view} tap`] = stats(taps);
@@ -427,16 +347,11 @@ async function cadence(kit: Kit, base: string) {
   }
   await writeFile(
     join(kit.out, "cadence.json"),
-    `${JSON.stringify({ results, perTap }, null, 2)}\n`
+    `${JSON.stringify(results, null, 2)}\n`
   );
   for (const [what, s] of Object.entries(results)) {
     kit.note(
       `WebKit ${what}: ${s.frames} intervals, p50 ${s.p50}ms, p95 ${s.p95}ms, max ${s.max}ms, ${s.over20} over ${SLOW_MS}ms`
-    );
-  }
-  for (const t of perTap) {
-    kit.note(
-      `WebKit ${t.view} tap: first intervals ${t.first.join(" / ")}ms, max ${t.max}ms (interval ${t.maxAt}), ${t.over20} over ${SLOW_MS}ms`
     );
   }
 }
@@ -447,7 +362,6 @@ const spec: Spec = {
     const base = await kit.bench();
     if (process.env.PROBE_ONLY !== "cadence") {
       await engineAndPixels(kit, base);
-      await webkitPixels(kit, base);
     }
     if (process.env.PROBE_ONLY !== "pixels") {
       await cadence(kit, base);
