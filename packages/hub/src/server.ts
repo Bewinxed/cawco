@@ -13049,13 +13049,15 @@ export const createServer = (
    * Where a session's transcript is stored, and where its history ends when
    * it is a fork not yet named. The hub's row is the single authority for a
    * session it holds; an id with no row is a stored key, located. A row that
-   * never reported a key has nothing stored anywhere: what it was sent is the
-   * hub's own to say, and that is its whole history.
+   * never reported a key (a start refused or failed before its first turn)
+   * has nothing stored anywhere, and is read like every other row
+   * ({@link readHistory}): what it was sent and the hub's own lines on it are
+   * its whole history.
    */
   const historyWhere = async (
     instanceId: string
   ): Promise<
-    { where: TranscriptWhere; cut?: string; row?: InstanceRow } | HistoryRead
+    { where: TranscriptWhere; cut?: string; row?: InstanceRow } | HistoryFault
   > => {
     const [row] = db.getInstancesByIds([instanceId]);
     if (!row) {
@@ -13079,13 +13081,6 @@ export const createServer = (
       cwd: row.cwd || "",
       harness: row.harness || "claude",
     };
-    if (!where.sessionKey) {
-      return {
-        entries: [],
-        records: recordMap(sendLines(row.id, [], true, true)),
-        where,
-      };
-    }
     return { where, cut: fork?.at, row };
   };
 
@@ -13171,9 +13166,6 @@ export const createServer = (
     }
     const [held] = db.getInstancesByIds([instanceId]);
     const prior = held ? (db.ownedInstance(held.id)?.conversations ?? []) : [];
-    if ("entries" in found && prior.length === 0) {
-      return found;
-    }
     const { where } = found;
     const row = "row" in found ? found.row : held;
     // The conversations it went on from, oldest first, each followed by the
