@@ -4,7 +4,7 @@ import { platform } from "node:os";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import { extractFromBunfs } from "@anthropic-ai/claude-agent-sdk/extract";
 import { embeddedFile, standalone } from "@cawco/core/runtime";
-import { loginKeychainPath } from "./login-keychain";
+import { keychainLocked, loginKeychainPath } from "./login-keychain";
 
 /**
  * A prompt that never yields. `query()` starts the CLI and its control channel
@@ -98,19 +98,30 @@ export const unlockKeychain = async (password: string): Promise<void> => {
   }
 
   const keychain = loginKeychainPath();
+  const lockedBefore = keychainLocked(keychain);
   const unlocked =
     await Bun.$`security unlock-keychain -p ${password} ${keychain}`
       .quiet()
       .nothrow();
+  // The keychain's own lock state says whether it opened (login-keychain.ts,
+  // SecKeychainGetStatus); the exit only says why one still locked did not.
+  // Live on a Mac the right password left it unlocked while the step said it
+  // had refused it, and the agent never read Claude again or beat: the
+  // answer had gone on the exit alone.
+  const lockedAfter = keychainLocked(keychain);
+  // The tool's own words: `security` prints the OSStatus's message and the
+  // keychain's path, never the password it was given.
+  const said = unlocked.stderr.toString().trim();
+  console.info(
+    `[keychain] security unlock-keychain ${keychain}: exit ${unlocked.exitCode}${said ? ` (${said})` : ""}; locked before ${lockedBefore}, after ${lockedAfter}`
+  );
+  if (!lockedAfter) {
+    return;
+  }
   if (unlocked.exitCode === SEC_AUTH_FAILED) {
     throw new Error("That password did not unlock the keychain.");
   }
-  if (unlocked.exitCode !== 0) {
-    // The tool's own words: `security` prints the OSStatus's message and the
-    // keychain's path, never the password it was given.
-    const said = unlocked.stderr.toString().trim();
-    throw new Error(
-      `The keychain refused to unlock: ${said || `exit ${unlocked.exitCode}`}`
-    );
-  }
+  throw new Error(
+    `The keychain refused to unlock: ${said || `security exited ${unlocked.exitCode} and the keychain is still locked`}`
+  );
 };

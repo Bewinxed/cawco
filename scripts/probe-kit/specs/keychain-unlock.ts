@@ -55,6 +55,8 @@ import { open, settle } from "../kit";
 const MACHINES_BUTTON = /^\d+ machines?/;
 const UNLOCK_ITEM = /^Unlock keychain/;
 const UNLOCK_BUTTON = /^Unlock$/;
+/** What puts the step away: Done once answered, Close while it works, Cancel on the form. */
+const PUT_AWAY = /^(Done|Close|Cancel)$/;
 /** agent/src/auth.ts, `security unlock-keychain` exiting errSecAuthFailed. */
 const WRONG_PASSWORD = "That password did not unlock the keychain.";
 /** A user name Claude Code files its Keychain item under as it is (agent/src/accounts.ts). */
@@ -343,13 +345,34 @@ const stepState = (page: Page, machineId: string) =>
     };
   }, machineId);
 
-/** Right-clicks the machine's row and answers whether its menu offers Unlock keychain; the menu stays open. */
-async function menuOffersUnlock(page: Page): Promise<boolean> {
+/**
+ * Right-clicks the machine's row and reads the items of the menu that opened
+ * from it: the one holding "Copy machine id" (MachineMenu), never any other
+ * menu or the unlock step. Empty when no such menu opened. The menu stays open.
+ */
+async function machineMenu(page: Page): Promise<string[]> {
   const row = page.locator(`li[data-machine="${MACHINE}"] .row`).first();
   await row.waitFor();
   await row.click({ button: "right" });
-  await page.getByRole("menu").first().waitFor();
-  return (await page.getByRole("menuitem", { name: UNLOCK_ITEM }).count()) > 0;
+  const menu = page
+    .getByRole("menu")
+    .filter({ has: page.getByRole("menuitem", { name: "Copy machine id" }) });
+  const opened = await menu
+    .first()
+    .waitFor({ timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!opened) {
+    return [];
+  }
+  return (await menu.first().getByRole("menuitem").allTextContents()).map(
+    (text) => text.replace(/\s+/g, " ").trim()
+  );
+}
+
+/** Whether the machine's own menu offers Unlock keychain; the menu stays open. */
+async function menuOffersUnlock(page: Page): Promise<boolean> {
+  return (await machineMenu(page)).some((item) => UNLOCK_ITEM.test(item));
 }
 
 const spec: Spec = {
@@ -570,6 +593,10 @@ const spec: Spec = {
         `No account is signed in on ${hostname}`,
         `${hostname} cannot read its logins`,
       ];
+      // The answer: a final title, or an alert in a form that is standing.
+      // The refused form fades out as the press is sent, its alert still in
+      // it and the form inert while it leaves (Svelte), so an alert counts
+      // only outside anything inert.
       await page.waitForFunction(
         (finals) =>
           Array.from(
@@ -578,7 +605,10 @@ const spec: Spec = {
             finals.includes(
               title.textContent?.replace(/\s+/g, " ").trim() ?? ""
             )
-          ) || document.querySelector('section.unlock [role="alert"]') !== null,
+          ) ||
+          Array.from(
+            document.querySelectorAll('section.unlock [role="alert"]')
+          ).some((alert) => alert.closest("[inert]") === null),
         answers,
         { timeout: 60_000 }
       );
@@ -589,6 +619,12 @@ const spec: Spec = {
       kit.note(
         `show-keychain-info after: exit ${infoAfter.code} ${infoAfter.err || infoAfter.out}`
       );
+      // The agent's own account of each unlock: security's exit and the
+      // keychain's lock state either side of it (agent/src/auth.ts).
+      const unlocks = (await fleet.logs("agent"))
+        .split("\n")
+        .filter((line) => line.includes("[keychain]"));
+      kit.note(`the agent's unlocks: ${JSON.stringify(unlocks)}`);
       kit.check(
         "the right password unlocks it: SecKeychainGetStatus reads it unlocked, and the step says the machine is past its keychain",
         !lockedAfter &&
@@ -610,23 +646,37 @@ const spec: Spec = {
         after !== undefined && after.auth !== "unreadable-credentials",
         JSON.stringify(after)
       );
+      // The step put away (Done, or Close while it still works), so the
+      // row and its own menu are what is read.
+      await page
+        .locator("section.unlock")
+        .getByRole("button", { name: PUT_AWAY })
+        .first()
+        .click()
+        .catch(() => undefined);
+      await page
+        .locator("section.unlock")
+        .waitFor({ state: "detached", timeout: 10_000 })
+        .catch(() => undefined);
+      let lastMenu: string[] = [];
       const cleared = await until(
         "the machine's menu without Unlock keychain…",
         async () => {
-          const still = await menuOffersUnlock(page);
+          lastMenu = await machineMenu(page);
           await page.keyboard.press("Escape");
-          return still;
+          return lastMenu;
         },
-        (still) => !still,
+        (items) =>
+          items.length > 0 && !items.some((item) => UNLOCK_ITEM.test(item)),
         15_000
       ).then(
         () => true,
         () => false
       );
       kit.check(
-        "the row clears: the machine's menu no longer offers Unlock keychain…",
+        "the row clears: the machine's own menu no longer offers Unlock keychain…",
         cleared,
-        `auth ${after?.auth}`
+        JSON.stringify({ auth: after?.auth, menu: lastMenu })
       );
     } finally {
       await tearDown(kit, owner, made ? { home, keychain } : null);
