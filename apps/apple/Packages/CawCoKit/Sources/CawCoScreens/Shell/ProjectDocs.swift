@@ -428,17 +428,11 @@ final class ProjectDocsView: UIStackView {
         return box
     }
 
-    /// The kit's EmptyState for a project with no checkout, at the card's resting height.
+    /// The kit's EmptyState for a project with no checkout, at its own height:
+    /// no document will come to fill the card's resting height.
     private func noCheckoutState() -> UIView {
-        let state = KitEmptyState(icon: .document, title: "No checkout yet",
-                                  line: "The docs live in a checkout of this project, and none is open on a machine yet.")
-        // At its own height at the card's top; the card's resting height is the space under it.
-        state.setContentHuggingPriority(.required, for: .vertical)
-        let column = UIStackView(arrangedSubviews: [state, UIView()])
-        column.axis = .vertical
-        let box = padded(column)
-        box.heightAnchor.constraint(greaterThanOrEqualToConstant: Self.clamp + 36).isActive = true
-        return box
+        padded(KitEmptyState(icon: .document, title: "No checkout yet",
+                             line: "The docs live in a checkout of this project, and none is open on a machine yet."))
     }
 
     /// The size the document will stand at, clamped, with the row its Read more takes.
