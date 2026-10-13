@@ -4,6 +4,7 @@
   /** A task's own dates, the ones the hub keeps for every task left out. */
   const DAY_ONLY = /^\d{4}-\d{2}-\d{2}$/;
   const KEPT_DATES = new Set([
+    "createdAt",
     "updatedAt",
     "attemptStartedAt",
     "attemptEndedAt",

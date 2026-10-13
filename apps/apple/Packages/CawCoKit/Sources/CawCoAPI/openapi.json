@@ -24084,10 +24084,6 @@
               "string"
             ]
           },
-          "updatedAt": {
-            "description": "When the hub last saw the file's content change, ms epoch.",
-            "type": "number"
-          },
           "attempts": {
             "description": "Its attempts, newest first.",
             "type": "array",
@@ -24120,12 +24116,21 @@
               "null",
               "string"
             ]
+          },
+          "createdAt": {
+            "description": "When the commit that first added its file landed, ms epoch.",
+            "type": "number"
+          },
+          "updatedAt": {
+            "description": "When its file last changed, ms epoch: its last commit, or an edit no commit has yet.",
+            "type": "number"
           }
         },
         "required": [
           "after",
           "attempts",
           "blockedBy",
+          "createdAt",
           "foundIn",
           "id",
           "labels",
@@ -24391,6 +24396,14 @@
               "null",
               "string"
             ]
+          },
+          "createdAt": {
+            "description": "When the commit that first added its file landed, ms epoch.",
+            "type": "number"
+          },
+          "updatedAt": {
+            "description": "When its file last changed, ms epoch: its last commit, or an edit no commit has yet.",
+            "type": "number"
           }
         },
         "required": [
@@ -24400,6 +24413,7 @@
           "attempts",
           "blockedBy",
           "checks",
+          "createdAt",
           "description",
           "extra",
           "foundIn",
@@ -24424,7 +24438,8 @@
           "startProblem",
           "title",
           "todos",
-          "type"
+          "type",
+          "updatedAt"
         ]
       },
       "WorkBudget": {
@@ -27706,7 +27721,7 @@
           },
           "dates": {
             "type": "object",
-            "description": "Its dates, ms epoch, by name: `updatedAt` always (when the hub last saw\nits file change); `attemptStartedAt` and `attemptEndedAt` of its newest\nattempt when it has one; and every field its file carries whose value is\nan ISO 8601 date, under the field's own name."
+            "description": "Its dates, ms epoch, by name: `createdAt` and `updatedAt` always (the\ncommit that added its file, and its file's last change: its last commit,\nor an edit no commit has yet); `attemptStartedAt` and `attemptEndedAt` of its newest\nattempt when it has one; and every field its file carries whose value is\nan ISO 8601 date, under the field's own name."
           },
           "fields": {
             "type": "object",

@@ -37,8 +37,10 @@ import type { Tracker, WorkBudget, WorkItemState } from "./db/schema";
 import {
   type FolderAuthor,
   FolderRefusal,
+  folderFileTimes,
   folderHistory,
   folderPathsInHistory,
+  folderUncommitted,
   HISTORY_LIMIT,
   hasProjectFolder,
   listFolder,
@@ -235,8 +237,22 @@ export interface TaskStore {
   ) => string | null;
 }
 
+/**
+ * When a task was made and last changed, ms epoch, worked out from its file
+ * and never written into it. Made: the commit that first added the file to
+ * the project folder. Changed: the last commit that touched it, or, while
+ * the file holds an edit no commit has, when the hub saw that edit. A file
+ * no commit has yet holds the time the hub saw it for both.
+ */
+export interface TaskTimes {
+  /** When the commit that first added its file landed, ms epoch. */
+  createdAt: number;
+  /** When its file last changed, ms epoch: its last commit, or an edit no commit has yet. */
+  updatedAt: number;
+}
+
 /** One task as a list shows it: the index's row, and what its attempts and edges say. */
-export interface TaskSummary extends TaskFlags {
+export interface TaskSummary extends TaskFlags, TaskTimes {
   after: string[];
   /** The task it was found in (`found_in`); null when none. */
   foundIn: string | null;
@@ -261,8 +277,6 @@ export interface TaskSummary extends TaskFlags {
   title: string;
   todos: { done: number; total: number };
   type: string | null;
-  /** When the hub last saw the file's content change, ms epoch. */
-  updatedAt: number;
 }
 
 export interface TaskList {
@@ -297,7 +311,7 @@ export interface StagesTemplateView {
 }
 
 /** One task, its file read whole, and what its attempts and edges say. */
-export interface TaskView extends TaskFlags {
+export interface TaskView extends TaskFlags, TaskTimes {
   acceptance: string;
   /** The accounts its attempts may run on; empty: every account. */
   accounts: string[];
@@ -562,7 +576,8 @@ export const onFrontier = (task: TaskSummary): boolean =>
 const summaryOf = (
   row: TaskIndexRow,
   stages: Stages | undefined,
-  flags: TaskFlags
+  flags: TaskFlags,
+  times: TaskTimes
 ): TaskSummary => {
   const kind = kindIn(stages, row.stage);
   const stray =
@@ -586,7 +601,7 @@ const summaryOf = (
     rank: row.rank,
     labels: row.labels,
     todos: { done: row.todosDone, total: row.todosTotal },
-    updatedAt: row.updatedAt.getTime(),
+    ...times,
     problem: [row.problem, stray].filter(Boolean).join(" ") || null,
   };
 };
@@ -598,7 +613,8 @@ const viewOf = (
   title: string,
   hash: string,
   stages: Stages | undefined,
-  flags: TaskFlags
+  flags: TaskFlags,
+  times: TaskTimes
 ): TaskView => ({
   id: taskId(number),
   number,
@@ -629,6 +645,7 @@ const viewOf = (
   extra: parsed.extra,
   problems: parsed.problems,
   hash,
+  ...times,
 });
 
 /** A list's sort: ranked tasks by rank, then the rest by number. */
@@ -925,6 +942,67 @@ export const createTasks = (store: TaskStore) => {
       startProblem: store.startProblem?.(projectId, task) ?? null,
     };
   };
+  /**
+   * Whether a task file held an edit no commit has, as last asked: at a
+   * commit, for the time the index saw its content. Either moving asks again.
+   */
+  const uncommittedSeen = new Map<
+    string,
+    { head: string; observed: number; uncommitted: boolean }
+  >();
+
+  /**
+   * Each row's {@link TaskTimes}: from the folder's history (one read per
+   * commit, folderFileTimes), and the index's time for an edit the file holds
+   * past its last commit. Only a row the index saw change after that commit
+   * can hold one, so git is asked about the working copy only then, once per
+   * commit and change.
+   */
+  const timesOf = async (
+    projectId: string,
+    rows: Pick<TaskIndexRow, "path" | "updatedAt">[]
+  ): Promise<Map<string, TaskTimes>> => {
+    const { head, times } = await folderFileTimes(projectId, "tasks");
+    const seen = (path: string, observed: number) => {
+      const said = uncommittedSeen.get(`${projectId}\0${path}`);
+      return said?.head === head && said.observed === observed
+        ? said
+        : undefined;
+    };
+    const later = rows.filter((row) => {
+      const committed = times.get(row.path);
+      return committed && row.updatedAt.getTime() > committed.updated;
+    });
+    if (later.some((row) => !seen(row.path, row.updatedAt.getTime()))) {
+      const uncommitted = await folderUncommitted(projectId, "tasks");
+      for (const row of later) {
+        uncommittedSeen.set(`${projectId}\0${row.path}`, {
+          head,
+          observed: row.updatedAt.getTime(),
+          uncommitted: uncommitted.has(row.path),
+        });
+      }
+    }
+    return new Map(
+      rows.map((row): [string, TaskTimes] => {
+        const observed = row.updatedAt.getTime();
+        const committed = times.get(row.path);
+        if (!committed) {
+          return [row.path, { createdAt: observed, updatedAt: observed }];
+        }
+        return [
+          row.path,
+          {
+            createdAt: committed.created,
+            updatedAt: seen(row.path, observed)?.uncommitted
+              ? Math.max(committed.updated, observed)
+              : committed.updated,
+          },
+        ];
+      })
+    );
+  };
+
   /** The highest task number each project has handed out, once read from its history. */
   const issued = new Map<string, number>();
 
@@ -1436,16 +1514,22 @@ export const createTasks = (store: TaskStore) => {
     return reading.stages;
   };
 
-  const view = (
+  const view = async (
     projectId: string,
     path: string,
     number: number,
     content: string,
     stages: Stages | undefined
-  ): TaskView => {
+  ): Promise<TaskView> => {
     const doc = new TaskDoc(path, content);
     const parsed = doc.read();
     const hash = hashOf(content);
+    const rows = store.index(projectId);
+    const observed =
+      rows.find((row) => row.path === path)?.updatedAt ?? new Date();
+    const times = (
+      await timesOf(projectId, [{ path, updatedAt: observed }])
+    ).get(path) as TaskTimes;
     return viewOf(
       path,
       number,
@@ -1464,10 +1548,11 @@ export const createTasks = (store: TaskStore) => {
         {
           attempts: attemptsByTask(projectId),
           queued: queuedIn(projectId),
-          stageOf: stagesById(store.index(projectId)),
+          stageOf: stagesById(rows),
           stages,
         }
-      )
+      ),
+      times
     );
   };
 
@@ -1589,8 +1674,16 @@ export const createTasks = (store: TaskStore) => {
         stageOf: stagesById(rows),
         stages,
       };
+      const times = await timesOf(projectId, rows);
       const tasks = rows
-        .map((row) => summaryOf(row, stages, flagsOf(projectId, row, context)))
+        .map((row) =>
+          summaryOf(
+            row,
+            stages,
+            flagsOf(projectId, row, context),
+            times.get(row.path) as TaskTimes
+          )
+        )
         .filter(
           (task) =>
             (!filter.stage || task.stage === filter.stage) &&

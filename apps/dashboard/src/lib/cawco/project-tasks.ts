@@ -117,7 +117,7 @@ export interface AttemptStart {
 }
 
 /** One task as a list shows it: the hub's index row. */
-export interface TaskSummary extends TaskFlags {
+export interface TaskSummary extends TaskFlags, TaskTimes {
   after: string[];
   /** The task it was found in (`found_in`); null when none. */
   foundIn: string | null;
@@ -136,6 +136,11 @@ export interface TaskSummary extends TaskFlags {
   title: string;
   todos: { done: number; total: number };
   type: string | null;
+}
+
+/** When a task was made and last changed, ms epoch, from its file's commits (the hub's `TaskTimes`). */
+export interface TaskTimes {
+  createdAt: number;
   updatedAt: number;
 }
 
@@ -160,7 +165,7 @@ export interface Todo {
 }
 
 /** One task, its file read whole. */
-export interface TaskView extends TaskFlags {
+export interface TaskView extends TaskFlags, TaskTimes {
   acceptance: string;
   after: string[];
   checks: string[];

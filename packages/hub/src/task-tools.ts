@@ -108,6 +108,8 @@ const taskLine = (task: TaskLine) => ({
     : {}),
   ...attemptFields(task),
   ...(task.problem ? { problem: task.problem } : {}),
+  createdAt: task.createdAt,
+  updatedAt: task.updatedAt,
 });
 
 /** A list as a model reads it: the project's stages, then one short line of fields per task. */
@@ -276,7 +278,7 @@ export function taskTools(context: TaskToolContext | undefined) {
   return [
     tool(
       "task_read",
-      "Read your project's tasks. With `id`: that task's file, parsed — stage, edges, checks, description, acceptance criteria, to-dos with their ids (td-3) and positions (2.1), and its attempts. Without: the project's stages and every task, one line each; `stage` narrows the list. needsYou marks a task waiting on the operator; attempt says one is live or the last one failed; blockedBy lists the tasks it still waits for.",
+      "Read your project's tasks. With `id`: that task's file, parsed — stage, edges, checks, description, acceptance criteria, to-dos with their ids (td-3) and positions (2.1), and its attempts. Without: the project's stages and every task, one line each; `stage` narrows the list. Every task carries createdAt and updatedAt (ms epoch, from its file's commits). needsYou marks a task waiting on the operator; attempt says one is live or the last one failed; blockedBy lists the tasks it still waits for.",
       {
         id: taskRef().optional(),
         stage: z

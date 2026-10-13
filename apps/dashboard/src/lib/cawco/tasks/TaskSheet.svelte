@@ -42,6 +42,7 @@
     IconNeedsYou,
     IconWorking,
   } from "#lib/icons.js";
+  import { formatDistanceToNow, formatTimestamp } from "#lib/utils/time.js";
   import TextSection from "./TextSection.svelte";
   import TodoList from "./TodoList.svelte";
 
@@ -335,6 +336,20 @@
               {/each}
             </Select.Content>
           </Select.Root>
+          <span class="dates">
+            Created
+            <time
+              datetime={new Date(shown.createdAt).toISOString()}
+              title={when(shown.createdAt)}
+              >{formatTimestamp(new Date(shown.createdAt))}</time
+            >
+            · Updated
+            <time
+              datetime={new Date(shown.updatedAt).toISOString()}
+              title={when(shown.updatedAt)}
+              >{formatDistanceToNow(new Date(shown.updatedAt))}</time
+            >
+          </span>
         {:else}
           <Skeleton class="h-[var(--c-btn-h-sm)] w-24" />
         {/if}
@@ -594,9 +609,17 @@
   }
   .meta {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: var(--space-2);
     padding-inline-end: var(--space-8);
+  }
+  /* Its own line under the id and stage: the sheet is too narrow for all three. */
+  .dates {
+    flex-basis: 100%;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    white-space: nowrap;
   }
   .id {
     font: var(--type-meta);

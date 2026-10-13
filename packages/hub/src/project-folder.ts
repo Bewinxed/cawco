@@ -1056,6 +1056,184 @@ export const folderPathsInHistory = async (
   return [...new Set(out.split("\n").filter(Boolean))];
 };
 
+/** When the folder's history first added a file and last changed it, ms epoch, by commit time. */
+export interface FolderFileTimes {
+  /** The oldest commit that added it, followed across renames. */
+  created: number;
+  /** The newest commit that touched it. */
+  updated: number;
+}
+
+/** A folder's file times as of one commit. */
+export interface FolderTimes {
+  /** The commit they were read at; empty while the folder has none. */
+  head: string;
+  times: ReadonlyMap<string, FolderFileTimes>;
+}
+
+const REF_LINE = /^ref: (\S+)\s*$/;
+const RECORD = "\x1e";
+
+/**
+ * The commit HEAD names, read from git's own files (HEAD, then its loose
+ * ref, then packed-refs) so a board read spawns no git; empty while the
+ * branch has no commit.
+ */
+const headCommit = async (root: string): Promise<string> => {
+  const gitDir = join(root, ".git");
+  const said = (await readFile(join(gitDir, "HEAD"), "utf8")).trim();
+  const ref = REF_LINE.exec(said)?.[1];
+  if (!ref) {
+    return said;
+  }
+  const loose = await readFile(join(gitDir, ref), "utf8").catch(
+    (error: unknown): string | undefined => {
+      if (isMissing(error)) {
+        return;
+      }
+      throw error;
+    }
+  );
+  if (loose !== undefined) {
+    return loose.trim();
+  }
+  const packed = await readFile(join(gitDir, "packed-refs"), "utf8").catch(
+    (error: unknown) => {
+      if (isMissing(error)) {
+        return "";
+      }
+      throw error;
+    }
+  );
+  for (const line of packed.split("\n")) {
+    const [sha = "", name] = line.trim().split(" ");
+    if (name === ref) {
+      return sha;
+    }
+  }
+  return "";
+};
+
+/**
+ * Applies `git log --reverse --format=%x1e%ct -M --name-status` output to
+ * `times`, oldest commit first: an add or change sets the file's last time
+ * (its first stays once it has one, so a file deleted and added again keeps
+ * its first add), a rename carries the old path's first time to the new
+ * path, a delete leaves the times standing.
+ */
+const applyLog = (times: Map<string, FolderFileTimes>, out: string): void => {
+  for (const record of out.split(RECORD)) {
+    const [stamp = "", ...changes] = record.split("\n");
+    const at = Number(stamp.trim()) * 1000;
+    if (!(stamp.trim() && Number.isFinite(at))) {
+      continue;
+    }
+    for (const change of changes) {
+      const [kind = "", from = "", to] = change.split("\t");
+      if (!from || kind.startsWith("D")) {
+        continue;
+      }
+      const path = to ?? from;
+      const was = kind.startsWith("R") ? times.get(from) : times.get(path);
+      if (kind.startsWith("R")) {
+        times.delete(from);
+      }
+      times.set(path, { created: was?.created ?? at, updated: at });
+    }
+  }
+};
+
+/** The times at commit `tip`, read on from `known` when its commit is one of tip's ancestors, else from the start. */
+const timesAt = async (
+  root: string,
+  rel: string,
+  tip: string,
+  known: FolderTimes | undefined
+): Promise<FolderTimes> => {
+  if (!tip) {
+    return { head: tip, times: new Map() };
+  }
+  const from =
+    known?.head &&
+    (await run(root, ["merge-base", "--is-ancestor", known.head, tip])).code ===
+      0
+      ? known
+      : undefined;
+  const times = new Map(from?.times);
+  applyLog(
+    times,
+    await git(root, [
+      "log",
+      "--reverse",
+      `--format=${RECORD}%ct`,
+      "-M",
+      "--name-status",
+      from ? `${from.head}..${tip}` : tip,
+      "--",
+      ...(rel ? [rel] : []),
+    ])
+  );
+  return { head: tip, times };
+};
+
+/** Each folder's file times, by project and folder, as of the last commit read. */
+const timesRead = new Map<string, Promise<FolderTimes>>();
+
+/**
+ * When each file under `rawDir` was first added and last changed by a
+ * commit. Kept per project and folder at the commit it was read at: a read
+ * while HEAD stands spawns no git, and a new commit reads only the commits
+ * since.
+ */
+export const folderFileTimes = async (
+  projectId: string,
+  rawDir: string
+): Promise<FolderTimes> => {
+  const rel = folderPath(rawDir);
+  const root = await forReading(projectId);
+  const tip = await headCommit(root);
+  const key = `${projectId}\0${rel}`;
+  const known = await timesRead.get(key)?.catch(() => undefined);
+  if (known?.head === tip) {
+    return known;
+  }
+  const next = timesAt(root, rel, tip, known);
+  timesRead.set(key, next);
+  return await next;
+};
+
+/** The files under `rawDir` whose content is not their last commit's: changed, or never committed. */
+export const folderUncommitted = async (
+  projectId: string,
+  rawDir: string
+): Promise<Set<string>> => {
+  const rel = folderPath(rawDir);
+  const root = await forReading(projectId);
+  // `--no-optional-locks`: a read never takes the index lock a commit needs.
+  const out = await git(root, [
+    "--no-optional-locks",
+    "status",
+    "--porcelain=v1",
+    "-z",
+    "--untracked-files=all",
+    "--",
+    rel || ".",
+  ]);
+  const paths = new Set<string>();
+  const records = out.split("\0");
+  for (let index = 0; index < records.length; index += 1) {
+    const record = records[index] ?? "";
+    if (record.length > 3) {
+      paths.add(record.slice(3));
+      // A rename or copy's source path follows as a record of its own.
+      if (record[0] === "R" || record[0] === "C") {
+        index += 1;
+      }
+    }
+  }
+  return paths;
+};
+
 /** Whether the project's folder has been made: a project never written to has none. */
 export const hasProjectFolder = (projectId: string): Promise<boolean> =>
   exists(join(projectRoot(projectId), ".git"));
@@ -1071,6 +1249,11 @@ export const trashProjectFolder = async (
   const root = projectRoot(projectId);
   return await inTurn(projectId, async () => {
     ready.delete(projectId);
+    for (const key of timesRead.keys()) {
+      if (key.startsWith(`${projectId}\0`)) {
+        timesRead.delete(key);
+      }
+    }
     if (!(await exists(root))) {
       return;
     }

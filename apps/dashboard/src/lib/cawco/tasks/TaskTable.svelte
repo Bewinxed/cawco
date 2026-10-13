@@ -1,15 +1,23 @@
 <script lang="ts">
   /**
    * The table view: the same tasks as a ledger — id, title, stage, labels,
-   * to-dos and when the file last changed — in stage order, then the board's
-   * own order inside a stage. Labels and To-dos stand only while some task
-   * has one: a column of blanks says nothing. The rows and columns are TanStack Table's (PRD
-   * §5.2); the markup is the ledger's. The header is the ledger's band; a
-   * row is the task's link, and opens its drawer in place. Under 640px each
-   * row becomes the board's two-line card: the title, then id · stage ·
-   * to-dos · age.
+   * to-dos, and when the task was created and last updated — in stage order,
+   * then the board's own order inside a stage, until Created or Updated is
+   * picked to sort by (newest first, then oldest, then back to stage order).
+   * Labels and To-dos stand only while some task has one: a column of blanks
+   * says nothing; Created stands only while the ledger is 900px wide or
+   * more, so the title keeps its room. The rows and columns are TanStack Table's (PRD §5.2); the
+   * markup is the ledger's. The header is the ledger's band; a row is the
+   * task's link, and opens its drawer in place. Under 640px each row becomes
+   * the board's two-line card: the title, then id · stage · to-dos · updated.
    */
-  import { createTable, tableFeatures } from "@tanstack/svelte-table";
+  import {
+    createSortedRowModel,
+    createTable,
+    rowSortingFeature,
+    sortFn_basic,
+    tableFeatures,
+  } from "@tanstack/svelte-table";
   import {
     type Stage,
     stageLabel,
@@ -19,7 +27,7 @@
   import { Badge } from "#lib/components/ui/badge/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Table from "#lib/components/ui/table/index.js";
-  import { IconNeedsYou } from "#lib/icons.js";
+  import { IconChevronDown, IconChevronUp, IconNeedsYou } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
 
   let {
@@ -49,25 +57,40 @@
       .map(({ task }) => task)
   );
 
-  const features = tableFeatures({});
+  const features = tableFeatures({
+    rowSortingFeature,
+    sortedRowModel: createSortedRowModel(),
+    sortFns: { basic: sortFn_basic },
+  });
   const labelled = $derived(tasks.some((task) => task.labels.length > 0));
   const planned = $derived(tasks.some((task) => task.todos.total > 0));
+  /** A column the ledger holds in its own order. */
+  const fixed = { enableSorting: false } as const;
+  /** A time column: sorted by its ms epoch, newest first on the first pick. */
+  const timed = {
+    sortFn: "basic",
+    sortDescFirst: true,
+    enableMultiSort: false,
+  } as const;
   /** The ledger's columns, by id; each cell is drawn below by its id. */
   const columns = $derived([
     {
       id: "id",
       header: "Id",
       accessorFn: (task: TaskSummary) => task.id,
+      ...fixed,
     },
     {
       id: "title",
       header: "Task",
       accessorFn: (task: TaskSummary) => task.title,
+      ...fixed,
     },
     {
       id: "stage",
       header: "Stage",
       accessorFn: (task: TaskSummary) => task.stage,
+      ...fixed,
     },
     ...(labelled
       ? [
@@ -75,6 +98,7 @@
             id: "labels",
             header: "Labels",
             accessorFn: (task: TaskSummary) => task.labels,
+            ...fixed,
           },
         ]
       : []),
@@ -84,13 +108,21 @@
             id: "todos",
             header: "To-dos",
             accessorFn: (task: TaskSummary) => task.todos,
+            ...fixed,
           },
         ]
       : []),
     {
-      id: "age",
+      id: "created",
+      header: "Created",
+      accessorFn: (task: TaskSummary) => task.createdAt,
+      ...timed,
+    },
+    {
+      id: "updated",
       header: "Updated",
       accessorFn: (task: TaskSummary) => task.updatedAt,
+      ...timed,
     },
   ]);
   const table = createTable({
@@ -103,6 +135,14 @@
       return rows;
     },
   });
+
+  /** A sorted column's `aria-sort`; the rest say nothing. */
+  const ariaSort = (sorted: false | "asc" | "desc") => {
+    if (sorted === "asc") {
+      return "ascending";
+    }
+    return sorted === "desc" ? "descending" : undefined;
+  };
 
   /** Re-read once a minute, so an age does not go stale on an open page. */
   let now = $state(Date.now());
@@ -134,10 +174,28 @@
       {#each table.getHeaderGroups() as group (group.id)}
         <Table.Row class="band border-0">
           {#each group.headers as header (header.id)}
+            {@const column = header.column}
+            {@const sorted = column.getIsSorted()}
+            {@const sort = ariaSort(sorted)}
             <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head class="col-{header.column.id}" scope="col"
-              >{header.column.columnDef.header}</Table.Head
-            >
+            <Table.Head aria-sort={sort} class="col-{column.id}" scope="col">
+              {#if column.getCanSort()}
+                <button
+                  class="sort press-tint focus-inset"
+                  onclick={column.getToggleSortingHandler()}
+                  type="button"
+                >
+                  {column.columnDef.header}
+                  {#if sorted === "desc"}
+                    <IconChevronDown aria-hidden="true" />
+                  {:else if sorted === "asc"}
+                    <IconChevronUp aria-hidden="true" />
+                  {/if}
+                </button>
+              {:else}
+                {column.columnDef.header}
+              {/if}
+            </Table.Head>
           {/each}
         </Table.Row>
       {/each}
@@ -185,11 +243,15 @@
                   </span>
                 {/if}
               {:else}
+                {@const at =
+                  cell.column.id === "created"
+                    ? task.createdAt
+                    : task.updatedAt}
                 <time
                   class="num"
-                  datetime={new Date(task.updatedAt).toISOString()}
-                  title={new Date(task.updatedAt).toLocaleString()}
-                  >{formatAgeShort(task.updatedAt, now)}</time
+                  datetime={new Date(at).toISOString()}
+                  title={new Date(at).toLocaleString()}
+                  >{formatAgeShort(at, now)}</time
                 >
               {/if}
             </Table.Cell>
@@ -202,6 +264,7 @@
 
 <style>
   .ledger {
+    container-type: inline-size;
     overflow: hidden;
     border-radius: var(--radius-lg);
     background: var(--surface-raised);
@@ -249,9 +312,36 @@
   .ledger :global(.col-todos) {
     inline-size: 6rem;
   }
-  .ledger :global(.col-age) {
-    inline-size: 6rem;
+  .ledger :global(.col-created),
+  .ledger :global(.col-updated) {
+    inline-size: 7rem;
     text-align: end;
+  }
+  /* A ledger under the rail breakpoint's width keeps its room for the title:
+     Updated stays, Created goes. */
+  @container (width < 900px) {
+    .ledger :global(tr.band th.col-created),
+    .ledger :global(tr.row td.col-created) {
+      display: none;
+    }
+  }
+  /* A sortable head: the head's own words, pressable, its arrow after them. */
+  .sort {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-inline-end: calc(var(--space-1) * -1);
+    padding: var(--space-1);
+    border-radius: var(--radius-sm);
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+    color: inherit;
+  }
+  .sort :global(svg) {
+    inline-size: var(--icon-sm);
+    block-size: var(--icon-sm);
+    flex: none;
   }
   /* The whole row is the task's link: its title's box reaches every cell. */
   .ledger :global(tr.row) {
@@ -337,7 +427,7 @@
       padding: 0;
       border: 0;
     }
-    /* The title on its own line first; id, stage, to-dos and age under it. */
+    /* The title on its own line first; id, stage, to-dos and updated under it. */
     .ledger :global(tr.row td.col-title) {
       grid-row: 1;
       grid-column: 1 / -1;
@@ -345,7 +435,7 @@
     .ledger :global(tr.row td.col-labels) {
       display: none;
     }
-    .ledger :global(tr.row td.col-age) {
+    .ledger :global(tr.row td.col-updated) {
       grid-column: 4;
     }
   }

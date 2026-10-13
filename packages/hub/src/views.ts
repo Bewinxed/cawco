@@ -182,7 +182,10 @@ export const createViews = ({ projectName, tasks }: ViewsDeps) => {
       const viewTasks = rows.map((row, index): ViewTask => {
         const fields = files[index] ?? {};
         const [newest] = row.attempts;
-        const dates: Record<string, number> = { updatedAt: row.updatedAt };
+        const dates: Record<string, number> = {
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+        };
         if (newest) {
           dates.attemptStartedAt = newest.startedAt;
           if (newest.endedAt !== null) {
