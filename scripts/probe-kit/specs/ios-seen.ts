@@ -426,7 +426,6 @@ async function run(kit: Kit): Promise<void> {
       (await fleet.logs("hub"))
         .split("\n")
         .filter((l) => l.includes("[presence] ios "));
-    const hubFrom = (await presence()).length;
     const appFrom = heard.length;
     const readStart = Date.now();
     /** Where the reading is, on its clock: a stall is placed by these. */
@@ -483,7 +482,14 @@ async function run(kit: Kit): Promise<void> {
     const readFor = Date.now() - readStart;
 
     const all = await presence();
-    const during = all.slice(hubFrom);
+    // From the session first in front until he leaves: the turns and the
+    // reading alike, so a stale inactive landing after the active is caught.
+    const during = all.slice(
+      Math.max(
+        0,
+        all.findIndex((l) => l.endsWith(`active on ${session}`))
+      )
+    );
     const beats = heard
       .slice(appFrom)
       .filter(
@@ -491,10 +497,10 @@ async function run(kit: Kit): Promise<void> {
           h.line.includes("presence beat:") && h.line.includes("answered 200")
       );
     kit.check(
-      `the hub said the client active on the session, and nothing else in ${(readFor / 1000).toFixed(0)}s of reading`,
+      `the hub said the client active on the session, and nothing else from its opening through ${(readFor / 1000).toFixed(0)}s of reading`,
       all.some((l) => l.endsWith(`active on ${session}`)) &&
         during.every((l) => !(l.includes("inactive") || l.includes("lapsed"))),
-      [...all.slice(-3), ...during].join(" | ") || "no [presence] line"
+      during.join(" | ") || "no [presence] line"
     );
     const { longest, stalls } = heartbeatReads(heard.slice(appFrom), readStart);
     kit.check(

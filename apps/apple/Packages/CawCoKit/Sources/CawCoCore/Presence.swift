@@ -40,6 +40,11 @@ public final class Presence {
     private var appResigned = false
     private var sent: State?
     private var beat: Timer?
+    /// The post said last: the next one waits for it to be answered, so the
+    /// hub hears them in the order they were said. Two at once go out on
+    /// separate connections and can land the other way round, leaving the
+    /// hub on the older one until the next beat.
+    private var lastPost: Task<Void, Never>?
 
     private init() {
         if let kept = UserDefaults.standard.string(forKey: Self.clientKey) {
@@ -133,8 +138,9 @@ public final class Presence {
         post(sent, "beat")
     }
 
-    /// One presence, sent; going inactive asks for the time to finish it in
-    /// the background, so the hub hears it before the app is suspended.
+    /// One presence, sent after the one before it; going inactive asks for
+    /// the time to finish it in the background, so the hub hears it before
+    /// the app is suspended.
     private func post(_ state: State, _ why: String) {
         guard let hub = HubConnection.keptAddress else { return }
         #if targetEnvironment(macCatalyst)
@@ -154,7 +160,9 @@ public final class Presence {
         let active = state.active
         let application = UIApplication.shared
         let background = active ? .invalid : application.beginBackgroundTask(withName: "presence") {}
-        Task { [log] in
+        let previous = lastPost
+        lastPost = Task { [log] in
+            await previous?.value
             let status: Int
             do {
                 let (_, response) = try await URLSession.shared.data(for: request)
