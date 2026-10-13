@@ -25,8 +25,10 @@ function spawn(
   args: string[] = [],
   extra: Record<string, string> = {}
 ) {
+  // A proof hub never advertises on the real network: its mDNS would answer
+  // for a scratch stack on whatever link the host sits on.
   const child = Bun.spawn([process.execPath, verb, ...args], {
-    env: { ...process.env, ...extra },
+    env: { ...process.env, CAWCO_NO_MDNS: "1", ...extra },
     stdout: "pipe",
     stderr: "pipe",
     stdin: "ignore",
