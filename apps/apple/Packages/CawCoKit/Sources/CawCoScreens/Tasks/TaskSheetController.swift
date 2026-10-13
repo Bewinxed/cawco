@@ -321,8 +321,10 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         datesLabel.isHidden = shown == nil
         if let shown {
             // time.ts `formatTimestamp` (en-US "Oct 13, 11:15 AM") and `formatDistanceToNow`.
-            let created = Date(timeIntervalSince1970: shown.createdAt / 1000)
-                .formatted(.dateTime.month(.abbreviated).day().hour().minute().locale(Locale(identifier: "en_US")))
+            // The date and the time apart: one en-US date-time style reads "Oct 13 at 11:15 AM".
+            let at = Date(timeIntervalSince1970: shown.createdAt / 1000)
+            let us = Locale(identifier: "en_US")
+            let created = "\(at.formatted(.dateTime.month(.abbreviated).day().locale(us))), \(at.formatted(.dateTime.hour().minute().locale(us)))"
             let updated = RailAge.ago(shown.updatedAt, now: Date().timeIntervalSince1970 * 1000)
             datesLabel.text = "Created \(created) · Updated \(updated)"
         }

@@ -37,6 +37,7 @@ public final class RootViewController: ObservedViewController {
         let landing = activity.map(landing(from:)) ?? ShellLanding()
         #if DEBUG
         board.land(Self.probing(landing))
+        pushRoute = Self.probedTask
         #else
         board.land(landing)
         #endif
@@ -51,6 +52,17 @@ public final class RootViewController: ObservedViewController {
         var probed = landing
         probed.sessionIds = arguments[at + 1].split(separator: ",").map(String.init)
         return probed
+    }
+
+    /// A simulator pass's `-open-task <projectId>/<taskId>`: the task's sheet
+    /// over its project's page, opened as a tapped `task` push opens it, once
+    /// the fleet is read.
+    private static var probedTask: PushRoute? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let at = arguments.firstIndex(of: "-open-task"), arguments.indices.contains(at + 1) else { return nil }
+        let parts = arguments[at + 1].split(separator: "/", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return nil }
+        return .task(projectId: parts[0], taskId: parts[1], attempt: nil)
     }
     #endif
 
