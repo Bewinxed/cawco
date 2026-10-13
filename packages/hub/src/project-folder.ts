@@ -28,6 +28,7 @@
 import { randomUUID } from "node:crypto";
 import type { Stats } from "node:fs";
 import {
+  link,
   lstat,
   mkdir,
   readdir,
@@ -141,6 +142,16 @@ export class FolderRefusal extends Error {
   ) {
     super(message, options);
     this.status = code;
+  }
+}
+
+/** An exclusive write refused: a file in its folder already holds its place (FolderWriteOptions.exclusive). */
+export class FolderTaken extends FolderRefusal {
+  constructor(rel: string, holder: string) {
+    super(
+      409,
+      `${rel} was not written: ${holder} already holds its place in the folder.`
+    );
   }
 }
 
@@ -669,9 +680,69 @@ export const readFolderFile = async (
 export interface FolderWriteOptions {
   /** Who the commit is by; the operator when left out. */
   author?: FolderAuthor;
+  /**
+   * A new file only: refused with {@link FolderTaken}, nothing written, when
+   * any file in its folder (the path itself included) answers true here,
+   * before or while it is placed. The file goes in with a hard link, which
+   * never replaces what is at the path.
+   */
+  exclusive?: (name: string) => boolean;
   /** The commit message; "Add <path>" or "Update <path>" when left out. */
   message?: string;
 }
+
+/** Refuses with {@link FolderTaken} when a file in `abs`'s folder, other than `self`, answers true to `exclusive`. */
+const claimed = async (
+  abs: string,
+  rel: string,
+  exclusive: (name: string) => boolean,
+  self?: string
+): Promise<void> => {
+  const names = await readdir(dirname(abs)).catch((error: unknown) => {
+    if (isMissing(error)) {
+      return [];
+    }
+    throw error;
+  });
+  const holder = names.find((name) => name !== self && exclusive(name));
+  if (holder !== undefined) {
+    throw new FolderTaken(rel, join(dirname(rel), holder));
+  }
+};
+
+/**
+ * Puts `scratch` at `abs` only while nothing is there (a hard link fails
+ * on an existing path; a rename would replace it), then refuses, taking it
+ * back out, if another claim landed in its folder meanwhile. `scratch` is
+ * gone either way.
+ */
+const placeOnly = async (
+  scratch: string,
+  abs: string,
+  rel: string,
+  exclusive: (name: string) => boolean
+): Promise<void> => {
+  const placed = await link(scratch, abs)
+    .then(
+      () => true,
+      (error: unknown) => {
+        if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+          return false;
+        }
+        throw error;
+      }
+    )
+    .finally(() => unlink(scratch).catch(noop));
+  if (!placed) {
+    throw new FolderTaken(rel, rel);
+  }
+  try {
+    await claimed(abs, rel, exclusive, basename(abs));
+  } catch (error) {
+    await unlink(abs).catch(noop);
+    throw error;
+  }
+};
 
 /**
  * Writes one file (its folders made as needed) atomically, then commits it.
@@ -719,11 +790,19 @@ export const writeFolderFile = async (
       }
       throw error;
     });
-    // Beside the history, on the same disk: the rename is the write.
+    const { exclusive } = options;
+    if (exclusive) {
+      await claimed(abs, rel, exclusive);
+    }
+    // Beside the history, on the same disk: the rename (or link) is the write.
     const scratch = join(root, ".git", `cawco-write-${randomUUID()}`);
     await writeFile(scratch, bytes);
     try {
-      await rename(scratch, abs);
+      if (exclusive) {
+        await placeOnly(scratch, abs, rel, exclusive);
+      } else {
+        await rename(scratch, abs);
+      }
     } catch (error) {
       await unlink(scratch).catch(noop);
       throw error;
@@ -1036,24 +1115,22 @@ export const folderHistory = async (
 };
 
 /**
- * Every path under `rawDir` that any commit of the folder ever touched,
- * including files deleted since: what keeps a number handed out once from
- * being handed out again.
+ * The name of every entry in one folder as the disk holds it now, committed
+ * or not, uncapped and unsorted; none when the folder is not there. A read of
+ * the directory alone: no git, no stat per file.
  */
-export const folderPathsInHistory = async (
+export const folderFileNames = async (
   projectId: string,
   rawDir: string
 ): Promise<string[]> => {
   const rel = folderPath(rawDir);
   const root = await forReading(projectId);
-  const out = await git(root, [
-    "log",
-    "--format=",
-    "--name-only",
-    "--no-renames",
-    ...(rel ? ["--", rel] : []),
-  ]);
-  return [...new Set(out.split("\n").filter(Boolean))];
+  return await readdir(await readable(root, rel)).catch((error: unknown) => {
+    if (isMissing(error)) {
+      return [];
+    }
+    throw error;
+  });
 };
 
 /** When the folder's history first added a file and last changed it, ms epoch, by commit time. */
@@ -1066,6 +1143,8 @@ export interface FolderFileTimes {
 
 /** A folder's file times as of one commit. */
 export interface FolderTimes {
+  /** Every path any commit added, changed, deleted or renamed from or to: what keeps a name handed out once from being handed out again. */
+  ever: ReadonlySet<string>;
   /** The commit they were read at; empty while the folder has none. */
   head: string;
   times: ReadonlyMap<string, FolderFileTimes>;
@@ -1119,28 +1198,49 @@ const headCommit = async (root: string): Promise<string> => {
  * `times`, oldest commit first: an add or change sets the file's last time
  * (its first stays once it has one, so a file deleted and added again keeps
  * its first add), a rename carries the old path's first time to the new
- * path, a delete leaves the times standing.
+ * path, a delete leaves the times standing. Every path named goes in `ever`.
  */
-const applyLog = (times: Map<string, FolderFileTimes>, out: string): void => {
+const applyLog = (
+  times: Map<string, FolderFileTimes>,
+  ever: Set<string>,
+  out: string
+): void => {
   for (const record of out.split(RECORD)) {
     const [stamp = "", ...changes] = record.split("\n");
     const at = Number(stamp.trim()) * 1000;
-    if (!(stamp.trim() && Number.isFinite(at))) {
-      continue;
-    }
-    for (const change of changes) {
-      const [kind = "", from = "", to] = change.split("\t");
-      if (!from || kind.startsWith("D")) {
-        continue;
+    if (stamp.trim() && Number.isFinite(at)) {
+      for (const change of changes) {
+        applyChange(times, ever, change, at);
       }
-      const path = to ?? from;
-      const was = kind.startsWith("R") ? times.get(from) : times.get(path);
-      if (kind.startsWith("R")) {
-        times.delete(from);
-      }
-      times.set(path, { created: was?.created ?? at, updated: at });
     }
   }
+};
+
+/** One `--name-status` line of a commit made at `at`, as {@link applyLog} reads it. */
+const applyChange = (
+  times: Map<string, FolderFileTimes>,
+  ever: Set<string>,
+  change: string,
+  at: number
+): void => {
+  const [kind = "", from = "", to] = change.split("\t");
+  if (!from) {
+    return;
+  }
+  ever.add(from);
+  if (to) {
+    ever.add(to);
+  }
+  if (kind.startsWith("D")) {
+    return;
+  }
+  const path = to ?? from;
+  const renamed = kind.startsWith("R");
+  const was = renamed ? times.get(from) : times.get(path);
+  if (renamed) {
+    times.delete(from);
+  }
+  times.set(path, { created: was?.created ?? at, updated: at });
 };
 
 /** The times at commit `tip`, read on from `known` when its commit is one of tip's ancestors, else from the start. */
@@ -1150,8 +1250,10 @@ const timesAt = async (
   tip: string,
   known: FolderTimes | undefined
 ): Promise<FolderTimes> => {
+  // Paths seen once stay seen, even across a rewritten history.
+  const ever = new Set(known?.ever);
   if (!tip) {
-    return { head: tip, times: new Map() };
+    return { head: tip, times: new Map(), ever };
   }
   const from =
     known?.head &&
@@ -1162,6 +1264,7 @@ const timesAt = async (
   const times = new Map(from?.times);
   applyLog(
     times,
+    ever,
     await git(root, [
       "log",
       "--reverse",
@@ -1173,7 +1276,7 @@ const timesAt = async (
       ...(rel ? [rel] : []),
     ])
   );
-  return { head: tip, times };
+  return { head: tip, times, ever };
 };
 
 /** Each folder's file times, by project and folder, as of the last commit read. */

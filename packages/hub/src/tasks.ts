@@ -37,9 +37,10 @@ import type { Tracker, WorkBudget, WorkItemState } from "./db/schema";
 import {
   type FolderAuthor,
   FolderRefusal,
+  FolderTaken,
+  folderFileNames,
   folderFileTimes,
   folderHistory,
-  folderPathsInHistory,
   folderUncommitted,
   HISTORY_LIMIT,
   hasProjectFolder,
@@ -409,6 +410,8 @@ const TODO_LIMIT = 500;
 const PROMOTED_TODO = /^(\s*- \[[ xX]\] .*?(?:→|->)\s*#)(\d{1,9})(?=\s*$)/gm;
 const TEXT_LIMIT = 20_000;
 const ITEM_LIMIT = 200;
+/** How many numbers a create tries while files keep landing on the one it took. */
+const CLAIM_TRIES = 10;
 const LIST_LIMIT = 50;
 const TYPE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 const SECTION_LINE = /^##\s/m;
@@ -1452,21 +1455,32 @@ export const createTasks = (store: TaskStore) => {
     return stage;
   };
 
-  /** One past the highest number the folder ever held, or this process handed out. */
-  const nextNumber = async (projectId: string): Promise<number> => {
-    let highest = issued.get(projectId);
-    if (highest === undefined) {
-      const history = await folderPathsInHistory(projectId, "tasks");
-      highest = Math.max(
-        0,
-        ...history.map((path) => fileTaskNumber(path) ?? 0)
-      );
+  /**
+   * One past the highest number anything holds now: a file in tasks/ as
+   * the disk has it (committed or not, read with no git), any path the
+   * folder's history ever named (read once per commit, folderFileTimes), the
+   * index, and what this process handed out; and past `above`. Read at the
+   * moment of making a task, inside the project's turn.
+   */
+  const nextNumber = async (projectId: string, above = 0): Promise<number> => {
+    const [{ ever }, names] = await Promise.all([
+      folderFileTimes(projectId, "tasks"),
+      folderFileNames(projectId, "tasks"),
+    ]);
+    let highest = Math.max(above, issued.get(projectId) ?? 0);
+    for (const name of [...ever, ...names]) {
+      highest = Math.max(highest, fileTaskNumber(name) ?? 0);
     }
-    const next =
-      Math.max(highest, ...store.index(projectId).map((row) => row.number)) + 1;
-    issued.set(projectId, next);
-    return next;
+    for (const row of store.index(projectId)) {
+      highest = Math.max(highest, row.number);
+    }
+    issued.set(projectId, highest + 1);
+    return highest + 1;
   };
+
+  /** A file name that claims task `number` (`tsk-12.md`, `tsk-012-anything.md`). */
+  const claims = (number: number) => (name: string) =>
+    fileTaskNumber(name) === number;
 
   /** stages.md as it reads, or the code template while the project has none. */
   const stagesOf = async (
@@ -1556,14 +1570,19 @@ export const createTasks = (store: TaskStore) => {
     );
   };
 
-  /** Writes a task file through the folder (one commit) and re-indexes it. */
+  /**
+   * Writes a task file through the folder (one commit) and re-indexes it.
+   * `fresh`: a new task, written only while no file claims its number
+   * (FolderTaken otherwise).
+   */
   const save = async (
     projectId: string,
     path: string,
     number: number,
     content: string,
     actor: TaskActor,
-    message: string
+    message: string,
+    fresh = false
   ): Promise<TaskView> => {
     // A project deleted since the change began takes no task: before its
     // folder is written, and again in the step that indexes the task.
@@ -1571,6 +1590,7 @@ export const createTasks = (store: TaskStore) => {
     await writeFolderFile(projectId, path, content, {
       author: actor.author,
       message,
+      ...(fresh ? { exclusive: claims(number) } : {}),
     });
     stands(projectId);
     store.put([indexRow(projectId, path, number, content, hashOf(content))]);
@@ -1581,6 +1601,43 @@ export const createTasks = (store: TaskStore) => {
       content,
       await currentStages(projectId)
     );
+  };
+
+  /**
+   * Files a new task under the next free number, its file made by `make`
+   * for that number. A file that claims the number between the read and the
+   * write (an agent writing tasks/ straight) sends it on to the next one.
+   * Inside the project's turn.
+   */
+  const fileNew = async (
+    projectId: string,
+    actor: TaskActor,
+    make: (number: number) => { content: string; message: string; path: string }
+  ): Promise<TaskView> => {
+    let number = await nextNumber(projectId);
+    for (let tries = 1; ; tries += 1) {
+      const { path, content, message } = make(number);
+      try {
+        // biome-ignore lint/performance/noAwaitInLoops: each try waits on the one before it
+        return await save(
+          projectId,
+          path,
+          number,
+          content,
+          actor,
+          message,
+          true
+        );
+      } catch (error) {
+        if (!(error instanceof FolderTaken) || tries >= CLAIM_TRIES) {
+          throw error;
+        }
+        console.info(
+          `[tasks] ${projectId} ${taskId(number)} was claimed by a file in tasks/ as it was made; taking the next number`
+        );
+        number = await nextNumber(projectId, number);
+      }
+    }
   };
 
   /**
@@ -1747,23 +1804,20 @@ export const createTasks = (store: TaskStore) => {
         const description = block("description", draft.description ?? "");
         const acceptance = block("acceptance criteria", draft.acceptance ?? "");
         const todos = (draft.todos ?? []).map(todoText);
-        const number = await nextNumber(projectId);
-        const path = taskPath(number, title);
-        const doc = TaskDoc.create(path, {
-          title,
-          fields,
-          description,
-          acceptance,
-          todos,
+        return await fileNew(projectId, actor, (number) => {
+          const path = taskPath(number, title);
+          return {
+            path,
+            content: TaskDoc.create(path, {
+              title,
+              fields,
+              description,
+              acceptance,
+              todos,
+            }).toString(),
+            message: `task ${taskId(number)}: create “${title}” in ${fields.stage} ${byWhom(actor)}`,
+          };
         });
-        return await save(
-          projectId,
-          path,
-          number,
-          doc.toString(),
-          actor,
-          `task ${taskId(number)}: create “${title}” in ${fields.stage} ${byWhom(actor)}`
-        );
       }).then((task) =>
         told(
           { kind: "created", projectId, id: task.id, stage: task.stage, actor },
