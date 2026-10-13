@@ -37,7 +37,7 @@ public final class RootViewController: ObservedViewController {
         let landing = activity.map(landing(from:)) ?? ShellLanding()
         #if DEBUG
         board.land(Self.probing(landing))
-        pushRoute = Self.probedTask
+        if let task = Self.probedTask { board.open(task) }
         #else
         board.land(landing)
         #endif
@@ -170,27 +170,12 @@ public final class RootViewController: ObservedViewController {
         }
         #endif
         show(key: "board") { waiting }
-        // After the first full read, `/api/pending` included: an ask's
-        // session opens with its card in view, never an empty pane.
-        if read, let route = pushRoute {
-            pushRoute = nil
-            switch route {
-            case let .session(id): board.openSession(id)
-            case let .project(id): board.go(.project(id))
-            case let .task(projectId, taskId, attempt): board.openTask(projectId: projectId, taskId: taskId, attempt: attempt)
-            case .board: board.go(.fleet)
-            case .keepPro: gate.keepPro()
-            }
-        }
     }
 
-    /// Where a tapped push opens, waiting for the fleet's first read.
-    private var pushRoute: PushRoute?
-
-    /// Opens what a tapped push names (PushNote.route).
+    /// Opens what a tapped push names (PushNote.route). The shell keeps it
+    /// until it can land, after its own landing (ShellController `open`).
     public func open(_ route: PushRoute) {
-        pushRoute = route
-        requestRefresh()
+        board.open(route)
     }
 
     // MARK: Commands (the menu bar and the keyboard)

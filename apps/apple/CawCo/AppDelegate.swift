@@ -1,6 +1,9 @@
 import CawCoCore
 import CawCoScreens
 import CawCoDesign
+#if DEBUG
+import notify
+#endif
 import OSLog
 import UIKit
 import UserNotifications
@@ -33,6 +36,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         #if DEBUG
         PushRegistry.shared.launch(environment: .sandbox)
         PushProbe.run()
+        PushTaps.probe()
         #else
         PushRegistry.shared.launch(environment: .production)
         #endif
@@ -221,14 +225,53 @@ enum PushTaps {
     private static var waiting: PushRoute?
 
     static func deliver(_ note: PushNote, to root: RootViewController?) {
-        guard seen.insert(note.key).inserted else { return }
         Logger(subsystem: "dev.cawco.app", category: "Push").notice("open \(note.kind ?? "unknown", privacy: .public) push \(note.id, privacy: .public)")
+        deliver(note.route, key: note.key, to: root)
+    }
+
+    /// The window in front takes the route, and its shell keeps it until it
+    /// can land (ShellController `open`); with no window yet, the first takes it.
+    static func deliver(_ route: PushRoute, key: String, to root: RootViewController?) {
+        guard seen.insert(key).inserted else { return }
         if let root = root ?? front {
-            root.open(note.route)
+            root.open(route)
         } else {
-            waiting = note.route
+            waiting = route
         }
     }
+
+    #if DEBUG
+    /// A simulator pass's tapped push, where `simctl push` and a banner tap
+    /// can't be driven: `-push-route session:<id>` or `task:<projectId>/<taskId>`
+    /// at launch, before any window, as a tap that launched the app; and,
+    /// running, the `debug-push-route` default on `dev.cawco.debug.push-route`
+    /// (notifyutil). Each goes through `deliver`, as the delegate's tap does.
+    static func probe() {
+        let arguments = ProcessInfo.processInfo.arguments
+        if let at = arguments.firstIndex(of: "-push-route"), arguments.indices.contains(at + 1), let route = probed(arguments[at + 1]) {
+            deliver(route, key: "probe-launch", to: nil)
+        }
+        var token: Int32 = 0
+        notify_register_dispatch("dev.cawco.debug.push-route", &token, .main) { _ in
+            MainActor.assumeIsolated {
+                guard let text = UserDefaults.standard.string(forKey: "debug-push-route"), let route = probed(text) else { return }
+                deliver(route, key: "probe-\(Date().timeIntervalSince1970)", to: nil)
+            }
+        }
+    }
+
+    private static func probed(_ text: String) -> PushRoute? {
+        let parts = text.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2 else { return nil }
+        switch parts[0] {
+        case "session": return .session(parts[1])
+        case "task":
+            let ids = parts[1].split(separator: "/", maxSplits: 1).map(String.init)
+            return ids.count == 2 ? .task(projectId: ids[0], taskId: ids[1], attempt: nil) : nil
+        default: return nil
+        }
+    }
+    #endif
 
     static func take() -> PushRoute? {
         defer { waiting = nil }

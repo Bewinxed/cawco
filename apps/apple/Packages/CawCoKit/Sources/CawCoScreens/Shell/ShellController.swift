@@ -270,7 +270,15 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// unspecified: a conversation opened then went into the wide screen's
     /// detail, and the phone's own stack stayed on its board.
     private func applyLanding() {
-        guard landing != nil, home.ready, isViewLoaded, view.window != nil else { return }
+        // Read on every pass, so the watcher wakes when a waiting route can land.
+        let ready = routeReady
+        let routable = pushRoute != nil && ready
+        guard isViewLoaded, view.window != nil else { return }
+        guard landing != nil else {
+            if routable { applyRoute() }
+            return
+        }
+        guard home.ready else { return }
         // After the watcher's read: landing changes the workspace it observes.
         DispatchQueue.main.async { [weak self] in
             guard let self, let landing else { return }
@@ -282,10 +290,52 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                 // Nothing in front to bring back: a phone rests on the place,
                 // whatever its workspace kept in front from the last run.
                 if compact, workspace.activeSessionId != nil { workspace.showBoard() }
+            } else {
+                for id in landing.sessionIds { openSession(id, animated: false) }
+            }
+            // A tapped push lands over the restore, never under it.
+            applyRoute()
+        }
+    }
+
+    // MARK: Push routes
+
+    /// A tapped push's route (PushNote.route), kept until the shell has
+    /// landed and the hub has answered the fleet's first read. One route at a
+    /// time: a later tap replaces one still waiting.
+    private var pushRoute: PushRoute?
+    private static let pushLog = Logger(subsystem: "dev.cawco.app", category: "Push")
+
+    /// Opens what a tapped push names, now or once it can land.
+    func open(_ route: PushRoute) {
+        pushRoute = route
+        Self.pushLog.notice("route \(String(describing: route), privacy: .public) waiting")
+        applyLanding()
+    }
+
+    /// The hub is connected and has answered for the fleet: a session's id
+    /// can be told present or gone. An unreachable hub's `home.ready` is not this.
+    private var routeReady: Bool {
+        hub.state == .connected && hub.fleet.fleetRead && hub.fleet.liveRead && hub.fleet.runsRead
+    }
+
+    private func applyRoute() {
+        guard let route = pushRoute, routeReady else { return }
+        pushRoute = nil
+        switch route {
+        case let .session(id):
+            guard id.hasPrefix(BoardRun.prefix) || hub.fleet.byId[id] != nil else {
+                Self.pushLog.notice("route session \(id, privacy: .public) is not on the hub")
+                Toast.show("That session isn't on the hub any more.", in: view.window)
                 return
             }
-            for id in landing.sessionIds { openSession(id, animated: false) }
+            openSession(id)
+        case let .project(id): go(.project(id))
+        case let .task(projectId, taskId, attempt): openTask(projectId: projectId, taskId: taskId, attempt: attempt)
+        case .board: go(.fleet)
+        case .keepPro: onKeepPro()
         }
+        Self.pushLog.notice("route \(String(describing: route), privacy: .public) landed")
     }
 
     /// What the scene keeps when it goes to the background
