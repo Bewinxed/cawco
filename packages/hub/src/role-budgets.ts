@@ -37,12 +37,16 @@ import type { Tasks } from "./tasks";
  * the place of the preview's two, about 456 tokens more for the worker and
  * the delegate; the lead takes them in place of its two one-line decision
  * page tools, about 852 more (worker 21,587, delegate 4,727, lead 13,158
- * measured).
+ * measured). The canvas (§5.10, slice 3a) gives `artifact_create` and
+ * `artifact_update` their bounded skeleton `elements`, `mermaid` and
+ * `delete`, and `artifact_read` its `png`, its words cut to a clause each:
+ * about 560 tokens more for all three (worker 22,463, delegate 5,422, lead
+ * 14,035 measured).
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 22_000,
-  delegate: 5000,
-  lead: 13_500,
+  worker: 22_600,
+  delegate: 5600,
+  lead: 14_100,
   overseer: 2800,
   "web-facing": 3400,
 };

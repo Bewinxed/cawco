@@ -30,13 +30,14 @@ export interface LegacyCanvas {
 export interface ArtifactsDb {
   /**
    * Appends one update to an artifact's log at the artifact's next seq, and
-   * moves the row's seq, the `state` keys it changed (by whom) and
-   * `updatedAt` with it, in one transaction; the seq it was kept at.
+   * moves the row's seq, the keys it changed (a page's `state` keys, a
+   * canvas's element ids) with who changed each, and `updatedAt` with it, in
+   * one transaction; the seq it was kept at.
    */
   readonly append: (
     id: string,
     update: Uint8Array,
-    changed: { by: "person" | "agent"; keys: readonly string[] }
+    changed: Record<string, "person" | "agent">
   ) => number;
   readonly byName: (
     instanceId: string,
@@ -75,8 +76,8 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
       const seq = row.seq + 1;
       tx.insert(artifactUpdates).values({ artifactId: id, seq, update }).run();
       const changes = { ...row.changes };
-      for (const key of changed.keys) {
-        changes[key] = { seq, by: changed.by };
+      for (const [key, by] of Object.entries(changed)) {
+        changes[key] = { seq, by };
       }
       tx.update(artifacts)
         .set({ seq, changes, updatedAt: new Date() })

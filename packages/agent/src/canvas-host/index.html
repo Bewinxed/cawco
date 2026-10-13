@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+      name="viewport"
+    >
+    <meta content="light dark" name="color-scheme">
+    <title>Canvas</title>
+    <script>
+      "use strict";
+      // Excalidraw's fonts stand beside the page (core canvas-host.ts), so
+      // the page asks nothing of any other origin. Relative to the page: it
+      // lives under the dashboard's preview prefix, or at the listener's root.
+      window.EXCALIDRAW_ASSET_PATH = new URL("canvas/", location.href).href;
+    </script>
+    <link href="canvas/host.css" rel="stylesheet">
+    <script src="canvas/host.js" type="module"></script>
+  </head>
+  <body>
+    <div id="canvas-root"></div>
+  </body>
+</html>

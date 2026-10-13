@@ -1053,23 +1053,39 @@ export function handoffTools(deps: HandoffDeps) {
       artifactRead.name,
       artifactRead.description,
       artifactRead.input,
-      async ({ id, since }) => {
-        const query = since === undefined ? "" : `?since=${since}`;
-        if (id !== undefined) {
-          return json(
-            await actions.artifactCall(
-              "GET",
-              `/${encodeURIComponent(id)}${query}`
-            )
-          );
+      async ({ id, since, png }) => {
+        const query = new URLSearchParams({
+          ...(since === undefined ? {} : { since: String(since) }),
+          ...(png ? { png: "true" } : {}),
+        }).toString();
+        let target = id;
+        if (target === undefined) {
+          const [newest] = (await actions.artifactCall("GET", "")) as {
+            id: string;
+          }[];
+          if (!newest) {
+            throw new Error("This session has made no artifact yet.");
+          }
+          target = newest.id;
         }
-        const [newest] = (await actions.artifactCall("GET", "")) as {
-          id: string;
-        }[];
-        if (!newest) {
-          throw new Error("This session has made no artifact yet.");
-        }
-        return json(await actions.artifactCall("GET", `/${newest.id}${query}`));
+        const answer = (await actions.artifactCall(
+          "GET",
+          `/${encodeURIComponent(target)}${query ? `?${query}` : ""}`
+        )) as { png?: string | null };
+        // A canvas's picture is an image the model sees, beside the outline.
+        const { png: picture, ...rest } = answer;
+        return picture
+          ? {
+              content: [
+                { type: "text" as const, text: JSON.stringify(rest) },
+                {
+                  type: "image" as const,
+                  data: picture,
+                  mimeType: "image/png",
+                },
+              ],
+            }
+          : json(png ? { ...rest, png: null } : rest);
       },
       {
         readOnlyHint: true,

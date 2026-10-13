@@ -26,6 +26,8 @@
     "@cawco/jsonl-parser": "workspace:*",
     "@earendil-works/pi-ai": "1.0.1",
     "@earendil-works/pi-coding-agent": "1.0.1",
+    "@excalidraw/excalidraw": "0.18.1",
+    "@excalidraw/mermaid-to-excalidraw": "2.2.2",
     "@opencode-ai/sdk": "1.18.34",
     "@vscode/ripgrep-universal": "1.18.0",
     "bonjour-service": "^1.4.4",
@@ -33,13 +35,18 @@
     "idiomorph": "0.8.0",
     "modern-screenshot": "4.7.0",
     "playwright-core": "^1.63.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "typebox": "1.3.34",
+    "y-excalidraw": "2.0.12",
     "y-websocket": "3.1.0",
     "yjs": "13.6.33",
     "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/bun": "^1.4.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "@typescript/native": "npm:typescript@^7.0.2",
     "typescript": "npm:@typescript/typescript6@^6.0.2"
   }

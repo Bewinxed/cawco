@@ -5,30 +5,43 @@
  * whole.
  *
  * Every update the doc takes, from a joined client or from the hub, is
- * appended to the log at the artifact's next seq, with the `state` keys it
- * changed and who changed them (`changes`, what `artifact_read`'s `since`
- * and the delivery to the session read), and sent to every other joined
- * client. Every {@link COMPACT_EVERY} updates the log is replaced by one
- * snapshot.
+ * appended to the log at the artifact's next seq, with what it changed and
+ * who changed it (`changes`, what `artifact_read`'s `since` and the
+ * delivery to the session read): a page's `state` keys, by whoever's client
+ * wrote them; a canvas's element ids, by the `by` each element carries (a
+ * screen writes the agent's converted elements too). It is sent to every
+ * other joined client. Every {@link COMPACT_EVERY} updates the log is
+ * replaced by one snapshot.
  */
+import type { CanvasAuthor } from "@cawco/core/canvas";
 import {
   type AbstractType,
   applyUpdate,
   Doc,
   encodeStateAsUpdate,
+  type Array as YArray,
   type YEvent,
+  Map as YMap,
 } from "yjs";
 import type { ArtifactsDb } from "../db/artifacts";
 
-/** The doc's top-level maps; this slice writes `meta` and `state` only. */
+/** The doc's top-level maps. */
 export const MAPS = [
   "meta",
   "state",
-  "elements",
   "ink",
   "pins",
   "comments",
+  "files",
+  "requests",
 ] as const;
+
+/** The doc's one top-level array: a canvas's scene, as y-excalidraw lays it out. */
+export const ELEMENTS = "elements";
+
+/** A canvas's elements: each a `Y.Map` of `el`, `pos`, `by` and `at`. */
+export const elementsOf = (doc: Doc): YArray<YMap<unknown>> =>
+  doc.getArray<YMap<unknown>>(ELEMENTS);
 
 /** Updates kept one by one before the log becomes one snapshot. The brief's number. */
 const COMPACT_EVERY = 100;
@@ -41,6 +54,8 @@ export type ChangeOrigin = { client: ArtifactClient } | "agent" | "hub";
 
 /** A joined client: the hub sends it every update another made. */
 export interface ArtifactClient {
+  /** A canvas's host page, which can convert the agent's writes (the socket's `screen` query). */
+  screen: boolean;
   send: (update: Uint8Array) => void;
 }
 
@@ -56,6 +71,8 @@ export interface ArtifactDocs {
   /** Starts sending `client` every update another makes. */
   join: (id: string, client: ArtifactClient) => Doc;
   leave: (id: string, client: ArtifactClient) => void;
+  /** How many screens (canvas host pages) are joined to the artifact now. */
+  screens: (id: string) => number;
   /** The whole doc as one base64 Yjs update: what a page's overlay starts from before it joins. */
   snapshot: (id: string) => string;
   /** Runs `change` as one transaction on the artifact's doc, made by `origin`. */
@@ -71,6 +88,34 @@ const clientOf = (origin: unknown): ArtifactClient | undefined =>
   origin && typeof origin === "object" && "client" in origin
     ? (origin as { client: ArtifactClient }).client
     : undefined;
+
+/** The id and author of a canvas element's map, when it holds one. */
+const elementOf = (
+  map: YMap<unknown>
+): { id: string; by: CanvasAuthor } | null => {
+  const el = map.get("el") as { id?: unknown } | undefined;
+  return typeof el?.id === "string"
+    ? { id: el.id, by: map.get("by") === "person" ? "person" : "agent" }
+    : null;
+};
+
+/** The canvas elements a deep event on `elements` added or changed. */
+const elementsIn = (
+  elements: YArray<YMap<unknown>>,
+  events: YEvent<AbstractType<unknown>>[]
+): { id: string; by: CanvasAuthor }[] =>
+  events
+    .flatMap((event) =>
+      event.target === elements
+        ? [...event.changes.added].flatMap(
+            (item) => item.content.getContent() as unknown[]
+          )
+        : [event.target]
+    )
+    .flatMap((map) => {
+      const element = map instanceof YMap ? elementOf(map) : null;
+      return element ? [element] : [];
+    });
 
 export const createArtifactDocs = (deps: {
   db: ArtifactsDb;
@@ -98,12 +143,13 @@ export const createArtifactDocs = (deps: {
     entry: Loaded,
     update: Uint8Array,
     origin: unknown,
-    keys: string[]
+    changed: { keys: string[]; elements: Map<string, CanvasAuthor> }
   ) => {
     const client = clientOf(origin);
+    const by: CanvasAuthor = client ? "person" : "agent";
     const seq = deps.db.append(id, update, {
-      keys,
-      by: client ? "person" : "agent",
+      ...Object.fromEntries(changed.keys.map((key) => [key, by])),
+      ...Object.fromEntries(changed.elements),
     });
     for (const other of entry.clients) {
       if (other !== client) {
@@ -113,8 +159,8 @@ export const createArtifactDocs = (deps: {
     if (deps.db.updateCount(id) >= COMPACT_EVERY) {
       deps.db.compact(id, encodeStateAsUpdate(entry.doc));
     }
-    if (client && keys.length > 0) {
-      deps.personChanged(id, keys, seq);
+    if (client && changed.keys.length > 0) {
+      deps.personChanged(id, changed.keys, seq);
     }
   };
 
@@ -128,23 +174,39 @@ export const createArtifactDocs = (deps: {
     for (const name of MAPS) {
       doc.getMap(name);
     }
+    const elements = elementsOf(doc);
     for (const update of deps.db.updates(id)) {
       applyUpdate(doc, update, "load");
     }
     const entry: Loaded = { doc, clients: new Set() };
-    // The keys a transaction changed, read before its update is emitted.
-    let keys: string[] = [];
+    // What a transaction changed, read before its update is emitted.
+    let changed = {
+      keys: [] as string[],
+      elements: new Map<string, CanvasAuthor>(),
+    };
     const state = doc.getMap("state") as unknown as AbstractType<
       YEvent<AbstractType<unknown>>
     >;
+    // The elements a transaction added or changed, heard before its
+    // `afterTransaction` (Yjs calls observers first).
+    let touched = new Map<string, CanvasAuthor>();
+    elements.observeDeep((events) => {
+      for (const element of elementsIn(elements, events)) {
+        touched.set(element.id, element.by);
+      }
+    });
     doc.on("afterTransaction", (transaction) => {
-      keys = [...(transaction.changed.get(state) ?? [])].filter(
-        (key): key is string => key !== null
-      );
+      changed = {
+        keys: [...(transaction.changed.get(state) ?? [])].filter(
+          (key): key is string => key !== null
+        ),
+        elements: touched,
+      };
+      touched = new Map();
     });
     doc.on("update", (update: Uint8Array, origin: unknown) => {
       if (origin !== "load") {
-        keep(id, entry, update, origin, keys);
+        keep(id, entry, update, origin, changed);
       }
     });
     loaded.set(id, entry);
@@ -166,6 +228,9 @@ export const createArtifactDocs = (deps: {
         sleep(id, entry);
       }
     },
+    screens: (id) =>
+      [...(loaded.get(id)?.clients ?? [])].filter((client) => client.screen)
+        .length,
     snapshot: (id) =>
       Buffer.from(encodeStateAsUpdate(load(id).doc)).toString("base64"),
     transact: (id, origin, change) => {

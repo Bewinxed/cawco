@@ -704,6 +704,7 @@
       }}
       src={url}
       title="Preview"
+      class:canvas={artifact?.kind === "canvas"}
       class:ready={!current || loaded}
       {@attach (node) => {
         if (key === frameKey) {
@@ -840,6 +841,11 @@
   }
   iframe.ready {
     opacity: 1;
+  }
+  /* A canvas is ours, drawn in our tokens: its theme follows the
+     dashboard's (the frame's scheme is its prefers-color-scheme). */
+  iframe.canvas {
+    color-scheme: inherit;
   }
   /* Covers the frame until it connects, holding one kit skeleton line. */
   .cover {

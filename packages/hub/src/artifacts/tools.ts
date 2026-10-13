@@ -5,6 +5,7 @@
  * the artifact routes (delegation-actions.ts).
  */
 import { ARTIFACT_NAME, PREVIEW_START_PATH } from "@cawco/core";
+import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
 import { z } from "zod";
 import { PAGE_LIMIT } from "../decision-page";
 
@@ -26,15 +27,39 @@ const id = z
   .regex(/^[0-9a-f-]{36}$/)
   .describe("The artifact's id, from artifact_create.");
 
+/** An Excalidraw element skeleton: its type, an id you choose, and Excalidraw's own fields. */
+const skeleton = z.looseObject({
+  type: z.enum(SKELETON_TYPES),
+  id: z.string().min(1).max(100).optional(),
+});
+
+/** A canvas's skeleton elements, as create and update take them. */
+const elements = z
+  .array(skeleton)
+  .min(1)
+  .max(CANVAS_LIMITS.elementsPerCall)
+  .optional()
+  .describe(
+    'Excalidraw skeletons, like {"type":"rectangle","id":"api","x":0,"y":0,"width":160,"height":60,"label":{"text":"API"}}; an arrow binds with "start":{"id":"api"}. Your id is the outline\'s.'
+  );
+
+const mermaid = z
+  .string()
+  .min(1)
+  .max(CANVAS_LIMITS.mermaid)
+  .optional()
+  .describe('Mermaid, like "flowchart LR; A --> B".');
+
 export const artifactCreate = {
   name: "artifact_create",
   description:
     "Make an artifact and open it in your panel beside the transcript. A page is HTML you wrote: `html`, or `dir` " +
     "holding a decision page's page.html (decision-page skill); in a project, neither builds decisions/<name>/page.html " +
-    "from its folder. A preview is your dev server (`port`) or a folder (`dir`). The same kind and name again replaces " +
-    "it in place and keeps the person's picks. Answers its id and whether the panel opened it.",
+    "from its folder. A preview is your dev server (`port`) or a folder (`dir`). A canvas is a drawing from `elements` " +
+    "or `mermaid`, or empty for the person. The same kind and name again replaces it in place and keeps the person's " +
+    "picks. Answers its id and whether the panel opened it.",
   input: {
-    kind: z.enum(["page", "preview"]),
+    kind: z.enum(["page", "preview", "canvas"]),
     name: z
       .string()
       .regex(ARTIFACT_NAME)
@@ -68,6 +93,8 @@ export const artifactCreate = {
       .describe(
         "The workspace whose server a port is: yours, or a delegate's id as delegate returned it; omitted, your own."
       ),
+    elements,
+    mermaid,
   },
 };
 
@@ -77,9 +104,18 @@ export const artifactUpdate = {
     "Change one of your artifacts in place. `html` replaces a page: every open view morphs to it without a reload, and " +
     "picks, typed fields, focus and scroll stay. `patch` is a " +
     'JSON Patch (RFC 6902) over its state, keyed by choice id or field name, like [{"op":"replace","path":"/hero/options","value":["b"]}]; ' +
-    "all of it applies or none. Answers the state after the change.",
+    "all of it applies or none. Answers the state after the change. A canvas takes `elements` (added, or replacing " +
+    'the one of the id given), `delete` (ids) or `mermaid` (added below); it answers its outline and "<id> changed ' +
+    'under you" for what you replaced that the person changed since your last read.',
   input: {
     id,
+    elements,
+    mermaid,
+    delete: z
+      .array(z.string().min(1).max(100))
+      .min(1)
+      .max(CANVAS_LIMITS.deletePerCall)
+      .optional(),
     html: z.string().min(1).max(PAGE_LIMIT).optional(),
     patch: z
       .array(
@@ -101,10 +137,13 @@ export const artifactRead = {
   description:
     "Read the person's picks, notes and values on one of your artifacts, each with the page hash it was made on. " +
     "`since` (the `seq` of your last read or delivery) returns only what changed after it. No id: your newest. " +
-    "Their changes also reach you as a message once they pause, and at once while your turn runs.",
+    "Their changes also reach you as a message once they pause, and at once while your turn runs. A canvas answers " +
+    "its outline (a line per element; the person's pen strokes as ink over the ids they cross) and `changed`, what " +
+    "the person changed since `since` or your last read; `png: true` adds its picture.",
   input: {
     id: id.optional(),
     since: z.number().int().min(0).optional(),
+    png: z.boolean().optional(),
   },
 };
 

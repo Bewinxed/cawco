@@ -281,7 +281,11 @@ import {
   type Artifacts,
   createArtifacts,
 } from "./artifacts/service";
-import { artifactSend, artifactSocket } from "./artifacts/sync";
+import {
+  artifactPicture,
+  artifactSend,
+  artifactSocket,
+} from "./artifacts/sync";
 import {
   answeredWithOriginal,
   clientCopy,
@@ -15990,6 +15994,7 @@ export const createServer = (
   /** What the preview listener (index.ts) needs to serve artifacts' documents. */
   const artifactListener = {
     ownerOf: (artifactId: string) => db.artifacts.get(artifactId)?.instanceId,
+    picture: artifactPicture(ARTIFACTS_ROOT, artifactDocs),
     send: artifactSend(artifacts.send),
     socket: artifactSocket(artifactDocs),
     state: artifactDocs.snapshot,

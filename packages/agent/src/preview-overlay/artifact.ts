@@ -22,7 +22,7 @@ import {
   choiceEntryProblem,
 } from "@cawco/core/choices";
 import { WebsocketProvider } from "y-websocket";
-import { applyUpdate, Doc } from "yjs";
+import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 
 /** The hub's close code for an update it would not keep (hub artifacts/sync.ts). */
 const REFUSED = 4400;
@@ -90,13 +90,77 @@ const sameEntry = (a: ChoiceEntry | undefined, b: ChoiceEntry): boolean =>
   a.options.join("\u0000") === b.options.join("\u0000") &&
   JSON.stringify(a.value) === JSON.stringify(b.value);
 
+/**
+ * The doc the overlay holds, as a canvas's host page takes it
+ * (`window.cawcoArtifact`). The page bundles its own copy of Yjs, whose
+ * types are not this copy's, so the doc crosses as updates only: its whole
+ * state, an update applied to it, and every update it takes after. With it,
+ * the artifact once the host named it, and where it is synced (the host
+ * page posts its picture beside it).
+ */
+export interface ArtifactHold {
+  /** Applies an update the page made; it reaches the hub and every other view. */
+  apply: (update: Uint8Array) => void;
+  /** Which doc this is: it moves when the overlay replaces its doc (another artifact's, or one the hub refused). */
+  generation: number;
+  /** Calls back with every update the doc takes after this, `own` when the page applied it. */
+  observe: (listener: (update: Uint8Array, own: boolean) => void) => () => void;
+  ref: ArtifactRef | null;
+  /** The doc's whole state as one update. */
+  state: () => Uint8Array;
+  sync: string | null;
+}
+
+/** The origin of an update the host page applied. */
+const FROM_PAGE = Symbol("cawco host page");
+
 let watchers: Watchers | null = null;
 let doc = new Doc();
 let provider: WebsocketProvider | null = null;
 /** The artifact the page's doc is: told by the host, or embedded by the hub before that. */
 let joined: ArtifactRef | null = null;
 let seeded: string | null = null;
+/** The kind the hub embedded with the doc, before the host names it. */
+let seededKind: ArtifactRef["kind"] | null = null;
 let syncPath: string | null = null;
+const holders = new Set<(hold: ArtifactHold) => void>();
+let generation = 0;
+const hold = (): ArtifactHold => {
+  const held = doc;
+  return {
+    generation,
+    ref: joined,
+    sync: syncPath,
+    state: () => encodeStateAsUpdate(held),
+    apply: (update) => applyUpdate(held, update, FROM_PAGE),
+    observe: (listener) => {
+      const heard = (update: Uint8Array, origin: unknown) =>
+        listener(update, origin === FROM_PAGE);
+      held.on("update", heard);
+      return () => held.off("update", heard);
+    },
+  };
+};
+const handed = () => {
+  for (const holder of holders) {
+    holder(hold());
+  }
+};
+
+/**
+ * The one global a canvas's host page takes the doc from: `subscribe` calls
+ * back at once and again whenever the doc is replaced or joined, so the page
+ * binds to the doc the overlay syncs and never opens a socket of its own.
+ */
+Object.defineProperty(window, "cawcoArtifact", {
+  value: Object.freeze({
+    subscribe: (holder: (hold: ArtifactHold) => void) => {
+      holders.add(holder);
+      holder(hold());
+      return () => holders.delete(holder);
+    },
+  }),
+});
 /** "none": the host said this page has no artifact, so nothing is kept. */
 let status: "waiting" | "joined" | "none" = "waiting";
 let synced = false;
@@ -128,12 +192,14 @@ const replaceDoc = () => {
   provider = null;
   doc.destroy();
   doc = new Doc();
+  generation += 1;
   observe(doc);
   synced = false;
   syncedOnce = new Promise<void>((resolve) => {
     whenSynced = resolve;
   });
   watchers?.state(null, true);
+  handed();
 };
 
 const connect = () => {
@@ -150,6 +216,11 @@ const connect = () => {
       disableBc: true,
       resyncInterval: RESYNC_MS,
       WebSocketPolyfill: LiveWebSocket,
+      // A canvas's page is a screen: it converts the agent's writes.
+      params:
+        joined.kind === "canvas"
+          ? { screen: "1" }
+          : ({} as Record<string, string>),
     }
   );
   provider = own;
@@ -176,8 +247,8 @@ export const artifact = {
     watchers = next;
   },
 
-  /** The doc the hub embedded in the page's overlay tag, for `id`. */
-  seed: (id: string, state: string) => {
+  /** The doc the hub embedded in the page's overlay tag, for `id`, and its kind (a page's, unless it says canvas). */
+  seed: (id: string, state: string, kind: string | undefined) => {
     const update = decode(state);
     if (!update) {
       return;
@@ -185,6 +256,8 @@ export const artifact = {
     try {
       applyUpdate(doc, update, "seed");
       seeded = id;
+      seededKind = kind === "canvas" ? "canvas" : "page";
+      handed();
     } catch {
       // Not a Yjs update: the socket brings the doc instead.
     }
@@ -223,12 +296,12 @@ export const artifact = {
     syncPath = sync as string;
     status = "joined";
     connect();
+    handed();
     return joined;
   },
 
   /** The kind of artifact this page is, once known. */
-  kind: (): ArtifactRef["kind"] | null =>
-    joined?.kind ?? (seeded ? "page" : null),
+  kind: (): ArtifactRef["kind"] | null => joined?.kind ?? seededKind,
 
   /** Whether the doc holds the hub's state: embedded, or synced. */
   known: () => synced || seeded !== null,

@@ -1,6 +1,6 @@
 import { realpath, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
-import type { PreviewFrame, PreviewSource } from "@cawco/core";
+import type { ArtifactKind, PreviewFrame, PreviewSource } from "@cawco/core";
 import {
   downResponse,
   injectOverlay,
@@ -12,9 +12,11 @@ import {
   upgradePreview,
 } from "@cawco/core/preview-proxy";
 import type { ServerWebSocket, WebSocketHandler } from "bun";
+import { serveCanvas } from "./artifacts/canvas";
 import {
   ARTIFACT_PATH,
   type ArtifactSocket,
+  type artifactPicture,
   type artifactSend,
   type artifactSocket,
 } from "./artifacts/sync";
@@ -125,6 +127,13 @@ async function servePage(
     : new Response(body, { headers });
 }
 
+/** What the hub serves for an artifact it holds: a page's files, or a canvas's host page. */
+const HUB_SERVES: Record<ArtifactKind, typeof servePage> = {
+  page: servePage,
+  preview: servePage,
+  canvas: serveCanvas,
+};
+
 type ListenerSocket = PreviewSocket | ArtifactSocket;
 
 const isArtifact = (
@@ -141,24 +150,29 @@ const sessionNamed = (request: Request): string | null | undefined =>
   request.headers.get("x-cawco-preview") ??
   new Bun.CookieMap(request.headers.get("cookie") ?? "").get("cawco-preview");
 
-/** An artifact's sync socket, or its send (`/send`), for the session that owns it only. */
+/** An artifact's sync socket, its send (`/send`) or a canvas's picture (`/picture`), for the session that owns it only. */
 const joinArtifact = (
   request: Request,
   server: Bun.Server<ListenerSocket>,
-  [, artifactId, send]: RegExpMatchArray,
+  [, artifactId, action]: RegExpMatchArray,
   instanceId: string | null | undefined,
   artifacts: {
     ownerOf: (artifactId: string) => string | undefined;
+    picture: ReturnType<typeof artifactPicture>;
     send: ReturnType<typeof artifactSend>;
   }
 ): Response | Promise<Response> | undefined => {
   if (!instanceId || artifacts.ownerOf(artifactId) !== instanceId) {
     return new Response("This session has no such artifact.", { status: 404 });
   }
-  if (send) {
+  if (action === "/send") {
     return artifacts.send(request, instanceId, artifactId);
   }
-  return server.upgrade(request, { data: { artifactId } })
+  if (action === "/picture") {
+    return artifacts.picture(request, artifactId);
+  }
+  const screen = new URL(request.url).searchParams.get("screen") === "1";
+  return server.upgrade(request, { data: { artifactId, screen } })
     ? undefined
     : new Response("WebSocket upgrade failed", { status: 400 });
 };
@@ -168,6 +182,7 @@ export function startPreviewListener(
   artifacts: {
     /** The session that owns an artifact; undefined when there is none. */
     ownerOf: (artifactId: string) => string | undefined;
+    picture: ReturnType<typeof artifactPicture>;
     send: ReturnType<typeof artifactSend>;
     socket: ReturnType<typeof artifactSocket>;
     /** A page artifact's doc as one base64 Yjs update, embedded in its overlay tag. */
@@ -203,7 +218,7 @@ export function startPreviewListener(
         return new Response("No preview selected.", { status: 404 });
       }
       if ("page" in target.source) {
-        return servePage(
+        return HUB_SERVES[target.artifact.kind](
           target.artifact.id,
           new URL(request.url).pathname,
           artifacts.state

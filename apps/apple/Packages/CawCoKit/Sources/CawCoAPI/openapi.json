@@ -3643,8 +3643,45 @@
                     "type": "string",
                     "enum": [
                       "page",
-                      "preview"
+                      "preview",
+                      "canvas"
                     ]
+                  },
+                  "elements": {
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "rectangle",
+                            "ellipse",
+                            "diamond",
+                            "arrow",
+                            "line",
+                            "text",
+                            "frame"
+                          ]
+                        },
+                        "id": {
+                          "minLength": 1,
+                          "maxLength": 100,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ]
+                    }
+                  },
+                  "mermaid": {
+                    "minLength": 1,
+                    "maxLength": 20000,
+                    "type": "string"
                   },
                   "name": {
                     "pattern": "^[a-z0-9][a-z0-9-]{0,62}$",
@@ -3748,6 +3785,21 @@
                 }
               ]
             }
+          },
+          {
+            "name": "png",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
           }
         ],
         "operationId": "getApiInstancesByIdArtifactsByArtifact",
@@ -3838,6 +3890,52 @@
                         "path"
                       ]
                     }
+                  },
+                  "elements": {
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "additionalProperties": true,
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "rectangle",
+                            "ellipse",
+                            "diamond",
+                            "arrow",
+                            "line",
+                            "text",
+                            "frame"
+                          ]
+                        },
+                        "id": {
+                          "minLength": 1,
+                          "maxLength": 100,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ]
+                    }
+                  },
+                  "delete": {
+                    "minItems": 1,
+                    "maxItems": 500,
+                    "type": "array",
+                    "items": {
+                      "minLength": 1,
+                      "maxLength": 100,
+                      "type": "string"
+                    }
+                  },
+                  "mermaid": {
+                    "minLength": 1,
+                    "maxLength": 20000,
+                    "type": "string"
                   }
                 }
               }
@@ -3924,6 +4022,33 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/getApiArtifactsByArtifact200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/artifacts/{artifact}/export": {
+      "get": {
+        "parameters": [
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiArtifactsByArtifactExport",
+        "responses": {
+          "200": {
+            "description": "getApiArtifactsByArtifactExport 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CanvasExport"
                 }
               }
             }
@@ -25912,6 +26037,10 @@
           "name": {
             "type": "string"
           },
+          "note": {
+            "description": "A canvas made with nothing to draw says so.",
+            "type": "string"
+          },
           "opened": {
             "description": "Whether the session's panel shows it now, or why not.",
             "anyOf": [
@@ -25924,9 +26053,20 @@
               }
             ]
           },
+          "outline": {
+            "description": "A canvas's outline once drawn (core `canvasOutline`).",
+            "type": "string"
+          },
           "route": {
             "description": "Its live document on the hub's preview listener.",
             "type": "string"
+          },
+          "wrote": {
+            "description": "The element ids a canvas's create wrote.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -25940,16 +26080,61 @@
       "ArtifactRead": {
         "type": "object",
         "properties": {
+          "changed": {
+            "description": "A canvas's elements the person changed since `since` (or since your last read).",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "changedUnderYou": {
+            "description": "A canvas's elements you replaced that the person had changed since your last read: \"<id> changed under you\".",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "deleted": {
+            "description": "Elements an update deleted, and the ids it named that the canvas does not hold.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "id": {
             "type": "string"
           },
           "kind": {
             "$ref": "#/components/schemas/ArtifactKind"
           },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "name": {
             "type": "string"
           },
+          "outline": {
+            "description": "A canvas, as you read it: one line per element (core `canvasOutline`).",
+            "type": "string"
+          },
           "pageHash": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "pictureAt": {
+            "description": "When the canvas's latest picture was drawn; null when it has none.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "png": {
+            "description": "A canvas's latest picture, base64 PNG, when asked (`png: true`); null when it has none yet.",
             "type": [
               "null",
               "string"
@@ -25982,6 +26167,13 @@
           "workspace": {
             "description": "A port preview's workspace, whose dev server it is.",
             "type": "string"
+          },
+          "wrote": {
+            "description": "The element ids an update wrote.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -25993,6 +26185,173 @@
           "sentAt",
           "seq",
           "state"
+        ]
+      },
+      "CanvasExport": {
+        "description": "A canvas's export: the `.excalidraw` file, its outline and its latest picture.",
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "excalidraw"
+                ]
+              },
+              "version": {
+                "type": "number",
+                "enum": [
+                  2
+                ]
+              },
+              "source": {
+                "type": "string"
+              },
+              "elements": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CanvasElement"
+                }
+              },
+              "appState": {
+                "type": "object"
+              },
+              "files": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "appState",
+              "elements",
+              "files",
+              "source",
+              "type",
+              "version"
+            ]
+          },
+          "outline": {
+            "type": "string"
+          },
+          "png": {
+            "description": "Base64 PNG; null until a screen has drawn one.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "file",
+          "outline",
+          "png"
+        ]
+      },
+      "CanvasElement": {
+        "description": "An element as the outline reads it: Excalidraw's own fields, those it needs.",
+        "type": "object",
+        "properties": {
+          "boundElements": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "type"
+              ]
+            }
+          },
+          "containerId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "endBinding": {
+            "type": "object",
+            "properties": {
+              "elementId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "elementId"
+            ]
+          },
+          "groupIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "height": {
+            "type": "number"
+          },
+          "id": {
+            "type": "string"
+          },
+          "isDeleted": {
+            "type": "boolean"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            }
+          },
+          "startBinding": {
+            "type": "object",
+            "properties": {
+              "elementId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "elementId"
+            ]
+          },
+          "text": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number"
+          },
+          "x": {
+            "type": "number"
+          },
+          "y": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "height",
+          "id",
+          "type",
+          "width",
+          "x",
+          "y"
         ]
       },
       "PushOutcome": {

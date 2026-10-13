@@ -6,10 +6,17 @@
  * listener, beside the doc's socket (sync.ts `artifactSend`).
  */
 import { ARTIFACT_NAME, PREVIEW_START_PATH } from "@cawco/core";
+import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
 import { Elysia, t } from "elysia";
 import type { Operation } from "rfc6902";
 import { PAGE_LIMIT } from "../decision-page";
-import { ArtifactRefusal, type Artifacts } from "./service";
+import {
+  ArtifactRefusal,
+  type Artifacts,
+  type CanvasChange,
+  type PageChange,
+  type SkeletonElement,
+} from "./service";
 import { PATCH_LIMIT, WORKSPACE_ID } from "./tools";
 
 const refused = (error: unknown) => {
@@ -18,6 +25,20 @@ const refused = (error: unknown) => {
   }
   throw error;
 };
+
+/** A canvas's skeleton elements: a type, an optional id, and Excalidraw's own fields. */
+const skeletons = t.Array(
+  t.Object(
+    {
+      type: t.Union(SKELETON_TYPES.map((type) => t.Literal(type))),
+      id: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
+    },
+    { additionalProperties: true }
+  ),
+  { minItems: 1, maxItems: CANVAS_LIMITS.elementsPerCall }
+);
+
+const mermaid = t.String({ minLength: 1, maxLength: CANVAS_LIMITS.mermaid });
 
 const operation = t.Object({
   op: t.Union([
@@ -33,6 +54,37 @@ const operation = t.Object({
   value: t.Optional(t.Unknown()),
 });
 
+/** The one change an update names: a page's html or patch, a canvas's elements, delete or mermaid. */
+const changeOf = (body: {
+  delete?: string[];
+  elements?: SkeletonElement[];
+  html?: string;
+  mermaid?: string;
+  patch?: unknown[];
+}): PageChange | CanvasChange => {
+  const named = (
+    ["html", "patch", "elements", "delete", "mermaid"] as const
+  ).filter((key) => body[key] !== undefined);
+  if (named.length !== 1) {
+    throw new ArtifactRefusal(
+      400,
+      "Pass exactly one of html or patch (a page), or elements, delete or mermaid (a canvas)."
+    );
+  }
+  if (body.html !== undefined) {
+    return { html: body.html };
+  }
+  if (body.patch !== undefined) {
+    return { patch: body.patch as Operation[] };
+  }
+  if (body.elements !== undefined) {
+    return { elements: body.elements };
+  }
+  return body.delete === undefined
+    ? { mermaid: body.mermaid as string }
+    : { delete: body.delete };
+};
+
 export const artifactRoutes = (artifacts: Artifacts) =>
   new Elysia()
     .get("/api/instances/:id/artifacts", ({ params }) => {
@@ -46,7 +98,13 @@ export const artifactRoutes = (artifacts: Artifacts) =>
       "/api/instances/:id/artifacts",
       {
         body: t.Object({
-          kind: t.Union([t.Literal("page"), t.Literal("preview")]),
+          kind: t.Union([
+            t.Literal("page"),
+            t.Literal("preview"),
+            t.Literal("canvas"),
+          ]),
+          elements: t.Optional(skeletons),
+          mermaid: t.Optional(mermaid),
           name: t.String({ pattern: ARTIFACT_NAME.source }),
           html: t.Optional(t.String({ minLength: 1, maxLength: PAGE_LIMIT })),
           dir: t.Optional(
@@ -71,11 +129,19 @@ export const artifactRoutes = (artifacts: Artifacts) =>
     .get(
       "/api/instances/:id/artifacts/:artifact",
       {
-        query: t.Object({ since: t.Optional(t.Numeric({ minimum: 0 })) }),
+        query: t.Object({
+          since: t.Optional(t.Numeric({ minimum: 0 })),
+          png: t.Optional(t.BooleanString()),
+        }),
       },
       ({ params, query }) => {
         try {
-          return artifacts.read(params.id, params.artifact, query.since);
+          return artifacts.read(
+            params.id,
+            params.artifact,
+            query.since,
+            query.png === true
+          );
         } catch (error) {
           return refused(error);
         }
@@ -89,22 +155,22 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           patch: t.Optional(
             t.Array(operation, { minItems: 1, maxItems: PATCH_LIMIT })
           ),
+          elements: t.Optional(skeletons),
+          delete: t.Optional(
+            t.Array(t.String({ minLength: 1, maxLength: 100 }), {
+              minItems: 1,
+              maxItems: CANVAS_LIMITS.deletePerCall,
+            })
+          ),
+          mermaid: t.Optional(mermaid),
         }),
       },
       async ({ params, body }) => {
         try {
-          if ((body.html === undefined) === (body.patch === undefined)) {
-            throw new ArtifactRefusal(
-              400,
-              "Pass exactly one of html or patch."
-            );
-          }
           return await artifacts.update(
             params.id,
             params.artifact,
-            body.html === undefined
-              ? { patch: body.patch as Operation[] }
-              : { html: body.html }
+            changeOf(body)
           );
         } catch (error) {
           return refused(error);
@@ -125,6 +191,14 @@ export const artifactRoutes = (artifacts: Artifacts) =>
     .get("/api/artifacts/:artifact", ({ params }) => {
       try {
         return artifacts.find(params.artifact);
+      } catch (error) {
+        return refused(error);
+      }
+    })
+    // A canvas as a send carries it: the .excalidraw file, the outline, the picture.
+    .get("/api/artifacts/:artifact/export", ({ params }) => {
+      try {
+        return artifacts.export(params.artifact);
       } catch (error) {
         return refused(error);
       }

@@ -7,7 +7,7 @@
  * after {@link QUIET_MS} of quiet, at once while its turn runs, and at once
  * when the person sends.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   type AgentRow,
@@ -21,11 +21,24 @@ import {
   machineLabel,
   type PreviewSource,
 } from "@cawco/core";
+import {
+  CANVAS_LIMITS,
+  canvasOutline,
+  excalidrawFile,
+  NO_SCREEN,
+} from "@cawco/core/canvas";
 import { pageHash } from "@cawco/core/preview-proxy";
 import { applyPatch, type Operation } from "rfc6902";
 import { Doc, encodeStateAsUpdate } from "yjs";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
+import {
+  canvasEntries,
+  convertOnScreen,
+  deleteElements,
+  screenJoined,
+} from "./canvas";
 import type { ArtifactDocs } from "./docs";
+import { picturePath } from "./sync";
 
 /**
  * How long the person's changes wait for quiet before they go to the
@@ -48,15 +61,19 @@ export class ArtifactRefusal extends Error {
 }
 
 /**
- * What a create or a re-create names: a page from `html` or `dir`, or a
- * preview of `port` or `dir` on `machine`, opened at `path`; each kind's
- * fields only.
+ * What a create or a re-create names: a page from `html` or `dir`, a
+ * preview of `port` or `dir` on `machine`, opened at `path`, or a canvas
+ * drawn from skeleton `elements` or `mermaid`; each kind's fields only.
  */
 export interface ArtifactInput {
   dir?: string | undefined;
+  /** A canvas's skeleton elements (Excalidraw's `convertToExcalidrawElements`). */
+  elements?: SkeletonElement[] | undefined;
   html?: string | undefined;
-  kind: "page" | "preview";
+  kind: ArtifactKind;
   machine?: string | undefined;
+  /** A canvas's Mermaid diagram. */
+  mermaid?: string | undefined;
   name: string;
   path?: string | undefined;
   port?: number | undefined;
@@ -68,21 +85,51 @@ export interface ArtifactInput {
   workspace?: string | undefined;
 }
 
-/** The fields only the other kind takes, named in its refusal. */
-const OTHER_KIND = {
-  page: ["port", "path", "machine", "workspace"],
-  preview: ["html"],
+/** A skeleton element as the agent writes it: a type, an optional id, and Excalidraw's own fields. */
+export type SkeletonElement = { id?: string; type: string } & Record<
+  string,
+  unknown
+>;
+
+/** What `artifact_update` changes on a canvas: exactly one of these. */
+export type CanvasChange =
+  | { elements: SkeletonElement[] }
+  | { delete: string[] }
+  | { mermaid: string };
+
+/** What `artifact_update` changes on a page: exactly one of these. */
+export type PageChange = { html: string } | { patch: Operation[] };
+
+/** The fields each kind takes, and what its refusal says it takes. */
+const KIND_FIELDS = {
+  page: { fields: ["html", "dir"], takes: "html or dir" },
+  preview: {
+    fields: ["port", "dir", "path", "machine", "workspace"],
+    takes: "port or dir",
+  },
+  canvas: { fields: ["elements", "mermaid"], takes: "elements or mermaid" },
 } as const;
 
+const INPUT_FIELDS = [
+  "html",
+  "dir",
+  "port",
+  "path",
+  "machine",
+  "workspace",
+  "elements",
+  "mermaid",
+] as const;
+
 const strayFields = (input: ArtifactInput): string | null => {
-  const stray = OTHER_KIND[input.kind].filter(
-    (key) => input[key] !== undefined
+  const own: readonly string[] = KIND_FIELDS[input.kind].fields;
+  const stray = INPUT_FIELDS.filter(
+    (key) => input[key] !== undefined && !own.includes(key)
   );
   if (stray.length === 0) {
     return null;
   }
-  const other = input.kind === "page" ? "a preview" : "a page";
-  return `A ${input.kind} takes ${input.kind === "page" ? "html or dir" : "port or dir"}; ${stray.join(", ")} ${stray.length === 1 ? "is" : "are"} for ${other}.`;
+  return `A ${input.kind} takes ${KIND_FIELDS[input.kind].takes}; ${stray.join(", ")} ${stray.length === 1 ? "is" : "are"} not for a ${input.kind}.`;
 };
 
 /** Why a preview's fields do not go together, or nothing. */
@@ -103,10 +150,23 @@ const previewProblem = (input: ArtifactInput): string | null => {
 type ReadEntry = ChoiceEntry & { earlierRevision?: true };
 
 export interface ArtifactRead {
+  /** A canvas's elements the person changed since `since` (or since your last read). */
+  changed?: string[];
+  /** A canvas's elements you replaced that the person had changed since your last read: "<id> changed under you". */
+  changedUnderYou?: string[];
+  /** Elements an update deleted, and the ids it named that the canvas does not hold. */
+  deleted?: string[];
   id: string;
   kind: ArtifactKind;
+  missing?: string[];
   name: string;
+  /** A canvas, as you read it: one line per element (core `canvasOutline`). */
+  outline?: string;
   pageHash: string | null;
+  /** When the canvas's latest picture was drawn; null when it has none. */
+  pictureAt?: string | null;
+  /** A canvas's latest picture, base64 PNG, when asked (`png: true`); null when it has none yet. */
+  png?: string | null;
   /** Keys that changed since `since` and are no longer there. */
   removed?: string[];
   revision: number;
@@ -117,16 +177,32 @@ export interface ArtifactRead {
   state: Record<string, ReadEntry>;
   /** A port preview's workspace, whose dev server it is. */
   workspace?: string;
+  /** The element ids an update wrote. */
+  wrote?: string[];
 }
 
 export interface Created {
   id: string;
   kind: ArtifactKind;
   name: string;
+  /** A canvas made with nothing to draw says so. */
+  note?: string;
   /** Whether the session's panel shows it now, or why not. */
   opened: true | string;
+  /** A canvas's outline once drawn (core `canvasOutline`). */
+  outline?: string;
   /** Its live document on the hub's preview listener. */
   route: string;
+  /** The element ids a canvas's create wrote. */
+  wrote?: string[];
+}
+
+/** A canvas's export: the `.excalidraw` file, its outline and its latest picture. */
+export interface CanvasExport {
+  file: ReturnType<typeof excalidrawFile>;
+  outline: string;
+  /** Base64 PNG; null until a screen has drawn one. */
+  png: string | null;
 }
 
 const routeOf = (id: string) => `/__cawco/artifact/${id}`;
@@ -279,7 +355,7 @@ export interface ArtifactServiceDeps {
   ) => Promise<
     { html: string } | { refused: string; status: ArtifactRefusal["status"] }
   >;
-  /** Where page artifacts' files are kept: `<root>/<id>/index.html`. */
+  /** Where artifacts' files are kept: a page's `<root>/<id>/index.html`, a canvas's `<root>/<id>/picture.png`. */
   root: string;
   /**
    * What a send applies before the session hears it (setup.ts
@@ -551,6 +627,201 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return true;
   };
 
+  /*
+   * A canvas (Projects spec §5.10, D24–D25). Its `deliveredSeq` is the seq
+   * the session last read it at (a canvas delivers no picks): what "changed
+   * since your last read" and "changed under you" are measured from.
+   */
+
+  /** The canvas's latest picture as base64; null until a screen drew one. */
+  const pictureOf = (id: string): string | null => {
+    try {
+      return readFileSync(picturePath(deps.root, id)).toString("base64");
+    } catch {
+      return null;
+    }
+  };
+
+  /** The elements the person changed after `since` that the canvas still holds. */
+  const personChangedAfter = (
+    row: ArtifactRow,
+    since: number,
+    present: Set<string>
+  ): string[] =>
+    Object.entries(row.changes)
+      .filter(
+        ([id, change]) =>
+          change.by === "person" && change.seq > since && present.has(id)
+      )
+      .map(([id]) => id);
+
+  /** A canvas as the session reads it, which counts as its read. */
+  const readCanvas = (
+    row: ArtifactRow,
+    since?: number,
+    png = false
+  ): ArtifactRead => {
+    const entries = canvasEntries(docs, row.id);
+    const present = new Set(entries.map((entry) => entry.el.id));
+    const meta = docs.doc(row.id).getMap("meta");
+    db.update(row.id, { deliveredSeq: row.seq });
+    return {
+      id: row.id,
+      kind: row.kind,
+      name: row.name,
+      revision: row.revision,
+      pageHash: null,
+      sentAt: null,
+      seq: row.seq,
+      state: {},
+      outline: canvasOutline(entries.map((entry) => entry.el)),
+      changed: personChangedAfter(row, since ?? row.deliveredSeq, present),
+      pictureAt: (meta.get("pictureAt") as string | null | undefined) ?? null,
+      ...(png ? { png: pictureOf(row.id) } : {}),
+    };
+  };
+
+  /** What a canvas's create or update draws: skeleton elements or Mermaid, converted on a screen; the ids written. */
+  const draw = async (
+    row: ArtifactRow,
+    change: { elements: SkeletonElement[] } | { mermaid: string }
+  ): Promise<string[]> => {
+    if ("elements" in change) {
+      if (change.elements.length > CANVAS_LIMITS.elementsPerCall) {
+        throw new ArtifactRefusal(
+          413,
+          `One call writes at most ${CANVAS_LIMITS.elementsPerCall} elements; send the rest in another.`
+        );
+      }
+      return await convertOnScreen(docs, row.id, "elements", {
+        elements: change.elements,
+      });
+    }
+    if (change.mermaid.length > CANVAS_LIMITS.mermaid) {
+      throw new ArtifactRefusal(
+        413,
+        `Mermaid is at most ${CANVAS_LIMITS.mermaid} characters; split the diagram.`
+      );
+    }
+    return await convertOnScreen(docs, row.id, "mermaid", {
+      mermaid: change.mermaid,
+    });
+  };
+
+  /**
+   * Makes a canvas (or opens the one of that name) and shows it; with
+   * elements or Mermaid, waits for a screen to join and draws them.
+   */
+  const createCanvas = async (
+    instance: InstanceRow,
+    input: ArtifactInput
+  ): Promise<Created> => {
+    if (input.elements !== undefined && input.mermaid !== undefined) {
+      throw new ArtifactRefusal(
+        400,
+        "A canvas takes elements or mermaid, not both."
+      );
+    }
+    const now = new Date();
+    const before = db.byName(instance.id, "canvas", input.name);
+    const row =
+      (before && db.update(before.id, { updatedAt: now })) ??
+      db.create({
+        id: crypto.randomUUID(),
+        instanceId: instance.id,
+        projectId: instance.projectId ?? null,
+        kind: "canvas",
+        name: input.name,
+        machineId: null,
+        // The hub serves it, as it serves a page.
+        source: { page: input.name },
+        revision: 1,
+        seq: 0,
+        changes: {},
+        deliveredSeq: 0,
+        createdAt: now,
+        updatedAt: now,
+        shownAt: null,
+      });
+    stampMeta(row, null);
+    const opened = await show(row);
+    const made = {
+      id: row.id,
+      kind: row.kind,
+      name: row.name,
+      route: routeOf(row.id),
+      opened,
+    };
+    if (input.elements === undefined && input.mermaid === undefined) {
+      const { outline } = readCanvas(db.get(row.id) as ArtifactRow);
+      return {
+        ...made,
+        outline,
+        ...(outline
+          ? {}
+          : {
+              note: "The canvas is empty. Draw on it with artifact_update (elements or mermaid), or wait for the person to draw.",
+            }),
+      };
+    }
+    if (!(await screenJoined(docs, row.id, CANVAS_LIMITS.convertMs))) {
+      throw new ArtifactRefusal(
+        503,
+        `The canvas ${row.name} is made (id ${row.id}) and empty. ${NO_SCREEN}`
+      );
+    }
+    const wrote = await draw(
+      row,
+      input.elements === undefined
+        ? { mermaid: input.mermaid as string }
+        : { elements: input.elements }
+    );
+    return {
+      ...made,
+      wrote,
+      outline: readCanvas(db.get(row.id) as ArtifactRow).outline,
+    };
+  };
+
+  /** A canvas's change: elements added or replaced by id, ids deleted, or Mermaid appended. */
+  const updateCanvas = async (
+    row: ArtifactRow,
+    change: CanvasChange
+  ): Promise<ArtifactRead> => {
+    if ("delete" in change) {
+      if (change.delete.length > CANVAS_LIMITS.deletePerCall) {
+        throw new ArtifactRefusal(
+          413,
+          `One call deletes at most ${CANVAS_LIMITS.deletePerCall} elements.`
+        );
+      }
+      const { deleted, missing } = deleteElements(docs, row.id, change.delete);
+      return {
+        ...readCanvas(db.get(row.id) as ArtifactRow),
+        deleted,
+        ...(missing.length > 0 ? { missing } : {}),
+      };
+    }
+    // Replacing what the person changed since the session last read it.
+    const present = new Set(
+      canvasEntries(docs, row.id).map((entry) => entry.el.id)
+    );
+    const underYou =
+      "elements" in change
+        ? personChangedAfter(row, row.deliveredSeq, present).filter((id) =>
+            change.elements.some((element) => element.id === id)
+          )
+        : [];
+    const wrote = await draw(row, change);
+    return {
+      ...readCanvas(db.get(row.id) as ArtifactRow),
+      wrote,
+      ...(underYou.length > 0
+        ? { changedUnderYou: underYou.map((id) => `${id} changed under you`) }
+        : {}),
+    };
+  };
+
   return {
     personChanged,
 
@@ -594,6 +865,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const stray = strayFields(input);
       if (stray) {
         throw new ArtifactRefusal(400, stray);
+      }
+      if (input.kind === "canvas") {
+        return await createCanvas(instance, input);
       }
       let source: PreviewSource = { page: input.name };
       let machineId: string | null = null;
@@ -650,15 +924,28 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     /**
      * New HTML for a page (its revision moves and every open view morphs to
      * it, its state kept), or a JSON Patch (RFC 6902) over its `state` applied as one
-     * transaction; the state after the change.
+     * transaction; the state after the change. A canvas's elements, deletes
+     * or Mermaid; its outline after the change.
      */
     update: async (
       instanceId: string,
       id: string,
-      change: { html: string } | { patch: Operation[] }
+      change: PageChange | CanvasChange
     ): Promise<ArtifactRead> => {
       const instance = sessionOf(instanceId);
       let row = own(instance, id);
+      const forCanvas = !("html" in change || "patch" in change);
+      if (forCanvas !== (row.kind === "canvas")) {
+        throw new ArtifactRefusal(
+          409,
+          row.kind === "canvas"
+            ? `${row.name} is a canvas: it takes elements, delete or mermaid.`
+            : `${row.name} is a ${row.kind}: elements, delete and mermaid are for a canvas.`
+        );
+      }
+      if (!("html" in change || "patch" in change)) {
+        return await updateCanvas(row, change);
+      }
       if ("html" in change) {
         if (row.kind !== "page") {
           throw new ArtifactRefusal(
@@ -710,8 +997,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       return read(db.get(row.id) as ArtifactRow);
     },
 
-    /** The state, meta and sentAt; with no id, the session's newest artifact. */
-    read: (instanceId: string, id?: string, since?: number): ArtifactRead => {
+    /**
+     * The state, meta and sentAt; a canvas's outline and what the person
+     * changed, with its picture when `png`; with no id, the session's
+     * newest artifact.
+     */
+    read: (
+      instanceId: string,
+      id?: string,
+      since?: number,
+      png = false
+    ): ArtifactRead => {
       const instance = sessionOf(instanceId);
       const row =
         id === undefined ? db.ofInstance(instance.id)[0] : own(instance, id);
@@ -721,7 +1017,32 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           "This session has made no artifact yet."
         );
       }
-      return read(row, since);
+      return row.kind === "canvas"
+        ? readCanvas(row, since, png)
+        : read(row, since);
+    },
+
+    /** A canvas's `.excalidraw` file, its outline and its latest picture: what a send carries. */
+    export: (id: string): CanvasExport => {
+      const row = db.get(id);
+      if (!row) {
+        throw new ArtifactRefusal(404, `No artifact ${id} on this hub.`);
+      }
+      if (row.kind !== "canvas") {
+        throw new ArtifactRefusal(
+          409,
+          `${row.name} is a ${row.kind}: only a canvas exports.`
+        );
+      }
+      const elements = canvasEntries(docs, id).map((entry) => entry.el);
+      return {
+        file: excalidrawFile(
+          elements,
+          docs.doc(id).getMap("files").toJSON() as Record<string, unknown>
+        ),
+        outline: canvasOutline(elements),
+        png: pictureOf(id),
+      };
     },
 
     /** Brings an artifact to the front of its session's panel: true, or why not. */

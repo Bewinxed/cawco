@@ -1,0 +1,334 @@
+/* The canvas's host page (DESIGN.md, Artifact panel, canvas and ink), on
+   the decision-page kit's tokens: the rail's two groups in the panel
+   material, Excalidraw's own chrome hidden, the canvas on surface-raised
+   with our grid in code-bg, and the empty recipe. */
+@import "../../../hub/skills/decision-page/kit/tokens.css";
+
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body,
+#canvas-root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: var(--surface-raised);
+  color: var(--ink-strong);
+  font: var(--type-body);
+}
+
+/* The canvas's ground and grid: Excalidraw draws on a clear canvas over
+   them, and the grid moves with its scroll and zoom (host.tsx). */
+.canvas-host {
+  --grid: 20px;
+  --grid-x: 0px;
+  --grid-y: 0px;
+  position: relative;
+  height: 100%;
+  background-color: var(--surface-raised);
+  background-image:
+    linear-gradient(to right, var(--code-bg) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--code-bg) 1px, transparent 1px);
+  background-position: var(--grid-x) var(--grid-y);
+  background-size: var(--grid) var(--grid);
+}
+
+.canvas-host .excalidraw {
+  --default-bg-color: transparent;
+  background: transparent;
+}
+
+/* Excalidraw's own chrome, the desk's and (in a narrow frame) the mobile
+   layout's top and bottom bars: the rail is ours. */
+.canvas-host .excalidraw .layer-ui__wrapper,
+.canvas-host .excalidraw .App-top-bar,
+.canvas-host .excalidraw .App-bottom-bar {
+  display: none !important;
+}
+
+/* ---- The rail: two floating groups, 11px in from the canvas's edges. */
+.rail {
+  position: absolute;
+  z-index: 4;
+  top: var(--space-3);
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-lg);
+  background: var(--material-panel);
+  backdrop-filter: blur(calc(var(--material-blur) * 1.4))
+    saturate(var(--material-saturate));
+  box-shadow: var(--shadow-tile);
+
+  @media (prefers-reduced-transparency: reduce) {
+    background: var(--surface-raised);
+    backdrop-filter: none;
+  }
+}
+
+.rail-tools {
+  left: var(--space-3);
+}
+
+.rail-view {
+  right: var(--space-3);
+}
+
+/* A group's height: its box, its inset each side, its edge. */
+.canvas-host {
+  --rail-box: 34px;
+  --rail-h: calc(var(--rail-box) + 2 * var(--space-2) + 2px);
+
+  @media (pointer: coarse) {
+    --rail-box: var(--c-btn-h-lg);
+  }
+}
+
+/* Too narrow for the two groups side by side: the view's stands under the
+   tools'. Our call; DESIGN.md places them only for the desk and the phone. */
+@media (max-width: 559px) {
+  .rail-view {
+    top: calc(var(--space-3) + var(--rail-h) + var(--space-2));
+  }
+}
+
+/* A phone: the groups stand at the foot, above the field, and their menus
+   open upward. */
+@media (max-width: 639px) and (pointer: coarse) {
+  .rail {
+    top: auto;
+    bottom: var(--space-3);
+  }
+  .rail-view {
+    bottom: calc(var(--space-3) + var(--rail-h) + var(--space-2));
+  }
+  .rail .rail-menu {
+    top: auto;
+    bottom: calc(100% + var(--space-2) + 1px);
+    transform-origin: bottom left;
+  }
+  .rail-view .rail-menu {
+    transform-origin: bottom right;
+  }
+}
+
+/* A tool: 34px at the concentric 5px radius (the group's 12px less its
+   7px inset), the chosen one on surface-fill; 44px under a finger. */
+.rail-box {
+  display: grid;
+  width: var(--rail-box);
+  height: var(--rail-box);
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-control) var(--ease-out),
+    color var(--dur-control) var(--ease-out),
+    scale var(--dur-control) var(--ease-out);
+
+  &[data-chosen] {
+    background: var(--surface-fill);
+    color: var(--ink-strong);
+  }
+  &:active {
+    scale: 0.97;
+  }
+  &:focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+  &:focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover:not([data-chosen]) {
+      background: var(--surface-hover);
+      color: var(--ink-strong);
+    }
+  }
+}
+
+/* The diamond is the square stood on its corner. */
+[data-shape="diamond"] svg {
+  rotate: 45deg;
+  scale: 0.8;
+}
+
+/* ---- A rail's menu: the kit's floating surface (kit-pop) under its box. */
+.rail-menu-holder {
+  position: relative;
+}
+
+.rail-menu {
+  position: absolute;
+  top: calc(100% + var(--space-2) + 1px);
+  left: calc(-1 * (var(--space-2) + 1px));
+  display: grid;
+  min-width: 180px;
+  padding: 6px;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-overlay);
+  color: var(--ink-strong);
+  transform-origin: top left;
+
+  @media (prefers-reduced-motion: no-preference) {
+    animation: rail-menu-in var(--dur-pop) var(--ease-drawer);
+  }
+}
+
+.rail-view .rail-menu {
+  right: calc(-1 * (var(--space-2) + 1px));
+  left: auto;
+  transform-origin: top right;
+}
+
+@keyframes rail-menu-in {
+  from {
+    opacity: 0;
+    translate: 0 calc(-1 * var(--pop-rise));
+    scale: var(--pop-scale);
+  }
+}
+
+/* A menu item: 32px (44px under a finger), 8px radius, the label role,
+   10px in, a 16px glyph. */
+.rail-item {
+  display: flex;
+  height: 32px;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-strong);
+  cursor: pointer;
+  font: var(--type-label);
+  text-align: start;
+
+  & svg {
+    flex: none;
+    color: var(--ink-muted);
+  }
+  &[aria-checked="true"] {
+    color: var(--selected-ink);
+
+    & svg {
+      color: var(--selected-ink);
+    }
+  }
+  &:focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: var(--focus-ring-inset);
+  }
+  &:focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      background: var(--surface-hover);
+    }
+  }
+  @media (pointer: coarse) {
+    height: var(--c-btn-h-lg);
+  }
+}
+
+.rail-item-label {
+  flex: 1;
+}
+
+.rail-item-hint {
+  color: var(--ink-muted);
+  font: var(--type-meta);
+}
+
+/* ---- The empty canvas: the empty recipe, centred. Only its action takes
+   a press; the canvas under it stays drawable. */
+.canvas-empty {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  display: grid;
+  padding-block: var(--space-6);
+  pointer-events: none;
+  place-items: center;
+}
+
+.canvas-empty-body {
+  display: grid;
+  max-width: 60ch;
+  justify-items: center;
+  gap: var(--space-2);
+  text-align: center;
+}
+
+.canvas-empty-mark {
+  display: grid;
+  color: var(--ink-muted);
+}
+
+.canvas-empty-title {
+  margin: 0;
+  color: var(--ink-strong);
+  font: var(--type-title);
+}
+
+.canvas-empty-line {
+  margin: 0;
+  color: var(--ink-muted);
+  font: var(--type-body);
+}
+
+/* The kit's outline button at sm: 30px, 11px in, 10px radius. */
+.canvas-empty-action {
+  height: var(--c-btn-h-sm);
+  margin-top: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-button-outline);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  color: var(--ink-strong);
+  cursor: pointer;
+  font: var(--type-button);
+  pointer-events: auto;
+  transition:
+    background-color var(--dur-control) var(--ease-out),
+    scale var(--dur-control) var(--ease-out);
+
+  &:active {
+    scale: 0.97;
+  }
+  &:focus-visible {
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: var(--focus-ring-offset);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      background: var(--surface-hover);
+    }
+  }
+  @media (pointer: coarse) {
+    position: relative;
+
+    &::after {
+      position: absolute;
+      inset: calc((var(--c-btn-h-sm) - var(--c-btn-h-lg)) / 2);
+      content: "";
+    }
+  }
+}

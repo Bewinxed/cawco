@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
+import { canvasHostAssets } from "../packages/core/src/canvas-host";
 import { nativeTarball, stageNativeClaude } from "./binary/native-tarball";
 
 export const PINNED_BUN = "1.4.2";
@@ -237,6 +238,8 @@ export async function buildBinary(options: {
     ["workflow/workflow-program.ts", join(work, "workflow-program.ts")],
     ["workflow/workflow.ts", join(work, "workflow.ts")],
     ["preview/overlay.js", join(work, "overlay.js")],
+    // A canvas's host page, its bundle and Excalidraw's fonts (core canvas-host.ts).
+    ...(await canvasHostAssets(join(work, "canvas"), filesUnder)),
     // Run as plain Bun as each workspace's judge, never as cawco (boundary.ts).
     ["boundary/judge.ts", join(ROOT, "packages/agent/src/boundary-judge.ts")],
     // Run as plain Bun by a macOS workspace's `log` shim (boundary.ts).

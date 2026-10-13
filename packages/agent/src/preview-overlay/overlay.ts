@@ -20,7 +20,7 @@ const tag = document.currentScript as HTMLScriptElement | null;
 let pageHash = tag?.dataset.pageHash ?? "";
 // A page the hub serves carries its artifact's doc, so it is filled before it paints.
 if (tag?.dataset.artifact && tag.dataset.state) {
-  artifact.seed(tag.dataset.artifact, tag.dataset.state);
+  artifact.seed(tag.dataset.artifact, tag.dataset.state, tag.dataset.kind);
 }
 // Before any listener that stops a press: a morph waits for every pointer up.
 watchPointers();
