@@ -55,6 +55,8 @@ const TITLE = "Seen probe";
 /** A log line's stamp, process and category, up to what it says. */
 const LOG_HEAD = /^.*\] /;
 const TRAILING_SLASH = /\/$/;
+/** The app's socket: `heard <s> seconds after the heartbeat`. */
+const HEARD_AFTER = /heard ([\d.]+) seconds after the heartbeat/;
 /** A SQLite column type that takes a number. */
 const NUMERIC = /INT|REAL|NUM/i;
 
@@ -391,19 +393,28 @@ async function run(kit: Kit): Promise<void> {
     const hubFrom = (await presence()).length;
     const appFrom = heard.length;
     const readStart = Date.now();
+    /** Where the reading is, on its clock: a stall is placed by these. */
+    const phase = (what: string) =>
+      console.log(
+        `  +${((Date.now() - readStart) / 1000).toFixed(1)}s ${what}`
+      );
     const scrollUntil = readStart + READ_MS / 3;
+    phase("scrolling");
     while (Date.now() < scrollUntil) {
       // biome-ignore lint/performance/noAwaitInLoops: one gesture after another
       await swipe(300, 650);
       await swipe(650, 300);
     }
+    phase("scrolled; the composer tapped");
     await tap(field, "the composer");
     await pause(1500);
+    phase("reading the keyboard");
     const keyboard = (await tree()).some(
       (n) =>
         n.role === "AXKeyboard" || n.label === "space" || n.label === "Return"
     );
     kit.check("the keyboard is up", keyboard, "the composer tapped");
+    phase("keyboard up");
     const keyboardTurn = turnInFront("keyboard up", true);
     await pause(Math.max(0, readStart + (2 * READ_MS) / 3 - Date.now()));
     await keyboardTurn;
@@ -418,6 +429,7 @@ async function run(kit: Kit): Promise<void> {
     const opener = nodes.find(
       (n) => n.label?.includes(TITLE) && (n.frame?.y ?? 999) < 200
     );
+    phase("the session's tab tapped");
     await tap(opener, "the session's tab");
     await pause(1500);
     const card = await tree();
@@ -447,6 +459,24 @@ async function run(kit: Kit): Promise<void> {
       all.some((l) => l.endsWith(`active on ${session}`)) &&
         during.every((l) => !(l.includes("inactive") || l.includes("lapsed"))),
       [...all.slice(-3), ...during].join(" | ") || "no [presence] line"
+    );
+    // The app's main run loop kept up: its socket's own heartbeat was heard
+    // within seconds (a stall there stops the beat's timer with it).
+    const answers = heard
+      .slice(appFrom)
+      .map((h) => ({ h, s: Number(HEARD_AFTER.exec(h.line)?.[1]) }))
+      .filter(({ s }) => Number.isFinite(s));
+    const slowest = Math.max(0, ...answers.map(({ s }) => s));
+    kit.check(
+      "the app's main run loop kept up through it",
+      slowest < 5,
+      `${answers.length} heartbeats, the slowest heard ${slowest.toFixed(1)}s after${answers
+        .filter(({ s }) => s >= 5)
+        .map(
+          ({ h, s }) =>
+            `; ${s.toFixed(0)}s at +${((h.at - readStart) / 1000).toFixed(0)}s`
+        )
+        .join("")}`
     );
     kit.check(
       "the app's beat went out every 30 s through it",
