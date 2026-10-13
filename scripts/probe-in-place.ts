@@ -43,7 +43,11 @@
  *   (g) a person's Stop, a parent's stop_delegate and a SIGTERM from outside
  *       CawCo each end the stand-in's CLI with exit 143, and each reads as
  *       what it was ("Stopped by a person", "Stopped by <parent>", "Ended
- *       from outside CawCo (SIGTERM)"): no failure shown, no bare exit code.
+ *       from outside CawCo (SIGTERM)"): no failure shown, no bare exit code;
+ *   (h) the CLI crashing on its own (exit 1, "fatal: …" on stderr) is a
+ *       failure in its own words, its row failed, and a send starts it
+ *       again with its conversation; a SIGKILL from outside CawCo reads
+ *       "Ended from outside CawCo (SIGKILL)" and is no failure.
  */
 import assert from "node:assert/strict";
 import { cpSync, existsSync, readdirSync, writeFileSync } from "node:fs";
@@ -627,6 +631,22 @@ if (role === "sessiond") {
     extra: object = {}
   ) =>
     entry(key, kind, text, { timestamp: new Date().toISOString(), ...extra });
+  /** What the SDK says of a CLI that exited on SIGTERM: Claude Code catches it and exits 143. */
+  const TERM_EXIT = "Claude Code process exited with code 143";
+  /** The SDK's word for how a CLI child ended, from sessiond's listing of it. */
+  const sdkWord = (
+    proc: { exitCode?: number; signal?: string } | undefined
+  ): string => {
+    if (proc?.signal && proc.signal !== "SIGTERM") {
+      return `Claude Code process terminated by signal ${proc.signal}`;
+    }
+    if (!proc?.signal && proc?.exitCode) {
+      return `Claude Code process exited with code ${proc.exitCode}`;
+    }
+    return TERM_EXIT;
+  };
+  /** What the stand-in's CLI says on stderr as it crashes on a `crash-turn`. */
+  const CRASH_SAID = "fatal: the stand-in's CLI crashed on purpose";
   const session = (
     ctx: import("../packages/agent/src/harness").HarnessContext,
     key: string,
@@ -645,26 +665,22 @@ if (role === "sessiond") {
             client
               .list()
               .then(({ procs }) => {
-                if (
-                  !procs.some(
-                    (proc) =>
-                      proc.procId === ctx.instanceId &&
-                      proc.alive &&
-                      proc.pid === pid
-                  )
-                ) {
-                  ended();
+                const mine = procs.find(
+                  (proc) => proc.procId === ctx.instanceId && proc.pid === pid
+                );
+                if (!mine?.alive) {
+                  ended(sdkWord(mine));
                 }
               })
               .catch(() => undefined);
           }, 300);
-    const ended = (): void => {
+    const ended = (said = TERM_EXIT): void => {
       if (over) {
         return;
       }
       over = true;
       clearInterval(watching);
-      processEnded(ctx, new Error("Claude Code process exited with code 143"));
+      processEnded(ctx, new Error(said));
       ctx.closed?.();
     };
     return {
@@ -744,6 +760,18 @@ if (role === "sessiond") {
             transcript(key),
             `${JSON.stringify(stamped(key, "user", text, { uuid: message.uuid }))}\n`
           );
+          // Its CLI crashes in this turn: it exits 1, its stderr saying why,
+          // as the SDK reports such an end. Said before its child is gone, so
+          // the watch above does not read the child's end as a kill.
+          if (text.includes("crash-turn")) {
+            ctx.busy(true);
+            await log(`CRASH ${ctx.instanceId}`);
+            ended(
+              `Claude Code process exited with code 1. stderr: ${CRASH_SAID}`
+            );
+            await endProc(client, ctx.instanceId);
+            return;
+          }
           if (text.includes("ask-question")) {
             // Its turn is open on a question to the person, as a real one is.
             ctx.busy(true);
@@ -1900,6 +1928,94 @@ if (role === "sessiond") {
     );
     quote("(g) the rows", statuses);
     quote("(g) failures a dashboard was shown for them", shown);
+
+    // (h) The CLI crashing on its own (exit 1, a reason on stderr), and a
+    // SIGKILL nobody in CawCo sent. The crash is a failure in the CLI's own
+    // words, never an exit code, and a send starts the session again; the
+    // kill is no failure, and says it came from outside CawCo.
+    const h1 = crypto.randomUUID();
+    const h2 = crypto.randomUUID();
+    spawn(h1, b);
+    spawn(h2, b);
+    await running(h1);
+    await running(h2);
+    const h1Session = (await row(h1))?.sessionId;
+    personSays(h1, "crash-turn: one more piece of work.");
+    await until(
+      "H1's crash shown",
+      () => Promise.resolve(failuresShown),
+      (now) => now.some((one) => one.startsWith(h1))
+    );
+    const h1Failed = await until(
+      "H1 reads failed",
+      () => row(h1),
+      (one) => one?.status === "error"
+    );
+    const crashShown = failuresShown.filter((one) => one.startsWith(h1));
+    assert.ok(
+      crashShown.some(
+        (one) =>
+          one.includes(
+            "Claude Code stopped on its own: fatal: the stand-in's CLI crashed on purpose"
+          ) && one.includes("A message to it starts it again")
+      ),
+      JSON.stringify(crashShown)
+    );
+    assert.ok(
+      crashShown.every((one) => !one.includes("exited with code")),
+      JSON.stringify(crashShown)
+    );
+    personSays(h1, "Carry on after the crash.");
+    await until(
+      "H1 started again by a send, its conversation resumed",
+      eventLog,
+      (text) =>
+        lines(text, `SPAWN ${h1} `).some(
+          (one) => one.includes(" resume") && one.includes(`${h1Session}`)
+        ) &&
+        lines(text, `TURN ${h1}`).some((one) =>
+          one.includes("Carry on after the crash.")
+        )
+    );
+    const h1After = (await row(h1)) as Row;
+    process.kill(
+      Number(await readFile(join(dir, `pid-${h2}`), "utf8")),
+      "SIGKILL"
+    );
+    const h2Lines = await until(
+      'H2\'s end said as "Ended from outside CawCo (SIGKILL)"',
+      () => endedLine(h2),
+      (seen) => seen.includes("Ended from outside CawCo (SIGKILL)")
+    );
+    await delay(2000);
+    const h2Shown = failuresShown.filter((one) => one.startsWith(h2));
+    assert.deepEqual(h2Shown, [], "the kill was shown as no failure");
+    const h2Row = (await row(h2)) as Row;
+    assert.notEqual(h2Row.status, "error", "the killed session isn't failed");
+    const log8 = await hubLog();
+    assert.ok(
+      !log8.includes("exited with code"),
+      "no bare exit code in the hub's log"
+    );
+    quote("(h) the crash as a dashboard is shown it", crashShown);
+    quote("(h) the crashed row, then after a send", [
+      `${titled(h1)} ${h1Failed?.status}`,
+      `${titled(h1)} ${h1After.status}`,
+    ]);
+    quote(
+      "(h) the stand-in: what H1's processes did",
+      lines(await eventLog(), h1).filter((one) => !one.includes("Turn "))
+    );
+    quote("(h) the SIGKILL's transcript line", h2Lines);
+    quote(
+      "(h) the hub log",
+      lines(log8, "").filter(
+        (one) =>
+          [h1, h2].some((id) => one.includes(titled(id))) &&
+          !one.startsWith("[meaning]")
+      )
+    );
+    quote("(h) the killed row", [`${titled(h2)} ${h2Row.status}`]);
 
     // A person's "Continue in new session" of P, as the dashboard asks it.
     const byPerson = (await api(`/api/instances/${p}/continue`, {
