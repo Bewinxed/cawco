@@ -319,6 +319,14 @@ const promotedFolder = (name: string): string => {
 
 const TRAILING_DOT = /\.$/;
 
+/** A promote git refused, in WORDS.md's error formula: what failed, and git's reason. */
+const notCommitted = (name: string, error: FolderRefusal): ArtifactRefusal =>
+  new ArtifactRefusal(
+    error.status === 413 || error.status === 409 ? error.status : 503,
+    `${name} could not be committed: ${error.message.replace(TRAILING_DOT, "")}.`,
+    { cause: error }
+  );
+
 /** A promoted file's text: JSON, two-space indented, ending on a newline, as a repository keeps it. */
 const promotedJson = (value: unknown): string =>
   `${JSON.stringify(value, null, 2)}\n`;
@@ -1431,11 +1439,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         if (!(error instanceof FolderRefusal)) {
           throw error;
         }
-        throw new ArtifactRefusal(
-          error.status === 413 || error.status === 409 ? error.status : 503,
-          `${row.name} could not be committed: ${error.message.replace(TRAILING_DOT, "")}.`,
-          { cause: error }
-        );
+        throw notCommitted(row.name, error);
       }
       const promoted: ArtifactPromotion = { commit, at };
       docs.transact(row.id, "hub", (doc) =>
