@@ -8,10 +8,10 @@
  * The status (fable-lead-switch.md §3, design §2 States):
  * - `reconnecting` while the hub is unreachable, `loading` while another
  *   project's board is on its way past its grace;
- * - `sleeping` while the lead is off;
  * - `loading` until his view is first read (shown past its grace);
  * - `needs-you` while the lead has a question parked in a thread;
- * - `working` while the lead session is in a turn of its own;
+ * - `working` while the lead session is in a turn of its own, on or off;
+ * - `sleeping` otherwise while he is off: only your words wake him;
  * - `trying` while an attempt at a task runs again after a failed one;
  * - `done` for two breaths after a task lands in a done stage;
  * - `idle` when nothing is due (no task to do, under way or waiting);
@@ -241,19 +241,20 @@ export class CawLead {
     if (this.#reading()) {
       return "loading";
     }
-    if (this.view && !this.view.on) {
-      return "sleeping";
-    }
     if (!this.view) {
       return "loading";
     }
     if (this.asks.length > 0) {
       return "needs-you";
     }
-    // His own turn: an attempt he parents running is not Caw working.
+    // His own turn: an attempt he parents running is not Caw working. Off,
+    // he still answers your words, and works while he does.
     const leadId = this.view.leadInstanceId;
     if (leadId && cawco.busyOf(leadId)) {
       return "working";
+    }
+    if (!this.view.on) {
+      return "sleeping";
     }
     if (this.retrying) {
       return "trying";
@@ -342,7 +343,7 @@ export class CawLead {
   readonly sentence = $derived.by((): string => {
     switch (this.status) {
       case "sleeping":
-        return "Asleep · nothing wakes a model";
+        return "Off · answers when you write";
       case "working":
         return `Awake · ${this.#said?.text ?? "working"}`;
       case "needs-you":

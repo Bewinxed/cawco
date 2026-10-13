@@ -54,7 +54,7 @@
     /** Caw sits here; off while he stands over the empty board. */
     seated: boolean;
     onnewtask: () => void;
-    /** Ask Caw for a view, from the menu; null while the lead is off. */
+    /** Ask Caw for a view, from the menu; null while Caw can't start. */
     onask: ((anchor: HTMLElement) => void) | null;
     /** Pick the project's stages, from the menu; null once it has its own. */
     onstages: ((anchor: HTMLElement) => void) | null;

@@ -56,10 +56,10 @@
 
   let open = $state(false);
   /**
-   * The project's Caw can take a thread now: his lead is on and the hub can
-   * start it. Read each time the menu opens, so it says what is true then.
+   * The project's Caw can take a thread now, on or off: the hub can start
+   * him. Read each time the menu opens, so it says what is true then.
    */
-  let leadOn = $state(false);
+  let canTalk = $state(false);
   $effect(() => {
     const id = project?.id;
     if (!(open && id)) {
@@ -69,12 +69,12 @@
     cawOf(id).then(
       (view) => {
         if (live) {
-          leadOn = view.on && !view.problem;
+          canTalk = !view.problem;
         }
       },
       () => {
         if (live) {
-          leadOn = false;
+          canTalk = false;
         }
       }
     );
@@ -97,7 +97,7 @@
       <IconSessionAdd />
       New session here
     </ContextMenu.Item>
-    {#if project && leadOn}
+    {#if project && canTalk}
       <ContextMenu.Item
         onSelect={() => goto(`/session/${newThreadTabId(project.id)}`)}
       >

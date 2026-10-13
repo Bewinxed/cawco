@@ -1320,11 +1320,20 @@ export const createWorkItems = ({
   const mayReopen = (item: WorkItemRow, origin: NeutralOrigin): boolean =>
     reopens(item.parentInstanceId, origin, leadFor(item)?.id);
 
+  /** The Caw an attempt at a task must not wake: its project's, while he is off; null otherwise. */
+  const cawOff = (item: WorkItemRow): string | null => {
+    const led = item.projectId ? db.project(item.projectId) : undefined;
+    return item.taskId && led && !led.caw ? led.leadInstanceId : null;
+  };
+
   /**
    * Who hears a delegated session's reports: its parent, and its project's
    * lead as well when that is another session; only the lead once the parent
    * has ended (stopped or discarded, or gone), as it adopts the orphan.
-   * Without a lead, the parent alone, as before.
+   * Without a lead, the parent alone, as before. An attempt at a task of a
+   * project whose Caw is off reaches no Caw at all, even one that started
+   * it: an attempt's report is an event, and off, only your words wake him
+   * (caw.ts).
    */
   const reportees = (row: InstanceRow): InstanceRow[] => {
     // A routine's run reports to nobody: its routine reads how it ended, and
@@ -1336,9 +1345,10 @@ export const createWorkItems = ({
       ? db.getInstancesByIds([row.parentInstanceId])
       : [];
     const item = itemOf(row);
-    const lead = item ? leadFor(item) : undefined;
+    const sleeping = item ? cawOff(item) : null;
+    const lead = item && !sleeping ? leadFor(item) : undefined;
     if (!lead) {
-      return parent ? [parent] : [];
+      return parent && parent.id !== sleeping ? [parent] : [];
     }
     if (!parent || ENDED.has(parent.status)) {
       return [lead];

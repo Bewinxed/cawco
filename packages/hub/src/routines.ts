@@ -87,6 +87,8 @@ const PLACE_POLL_MS = 1000;
 const RUNS_SHOWN = 20;
 /** The longest delivered output a thread note carries. */
 const NOTE_MAX = 4000;
+/** A lead run's skip while Caw is off: a routine is Caw acting on his own (WORDS.md, Caw on / Caw off). */
+const CAW_OFF = "Caw is off, so only your words wake him";
 
 /** A refusal, with the status a route answers and the words a tool returns. */
 export class RoutineRefusal extends Error {
@@ -223,8 +225,8 @@ export interface RoutineDeps {
   /** Why the project's spend cap holds its work back now, or nothing (project-caps.ts). */
   readonly pauses: (projectId: string) => string | undefined;
   readonly push: Pick<Push, "routine">;
-  /** Whether the project's spend cap keeps its Caw from waking (project-caps.ts). */
-  readonly quiets: (projectId: string) => boolean;
+  /** Why the project's spend cap keeps its Caw from waking, or nothing (project-caps.ts). */
+  readonly quiets: (projectId: string) => string | undefined;
   /** The delegate types a project's sessions see (the fleet's without one). */
   readonly types: (projectId?: string | null) => DelegateType[];
   readonly workItems: Pick<
@@ -423,9 +425,9 @@ export const createRoutines = ({
   /**
    * What a run is filed as, decided inside its insert: skipped while the
    * routine's last run still goes, past its daily cap, past the project's
-   * spend cap, or (a lead routine) with the lead off; else started.
+   * spend cap, or (a lead routine) with Caw off; else started.
    */
-  /** Why the routine's project holds a run back: gone, its lead off, its spend cap; or nothing. */
+  /** Why the routine's project holds a run back: gone, Caw off, its spend cap; or nothing. */
   const projectGate = (routine: RoutineRow): string | undefined => {
     if (!routine.projectId) {
       return undefined;
@@ -438,7 +440,7 @@ export const createRoutines = ({
       return pauses(project.id);
     }
     if (!project.caw) {
-      return "the lead is off";
+      return CAW_OFF;
     }
     return quiets(project.id)
       ? "the project is past its spend cap, so its lead is not woken"
@@ -660,6 +662,7 @@ export const createRoutines = ({
     const label = slotLabel(run.slot, routine.timeZone);
     const threadId = note(routine, noteTitle(routine, `· ${label}`));
     const woke = await caw.wake(projectId, {
+      by: "event",
       threadId,
       text: `Routine “${routine.name}” (routine ${routine.id}), its ${label} run. Its prompt:\n\n${routine.prompt}${inputOf(run)}\n\nHandle it now. Tell the person in thread ${threadId} with thread_reply only when there is something they should hear.`,
     });
@@ -667,7 +670,11 @@ export const createRoutines = ({
       run.id,
       woke
         ? { state: "ended", outcome: "sent", endedAt: new Date() }
-        : { state: "skipped", reason: "the lead is off", endedAt: new Date() }
+        : {
+            state: "skipped",
+            reason: projectGate(routine) ?? CAW_OFF,
+            endedAt: new Date(),
+          }
     );
     drain(routine.id);
   };

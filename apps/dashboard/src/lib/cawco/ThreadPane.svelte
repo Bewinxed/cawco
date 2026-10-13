@@ -10,9 +10,9 @@
    * row; withdrawn, a quiet line says so.
    *
    * Caw sits on the composer: his ledge peek over the pill's top-leading
-   * corner, then the thread's status, clipped at the pill's edge. With the
-   * lead off, or unable to start, the composer gives way to a line that says
-   * why and turns him on.
+   * corner, then the thread's status, clipped at the pill's edge. On or off,
+   * your words start him; only when he cannot start (no machine for him)
+   * does the composer give way to a line that says why.
    *
    * `thread:new:<project>` is a thread not yet started: its first message
    * makes it, and the tab is re-addressed to the thread the hub made.
@@ -36,7 +36,6 @@
     blankSession,
     cawco,
     cawOf,
-    configureCaw,
     readThread,
     type SendExtras,
     type SessionState,
@@ -250,16 +249,11 @@
       );
     });
   });
-  const leadOn = $derived(view?.on === true && !view.problem);
-  let turningOn = $state(false);
-  async function turnOn() {
-    turningOn = true;
-    try {
-      view = await configureCaw(projectId, { on: true });
-    } finally {
-      turningOn = false;
-    }
-  }
+  /**
+   * You can write to Caw, on or off: your words start him. Only a reason he
+   * cannot start (no machine for him) takes the composer away.
+   */
+  const writable = $derived(view !== null && !view.problem);
 
   // --- his plan, the thread's --------------------------------------------------
 
@@ -472,7 +466,7 @@
   };
 
   $effect(() => {
-    if (!(browser && leadOn)) {
+    if (!(browser && writable)) {
       return;
     }
     const id = viewId;
@@ -497,7 +491,7 @@
   const fadeSolid = $derived(
     `max(calc(var(--space-4) + ${foot.stack + foot.perch}px), calc(${latestFoot} + var(--c-btn-h-sm)))`
   );
-  /** The lead-off line's height, standing where the composer would: the foot clears it. */
+  /** The problem line's height, standing where the composer would: the foot clears it. */
   let offHeight = $state(0);
   /**
    * Room at the transcript's foot for what stands over it: the composer and
@@ -508,7 +502,7 @@
    * push the transcript up" (a7443251).
    */
   const composerRoom = $derived.by(() => {
-    if (!leadOn) {
+    if (!writable) {
       return view ? `${offHeight}px` : "0px";
     }
     // His slot above the pill, and what his acting may draw above it, in
@@ -516,14 +510,9 @@
     const rise = seatSize * (LEDGE_LINE + CAW_HEADROOM);
     return `var(--c-composer-panel) + var(--c-tray-row) + ${rise}px`;
   });
-  const offLine = $derived(
-    view?.on && view.problem
-      ? view.problem
-      : "Caw lead is off for this project — turn it on to message Caw."
-  );
-  /** Caw is on and cannot start because no machine is online: the cause's one action is to look at the machines. */
+  /** Caw cannot start because no machine is online: the cause's one action is to look at the machines. */
   const noMachine = $derived(
-    !!view?.on && !!view.problem && cawco.onlineMachines.length === 0
+    !!view?.problem && cawco.onlineMachines.length === 0
   );
 </script>
 
@@ -606,9 +595,9 @@
 <div class="pane" bind:clientWidth={paneWidth}>
   <div
     class="body"
-    style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4)); --parked-room: {leadOn
+    style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4)); --parked-room: {writable
       ? foot.parked
-      : 0}px; {leadOn && foot.stack
+      : 0}px; {writable && foot.stack
       ? `--latest-inset: calc(${latestFoot} - max(calc(var(--space-8) * 3), var(--composer-clearance)))`
       : ""}"
   >
@@ -648,7 +637,7 @@
         <!-- The skeleton stands in for rows still on their way and goes the
              moment they are drawn: its rows are not where the real ones fall, so
              fading it over them reads as a second, stale transcript. -->
-        {#if leadOn}
+        {#if writable}
           <FootFade solid={foot.stack ? fadeSolid : undefined} />
         {/if}
         {#if veiled}
@@ -658,9 +647,9 @@
         {/if}
       </div>
     </SideSplit>
-    {#if view && !leadOn}
-      <!-- No composer: nothing would read it. What is true, and the one
-           thing that changes it. -->
+    {#if view?.problem}
+      <!-- No composer: Caw cannot start to read it. What is true, and the
+           one thing that changes it. -->
       <div
         class="off"
         data-safe-bottom
@@ -669,19 +658,8 @@
         out:crossOut
       >
         <Alert class="off-line" role="status">
-          <AlertDescription>{offLine}</AlertDescription>
-          {#if !view.on}
-            <AlertAction>
-              <Button
-                label="Turn on"
-                onclick={turnOn}
-                pending={turningOn}
-                pendingLabel="Turning on…"
-                size="sm"
-                variant="outline"
-              />
-            </AlertAction>
-          {:else if noMachine}
+          <AlertDescription>{view.problem}</AlertDescription>
+          {#if noMachine}
             <AlertAction>
               <Button
                 label="Check machines"

@@ -34031,6 +34031,10 @@
             "$ref": "#/components/schemas/RuleAction",
             "description": "What the rule does when it fires. Default `'reply'` — the only kind before this existed."
           },
+          "interrupt": {
+            "description": "`immediate` only: cut into the running turn rather than queueing.",
+            "type": "boolean"
+          },
           "prompt": {
             "description": "`action: 'llm'` only: the operator's standing instructions for the supervisor.",
             "type": [
@@ -34060,10 +34064,6 @@
           },
           "timing": {
             "$ref": "#/components/schemas/RuleTiming"
-          },
-          "interrupt": {
-            "description": "`immediate` only: cut into the running turn rather than queueing.",
-            "type": "boolean"
           },
           "scope": {
             "$ref": "#/components/schemas/RuleScope"

@@ -3,24 +3,35 @@
  *
  * - **A setting per project**: on or off, and the harness Caw runs on. On by
  *   default for a project made with Caw; off for every project from before.
+ * - **You can always talk to him** (WORDS.md, Caw on / Caw off): your
+ *   message in a thread, your ask for a view and the project's setup start
+ *   his session whether he is on or off. Only a reason he cannot start (no
+ *   machine for him, {@link problemOf}) or the project's spend cap refuses
+ *   your words, each with its sentence. On means only that he ALSO acts on
+ *   his own: events wake him and he leads dispatch.
  * - **The lead is P1's lead.** `projects.lead_instance_id` names Caw's
  *   session; the dispatcher's attempts report to it and work-items.ts makes
- *   it a co-parent of the project's items, as before. Only the hub sets it:
- *   it starts the session on the first event while Caw is on, on a checkout
- *   of the project on a machine that is online, with the role `lead`, so the
- *   `cawco` server lists it board tools only, and its harness denies its edit
- *   and shell tools on every spawn of its row (server.ts `bounded`).
- * - **Woken by events only**, never a timer: your message in a thread, an
- *   attempt at a task landing or failing (its report, or a line from here
- *   while the project has no Caw session yet), a task entering a stage of
- *   kind `you`, your ask for a view. Each wake is one message to its session
- *   through the one send path, which revives a session at rest. An event the
- *   person should read is also noted in a thread (`author: "event"`): the
- *   thread it belongs to, else the project's newest.
- * - **Off**: the lead is cleared and its session ended, so nothing for the
- *   project wakes a model. Reports go to the parent alone, asks with no
- *   session to take them and failed attempts to you (push.ts), and the
- *   dispatcher starts nothing on its own.
+ *   it a co-parent of the project's items while he is on. Only the hub sets
+ *   it: it starts the session on your words or, while Caw is on, the first
+ *   event, on a checkout of the project on a machine that is online, with
+ *   the role `lead`, so the `cawco` server lists it board tools only, and its
+ *   harness denies its edit and shell tools on every spawn of its row
+ *   (server.ts `bounded`).
+ * - **Woken by your words and, while on, by events**, never a timer: your
+ *   message in a thread, your ask for a view; an attempt at a task landing
+ *   or failing (its report, or a line from here while the project has no Caw
+ *   session yet), a task entering a stage of kind `you`, a routine for the
+ *   lead. Each wake is one message to its session through the one send path,
+ *   which revives a session at rest. An event the person should read is also
+ *   noted in a thread (`author: "event"`): the thread it belongs to, else the
+ *   project's newest.
+ * - **Off**: no event wakes him and nothing he would do on his own spends.
+ *   His session stays, resting between turns (it costs nothing so), so your
+ *   next words carry on his context. A turn an event started is cut when he
+ *   is turned off; one your words are in runs to its end. Attempt reports go
+ *   to their parent alone (work-items.ts `reportees`), asks with no session
+ *   to take them and failed attempts to you (push.ts), and the dispatcher
+ *   starts nothing on its own. A move of harness or model ends his session.
  * - **Threads**: conversations with Caw, kept here; Caw answers with
  *   `thread_reply`. A thread's status is derived, never stored: `working`
  *   while the lead is busy on a turn that thread woke, `needs-you` while a
@@ -143,11 +154,20 @@ export const withCawDenials = (
 };
 
 /**
- * What wakes Caw: the words it reads, the thread the event belongs to, and
- * the note the person reads in that thread (none for your own message,
- * which is in the thread already).
+ * Who a wake is from: `you`, the person's own words (a thread, a view
+ * request, a project's setup), which reach Caw on or off; or an `event`
+ * (an attempt, a needs-you task, a routine, the dispatcher), which wakes him
+ * only while he is on.
+ */
+export type CawWaker = "you" | "event";
+
+/**
+ * What wakes Caw: who it is from, the words it reads, the thread the event
+ * belongs to, and the note the person reads in that thread (none for your
+ * own message, which is in the thread already).
  */
 export interface CawEvent {
+  by: CawWaker;
   note?: { body?: string; title: string };
   text: string;
   /** Its thread: the note goes there, and that thread is `working` while the turn it wakes runs. */
@@ -264,7 +284,7 @@ const briefOf = (projectName: string): string =>
   [
     `You are Caw, the lead of the project “${projectName}” in CawCo.`,
     "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft), its folder on the hub (folder_read, folder_write: stages.md, delegates/, AGENTS.md, decisions/), decision pages (page_show, page_choices), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate, set_item_checks), and send_to_user. You have no edit or shell tools: work that changes the project's code becomes a task or a delegate.",
-    "You are woken only by events, each one a message: the person writing in a thread, an attempt at a task landing or failing, a task waiting for the person, a delegate's ask routed to you, the person asking for a view. Handle the event, then end your turn. Nothing wakes you on a timer. Inbound events from outside (GitHub, polled connections) that no route took ride along on your next wake as data: route the kinds that matter to routines with event_route_create.",
+    "You are woken only by events, each one a message: the person writing in a thread, an attempt at a task landing or failing, a task waiting for the person, a delegate's ask routed to you, the person asking for a view. Handle the event, then end your turn. Nothing wakes you on a timer. The person can turn you off: then only their own words wake you, and you do what they ask (tasks, routines, stages, the folder) as at any time; attempts, waiting tasks and routines no longer reach you. Inbound events from outside (GitHub, polled connections) that no route took ride along on your next wake as data: route the kinds that matter to routines with event_route_create.",
     "When the person writes in a thread, answer in that thread with thread_reply; the person does not see what you say outside it. Name the tasks a reply is about in its `tasks`. Code coordinates, models judge, the person decides: permissions, merges, configuration and public actions are theirs, so ask in the thread (AskUserQuestion lands there).",
     "A view-request event is the person asking for a view of the project's tasks: answer it with view_draft, then say in that thread what you drafted; the person keeps or discards it.",
   ].join("\n\n");
@@ -295,12 +315,16 @@ export interface CawDeps {
     | "threadOfTask"
     | "workItem"
   >;
-  /** Ends a session (the lead, when Caw is turned off or moves harness). */
+  /** Ends a session (the lead, when Caw moves harness or model). */
   readonly end: (instanceId: string) => void;
   /** Whether the fleet's two choices were ever set (the setup page asks for them until they are). */
   readonly fleetChoicesSet: () => boolean;
   /** The project's folder changed under its tasks (stages.md, a task file). */
   readonly folderChanged: (projectId: string) => void;
+  /** Whether a session is in a turn now, as its last pulse said. */
+  readonly inTurn: (instanceId: string) => boolean;
+  /** Cuts a session's turn in flight; the session keeps its state (the lead's event turn, when Caw is turned off). */
+  readonly interrupt: (instanceId: string) => void;
   /**
    * Where Caw starts while no checkout of the project is online: its folder
    * on the hub when the hub's machine runs an agent, else a folder of his own
@@ -347,6 +371,8 @@ export const createCaw = ({
   end,
   fleetChoicesSet,
   folderChanged,
+  inTurn,
+  interrupt,
   leadHome,
   online,
   publish,
@@ -362,10 +388,12 @@ export const createCaw = ({
    * The thread each lead's current turn was woken by, by lead session; kept
    * in memory: it is the process's state, read off its pulses. `started`
    * once the turn's first busy pulse came, so the idle one after ends it.
+   * `by` is `you` once your words are in the turn, else `event`: turning
+   * Caw off cuts an event's turn and lets yours run to its end.
    */
   const turns = new Map<
     string,
-    { projectId: string; started: boolean; threadId: string }
+    { by: CawWaker; projectId: string; started: boolean; threadId: string }
   >();
 
   /**
@@ -434,11 +462,25 @@ export const createCaw = ({
     return { thread: summaryOf(thread), message };
   };
 
-  /** The lead's turn now answers `threadId`: it is `working`, and the thread before it no longer. */
-  const follow = (lead: InstanceRow, projectId: string, threadId: string) => {
+  /**
+   * The lead's turn now answers `threadId`: it is `working`, and the thread
+   * before it no longer. A turn your words are in stays yours when an event
+   * joins it.
+   */
+  const follow = (
+    lead: InstanceRow,
+    projectId: string,
+    threadId: string,
+    by: CawWaker
+  ) => {
     answered.set(lead.id, threadId);
     const before = turns.get(lead.id);
-    turns.set(lead.id, { projectId, threadId, started: false });
+    turns.set(lead.id, {
+      by: before?.by === "you" ? "you" : by,
+      projectId,
+      threadId,
+      started: false,
+    });
     if (before && before.threadId !== threadId) {
       upsert(db.thread(before.threadId));
     }
@@ -528,9 +570,9 @@ export const createCaw = ({
       : await leadHome(project.id);
   };
 
-  /** Why Caw could not start for the project now, or null. */
+  /** Why Caw could not start for the project now, on or off, or null. */
   const problemOf = (project: ReturnType<typeof projectOf>): string | null => {
-    if (!project.caw || standing(project) || checkoutFor(project)) {
+    if (standing(project) || checkoutFor(project)) {
       return null;
     }
     return online()
@@ -597,16 +639,18 @@ export const createCaw = ({
 
   /**
    * The project's Caw session: the one it has, or one started now for
-   * `event` while Caw is on (its first message, after its brief). Undefined
-   * while Caw is off. Callers at once share one start; `started` says whether
-   * this call's event went out with it.
+   * `event` (its first message, after its brief): for your words on or off,
+   * for an event while Caw is on. Undefined for an event while he is off.
+   * Callers at once share one start; `started` says whether this call's
+   * event went out with it.
    */
   const leadFor = async (
     projectId: string,
-    event: string
+    event: string,
+    by: CawWaker
   ): Promise<{ row: InstanceRow; started: boolean } | undefined> => {
     const project = projectOf(projectId);
-    if (!project.caw) {
+    if (by === "event" && !project.caw) {
       return undefined;
     }
     const current = standing(project);
@@ -625,29 +669,48 @@ export const createCaw = ({
   };
 
   /**
-   * The one way any event source wakes a project's Caw (§5.3: your message,
-   * an attempt landing or failing, a needs-you item, your ask for a view;
-   * routines, GitHub events and check results call it the same way). Its
-   * note goes into its thread first; then one message to Caw's session,
-   * starting the session when it has none, and that thread follows the turn.
-   * Nothing while Caw is off; there is no timer behind it. Answers whether a
-   * model was woken.
+   * Past its spend cap the project's Caw takes no turn: true for an event,
+   * which stays in its thread; your words are refused with the cap's
+   * sentence (a thread's words are refused before they are kept,
+   * `listening`). `settle` publishes the wake's thread row either way.
+   */
+  const capHolds = (
+    projectId: string,
+    by: CawWaker,
+    settle: () => void
+  ): boolean => {
+    const capped = caps.quiets(projectId);
+    if (capped === undefined) {
+      return false;
+    }
+    settle();
+    if (by === "you") {
+      refuse(409, capped);
+    }
+    return true;
+  };
+
+  /**
+   * The one way anything wakes a project's Caw (§5.3: your message, your ask
+   * for a view, the project's setup; an attempt landing or failing, a
+   * needs-you item; routines, GitHub events and check results call it the
+   * same way). Its note goes into its thread first; then one message to
+   * Caw's session, starting the session when it has none, and that thread
+   * follows the turn. Your words wake him on or off; an event, only while he
+   * is on. There is no timer behind it. Answers whether a model was woken.
    */
   const wake = async (projectId: string, event: CawEvent): Promise<boolean> => {
     // The thread's row goes out once, with the status this wake leaves it in.
     const settle = (id: string | undefined) =>
       upsert(id ? db.thread(id) : undefined);
-    if (!projectOf(projectId).caw) {
+    if (event.by === "event" && !projectOf(projectId).caw) {
       settle(event.threadId);
       return false;
     }
     const threadId = event.note
       ? noteIn(projectId, event.threadId, event.note, false)
       : event.threadId;
-    // Past its spend cap the project's Caw is not woken: what happened is in
-    // its thread (your words are already there), and nothing costs a turn.
-    if (caps.quiets(projectId)) {
-      settle(threadId);
+    if (capHolds(projectId, event.by, () => settle(threadId))) {
       return false;
     }
     const words =
@@ -663,7 +726,7 @@ export const createCaw = ({
       db.ingress.releaseInbox(inbox.map((line) => line.id));
     let lead: Awaited<ReturnType<typeof leadFor>>;
     try {
-      lead = await leadFor(projectId, text);
+      lead = await leadFor(projectId, text, event.by);
     } catch (error) {
       giveBack();
       settle(threadId);
@@ -675,7 +738,7 @@ export const createCaw = ({
       return false;
     }
     if (threadId) {
-      follow(lead.row, projectId, threadId);
+      follow(lead.row, projectId, threadId, event.by);
     }
     if (!lead.started) {
       message(lead.row, text);
@@ -692,13 +755,32 @@ export const createCaw = ({
     );
   };
 
-  /** Ends the project's Caw session and clears the lead. */
+  /** Ends the project's Caw session and clears the lead: his harness or model moved. */
   const retire = (project: ReturnType<typeof projectOf>): void => {
     if (project.leadInstanceId) {
       unfollow(project.leadInstanceId);
       end(project.leadInstanceId);
     }
     db.setProjectCaw(project.id, { leadInstanceId: null });
+  };
+
+  /**
+   * Caw turned off: a turn an event started is cut, so nothing he does on
+   * his own spends from now; a turn your words are in runs to its end. His
+   * session stays, resting, for your next words (a session between turns
+   * costs nothing). A busy lead with no turn followed here was woken by
+   * none of your words (a report or an ask reaching him as the lead).
+   */
+  const halt = (project: ReturnType<typeof projectOf>): void => {
+    const lead = standing(project);
+    if (!(lead && inTurn(lead.id)) || turns.get(lead.id)?.by === "you") {
+      return;
+    }
+    interrupt(lead.id);
+    unfollow(lead.id);
+    console.log(
+      `[caw] ${project.name}: turned off; cut the turn an event started (${lead.id})`
+    );
   };
 
   const view = (projectId: string): CawView => {
@@ -729,18 +811,20 @@ export const createCaw = ({
   const viewRequest = (thread: ThreadRow, body: string) =>
     `Event view-request: you asked for a view in the thread “${thread.title}” (thread ${thread.id}):\n\n${body}\n\nDraft it with view_draft({ name, spec }), then tell the person in that thread with thread_reply.`;
 
-  /** Refuses a message while Caw is off: nothing would read it. */
+  /**
+   * Refuses your words before they are kept when Caw cannot read them: he
+   * cannot start (no machine for him), or the project is past its spend cap.
+   * On or off, anything else reaches him, so your words are always read.
+   */
   const listening = (projectId: string) => {
     const project = projectOf(projectId);
-    if (!project.caw) {
-      refuse(
-        409,
-        `Caw is off for ${project.name}: turn it on to talk to it in a thread.`
-      );
-    }
     const problem = problemOf(project);
     if (problem) {
       refuse(409, problem);
+    }
+    const capped = caps.quiets(projectId);
+    if (capped) {
+      refuse(409, capped);
     }
   };
 
@@ -785,10 +869,11 @@ export const createCaw = ({
   };
 
   /**
-   * Wakes the project's Caw with its setup event. When Caw cannot start for
-   * a reason the thread already states (no machine online: the thread's
-   * composer says so), nothing is added; any other failure is noted in it.
-   * `machineOnline` tries again.
+   * Wakes the project's Caw with its setup event: your words (your prompt,
+   * or the offer you accepted), so on or off. When Caw cannot start for a
+   * reason the thread already states (no machine online: the thread's
+   * composer says so), nothing is added; any other failure, the spend cap's
+   * included, is noted in it. `machineOnline` tries again.
    */
   const wakeForSetup = (
     project: ReturnType<typeof projectOf>,
@@ -797,6 +882,7 @@ export const createCaw = ({
     template: StagesTemplate | null
   ): void => {
     wake(project.id, {
+      by: "you",
       threadId,
       text: setupEvent({
         askFleet: !fleetChoicesSet(),
@@ -806,10 +892,15 @@ export const createCaw = ({
         threadId,
       }),
     }).catch((error: unknown) => {
-      // Already started, or the project was deleted meanwhile: nothing to say.
+      // No machine for him (the composer says so), or the project was
+      // deleted meanwhile: nothing to say.
+      if (!db.project(project.id)) {
+        return;
+      }
       if (
-        (error instanceof CawRefusal && error.status === 409) ||
-        !db.project(project.id)
+        error instanceof CawRefusal &&
+        error.status === 409 &&
+        !caps.quiets(project.id)
       ) {
         return;
       }
@@ -856,7 +947,8 @@ export const createCaw = ({
       (
         await leadFor(
           projectId,
-          "The hub is starting an attempt at a task of the project; its report comes to you."
+          "The hub is starting an attempt at a task of the project; its report comes to you.",
+          "event"
         )
       )?.row,
     wake,
@@ -938,9 +1030,10 @@ export const createCaw = ({
     },
 
     /**
-     * Turns Caw on or off, or moves it to another harness or model; a lead it
-     * had is ended. A harness of its own takes its own default model unless
-     * the change names one.
+     * Turns Caw on or off, or moves it to another harness or model. A move
+     * ends the lead he had; off cuts only a turn an event started
+     * ({@link halt}). A harness of its own takes its own default model
+     * unless the change names one.
      */
     configure(
       projectId: string,
@@ -959,8 +1052,10 @@ export const createCaw = ({
       const rehomed = harness !== undefined && harness !== project.cawHarness;
       const model = modelAfter(project.cawModel, change.model, rehomed);
       const moved = rehomed || model !== project.cawModel;
-      if ((!on && project.caw) || moved) {
+      if (moved) {
         retire(project);
+      } else if (!on && project.caw) {
+        halt(project);
       }
       db.setProjectCaw(projectId, {
         caw: on,
@@ -995,6 +1090,7 @@ export const createCaw = ({
       listening(projectId);
       const opened = open(projectId, body, id);
       await wake(projectId, {
+        by: "you",
         text: yourWords(opened.row, body, true),
         threadId: opened.row.id,
       });
@@ -1025,6 +1121,7 @@ export const createCaw = ({
       });
       const out = said(added.thread, added.message, false);
       await wake(projectId, {
+        by: "you",
         text: yourWords(added.thread, body, false),
         threadId,
       });
@@ -1037,6 +1134,7 @@ export const createCaw = ({
       listening(projectId);
       const opened = open(projectId, body);
       await wake(projectId, {
+        by: "you",
         text: viewRequest(opened.row, body),
         threadId: opened.row.id,
       });
@@ -1093,13 +1191,13 @@ export const createCaw = ({
     /**
      * A machine came online: a project whose Setup thread Caw never answered
      * (none was online when it was made, or his session went with its
-     * machine) is set up now.
+     * machine) is set up now, on or off: setting it up was your ask.
      */
     machineOnline(): void {
       for (const thread of db.allThreads()) {
         const project = thread.setup ? db.project(thread.projectId) : undefined;
         if (
-          !project?.caw ||
+          !project ||
           standing(project) ||
           starting.has(project.id) ||
           db.threadMessages(thread.id).some((each) => each.author === "caw")
@@ -1151,6 +1249,7 @@ export const createCaw = ({
         .then((waiting) => {
           if (waiting.kind === "you") {
             wakeQuietly(projectId, {
+              by: "event",
               text: `${waiting.id} “${waiting.title}” now waits for the person in ${waiting.stage}.`,
               threadId: db.threadOfTask(projectId, waiting.id)?.id,
               note: {
@@ -1179,6 +1278,7 @@ export const createCaw = ({
           ? (item.digest ?? item.result ?? "").trim()
           : (item.error ?? "").trim();
       const event: CawEvent = {
+        by: "event",
         text: `The attempt at ${item.taskId} (“${item.title}”) ended ${item.state}.${report ? `\n\n${report.slice(0, 2000)}` : ""}`,
         threadId: db.threadOfTask(project.id, item.taskId)?.id,
         note: {
@@ -1198,7 +1298,7 @@ export const createCaw = ({
       );
       const lead = standing(project);
       if (lead) {
-        follow(lead, project.id, threadId);
+        follow(lead, project.id, threadId, "event");
       } else {
         upsert(db.thread(threadId));
       }

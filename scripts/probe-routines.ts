@@ -21,8 +21,8 @@
  * 5. test run: every routine made runs once at once, slot `test:<made at>`.
  * 6. expiry: a routine a worker session made (through routine_create) whose
  *    expiry has passed turns itself off, with the reason.
- * 7. lead off: a lead routine in a project with Caw off is skipped, "the lead
- *    is off".
+ * 7. Caw off: a lead routine in a project with Caw off is skipped, "Caw is
+ *    off, so only your words wake him".
  *
  * Run from the repo root:
  *   bun scripts/probe-routines.ts [--keep]
@@ -223,7 +223,7 @@ try {
   const base = { projectId: project.id, timeZone: "UTC", target: "delegate" };
   const YEARLY = "0 0 1 1 *";
 
-  // ── 7: a lead routine with the lead off ───────────────────────────────
+  // ── 7: a lead routine with Caw off ────────────────────────────────────
   const lead = await make({
     ...base,
     target: "lead",
@@ -233,8 +233,9 @@ try {
   });
   const [leadRun] = runsOf(lead.id);
   check(
-    "7: a lead routine with Caw off is skipped, the lead is off",
-    leadRun?.state === "skipped" && leadRun.reason === "the lead is off",
+    "7: a lead routine with Caw off is skipped, Caw is off",
+    leadRun?.state === "skipped" &&
+      leadRun.reason === "Caw is off, so only your words wake him",
     JSON.stringify(leadRun)
   );
 

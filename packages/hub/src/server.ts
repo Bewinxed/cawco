@@ -13337,8 +13337,8 @@ export const createServer = (
    * the hub and the checkout it was made from, its primary. With no checkout
    * (New project: its place is picked once it is set up) its one place is
    * its folder on the hub. A new project's `template` is written as its
-   * stages.md; made with Caw and given `setup`, it opens its Setup thread and
-   * Caw is woken to set it up (caw.ts `setup`). The dashboard's "New
+   * stages.md; given `setup` (your prompt), it opens its Setup thread and
+   * Caw is woken to set it up, on or off (caw.ts `setup`). The dashboard's "New
    * project" and "Create project" and an accepted project offer all come here.
    */
   const createOrJoinProject = async (asked: {
@@ -13421,7 +13421,8 @@ export const createServer = (
       );
       tasks.touched(created.id);
     }
-    return created.caw && asked.setup
+    // Your prompt sets the project up whether its Caw is on or off.
+    return asked.setup
       ? caw.setup(created.id, {
           ...asked.setup,
           template: asked.template ?? null,
@@ -13717,8 +13718,32 @@ export const createServer = (
   // Each project's Caw: its lead session, woken by events only (caw.ts).
   const caw = createCaw({
     asks: () => pending.list(),
+    inTurn: (instanceId) => pulses.get(instanceId)?.busy === true,
     caps,
     db,
+    // The control interrupt_delegate sends: the turn stops, the session keeps its state.
+    interrupt: (instanceId) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const agent = row ? registry.agent(row.machineId) : undefined;
+      if (!(row && agent)) {
+        return;
+      }
+      const requestId = crypto.randomUUID();
+      sendFrame(agent, {
+        verb: "control",
+        machineId: row.machineId,
+        instanceId,
+        requestId,
+        payload: {
+          instanceId,
+          requestId,
+          method: CONTROL_INTERRUPT,
+          args: [],
+        },
+      } satisfies Envelope<ControlPayload>);
+      noteInterrupt(instanceId);
+      transcripts.noteInterrupt(instanceId);
+    },
     online: (machineId) =>
       machineId === undefined
         ? onlineMachines().length > 0

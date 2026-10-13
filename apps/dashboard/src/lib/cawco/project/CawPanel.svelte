@@ -3,8 +3,8 @@
    * Caw's panel (fable-lead-switch.md §1, "switch in panel"): who he is and
    * what he is doing in one sentence, the lead switch, the harness he runs
    * on and the model his session runs, what he has spent with the way to
-   * the Usage page, and the way to talk to him. Off, he is asleep: nothing
-   * wakes a model, and there is nobody to message.
+   * the Usage page, and the way to talk to him, on or off. Off, he acts only
+   * when you write to him: no event wakes him (WORDS.md, Caw on and off).
    */
   import type { CawHarness } from "@cawco/core";
   import { cawco, startThread, threadsOf } from "#lib/cawco/client.svelte.js";
@@ -43,7 +43,7 @@
 <div class="caw-panel">
   <p class="head">Caw · lead of {projectName}</p>
   <div class="row status">
-    <CawFace size={18} status={on ? lead.status : "sleeping"} />
+    <CawFace size={18} status={lead.status} />
     <span class="sentence">{lead.sentence}</span>
   </div>
   {#if lead.capLine}
@@ -104,9 +104,9 @@
       >See spend →</a
     >
   </div>
-  {#if on || lastThread}
+  {#if !lead.view?.problem || lastThread}
     <div class="row actions">
-      {#if on && !talking}
+      {#if !(lead.view?.problem || talking)}
         <Button
           onclick={() => {
             talking = true;
@@ -127,7 +127,7 @@
       {/if}
     </div>
   {/if}
-  {#if on && talking}
+  {#if talking}
     <CawField
       autofocus
       label="Message Caw"

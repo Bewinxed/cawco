@@ -4,8 +4,8 @@
    * button. A press opens his panel and keeps it; a pointer resting on him
    * for 350ms opens it too, and it closes 250ms after the pointer leaves
    * both him and the panel, as a session tab's details card does
-   * (PaneTabs). On touch the panel is a bottom sheet. Off, he sleeps; the
-   * panel holds the switch that wakes him.
+   * (PaneTabs). On touch the panel is a bottom sheet. Off, he sleeps between
+   * your words: no event wakes him, and the panel holds the switch.
    */
   import { MediaQuery } from "svelte/reactivity";
   import { cawLoop } from "#lib/cawco/feel.svelte.js";

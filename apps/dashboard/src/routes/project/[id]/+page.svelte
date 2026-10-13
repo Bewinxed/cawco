@@ -184,7 +184,8 @@
     () => tasks,
     () => reading
   );
-  const leadOn = $derived(lead.view?.on === true);
+  /** You can talk to Caw, on or off: only a reason he cannot start (no machine) stops it. */
+  const canTalk = $derived(lead.view !== null && !lead.view.problem);
 
   /** The project's views, kept then drafted, once read. */
   let views = $state<ProjectView[]>([]);
@@ -646,18 +647,18 @@
   /**
    * New task stands in the strip whenever there is no form for it on the
    * board: a board with tasks, and an empty one Caw's field stands over
-   * (an empty board with the lead off holds the form itself).
+   * (an empty board while Caw can't start holds the form itself).
    */
-  const strippedNewTask = $derived(list !== null && (!empty || leadOn));
+  const strippedNewTask = $derived(list !== null && (!empty || canTalk));
   /** Something stands after the tabs: the hairline marks where it starts. */
-  const trailing = $derived(needsYou.length > 0 || strippedNewTask || leadOn);
+  const trailing = $derived(needsYou.length > 0 || strippedNewTask || canTalk);
   /**
-   * Caw stands over the empty board while the lead is on; elsewhere he sits
+   * Caw stands over the empty board while he can start; elsewhere he sits
    * in the head, and the board is drawn — its columns and the new task's
    * form — once a task is being added by hand.
    */
   const standing = $derived(
-    empty && leadOn && !adding && !current.startsWith("view:")
+    empty && canTalk && !adding && !current.startsWith("view:")
   );
 
   /**
@@ -749,7 +750,7 @@
   {:else if empty && !adding}
     {#if !lead.view}
       <Skeleton class="h-48 w-full max-w-xl rounded-[var(--radius-lg)]" />
-    {:else if leadOn}
+    {:else if canTalk}
       <div class="state caw-empty">
         <EmptyState line={cawLine} title="Nothing on the board yet">
           {#snippet mark()}
@@ -771,7 +772,7 @@
       <div class="state">
         <EmptyState
           icon={IconToolTodo}
-          line="Add a task, or turn Caw on to plan it with him."
+          line="Add a task by hand while Caw can't start."
           title="Nothing on the board yet"
         >
           {#snippet action()}
@@ -848,7 +849,7 @@
     <ProjectHead
       {lead}
       {machine}
-      onask={leadOn ? ask : null}
+      onask={canTalk ? ask : null}
       onnewtask={() => {
         choose("board");
         adding = true;
@@ -863,7 +864,7 @@
       seated={!standing}
     />
 
-    {#if leadOn && lead.view?.problem}
+    {#if lead.view?.problem}
       <Alert class="notice" variant="warning">
         <AlertDescription>{lead.view.problem}</AlertDescription>
       </Alert>
@@ -953,7 +954,7 @@
             New task
           </Button>
         {/if}
-        {#if leadOn}
+        {#if canTalk}
           <Button
             class="wide pressable"
             onclick={(event) => ask(event.currentTarget as HTMLElement)}

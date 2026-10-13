@@ -126,10 +126,17 @@ export const createCaps = ({ db, publish }: CapsDeps) => {
       return `${name} reached its budget: $${cap.spentUsd.toFixed(2)} of its $${cap.usd.toFixed(2)} this ${cap.period}. No attempt starts until the next ${cap.period} begins (${WHEN.format(cap.resetsAt)}), or the budget is raised.`;
     },
 
-    /** Its Caw is not woken now: the cap holds and says so. */
-    quiets(projectId: string): boolean {
+    /**
+     * Why its Caw takes no turn now, in the sentence the person reads when
+     * they write to him: the cap holds and says so. Nothing when he may.
+     */
+    quiets(projectId: string): string | undefined {
       const cap = holding(projectId);
-      return cap !== null && cap.onCap !== "pause";
+      if (!cap || cap.onCap === "pause") {
+        return;
+      }
+      const name = db.project(projectId)?.name ?? "The project";
+      return `${name} reached its budget: $${cap.spentUsd.toFixed(2)} of its $${cap.usd.toFixed(2)} this ${cap.period}. Caw takes no turn until the next ${cap.period} begins (${WHEN.format(cap.resetsAt)}), or the budget is raised.`;
     },
 
     /** Every capped project's state, told to the dashboards where it moved. */
