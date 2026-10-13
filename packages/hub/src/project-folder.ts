@@ -681,21 +681,25 @@ export interface FolderWriteOptions {
   /** Who the commit is by; the operator when left out. */
   author?: FolderAuthor;
   /**
-   * A new file only: refused with {@link FolderTaken}, nothing written, when
-   * any file in its folder (the path itself included) answers true here,
-   * before or while it is placed. The file goes in with a hard link, which
-   * never replaces what is at the path.
+   * New files only: whether `name`, an entry in the folder `rel` goes into,
+   * already holds `rel`'s place (the path itself always does). Any file held
+   * before or while it is placed refuses the write with {@link FolderTaken},
+   * and nothing of it stays written. Each file goes in with a hard link,
+   * which never replaces what is at its path.
    */
-  exclusive?: (name: string) => boolean;
+  exclusive?: Exclusive;
   /** The commit message; "Add <path>" or "Update <path>" when left out. */
   message?: string;
 }
 
-/** Refuses with {@link FolderTaken} when a file in `abs`'s folder, other than `self`, answers true to `exclusive`. */
+/** {@link FolderWriteOptions.exclusive}. */
+export type Exclusive = (name: string, rel: string) => boolean;
+
+/** Refuses with {@link FolderTaken} when an entry in `abs`'s folder, other than `self`, holds `rel`'s place. */
 const claimed = async (
   abs: string,
   rel: string,
-  exclusive: (name: string) => boolean,
+  exclusive: Exclusive,
   self?: string
 ): Promise<void> => {
   const names = await readdir(dirname(abs)).catch((error: unknown) => {
@@ -704,7 +708,9 @@ const claimed = async (
     }
     throw error;
   });
-  const holder = names.find((name) => name !== self && exclusive(name));
+  const holder = names.find(
+    (name) => name !== self && (name === basename(abs) || exclusive(name, rel))
+  );
   if (holder !== undefined) {
     throw new FolderTaken(rel, join(dirname(rel), holder));
   }
@@ -720,7 +726,7 @@ const placeOnly = async (
   scratch: string,
   abs: string,
   rel: string,
-  exclusive: (name: string) => boolean
+  exclusive: Exclusive
 ): Promise<void> => {
   const placed = await link(scratch, abs)
     .then(
@@ -867,12 +873,16 @@ const toWrite = (
 /**
  * Puts `bytes` at `rel` (its folders made as needed), atomically, keeping in
  * `before` what the path held first so a failed commit can put it back.
+ * `exclusive`: only where nothing holds its place (FolderTaken otherwise),
+ * and in `before` only once it is placed, so a put-back never removes
+ * another writer's file.
  */
 const putFile = async (
   root: string,
   rel: string,
   bytes: Uint8Array,
-  before: Map<string, Buffer | undefined>
+  before: Map<string, Buffer | undefined>,
+  exclusive?: Exclusive
 ): Promise<void> => {
   const abs = await writable(root, rel);
   const there = await lstatIfThere(abs);
@@ -882,7 +892,9 @@ const putFile = async (
       `${rel} is a folder, so a file cannot be written there.`
     );
   }
-  if (!before.has(abs)) {
+  if (exclusive) {
+    await claimed(abs, rel, exclusive);
+  } else if (!before.has(abs)) {
     before.set(abs, there?.isFile() ? await readFile(abs) : undefined);
   }
   await mkdir(dirname(abs), { recursive: true }).catch((error: unknown) => {
@@ -895,9 +907,14 @@ const putFile = async (
     }
     throw error;
   });
-  // Beside the history, on the same disk: the rename is the write.
+  // Beside the history, on the same disk: the rename (or link) is the write.
   const scratch = join(root, ".git", `cawco-write-${randomUUID()}`);
   await writeFile(scratch, bytes);
+  if (exclusive) {
+    await placeOnly(scratch, abs, rel, exclusive);
+    before.set(abs, undefined);
+    return;
+  }
   try {
     await rename(scratch, abs);
   } catch (error) {
@@ -929,7 +946,8 @@ const putBackAll = async (
  * together, one commit for what one piece of work produced (a work item's
  * outputs). Each is checked and sized as {@link writeFolderFile} checks one.
  * Files HEAD already holds as asked change nothing; when none changed, no
- * commit is made. A failed write or commit puts every file back as it was.
+ * commit is made. A failed write or commit puts every file back as it was;
+ * with `exclusive`, one file whose place is held refuses them all.
  */
 export const writeFolderFiles = async (
   projectId: string,
@@ -947,10 +965,19 @@ export const writeFolderFiles = async (
     await prepare(projectId, root);
     /** What each path held before, to put back if anything fails. */
     const before = new Map<string, Buffer | undefined>();
+    const { exclusive } = options;
     try {
       for (const { rel, bytes } of writes) {
         // biome-ignore lint/performance/noAwaitInLoops: one file at a time, each checked before it is written
-        await putFile(root, rel, bytes, before);
+        await putFile(root, rel, bytes, before, exclusive);
+      }
+      if (exclusive) {
+        // A claim that landed on an earlier file while a later one went in.
+        for (const { rel } of writes) {
+          const abs = join(root, rel);
+          // biome-ignore lint/performance/noAwaitInLoops: one folder read per file, in order
+          await claimed(abs, rel, exclusive, basename(abs));
+        }
       }
       const done = await commitPaths(
         root,

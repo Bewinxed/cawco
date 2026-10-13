@@ -35,6 +35,7 @@ import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
 import type { Tracker, WorkBudget, WorkItemState } from "./db/schema";
 import {
+  type Exclusive,
   type FolderAuthor,
   FolderRefusal,
   FolderTaken,
@@ -410,8 +411,14 @@ const TODO_LIMIT = 500;
 const PROMOTED_TODO = /^(\s*- \[[ xX]\] .*?(?:→|->)\s*#)(\d{1,9})(?=\s*$)/gm;
 const TEXT_LIMIT = 20_000;
 const ITEM_LIMIT = 200;
-/** How many numbers a create tries while files keep landing on the one it took. */
+/** How many numberings a create or merge tries while files keep landing on the numbers it took. */
 const CLAIM_TRIES = 10;
+
+/** A file in tasks/ holds a new task file's place when it claims the same number (`tsk-12.md`, `tsk-012-anything.md`). */
+const sameNumber: Exclusive = (name, rel) => {
+  const number = fileTaskNumber(rel);
+  return number !== undefined && fileTaskNumber(name) === number;
+};
 const LIST_LIMIT = 50;
 const TYPE_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 const SECTION_LINE = /^##\s/m;
@@ -1478,10 +1485,6 @@ export const createTasks = (store: TaskStore) => {
     return highest + 1;
   };
 
-  /** A file name that claims task `number` (`tsk-12.md`, `tsk-012-anything.md`). */
-  const claims = (number: number) => (name: string) =>
-    fileTaskNumber(name) === number;
-
   /** stages.md as it reads, or the code template while the project has none. */
   const stagesOf = async (
     projectId: string
@@ -1590,7 +1593,7 @@ export const createTasks = (store: TaskStore) => {
     await writeFolderFile(projectId, path, content, {
       author: actor.author,
       message,
-      ...(fresh ? { exclusive: claims(number) } : {}),
+      ...(fresh ? { exclusive: sameNumber } : {}),
     });
     stands(projectId);
     store.put([indexRow(projectId, path, number, content, hashOf(content))]);
@@ -1601,6 +1604,86 @@ export const createTasks = (store: TaskStore) => {
       content,
       await currentStages(projectId)
     );
+  };
+
+  /**
+   * One try at taking in another project's task files (`adopt`): each under
+   * the next free number, edges and promoted to-dos renamed to match, all
+   * written in one commit only where no file holds their places
+   * (FolderTaken otherwise, with none of them left written). Inside the
+   * project's turn. Answers each old id → its new id.
+   */
+  const adoptOnce = async (
+    projectId: string,
+    numbered: { file: { content: string; path: string }; was: number }[],
+    actor: TaskActor,
+    from: string
+  ): Promise<Map<string, string>> => {
+    const renames = new Map<string, string>();
+    const numbers: number[] = [];
+    for (const { was } of numbered) {
+      // biome-ignore lint/performance/noAwaitInLoops: numbers are handed out in the files' own order
+      const number = await nextNumber(projectId);
+      renames.set(taskId(was), taskId(number));
+      numbers.push(number);
+    }
+    const renamed = (ref: string, was: string): string[] => {
+      const now = renames.get(ref);
+      if (!now) {
+        console.warn(
+          `[tasks] ${was} from ${from} named ${ref}, which did not come with it; the edge is dropped.`
+        );
+      }
+      return now ? [now] : [];
+    };
+    const written = numbered.map(({ file, was }, index) => {
+      const number = numbers[index] as number;
+      const old = taskId(was);
+      const doc = new TaskDoc(file.path, file.content);
+      const { fields } = doc.read();
+      doc.setField(
+        "after",
+        fields.after.flatMap((ref) => renamed(ref, old))
+      );
+      doc.setField(
+        "related",
+        fields.related.flatMap((ref) => renamed(ref, old))
+      );
+      doc.setField(
+        "parent",
+        fields.parent ? (renamed(fields.parent, old)[0] ?? null) : null
+      );
+      doc.setField(
+        "found_in",
+        fields.foundIn ? (renamed(fields.foundIn, old)[0] ?? null) : null
+      );
+      // A to-do promoted to a task names it `→ #<n>`.
+      const content = doc
+        .toString()
+        .replace(PROMOTED_TODO, (line, head: string, n: string) => {
+          const now = renames.get(taskId(Number(n)));
+          return now ? `${head}${taskNumber(now)}` : line;
+        });
+      return { path: taskPath(number, doc.title()), number, content };
+    });
+    // All of them in one commit, or none: a merge never half-lands.
+    stands(projectId);
+    await writeFolderFiles(
+      projectId,
+      written.map(({ path, content }) => ({ path, content })),
+      {
+        author: actor.author,
+        message: `tasks ${written.map((each) => taskId(each.number)).join(", ")}: ${from}'s ${written.length === 1 ? "task" : "tasks"}, merged in ${byWhom(actor)}`,
+        exclusive: sameNumber,
+      }
+    );
+    stands(projectId);
+    store.put(
+      written.map(({ path, number, content }) =>
+        indexRow(projectId, path, number, content, hashOf(content))
+      )
+    );
+    return renames;
   };
 
   /**
@@ -1849,73 +1932,25 @@ export const createTasks = (store: TaskStore) => {
               each.was !== undefined
           )
           .sort((a, b) => a.was - b.was);
-        const renames = new Map<string, string>();
-        const numbers: number[] = [];
-        for (const { was } of numbered) {
-          // biome-ignore lint/performance/noAwaitInLoops: numbers are handed out in the files' own order
-          const number = await nextNumber(projectId);
-          renames.set(taskId(was), taskId(number));
-          numbers.push(number);
+        if (numbered.length === 0) {
+          return new Map<string, string>();
         }
-        const renamed = (ref: string, was: string): string[] => {
-          const now = renames.get(ref);
-          if (!now) {
-            console.warn(
-              `[tasks] ${was} from ${from} named ${ref}, which did not come with it; the edge is dropped.`
+        // A file that claims one of the numbers between the read and the
+        // write (an agent writing tasks/ straight) takes none of them: the
+        // whole merge is numbered afresh and written again.
+        for (let tries = 1; ; tries += 1) {
+          try {
+            // biome-ignore lint/performance/noAwaitInLoops: each try waits on the one before it
+            return await adoptOnce(projectId, numbered, actor, from);
+          } catch (error) {
+            if (!(error instanceof FolderTaken) || tries >= CLAIM_TRIES) {
+              throw error;
+            }
+            console.info(
+              `[tasks] ${projectId}: ${error.message} ${from}'s tasks are numbered again.`
             );
           }
-          return now ? [now] : [];
-        };
-        const written = numbered.map(({ file, was }, index) => {
-          const number = numbers[index] as number;
-          const old = taskId(was);
-          const doc = new TaskDoc(file.path, file.content);
-          const { fields } = doc.read();
-          doc.setField(
-            "after",
-            fields.after.flatMap((ref) => renamed(ref, old))
-          );
-          doc.setField(
-            "related",
-            fields.related.flatMap((ref) => renamed(ref, old))
-          );
-          doc.setField(
-            "parent",
-            fields.parent ? (renamed(fields.parent, old)[0] ?? null) : null
-          );
-          doc.setField(
-            "found_in",
-            fields.foundIn ? (renamed(fields.foundIn, old)[0] ?? null) : null
-          );
-          // A to-do promoted to a task names it `→ #<n>`.
-          const content = doc
-            .toString()
-            .replace(PROMOTED_TODO, (line, head: string, n: string) => {
-              const now = renames.get(taskId(Number(n)));
-              return now ? `${head}${taskNumber(now)}` : line;
-            });
-          return { path: taskPath(number, doc.title()), number, content };
-        });
-        if (written.length === 0) {
-          return renames;
         }
-        // All of them in one commit, or none: a merge never half-lands.
-        stands(projectId);
-        await writeFolderFiles(
-          projectId,
-          written.map(({ path, content }) => ({ path, content })),
-          {
-            author: actor.author,
-            message: `tasks ${written.map((each) => taskId(each.number)).join(", ")}: ${from}'s ${written.length === 1 ? "task" : "tasks"}, merged in ${byWhom(actor)}`,
-          }
-        );
-        stands(projectId);
-        store.put(
-          written.map(({ path, number, content }) =>
-            indexRow(projectId, path, number, content, hashOf(content))
-          )
-        );
-        return renames;
       }).then((renames) => told({ kind: "changed", projectId }, renames));
     },
 
