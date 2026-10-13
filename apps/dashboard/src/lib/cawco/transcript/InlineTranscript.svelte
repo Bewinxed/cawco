@@ -134,9 +134,13 @@
         <p class="empty">Loading its transcript…</p>
       {:else if shown.length === 0 && fault}
         <p class="empty">
-          {fault.reason === "offline"
-            ? "Its machine is offline"
-            : "Its transcript couldn't be read"}:
+          {#if fault.reason !== "offline"}
+            Its transcript couldn't be read:
+          {:else if fault.reconnecting}
+            Its machine is reconnecting:
+          {:else}
+            Its machine is offline:
+          {/if}
           {fault.message}
         </p>
         <!-- The read that failed is the one asked for again: the newest

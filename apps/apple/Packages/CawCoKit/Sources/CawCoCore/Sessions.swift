@@ -112,6 +112,17 @@ public struct ReadFault: Sendable, Equatable {
     public let reason: Reason
     public let machineId: String?
     public let message: String
+    /// `offline`, and the hub heard from the machine moments ago (its 503's
+    /// `X-Cawco-Machine-State: reconnecting`): its agent is on its way back,
+    /// as after a hub restart. A wait, said in place, never toasted.
+    public var reconnecting = false
+
+    init(reason: Reason, machineId: String?, message: String, reconnecting: Bool = false) {
+        self.reason = reason
+        self.machineId = machineId
+        self.message = message
+        self.reconnecting = reconnecting
+    }
 
     /// A read that failed while the hub answered, or never reached it.
     static func failed(_ message: String) -> ReadFault { ReadFault(reason: .failed, machineId: nil, message: message) }
@@ -381,7 +392,7 @@ public final class SessionsStore {
                     transcript.catchingUp = false
                     transcript.missing = true
                     return
-                case let .away(machine): throw Fault(offline(machine))
+                case let .away(machine, reconnecting): throw Fault(offline(machine, reconnecting: reconnecting))
                 }
                 guard !Task.isCancelled else { return }
                 // The pages back to the rows held, when the newest does not reach them.
@@ -422,8 +433,8 @@ public final class SessionsStore {
                         continue
                     case .missing:
                         older = .failed("The hub no longer holds the page before these")
-                    case let .away(machine):
-                        older = offline(machine)
+                    case let .away(machine, reconnecting):
+                        older = offline(machine, reconnecting: reconnecting)
                     }
                     // The rows held before the page that could not be read cannot be joined: the
                     // read stands alone, and the strip before its first row says why.
@@ -524,8 +535,9 @@ public final class SessionsStore {
         case read(Components.Schemas.TranscriptPage)
         /// The hub answered 404.
         case missing
-        /// The machine holding the transcript is not connected (a 503 naming it).
-        case away(String)
+        /// The machine holding the transcript is not connected (a 503 naming
+        /// it), and whether the hub says it is on its way back.
+        case away(String, reconnecting: Bool)
     }
 
     /// One page of a transcript, fetched and decoded off the main thread:
@@ -544,7 +556,8 @@ public final class SessionsStore {
         case .notFound: return .missing
         case let .undocumented(statusCode, payload):
             if statusCode == 503, let away = payload.headerFields.first(where: { $0.name.canonicalName == "x-cawco-machine" })?.value {
-                return .away(away)
+                let state = payload.headerFields.first { $0.name.canonicalName == "x-cawco-machine-state" }?.value
+                return .away(away, reconnecting: state == "reconnecting")
             }
             throw Fault(await refused(payload.body, status: statusCode))
         case let .conflict(answer): throw Fault(await refused(try? answer.body.plainText, status: 409))
@@ -561,10 +574,13 @@ public final class SessionsStore {
         return .failed(Wire.reason(data ?? Data(), status: status))
     }
 
-    /// A 503 naming a machine is the hub saying that machine is not connected.
-    private func offline(_ machine: String) -> ReadFault {
+    /// A 503 naming a machine is the hub saying that machine is not connected;
+    /// `reconnecting`, that it heard from it moments ago (client.svelte.ts `readFaultOf`).
+    private func offline(_ machine: String, reconnecting: Bool) -> ReadFault {
         let host = hub.fleet.machineName(machine)
-        return ReadFault(reason: .offline, machineId: machine, message: "\(host) is offline, so its stored transcript can't be read right now")
+        return reconnecting
+            ? ReadFault(reason: .offline, machineId: machine, message: "\(host) is reconnecting, so its stored transcript is read once it's back", reconnecting: true)
+            : ReadFault(reason: .offline, machineId: machine, message: "\(host) is offline, so its stored transcript can't be read right now")
     }
 
     /// The one page older than what a transcript holds, put in front of it
@@ -606,8 +622,8 @@ public final class SessionsStore {
                 return
             case .success(.missing):
                 transcript.olderFault = .failed("The hub no longer holds the page before these")
-            case let .success(.away(machine)):
-                transcript.olderFault = offline(machine)
+            case let .success(.away(machine, reconnecting)):
+                transcript.olderFault = offline(machine, reconnecting: reconnecting)
             case let .failure(error):
                 transcript.olderFault = await Self.fault(error)
             }

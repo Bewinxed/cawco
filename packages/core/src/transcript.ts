@@ -13,7 +13,12 @@
  * send drawn in its place (`placeSends`), the sends still waiting, the live
  * tail, and the facts the session has stated.
  */
-import type { NeutralMessage, SendRecord, SessionMessage } from "./harness";
+import {
+  type NeutralMessage,
+  type SendRecord,
+  type SessionMessage,
+  STREAM_SO_FAR,
+} from "./harness";
 import {
   applyBranchEvent,
   applyToolResult,
@@ -389,6 +394,9 @@ export class TranscriptBuilder {
     if (harness && harness !== this.facts.harness) {
       this.setFacts({ harness });
     }
+    if (frame.type === "system" && frame.subtype === STREAM_SO_FAR) {
+      return this.restream(frame.partials ?? [], frame.message_id);
+    }
     const now = this.now();
     const mapping = mapFrame(this.instanceId, frame, () => frameHash(frame));
     for (const event of branchEvents(mapping)) {
@@ -534,36 +542,7 @@ export class TranscriptBuilder {
     if (mapping.currentTool && !mapping.agentId) {
       this.setTail({ currentTool: mapping.currentTool });
     }
-    // What the partials say the model is writing right now.
-    if (mapping.blockStart) {
-      this.setTail({ openBlock: mapping.blockStart });
-      // A fresh block of reasoning, not a continuation of the last one.
-      if (mapping.blockStart === "thinking") {
-        this.setTail({
-          thinkingStream: "",
-          thinkingClosing: false,
-          thinkingSince: now,
-        });
-      }
-    }
-    if (mapping.thinkingDelta) {
-      this.tail.thinkingStream += mapping.thinkingDelta;
-      this.events.push({
-        type: "tail.append",
-        thinking: mapping.thinkingDelta,
-      });
-    }
-    if (mapping.thinkingClosing) {
-      this.setTail({ thinkingClosing: true });
-    }
-    if (mapping.blockStop) {
-      this.setTail({ openBlock: null });
-    }
-    // The glance is empty until the full frame lands, so it never overwrites
-    // one that already has the arguments in it.
-    if (mapping.toolStarting && !this.tail.currentTool) {
-      this.setTail({ currentTool: mapping.toolStarting });
-    }
+    this.foldStream(mapping, now, true);
     // The turn's own messages are in the transcript, which is where the
     // reasoning is read from now.
     if (frame.type === "assistant" && !mapping.agentId) {
@@ -572,32 +551,6 @@ export class TranscriptBuilder {
     const answered = this.tail.currentTool?.toolId;
     if (mapping.toolResults.some((result) => result.toolId === answered)) {
       this.setTail({ currentTool: null });
-    }
-    // A subagent's deltas feed its branch's buffer, not the main loop's.
-    if (mapping.agentId) {
-      const held = this.tail.streams[mapping.agentId] ?? "";
-      if (mapping.delta) {
-        this.tail.streams = {
-          ...this.tail.streams,
-          [mapping.agentId]: held + mapping.delta,
-        };
-        this.events.push({
-          type: "tail.append",
-          branch: { toolUseId: mapping.agentId, text: mapping.delta },
-        });
-      }
-      if (mapping.clearsStream && this.tail.streams[mapping.agentId]) {
-        const { [mapping.agentId]: _, ...rest } = this.tail.streams;
-        this.setTail({ streams: rest });
-      }
-    } else {
-      if (mapping.delta) {
-        this.tail.streaming += mapping.delta;
-        this.events.push({ type: "tail.append", streaming: mapping.delta });
-      }
-      if (mapping.clearsStream && this.tail.streaming) {
-        this.setTail({ streaming: "" });
-      }
     }
     if (mapping.failedTurn !== undefined) {
       this.setFacts({ lastTurnFailed: mapping.failedTurn });
@@ -648,16 +601,70 @@ export class TranscriptBuilder {
 
   /** One of the hub's own lines taken back: its row is no longer drawn. */
   removeLine(id: string): TranscriptEvent[] {
-    const at = this.rows.findIndex((row) => row.id === id);
-    if (at >= 0) {
-      const [held] = this.rows.splice(at, 1);
-      this.rowIds.delete(id);
-      const shown = this.placed.indexOf(held);
-      if (shown >= 0) {
-        this.placed.splice(shown, 1);
+    this.dropRow(id);
+    return this.flush();
+  }
+
+  /**
+   * The reply being written, whole so far ({@link STREAM_SO_FAR}): what the
+   * partials painted is replaced by these, which an agent kept since its
+   * message began while no hub may have been listening. A row the harness
+   * stored of that same message while writing it (`messageId`) goes: the
+   * partials draw it, and its final frame draws it whole. One change: the
+   * tail as the partials leave it.
+   */
+  private restream(
+    partials: NeutralMessage[],
+    messageId: string | undefined
+  ): TranscriptEvent[] {
+    if (messageId) {
+      for (const row of this.rows.filter(
+        (held) =>
+          held.sdkUuid === messageId &&
+          !held.parentToolUseId &&
+          (held.type === "assistant" || held.type === "thinking")
+      )) {
+        this.dropRow(row.id);
       }
-      this.events.push({ type: "block.remove", id });
+      // Its final frame is news now, also behind the read that carried it.
+      this.seeded.delete(messageId);
     }
+    const now = this.now();
+    Object.assign(this.tail, {
+      openBlock: null,
+      streams: {},
+      streaming: "",
+      thinkingClosing: false,
+      thinkingSince: null,
+      thinkingStream: "",
+    });
+    for (const partial of partials) {
+      this.foldStream(
+        mapFrame(this.instanceId, partial, () => ""),
+        now,
+        false
+      );
+    }
+    const {
+      currentTool,
+      openBlock,
+      streams,
+      streaming,
+      thinkingClosing,
+      thinkingSince,
+      thinkingStream,
+    } = this.tail;
+    Object.assign(this.tailPatch, {
+      busy: true,
+      currentTool,
+      openBlock,
+      streams,
+      streaming,
+      thinkingClosing,
+      thinkingSince,
+      thinkingStream,
+    });
+    this.tail.busy = true;
     return this.flush();
   }
 
@@ -821,6 +828,91 @@ export class TranscriptBuilder {
       initialized: true,
       inits: this.facts.inits + 1,
     });
+  }
+
+  /** A main-transcript row taken out, and said so. */
+  private dropRow(id: string): void {
+    const at = this.rows.findIndex((row) => row.id === id);
+    if (at < 0) {
+      return;
+    }
+    const [held] = this.rows.splice(at, 1);
+    this.rowIds.delete(id);
+    const shown = this.placed.indexOf(held);
+    if (shown >= 0) {
+      this.placed.splice(shown, 1);
+    }
+    this.events.push({ type: "block.remove", id });
+  }
+
+  /**
+   * What the partials say the model is writing right now, into the tail.
+   * `say`: each delta goes out as it lands (`tail.append`); unsaid, the
+   * caller states the tail it leaves ({@link restream}).
+   */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one pass over every tail field a partial moves, main loop and branch alike
+  private foldStream(mapping: FrameMapping, now: number, say: boolean): void {
+    if (mapping.blockStart) {
+      this.setTail({ openBlock: mapping.blockStart });
+      // A fresh block of reasoning, not a continuation of the last one.
+      if (mapping.blockStart === "thinking") {
+        this.setTail({
+          thinkingStream: "",
+          thinkingClosing: false,
+          thinkingSince: now,
+        });
+      }
+    }
+    if (mapping.thinkingDelta) {
+      this.tail.thinkingStream += mapping.thinkingDelta;
+      if (say) {
+        this.events.push({
+          type: "tail.append",
+          thinking: mapping.thinkingDelta,
+        });
+      }
+    }
+    if (mapping.thinkingClosing) {
+      this.setTail({ thinkingClosing: true });
+    }
+    if (mapping.blockStop) {
+      this.setTail({ openBlock: null });
+    }
+    // The glance is empty until the full frame lands, so it never overwrites
+    // one that already has the arguments in it.
+    if (mapping.toolStarting && !this.tail.currentTool) {
+      this.setTail({ currentTool: mapping.toolStarting });
+    }
+    // A subagent's deltas feed its branch's buffer, not the main loop's.
+    if (mapping.agentId) {
+      const held = this.tail.streams[mapping.agentId] ?? "";
+      if (mapping.delta) {
+        this.tail.streams = {
+          ...this.tail.streams,
+          [mapping.agentId]: held + mapping.delta,
+        };
+        if (say) {
+          this.events.push({
+            type: "tail.append",
+            branch: { toolUseId: mapping.agentId, text: mapping.delta },
+          });
+        }
+      }
+      if (mapping.clearsStream && this.tail.streams[mapping.agentId]) {
+        const { [mapping.agentId]: _, ...rest } = this.tail.streams;
+        this.setTail({ streams: rest });
+      }
+      return;
+    }
+    if (mapping.delta) {
+      this.tail.streaming += mapping.delta;
+      if (say) {
+        this.events.push({ type: "tail.append", streaming: mapping.delta });
+      }
+    }
+    if (mapping.clearsStream && this.tail.streaming) {
+      this.setTail({ streaming: "" });
+    }
   }
 
   /** A block onto the end of its transcript: a branch's, or the main one. */

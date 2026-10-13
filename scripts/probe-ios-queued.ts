@@ -9,15 +9,17 @@
  * continued its own, and a socket that is dead while it reads open is
  * noticed within ~30 s, after which the client reconnects and reads again.
  *
- *   bun scripts/probe-ios-queued.ts --app <CawCo.app> [--keep]
+ *   bun scripts/probe-ios-queued.ts --app <CawCo.app> [--harness claude|opencode] [--keep]
  *
  * Run from the repo root on the Mac (a CawCo workspace on the Mac runs it
  * too: the scratch fleet is loopback, the simulator is local). It:
  *
- *  1. stands up a scratch fleet (scratch-fleet.ts) with one Claude session,
+ *  1. stands up a scratch fleet (scratch-fleet.ts) with one Claude session
+ *     (or OpenCode, `--harness opencode`),
  *     whose mock model streams a long reply to a `HOLD` message (`step 1.
  *     step 2. …`), so a turn stays open for about two minutes;
- *  2. opens the session in the app on an iOS 18.5 simulator of its own, and
+ *  2. opens the session in the app on an iOS 18.5 simulator (a mac-slot.sh
+ *     simulator slot, below), and
  *     in the web dashboard (a `vite dev` server pointed at the scratch hub,
  *     `CAWCO_DEV_HUB_URL`) in Playwright's Chromium, and sends `HOLD` from
  *     the hub's side: the session is busy;
@@ -31,9 +33,14 @@
  *     of a transcript page read on that connection (iOS: its `page adopted`
  *     and `stream: subscribe` lines; the web: the `stream.subscribe` frames
  *     each socket sent, against the transcript pages the page read after
- *     that socket opened), never from the cursor the hub before left; and
- *     the web's reply reads `step 1. step 2. …` with no step repeated or
- *     skipped;
+ *     that socket opened), never from the cursor the hub before left. While
+ *     the turn is still running, each client's reply reads `step 1. step 2.
+ *     …` whole, none repeated or skipped (the web's drawn text; the app's
+ *     DEBUG `probe reply` line), though the new hub process heard only what
+ *     streamed after it started (the agent says the reply so far again,
+ *     STREAM_SO_FAR). Until the web has read the transcript again, nothing it
+ *     says over the rows or in a toast calls it not caught up: its machine is
+ *     reconnecting;
  *  6. (b) freezes the hub (SIGSTOP), its sockets left open. Each client says
  *     within 30 s that it heard nothing after a heartbeat, shows its
  *     reconnecting state (iOS: "Reconnecting to the hub…" or "Hub
@@ -48,7 +55,8 @@
  * the app logged from the send on, it is never absent and never in two rows;
  * and the checks of (a) and (b) on both clients.
  * It stops only what it started: the fleet's processes, the dev server, the
- * browser, the log stream and the simulator it created (deleted at the end).
+ * browser and the log stream. Its simulator is a mac-slot.sh simulator slot,
+ * created for it and deleted as it ends, however it ends.
  */
 import { join } from "node:path";
 import type { Subprocess } from "bun";
@@ -61,13 +69,44 @@ const option = (name: string): string | undefined => {
   return at >= 0 ? args[at + 1] : undefined;
 };
 const app = option("--app");
-if (!app) {
+const harness = option("--harness") ?? "claude";
+if (!app || (harness !== "claude" && harness !== "opencode")) {
   console.log(
-    "usage: bun scripts/probe-ios-queued.ts --app <CawCo.app> [--keep]"
+    "usage: bun scripts/probe-ios-queued.ts --app <CawCo.app> [--harness claude|opencode] [--keep]"
   );
   process.exit(2);
 }
 const keep = args.includes("--keep");
+
+/**
+ * The simulator runs in one of the Mac's two simulator slots
+ * (apps/apple/scripts/mac-slot.sh, README "The Mac's slots"): run without
+ * one, the probe runs itself again inside `mac-slot.sh sim`, which creates
+ * and boots an iPhone 16 Pro on iOS 18.5 for it ($CAWCO_SIM_UDID), and shuts
+ * it down and deletes it when the probe ends, however it ends.
+ */
+if (!process.env.CAWCO_SIM_UDID) {
+  const slotted = Bun.spawn(
+    [
+      "bash",
+      join(import.meta.dir, "../apps/apple/scripts/mac-slot.sh"),
+      "sim",
+      "--runtime",
+      "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
+      "--device",
+      "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro",
+      "--",
+      process.execPath,
+      import.meta.path,
+      ...args,
+    ],
+    { stdin: "inherit", stdout: "inherit", stderr: "inherit" }
+  );
+  for (const signal of ["SIGINT", "SIGTERM"] as const) {
+    process.on(signal, () => slotted.kill(signal));
+  }
+  process.exit(await slotted.exited);
+}
 const AXE = "/opt/homebrew/bin/axe";
 const HOLD = "HOLD";
 const WORDS = "queued probe message";
@@ -175,6 +214,7 @@ const listen = () => {
       for (const line of lines) {
         if (
           line.includes("probe sends") ||
+          line.includes("probe reply") ||
           line.includes("page adopted") ||
           line.includes("hub socket") ||
           line.includes("status line: ") ||
@@ -285,6 +325,7 @@ const openDashboard = async () => {
     const text = message.text();
     if (
       text.includes("[cawco] read ") ||
+      text.includes("[cawco] toast:") ||
       text.includes("hub socket") ||
       text.includes("stream:")
     ) {
@@ -359,41 +400,74 @@ const listingText = async (): Promise<string> =>
     .textContent({ timeout: 2000 })
     .catch(() => "")) ?? "";
 
-/** Whether the web reply's steps run 1, 2, 3… with none repeated or skipped. */
 const STEP = /step (\d+)\./g;
-const HAS_STEP = /step \d+\./;
+const LAST_STEP = /step (\d+)\.\s*$/;
 
 /**
- * Whether a reply's steps, as drawn, run on one at a time, none repeated or
- * skipped: a stream from another hub process applied as a continuation would
- * repeat or skip them. Where it starts is reported, not checked: a reply
- * read mid-turn after a hub restart starts where the new process's stream
- * picked it up (the old process held its first steps in memory only), and
- * reads whole once the turn ends.
+ * Whether the web reply, as drawn, reads step 1 onward, one at a time, none
+ * repeated or skipped: the whole reply so far, also mid-turn after a hub
+ * restart (what only the old process had heard comes again whole,
+ * STREAM_SO_FAR), and no stream from another process applied as a
+ * continuation (which would repeat or skip steps).
  */
-const stepsInOrder = (label: string, who: string, text: string) => {
-  const steps = [...text.matchAll(STEP)].map((m) => Number(m[1]));
-  const broken = steps.findIndex((n, i) => i > 0 && n !== steps[i - 1] + 1);
+const webStepsInOrder = async (label: string) => {
+  const steps = [...(await listingText()).matchAll(STEP)].map((m) =>
+    Number(m[1])
+  );
+  const broken = steps.findIndex((n, i) => n !== i + 1);
   check(
-    `${label}: ${who}: the reply's steps run on one at a time, none repeated or skipped`,
+    `${label}: web: the reply reads step 1 onward, none repeated or skipped`,
     steps.length > 0 && broken < 0,
     broken < 0
-      ? `step ${steps[0]} to ${steps.at(-1)}`
+      ? `step 1 to ${steps.at(-1)}`
       : `at ${broken}: …${steps.slice(Math.max(0, broken - 3), broken + 3).join(", ")}…`
   );
 };
-const webStepsInOrder = async (label: string) =>
-  stepsInOrder(label, "web", await listingText());
-/** The app's reply as its accessibility tree reads it: the longest label carrying steps. */
-const iosStepsInOrder = async (label: string) =>
-  stepsInOrder(
-    label,
-    "iOS",
-    (await tree())
-      .map((n) => n.label ?? "")
-      .filter((text) => HAS_STEP.test(text))
-      .sort((a, b) => b.length - a.length)[0] ?? ""
+
+/** The app's `probe reply` line: its newest assistant row and its live tail, each as length, head and end. */
+const REPLY =
+  /probe reply \w+: row (\d+) "(.*?)…(.*?)" stream (\d+) "(.*?)…(.*?)"$/;
+
+/** How long `step 1. step 2. … step N. ` is: "step " and ". " around each number. */
+const stepsLength = (last: number): number => {
+  let length = 0;
+  for (let step = 1; step <= last; step += 1) {
+    length += 7 + String(step).length;
+  }
+  return length;
+};
+
+/**
+ * The same of the app, read off its DEBUG `probe reply` line (TranscriptView
+ * `sayReply`): the reply it holds (the live tail while one is written, the
+ * newest assistant row once it is) begins `step 1.`, ends on step N, and is
+ * exactly as long as `step 1. … step N. `, so no step is missing or doubled.
+ */
+const iosStepsInOrder = (label: string) => {
+  // The newest line that holds the stepped reply: once the turn has ended,
+  // the queued message is answered too, and its "Done." becomes the newest
+  // assistant row after the reply's own.
+  const said = heard
+    .filter((h) => h.line.includes("probe reply") && h.line.includes('"step '))
+    .at(-1);
+  const m = said ? REPLY.exec(said.line) : null;
+  // The live tail while it holds anything, else the newest assistant row.
+  const at = m && Number(m[4]) > 0 ? 4 : 1;
+  const [length, head, end] = m
+    ? [Number(m[at]), m[at + 1], m[at + 2]]
+    : [0, "", ""];
+  const last = Number(LAST_STEP.exec(end)?.[1] ?? 0);
+  const want = stepsLength(last);
+  check(
+    `${label}: iOS: the reply reads step 1 onward, none repeated or skipped`,
+    head.startsWith("step 1. ") &&
+      last > 0 &&
+      (length === want || length === want - 1),
+    said
+      ? `step 1 to ${last}? "${head}…${end}", ${length} characters, ${want} for steps 1 to ${last}`
+      : "no probe reply line"
   );
+};
 
 /**
  * The web page's every socket since `since` subscribed the session only from
@@ -476,9 +550,9 @@ const iosSaid = (what: string, needle: string, from: number, ms: number) =>
   );
 /**
  * Stops everything this probe started, once, whichever way it ends: the log
- * stream, the browser, the dev server, the simulator it created (shut down,
- * then deleted, so none is left booted for its daemons to crash on the Mac's
- * screen), and the fleet. An interrupt (SIGINT, SIGTERM) runs it too.
+ * stream, the browser, the dev server and the fleet. An interrupt (SIGINT,
+ * SIGTERM) runs it too. The simulator is the slot's: mac-slot.sh shuts it
+ * down and deletes it as the probe ends.
  */
 let tornDown: Promise<void> | undefined;
 const teardown = () => {
@@ -487,12 +561,6 @@ const teardown = () => {
     await browser?.close().catch(() => undefined);
     if (dashboard) {
       await fleet.killTree(dashboard.pid, "SIGTERM").catch(() => undefined);
-    }
-    if (udid) {
-      await sh(`xcrun simctl shutdown ${udid} >/dev/null 2>&1 || true
-xcrun simctl delete ${udid}`).catch((error: unknown) =>
-        console.log(`  the simulator ${udid} was not deleted: ${error}`)
-      );
     }
     await fleet.close();
     await fleet.clean(keep);
@@ -522,22 +590,15 @@ try {
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
-  sessionId = await fleet.spawn("claude", "Queued probe");
+  sessionId = await fleet.spawn(harness, "Queued probe");
+  console.log(`  ${harness} session ${sessionId}`);
   await fleet.send(sessionId, "Say hello.");
   await until("the first turn over", busy, (b) => !b, 120_000);
 
-  udid = (
-    await sh(`TYPE=$(xcrun simctl list devicetypes -j | python3 -c '
-import json, sys
-names = {d["name"]: d["identifier"] for d in json.load(sys.stdin)["devicetypes"]}
-print(names["iPhone 16 Pro"])
-')
-xcrun simctl create "CawCo probe queued" "$TYPE" com.apple.CoreSimulator.SimRuntime.iOS-18-5`)
-  ).trim();
-  console.log(`  simulator ${udid} (iOS 18.5)`);
-  await sh(`xcrun simctl boot ${udid}
-xcrun simctl bootstatus ${udid} -b >/dev/null
-xcrun simctl install ${udid} "${app}"`);
+  // The slot's simulator, booted by mac-slot.sh, which also deletes it.
+  udid = process.env.CAWCO_SIM_UDID ?? "";
+  console.log(`  simulator ${udid} (iOS 18.5, a mac-slot.sh simulator slot)`);
+  await sh(`xcrun simctl install ${udid} "${app}"`);
   stream = listen();
   await launch();
   const field = await until(
@@ -590,11 +651,29 @@ xcrun simctl install ${udid} "${app}"`);
   read("+5 s", (p, s) => p === "queue" && s === "pending", "queued on the hub");
   check("+5 s: the session is still mid-turn", await busy(), "tail.busy true");
   await webStepsInOrder("before the restart");
-  await iosStepsInOrder("before the restart");
+  iosStepsInOrder("before the restart");
 
   // ── (a) A hub restart with the message queued: the owner's case ────────
   const beforeRestart = heard.length;
   const restartAt = Date.now();
+  // What the web page says over the rows, and in toasts, until it has read
+  // the transcript again: the gap before the machine is back on the new hub.
+  const gapSaid = new Set<string>();
+  const sampler = setInterval(async () => {
+    const said =
+      (await page
+        ?.evaluate(() =>
+          [...document.querySelectorAll(".behind, [data-sonner-toast]")].map(
+            (node) => node.textContent?.trim().replace(/\s+/g, " ") ?? ""
+          )
+        )
+        .catch(() => [])) ?? [];
+    for (const text of said) {
+      if (text) {
+        gapSaid.add(text);
+      }
+    }
+  }, 250);
   await fleet.stop("hub");
   fleet.launch("hub");
   await fleet.hubUp();
@@ -616,6 +695,16 @@ xcrun simctl install ${udid} "${app}"`);
   );
   // Long enough for the new process's events to stream on past the page.
   await pause(5000);
+  clearInterval(sampler);
+  const toasts = consoleLines.filter(
+    (c) => c.at >= restartAt && c.text.includes("[cawco] toast:")
+  );
+  const caughtUp = [...gapSaid].filter((text) => text.includes("caught up"));
+  check(
+    "(a) web: the gap before the machine is back never says it isn't caught up",
+    toasts.length === 0 && caughtUp.length === 0,
+    `said over the rows or in a toast: ${[...gapSaid].join(" / ") || "nothing"}${toasts.length ? `; toasts: ${toasts.map((c) => c.text).join(" / ")}` : ""}`
+  );
   const stillBusy = await busy();
   read(
     "(a) after the hub restart and the app's read",
@@ -629,7 +718,7 @@ xcrun simctl install ${udid} "${app}"`);
   iosRejoined("(a)", beforeRestart);
   webRejoined("(a)", restartAt);
   await webStepsInOrder("(a) after the restart");
-  await iosStepsInOrder("(a) after the restart");
+  iosStepsInOrder("(a) after the restart");
 
   // ── (b) A frozen hub: the sockets stay open, nothing answers ───────────
   const beforeFreeze = heard.length;
@@ -738,7 +827,7 @@ xcrun simctl install ${udid} "${app}"`);
   iosRejoined("(b)", beforeFreeze);
   webRejoined("(b)", frozenAt);
   await webStepsInOrder("(b) after the freeze");
-  await iosStepsInOrder("(b) after the freeze");
+  iosStepsInOrder("(b) after the freeze");
 
   // ── The turn ends, Claude Code reads it ────────────────────────────────
   await until(
@@ -752,7 +841,7 @@ xcrun simctl install ${udid} "${app}"`);
   );
   read("after the turn", (p, s) => p === "blocks" && s === "read", "delivered");
   await webStepsInOrder("after the turn");
-  await iosStepsInOrder("after the turn");
+  iosStepsInOrder("after the turn");
   const webText = (await listingText()).toLowerCase();
   const webCopies = webText.split(WORDS).length - 1;
   check(

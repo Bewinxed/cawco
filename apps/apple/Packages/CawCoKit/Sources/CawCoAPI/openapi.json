@@ -37439,6 +37439,10 @@
               }
             ]
           },
+          "message_id": {
+            "description": "The id the harness stores the message being written under, where it\nstores it while it is written (opencode): what {@link STREAM_SO_FAR}\nnames, so a stored copy of the same message is not drawn beside it.",
+            "type": "string"
+          },
           "parent_tool_use_id": {
             "type": [
               "null",
@@ -37690,6 +37694,9 @@
                 "status"
               ]
             }
+          },
+          "message_id": {
+            "type": "string"
           },
           "model": {
             "type": "string"
@@ -38013,6 +38020,12 @@
                 ]
               }
             ]
+          },
+          "partials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NeutralStreamMessage"
+            }
           },
           "patch": {
             "type": "object",

@@ -331,7 +331,9 @@
   const served = $derived(tail && !tail.ok && !readAnswered ? tail : null);
   const servedMissing = $derived(served?.status === 404);
   const servedFault = $derived(
-    served && !servedMissing ? readFaultOf(served, served.machineId) : null
+    served && !servedMissing
+      ? readFaultOf(served, served.machineId, served.reconnecting)
+      : null
   );
 
   /**
@@ -507,12 +509,25 @@
     return crossOut(node);
   }
 
+  /** What a read failure is called: its machine away (on its way back, or offline), or the read failed. */
+  const faultTitle = $derived.by(() => {
+    if (fault?.reason !== "offline") {
+      return "This transcript couldn't be read";
+    }
+    return fault.reconnecting
+      ? "This machine is reconnecting"
+      : "This machine is offline";
+  });
+
   /** What a read failure says: what went wrong, then what to do about it. */
-  const faultLine = $derived(
-    fault?.reason === "offline"
-      ? `${fault.message}. Try again once it is back online.`
-      : `Reading it failed: ${fault?.message}. Try again; if it fails the same way, the hub's log has the cause.`
-  );
+  const faultLine = $derived.by(() => {
+    if (fault?.reason !== "offline") {
+      return `Reading it failed: ${fault?.message}. Try again; if it fails the same way, the hub's log has the cause.`;
+    }
+    return fault.reconnecting
+      ? `${fault.message}.`
+      : `${fault.message}. Try again once it is back online.`;
+  });
 
   /** Try again: forget what was said about the last read, then read. */
   function retry(): void {
@@ -1005,9 +1020,7 @@
     icon={fault.reason === "offline" ? IconLaptop : IconAlert}
     line={faultLine}
     role="alert"
-    title={fault.reason === "offline"
-      ? "This machine is offline"
-      : "This transcript couldn't be read"}
+    title={faultTitle}
   >
     {#snippet action()}
       <Button onclick={retry} variant="outline">Try again</Button>

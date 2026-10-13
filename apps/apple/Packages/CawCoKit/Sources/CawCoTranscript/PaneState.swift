@@ -76,11 +76,13 @@ final class PaneState: UIView {
         switch state {
         case let .fault(fault):
             mark.glyph = fault.reason == .offline ? .laptop : .alert
-            titleText = fault.reason == .offline ? "This machine is offline" : "This transcript couldn't be read"
+            titleText = fault.reason == .offline
+                ? (fault.reconnecting ? "This machine is reconnecting" : "This machine is offline")
+                : "This transcript couldn't be read"
             // SessionPane `faultLine`: what went wrong, then what to do about it.
             // The fault's message is one sentence without its stop (`ReadFault`).
             let said = switch fault.reason {
-            case .offline: "\(fault.message). Try again once it is back online."
+            case .offline: fault.reconnecting ? "\(fault.message)." : "\(fault.message). Try again once it is back online."
             case .localNetwork: "\(fault.message). \(LocalNetwork.allowIt), and it's read as soon as you're back."
             case .failed: "Reading it failed: \(fault.message). Try again; if it fails the same way, the hub's log has the cause."
             }

@@ -14,6 +14,25 @@ export interface HubFailure {
 export type HubRead<T> = { ok: true; value: T } | ({ ok: false } & HubFailure);
 
 /**
+ * The machine a transcript read's 503 names as not connected, and whether
+ * the hub says it is on its way back (`X-Cawco-Machine-State: reconnecting`:
+ * heard from moments ago). Any other answer names none.
+ */
+export function machineAway(response: Response): {
+  away: string | null;
+  reconnecting: boolean;
+} {
+  const away =
+    response.status === 503 ? response.headers.get("x-cawco-machine") : null;
+  return {
+    away,
+    reconnecting:
+      away !== null &&
+      response.headers.get("x-cawco-machine-state") === "reconnecting",
+  };
+}
+
+/**
  * The hub's own words on a refused read: the problem's `detail` or `title`,
  * the api proxy's `error`, or the text it answered. Read from the body alone —
  * a universal load may not read response headers SvelteKit does not

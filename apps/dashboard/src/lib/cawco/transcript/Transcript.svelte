@@ -2751,9 +2751,13 @@
   <div class="older" {@attach keepPlace}>
     {#if renderedRows.length > 0 && session.olderFault}
       <p class="empty">
-        {session.olderFault.reason === "offline"
-          ? "This machine is offline"
-          : "The turns before these couldn't be read"}:
+        {#if session.olderFault.reason !== "offline"}
+          The turns before these couldn't be read:
+        {:else if session.olderFault.reconnecting}
+          This machine is reconnecting:
+        {:else}
+          This machine is offline:
+        {/if}
         {session.olderFault.message}
       </p>
       <Button

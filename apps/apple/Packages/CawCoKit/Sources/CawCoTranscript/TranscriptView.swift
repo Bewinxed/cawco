@@ -693,6 +693,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             arrivals.append((characters.count, now))
             lastArrival = now
             drainDeadline = nil
+            #if DEBUG
+            sayReply()
+            #endif
         }
         dirty = true
     }
@@ -749,9 +752,27 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         if next.compacts, !Self.markWarmed { Self.markWarmed = true; CawMark.warm(.compacted) }
         #if DEBUG
         saySends()
+        sayReply()
         #endif
         dirty = true
     }
+
+    #if DEBUG
+    private var replySaid = ""
+
+    /// The running reply as this view holds it: the newest assistant row and
+    /// the live tail, each as its length, its first and its last characters,
+    /// for a simulator pass to read (probe-ios-queued.ts). Said when it changes.
+    private func sayReply() {
+        guard let transcript else { return }
+        func part(_ text: String) -> String { "\(text.count) \"\(text.prefix(16))…\(text.suffix(16))\"" }
+        let row = blocks.last { $0.type == "assistant" && $0.parentToolUseId == nil }?.content ?? ""
+        let said = "row \(part(row)) stream \(part(received))"
+        guard said != replySaid else { return }
+        replySaid = said
+        Self.dockLog.notice("probe reply \(transcript.id.prefix(8), privacy: .public): \(said, privacy: .public)")
+    }
+    #endif
 
     #if DEBUG
     /// Every send this view has drawn waiting (this device's, or the hub's
@@ -1942,7 +1963,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// and no toast: the status line is where that is said.
     static func notCaughtUp(_ fault: ReadFault, name: (String) -> String) -> String {
         if fault.reason == .offline, let machine = fault.machineId {
-            return "Not caught up: \(Naming.unbroken(name(machine))) is offline. The rest comes in once it's back."
+            return fault.reconnecting
+                ? "\(Naming.unbroken(name(machine))) is reconnecting. The rest comes in once it's back."
+                : "Not caught up: \(Naming.unbroken(name(machine))) is offline. The rest comes in once it's back."
         }
         return "Not caught up"
     }
@@ -1991,7 +2014,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         if rowsDrawn, let transcript, let fault = transcript.behind {
             behind.say(Self.notCaughtUp(fault) { [hub] in hub?.fleet.machineName($0) ?? $0 }, action: Self.dockAction(fault))
             behind.show(true)
-            toastFor = (transcript, fault)
+            // A machine on its way back is a wait the dock says; the toast is
+            // for a read that failed.
+            if !fault.reconnecting { toastFor = (transcript, fault) }
         } else {
             behind.show(false)
         }

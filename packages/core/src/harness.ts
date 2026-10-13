@@ -863,6 +863,20 @@ export const MESSAGES_STORED = "stored";
  */
 export const MESSAGES_HELD = "held";
 
+/**
+ * The `system` subtype carrying the reply being written, whole so far: every
+ * partial since its message began (`partials`, consecutive deltas joined).
+ * An agent sends it as it registers with the hub, for each session part way
+ * through a message: what streamed while no hub was listening was dropped,
+ * and a hub that started since knows the reply only from what streams after
+ * it, while the harness stores a message only once it is written (Claude
+ * Code, pi). The hub's transcript draws the running reply from it in place of
+ * whatever it painted (`TranscriptBuilder` `restream`), dropping the rows a
+ * harness stored of that message while it was being written (`message_id`,
+ * opencode). It is never stored, and nothing else reads it.
+ */
+export const STREAM_SO_FAR = "stream_so_far";
+
 export interface NeutralStreamMessage {
   event:
     | {
@@ -879,6 +893,12 @@ export interface NeutralStreamMessage {
       }
     | { type: "content_block_stop" }
     | { type: "message_stop" };
+  /**
+   * The id the harness stores the message being written under, where it
+   * stores it while it is written (opencode): what {@link STREAM_SO_FAR}
+   * names, so a stored copy of the same message is not drawn beside it.
+   */
+  message_id?: string;
   parent_tool_use_id?: string | null;
   raw?: unknown;
   session_id?: string;
@@ -1031,10 +1051,16 @@ export interface NeutralSystemMessage {
   hook_name?: string;
   last_tool_name?: string;
   mcp_servers?: { name: string; status: string }[];
+  // stream_so_far ({@link STREAM_SO_FAR}) — the id the harness stores the
+  // message being written under, when it stores it while it is written
+  message_id?: string;
   // init
   model?: string;
   // account_move ({@link ACCOUNT_MOVE}) — what the hub did at the account's limit
   move?: import("./accounts").AccountMove;
+  // stream_so_far ({@link STREAM_SO_FAR}) — every partial of the message being
+  // written, since it began
+  partials?: NeutralStreamMessage[];
   patch?: { description?: string; status?: string; error?: string };
   permissionMode?: PermissionMode;
   // rate_limit ({@link RATE_LIMIT_READ}) — the `rate_limit_info` Claude Code reported

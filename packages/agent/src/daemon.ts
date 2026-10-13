@@ -1502,6 +1502,9 @@ const attach = (
     // see one to answer. The register is already on the wire above and the
     // socket preserves that order, so the hub still reads the register first.
     supervisor.replayOpenAsks();
+    // And each session's reply so far: what streamed while no hub listened
+    // was dropped, and a hub that started since knows only what comes next.
+    supervisor.replayStreams();
     supervisor.replaySessionAddresses();
     supervisor.replaySpawnFailures();
     /**

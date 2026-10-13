@@ -1,8 +1,10 @@
 <!--
   A transcript that cannot be caught up says so in one line over the rows the
   reader holds (client.svelte.ts `SessionState.behind`), and goes when the
-  read lands. Its machine is offline, and the rest comes in once the hub
-  says it is back (`readBehind`); or the read failed: "Not caught up" beside
+  read lands. Its machine is reconnecting (the hub heard from it moments
+  ago: a hub that just restarted, a dropped connection), a wait said with no
+  toast; or it is offline; either way the rest comes in once the hub says it
+  is back (`readBehind`). Or the read failed: "Not caught up" beside
   Try again, which reads it now, as the backoff does by itself
   (`readAgainLater`). Why it failed is the toast's to say, once per fault
   (`toastBehind`): the line never carries the hub's words.
@@ -49,7 +51,12 @@
   in:rise={"--dur-panel"}
   out:rise={"--dur-exit"}
 >
-  {#if fault.reason === "offline"}
+  {#if fault.reason === "offline" && fault.reconnecting}
+    <p>
+      <span class="name">{machine}</span>
+      is reconnecting. The rest comes in once it's back.
+    </p>
+  {:else if fault.reason === "offline"}
     <p>
       Not caught up: <span class="name">{machine}</span> is offline. The rest
       comes in once it's back.

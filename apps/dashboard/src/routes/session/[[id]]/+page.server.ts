@@ -1,6 +1,6 @@
 import type { TranscriptPage } from "@cawco/core";
 import type { ServerTail } from "#lib/cawco/client.svelte.js";
-import { hubFailure } from "#lib/cawco/hub-read.js";
+import { hubFailure, machineAway } from "#lib/cawco/hub-read.js";
 import { transcriptUrl } from "#lib/cawco/links.js";
 import { isThreadTab } from "#lib/cawco/thread-tabs.js";
 import { runIdOf } from "#lib/cawco/workflow-runs.js";
@@ -35,15 +35,14 @@ export const load: PageServerLoad = async ({
   }
   const response = await fetch(transcriptUrl(viewId));
   if (!response.ok) {
+    // A 503 naming a machine is the hub saying that machine is not connected.
+    const { away, reconnecting } = machineAway(response);
     return {
       tail: {
         ok: false,
         viewId,
-        // A 503 naming a machine is the hub saying that machine is not connected.
-        machineId:
-          response.status === 503
-            ? response.headers.get("x-cawco-machine")
-            : null,
+        machineId: away,
+        reconnecting,
         ...(await hubFailure(response)),
       },
     };

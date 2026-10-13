@@ -123,6 +123,7 @@ import { type PromptWriteNotice, withPromptWrites } from "./prompt-writes";
 import { rememberCredential } from "./redaction";
 import { fenced } from "./restart";
 import { endProc, keeperLimits, procEpoch } from "./sessiond-client";
+import { StreamsSoFar } from "./stream-so-far";
 import { installTool, probeTools } from "./tools";
 import { runWorkflowCommand } from "./workflow-command";
 import { workspaceHolding } from "./workspace-records";
@@ -873,6 +874,20 @@ export class SessionSupervisor {
    * would leave the ask on every screen. Said after the next registration.
    */
   readonly #unheardSettles = new Map<string, Parameters<FrameSink>[0]>();
+
+  /** The reply each session is writing, whole so far ({@link StreamsSoFar}). */
+  readonly #streams = new StreamsSoFar();
+
+  /**
+   * Says each session's reply so far again — called by the daemon after
+   * register. What streamed while no hub listened was dropped, and a hub that
+   * started since would draw a running reply from its middle.
+   */
+  replayStreams(): void {
+    for (const frame of this.#streams.frames()) {
+      this.sink({ kind: "frame", ...frame });
+    }
+  }
 
   /** Re-sinks every unresolved ask, and every ask's end the hub missed — called by the daemon after register. */
   replayOpenAsks(): void {
@@ -1653,6 +1668,7 @@ export class SessionSupervisor {
     this.#busy.delete(instanceId);
     this.#activeAt.delete(instanceId);
     this.#line.delete(instanceId);
+    this.#streams.forget(instanceId);
     // The process this mark counted in is over — a relaunch or a death.
     // Whatever produces frames next is not replaying the hub's own past.
     this.#ingested.delete(instanceId);
@@ -2424,6 +2440,7 @@ export class SessionSupervisor {
         // this agent what its own session is doing.
         if (!keepAlive) {
           this.#foldPulse(instanceId, message);
+          this.#streams.note(instanceId, adapter.kind, message);
         }
         // AT MOST ONCE. The hub's mark is the hub's word, so a line at or below
         // it has already become a frame there — replaying it would double what

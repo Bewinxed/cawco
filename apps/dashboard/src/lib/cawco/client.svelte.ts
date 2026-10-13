@@ -117,7 +117,12 @@ import { browser } from "$app/env";
 import { goto } from "$app/navigation";
 import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
-import { failureReason, type HubFailure, hubFailure } from "./hub-read";
+import {
+  failureReason,
+  type HubFailure,
+  hubFailure,
+  machineAway,
+} from "./hub-read";
 import { newId } from "./id";
 import {
   conversationHref,
@@ -423,7 +428,18 @@ export interface CommandState {
  * again when that machine is back.
  */
 export type ReadFault =
-  | { machineId: string; message: string; reason: "offline" }
+  | {
+      machineId: string;
+      message: string;
+      reason: "offline";
+      /**
+       * The hub heard from the machine moments ago: its agent is on its way
+       * back (the hub restarted, or the machine's connection dropped), and
+       * the read comes once it is. A wait, not a fault: said in place, never
+       * as a toast.
+       */
+      reconnecting?: true;
+    }
   | { message: string; reason: "failed" };
 
 export interface SessionState {
@@ -5914,6 +5930,8 @@ export type ServerTail =
       /** The machine a 503 named as not connected, else null. */
       machineId: string | null;
       ok: false;
+      /** The hub heard from that machine moments ago (`machineAway`). */
+      reconnecting: boolean;
       status: number;
       viewId: string;
     };
@@ -5927,15 +5945,24 @@ export type ServerTail =
  */
 export function readFaultOf(
   failure: HubFailure,
-  away: string | null
+  away: string | null,
+  reconnecting = false
 ): ReadFault {
   if (away) {
     const machine = state.machines.find((row) => row.machineId === away);
-    return {
-      reason: "offline",
-      machineId: away,
-      message: `${machine?.hostname || away} is offline, so its stored transcript can't be read right now`,
-    };
+    const name = machine?.hostname || away;
+    return reconnecting
+      ? {
+          reason: "offline",
+          machineId: away,
+          reconnecting: true,
+          message: `${name} is reconnecting, so its stored transcript is read once it's back`,
+        }
+      : {
+          reason: "offline",
+          machineId: away,
+          message: `${name} is offline, so its stored transcript can't be read right now`,
+        };
   }
   return { reason: "failed", message: failureReason(failure) };
 }
@@ -5955,9 +5982,12 @@ function thrownReason(error: unknown): string {
 /** Why a page read ended with nothing, said the way the pane says it. */
 async function pageFault(response: Response): Promise<TranscriptOutcome> {
   const failure = await hubFailure(response);
-  const away =
-    response.status === 503 ? response.headers.get("x-cawco-machine") : null;
-  return { ok: false, status: response.status, ...readFaultOf(failure, away) };
+  const { away, reconnecting } = machineAway(response);
+  return {
+    ok: false,
+    status: response.status,
+    ...readFaultOf(failure, away, reconnecting),
+  };
 }
 
 /** Why the newest page is read: each caller of {@link readTranscript} names itself. */
@@ -6197,7 +6227,11 @@ async function readBackToHeld(
 function readFailed(target: SessionState, fault: ReadFault): void {
   if (target.blocks.length > 0) {
     target.behind = fault;
-    toastBehind(target.instanceId, fault);
+    // A machine on its way back is a wait the line over the rows says; the
+    // toast is for a read that failed.
+    if (!(fault.reason === "offline" && fault.reconnecting)) {
+      toastBehind(target.instanceId, fault);
+    }
   } else {
     target.readFault = fault;
   }
@@ -6396,12 +6430,8 @@ async function olderPage(
         if (response.ok) {
           return (await response.json()) as TranscriptPage;
         }
-        return readFaultOf(
-          await hubFailure(response),
-          response.status === 503
-            ? response.headers.get("x-cawco-machine")
-            : null
-        );
+        const { away, reconnecting } = machineAway(response);
+        return readFaultOf(await hubFailure(response), away, reconnecting);
       },
       cancel
     );

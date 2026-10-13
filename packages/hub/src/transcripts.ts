@@ -19,6 +19,7 @@ import {
   type SendRecord,
   type SessionMessage,
   type SessionStreamFrame,
+  STREAM_SO_FAR,
   TRANSCRIPT_PAGE,
   TranscriptBuilder,
   type TranscriptEvent,
@@ -75,6 +76,37 @@ export type TranscriptPayload = Extract<
   FramePayload,
   { kind: "frame" | "send" }
 >;
+
+/** A frame that paints the reply being written: a partial, or the reply so far re-sent whole. */
+const partial = (message: NeutralMessage): boolean =>
+  message.type === "stream_event" ||
+  (message.type === "system" && message.subtype === STREAM_SO_FAR);
+
+/**
+ * A held payload after which the partials before it paint nothing: the main
+ * loop's message written (its final frame, or its stream's end), the turn's
+ * end, or the reply so far re-sent whole.
+ */
+const endsPartials = (payload: TranscriptPayload): boolean => {
+  if (payload.kind !== "frame") {
+    return false;
+  }
+  const message = payload.message as NeutralMessage;
+  switch (message.type) {
+    case "assistant":
+      return !message.parent_tool_use_id;
+    case "result":
+      return true;
+    case "stream_event":
+      return (
+        message.event.type === "message_stop" && !message.parent_tool_use_id
+      );
+    case "system":
+      return message.subtype === STREAM_SO_FAR;
+    default:
+      return false;
+  }
+};
 
 interface Entry {
   /**
@@ -160,9 +192,8 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
 
   /**
    * Reads the stored transcript and folds it in, then whatever arrived while
-   * it was read — minus partials (the turn's own frames land right behind
-   * them) and frames the read already carried. A read that fails leaves no
-   * transcript: the next frame or page reads again.
+   * it was read ({@link replayHeld}). A read that fails leaves no transcript:
+   * the next frame or page reads again.
    */
   const load = (
     instanceId: string,
@@ -202,20 +233,30 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     return loading;
   };
 
-  /** What arrived during a read, folded in behind it, less what it already carried. */
-  const replayHeld = (entry: Entry): TranscriptEvent[] =>
-    entry.held.splice(0).flatMap((payload) => {
+  /**
+   * What arrived during a read, folded in behind it, less what it already
+   * carried. A read holds no partial (a harness stores a message once it is
+   * written, or opencode what it had so far, which a re-sent reply replaces),
+   * so the partials of the message still being written as the read ended are
+   * folded: those after the last frame held that ends a message or re-sends
+   * the reply whole. Those before it are dropped: what they painted is in the
+   * read, or in what came after them.
+   */
+  const replayHeld = (entry: Entry): TranscriptEvent[] => {
+    const held = entry.held.splice(0);
+    const settled = held.findLastIndex(endsPartials);
+    return held.flatMap((payload, index) => {
       if (payload.kind === "frame") {
-        const message = payload.message as { type?: string; uuid?: string };
+        const message = payload.message as NeutralMessage;
         if (
-          message.type === "stream_event" ||
-          entry.builder.seen(message.uuid)
+          partial(message) ? index < settled : entry.builder.seen(message.uuid)
         ) {
           return [];
         }
       }
       return fold(entry, payload);
     });
+  };
 
   const entryFor = (instanceId: string): Entry => {
     const known = entries.get(instanceId);

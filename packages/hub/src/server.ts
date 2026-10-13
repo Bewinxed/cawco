@@ -226,6 +226,7 @@ import {
   runDoing,
   SERVER_STOPPED_MID_TURN,
   SESSION_DIR_READ,
+  STREAM_SO_FAR,
   SUMMARISER_OUTPUT_RESERVE_TOKENS,
   SUMMARY_CAP_TOKENS,
   sameIdentity,
@@ -831,6 +832,14 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
 
 /** Reading one file off a machine: it answers about as fast as a disk does. */
 const READ_TIMEOUT_MS = 10_000;
+
+/**
+ * How recently a machine that is not connected must have been heard from to
+ * read as reconnecting, not offline (`machineReconnecting`). Our choice: two
+ * of the agent's longest waits between tries (30 s, agent daemon.ts
+ * `reconnect`).
+ */
+const RECONNECTING_MS = 60_000;
 
 /**
  * Statuses a session's row holds once its process has ended, or once its end
@@ -12888,6 +12897,24 @@ export const createServer = (
     return { where, cut: fork?.at, row };
   };
 
+  /**
+   * Whether a machine that is not connected is on its way back: this hub (or
+   * the process before it, whose word the database keeps) heard from it
+   * within {@link RECONNECTING_MS}. A machine's agent tries its hub again
+   * within seconds of losing it, and never waits more than 30 s between tries
+   * (agent daemon.ts `reconnect`), so a hub that just restarted reads every
+   * machine it was serving this way until each registers. Silent longer, it
+   * is offline.
+   */
+  const machineReconnecting = (machineId: string): boolean => {
+    const heard = db
+      .listAgents()
+      .find((agent) => agent.machineId === machineId)?.lastSeenAt;
+    return (
+      heard instanceof Date && Date.now() - heard.getTime() <= RECONNECTING_MS
+    );
+  };
+
   /** The stored entries under `where`, as its machine answers, or why it could not. */
   const storedEntries = async (
     where: TranscriptWhere
@@ -16925,11 +16952,16 @@ export const createServer = (
           }
           switch (page.fault) {
             // Named with the machine, so a reader can say which one is away
-            // and hear it come back.
+            // and hear it come back, and whether it is on its way back.
             case "offline":
               return new Response(page.message, {
                 status: 503,
-                headers: { "X-Cawco-Machine": page.machineId ?? "" },
+                headers: {
+                  "X-Cawco-Machine": page.machineId ?? "",
+                  ...(page.machineId && machineReconnecting(page.machineId)
+                    ? { "X-Cawco-Machine-State": "reconnecting" }
+                    : {}),
+                },
               });
             case "missing":
               return status(404, page.message);
@@ -20837,6 +20869,22 @@ export const createServer = (
                     frame.harness,
                     frame.message
                   );
+                  break;
+                }
+                // The reply being written, re-sent whole by an agent that just
+                // registered (STREAM_SO_FAR): it only repaints the running
+                // reply. Not a line of the session's output, so the ingest
+                // ledger never sees it (no provenance would retire the mark a
+                // later reattach replays from), and nothing that makes a turn
+                // into work, attention or activity reads it.
+                if (
+                  frame.message.type === "system" &&
+                  frame.message.subtype === STREAM_SO_FAR
+                ) {
+                  const [row] = db.getInstancesByIds([message.instanceId]);
+                  if (row?.machineId === message.machineId) {
+                    transcripts.ingest(row.id, frame as TranscriptPayload);
+                  }
                   break;
                 }
               }

@@ -2133,6 +2133,7 @@ interface ThinkingStreamFrame {
         delta: { type: "thinking_delta"; thinking: string };
       }
     | { type: "content_block_stop" };
+  message_id?: string;
   session_id?: string;
   type: "stream_event";
 }
@@ -2756,20 +2757,30 @@ export class OpencodeSession implements HarnessSession {
           if (this.#openThinking !== props.partID) {
             this.#closeThinking();
             this.#openThinking = props.partID;
-            this.#thinkingFrame({
-              type: "content_block_start",
-              content_block: { type: "thinking", thinking: "" },
-            });
+            this.#thinkingFrame(
+              {
+                type: "content_block_start",
+                content_block: { type: "thinking", thinking: "" },
+              },
+              props.messageID
+            );
           }
-          this.#thinkingFrame({
-            type: "content_block_delta",
-            delta: { type: "thinking_delta", thinking: props.delta },
-          });
+          this.#thinkingFrame(
+            {
+              type: "content_block_delta",
+              delta: { type: "thinking_delta", thinking: props.delta },
+            },
+            props.messageID
+          );
         } else {
           this.#closeThinking();
+          // Named with its message: opencode stores the message while it is
+          // written, and a reply re-sent whole replaces that copy
+          // (STREAM_SO_FAR) rather than drawing beside it.
           this.#ctx.frame({
             type: "stream_event",
             session_id: this.sessionId ?? undefined,
+            ...(props.messageID ? { message_id: props.messageID } : {}),
             event: {
               type: "content_block_delta",
               delta: { type: "text_delta", text: props.delta },
@@ -3195,10 +3206,12 @@ export class OpencodeSession implements HarnessSession {
    * thinking events itself (harness.ts widened 2026-08-16), so this is a plain
    * frame — no widening, the literals stay checked end to end.
    */
-  #thinkingFrame(event: ThinkingStreamFrame["event"]): void {
+  #thinkingFrame(event: ThinkingStreamFrame["event"], writing?: string): void {
     const frame: ThinkingStreamFrame = {
       type: "stream_event",
       session_id: this.sessionId ?? undefined,
+      // The message it is part of: see the text delta's `message_id`.
+      ...(writing ? { message_id: writing } : {}),
       event,
     };
     this.#ctx.frame(frame);
