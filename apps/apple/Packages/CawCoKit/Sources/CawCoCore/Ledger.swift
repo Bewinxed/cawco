@@ -141,15 +141,29 @@ public final class Ledger {
         cursors[sessionId] = cursor
     }
 
-    /// Forgets what is no longer watched, cursor and all. A watched session
+    /// Forgets what is no longer watched, cursor and all. `sessionIds` is
+    /// every session anything on this connection shows (`SessionsStore`'s
+    /// counted watches: every tab, the peek, every delegate and hover card),
+    /// so one is let go only when nothing shows it. A watched session
     /// is subscribed by the read that adopts its page (`adoptPage`), never
     /// resumed from a cursor across a connection: the hub numbers a session's
     /// stream in memory, from 1 again after it restarts, so a cursor from the
     /// connection before may name events of another hub process.
     func forget(except sessionIds: Set<String>) {
         for id in cursors.keys where !sessionIds.contains(id) {
-            cursors[id] = nil
+            letGo(id)
         }
+    }
+
+    /// Drops a session's cursor, and tells the hub when this connection
+    /// follows it: the hub sends a follower every event until it hears
+    /// otherwise (stream.ts `letGo`). Events already on their way find no
+    /// cursor and are dropped (`handle`).
+    private func letGo(_ sessionId: String) {
+        let subscribed = cursors.removeValue(forKey: sessionId)?.subscribed == true
+        guard subscribed else { return }
+        log.info("stream: unsubscribe \(sessionId.prefix(8), privacy: .public)")
+        _ = dispatch(Components.Schemas.StreamUnsubscribe(sessionId: sessionId, _type: .stream_unsubscribe))
     }
 
     func beginRead(_ id: String) {
@@ -247,8 +261,11 @@ public final class Ledger {
             log.error("stream: unreadable \(type, privacy: .public) naming no session")
             return
         }
+        guard var cursor = cursors[sessionId] else {
+            log.debug("stream: unreadable \(type, privacy: .public) for \(sessionId.prefix(8), privacy: .public) dropped, unfollowed")
+            return
+        }
         log.error("stream: unreadable \(type, privacy: .public) for \(sessionId.prefix(8), privacy: .public): read again")
-        var cursor = cursors[sessionId] ?? Cursor()
         cursor.reading = true
         cursor.resyncAfter = nil
         cursor.resyncFailures = 0
@@ -257,8 +274,13 @@ public final class Ledger {
     }
 
     private func apply(_ event: Event) {
-        var cursor = cursors[event.sessionId] ?? Cursor()
         let session = event.sessionId.prefix(8)
+        // What the hub sent before it heard this connection let the session
+        // go is not this connection's: the read that follows it again starts it afresh.
+        guard var cursor = cursors[event.sessionId] else {
+            log.debug("stream: \(session, privacy: .public) seq \(event.seq) dropped, unfollowed")
+            return
+        }
         guard !cursor.reading else {
             log.debug("stream: \(session, privacy: .public) seq \(event.seq) dropped while reading")
             return
@@ -306,7 +328,10 @@ public final class Ledger {
     }
 
     private func apply(backlog events: [Event], of sessionId: String) {
-        var cursor = cursors[sessionId] ?? Cursor()
+        guard var cursor = cursors[sessionId] else {
+            log.debug("stream: backlog for \(sessionId.prefix(8), privacy: .public) dropped, unfollowed")
+            return
+        }
         log.info("stream: backlog for \(sessionId.prefix(8), privacy: .public): \(events.count) events from \(events.first?.seq ?? -1), at \(cursor.lastSeq)\(cursor.reading ? ", dropped while reading" : "", privacy: .public)")
         guard !cursor.reading else { return }
         cursor.subscribed = true
@@ -353,7 +378,10 @@ public final class Ledger {
     }
 
     private func reset(_ sessionId: String, nextSeq: Double?) {
-        var cursor = cursors[sessionId] ?? Cursor()
+        guard var cursor = cursors[sessionId] else {
+            log.debug("stream: reset for \(sessionId.prefix(8), privacy: .public) dropped, unfollowed")
+            return
+        }
         cursor.reading = true
         cursor.subscribed = true
         cursor.resyncAfter = nil
