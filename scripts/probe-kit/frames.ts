@@ -22,6 +22,10 @@
  * an `await` is no callback and is not seen.
  *
  * The readers below turn those series into the probes' checks.
+ *
+ * `traceMain` reads the main thread off a DevTools trace instead (Chromium):
+ * each top-level task's wall time and its thread time, the CPU it took
+ * whatever else the machine ran, and the page's `performance.mark`s.
  */
 import type { Page } from "playwright-core";
 
@@ -341,6 +345,105 @@ export function wholeWheels(
     widest,
   };
 }
+
+/** One top-level task of the page's main thread, from a trace. */
+export interface MainTask {
+  /** When it started, the trace clock, µs. */
+  at: number;
+  /** Its thread's own clock (`tdur`), ms: the CPU it took, whatever else ran. */
+  cpu: number;
+  /** When it ended, the trace clock, µs. */
+  end: number;
+  /** The trace clock (`dur`), ms: wall time, other processes' turns included. */
+  wall: number;
+}
+
+/** What a trace says of the page's main thread: its top-level tasks, and the marks made on it. */
+export interface MainThread {
+  /** Each `performance.mark` made while tracing: its name and when, the trace clock, µs. */
+  marks: { at: number; name: string }[];
+  tasks: MainTask[];
+}
+
+interface TraceEvent {
+  cat: string;
+  dur?: number;
+  name: string;
+  ph: string;
+  pid: number;
+  tdur?: number;
+  tid: number;
+  ts: number;
+}
+
+/**
+ * The page's main thread while `act` runs, read off a DevTools trace
+ * (Chromium): every top-level task (`RunTask`) with its wall time (`dur`)
+ * and its thread time (`tdur`, the thread clock: the CPU the task took),
+ * and every user-timing mark. The main thread is the one the marks are made
+ * on, so `act` makes at least one (`performance.mark`) in the page.
+ */
+export async function traceMain(
+  page: Page,
+  act: () => Promise<unknown>
+): Promise<MainThread> {
+  const cdp = await page.context().newCDPSession(page);
+  const events: TraceEvent[] = [];
+  cdp.on("Tracing.dataCollected", ({ value }) => {
+    events.push(...(value as unknown as TraceEvent[]));
+  });
+  const complete = new Promise<void>((resolve) => {
+    cdp.once("Tracing.tracingComplete", () => resolve());
+  });
+  await cdp.send("Tracing.start", {
+    transferMode: "ReportEvents",
+    traceConfig: {
+      includedCategories: [
+        "blink.user_timing",
+        "disabled-by-default-devtools.timeline",
+      ],
+    },
+  });
+  await act();
+  await cdp.send("Tracing.end");
+  await complete;
+  await cdp.detach();
+  const marks = events.filter(
+    (event) => event.cat.includes("blink.user_timing") && event.ph !== "X"
+  );
+  const [first] = marks;
+  if (!first) {
+    throw new Error("the trace holds no performance.mark of the page's");
+  }
+  return {
+    marks: marks.map((event) => ({ at: event.ts, name: event.name })),
+    tasks: events
+      .filter(
+        (event) =>
+          event.name === "RunTask" &&
+          event.ph === "X" &&
+          event.pid === first.pid &&
+          event.tid === first.tid
+      )
+      .map((event) => ({
+        at: event.ts,
+        end: event.ts + (event.dur ?? 0),
+        wall: (event.dur ?? 0) / 1000,
+        cpu: (event.tdur ?? 0) / 1000,
+      })),
+  };
+}
+
+/** The task a mark was made in. */
+export const taskOf = (
+  main: MainThread,
+  mark: string
+): MainTask | undefined => {
+  const at = main.marks.find((one) => one.name === mark)?.at;
+  return at === undefined
+    ? undefined
+    : main.tasks.find((task) => task.at <= at && at <= task.end);
+};
 
 /** The longest long task that started at or after `since` (ms, the page's clock), and how many. */
 export function longest(tasks: [number, number][], since: number) {
