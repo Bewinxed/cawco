@@ -34,9 +34,28 @@ const fontsDir = () =>
   );
 
 /**
+ * `yjs` in the host bundle is the overlay's (canvas-host/yjs.ts, which reads
+ * `window.cawcoArtifact.Y`): the page runs one Yjs, and the doc it binds is
+ * the overlay's, of the same classes.
+ */
+const YJS = /^yjs$/;
+const overlayYjs: Bun.BunPlugin = {
+  name: "overlay-yjs",
+  setup(build) {
+    build.onResolve({ filter: YJS }, () => ({
+      path: join(HOST_DIR, "yjs.ts"),
+    }));
+  },
+};
+
+/**
  * Bundles the host page: written to `outdir` for a release build, else
  * kept in memory. React and Excalidraw built for production; Mermaid's
  * converter is its own chunk, loaded when the agent first sends Mermaid.
+ * Yjs is not in it: the overlay's is (`overlayYjs`). With
+ * `CAWCO_PROBE_HOOKS=1` in the builder's environment (the probe kit's
+ * scratch hub) the page exposes what it binds for the probe to read
+ * (scene.ts); every other build folds the hook away.
  */
 export async function buildCanvasHost(outdir?: string) {
   const result = await Bun.build({
@@ -46,7 +65,11 @@ export async function buildCanvasHost(outdir?: string) {
     splitting: true,
     minify: true,
     conditions: ["production"],
-    define: { "process.env.NODE_ENV": '"production"' },
+    plugins: [overlayYjs],
+    define: {
+      "process.env.NODE_ENV": '"production"',
+      __CAWCO_PROBE_HOOKS__: String(process.env.CAWCO_PROBE_HOOKS === "1"),
+    },
     naming: {
       entry: "[name].[ext]",
       chunk: "chunk-[hash].[ext]",

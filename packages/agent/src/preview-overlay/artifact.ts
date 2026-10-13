@@ -22,7 +22,16 @@ import {
   choiceEntryProblem,
 } from "@cawco/core/choices";
 import { WebsocketProvider } from "y-websocket";
-import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
+import {
+  applyUpdate,
+  Doc,
+  encodeStateAsUpdate,
+  Array as YArray,
+  YArrayEvent,
+  YEvent,
+  Map as YMap,
+  YMapEvent,
+} from "yjs";
 
 /** The hub's close code for an update it would not keep (hub artifacts/sync.ts). */
 const REFUSED = 4400;
@@ -92,27 +101,42 @@ const sameEntry = (a: ChoiceEntry | undefined, b: ChoiceEntry): boolean =>
 
 /**
  * The doc the overlay holds, as a canvas's host page takes it
- * (`window.cawcoArtifact`). The page bundles its own copy of Yjs, whose
- * types are not this copy's, so the doc crosses as updates only: its whole
- * state, an update applied to it, and every update it takes after. With it,
- * the artifact once the host named it, and where it is synced (the host
- * page posts its picture beside it).
+ * (`window.cawcoArtifact`): the doc itself, of the page's one Yjs (the host
+ * bundle's `yjs` is this one, canvas-host/yjs.ts), so whatever the page
+ * writes in it reaches the hub and every other view. With it, the artifact
+ * once the host named it, and where it is synced (the host page posts its
+ * picture beside it).
  */
 export interface ArtifactHold {
-  /** Applies an update the page made; it reaches the hub and every other view. */
-  apply: (update: Uint8Array) => void;
+  doc: Doc;
   /** Which doc this is: it moves when the overlay replaces its doc (another artifact's, or one the hub refused). */
   generation: number;
-  /** Calls back with every update the doc takes after this, `own` when the page applied it. */
-  observe: (listener: (update: Uint8Array, own: boolean) => void) => () => void;
   ref: ArtifactRef | null;
-  /** The doc's whole state as one update. */
-  state: () => Uint8Array;
   sync: string | null;
 }
 
-/** The origin of an update the host page applied. */
-const FROM_PAGE = Symbol("cawco host page");
+/**
+ * The Yjs a canvas's host page runs on: the members it and y-excalidraw
+ * use, so every other page's overlay keeps the rest of Yjs out of its
+ * bundle. canvas-host/yjs.ts re-exports these by name.
+ */
+const SHARED_YJS = Object.freeze({
+  applyUpdate,
+  Array: YArray,
+  Doc,
+  encodeStateAsUpdate,
+  Map: YMap,
+  YArrayEvent,
+  YEvent,
+  YMapEvent,
+});
+
+/** What a canvas's host page takes from the overlay: its Yjs, the doc now, and every doc after. */
+export interface ArtifactGlobal {
+  readonly doc: Doc;
+  subscribe: (holder: (hold: ArtifactHold) => void) => () => boolean;
+  readonly Y: typeof SHARED_YJS;
+}
 
 let watchers: Watchers | null = null;
 let doc = new Doc();
@@ -125,22 +149,12 @@ let seededKind: ArtifactRef["kind"] | null = null;
 let syncPath: string | null = null;
 const holders = new Set<(hold: ArtifactHold) => void>();
 let generation = 0;
-const hold = (): ArtifactHold => {
-  const held = doc;
-  return {
-    generation,
-    ref: joined,
-    sync: syncPath,
-    state: () => encodeStateAsUpdate(held),
-    apply: (update) => applyUpdate(held, update, FROM_PAGE),
-    observe: (listener) => {
-      const heard = (update: Uint8Array, origin: unknown) =>
-        listener(update, origin === FROM_PAGE);
-      held.on("update", heard);
-      return () => held.off("update", heard);
-    },
-  };
-};
+const hold = (): ArtifactHold => ({
+  doc,
+  generation,
+  ref: joined,
+  sync: syncPath,
+});
 const handed = () => {
   for (const holder of holders) {
     holder(hold());
@@ -148,19 +162,24 @@ const handed = () => {
 };
 
 /**
- * The one global a canvas's host page takes the doc from: `subscribe` calls
- * back at once and again whenever the doc is replaced or joined, so the page
- * binds to the doc the overlay syncs and never opens a socket of its own.
+ * The one global a canvas's host page takes the doc from, and its Yjs:
+ * `subscribe` calls back at once and again whenever the doc is replaced or
+ * joined, so the page binds to the doc the overlay syncs and never opens a
+ * socket of its own; `Y` is the Yjs the page's bundle runs on, so the page
+ * holds one copy of it and its types are the doc's.
  */
-Object.defineProperty(window, "cawcoArtifact", {
-  value: Object.freeze({
-    subscribe: (holder: (hold: ArtifactHold) => void) => {
-      holders.add(holder);
-      holder(hold());
-      return () => holders.delete(holder);
-    },
-  }),
+const artifactGlobal: ArtifactGlobal = Object.freeze({
+  Y: SHARED_YJS,
+  get doc() {
+    return doc;
+  },
+  subscribe: (holder: (hold: ArtifactHold) => void) => {
+    holders.add(holder);
+    holder(hold());
+    return () => holders.delete(holder);
+  },
 });
+Object.defineProperty(window, "cawcoArtifact", { value: artifactGlobal });
 /** "none": the host said this page has no artifact, so nothing is kept. */
 let status: "waiting" | "joined" | "none" = "waiting";
 let synced = false;

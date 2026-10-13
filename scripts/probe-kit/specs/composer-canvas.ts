@@ -125,12 +125,7 @@ const setUp = async (kit: Kit): Promise<On> => {
   const said: string[] = [];
   page.on("pageerror", (error) => said.push(`pageerror: ${error.message}`));
   page.on("console", (message) => {
-    // The canvas page carries its own Yjs beside the overlay's (slice 3a:
-    // "the page's Yjs is its own copy"), and Yjs says so once per load.
-    if (
-      message.type() === "error" &&
-      !message.text().startsWith("Yjs was already imported")
-    ) {
+    if (message.type() === "error") {
       said.push(`error: ${message.text()}`);
     }
   });

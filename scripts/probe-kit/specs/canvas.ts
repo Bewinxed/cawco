@@ -22,6 +22,15 @@
  *    "No screen is showing this canvas. …".
  * 7. Throughout, every request the pages make is to the dashboard's own
  *    origin.
+ * 9. No canvas page load logs "Yjs was already imported", and no console
+ *    message is an error: the page runs one Yjs, the overlay's.
+ * 10. The page's binding holds the overlay's doc itself
+ *     (`window.cawcoArtifact.doc`) and its scene doc is of the same Yjs
+ *     (one `Doc` constructor on the page); an `artifact_update` with one
+ *     skeleton element is in Excalidraw's scene within 2 s.
+ *
+ * The scratch hub builds the canvas page with `CAWCO_PROBE_HOOKS=1` (core
+ * canvas-host.ts), which exposes the binding as `window.cawcoCanvasProbe`.
  */
 import type { Frame, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
@@ -129,6 +138,8 @@ interface OnCanvas {
   call: (tool: string, input: object) => Promise<string>;
   fleet: KitFleet;
   kit: Kit;
+  /** Every console message any frame of the page logged (check 9). */
+  logged: string[];
   /** Requests any page made to another origin (check 7). */
   offOrigin: string[];
   page: Page;
@@ -141,6 +152,8 @@ const setUp = async (kit: Kit): Promise<OnCanvas> => {
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
   await fleet.sessiondUp();
+  // The canvas page the hub builds shows the probe its binding (check 10).
+  fleet.env.CAWCO_PROBE_HOOKS = "1";
   fleet.launch("hub");
   await fleet.hubUp();
   fleet.fileAccount();
@@ -165,6 +178,7 @@ const setUp = async (kit: Kit): Promise<OnCanvas> => {
   const origin = new URL(base).host;
   const offOrigin: string[] = [];
   const said: string[] = [];
+  const logged: string[] = [];
   const page = await kit.page("desk");
   page.on("request", (request) => {
     const url = new URL(request.url());
@@ -178,13 +192,14 @@ const setUp = async (kit: Kit): Promise<OnCanvas> => {
     }
   });
   page.on("console", (message) => {
+    logged.push(`${message.type()}: ${message.text()}`);
     if (message.type() === "error") {
       said.push(`error: ${message.text()}`);
     }
   });
   page.on("pageerror", (error) => said.push(`pageerror: ${error.message}`));
   await open(page, `${base}/session/${session}`, "textarea");
-  return { call, fleet, kit, offOrigin, page, said, session };
+  return { call, fleet, kit, logged, offOrigin, page, said, session };
 };
 
 const run = async (kit: Kit) => {
@@ -195,7 +210,18 @@ const run = async (kit: Kit) => {
   }
   const lifted = await penChecks(on, made);
   await pictureChecks(on, made.id, lifted);
+  await oneDocCheck(on, made.id);
   await emptyChecks(on);
+
+  // 9. Every canvas page load so far (the flow canvas, its reloads, the blank one).
+  const twice = on.logged.filter((line) =>
+    line.includes("Yjs was already imported")
+  );
+  kit.check(
+    '9: no canvas page load logs "Yjs was already imported", and no console message is an error',
+    twice.length === 0 && on.said.length === 0,
+    [...twice, ...on.said].slice(0, 6).join(" | ") || "none"
+  );
 
   // 6. Nothing shows the canvas: the agent's Mermaid is refused.
   await on.page.close();
@@ -306,6 +332,76 @@ const emptyChecks = async (on: OnCanvas) => {
       rail.line === "Draw with the pencil, or ask the agent to draw." &&
       pen === 1,
     `${answer.slice(0, 200)}; ${rail.title} / ${rail.line}; pen chosen ${pen}`
+  );
+};
+
+/**
+ * Check 10: one doc, one Yjs. The binding's `live` is the overlay's doc
+ * itself and its `scene` a doc of the overlay's Yjs; the agent's one
+ * skeleton element reaches Excalidraw's scene within 2 s.
+ */
+const oneDocCheck = async (on: OnCanvas, id: string) => {
+  const frame = await canvasFrame(on.page);
+  const docs = await frame.evaluate(() => {
+    const probe = (
+      window as unknown as {
+        cawcoCanvasProbe?: { live: object; scene: object };
+      }
+    ).cawcoCanvasProbe;
+    const overlay = (
+      window as unknown as {
+        cawcoArtifact: { doc: object; Y: { Doc: new () => object } };
+      }
+    ).cawcoArtifact;
+    return {
+      hooked: !!probe,
+      sameDoc: !!probe && probe.live === overlay.doc,
+      oneYjs:
+        !!probe &&
+        probe.live instanceof overlay.Y.Doc &&
+        probe.scene instanceof overlay.Y.Doc,
+    };
+  });
+  const answer = await on.call(UPDATE, {
+    id,
+    elements: [
+      {
+        type: "rectangle",
+        id: "one-yjs",
+        x: 40,
+        y: 420,
+        width: 120,
+        height: 60,
+      },
+    ],
+  });
+  const toolAnswered = Date.now();
+  const landed = await until(
+    "the element in Excalidraw's scene",
+    () =>
+      frame.evaluate(() =>
+        (
+          window as unknown as {
+            cawcoCanvasProbe: { elements: () => { id: string }[] };
+          }
+        ).cawcoCanvasProbe
+          .elements()
+          .some((el) => el.id === "one-yjs")
+      ),
+    Boolean,
+    2000
+  ).then(
+    () => Date.now() - toolAnswered,
+    () => null
+  );
+  on.kit.check(
+    "10: the binding holds the overlay's doc itself, its scene doc is of the same Yjs (one Doc constructor); the agent's one element is in Excalidraw's scene within 2 s",
+    docs.hooked &&
+      docs.sameDoc &&
+      docs.oneYjs &&
+      answer.includes("wrote") &&
+      landed !== null,
+    `${JSON.stringify(docs)}; landed ${landed === null ? "not within 2 s" : `${landed} ms after the tool answered`}; tool: ${answer.slice(0, 160)}`
   );
 };
 

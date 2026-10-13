@@ -11,12 +11,11 @@ import {
  * bound to the artifact's doc by y-excalidraw, the agent's writes converted
  * here, and the picture drawn for the agent.
  *
- * Three docs, joined by updates only (the overlay's copy of Yjs is not
- * this bundle's, so its types never cross; artifact.ts `ArtifactHold`):
+ * Two docs of the page's one Yjs (the overlay's, canvas-host/yjs.ts):
  *
- * - the overlay's doc, synced with the hub;
- * - `live`, this page's copy of it, always current: the agent's requests
- *   are claimed and answered here, and converted elements written here;
+ * - `live`, the overlay's doc itself, synced with the hub: the agent's
+ *   requests are claimed and answered here, and converted elements written
+ *   here;
  * - `scene`, what Excalidraw is bound to: it takes what `live` hears only
  *   while no pointer is down, so nothing moves under a hand and a change
  *   that lands mid-stroke waits for the pen to lift (DESIGN.md, The agent's
@@ -55,8 +54,10 @@ import {
 } from "yjs";
 import type { ArtifactHold } from "../preview-overlay/artifact";
 
+/** With `CAWCO_PROBE_HOOKS=1` at build (core canvas-host.ts), the page shows the probe what it binds. */
+declare const __CAWCO_PROBE_HOOKS__: boolean;
+
 /** Origins of the page's own transactions. */
-const NET = "net";
 const LIVE = "live";
 const SCENE = "scene";
 const AGENT = "agent";
@@ -214,28 +215,13 @@ export function bindScene(
     return timer;
   };
 
-  // The overlay's doc ⇄ live: every update both ways.
-  const live = new Doc();
-  applyUpdate(live, hold().state(), NET);
-  stops.push(
-    hold().observe((update, own) => {
-      if (!own) {
-        applyUpdate(live, update, NET);
-      }
-    })
-  );
-  live.on("update", (update: Uint8Array, origin: unknown) => {
-    if (origin !== NET) {
-      hold().apply(update);
-    }
-  });
-
   // live ⇄ scene: the scene hears live only while no pointer is down.
+  const live = hold().doc;
   const scene = new Doc();
   applyUpdate(scene, encodeStateAsUpdate(live), LIVE);
   const pressed = new Set<number>();
   const waiting: Uint8Array[] = [];
-  live.on("update", (update: Uint8Array, origin: unknown) => {
+  const heard = (update: Uint8Array, origin: unknown) => {
     if (origin === SCENE) {
       return;
     }
@@ -244,12 +230,21 @@ export function bindScene(
     } else {
       applyUpdate(scene, update, LIVE);
     }
-  });
+  };
+  live.on("update", heard);
+  stops.push(() => live.off("update", heard));
   scene.on("update", (update: Uint8Array, origin: unknown) => {
     if (origin !== LIVE) {
       applyUpdate(live, update, SCENE);
     }
   });
+  if (__CAWCO_PROBE_HOOKS__) {
+    (window as unknown as { cawcoCanvasProbe: object }).cawcoCanvasProbe = {
+      live,
+      scene,
+      elements: () => api.getSceneElements(),
+    };
+  }
   /** What waited for the pointers: after Excalidraw has ended the gesture on the same pointerup. */
   const release = () =>
     later(() => {
@@ -539,7 +534,7 @@ export function bindScene(
       for (const timer of timers) {
         clearTimeout(timer);
       }
-      live.destroy();
+      // `live` is the overlay's: it keeps syncing after this binding goes.
       scene.destroy();
     },
   };

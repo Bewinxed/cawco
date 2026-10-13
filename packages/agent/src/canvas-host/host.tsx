@@ -25,17 +25,15 @@ import {
   useSyncExternalStore,
 } from "react";
 import { createRoot } from "react-dom/client";
-import { applyUpdate, Doc } from "yjs";
-import type { ArtifactHold } from "../preview-overlay/artifact";
+import type { Map as YMap } from "yjs";
+import type { ArtifactGlobal, ArtifactHold } from "../preview-overlay/artifact";
 import { Icon } from "./icons";
 import { Rail } from "./rail";
 import { bindScene, type CanvasInk, tokenHex } from "./scene";
 
 declare global {
   interface Window {
-    cawcoArtifact: {
-      subscribe: (holder: (hold: ArtifactHold) => void) => () => boolean;
-    };
+    cawcoArtifact: ArtifactGlobal;
   }
 }
 
@@ -130,21 +128,14 @@ window.addEventListener("keydown", (event) => {
 
 /** What the canvas holds before Excalidraw binds to it: its pen mode, and whether it is empty. */
 const firstLook = (hold: ArtifactHold | null) => {
-  const doc = new Doc();
-  if (hold) {
-    applyUpdate(doc, hold.state());
-  }
-  const meta = doc.getMap("meta");
-  const look = {
-    empty: doc
-      .getArray<{ get: (key: string) => unknown }>("elements")
-      .toArray()
-      .every((map) => (map.get("el") as ExcalidrawElement).isDeleted),
-    penMode: meta.get("penMode") === true,
-    penDetected: meta.get("penDetected") === true,
+  const meta = hold?.doc.getMap("meta");
+  return {
+    empty: (
+      hold?.doc.getArray<YMap<unknown>>("elements").toArray() ?? []
+    ).every((map) => (map.get("el") as ExcalidrawElement).isDeleted),
+    penMode: meta?.get("penMode") === true,
+    penDetected: meta?.get("penDetected") === true,
   };
-  doc.destroy();
-  return look;
 };
 
 function Empty({ onDraw }: { onDraw: () => void }) {
