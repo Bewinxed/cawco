@@ -17,7 +17,9 @@
  *     three tabs (`<a role="tab" href="?view=…">`, `aria-selected` from the
  *     query) and a button counting its own clicks; the page posts
  *     `cawco:probe` with its state and the rects of what is tapped;
- *  3. on the newest iPhone Pro simulator (mac-slot.sh's pick) launches the
+ *  3. on an iPhone 16 Pro simulator on iOS 18.5 (mac-slot.sh sim --runtime
+ *     …iOS-18-5, as probe-ios-recall.ts and build-both.sh's floor launch;
+ *     axe's touches time out on the 27.2 runtime) launches the
  *     app on that session with `-preview-probe`, which logs the preview's
  *     mode, documents, picks and the page's posts (PreviewController.swift)
  *     in the Probe category, each rect as its centre in window points;
@@ -257,7 +259,13 @@ try {
   const port = Number(new URL(fleet.base).port);
 
   // ── 4. The simulator ───────────────────────────────────────────────────
-  sim = await macSim();
+  // iOS 18.5, as probe-ios-recall.ts and build-both.sh's floor launch take:
+  // axe on the 27.2 runtime timed out "creating the simulator remote
+  // automation session" at its first touch, twice.
+  sim = await macSim({
+    runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
+    device: "iPhone 16 Pro",
+  });
   const { udid } = sim;
   console.log(`  simulator ${udid}`);
   await sh(`xcrun simctl status_bar ${udid} override --time 9:41 --batteryState charged --batteryLevel 100 --cellularBars 4 --wifiBars 3
