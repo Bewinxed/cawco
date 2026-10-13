@@ -162,6 +162,7 @@ import {
   deriveTitleFromFirstMessage,
   EFFORT_NONE,
   EFFORT_READ,
+  type EndedBy,
   estimateTokens,
   FLEET_STATUS,
   FLEET_SYNC,
@@ -9427,15 +9428,26 @@ export const createServer = (
       );
     },
   });
+  /**
+   * Ends a session as `intent` says, for `by`. A stop writes its own line in
+   * the session's transcript, who stopped it and what starts it again, so
+   * its process going is never read as a failure.
+   */
   const endSession = (
     instanceId: string,
     intent: SessionEndIntent,
+    by: EndedBy,
     requestId?: string
   ): void => {
     const row = db.ownedInstance(instanceId);
     lifecycle.endSession(instanceId, intent, requestId);
     if (row) {
       sessionEnding(row);
+    }
+    // Once per stop: a session already ending says nothing new.
+    const [stored] = db.getInstancesByIds([instanceId]);
+    if (intent === "stop" && stored && !row?.endIntent) {
+      noteAtLimit(stored, { kind: "ended", by });
     }
   };
   /**
@@ -9469,7 +9481,11 @@ export const createServer = (
     db,
     lifetime,
     pulse: (id) => pulses.get(id),
-    stop: (id) => endSession(id, "stop"),
+    stop: (id) =>
+      endSession(id, "stop", {
+        kind: "hub",
+        why: "its project's sessions were stopped (the project is being forgotten, or Caw was turned off)",
+      }),
     // A machine that is away: the stop is stored, and its next register's
     // reconcile sends it (session-lifecycle `reconcile`).
     owe: (id) => oweStop(id),
@@ -9551,7 +9567,12 @@ export const createServer = (
     );
     waiting.set(requestId, reply);
     try {
-      endSession(instanceId, discard ? "discard" : "stop", requestId);
+      endSession(
+        instanceId,
+        discard ? "discard" : "stop",
+        { kind: "person" },
+        requestId
+      );
       if (db.ownedInstance(instanceId)?.endConfirmedAt) {
         reply({ kind: "control_result", requestId, ok: true });
       } else if (!registry.agent(message.machineId)) {
@@ -13121,7 +13142,7 @@ export const createServer = (
         .filter((row) => row.sessionId === deleted);
       if (rows.length > 0) {
         for (const row of rows) {
-          endSession(row.id, "delete-transcript");
+          endSession(row.id, "delete-transcript", { kind: "person" });
         }
         const requestId = message.requestId ?? message.payload.requestId;
         const frame: ControlResult = {
@@ -13958,7 +13979,10 @@ export const createServer = (
         oweStop(instanceId);
         return;
       }
-      endSession(instanceId, "stop");
+      endSession(instanceId, "stop", {
+        kind: "hub",
+        why: "its work item is over, or its workspace was closed",
+      });
       await waitForEnd(instanceId, waitMs);
     },
     // An attempt at a task ended: the dispatcher moves the task. Deferred: the
@@ -14036,6 +14060,11 @@ export const createServer = (
       workItems.cancelled(row);
     }
   }
+  /** Who stops a workflow's step session: its workflow, when the step or its run ends. */
+  const WORKFLOW_STOP: EndedBy = {
+    kind: "hub",
+    why: "its workflow step is over, or its workflow run was stopped",
+  };
   const workflowRuntime = createWorkflowRuntime({
     lifetime,
     custodyPending: (machineId, instanceId) => {
@@ -14056,7 +14085,7 @@ export const createServer = (
     online: (machineId) => !!registry.agent(machineId),
     emit: (envelope) => {
       if (envelope.verb === "stop" && envelope.instanceId) {
-        endSession(envelope.instanceId, "stop");
+        endSession(envelope.instanceId, "stop", WORKFLOW_STOP);
         return;
       }
       // A send waits wherever its session cannot take it yet ({@link deliverSend}).
@@ -14073,7 +14102,7 @@ export const createServer = (
     spawn: spawnSession,
     halt: (machineId, instanceId) =>
       new Promise<void>((resolve, reject) => {
-        endSession(instanceId, "stop");
+        endSession(instanceId, "stop", WORKFLOW_STOP);
         const deadline = Date.now() + 30_000;
         const observe = () => {
           const row = db.ownedInstance(instanceId, machineId);
@@ -14253,7 +14282,8 @@ export const createServer = (
     send: (envelope) => {
       deliverSend(envelope);
     },
-    end: (instanceId) => endSession(instanceId, "stop"),
+    end: (instanceId) =>
+      endSession(instanceId, "stop", { kind: "session", name: "Caw" }),
     task: (projectId, id) => tasks.get(projectId, id),
     views,
   });
@@ -14663,7 +14693,10 @@ export const createServer = (
         );
       }
       if (envelope.verb === "stop") {
-        endSession(row.id, "stop");
+        endSession(row.id, "stop", {
+          kind: "session",
+          name: sessionName(requester),
+        });
         closePreview(row.id).catch(console.error);
         noteInterrupt(row.id);
         workItems.cancelled(row);
@@ -15295,20 +15328,30 @@ export const createServer = (
       (last !== undefined && now - last < SIGNAL_REPEAT_MS)
     ) {
       signalDeaths.delete(instanceId);
+      const again =
+        last === undefined
+          ? `Its process was ended by ${died.signal} from outside CawCo.`
+          : `Its process was ended by ${died.signal} from outside CawCo again, ${Math.round((now - last) / 1000)} s after the last time, so it isn't started again: something on ${machineName(machineId)} keeps ending it.`;
       if (last !== undefined) {
         console.warn(
-          `[hub] ${instanceId}: killed by ${died.signal} again ${Math.round((now - last) / 1000)}s after the last kill; it fails rather than spin`
+          `[hub] ${row ? sessionName(row) : "A session no longer recorded"}: ${again}`
         );
       }
-      processFailed(machineId, instanceId, died.error);
+      processFailed(
+        machineId,
+        instanceId,
+        `${again} A message to it starts it again once that is fixed.`
+      );
       return;
     }
     signalDeaths.set(instanceId, now);
-    console.log(
-      `[hub] ${instanceId}: its process was killed by ${died.signal}; it carries on`
-    );
     sessionAsleep(machineId, instanceId);
-    resumeKilledTurn(instanceId, died.signal, new Date(now));
+    const resumes = resumeKilledTurn(instanceId, died.signal, new Date(now));
+    // Its own line: who ended it (no part of CawCo) and what starts it again.
+    noteAtLimit(row, {
+      kind: "ended",
+      by: { kind: "outside", signal: died.signal, resumes },
+    });
   };
 
   /**
@@ -15321,11 +15364,11 @@ export const createServer = (
     instanceId: string,
     signal: string,
     killedAt: Date
-  ): void => {
+  ): boolean => {
     const [row] = db.getInstancesByIds([instanceId]);
     const cut = row ? cutTurnOf(row, "killed") : undefined;
     if (!(row && cut !== undefined)) {
-      return;
+      return false;
     }
     const sent = handTurnBack(
       row,
@@ -15335,13 +15378,14 @@ export const createServer = (
     if (sent.state === "failed") {
       turnOver(row.id);
       console.warn(
-        `[hub] ${row.id}: the turn a kill cut was not handed back: ${sent.reason ?? "the send failed"}`
+        `[hub] ${sessionName(row)}: the turn its killed process was in couldn't be handed back: ${sent.reason ?? "the send failed"}. It starts again with its next message.`
       );
-      return;
+      return false;
     }
     console.log(
-      `[hub] ${row.id}: handed back the turn a kill cut (heard ${new Date(cut).toISOString()})`
+      `[hub] ${sessionName(row)}: the turn its killed process was in (heard ${new Date(cut).toISOString()}) is handed back, which starts it again.`
     );
+    return true;
   };
 
   /** Machines whose work items asleep on a cut turn this hub has settled since it started. */
@@ -15568,7 +15612,7 @@ export const createServer = (
     });
     // The transcript's own words: its line, then the detail under it.
     console.info(
-      `[at-limit] ${sessionName(row)}: ${accountMoveSentence(move, event.at)}`
+      `[${move.kind === "ended" ? "session" : "at-limit"}] ${sessionName(row)}: ${accountMoveSentence(move, event.at)}`
     );
   };
 
@@ -16969,7 +17013,7 @@ export const createServer = (
           }
         }
         try {
-          endSession(row.id, "delete");
+          endSession(row.id, "delete", { kind: "person" });
         } catch (error) {
           return status(
             409,
@@ -20794,7 +20838,10 @@ export const createServer = (
               );
               for (const row of toEnd) {
                 if (addressProtocolMachines.has(message.machineId)) {
-                  endSession(row.id, "stop");
+                  endSession(row.id, "stop", {
+                    kind: "hub",
+                    why: "no summary job needs this summariser any more",
+                  });
                 }
               }
               lifecycle.reconcile(

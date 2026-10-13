@@ -714,8 +714,10 @@ export class SessionSupervisor {
   /** The sessions this daemon put to sleep, until their next start ({@link sleep}). */
   readonly #asleep = new Set<string>();
   /**
-   * Sessions this daemon is stopping itself (a sleep, a stop): their process
-   * closing is that stop's to say, not a process going away on its own.
+   * Sessions this daemon is stopping itself (a sleep, a stop, a relaunch, a
+   * move's carry): their process closing, on whatever signal or exit, is
+   * that stop's to say, never a failure and never a process going away on
+   * its own.
    */
   readonly #ending = new WeakSet<HarnessSession>();
   readonly #generations = new Map<string, string>();
@@ -1691,6 +1693,8 @@ export class SessionSupervisor {
         }
         this.#sessions.delete(instanceId);
         this.#forgetPulse(instanceId);
+        // Ended by this daemon for a move: its end is no failure.
+        this.#ending.add(running);
         await running.stop();
         go.push(request);
         continue;
@@ -2214,6 +2218,8 @@ export class SessionSupervisor {
         }
         this.#sessions.delete(instanceId);
         this.#forgetPulse(instanceId);
+        // Ended by this daemon: its end is no failure ({@link #ending}).
+        this.#ending.add(running);
         await running.stop();
       }
       // What the process this replaces was handed and never read goes back to
@@ -2619,20 +2625,32 @@ export class SessionSupervisor {
       },
       session: (sessionId) =>
         this.#noteQuestSession(instanceId, sessionId, adapter.kind),
-      failed: (error) =>
-        recovery
-          ? this.#failures.set(instanceId, String(error))
-          : this.#fail(instanceId, error, processGeneration),
+      failed: (error) => {
+        // A process this daemon ended (a sleep, a stop, a relaunch, a move)
+        // ends as that stop says, whatever its harness made of it.
+        if (holder.session && this.#ending.has(holder.session)) {
+          this.#endedHere(instanceId, error);
+          return;
+        }
+        if (recovery) {
+          this.#failures.set(instanceId, String(error));
+        } else {
+          this.#fail(instanceId, error, processGeneration);
+        }
+      },
       died: (signal, error) => {
         const { session } = holder;
-        // The process this runs now, killed by nothing of this daemon's (a
-        // sleep, a stop, a relaunch): the hub starts it again with its turn.
-        // Anything else died as a failure does.
+        if (session && this.#ending.has(session)) {
+          this.#endedHere(instanceId, error);
+          return;
+        }
+        // The process this runs now, killed by nothing of this daemon's: the
+        // hub starts it again with its turn. One killed before it was this
+        // daemon's to run died as a failure does.
         if (
           recovery ||
           !session ||
-          this.#sessions.get(instanceId) !== session ||
-          this.#ending.has(session)
+          this.#sessions.get(instanceId) !== session
         ) {
           if (recovery) {
             this.#failures.set(instanceId, String(error));
@@ -2646,9 +2664,7 @@ export class SessionSupervisor {
         this.#forgetPulse(instanceId);
         this.#gone(instanceId, processGeneration, {
           signal,
-          error:
-            (error instanceof Error && error.message) ||
-            `${String(error)}: its process was killed by ${signal}`,
+          error: `its process was ended by ${signal} from outside CawCo`,
         });
       },
       refused: (error) => this.#fail(instanceId, error, processGeneration),
@@ -3398,6 +3414,17 @@ export class SessionSupervisor {
     if (this.#unsentGone.length > 0 || !this.sink(frame)) {
       this.#unsentGone.push(frame);
     }
+  }
+
+  /**
+   * A process this daemon ended itself ({@link #ending}) has gone: whoever
+   * ended it says so (the hub for a stop or a move, a sleep for itself), so
+   * its harness's word on the way out is only logged, never a failure.
+   */
+  #endedHere(instanceId: string, error: unknown): void {
+    console.info(
+      `[session] ${instanceId}: its process ended as this agent stopped it (${error instanceof Error ? error.message : String(error)}); not a failure`
+    );
   }
 
   #fail(instanceId: string, error: unknown, processGeneration?: string): void {

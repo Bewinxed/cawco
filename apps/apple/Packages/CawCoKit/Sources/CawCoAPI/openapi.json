@@ -32825,6 +32825,25 @@
                 "type": "object",
                 "properties": {
                   "kind": {
+                    "description": "The session's process was ended, and by whom: a stop someone asked\nfor, or a signal from outside CawCo. A stop is never a failure; the\nline says what starts it again.",
+                    "type": "string",
+                    "enum": [
+                      "ended"
+                    ]
+                  },
+                  "by": {
+                    "$ref": "#/components/schemas/EndedBy"
+                  }
+                },
+                "required": [
+                  "by",
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
                     "description": "Moving it whole to `to`, or continuing it there from a summary\n(`action`), failed at `step`: it goes on in its conversation, still\non `from`.",
                     "type": "string",
                     "enum": [
@@ -33334,6 +33353,83 @@
           "full",
           "off",
           "soon"
+        ]
+      },
+      "EndedBy": {
+        "description": "Who ended a session's process ({@link AccountMove} `ended`): a person (the\ndashboard's Stop), a session (its parent's `stop_delegate`, a lead), the\nhub's own work (`why`: a work item over, a workflow step, a project\nforgotten), or a signal no part of CawCo sent (`outside`), after which the\nturn it cut is handed back when there was one (`resumes`).",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "person"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "session"
+                ]
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "name"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "hub"
+                ]
+              },
+              "why": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "why"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "outside"
+                ]
+              },
+              "signal": {
+                "type": "string"
+              },
+              "resumes": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "kind",
+              "resumes",
+              "signal"
+            ]
+          }
         ]
       },
       "ContinueStep": {
@@ -38391,6 +38487,25 @@
                 },
                 "required": [
                   "account",
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "description": "The session's process was ended, and by whom: a stop someone asked\nfor, or a signal from outside CawCo. A stop is never a failure; the\nline says what starts it again.",
+                    "type": "string",
+                    "enum": [
+                      "ended"
+                    ]
+                  },
+                  "by": {
+                    "$ref": "#/components/schemas/EndedBy"
+                  }
+                },
+                "required": [
+                  "by",
                   "kind"
                 ]
               },

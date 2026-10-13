@@ -93,6 +93,9 @@
         return row.move.account.hue;
       case "unmoved":
         return (row.move.from ?? row.move.to)?.hue ?? null;
+      // A stop names no account: drawn in the neutral ink, never a failure's.
+      case "ended":
+        return null;
       default:
         return row.move.to?.hue ?? null;
     }

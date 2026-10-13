@@ -999,6 +999,15 @@ export type AccountMove =
     }
   | {
       /**
+       * The session's process was ended, and by whom: a stop someone asked
+       * for, or a signal from outside CawCo. A stop is never a failure; the
+       * line says what starts it again.
+       */
+      kind: "ended";
+      by: EndedBy;
+    }
+  | {
+      /**
        * Moving it whole to `to`, or continuing it there from a summary
        * (`action`), failed at `step`: it goes on in its conversation, still
        * on `from`.
@@ -1016,6 +1025,19 @@ export type AccountMove =
       /** What the hub got from the step that failed. */
       reason: string;
     };
+
+/**
+ * Who ended a session's process ({@link AccountMove} `ended`): a person (the
+ * dashboard's Stop), a session (its parent's `stop_delegate`, a lead), the
+ * hub's own work (`why`: a work item over, a workflow step, a project
+ * forgotten), or a signal no part of CawCo sent (`outside`), after which the
+ * turn it cut is handed back when there was one (`resumes`).
+ */
+export type EndedBy =
+  | { kind: "person" }
+  | { kind: "session"; name: string }
+  | { kind: "hub"; why: string }
+  | { kind: "outside"; signal: string; resumes: boolean };
 
 /**
  * The steps of continuing a session from a summary, in order: read its
@@ -1162,6 +1184,8 @@ export const accountMoveWords = (
         line: `Sign in to ${move.account.name} · its sign-in was refused`,
         detail: `No other account can take it, so what it is sent waits until ${move.account.name} is signed in again in Configure → Accounts`,
       };
+    case "ended":
+      return endedWords(move.by);
     case "unmoved":
       return {
         line: `${unmovedWords(move)}: ${move.reason}`,
@@ -1185,6 +1209,29 @@ const unmovedWords = (
     return `Couldn't move${move.from ? ` from ${move.from.name}` : ""}${move.to ? ` to ${move.to.name}` : ""}`;
   }
   return `Couldn't continue${move.to ? ` on ${move.to.name}` : ""}`;
+};
+
+/** What starts a stopped session again: a stop holds it for its person or its parent. */
+const STOPPED_NEXT =
+  "A message from a person or its parent starts it again, with its conversation";
+
+/** A process ended, in words: who ended it, and what starts it again. Never a failure. */
+const endedWords = (by: EndedBy): { line: string; detail: string } => {
+  switch (by.kind) {
+    case "person":
+      return { line: "Stopped by a person", detail: STOPPED_NEXT };
+    case "session":
+      return { line: `Stopped by ${by.name}`, detail: STOPPED_NEXT };
+    case "hub":
+      return { line: `Stopped: ${by.why}`, detail: STOPPED_NEXT };
+    default:
+      return {
+        line: `Ended from outside CawCo (${by.signal})`,
+        detail: by.resumes
+          ? "Something on its machine ended its process; the turn it was in is handed back, which starts it again"
+          : "Something on its machine ended its process; its next message starts it again",
+      };
+  }
 };
 
 /** What happens next after a failed move or continuation: where it stays, and what carries it on. */

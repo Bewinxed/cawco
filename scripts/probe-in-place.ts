@@ -36,7 +36,14 @@
  *       delegate keeps its parent. The controller's own whole move, refused
  *       by a process that holds a send unread, says "Couldn't move to …" in
  *       its transcript and the hub log. Each continuation's log line names
- *       who asked (the controller, a person).
+ *       who asked (the controller, a person);
+ *   (f) a rebalance move of an idle session whose process holds a
+ *       background task: one stop, one relaunch with its conversation, no
+ *       refusal said or tried again;
+ *   (g) a person's Stop, a parent's stop_delegate and a SIGTERM from outside
+ *       CawCo each end the stand-in's CLI with exit 143, and each reads as
+ *       what it was ("Stopped by a person", "Stopped by <parent>", "Ended
+ *       from outside CawCo (SIGTERM)"): no failure shown, no bare exit code.
  */
 import assert from "node:assert/strict";
 import { cpSync, existsSync, readdirSync, writeFileSync } from "node:fs";
@@ -573,6 +580,9 @@ if (role === "sessiond") {
     "../packages/agent/src/sessiond-client"
   );
   const { MESSAGES_READ } = await import("../packages/core/src/harness");
+  const { processEnded } = await import(
+    "../packages/agent/src/harnesses/claude"
+  );
   const client = await SessiondClient.connect(
     process.env.CAWCO_SESSIOND_ENDPOINT
   );
@@ -620,152 +630,201 @@ if (role === "sessiond") {
   const session = (
     ctx: import("../packages/agent/src/harness").HarnessContext,
     key: string,
-    account: string | undefined
-  ) => ({
-    harness: "claude" as const,
-    sessionId: key,
-    attached: () =>
-      ctx.frame({
-        type: "system",
-        subtype: "init",
-        session_id: key,
-        cwd: ctx.cwd,
-      } as never),
-    // What Claude Code's context read answers: a context past any account's
-    // move-whole bound, so a refused turn continues from a summary.
-    control: async (method: string) => {
-      if (method === "interrupt") {
-        await log(`INTERRUPTED ${ctx.instanceId}`);
-        ctx.busy(false);
+    account: string | undefined,
+    /** Its child's pid, watched as Claude Code's SDK watches its CLI. */
+    pid?: number
+  ) => {
+    // Its process's end, said as the SDK says a Claude Code CLI's: the CLI
+    // exits 143 on SIGTERM, whoever sent it, and the real adapter's own
+    // word for that decides what it was (claude.ts `processEnded`).
+    let over = false;
+    const watching =
+      pid === undefined
+        ? undefined
+        : setInterval(() => {
+            client
+              .list()
+              .then(({ procs }) => {
+                if (
+                  !procs.some(
+                    (proc) =>
+                      proc.procId === ctx.instanceId &&
+                      proc.alive &&
+                      proc.pid === pid
+                  )
+                ) {
+                  ended();
+                }
+              })
+              .catch(() => undefined);
+          }, 300);
+    const ended = (): void => {
+      if (over) {
         return;
       }
-      return method === "getContextUsage" ? { totalTokens: 50_000 } : undefined;
-    },
-    resolvePermission: (requestId: string) => {
-      log(`ANSWERED ${ctx.instanceId} ${requestId}`).catch(console.error);
-      ctx.permissionResolved?.(requestId, "answered");
-    },
-    interrupt: async () => {
-      await log(`INTERRUPTED ${ctx.instanceId}`);
-      ctx.busy(false);
-    },
-    dispose: async () => closeStream(ctx.instanceId),
-    // A background task it started, while `background-<id>` exists: a move's
-    // stop does not count it (agent `holding`). A send it holds unread, while
-    // `unread-held-<id>` exists: that holds it for a move too.
-    holding: (forMove?: boolean) => {
-      if (existsSync(join(scratch, `unread-held-${ctx.instanceId}`))) {
-        return "it holds 1 send(s) it has not read yet";
-      }
-      return !forMove &&
-        existsSync(join(scratch, `background-${ctx.instanceId}`))
-        ? "1 background task(s) it started are still running"
-        : undefined;
-    },
-    send: (message: { uuid: string; message: { content: unknown } }) => {
-      const { content } = message.message;
-      const text =
-        typeof content === "string"
-          ? content
-          : (content as { type: string; text?: string }[])
-              .map((block) => block.text ?? "")
-              .join("");
-      (async () => {
-        // A session told to leave its sends unread never reads them.
-        if (
-          await Bun.file(join(scratch, `unread-${ctx.instanceId}`)).exists()
-        ) {
-          await log(`UNREAD ${ctx.instanceId} ${text.slice(0, 60)}`);
-          return;
-        }
-        await log(
-          `TURN ${ctx.instanceId} ${key} ${text.replaceAll("\n", " ").slice(0, 400)}`
-        );
+      over = true;
+      clearInterval(watching);
+      processEnded(ctx, new Error("Claude Code process exited with code 143"));
+      ctx.closed?.();
+    };
+    return {
+      harness: "claude" as const,
+      sessionId: key,
+      attached: () =>
         ctx.frame({
           type: "system",
-          subtype: MESSAGES_READ,
-          read: [message.uuid],
-          storedAs: {},
-        } as never);
-        // Stored under the uuid it was sent with, as Claude Code stores it.
-        await appendFile(
-          transcript(key),
-          `${JSON.stringify(stamped(key, "user", text, { uuid: message.uuid }))}\n`
-        );
-        if (text.includes("ask-question")) {
-          // Its turn is open on a question to the person, as a real one is.
-          ctx.busy(true);
-          ctx.permission({
-            requestId: `ask-${ctx.instanceId.slice(0, 8)}`,
-            toolName: "AskUserQuestion",
-            input: {
-              questions: [
-                {
-                  question: "Which colour should the button be?",
-                  header: "Colour",
-                  multiSelect: false,
-                  options: [
-                    { label: "Red", description: "red" },
-                    { label: "Blue", description: "blue" },
-                  ],
-                },
-              ],
-            },
-          });
+          subtype: "init",
+          session_id: key,
+          cwd: ctx.cwd,
+        } as never),
+      // What Claude Code's context read answers: a context past any account's
+      // move-whole bound, so a refused turn continues from a summary.
+      control: async (method: string) => {
+        if (method === "interrupt") {
+          await log(`INTERRUPTED ${ctx.instanceId}`);
+          ctx.busy(false);
           return;
         }
-        // A turn that takes its time before its answer: mid-turn meanwhile.
-        if (text.includes("slow-turn")) {
-          ctx.busy(true);
-          await delay(4000);
-          ctx.busy(false);
+        return method === "getContextUsage"
+          ? { totalTokens: 50_000 }
+          : undefined;
+      },
+      resolvePermission: (requestId: string) => {
+        log(`ANSWERED ${ctx.instanceId} ${requestId}`).catch(console.error);
+        ctx.permissionResolved?.(requestId, "answered");
+      },
+      interrupt: async () => {
+        await log(`INTERRUPTED ${ctx.instanceId}`);
+        ctx.busy(false);
+      },
+      dispose: () => {
+        clearInterval(watching);
+        closeStream(ctx.instanceId);
+        return Promise.resolve();
+      },
+      // A background task it started, while `background-<id>` exists: a move's
+      // stop does not count it (agent `holding`). A send it holds unread, while
+      // `unread-held-<id>` exists: that holds it for a move too.
+      holding: (forMove?: boolean) => {
+        if (existsSync(join(scratch, `unread-held-${ctx.instanceId}`))) {
+          return "it holds 1 send(s) it has not read yet";
         }
-        if (await limited(account)) {
-          await log(`REFUSED ${ctx.instanceId} on ${account}`);
+        return !forMove &&
+          existsSync(join(scratch, `background-${ctx.instanceId}`))
+          ? "1 background task(s) it started are still running"
+          : undefined;
+      },
+      send: (message: { uuid: string; message: { content: unknown } }) => {
+        const { content } = message.message;
+        const text =
+          typeof content === "string"
+            ? content
+            : (content as { type: string; text?: string }[])
+                .map((block) => block.text ?? "")
+                .join("");
+        (async () => {
+          // A session told to leave its sends unread never reads them.
+          if (
+            await Bun.file(join(scratch, `unread-${ctx.instanceId}`)).exists()
+          ) {
+            await log(`UNREAD ${ctx.instanceId} ${text.slice(0, 60)}`);
+            return;
+          }
+          await log(
+            `TURN ${ctx.instanceId} ${key} ${text.replaceAll("\n", " ").slice(0, 400)}`
+          );
           ctx.frame({
-            ...stamped(key, "assistant", "You've hit your limit"),
-            error: "rate_limit",
+            type: "system",
+            subtype: MESSAGES_READ,
+            read: [message.uuid],
+            storedAs: {},
           } as never);
+          // Stored under the uuid it was sent with, as Claude Code stores it.
+          await appendFile(
+            transcript(key),
+            `${JSON.stringify(stamped(key, "user", text, { uuid: message.uuid }))}\n`
+          );
+          if (text.includes("ask-question")) {
+            // Its turn is open on a question to the person, as a real one is.
+            ctx.busy(true);
+            ctx.permission({
+              requestId: `ask-${ctx.instanceId.slice(0, 8)}`,
+              toolName: "AskUserQuestion",
+              input: {
+                questions: [
+                  {
+                    question: "Which colour should the button be?",
+                    header: "Colour",
+                    multiSelect: false,
+                    options: [
+                      { label: "Red", description: "red" },
+                      { label: "Blue", description: "blue" },
+                    ],
+                  },
+                ],
+              },
+            });
+            return;
+          }
+          // A turn that takes its time before its answer: mid-turn meanwhile.
+          if (text.includes("slow-turn")) {
+            ctx.busy(true);
+            await delay(4000);
+            ctx.busy(false);
+          }
+          if (await limited(account)) {
+            await log(`REFUSED ${ctx.instanceId} on ${account}`);
+            ctx.frame({
+              ...stamped(key, "assistant", "You've hit your limit"),
+              error: "rate_limit",
+            } as never);
+            ctx.frame({
+              type: "result",
+              subtype: "success",
+              is_error: true,
+              uuid: crypto.randomUUID(),
+              result: "You've hit your limit",
+            } as never);
+            return;
+          }
+          // A summariser asked to take its time does, so its live row is seen.
+          if (
+            text.startsWith("Below is the transcript") &&
+            (await Bun.file(join(scratch, "slow-summary")).exists())
+          ) {
+            await delay(
+              Number(await readFile(join(scratch, "slow-summary"), "utf8"))
+            );
+          }
+          const answer = stamped(
+            key,
+            "assistant",
+            `done: ${text.slice(0, 40)}`,
+            {
+              turnEnd: true,
+            }
+          );
+          await appendFile(transcript(key), `${JSON.stringify(answer)}\n`);
+          ctx.frame(answer as never);
           ctx.frame({
             type: "result",
             subtype: "success",
-            is_error: true,
+            is_error: false,
             uuid: crypto.randomUUID(),
-            result: "You've hit your limit",
+            result: `done: ${text.slice(0, 40)}`,
+            // Each model's window, which Claude Code reports only here.
+            modelUsage: { "stand-in": { contextWindow: 200_000 } },
           } as never);
-          return;
-        }
-        // A summariser asked to take its time does, so its live row is seen.
-        if (
-          text.startsWith("Below is the transcript") &&
-          (await Bun.file(join(scratch, "slow-summary")).exists())
-        ) {
-          await delay(
-            Number(await readFile(join(scratch, "slow-summary"), "utf8"))
-          );
-        }
-        const answer = stamped(key, "assistant", `done: ${text.slice(0, 40)}`, {
-          turnEnd: true,
-        });
-        await appendFile(transcript(key), `${JSON.stringify(answer)}\n`);
-        ctx.frame(answer as never);
-        ctx.frame({
-          type: "result",
-          subtype: "success",
-          is_error: false,
-          uuid: crypto.randomUUID(),
-          result: `done: ${text.slice(0, 40)}`,
-          // Each model's window, which Claude Code reports only here.
-          modelUsage: { "stand-in": { contextWindow: 200_000 } },
-        } as never);
-      })().catch(console.error);
-    },
-    stop: async () => {
-      closeStream(ctx.instanceId);
-      await log(`STOP ${ctx.instanceId}`);
-      await endProc(client, ctx.instanceId);
-    },
-  });
+        })().catch(console.error);
+      },
+      stop: async () => {
+        closeStream(ctx.instanceId);
+        await log(`STOP ${ctx.instanceId}`);
+        await endProc(client, ctx.instanceId);
+        ended();
+      },
+    };
+  };
   const read = async (key: string) =>
     (await Bun.file(transcript(key)).exists())
       ? (await readFile(transcript(key), "utf8"))
@@ -870,7 +929,14 @@ if (role === "sessiond") {
       await log(
         `SPAWN ${ctx.instanceId} ${key} account=${spec.accountDir?.accountId ?? "none"}${spec.resume ? " resume" : " fresh"}`
       );
-      return session(ctx, key, spec.accountDir?.accountId);
+      // Its child's pid, for a kill from outside CawCo to aim at.
+      const pid = (await client.list()).procs.find(
+        (proc) => proc.procId === ctx.instanceId && proc.alive
+      )?.pid;
+      if (pid !== undefined) {
+        await writeFile(join(scratch, `pid-${ctx.instanceId}`), String(pid));
+      }
+      return session(ctx, key, spec.accountDir?.accountId, pid);
     },
   };
   registerHarness(
@@ -988,6 +1054,8 @@ if (role === "sessiond") {
   /** A session's title, as the stand-in's spawns name it and the hub's lines say it. */
   const titled = (id: string) => `Private ${short(id)}`;
   let dashboard: WebSocket | undefined;
+  /** The failures the dashboard was told of, each "<session> <words>". */
+  const failuresShown: string[] = [];
   const dash = (frame: object) => dashboard?.send(JSON.stringify(frame));
   const spawn = (id: string, account: string, parent?: string) =>
     dash({
@@ -1141,6 +1209,15 @@ if (role === "sessiond") {
       Boolean
     );
     dashboard = new WebSocket(`${base.replace("http", "ws")}/ws/dashboard`);
+    // Every failure a dashboard is told of: what it draws as "Turn failed".
+    dashboard.addEventListener("message", (event) => {
+      const frame = JSON.parse(String(event.data));
+      if (frame.payload?.kind === "error") {
+        failuresShown.push(
+          `${frame.payload.instanceId ?? frame.instanceId ?? ""} ${frame.payload.message ?? ""}`
+        );
+      }
+    });
     const formerIds = new Promise<Record<string, string>>((done, fail) => {
       if (dashboard) {
         dashboard.onerror = () => fail(new Error("dashboard socket"));
@@ -1741,6 +1818,89 @@ if (role === "sessiond") {
       lines(await eventLog(), r2).filter((one) => !one.includes("Turn "))
     );
     await rm(join(dir, `limit-${a}`));
+
+    // (g) Three ends of a session's process, each said as what it was and
+    // none as a failure: a person's Stop on the dashboard, its parent's
+    // stop_delegate, and a SIGTERM from outside CawCo. The stand-in's CLI
+    // exits 143 on each, as Claude Code does.
+    const g1 = crypto.randomUUID();
+    const g2 = crypto.randomUUID();
+    const g3 = crypto.randomUUID();
+    spawn(g1, b);
+    spawn(g2, b, parent);
+    spawn(g3, b);
+    for (const id of [g1, g2, g3]) {
+      // biome-ignore lint/performance/noAwaitInLoops: three starts
+      await running(id);
+    }
+    const stopAsked = crypto.randomUUID();
+    dash({
+      verb: "stop",
+      machineId: machine,
+      instanceId: g1,
+      requestId: stopAsked,
+      payload: { instanceId: g1, requestId: stopAsked },
+    });
+    const stopped = await tool(parent, "stop_delegate", { target: g2 });
+    assert.ok(!stopped.isError, stopped.text);
+    process.kill(
+      Number(await readFile(join(dir, `pid-${g3}`), "utf8")),
+      "SIGTERM"
+    );
+    const endedLine = async (id: string) =>
+      (
+        (await api(`/api/instances/${id}/transcript?limit=200`)) as {
+          blocks: { type: string; content: string }[];
+        }
+      ).blocks
+        .filter((block) => block.type === "system.account_move")
+        .map((block) => block.content);
+    const said = new Map<string, string[]>();
+    for (const [id, want] of [
+      [g1, "Stopped by a person"],
+      [g2, `Stopped by ${titled(parent)}`],
+      [g3, "Ended from outside CawCo (SIGTERM)"],
+    ] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: one session at a time
+      const lines3 = await until(
+        `${short(id)}'s end said as "${want}"`,
+        () => endedLine(id),
+        (seen) => seen.includes(want)
+      );
+      said.set(id, lines3);
+    }
+    await delay(2000);
+    const g = [g1, g2, g3];
+    const shown = failuresShown.filter((one) =>
+      g.some((id) => one.startsWith(id))
+    );
+    assert.deepEqual(shown, [], "no stop was shown as a failure");
+    const log7 = await hubLog();
+    assert.ok(
+      !log7.includes("exited with code"),
+      "no bare exit code in the hub's log"
+    );
+    const statuses = (await rows())
+      .filter((one) => g.includes(one.id))
+      .map((one) => `${titled(one.id)} ${one.status}`);
+    assert.ok(
+      statuses.every((one) => !one.endsWith(" error")),
+      JSON.stringify(statuses)
+    );
+    quote("(g) each end's transcript line", [
+      ...g.map((id) => `${titled(id)}: ${JSON.stringify(said.get(id))}`),
+    ]);
+    quote(
+      "(g) the hub log",
+      lines(log7, "").filter(
+        (one) =>
+          g.some((id) => one.includes(titled(id))) &&
+          !one.startsWith("[meaning]")
+      )
+    );
+    quote("(g) the rows", statuses);
+    quote("(g) failures a dashboard was shown for them", shown);
+
     // A person's "Continue in new session" of P, as the dashboard asks it.
     const byPerson = (await api(`/api/instances/${p}/continue`, {
       summarizer: { harness: "claude", model: "stand-in", account: c },

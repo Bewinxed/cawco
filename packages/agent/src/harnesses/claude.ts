@@ -21,6 +21,7 @@ import {
   rm,
   stat,
 } from "node:fs/promises";
+import { constants as osConstants } from "node:os";
 import { dirname, join } from "node:path";
 import {
   deleteSession,
@@ -192,6 +193,60 @@ import {
  */
 const KILLED_BY_SIGNAL =
   /Claude Code process terminated by signal (SIG[A-Z0-9]+)/;
+/**
+ * The same SDK's word for a CLI that exited: "Claude Code process exited
+ * with code 143", then ". stderr: " and its stderr's tail. A code over 128 is
+ * a signal the CLI caught and exited on (128 + its number: SIGTERM is 143).
+ */
+const EXITED_WITH = /Claude Code process exited with code (\d+)/;
+const STDERR_TAIL = /\. stderr: ([\s\S]*)$/;
+
+/** The signal a CLI's end names or encodes; undefined for an exit of its own. */
+export const signalOfExit = (said: string): string | undefined => {
+  const named = said.match(KILLED_BY_SIGNAL)?.[1];
+  if (named) {
+    return named;
+  }
+  const code = Number(said.match(EXITED_WITH)?.[1]);
+  if (!(Number.isInteger(code) && code > 128)) {
+    return;
+  }
+  return Object.entries(osConstants.signals).find(
+    ([, number]) => number === code - 128
+  )?.[0];
+};
+
+/**
+ * A Claude Code process's end, as the SDK said it, told to its session: a
+ * signal (named, or an exit over 128) is a death the supervisor attributes,
+ * to its own stop or to something outside CawCo; a conversation gone is its
+ * own word; anything else is the CLI ending on its own, in its own words.
+ */
+export const processEnded = (
+  ctx: Pick<HarnessContext, "died" | "failed">,
+  error: unknown
+): void => {
+  const said = String(error);
+  const signal = signalOfExit(said);
+  if (signal && ctx.died) {
+    ctx.died(signal, error);
+  } else if (said.includes("No conversation found with session ID:")) {
+    ctx.failed(new Error(CLAUDE_CONVERSATION_GONE));
+  } else {
+    ctx.failed(EXITED_WITH.test(said) ? new Error(crashWords(said)) : error);
+  }
+};
+
+/**
+ * A CLI that ended on its own, in words: what it said on its way out, never
+ * a bare exit code, and what starts it again.
+ */
+export const crashWords = (said: string): string => {
+  const tail = said.match(STDERR_TAIL)?.[1]?.trim();
+  return tail
+    ? `Claude Code stopped on its own: ${tail}. A message to it starts it again.`
+    : "Claude Code stopped on its own and said nothing about why. A message to it starts it again.";
+};
 
 /**
  * The CLI's word on one command it was sent: `command_uuid` is the uuid the
@@ -1850,16 +1905,7 @@ class ClaudeSession implements HarnessSession {
       }
     } catch (error) {
       ctx.busy(false);
-      const signal = String(error).match(KILLED_BY_SIGNAL)?.[1];
-      if (signal && ctx.died) {
-        ctx.died(signal, error);
-      } else {
-        ctx.failed(
-          String(error).includes("No conversation found with session ID:")
-            ? new Error(CLAUDE_CONVERSATION_GONE)
-            : error
-        );
-      }
+      processEnded(ctx, error);
     } finally {
       this.#transcriptWatch?.close();
       for (const delivery of this.#delivery.values()) {
