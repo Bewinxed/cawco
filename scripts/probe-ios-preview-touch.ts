@@ -168,7 +168,8 @@ const HEAD_LINE =
 const seen: string[] = [];
 
 interface Page {
-  at: Record<string, { x: number; y: number }>;
+  /** Each named point the page logged; a name it did not log has none. */
+  at: Record<string, { x: number; y: number } | undefined>;
   count: number;
   selected: string;
   view: string;
