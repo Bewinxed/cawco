@@ -46,17 +46,19 @@
  *     reconnecting state (iOS: "Reconnecting to the hub…" or "Hub
  *     unreachable"; the web: "Hub connection lost"), and once the hub runs
  *     again (SIGCONT) reconnects and reads again, subscribing as in (a);
- *  7. (c) black-holes the agent's link to the hub alone (a proxy between the
+ *  7. waits for the turn's end and the harness's read, then relaunches the
+ *     app cold, and counts the rows that carry the message's words in its
+ *     accessibility tree where the reader lands (it and its answer are the
+ *     latest rows then);
+ *  8. (c) black-holes the agent's link to the hub alone (a proxy between the
  *     two, its sockets left open), the hub, the web page and the app staying
  *     connected, while a turn runs a tool and ends on a message. The agent
  *     drops its silent link by its heartbeat's deadline, and once the link
  *     is back sends again what the hub did not take (outbox.ts, "same hub").
  *     The web page and the app draw the tool and the message with no reload,
  *     and exactly as a fresh read draws them (the page reloaded, the app
- *     relaunched cold): neither missing, neither twice;
- *  8. waits for the turn's end and Claude Code's read, then relaunches the
- *     app cold as the control, and counts the rows that carry the
- *     message's words in its accessibility tree.
+ *     relaunched cold, landing on that message): neither missing, neither
+ *     twice.
  *
  * Checks: at every read the message is drawn, in exactly one row, `local`
  * or `queue` until the turn ends and `blocks:read` after; across every line
@@ -1129,6 +1131,57 @@ try {
     console.log(`    web: +${said.at - t0} ms ${said.text}`);
   }
 
+  // ── A cold launch lands on the message the reader sent ────────────────
+  // Here, before case (c) adds a turn below it, the sent message and its
+  // answer are the latest rows: the reader lands on them.
+  await sh(`xcrun simctl terminate ${udid} dev.cawco.app`);
+  const sentColdAt = Date.now();
+  await launch();
+  // The field capitalises a message's first word as it is typed.
+  const carrying = async () =>
+    (await tree()).filter(
+      (n) => n.label?.toLowerCase().includes(WORDS) === true
+    );
+  const shown = await until(
+    "the message's words on screen after a cold launch",
+    carrying,
+    (nodes) => nodes.length > 0,
+    60_000
+  ).catch(() => []);
+  // Where the view put the reader: a place restored above the latest rows
+  // leaves the message drawn but off screen, which the accessibility tree
+  // does not list. Then the dock's Jump to latest is tapped, and looked again.
+  const restored = heard
+    .filter((h) => h.at >= sentColdAt && h.line.includes("place "))
+    .map((h) => h.line);
+  let afterJump: Node[] = [];
+  if (shown.length === 0) {
+    const jump = (await tree()).find((n) => n.label === "Jump to latest");
+    if (jump) {
+      await tapNode(jump);
+      afterJump = await until(
+        "the message's words on screen after Jump to latest",
+        carrying,
+        (nodes) => nodes.length > 0,
+        30_000
+      ).catch(() => []);
+    }
+  }
+  check(
+    "cold launch: the message's words are drawn where the reader lands",
+    shown.length >= 1,
+    shown.length >= 1
+      ? `${shown.length} element(s) carry them`
+      : `none on screen; after Jump to latest ${afterJump.length}; the place restored: ${restored.join(" / ") || "nothing said"}; the latest labels: ${(
+          await tree().catch(() => [])
+        )
+          .map((n) => n.label ?? "")
+          .filter(Boolean)
+          .slice(-12)
+          .map((label) => label.slice(0, 60))
+          .join(" | ")}`
+  );
+
   // ── (c) The agent's link drops, the hub stays up ───────────────────────
   // A turn that runs a tool and ends on a message, all while the agent's
   // link to the hub is black-holed: the agent notices by its heartbeat's
@@ -1258,49 +1311,12 @@ try {
       iosDrawn.words === iosRead.words,
     `live ${JSON.stringify(iosDrawn)}, read whole after a cold launch ${JSON.stringify(iosRead)}`
   );
-  // The field capitalises a message's first word as it is typed.
-  const carrying = async () =>
-    (await tree()).filter(
-      (n) => n.label?.toLowerCase().includes(WORDS) === true
-    );
-  const shown = await until(
-    "the message's words on screen after a cold launch",
-    carrying,
-    (nodes) => nodes.length > 0,
-    60_000
-  ).catch(() => []);
-  // Where the view put the reader: a place restored above the latest rows
-  // leaves the message drawn but off screen, which the accessibility tree
-  // does not list. Then the dock's Jump to latest is tapped, and looked again.
-  const restored = heard
-    .filter((h) => h.at >= coldAt && h.line.includes("place "))
-    .map((h) => h.line);
-  let afterJump: Node[] = [];
-  if (shown.length === 0) {
-    const jump = (await tree()).find((n) => n.label === "Jump to latest");
-    if (jump) {
-      await tapNode(jump);
-      afterJump = await until(
-        "the message's words on screen after Jump to latest",
-        carrying,
-        (nodes) => nodes.length > 0,
-        30_000
-      ).catch(() => []);
-    }
-  }
+  // The cold launch landed on the latest rows: case (c)'s message was found
+  // on screen with no Jump to latest tapped.
   check(
-    "cold launch: the message's words are drawn where the reader lands",
-    shown.length >= 1,
-    shown.length >= 1
-      ? `${shown.length} element(s) carry them`
-      : `none on screen; after Jump to latest ${afterJump.length}; the place restored: ${restored.join(" / ") || "nothing said"}; the latest labels: ${(
-          await tree().catch(() => [])
-        )
-          .map((n) => n.label ?? "")
-          .filter(Boolean)
-          .slice(-12)
-          .map((label) => label.slice(0, 60))
-          .join(" | ")}`
+    "(c) cold launch: the latest message is drawn where the reader lands",
+    iosRead.words > 0,
+    `"Relinked" on screen ${Date.now() - coldAt} ms after the launch, ${iosRead.words} element(s)`
   );
 } catch (error) {
   console.log(`FAIL ${error instanceof Error ? error.message : String(error)}`);
