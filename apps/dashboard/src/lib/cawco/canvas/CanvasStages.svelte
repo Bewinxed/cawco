@@ -8,6 +8,8 @@
    * the slot it stands in.
    */
   import { Portal } from "bits-ui";
+  import { untrack } from "svelte";
+  import { theme } from "#lib/theme.svelte.js";
   import { heardInk } from "../preview/ink.svelte";
   import { watchInput } from "../reload.svelte";
   import { type Stage, slotSizes, stages } from "./stage.svelte";
@@ -52,6 +54,10 @@
       case "cawco:done":
         actions?.done?.();
         break;
+      // A press on an element (no drag), for whoever hosts the dashboard (the Decisions tab).
+      case "cawco:element-press":
+        window.parent.postMessage(event.data, location.origin);
+        break;
       default:
         break;
     }
@@ -67,6 +73,14 @@
     }
     stage.hello();
   }
+
+  // The dashboard's theme turning tells every canvas: it draws in the dashboard's scheme, never the OS's.
+  $effect(() => {
+    const now = theme.resolved;
+    for (const stage of untrack(() => [...stages.values()])) {
+      stage.tellTheme(now);
+    }
+  });
 
   /** Each slot a stage may stand over is watched for its size. */
   $effect(() => {

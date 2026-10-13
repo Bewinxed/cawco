@@ -1,12 +1,8 @@
 /* The canvas's host page (DESIGN.md, Artifact panel, canvas and ink), on
-   the decision-page kit's tokens: the rail's two groups in the panel
-   material, Excalidraw's own chrome hidden, the canvas on surface-raised
-   with our grid in code-bg, and the empty recipe. */
-@import "../../../hub/skills/decision-page/kit/tokens.css";
-
-:root {
-  color-scheme: light dark;
-}
+   the decision-page kit's tokens, which host.tsx sets as written in the
+   host's colour scheme: the rail's two groups in the panel material,
+   Excalidraw's own chrome hidden, the canvas on surface-raised with our
+   grid in code-bg, and the empty recipe. */
 
 html,
 body,

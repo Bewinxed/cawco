@@ -39,6 +39,7 @@ import type {
   OrderedExcalidrawElement,
 } from "@excalidraw/excalidraw/element/types";
 import type {
+  AppState,
   BinaryFileData,
   ExcalidrawImperativeAPI,
 } from "@excalidraw/excalidraw/types";
@@ -242,6 +243,7 @@ export function bindScene(
     (window as unknown as { cawcoCanvasProbe: object }).cawcoCanvasProbe = {
       live,
       scene,
+      api,
       elements: () => api.getSceneElements(),
     };
   }
@@ -301,6 +303,7 @@ export function bindScene(
     stops.push(() => window.removeEventListener(type, listener, true));
   }
   stops.push(tellStrokeEnds(api, later));
+  stops.push(tellPresses(api));
 
   /** Excalidraw's reconcile rule (`shouldDiscardRemoteElement`), kept here for every remote element. */
   const guarded: ExcalidrawImperativeAPI = {
@@ -541,6 +544,47 @@ export function bindScene(
   };
 }
 
+/** The room round a drawing fitted to the view, px; the zoom it may take. The brief's numbers. */
+const FIT_MARGIN = 32;
+const FIT_ZOOM = { min: 0.25, max: 1.5 };
+
+/**
+ * Fits the drawing to the view when the canvas opens: its box centred with
+ * {@link FIT_MARGIN} round it, the zoom held to {@link FIT_ZOOM}; the view
+ * moves, never an element. An empty canvas stays at the origin, zoom 1.
+ */
+export const fitScene = (api: ExcalidrawImperativeAPI): void => {
+  const boxes = api
+    .getSceneElements()
+    .map((el) => boxOf(el as Parameters<typeof boxOf>[0]));
+  if (boxes.length === 0) {
+    return;
+  }
+  const left = Math.min(...boxes.map((box) => box.x));
+  const top = Math.min(...boxes.map((box) => box.y));
+  const right = Math.max(...boxes.map((box) => box.x + box.width));
+  const bottom = Math.max(...boxes.map((box) => box.y + box.height));
+  const { width, height } = api.getAppState();
+  const zoom = Math.min(
+    FIT_ZOOM.max,
+    Math.max(
+      FIT_ZOOM.min,
+      Math.min(
+        (width - 2 * FIT_MARGIN) / Math.max(1, right - left),
+        (height - 2 * FIT_MARGIN) / Math.max(1, bottom - top)
+      )
+    )
+  );
+  api.updateScene({
+    appState: {
+      zoom: { value: zoom as AppState["zoom"]["value"] },
+      scrollX: width / (2 * zoom) - (left + right) / 2,
+      scrollY: height / (2 * zoom) - (top + bottom) / 2,
+    },
+    captureUpdate: CaptureUpdateAction.NEVER,
+  });
+};
+
 /**
  * Ink on a canvas is its own freedraw (preview-overlay ink.ts): when a pen
  * lifts off a freedraw it drew, the overlay hears where the stroke ended
@@ -631,6 +675,141 @@ const tellStrokeEnds = (
     window.removeEventListener("pointerdown", down, true);
     window.removeEventListener("pointerup", up, true);
     window.removeEventListener("cawco:erase", erase);
+  };
+};
+
+/** How far a press may travel and how long it may last and still be a press, not a drag: the brief's numbers. */
+const PRESS_PX = 8;
+const PRESS_MS = 500;
+/** How near a line or an arrow a press lands on it, in screen px. Our call: half the 44px touch target's slack. */
+const LINE_REACH = 10;
+
+/** The distance from `p` to the segment `a`–`b`. */
+const toSegment = (
+  p: [number, number],
+  a: readonly [number, number],
+  b: readonly [number, number]
+) => {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const length = dx * dx + dy * dy;
+  const t =
+    length === 0
+      ? 0
+      : Math.max(
+          0,
+          Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / length)
+        );
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+};
+
+/** Whether the scene point `at` lands on `el`: inside its box, or for a line or an arrow within reach of it. */
+const lands = (
+  el: ExcalidrawElement,
+  at: [number, number],
+  reach: number
+): boolean => {
+  if ("points" in el && (el.type === "arrow" || el.type === "line")) {
+    const local: [number, number] = [at[0] - el.x, at[1] - el.y];
+    return el.points.some(
+      (point, i) => i > 0 && toSegment(local, el.points[i - 1], point) <= reach
+    );
+  }
+  const box = boxOf(el as Parameters<typeof boxOf>[0]);
+  return (
+    at[0] >= box.x &&
+    at[0] <= box.x + box.width &&
+    at[1] >= box.y &&
+    at[1] <= box.y + box.height
+  );
+};
+
+/**
+ * A press on the canvas, a pointer down and up within {@link PRESS_PX} and
+ * {@link PRESS_MS} (any pointer), tells the host which element it landed on
+ * (`cawco:element-press`, which the overlay posts to the host with the
+ * artifact's id): the topmost under the point, a bound label as its
+ * container, or none on the empty canvas. A drag tells nothing.
+ */
+const tellPresses = (api: ExcalidrawImperativeAPI): (() => void) => {
+  const downs = new Map<number, { x: number; y: number; at: number }>();
+  const down = (event: PointerEvent) => {
+    downs.set(event.pointerId, {
+      x: event.clientX,
+      y: event.clientY,
+      at: performance.now(),
+    });
+  };
+  const up = (event: PointerEvent) => {
+    const start = downs.get(event.pointerId);
+    downs.delete(event.pointerId);
+    if (
+      !start ||
+      Math.hypot(event.clientX - start.x, event.clientY - start.y) > PRESS_PX ||
+      performance.now() - start.at > PRESS_MS
+    ) {
+      return;
+    }
+    const state = api.getAppState();
+    const zoom = state.zoom.value;
+    const at: [number, number] = [
+      (event.clientX - state.offsetLeft) / zoom - state.scrollX,
+      (event.clientY - state.offsetTop) / zoom - state.scrollY,
+    ];
+    const elements = api.getSceneElements();
+    const byId = new Map(elements.map((el) => [el.id, el]));
+    const hit = elements.findLast((el) => lands(el, at, LINE_REACH / zoom));
+    const container =
+      hit && "containerId" in hit && hit.containerId
+        ? byId.get(hit.containerId)
+        : undefined;
+    const pressed = container ?? hit;
+    const label = pressed?.boundElements?.find((one) => one.type === "text");
+    const textOf = (el: ExcalidrawElement | undefined) =>
+      el && "text" in el ? el.text : "";
+    const box = pressed
+      ? boxOf(pressed as Parameters<typeof boxOf>[0])
+      : undefined;
+    window.dispatchEvent(
+      new CustomEvent("cawco:element-press", {
+        detail: {
+          element:
+            pressed && box
+              ? {
+                  id: pressed.id,
+                  type: pressed.type,
+                  text:
+                    textOf(pressed) ||
+                    textOf(label ? byId.get(label.id) : undefined),
+                  box: {
+                    x: Math.round(box.x),
+                    y: Math.round(box.y),
+                    width: Math.round(box.width),
+                    height: Math.round(box.height),
+                  },
+                }
+              : null,
+          screen: { x: event.clientX, y: event.clientY },
+          pointer: event.pointerType,
+          button: event.button,
+          modifiers: {
+            shift: event.shiftKey,
+            alt: event.altKey,
+            meta: event.metaKey,
+            ctrl: event.ctrlKey,
+          },
+        },
+      })
+    );
+  };
+  const cancel = (event: PointerEvent) => downs.delete(event.pointerId);
+  window.addEventListener("pointerdown", down, true);
+  window.addEventListener("pointerup", up, true);
+  window.addEventListener("pointercancel", cancel, true);
+  return () => {
+    window.removeEventListener("pointerdown", down, true);
+    window.removeEventListener("pointerup", up, true);
+    window.removeEventListener("pointercancel", cancel, true);
   };
 };
 
@@ -798,6 +977,101 @@ const gainArrows = (map: Entry | undefined, el: OrderedExcalidrawElement) => {
   }
 };
 
+/** A free arrow or line: one no `start`/`end` id binds, whose ends are where the agent put them. */
+const isFree = (skeleton: Skeleton) =>
+  (skeleton.type === "arrow" || skeleton.type === "line") &&
+  skeleton.start === undefined &&
+  skeleton.end === undefined;
+
+/**
+ * A free skeleton arrow or line with its width and height carries its end
+ * as a point: Excalidraw's conversion reads a 0 as unset and draws that
+ * side 100px, so a straight one (0 wide or 0 high) landed 100px off. One
+ * bound by `start`/`end` ids is laid out by its ends, as before.
+ */
+const withEnds = (skeleton: Skeleton): Skeleton => {
+  const { width, height } = skeleton;
+  if (
+    !isFree(skeleton) ||
+    skeleton.points !== undefined ||
+    typeof width !== "number" ||
+    typeof height !== "number"
+  ) {
+    return skeleton;
+  }
+  return {
+    ...skeleton,
+    points: [
+      [0, 0],
+      [width, height],
+    ],
+  };
+};
+
+/**
+ * A free arrow keeps the ends the agent gave it. Excalidraw's conversion
+ * insets every arrow's two ends by half a pixel (`bindLinearElementToElement`,
+ * `const delta = 0.5`), meant for an arrow drawn up to a bound element, so
+ * a free one came out a pixel short.
+ */
+const freeEnds = (
+  converted: readonly OrderedExcalidrawElement[],
+  sent: readonly Skeleton[]
+): OrderedExcalidrawElement[] => {
+  const asked = new Map(
+    sent
+      .filter((one) => isFree(one) && Array.isArray(one.points))
+      .map((one) => [one.id, one.points as [number, number][]])
+  );
+  return converted.map((el) => {
+    const points = asked.get(el.id);
+    if (!(points && el.type === "arrow")) {
+      return el;
+    }
+    const xs = points.map(([x]) => x);
+    const ys = points.map(([, y]) => y);
+    return {
+      ...el,
+      points: points.map(([x, y]) => [x, y]) as typeof el.points,
+      width: Math.max(...xs) - Math.min(...xs),
+      height: Math.max(...ys) - Math.min(...ys),
+    };
+  });
+};
+
+/**
+ * An arrow bound at both ends belongs to the frame both its ends stand in,
+ * and to no frame when they stand in different frames or one in none: a
+ * frame clips what stands outside it, so a cross-frame arrow kept in the
+ * end's frame showed its head alone.
+ */
+const framed = (
+  converted: readonly OrderedExcalidrawElement[],
+  entries: Map<string, Entry>
+): OrderedExcalidrawElement[] => {
+  const byId = new Map(converted.map((el) => [el.id, el]));
+  const frameOf = (id: string) =>
+    (
+      byId.get(id) ??
+      (entries.get(id)?.get("el") as ExcalidrawElement | undefined)
+    )?.frameId ?? null;
+  return converted.map((el) => {
+    if (
+      el.type !== "arrow" ||
+      !("startBinding" in el) ||
+      !(el.startBinding && el.endBinding)
+    ) {
+      return el;
+    }
+    const start = frameOf(el.startBinding.elementId);
+    const frameId =
+      start !== null && start === frameOf(el.endBinding.elementId)
+        ? start
+        : null;
+    return el.frameId === frameId ? el : { ...el, frameId };
+  });
+};
+
 /** Skeleton elements: added, or replacing the element of the id they carry. */
 const fromSkeletons = (
   live: Doc,
@@ -807,9 +1081,11 @@ const fromSkeletons = (
   const entries = entriesOf(live);
   const sent = skeletons.map((skeleton) => {
     const map = skeleton.id ? entries.get(skeleton.id) : undefined;
-    return map
-      ? filled(skeleton, map.get("el") as ExcalidrawElement, entries)
-      : skeleton;
+    return withEnds(
+      map
+        ? filled(skeleton, map.get("el") as ExcalidrawElement, entries)
+        : skeleton
+    );
   });
   // An arrow may bind to an element already drawn: it converts beside them.
   const sentIds = new Set(sent.map((one) => one.id));
@@ -821,12 +1097,18 @@ const fromSkeletons = (
       }
     }
   }
-  const converted = convertToExcalidrawElements(
-    [
-      ...[...context].map((id) => entries.get(id)?.get("el")),
-      ...sent,
-    ] as ExcalidrawElementSkeleton[],
-    { regenerateIds: false }
+  const converted = framed(
+    freeEnds(
+      convertToExcalidrawElements(
+        [
+          ...[...context].map((id) => entries.get(id)?.get("el")),
+          ...sent,
+        ] as ExcalidrawElementSkeleton[],
+        { regenerateIds: false }
+      ),
+      sent
+    ),
+    entries
   );
   const drawn = converted.filter((el) => !context.has(el.id));
   write(

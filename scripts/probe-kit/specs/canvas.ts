@@ -50,6 +50,8 @@ const CANVAS_GLYPH = "M1 12C1 6.81455";
 const RECT = /^(\S+) rectangle "([^"]*)" at (-?\d+),(-?\d+) (\d+)×(\d+)$/gm;
 const ARROW = /^arrow (\S+)(?: "[^"]*")?: (\S+) → (\S+)$/m;
 const INK = /^ink (\S+): (\d+) points, .*, over (.*)$/gm;
+/** One of check 13's 29 cells in the outline. */
+const CELL = /^cell-\d+ rectangle at /;
 
 interface Read {
   changed?: string[];
@@ -211,6 +213,12 @@ const run = async (kit: Kit) => {
   const lifted = await penChecks(on, made);
   await pictureChecks(on, made.id, lifted);
   await oneDocCheck(on, made.id);
+  await pressChecks(on, made.id, made.hub.id);
+  await arrowChecks(on, made.id);
+  await bindChecks(on);
+  await frameChecks(on);
+  await fitChecks(on);
+  await themeChecks(on, made.id);
   await emptyChecks(on);
 
   // 9. Every canvas page load so far (the flow canvas, its reloads, the blank one).
@@ -402,6 +410,658 @@ const oneDocCheck = async (on: OnCanvas, id: string) => {
       answer.includes("wrote") &&
       landed !== null,
     `${JSON.stringify(docs)}; landed ${landed === null ? "not within 2 s" : `${landed} ms after the tool answered`}; tool: ${answer.slice(0, 160)}`
+  );
+};
+
+interface ProbeElement {
+  boundElements?: { id: string; type: string }[] | null;
+  frameId?: string | null;
+  height: number;
+  id: string;
+  isDeleted?: boolean;
+  points?: [number, number][];
+  strokeColor?: string;
+  type: string;
+  width: number;
+  x: number;
+  y: number;
+}
+
+/** The page's binding as the probe hook shows it (scene.ts, `CAWCO_PROBE_HOOKS`). */
+interface CanvasProbe {
+  api: {
+    getAppState: () => {
+      offsetLeft: number;
+      offsetTop: number;
+      scrollX: number;
+      scrollY: number;
+      zoom: { value: number };
+    };
+    scrollToContent: (
+      target: ProbeElement,
+      options: { animate: boolean; fitToContent: boolean }
+    ) => void;
+    setActiveTool: (tool: { type: string }) => void;
+  };
+  elements: () => ProbeElement[];
+  live: {
+    getArray: (name: string) => {
+      toArray: () => { get: (key: string) => unknown }[];
+    };
+  };
+}
+
+/** An element's centre on the dashboard's screen, its zoom, and its x on the canvas. */
+const screenOf = async (on: OnCanvas, frame: Frame, id: string) => {
+  const inner = await frame.evaluate((elementId) => {
+    const probe = (window as unknown as { cawcoCanvasProbe: CanvasProbe })
+      .cawcoCanvasProbe;
+    const el = probe.elements().find((one) => one.id === elementId);
+    const state = probe.api.getAppState();
+    const z = state.zoom.value;
+    return el
+      ? {
+          x: (el.x + el.width / 2 + state.scrollX) * z + state.offsetLeft,
+          y: (el.y + el.height / 2 + state.scrollY) * z + state.offsetTop,
+          z,
+          ex: el.x,
+        }
+      : null;
+  }, id);
+  const outer = await on.page.locator(PANEL_CANVAS).boundingBox();
+  if (!(inner && outer)) {
+    return null;
+  }
+  return {
+    x: outer.x + inner.x,
+    y: outer.y + inner.y,
+    z: inner.z,
+    ex: inner.ex,
+  };
+};
+
+const elementX = (frame: Frame, id: string) =>
+  frame.evaluate(
+    (elementId) =>
+      (window as unknown as { cawcoCanvasProbe: CanvasProbe }).cawcoCanvasProbe
+        .elements()
+        .find((one) => one.id === elementId)?.x ?? null,
+    id
+  );
+
+/**
+ * Checks 11 and 12: the first press in the panel's frame acts though the
+ * dashboard has the focus, and a press (no drag) on an element tells the
+ * dashboard's host which one (`cawco:element-press`); a drag tells nothing,
+ * and a press on the empty canvas names no element.
+ */
+const pressChecks = async (on: OnCanvas, id: string, hubId: string) => {
+  const frame = await canvasFrame(on.page);
+  // The selection tool, and Hub in view, through Excalidraw's API: nothing here focuses the frame.
+  await frame.evaluate((hub) => {
+    const { api, elements } = (
+      window as unknown as { cawcoCanvasProbe: CanvasProbe }
+    ).cawcoCanvasProbe;
+    api.setActiveTool({ type: "selection" });
+    const el = elements().find((one) => one.id === hub);
+    if (el) {
+      api.scrollToContent(el, { animate: false, fitToContent: false });
+    }
+  }, hubId);
+  await settle(on.page, 300);
+  // What the dashboard's host hears: the pane's relay, sent from the dashboard's own window.
+  await on.page.evaluate(() => {
+    const kept = window as unknown as { __presses: unknown[] };
+    kept.__presses = [];
+    addEventListener("message", (event) => {
+      if (
+        event.source === window &&
+        (event.data as { type?: string } | null)?.type === "cawco:element-press"
+      ) {
+        kept.__presses.push(event.data);
+      }
+    });
+  });
+  const presses = () =>
+    on.page.evaluate(
+      () =>
+        (window as unknown as { __presses: Record<string, unknown>[] })
+          .__presses
+    );
+
+  // 11. The dashboard has the focus; the frame does not.
+  await on.page.locator("textarea").first().focus();
+  const frameFocused = await frame.evaluate(() => document.hasFocus());
+  const at = await screenOf(on, frame, hubId);
+  if (!at) {
+    on.kit.check("11: the Hub rectangle is on the canvas", false, "not found");
+    return;
+  }
+  // What the frame hears through the drag, in order.
+  await frame.evaluate(() => {
+    const heard: string[] = [];
+    (window as unknown as { __heard: string[] }).__heard = heard;
+    for (const type of ["focus", "blur"]) {
+      addEventListener(type, () => heard.push(type), true);
+    }
+    for (const type of [
+      "pointerdown",
+      "pointermove",
+      "pointerup",
+      "pointercancel",
+      "lostpointercapture",
+    ]) {
+      addEventListener(
+        type,
+        (event) => {
+          const last = heard.at(-1);
+          const word = `${type}@${(event.target as Element).localName}`;
+          if (last !== word) {
+            heard.push(word);
+          }
+        },
+        true
+      );
+    }
+  });
+  await on.page.mouse.move(at.x, at.y);
+  await on.page.mouse.down();
+  await on.page.mouse.move(at.x + 60, at.y, { steps: 8 });
+  await on.page.mouse.up();
+  await settle(on.page, 300);
+  const trace = await frame.evaluate(() => {
+    const selected = (
+      window as unknown as {
+        cawcoCanvasProbe: {
+          api: { getAppState: () => { selectedElementIds: object } };
+        };
+      }
+    ).cawcoCanvasProbe.api.getAppState().selectedElementIds;
+    return `${(window as unknown as { __heard: string[] }).__heard.join(" ")}; selected ${Object.keys(selected).join(",") || "none"}`;
+  });
+  const moved = await elementX(frame, hubId);
+  on.kit.check(
+    "11: in the panel's frame without the focus, the first drag from Hub's centre moves it (60px on screen)",
+    !frameFocused && moved !== null && Math.abs(moved - at.ex - 60 / at.z) <= 2,
+    `frame had the focus ${frameFocused}; x ${at.ex} → ${moved} (expected +${(60 / at.z).toFixed(1)} at zoom ${at.z}); the frame heard ${trace}`
+  );
+  const afterDrag = (await presses()).length;
+
+  // 12. A press on Hub, then one on the empty canvas.
+  const now = await screenOf(on, frame, hubId);
+  if (now) {
+    await on.page.mouse.click(now.x, now.y);
+  }
+  const box = await on.page.locator(PANEL_CANVAS).boundingBox();
+  if (box) {
+    await on.page.mouse.click(box.x + 60, box.y + box.height - 60);
+  }
+  const heard = await until(
+    "two presses at the dashboard's host",
+    presses,
+    (all) => all.length >= 2,
+    5000
+  ).catch(presses);
+  const [onHub, onEmpty] = heard as {
+    artifact?: string;
+    element?: { id: string; text: string; type: string; box: object } | null;
+    pointer?: string;
+    modifiers?: object;
+    screen?: { x: number; y: number };
+  }[];
+  on.kit.check(
+    "12: a press on Hub posts cawco:element-press with its id, type and text; a drag posts nothing; a press on the empty canvas posts element null",
+    afterDrag === 0 &&
+      onHub?.artifact === id &&
+      onHub.element?.id === hubId &&
+      onHub.element.text === "Hub" &&
+      onHub.element.type === "rectangle" &&
+      onHub.pointer === "mouse" &&
+      !!onHub.modifiers &&
+      !!onHub.screen &&
+      onEmpty?.element === null,
+    `after the drag ${afterDrag}; ${JSON.stringify(heard).slice(0, 600)}`
+  );
+};
+
+/** Check 14: a skeleton arrow with a 0 width or height lands where it was put, that long. */
+const arrowChecks = async (on: OnCanvas, id: string) => {
+  await on.call(UPDATE, {
+    id,
+    elements: [
+      { type: "arrow", id: "down", x: 0, y: 0, width: 0, height: 120 },
+      { type: "arrow", id: "across", x: 0, y: 200, width: 150, height: 0 },
+    ],
+  });
+  const outline = (await reader(on, id)()).outline ?? "";
+  const stored = await (await canvasFrame(on.page)).evaluate(() => {
+    const probe = (window as unknown as { cawcoCanvasProbe: CanvasProbe })
+      .cawcoCanvasProbe;
+    const live = probe.live
+      .getArray("elements")
+      .toArray()
+      .map((map) => map.get("el") as ProbeElement)
+      .filter((el) => el.id === "down" || el.id === "across")
+      .map((el) => ({ id: el.id, x: el.x, y: el.y, points: el.points }));
+    const scene = probe
+      .elements()
+      .filter((el) => el.id === "down" || el.id === "across")
+      .map((el) => ({ id: el.id, x: el.x, y: el.y, points: el.points }));
+    return { live, scene };
+  });
+  const down = outline
+    .split("\n")
+    .find((line) => line.startsWith("arrow down:"));
+  const across = outline
+    .split("\n")
+    .find((line) => line.startsWith("arrow across:"));
+  on.kit.check(
+    "14: {arrow, width 0, height 120} reads back 0×120 at 0,0, and {width 150, height 0} 150×0 at 0,200",
+    down === "arrow down: free → free at 0,0 0×120" &&
+      across === "arrow across: free → free at 0,200 150×0",
+    `${down}; ${across}; stored ${JSON.stringify(stored)}`
+  );
+};
+
+/** The live doc's elements and Excalidraw's, not deleted, on the page in the panel. */
+const counts = (frame: Frame) =>
+  frame.evaluate(() => {
+    const probe = (window as unknown as { cawcoCanvasProbe?: CanvasProbe })
+      .cawcoCanvasProbe;
+    if (!probe) {
+      return null;
+    }
+    return {
+      doc: probe.live
+        .getArray("elements")
+        .toArray()
+        .filter((map) => !(map.get("el") as { isDeleted?: boolean }).isDeleted)
+        .length,
+      scene: probe.elements().length,
+    };
+  });
+
+/** Reloads the panel's canvas page and answers its frame once it has drawn again. */
+const reloaded = async (on: OnCanvas, frame: Frame) => {
+  await frame.evaluate(() => location.reload());
+  await settle(on.page, 500);
+  return await canvasFrame(on.page);
+};
+
+/**
+ * Check 13: a canvas that already holds 29 elements keeps them through a
+ * reload of its page, the doc and Excalidraw's scene alike; and so with
+ * the doc's sync held back until after the page has bound.
+ */
+const bindChecks = async (on: OnCanvas) => {
+  const many = Array.from({ length: 29 }, (_, i) => ({
+    type: "rectangle",
+    id: `cell-${i}`,
+    x: (i % 6) * 140,
+    y: Math.floor(i / 6) * 90,
+    width: 120,
+    height: 60,
+  }));
+  const made = await on.call(CREATE, {
+    kind: "canvas",
+    name: "many",
+    elements: many,
+  });
+  const id = made.match(ANSWERED_ID)?.[1];
+  if (!id) {
+    on.kit.check(
+      "13: the 29-element canvas is made",
+      false,
+      made.slice(0, 300)
+    );
+    return;
+  }
+  let frame = await until(
+    "the 29-element canvas in the panel",
+    async () => {
+      const found = await canvasFrame(on.page);
+      const now = await counts(found);
+      return now?.scene === 29 ? found : null;
+    },
+    Boolean,
+    30_000
+  );
+  frame = await reloaded(on, frame as Frame);
+  await settle(on.page, 2500);
+  const reload = await counts(frame);
+  const cells = async () =>
+    ((await reader(on, id)()).outline ?? "")
+      .split("\n")
+      .filter((line) => CELL.test(line)).length;
+  const hubCount = await cells();
+
+  // The sync held back 1.5 s, so the page binds before the hub's doc arrives.
+  const socket = new RegExp(`__cawco/artifact/${id}`);
+  await on.page.context().routeWebSocket(socket, (ws) => {
+    const server = ws.connectToServer();
+    ws.onMessage((message) => server.send(message));
+    server.onMessage((message) => {
+      setTimeout(() => ws.send(message), 1500);
+    });
+  });
+  frame = await reloaded(on, frame);
+  await settle(on.page, 4000);
+  const delayed = await counts(frame);
+  const hubAfter = await cells();
+  await on.page.context().unrouteAll({ behavior: "ignoreErrors" });
+  on.kit.check(
+    "13: a canvas holding 29 elements keeps 29 in the doc and in Excalidraw's scene after a reload, and after one with the sync held past the bind",
+    reload?.doc === 29 &&
+      reload.scene === 29 &&
+      hubCount === 29 &&
+      delayed?.doc === 29 &&
+      delayed.scene === 29 &&
+      hubAfter === 29,
+    `reload ${JSON.stringify(reload)}, hub ${hubCount}; sync held ${JSON.stringify(delayed)}, hub ${hubAfter}`
+  );
+};
+
+/**
+ * Check 15: an arrow between cards in two frames belongs to no frame (a
+ * frame clips what stands outside it), its line spanning both cards; one
+ * between two cards of one frame keeps the frame.
+ */
+const frameChecks = async (on: OnCanvas) => {
+  const made = await on.call(CREATE, {
+    kind: "canvas",
+    name: "frames",
+    elements: [
+      {
+        type: "rectangle",
+        id: "cta",
+        x: 40,
+        y: 60,
+        width: 160,
+        height: 60,
+        label: { text: "CTA" },
+      },
+      {
+        type: "rectangle",
+        id: "cta-2",
+        x: 40,
+        y: 200,
+        width: 160,
+        height: 60,
+        label: { text: "Second" },
+      },
+      {
+        type: "rectangle",
+        id: "install",
+        x: 520,
+        y: 60,
+        width: 160,
+        height: 60,
+        label: { text: "Install" },
+      },
+      {
+        type: "frame",
+        id: "launch",
+        children: ["cta", "cta-2"],
+        name: "Launch",
+      },
+      { type: "frame", id: "setup", children: ["install"], name: "Setup" },
+      {
+        type: "arrow",
+        id: "across-frames",
+        x: 200,
+        y: 90,
+        width: 320,
+        height: 0,
+        start: { id: "cta" },
+        end: { id: "install" },
+      },
+      {
+        type: "arrow",
+        id: "in-frame",
+        x: 120,
+        y: 120,
+        start: { id: "cta" },
+        end: { id: "cta-2" },
+      },
+    ],
+  });
+  if (!made.match(ANSWERED_ID)) {
+    on.kit.check("15: the framed canvas is made", false, made.slice(0, 300));
+    return;
+  }
+  const frame = await canvasFrame(on.page);
+  const read = await until(
+    "the framed canvas's arrows",
+    () =>
+      frame.evaluate(() => {
+        const all = (
+          window as unknown as { cawcoCanvasProbe: CanvasProbe }
+        ).cawcoCanvasProbe.elements();
+        const by = (key: string) => all.find((el) => el.id === key);
+        return {
+          across: by("across-frames"),
+          inFrame: by("in-frame"),
+          cta: by("cta"),
+          install: by("install"),
+        };
+      }),
+    (now) => !!(now.across && now.inFrame && now.cta && now.install),
+    15_000
+  );
+  const { across, inFrame, cta, install } = read;
+  const span = across?.points?.map(([px]) => (across.x ?? 0) + px) ?? [];
+  on.kit.check(
+    "15: an arrow from a card in one frame to a card in another has no frame and spans both cards; one inside a frame keeps it",
+    across?.frameId === null &&
+      !!cta &&
+      !!install &&
+      Math.min(...span) <= cta.x + cta.width + 2 &&
+      Math.max(...span) >= install.x - 2 &&
+      inFrame?.frameId === "launch",
+    `across ${JSON.stringify({ frameId: across?.frameId, x: across?.x, points: across?.points })}; in-frame ${inFrame?.frameId}`
+  );
+};
+
+/**
+ * Check 16: a drawing far from the origin opens fitted: every element's box
+ * on screen inside the frame, on a phone and at a desk; the file's places
+ * unchanged.
+ */
+const fitChecks = async (on: OnCanvas) => {
+  const far = [
+    {
+      type: "rectangle",
+      id: "far-a",
+      x: 2000,
+      y: 1500,
+      width: 200,
+      height: 120,
+    },
+    {
+      type: "rectangle",
+      id: "far-b",
+      x: 2400,
+      y: 1500,
+      width: 200,
+      height: 120,
+    },
+    { type: "ellipse", id: "far-c", x: 2200, y: 1780, width: 200, height: 120 },
+  ];
+  const made = await on.call(CREATE, {
+    kind: "canvas",
+    name: "far",
+    elements: far,
+  });
+  const id = made.match(ANSWERED_ID)?.[1];
+  if (!id) {
+    on.kit.check("16: the far canvas is made", false, made.slice(0, 300));
+    return;
+  }
+  const inside: string[] = [];
+  for (const [view, size] of [
+    ["phone", { width: 390, height: 844 }],
+    ["desk", { width: 1280, height: 800 }],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one viewport at a time, each its own page
+    const page = await on.kit.page(view);
+    await page.setViewportSize(size);
+    await open(
+      page,
+      `${new URL(on.page.url()).origin}/artifact/${id}`,
+      ".canvas-stage iframe"
+    );
+    const frame = await until(
+      `the far canvas on the ${view}`,
+      async () => {
+        const handle = await page
+          .locator(".canvas-stage iframe")
+          .elementHandle();
+        const found = await handle?.contentFrame();
+        return found &&
+          (await found.locator(".canvas-host .excalidraw").count()) === 1
+          ? found
+          : null;
+      },
+      Boolean,
+      60_000
+    );
+    await settle(page, 1500);
+    const placed = await (frame as Frame).evaluate(() => {
+      const probe = (window as unknown as { cawcoCanvasProbe: CanvasProbe })
+        .cawcoCanvasProbe;
+      const state = probe.api.getAppState();
+      const z = state.zoom.value;
+      return {
+        z,
+        width: innerWidth,
+        height: innerHeight,
+        boxes: probe.elements().map((el) => ({
+          id: el.id,
+          left: (el.x + state.scrollX) * z,
+          top: (el.y + state.scrollY) * z,
+          right: (el.x + el.width + state.scrollX) * z,
+          bottom: (el.y + el.height + state.scrollY) * z,
+        })),
+      };
+    });
+    const out = placed.boxes.filter(
+      (box) =>
+        box.left < 0 ||
+        box.top < 0 ||
+        box.right > placed.width ||
+        box.bottom > placed.height
+    );
+    inside.push(
+      `${view} ${placed.width}×${placed.height} zoom ${placed.z.toFixed(3)}: ${placed.boxes.length} boxes, ${out.length === 0 ? "all inside" : `outside ${out.map((box) => box.id).join(", ")}`}`
+    );
+    await page.close();
+  }
+  const outline = (await reader(on, id)()).outline ?? "";
+  on.kit.check(
+    "16: a drawing at x 2000–2600, y 1500–1900 opens fitted, every element inside the frame on a phone and at a desk; the file's places unchanged",
+    inside.every((line) => line.includes("3 boxes, all inside")) &&
+      outline.includes("far-a rectangle at 2000,1500 200×120") &&
+      outline.includes("far-b rectangle at 2400,1500 200×120"),
+    `${inside.join("; ")}; outline ${outline.replaceAll("\n", " | ")}`
+  );
+};
+
+/**
+ * Check 17: the canvas draws in the dashboard's theme, never the OS's:
+ * with the system dark and the dashboard light its ground is the day
+ * value and Excalidraw's theme light; the reverse the other way; an
+ * agent's stroke is the day ink either way (Excalidraw's dark theme
+ * inverts it).
+ */
+const themeChecks = async (on: OnCanvas, id: string) => {
+  const lines: string[] = [];
+  let ok = true;
+  for (const [dashboard, system] of [
+    ["light", "dark"],
+    ["dark", "light"],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one theme at a time, each its own page
+    const page = await on.kit.page("desk", { theme: dashboard });
+    await page.emulateMedia({ colorScheme: system });
+    await open(
+      page,
+      `${new URL(on.page.url()).origin}/artifact/${id}`,
+      ".canvas-stage iframe"
+    );
+    const frame = await until(
+      `the canvas, dashboard ${dashboard}`,
+      async () => {
+        const handle = await page
+          .locator(".canvas-stage iframe")
+          .elementHandle();
+        const found = await handle?.contentFrame();
+        return found &&
+          (await found.locator(".canvas-host .excalidraw").count()) === 1
+          ? found
+          : null;
+      },
+      Boolean,
+      60_000
+    );
+    await settle(page, 800);
+    const read = await (frame as Frame).evaluate(() => {
+      const value = (scheme: string) => {
+        const probe = document.createElement("span");
+        probe.style.cssText = `color-scheme: ${scheme}; background: var(--surface-raised); display: block`;
+        document.body.append(probe);
+        const color = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return color;
+      };
+      const stroke = (
+        window as unknown as { cawcoCanvasProbe: CanvasProbe }
+      ).cawcoCanvasProbe
+        .elements()
+        .find((el) => el.type === "rectangle")?.strokeColor;
+      // `ink-strong` by day as a hex, as scene.ts's tokenHex stores it.
+      const ink = document.createElement("span");
+      ink.style.cssText =
+        "color-scheme: light; color: var(--ink-strong); display: none";
+      document.body.append(ink);
+      const paint = document.createElement("canvas").getContext("2d");
+      let dayInk = "";
+      if (paint) {
+        paint.fillStyle = getComputedStyle(ink).color;
+        paint.fillRect(0, 0, 1, 1);
+        const [r, g, b] = paint.getImageData(0, 0, 1, 1).data;
+        dayInk = `#${[r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("")}`;
+      }
+      ink.remove();
+      return {
+        dayInk,
+        ground: getComputedStyle(document.body).backgroundColor,
+        day: value("light"),
+        night: value("dark"),
+        excalidraw: document
+          .querySelector(".excalidraw")
+          ?.classList.contains("theme--dark")
+          ? "dark"
+          : "light",
+        stroke,
+      };
+    });
+    const expected = dashboard === "light" ? read.day : read.night;
+    const pass =
+      read.day !== read.night &&
+      read.ground === expected &&
+      read.excalidraw === dashboard &&
+      !!read.dayInk &&
+      read.stroke === read.dayInk;
+    ok &&= pass;
+    lines.push(
+      `dashboard ${dashboard}, system ${system}: ${JSON.stringify(read)}`
+    );
+    await page.close();
+  }
+  on.kit.check(
+    "17: the canvas draws in the dashboard's theme under either system scheme: its ground and Excalidraw's theme follow the dashboard, the agent's stroke stays the day ink",
+    ok && lines.length === 2,
+    lines.join(" | ")
   );
 };
 

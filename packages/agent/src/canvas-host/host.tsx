@@ -14,6 +14,7 @@ import { Excalidraw } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type {
   AppState,
+  BinaryFiles,
   ExcalidrawImperativeAPI,
 } from "@excalidraw/excalidraw/types";
 import {
@@ -26,10 +27,13 @@ import {
 } from "react";
 import { createRoot } from "react-dom/client";
 import type { Map as YMap } from "yjs";
+import tokensCss from "../../../hub/skills/decision-page/kit/tokens.css" with {
+  type: "text",
+};
 import type { ArtifactGlobal, ArtifactHold } from "../preview-overlay/artifact";
 import { Icon } from "./icons";
 import { Rail } from "./rail";
-import { bindScene, type CanvasInk, tokenHex } from "./scene";
+import { bindScene, type CanvasInk, fitScene, tokenHex } from "./scene";
 
 declare global {
   interface Window {
@@ -54,6 +58,13 @@ const UI_OPTIONS = {
   tools: { image: false },
 } as const;
 
+// The kit's tokens as written: Bun's CSS bundler lowers `light-dark()` into
+// `prefers-color-scheme` rules (the OS's scheme), so they stay out of it and
+// follow the host's `color-scheme` (`scheme` below).
+const tokenSheet = document.createElement("style");
+tokenSheet.textContent = tokensCss;
+document.head.prepend(tokenSheet);
+
 const media = (query: string) => {
   const list = matchMedia(query);
   return {
@@ -64,8 +75,42 @@ const media = (query: string) => {
     },
   };
 };
-const darkScheme = media("(prefers-color-scheme: dark)");
 const lessMotion = media("(prefers-reduced-motion: reduce)");
+
+/**
+ * The scheme the canvas draws in: the host's (the dashboard's theme, which
+ * its `cawco:hello` and `cawco:theme` carry), never the OS's. Light until
+ * the host says.
+ */
+let scheme: "light" | "dark" = "light";
+const schemeListeners = new Set<() => void>();
+const takeScheme = (said: unknown) => {
+  if ((said !== "light" && said !== "dark") || said === scheme) {
+    return;
+  }
+  scheme = said;
+  document.documentElement.style.colorScheme = said;
+  for (const listener of schemeListeners) {
+    listener();
+  }
+};
+document.documentElement.style.colorScheme = scheme;
+window.addEventListener("message", (event) => {
+  if (
+    event.source === window.parent &&
+    event.origin === location.origin &&
+    (event.data?.type === "cawco:hello" || event.data?.type === "cawco:theme")
+  ) {
+    takeScheme(event.data.theme);
+  }
+});
+const schemeStore = {
+  subscribe: (changed: () => void) => {
+    schemeListeners.add(changed);
+    return () => schemeListeners.delete(changed);
+  },
+  now: () => scheme,
+};
 
 /** The doc as the overlay holds it now: the first hold, and every one after. */
 let current: ArtifactHold | null = null;
@@ -114,6 +159,24 @@ const placeStore = {
   now: () => placedDocked,
 };
 
+/*
+ * The first press acts. In the panel the page is a frame without the focus:
+ * a press there hands the window the focus as its default action, after
+ * Excalidraw has begun the drag, and that drag then moved nothing (the
+ * frame heard pointerdown, focus, focus, pointermove, pointerup). The
+ * window takes the focus first, here, before Excalidraw's own listener, and
+ * on a press only: the pointer passing over leaves the keyboard where it is.
+ */
+window.addEventListener(
+  "pointerdown",
+  () => {
+    if (!document.hasFocus()) {
+      window.focus();
+    }
+  },
+  true
+);
+
 // ⌘⇧D (Ctrl+Shift+D) with the canvas focused folds it, as it does from the field.
 window.addEventListener("keydown", (event) => {
   if (
@@ -126,17 +189,59 @@ window.addEventListener("keydown", (event) => {
   }
 });
 
-/** What the canvas holds before Excalidraw binds to it: its pen mode, and whether it is empty. */
+/** The doc's order, by its order keys (y-excalidraw's `pos`), compared code unit by code unit. */
+const byPos = (a: { pos: string }, b: { pos: string }) => {
+  if (a.pos === b.pos) {
+    return 0;
+  }
+  return a.pos < b.pos ? -1 : 1;
+};
+
+/**
+ * What the canvas holds before Excalidraw binds to it: its elements in
+ * their order and its files (Excalidraw's first scene), its pen mode, and
+ * whether it is empty.
+ */
 const firstLook = (hold: ArtifactHold | null) => {
   const meta = hold?.doc.getMap("meta");
+  const elements = (
+    hold?.doc.getArray<YMap<unknown>>("elements").toArray() ?? []
+  )
+    .map((map) => ({
+      el: map.get("el") as ExcalidrawElement,
+      pos: map.get("pos") as string,
+    }))
+    .sort(byPos)
+    .map((entry) => entry.el);
   return {
-    empty: (
-      hold?.doc.getArray<YMap<unknown>>("elements").toArray() ?? []
-    ).every((map) => (map.get("el") as ExcalidrawElement).isDeleted),
+    elements,
+    files: (hold?.doc.getMap("files").toJSON() ?? {}) as BinaryFiles,
+    empty: elements.every((el) => el.isDeleted),
     penMode: meta?.get("penMode") === true,
     penDetected: meta?.get("penDetected") === true,
   };
 };
+
+/**
+ * Resolves once Excalidraw has loaded its first scene (`initialData`): it
+ * loads it after handing out its API, and a binding made before would hear
+ * the empty scene before it as the person's change, and delete every
+ * element of the doc (y-excalidraw's onChange diffs the scene against the
+ * doc it bound).
+ */
+const loaded = (api: ExcalidrawImperativeAPI): Promise<void> =>
+  new Promise((done) => {
+    if (!api.getAppState().isLoading) {
+      done();
+      return;
+    }
+    const stop = api.onChange((_elements, state) => {
+      if (!state.isLoading) {
+        stop();
+        done();
+      }
+    });
+  });
 
 function Empty({ onDraw }: { onDraw: () => void }) {
   return (
@@ -159,7 +264,7 @@ function Empty({ onDraw }: { onDraw: () => void }) {
 
 function Host() {
   const hold = useSyncExternalStore(holdStore.subscribe, holdStore.now);
-  const dark = useSyncExternalStore(darkScheme.subscribe, darkScheme.now);
+  const theme = useSyncExternalStore(schemeStore.subscribe, schemeStore.now);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const first = useMemo(() => firstLook(holdStore.now()), []);
   const [empty, setEmpty] = useState(first.empty);
@@ -174,15 +279,14 @@ function Host() {
   );
   const generation = hold?.generation;
   const docked = useSyncExternalStore(placeStore.subscribe, placeStore.now);
+  /** The drawing is fitted to the view once, when the canvas opens. */
+  const fitted = useRef(false);
   useEffect(() => {
     if (!(api && generation !== undefined)) {
       return;
     }
-    const bound = bindScene(api, () => holdStore.now() as ArtifactHold, {
-      ink,
-      dark: darkScheme.now,
-      reduced: lessMotion.now,
-    });
+    let bound: ReturnType<typeof bindScene> | null = null;
+    let gone = false;
     // The host asks for the picture before it sends or folds the canvas.
     const asked = async (event: MessageEvent) => {
       if (
@@ -192,13 +296,28 @@ function Host() {
       ) {
         return;
       }
-      await bound.picture().catch(() => undefined);
+      await bound?.picture().catch(() => undefined);
       toHost("pictured");
     };
-    window.addEventListener("message", asked);
+    loaded(api).then(() => {
+      if (gone) {
+        return;
+      }
+      bound = bindScene(api, () => holdStore.now() as ArtifactHold, {
+        ink,
+        dark: () => schemeStore.now() === "dark",
+        reduced: lessMotion.now,
+      });
+      if (fitted.current === false) {
+        fitted.current = true;
+        fitScene(api);
+      }
+      window.addEventListener("message", asked);
+    });
     return () => {
+      gone = true;
       window.removeEventListener("message", asked);
-      bound.destroy();
+      bound?.destroy();
     };
   }, [api, generation, ink]);
   const changed = useCallback(
@@ -220,6 +339,8 @@ function Host() {
   );
   const initialData = useMemo(
     () => ({
+      elements: first.elements,
+      files: first.files,
       appState: {
         viewBackgroundColor: "transparent",
         currentItemStrokeColor: ink.stroke,
@@ -244,7 +365,7 @@ function Host() {
         initialData={initialData}
         onChange={changed}
         onScrollChange={scrolled}
-        theme={dark ? "dark" : "light"}
+        theme={theme}
         UIOptions={UI_OPTIONS}
         zenModeEnabled={false}
       />

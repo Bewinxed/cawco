@@ -332,6 +332,9 @@ export const artifact = {
   /** The kind of artifact this page is, once known. */
   kind: (): ArtifactRef["kind"] | null => joined?.kind ?? seededKind,
 
+  /** The artifact this page is, by id, once known. */
+  id: (): string | null => joined?.id ?? seeded,
+
   /** The doc as it is now: the ink (ink.ts) reads and writes its `ink`, `moved` and `pins`. */
   doc: (): Doc => doc,
 

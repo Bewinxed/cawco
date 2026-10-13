@@ -19,6 +19,7 @@
  * (`watch`), and for a short tail after each.
  */
 import { SvelteMap } from "svelte/reactivity";
+import { theme } from "#lib/theme.svelte.js";
 import { artifactSyncPath } from "../preview/artifact-doc";
 
 export type Slot = "composer" | "panel";
@@ -139,15 +140,21 @@ export class Stage {
     this.frame?.contentWindow?.postMessage(message, location.origin);
   }
 
-  /** Tells the page which artifact it is, where its doc is, and where it stands. */
+  /** Tells the page which artifact it is, where its doc is, the dashboard's theme, and where it stands. */
   hello(): void {
     this.connected = false;
     this.post({
       type: "cawco:hello",
       artifact: { id: this.id, kind: "canvas", name: this.name },
       sync: artifactSyncPath(this.base, this.id),
+      theme: theme.resolved,
     });
     this.tellPlace();
+  }
+
+  /** The dashboard's theme changed: the canvas draws in it (never in the OS's). */
+  tellTheme(scheme: "light" | "dark"): void {
+    this.post({ type: "cawco:theme", theme: scheme });
   }
 
   tellPlace(): void {

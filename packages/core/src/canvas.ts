@@ -130,6 +130,16 @@ const overlaps = (
 
 const quoted = (text: string) => JSON.stringify(text);
 
+/** An arrow's outline line: its label, its two ends, and its place when an end is free. */
+const arrowLine = (
+  element: CanvasElement,
+  label: string | null,
+  box: ReturnType<typeof boxOf>
+): string => {
+  const free = !(element.startBinding && element.endBinding);
+  return `arrow ${element.id}${label === null ? "" : ` ${quoted(label)}`}: ${element.startBinding?.elementId ?? "free"} → ${element.endBinding?.elementId ?? "free"}${free ? ` at ${boxText(box)}` : ""}`;
+};
+
 /**
  * The canvas as the agent reads it: one line per element that is not
  * deleted, in scene order.
@@ -137,7 +147,8 @@ const quoted = (text: string) => JSON.stringify(text);
  * - `<id> <type> "<text>" at x,y w×h`, the text its own or its bound
  *   label's (a label is read on its container, not on a line of its own);
  * - `arrow <id> "<label>": <startId> → <endId>` (`free` for an end bound to
- *   nothing);
+ *   nothing), and `at x,y w×h` after it when an end is free, since its
+ *   place is then its own;
  * - `ink <id>: N points, x,y w×h, over <ids>`, a freedraw with the ids
  *   whose boxes it crosses (`over nothing` when none);
  * - then `group <id>: <ids>` for every group.
@@ -161,8 +172,7 @@ export const canvasOutline = (elements: readonly CanvasElement[]): string => {
   const lines = shown.map((element) => {
     const box = boxOf(element);
     if (element.type === "arrow") {
-      const label = labelOf(element);
-      return `arrow ${element.id}${label === null ? "" : ` ${quoted(label)}`}: ${element.startBinding?.elementId ?? "free"} → ${element.endBinding?.elementId ?? "free"}`;
+      return arrowLine(element, labelOf(element), box);
     }
     if (element.type === "freedraw") {
       const over = shown

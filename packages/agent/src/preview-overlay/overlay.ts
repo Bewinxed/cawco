@@ -1068,6 +1068,17 @@ window.addEventListener("message", async (event) => {
   await handle?.(message as HostMessage);
 });
 
+/*
+ * A canvas's page tells its host which element a press (no drag) landed on
+ * (canvas-host scene.ts): the Decisions tab opens a decision page from it.
+ */
+window.addEventListener("cawco:element-press", (event) => {
+  post("cawco:element-press", {
+    artifact: artifact.id(),
+    ...(event as CustomEvent<object>).detail,
+  });
+});
+
 window.addEventListener("popstate", navigated);
 window.addEventListener("hashchange", navigated);
 ready();
