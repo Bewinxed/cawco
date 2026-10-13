@@ -2,7 +2,7 @@
 
 **UI wordmark:** “Caw&Co”, set in the landing's Nunito Variable face. Product names in sentences, page titles and notices remain “CawCo”.
 
-**Date:** 2026-08-21 · **Status:** confirmed · **Amended:** 2026-10-06 (projects: the terms from `.design-foundations/plans/2026-10-06-projects.md` §3; the tone register once called "Routine" is now "Readout", because a routine is scheduled work)
+**Date:** 2026-08-21 · **Status:** confirmed · **Amended:** 2026-10-06 (projects: the terms from `.design-foundations/plans/2026-10-06-projects.md` §3; the tone register once called "Routine" is now "Readout", because a routine is scheduled work) · 2026-10-13 (artifacts, §5.10: *artifact*, *page*, *pin*; *canvas* now means a drawing)
 **Doctorate authority:** `content-design` (design-for-ai 4.2.0) — voice/tone per Podmajersky (2019), error
 formula per Yifrah (2017), plain language per Redish (2007), destructive confirmation per Nielsen
 #5 (1994) and the microcopy-patterns catalog. **Pairs with DESIGN.md** (visual tokens, LOCKED) and
@@ -162,8 +162,12 @@ it actually means.
 | One session's try at a task, possibly over many runs | **attempt** | A task's attempts list; "fresh attempt". | "run" (a run is one turn's execution); "try" as a noun |
 | Work that happens on a schedule or when an event arrives | **routine** | The routines list, "next run 08:55". | "job", "automation", "schedule" (a routine *has* a schedule), "cron" in copy |
 | A saved way of looking at a project's tasks: board, table, calendar, pipeline | **view** | The view picker; "Ask Caw for a view". | "board" alone (the board is the fleet board); "layout" |
-| A pannable surface holding previews, images and cards | **canvas** | A project's canvases; a decision page's canvas view. | "whiteboard", "artboard" |
-| A note pinned to an element in a preview, with its replies | **comment** | Pins on a preview and the comment list beside it. | "thread" (a thread is a conversation with Caw), "annotation" |
+| A document a session made that you work in: a page, a canvas or a preview, kept by the hub | **artifact** | The session's artifact panel; "Open in new tab". | "preview" as the general term, "sandbox", "document" |
+| An artifact that is HTML the agent wrote: a decision page, a form, a mockup | **page** | A page in the artifact panel. | "document", "app" |
+| An artifact that is a drawing, by you or the agent | **canvas** | The canvas the pen's swipe opens; "Draw". | "whiteboard", "artboard", "sketch", "drawing" as the noun |
+| An artifact that is a dev server or folder shown live | **preview** | The preview beside the transcript. | "canvas" (that is a drawing) |
+| A numbered mark on an artifact's element: an annotation, or a comment's anchor | **pin** | "Send 3" sends the unsent pins and comments. | "marker", "selection" |
+| A note pinned to an element in an artifact, with its replies | **comment** | Pins on an artifact and the comment list beside it. | "thread" (a thread is a conversation with Caw), "annotation" |
 | A conversation with Caw in a project | **thread** | The project's threads. | "chat", "comment" |
 | A page of decisions Caw writes with you, where you pick, note and comment | **decision page** | The Decisions tab; "Make tasks". | "plan" (that is the harness's list), "proposal" (that is the memory curator's) |
 | A project's preset of harness, model, effort, skills, tools and budget that a delegate runs as | **delegate type** | `delegates/writer.md`; the type picker. | "persona", "agent", "profile" |
@@ -244,7 +248,8 @@ Every button parses as **[Verb] + [Object]** and stays comprehensible with surro
 "Yes" alone. A button is not "Submit" (mechanism), not "OK" (ambiguous), not "Click here" (pointer).
 Allowlisted imperative verbs for the gate: *Start, Create, Add, Save, Cancel, Delete, Remove,
 Approve, Deny, Allow, Deny, Reconnect, Retry, Export, Filter, Manage, Open, Stop, Interrupt, Send,
-Attach, Refresh, Install, Fetch, Restore, Redirect, Skip, Switch, Check, Configure, Copy*. "Continue" is acceptable only where the
+Attach, Refresh, Install, Fetch, Restore, Redirect, Skip, Switch, Check, Configure, Copy, Draw, Dock, Undock, Annotate,
+Comment, Illustrate, Erase, Done*. "Continue" is acceptable only where the
 next step is already visible in context (microcopy-patterns catalog).
 
 **Composer exception (recorded):** the transcript composer's `<textarea>` carries `aria-label="Message
