@@ -39,6 +39,14 @@ import { createRebalancer, readForecast, reReadCost } from "./rebalance";
  * accounts forecast to run out move to where placement would carry them,
  * when moving is free (their cache carries, or is cold) or cheap (under the
  * floor and affordable), and held sessions are looked at again at once.
+ *
+ * It also answers a Claude session whose turn died on its account's
+ * credential. Refused for good (server.ts `settleRefusal` signed the account
+ * out on its machine): the session moves whole the same way, to an account
+ * of the same organization first, and carries on there; with none to take
+ * it, it is held, what it is sent waiting at the hub, until its account is
+ * signed in again or another comes free. A token refresh another Claude Code
+ * process held: the session carries on where it is a minute later, once.
  */
 
 export type LimitRow = ReturnType<DbShape["getInstancesByIds"]>[number];
@@ -70,6 +78,19 @@ const RECHECK_MS = 5 * MINUTE_MS;
 const SETTLE_MS = 5000;
 /** …for this long: a session busy past it started a turn its account took. */
 const SETTLE_FOR_MS = 2 * MINUTE_MS;
+/**
+ * How long a turn a token refresh race cut waits before it goes again:
+ * Claude Code's own words for it, "This is usually transient; retry in a
+ * minute".
+ */
+const RACE_RETRY_MS = MINUTE_MS;
+
+/**
+ * Why a session leaves its account: its limit refused a turn, or Claude Code
+ * refused the account's credential for good. Either way it carries on where
+ * it moves to.
+ */
+type Cause = "limit" | "refused";
 
 /** Two accounts of one organization share its prompt cache and its thinking. */
 export const sameOrganization = (a: Account, b: Account): boolean =>
@@ -253,21 +274,27 @@ export interface AtLimitPorts {
   machineName: (machineId: string) => string;
   /**
    * Relaunches `row` on `accountId`, its conversation with it, and, when
-   * its limit stopped it (`carryOn`), has it carry on; a session moved
-   * between turns before any limit waits for its next message. Answers why
-   * when it did not move: `row` is still on its account then.
+   * its limit or a sign-in failure stopped it (`carryOn` says which), has it
+   * carry on; a session moved between turns before any limit waits for its
+   * next message. Answers why when it did not move: `row` is still on its
+   * account then.
    */
   move: (
     row: LimitRow,
     accountId: string,
-    carryOn: boolean
+    carryOn: false | "limit" | "signin"
   ) => Promise<string | undefined>;
   /** Writes one line into `row`'s transcript; under `id`, the line already written there is what it says now. */
   note: (row: LimitRow, move: AccountMove, id?: string) => void;
   /** What adding an account set moving, for the Accounts page. */
   noticed: (notice: RebalanceNotice) => void;
-  /** Has `row` carry on where its limit stopped it, on the account it is on. */
-  resume: (row: LimitRow) => void;
+  /** A move off a refused sign-in, said to whoever hears `row`'s reports. */
+  refusedMove: (row: LimitRow, move: AccountMove) => void;
+  /**
+   * Has `row` carry on, on the account it is on, where what `stopped` it
+   * left it: its account's limit, or a sign-in failure.
+   */
+  resume: (row: LimitRow, stopped: "limit" | "signin") => void;
   /**
    * Who sent what `row`'s last turn read: the newest message it was handed.
    * Undefined when it was handed none.
@@ -281,8 +308,15 @@ export interface AtLimitPorts {
     row: LimitRow,
     accountId: string
   ) => Promise<Summarised | undefined>;
-  /** Who would carry `row` off `accountId`: placement for its kind, excluding that account. */
-  target: (row: LimitRow, accountId: string) => string | null;
+  /**
+   * Who would carry `row` off `accountId`: placement for its kind, excluding
+   * that account, among the accounts `among` admits when it is given.
+   */
+  target: (
+    row: LimitRow,
+    accountId: string,
+    among?: (account: Account) => boolean
+  ) => string | null;
   /** Takes the line `id` out of `row`'s transcript. */
   unnote: (row: LimitRow, id: string) => void;
   /** Whether `row`'s prompt cache is still warm: a move off its account then re-reads it. */
@@ -318,6 +352,12 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   const acting = new Set<string>();
   /** Refused sessions still mid-turn on their machine, by when they stop being looked at. */
   const settling = new Map<string, { timer: HubTimer; until: number }>();
+  /**
+   * Sessions whose turn a token refresh race cut, from then until a turn of
+   * theirs ends on anything else: the timer that sends it again, gone once
+   * it has gone. A second race meanwhile is the turn's end.
+   */
+  const raced = new Map<string, HubTimer | undefined>();
 
   const readingOf = (accountId: string): AccountReading | undefined =>
     db.accounts.readings().find((one) => one.accountId === accountId);
@@ -346,6 +386,37 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     });
   };
 
+  /**
+   * Where `row` goes off `current`, whose credential Claude Code refused:
+   * an account placement would carry it to in `current`'s organization
+   * first, whose cache comes along, else any. Neither the limit's policy
+   * nor a fork's tie to its origin's cache keeps it on an account that
+   * cannot run it. Undefined when none can take it.
+   */
+  const refusedTarget = (
+    row: LimitRow,
+    current: Account
+  ): { target: Account; sameOrganization: boolean } | undefined => {
+    const targetId =
+      ports.target(row, current.id, (one) => sameOrganization(one, current)) ??
+      ports.target(row, current.id);
+    const target = targetId ? db.accounts.get(targetId) : undefined;
+    return target
+      ? { target, sameOrganization: cacheCarries(current, target) }
+      : undefined;
+  };
+
+  /** Whether `current` is signed in on `row`'s machine: not, once Claude Code refused its credential there. */
+  const signedIn = (row: LimitRow, current: Account): boolean =>
+    db.accounts
+      .signins()
+      .some(
+        (one) =>
+          one.accountId === current.id &&
+          one.machineId === row.machineId &&
+          one.state === "signed-in"
+      );
+
   /** Holds `row` until `until`; the line is written once per hold. */
   const hold = (
     row: LimitRow,
@@ -370,11 +441,30 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   };
 
   /**
+   * Holds `row`, whose credential Claude Code refused and which no other
+   * account can take, with no reset to wait for (`until` null): what it is
+   * sent waits at the hub until `current` is signed in again or another
+   * account comes free ({@link lookAt}). Its line, the one place the
+   * refusal is told, is written once per hold.
+   */
+  const holdRefused = (row: LimitRow, current: Account): void => {
+    const held = db.atLimit.hold(row.id);
+    db.atLimit.putHold({
+      instanceId: row.id,
+      accountId: current.id,
+      until: null,
+    });
+    if (held?.until !== null) {
+      ports.note(row, { kind: "signed-out", account: namedAccount(current) });
+    }
+  };
+
+  /**
    * Looks at a refused session again shortly: its machine still had its turn
    * running when the refusal came. Given up once {@link SETTLE_FOR_MS} has
    * passed: a session busy that long is in a turn its account took.
    */
-  const settle = (row: LimitRow, current: Account): void => {
+  const settle = (row: LimitRow, current: Account, cause: Cause): void => {
     const was = settling.get(row.id);
     const until = was?.until ?? Date.now() + SETTLE_FOR_MS;
     if (was) {
@@ -393,7 +483,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         settling.delete(row.id);
         return;
       }
-      act(fresh, current).catch((error: unknown) => {
+      act(fresh, current, cause).catch((error: unknown) => {
         console.error(
           `[at-limit] ${row.id}: ${error instanceof Error ? error.message : String(error)}`
         );
@@ -402,15 +492,19 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     settling.set(row.id, { timer: next, until });
   };
 
-  /** The line a move writes: what it cost, and the window that sent it. */
+  /** The line a move writes: what it cost, and the window, or the refused sign-in, that sent it. */
   const movedNote = (
     row: LimitRow,
     current: Account,
     target: Account,
     sameOrg: boolean,
-    now: number
+    now: number,
+    cause: Cause
   ): AccountMove => {
-    const full = fullWindow(readingOf(current.id), row.model, now);
+    const full =
+      cause === "limit"
+        ? fullWindow(readingOf(current.id), row.model, now)
+        : undefined;
     const cost = sameOrg
       ? undefined
       : reReadCost(readForecast(db, target.provider, now), row, target);
@@ -420,15 +514,19 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       to: namedAccount(target),
       sameOrganization: sameOrg,
       ...(cost ? { cost } : {}),
+      ...(cause === "refused" ? { because: { kind: "refused" as const } } : {}),
       tokens: row.contextTokens,
       window: full ? windowWords(full) : null,
-      resetsAt: refusedUntil(
-        db.accounts.bench(now),
-        readingOf(current.id),
-        current.id,
-        row.model,
-        now
-      ),
+      resetsAt:
+        cause === "limit"
+          ? refusedUntil(
+              db.accounts.bench(now),
+              readingOf(current.id),
+              current.id,
+              row.model,
+              now
+            )
+          : null,
     };
   };
 
@@ -449,7 +547,8 @@ export const createAtLimit = (ports: AtLimitPorts) => {
    * same failure, however often a retry meets it again; in place of the
    * continuation's own "Summarising…" line, `line`, when it wrote one), and
    * it is held until its reset, each look deciding again whether to wait or
-   * try once more.
+   * try once more. One whose credential was refused (`refused`) has no
+   * reset: it is held until a look finds it an account.
    */
   const unmoved = (
     row: LimitRow,
@@ -457,7 +556,8 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     target: Account,
     step: ContinueStep,
     reason: string,
-    line?: string
+    line?: string,
+    refused = false
   ): void => {
     const events = db.atLimit.events([row.id]);
     const last = events.filter((event) => event.id !== line).at(-1)?.move;
@@ -483,7 +583,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     db.atLimit.putHold({
       instanceId: row.id,
       accountId: current.id,
-      until: holdUntil(row, current, Date.now()),
+      until: refused ? null : holdUntil(row, current, Date.now()),
     });
     console.warn(
       `[at-limit] ${row.id}: continuing on ${accountName(target)} failed at ${step}: ${reason}`
@@ -494,42 +594,82 @@ export const createAtLimit = (ports: AtLimitPorts) => {
 
   /**
    * Moves `row` whole onto `target`, its line written once it has; one that
-   * did not move is held on `current` until its reset, and says why.
+   * did not move is held on `current` until its reset (or, its credential
+   * refused, until a look finds it an account), and says why. A move off a
+   * refused sign-in is also said to whoever hears its reports.
    */
   const moveWhole = async (
     row: LimitRow,
     current: Account,
     target: Account,
     oneOrganization: boolean,
-    now: number
+    now: number,
+    cause: Cause
   ): Promise<void> => {
-    const why = await ports.move(row, target.id, true);
+    const refused = cause === "refused";
+    const why = await ports.move(row, target.id, refused ? "signin" : "limit");
     if (why) {
-      unmoved(row, current, target, "start", why);
+      unmoved(row, current, target, "start", why, undefined, refused);
       return;
     }
     db.atLimit.dropSummary(row.id);
-    ports.note(row, movedNote(row, current, target, oneOrganization, now));
+    const move = movedNote(row, current, target, oneOrganization, now, cause);
+    ports.note(row, move);
+    if (refused) {
+      ports.refusedMove(row, move);
+    }
   };
 
-  /** Moves or continues `row` off `current`, or holds it, as {@link decideAtLimit} says. */
-  const act = async (row: LimitRow, current: Account): Promise<void> => {
+  /**
+   * What is done with `row` off `current` for `cause`: at its limit, as
+   * {@link decideAtLimit} says; its credential refused, a move whole to
+   * {@link refusedTarget}, else a hold until there is one.
+   */
+  const decideFor = (
+    row: LimitRow,
+    current: Account,
+    now: number,
+    cause: Cause
+  ): AtLimitDecision | undefined => {
+    if (cause === "limit") {
+      return decide(row, current, now);
+    }
+    const to = refusedTarget(row, current);
+    return to
+      ? {
+          action: "move",
+          targetId: to.target.id,
+          sameOrganization: to.sameOrganization,
+        }
+      : undefined;
+  };
+
+  /** Moves or continues `row` off `current`, or holds it, as {@link decideFor} says. */
+  const act = async (
+    row: LimitRow,
+    current: Account,
+    cause: Cause = "limit"
+  ): Promise<void> => {
     if (acting.has(row.id) || ports.continuing(row) || over(row)) {
       return;
     }
     acting.add(row.id);
     try {
       const now = Date.now();
-      const decision = decide(row, current, now);
-      if (decision.action === "wait") {
+      const decision = decideFor(row, current, now, cause);
+      if (!decision || decision.action === "wait") {
         settling.delete(row.id);
-        hold(row, current, decision);
+        if (decision) {
+          hold(row, current, decision);
+        } else {
+          holdRefused(row, current);
+        }
         return;
       }
       // Only between turns: never inside a tool round, never over a turn
       // someone started since.
       if (!(await ports.idle(row))) {
-        settle(row, current);
+        settle(row, current, cause);
         return;
       }
       const was = settling.get(row.id);
@@ -543,7 +683,14 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       }
       db.atLimit.dropHold(row.id);
       if (decision.action === "move") {
-        await moveWhole(row, current, target, decision.sameOrganization, now);
+        await moveWhole(
+          row,
+          current,
+          target,
+          decision.sameOrganization,
+          now,
+          cause
+        );
         return;
       }
       // The summary kept for it (ahead of the limit, or at a move that
@@ -709,13 +856,28 @@ export const createAtLimit = (ports: AtLimitPorts) => {
 
   /**
    * One held session: past its reset, it carries on where it is once it is
-   * between turns; before, another account may have come free for it.
+   * between turns; before, another account may have come free for it. One
+   * held on its refused credential (`until` null) carries on where it is
+   * once its account is signed in there again, and until then moves as soon
+   * as another account can take it.
    */
   const lookAt = async (held: LimitHold, now: number): Promise<void> => {
     const row = rowOf(held.instanceId);
     const current = db.accounts.get(held.accountId);
     if (over(row) || !row || !current) {
       db.atLimit.dropHold(held.instanceId);
+      return;
+    }
+    if (held.until === null) {
+      if (!signedIn(row, current)) {
+        await act(row, current, "refused");
+      } else if (await ports.idle(row)) {
+        db.atLimit.dropHold(row.id);
+        console.info(
+          `[at-limit] ${row.id}: ${accountName(current)} is signed in again; carrying on`
+        );
+        ports.resume(row, "signin");
+      }
       return;
     }
     if (stays(row, current)) {
@@ -730,7 +892,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       console.info(
         `[at-limit] ${row.id}: ${accountName(current)} reset; carrying on`
       );
-      ports.resume(row);
+      ports.resume(row, "limit");
     }
   };
 
@@ -827,6 +989,55 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       if (!stays(row, current)) {
         await act(row, current);
       }
+    },
+    /**
+     * A turn of `instanceId` ended on Claude Code refusing its account's
+     * credential for good, and the account is signed out on its machine:
+     * it moves whole to another account and carries on there; with none to
+     * take it, it is held ({@link holdRefused}).
+     */
+    async signedOut(instanceId: string): Promise<void> {
+      const row = rowOf(instanceId);
+      const current = row ? currentOf(row) : undefined;
+      if (!(row && current)) {
+        return;
+      }
+      console.info(
+        `[at-limit] ${instanceId}: turn ended on ${accountName(current)}'s refused sign-in`
+      );
+      await act(row, current, "refused");
+    },
+    /** Whether a turn of `instanceId` a token refresh race cut goes again: not once one has since its last turn that ended otherwise. */
+    retriesRace(instanceId: string): boolean {
+      return !raced.has(instanceId);
+    },
+    /**
+     * A turn of `instanceId` a token refresh another Claude Code process
+     * held has ended: the session carries on where it is
+     * {@link RACE_RETRY_MS} later, once.
+     */
+    turnRaced(instanceId: string): void {
+      if (raced.has(instanceId) || lifetime.closed()) {
+        return;
+      }
+      const retry = lifetime.after(RACE_RETRY_MS, () => {
+        raced.set(instanceId, undefined);
+        const row = rowOf(instanceId);
+        if (over(row) || !row) {
+          raced.delete(instanceId);
+          return;
+        }
+        console.info(
+          `[accounts] ${instanceId}: its turn raced another Claude Code process refreshing its token; sent again after ${RACE_RETRY_MS / 1000}s`
+        );
+        ports.resume(row, "signin");
+      });
+      raced.set(instanceId, retry);
+    },
+    /** A turn of `instanceId` ended on anything but a refresh race: one waiting to go again went with it. */
+    turnWent(instanceId: string): void {
+      lifetime.cancel(raced.get(instanceId));
+      raced.delete(instanceId);
     },
     /** A turn of `instanceId` ended as any turn does: maybe write a summary ahead of the limit. */
     async turnEnded(instanceId: string): Promise<void> {

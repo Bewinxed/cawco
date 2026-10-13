@@ -30982,7 +30982,7 @@
                     ]
                   },
                   "because": {
-                    "description": "Why it moved before any limit refused it: its account was forecast\nto run out at `runsOutAt` (a rebalance between turns), or its cache\nwas cold at its wake, so the move re-read nothing extra. Absent: its\naccount's limit refused a turn, or a person asked.",
+                    "description": "Why it moved other than at a limit: its account was forecast to run\nout at `runsOutAt` (a rebalance between turns), its cache was cold at\nits wake, so the move re-read nothing extra, or Claude Code refused\n`from`'s credential for good (`refused`: the hub signed it out there).\nAbsent: its account's limit refused a turn, or a person asked.",
                     "anyOf": [
                       {
                         "type": "object",
@@ -31018,6 +31018,20 @@
                         "required": [
                           "kind",
                           "wake"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "refused"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
                         ]
                       }
                     ]
@@ -31183,6 +31197,25 @@
                   "account",
                   "kind",
                   "resetsAt"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "description": "Claude Code refused `account`'s credential for good and no other\naccount can take the session: it stays, and what it is sent waits at\nthe hub, until `account` is signed in again or another comes free.",
+                    "type": "string",
+                    "enum": [
+                      "signed-out"
+                    ]
+                  },
+                  "account": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  }
+                },
+                "required": [
+                  "account",
+                  "kind"
                 ]
               },
               {
@@ -36404,7 +36437,7 @@
                     ]
                   },
                   "because": {
-                    "description": "Why it moved before any limit refused it: its account was forecast\nto run out at `runsOutAt` (a rebalance between turns), or its cache\nwas cold at its wake, so the move re-read nothing extra. Absent: its\naccount's limit refused a turn, or a person asked.",
+                    "description": "Why it moved other than at a limit: its account was forecast to run\nout at `runsOutAt` (a rebalance between turns), its cache was cold at\nits wake, so the move re-read nothing extra, or Claude Code refused\n`from`'s credential for good (`refused`: the hub signed it out there).\nAbsent: its account's limit refused a turn, or a person asked.",
                     "anyOf": [
                       {
                         "type": "object",
@@ -36440,6 +36473,20 @@
                         "required": [
                           "kind",
                           "wake"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "refused"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
                         ]
                       }
                     ]
@@ -36605,6 +36652,25 @@
                   "account",
                   "kind",
                   "resetsAt"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "description": "Claude Code refused `account`'s credential for good and no other\naccount can take the session: it stays, and what it is sent waits at\nthe hub, until `account` is signed in again or another comes free.",
+                    "type": "string",
+                    "enum": [
+                      "signed-out"
+                    ]
+                  },
+                  "account": {
+                    "$ref": "#/components/schemas/NamedAccount"
+                  }
+                },
+                "required": [
+                  "account",
+                  "kind"
                 ]
               },
               {

@@ -926,14 +926,16 @@ export type AccountMove =
       /** When that window resets, epoch ms; null when nothing said. */
       resetsAt: number | null;
       /**
-       * Why it moved before any limit refused it: its account was forecast
-       * to run out at `runsOutAt` (a rebalance between turns), or its cache
-       * was cold at its wake, so the move re-read nothing extra. Absent: its
-       * account's limit refused a turn, or a person asked.
+       * Why it moved other than at a limit: its account was forecast to run
+       * out at `runsOutAt` (a rebalance between turns), its cache was cold at
+       * its wake, so the move re-read nothing extra, or Claude Code refused
+       * `from`'s credential for good (`refused`: the hub signed it out there).
+       * Absent: its account's limit refused a turn, or a person asked.
        */
       because?:
         | { kind: "forecast"; runsOutAt: number }
-        | { kind: "cold"; wake: boolean };
+        | { kind: "cold"; wake: boolean }
+        | { kind: "refused" };
       /** What the re-read cost on `to`: a percent of its window; absent when unpriced. */
       cost?: { pct: number; window: string };
     }
@@ -985,6 +987,15 @@ export type AccountMove =
       account: NamedAccount;
       /** When that limit resets, epoch ms; null when nothing said. */
       resetsAt: number | null;
+    }
+  | {
+      /**
+       * Claude Code refused `account`'s credential for good and no other
+       * account can take the session: it stays, and what it is sent waits at
+       * the hub, until `account` is signed in again or another comes free.
+       */
+      kind: "signed-out";
+      account: NamedAccount;
     }
   | {
       /** Continuing it on `to` failed at `step`: it goes on in its conversation, still on `from`. */
@@ -1084,6 +1095,14 @@ const movedWords = (
   const cost = move.cost
     ? ` (≈${Math.max(1, Math.round(move.cost.pct))}% of ${move.to.name}'s ${move.cost.window} window)`
     : "";
+  if (move.because?.kind === "refused") {
+    return {
+      line: `Moved to ${move.to.name}: ${move.from.name}'s sign-in was refused`,
+      detail: move.sameOrganization
+        ? "Same organization, cache kept"
+        : `Re-read ${tokenWords(move.tokens)}${cost}`,
+    };
+  }
   const line = move.sameOrganization
     ? `Moved to ${move.to.name} · same organization, cache kept`
     : `Moved to ${move.to.name} · re-read ${tokenWords(move.tokens)}${cost}`;
@@ -1130,6 +1149,11 @@ export const accountMoveWords = (
     }
     case "stopped":
       return stoppedWords(move, now);
+    case "signed-out":
+      return {
+        line: `Sign in to ${move.account.name} · its sign-in was refused`,
+        detail: `No other account can take it, so what it is sent waits until ${move.account.name} is signed in again in Configure → Accounts`,
+      };
     case "unmoved":
       return {
         line: `Couldn't continue${move.to ? ` on ${move.to.name}` : ""}: ${move.reason}`,

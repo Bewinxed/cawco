@@ -502,7 +502,9 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
  * (`behind`); the session has no process and this sender may not wake it
  * (`resting`: a stopped session is woken only by a person or its parent); or
  * its account is at its limit, where a turn would only be refused, and it
- * waits for the reset, a move, or its continuation from a summary (`limit`).
+ * waits for the reset, a move, or its continuation from a summary (`limit`);
+ * or Claude Code refused its account's credential and no other account can
+ * take it, so it waits for a sign-in or a free account (`signin`).
  */
 export type SendHold =
   | "agent"
@@ -511,6 +513,7 @@ export type SendHold =
   | "hub"
   | "limit"
   | "resting"
+  | "signin"
   | "update";
 
 /** What the hub did with a send, as `handoff` tells its sender. */
@@ -542,6 +545,8 @@ const HOLD_WORDS: Record<SendHold, string> = {
     "It is stopped, and only a person or its parent starts it again, so the message is kept at the hub and goes to it when one of them next writes to it.",
   limit:
     "Its account is at its usage limit, so the message is kept at the hub and goes to the session as soon as it can run again: at the reset, on another account, or once it goes on from a summary.",
+  signin:
+    "Its account's sign-in was refused and no other account can take it, so the message is kept at the hub and goes to the session once its account is signed in again or another account comes free.",
 };
 
 /** What the hub did with a hand-off, as its sender is told. */

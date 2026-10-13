@@ -3565,6 +3565,9 @@ export const createServer = (
    * reading the account's own credential: not one on the machine's own login
    * while it moves into CawCo, nor one still running from a credential that
    * has moved out of its store, whose refusal is that old credential's.
+   * Answers what the live launch said, which the turn's end then answers
+   * ({@link credentialTurns}): a refusal also when another session's had
+   * already signed the account out there.
    */
   const settleRefusal = (
     machineId: string,
@@ -3572,7 +3575,7 @@ export const createServer = (
     generation: string | undefined,
     error: string | undefined,
     text: string
-  ): void => {
+  ): ReturnType<typeof claudeCredentialWord> => {
     const word = claudeCredentialWord(error, text);
     const [row] = word ? db.getInstancesByIds([instanceId]) : [];
     const accountId = row?.accountId;
@@ -3591,7 +3594,7 @@ export const createServer = (
       console.info(
         `[accounts] ${instanceId}: refreshing ${where}'s token raced another Claude Code process; it stays signed in`
       );
-      return;
+      return word;
     }
     const signedIn = db.accounts
       .signins()
@@ -3602,7 +3605,7 @@ export const createServer = (
           one.state === "signed-in"
       );
     if (!signedIn) {
-      return;
+      return word;
     }
     db.accounts.putSignin({
       accountId,
@@ -3614,6 +3617,7 @@ export const createServer = (
       `[accounts] ${where} is signed out: ${instanceId}'s Claude Code refused its credential (${word.reason}); nothing new is placed on it there until it is signed in again`
     );
     publishUsage(machineId);
+    return word;
   };
   /** Why an ask arriving from a machine is not this row's live process's; none when it is. */
   const askRefusal = (
@@ -4465,8 +4469,13 @@ export const createServer = (
     const neutral = frame.message;
     // A turn its account's limit refused fails nothing it read: the session
     // reads it when it goes on — carried on at the reset or on another
-    // account, or from a summary that carries its last turns verbatim.
-    if (limitRefusesTurn(instanceId, neutral)) {
+    // account, or from a summary that carries its last turns verbatim. Nor
+    // does one its credential ended that the hub sends again or carries on
+    // elsewhere ({@link credentialTurns}).
+    if (
+      limitRefusesTurn(instanceId, neutral) ||
+      credentialTurns.has(instanceId)
+    ) {
       unanswered.delete(instanceId);
       return;
     }
@@ -6385,7 +6394,10 @@ export const createServer = (
     }
     const origin = (record.body as SentMessage | null)?.origin;
     if (origin && heldAtLimit(record.instanceId, origin)) {
-      return "limit";
+      // Held with no reset to wait for: its credential was refused.
+      return db.atLimit.hold(record.instanceId)?.until === null
+        ? "signin"
+        : "limit";
     }
     const away = row ? awaitingMachine.get(row.machineId) : undefined;
     if (row && away && !registry.agent(row.machineId)) {
@@ -6530,6 +6542,25 @@ export const createServer = (
    * not a failed turn to hand back.
    */
   const limitRefused = new Set<string>();
+  /**
+   * Sessions whose turn in flight died on their account's credential and
+   * whose end is the at-limit controller's to answer, not a failed turn to
+   * hand back ({@link takeCredentialTurn}): a token refresh race it sends
+   * again, or a refusal it moves the session off.
+   */
+  const credentialTurns = new Map<string, "raced" | "refused">();
+  /** Sessions whose turn in flight has called a tool: it has done work, which a refusal never runs again. */
+  const workedTurns = new Set<string>();
+  /**
+   * A work item's turn its account's refused credential ended and the hub
+   * does not carry on: the account, and why not, for the item's failure.
+   */
+  const refusedFailures = new Map<
+    string,
+    { accountId: string; words: string }
+  >();
+  /** Work items whose session a refused credential has already moved once. */
+  const refusalMoved = new Set<string>();
   /**
    * Installs somebody is waiting on, by `requestId`: what keeps a machine from
    * being sent the same install twice while the first is still running, and
@@ -14345,12 +14376,23 @@ export const createServer = (
     changed: () => publishInstances(""),
   });
 
-  /** What a session at its account's limit is told when it may go on, in its own process. */
-  const CARRY_ON =
-    "The usage limit that stopped your last turn no longer applies. Carry on from where you stopped.";
+  /**
+   * What a session is told when it may go on, in its own process, after
+   * what stopped its last turn: its account's limit, or a sign-in failure
+   * (a refused credential it moved off, or a token refresh race).
+   */
+  const CARRY_ON: Record<"limit" | "signin", string> = {
+    limit:
+      "The usage limit that stopped your last turn no longer applies. Carry on from where you stopped.",
+    signin:
+      "The sign-in failure that stopped your last turn has been dealt with. Carry on from where you stopped.",
+  };
 
-  /** Has a session carry on where its account's limit stopped it. */
-  const carryOn = (row: { id: string; machineId: string }): void => {
+  /** Has a session carry on where its account's limit, or a sign-in failure, stopped it. */
+  const carryOn = (
+    row: { id: string; machineId: string },
+    stopped: "limit" | "signin"
+  ): void => {
     deliverSend({
       verb: "send",
       machineId: row.machineId,
@@ -14360,7 +14402,7 @@ export const createServer = (
         message: {
           type: "user",
           uuid: crypto.randomUUID(),
-          message: { role: "user", content: CARRY_ON },
+          message: { role: "user", content: CARRY_ON[stopped] },
           parent_tool_use_id: null,
           origin: { kind: "system", name: LIMIT_ORIGIN },
         },
@@ -14904,23 +14946,26 @@ export const createServer = (
    * Who would carry a running session off `accountId`: placement for the
    * kind of session it is, on its machine, within its project's and task's
    * lists and its type's preference, never `accountId`, and only an account
-   * with room.
+   * with room; among the accounts `among` admits, when it is given.
    */
   const limitTarget = (
     row: ReturnType<typeof db.getInstancesByIds>[number],
-    accountId: string
-  ): string | null => replaceRow(row, accountId, accountId);
+    accountId: string,
+    among?: (account: Account) => boolean
+  ): string | null => replaceRow(row, accountId, accountId, among);
 
   /**
    * Where placement puts a session that runs on `accountId` now, for the
    * kind of session it is, on its machine, within its project's and task's
    * lists and its type's preference, its own burn in the carry test:
-   * never `exclude` when one is named (then only an account with room).
+   * never `exclude` when one is named (then only an account with room), and
+   * only one `among` admits when it is given.
    */
   const replaceRow = (
     row: ReturnType<typeof db.getInstancesByIds>[number],
     accountId: string,
-    exclude?: string
+    exclude?: string,
+    among: (account: Account) => boolean = () => true
   ): string | null => {
     // The provider of the account it is on: it moves only among that
     // provider's accounts signed in for its harness on its machine.
@@ -14934,7 +14979,7 @@ export const createServer = (
     const placed = placeAccount({
       accounts: db.accounts
         .list()
-        .filter((account) => account.provider === provider),
+        .filter((account) => account.provider === provider && among(account)),
       signins: db.accounts.signins(),
       readings: db.accounts.readings(),
       bench: db.accounts.bench(),
@@ -15227,7 +15272,7 @@ export const createServer = (
       );
       publishUsage();
     },
-    move: async (row, accountId, resume) => {
+    move: async (row, accountId, stopped) => {
       if (!(registry.agent(row.machineId) && row.sessionId)) {
         return row.sessionId
           ? awayWords(row.machineId, "offline")
@@ -15259,11 +15304,24 @@ export const createServer = (
         { ...now, sessionId: now.sessionId },
         true
       );
-      if (resume) {
-        carryOn(now);
+      if (stopped) {
+        carryOn(now, stopped);
       }
     },
     resume: carryOn,
+    // A delegate's parent hears of it as a notice, the line its transcript has.
+    refusedMove: (row, move) => {
+      const [listed] = db.listedInstancesByIds([row.id]);
+      if (listed?.parentInstanceId) {
+        reportToParent(
+          listed,
+          accountMoveWords(move, Date.now()).line,
+          false,
+          undefined,
+          true
+        );
+      }
+    },
     // What its process was last handed: what it kept for later never reached
     // it. A turn the limit refused leaves the send that started it read.
     startedBy: (row) =>
@@ -15282,6 +15340,93 @@ export const createServer = (
     },
   });
   accountsMoved = atLimit.accountsChanged;
+
+  /**
+   * Who answers the end of a turn of `instanceId` its live launch's Claude
+   * Code ended on its account's credential ({@link settleRefusal}): the
+   * at-limit controller ({@link credentialTurns}), or the turn's end as any
+   * failed turn's. A token refresh race goes again, once. A refusal moves
+   * the session and carries it on, but a work item's session only from a
+   * turn that called no tool, once per item, and only with an account to
+   * take it; otherwise its item fails as today, its failure naming the
+   * account ({@link refusedFailures}).
+   */
+  const takeCredentialTurn = (
+    instanceId: string,
+    word: "raced" | "refused"
+  ): void => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    const from = row?.accountId ? db.accounts.get(row.accountId) : undefined;
+    if (!(row && from && atLimit.manages(instanceId))) {
+      return;
+    }
+    if (word === "raced") {
+      if (atLimit.retriesRace(instanceId)) {
+        credentialTurns.set(instanceId, "raced");
+      }
+      return;
+    }
+    // A move owed to its next launch off this refusal is the controller's
+    // to make now ({@link oweRefusedMove}).
+    const owed = relaunchAtTurnEnd.get(instanceId)?.move;
+    const take = (): void => {
+      if (owed?.kind === "moved" && owed.because?.kind === "refused") {
+        relaunchAtTurnEnd.delete(instanceId);
+      }
+      credentialTurns.set(instanceId, "refused");
+    };
+    const itemId = row.workItemId;
+    if (!itemId) {
+      take();
+      return;
+    }
+    let stays: string | undefined;
+    if (workedTurns.has(instanceId)) {
+      stays = "its turn had already done work, so it was not run again";
+    } else if (refusalMoved.has(itemId)) {
+      stays = "it was already moved once for this item";
+    } else if (limitTarget(row, from.id) === null) {
+      stays = `no other account it may run on is signed in on ${machineName(row.machineId)} with room for it`;
+    }
+    if (!stays) {
+      refusalMoved.add(itemId);
+      take();
+      return;
+    }
+    refusedFailures.set(instanceId, {
+      accountId: from.id,
+      words: `${accountName(from)}'s sign-in was refused, so it is signed out on ${machineName(row.machineId)}; ${stays}. Sign it in again in Configure → Accounts.`,
+    });
+  };
+
+  /**
+   * A session whose item failed on its account's refused credential: its
+   * next launch (its parent's word wakes it) runs on the account placement
+   * carries it to, its line written once its data is there
+   * ({@link relaunchAtTurnEnd}). None, when no account can take it.
+   */
+  const oweRefusedMove = (instanceId: string, accountId: string): void => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    const from = db.accounts.get(accountId);
+    const toId = row && from ? limitTarget(row, from.id) : null;
+    const to = toId ? db.accounts.get(toId) : undefined;
+    if (!(row && from && to) || row.accountId !== from.id) {
+      return;
+    }
+    relaunchAtTurnEnd.set(row.id, {
+      to: to.id,
+      move: {
+        kind: "moved",
+        from: namedAccount(from),
+        to: namedAccount(to),
+        sameOrganization: cacheCarries(from, to),
+        tokens: row.contextTokens,
+        window: null,
+        resetsAt: null,
+        because: { kind: "refused" },
+      },
+    });
+  };
 
   workItems.resumeWaits();
 
@@ -20692,6 +20837,7 @@ export const createServer = (
                   } else {
                     turnOver(message.instanceId);
                   }
+                  workedTurns.delete(message.instanceId);
                   // Claimed once: a lead's turn books its cost to its thread.
                   if (typeof neutral.total_cost_usd === "number") {
                     caw.turnCost(message.instanceId, neutral.total_cost_usd);
@@ -20885,13 +21031,14 @@ export const createServer = (
                   break;
                 }
                 // Claude Code's error in the model's place: what it says of
-                // the account's credential settles its sign-in there.
+                // the account's credential settles its sign-in there, and
+                // decides who answers the turn's end.
                 if (
                   frame.message.type === "assistant" &&
                   !frame.message.parent_tool_use_id &&
                   frame.message.error
                 ) {
-                  settleRefusal(
+                  const word = settleRefusal(
                     message.machineId,
                     message.instanceId,
                     peek(message.payload, "processGeneration"),
@@ -20902,6 +21049,9 @@ export const createServer = (
                       )
                       .join("\n")
                   );
+                  if (word) {
+                    takeCredentialTurn(message.instanceId, word.kind);
+                  }
                 }
                 if (
                   frame.message.type === "assistant" ||
@@ -21181,6 +21331,7 @@ export const createServer = (
                     )
                   ) {
                     finalMessage.delete(message.instanceId);
+                    workedTurns.add(message.instanceId);
                   } else if (text) {
                     const acc = finalMessage.get(message.instanceId);
                     if (acc) {
@@ -21188,6 +21339,27 @@ export const createServer = (
                     } else {
                       finalMessage.set(message.instanceId, [text]);
                     }
+                  }
+                } else if (
+                  neutral.type === "result" &&
+                  credentialTurns.has(message.instanceId)
+                ) {
+                  // A turn its credential ended that the hub answers:
+                  // nothing ended, as at a limit. A refresh race goes again
+                  // where it is; a refusal moves the session and carries on.
+                  const ended = message.instanceId;
+                  const word = credentialTurns.get(ended);
+                  credentialTurns.delete(ended);
+                  limitRefused.delete(ended);
+                  finalMessage.delete(ended);
+                  if (word === "raced") {
+                    atLimit.turnRaced(ended);
+                  } else {
+                    atLimit.signedOut(ended).catch((error: unknown) => {
+                      console.error(
+                        `[at-limit] ${ended}: ${error instanceof Error ? error.message : String(error)}`
+                      );
+                    });
                   }
                 } else if (
                   neutral.type === "result" &&
@@ -21206,6 +21378,10 @@ export const createServer = (
                     );
                   });
                 } else if (neutral.type === "result") {
+                  // A turn that ended on anything but a refresh race the hub
+                  // sends again: one waiting to go again went with it, and a
+                  // second race fails as any turn does.
+                  atLimit.turnWent(message.instanceId);
                   const [cacheRow] = db.getInstancesByIds([message.instanceId]);
                   if (cacheRow?.harness === "claude") {
                     db.updateKeepAlive(
@@ -21320,6 +21496,10 @@ export const createServer = (
                       .filter(Boolean)
                       .join("\n") || undefined;
                   const failed = !!neutral.is_error;
+                  // A turn its account's refused credential ended that the
+                  // hub does not carry on: its failure names the account.
+                  const refused = refusedFailures.get(turnId);
+                  refusedFailures.delete(turnId);
                   // A failed turn's words, blank ones skipped: a result frame
                   // can carry `result: ""`, and that is no reason.
                   const turn = {
@@ -21329,10 +21509,11 @@ export const createServer = (
                       "(the delegate produced no text this turn)",
                     ...(failed
                       ? {
-                          error:
+                          error: `${
                             harnessError ||
                             neutral.result?.trim() ||
-                            `The harness ended the turn as failed (${neutral.subtype}) and gave no words for it.`,
+                            `The harness ended the turn as failed (${neutral.subtype}) and gave no words for it.`
+                          }${refused ? `\n${refused.words}` : ""}`,
                         }
                       : {}),
                   };
@@ -21378,6 +21559,9 @@ export const createServer = (
                     // work has its turn answered as it always has.
                     if (delegate) {
                       handBack(delegate);
+                    }
+                    if (refused) {
+                      oweRefusedMove(turnId, refused.accountId);
                     }
                     // Nothing waits on whether a rule answered a turn that is
                     // not held, but the owner's push does: a turn a rule or the

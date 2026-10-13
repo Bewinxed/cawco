@@ -89,6 +89,7 @@
     switch (row.move.kind) {
       case "waiting":
       case "stopped":
+      case "signed-out":
         return row.move.account.hue;
       case "unmoved":
         return (row.move.from ?? row.move.to)?.hue ?? null;
