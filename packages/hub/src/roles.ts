@@ -19,8 +19,11 @@
  *   proposing approved actions, delegating and steering the
  *   project's work, the person's phone. It has
  *   no edit or shell tools in its harness either (caw.ts).
- * - **overseer**: fleet-watch triage: read the fleet, stop or interrupt, tell
- *   a session or you, and the fleet's hooks (a write asks you first).
+ * - **overseer**: fleet-watch triage (fleet-watch.ts): it reads the fleet
+ *   and the session's task, and decides once with `triage_decide` (nudge the
+ *   lead, interrupt, stop, tell you, or leave it), which the hub carries
+ *   out. Nothing else: no tool that messages a session, so it never reaches
+ *   the session it judges.
  * - **web-facing**: a session that reads the outside world: it finishes its
  *   work and tells you, with no posting, spawning or admin tools.
  * - **curator**: a project's memory curator run (memory.ts): it reads the
@@ -76,6 +79,9 @@ export const CAW_TOOLS = [
   "folder_read",
   "folder_write",
 ] as const;
+
+/** Fleet watch's triage decision (fleet-watch.ts), the overseer's alone. */
+export const TRIAGE_TOOLS = ["triage_decide"] as const;
 
 /**
  * A project's routines (routines.ts): made, changed and run by the roles that
@@ -181,17 +187,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     "interrupt_delegate",
     "answer_delegate",
   ]),
-  overseer: new Set([
-    ...CORE,
-    "task_read",
-    "list_delegate_types",
-    "list_sessions",
-    "stop_delegate",
-    "interrupt_delegate",
-    // The decision page's overseer: the fleet's hooks, a write asking you first.
-    "admin_hooks_read",
-    "admin_hooks_write",
-  ]),
+  overseer: new Set([...TRIAGE_TOOLS, "task_read", "list_sessions"]),
   "web-facing": new Set([
     ...CORE,
     ...TASK_READ,
@@ -208,11 +204,15 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
   ]),
 };
 
-/** What a worker never has: Caw's own, and the curator's (proposing is the lead's and the curator's). */
+/**
+ * What a worker never has: Caw's own, the curator's (proposing is the lead's
+ * and the curator's), and triage's.
+ */
 const NOT_THE_WORKERS: ReadonlySet<string> = new Set([
   ...CAW_TOOLS,
   ...CURATOR_OWN,
   "memory_propose",
+  ...TRIAGE_TOOLS,
 ]);
 
 /** Whether a session in `role` may see and call the tool `name`. */
@@ -242,7 +242,7 @@ export const refusal = (role: SessionRole, name: string): string => {
     case "web-facing":
       return `${name} isn't available here: this session reads the outside world, so it has no posting, spawning or admin tools. Say what should happen in finish_item or with handoff.`;
     case "overseer":
-      return `${name} isn't available to fleet-watch triage: it reads the fleet, stops or interrupts, and tells a session or you.`;
+      return `${name} isn't available to fleet-watch triage: it reads the fleet and decides once with triage_decide.`;
     case "delegate":
       return `${name} isn't available here: only sessions you started file, change or start tasks or change fleet settings, and this one is a delegate, work item or workflow step. Hand the change to the session that started it.`;
     case "curator":
@@ -250,6 +250,9 @@ export const refusal = (role: SessionRole, name: string): string => {
     default:
       if (name === "memory_propose") {
         return "memory_propose belongs to a project's Caw and its memory curator: write what you learned with memory_note, and the curator proposes it to the person.";
+      }
+      if (TRIAGE_TOOLS.includes(name as (typeof TRIAGE_TOOLS)[number])) {
+        return `${name} belongs to a fleet-watch triage run.`;
       }
       return CURATOR_OWN.includes(name as (typeof CURATOR_OWN)[number])
         ? `${name} belongs to a project's memory curator.`

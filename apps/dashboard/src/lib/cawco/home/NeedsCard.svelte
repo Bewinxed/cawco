@@ -90,6 +90,8 @@
           : item.ask;
       case "run":
         return "Waiting on your answer";
+      case "watch":
+        return item.notice.title;
       case "action":
         if (item.action.state === "unknown") {
           return `This may or may not have happened. Check ${item.action.service}.`;
@@ -172,12 +174,16 @@
     }
   }
   /**
-   * A run's and a budget's last line: the kind, then where it is. An ask's
-   * is drawn in the markup: its project, its kind, its machine by its mark.
+   * A run's, a watch notice's and a budget's last line: the kind, then where
+   * it is. An ask's is drawn in the markup: its project, its kind, its
+   * machine by its mark.
    */
-  const meta = $derived(
-    item.kind === "run" ? `Workflow · ${item.place}` : "Budget"
-  );
+  const meta = $derived.by(() => {
+    if (item.kind === "run") {
+      return `Workflow · ${item.place}`;
+    }
+    return item.kind === "watch" ? `Fleet watch · ${item.place}` : "Budget";
+  });
   /**
    * The row stands but cannot be answered yet: the hub is not live, or its
    * session's machine is offline. It keeps its place, dimmed, and its
@@ -292,7 +298,7 @@
   >
   <!-- The session's own mark, as the rail draws it; a run and a budget their glyphs. -->
   <span class="lead">
-    {#if item.kind === "ask"}
+    {#if item.kind === "ask" || item.kind === "watch"}
       <SessionMark
         id={item.instanceId}
         place={item.cwd || item.machineId}

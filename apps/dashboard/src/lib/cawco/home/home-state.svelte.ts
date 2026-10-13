@@ -14,6 +14,7 @@
  */
 import type {
   ApprovedActionView,
+  FleetWatchNotice,
   NeutralSessionInfo,
   ProjectCap,
   WorkflowRun,
@@ -326,7 +327,25 @@ export interface ActionItem {
   title: string;
 }
 
-export type NeedsItem = AskItem | RunItem | CapItem | ActionItem;
+/**
+ * Fleet watch telling you about a session (core `FleetWatchNotice`): a
+ * triage said so, or its project's Caw is off. It opens the session, and
+ * leaves once you write to it or it moves on.
+ */
+export interface WatchItem {
+  cwd: string;
+  href: string;
+  instanceId: string;
+  key: string;
+  kind: "watch";
+  machineId: string;
+  notice: FleetWatchNotice;
+  place: string;
+  raisedAt: number;
+  title: string;
+}
+
+export type NeedsItem = AskItem | RunItem | CapItem | ActionItem | WatchItem;
 
 export interface RecentItem {
   at: number;
@@ -901,8 +920,23 @@ class Home {
             : (action.endedAt ?? action.createdAt),
       };
     });
+    const watched: NeedsItem[] = cawco.watchNotices.map((notice) => {
+      const row = cawco.instanceIndex.byId.get(notice.instanceId);
+      return {
+        kind: "watch",
+        key: `watch:${notice.instanceId}`,
+        notice,
+        instanceId: notice.instanceId,
+        machineId: notice.machineId,
+        cwd: row?.cwd ?? "",
+        title: row ? instanceTitle(row) : notice.title,
+        place: row ? placeOfRow(row) : machineName(notice.machineId),
+        href: conversationHref(notice.instanceId, cawco.instanceIndex),
+        raisedAt: notice.at,
+      };
+    });
     // Longest wait first; an ask the hub has not stamped sorts last.
-    return [...asks, ...runs, ...caps, ...actions].sort(
+    return [...asks, ...runs, ...caps, ...actions, ...watched].sort(
       (a, b) =>
         (a.raisedAt ?? Number.POSITIVE_INFINITY) -
         (b.raisedAt ?? Number.POSITIVE_INFINITY)

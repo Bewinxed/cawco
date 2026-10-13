@@ -210,23 +210,6 @@ public final class FleetStore {
     /// its session is read or pulses, so a reader that found none hears the first.
     @ObservationIgnored private var pulseCells: [String: PulseCell] = [:]
     public internal(set) var catalogs: [String: [StoredSession]] = [:]
-    /// REST seeds and live pushes share one recorder: newest ids first, at most 200.
-    public internal(set) var supervisorEvents: [Components.Schemas.SupervisorEvent] = []
-
-    @discardableResult
-    public func recordSupervisorEvent(_ event: Components.Schemas.SupervisorEvent) -> Bool {
-        guard !supervisorEvents.contains(where: { $0.id == event.id }) else { return false }
-        let at = supervisorEvents.firstIndex(where: { $0.id < event.id }) ?? supervisorEvents.endIndex
-        supervisorEvents.insert(event, at: at)
-        if supervisorEvents.count > 200 {
-            supervisorEvents.removeLast(supervisorEvents.count - 200)
-        }
-        return true
-    }
-
-    public func supervisorEvents(of instanceId: String) -> [Components.Schemas.SupervisorEvent] {
-        supervisorEvents.filter { $0.instanceId == instanceId }
-    }
 
     /// Every machine's latest Claude and opencode Go limit readings, by machine.
     /// The fleet's spend as the hub reckons it (`/api/usage/spend`, and every

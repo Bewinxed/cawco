@@ -1,28 +1,24 @@
 <script lang="ts">
   import type {
     HarnessKind,
-    RuleAction,
     RuleDraft,
     RuleMatchKind,
     RuleRow,
     RuleTiming,
-    RuleTrigger,
     RuleWatch,
   } from "@cawco/core";
   import { HARNESSES, ruleProblem, ruleSentence } from "@cawco/core";
-  import { onMount, tick, untrack } from "svelte";
+  import { onMount, untrack } from "svelte";
   import {
     appear,
     crossIn,
     crossOut,
     dur,
     ease,
-    motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { folds, unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import type { JevState } from "#lib/cawco/suggest.svelte.js";
-  import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import {
@@ -31,7 +27,6 @@
     IconMapPoint,
     IconPin,
     IconPlain,
-    IconSparkles,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -45,7 +40,6 @@
     message,
     removeRule,
     saveRule,
-    WHIP_PRESETS,
   } from "../../rules";
   import Choice from "../Choice.svelte";
   import { keepDraft, sameFields } from "../drafts.svelte";
@@ -55,8 +49,6 @@
   import Field from "../Field.svelte";
   import PickerChip from "../PickerChip.svelte";
   import ReadingWell from "../ReadingWell.svelte";
-  import RowList from "../RowList.svelte";
-  import SectionRow from "../SectionRow.svelte";
   import SwitchField from "../SwitchField.svelte";
   import { configStore, upsert, withStats } from "../store.svelte";
   import TitleInput from "../TitleInput.svelte";
@@ -164,74 +156,6 @@
   const how = $derived(
     TIMING.find((option) => option.value === draft.timing)?.how ?? ""
   );
-
-  function setTrigger(next: RuleTrigger) {
-    draft.trigger = next;
-    if (next === "every-turn") {
-      draft.action = "llm";
-      draft.timing = "turn";
-      draft.interrupt = false;
-      draft.repeat = false;
-    }
-  }
-
-  function setAction(next: RuleAction) {
-    draft.action = next;
-    if (next === "llm") {
-      draft.timing = "turn";
-      draft.interrupt = false;
-      draft.repeat = false;
-    }
-  }
-
-  /**
-   * A preset fills the form: its name flies from its row into the title
-   * (--dur-pop, --ease-drawer) and the fields it set fade up in place.
-   */
-  async function usePreset(
-    preset: (typeof WHIP_PRESETS)[number],
-    event: MouseEvent
-  ) {
-    const from = (event.currentTarget as HTMLElement)
-      .closest("[data-row-name]")
-      ?.querySelector(".name")
-      ?.getBoundingClientRect();
-    draft.name = preset.name;
-    draft.trigger = preset.trigger;
-    draft.action = preset.action;
-    draft.prompt = preset.prompt;
-    draft.timing = "turn";
-    draft.interrupt = false;
-    draft.repeat = false;
-    draft.enabled = true;
-    await tick();
-    const title = document.querySelector<HTMLElement>(
-      `.editor [data-share="title:${page.url.pathname}"]`
-    );
-    if (from && title && motionOk.current) {
-      const to = title.getBoundingClientRect();
-      const scale = from.height / to.height;
-      title.animate(
-        [
-          {
-            transformOrigin: "0 0",
-            transform: `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${scale})`,
-          },
-          { transformOrigin: "0 0", transform: "none" },
-        ],
-        { duration: dur("--dur-pop"), easing: ease("--ease-drawer") }
-      );
-    }
-    const filled = document.querySelectorAll<HTMLElement>(
-      '.editor :is([aria-label="Trigger"], [aria-label="Action"], [aria-label="Send it"], #rule-prompt, #rule-reply)'
-    );
-    for (const field of filled) {
-      field.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: dur("--dur-control"),
-        easing: ease("--ease-out"),
-      });
-    }
-  }
 
   /** A meaning rule is a question Jev answers about a finished message or turn. */
   function setMatchKind(next: RuleMatchKind) {
@@ -408,165 +332,114 @@
     {/if}
   {/snippet}
 
-  {#if !id}
-    <EditorSection hue={HUE} icon={IconSparkles} label="Start from a preset">
-      <p class="note">
-        Supervisor rules that catch the habits coding agents fall into. Using
-        one fills the form; it is an ordinary rule once saved.
-      </p>
-      <RowList label="Presets">
-        {#each WHIP_PRESETS as preset (preset.name)}
-          <SectionRow
-            hue={HUE}
-            icon={IconSparkles}
-            meta={preset.prompt}
-            name={preset.name}
-          >
-            {#snippet trailing()}
-              <Button
-                onclick={(event) => usePreset(preset, event)}
-                size="sm"
-                variant="outline"
-              >
-                Use
-              </Button>
-            {/snippet}
-          </SectionRow>
-        {/each}
-      </RowList>
-    </EditorSection>
-  {/if}
-
   <EditorSection hue={HUE} icon={IconEye} label="What to watch for">
     <p class="note">
       CawCo reads what a session writes, not what you write to it.
     </p>
-    <Choice
-      label="Trigger"
-      onchange={(next) => setTrigger(next as RuleTrigger)}
-      options={[
-        { value: "pattern", label: "A pattern match" },
-        { value: "every-turn", label: "Every turn" },
-      ]}
-      value={draft.trigger}
-    />
-    {#if shown("trigger")}
-      <p class="problem" in:appear>{wrong.trigger}</p>
-    {/if}
-    <!-- Each block the choices above open or close folds (240 / 160). -->
-    {#if draft.trigger === "every-turn"}
-      <div class="fold" in:unfold out:unfold>
-        <p class="note">
-          The rule fires at the end of every turn — no pattern needed. The
-          supervisor judges each turn and decides what to do.
-        </p>
-      </div>
-    {:else}
-      <div class="fold" in:unfold out:unfold>
-        <Choice
-          label="Match"
-          onchange={(next) => setMatchKind(next as RuleMatchKind)}
-          options={[
-            { value: "phrase", label: "A phrase" },
-            { value: "regex", label: "A regular expression" },
-            { value: "meaning", label: "Meaning" },
-          ]}
-          value={draft.matchKind}
-        />
-        {#snippet needsJev()}
-          Meaning rules need Jev —
-          <a class="underline underline-offset-2" href="/config/models"
-            >set a TypeSafe key or connect OpenRouter in Models CawCo uses</a
-          >
-        {/snippet}
-        <Field
-          id="rule-pattern"
-          label={PATTERN_LABEL[draft.matchKind]}
-          problem={shown("pattern")}
-          warn={draft.matchKind === "meaning" && !jevOn ? needsJev : undefined}
+    <div class="fold">
+      <Choice
+        label="Match"
+        onchange={(next) => setMatchKind(next as RuleMatchKind)}
+        options={[
+          { value: "phrase", label: "A phrase" },
+          { value: "regex", label: "A regular expression" },
+          { value: "meaning", label: "Meaning" },
+        ]}
+        value={draft.matchKind}
+      />
+      {#snippet needsJev()}
+        Meaning rules need Jev —
+        <a class="underline underline-offset-2" href="/config/models"
+          >set a TypeSafe key or connect OpenRouter in Models CawCo uses</a
         >
-          {#snippet hint()}
-            {#if draft.matchKind === "meaning"}
-              Jev answers it about each finished message or turn. The rule fires
-              when the answer is yes.
-            {:else if draft.matchKind === "regex"}
-              JavaScript syntax. It is matched against the whole message, not
-              line by line.
-            {/if}
-          {/snippet}
+      {/snippet}
+      <Field
+        id="rule-pattern"
+        label={PATTERN_LABEL[draft.matchKind]}
+        problem={shown("pattern")}
+        warn={draft.matchKind === "meaning" && !jevOn ? needsJev : undefined}
+      >
+        {#snippet hint()}
           {#if draft.matchKind === "meaning"}
-            <Textarea
-              aria-invalid={shown("pattern") ? "true" : undefined}
-              class="resize-y"
-              id="rule-pattern"
-              onblur={() => {
-                touched.pattern = true;
-              }}
-              placeholder="Is the agent proposing to keep old behaviour alongside the new, a compatibility shim, or a fallback path?"
-              rows={3}
-              bind:value={draft.pattern}
-            />
-          {:else}
-            <Input
-              aria-invalid={shown("pattern") ? "true" : undefined}
-              autocomplete="off"
-              class="font-mono"
-              id="rule-pattern"
-              onblur={() => {
-                touched.pattern = true;
-              }}
-              placeholder={draft.matchKind === "phrase"
-                ? "honest caveat"
-                : "should (work|be fine)|probably works"}
-              spellcheck="false"
-              bind:value={draft.pattern}
-            />
+            Jev answers it about each finished message or turn. The rule fires
+            when the answer is yes.
+          {:else if draft.matchKind === "regex"}
+            JavaScript syntax. It is matched against the whole message, not line
+            by line.
           {/if}
-        </Field>
-        <!-- Text-matching options fold away for a meaning rule rather than popping. -->
-        <div
-          class="fold"
-          inert={draft.matchKind === "meaning"}
-          {@attach folds(() => draft.matchKind !== "meaning", FOLD)}
-        >
-          <SwitchField
-            id="rule-case"
-            label="Case sensitive"
-            bind:checked={draft.caseSensitive}
+        {/snippet}
+        {#if draft.matchKind === "meaning"}
+          <Textarea
+            aria-invalid={shown("pattern") ? "true" : undefined}
+            class="resize-y"
+            id="rule-pattern"
+            onblur={() => {
+              touched.pattern = true;
+            }}
+            placeholder="Is the agent proposing to keep old behaviour alongside the new, a compatibility shim, or a fallback path?"
+            rows={3}
+            bind:value={draft.pattern}
           />
-          {#if draft.matchKind === "phrase"}
-            <div in:unfold out:unfold>
-              <SwitchField
-                id="rule-whole"
-                label="Whole words only"
-                bind:checked={draft.wholeWord}
-              />
-            </div>
-          {/if}
-        </div>
-        <Choice
-          label="Read"
-          onchange={(next) => {
-            draft.watch = next as RuleWatch;
-          }}
-          options={WATCH}
-          value={draft.watch}
-        />
-        {#if draft.watch !== "text" && draft.timing === "turn"}
-          <p class="caution" in:unfold out:unfold>
-            Reasoning is not kept once a turn is over. To watch thinking, fire
-            on the message or the moment instead.
-          </p>
+        {:else}
+          <Input
+            aria-invalid={shown("pattern") ? "true" : undefined}
+            autocomplete="off"
+            class="font-mono"
+            id="rule-pattern"
+            onblur={() => {
+              touched.pattern = true;
+            }}
+            placeholder={draft.matchKind === "phrase"
+              ? "honest caveat"
+              : "should (work|be fine)|probably works"}
+            spellcheck="false"
+            bind:value={draft.pattern}
+          />
         {/if}
-        <div
-          class="fold"
-          inert={draft.matchKind === "meaning"}
-          {@attach folds(() => draft.matchKind !== "meaning", FOLD)}
-        >
-          <RuleTester {draft} bind:sample />
-        </div>
+      </Field>
+      <!-- Text-matching options fold away for a meaning rule rather than popping. -->
+      <div
+        class="fold"
+        inert={draft.matchKind === "meaning"}
+        {@attach folds(() => draft.matchKind !== "meaning", FOLD)}
+      >
+        <SwitchField
+          id="rule-case"
+          label="Case sensitive"
+          bind:checked={draft.caseSensitive}
+        />
+        {#if draft.matchKind === "phrase"}
+          <div in:unfold out:unfold>
+            <SwitchField
+              id="rule-whole"
+              label="Whole words only"
+              bind:checked={draft.wholeWord}
+            />
+          </div>
+        {/if}
       </div>
-    {/if}
+      <Choice
+        label="Read"
+        onchange={(next) => {
+          draft.watch = next as RuleWatch;
+        }}
+        options={WATCH}
+        value={draft.watch}
+      />
+      {#if draft.watch !== "text" && draft.timing === "turn"}
+        <p class="caution" in:unfold out:unfold>
+          Reasoning is not kept once a turn is over. To watch thinking, fire on
+          the message or the moment instead.
+        </p>
+      {/if}
+      <div
+        class="fold"
+        inert={draft.matchKind === "meaning"}
+        {@attach folds(() => draft.matchKind !== "meaning", FOLD)}
+      >
+        <RuleTester {draft} bind:sample />
+      </div>
+    </div>
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconPlain} label="What CawCo sends back">
@@ -574,91 +447,49 @@
       The session is told this is CawCo and not you, so it does not answer you
       for something you never said.
     </p>
-    <Choice
-      label="Action"
-      onchange={(next) => setAction(next as RuleAction)}
-      options={[
-        {
-          value: "reply",
-          label: "Canned reply",
-          disabled: draft.trigger === "every-turn",
-        },
-        { value: "llm", label: "LLM verdict" },
-      ]}
-      value={draft.action}
-    />
-    {#if draft.action === "reply"}
-      <div class="fold" in:unfold out:unfold>
-        <Field id="rule-reply" label="Reply" problem={shown("reply")}>
-          <Textarea
-            aria-invalid={shown("reply") ? "true" : undefined}
-            class="resize-y"
-            id="rule-reply"
-            onblur={() => {
-              touched.reply = true;
-            }}
-            placeholder="if there's an honest caveat that you are aware of and you're just reporting it to the user instead of fixing it, then your work is not done yet"
-            rows={4}
-            bind:value={draft.reply}
-          />
-        </Field>
-        <Field
-          hint={how}
-          id="rule-timing"
+    <div class="fold">
+      <Field id="rule-reply" label="Reply" problem={shown("reply")}>
+        <Textarea
+          aria-invalid={shown("reply") ? "true" : undefined}
+          class="resize-y"
+          id="rule-reply"
+          onblur={() => {
+            touched.reply = true;
+          }}
+          placeholder="if there's an honest caveat that you are aware of and you're just reporting it to the user instead of fixing it, then your work is not done yet"
+          rows={4}
+          bind:value={draft.reply}
+        />
+      </Field>
+      <Field
+        hint={how}
+        id="rule-timing"
+        label="Send it"
+        problem={shown("timing")}
+      >
+        <Choice
           label="Send it"
-          problem={shown("timing")}
-        >
-          <Choice
-            label="Send it"
-            onchange={(next) => setTiming(next as RuleTiming)}
-            options={TIMING.map((option) => ({
-              value: option.value,
-              label: option.label,
-              disabled:
-                option.value === "immediate" && draft.matchKind === "meaning",
-            }))}
-            value={draft.timing}
+          onchange={(next) => setTiming(next as RuleTiming)}
+          options={TIMING.map((option) => ({
+            value: option.value,
+            label: option.label,
+            disabled:
+              option.value === "immediate" && draft.matchKind === "meaning",
+          }))}
+          value={draft.timing}
+        />
+      </Field>
+      {#if draft.timing === "immediate"}
+        <div in:unfold out:unfold>
+          <SwitchField
+            hint="A claude session reads it mid-turn without stopping. Other harnesses cut the turn short to deliver it, which loses whatever they were partway through."
+            id="rule-interrupt"
+            label="Interrupt the running turn"
+            bind:checked={draft.interrupt}
           />
-        </Field>
-        {#if draft.timing === "immediate"}
-          <div in:unfold out:unfold>
-            <SwitchField
-              hint="A claude session reads it mid-turn without stopping. Other harnesses cut the turn short to deliver it, which loses whatever they were partway through."
-              id="rule-interrupt"
-              label="Interrupt the running turn"
-              bind:checked={draft.interrupt}
-            />
-          </div>
-        {/if}
-      </div>
-    {:else}
-      <div class="fold" in:unfold out:unfold>
-        <p class="note">
-          The supervisor reads the turn and decides what to say. You write the
-          standing instructions; it writes the reply.
-        </p>
-        <Field
-          id="rule-prompt"
-          label="Supervisor instructions"
-          problem={shown("prompt")}
-        >
-          <Textarea
-            aria-invalid={shown("prompt") ? "true" : undefined}
-            class="resize-y"
-            id="rule-prompt"
-            onblur={() => {
-              touched.prompt = true;
-            }}
-            placeholder="If the agent claims work is done without pasting test output, reject the claim. Tell it to run the tests and paste the full output."
-            rows={4}
-            bind:value={draft.prompt}
-          />
-        </Field>
-        {#if shown("timing")}
-          <p class="problem" in:appear>{wrong.timing}</p>
-        {/if}
-      </div>
-    {/if}
+        </div>
+      {/if}
+    </div>
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
@@ -716,34 +547,32 @@
     </div>
   </EditorSection>
 
-  {#if draft.action === "reply"}
-    <div class="fold" in:unfold out:unfold>
-      <EditorSection hue={HUE} icon={IconPin} label="Making it stick">
-        <SwitchField
-          id="rule-repeat"
-          label="Fire again every time it matches"
-          bind:checked={draft.repeat}
-        >
-          {#snippet hint()}
-            <!-- The two readings cross-fade in one box, its height following. -->
-            <span class="swap" {@attach morph()}>
-              {#if draft.repeat}
-                <span in:crossIn out:crossOut>
-                  The session gets your reply each time it is tripped. It stops
-                  after ten in a row in one session.
-                </span>
-              {:else}
-                <span in:crossIn out:crossOut>
-                  The rule fires once per session and then goes quiet, whether
-                  or not anything came of it.
-                </span>
-              {/if}
-            </span>
-          {/snippet}
-        </SwitchField>
-      </EditorSection>
-    </div>
-  {/if}
+  <div class="fold">
+    <EditorSection hue={HUE} icon={IconPin} label="Making it stick">
+      <SwitchField
+        id="rule-repeat"
+        label="Fire again every time it matches"
+        bind:checked={draft.repeat}
+      >
+        {#snippet hint()}
+          <!-- The two readings cross-fade in one box, its height following. -->
+          <span class="swap" {@attach morph()}>
+            {#if draft.repeat}
+              <span in:crossIn out:crossOut>
+                The session gets your reply each time it is tripped. It stops
+                after ten in a row in one session.
+              </span>
+            {:else}
+              <span in:crossIn out:crossOut>
+                The rule fires once per session and then goes quiet, whether or
+                not anything came of it.
+              </span>
+            {/if}
+          </span>
+        {/snippet}
+      </SwitchField>
+    </EditorSection>
+  </div>
 
   {#if id}
     <EditorSection hue={HUE} icon={IconHistory} label="What it has caught">

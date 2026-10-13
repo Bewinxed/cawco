@@ -30,11 +30,9 @@ import type {
   NeutralUserMessage,
   OnCap,
   OpenCodeGoLimits,
-  RuleAction,
   RuleMatchKind,
   RuleScope,
   RuleTiming,
-  RuleTrigger,
   RuleWatch,
   SendMode,
   SendRefusal,
@@ -650,6 +648,15 @@ export const instances = sqliteTable("instances", {
   limitNotes: text("limit_notes", { mode: "json" }).$type<
     { at: number; id: string; content: string }[]
   >(),
+  /**
+   * What fleet watch did about this session, or for it as the lead (core
+   * `FLEET_WATCH`): when, and the line with the triage's reason under it,
+   * newest last and the last few kept (db `WATCH_LINES_KEPT`). Its
+   * transcript says each where it happened.
+   */
+  watchLines: text("watch_lines", { mode: "json" }).$type<
+    { at: number; id: string; content: string }[]
+  >(),
   keepAliveEnabled: integer("keep_alive", { mode: "boolean" })
     .notNull()
     .default(false),
@@ -872,16 +879,6 @@ export const instances = sqliteTable("instances", {
     .default("starting"),
   /** Why the session died, for a dashboard that was not watching when it did. */
   lastError: text("last_error"),
-  /**
-   * The supervisor's standing autopilot for this session: `{enabled, prompt,
-   * updatedAt}` as JSON text, following the `rules.scope` idiom. Null means
-   * never configured; disabling keeps the prompt.
-   */
-  autopilot: text("autopilot", { mode: "json" }).$type<{
-    enabled: boolean;
-    prompt: string;
-    updatedAt: number;
-  }>(),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -1933,8 +1930,6 @@ export const rules = sqliteTable("rules", {
   name: text("name").notNull(),
   /** A disabled rule stays here, keeps its history, and stops firing. */
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-  /** What starts the evaluation: `pattern` (default, every rule before this) or `every-turn`. */
-  trigger: text("trigger").$type<RuleTrigger>().notNull().default("pattern"),
   pattern: text("pattern").notNull(),
   matchKind: text("match_kind")
     .$type<RuleMatchKind>()
@@ -1948,11 +1943,7 @@ export const rules = sqliteTable("rules", {
     .default(false),
   /** Whether the rule reads the session's answer, its reasoning, or both. */
   watch: text("watch").$type<RuleWatch>().notNull().default("text"),
-  /** What the rule does when it fires: `reply` (default) or `llm` (supervisor evaluates). */
-  action: text("action").$type<RuleAction>().notNull().default("reply"),
   reply: text("reply").notNull(),
-  /** `action: 'llm'` only: the operator's standing instructions for the supervisor. */
-  prompt: text("prompt"),
   /** `turn` wakes an idle session, `message` queues, `immediate` cuts in. */
   timing: text("timing").$type<RuleTiming>().notNull().default("turn"),
   /** `immediate` only: deliver mid-turn instead of waiting for a boundary. */
@@ -2102,60 +2093,15 @@ export const fleetSkillHistory = sqliteTable("fleet_skill_history", {
     .$defaultFn(() => new Date()),
 });
 
-/** What the supervisor's verdict was on a given evaluation. */
-export type SupervisorVerdict =
-  | "silent"
-  | "reply"
-  | "escalate"
-  | "ask"
-  | "error"
-  | "skipped";
-
-/** What triggered the evaluation: a matched rule, or the session's autopilot. */
-export type SupervisorSource = "rule" | "autopilot";
-
 /**
- * The supervisor's intervention log: every evaluation the supervisor ran on a
- * session — including silent ones and skips. Mirrored structurally from
- * `delegate_events`; pruned to newest 5,000 rows at insert (plan: our choice).
- */
-export const supervisorEvents = sqliteTable(
-  "supervisor_events",
-  {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    instanceId: text("instance_id").notNull(),
-    source: text("source").$type<SupervisorSource>().notNull(),
-    ruleId: text("rule_id"),
-    verdict: text("verdict").$type<SupervisorVerdict>().notNull(),
-    message: text("message"),
-    note: text("note"),
-    model: text("model"),
-    latencyMs: integer("latency_ms"),
-    createdAt: timestamp("created_at")
-      .notNull()
-      .$defaultFn(() => new Date()),
-  },
-  (table) => [
-    index("supervisor_events_instance_created_idx").on(
-      table.instanceId,
-      table.createdAt
-    ),
-  ]
-);
-
-/**
- * The supervisor's own configuration — one row, keyed `'supervisor'`,
- * following the `fleetMemory` / `MEMORY_ID` single-row precedent. Neither
- * DB nor env URL present means disabled.
+ * The fleet's choices — one row, keyed `'supervisor'`, following the
+ * `fleetMemory` / `MEMORY_ID` single-row precedent. The table and its key
+ * keep the name of the LLM supervisor whose settings it first held; fleet
+ * watch replaced that supervisor, and these columns are what stayed.
  */
 export const supervisorConfig = sqliteTable("supervisor_config", {
   /** Always `'supervisor'`: the hub has one, and a table with a key says so cheaply. */
   id: text("id").primaryKey(),
-  enabled: integer("enabled", { mode: "boolean" }).notNull().default(false),
-  baseUrl: text("base_url"),
-  model: text("model"),
-  /** Sealed. */
-  apiKey: sealedText("api_key"),
   /**
    * Fleet-wide tool denials — JSON `string[]`. Every spawned session and every
    * `~/.claude/settings.json` convergence reads this list. `null` only before
@@ -2205,6 +2151,32 @@ export const sessionLimits = sqliteTable("session_limits", {
   id: text("id").primaryKey(),
   memoryPercent: integer("memory_percent"),
   cpuPercent: integer("cpu_percent"),
+});
+
+/**
+ * Fleet watch's switch (fleet-watch.ts) — one row, keyed `'fleet-watch'`,
+ * following the {@link spendSettings} precedent. No row reads as on: it
+ * replaced the supervisor, and with nothing open it spends nothing.
+ */
+export const fleetWatchSettings = sqliteTable("fleet_watch_settings", {
+  /** Always `'fleet-watch'`. */
+  id: text("id").primaryKey(),
+  on: integer("on", { mode: "boolean" }).notNull().default(true),
+});
+
+/**
+ * Fleet watch's needs-you notices (core `FleetWatchNotice`): a triage told
+ * you, or a session in a project whose Caw is off showed two signals. One
+ * per session; gone when you act on the session or it moves on.
+ */
+export const fleetWatchNotices = sqliteTable("fleet_watch_notices", {
+  instanceId: text("instance_id").primaryKey(),
+  id: text("id").notNull(),
+  machineId: text("machine_id").notNull(),
+  projectId: text("project_id"),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  at: timestamp("at").notNull(),
 });
 
 /**

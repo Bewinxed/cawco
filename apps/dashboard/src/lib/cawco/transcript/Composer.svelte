@@ -151,7 +151,6 @@
     onstop,
     prompts,
     ask = null,
-    leading,
     perch,
     planRing,
     onfoot,
@@ -214,8 +213,6 @@
     prompts?: Snippet;
     /** The ask parked on this conversation, which the composer grows into; none with none. */
     ask?: ComposerAsk | null;
-    /** Controls rendered before the attach button in the composer row. */
-    leading?: Snippet;
     /**
      * What stands on the pill's top-leading corner, its box's foot on the
      * pill's top edge: a project's Caw peeking over the composer.
@@ -3357,7 +3354,6 @@
              trailing end, which is not a control: Esc, ↓ past the draft or
              a press outside put the wheel away. -->
         <div class="ctrls" inert={!!recall} bind:this={ctrls}>
-          {@render leading?.()}
           <AttachButton
             {draft}
             ondraw={recallOf ? () => room.open() : undefined}
@@ -3952,11 +3948,8 @@
      face, its edge at the outline button's 3:1 (the control edge, 1.37:1,
      is lost at a 4px peek) and a little shadow, so each one's edge reads
      behind the one in front. */
-  .ctrls[inert] :global(:is(.att-btn, .ap-trigger)) {
+  .ctrls[inert] :global(.att-btn) {
     box-shadow: var(--shadow-xs);
-  }
-  /* An Autopilot that is on keeps its brand edge. */
-  .ctrls[inert] :global(:is(.att-btn, .ap-trigger:not(.ap-active))) {
     border-color: var(--border-button-outline);
   }
   @media (hover: hover) and (pointer: fine) {
@@ -4081,7 +4074,7 @@
   /* While the composer is grown into an ask, everything in it that does not
      act on the ask steps aside: the offer column, the tray row with its
      chips and the plan's ring, a perch, the attachments, and the pill's own
-     controls (Autopilot, attach, history, Stop/Send). They fade out and are
+     controls (attach, history, Stop/Send). They fade out and are
      gone, out of the tab order with them, and come back the same way
      (`--step-aside`) as the ask folds. */
   .dock.asking :is(.prompts, .lift, .perch, .ctrls),

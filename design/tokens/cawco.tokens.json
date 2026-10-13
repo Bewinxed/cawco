@@ -2213,7 +2213,7 @@
     "radius-panel": {
       "$type": "dimension",
       "$value": "16px",
-      "$description": "The assistant panel's shell."
+      "$description": "A panel's shell: the paywall's hero, a decision page's panels."
     },
     "radius-modal": {
       "$type": "dimension",

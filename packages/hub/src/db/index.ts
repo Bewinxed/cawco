@@ -18,6 +18,7 @@ import type {
   FleetScope,
   FleetSkillMeta,
   FleetSyncReport,
+  FleetWatchNotice,
   HarnessReport,
   HookEvent,
   HookHandler,
@@ -32,7 +33,6 @@ import type {
   SessionLimits,
   SessionTooling,
   SkillFile,
-  SupervisorEvent,
   ToolPolicy,
   ToolStatus,
   UsageBucket,
@@ -107,6 +107,8 @@ import {
   fleetMemoryDocs,
   fleetMemoryHistory,
   fleetSkillHistory,
+  fleetWatchNotices,
+  fleetWatchSettings,
   instanceAliases,
   instances,
   jevSettings,
@@ -143,7 +145,6 @@ import {
   skills,
   spendSettings,
   supervisorConfig,
-  supervisorEvents,
   type Tracker,
   threadMessages,
   tools,
@@ -213,6 +214,7 @@ export type PublicInstanceRow = Omit<
   | "turnOpenAt"
   | "movedHere"
   | "limitNotes"
+  | "watchLines"
   | "conversations"
 >;
 /** A limit line kept on a session's row ({@link DbShape.noteLimit}). */
@@ -221,6 +223,10 @@ export type LimitNote = NonNullable<
 >[number];
 /** How many of a session's limit lines its row keeps. */
 export const LIMIT_NOTES_KEPT = 20;
+/** A fleet-watch line kept on a session's row ({@link DbShape.noteWatchLine}). */
+export type WatchLine = LimitNote;
+/** How many of a session's fleet-watch lines its row keeps. */
+export const WATCH_LINES_KEPT = 20;
 /** A session's move line ({@link DbShape.noteMovedHere}). */
 export type MovedHere = NonNullable<
   (typeof instances.$inferSelect)["movedHere"]
@@ -593,6 +599,8 @@ export interface DbShape {
   readonly dropQueuedWorkItem: (id: string) => void;
   /** Forgets the index rows of task files that are gone. */
   readonly dropTaskIndex: (projectId: string, paths: string[]) => void;
+  /** Takes the session's notice down; true when it had one. */
+  readonly dropWatchNotice: (instanceId: string) => boolean;
   /** Persist the decision before its reconciler may send anything. */
   readonly endInstance: (
     id: string,
@@ -620,6 +628,8 @@ export interface DbShape {
   readonly fleetSkillVersion: (
     id: number
   ) => (SkillVersion & { skillSource: string; files: SkillFile[] }) | undefined;
+  /** Whether fleet watch is on for the fleet; on while no row says otherwise. */
+  readonly fleetWatchOn: () => boolean;
   /**
    * Folds every former session ({@link instanceAliases}) not yet folded into
    * the session it is now, one transaction each: what answered to it, what
@@ -689,13 +699,9 @@ export interface DbShape {
     | undefined;
   /** One rule, or nothing when it has been deleted out from under a caller. */
   readonly getRule: (id: string) => Rule | undefined;
-  /** The supervisor's own configuration, or undefined while none is stored. */
+  /** The fleet's choices row (`supervisor_config`), or undefined while none is stored. */
   readonly getSupervisorConfig: () =>
     | {
-        enabled: boolean;
-        baseUrl: string | null;
-        model: string | null;
-        apiKey: string | null;
         deniedTools: string[] | null;
         cawcoTodos: boolean;
         choicesSetAt: Date | null;
@@ -851,11 +857,6 @@ export interface DbShape {
   readonly listRules: () => Rule[];
   /** Every skill row without its files — a catalog read should not weigh megabytes. */
   readonly listSkills: () => FleetSkillMeta[];
-  /** Newest first; optionally filtered to one session; default limit 100. */
-  readonly listSupervisorEvents: (filter: {
-    instanceId?: string;
-    limit?: number;
-  }) => SupervisorEvent[];
   /** The fleet's tool policy (NEW.md §10) — only the tools somebody has ruled on. */
   readonly listToolPolicies: () => ToolPolicy[];
   /** Every machine's latest OpenCode Go reading. */
@@ -1011,6 +1012,8 @@ export interface DbShape {
   ) => RuleState;
   /** The session's turn ended at `at`, on the hub's clock (`turnEndedAt`). */
   readonly noteTurnEnded: (id: string, at: Date) => void;
+  /** Keeps a fleet-watch line on the session's row, the last {@link WATCH_LINES_KEPT}. */
+  readonly noteWatchLine: (id: string, line: WatchLine) => void;
   /** What a device or Telegram was shown and what has been cleared, by collapse id (notifications.ts). */
   readonly notifications: {
     /** Shown under this collapse id: outstanding again, and no longer cleared. */
@@ -1318,12 +1321,8 @@ export interface DbShape {
     error?: string;
     files?: SkillFile[];
   }) => FleetSkillMeta;
-  /** Upserts the supervisor's configuration (single-row table). */
+  /** Upserts the fleet's choices row (single-row table). */
   readonly putSupervisorConfig: (config: {
-    enabled?: boolean;
-    baseUrl?: string | null;
-    model?: string | null;
-    apiKey?: string | null;
     deniedTools?: string[] | null;
     cawcoTodos?: boolean;
     /** When the fleet's choices were set through `PUT /api/fleet/choices`. */
@@ -1344,6 +1343,8 @@ export interface DbShape {
    * never accumulates.
    */
   readonly putUsageBuckets: (machineId: string, buckets: UsageBucket[]) => void;
+  /** Raises (or replaces) the session's notice. */
+  readonly putWatchNotice: (notice: FleetWatchNotice) => void;
   readonly putWorkflow: (row: typeof workflows.$inferInsert) => WorkflowRow;
   /** Records a call in its run's log, or completes the row it already has. */
   readonly putWorkflowLog: (row: typeof workflowRunLog.$inferInsert) => void;
@@ -1483,17 +1484,6 @@ export interface DbShape {
   readonly recordSend: (
     send: typeof sentMessages.$inferInsert
   ) => SentMessageRow;
-  /** Files one supervisor evaluation result and prunes to newest 5,000 rows (plan: our choice). */
-  readonly recordSupervisorEvent: (event: {
-    instanceId: string;
-    source: "rule" | "autopilot";
-    ruleId?: string;
-    verdict: "silent" | "reply" | "escalate" | "ask" | "error" | "skipped";
-    message?: string;
-    note?: string;
-    model?: string;
-    latencyMs?: number;
-  }) => SupervisorEvent;
   /** Relays: a project's public webhook paths through Funnel (relay.ts). */
   readonly relays: RelaysDb;
   /**
@@ -1585,12 +1575,8 @@ export interface DbShape {
     hash: string;
     updatedAt: Date;
   };
+  readonly setFleetWatchOn: (on: boolean) => void;
 
-  /** Sets (or clears) the autopilot configuration on a session. */
-  readonly setInstanceAutopilot: (
-    instanceId: string,
-    value: { enabled: boolean; prompt: string; updatedAt: number } | null
-  ) => void;
   /** Puts sessions in a project: a session made a project, and its delegates. */
   readonly setInstancesProject: (ids: string[], projectId: string) => void;
   readonly setMcpAuth: (
@@ -1908,6 +1894,10 @@ export interface DbShape {
   }) => UsageSummary;
   /** Stored waits, including any that elapsed while the hub was stopped. */
   readonly waitingWorkItems: () => WorkItemRow[];
+  /** The fleet-watch lines kept on the session's row, oldest first. */
+  readonly watchLinesOf: (id: string) => WatchLine[];
+  /** Fleet watch's open needs-you notices, oldest first. */
+  readonly watchNotices: () => FleetWatchNotice[];
   readonly workflowTransition: (
     run: typeof workflowRuns.$inferInsert,
     step?: typeof workflowSteps.$inferInsert,
@@ -1945,15 +1935,12 @@ const ruleOf = (row: typeof rules.$inferSelect): Rule => ({
   id: row.id,
   name: row.name,
   enabled: row.enabled,
-  trigger: row.trigger,
   pattern: row.pattern,
   matchKind: row.matchKind,
   caseSensitive: row.caseSensitive,
   wholeWord: row.wholeWord,
   watch: row.watch,
-  action: row.action,
   reply: row.reply,
-  prompt: row.prompt,
   timing: row.timing,
   interrupt: row.interrupt,
   repeat: row.repeat,
@@ -2106,13 +2093,11 @@ const folderOf = (path: string | null | undefined): string | undefined =>
 /** The one row the fleet's memory ever takes: there is one document, not a list. */
 const MEMORY_ID = "memory";
 
-/** The one row the supervisor config ever takes — same precedent as `MEMORY_ID`. */
+/** The one row the fleet's choices ever take — same precedent as `MEMORY_ID`. */
 const SUPERVISOR_CONFIG_ID = "supervisor";
 const OPENROUTER_CONNECTION_ID = "openrouter";
 const JEV_SETTINGS_ID = "jev";
-
-/** How many supervisor event rows to keep — bounded without a scheduler (plan: our choice). */
-const SUPERVISOR_EVENTS_RETENTION = 5000;
+const FLEET_WATCH_ID = "fleet-watch";
 
 /**
  * How far back a memory document, a hook or a skill can be taken, each within
@@ -2163,6 +2148,7 @@ const make = async (path: string): Promise<DbShape> => {
     turnOpenAt: _turnOpenAt,
     movedHere: _movedHere,
     limitNotes: _limitNotes,
+    watchLines: _watchLines,
     tooling: _tooling,
     conversations: _conversations,
     ...publicColumns
@@ -2198,16 +2184,12 @@ const make = async (path: string): Promise<DbShape> => {
    */
   const asListed = <
     Row extends {
-      autopilot: unknown;
       derivedTitle: string | null;
       title: string | null;
     },
   >(
     row: Row
-  ): Row => ({
-    ...(row.title ? row : { ...row, title: row.derivedTitle }),
-    ...(row.autopilot ? { autopilot: row.autopilot } : {}),
-  });
+  ): Row => (row.title ? row : { ...row, title: row.derivedTitle });
   // A marker for the update helper: while it names a live process the hub is
   // migrating, and the helper's wait for a healthy start does not run down.
   const migrating = `${path}.migrating`;
@@ -2350,8 +2332,8 @@ const make = async (path: string): Promise<DbShape> => {
       .where(inArray(limitSummaries.instanceId, list))
       .run();
     tx.delete(limitEvents).where(inArray(limitEvents.instanceId, list)).run();
-    tx.delete(supervisorEvents)
-      .where(inArray(supervisorEvents.instanceId, list))
+    tx.delete(fleetWatchNotices)
+      .where(inArray(fleetWatchNotices.instanceId, list))
       .run();
     // What only pointed at one keeps its own history, pointing nowhere: a
     // workflow's step, a run's supervisor, a delegate whose parent went.
@@ -2391,11 +2373,11 @@ const make = async (path: string): Promise<DbShape> => {
     ["projects", "lead_instance_id"],
     ["limit_events", "instance_id"],
     ["turn_usage", "instance_id"],
-    ["supervisor_events", "instance_id"],
     ["artifacts", "instance_id"],
     ["completed_turns", "instance_id", "once"],
     ["session_plans", "instance_id", "once"],
     ["project_offers", "instance_id", "once"],
+    ["fleet_watch_notices", "instance_id", "once"],
   ];
   /** A former session's state of the moment, which the session it is now keeps its own of. */
   const FOLD_DROPPED = [
@@ -6513,6 +6495,24 @@ const make = async (path: string): Promise<DbShape> => {
         .from(instances)
         .where(eq(instances.id, id))
         .get()?.line ?? null,
+    noteWatchLine: (id, line) => {
+      const kept =
+        db
+          .select({ lines: instances.watchLines })
+          .from(instances)
+          .where(eq(instances.id, id))
+          .get()?.lines ?? [];
+      db.update(instances)
+        .set({ watchLines: [...kept, line].slice(-WATCH_LINES_KEPT) })
+        .where(eq(instances.id, id))
+        .run();
+    },
+    watchLinesOf: (id) =>
+      db
+        .select({ lines: instances.watchLines })
+        .from(instances)
+        .where(eq(instances.id, id))
+        .get()?.lines ?? [],
     noteLimit: (id, note) => {
       const kept =
         db
@@ -7142,75 +7142,6 @@ const make = async (path: string): Promise<DbShape> => {
       return { rows, totals, missingPricing };
     },
 
-    setInstanceAutopilot: (instanceId, value) => {
-      db.update(instances)
-        .set({ autopilot: value, updatedAt: new Date() })
-        .where(eq(instances.id, instanceId))
-        .run();
-    },
-    recordSupervisorEvent: (event) => {
-      const row = db
-        .insert(supervisorEvents)
-        .values({
-          instanceId: event.instanceId,
-          source: event.source,
-          ruleId: event.ruleId ?? null,
-          verdict: event.verdict,
-          message: event.message ?? null,
-          note: event.note ?? null,
-          model: event.model ?? null,
-          latencyMs: event.latencyMs ?? null,
-        })
-        .returning()
-        .get();
-      // Prune to newest SUPERVISOR_EVENTS_RETENTION rows.
-      const cutoff = db
-        .select({ id: supervisorEvents.id })
-        .from(supervisorEvents)
-        .orderBy(desc(supervisorEvents.id))
-        .limit(1)
-        .offset(SUPERVISOR_EVENTS_RETENTION)
-        .get();
-      if (cutoff) {
-        db.delete(supervisorEvents)
-          .where(lte(supervisorEvents.id, cutoff.id))
-          .run();
-      }
-      return {
-        id: row.id,
-        instanceId: row.instanceId,
-        source: row.source,
-        ruleId: row.ruleId,
-        verdict: row.verdict,
-        message: row.message,
-        note: row.note,
-        model: row.model,
-        latencyMs: row.latencyMs,
-        createdAt: row.createdAt.getTime(),
-      };
-    },
-    listSupervisorEvents: ({ instanceId, limit }) =>
-      db
-        .select()
-        .from(supervisorEvents)
-        .where(
-          instanceId ? eq(supervisorEvents.instanceId, instanceId) : undefined
-        )
-        .orderBy(desc(supervisorEvents.createdAt), desc(supervisorEvents.id))
-        .limit(limit ?? 100)
-        .all()
-        .map((row) => ({
-          id: row.id,
-          instanceId: row.instanceId,
-          source: row.source,
-          ruleId: row.ruleId,
-          verdict: row.verdict,
-          message: row.message,
-          note: row.note,
-          model: row.model,
-          latencyMs: row.latencyMs,
-          createdAt: row.createdAt.getTime(),
-        })),
     getSupervisorConfig: () => {
       const row = db
         .select()
@@ -7219,10 +7150,6 @@ const make = async (path: string): Promise<DbShape> => {
         .get();
       return row
         ? {
-            enabled: row.enabled,
-            baseUrl: row.baseUrl,
-            model: row.model,
-            apiKey: row.apiKey,
             deniedTools: row.deniedTools,
             cawcoTodos: row.cawcoTodos,
             choicesSetAt: row.choicesSetAt,
@@ -7238,17 +7165,6 @@ const make = async (path: string): Promise<DbShape> => {
         .get();
       const values = {
         id: SUPERVISOR_CONFIG_ID,
-        enabled: config.enabled ?? stored?.enabled ?? false,
-        baseUrl:
-          config.baseUrl === undefined
-            ? (stored?.baseUrl ?? null)
-            : config.baseUrl,
-        model:
-          config.model === undefined ? (stored?.model ?? null) : config.model,
-        apiKey:
-          config.apiKey === undefined
-            ? (stored?.apiKey ?? null)
-            : config.apiKey,
         deniedTools:
           config.deniedTools === undefined
             ? (stored?.deniedTools ?? null)
@@ -7265,10 +7181,6 @@ const make = async (path: string): Promise<DbShape> => {
         .onConflictDoUpdate({
           target: supervisorConfig.id,
           set: {
-            enabled: values.enabled,
-            baseUrl: values.baseUrl,
-            model: values.model,
-            apiKey: values.apiKey,
             deniedTools: values.deniedTools,
             cawcoTodos: values.cawcoTodos,
             choicesSetAt: values.choicesSetAt,
@@ -7277,6 +7189,38 @@ const make = async (path: string): Promise<DbShape> => {
         })
         .run();
     },
+    fleetWatchOn: () =>
+      db
+        .select({ on: fleetWatchSettings.on })
+        .from(fleetWatchSettings)
+        .where(eq(fleetWatchSettings.id, FLEET_WATCH_ID))
+        .get()?.on ?? true,
+    setFleetWatchOn: (on) => {
+      db.insert(fleetWatchSettings)
+        .values({ id: FLEET_WATCH_ID, on })
+        .onConflictDoUpdate({ target: fleetWatchSettings.id, set: { on } })
+        .run();
+    },
+    watchNotices: () =>
+      db
+        .select()
+        .from(fleetWatchNotices)
+        .orderBy(fleetWatchNotices.at)
+        .all()
+        .map((row) => ({ ...row, at: row.at.getTime() })),
+    putWatchNotice: (notice) => {
+      const row = { ...notice, at: new Date(notice.at) };
+      db.insert(fleetWatchNotices)
+        .values(row)
+        .onConflictDoUpdate({ target: fleetWatchNotices.instanceId, set: row })
+        .run();
+    },
+    dropWatchNotice: (instanceId) =>
+      db
+        .delete(fleetWatchNotices)
+        .where(eq(fleetWatchNotices.instanceId, instanceId))
+        .returning({ id: fleetWatchNotices.id })
+        .all().length > 0,
     claudeContextWindows: () =>
       Object.fromEntries(
         db
@@ -7587,15 +7531,12 @@ const make = async (path: string): Promise<DbShape> => {
         id: rule.id,
         name: rule.name,
         enabled: rule.enabled,
-        trigger: rule.trigger,
         pattern: rule.pattern,
         matchKind: rule.matchKind,
         caseSensitive: rule.caseSensitive,
         wholeWord: rule.wholeWord,
         watch: rule.watch,
-        action: rule.action,
         reply: rule.reply,
-        prompt: rule.prompt,
         timing: rule.timing,
         interrupt: rule.interrupt,
         repeat: rule.repeat,
@@ -7612,15 +7553,12 @@ const make = async (path: string): Promise<DbShape> => {
           set: {
             name: values.name,
             enabled: values.enabled,
-            trigger: values.trigger,
             pattern: values.pattern,
             matchKind: values.matchKind,
             caseSensitive: values.caseSensitive,
             wholeWord: values.wholeWord,
             watch: values.watch,
-            action: values.action,
             reply: values.reply,
-            prompt: values.prompt,
             timing: values.timing,
             interrupt: values.interrupt,
             repeat: values.repeat,

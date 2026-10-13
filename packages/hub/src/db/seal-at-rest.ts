@@ -21,7 +21,6 @@ import { hubSecrets, isSealed } from "../secret-box";
 const SECRET_COLUMNS = [
   { table: "openrouter_connection", key: "id", columns: ["api_key"] },
   { table: "jev_settings", key: "id", columns: ["typesafe_key"] },
-  { table: "supervisor_config", key: "id", columns: ["api_key"] },
   { table: "push_devices", key: "pairing_id", columns: ["secret", "key"] },
   {
     table: "fleet_mcp_oauth",

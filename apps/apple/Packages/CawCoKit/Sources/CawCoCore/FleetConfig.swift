@@ -8,8 +8,8 @@ import OpenAPIRuntime
 /// are the same numbers: the rows of `GET /api/fleet`, where each has landed
 /// machine by machine, and every fault. A read that fails keeps the last
 /// good rows and says why. Sections write through the hub's own wrappers
-/// (`HubAPI.Configuration`, `.rules`, `.delegates`, `.tools`, `.models`,
-/// `.supervisor`) and read again.
+/// (`HubAPI.Configuration`, `.rules`, `.delegates`, `.tools`, `.models`) and
+/// read again.
 @MainActor
 @Observable
 public final class FleetConfig {

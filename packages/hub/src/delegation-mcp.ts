@@ -23,6 +23,7 @@ import type { Fleet, SendDelivery } from "./delegation-actions";
 import { handoffInstructions, handoffTools } from "./delegation-tools";
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import type { AttemptStart } from "./dispatch";
+import type { FleetWatch } from "./fleet-watch";
 import { INGRESS_TOOLS, type Ingress } from "./ingress";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { MEMORY_TOOLS, type Memory } from "./memory";
@@ -34,7 +35,7 @@ import {
 } from "./project-offers";
 import { RELAY_TOOLS, type Relay } from "./relay";
 import { admitToolCall } from "./restart-holds";
-import { allows, CAW_TOOLS, refusal, roleOf } from "./roles";
+import { allows, CAW_TOOLS, refusal, roleOf, TRIAGE_TOOLS } from "./roles";
 import { ROUTINE_TOOLS, type Routines } from "./routines";
 import { TASK_TOOLS, type TaskToolContext, taskTools } from "./task-tools";
 import type { Tasks } from "./tasks";
@@ -46,6 +47,7 @@ type IngressTool = ReturnType<Ingress["tools"]>[number];
 type ActionTool = ReturnType<Actions["tools"]>[number];
 type RelayTool = ReturnType<Relay["tools"]>[number];
 type MemoryTool = ReturnType<Memory["tools"]>[number];
+type TriageTool = ReturnType<FleetWatch["tools"]>[number];
 /** A tool of a project's own groups: routines, ingress, approved actions, relays, memory. */
 type ProjectTool =
   | RoutineTool
@@ -189,6 +191,8 @@ export function createDelegationMcp(options: {
   relayTools?: (actor: InstanceRow | undefined) => RelayTool[];
   /** The memory tools (memory.ts): notes into a project's inbox, the curator's sorting and proposals. */
   memoryTools?: (actor: InstanceRow | undefined) => MemoryTool[];
+  /** Fleet watch's `triage_decide` (fleet-watch.ts), for a triage run. */
+  triageTools?: (actor: InstanceRow | undefined) => TriageTool[];
   /**
    * Connections (connections.ts): the `conn__<name>__<tool>` tools a session
    * is granted, and the hub's call of one for it.
@@ -299,7 +303,11 @@ export function createDelegationMcp(options: {
           options.actionTools,
           options.relayTools,
           options.memoryTools,
-        ] as (((actor: undefined) => (ProjectTool | CawTool)[]) | undefined)[]
+          options.triageTools,
+        ] as (
+          | ((actor: undefined) => (ProjectTool | CawTool | TriageTool)[])
+          | undefined
+        )[]
       ).flatMap((group) => group?.(undefined) ?? []),
     ];
     // Granted by a delegate type or a project, not a role's list: the
@@ -527,6 +535,7 @@ export function createDelegationMcp(options: {
   };
 
   const CAWS: ReadonlySet<string> = new Set(CAW_TOOLS);
+  const TRIAGES: ReadonlySet<string> = new Set(TRIAGE_TOOLS);
 
   /** Every call, MCP or REST, from any machine: held for a hub restart while it runs, refused behind its fence. */
   const call = async (
@@ -566,6 +575,15 @@ export function createDelegationMcp(options: {
     }
     if (CAWS.has(name) && options.cawTools) {
       return await cawCall(actor, name, input);
+    }
+    if (TRIAGES.has(name) && options.triageTools) {
+      const entry = options
+        .triageTools(actor)
+        .find((tool) => tool.name === name);
+      if (!entry) {
+        throw new Error(`Unknown tool ${name}`);
+      }
+      return (await entry.handler(input)) as CallToolResult;
     }
     return await projectToolCall(actor, name, input);
   };

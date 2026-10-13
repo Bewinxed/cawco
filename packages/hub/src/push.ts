@@ -37,6 +37,7 @@
  */
 import {
   type Envelope,
+  type FleetWatchNotice,
   machineLabel,
   type PermissionRequestFrame,
   questionsOf,
@@ -999,6 +1000,39 @@ export const createPush = ({
       console.log(
         `[push] routine ${run.routineId} run ${run.runId}: ${run.failed ? "needs you" : "delivered"}`
       );
+    },
+
+    /**
+     * Fleet watch tells you about a session (fleet-watch.ts): a triage said
+     * so, or its project's Caw is off. The session push's shape (opens the
+     * session, Reply writes to it); the visible words say "Fleet watch" and
+     * "Needs you", the sealed ones the session and what was noticed.
+     */
+    watchNotice(notice: FleetWatchNotice): void {
+      const [row] = db.getInstancesByIds([notice.instanceId]);
+      const project = projectName(notice.projectId);
+      moment(
+        {
+          shown: alertOf("Fleet watch", project, NEEDS_YOU),
+          sealed: alertOf(
+            row ? boardTitle(row) : "A session",
+            project,
+            firstLine(notice.title)
+          ),
+          category: PUSH_CATEGORIES.turn,
+          collapseId: `watch-${notice.instanceId}`,
+          threadId: notice.projectId ?? notice.instanceId,
+          data: {
+            kind: "turn",
+            instanceId: notice.instanceId,
+            machineId: notice.machineId,
+            projectId: notice.projectId,
+          },
+        },
+        notice.instanceId,
+        new Date()
+      );
+      console.log(`[push] fleet watch ${notice.instanceId}: needs you`);
     },
 
     /**

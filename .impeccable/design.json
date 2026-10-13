@@ -2204,7 +2204,7 @@
       {
         "name": "dur-loop",
         "value": "1.2s",
-        "purpose": "One turn of an ambient loop while something is pending: spinners, the task ring, the supervisor's orbit, the skeleton sweep, and Tailwind's animate-spin (linear), animate-pulse (ease-in-out) and animate-ping (ease-out)."
+        "purpose": "One turn of an ambient loop while something is pending: spinners, the task ring, the skeleton sweep, and Tailwind's animate-spin (linear), animate-pulse (ease-in-out) and animate-ping (ease-out)."
       },
       {
         "name": "default-transition",
@@ -2441,7 +2441,7 @@
       },
       {
         "name": "The One Loop Rule",
-        "body": "Anything that turns or blinks while something is pending runs one ambient loop, `--dur-loop` (1.2s): a spinner, the task ring's arc, the supervisor's orbit, the skeleton's sweep, and Tailwind's `animate-spin`, `animate-pulse` and `animate-ping`, which the theme points at the token. A rotation turns linearly; a pulse runs ease-in-out and a ping ease-out. Longer rhythms are multiples of the breath, never new numbers: the thinking indicator's words change every two breaths. Tailwind's default transition timing (`transition-colors` and its siblings) is `--dur-control` on ease-out.",
+        "body": "Anything that turns or blinks while something is pending runs one ambient loop, `--dur-loop` (1.2s): a spinner, the task ring's arc, the skeleton's sweep, and Tailwind's `animate-spin`, `animate-pulse` and `animate-ping`, which the theme points at the token. A rotation turns linearly; a pulse runs ease-in-out and a ping ease-out. Longer rhythms are multiples of the breath, never new numbers: the thinking indicator's words change every two breaths. Tailwind's default transition timing (`transition-colors` and its siblings) is `--dur-control` on ease-out.",
         "section": "motion"
       },
       {
@@ -2531,12 +2531,12 @@
       },
       {
         "name": "The Concentric Rule",
-        "body": "A surface nested inside another takes the outer radius less the inset. The dialog tray (18px, 6px padding) holds a 12px body. The composer shell (12px, 7px inset) holds 5px controls, and the autopilot's halo 3px outside its control is drawn at 8px. A subagent's well (8px, 4px padding) holds a 5px report.",
+        "body": "A surface nested inside another takes the outer radius less the inset. The dialog tray (18px, 6px padding) holds a 12px body. The composer shell (12px, 7px inset) holds 5px controls. A subagent's well (8px, 4px padding) holds a 5px report.",
         "section": "shapes"
       },
       {
         "name": "The Measured Exception Rule",
-        "body": "The stat tile keeps the comp's measured radii (a 10px card around a 7px well, 7px in), even though a concentric well would be 3px. The assistant panel keeps its measured 16px shell (`--radius-panel`, JOURNEY.md §Assistant), and the smallest marks keep a 2px hair (`--radius-hair`) rather than the 5px that would turn them into dots. Each is a token, never a literal.",
+        "body": "The stat tile keeps the comp's measured radii (a 10px card around a 7px well, 7px in), even though a concentric well would be 3px. A panel keeps the measured 16px shell (`--radius-panel`: the paywall's hero, a decision page's panels), and the smallest marks keep a 2px hair (`--radius-hair`) rather than the 5px that would turn them into dots. Each is a token, never a literal.",
         "section": "shapes"
       },
       {

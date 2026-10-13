@@ -15,8 +15,6 @@ import type {
   InstanceRow,
   PreviewSource,
   SessionPulse,
-  SupervisorEvent,
-  SupervisorStatusSignal,
   Verb,
   WorkItemSummary,
 } from "./index";
@@ -374,18 +372,4 @@ export interface DelegateEventFrame {
   instanceId: string;
   /** Hub-originated: delegate traffic; `instanceId` is the delegate's. */
   kind: "delegate_event";
-}
-
-export interface SupervisorEventFrame {
-  event: SupervisorEvent;
-  instanceId: string;
-  /** Hub-originated: a supervisor verdict the moment it is logged. */
-  kind: "supervisor_event";
-}
-
-export interface SupervisorStatusFrame {
-  instanceId: string;
-  /** Hub-originated, never stored: the supervisor began evaluating. */
-  kind: "supervisor_status";
-  status: SupervisorStatusSignal;
 }

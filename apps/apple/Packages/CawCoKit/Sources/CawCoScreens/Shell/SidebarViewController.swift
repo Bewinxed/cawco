@@ -10,10 +10,8 @@ protocol SidebarHost: AnyObject {
     var destination: ShellDestination { get }
     /// The conversation in front, for the rows to mark.
     var activeSessionId: String? { get }
-    var assistantOpen: Bool { get }
     func go(_ destination: ShellDestination)
     func openSession(_ id: String)
-    func toggleAssistant()
     func startSession(machineId: String?, cwd: String?, projectId: String?)
     func newProject(from source: UIView)
     func forgetProject(_ project: ProjectRow)
@@ -24,8 +22,8 @@ protocol SidebarHost: AnyObject {
     func keepPro()
 }
 
-/// The management rail (Sidebar.svelte): the wordmark with the assistant
-/// and Start session in its corner, the app's places, on a wide screen the
+/// The management rail (Sidebar.svelte): the wordmark with Start session in
+/// its corner, the app's places, on a wide screen the
 /// home itself, the projects with their sessions, and in the footer the
 /// usage strip, the account row, Configure and the theme. The split view's
 /// primary column on a wide screen; on a phone the sheet the bar's burger
@@ -45,9 +43,6 @@ final class SidebarViewController: ObservedViewController {
     private var scrollFade: EdgeFade?
     private let column = UIStackView()
     private let headerRow = UIStackView()
-    private let assistantButton = HeadAction(.assistant, label: "Assistant", tint: Palette.coral11)
-    /// The rail's Assistant control: where the desk's pane grows from.
-    var assistantSource: UIView { assistantButton }
     private let startButton = HeadAction(.plus, label: "Start session", tint: Palette.inkMuted)
     private let fleetRow = RailRow(height: nil, leading: 10, trailing: 10, gap: 10)
     private let workflowsRow = RailRow(height: nil, leading: 10, trailing: 10, gap: 10)
@@ -294,13 +289,11 @@ final class SidebarViewController: ObservedViewController {
         brand.content.addArrangedSubview(UIView())
         brand.accessibilityLabel = "Caw&Co"
         brand.addAction(UIAction { [weak self] _ in self?.host?.go(.fleet) }, for: .primaryActionTriggered)
-        assistantButton.addAction(UIAction { [weak self] _ in self?.host?.toggleAssistant() }, for: .primaryActionTriggered)
         startButton.addAction(UIAction { [weak self] _ in self?.host?.startSession(machineId: nil, cwd: nil, projectId: nil) }, for: .primaryActionTriggered)
-        for action in [assistantButton, startButton] { navConstraint(action); action.widthAnchor.constraint(equalTo: action.heightAnchor).isActive = true }
-        KitTip.attach(to: assistantButton, label: "Assistant", keys: "⌘J")
+        navConstraint(startButton)
+        startButton.widthAnchor.constraint(equalTo: startButton.heightAnchor).isActive = true
         KitTip.attach(to: startButton, label: "Start session", keys: "⇧⌘N")
         headerRow.addArrangedSubview(brand)
-        headerRow.addArrangedSubview(assistantButton)
         headerRow.addArrangedSubview(startButton)
         headerRow.axis = .horizontal
         headerRow.spacing = 4
@@ -710,7 +703,6 @@ final class SidebarViewController: ObservedViewController {
         // Any page under /workflows (Sidebar.svelte `path.startsWith("/workflows")`).
         workflowsRow.active = host.destination.spoke == ShellDestination.workflows.spoke
         if configureButton.on != (host.destination == .configure) { configureButton.on = host.destination == .configure }
-        if assistantButton.on != host.assistantOpen { assistantButton.on = host.assistantOpen }
         // `blockedCount || runningInstances.length`: what waits on the operator, else what runs.
         let blocked = blockedCount
         let count = blocked > 0 ? blocked : liveCount

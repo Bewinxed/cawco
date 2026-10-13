@@ -117,12 +117,11 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         // The shell's own (Shell.svelte `shortcut`; Sidebar.svelte's ⇧⌘N).
         let start = UIKeyCommand(title: "Start Session", action: #selector(startNewSession), input: "n", modifierFlags: [.command, .shift])
         let jump = UIKeyCommand(title: "Jump to Session…", action: #selector(jumpToSession), input: "k", modifierFlags: .command)
-        let assistant = UIKeyCommand(title: "Assistant", action: #selector(toggleAssistant), input: "j", modifierFlags: .command)
         let splitRight = UIKeyCommand(title: "Split Right", action: #selector(splitRight), input: "\\", modifierFlags: .command)
         let splitDown = UIKeyCommand(title: "Split Down", action: #selector(splitDown), input: "\\", modifierFlags: [.command, .shift])
-        for command in [start, jump, assistant, splitRight, splitDown] { command.wantsPriorityOverSystemBehavior = true }
+        for command in [start, jump, splitRight, splitDown] { command.wantsPriorityOverSystemBehavior = true }
         let fleet = UIMenu(title: "Fleet", children: [
-            UIMenu(options: .displayInline, children: [start, jump, assistant]),
+            UIMenu(options: .displayInline, children: [start, jump]),
             UIMenu(options: .displayInline, children: [approve, deny]),
             UIMenu(options: .displayInline, children: [reconnect]),
             UIMenu(options: .displayInline, children: [stop, steer]),
@@ -138,7 +137,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     private static let shellCommands: [Selector: RootViewController.ShellCommand] = [
-        #selector(startNewSession): .startSession, #selector(jumpToSession): .jump, #selector(toggleAssistant): .assistant,
+        #selector(startNewSession): .startSession, #selector(jumpToSession): .jump,
         #selector(splitRight): .splitRight, #selector(splitDown): .splitDown, #selector(openConfigure): .configure,
     ]
 
@@ -185,7 +184,6 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     @objc private func openSessionWindow() { board?.openSessionWindow() }
     @objc private func startNewSession() { board?.run(.startSession) }
     @objc private func jumpToSession() { board?.run(.jump) }
-    @objc private func toggleAssistant() { board?.run(.assistant) }
     @objc private func splitRight() { board?.run(.splitRight) }
     @objc private func splitDown() { board?.run(.splitDown) }
     @objc private func openConfigure() { board?.run(.configure) }

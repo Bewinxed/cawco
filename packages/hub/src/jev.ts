@@ -1,6 +1,7 @@
 /**
- * TypeSafe's Jev — the hub's one Jev client, for meaning rules, suggestions,
- * placement and workflow `w.jev` — and the one rule for which route it takes.
+ * TypeSafe's Jev — the hub's one Jev client, for meaning rules, fleet watch,
+ * suggestions, placement and workflow `w.jev` — and the one rule for which
+ * route it takes.
  *
  * Two routes reach the same System One API with the same body:
  * - **typesafe**: straight to TypeSafe with the key the hub holds

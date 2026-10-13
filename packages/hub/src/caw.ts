@@ -148,12 +148,13 @@ const curatorDenied = (harness: string): readonly string[] => {
 };
 
 /**
- * A spawn as it reaches a machine: a lead row's (a project's Caw) also denies
+ * A spawn as it reaches a machine: a lead row's (a project's Caw) or an
+ * overseer row's (a fleet-watch triage run, fleet-watch.ts) also denies
  * Caw's edit, shell and subagent tools on `harness`, a curator row's (a
  * project's memory curator run) those and the web, whatever else it denies;
- * both say they are a lead ({@link SpawnPayload.lead}), so the machine gives
- * them CawCo's MCP server and no other. Any other row's spawn says it is
- * none, whatever its caller sent.
+ * each says it is a lead ({@link SpawnPayload.lead}), so the machine gives it
+ * CawCo's MCP server and no other. Any other row's spawn says it is none,
+ * whatever its caller sent.
  */
 export const withCawDenials = (
   payload: SpawnPayload,
@@ -162,7 +163,7 @@ export const withCawDenials = (
 ): SpawnPayload => {
   const { lead: _callerLead, ...asked } = payload;
   let denied: readonly string[];
-  if (row.role === "lead") {
+  if (row.role === "lead" || row.role === "overseer") {
     denied = cawDenied(harness);
   } else if (row.role === "curator") {
     denied = curatorDenied(harness);

@@ -225,7 +225,6 @@ enum Frame {
     case controlResult(Components.Schemas.ControlResultFrame)
     case error(requestId: String?, message: String)
     case pulse(Components.Schemas.PulseFrame)
-    case supervisorEvent(Components.Schemas.SupervisorEvent)
     case workflow(Components.Schemas.WorkflowFrame)
     /// A delegate's work item changed: its parent's tray reads it.
     case workItem(Components.Schemas.WorkItemSummary)
@@ -262,8 +261,6 @@ enum Frame {
             self = .error(requestId: frame.requestId ?? answering, message: frame.message)
         case .pulse(let frame):
             self = .pulse(frame)
-        case .supervisorEvent(let frame):
-            self = .supervisorEvent(frame.event)
         case .workflow(let frame):
             self = .workflow(frame)
         case .workItem(let frame):

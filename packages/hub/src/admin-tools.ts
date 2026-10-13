@@ -606,7 +606,7 @@ export function adminTools() {
           .string()
           .optional()
           .describe(
-            "What to send back when the rule fires. Required for create when action is 'reply'."
+            "What to send back when the rule fires. Required for create."
           ),
         timing: z
           .enum(["turn", "message", "immediate"])
@@ -636,23 +636,6 @@ export function adminTools() {
           .describe(
             "Narrow the rule to specific machines, projects, harnesses or models."
           ),
-        trigger: z
-          .enum(["pattern", "every-turn"])
-          .optional()
-          .describe("What starts evaluation. Default 'pattern'."),
-        ruleAction: z
-          .enum(["reply", "llm"])
-          .optional()
-          .describe(
-            "What a firing does. 'reply' sends the reply verbatim; 'llm' hands the turn to " +
-              "the supervisor. Default 'reply'. Named ruleAction to avoid collision with action."
-          ),
-        prompt: z
-          .string()
-          .optional()
-          .describe(
-            "For action 'llm': the supervisor's standing instructions."
-          ),
       },
       async (args) => {
         const { action } = args;
@@ -674,12 +657,10 @@ export function adminTools() {
           );
         }
 
-        // Only the fields the call names: `ruleAction` is the rule's `action`.
-        const { action: _verb, id, ruleAction, ...named } = args;
+        // Only the fields the call names.
+        const { action: _verb, id, ...named } = args;
         const given = Object.fromEntries(
-          Object.entries({ ...named, action: ruleAction }).filter(
-            ([, value]) => value !== undefined
-          )
+          Object.entries(named).filter(([, value]) => value !== undefined)
         );
 
         if (action === "create") {
@@ -697,9 +678,6 @@ export function adminTools() {
               interrupt: false,
               repeat: false,
               scope: {},
-              trigger: "pattern",
-              action: "reply",
-              prompt: null,
               ...given,
             })
           );

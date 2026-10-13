@@ -619,7 +619,7 @@
     --radius-lg: 12px;
     /* The stat tile's recessed well. */
     --radius-well: 7px;
-    /* The assistant panel's shell. */
+    /* A panel's shell: the paywall's hero, a decision page's panels. */
     --radius-panel: 16px;
     /* Dialog tray: 6px pad + 12px body, concentric. */
     --radius-modal: 18px;

@@ -6,17 +6,14 @@
  * (`cawco connections set-key`). On a scratch hub (scratch-fleet.ts).
  *
  * 1. A hub that has run once is stopped, and plain secrets are written into
- *    its database as a hub before sealing kept them: the OpenRouter key, the
- *    supervisor's key, a phone's pairing secret and push key, and a fleet MCP
+ *    its database as a hub before sealing kept them: the OpenRouter key, a
+ *    phone's pairing secret and push key, and a fleet MCP
  *    server whose config carries a header key and whose OAuth row holds
  *    tokens issued by this probe's own authorization server.
  * 2. First restart: the hub logs what it sealed, and the database file holds
  *    none of the values as plain text.
  *    - OpenRouter reads connected (its suggest setting takes a write only
  *      when the key opens), and its sealed value opens to the original.
- *    - The supervisor's config, saved without a key, keeps the stored one:
- *      the hub read it and wrote it back sealed, and it opens to the
- *      original.
  *    - A test push reaches Cawrier (a stand-in here) with the pairing
  *      secret, and its alert opens under the device's key.
  *    - The fleet MCP server's access token is revoked; a request through
@@ -51,7 +48,6 @@ const check = (name: string, ok: boolean, detail: string) => {
 
 const token = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
 const OPENROUTER_KEY = token("sk-or-v1-probe");
-const SUPERVISOR_KEY = token("sup-probe");
 const PUSH_SECRET = randomBytes(32).toString("base64url");
 const PUSH_KEY = randomBytes(32).toString("base64");
 const HEADER_KEY = token("hdr-probe");
@@ -228,7 +224,6 @@ const dbPath = join(fleet.sandbox, "hub", "hub.db");
 const keyPath = join(fleet.sandbox, "hub", "secrets.key");
 const PLAIN = [
   OPENROUTER_KEY,
-  SUPERVISOR_KEY,
   PUSH_SECRET,
   PUSH_KEY,
   HEADER_KEY,
@@ -260,7 +255,6 @@ const stored = () =>
   fleet
     .query<{ v: string | null }>(
       `SELECT api_key AS v FROM openrouter_connection
-     UNION ALL SELECT api_key FROM supervisor_config
      UNION ALL SELECT secret FROM push_devices
      UNION ALL SELECT key FROM push_devices
      UNION ALL SELECT config FROM mcp_servers`
@@ -302,11 +296,6 @@ const writePlain = () => {
       "INSERT INTO openrouter_connection (id, api_key, connected_at) VALUES ('openrouter', ?, ?)"
     )
     .run(OPENROUTER_KEY, now);
-  sqlite
-    .query(
-      "INSERT INTO supervisor_config (id, enabled, base_url, model, api_key, cawco_todos, updated_at) VALUES ('supervisor', 0, ?, 'probe-model', ?, 0, ?) ON CONFLICT(id) DO UPDATE SET base_url = excluded.base_url, model = excluded.model, api_key = excluded.api_key"
-    )
-    .run(SERVICES, SUPERVISOR_KEY, now);
   sqlite
     .query(
       "INSERT INTO push_devices (pairing_id, secret, key, name, platform, quiet, created_at, updated_at) VALUES (?, ?, ?, 'Probe phone', 'ios', 0, ?, ?)"
@@ -365,25 +354,6 @@ const features = async (round: string) => {
         )[0]?.api_key
       ) === OPENROUTER_KEY,
     `connected ${status.connected}, suggest ${suggest.status}`
-  );
-  const before = fleet.query<{ api_key: string }>(
-    "SELECT api_key FROM supervisor_config"
-  )[0]?.api_key;
-  const saved = await json("PUT", "/api/supervisor/config", {
-    enabled: false,
-    baseUrl: SERVICES,
-    model: "probe-model",
-  });
-  const after = fleet.query<{ api_key: string }>(
-    "SELECT api_key FROM supervisor_config"
-  )[0]?.api_key;
-  check(
-    `${round}: the supervisor's key, read and written back by the hub, opens to the original`,
-    saved.status === 200 &&
-      after !== undefined &&
-      after !== before &&
-      opened(after) === SUPERVISOR_KEY,
-    `saved ${saved.status}; the row was ${after === before ? "not " : ""}rewritten`
   );
   const pushed = pushes.length;
   const test = await json("POST", "/api/push/test", { pairingId: PAIRING });
@@ -536,7 +506,6 @@ try {
       sealedLine?.includes("sealed in place") &&
         [
           "openrouter_connection.api_key 1",
-          "supervisor_config.api_key 1",
           "push_devices.secret 1",
           "push_devices.key 1",
           "mcp_servers.config 1",

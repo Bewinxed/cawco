@@ -22,6 +22,8 @@ export * from "./continuation";
 export * from "./delegate-types";
 // Fleet MCP + skills desired state, sync reports, and the `/` menu (NEW.md §11).
 export * from "./fleet";
+// Fleet watch: its signals, limits, words and frames (Projects spec §5.3).
+export * from "./fleet-watch";
 export * from "./frames";
 // The harness-neutral spine (2026-08 rework). CawCo owns these types; the
 // harness adapters (claude, opencode, pi) translate their native events into
@@ -242,10 +244,10 @@ export interface SpawnPayload {
   /** The in-flight maintenance send a surviving Claude process is answering. */
   keepAliveTurn?: string;
   /**
-   * This spawn is a project's Caw or its memory curator (a `lead` or
-   * `curator` row): the machine gives it CawCo's MCP server and no other.
-   * Set by the hub alone, on every launch of such a row, and never taken
-   * from a caller.
+   * This spawn is a project's Caw, its memory curator or a fleet-watch
+   * triage run (a `lead`, `curator` or `overseer` row): the machine gives it
+   * CawCo's MCP server and no other. Set by the hub alone, on every launch
+   * of such a row, and never taken from a caller.
    */
   lead?: true;
   /**
@@ -851,13 +853,6 @@ export interface InstanceRow {
    */
   accountId?: string | null;
   /**
-   * The supervisor's standing autopilot for this session, set from the
-   * composer popover. `null` means never configured; disabling keeps the
-   * prompt rather than discarding it, so re-enabling does not mean retyping
-   * it. Absent on a hub that predates the column.
-   */
-  autopilot?: { enabled: boolean; prompt: string; updatedAt: number } | null;
-  /**
    * Whether the session may spawn delegates of its own — `false` on a leaf
    * delegate (spawned with `can_delegate: false`, the default). Null on a
    * session nobody delegated, which may.
@@ -1076,45 +1071,6 @@ export type DelegateEventKind = DelegateEvent["kind"];
 export type DelegateEventPayload = DelegateEvent["payload"];
 
 /**
- * One line of the supervisor's intervention log — `supervisor_events`
- * (packages/hub `db/schema.ts`), read over `GET /api/supervisor/events` and
- * pushed as a `supervisor_event` frame. Silent verdicts are recorded too: the
- * log is the only place any of this is visible, so "it looked and did
- * nothing" has to show up the same as "it spoke".
- */
-export interface SupervisorEvent {
-  createdAt: number;
-  /** The hub's row id — what a fold deduplicates on and orders by. */
-  id: number;
-  instanceId: string;
-  latencyMs: number | null;
-  /** Sent into the session (`reply`) or shown to the operator (`escalate`/`ask`); null for the rest. */
-  message: string | null;
-  /** Which model answered, when one did. */
-  model: string | null;
-  /** The supervisor's own one-line rationale — logged, never sent to the session. */
-  note: string | null;
-  /** The rule that fired, for `source: 'rule'`; null for autopilot. */
-  ruleId: string | null;
-  /** Which mechanism produced the verdict. */
-  source: "rule" | "autopilot";
-  verdict: "silent" | "reply" | "escalate" | "ask" | "error" | "skipped";
-}
-
-/**
- * Fired the moment an evaluation actually begins — the transient half of the
- * supervisor's visible life. Every evaluation is guaranteed to terminate in a
- * published {@link SupervisorEvent}, so a consumer can treat that event as
- * this signal's close; nothing here is persisted.
- */
-export interface SupervisorStatusSignal {
-  at: number;
-  phase: "evaluating";
-  ruleId: string | null;
-  source: "rule" | "autopilot";
-}
-
-/**
  * A coarse, now-state the rail draws without frames: what a session is doing
  * right now, folded on the daemon from the frames it is already pumping. It is
  * the *fallback* the dashboard reads for sessions it has not subscribed to —
@@ -1190,8 +1146,8 @@ export type FramePayload =
   | import("./actions").ActionsFrame
   | import("./frames").ProjectStopFrame
   | import("./frames").DelegateEventFrame
-  | import("./frames").SupervisorEventFrame
-  | import("./frames").SupervisorStatusFrame
+  /** Hub-originated: every open fleet-watch notice, whole, on each change. */
+  | import("./fleet-watch").FleetWatchNoticesFrame
   /** Hub-originated: every project move, whole, on each change. */
   | import("./move").MovesFrame
   /** Daemon-originated: how far a move's clone or large files are. */

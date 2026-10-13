@@ -173,6 +173,27 @@ export function parseUndelivered(
 }
 
 /**
+ * Fleet watch's nudge to a session's lead (packages/hub `fleet-watch.ts`):
+ * the line, then what the lead reads. A transcript draws it as the same
+ * fleet-watch note the watched session's transcript has.
+ */
+export const fleetWatchNudge = (line: string, body: string): string =>
+  `[Fleet watch] ${line}\n\n${body}`;
+
+const FLEET_WATCH_NUDGE = /^\[Fleet watch\] (.+)\n\n/;
+
+/** A fleet-watch nudge read back into its line and what it says. */
+export function parseFleetWatchNudge(
+  text: string
+): { line: string; body: string } | null {
+  const marker = FLEET_WATCH_NUDGE.exec(text);
+  if (!marker) {
+    return null;
+  }
+  return { line: marker[1], body: text.slice(marker[0].length).trim() };
+}
+
+/**
  * A workflow telling its supervising session what happened: a step passed or
  * failed, the run finished, a question or checkpoint came up.
  */

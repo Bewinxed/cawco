@@ -96,10 +96,8 @@ typeOverrides:
     RoutineRunState: OpenEnums.RoutineRunState
     RoutineRunViewOutcome: OpenEnums.RoutineRunViewOutcome
     RoutineTarget: OpenEnums.RoutineTarget
-    RuleAction: OpenEnums.RuleAction
     RuleMatchKind: OpenEnums.RuleMatchKind
     RuleTiming: OpenEnums.RuleTiming
-    RuleTrigger: OpenEnums.RuleTrigger
     RuleWatch: OpenEnums.RuleWatch
     SendMode: OpenEnums.SendMode
     SendState: OpenEnums.SendState
@@ -112,8 +110,6 @@ typeOverrides:
     StageKind: OpenEnums.StageKind
     StagesTemplate: OpenEnums.StagesTemplate
     StagesViewSource: OpenEnums.StagesViewSource
-    SupervisorEventSource: OpenEnums.SupervisorEventSource
-    SupervisorEventVerdict: OpenEnums.SupervisorEventVerdict
     TaskHistoryActorMover: OpenEnums.TaskHistoryActorMover
     TaskHistoryKind: OpenEnums.TaskHistoryKind
     TaskHistoryState: OpenEnums.TaskHistoryState

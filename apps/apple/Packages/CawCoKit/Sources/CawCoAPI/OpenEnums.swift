@@ -3830,44 +3830,6 @@ public enum OpenEnums {
         }
     }
 
-    /// `#/components/schemas/RuleAction`.
-    public enum RuleAction: OpenEnum {
-        case llm
-        case reply
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "llm": self = .llm
-            case "reply": self = .reply
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .llm: "llm"
-            case .reply: "reply"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.llm, .reply]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
     /// `#/components/schemas/RuleMatchKind`.
     public enum RuleMatchKind: OpenEnum {
         case meaning
@@ -3940,44 +3902,6 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.immediate, .message, .turn]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/RuleTrigger`.
-    public enum RuleTrigger: OpenEnum {
-        case everyTurn
-        case pattern
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "every-turn": self = .everyTurn
-            case "pattern": self = .pattern
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .everyTurn: "every-turn"
-            case .pattern: "pattern"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.everyTurn, .pattern]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -4503,94 +4427,6 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.file, .template]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/SupervisorEventSource`.
-    public enum SupervisorEventSource: OpenEnum {
-        case autopilot
-        case rule
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "autopilot": self = .autopilot
-            case "rule": self = .rule
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .autopilot: "autopilot"
-            case .rule: "rule"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.autopilot, .rule]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/SupervisorEventVerdict`.
-    public enum SupervisorEventVerdict: OpenEnum {
-        case ask
-        case error
-        case escalate
-        case reply
-        case silent
-        case skipped
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "ask": self = .ask
-            case "error": self = .error
-            case "escalate": self = .escalate
-            case "reply": self = .reply
-            case "silent": self = .silent
-            case "skipped": self = .skipped
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .ask: "ask"
-            case .error: "error"
-            case .escalate: "escalate"
-            case .reply: "reply"
-            case .silent: "silent"
-            case .skipped: "skipped"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.ask, .error, .escalate, .reply, .silent, .skipped]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

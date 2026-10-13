@@ -72,8 +72,6 @@ export { default as IconDollar } from "~icons/solar/dollar-bold-duotone";
 export { default as IconDownload } from "~icons/solar/download-bold-duotone";
 export { default as IconEye } from "~icons/solar/eye-bold-duotone";
 export { default as IconEyeClosed } from "~icons/solar/eye-closed-bold-duotone";
-/** The assistant/supervisor: an eye in scan corners — oversight across sessions. */
-export { default as IconAssistant } from "~icons/solar/eye-scan-bold-duotone";
 export { default as IconDocument } from "~icons/solar/file-text-bold-duotone";
 export { default as IconFire } from "~icons/solar/fire-bold-duotone";
 export { default as IconFolder } from "~icons/solar/folder-bold-duotone";

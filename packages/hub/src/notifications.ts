@@ -7,7 +7,7 @@
  * foreground, visible and focused (`POST /api/presence`). Only a focused
  * foreground client counts: Matrix's push bugs came from a backgrounded app
  * counting as viewing. A notification about a session (a finished turn, an
- * ask, a task's attempt, the supervisor's word; push or Telegram) shows in
+ * ask, a task's attempt, fleet watch's notice; push or Telegram) shows in
  * that session, so the owner saw it if some client was active on the session
  * at any moment from when it landed to when it is offered: the gate drops it,
  * on every outlet, and never sends it later. The hub settles this from the
@@ -79,9 +79,6 @@ export const turnCollapseId = (instanceId: string): string =>
 /** A task waiting on the owner: its move and its failed attempt are one notification. */
 export const taskCollapseId = (projectId: string, taskId: string): string =>
   collapseOf("task", `${projectId}:${taskId}`);
-/** The supervisor's escalation about a session (Telegram only). */
-export const supervisorCollapseId = (instanceId: string): string =>
-  collapseOf("supervisor", instanceId);
 
 /** Where a notification is shown. */
 type Outlet = "push" | "telegram";

@@ -49,7 +49,7 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
     private var dragging = false
 
     /// The most of the screen it stands tall, where a sheet sets its own
-    /// (the assistant's `max-height: 85dvh`); nil, the style's (80%, 88%).
+    /// (the paywall's 90%); nil, the style's (80%, 88%).
     private let cap: Double?
 
     /// `scroller`: the content's own scroll view, which hands a downward pull

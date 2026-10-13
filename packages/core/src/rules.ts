@@ -44,30 +44,6 @@ export type RuleWatch = "text" | "thinking" | "both";
 export type RuleTiming = "turn" | "message" | "immediate";
 
 /**
- * What starts a rule's evaluation.
- *
- * - `pattern` — the phrase/regex match this file has always done: a rule
- *   fires when {@link Rule.pattern} shows up.
- * - `every-turn` — there is nothing to match; every turn end is itself the
- *   trigger. Only the supervisor can act on that (see {@link RuleAction}),
- *   since nothing about the turn has been read yet to answer with a fixed
- *   reply.
- */
-export type RuleTrigger = "pattern" | "every-turn";
-
-/**
- * What a firing rule does.
- *
- * - `reply` — send {@link Rule.reply}, verbatim, the way every rule has
- *   always fired.
- * - `llm` — hand the turn to the supervisor and send back whatever it
- *   decides. Only fires at the `turn` timing (the supervisor judges a
- *   finished turn, not a half-typed message) and never repeats a fixed
- *   reply (it decides fresh every time).
- */
-export type RuleAction = "reply" | "llm";
-
-/**
  * What narrows a rule from "every session on the fleet" to some of them. Every
  * field is optional and they are ANDed; an empty scope is the default and means
  * everywhere. `model` is a substring test, so `opus` covers every dated build
@@ -90,8 +66,6 @@ export interface RuleFacts {
 
 /** One standing instruction. */
 export interface Rule {
-  /** What the rule does when it fires. Default `'reply'` — the only kind before this existed. */
-  action: RuleAction;
   caseSensitive: boolean;
   createdAt: number;
   enabled: boolean;
@@ -103,19 +77,15 @@ export interface Rule {
   name: string;
   /** The phrase to watch for, a regular expression, or a yes/no question, as `matchKind` says. */
   pattern: string;
-  /** `action: 'llm'` only: the operator's standing instructions for the supervisor. */
-  prompt: string | null;
   /**
    * Fire again on every later match. Off makes the rule fire once per session
    * and then go quiet.
    */
   repeat: boolean;
-  /** What the session is sent when the rule fires. Ignored (and not required) when `action` is `'llm'`. */
+  /** What the session is sent when the rule fires. */
   reply: string;
   scope: RuleScope;
   timing: RuleTiming;
-  /** What starts the evaluation. Default `'pattern'` — every rule before this existed. */
-  trigger: RuleTrigger;
   watch: RuleWatch;
   /** Phrase mode only: refuse matches that sit inside a longer word. */
   wholeWord: boolean;
@@ -232,13 +202,6 @@ export const ruleMatches = (
   text: string
 ): boolean => ruleHits(rule, text).length > 0;
 
-/**
- * The shortest an LLM rule's prompt (or an autopilot standing prompt) can be
- * and still count as an instruction rather than noise — under ten characters
- * is not a sentence.
- */
-const MIN_LLM_PROMPT = 10;
-
 /** The shortest a meaning rule's question can be and still be a question. */
 const MIN_MEANING_QUESTION = 10;
 
@@ -246,73 +209,45 @@ const MIN_MEANING_QUESTION = 10;
  * Everything wrong with a draft, as whole sentences the form can print under
  * the field that caused it. Empty means it is safe to save.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates a draft against every trigger/action/matchKind combination the form allows — the hub's own gate before a rule starts firing on live sessions.
 export function ruleProblem(draft: Partial<RuleDraft>): Record<string, string> {
   const wrong: Record<string, string> = {};
   if (!draft.name?.trim()) {
     wrong.name = "Give the rule a name so you can recognise it later.";
   }
 
-  const trigger = draft.trigger ?? "pattern";
-  const action = draft.action ?? "reply";
-
-  // `every-turn` has nothing to match against — a fixed reply cannot answer a
-  // turn it never read, so only the supervisor can be behind it.
-  if (trigger === "every-turn" && action !== "llm") {
-    wrong.trigger =
-      "An every-turn rule has nothing to match, so only the supervisor can act on it — set the action to LLM.";
-  }
-
-  if (trigger === "pattern") {
-    const pattern = draft.pattern ?? "";
-    if (pattern.trim() === "") {
-      wrong.pattern = "A rule needs something to watch for.";
-    } else if (draft.matchKind === "meaning") {
-      if (pattern.trim().length < MIN_MEANING_QUESTION) {
-        wrong.pattern =
-          "Ask a whole yes-or-no question — that is too short to be one.";
-      }
-      if (draft.timing === "immediate") {
-        wrong.timing =
-          "A meaning rule is answered about a finished message or turn, so it cannot fire mid-stream — pick message or turn.";
-      }
-    } else if (draft.matchKind === "regex") {
-      try {
-        const compiled = new RegExp(pattern);
-        if (compiled.test("")) {
-          wrong.pattern =
-            "This expression matches empty text, so it would fire on every message.";
-        }
-      } catch (error) {
-        wrong.pattern = `That is not a valid regular expression — ${
-          error instanceof Error
-            ? error.message.replace(INVALID_REGEX_PREFIX, "")
-            : "it will not compile"
-        }.`;
-      }
-    } else if (pattern.trim().length < 3) {
+  const pattern = draft.pattern ?? "";
+  if (pattern.trim() === "") {
+    wrong.pattern = "A rule needs something to watch for.";
+  } else if (draft.matchKind === "meaning") {
+    if (pattern.trim().length < MIN_MEANING_QUESTION) {
       wrong.pattern =
-        "Two characters will match almost everything. Watch for something longer.";
+        "Ask a whole yes-or-no question — that is too short to be one.";
     }
-  }
-
-  if (action === "reply" && !draft.reply?.trim()) {
-    wrong.reply = "Write what the session should be told when this fires.";
-  }
-
-  if (action === "llm") {
-    if (draft.timing !== undefined && draft.timing !== "turn") {
+    if (draft.timing === "immediate") {
       wrong.timing =
-        "The supervisor judges a finished turn, not a message in progress — an LLM rule only fires at the turn boundary.";
+        "A meaning rule is answered about a finished message or turn, so it cannot fire mid-stream — pick message or turn.";
     }
-    if ((draft.prompt ?? "").trim().length < MIN_LLM_PROMPT) {
-      wrong.prompt =
-        "Tell the supervisor what to watch for and how to respond — that is too short to be an instruction.";
+  } else if (draft.matchKind === "regex") {
+    try {
+      const compiled = new RegExp(pattern);
+      if (compiled.test("")) {
+        wrong.pattern =
+          "This expression matches empty text, so it would fire on every message.";
+      }
+    } catch (error) {
+      wrong.pattern = `That is not a valid regular expression — ${
+        error instanceof Error
+          ? error.message.replace(INVALID_REGEX_PREFIX, "")
+          : "it will not compile"
+      }.`;
     }
-    if (draft.repeat) {
-      wrong.repeat =
-        "The supervisor decides fresh at every turn end — there is no fixed reply to repeat.";
-    }
+  } else if (pattern.trim().length < 3) {
+    wrong.pattern =
+      "Two characters will match almost everything. Watch for something longer.";
+  }
+
+  if (!draft.reply?.trim()) {
+    wrong.reply = "Write what the session should be told when this fires.";
   }
 
   if (draft.timing !== "immediate" && draft.interrupt) {
@@ -355,12 +290,6 @@ export function ruleSentence(rule: Partial<RuleDraft>): string {
   }
   const scope = narrowing.length ? ` In ${narrowing.join(" and ")} only.` : "";
 
-  if (rule.trigger === "every-turn") {
-    // Nothing is matched — every turn end is the trigger, and only the
-    // supervisor can be behind that (ruleProblem refuses any other action).
-    return `At the end of every turn, ask the supervisor to judge it and reply as it decides.${scope}`;
-  }
-
   let where: string;
   if (rule.watch === "thinking") {
     where = "thinks";
@@ -370,12 +299,6 @@ export function ruleSentence(rule: Partial<RuleDraft>): string {
     where = "says";
   }
   const what = watchedFor(rule);
-
-  if (rule.action === "llm") {
-    // Illegal to pair with anything but `timing: 'turn'`, so the wake-into-a-
-    // new-turn phrasing is the only one that ever applies here.
-    return `When a session ${where} ${what}, wait for the turn to end, then ask the supervisor to judge it and reply as it decides.${scope}`;
-  }
 
   let when: string;
   if (rule.timing === "immediate") {
@@ -408,16 +331,13 @@ export const RULE_TEMPLATES: {
     draft: {
       name: "Honest caveat",
       enabled: true,
-      trigger: "pattern",
       pattern: "honest caveat",
       matchKind: "phrase",
       caseSensitive: false,
       wholeWord: false,
       watch: "text",
-      action: "reply",
       reply:
         "if there's an honest caveat that you are aware of and you're just reporting it to the user instead of fixing it, then your work is not done yet",
-      prompt: null,
       timing: "turn",
       interrupt: false,
       repeat: true,
@@ -430,16 +350,13 @@ export const RULE_TEMPLATES: {
     draft: {
       name: "Placeholder code",
       enabled: true,
-      trigger: "pattern",
       pattern: "for (now|brevity)|placeholder|TODO: implement|stub(bed)? out",
       matchKind: "regex",
       caseSensitive: false,
       wholeWord: false,
       watch: "text",
-      action: "reply",
       reply:
         "You left a placeholder. Go back and write the real implementation, or tell me exactly what is blocking you from writing it.",
-      prompt: null,
       timing: "turn",
       interrupt: false,
       repeat: true,
@@ -452,16 +369,13 @@ export const RULE_TEMPLATES: {
     draft: {
       name: "Unverified claim",
       enabled: true,
-      trigger: "pattern",
       pattern: "should (work|be fine)|probably works|I believe (this|it) works",
       matchKind: "regex",
       caseSensitive: false,
       wholeWord: false,
       watch: "text",
-      action: "reply",
       reply:
         "You said it should work. Run it and report what actually happened, with the output.",
-      prompt: null,
       timing: "turn",
       interrupt: false,
       repeat: true,

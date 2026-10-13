@@ -11,10 +11,8 @@ const MEANING_TIMEOUT_MS = 10_000;
  * Meaning rules: a yes/no question put to Jev about what the session said,
  * instead of a phrase to find in it.
  *
- * Both engines read meaning rules — the rule engine fires `reply` ones, the
- * supervisor composes `llm` ones — and both see the same turn end. So the
- * judge asks once per turn frame, every in-scope meaning rule in the one call,
- * and hands each engine the same answer.
+ * The judge asks once per turn frame, every in-scope meaning rule in the one
+ * call, and hands whoever asks about that frame again the same answer.
  *
  * Besides what the session said, Jev reads `live_delegated_work`: the titles
  * of the session's work items still starting or running, or `none`. A rule
@@ -48,8 +46,8 @@ export class MeaningJudge {
   }
 
   /**
-   * The ids of every enabled, in-scope `turn` meaning rule (either action)
-   * whose answer about this turn's speech is yes. Thinking-only rules sit
+   * The ids of every enabled, in-scope `turn` meaning rule whose answer
+   * about this turn's speech is yes. Thinking-only rules sit
    * this timing out, as they do on the phrase path.
    */
   turn(

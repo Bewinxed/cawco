@@ -32,8 +32,6 @@ export interface ComposerBinding {
   /** The session whose delegates the composer's tray shows. */
   readonly delegatesOf: string;
   readonly draft: ComposerDraft;
-  /** What stands before the field in the pill; a project's Caw has nothing there. */
-  leading?: Snippet;
   readonly mentions: Mention[];
   /** What the composer stands over the transcript's foot (Composer `ComposerFoot`). */
   readonly onfoot?: (foot: ComposerFoot) => void;

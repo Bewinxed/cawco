@@ -39,7 +39,6 @@
   import { goto, onNavigate } from "$app/navigation";
   import { page } from "$app/state";
   import AddMachineDialog from "./AddMachineDialog.svelte";
-  import AssistantPanel from "./assistant/AssistantPanel.svelte";
   import { barGlass, type GlassCard as GlassFace } from "./bar-glass.svelte";
   import CawOffDialog from "./CawOffDialog.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
@@ -104,7 +103,6 @@
     railOpen = false;
     barGlass.open = card;
   }
-  let assistantOpen = $state(false);
 
   /**
    * The rail's width is settled before the first paint, in two places at once.
@@ -304,11 +302,6 @@
     if (key === "k") {
       event.preventDefault();
       barGlass.toggle("jump");
-      return;
-    }
-    if (key === "j") {
-      event.preventDefault();
-      assistantOpen = !assistantOpen;
       return;
     }
     // Split the focused group, putting the conversation in front into the new
@@ -867,14 +860,7 @@
   >
     <aside class="rail hidden min-[900px]:flex">
       {#if railed}
-        <Sidebar
-          {assistantOpen}
-          {narrow}
-          onassistant={() => {
-            assistantOpen = !assistantOpen;
-          }}
-          scroller={keepScroll}
-        />
+        <Sidebar {narrow} scroller={keepScroll} />
       {/if}
       <div
         aria-label="Resize sidebar"
@@ -916,28 +902,17 @@
           <Sheet.Title>Navigation</Sheet.Title>
         </Sheet.Header>
         {#if !railed}
-          <Sidebar
-            {assistantOpen}
-            {narrow}
-            onassistant={() => {
-              railOpen = false;
-              assistantOpen = true;
-            }}
-            onsearch={() => fromSheet("jump")}
-            sheet
-          />
+          <Sidebar {narrow} onsearch={() => fromSheet("jump")} sheet />
         {/if}
       </Sheet.Content>
     </Sheet.Root>
 
     <div class="main">
       <header class="top" class:floating={floating} class:hosting={hosting}>
-        <!-- The sidebar toggle. On a phone the assistant is opened from the
-             sidebar, and its drawer grows from here (AssistantPanel). -->
+        <!-- The sidebar toggle. -->
         <button
           aria-label="Open navigation"
           class="burger min-[900px]:hidden"
-          data-assistant-origin
           onclick={() => {
             railOpen = true;
           }}
@@ -1155,8 +1130,6 @@
     prefill={continuing.source ? undefined : spawning.prefill}
     restore={continuing.restore ?? undefined}
   />
-
-  <AssistantPanel bind:open={assistantOpen} />
 </Tooltip.Provider>
 
 <style>

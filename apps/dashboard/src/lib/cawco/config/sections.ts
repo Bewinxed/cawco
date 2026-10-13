@@ -131,8 +131,7 @@ export const SECTIONS: ConfigSection[] = [
     counted: false,
     group: "Hub",
     label: "Models CawCo uses",
-    purpose:
-      "Jev's route (OpenRouter or a TypeSafe key) and the supervisor server",
+    purpose: "Jev's route (OpenRouter or a TypeSafe key), and fleet watch",
     icon: IconCpu,
     hue: "var(--hue-orange-500)",
   },

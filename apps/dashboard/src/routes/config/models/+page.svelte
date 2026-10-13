@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { FleetWatchSettings } from "@cawco/core";
   import { onMount } from "svelte";
   import { blur } from "svelte/transition";
   import Field from "#lib/cawco/config/Field.svelte";
@@ -13,11 +14,6 @@
     saveSuggestSetting,
     suggestions,
   } from "#lib/cawco/suggest.svelte.js";
-  import {
-    loadSupervisor,
-    type SupervisorStatus,
-    saveSupervisorConfig,
-  } from "#lib/cawco/supervisor.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
@@ -31,9 +27,9 @@
    * TypeSafe key the hub holds (straight to TypeSafe), or OpenRouter,
    * connected by OAuth PKCE: the hub holds the verifier and the key, the
    * browser only carries the operator to OpenRouter and the `code` back here.
-   * A held TypeSafe key is the route; neither is Jev off. The supervisor is
-   * the OpenAI-compatible server that judges turns for LLM rules and
-   * autopilot.
+   * A held TypeSafe key is the route; neither is Jev off. Fleet watch is the
+   * hub's watch over every session for a loop or a stall: its switch, and
+   * what opens a signal, as facts.
    */
   const section = sectionOf("models");
   const HUE = section.hue;
@@ -196,53 +192,46 @@
     savingSuggest = false;
   }
 
-  // ── supervisor ─────────────────────────────────────────────────────────
-  let supervisor = $state<SupervisorStatus | null>(null);
-  let supervisorError = $state<string | null>(null);
-  let enabled = $state(false);
-  let baseUrl = $state("");
-  let model = $state("");
-  let apiKey = $state("");
-  let saving = $state(false);
+  // ── fleet watch ────────────────────────────────────────────────────────
+  let watch = $state<FleetWatchSettings | null>(null);
+  let watchError = $state<string | null>(null);
+  let savingWatch = $state(false);
 
-  async function readSupervisor() {
+  async function readWatch() {
     try {
-      supervisor = await loadSupervisor();
-      const { config } = supervisor;
-      ({ enabled } = config);
-      baseUrl = config.baseUrl ?? "";
-      model = config.model ?? "";
+      const response = await fetch("/api/fleet-watch");
+      if (!response.ok) {
+        throw new Error(`the hub answered ${response.status}`);
+      }
+      watch = (await response.json()) as FleetWatchSettings;
     } catch (error) {
-      supervisorError = error instanceof Error ? error.message : String(error);
+      watchError = `Could not read fleet watch — ${error instanceof Error ? error.message : String(error)}.`;
     }
   }
 
-  async function saveSupervisor(event: SubmitEvent) {
-    event.preventDefault();
-    saving = true;
-    supervisorError = null;
-    try {
-      await saveSupervisorConfig({
-        enabled,
-        baseUrl: baseUrl.trim(),
-        model: model.trim(),
-        ...(apiKey === "" ? {} : { apiKey }),
-      });
-      apiKey = "";
-      await readSupervisor();
-    } catch (error) {
-      supervisorError = error instanceof Error ? error.message : String(error);
+  async function setWatch(on: boolean) {
+    savingWatch = true;
+    watchError = null;
+    const response = await fetch("/api/fleet-watch", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ on }),
+    });
+    if (response.ok) {
+      watch = (await response.json()) as FleetWatchSettings;
+    } else {
+      watchError = `${response.status} ${await response.text()}`;
     }
-    saving = false;
+    savingWatch = false;
   }
 
   /**
    * The section shows once both reads are in (or the OAuth code is being
    * exchanged), so its first paint is the state it keeps: the header's button,
-   * the switch's hint and both status lines are already their final size.
+   * the switches' hints and the status line are already their final size.
    */
   const ready = $derived(
-    supervisor !== null && ((openrouter !== null && jev !== null) || exchanging)
+    watch !== null && ((openrouter !== null && jev !== null) || exchanging)
   );
 
   /**
@@ -259,31 +248,6 @@
   });
   /** A problem fades in over 300ms on the settle-in curve. */
   let openrouterHeight = $state(0);
-  let reachHeight = $state(0);
-
-  const reach = $derived.by(
-    (): { tone: "off" | "bad" | "ok"; text: string } => {
-      if (!supervisor?.status.configured) {
-        return {
-          tone: "off",
-          text: "Not configured. Set a server URL and a model to turn it on.",
-        };
-      }
-      const { status } = supervisor;
-      if (!status.reachable) {
-        return {
-          tone: "bad",
-          text: `The server at ${supervisor.config.baseUrl} did not answer.`,
-        };
-      }
-      return {
-        tone: "ok",
-        text: status.resolvedModel
-          ? `The server answers, and runs ${status.resolvedModel}.`
-          : "The server answers.",
-      };
-    }
-  );
 
   /**
    * OpenRouter's redirect lands here with `?code=`: exchange it, then strip it
@@ -308,12 +272,12 @@
       void readOpenRouter();
     }
     // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
-    void readSupervisor();
+    void readWatch();
   });
 </script>
 
 <SectionFrame
-  problem={ready ? null : (openrouterError ?? jevError ?? supervisorError)}
+  problem={ready ? null : (openrouterError ?? jevError ?? watchError)}
   purpose={section.purpose}
   {ready}
   title={section.label}
@@ -418,9 +382,9 @@
       {/snippet}
     </SectionHeader>
     <p class="note">
-      Answers the hub's yes/no questions: meaning rules, suggestions and its own
-      judgments. It goes straight to TypeSafe while a key is held here,
-      otherwise through OpenRouter.
+      Answers the hub's yes/no questions: meaning rules, fleet watch,
+      suggestions and its own judgments. It goes straight to TypeSafe while a
+      key is held here, otherwise through OpenRouter.
     </p>
     <p
       aria-live="polite"
@@ -493,93 +457,44 @@
     {/if}
   </form>
 
-  <form class="group" onsubmit={saveSupervisor}>
-    <SectionHeader hue={HUE} icon={IconRules} label="Supervisor">
-      {#snippet right()}
-        <Button
-          failed={supervisorError !== null}
-          label="Save supervisor"
-          pending={saving}
-          pendingLabel="Saving…"
-          size="sm"
-          type="submit"
-        />
-      {/snippet}
-    </SectionHeader>
+  <div class="group">
+    <SectionHeader hue={HUE} icon={IconRules} label="Fleet watch" />
     <p class="note">
-      The OpenAI-compatible server that judges turns for LLM rules and
-      autopilot.
+      Reads every session's stream for a loop or a stall. A yes from Jev, or a
+      second signal while Jev is off, starts one triage that tells the session's
+      lead. In a project whose Caw is off, it tells you instead.
     </p>
     <SwitchField
-      hint={enabled
-        ? "LLM rules and autopilot are judged by this server."
-        : "Off — LLM rules and autopilot do nothing."}
-      id="supervisor-enabled"
+      checked={watch?.on ?? false}
+      disabled={!watch || savingWatch}
+      hint={watch?.on
+        ? "Every session is watched. Nothing spends until a signal opens."
+        : "Off — no session is watched."}
+      id="fleet-watch"
       label="Enabled"
-      bind:checked={enabled}
+      onchange={setWatch}
     />
-    <div class="fields">
-      <Field id="supervisor-url" label="Server URL">
-        <Input
-          autocomplete="off"
-          class="font-mono"
-          id="supervisor-url"
-          placeholder="http://localhost:8080/v1"
-          spellcheck="false"
-          bind:value={baseUrl}
-        />
-      </Field>
-      <Field id="supervisor-model" label="Model">
-        <Input
-          autocomplete="off"
-          class="font-mono"
-          id="supervisor-model"
-          placeholder="qwen3"
-          spellcheck="false"
-          bind:value={model}
-        />
-      </Field>
-    </div>
-    <Field id="supervisor-key" label="API key">
-      <Input
-        autocomplete="off"
-        id="supervisor-key"
-        placeholder="Leave blank to keep the stored key"
-        type="password"
-        bind:value={apiKey}
-      />
-    </Field>
-    <div
-      class="morph"
-      style:block-size={reachHeight ? `${reachHeight}px` : undefined}
-    >
-      <div class="stack" bind:clientHeight={reachHeight}>
-        {#key reach.text}
-          <p
-            aria-live="polite"
-            class="status num"
-            data-tone={reach.tone}
-            in:blur={{
-              duration: dur("--dur-panel"),
-              easing: easeOut,
-              amount: 2,
-            }}
-            out:blur={{
-              duration: dur("--dur-exit"),
-              easing: easeOut,
-              amount: 2,
-            }}
-          >
-            <span aria-hidden="true" class="dot"></span>
-            {reach.text}
-          </p>
-        {/key}
-      </div>
-    </div>
-    {#if supervisorError}
-      <p class="problem" role="alert" transition:unfold>{supervisorError}</p>
+    {#if watch}
+      <ul class="facts num">
+        <li>
+          Same error {watch.limits.sameError} times in
+          {watch.limits.errorTurns}
+          turns
+        </li>
+        <li>Same tool call {watch.limits.sameCall} times in a row</li>
+        <li>No file changed in {watch.limits.quietTurns} turns</li>
+        <li>No output for {watch.limits.stallMinutes} min in a running turn</li>
+        <li>
+          {watch.jev
+            ? "Jev answers whether a session is stuck before triage starts."
+            : "Jev is off: a second signal starts triage."}
+        </li>
+      </ul>
     {/if}
-  </form>
+    {#if watchError}
+      <p class="problem" role="alert" transition:unfold>{watchError}</p>
+    {/if}
+  </div>
 </SectionFrame>
 
 <style>
@@ -661,14 +576,16 @@
       opacity: 0.2;
     }
   }
-  .fields {
-    display: grid;
-    gap: 8px 12px;
-  }
-  @media (min-width: 640px) {
-    .fields {
-      grid-template-columns: 1fr 1fr;
-    }
+  /* Fleet watch's limits: read-only facts, one per line, in the note's face. */
+  .facts {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    font: var(--type-meta);
+    color: var(--ink-muted);
   }
   .status {
     display: flex;
@@ -691,10 +608,6 @@
   }
   [data-tone="ok"] .dot {
     background: var(--status-live-glyph);
-    opacity: 1;
-  }
-  [data-tone="bad"] .dot {
-    background: var(--status-attn-glyph);
     opacity: 1;
   }
 </style>

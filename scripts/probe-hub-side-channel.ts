@@ -8,7 +8,6 @@
  *   ask        a permission_request frame        → onAsk → sendMessage
  *   settle     an error frame ending an open ask → onSettled → editMessageText
  *   error      an error frame                    → onError → sendMessage
- *   supervisor a turn's result, autopilot armed  → onSupervisor → sendMessage
  *   message    a user_message frame              → onUserMessage → sendMessage
  *
  * The hub's own getUpdates poll is reset the whole time as well. It passes
@@ -28,7 +27,7 @@ const MACHINE = "side-channel-probe";
 const CHAT_ID = 4242;
 const ROUNDS = 5;
 const SPAWNED_AT = 1_790_000_000_000;
-const PATHS = ["ask", "settle", "error", "supervisor", "message"] as const;
+const PATHS = ["ask", "settle", "error", "message"] as const;
 type Path = (typeof PATHS)[number];
 const CONTENT_LENGTH_RE = /content-length:\s*(\d+)/i;
 /** The Bot API method off a request line: `POST /bot<token>/<method> HTTP/1.1`. */
@@ -38,10 +37,10 @@ const instanceIds = PATHS.flatMap((path) =>
   Array.from({ length: ROUNDS }, (_, index) => `${path}-${index + 1}`)
 );
 
-const [role, rootArg, scratchArg, llmUrl] = process.argv.slice(2);
+const [role, rootArg, scratchArg] = process.argv.slice(2);
 
 /** Seeds the scratch database through the hub's own Db, in its own process: the Db reads its path at import. */
-const seed = async (root: string, scratch: string, supervisorUrl: string) => {
+const seed = async (root: string, scratch: string) => {
   const hubRequire = createRequire(join(root, "packages/hub/package.json"));
   const { Effect, Layer } = await import(hubRequire.resolve("effect"));
   const { Db, DbLayer } = await import(join(root, "packages/hub/src/db"));
@@ -71,18 +70,6 @@ const seed = async (root: string, scratch: string, supervisorUrl: string) => {
               kind: "mainline",
               model: "stand-in",
               permissionMode: "default",
-            });
-          }
-          db.putSupervisorConfig({
-            enabled: true,
-            baseUrl: supervisorUrl,
-            model: "probe-model",
-          });
-          for (let round = 1; round <= ROUNDS; round += 1) {
-            db.setInstanceAutopilot(`supervisor-${round}`, {
-              enabled: true,
-              prompt: "Escalate every turn to the operator.",
-              updatedAt: Date.now(),
             });
           }
           const sql = new Database(join(scratch, "hub.db"));
@@ -177,38 +164,6 @@ const run = async (root: string) => {
     },
   });
 
-  // ── The supervisor's model: every turn is escalated ─────────────────────
-  const llm = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch: (request) => {
-      if (new URL(request.url).pathname.endsWith("/chat/completions")) {
-        return Response.json({
-          id: "probe",
-          object: "chat.completion",
-          created: Math.floor(Date.now() / 1000),
-          model: "probe-model",
-          choices: [
-            {
-              index: 0,
-              finish_reason: "stop",
-              message: {
-                role: "assistant",
-                content: JSON.stringify({
-                  verdict: "escalate",
-                  message: "probe escalation",
-                  note: "probe",
-                }),
-              },
-            },
-          ],
-          usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
-        });
-      }
-      return Response.json({ data: [{ id: "probe-model" }] });
-    },
-  });
-
   const env = {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
     HOME: join(scratch, "home"),
@@ -219,14 +174,7 @@ const run = async (root: string) => {
   };
 
   const seeded = Bun.spawn(
-    [
-      process.execPath,
-      import.meta.path,
-      "seed",
-      root,
-      scratch,
-      `http://127.0.0.1:${llm.port}`,
-    ],
+    [process.execPath, import.meta.path, "seed", root, scratch],
     { cwd: root, env, stdout: "inherit", stderr: "inherit" }
   );
   if ((await seeded.exited) !== 0) {
@@ -411,23 +359,6 @@ const run = async (root: string) => {
           () => count("sendMessage", "probe failure") >= round
         );
       },
-      supervisor: async (round) => {
-        frame(`supervisor-${round}`, {
-          kind: "frame",
-          message: {
-            type: "result",
-            subtype: "success",
-            is_error: false,
-            uuid: crypto.randomUUID(),
-            session_id: `conversation-supervisor-${round}`,
-            result: "probe turn done",
-          },
-        });
-        await until(
-          `supervisor ${round} to reach Telegram`,
-          () => count("sendMessage", "probe escalation") >= round
-        );
-      },
       message: async (round) => {
         frame(`message-${round}`, {
           kind: "user_message",
@@ -473,7 +404,6 @@ const run = async (root: string) => {
   }
   await collected;
   telegram.stop(true);
-  await llm.stop(true);
 
   const leaked = log.split("\n").filter((line) => line.includes(TOKEN));
   /** Requests that were reset, by the path that made them. */
@@ -488,7 +418,6 @@ const run = async (root: string) => {
           ask: reset("sendMessage", "echo ask-"),
           settle: reset("editMessageText", "echo settle-"),
           error: reset("sendMessage", "probe failure"),
-          supervisor: reset("sendMessage", "probe escalation"),
           message: reset("sendMessage", "probe message"),
         }[path]
       }`
@@ -514,8 +443,8 @@ const run = async (root: string) => {
   );
 };
 
-if (role === "seed" && rootArg && scratchArg && llmUrl) {
-  await seed(rootArg, scratchArg, llmUrl);
+if (role === "seed" && rootArg && scratchArg) {
+  await seed(rootArg, scratchArg);
 } else {
   await run(resolve(role ?? join(import.meta.dir, "..")));
 }

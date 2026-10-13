@@ -397,7 +397,7 @@ const noticeRunOf = (m: Message): string | null =>
  * A workflow notice, read against the transcript it is in: folded into its
  * run's block, or — for a run this session supervises but did not start
  * with a call (a run launched from the dashboard) — the block's own place,
- * its first notice (the supervisor brief).
+ * its first notice (the run supervisor's brief).
  */
 export type Receipt = { fold: true } | { fold: false; anchor: string } | null;
 

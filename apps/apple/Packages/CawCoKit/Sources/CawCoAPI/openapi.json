@@ -14669,27 +14669,6 @@
                         "type": "string"
                       }
                     }
-                  },
-                  "trigger": {
-                    "type": "string",
-                    "enum": [
-                      "pattern",
-                      "every-turn"
-                    ]
-                  },
-                  "action": {
-                    "type": "string",
-                    "enum": [
-                      "reply",
-                      "llm"
-                    ]
-                  },
-                  "prompt": {
-                    "default": null,
-                    "type": [
-                      "string",
-                      "null"
-                    ]
                   }
                 },
                 "required": [
@@ -14828,27 +14807,6 @@
                         "type": "string"
                       }
                     }
-                  },
-                  "trigger": {
-                    "type": "string",
-                    "enum": [
-                      "pattern",
-                      "every-turn"
-                    ]
-                  },
-                  "action": {
-                    "type": "string",
-                    "enum": [
-                      "reply",
-                      "llm"
-                    ]
-                  },
-                  "prompt": {
-                    "default": null,
-                    "type": [
-                      "string",
-                      "null"
-                    ]
                   }
                 },
                 "required": [
@@ -15348,24 +15306,22 @@
         }
       }
     },
-    "/api/supervisor": {
+    "/api/fleet-watch": {
       "get": {
-        "operationId": "getApiSupervisor",
+        "operationId": "getApiFleetWatch",
         "responses": {
           "200": {
-            "description": "getApiSupervisor 200",
+            "description": "getApiFleetWatch 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiSupervisor200"
+                  "$ref": "#/components/schemas/FleetWatchSettings"
                 }
               }
             }
           }
         }
-      }
-    },
-    "/api/supervisor/config": {
+      },
       "put": {
         "requestBody": {
           "required": true,
@@ -15374,42 +15330,31 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "enabled": {
+                  "on": {
                     "type": "boolean"
-                  },
-                  "baseUrl": {
-                    "type": "string"
-                  },
-                  "model": {
-                    "type": "string"
-                  },
-                  "apiKey": {
-                    "type": "string"
                   }
                 },
                 "required": [
-                  "enabled",
-                  "baseUrl",
-                  "model"
+                  "on"
                 ]
               }
             }
           }
         },
-        "operationId": "putApiSupervisorConfig",
+        "operationId": "putApiFleetWatch",
         "responses": {
           "200": {
-            "description": "putApiSupervisorConfig 200",
+            "description": "putApiFleetWatch 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/putApiSupervisorConfig200"
+                  "$ref": "#/components/schemas/FleetWatchSettings"
                 }
               }
             }
           },
           "422": {
-            "description": "putApiSupervisorConfig 422",
+            "description": "putApiFleetWatch 422",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -15421,125 +15366,16 @@
         }
       }
     },
-    "/api/supervisor/events": {
+    "/api/fleet-watch/notices": {
       "get": {
-        "parameters": [
-          {
-            "name": "instanceId",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "minimum": 1,
-              "default": 100,
-              "type": "integer"
-            }
-          }
-        ],
-        "operationId": "getApiSupervisorEvents",
+        "operationId": "getApiFleetWatchNotices",
         "responses": {
           "200": {
-            "description": "getApiSupervisorEvents 200",
+            "description": "getApiFleetWatchNotices 200",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiSupervisorEvents200"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "getApiSupervisorEvents 422",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/autopilot/{instanceId}": {
-      "put": {
-        "parameters": [
-          {
-            "name": "instanceId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "enabled": {
-                    "type": "boolean"
-                  },
-                  "prompt": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "enabled",
-                  "prompt"
-                ]
-              }
-            }
-          }
-        },
-        "operationId": "putApiAutopilotByInstanceId",
-        "responses": {
-          "200": {
-            "description": "putApiAutopilotByInstanceId 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/putApiAutopilotByInstanceId200"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "putApiAutopilotByInstanceId 400",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "putApiAutopilotByInstanceId 404",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "putApiAutopilotByInstanceId 422",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                  "$ref": "#/components/schemas/getApiFleetWatchNotices200"
                 }
               }
             }
@@ -21078,25 +20914,6 @@
                   "string"
                 ]
               },
-              "autopilot": {
-                "type": "object",
-                "properties": {
-                  "enabled": {
-                    "type": "boolean"
-                  },
-                  "prompt": {
-                    "type": "string"
-                  },
-                  "updatedAt": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "enabled",
-                  "prompt",
-                  "updatedAt"
-                ]
-              },
               "spawnedAt": {
                 "type": "string",
                 "format": "date-time"
@@ -21332,25 +21149,6 @@
                   "type": [
                     "null",
                     "string"
-                  ]
-                },
-                "autopilot": {
-                  "type": "object",
-                  "properties": {
-                    "enabled": {
-                      "type": "boolean"
-                    },
-                    "prompt": {
-                      "type": "string"
-                    },
-                    "updatedAt": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "enabled",
-                    "prompt",
-                    "updatedAt"
                   ]
                 },
                 "spawnedAt": {
@@ -21761,10 +21559,6 @@
                 "stats": {
                   "$ref": "#/components/schemas/RuleStats"
                 },
-                "action": {
-                  "$ref": "#/components/schemas/RuleAction",
-                  "description": "What the rule does when it fires. Default `'reply'` — the only kind before this existed."
-                },
                 "caseSensitive": {
                   "type": "boolean"
                 },
@@ -21792,19 +21586,12 @@
                   "description": "The phrase to watch for, a regular expression, or a yes/no question, as `matchKind` says.",
                   "type": "string"
                 },
-                "prompt": {
-                  "description": "`action: 'llm'` only: the operator's standing instructions for the supervisor.",
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
                 "repeat": {
                   "description": "Fire again on every later match. Off makes the rule fire once per session\nand then go quiet.",
                   "type": "boolean"
                 },
                 "reply": {
-                  "description": "What the session is sent when the rule fires. Ignored (and not required) when `action` is `'llm'`.",
+                  "description": "What the session is sent when the rule fires.",
                   "type": "string"
                 },
                 "scope": {
@@ -21812,10 +21599,6 @@
                 },
                 "timing": {
                   "$ref": "#/components/schemas/RuleTiming"
-                },
-                "trigger": {
-                  "$ref": "#/components/schemas/RuleTrigger",
-                  "description": "What starts the evaluation. Default `'pattern'` — every rule before this existed."
                 },
                 "watch": {
                   "$ref": "#/components/schemas/RuleWatch"
@@ -21826,7 +21609,6 @@
                 }
               },
               "required": [
-                "action",
                 "caseSensitive",
                 "createdAt",
                 "enabled",
@@ -21835,13 +21617,11 @@
                 "matchKind",
                 "name",
                 "pattern",
-                "prompt",
                 "repeat",
                 "reply",
                 "scope",
                 "stats",
                 "timing",
-                "trigger",
                 "watch",
                 "wholeWord"
               ]
@@ -22137,133 +21917,18 @@
           "ok"
         ]
       },
-      "getApiSupervisor200": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "config": {
-                "type": "object",
-                "properties": {
-                  "enabled": {
-                    "type": "boolean"
-                  },
-                  "baseUrl": {
-                    "type": [
-                      "null",
-                      "string"
-                    ]
-                  },
-                  "model": {
-                    "type": [
-                      "null",
-                      "string"
-                    ]
-                  }
-                },
-                "required": [
-                  "baseUrl",
-                  "enabled",
-                  "model"
-                ]
-              },
-              "status": {
-                "type": "object",
-                "properties": {
-                  "configured": {
-                    "type": "boolean"
-                  }
-                },
-                "required": [
-                  "configured"
-                ]
-              }
-            },
-            "required": [
-              "config",
-              "status"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "config": {
-                "type": "object",
-                "properties": {
-                  "enabled": {
-                    "type": "boolean"
-                  },
-                  "baseUrl": {
-                    "type": [
-                      "null",
-                      "string"
-                    ]
-                  },
-                  "model": {
-                    "type": [
-                      "null",
-                      "string"
-                    ]
-                  }
-                },
-                "required": [
-                  "baseUrl",
-                  "enabled",
-                  "model"
-                ]
-              },
-              "status": {
-                "type": "object",
-                "properties": {
-                  "resolvedModel": {
-                    "type": "string"
-                  },
-                  "configured": {
-                    "type": "boolean"
-                  },
-                  "reachable": {
-                    "type": "boolean"
-                  }
-                },
-                "required": [
-                  "configured",
-                  "reachable"
-                ]
-              }
-            },
-            "required": [
-              "config",
-              "status"
-            ]
-          }
-        ]
-      },
-      "putApiSupervisorConfig200": {
+      "getApiFleetWatchNotices200": {
         "type": "object",
         "properties": {
-          "ok": {
-            "type": "boolean"
+          "notices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FleetWatchNotice"
+            }
           }
         },
         "required": [
-          "ok"
-        ]
-      },
-      "getApiSupervisorEvents200": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/SupervisorEvent"
-        }
-      },
-      "putApiAutopilotByInstanceId200": {
-        "type": "object",
-        "properties": {
-          "ok": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
+          "notices"
         ]
       },
       "getApiFleetMarketplaceName200": {
@@ -24795,10 +24460,7 @@
             "$ref": "#/components/schemas/DelegateEventFrame"
           },
           {
-            "$ref": "#/components/schemas/SupervisorEventFrame"
-          },
-          {
-            "$ref": "#/components/schemas/SupervisorStatusFrame"
+            "$ref": "#/components/schemas/FleetWatchNoticesFrame"
           },
           {
             "$ref": "#/components/schemas/MovesFrame"
@@ -24850,8 +24512,7 @@
             "actions": "#/components/schemas/ActionsFrame",
             "project.stop": "#/components/schemas/ProjectStopFrame",
             "delegate_event": "#/components/schemas/DelegateEventFrame",
-            "supervisor_event": "#/components/schemas/SupervisorEventFrame",
-            "supervisor_status": "#/components/schemas/SupervisorStatusFrame",
+            "fleet_watch.notices": "#/components/schemas/FleetWatchNoticesFrame",
             "moves": "#/components/schemas/MovesFrame",
             "move_progress": "#/components/schemas/MoveProgressFrame",
             "command_queue": "#/components/schemas/CommandQueueFrame",
@@ -24973,7 +24634,7 @@
             "type": "string"
           },
           "lead": {
-            "description": "This spawn is a project's Caw or its memory curator (a `lead` or\n`curator` row): the machine gives it CawCo's MCP server and no other.\nSet by the hub alone, on every launch of such a row, and never taken\nfrom a caller.",
+            "description": "This spawn is a project's Caw, its memory curator or a fleet-watch\ntriage run (a `lead`, `curator` or `overseer` row): the machine gives it\nCawCo's MCP server and no other. Set by the hub alone, on every launch\nof such a row, and never taken from a caller.",
             "const": true,
             "type": "boolean"
           },
@@ -35052,14 +34713,6 @@
           "totalFires"
         ]
       },
-      "RuleAction": {
-        "description": "What a firing rule does.\n\n- `reply` — send {@link Rule.reply}, verbatim, the way every rule has\n  always fired.\n- `llm` — hand the turn to the supervisor and send back whatever it\n  decides. Only fires at the `turn` timing (the supervisor judges a\n  finished turn, not a half-typed message) and never repeats a fixed\n  reply (it decides fresh every time).",
-        "type": "string",
-        "enum": [
-          "llm",
-          "reply"
-        ]
-      },
       "RuleMatchKind": {
         "description": "How {@link Rule.pattern} is read.\n\n- `phrase` / `regex` — text to find in what the session said.\n- `meaning` — a yes/no question the hub puts to TypeSafe's Jev (directly\n  with a TypeSafe key, or through OpenRouter) about what the session said; the rule fires when the answer\n  is yes. Decided by the hub asynchronously, so nothing here matches it.",
         "type": "string",
@@ -35097,14 +34750,6 @@
           "turn"
         ]
       },
-      "RuleTrigger": {
-        "description": "What starts a rule's evaluation.\n\n- `pattern` — the phrase/regex match this file has always done: a rule\n  fires when {@link Rule.pattern} shows up.\n- `every-turn` — there is nothing to match; every turn end is itself the\n  trigger. Only the supervisor can act on that (see {@link RuleAction}),\n  since nothing about the turn has been read yet to answer with a fixed\n  reply.",
-        "type": "string",
-        "enum": [
-          "every-turn",
-          "pattern"
-        ]
-      },
       "RuleWatch": {
         "description": "Which part of the session's output a rule reads.",
         "type": "string",
@@ -35130,23 +34775,12 @@
             "description": "Fire again on every later match. Off makes the rule fire once per session\nand then go quiet.",
             "type": "boolean"
           },
-          "action": {
-            "$ref": "#/components/schemas/RuleAction",
-            "description": "What the rule does when it fires. Default `'reply'` — the only kind before this existed."
-          },
           "interrupt": {
             "description": "`immediate` only: cut into the running turn rather than queueing.",
             "type": "boolean"
           },
           "watch": {
             "$ref": "#/components/schemas/RuleWatch"
-          },
-          "prompt": {
-            "description": "`action: 'llm'` only: the operator's standing instructions for the supervisor.",
-            "type": [
-              "null",
-              "string"
-            ]
           },
           "enabled": {
             "type": "boolean"
@@ -35162,7 +34796,7 @@
             "type": "boolean"
           },
           "reply": {
-            "description": "What the session is sent when the rule fires. Ignored (and not required) when `action` is `'llm'`.",
+            "description": "What the session is sent when the rule fires.",
             "type": "string"
           },
           "timing": {
@@ -35170,26 +34804,19 @@
           },
           "scope": {
             "$ref": "#/components/schemas/RuleScope"
-          },
-          "trigger": {
-            "$ref": "#/components/schemas/RuleTrigger",
-            "description": "What starts the evaluation. Default `'pattern'` — every rule before this existed."
           }
         },
         "required": [
-          "action",
           "caseSensitive",
           "enabled",
           "interrupt",
           "matchKind",
           "name",
           "pattern",
-          "prompt",
           "repeat",
           "reply",
           "scope",
           "timing",
-          "trigger",
           "watch",
           "wholeWord"
         ]
@@ -35198,10 +34825,6 @@
         "description": "One standing instruction.",
         "type": "object",
         "properties": {
-          "action": {
-            "$ref": "#/components/schemas/RuleAction",
-            "description": "What the rule does when it fires. Default `'reply'` — the only kind before this existed."
-          },
           "caseSensitive": {
             "type": "boolean"
           },
@@ -35229,19 +34852,12 @@
             "description": "The phrase to watch for, a regular expression, or a yes/no question, as `matchKind` says.",
             "type": "string"
           },
-          "prompt": {
-            "description": "`action: 'llm'` only: the operator's standing instructions for the supervisor.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
           "repeat": {
             "description": "Fire again on every later match. Off makes the rule fire once per session\nand then go quiet.",
             "type": "boolean"
           },
           "reply": {
-            "description": "What the session is sent when the rule fires. Ignored (and not required) when `action` is `'llm'`.",
+            "description": "What the session is sent when the rule fires.",
             "type": "string"
           },
           "scope": {
@@ -35249,10 +34865,6 @@
           },
           "timing": {
             "$ref": "#/components/schemas/RuleTiming"
-          },
-          "trigger": {
-            "$ref": "#/components/schemas/RuleTrigger",
-            "description": "What starts the evaluation. Default `'pattern'` — every rule before this existed."
           },
           "watch": {
             "$ref": "#/components/schemas/RuleWatch"
@@ -35263,7 +34875,6 @@
           }
         },
         "required": [
-          "action",
           "caseSensitive",
           "createdAt",
           "enabled",
@@ -35272,83 +34883,119 @@
           "matchKind",
           "name",
           "pattern",
-          "prompt",
           "repeat",
           "reply",
           "scope",
           "timing",
-          "trigger",
           "watch",
           "wholeWord"
         ]
       },
-      "SupervisorEvent": {
-        "description": "One line of the supervisor's intervention log — `supervisor_events`\n(packages/hub `db/schema.ts`), read over `GET /api/supervisor/events` and\npushed as a `supervisor_event` frame. Silent verdicts are recorded too: the\nlog is the only place any of this is visible, so \"it looked and did\nnothing\" has to show up the same as \"it spoke\".",
+      "FleetWatchSettings": {
+        "description": "Fleet watch's settings and facts, as Settings reads them.",
         "type": "object",
         "properties": {
-          "createdAt": {
+          "jev": {
+            "description": "Jev answers fleet watch's question: it has a route (a TypeSafe key, or OpenRouter).",
+            "type": "boolean"
+          },
+          "limits": {
+            "type": "object",
+            "properties": {
+              "sameError": {
+                "description": "The same tool error, normalised, this many times in the session's recent turns.",
+                "type": "number",
+                "enum": [
+                  3
+                ]
+              },
+              "errorTurns": {
+                "description": "The turns `sameError` counts over.",
+                "type": "number",
+                "enum": [
+                  10
+                ]
+              },
+              "sameCall": {
+                "description": "The same tool call (name and normalised input) this many times in a row.",
+                "type": "number",
+                "enum": [
+                  3
+                ]
+              },
+              "quietTurns": {
+                "description": "Finished turns in a row that changed no file.",
+                "type": "number",
+                "enum": [
+                  6
+                ]
+              },
+              "stallMinutes": {
+                "description": "Minutes a running turn streams nothing while its process lives.",
+                "type": "number",
+                "enum": [
+                  10
+                ]
+              }
+            },
+            "required": [
+              "errorTurns",
+              "quietTurns",
+              "sameCall",
+              "sameError",
+              "stallMinutes"
+            ]
+          },
+          "on": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "jev",
+          "limits",
+          "on"
+        ]
+      },
+      "FleetWatchNotice": {
+        "description": "A needs-you notice from fleet watch: a triage told you, or a session in a\nproject whose Caw is off showed two signals (no model is woken there).\nKept by the hub until you act on the session or it moves on.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "ms epoch the hub raised it.",
             "type": "number"
           },
+          "body": {
+            "description": "Why, in a sentence or two: the triage's words, or the signals.",
+            "type": "string"
+          },
           "id": {
-            "description": "The hub's row id — what a fold deduplicates on and orders by.",
-            "type": "number"
+            "type": "string"
           },
           "instanceId": {
             "type": "string"
           },
-          "latencyMs": {
-            "type": [
-              "null",
-              "number"
-            ]
+          "machineId": {
+            "type": "string"
           },
-          "message": {
-            "description": "Sent into the session (`reply`) or shown to the operator (`escalate`/`ask`); null for the rest.",
+          "projectId": {
             "type": [
               "null",
               "string"
             ]
           },
-          "model": {
-            "description": "Which model answered, when one did.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "note": {
-            "description": "The supervisor's own one-line rationale — logged, never sent to the session.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "ruleId": {
-            "description": "The rule that fired, for `source: 'rule'`; null for autopilot.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "source": {
-            "$ref": "#/components/schemas/SupervisorEventSource",
-            "description": "Which mechanism produced the verdict."
-          },
-          "verdict": {
-            "$ref": "#/components/schemas/SupervisorEventVerdict"
+          "title": {
+            "description": "The line: its signals, joined with \" · \".",
+            "type": "string"
           }
         },
         "required": [
-          "createdAt",
+          "at",
+          "body",
           "id",
           "instanceId",
-          "latencyMs",
-          "message",
-          "model",
-          "note",
-          "ruleId",
-          "source",
-          "verdict"
+          "machineId",
+          "projectId",
+          "title"
         ]
       },
       "MarketplacePluginInfo": {
@@ -39830,26 +39477,6 @@
               "string"
             ]
           },
-          "autopilot": {
-            "description": "The supervisor's standing autopilot for this session, set from the\ncomposer popover. `null` means never configured; disabling keeps the\nprompt rather than discarding it, so re-enabling does not mean retyping\nit. Absent on a hub that predates the column.",
-            "type": "object",
-            "properties": {
-              "enabled": {
-                "type": "boolean"
-              },
-              "prompt": {
-                "type": "string"
-              },
-              "updatedAt": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "enabled",
-              "prompt",
-              "updatedAt"
-            ]
-          },
           "canDelegate": {
             "description": "Whether the session may spawn delegates of its own — `false` on a leaf\ndelegate (spawned with `can_delegate: false`, the default). Null on a\nsession nobody delegated, which may.",
             "type": [
@@ -41097,80 +40724,26 @@
           "kind"
         ]
       },
-      "SupervisorEventFrame": {
+      "FleetWatchNoticesFrame": {
+        "description": "Hub-originated: every open fleet-watch notice, whole, on each change.",
         "type": "object",
         "properties": {
-          "event": {
-            "$ref": "#/components/schemas/SupervisorEvent"
-          },
-          "instanceId": {
-            "type": "string"
-          },
           "kind": {
-            "description": "Hub-originated: a supervisor verdict the moment it is logged.",
             "type": "string",
             "enum": [
-              "supervisor_event"
+              "fleet_watch.notices"
             ]
+          },
+          "notices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FleetWatchNotice"
+            }
           }
         },
         "required": [
-          "event",
-          "instanceId",
-          "kind"
-        ]
-      },
-      "SupervisorStatusFrame": {
-        "type": "object",
-        "properties": {
-          "instanceId": {
-            "type": "string"
-          },
-          "kind": {
-            "description": "Hub-originated, never stored: the supervisor began evaluating.",
-            "type": "string",
-            "enum": [
-              "supervisor_status"
-            ]
-          },
-          "status": {
-            "$ref": "#/components/schemas/SupervisorStatusSignal"
-          }
-        },
-        "required": [
-          "instanceId",
           "kind",
-          "status"
-        ]
-      },
-      "SupervisorStatusSignal": {
-        "description": "Fired the moment an evaluation actually begins — the transient half of the\nsupervisor's visible life. Every evaluation is guaranteed to terminate in a\npublished {@link SupervisorEvent}, so a consumer can treat that event as\nthis signal's close; nothing here is persisted.",
-        "type": "object",
-        "properties": {
-          "at": {
-            "type": "number"
-          },
-          "phase": {
-            "type": "string",
-            "enum": [
-              "evaluating"
-            ]
-          },
-          "ruleId": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "source": {
-            "$ref": "#/components/schemas/SupervisorEventSource"
-          }
-        },
-        "required": [
-          "at",
-          "phase",
-          "ruleId",
-          "source"
+          "notices"
         ]
       },
       "MovesFrame": {
@@ -42129,24 +41702,6 @@
         "enum": [
           "file",
           "template"
-        ]
-      },
-      "SupervisorEventSource": {
-        "type": "string",
-        "enum": [
-          "autopilot",
-          "rule"
-        ]
-      },
-      "SupervisorEventVerdict": {
-        "type": "string",
-        "enum": [
-          "ask",
-          "error",
-          "escalate",
-          "reply",
-          "silent",
-          "skipped"
         ]
       },
       "TaskHistoryState": {

@@ -60,7 +60,7 @@ export interface RuleEngineDeps {
    */
   agent: (machineId: string, instanceId: string) => RuleSender | undefined;
   db: DbShape;
-  /** Answers meaning rules; shared with the supervisor so a turn is asked about once. */
+  /** Answers meaning rules, once per turn frame. */
   meaning: MeaningJudge;
 }
 
@@ -158,10 +158,7 @@ export class RuleEngine {
 
   /** Called after any rule is written or deleted. Cheap; the table is small. */
   reload(): void {
-    // LLM rules are the supervisor engine's concern — this engine only fires replies.
-    this.#rules = this.#db
-      .listRules()
-      .filter((rule) => rule.enabled && rule.action === "reply");
+    this.#rules = this.#db.listRules().filter((rule) => rule.enabled);
     const textual = this.#rules.filter((rule) => rule.matchKind !== "meaning");
     const meaning = this.#rules.filter((rule) => rule.matchKind === "meaning");
     this.#byTiming = {

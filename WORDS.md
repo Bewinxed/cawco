@@ -184,6 +184,7 @@ it actually means.
 | A provider's sign-in or key, held once per machine for the harnesses there that speak that provider (Claude Code, pi, OpenCode) | **account** | Configure › Accounts; the New session account chip. | "connection" (a connection is a service key the hub holds) |
 | A signed-in outside service whose key the hub holds | **connection** | Settings › Connections; `x-brand`. | "integration", "account" (an account is what a connection signs in as) |
 | The optional public path that lets push-only services reach the hub | **relay** | "Relay off · Set up". | "tunnel", "webhook server" in copy |
+| The hub's watch over every session for a loop or a stall, read by code from what the session streams: a **signal** is one thing it noticed (the same error 3 times, the same call 3 times in a row, no file changed in 6 turns, no output for 10 min in a running turn); a yes from Jev, or a second signal, starts one **triage** that decides once; its message to the session's lead is a **nudge**. A session is never told about itself | **fleet watch** / **signal** / **triage** / **nudge** | Settings › Models CawCo uses › Fleet watch; a session's line "Fleet watch · Same Bash call 3 times in a row · nudged Caw". | "supervisor", "autopilot", "assistant", "monitor" |
 
 **Banned-synonym quick list** (for the gate and for writers): `run` ≡ entity, `session` ≡ execution,
 `agent` ≡ entity, `delegate` ≡ in-session child, `subagent` ≡ separate session, "We" as error subject,

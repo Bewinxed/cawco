@@ -222,7 +222,7 @@ public final class RootViewController: ObservedViewController {
     /// The shell's own commands (Shell.svelte `shortcut`, and Start session's
     /// ⇧⌘N), for the menu bar and a hardware keyboard; ⌘, opens Configure
     /// (HIG Settings: "use the standard Command-Comma (,) keyboard shortcut to open an app's settings").
-    public enum ShellCommand: Sendable { case jump, assistant, startSession, splitRight, splitDown, configure }
+    public enum ShellCommand: Sendable { case jump, startSession, splitRight, splitDown, configure }
 
     public func canRun(_ command: ShellCommand) -> Bool {
         shownKey == "board" && !waiting.waiting && !gate.isLocked && board.can(command)

@@ -33,7 +33,6 @@
   import ThemeSwitcher from "#lib/components/ui/ThemeSwitcher.svelte";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
-    IconAssistant,
     IconBox,
     IconPlus,
     IconSearch,
@@ -90,18 +89,13 @@
   import { workspace } from "./workspace/workspace.svelte";
 
   let {
-    onassistant,
     onsearch,
-    assistantOpen,
     narrow,
     sheet = false,
     scroller,
   }: {
-    /** Toggles the assistant, which Shell owns so ⌘J and this row share it. */
-    onassistant: () => void;
     /** Opens Jump, from the phone's Search field (Shell owns the palette). */
     onsearch?: () => void;
-    assistantOpen: boolean;
     /** The Shell's live narrow answer: a phone opens Configure on its list. */
     narrow: boolean;
     /**
@@ -832,9 +826,9 @@
   <!-- ────────────────────── header ──────────────────────── -->
 
   <Sidebar.Header>
-    <!-- The wordmark, and in the header's corner the two things started from
-         anywhere: a session (⇧⌘N) and the assistant (⌘J). Jump lives on the
-         tab row (Shell), beside the conversations it jumps between. -->
+    <!-- The wordmark, and in the header's corner what is started from
+         anywhere: a session (⇧⌘N). Jump lives on the tab row (Shell), beside
+         the conversations it jumps between. -->
     <div class="flex items-center gap-1">
       <Sidebar.Menu aria-label="Workspace" class="min-w-0 flex-1">
         <Sidebar.MenuItem>
@@ -860,24 +854,6 @@
           </Sidebar.MenuButton>
         </Sidebar.MenuItem>
       </Sidebar.Menu>
-      <Tip keys="⌘J" label="Assistant">
-        {#snippet children(
-          tip
-        )}
-          <button
-            {...tip}
-            aria-expanded={assistantOpen}
-            aria-label="Assistant"
-            class="head-action focus-inset touch-hit"
-            data-assistant-row
-            data-on={assistantOpen || undefined}
-            onclick={onassistant}
-            type="button"
-          >
-            <IconAssistant class="text-[var(--coral-11)]" />
-          </button>
-        {/snippet}
-      </Tip>
       <Tip keys="⇧⌘N" label="Start session">
         {#snippet children(
           tip
@@ -1328,10 +1304,6 @@
   .head-action :global(svg) {
     inline-size: 18px;
     block-size: 18px;
-  }
-  .head-action[data-on] {
-    background: var(--selected-bg);
-    color: var(--selected-ink);
   }
   @media (hover: hover) and (pointer: fine) {
     .head-action:hover {

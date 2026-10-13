@@ -93,11 +93,10 @@ const SOLAR_ICONS = [
   "moon-sleep-bold-duotone", // Sleeping
   "pause-circle-bold-duotone", // Idle, Stopped, Stored
   "refresh-circle-bold-duotone", // Working
-  // The shell: bar, sidebar, projects, machines, jump, assistant, panes.
+  // The shell: bar, sidebar, projects, machines, jump, panes.
   "alt-arrow-up-linear", // IconChevronUp
   "arrow-right-linear", // IconArrowRight
   "align-left-bold-duotone", // IconAlignLeft
-  "eye-scan-bold-duotone", // IconAssistant
   "folder-bold-duotone", // IconFolder
   "key-bold-duotone", // IconKey
   "laptop-minimalistic-bold-duotone", // IconLaptop

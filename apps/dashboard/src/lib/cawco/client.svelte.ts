@@ -29,6 +29,7 @@ import type {
   DelegateEvent,
   EffortLevel,
   Envelope,
+  FleetWatchNotice,
   FramePayload,
   FsPayload,
   HarnessKind,
@@ -68,7 +69,6 @@ import type {
   SpawnPayload,
   StopPayload,
   StreamHeartbeat,
-  SupervisorEvent,
   SupportedCommands,
   ThreadMessage,
   ThreadRead,
@@ -118,7 +118,6 @@ import {
 } from "#lib/config.js";
 import type { SubagentState } from "#lib/utils/flow-types.js";
 import { browser } from "$app/env";
-import { goto } from "$app/navigation";
 import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
 import {
@@ -129,7 +128,6 @@ import {
 } from "./hub-read";
 import { newId } from "./id";
 import {
-  conversationHref,
   indexInstances,
   instanceForSession,
   resolveSessionTitle,
@@ -902,21 +900,11 @@ const state = $state({
    */
   plans: {} as Record<string, HeldPlan>,
   /**
-   * The supervisor's intervention log, newest first, capped at 200 in memory
-   * (PLAN §C9). Seeded from REST and kept live by `supervisor_event` frames.
+   * Fleet watch's needs-you notices (core `FleetWatchNotice`), oldest first:
+   * read as the dashboard connects, then kept whole by the hub's
+   * `fleet_watch.notices` frames.
    */
-  supervisorEvents: [] as SupervisorEvent[],
-  /**
-   * The supervisor's live presence per session: `evaluating` from the hub's
-   * transient status frame until the terminal event settles it; `settled`
-   * carries the verdict briefly so the composer can pulse it. Never persisted,
-   * never seeded from REST — this is strictly what is happening right now.
-   */
-  supervisorActivity: {} as Record<
-    string,
-    | { phase: "evaluating"; source: "rule" | "autopilot"; since: number }
-    | { phase: "settled"; verdict: SupervisorEvent["verdict"]; at: number }
-  >,
+  watchNotices: [] as FleetWatchNotice[],
   /**
    * Each machine's latest Claude limit reading, by machineId — folded in from
    * the `kind: 'usage'` frame so the pill updates live rather than polling
@@ -2366,6 +2354,8 @@ async function refresh(): Promise<boolean> {
   readProjectOffers();
   // Approved actions waiting on you: frames keep them from here.
   readWaitingActions();
+  // Fleet watch's notices to you: frames keep them from here.
+  readWatchNotices();
   // Every project's threads, for the rail; frames keep them from here.
   readThreads();
   // What the socket says about asks from here on is newer than the read.
@@ -2614,79 +2604,6 @@ function recordDelegateEvent(event: DelegateEvent): void {
   foldDelegateEvent(state.delegateEvents[event.instanceId], event);
 }
 
-/** The hub's supervisor-event push. */
-function supervisorEventOf(frame: FramePayload): SupervisorEvent | null {
-  return frame.kind === "supervisor_event" ? frame.event : null;
-}
-
-/** The transient "supervisor is thinking" push. */
-function supervisorStatusOf(
-  frame: FramePayload
-): { instanceId: string; source: "rule" | "autopilot"; at: number } | null {
-  return frame.kind === "supervisor_status"
-    ? { instanceId: frame.instanceId, ...frame.status }
-    : null;
-}
-
-/** Cap sourced from PLAN §C9: 200 in memory. */
-const SUPERVISOR_EVENT_CAP = 200;
-
-/** Files a supervisor event into the ring, newest first, capped. */
-function recordSupervisorEvent(event: SupervisorEvent): boolean {
-  const ring = state.supervisorEvents;
-  // Deduplicate by id — the same row can arrive via REST seed and broadcast.
-  if (ring.some((e) => e.id === event.id)) {
-    return false;
-  }
-  // Insert newest-first: find the position to keep descending-id order.
-  const idx = ring.findIndex((e) => e.id < event.id);
-  if (idx === -1) {
-    ring.push(event);
-  } else {
-    ring.splice(idx, 0, event);
-  }
-  // Cap.
-  if (ring.length > SUPERVISOR_EVENT_CAP) {
-    ring.length = SUPERVISOR_EVENT_CAP;
-  }
-  return true;
-}
-
-/**
- * The verdicts that must not die quietly in the panel's log. An `error` means
- * the supervisor's brain is broken — a misconfigured URL or a dead router
- * failing every turn invisibly is exactly how the first field bug survived
- * three evaluations unnoticed. An escalation is the supervisor handing the
- * session back to the operator; if the operator is looking at the dashboard,
- * the hand-off happens here, not just on the phone.
- */
-function announceSupervisorEvent(event: SupervisorEvent): void {
-  const row = instanceIndex.byId.get(event.instanceId);
-  const where =
-    row?.title ??
-    (row?.cwd ? row.cwd.split("/").filter(Boolean).pop() : undefined) ??
-    "a session";
-  const open = {
-    label: "Open",
-    onClick: () => goto(conversationHref(event.instanceId, instanceIndex)),
-  };
-  if (event.verdict === "error") {
-    // One toast per (session, cause) — sonner replaces by id, so a broken
-    // brain failing every turn updates one toast instead of stacking forty.
-    toast.error(`Supervisor error — ${event.note ?? "unknown"}`, {
-      id: `sup-error-${event.instanceId}-${event.note ?? ""}`,
-      description: where,
-      action: open,
-    });
-  } else if (event.verdict === "escalate" || event.verdict === "ask") {
-    toast.warning(event.message ?? "The supervisor needs you.", {
-      id: `sup-esc-${event.id}`,
-      description: `${event.source === "autopilot" ? "Autopilot" : "Supervisor"} — ${where}`,
-      action: open,
-    });
-  }
-}
-
 /**
  * Keeps {@link SessionState.workingSince} in step with what the session is
  * doing. Anything that can change {@link activityOf} calls this: the clock
@@ -2899,6 +2816,11 @@ function handleFrame(frame: FramePayload): void {
     return;
   }
 
+  if (frame.kind === "fleet_watch.notices") {
+    state.watchNotices = frame.notices;
+    return;
+  }
+
   if (frame.kind === "project.stop") {
     for (const listener of projectStopListeners) {
       listener(frame);
@@ -2997,40 +2919,6 @@ function handleFrame(frame: FramePayload): void {
     return;
   }
 
-  const supervisorEvent = supervisorEventOf(frame);
-  if (supervisorEvent) {
-    // Announce only what is genuinely new — the REST seed replays history
-    // through the same recorder and must never replay its toasts.
-    if (recordSupervisorEvent(supervisorEvent)) {
-      announceSupervisorEvent(supervisorEvent);
-      // Settle the composer's thinking halo into a verdict pulse — except for
-      // the in-flight/queue skips, which describe a SECOND turn while the
-      // first evaluation is still genuinely running.
-      const stillRunning =
-        supervisorEvent.verdict === "skipped" &&
-        (supervisorEvent.note === "in-flight" ||
-          supervisorEvent.note === "semaphore queue full");
-      if (!stillRunning) {
-        state.supervisorActivity[supervisorEvent.instanceId] = {
-          phase: "settled",
-          verdict: supervisorEvent.verdict,
-          at: Date.now(),
-        };
-      }
-    }
-    return;
-  }
-
-  const supervisorStatus = supervisorStatusOf(frame);
-  if (supervisorStatus) {
-    state.supervisorActivity[supervisorStatus.instanceId] = {
-      phase: "evaluating",
-      source: supervisorStatus.source,
-      since: supervisorStatus.at,
-    };
-    return;
-  }
-
   // Every project move, whole, on each change (and `heardMove` between). A
   // move's progress travels machine → hub only, never as its own frame.
   if (frame.kind === "moves") {
@@ -3084,8 +2972,8 @@ function handleFrame(frame: FramePayload): void {
     }
 
     default:
-      // Every other FramePayload kind (instances, usage, delegate/supervisor
-      // events, …) is handled above, before this switch is reached.
+      // Every other FramePayload kind (instances, usage, delegate events,
+      // fleet watch's notices, …) is handled above, before this switch is reached.
       break;
   }
 
@@ -5539,6 +5427,16 @@ async function readProjectOffers(): Promise<void> {
   }
 }
 
+/** Fleet watch's needs-you notices, as the hub holds them now. */
+async function readWatchNotices(): Promise<void> {
+  const read = await load<{ notices: FleetWatchNotice[] }>(
+    "/api/fleet-watch/notices"
+  );
+  if (read) {
+    state.watchNotices = read.notices;
+  }
+}
+
 /** The approved actions waiting on you, as the hub holds them now. */
 async function readWaitingActions(): Promise<void> {
   const read = await load<{ actions: ApprovedActionView[] }>(
@@ -7572,34 +7470,9 @@ export const cawco = {
     Object.values(state.workItems).find(
       (item) => item.instanceId === instanceId
     ),
-  /** The supervisor's intervention log, newest first, capped in memory. */
-  get supervisorEvents(): SupervisorEvent[] {
-    return state.supervisorEvents;
-  },
-  /** Supervisor events for one session, newest first. */
-  supervisorEventsOf: (instanceId: string): SupervisorEvent[] =>
-    state.supervisorEvents.filter((e) => e.instanceId === instanceId),
-  /**
-   * The supervisor's live presence for one session, time-bounded at read:
-   * an evaluation older than the engine's own budget means the terminal
-   * frame was lost — show nothing rather than a stuck halo; a settled
-   * verdict is only worth pulsing for a moment.
-   */
-  supervisorActivityOf: (instanceId: string) => {
-    const activity = state.supervisorActivity[instanceId];
-    if (!activity) {
-      return;
-    }
-    if (
-      activity.phase === "evaluating" &&
-      Date.now() - activity.since > 300_000
-    ) {
-      return;
-    }
-    if (activity.phase === "settled" && Date.now() - activity.at > 2600) {
-      return;
-    }
-    return activity;
+  /** Fleet watch's needs-you notices, oldest first. */
+  get watchNotices(): FleetWatchNotice[] {
+    return state.watchNotices;
   },
   /** The ask a permission requestId belongs to, whichever delegate raised it. */
   delegateAskOf: (requestId: string): DelegateAskEvent | null => {

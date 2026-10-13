@@ -15,6 +15,7 @@ import {
 import { createActions } from "./actions";
 import { createCaw } from "./caw";
 import { createDelegationMcp } from "./delegation-mcp";
+import { createFleetWatch } from "./fleet-watch";
 import { createIngress } from "./ingress";
 import { makeLifetime } from "./lifetime";
 import { createMemory, createTurnWatch } from "./memory";
@@ -45,13 +46,16 @@ import type { Tasks } from "./tasks";
  * 14,035 measured). 2026-10-13: +memory_note, memory_propose and task
  * context for PRD D8 memory tiers (measured lead 14,392, worker 22,680);
  * raised deliberately, not to absorb drift. The memory curator (§5.4), a
- * role of its own, lists five tools (1,019 measured).
+ * role of its own, lists five tools (1,019 measured). P5's fleet watch makes
+ * the overseer a triage run: its one decision, `triage_decide`, with the
+ * fleet and its task to read, and nothing that messages a session (668
+ * measured).
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 22_700,
   delegate: 5600,
   lead: 14_400,
-  overseer: 2800,
+  overseer: 770,
   "web-facing": 3400,
   curator: 1200,
 };
@@ -198,6 +202,24 @@ export const measureRoles = (): RoleSize[] => {
         park: () => undefined,
         settle: () => undefined,
         watch: createTurnWatch(),
+      }).tools(actor),
+    triageTools: (actor) =>
+      createFleetWatch({
+        asking: () => false,
+        // Read once as it is made; nothing else is read while measuring.
+        db: { fleetWatchOn: () => false } as never,
+        end: () => undefined,
+        interrupt: () => undefined,
+        lifetime,
+        line: () => undefined,
+        name: () => "",
+        notices: () => undefined,
+        online: () => false,
+        push: () => undefined,
+        send: () => undefined,
+        spawn: () => Promise.reject(new Error("measuring")),
+        stop: () => undefined,
+        wakeCaw: () => Promise.reject(new Error("measuring")),
       }).tools(actor),
   });
   try {

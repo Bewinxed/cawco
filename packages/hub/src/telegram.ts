@@ -18,11 +18,7 @@ import { detach, failureOf } from "@cawco/core/detach";
 import type { DbShape } from "./db";
 import { sessionLabel } from "./labels";
 import type { HubLifetimeShape } from "./lifetime";
-import {
-  askCollapseId,
-  type Notifications,
-  supervisorCollapseId,
-} from "./notifications";
+import { askCollapseId, type Notifications } from "./notifications";
 import type { PendingShape } from "./pending";
 import { answerPermission } from "./pending";
 import type { RegistryShape } from "./registry";
@@ -49,8 +45,6 @@ export interface TelegramBridge {
   /** A session is blocked on the reader; put it in their pocket, unless they had it in front since it parked (the gate drops it). */
   readonly onAsk: (envelope: Envelope) => void;
   readonly onError: (instanceId: string, message: string) => void;
-  /** The supervisor wants the operator's attention — escalation or question; gated like an ask. */
-  readonly onSupervisor: (instanceId: string, text: string) => void;
   /** A session's own words to the owner — no ask, no buttons, no answer. */
   readonly onUserMessage: (envelope: Envelope) => void;
   /**
@@ -69,7 +63,7 @@ export interface TelegramBridge {
    * The server's one send path, registered after construction like
    * {@link setMediaReader}: a reply typed here is a message sent to the
    * session like any other — recorded, streamed, and the reader's hand on the
-   * session to the supervisor — and only the server does those. True when the
+   * session — and only the server does those. True when the
    * machine took it.
    */
   readonly setSender: (
@@ -804,43 +798,6 @@ export const createTelegramBridge = ({
     );
   };
 
-  const onSupervisor = (instanceId: string, message: string): void => {
-    if (chatId === undefined) {
-      return;
-    }
-    const [row] = db.listedInstancesByIds([instanceId]);
-    if (!row) {
-      return;
-    }
-    const lines = [
-      `${header(instanceId, "🤖")}`,
-      `<code>${esc(clip(message, 900))}</code>`,
-      `→ ${esc(dashboardUrl(registry))}/session/${instanceId}`,
-    ];
-    const text = fit(lines);
-    const collapseId = supervisorCollapseId(instanceId);
-    gate().offer({
-      outlet: "telegram",
-      collapseId,
-      instanceId,
-      landedAt: Date.now(),
-      send: () =>
-        detach(
-          send(text).then((sent) => {
-            if (sent) {
-              track(sent.message_id, {
-                instanceId,
-                machineId: row.machineId,
-                text,
-              });
-              noteShown(collapseId, sent.message_id);
-            }
-          }),
-          "telegram supervisor"
-        ),
-    });
-  };
-
   const onUserMessage = (envelope: Envelope): void => {
     if (chatId === undefined) {
       return;
@@ -1095,7 +1052,6 @@ export const createTelegramBridge = ({
   return {
     onAsk,
     onError,
-    onSupervisor,
     onUserMessage,
     deliver,
     start,

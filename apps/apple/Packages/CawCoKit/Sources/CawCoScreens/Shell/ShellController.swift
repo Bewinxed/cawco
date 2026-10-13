@@ -16,7 +16,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     private(set) var destination: ShellDestination = .fleet
     private var spoke: ShellDestination = .fleet
-    private(set) var assistantOpen = false
 
     /// This window's open conversations and their groups.
     let workspace = Workspace()
@@ -431,15 +430,13 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// window's, `cTopBarH` tall; the page's column starts under it, the
     /// titlebar's inset it inherits (32pt) made up to the bar's height. The
     /// split view lays its columns over its view's other subviews on a pass:
-    /// the bar comes back over them, and the assistant's pane over the bar,
-    /// which it overlaps by design (AssistantPane `install`).
+    /// the bar comes back over them.
     private func placeMacBar() {
         let rail = !isCollapsed && displayMode == .oneBesideSecondary ? primaryColumnWidth : 0
         let start = traitCollection.layoutDirection == .rightToLeft ? 0 : rail
         let frame = CGRect(x: start, y: 0, width: max(0, view.bounds.width - rail), height: Size.cTopBarH)
         if macBar.frame != frame { macBar.frame = frame }
         view.bringSubviewToFront(macBar)
-        if let assistantPane { view.bringSubviewToFront(assistantPane) }
         let inherited = mainNav.view.safeAreaInsets.top - mainNav.additionalSafeAreaInsets.top
         let top = Size.cTopBarH - inherited
         if abs(mainNav.additionalSafeAreaInsets.top - top) > 0.25 { mainNav.additionalSafeAreaInsets.top = top }
@@ -1446,74 +1443,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     }
     #endif
 
-    func toggleAssistant() {
-        railSheet?.dismiss(animated: true)
-        if assistantOpen { closeAssistant() } else { openAssistant() }
-    }
-
-    private var assistantPane: AssistantPane?
-    private weak var assistantSheet: UIViewController?
-    /// AssistantPanel.svelte's `(max-width: 899px)`: a drawer there, a pane wider.
-    private var assistantDrawer: Bool { view.bounds.width < 900 }
-
-    /// Where the assistant comes from: the rail's row on a desk; on a phone the
-    /// sidebar toggle, since the sheet it opened from has gone.
-    private var assistantOrigin: CGPoint? {
-        let phoneToggle: UIView = compactNav.topViewController === workspaceController ? sessionBurger : burger
-        let source: UIView = assistantDrawer ? (compact ? phoneToggle : railToggle) : rail.assistantSource
-        guard source.window != nil else { return nil }
-        return source.convert(CGPoint(x: source.bounds.midX, y: source.bounds.midY), to: view)
-    }
-
-    private func openAssistant() {
-        assistantOpen = true
-        let panel = AssistantPanelView(hub: hub, focused: { [weak self] in self?.workspace.activeSessionId }, closable: !assistantDrawer)
-        panel.onClose = { [weak self] in self?.closeAssistant() }
-        panel.onOpenSession = { [weak self] id in
-            self?.closeAssistant()
-            self?.openSession(id)
-        }
-        if assistantDrawer {
-            let holder = AssistantHolder(panel: panel) { [weak self] in
-                // Swiped or tapped away.
-                guard let self, assistantOpen, assistantSheet == nil || assistantSheet?.isBeingDismissed == true else { return }
-                assistantOpen = false
-                refreshBars()
-                rail.requestRefresh()
-            }
-            // `max-height: 85dvh` on the assistant's drawer.
-            let sheet = HouseSheetController(holder, style: .card, scroller: panel.scroller, cap: 0.85)
-            assistantSheet = sheet
-            dialogPresenter.present(sheet, animated: true)
-        } else {
-            let pane = AssistantPane(panel: panel)
-            pane.install(in: view, under: mainBar)
-            pane.appear(from: assistantOrigin)
-            assistantPane = pane
-        }
-        refreshBars()
-        rail.requestRefresh()
-    }
-
-    private func closeAssistant() {
-        assistantOpen = false
-        if let pane = assistantPane {
-            assistantPane = nil
-            pane.disappear(into: assistantOrigin) { pane.removeFromSuperview() }
-        }
-        if let sheet = assistantSheet {
-            assistantSheet = nil
-            sheet.dismiss(animated: true)
-        }
-        refreshBars()
-        rail.requestRefresh()
-    }
-
-    @objc private func escapeKey() {
-        guard assistantPane != nil else { return }
-        closeAssistant()
-    }
-
     /// The New Session form, with what the caller knows filled in (Sidebar.svelte `newSession`).
     func startSession(machineId: String?, cwd: String?, projectId: String?) {
         // The phone's rail sheet steps aside first: the form opens over the page, not over the sheet.
@@ -1691,7 +1620,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// conversations showing (`onSession`), one in front and another to leave behind.
     func can(_ command: RootViewController.ShellCommand) -> Bool {
         switch command {
-        case .jump, .assistant, .startSession, .configure:
+        case .jump, .startSession, .configure:
             return true
         case .splitRight, .splitDown:
             let showing = compact ? compactNav.topViewController === workspaceController : detail.shown === workspaceController
@@ -1709,7 +1638,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         guard !UIResponder.isTyping, can(command) else { return }
         switch command {
         case .jump: openJump(.key)
-        case .assistant: toggleAssistant()
         case .startSession: startSession(machineId: nil, cwd: nil, projectId: nil)
         case .configure: go(.configure)
         // The conversation in front goes into the new half (`mod+\` right,
@@ -1718,14 +1646,6 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             guard let here = workspace.activeSessionId else { return }
             workspace.split(workspace.focusedLeaf, command == .splitRight ? .right : .bottom, here)
         }
-    }
-
-    /// Escape closes the desk's pane wherever focus is.
-    override var keyCommands: [UIKeyCommand]? {
-        guard assistantPane != nil else { return nil }
-        let escape = UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [], action: #selector(escapeKey))
-        escape.wantsPriorityOverSystemBehavior = true
-        return [escape]
     }
 
     /// MachinesButton's card, on the glass the button stands in; the button opens and closes it.

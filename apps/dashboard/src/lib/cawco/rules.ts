@@ -114,15 +114,12 @@ export const removeRule = async (id: string, name: string): Promise<void> => {
 export const blankRule = (): RuleDraft => ({
   name: "",
   enabled: true,
-  trigger: "pattern",
   pattern: "",
   matchKind: "phrase",
   caseSensitive: false,
   wholeWord: false,
   watch: "text",
-  action: "reply",
   reply: "",
-  prompt: null,
   // Waking an idle session is what makes a rule change what the session does;
   // the other two timings are for the cases where that is too late.
   timing: "turn",
@@ -135,61 +132,17 @@ export const blankRule = (): RuleDraft => ({
 export const draftOf = (rule: Rule): RuleDraft => ({
   name: rule.name,
   enabled: rule.enabled,
-  trigger: rule.trigger,
   pattern: rule.pattern,
   matchKind: rule.matchKind,
   caseSensitive: rule.caseSensitive,
   wholeWord: rule.wholeWord,
   watch: rule.watch,
-  action: rule.action,
   reply: rule.reply,
-  prompt: rule.prompt,
   timing: rule.timing,
   interrupt: rule.interrupt,
   repeat: rule.repeat,
   scope: { ...rule.scope },
 });
-
-/**
- * Pre-written every-turn LLM rules — the adversarial "whip" presets the
- * operator clicks into place. Client-side templates (no migration, operator
- * opts in); the prompts are sent verbatim to a local qwen model.
- */
-export const WHIP_PRESETS: {
-  name: string;
-  trigger: "every-turn";
-  action: "llm";
-  prompt: string;
-}[] = [
-  {
-    name: "Done-claim without evidence",
-    trigger: "every-turn",
-    action: "llm",
-    prompt:
-      "If the agent claims work is done, finished, complete, or passing without pasting the actual test output or build output that proves it, reject the claim. Tell it to run the tests and paste the full output before reporting done.",
-  },
-  {
-    name: "Permission-seeking stall",
-    trigger: "every-turn",
-    action: "llm",
-    prompt:
-      'If the agent asks "would you like me to…", "shall I proceed", "should I continue", or any variation that hands the decision back instead of doing the work, tell it to stop asking and proceed. Finish the whole list, do not stop after each item.',
-  },
-  {
-    name: "Placeholder left behind",
-    trigger: "every-turn",
-    action: "llm",
-    prompt:
-      'If the agent left a placeholder, stub, TODO, "rest as an exercise", or any incomplete implementation where real code was asked for, reject it. Demand the complete working version — no ellipsis, no "implement similarly", no deferred work.',
-  },
-  {
-    name: "Files touched outside the brief",
-    trigger: "every-turn",
-    action: "llm",
-    prompt:
-      "If the agent touched, edited, or created files outside the set of owned files stated in its brief, tell it to revert those changes immediately and stay in its owned files. Scope drift is not initiative — it is desertion.",
-  },
-];
 
 /** Whatever the caller threw, as a sentence. Every panel in this app has one. */
 export const message = (error: unknown): string =>

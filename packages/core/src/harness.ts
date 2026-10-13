@@ -212,6 +212,15 @@ export const LIMIT_REACHED = "limit_reached";
  */
 export const SESSION_STOPPED = "session_stopped";
 
+/**
+ * The hub's line in a session's transcript for what fleet watch did about it
+ * (core fleet-watch.ts): a triage's decision, or a notice it raised for you,
+ * in the watched session and in its lead's. `content`'s first line is the
+ * line ("Same Bash call 3 times in a row · nudged Caw"); the rest, the
+ * triage's reason, under it. Drawn as a note; never sent to the session.
+ */
+export const FLEET_WATCH = "fleet_watch";
+
 /** Which limit a keeper's child reached: its task limit, or its memory limit (an OOM kill inside it). */
 export type ChildLimit = "tasks" | "memory";
 

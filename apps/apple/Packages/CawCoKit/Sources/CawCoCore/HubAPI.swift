@@ -14,7 +14,6 @@ public struct HubAPI: Sendable {
     public var fleet: Configuration { Configuration(client: client) }
     public var rules: Rules { Rules(client: client) }
     public var models: Models { Models(client: client) }
-    public var supervisor: Supervisor { Supervisor(client: client) }
     public var search: Search { Search(client: client) }
     public var delegates: Delegates { Delegates(client: client) }
     public var tools: Tools { Tools(client: client) }
@@ -174,13 +173,6 @@ public struct HubAPI: Sendable {
         public func setSuggest(_ input: Operations.PutApiJevSuggest.Input) async throws -> Operations.PutApiJevSuggest.Output { try await client.putApiJevSuggest(input) }
         public func connect(_ input: Operations.PostApiOpenrouterConnect.Input) async throws -> Operations.PostApiOpenrouterConnect.Output { try await client.postApiOpenrouterConnect(input) }
         public func exchange(_ input: Operations.PostApiOpenrouterExchange.Input) async throws -> Operations.PostApiOpenrouterExchange.Output { try await client.postApiOpenrouterExchange(input) }
-    }
-    public struct Supervisor: Sendable {
-        let client: Client
-        public func status(_ input: Operations.GetApiSupervisor.Input = .init()) async throws -> Operations.GetApiSupervisor.Output { try await client.getApiSupervisor(input) }
-        public func configure(_ input: Operations.PutApiSupervisorConfig.Input) async throws -> Operations.PutApiSupervisorConfig.Output { try await client.putApiSupervisorConfig(input) }
-        public func events(_ input: Operations.GetApiSupervisorEvents.Input = .init()) async throws -> Operations.GetApiSupervisorEvents.Output { try await client.getApiSupervisorEvents(input) }
-        public func autopilot(_ input: Operations.PutApiAutopilotByInstanceId.Input) async throws -> Operations.PutApiAutopilotByInstanceId.Output { try await client.putApiAutopilotByInstanceId(input) }
     }
     public struct Search: Sendable {
         let client: Client

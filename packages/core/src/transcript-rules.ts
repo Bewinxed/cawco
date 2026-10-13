@@ -24,6 +24,7 @@ import {
   ACCOUNT_MOVE,
   CONTINUATION_ORIGIN,
   CUSTODY_HELD,
+  FLEET_WATCH,
   FRESH_START,
   FRESH_START_LINE,
   firstSentence,
@@ -35,6 +36,7 @@ import {
 } from "./harness";
 import {
   parseDelegateAsk,
+  parseFleetWatchNudge,
   parseHandoffMarker,
   parseReportMarker,
   parseUndelivered,
@@ -986,6 +988,19 @@ export function mapFrame(
           );
           break;
         }
+        // The hub's line for what fleet watch did about a session: titled by
+        // its signals and what was done, the triage's reason under it.
+        case FLEET_WATCH: {
+          const [line = "", ...reason] = (sdk.content ?? "").split("\n");
+          mapping.blocks.push(
+            systemLine(base, "ui.system_note", reason.join("\n").trim(), {
+              subtype: FLEET_WATCH,
+              noteKind: "Fleet watch",
+              noteTitle: line,
+            })
+          );
+          break;
+        }
         // The hub's line that opens a session started where its project was
         // moved to for it: what moved, titled, and what stayed under it.
         case MOVED_HERE: {
@@ -1543,6 +1558,21 @@ function injectedBlock(text: string, base: BlockBase): TranscriptBlock | null {
       metadata: {
         noteKind: "Not delivered",
         noteTitle: `Your message to ${undelivered.to} wasn't delivered.`,
+      },
+    };
+  }
+  // Fleet watch's nudge to this session, its lead: the same note the
+  // watched session's transcript draws.
+  const nudge = parseFleetWatchNudge(text);
+  if (nudge) {
+    return {
+      ...base,
+      type: "ui.system_note",
+      content: nudge.body,
+      metadata: {
+        subtype: FLEET_WATCH,
+        noteKind: "Fleet watch",
+        noteTitle: nudge.line,
       },
     };
   }

@@ -444,7 +444,6 @@
         draft={lent.draft}
         held={swipe.moving}
         {landing}
-        leading={lent.leading}
         mentions={lent.mentions}
         onfoot={lent.onfoot}
         oninterruptsend={lent.oninterruptsend}

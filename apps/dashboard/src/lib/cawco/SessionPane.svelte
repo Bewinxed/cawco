@@ -20,7 +20,6 @@
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconAlert, IconChat, IconLaptop } from "#lib/icons.js";
   import { browser } from "$app/env";
-  import AutopilotToggle from "./AutopilotToggle.svelte";
   import {
     cawco,
     clearReadFault,
@@ -621,8 +620,6 @@
     HARNESS_LABEL[session?.harness ?? ""] ?? session?.harness ?? "Agent"
   );
 
-  const instanceRow = $derived(cawco.instanceIndex.byId.get(viewId));
-
   /**
    * What `@` can name: the other conversations, as lists show them (a
    * project's lead is never one: his threads are, by title under his face),
@@ -962,7 +959,6 @@
     get ask() {
       return firstAsk;
     },
-    leading: autopilot,
     onfoot: (next) => {
       parkedRoom = next.parked;
     },
@@ -996,10 +992,6 @@
       total={planProgressNow.total}
     />
   {/if}
-{/snippet}
-
-{#snippet autopilot()}
-  <AutopilotToggle instance={instanceRow} instanceId={viewId} />
 {/snippet}
 
 <!-- The quiet one: an offer, standing on the composer's tray row. A parked
@@ -1137,7 +1129,6 @@
             {commands}
             delegatesOf={viewId}
             {draft}
-            leading={autopilot}
             {mentions}
             {oninterruptsend}
             onmenu={refreshMenu}

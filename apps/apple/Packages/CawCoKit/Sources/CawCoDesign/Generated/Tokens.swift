@@ -451,7 +451,7 @@ public enum Radius {
     public static let radiusLg: Double = 12
     /// The stat tile's recessed well.
     public static let radiusWell: Double = 7
-    /// The assistant panel's shell.
+    /// A panel's shell: the paywall's hero, a decision page's panels.
     public static let radiusPanel: Double = 16
     /// Dialog tray: 6px pad + 12px body, concentric.
     public static let radiusModal: Double = 18

@@ -23,6 +23,8 @@ import type {
   FleetMcpConfig,
   FleetSkillMeta,
   FleetSyncReport,
+  FleetWatchNotice,
+  FleetWatchSettings,
   FramePayload,
   FsMedia,
   FsPayload,
@@ -70,8 +72,6 @@ import type {
   SessionTooling,
   SkillFile,
   SpawnPayload,
-  SupervisorEvent,
-  SupervisorStatusSignal,
   ThreadSummary,
   ToolState,
   ToolStatus,
@@ -169,6 +169,8 @@ import {
   estimateTokens,
   FLEET_STATUS,
   FLEET_SYNC,
+  FLEET_WATCH,
+  FLEET_WATCH_LIMITS,
   FRAMES_LOST,
   FRESH_START,
   GENERATE_IMAGE,
@@ -366,6 +368,7 @@ import {
   setFleetChoices,
 } from "./fleet-choices";
 import { FleetMcp } from "./fleet-mcp";
+import { createFleetWatch, type FleetWatch } from "./fleet-watch";
 import { accountForecasts, carrySequence } from "./forecast";
 import { gitRemoteRoutes } from "./git-remote";
 import type { HarnessPlanDeps } from "./harness-plans";
@@ -388,7 +391,6 @@ import {
 } from "./keep-alive";
 import { type LabelledRow, leafOf, sessionLabel } from "./labels";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
-import { probe } from "./llm";
 import { basicCaller, createMachineCredentials } from "./machine-credentials";
 import { MeaningJudge } from "./meaning";
 import {
@@ -406,7 +408,6 @@ import {
   askCollapseId,
   createNotifications,
   notificationRoutes,
-  supervisorCollapseId,
   turnCollapseId,
 } from "./notifications";
 import type { PendingShape } from "./pending";
@@ -487,7 +488,6 @@ import {
 } from "./stages";
 import { createStreamHub } from "./stream";
 import { suggest } from "./suggest";
-import { SupervisorEngine } from "./supervisor";
 import { TaskDoc } from "./task-file";
 import {
   BUDGET,
@@ -1162,15 +1162,6 @@ const ruleBody = t.Object({
     harness: t.Optional(t.String()),
     model: t.Optional(t.String()),
   }),
-  trigger: t.Optional(
-    t.Union([t.Literal("pattern"), t.Literal("every-turn")], {
-      default: "pattern",
-    })
-  ),
-  action: t.Optional(
-    t.Union([t.Literal("reply"), t.Literal("llm")], { default: "reply" })
-  ),
-  prompt: t.Optional(t.Union([t.String(), t.Null()], { default: null })),
 });
 
 export interface HubServices {
@@ -1663,6 +1654,22 @@ const limitReachedLine = (
   session_id: row.sessionId ?? "",
   content: note.content,
   timestamp: new Date(note.at).toISOString(),
+});
+
+/**
+ * What fleet watch did about a session (core `FLEET_WATCH`), as its row keeps
+ * it: the same on the live stream and a later transcript read.
+ */
+const watchLine = (
+  row: { sessionId: string | null },
+  line: { at: number; id: string; content: string }
+): NeutralSystemMessage => ({
+  type: "system",
+  subtype: FLEET_WATCH,
+  uuid: line.id,
+  session_id: row.sessionId ?? "",
+  content: line.content,
+  timestamp: new Date(line.at).toISOString(),
 });
 
 /** Why a held session was not taken back, said on its row and in its transcript. */
@@ -3546,8 +3553,8 @@ export const createServer = (
   /**
    * A session's standing instructions reach it through the one send path,
    * while its machine is connected and the session takes cawco's own word:
-   * never finished work. A rule or supervisor verdict with no route is not
-   * sent and not counted.
+   * never finished work. A rule's reply with no route is not sent and not
+   * counted.
    */
   const sendRoute = (machineId: string, instanceId: string) =>
     registry.agent(machineId) && !inputRefusal(instanceId, { kind: "system" })
@@ -3558,65 +3565,11 @@ export const createServer = (
     meaning: meaningJudge,
     agent: sendRoute,
   });
-
   /**
-   * The supervisor's intervention log, to every dashboard, the moment it is
-   * written — same envelope shape as {@link publishDelegateEvent}.
+   * Fleet watch (fleet-watch.ts): reads the same frames the rule engine does,
+   * and its sessions' pulses. Made once Caw is, whose wake its nudges take.
    */
-  const publishSupervisorEvent = (
-    instanceId: string,
-    event: SupervisorEvent
-  ): void => {
-    const [row] = db.listedInstancesByIds([instanceId]);
-    if (!row) {
-      return;
-    }
-    registry.broadcast({
-      verb: "frames",
-      machineId: row.machineId,
-      instanceId,
-      payload: {
-        kind: "supervisor_event",
-        instanceId,
-        event,
-      } satisfies FramePayload,
-    });
-  };
-
-  /** Transient twin of {@link publishSupervisorEvent}: never persisted. */
-  const publishSupervisorStatus = (
-    instanceId: string,
-    status: SupervisorStatusSignal
-  ): void => {
-    const [row] = db.listedInstancesByIds([instanceId]);
-    if (!row) {
-      return;
-    }
-    registry.broadcast({
-      verb: "frames",
-      machineId: row.machineId,
-      instanceId,
-      payload: {
-        kind: "supervisor_status",
-        instanceId,
-        status,
-      } satisfies FramePayload,
-    });
-  };
-
-  /**
-   * LLM supervisor — watches the same frames the rule engine does and, when
-   * configured, evaluates turns against autopilot or LLM rules off the frame
-   * path. Constructed symmetrically to {@link ruleEngine}.
-   */
-  const supervisor = new SupervisorEngine({
-    db,
-    meaning: meaningJudge,
-    agent: sendRoute,
-    telegram,
-    publish: publishSupervisorEvent,
-    status: publishSupervisorStatus,
-  });
+  let watch: FleetWatch | undefined;
 
   /**
    * Drops a dead process's parked questions, telling whoever carried them
@@ -3675,8 +3628,12 @@ export const createServer = (
         settlePending(instanceId, why, "fail", (send) => !keptAtRest(send));
       }
     }
-    // The supervisor's turn buffers for a dead session are waste.
-    supervisor.forget(instanceId);
+    // A session that never runs again: what fleet watch read of it is over,
+    // and a triage run that was it frees its slot. One that runs again
+    // (a launch, a restart) is the same session to fleet watch.
+    if (keep === "none") {
+      watch?.forget(instanceId);
+    }
     usageCounter.forget(instanceId);
   };
 
@@ -6280,8 +6237,8 @@ export const createServer = (
 
   /**
    * What taking a send means beyond the send itself, whoever sent it — the
-   * one place it is done. The reader's hand clears a supervisor's mute; a
-   * session's first words name it; a queued hand-off is work the target now
+   * one place it is done. The reader's hand takes down fleet watch's notice
+   * about the session; a session's first words name it; a queued hand-off is work the target now
    * carries, and a send that starts a turn reads it; an urgent send cuts into
    * the turn it lands in; the parent's or the reader's word to a delegate
    * starts its item's count of quiet turns over.
@@ -6298,7 +6255,7 @@ export const createServer = (
       noteInterrupt(instanceId);
     }
     if (message.origin.kind === "human") {
-      supervisor.noteHumanSend(instanceId);
+      watch?.humanSend(instanceId);
     }
     workItems.heard(instanceId, message.origin);
     if (!hasAttachments(payload)) {
@@ -6315,7 +6272,7 @@ export const createServer = (
 
   /**
    * THE ONE PATH A MESSAGE TAKES INTO A SESSION, whoever sent it — a reader, a
-   * rule, the supervisor, a delegate's report, another session's hand-off.
+   * rule, fleet watch's nudge, a delegate's report, another session's hand-off.
    * A session whose process is gone is woken first ({@link wakeForSend}), so
    * every sender reaches a sleeping session the same way. The machine gets
    * it, and the hub writes its record — pending, or failed when the machine
@@ -8063,7 +8020,7 @@ export const createServer = (
     declare readonly status: 400 | 404;
   }
 
-  /** The fleet's two choices as the supervisor config keeps them (fleet-choices.ts). */
+  /** The fleet's two choices as their row keeps them (fleet-choices.ts). */
   const fleetChoices: FleetChoicesStore = {
     read: () => {
       const config = db.getSupervisorConfig();
@@ -8417,7 +8374,7 @@ export const createServer = (
 
   /**
    * Every summariser session this hub has started, its rows' kind: internal
-   * workers no rule, supervisor, usage count, hand-back or Telegram hears, and
+   * workers no rule, fleet watch, usage count, hand-back or Telegram hears, and
    * no board lists. Seeded from the rows, so a hub restart still knows them.
    */
   const summarisers = new Set(
@@ -13664,7 +13621,7 @@ export const createServer = (
     placeMovedHere(row, transcript);
   };
 
-  /** The limits its keeper held the session to ({@link noteLimitReached}), each where it happened. */
+  /** The limits its keeper held the session to ({@link noteLimitReached}), and fleet watch's lines, each where it happened. */
   const placeLimitNotes = (
     row: InstanceRow,
     transcript: SessionMessage[]
@@ -13682,6 +13639,22 @@ export const createServer = (
         parent_agent_id: null,
         message: limitReachedLine(row, note),
         timestamp: new Date(note.at).toISOString(),
+      });
+    }
+    // Fleet watch's lines ({@link noteWatch}), each where it happened.
+    for (const line of db.watchLinesOf(row.id)) {
+      const at = transcript.findIndex(
+        (entry) =>
+          entry.timestamp !== undefined && Date.parse(entry.timestamp) > line.at
+      );
+      transcript.splice(at < 0 ? transcript.length : at, 0, {
+        type: "system",
+        uuid: line.id,
+        session_id: row.sessionId ?? "",
+        parent_tool_use_id: null,
+        parent_agent_id: null,
+        message: watchLine(row, line),
+        timestamp: new Date(line.at).toISOString(),
       });
     }
   };
@@ -14382,6 +14355,29 @@ export const createServer = (
   });
   // Open proposals are the person's asks again as the hub starts.
   detach(projectMemory.start(), "memory proposals");
+  /** The control interrupt_delegate sends: the turn stops, the session keeps its state. */
+  const interruptTurn = (instanceId: string): void => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    const agent = row ? registry.agent(row.machineId) : undefined;
+    if (!(row && agent)) {
+      return;
+    }
+    const requestId = crypto.randomUUID();
+    sendFrame(agent, {
+      verb: "control",
+      machineId: row.machineId,
+      instanceId,
+      requestId,
+      payload: {
+        instanceId,
+        requestId,
+        method: CONTROL_INTERRUPT,
+        args: [],
+      },
+    } satisfies Envelope<ControlPayload>);
+    noteInterrupt(instanceId);
+    transcripts.noteInterrupt(instanceId);
+  };
   // Each project's Caw: its lead session, woken by events only (caw.ts).
   const caw = createCaw({
     asks: () => pending.list(),
@@ -14389,29 +14385,7 @@ export const createServer = (
     inTurn: (instanceId) => pulses.get(instanceId)?.busy === true,
     caps,
     db,
-    // The control interrupt_delegate sends: the turn stops, the session keeps its state.
-    interrupt: (instanceId) => {
-      const [row] = db.getInstancesByIds([instanceId]);
-      const agent = row ? registry.agent(row.machineId) : undefined;
-      if (!(row && agent)) {
-        return;
-      }
-      const requestId = crypto.randomUUID();
-      sendFrame(agent, {
-        verb: "control",
-        machineId: row.machineId,
-        instanceId,
-        requestId,
-        payload: {
-          instanceId,
-          requestId,
-          method: CONTROL_INTERRUPT,
-          args: [],
-        },
-      } satisfies Envelope<ControlPayload>);
-      noteInterrupt(instanceId);
-      transcripts.noteInterrupt(instanceId);
-    },
+    interrupt: interruptTurn,
     online: (machineId) =>
       machineId === undefined
         ? onlineMachines().length > 0
@@ -14439,6 +14413,40 @@ export const createServer = (
     views,
   });
   lead = caw;
+  // Fleet watch (fleet-watch.ts): code detectors, Jev as the gate, one
+  // triage run per episode whose word goes to the session's lead.
+  watch = createFleetWatch({
+    asking: (instanceId) =>
+      pending.list().some((ask) => ask.instanceId === instanceId),
+    db,
+    end: (instanceId) =>
+      endSession(instanceId, "stop", {
+        kind: "hub",
+        why: "fleet watch's triage is over",
+      }),
+    interrupt: interruptTurn,
+    lifetime,
+    line: (instanceId, content) => noteWatch(instanceId, content),
+    name: (row) => sessionName(row),
+    notices: (notices) =>
+      registry.broadcast({
+        verb: "frames",
+        machineId: "hub",
+        payload: { kind: "fleet_watch.notices", notices },
+      }),
+    online: (machineId) => Boolean(registry.agent(machineId)),
+    push: (notice) => push.watchNotice(notice),
+    send: (envelope) => {
+      deliverSend(envelope);
+    },
+    spawn: (machineId, payload) => spawnSession(machineId, payload),
+    stop: (instanceId) =>
+      endSession(instanceId, "stop", {
+        kind: "hub",
+        why: "fleet watch's triage stopped it",
+      }),
+    wakeCaw: (projectId, event) => caw.wake(projectId, event),
+  });
   const dispatcher = createDispatcher({
     // The brief's AGENTS.md and the knowledge files the task needs (memory.ts).
     context: (projectId, task) => projectMemory.contextFor(projectId, task),
@@ -14849,6 +14857,7 @@ export const createServer = (
     actionTools: (actor) => actions.tools(actor),
     relayTools: (actor) => relays.tools(actor),
     memoryTools: (actor) => projectMemory.tools(actor),
+    triageTools: (actor) => watch?.tools(actor) ?? [],
     askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
     sendToUser: telegram
       ? (actor, message, attachments) =>
@@ -15844,6 +15853,30 @@ export const createServer = (
       instanceId: row.id,
       harness,
       message: limitReachedLine(row, note),
+    });
+  };
+
+  /**
+   * What fleet watch did about a session, or told it as a lead (core
+   * `FLEET_WATCH`): kept on its row and folded into what its screens show
+   * now. Never sent to its process.
+   */
+  const noteWatch = (instanceId: string, content: string): void => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (!row) {
+      return;
+    }
+    const line = {
+      at: Date.now(),
+      id: `watch-${crypto.randomUUID()}`,
+      content,
+    };
+    db.noteWatchLine(row.id, line);
+    transcripts.ingest(row.id, {
+      kind: "frame",
+      instanceId: row.id,
+      harness: (row.harness ?? "claude") as HarnessKind,
+      message: watchLine(row, line),
     });
   };
 
@@ -17883,15 +17916,12 @@ export const createServer = (
           const at = body.kind === "unarchive" ? null : new Date();
           const seen = db.markSeen(instanceIds, runIds, at);
           if (body.kind === "look") {
-            // Looked at: its finished turn, its asks and the supervisor's
-            // word about it are read, so their notifications come down.
+            // Looked at: its finished turn and its asks are read, so their
+            // notifications come down.
             const looked = new Set(instanceIds);
             notifications.clear(
               [
-                ...instanceIds.flatMap((id) => [
-                  turnCollapseId(id),
-                  supervisorCollapseId(id),
-                ]),
+                ...instanceIds.map((id) => turnCollapseId(id)),
                 ...pending
                   .list()
                   .flatMap((parked) =>
@@ -18413,88 +18443,35 @@ export const createServer = (
         db.clearOpenRouterConnection();
         return { ok: true };
       })
-      // ── supervisor ────────────────────────────────────────────────────────
-      .get("/api/supervisor", async () => {
-        const dbConfig = db.getSupervisorConfig();
-        const baseUrl = dbConfig?.baseUrl || null;
-        const model = dbConfig?.model || null;
-        const enabled = dbConfig?.enabled ?? false;
-
-        const config = {
-          enabled,
-          baseUrl,
-          model,
-        };
-
-        if (!(baseUrl && model)) {
-          return { config, status: { configured: false } };
-        }
-
-        const probeResult = await probe(baseUrl, model);
-        return {
-          config,
-          status: {
-            configured: true,
-            reachable: probeResult.reachable,
-            ...(probeResult.resolvedModel
-              ? { resolvedModel: probeResult.resolvedModel }
-              : {}),
-          },
-        };
-      })
-      .put(
-        "/api/supervisor/config",
-        {
-          body: t.Object({
-            enabled: t.Boolean(),
-            baseUrl: t.String(),
-            model: t.String(),
-            apiKey: t.Optional(t.String()),
-          }),
-        },
-        ({ body }) => {
-          db.putSupervisorConfig({
-            enabled: body.enabled,
-            baseUrl: body.baseUrl,
-            model: body.model,
-            ...(body.apiKey === undefined ? {} : { apiKey: body.apiKey }),
-          });
-          return { ok: true };
-        }
-      )
+      // ── fleet watch (fleet-watch.ts) ──────────────────────────────────────
+      // Its switch, and its limits and Jev as facts: Settings shows them.
       .get(
-        "/api/supervisor/events",
-        {
-          query: t.Object({
-            instanceId: t.Optional(t.String()),
-            limit: t.Optional(t.Integer({ minimum: 1, default: 100 })),
-          }),
-        },
-        ({ query }) => db.listSupervisorEvents(query)
+        "/api/fleet-watch",
+        (): FleetWatchSettings => ({
+          on: db.fleetWatchOn(),
+          jev: jevAccess(db) !== undefined,
+          limits: FLEET_WATCH_LIMITS,
+        })
       )
       .put(
-        "/api/autopilot/:instanceId",
-        { body: t.Object({ enabled: t.Boolean(), prompt: t.String() }) },
-        ({ params, body, status }) => {
-          if (body.enabled && body.prompt.trim().length < 10) {
-            return status(
-              400,
-              "A standing prompt of under ten characters is not one — say what the autopilot should watch for."
-            );
-          }
-          const [row] = db.listedInstancesByIds([params.instanceId]);
-          if (!row) {
-            return status(404, "No such session.");
-          }
-          db.setInstanceAutopilot(params.instanceId, {
-            enabled: body.enabled,
-            prompt: body.prompt.trim(),
-            updatedAt: Date.now(),
-          });
-          publishInstances(row.machineId);
-          return { ok: true };
+        "/api/fleet-watch",
+        { body: t.Object({ on: t.Boolean() }) },
+        ({ body }): FleetWatchSettings => {
+          db.setFleetWatchOn(body.on);
+          watch?.switched(body.on);
+          console.log(`[fleet-watch] turned ${body.on ? "on" : "off"}`);
+          return {
+            on: body.on,
+            jev: jevAccess(db) !== undefined,
+            limits: FLEET_WATCH_LIMITS,
+          };
         }
       )
+      // Its open needs-you notices, as a dashboard that connects reads them;
+      // each change after arrives as a `fleet_watch.notices` frame.
+      .get("/api/fleet-watch/notices", (): { notices: FleetWatchNotice[] } => ({
+        notices: db.watchNotices(),
+      }))
       // What a source's marketplace calls itself, for the link form to show
       // before anything is linked.
       .get(
@@ -22267,6 +22244,10 @@ export const createServer = (
                   pulses.set(message.instanceId, pulse);
                   workItems.turnState(message.instanceId, pulse.busy);
                   caw.pulse(message.instanceId, pulse.busy);
+                  // A summariser is the hub's own worker: nothing watches it.
+                  if (!internal) {
+                    watch?.pulse(message.instanceId, pulse.busy);
+                  }
                   // A pulse is only ever emitted by a session doing something,
                   // so it is the fleet's cheapest honest signal for the column
                   // the rails age rows from.
@@ -22522,12 +22503,11 @@ export const createServer = (
                   if (row?.workItemId) {
                     workItems.countTurn(row);
                   }
-                  /** Whether a rule or the supervisor answered the turn with a reply. */
+                  // Fleet watch counts the turn (and ends a triage run's).
+                  watch?.endTurn(turnId, neutral);
+                  /** Whether a rule answered the turn with a reply. */
                   const answered = (): Promise<boolean> =>
-                    Promise.all([
-                      ruleEngine.endTurn(turnId, neutral),
-                      supervisor.endTurn(turnId, neutral),
-                    ]).then(([rule, supervised]) => rule || supervised);
+                    ruleEngine.endTurn(turnId, neutral);
                   const delegate =
                     row &&
                     !row.workflowStepId &&
@@ -22586,12 +22566,12 @@ export const createServer = (
                   };
                   if (delegate?.workItemId && !failed) {
                     // A work item's turn is answered before it is handed
-                    // back: a rule's or the supervisor's reply keeps the item
-                    // running and wakes its session into the next turn, and
-                    // the parent hears nothing of this one. Only a turn no
-                    // standing instruction answers goes back, and may end
-                    // the item. Meaning rules and the supervisor answer once
-                    // their model does; the hand-back waits for them.
+                    // back: a rule's reply keeps the item running and wakes
+                    // its session into the next turn, and the parent hears
+                    // nothing of this one. Only a turn no standing
+                    // instruction answers goes back, and may end the item.
+                    // Meaning rules answer once Jev does; the hand-back
+                    // waits for them.
                     answered()
                       .then((replied) => {
                         if (!replied) {
@@ -22614,8 +22594,8 @@ export const createServer = (
                       oweRefusedMove(turnId, refused.accountId);
                     }
                     // Nothing waits on whether a rule answered a turn that is
-                    // not held, but the owner's push does: a turn a rule or the
-                    // supervisor answered goes on, and waits on no one.
+                    // not held, but the owner's push does: a turn a rule
+                    // answered goes on, and waits on no one.
                     const owners =
                       row && !parentId && neutral.subtype !== "aborted";
                     detach(
@@ -22648,7 +22628,7 @@ export const createServer = (
                   message.instanceId,
                   (message.payload as FramePayload & { kind: "frame" }).message
                 );
-                supervisor.observe(
+                watch?.observe(
                   message.instanceId,
                   (message.payload as FramePayload & { kind: "frame" }).message
                 );

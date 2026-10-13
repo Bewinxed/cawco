@@ -74,11 +74,10 @@ public enum Glyph: String, CaseIterable, Sendable {
     case arrowUp = "arrow-up-linear"
     case chevronDown = "alt-arrow-down-linear"
     case chevronLeft = "alt-arrow-left-linear"
-    // The shell's (bar, sidebar, projects, machines, jump, assistant, panes).
+    // The shell's (bar, sidebar, projects, machines, jump, panes).
     case chevronUp = "alt-arrow-up-linear"
     case arrowRight = "arrow-right-linear"
     case alignLeft = "align-left-bold-duotone"
-    case assistant = "eye-scan-bold-duotone"
     case folder = "folder-bold-duotone"
     case key = "key-bold-duotone"
     case laptop = "laptop-minimalistic-bold-duotone"
