@@ -126,8 +126,36 @@ const chineseHoliday = (at: number): boolean => {
 
 const RATES: Map<string, ModelRates> = new Map();
 let lastRefreshAttempt = 0;
+let fingerprint = 0;
+
+/**
+ * A hash of every loaded rate, by model id: equal for equal catalogs, so a
+ * store costed under one can tell when re-costing would change anything.
+ */
+export function ratesFingerprint(): number {
+  return fingerprint;
+}
+
+/** 2^31 − 1: a prime, so `hash * 31 + code` stays an exact double below it. */
+const HASH_MODULUS = 2_147_483_647;
+
+function hashRates(): number {
+  const text = JSON.stringify(
+    [...RATES.keys()].sort().map((id) => [id, RATES.get(id)])
+  );
+  let hash = 0;
+  for (const char of text) {
+    hash = (hash * 31 + (char.codePointAt(0) ?? 0)) % HASH_MODULUS;
+  }
+  return hash;
+}
 
 function loadFromSnapshot(json: PricingSnapshot): void {
+  loadRates(json);
+  fingerprint = hashRates();
+}
+
+function loadRates(json: PricingSnapshot): void {
   RATES.clear();
   for (const [id, m] of Object.entries(json.models)) {
     const input = m.input / PER_MILLION;

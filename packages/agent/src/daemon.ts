@@ -181,7 +181,6 @@ const HEARTBEAT_INTERVAL = Duration.seconds(15);
 const HUB_SILENT_MS = 15_000;
 const USAGE_INTERVAL = Duration.seconds(60);
 const MEMORY_LOG_INTERVAL = Duration.millis(MEMORY_LOG_INTERVAL_MS);
-const USAGE_FULL_REBUILD_MS = 30 * 60 * 1000;
 /** How often every CawCo account dir's `auth status` is read again. */
 const CLAUDE_LOGIN_CHECK_INTERVAL_MS = 60_000;
 /** How often every provider account's OAuth sign-in is checked for a refresh it needs. */
@@ -2047,11 +2046,7 @@ const attach = (
     yield* Effect.forkScoped(
       Effect.repeat(
         Effect.gen(function* () {
-          const rebuilt = scanner.dueForFullRebuild(USAGE_FULL_REBUILD_MS);
-          yield* Effect.promise(() =>
-            rebuilt ? scanner.fullRebuild() : scanner.incremental()
-          );
-          const buckets = scanner.reportBuckets(Date.now());
+          const buckets = yield* Effect.promise(() => scanner.scan(Date.now()));
           // The OpenCode Go plan's windows, when this machine holds a Go key.
           // Claude's limits are its accounts', which each session's Claude
           // Code reports as it runs.
@@ -2266,7 +2261,8 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     }
 
     // Transcript search index: FTS5-backed BM25 search over transcripts.
-    // Created once, syncs every 30s in the background, outlives reconnects.
+    // Created once, syncs every ten minutes in the background and before a
+    // search, outlives reconnects.
     const search = yield* Effect.promise(() =>
       TranscriptSearchService.create()
     );

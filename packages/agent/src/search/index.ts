@@ -1,7 +1,7 @@
 /**
  * Transcript search service. Owns a `TranscriptIndex` at a stable
  * agent-local path and keeps it in sync with Claude Code transcripts
- * and OpenCode sessions in the background.
+ * and OpenCode sessions: in the background, and before a search.
  */
 
 import { existsSync } from "node:fs";
@@ -14,14 +14,37 @@ import {
   readOpenCodeDocs,
 } from "@cawco/jsonl-parser/opencode";
 
-const SYNC_INTERVAL_MS = 30_000;
+/**
+ * How often the index takes in what the transcripts gained when nobody is
+ * searching: one transaction each time. Each commit rewrites the pages at the
+ * tails of the index's tables and B-trees and starts a new FTS5 segment,
+ * whatever it adds, so the interval sets that share of the agent's disk
+ * writes: measured over four simulated hours of ten sessions writing, a sync
+ * every minute wrote 13.0 KB/s and every ten minutes 9.5 KB/s (in WAL; see
+ * the journal mode in fts5.ts). Freshness is not this interval's job: a
+ * search brings the index up to date first ({@link SEARCH_FRESH_MS}). It
+ * bounds what that sync has to take in: ten minutes of ten busy sessions
+ * took 150 ms, inside the hub's 1.5 s answer window.
+ */
+const SYNC_INTERVAL_MS = 10 * 60_000;
+/**
+ * How far behind the transcripts a search may answer. Search is the
+ * dashboard's jump palette, for finding a session by what was said in it,
+ * one query per keystroke (150 ms debounce): the first keystroke syncs, the
+ * rest of a burst answer from that sync. A sync that finds nothing new
+ * writes nothing.
+ */
+const SEARCH_FRESH_MS = 10_000;
 const MAX_SEARCH_LIMIT = 50;
 const DEFAULT_SEARCH_LIMIT = 20;
 
 export class TranscriptSearchService {
   readonly #index: TranscriptIndex;
   #timer: ReturnType<typeof setInterval> | null = null;
-  #syncing = false;
+  /** The sync in flight: one at a time, which the timer and searches share. */
+  #syncing: Promise<void> | null = null;
+  /** When the last sync that ended without error began. */
+  #syncedAt = 0;
   #openCodeWatermark = 0;
   readonly #firstSync = Promise.withResolvers<void>();
   /** Settles once the first sync has ended, however it ended. */
@@ -36,60 +59,52 @@ export class TranscriptSearchService {
     await mkdir(dirname(dbPath), { recursive: true });
     const index = new TranscriptIndex(dbPath);
     const svc = new TranscriptSearchService(index);
-    // Restore the opencode watermark from a meta table if one exists.
-    svc.#ensureMetaTable();
     svc.#openCodeWatermark = svc.#loadWatermark();
     return svc;
   }
 
-  #ensureMetaTable(): void {
-    this.#index.db.exec(
-      "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
-    );
-  }
-
   #loadWatermark(): number {
     const row = this.#index.db
-      .prepare("SELECT value FROM meta WHERE key = 'opencode_watermark'")
+      .query("SELECT value FROM meta WHERE key = 'opencode_watermark'")
       .get() as { value: string } | null;
     return row ? Number(row.value) : 0;
   }
 
-  #saveWatermark(watermark: number): void {
-    this.#index.db
-      .prepare(
-        "INSERT INTO meta (key, value) VALUES ('opencode_watermark', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value"
-      )
-      .run(String(watermark));
+  /**
+   * Run one sync cycle, or join the one in flight: claude transcripts +
+   * opencode, committed as one transaction, the opencode watermark written
+   * only when it moved.
+   */
+  sync(): Promise<void> {
+    if (!this.#syncing) {
+      this.#syncing = this.#syncOnce().finally(() => {
+        this.#syncing = null;
+      });
+    }
+    return this.#syncing;
   }
 
-  /** Run one sync cycle: claude transcripts + opencode. */
-  async sync(): Promise<void> {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: reentrancy guard — `#syncing` is set true below and cleared in `finally`; biome's flow analysis does not track concurrent entry
-    if (this.#syncing) {
-      return;
+  async #syncOnce(): Promise<void> {
+    const startedAt = Date.now();
+    // OpenCode — skip silently when the db does not exist.
+    const ocPath = defaultOpenCodePath();
+    const openCode = existsSync(ocPath)
+      ? readOpenCodeDocs(ocPath, { since: this.#openCodeWatermark })
+      : undefined;
+    const claudeFiles = await listClaudeFiles();
+    await this.#index.sync(
+      claudeFiles.map((f) => f.path),
+      openCode
+        ? {
+            docs: openCode.docs,
+            meta: { opencode_watermark: String(openCode.watermark) },
+          }
+        : {}
+    );
+    if (openCode) {
+      this.#openCodeWatermark = openCode.watermark;
     }
-    this.#syncing = true;
-    try {
-      // Claude Code transcripts.
-      const claudeFiles = await listClaudeFiles();
-      await this.#index.sync(claudeFiles.map((f) => f.path));
-
-      // OpenCode — skip silently when the db does not exist.
-      const ocPath = defaultOpenCodePath();
-      if (existsSync(ocPath)) {
-        const { docs, watermark } = readOpenCodeDocs(ocPath, {
-          since: this.#openCodeWatermark,
-        });
-        if (docs.length > 0) {
-          this.#index.indexDocs(docs);
-        }
-        this.#openCodeWatermark = watermark;
-        this.#saveWatermark(watermark);
-      }
-    } finally {
-      this.#syncing = false;
-    }
+    this.#syncedAt = startedAt;
   }
 
   /** Start the background sync loop. First sync is kicked off immediately. */
@@ -107,15 +122,21 @@ export class TranscriptSearchService {
     }, SYNC_INTERVAL_MS);
   }
 
-  /** Search the index. */
-  search(
+  /**
+   * Search the index, brought up to date first when its last sync began
+   * more than {@link SEARCH_FRESH_MS} ago.
+   */
+  async search(
     query: string,
     options?: {
       limit?: number;
       sessionId?: string;
       role?: "user" | "assistant";
     }
-  ): SearchHit[] {
+  ): Promise<SearchHit[]> {
+    if (Date.now() - this.#syncedAt > SEARCH_FRESH_MS) {
+      await this.sync();
+    }
     const limit = Math.min(
       options?.limit ?? DEFAULT_SEARCH_LIMIT,
       MAX_SEARCH_LIMIT

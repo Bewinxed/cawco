@@ -17,7 +17,22 @@ import { parseMany } from "./pool.ts";
 import { typeFilter } from "./scan.ts";
 import { extractDoc, type ExtractOptions, type TranscriptDoc } from "./text.ts";
 
-const SCHEMA = `
+/**
+ * A document is one record, deduplicated on its time, `doc_id` and harness
+ * (`docs_key`): the same record, read again or copied into a resumed or
+ * forked session, carries the same uuid and the same timestamp (Claude Code
+ * 2.x rewrites only `sessionId` in a fork's copy). Leading with the time is
+ * what keeps the index cheap to write: live records are the newest, so each
+ * sync's entries land together at its right edge. Keyed on the random
+ * `doc_id` alone, each new document dirtied a page of its own, and that page
+ * was most of what a sync wrote. A record with no time is deduplicated on its
+ * `doc_id`.
+ *
+ * Nothing is indexed by `session_id`: search filters on it after the FTS
+ * match, never through an index, and `docs_session` cost each live session a
+ * page split every other sync.
+ */
+const DOCS_TABLE = `
 CREATE TABLE IF NOT EXISTS docs (
   id INTEGER PRIMARY KEY,
   harness TEXT NOT NULL,
@@ -29,9 +44,12 @@ CREATE TABLE IF NOT EXISTS docs (
   model TEXT,
   sidechain INTEGER NOT NULL DEFAULT 0,
   tools TEXT,
-  text TEXT NOT NULL,
-  UNIQUE(harness, doc_id)
-);
+  text TEXT NOT NULL
+);`;
+
+const SCHEMA = `
+${DOCS_TABLE}
+CREATE UNIQUE INDEX IF NOT EXISTS docs_key ON docs(coalesce(ts, ''), doc_id, harness);
 CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
   text, tools,
   content='docs', content_rowid='id',
@@ -49,7 +67,8 @@ CREATE TABLE IF NOT EXISTS files (
   offset INTEGER NOT NULL,
   lines INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS docs_session ON docs(session_id);
+DROP INDEX IF EXISTS docs_session;
+CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `;
 
 export interface SearchOptions {
@@ -82,6 +101,10 @@ export interface SearchHit {
 export interface SyncOptions {
   workers?: number;
   extract?: ExtractOptions;
+  /** Documents from another source (opencode), indexed in the sync's last transaction. */
+  docs?: TranscriptDoc[];
+  /** `meta` values to keep, written in the same transaction, each only when it changed. */
+  meta?: Record<string, string>;
 }
 
 export interface SyncResult {
@@ -111,6 +134,26 @@ export function toMatchQuery(text: string): string {
 const FULL_PARSE_BATCH_BYTES = 128 * 1024 * 1024;
 
 /**
+ * How many transcript bytes one write transaction takes on, at most. A sync
+ * gathers every file's new documents and checkpoint and commits them
+ * together: each commit writes the pages it touched (FTS5 writes a new
+ * segment, its structure record and the B-tree pages above them), so one
+ * commit per file per sync cost ten times what one per sync does with ten
+ * live sessions. Only a catch-up reaches this bound; it keeps the journal,
+ * and the documents held for it, to one bounded slice at a time.
+ */
+const WRITE_BATCH_BYTES = 32 * 1024 * 1024;
+
+/** One transcript's new documents and where it was read up to. */
+interface FileWrite {
+  path: string;
+  docs: TranscriptDoc[];
+  checkpoint: Checkpoint;
+  /** Transcript bytes consumed: what {@link WRITE_BATCH_BYTES} bounds. */
+  bytes: number;
+}
+
+/**
  * `files` in order, as consecutive batches of at most `limit` bytes each; a
  * file larger than `limit` is a batch of its own.
  */
@@ -138,8 +181,54 @@ export class TranscriptIndex {
 
   constructor(path: string) {
     this.db = new Database(path, { create: true });
-    this.db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;");
+    // journal_mode: the index only grows, and a rollback journal writes a
+    // page added past the end of the file once, where WAL writes every page
+    // twice (to the log, then back at checkpoint). Only the few existing pages
+    // a sync changes are journaled. Measured over four simulated hours of ten
+    // sessions writing, synced every ten minutes: 9.5 KB/s in WAL, 6.1 KB/s
+    // with this. The agent is the index's one connection, so WAL's readers
+    // beside a writer bought nothing.
+    // synchronous: FULL is the rollback journal's default and what keeps it
+    // from corrupting on power loss; NORMAL there is "Maybe not consistent"
+    // (https://www.sqlite.org/pragma.html#pragma_synchronous). Its extra syncs
+    // write no extra pages.
+    // busy_timeout: a reader from outside (the sqlite3 shell, a probe) holds
+    // its lock for a query's length; a commit waits that out, not fails.
+    // temp_store: FTS5 flushes its pending terms (and merges segments) in the
+    // middle of an insert once they pass 1 MB, and SQLite journals every page
+    // that statement touches, spilling past 64 KB to a temp file: measured, a
+    // tenth of a sync's writes went to `etilqs_*` files. In memory, they cost
+    // a few MB of RAM for the moment of the flush.
+    this.db.exec(
+      "PRAGMA journal_mode = TRUNCATE; PRAGMA synchronous = FULL; PRAGMA busy_timeout = 5000; PRAGMA temp_store = MEMORY;",
+    );
+    this.#dropDocIdKey();
     this.db.exec(SCHEMA);
+  }
+
+  /**
+   * An index made before `docs_key` holds `docs` with `UNIQUE(harness,
+   * doc_id)`, which only a new table drops: its rows are copied across with
+   * their ids, so the FTS index over them stays as it is. Once, in one
+   * transaction.
+   */
+  #dropDocIdKey(): void {
+    const old = this.db
+      .query("SELECT 1 FROM sqlite_master WHERE name = 'sqlite_autoindex_docs_1'")
+      .get();
+    if (!old) {
+      return;
+    }
+    this.db.transaction(() => {
+      this.db.exec(`
+        ${DOCS_TABLE.replace("docs (", "docs_next (")}
+        INSERT INTO docs_next SELECT id, harness, doc_id, session_id, role, ts, cwd, model, sidechain, tools, text FROM docs;
+        DROP TRIGGER IF EXISTS docs_ai;
+        DROP TRIGGER IF EXISTS docs_ad;
+        DROP TABLE docs;
+        ALTER TABLE docs_next RENAME TO docs;
+      `);
+    })();
   }
 
   close(): void {
@@ -162,45 +251,97 @@ export class TranscriptIndex {
     if (docs.length === 0) {
       return 0;
     }
-    const insert = this.db.prepare(
+    return this.db.transaction(() => this.#insertDocs(docs))();
+  }
+
+  /** Inserts `docs` in the caller's transaction; answers how many were new. */
+  #insertDocs(docs: TranscriptDoc[]): number {
+    const insert = this.db.query(
       `INSERT OR IGNORE INTO docs (harness, doc_id, session_id, role, ts, cwd, model, sidechain, tools, text)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     );
     let added = 0;
-    const run = this.db.transaction((batch: TranscriptDoc[]) => {
-      for (const doc of batch) {
-        const row = insert.get(
-          doc.harness,
-          doc.id,
-          doc.sessionId,
-          doc.role,
-          doc.timestamp ?? null,
-          doc.cwd ?? null,
-          doc.model ?? null,
-          doc.sidechain ? 1 : 0,
-          doc.tools ?? null,
-          doc.text,
-        );
-        if (row) {
-          added += 1;
-        }
+    for (const doc of docs) {
+      const row = insert.get(
+        doc.harness,
+        doc.id,
+        doc.sessionId,
+        doc.role,
+        doc.timestamp ?? null,
+        doc.cwd ?? null,
+        doc.model ?? null,
+        doc.sidechain ? 1 : 0,
+        doc.tools ?? null,
+        doc.text,
+      );
+      if (row) {
+        added += 1;
       }
-    });
-    run(docs);
+    }
+    return added;
+  }
+
+  /**
+   * Commits `writes`, then `docs` and the `meta` values that changed, as one
+   * transaction, answering how many documents were new. Each file's inserts
+   * get a turn of the event loop of their own: a catch-up of many files is
+   * otherwise one unbroken block on the daemon's only thread. A transaction
+   * that would write nothing is not begun.
+   */
+  async #commit(
+    writes: FileWrite[],
+    docs: TranscriptDoc[] = [],
+    meta: Record<string, string> = {},
+  ): Promise<number> {
+    const getMeta = this.db.query("SELECT value FROM meta WHERE key = ?");
+    const changed = Object.entries(meta).filter(
+      ([key, value]) => (getMeta.get(key) as { value: string } | null)?.value !== value,
+    );
+    if (writes.length === 0 && docs.length === 0 && changed.length === 0) {
+      return 0;
+    }
+    const putCheckpoint = this.db.query(
+      `INSERT INTO files (path, size, offset, lines) VALUES (?, ?, ?, ?)
+       ON CONFLICT(path) DO UPDATE SET size = excluded.size, offset = excluded.offset, lines = excluded.lines`,
+    );
+    const putMeta = this.db.query(
+      "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+    );
+    let added = 0;
+    this.db.exec("BEGIN");
+    try {
+      for (const write of writes) {
+        // biome-ignore lint/performance/noAwaitInLoops: the await is the yield; the files are written one at a time on purpose.
+        await new Promise((resolve) => setImmediate(resolve));
+        added += this.#insertDocs(write.docs);
+        putCheckpoint.run(
+          write.path,
+          write.checkpoint.size,
+          write.checkpoint.offset,
+          write.checkpoint.lines,
+        );
+      }
+      added += this.#insertDocs(docs);
+      for (const [key, value] of changed) {
+        putMeta.run(key, value);
+      }
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
     return added;
   }
 
   /**
    * Index a set of transcript files incrementally. New files get a parallel
    * full parse; files with a valid checkpoint get an in-process tail read of
-   * appended bytes only; unchanged files are skipped entirely.
+   * appended bytes only; unchanged files are skipped entirely. Everything a
+   * sync found, `options.docs` and `options.meta` included, is committed
+   * together ({@link WRITE_BATCH_BYTES}).
    */
   async sync(files: string[], options: SyncOptions = {}): Promise<SyncResult> {
-    const getCheckpoint = this.db.prepare("SELECT size, offset, lines FROM files WHERE path = ?");
-    const putCheckpoint = this.db.prepare(
-      `INSERT INTO files (path, size, offset, lines) VALUES (?, ?, ?, ?)
-       ON CONFLICT(path) DO UPDATE SET size = excluded.size, offset = excluded.offset, lines = excluded.lines`,
-    );
+    const getCheckpoint = this.db.query("SELECT size, offset, lines FROM files WHERE path = ?");
     const result: SyncResult = {
       filesScanned: files.length,
       filesFull: 0,
@@ -236,8 +377,22 @@ export class TranscriptIndex {
       }),
     );
 
+    // What this sync will commit, flushed early only when a catch-up makes it
+    // large (WRITE_BATCH_BYTES).
+    let pending: FileWrite[] = [];
+    let pendingBytes = 0;
+    const gather = async (write: FileWrite) => {
+      pending.push(write);
+      pendingBytes += write.bytes;
+      if (pendingBytes >= WRITE_BATCH_BYTES) {
+        result.docsAdded += await this.#commit(pending);
+        pending = [];
+        pendingBytes = 0;
+      }
+    };
+
     // New (or reset) files: parallel full parse in workers, a batch at a time,
-    // each batch indexed before the next is parsed (FULL_PARSE_BATCH_BYTES).
+    // each batch gathered before the next is parsed (FULL_PARSE_BATCH_BYTES).
     for (const batch of byteBatches(fullFiles, FULL_PARSE_BATCH_BYTES)) {
       // biome-ignore lint/performance/noAwaitInLoops: one batch's docs in memory at a time is the point
       const parsed = await parseMany(batch, {
@@ -247,25 +402,26 @@ export class TranscriptIndex {
         workers: options.workers,
       });
       for (const file of parsed) {
-        // One file's inserts per turn of the event loop, as the tail loop
-        // below already gets from its reads: a catch-up of many new files is
-        // otherwise one unbroken block on the daemon's only thread.
-        // biome-ignore lint/performance/noAwaitInLoops: the await is the yield; the files are indexed one at a time on purpose.
-        await new Promise((resolve) => setImmediate(resolve));
         if (file.error !== undefined) {
           result.errors.push({ path: file.path, error: file.error });
           continue;
         }
         result.filesFull++;
-        result.docsAdded += this.indexDocs(file.docs ?? []);
-        putCheckpoint.run(file.path, file.stats.bytes, file.stats.bytes, file.stats.lines);
+        await gather({
+          path: file.path,
+          docs: file.docs ?? [],
+          checkpoint: { size: file.stats.bytes, offset: file.stats.bytes, lines: file.stats.lines },
+          bytes: file.stats.bytes,
+        });
       }
     }
 
     // Grown files: tail reads are small, run in-process.
     const prefilter = typeFilter("user", "assistant");
     for (const { path, checkpoint } of tailFiles) {
+      let write: FileWrite;
       try {
+        // biome-ignore lint/performance/noAwaitInLoops: one tail read at a time; they are small
         const tail = await readTranscriptTail(path, checkpoint, { prefilter });
         const docs: TranscriptDoc[] = [];
         for (const located of tail.records) {
@@ -275,18 +431,20 @@ export class TranscriptIndex {
           }
         }
         result.filesTailed++;
-        result.docsAdded += this.indexDocs(docs);
-        putCheckpoint.run(
+        write = {
           path,
-          tail.checkpoint.size,
-          tail.checkpoint.offset,
-          tail.checkpoint.lines,
-        );
+          docs,
+          checkpoint: tail.checkpoint,
+          bytes: tail.checkpoint.offset - checkpoint.offset,
+        };
       } catch (error) {
         result.errors.push({ path, error: error instanceof Error ? error.message : String(error) });
+        continue;
       }
+      await gather(write);
     }
 
+    result.docsAdded += await this.#commit(pending, options.docs, options.meta);
     return result;
   }
 

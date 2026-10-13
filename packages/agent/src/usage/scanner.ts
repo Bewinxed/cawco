@@ -6,6 +6,7 @@ import type { UsageBucket, UsageTokens } from "@cawco/core";
 import {
   BUCKET_MS,
   bucketStart,
+  ratesFingerprint,
   refreshPricing,
   totalTokens,
 } from "@cawco/core";
@@ -19,19 +20,57 @@ import type { ScannedRecord } from "./types";
  * The per-machine usage scanner (USAGE-SPEC.md §5). Folds every transcript's
  * usage into absolute bucket totals the hub upserts by bucket id. Incremental
  * scans compare `(mtimeMs, size)` per Claude transcript and a `time_created`
- * watermark for opencode; a full rebuild re-heals and re-costs every 30 min.
+ * watermark for opencode; a full rebuild re-heals and re-costs the store when
+ * its result could differ ({@link UsageScanner.scan}).
  *
  * Its state lives on disk, in `usage.db` under the agent's data dir: the dedup
  * set holds one row per assistant message the machine ever wrote, so it grows
  * with history, and kept in memory it was most of the agent's heap (261k keys,
  * ~140 MB, measured on a 1,500-transcript rig). SQLite's page cache is the
  * only part held in memory, capped at {@link PAGE_CACHE_KIB}. The store also
- * outlives a restart, so a start scans incrementally and the full rebuild
- * waits for its own schedule.
+ * outlives a restart, so a start scans incrementally.
+ *
+ * Every page it writes is a page the OS counts against the agent's disk
+ * budget (macOS: 24.86 KB/s averaged over a day), so the store is laid out
+ * for writes that land together:
+ * - A kept message's row is appended (`claude` and `claude_side` are rowid
+ *   tables) and found by {@link RowIndex}, in memory. Keyed on the random
+ *   message id, each new message dirtied a B-tree page of its own, and that
+ *   was most of what a scan wrote.
+ * - A bucket's key leads with its quarter hour, so the buckets a scan folds
+ *   into sit together.
+ * - A scan is one transaction and skips writes that change nothing.
+ * - A full rebuild deletes and rewrites the whole store, so it runs only when
+ *   that can change a number: it ran every 30 minutes when this state was in
+ *   memory, where it cost no disk, and here that alone dirtied the store's
+ *   size twice over each time.
  */
 
 /** SQLite's page cache for the store, in KiB: all of it the agent holds in memory. */
 const PAGE_CACHE_KIB = 8192;
+
+/**
+ * What the store's tables and rows mean, as this code lays them out, parses,
+ * dedups and costs them. Bump it with any change to those: a store made by
+ * other code is dropped on open and the next scan rebuilds it.
+ */
+const SCANNER_VERSION = 1;
+
+/**
+ * The longest a store goes between full rebuilds. A rebuild heals what
+ * incremental scans leave: a replaced message's stale window edge
+ * (`#takeBack`) and a transcript that was deleted.
+ */
+const HEAL_MS = 24 * 60 * 60 * 1000;
+
+const TABLES = [
+  "meta",
+  "files",
+  "buckets",
+  "claude",
+  "claude_side",
+  "opencode_seen",
+] as const;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value NUMERIC NOT NULL) WITHOUT ROWID;
@@ -47,14 +86,97 @@ CREATE TABLE IF NOT EXISTS buckets (
   messages INTEGER NOT NULL, touched INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS claude (
-  key TEXT PRIMARY KEY, bucket TEXT NOT NULL, side INTEGER NOT NULL,
+  id INTEGER PRIMARY KEY, key TEXT NOT NULL, bucket TEXT NOT NULL, side INTEGER NOT NULL,
   total INTEGER NOT NULL, counted INTEGER NOT NULL,
   input INTEGER NOT NULL, output INTEGER NOT NULL, cache_creation INTEGER NOT NULL,
   cache_read INTEGER NOT NULL, reasoning INTEGER NOT NULL, cost REAL NOT NULL
-) WITHOUT ROWID;
-CREATE TABLE IF NOT EXISTS claude_side (key TEXT PRIMARY KEY, main TEXT NOT NULL) WITHOUT ROWID;
+);
+CREATE TABLE IF NOT EXISTS claude_side (id INTEGER PRIMARY KEY, key TEXT NOT NULL, main INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS opencode_seen (id TEXT PRIMARY KEY) WITHOUT ROWID;
 `;
+
+/** 2^31 − 1: a prime, so `hash * 131 + code` stays an exact double below 2^39. */
+const HASH_MODULUS = 2_147_483_647;
+
+/** A 31-bit hash of `key`. */
+const hashKey = (key: string): number => {
+  let hash = 0;
+  for (let i = 0; i < key.length; i += 1) {
+    hash = (hash * 131 + key.charCodeAt(i)) % HASH_MODULUS;
+  }
+  return hash;
+};
+
+/**
+ * Where each key's row is: an open-addressed table of (hash, row id) pairs,
+ * 8 bytes a slot, kept at most half full (16 bytes a key; the 261k messages
+ * of a 1,500-transcript rig take 4 MB). A hash names candidates only: the
+ * caller reads each candidate's row and keeps the one whose key matches, so
+ * a collision, or a row a rolled-back transaction left named here, costs a
+ * read and nothing else.
+ */
+class RowIndex {
+  #hashes = new Uint32Array(1024);
+  /** 0 is an empty slot: SQLite's row ids start at 1. */
+  #rows = new Uint32Array(1024);
+  #count = 0;
+
+  get size(): number {
+    return this.#count;
+  }
+
+  /** The row ids that may hold `key`, in the order they were added. */
+  *candidates(key: string): Generator<number> {
+    const hash = hashKey(key);
+    const capacity = this.#rows.length;
+    for (let slot = hash % capacity; ; slot = (slot + 1) % capacity) {
+      const row = this.#rows[slot] ?? 0;
+      if (row === 0) {
+        return;
+      }
+      if (this.#hashes[slot] === hash) {
+        yield row;
+      }
+    }
+  }
+
+  add(key: string, row: number): void {
+    if ((this.#count + 1) * 2 > this.#rows.length) {
+      this.#grow();
+    }
+    this.#place(hashKey(key), row);
+    this.#count += 1;
+  }
+
+  clear(): void {
+    this.#hashes = new Uint32Array(1024);
+    this.#rows = new Uint32Array(1024);
+    this.#count = 0;
+  }
+
+  #place(hash: number, row: number): void {
+    const capacity = this.#rows.length;
+    let slot = hash % capacity;
+    while ((this.#rows[slot] ?? 0) !== 0) {
+      slot = (slot + 1) % capacity;
+    }
+    this.#hashes[slot] = hash;
+    this.#rows[slot] = row;
+  }
+
+  #grow(): void {
+    const hashes = this.#hashes;
+    const rows = this.#rows;
+    this.#hashes = new Uint32Array(rows.length * 2);
+    this.#rows = new Uint32Array(rows.length * 2);
+    for (let slot = 0; slot < rows.length; slot += 1) {
+      const row = rows[slot] ?? 0;
+      if (row !== 0) {
+        this.#place(hashes[slot] ?? 0, row);
+      }
+    }
+  }
+}
 
 /** A kept Claude message: which bucket it went into and what it added there. */
 interface ClaudeRow {
@@ -64,12 +186,20 @@ interface ClaudeRow {
   cost: number;
   /** 0 once its share was taken back out of its bucket. */
   counted: number;
+  id: number;
   input: number;
   key: string;
   output: number;
   reasoning: number;
   side: number;
   total: number;
+}
+
+/** A sidechain message id's kept message: `main` is its `claude` row id. */
+interface SideRow {
+  id: number;
+  key: string;
+  main: number;
 }
 
 interface BucketRow {
@@ -157,14 +287,21 @@ export class UsageScanner {
   /** Settles once the first scan, full or incremental, has ended. */
   readonly scanned = this.#firstScan.promise;
 
+  /** Where each kept message's `claude` row is, by its key. */
+  readonly #claudeRows = new RowIndex();
+  /** Where each sidechain message id's `claude_side` row is, by its key. */
+  readonly #sideRows = new RowIndex();
+
   readonly #getMeta;
   readonly #setMeta;
   readonly #getFile;
   readonly #putFile;
   readonly #getClaude;
   readonly #getSide;
-  readonly #putClaude;
-  readonly #putSide;
+  readonly #addClaude;
+  readonly #setClaude;
+  readonly #addSide;
+  readonly #setSide;
   readonly #uncount;
   readonly #seeOpencode;
   readonly #fold;
@@ -181,6 +318,7 @@ export class UsageScanner {
     this.#db.exec(
       `PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA cache_size = -${PAGE_CACHE_KIB};`
     );
+    this.#dropIfOther();
     this.#db.exec(SCHEMA);
     const db = this.#db;
     this.#getMeta = db.query<{ value: number }, [string]>(
@@ -196,38 +334,39 @@ export class UsageScanner {
       `INSERT INTO files (path, mtime_ms, size, offset) VALUES (?, ?, ?, ?)
        ON CONFLICT (path) DO UPDATE SET mtime_ms = excluded.mtime_ms, size = excluded.size, offset = excluded.offset`
     );
-    this.#getClaude = db.query<ClaudeRow, [string]>(
-      "SELECT * FROM claude WHERE key = ?"
+    this.#getClaude = db.query<ClaudeRow, [number]>(
+      "SELECT * FROM claude WHERE id = ?"
     );
-    this.#getSide = db.query<ClaudeRow, [string]>(
-      "SELECT c.* FROM claude_side s JOIN claude c ON c.key = s.main WHERE s.key = ?"
+    this.#getSide = db.query<SideRow, [number]>(
+      "SELECT * FROM claude_side WHERE id = ?"
     );
-    this.#putClaude = db.query<
-      unknown,
-      [
-        string,
-        string,
-        number,
-        number,
-        number,
-        number,
-        number,
-        number,
-        number,
-        number,
-      ]
-    >(
+    type ClaudeValues = [
+      string,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+    ];
+    this.#addClaude = db.query<{ id: number }, [string, ...ClaudeValues]>(
       `INSERT INTO claude (key, bucket, side, total, counted, input, output, cache_creation, cache_read, reasoning, cost)
-       VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (key) DO UPDATE SET bucket = excluded.bucket, side = excluded.side, total = excluded.total,
-         counted = 1, input = excluded.input, output = excluded.output, cache_creation = excluded.cache_creation,
-         cache_read = excluded.cache_read, reasoning = excluded.reasoning, cost = excluded.cost`
+       VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?) RETURNING id`
     );
-    this.#putSide = db.query<unknown, [string, string]>(
-      "INSERT INTO claude_side (key, main) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET main = excluded.main"
+    this.#setClaude = db.query<unknown, [...ClaudeValues, number]>(
+      `UPDATE claude SET bucket = ?, side = ?, total = ?, counted = 1, input = ?, output = ?,
+         cache_creation = ?, cache_read = ?, reasoning = ?, cost = ? WHERE id = ?`
     );
-    this.#uncount = db.query<unknown, [string]>(
-      "UPDATE claude SET counted = 0 WHERE key = ?"
+    this.#addSide = db.query<{ id: number }, [string, number]>(
+      "INSERT INTO claude_side (key, main) VALUES (?, ?) RETURNING id"
+    );
+    this.#setSide = db.query<unknown, [number, number]>(
+      "UPDATE claude_side SET main = ? WHERE id = ?"
+    );
+    this.#uncount = db.query<unknown, [number]>(
+      "UPDATE claude SET counted = 0 WHERE id = ?"
     );
     this.#seeOpencode = db.query<{ id: string }, [string]>(
       "INSERT OR IGNORE INTO opencode_seen (id) VALUES (?) RETURNING id"
@@ -277,16 +416,97 @@ export class UsageScanner {
       "UPDATE buckets SET touched = 0 WHERE touched = 1"
     );
     gauge("usage.dbMB", () => Math.round(statSync(this.#path).size / 2 ** 20));
+    gauge(
+      "usage.rowIndexKeys",
+      () => this.#claudeRows.size + this.#sideRows.size
+    );
+    this.#loadRows();
   }
 
-  get #lastFullRebuild(): number {
-    return this.#getMeta.get("last_full_rebuild")?.value ?? 0;
+  /**
+   * Drops every table of a store this code did not lay out (its `version`
+   * is another's, or it has none), so the first scan rebuilds it.
+   */
+  #dropIfOther(): void {
+    const hasMeta = this.#db
+      .query("SELECT 1 FROM sqlite_master WHERE name = 'meta'")
+      .get();
+    const version = hasMeta
+      ? this.#db
+          .query<{ value: number }, []>(
+            "SELECT value FROM meta WHERE key = 'version'"
+          )
+          .get()
+      : null;
+    if (version?.value === SCANNER_VERSION) {
+      return;
+    }
+    this.#db.transaction(() => {
+      for (const table of TABLES) {
+        this.#db.exec(`DROP TABLE IF EXISTS ${table}`);
+      }
+    })();
   }
 
-  /** Folds `rec` into its bucket; answers the bucket's key. */
+  /** Fills the row indexes from the store: at open, and after a rolled-back transaction. */
+  #loadRows(): void {
+    this.#claudeRows.clear();
+    this.#sideRows.clear();
+    for (const row of this.#db
+      .query<{ id: number; key: string }, []>("SELECT id, key FROM claude")
+      .iterate()) {
+      this.#claudeRows.add(row.key, row.id);
+    }
+    for (const row of this.#db
+      .query<{ id: number; key: string }, []>("SELECT id, key FROM claude_side")
+      .iterate()) {
+      this.#sideRows.add(row.key, row.id);
+    }
+  }
+
+  /** The kept message `key` names, if any. */
+  #findClaude(key: string): ClaudeRow | null {
+    for (const id of this.#claudeRows.candidates(key)) {
+      const row = this.#getClaude.get(id);
+      if (row?.key === key) {
+        return row;
+      }
+    }
+    return null;
+  }
+
+  /** The `claude_side` row of sidechain key `key`, if any. */
+  #findSide(key: string): SideRow | null {
+    for (const id of this.#sideRows.candidates(key)) {
+      const row = this.#getSide.get(id);
+      if (row?.key === key) {
+        return row;
+      }
+    }
+    return null;
+  }
+
+  #meta(key: string): number | undefined {
+    return this.#getMeta.get(key)?.value;
+  }
+
+  /**
+   * Whether a full rebuild could change what the store holds: it was costed
+   * under other rates (a refresh brought a new model's price, or changed
+   * one), built by other scanner code, or not healed for {@link HEAL_MS}.
+   */
+  #rebuildDue(): boolean {
+    return (
+      Date.now() - (this.#meta("last_full_rebuild") ?? 0) >= HEAL_MS ||
+      this.#meta("rates") !== ratesFingerprint() ||
+      this.#meta("version") !== SCANNER_VERSION
+    );
+  }
+
+  /** Folds `rec` into its bucket; answers the bucket's key, its quarter hour first. */
   #foldIn(rec: ScannedRecord): string {
     const start = bucketStart(rec.ts);
-    const key = `${rec.harness}:${rec.sessionId}:${rec.model}:${start}`;
+    const key = `${start}:${rec.harness}:${rec.sessionId}:${rec.model}`;
     this.#fold.run(
       key,
       rec.harness,
@@ -307,8 +527,8 @@ export class UsageScanner {
   /**
    * Takes a kept message's share back out of its bucket, once. firstTs/lastTs
    * are deliberately not reversed: a rare mid-stream replacement leaves at
-   * most a stale window edge, which the 30-minute full rebuild heals
-   * (USAGE-SPEC.md §5.1).
+   * most a stale window edge, which the next full rebuild heals (HEAL_MS,
+   * USAGE-SPEC.md §5.1).
    */
   #takeBack(row: ClaudeRow): void {
     if (row.counted === 0) {
@@ -323,7 +543,7 @@ export class UsageScanner {
       row.cost,
       row.bucket
     );
-    this.#uncount.run(row.key);
+    this.#uncount.run(row.id);
   }
 
   /** Folds `rec` in if it survives dedup (USAGE-SPEC.md §5.2). */
@@ -336,12 +556,13 @@ export class UsageScanner {
     }
 
     const mainKey = `${rec.messageId}\u0000${rec.requestId}`;
-    const main = this.#getClaude.get(mainKey);
+    const main = this.#findClaude(mainKey);
     if (main && !prefers(rec, main)) {
       return;
     }
     const sideKey = `${rec.messageId}\u0000`;
-    const side = rec.isSidechain ? this.#getSide.get(sideKey) : null;
+    const sideRow = rec.isSidechain ? this.#findSide(sideKey) : null;
+    const side = sideRow ? this.#getClaude.get(sideRow.main) : null;
     if (side && !prefers(rec, side)) {
       return;
     }
@@ -350,23 +571,51 @@ export class UsageScanner {
       this.#takeBack(main);
     }
     const bucket = this.#foldIn(rec);
-    this.#putClaude.run(
-      mainKey,
+    const values = [
       bucket,
       rec.isSidechain ? 1 : 0,
       totalTokens(rec.tokens),
       ...tokenValues(rec.tokens),
-      rec.costUsd
-    );
+      rec.costUsd,
+    ] as const;
+    let mainId: number;
+    if (main) {
+      this.#setClaude.run(...values, main.id);
+      mainId = main.id;
+    } else {
+      mainId = (this.#addClaude.get(mainKey, ...values) as { id: number }).id;
+      this.#claudeRows.add(mainKey, mainId);
+    }
     if (rec.isSidechain) {
-      if (side && side.key !== mainKey) {
-        this.#takeBack(side);
-      }
-      this.#putSide.run(sideKey, mainKey);
+      this.#keepSide(sideKey, sideRow, side, mainId);
     }
   }
 
-  /** Runs `work` as one transaction: all of it lands, or none. */
+  /**
+   * Points sidechain key `sideKey` at kept message `mainId`, taking the share
+   * of the message it pointed at before (`side`) back out.
+   */
+  #keepSide(
+    sideKey: string,
+    sideRow: SideRow | null,
+    side: ClaudeRow | null,
+    mainId: number
+  ): void {
+    if (side && side.id !== mainId) {
+      this.#takeBack(side);
+    }
+    if (!sideRow) {
+      const sideId = (this.#addSide.get(sideKey, mainId) as { id: number }).id;
+      this.#sideRows.add(sideKey, sideId);
+    } else if (sideRow.main !== mainId) {
+      this.#setSide.run(mainId, sideRow.id);
+    }
+  }
+
+  /**
+   * Runs `work` as one transaction: all of it lands, or none. A rollback
+   * refills the row indexes, which named the rows it took back.
+   */
   async #inTransaction(work: () => void | Promise<void>): Promise<void> {
     this.#db.exec("BEGIN");
     try {
@@ -374,93 +623,147 @@ export class UsageScanner {
       this.#db.exec("COMMIT");
     } catch (error) {
       this.#db.exec("ROLLBACK");
+      this.#loadRows();
       throw error;
     }
   }
 
-  /** Reads `path` from `offset`, folding each usage line in; records the new watermark. */
+  /**
+   * Reads `path` from `offset` and folds each usage line in, then records the
+   * new watermark, inside the caller's transaction. The lines are all read
+   * before anything is written, so a file that fails to read throws having
+   * written nothing; the records a read holds are a few hundred bytes for
+   * each assistant message.
+   */
   async #scanFile(
     path: string,
     project: string,
     offset: number,
     info: { mtimeMs: number; size: number }
   ): Promise<void> {
-    await this.#inTransaction(async () => {
-      const next = await eachLine(path, offset, (line) => {
-        const rec = parseClaudeLine(line, project);
-        if (rec) {
-          this.#ingest(rec);
-        }
-      });
-      this.#putFile.run(path, info.mtimeMs, info.size, next);
+    const records: ScannedRecord[] = [];
+    const next = await eachLine(path, offset, (line) => {
+      const rec = parseClaudeLine(line, project);
+      if (rec) {
+        records.push(rec);
+      }
     });
+    for (const rec of records) {
+      this.#ingest(rec);
+    }
+    this.#putFile.run(path, info.mtimeMs, info.size, next);
   }
 
+  /** Folds opencode's messages after `since` in; the watermark is written only when it moved. */
   async #scanOpencode(since: number): Promise<void> {
     const dbPath = await openDbPath();
     if (!dbPath) {
       return;
     }
-    await this.#inTransaction(() => {
-      const latest = scanOpencode(dbPath, since, (rec) => this.#ingest(rec));
+    const latest = scanOpencode(dbPath, since, (rec) => this.#ingest(rec));
+    if (latest !== since) {
       this.#setMeta.run("opencode_max_time_created", latest);
-    });
-  }
-
-  /** Reads every transcript and the opencode DB from scratch; clears prior state. */
-  async fullRebuild(): Promise<void> {
-    try {
-      // Re-cost against the live catalog before re-costing the corpus. The
-      // bundled snapshot goes stale the moment a new model ships — and a model
-      // it does not know prices at 0, silently, forever, because incremental
-      // scans never revisit a bucket they already wrote. The rebuild is the one
-      // place that re-costs everything, so it is the one place the rates must be
-      // fresh. `refreshPricing` throttles itself to 24h and swallows its own
-      // failures; offline keeps the snapshot and the rebuild proceeds.
-      await refreshPricing();
-      this.#db.exec(
-        "DELETE FROM buckets; DELETE FROM claude; DELETE FROM claude_side; DELETE FROM opencode_seen; DELETE FROM files; DELETE FROM meta;"
-      );
-      for (const file of await listClaudeFiles()) {
-        let info: { mtimeMs: number; size: number };
-        try {
-          // biome-ignore lint/performance/noAwaitInLoops: each file folds into the shared dedup set and buckets in sequence
-          info = await stat(file.path);
-        } catch {
-          continue;
-        }
-        await this.#scanFile(file.path, file.project, 0, info);
-      }
-      await this.#scanOpencode(0);
-      this.#setMeta.run("last_full_rebuild", Date.now());
-    } finally {
-      this.#firstScan.resolve();
     }
   }
 
-  /** Compares watermarks and reads only what changed since the last scan. */
-  async incremental(): Promise<void> {
-    try {
-      for (const file of await listClaudeFiles()) {
-        let info: { mtimeMs: number; size: number };
-        try {
-          // biome-ignore lint/performance/noAwaitInLoops: each file folds into the shared dedup set and buckets in sequence
-          info = await stat(file.path);
-        } catch {
-          continue;
-        }
-        const wm = this.#getFile.get(file.path);
-        if (wm && info.mtimeMs === wm.mtime_ms && info.size === wm.size) {
-          continue;
-        }
-        // Grown: transcripts are append-only, so only the bytes after the
-        // watermark are new. Shrunk or rotated: read it whole again.
-        const from = wm && info.size > wm.size ? wm.offset : 0;
-        await this.#scanFile(file.path, file.project, from, info);
+  /**
+   * Reads every transcript and the opencode DB from scratch, under the rates
+   * just refreshed; clears prior state. Each transcript is its own
+   * transaction, so the WAL holds one file's pages at a time, not the store's.
+   */
+  async #rebuild(): Promise<void> {
+    this.#db.transaction(() => {
+      for (const table of TABLES) {
+        this.#db.exec(`DELETE FROM ${table}`);
       }
-      await this.#scanOpencode(
-        this.#getMeta.get("opencode_max_time_created")?.value ?? 0
+    })();
+    this.#claudeRows.clear();
+    this.#sideRows.clear();
+    for (const file of await listClaudeFiles()) {
+      let info: { mtimeMs: number; size: number };
+      try {
+        // biome-ignore lint/performance/noAwaitInLoops: each file folds into the shared dedup set and buckets in sequence
+        info = await stat(file.path);
+      } catch {
+        continue;
+      }
+      await this.#inTransaction(() =>
+        this.#scanFile(file.path, file.project, 0, info)
       );
+    }
+    await this.#inTransaction(async () => {
+      await this.#scanOpencode(0);
+      this.#setMeta.run("last_full_rebuild", Date.now());
+      this.#setMeta.run("rates", ratesFingerprint());
+      this.#setMeta.run("version", SCANNER_VERSION);
+    });
+  }
+
+  /**
+   * Compares watermarks and reads only what changed since the last scan,
+   * inside the caller's transaction. A transcript that fails to read is left
+   * for the next scan; the others land, and the first failure is answered.
+   */
+  async #incremental(): Promise<unknown> {
+    let failure: unknown;
+    for (const file of await listClaudeFiles()) {
+      let info: { mtimeMs: number; size: number };
+      try {
+        // biome-ignore lint/performance/noAwaitInLoops: each file folds into the shared dedup set and buckets in sequence
+        info = await stat(file.path);
+      } catch {
+        continue;
+      }
+      const wm = this.#getFile.get(file.path);
+      if (wm && info.mtimeMs === wm.mtime_ms && info.size === wm.size) {
+        continue;
+      }
+      // Grown: transcripts are append-only, so only the bytes after the
+      // watermark are new. Shrunk or rotated: read it whole again.
+      const from = wm && info.size > wm.size ? wm.offset : 0;
+      try {
+        await this.#scanFile(file.path, file.project, from, info);
+      } catch (error) {
+        failure ??= error;
+      }
+    }
+    await this.#scanOpencode(this.#meta("opencode_max_time_created") ?? 0);
+    return failure;
+  }
+
+  /**
+   * One tick: folds in what changed since the last (or rebuilds the store,
+   * when {@link #rebuildDue}) and answers the buckets the hub must (re-)learn.
+   * The scan, the report and the report's untouch are one transaction, so a
+   * tick commits once however many transcripts moved; a tick where nothing
+   * moved writes nothing.
+   *
+   * Rates are refreshed first (`refreshPricing` throttles itself to 24h and
+   * swallows its own failures; offline keeps the snapshot): the bundled
+   * snapshot goes stale the moment a new model ships, and a model it does not
+   * know prices at 0, which incremental scans never revisit. Refreshed rates
+   * that differ from the store's are what make a rebuild due.
+   */
+  async scan(now: number): Promise<UsageBucket[]> {
+    try {
+      await refreshPricing();
+      if (this.#rebuildDue()) {
+        await this.#rebuild();
+      }
+      let failure: unknown;
+      let buckets: UsageBucket[] = [];
+      await this.#inTransaction(async () => {
+        failure = await this.#incremental();
+        // A failed tick reports nothing, so it untouches nothing: what it
+        // folded in is reported by the next one.
+        if (failure === undefined) {
+          buckets = this.#reportBuckets(now);
+        }
+      });
+      if (failure !== undefined) {
+        throw failure;
+      }
+      return buckets;
     } finally {
       this.#firstScan.resolve();
     }
@@ -472,7 +775,7 @@ export class UsageScanner {
    * touched since the last report — after a full rebuild, every bucket. Re-sends
    * are idempotent because the hub upserts by id.
    */
-  reportBuckets(now: number): UsageBucket[] {
+  #reportBuckets(now: number): UsageBucket[] {
     const current = bucketStart(now);
     const buckets = this.#report.all(current, current - BUCKET_MS).map(
       (row): UsageBucket => ({
@@ -499,10 +802,5 @@ export class UsageScanner {
     );
     this.#untouch.run();
     return buckets;
-  }
-
-  /** True when the last full rebuild, on this machine's store, is older than `intervalMs`. */
-  dueForFullRebuild(intervalMs: number): boolean {
-    return Date.now() - this.#lastFullRebuild >= intervalMs;
   }
 }
