@@ -1,5 +1,6 @@
 import CawCoCore
 import CawCoDesign
+import OSLog
 import UIKit
 import WebKit
 
@@ -35,6 +36,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private let grabber = UIView()
     private var headTop: NSLayoutConstraint!
     private let well = UIView()
+    /// While selecting, one line on the well's top edge says the page takes no taps but picks.
+    private let selectingNote = UIView()
+    private var selectingNoteHeight: NSLayoutConstraint!
     private let cover = UIView()
     private let failure = KitAlert(tone: .destructive)
     /// What the band's failure is of (PreviewPane.svelte `failure.again`):
@@ -43,6 +47,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var failureOf: String?
     private var revision: String?
     private var origin: URL?
+    /// Select, which the person turns on and nothing else does: every new
+    /// document, revision, Reload and Close starts the page with it off.
     private var selecting = false
     private var connected = false
     private var closing = false
@@ -132,13 +138,25 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         well.layer.borderWidth = 1
         well.clipsToBounds = true
         well.backgroundColor = Palette.surfaceRecess
+        // The mode in words, 28pt on the well's top edge, which the page gives
+        // way to while selecting and takes back when it ends.
+        selectingNote.translatesAutoresizingMaskIntoConstraints = false
+        selectingNote.backgroundColor = Palette.surfaceRecess
+        selectingNote.clipsToBounds = true
+        selectingNote.isUserInteractionEnabled = false
+        let noteLabel = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
+        noteLabel.text = "Selecting: tap an element on the page"
+        noteLabel.lineBreakMode = .byTruncatingTail
+        noteLabel.translatesAutoresizingMaskIntoConstraints = false
+        selectingNote.addSubview(noteLabel)
+        selectingNoteHeight = selectingNote.heightAnchor.constraint(equalToConstant: 0)
         cover.translatesAutoresizingMaskIntoConstraints = false
         cover.backgroundColor = Palette.surfaceRecess
         cover.isUserInteractionEnabled = false
         let line = SkeletonView(height: 11)
         cover.addSubview(line)
         failure.isHidden = true
-        for part in [web!, cover, failure] as [UIView] { well.addSubview(part) }
+        for part in [selectingNote, web!, cover, failure] as [UIView] { well.addSubview(part) }
 
         // The grabber, `space-1` from the top, centred, 100×6 in the control
         // edge; its hit area is 44pt tall about it (vaul's handle hit area),
@@ -176,7 +194,14 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             well.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: Space.space2),
             well.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Space.space2),
             well.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -Space.space2),
-            web.topAnchor.constraint(equalTo: well.topAnchor),
+            selectingNote.topAnchor.constraint(equalTo: well.topAnchor),
+            selectingNote.leadingAnchor.constraint(equalTo: well.leadingAnchor),
+            selectingNote.trailingAnchor.constraint(equalTo: well.trailingAnchor),
+            selectingNoteHeight,
+            noteLabel.leadingAnchor.constraint(equalTo: selectingNote.leadingAnchor, constant: Space.space3),
+            noteLabel.trailingAnchor.constraint(lessThanOrEqualTo: selectingNote.trailingAnchor, constant: -Space.space3),
+            noteLabel.centerYAnchor.constraint(equalTo: selectingNote.topAnchor, constant: Space.space4),
+            web.topAnchor.constraint(equalTo: selectingNote.bottomAnchor),
             web.leadingAnchor.constraint(equalTo: well.leadingAnchor),
             web.trailingAnchor.constraint(equalTo: well.trailingAnchor),
             web.bottomAnchor.constraint(equalTo: well.bottomAnchor),
@@ -213,6 +238,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
               let origin = hub.previewOrigin(frame) else { return }
         guard frame.revision != revision else { return }
         revision = frame.revision
+        select(false)
         titleLabel.text = frame.artifact.name
         pathLabel.text = Self.place(frame)
         self.origin = origin
@@ -233,6 +259,16 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     // MARK: The page
+
+    /// A new document (a load, the page's own reload or a link to another
+    /// page) starts its overlay out of select mode: Select goes off with it,
+    /// so the button and the page never disagree.
+    func webView(_: WKWebView, didCommit _: WKNavigation!) {
+        select(false)
+        #if DEBUG
+        probe("preview document")
+        #endif
+    }
 
     func webView(_: WKWebView, didFinish _: WKNavigation!) {
         Motion.easeOut.animator(Motion.durControl) { self.cover.alpha = 0 }.startAnimation()
@@ -267,7 +303,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
                 connected = true
                 selectButton.isEnabled = true
                 sendButton.isEnabled = true
-                select(selecting)
             }
         case "cawco:selected":
             guard selecting, let element = body["element"] as? [String: Any], let markdown = Self.selection(element) else { return }
@@ -275,6 +310,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             if let png = (body["png"] as? String).flatMap(Self.png) {
                 attachments.append(.image(name: "selection.png", mediaType: "image/png", data: png))
             }
+            #if DEBUG
+            probe("preview selected \(Self.text(element["selector"], 200) ?? "?")")
+            #endif
             UISelectionFeedbackGenerator().selectionChanged()
             onSelect(attachments)
             if let error = Self.text(body["error"], 300) { failed(error, of: nil) }
@@ -287,6 +325,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         case "cawco:resolved":
             // The page kept the field it refused: its word leaves the band.
             if failureOf == "field" { clearFailure() }
+        #if DEBUG
+        case "cawco:probe":
+            probePage(body)
+        #endif
         default:
             break
         }
@@ -326,12 +368,20 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         KitButton.setTitle(sending ? "Sending…" : "Send picks", of: sendButton, variant: .ghost, height: .sm)
     }
 
+    /// Select on or off, unmistakable while on: the button pressed and
+    /// reading Done (the way out on the button itself), the well's accent
+    /// edge, and the line on its top edge, 28pt.
     private func select(_ on: Bool) {
         selecting = on
         selectButton.isSelected = on
+        KitButton.setTitle(on ? "Done" : "Select", of: selectButton, variant: .ghost, height: .sm)
+        selectingNoteHeight.constant = on ? Space.space4 * 2 : 0
         reloadButton.setNeedsUpdateConfiguration()
         paintWell()
         deliver(["type": "cawco:mode", "mode": on ? "select" : "off"])
+        #if DEBUG
+        probe("preview select \(on ? "on" : "off")")
+        #endif
     }
 
     private func reload() {
@@ -371,6 +421,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     func close(refused: @escaping () -> Void = {}) {
         guard !closing else { return }
         closing = true
+        // A preview the hub keeps open comes back with the page taking taps.
+        select(false)
         closeButton.isEnabled = false
         Task { [weak self] in
             guard let self else { return }
@@ -384,6 +436,44 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             closeButton.isEnabled = true
         }
     }
+
+    #if DEBUG
+    // MARK: The simulator probe (scripts/probe-ios-preview-touch.ts)
+
+    /// `-preview-probe`: the preview's mode, documents and picks, and what
+    /// the probe's page says of itself, as `Probe` lines.
+    private static let probing = ProcessInfo.processInfo.arguments.contains("-preview-probe")
+
+    private func probe(_ line: String) {
+        guard Self.probing else { return }
+        Logger(subsystem: "dev.cawco.app", category: "Probe").notice("\(line, privacy: .public)")
+    }
+
+    /// The probe's page posts `cawco:probe` with its state and the viewport
+    /// rects of what the probe taps: logged with each rect's centre in the
+    /// window's points, where a simulator touch lands, after the header's own
+    /// line (Select's words and its centre, Reload's, the grabber's, and the
+    /// selecting line's height), so every post says where everything is now.
+    private func probePage(_ body: [String: Any]) {
+        guard Self.probing, let web else { return }
+        let centre = { (control: UIView) -> String in
+            let at = control.convert(CGPoint(x: control.bounds.midX, y: control.bounds.midY), to: nil)
+            return "\(Int(at.x.rounded())),\(Int(at.y.rounded()))"
+        }
+        let words = selectButton.configuration?.attributedTitle.map { String($0.characters) } ?? "?"
+        let grab = grabArea.isHidden ? "none" : centre(grabber)
+        probe("preview head select=\(words)@\(centre(selectButton)) reload=\(centre(reloadButton)) grabber=\(grab) note=\(Int(selectingNote.bounds.height))")
+        var parts = [Self.text(body["state"], 200) ?? ""]
+        let rects = body["rects"] as? [String: Any] ?? [:]
+        for name in rects.keys.sorted() {
+            guard let rect = rects[name] as? [String: Any], let x = rect["x"] as? Double, let y = rect["y"] as? Double,
+                  let width = rect["width"] as? Double, let height = rect["height"] as? Double else { continue }
+            let at = web.convert(CGPoint(x: x + width / 2, y: y + height / 2), to: nil)
+            parts.append("\(Self.text(name, 40) ?? "")=\(Int(at.x.rounded())),\(Int(at.y.rounded()))")
+        }
+        probe("preview page \(parts.joined(separator: " "))")
+    }
+    #endif
 
     // MARK: What a selection says (selection.ts `selectionExtras`)
 
