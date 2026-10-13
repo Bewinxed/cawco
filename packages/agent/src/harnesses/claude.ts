@@ -2425,33 +2425,69 @@ class ClaudeSession implements HarnessSession {
   }
 
   /**
-   * THE CAWCO SLOT, DIALLED AGAIN WHEN THE CLI HAS GIVEN IT UP. The child
-   * reaches CawCo through this machine's agent (its MCP gateway, or the hub
-   * itself when that is local), and an update restarts both. Claude Code
-   * retries a dropped HTTP server five times, 1 s to 8 s apart, with a 30 s
-   * connect timeout each, then marks it `failed` for good and never dials it
-   * again (2.1.289, the slot's own `mcp-logs-cawco`: "Reconnect gave up after
-   * 5 attempts: failed", 2026-10-08 10:30:46, two seconds before the rollback
-   * brought a hub that answered back). 2.1.295 and on keep dialling after
-   * those five: "Reconnect attempts spent; retrying in the background, up to
-   * 8 more times" (2.1.296 on a scratch rig: a 30 s hub outage, back on the
-   * slot's sixth attempt, 15 s after the hub was). A slot that outlasts those
-   * too still reads `failed`. A `failed` slot is dialled once more
-   * with the header it was launched with, so no credential changes: one the
-   * hub no longer knows is refused by that dial, or reads `needs-auth`,
-   * which is not redialled. A slot still connecting is left to finish.
+   * THE CAWCO SLOT OF A CHILD ATTACHED WHILE IT IS STILL CONNECTING, DIALLED
+   * UNTIL IT CONNECTS OR THE CHILD ENDS. The child reaches CawCo through this
+   * machine's agent (its MCP gateway, or the hub itself when that is local),
+   * and an update restarts both. Claude Code retries a dropped HTTP server
+   * five times, 1 s to 8 s apart, with a 30 s connect timeout each, then
+   * marks it `failed` (2.1.289, the slot's own `mcp-logs-cawco`: "Reconnect
+   * gave up after 5 attempts: failed", 2026-10-08 10:30:46). 2.1.295 and on
+   * keep dialling after those five: "Reconnect attempts spent; retrying in
+   * the background, up to 8 more times" (2.1.296 on a scratch rig). A slot
+   * still connecting is left to its own retries; a `failed` one is dialled
+   * again with the header it was launched with, so no credential changes,
+   * at a wait that doubles to 30 s. Once connected, the hub has taken that
+   * header as this session, and the ACK, authenticated by it, says so. A
+   * slot that reads anything else (`needs-auth`: the hub no longer knows the
+   * credential) is not dialled again, and the session runs on without CawCo
+   * tools, as its CLI says.
    */
-  async #reconnectCawco(): Promise<McpServerStatus[]> {
-    const servers = await this.#handle.mcpServerStatus();
-    if (
-      servers.find((server) => server.name === MCP_SERVER_NAME)?.status ===
-      "failed"
-    ) {
-      await this.#handle.reconnectMcpServer(MCP_SERVER_NAME);
+  async #dialCawco(credential: string): Promise<void> {
+    let over = false;
+    // Its end, however it ends: the pump reports its own failure.
+    const ended = () => {
+      over = true;
+    };
+    this.#pump.then(ended, ended);
+    for (let wait = 1000; !over; wait = Math.min(wait * 2, 30_000)) {
+      try {
+        // biome-ignore lint/performance/noAwaitInLoops: one reading of the slot at a time, each after the wait before it
+        const cawco = (await this.#handle.mcpServerStatus()).find(
+          (server) => server.name === MCP_SERVER_NAME
+        );
+        if (cawco?.status === "connected") {
+          await acknowledgeSessionCredential(credential);
+          console.info(
+            `[claude] held credential verified ${this.instanceId}: its CawCo MCP connected after it was attached`
+          );
+          return;
+        }
+        if (cawco?.status === "failed") {
+          await this.#handle.reconnectMcpServer(MCP_SERVER_NAME);
+        } else if (cawco?.status !== "pending") {
+          console.warn(
+            `[claude] ${this.instanceId}: its CawCo MCP reads ${cawco?.status ?? "missing"}; it is not dialled again`
+          );
+          return;
+        }
+      } catch (error) {
+        if (over) {
+          return;
+        }
+        console.warn(
+          `[claude] ${this.instanceId}: its CawCo MCP is still connecting: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+      await Bun.sleep(wait);
     }
-    return await this.#connectedCawcoSnapshot();
   }
 
+  /**
+   * A fresh launch's cawco slot, connected, within 30 s: the ACK that settles
+   * the hub's launch goes only once the slot carries the launch's header, so
+   * a launch whose slot never connects fails once rather than staying in
+   * flight (e75772bb).
+   */
   async #connectedCawcoSnapshot(): Promise<McpServerStatus[]> {
     const deadline = Date.now() + 30_000;
     for (;;) {
@@ -2512,19 +2548,21 @@ class ClaudeSession implements HarnessSession {
   }
 
   /**
-   * A child this host attached to proves what its cawco slot sends: the slot
-   * is connected, and the header it was launched with is one the hub
-   * acknowledges (the ACK is authenticated by that header, so a credential
-   * the hub no longer knows is refused). A child launched with no credential
-   * has no way to call CawCo tools: the hub takes no call without one.
-   *
-   * The slot is read through {@link #reconnectCawco}: a child that outlived
-   * the agent has often had its slot given up while the agent and the hub
-   * were restarting, and a gave-up slot is not a credential the hub refused.
+   * The credential a child this host attached to was launched with, read off
+   * its cawco slot's header: one with none has no way to call CawCo tools
+   * (the hub takes no call without one), and is refused. A connected slot is
+   * ACKed now (authenticated by that header, so a credential the hub no
+   * longer knows is refused). A slot still connecting, or given up, is no
+   * refusal: a child that outlived the agent has often had its slot dropped
+   * while the agent and the hub restarted, and on a loaded machine it can
+   * take far longer than any deadline to come back. The child is attached as
+   * it is, a live process this agent holds, and its slot is dialled until it
+   * connects ({@link #dialCawco}). Any other status is the hub's refusal.
    */
   async #verifyHeldCredential() {
-    const servers = await this.#reconnectCawco();
-    const cawco = servers.find((server) => server.name === MCP_SERVER_NAME);
+    const cawco = (await this.#handle.mcpServerStatus()).find(
+      (server) => server.name === MCP_SERVER_NAME
+    );
     const header =
       cawco?.config?.type === "http"
         ? cawco.config.headers?.Authorization
@@ -2535,8 +2573,20 @@ class ClaudeSession implements HarnessSession {
       );
     }
     const credential = header.slice("Bearer ".length);
-    await acknowledgeSessionCredential(credential);
-    console.info(`[claude] held credential verified ${this.instanceId}`);
+    if (cawco?.status === "connected") {
+      await acknowledgeSessionCredential(credential);
+      console.info(`[claude] held credential verified ${this.instanceId}`);
+    } else if (cawco?.status === "pending" || cawco?.status === "failed") {
+      console.info(
+        `[claude] ${this.instanceId}: attached while its CawCo MCP is ${cawco.status === "pending" ? "connecting" : "reconnecting"}; it is dialled until it connects`
+      );
+      // biome-ignore lint/complexity/noVoid: the attach does not wait on the slot; the dial runs as long as the child does
+      void this.#dialCawco(credential);
+    } else {
+      throw new Error(
+        `CawCo MCP is not connected (${cawco?.status ?? "missing"}).`
+      );
+    }
     return { credential };
   }
 

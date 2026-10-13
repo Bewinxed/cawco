@@ -48,7 +48,13 @@
  *              that send came back at most once;
  *   stopped-dies — the same, its process killed while frozen: it is let go
  *              as at rest, and the send made meanwhile starts it afresh and
- *              is read once.
+ *              is read once;
+ *   mcp-late — a Claude session mid-tool whose CawCo MCP slot reaches the hub
+ *              through a proxy; the hub and the agent restarted while the
+ *              proxy holds every new MCP connection, for 50 s past the
+ *              attach: the session is attached anyway (never refused), its
+ *              turn runs on to its end, and its slot connects once let
+ *              through.
  *
  * Claude runs every case; opencode and pi run exit and restart. A case whose
  * session is left failed rather than asleep is woken by a person's next
@@ -61,6 +67,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { Socket, SocketHandler } from "bun";
 import { SessiondClient } from "../packages/agent/src/sessiond-client";
 import { processStart } from "../packages/core/src/process-identity";
 import {
@@ -86,7 +93,8 @@ type Case =
   | "held-restart"
   | "stuck-opencode"
   | "stopped"
-  | "stopped-dies";
+  | "stopped-dies"
+  | "mcp-late";
 const CASES: Record<Harness, Case[]> = {
   claude: [
     "sleep",
@@ -102,6 +110,7 @@ const CASES: Record<Harness, Case[]> = {
     "stuck-opencode",
     "stopped",
     "stopped-dies",
+    "mcp-late",
   ],
   opencode: ["exit", "restart"],
   pi: ["exit", "restart"],
@@ -128,7 +137,7 @@ const KILLED = "Your process was killed (SIGKILL)";
 /** A turn that runs one long Bash `sleep`, then answers. */
 const TOOL_SLEEP = "CUSTODY-TOOL-SLEEP";
 /** How long that `sleep` runs, in seconds: past the custody bound and the restart around it. */
-const TOOL_SLEEP_S = 110;
+const TOOL_SLEEP_S = 240;
 const fleet = await scratchFleet({
   name: "send-custody-probe",
   respond: (request) => {
@@ -1060,7 +1069,267 @@ const frozenCase = async (label: string, dies: boolean) => {
   }
 };
 
+/**
+ * Requests that answered a tool's result in the turn `marker` started: on
+ * Anthropic messages the last user message is then the result itself, so
+ * the prompt is read from the whole conversation.
+ */
+const toolResults = (marker: string) =>
+  fleet.seen.filter(
+    (one) => one.tools && one.afterTool && one.all.includes(marker)
+  ).length;
+
+/** One side of a proxied connection: its peer, and what waits to be written to it. */
+interface Side {
+  closed?: boolean;
+  decided?: boolean;
+  peer?: Socket<Side>;
+  queue: Uint8Array[];
+  waiting: Uint8Array[];
+}
+
+/** Writes `chunk` to `sock` behind what already waits there. */
+const sendTo = (sock: Socket<Side>, chunk: Uint8Array) => {
+  if (sock.data.queue.length > 0) {
+    sock.data.queue.push(chunk);
+    return;
+  }
+  const written = sock.write(chunk);
+  if (written < chunk.byteLength) {
+    sock.data.queue.push(chunk.subarray(Math.max(written, 0)));
+  }
+};
+const flush = (sock: Socket<Side>) => {
+  const { queue } = sock.data;
+  while (queue.length > 0) {
+    const chunk = queue[0] as Uint8Array;
+    const written = sock.write(chunk);
+    if (written < chunk.byteLength) {
+      queue[0] = chunk.subarray(Math.max(written, 0));
+      return;
+    }
+    queue.shift();
+  }
+};
+const endSide = (sock: Socket<Side> | undefined) => {
+  if (sock && !sock.data.closed) {
+    sock.data.closed = true;
+    sock.end();
+  }
+};
+
+/**
+ * A TCP proxy on `listenPort`, the address the hub had, in front of the hub
+ * now on `hubPort`: every connection goes through as it is, but while `hold`
+ * is on (it starts on), a new one that asks for `/mcp/cawco` is taken and
+ * left unanswered, as a hub out of reach leaves a connect, until `hold` goes
+ * off and it goes through.
+ */
+const hubProxy = (listenPort: number, hubPort: number) => {
+  let holding = true;
+  let heldEver = 0;
+  const held = new Set<Socket<Side>>();
+  const through = async (client: Socket<Side>) => {
+    held.delete(client);
+    const up = await Bun.connect<Side>({
+      hostname: "127.0.0.1",
+      port: hubPort,
+      data: { queue: [], waiting: [] },
+      socket: {
+        data: (side, chunk) => {
+          if (side.data.peer) {
+            sendTo(side.data.peer, chunk.slice());
+          }
+        },
+        drain: flush,
+        close: (side) => endSide(side.data.peer),
+        error: (side) => endSide(side.data.peer),
+      },
+    }).catch(() => undefined);
+    if (!up || client.data.closed) {
+      endSide(client);
+      up?.end();
+      return;
+    }
+    up.data.peer = client;
+    client.data.peer = up;
+    for (const chunk of client.data.waiting) {
+      sendTo(up, chunk);
+    }
+    client.data.waiting = [];
+  };
+  const listening: SocketHandler<Side> = {
+    open: (sock) => {
+      sock.data = { queue: [], waiting: [] };
+    },
+    data: (sock, chunk) => {
+      if (sock.data.peer) {
+        sendTo(sock.data.peer, chunk.slice());
+        return;
+      }
+      sock.data.waiting.push(chunk.slice());
+      if (sock.data.decided) {
+        return;
+      }
+      sock.data.decided = true;
+      const head = new TextDecoder().decode(chunk.subarray(0, 512));
+      if (holding && head.includes("/mcp/cawco")) {
+        heldEver += 1;
+        held.add(sock);
+        return;
+      }
+      // biome-ignore lint/complexity/noVoid: the connection goes through when its upstream opens
+      void through(sock);
+    },
+    drain: flush,
+    close: (sock) => {
+      sock.data.closed = true;
+      held.delete(sock);
+      endSide(sock.data.peer);
+    },
+    error: (sock) => {
+      sock.data.closed = true;
+      held.delete(sock);
+      endSide(sock.data.peer);
+    },
+  };
+  Bun.listen<Side>({
+    hostname: "127.0.0.1",
+    port: listenPort,
+    socket: listening,
+  });
+  return {
+    hold: (on: boolean) => {
+      holding = on;
+      if (!on) {
+        for (const sock of [...held]) {
+          // biome-ignore lint/complexity/noVoid: each held connection goes through on its own
+          void through(sock);
+        }
+      }
+    },
+    heldNow: () => held.size,
+    heldSoFar: () => heldEver,
+  };
+};
+
+/**
+ * A Claude session mid-tool while the hub and the agent go down for 45 s
+ * (its CawCo MCP slot's connects refused, so Claude Code's own reconnects
+ * give up), then come back, the hub on a new port behind {@link hubProxy}
+ * on its old one, every new MCP connection held for 50 s past the agent's
+ * return (past the 30 s a launch's slot is given): attached anyway, its
+ * turn runs to its end, and its slot connects once let through.
+ */
+const mcpLateCase = async (label: string) => {
+  let proxy: ReturnType<typeof hubProxy> | undefined;
+  try {
+    const id = await fleet.spawn("claude", "Custody claude mcp-late");
+    const first = mark("claude", "mcp-late", "first");
+    await fleet.send(id, `${first}: say ok.`);
+    await until(
+      `${first} answered`,
+      () => turnsOf(first),
+      (n) => n >= 1
+    );
+    await Bun.sleep(3000);
+    const tool = mark("claude", "mcp-late", "tool");
+    await fleet.send(id, `${TOOL_SLEEP} ${tool}: wait in a tool.`);
+    await until(
+      `${tool} asked`,
+      () => turnsOf(tool),
+      (n) => n >= 1,
+      120_000
+    );
+    await Bun.sleep(3000);
+    // The hub goes down: its slot's connection drops and its reconnects
+    // are refused, until Claude Code's own retries give up. It comes back on
+    // a port of its own, behind a proxy on the one the slot dials, which
+    // holds every new MCP connection.
+    await fleet.stop("agent", "SIGKILL");
+    await fleet.stop("hub", "SIGKILL");
+    await Bun.sleep(45_000);
+    const lease = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: () => new Response(null),
+    });
+    const movedTo = lease.port as number;
+    await lease.stop(true);
+    proxy = hubProxy(Number(new URL(fleet.base).port), movedTo);
+    fleet.env.CAWCO_HUB_PORT = String(movedTo);
+    fleet.launch("hub");
+    await fleet.hubUp();
+    fleet.launch("agent");
+    await fleet.agentUp();
+    const upAt = Date.now();
+    const attachedConnecting = await until(
+      "attached while its slot connects",
+      () => agentSaid(id, "attached while its CawCo MCP is"),
+      (n) => n >= 1,
+      60_000
+    ).catch(() => 0);
+    await Bun.sleep(Math.max(0, upAt + 50_000 - Date.now()));
+    const whileHeld = {
+      heldForMs: Date.now() - upAt,
+      attachedConnecting,
+      verifiedAtAttach: await agentSaid(id, "held credential verified"),
+      dialsHeld: proxy.heldSoFar(),
+      refused:
+        (await agentSaid(id, "did not connect within")) +
+        (await agentSaid(id, "could not be verified")),
+      row: fleet.instance(id),
+      toolFinishedYet: toolResults(tool),
+    };
+    proxy.hold(false);
+    const connected = await until(
+      "its slot connected",
+      () => agentSaid(id, "connected after it was attached"),
+      (n) => n >= 1,
+      180_000
+    ).catch(() => 0);
+    const toolFinished = await until(
+      `${tool} ran to its end`,
+      () => toolResults(tool),
+      (n) => n >= 1,
+      180_000
+    ).catch(() => 0);
+    const next = mark("claude", "mcp-late", "next");
+    const read = await readOnce(await fleet.send(id, `${next}: say ok.`), next);
+    const outcome = {
+      whileHeld,
+      connected,
+      toolFinished,
+      read,
+      row: fleet.instance(id),
+    };
+    report(
+      label,
+      whileHeld.attachedConnecting >= 1 &&
+        whileHeld.verifiedAtAttach === 0 &&
+        whileHeld.dialsHeld >= 1 &&
+        whileHeld.refused === 0 &&
+        whileHeld.row?.status === "running" &&
+        whileHeld.toolFinishedYet === 0 &&
+        connected >= 1 &&
+        toolFinished >= 1 &&
+        read.turns === 1 &&
+        read.send?.state === "read" &&
+        outcome.row?.status === "running",
+      outcome,
+      `attached while its MCP slot was held ${Math.round(whileHeld.heldForMs / 1000)} s past the agent's return; its tool turn ran to its end and its slot connected once let through`
+    );
+  } finally {
+    // The hub stays on its new port behind the proxy, which lets all through.
+    proxy?.hold(false);
+  }
+};
+
 const runCase = async (harness: Harness, name: Case) => {
+  if (name === "mcp-late") {
+    await mcpLateCase(`${harness} ${name}`);
+    return;
+  }
   if (name === "stopped" || name === "stopped-dies") {
     await frozenCase(`${harness} ${name}`, name === "stopped-dies");
     return;
