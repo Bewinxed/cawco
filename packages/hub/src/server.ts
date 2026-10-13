@@ -540,6 +540,24 @@ interface SearchHitWire {
   timestamp: string | null;
 }
 
+/**
+ * How long a fleet search waits on each machine. Search is one query per
+ * keystroke, so a slow machine is named as one that didn't answer rather
+ * than holding every other machine's hits back.
+ */
+const SEARCH_ANSWER_MS = 1500;
+
+/** Why a machine's search came back empty-handed, as the clause after "couldn't search:". */
+function searchMiss(answer: ControlResult | "offline" | "timeout"): string {
+  if (answer === "offline") {
+    return "it went offline";
+  }
+  if (answer === "timeout") {
+    return `it didn't answer within ${SEARCH_ANSWER_MS / 1000} s`;
+  }
+  return answer.error ?? "it gave no reason";
+}
+
 /** A busy probe is polled in a loop before a restart, so it answers fast or not at all. */
 const BUSY_TIMEOUT_MS = 5000;
 
@@ -17677,18 +17695,23 @@ export const createServer = (
               ? query.role
               : undefined;
           const machineIds = registry.machineIds();
-          if (machineIds.length === 0) {
-            return { hits: [], machines: 0 };
-          }
+          // A machine that could not answer is named beside the others' hits,
+          // never dropped in silence: its sentence is the one every client
+          // shows as it is (WORDS.md's error formula).
+          const failures: { machineId: string; message: string }[] = [];
           const results = await Promise.all(
             machineIds.map(async (mid) => {
               const answer = await callAgent(
                 mid,
                 CONTROL_SEARCH_TRANSCRIPTS,
                 [q, { limit, ...(role ? { role } : {}) }],
-                1500
+                SEARCH_ANSWER_MS
               );
               if (answer === "offline" || answer === "timeout" || !answer.ok) {
+                failures.push({
+                  machineId: mid,
+                  message: `${machineName(mid)} couldn't search: ${searchMiss(answer)}. Its results are left out; the next search tries again.`,
+                });
                 return [];
               }
               return (answer.result as SearchHitWire[]).map((hit) => ({
@@ -17714,7 +17737,7 @@ export const createServer = (
                 instanceId;
             }
           }
-          return { hits: merged, machines: machineIds.length };
+          return { hits: merged, machines: machineIds.length, failures };
         }
       )
       // What a delegate and its parent said to each other, oldest first. Broadcast

@@ -390,6 +390,12 @@
           {/each}
         </Command.Group>
       {/if}
+
+      <!-- A machine that couldn't answer is named under the results, in the
+           hub's own words, so a short list is never mistaken for the fleet's. -->
+      {#each search.failures as failure (failure.machineId)}
+        <p class="jump-failure" data-flip role="status">{failure.message}</p>
+      {/each}
     </Command.List>
 
     <div class="jump-footer">
@@ -644,6 +650,15 @@
   }
   .jump-skeleton .jump-hit-head {
     height: 1lh;
+  }
+
+  /* One quiet line per machine left out: the trail's rung, at a heading's inset. */
+  .jump-failure {
+    padding: 6px 8px;
+    color: var(--ink-muted);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
+    line-height: var(--leading-ui);
   }
 
   /* Inside the well, divided from the results by the same hairline as the

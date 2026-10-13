@@ -13,6 +13,12 @@ export interface TranscriptHit {
   timestamp: string | null;
 }
 
+/** A machine that couldn't answer the search, in the hub's own sentence. */
+export interface SearchFailure {
+  machineId: string;
+  message: string;
+}
+
 /** Who wrote the line, as the palette names them and the index stores them. */
 export const AUTHORS = [
   { token: "me", role: "user", label: "Me", detail: "only what I wrote" },
@@ -89,6 +95,8 @@ export function applyAuthor(query: string, token: AuthorToken): string {
 
 export class JumpTranscriptSearch {
   hits = $state<TranscriptHit[]>([]);
+  /** The machines whose results the last answer leaves out, and why. */
+  failures = $state<SearchFailure[]>([]);
   pending = $state(false);
   #timer: ReturnType<typeof setTimeout> | undefined;
   #controller: AbortController | undefined;
@@ -109,6 +117,7 @@ export class JumpTranscriptSearch {
     // middle of replacing.
     if (text.length < 2 || authorFragment(query) !== null) {
       this.hits = [];
+      this.failures = [];
       this.pending = false;
       return;
     }
@@ -131,10 +140,14 @@ export class JumpTranscriptSearch {
       if (!response.ok) {
         throw new Error(`Transcript search failed: ${response.status}`);
       }
-      const { hits } = (await response.json()) as { hits: TranscriptHit[] };
+      const { hits, failures } = (await response.json()) as {
+        hits: TranscriptHit[];
+        failures: SearchFailure[];
+      };
       if (controller.signal.aborted) {
         return;
       }
+      this.failures = failures;
       const seen = new Set<string>();
       const next = hits
         .filter((hit) => {
@@ -155,6 +168,7 @@ export class JumpTranscriptSearch {
     } catch {
       if (!controller.signal.aborted) {
         this.hits = [];
+        this.failures = [];
       }
     } finally {
       if (this.#controller === controller) {

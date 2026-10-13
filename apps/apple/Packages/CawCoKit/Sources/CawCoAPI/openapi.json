@@ -20559,9 +20559,28 @@
           },
           "machines": {
             "type": "number"
+          },
+          "failures": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "machineId": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "machineId",
+                "message"
+              ]
+            }
           }
         },
         "required": [
+          "failures",
           "hits",
           "machines"
         ]

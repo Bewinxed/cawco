@@ -192,6 +192,8 @@ enum JumpAuthor: String, CaseIterable {
 }
 
 typealias TranscriptHit = Components.Schemas.GetApiSearch200.HitsPayloadPayload
+/// A machine that couldn't answer, in the hub's own sentence (shown as it is).
+typealias SearchFailure = Components.Schemas.GetApiSearch200.FailuresPayloadPayload
 
 /// The transcripts' full-text search: 150ms after the last keystroke, two
 /// characters or more, one hit per conversation, ten at most; any keystroke
@@ -200,6 +202,8 @@ typealias TranscriptHit = Components.Schemas.GetApiSearch200.HitsPayloadPayload
 @Observable
 final class JumpSearch {
     private(set) var hits: [TranscriptHit] = []
+    /// The machines whose results the last answer leaves out, and why.
+    private(set) var failures: [SearchFailure] = []
     private(set) var pending = false
     @ObservationIgnored private var task: Task<Void, Never>?
     private let hub: HubConnection
@@ -214,6 +218,7 @@ final class JumpSearch {
         let scope = author ?? parsed.author
         guard parsed.text.count >= 2, JumpAuthor.fragment(query) == nil else {
             hits = []
+            failures = []
             pending = false
             return
         }
@@ -224,13 +229,16 @@ final class JumpSearch {
             do {
                 let response = try await hub.api.search.transcripts(.init(query: .init(q: parsed.text, limit: "20", role: scope?.role)))
                 guard !Task.isCancelled, let self else { return }
+                let body = try response.ok.body.json
                 var seen = Set<String>()
-                let next = Array(try response.ok.body.json.hits.filter { seen.insert($0.sessionId).inserted }.prefix(10))
+                let next = Array(body.hits.filter { seen.insert($0.sessionId).inserted }.prefix(10))
                 if next.map(\.docId) != hits.map(\.docId) { hits = next }
+                if body.failures.map(\.message) != failures.map(\.message) { failures = body.failures }
                 pending = false
             } catch {
                 guard !Task.isCancelled, let self else { return }
                 hits = []
+                failures = []
                 pending = false
             }
         }
@@ -447,6 +455,7 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
     private func watchFleet() {
         withObservationTracking {
             _ = search.hits
+            _ = search.failures
             _ = search.pending
             _ = hub.fleet.rows
             _ = hub.fleet.catalogs
@@ -681,6 +690,14 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
             built["empty"] = empty
             arranged.append(empty)
         }
+        // A machine that couldn't answer is named under the results, in the
+        // hub's own words, so a short list is never mistaken for the fleet's.
+        for failure in search.failures {
+            let key = "failure:\(failure.machineId):\(failure.message)"
+            let line = rowViews[key] ?? Self.failure(failure.message)
+            built[key] = line
+            arranged.append(line)
+        }
         let leaving = fresh.subtracting(built.keys).compactMap { rowViews[$0] }
         let arriving = Set(built.keys).subtracting(fresh)
         rowViews = built
@@ -791,6 +808,19 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
         let box = UIStackView(arrangedSubviews: [label])
         box.isLayoutMarginsRelativeArrangement = true
         box.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 24, leading: 0, bottom: 24, trailing: 0)
+        return box
+    }
+
+    /// A machine left out (`.jump-failure`): meta type in muted ink, wrapped
+    /// whole, at a heading's inset (`padding: 6px 8px`).
+    private static func failure(_ message: String) -> UIView {
+        let label = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+        label.text = message
+        label.numberOfLines = 0
+        let box = UIStackView(arrangedSubviews: [label])
+        box.isLayoutMarginsRelativeArrangement = true
+        box.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 6, leading: 8, bottom: 6, trailing: 8)
+        box.accessibilityLabel = message
         return box
     }
 

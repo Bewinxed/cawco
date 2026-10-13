@@ -38,6 +38,17 @@ const SEARCH_FRESH_MS = 10_000;
 const MAX_SEARCH_LIMIT = 50;
 const DEFAULT_SEARCH_LIMIT = 20;
 
+/** A failed sync in a few words: SQLite's own message, with its code when it has one. */
+function syncFailure(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+  const { code } = error as Error & { code?: unknown };
+  return typeof code === "string" && !error.message.includes(code)
+    ? `${error.message}, ${code}`
+    : error.message;
+}
+
 export class TranscriptSearchService {
   readonly #index: TranscriptIndex;
   #timer: ReturnType<typeof setInterval> | null = null;
@@ -46,6 +57,8 @@ export class TranscriptSearchService {
   /** When the last sync that ended without error began. */
   #syncedAt = 0;
   #openCodeWatermark = 0;
+  /** The last failed sync's reason, logged once; null once a sync succeeds. */
+  #failing: string | null = null;
   readonly #firstSync = Promise.withResolvers<void>();
   /** Settles once the first sync has ended, however it ended. */
   readonly synced = this.#firstSync.promise;
@@ -77,9 +90,31 @@ export class TranscriptSearchService {
    */
   sync(): Promise<void> {
     if (!this.#syncing) {
-      this.#syncing = this.#syncOnce().finally(() => {
-        this.#syncing = null;
-      });
+      this.#syncing = this.#syncOnce()
+        .then(
+          () => {
+            if (this.#failing !== null) {
+              console.info("[search] transcript index syncs again");
+              this.#failing = null;
+            }
+          },
+          (error: unknown) => {
+            // Logged here, once per failure that differs from the last: the
+            // timer and every search share this sync, and a broken disk would
+            // otherwise say the same thing on every keystroke.
+            const reason = syncFailure(error);
+            if (reason !== this.#failing) {
+              console.warn(
+                `[search] transcript index sync failed: ${reason}. Searches on this machine are refused until a sync succeeds.`
+              );
+              this.#failing = reason;
+            }
+            throw error;
+          }
+        )
+        .finally(() => {
+          this.#syncing = null;
+        });
     }
     return this.#syncing;
   }
@@ -112,12 +147,12 @@ export class TranscriptSearchService {
     // Fire-and-forget initial sync — must not block startup.
     this.sync()
       .catch(() => {
-        // Swallowed: a failed initial sync is not fatal.
+        // Logged in sync(); a failed initial sync is not fatal.
       })
       .finally(() => this.#firstSync.resolve());
     this.#timer = setInterval(() => {
       this.sync().catch(() => {
-        // Swallowed: a periodic sync failure must not kill the daemon.
+        // Logged in sync(); a periodic sync failure must not kill the daemon.
       });
     }, SYNC_INTERVAL_MS);
   }
@@ -134,8 +169,16 @@ export class TranscriptSearchService {
       role?: "user" | "assistant";
     }
   ): Promise<SearchHit[]> {
+    // Never answered from a stale index: a sync that fails refuses the
+    // search, with the reason the hub names this machine by.
     if (Date.now() - this.#syncedAt > SEARCH_FRESH_MS) {
-      await this.sync();
+      try {
+        await this.sync();
+      } catch (error) {
+        throw new Error(`its index couldn't update (${syncFailure(error)})`, {
+          cause: error,
+        });
+      }
     }
     const limit = Math.min(
       options?.limit ?? DEFAULT_SEARCH_LIMIT,
