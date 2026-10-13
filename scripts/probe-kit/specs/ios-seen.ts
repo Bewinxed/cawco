@@ -55,8 +55,8 @@ const TITLE = "Seen probe";
 /** A log line's stamp, process and category, up to what it says. */
 const LOG_HEAD = /^.*\] /;
 const TRAILING_SLASH = /\/$/;
-/** The app's socket: `heard <s> seconds after the heartbeat`. */
-const HEARD_AFTER = /heard [\d.]+ seconds after the heartbeat/;
+/** The app's socket: `… after the heartbeat, read <s> seconds after asking`. */
+const READ_AFTER = /after the heartbeat, read ([\d.]+) seconds after asking/;
 /** HubConnection `heartbeatDeadline`: how long it sleeps before reading what it heard. */
 const HEARTBEAT_DEADLINE_S = 10;
 /** A SQLite column type that takes a number. */
@@ -120,9 +120,9 @@ const respond = (request: Seen): Reply =>
 /**
  * The app's main actor kept up: its socket asks the hub for a heartbeat and
  * reads what it heard after sleeping HEARTBEAT_DEADLINE_S on the main actor
- * (HubConnection `keepAlive`), so the gap between its two lines is that sleep
- * plus however long the main actor was held. A stall there holds the beat's
- * timer with it.
+ * (HubConnection `keepAlive`), and its line says how long after asking that
+ * read came: the sleep plus however long the main actor was held. A stall
+ * there holds the beat's timer with it.
  */
 function heartbeatReads(
   lines: { at: number; line: string }[],
@@ -130,23 +130,18 @@ function heartbeatReads(
 ): { longest: number; stalls: string[] } {
   const stalls: string[] = [];
   let longest = 0;
-  let asked: number | undefined;
   for (const h of lines) {
-    if (h.line.includes("hub socket: heartbeat asked")) {
-      asked = h.at;
+    const read = READ_AFTER.exec(h.line);
+    if (!read) {
       continue;
     }
-    if (asked === undefined || !HEARD_AFTER.test(h.line)) {
-      continue;
-    }
-    const gap = (h.at - asked) / 1000;
+    const gap = Number(read[1]);
     longest = Math.max(longest, gap);
     if (gap > HEARTBEAT_DEADLINE_S + 5) {
       stalls.push(
-        `${gap.toFixed(0)}s at +${((asked - from) / 1000).toFixed(0)}s`
+        `${gap.toFixed(0)}s at +${((h.at - from) / 1000).toFixed(0)}s`
       );
     }
-    asked = undefined;
   }
   return { longest, stalls };
 }

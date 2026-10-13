@@ -456,12 +456,15 @@ public final class HubConnection {
                 self?.log.debug("hub socket: heartbeat asked")
                 try? await Task.sleep(for: Self.heartbeatDeadline)
                 guard !Task.isCancelled, let heard = self?.lastHeard else { return }
+                // Past the deadline, the read is however long the main actor
+                // held this task after its sleep ended.
+                let read = ContinuousClock.now - asked
                 if heard < asked {
-                    self?.log.notice("hub socket: nothing heard 10 s after a heartbeat; reconnecting")
+                    self?.log.notice("hub socket: nothing heard \(String(describing: read), privacy: .public) after a heartbeat; reconnecting")
                     hubSocket.dead()
                     return
                 }
-                self?.log.debug("hub socket: heard \(String(describing: heard - asked), privacy: .public) after the heartbeat")
+                self?.log.debug("hub socket: last heard \(String(describing: heard - asked), privacy: .public) after the heartbeat, read \(String(describing: read), privacy: .public) after asking")
             }
         }
     }
