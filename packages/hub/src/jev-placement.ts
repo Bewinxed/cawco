@@ -3,12 +3,13 @@
  * question to Jev in the row's kind over bounded inputs, and the row's
  * "Jev off" rule beside it.
  *
- * - **On or off.** Jev is on while the hub holds a Jev key: the OpenRouter
- *   key Settings connects (OAuth), the one the meaning rules and suggestions
- *   use. Off, each row's own rule decides, as the table writes it; nothing
- *   here calls any other model.
+ * - **On or off.** Jev is on while it has a route (jev.ts `jevAccess`): the
+ *   TypeSafe key the hub holds, or the OpenRouter key Settings connects
+ *   (OAuth), the same route the meaning rules and suggestions use. Off, each
+ *   row's own rule decides, as the table writes it; nothing here calls any
+ *   other model.
  * - **One line per call.** Every Jev call logs `[jev] <row> project=<id>
- *   cost=$<usd>`, as meaning.ts does; every Jev-off decision logs `[jev off]
+ *   route=<typesafe|openrouter> cost=$<usd>`; every Jev-off decision logs `[jev off]
  *   <row> project=<id>: <who decided, and what>`, so a log says who decided.
  * - **Jev on but failing says so** (§2): the call throws {@link JevFailed}
  *   with Jev's own words, and the caller does not hand the question to a
@@ -22,8 +23,7 @@ import type {
   JevResult,
   JevText,
 } from "@cawco/core/workflow-program";
-import type { DbShape } from "./db";
-import { askJev } from "./jev";
+import { askJev, type JevAccess } from "./jev";
 
 /** The table's rows, by the words a log line uses. */
 export const ROWS = {
@@ -48,11 +48,6 @@ export type PlacementRow = keyof typeof ROWS;
 /** A placement question is asked inside a hub action, so it is asked briefly. Our own call. */
 const PLACEMENT_TIMEOUT_MS = 20_000;
 
-/** Jev's key while Jev is on; undefined while it is off. */
-export const jevKey = (
-  db: Pick<DbShape, "getOpenRouterConnection">
-): string | undefined => db.getOpenRouterConnection()?.apiKey;
-
 /** Jev was on and did not answer: the decision is not made, and the caller says so. */
 export class JevFailed extends Error {}
 
@@ -76,7 +71,7 @@ export async function askRow<
 >(
   rows: PlacementRow | PlacementRow[],
   projectId: string | null,
-  key: string,
+  access: JevAccess,
   state: JevText,
   questions: Questions
 ): Promise<JevResult<Questions>> {
@@ -84,16 +79,16 @@ export async function askRow<
     .map((row) => ROWS[row])
     .join(" + ");
   try {
-    const result = await askJev(key, state, questions, {
+    const result = await askJev(access, state, questions, {
       timeoutMs: PLACEMENT_TIMEOUT_MS,
     });
     console.log(
-      `[jev] ${named} project=${projectId ?? "none"} questions=${Object.keys(questions).length} cost=$${result.usage.costUsd}`
+      `[jev] ${named} project=${projectId ?? "none"} route=${access.route} questions=${Object.keys(questions).length} cost=$${result.usage.costUsd}`
     );
     return result;
   } catch (error) {
     console.warn(
-      `[jev] ${named} project=${projectId ?? "none"} failed: ${words(error)}`
+      `[jev] ${named} project=${projectId ?? "none"} route=${access.route} failed: ${words(error)}`
     );
     throw new JevFailed(`Jev did not answer (${named}): ${words(error)}`, {
       cause: error,
@@ -125,7 +120,7 @@ export const ATTACH_THRESHOLD = 0.5;
  * history matters to it.
  */
 export async function jevAttach(
-  key: string,
+  access: JevAccess,
   projectId: string | null,
   input: {
     /** Whether that session's prompt cache is warm now. */
@@ -141,7 +136,7 @@ export async function jevAttach(
   const result = await askRow(
     "attach",
     projectId,
-    key,
+    access,
     {
       message: head(input.message, 4000),
       session: head(input.session, 200),
@@ -226,7 +221,7 @@ const ORDER_SCORES = {
  * is the three scores' sum.
  */
 export async function jevDispatch(
-  key: string,
+  access: JevAccess,
   projectId: string,
   candidates: DispatchCandidate[]
 ): Promise<Map<string, DispatchJudgement>> {
@@ -273,7 +268,7 @@ export async function jevDispatch(
   const result = await askRow(
     ["ready", "order"],
     projectId,
-    key,
+    access,
     state,
     questions
   );
@@ -334,14 +329,14 @@ export const TRIAGE_BATCH_MAX = 30;
 
 /** Triage with Jev on: one choice over the four states, about one task. */
 export async function jevTriage(
-  key: string,
+  access: JevAccess,
   projectId: string,
   task: { acceptance: string; description: string; id: string; title: string }
 ): Promise<TriageState> {
   const result = await askRow(
     "triage",
     projectId,
-    key,
+    access,
     {
       task: {
         id: task.id,
@@ -403,7 +398,7 @@ export interface DuplicateBrief {
 
 /** Duplicates with Jev on: one yes/no per candidate; the likeliest yes over the threshold. */
 export async function jevDuplicate(
-  key: string,
+  access: JevAccess,
   projectId: string,
   filed: DuplicateBrief,
   candidates: DuplicateBrief[]
@@ -421,7 +416,7 @@ export async function jevDuplicate(
   const result = await askRow(
     "duplicates",
     projectId,
-    key,
+    access,
     {
       new_task: brief(filed),
       open_tasks: Object.fromEntries(
@@ -474,7 +469,7 @@ export const TO_LEAD = "lead";
  * none, which sends it to the lead's next wake.
  */
 export async function jevRoute(
-  key: string,
+  access: JevAccess,
   projectId: string,
   event: {
     actor: string | null;
@@ -496,7 +491,7 @@ export async function jevRoute(
   const result = await askRow(
     "routing",
     projectId,
-    key,
+    access,
     {
       event: {
         source: event.source,
@@ -528,7 +523,7 @@ const TYPES_ASKED_MAX = 50;
  * the project's catalog (its own types, then the fleet's) it is for.
  */
 export async function jevType(
-  key: string,
+  access: JevAccess,
   projectId: string | null,
   work: { text: string; title: string },
   types: { description: string; name: string }[]
@@ -537,7 +532,7 @@ export async function jevType(
   const result = await askRow(
     "type",
     projectId,
-    key,
+    access,
     { work: { title: head(work.title, 200), brief: head(work.text, 4000) } },
     {
       type: {
@@ -562,7 +557,7 @@ export const GROUNDED_THRESHOLD = 0.8;
  * out by the events it recaps. Unwired: nothing writes a recap yet.
  */
 export async function jevGroundedRecap(
-  key: string,
+  access: JevAccess,
   projectId: string,
   sentences: string[],
   events: string[]
@@ -571,7 +566,7 @@ export async function jevGroundedRecap(
   const result = await askRow(
     "recaps",
     projectId,
-    key,
+    access,
     { events: events.slice(-200).map((event) => head(event, 300)) },
     Object.fromEntries(
       asked.map((sentence, index) => [
@@ -617,7 +612,7 @@ export const criteriaOf = (acceptance: string): string[] => {
 
 /** Judged checks with Jev on: one yes/no per criterion, over the attempt's report. */
 export async function jevJudged(
-  key: string,
+  access: JevAccess,
   projectId: string,
   task: { description: string; id: string; title: string },
   criteria: string[],
@@ -626,7 +621,7 @@ export async function jevJudged(
   const result = await askRow(
     "judged",
     projectId,
-    key,
+    access,
     {
       task: {
         id: task.id,
@@ -677,7 +672,7 @@ export const PHONE_TASKS_MAX = 50;
  * stage it moves to; the task, when the push named none), in one call.
  */
 export async function jevPhone(
-  key: string,
+  access: JevAccess,
   projectId: string,
   text: string,
   options: {
@@ -727,7 +722,7 @@ export async function jevPhone(
   const result = await askRow(
     "phone",
     projectId,
-    key,
+    access,
     {
       request: head(text, 2000),
       ...(options.task ? { task: options.task } : {}),
@@ -752,7 +747,7 @@ export const VOICE_THRESHOLD = 0.8;
  * voice. Unwired: there is no writer and reviewer flow to put it in yet.
  */
 export async function jevVoice(
-  key: string,
+  access: JevAccess,
   projectId: string,
   draft: string,
   rules: string[]
@@ -761,7 +756,7 @@ export async function jevVoice(
   const result = await askRow(
     "voice",
     projectId,
-    key,
+    access,
     { draft: head(draft, 6000) },
     Object.fromEntries(
       asked.map((rule, index) => [
@@ -814,7 +809,7 @@ const VARIANT_LEVELS = [
  * Unwired: variants on a canvas do not exist yet.
  */
 export async function jevVariants(
-  key: string,
+  access: JevAccess,
   projectId: string,
   designMd: string,
   variants: { description: string; id: string }[]
@@ -823,7 +818,7 @@ export async function jevVariants(
   const result = await askRow(
     "variants",
     projectId,
-    key,
+    access,
     {
       design_md: head(designMd, 12_000),
       variants: Object.fromEntries(

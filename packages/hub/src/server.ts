@@ -372,13 +372,8 @@ import type { HarnessPlanDeps } from "./harness-plans";
 import { hidden } from "./hidden";
 import { hubId } from "./hub-id";
 import { createIngress, ingressRoutes } from "./ingress";
-import {
-  JevFailed,
-  jevAttach,
-  jevKey,
-  jevType,
-  offLine,
-} from "./jev-placement";
+import { jevAccess } from "./jev";
+import { JevFailed, jevAttach, jevType, offLine } from "./jev-placement";
 import { createJevTasks, phoneRequestRoutes } from "./jev-tasks";
 import { joinRoutes } from "./join";
 import { streamLargeJson } from "./json-response";
@@ -3504,6 +3499,24 @@ export const createServer = (
    * new connect replaces it, and a finished exchange spends it.
    */
   let openrouterVerifier: string | undefined;
+  /**
+   * What Settings shows of Jev: the route it takes now (jev.ts `jevAccess`;
+   * null is off), the TypeSafe key's last four characters and when it was
+   * set while one is held, and the suggestions switch. Never the key.
+   */
+  const jevView = () => {
+    const settings = db.getJevSettings();
+    return {
+      route: jevAccess(db)?.route ?? null,
+      typesafe: settings.typesafeKey
+        ? {
+            ends: settings.typesafeKey.slice(-4),
+            setAt: settings.typesafeKeySetAt?.getTime() ?? null,
+          }
+        : null,
+      suggestWhileTyping: settings.suggestWhileTyping,
+    };
+  };
   /**
    * Why a session takes no input from `origin` now, or nothing when it does
    * ({@link WorkItems.refusal}). Every sender asks this, by way of
@@ -14436,7 +14449,7 @@ export const createServer = (
     online: (machineId) => Boolean(registry.agent(machineId)),
     pauses: (projectId) => caps.pauses(projectId),
     placement: {
-      key: () => jevKey(db),
+      access: () => jevAccess(db),
       typesFor: (projectId) => projectTypes.typesFor(projectId),
       judgeByLead: (projectId, taskId, text) => {
         caw
@@ -14604,13 +14617,13 @@ export const createServer = (
     const { midTurn, lastTurnAt } = followupState(row);
     const expires = promptCacheExpiresAt(row, lastTurnAt);
     const cold = !(midTurn || expires === null || expires > Date.now());
-    const key = jevKey(db);
-    if (!(cold && key && message)) {
+    const access = jevAccess(db);
+    if (!(cold && access && message)) {
       return;
     }
     const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
     try {
-      const judged = await jevAttach(key, row.projectId, {
+      const judged = await jevAttach(access, row.projectId, {
         cache: "cold",
         lastWork: item?.digest ?? item?.result ?? item?.error ?? "",
         message,
@@ -14655,8 +14668,8 @@ export const createServer = (
     }
     const projectId =
       db.getInstancesByIds([request.parentInstanceId])[0]?.projectId ?? null;
-    const key = jevKey(db);
-    if (!key) {
+    const access = jevAccess(db);
+    if (!access) {
       offLine(
         "type",
         projectId,
@@ -14666,7 +14679,7 @@ export const createServer = (
     }
     try {
       const type = await jevType(
-        key,
+        access,
         projectId,
         { title: request.title, text: request.prompt },
         projectTypes.typesFor(projectId)
@@ -14727,7 +14740,7 @@ export const createServer = (
     quiets: (projectId) => caps.quiets(projectId),
     push,
     types: (projectId) => projectTypes.typesFor(projectId),
-    jevKey: () => jevKey(db),
+    jevAccess: () => jevAccess(db),
     workItems,
     hubCheckout: async () => {
       const machineId = await ownMachineId;
@@ -14784,7 +14797,7 @@ export const createServer = (
     connections,
     db,
     dispatcher,
-    jevKey: () => jevKey(db),
+    jevAccess: () => jevAccess(db),
     lifetime,
     routines,
   });
@@ -18273,17 +18286,41 @@ export const createServer = (
         return {
           connected: connection !== undefined,
           connectedAt: connection?.connectedAt.getTime() ?? null,
-          suggestWhileTyping: connection?.suggestWhileTyping ?? false,
         };
       })
+      // ── Jev: its route, the TypeSafe key, suggestions ─────────────────────
+      // The key is set from the owner's terminal (`cawco jev set-key`) or
+      // Settings, and no route answers it: only its last four characters.
+      .get("/api/jev", () => jevView())
       .put(
-        "/api/openrouter/suggest",
+        "/api/jev/typesafe-key",
+        { body: t.Object({ key: t.String({ minLength: 1 }) }) },
+        ({ body, status }) => {
+          const key = body.key.trim();
+          if (!key) {
+            return status(400, "The TypeSafe key is empty; nothing was saved.");
+          }
+          db.setTypesafeKey(key);
+          console.log("[jev] TypeSafe key set: Jev takes route=typesafe");
+          return jevView();
+        }
+      )
+      .delete("/api/jev/typesafe-key", () => {
+        db.setTypesafeKey(null);
+        const view = jevView();
+        console.log(
+          `[jev] TypeSafe key removed: Jev takes ${view.route ? `route=${view.route}` : "no route (off)"}`
+        );
+        return view;
+      })
+      .put(
+        "/api/jev/suggest",
         { body: t.Object({ enabled: t.Boolean() }) },
         ({ body, status }) => {
-          if (!db.getOpenRouterConnection()) {
+          if (!jevAccess(db)) {
             return status(
               409,
-              "OpenRouter is not connected. Connect it in Settings first."
+              "Jev is off. Set a TypeSafe key or connect OpenRouter in Settings first."
             );
           }
           db.setSuggestWhileTyping(body.enabled);
@@ -18310,19 +18347,14 @@ export const createServer = (
           }),
         },
         async ({ body, status }) => {
-          const connection = db.getOpenRouterConnection();
-          if (!connection) {
+          const access = jevAccess(db);
+          if (!access) {
             return status(
               409,
-              "OpenRouter is not connected. Connect it in Settings first."
+              "Jev is off. Set a TypeSafe key or connect OpenRouter in Settings first."
             );
           }
-          const result = await suggest(
-            db,
-            connection.apiKey,
-            body.text,
-            body.candidates
-          );
+          const result = await suggest(db, access, body.text, body.candidates);
           if ("error" in result) {
             return status(502, result.error);
           }

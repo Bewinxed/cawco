@@ -2211,7 +2211,7 @@ export const sessionLimits = sqliteTable("session_limits", {
  * The fleet's OpenRouter connection — one row, keyed `'openrouter'`, following
  * the {@link supervisorConfig} single-row precedent. Written by the Settings
  * page's OAuth PKCE exchange; the key never leaves the hub. No row means not
- * connected, and meaning rules are not evaluated.
+ * connected: Jev's OpenRouter route is off (jev.ts `jevAccess`).
  */
 export const openrouterConnection = sqliteTable("openrouter_connection", {
   /** Always `'openrouter'`. */
@@ -2219,6 +2219,25 @@ export const openrouterConnection = sqliteTable("openrouter_connection", {
   /** Sealed; null when the hub's key does not open it, which reads as not connected. */
   apiKey: sealedText("api_key").notNull(),
   connectedAt: timestamp("connected_at").notNull(),
+});
+
+/**
+ * Jev's own settings — one row, keyed `'jev'`, following the
+ * {@link supervisorConfig} single-row precedent: the TypeSafe key the hub
+ * reaches Jev with directly (jev.ts `jevAccess`), and the composer's
+ * suggestions switch, which holds on either route. No row reads as no key
+ * and suggestions off.
+ */
+export const jevSettings = sqliteTable("jev_settings", {
+  /** Always `'jev'`. */
+  id: text("id").primaryKey(),
+  /**
+   * Sealed. Set from the owner's terminal (`cawco jev set-key`) or Settings,
+   * never through a session; null while none is held, or when the hub's key
+   * does not open it, which reads as none.
+   */
+  typesafeKey: sealedText("typesafe_key"),
+  typesafeKeySetAt: timestamp("typesafe_key_set_at"),
   /** The composer asks Jev for skill and MCP server suggestions while typing. Off by default. */
   suggestWhileTyping: integer("suggest_while_typing", { mode: "boolean" })
     .notNull()

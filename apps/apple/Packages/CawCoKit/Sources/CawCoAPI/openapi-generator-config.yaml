@@ -39,6 +39,7 @@ typeOverrides:
     DelegateEventBaseRequestKind: OpenEnums.DelegateEventBaseRequestKind
     DelegateEventBaseStatus: OpenEnums.DelegateEventBaseStatus
     DelegateTypeRole: OpenEnums.DelegateTypeRole
+    DeleteApiJevTypesafeKey200Route: OpenEnums.DeleteApiJevTypesafeKey200Route
     DiscoveredSkillScope: OpenEnums.DiscoveredSkillScope
     EffortLevel: OpenEnums.EffortLevel
     Exclude: OpenEnums.Exclude

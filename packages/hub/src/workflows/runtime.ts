@@ -39,7 +39,7 @@ import type {
   WorkflowRunRow,
   WorkflowStepRow,
 } from "../db";
-import { askJev } from "../jev";
+import { askJev, jevAccess } from "../jev";
 import type { HubLifetimeShape } from "../lifetime";
 import { WorkItemRefusal } from "../work-items";
 import { createWorkflowEngine, type Outcome } from "./engine";
@@ -1100,15 +1100,17 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
 
   /** `w.jev`: every question over one state, its refs filled first. */
   const jev = (run: WorkflowRunRow, args: Record<string, unknown>) => {
-    const connection = db.getOpenRouterConnection();
-    if (!connection) {
-      throw new Error("Jev needs OpenRouter connected in Settings");
+    const access = jevAccess(db);
+    if (!access) {
+      throw new Error(
+        "Jev is off: set a TypeSafe key or connect OpenRouter in Settings"
+      );
     }
     const spec = args as unknown as JevSpec;
     const state = expandRefsDeep(spec.state, (seq) =>
       refValue(run.id, seq)
     ) as JevSpec["state"];
-    return askJev(connection.apiKey, state, spec.questions, {
+    return askJev(access, state, spec.questions, {
       model: spec.model,
       timeoutMs: WORKFLOW_JEV_TIMEOUT_MS,
     });

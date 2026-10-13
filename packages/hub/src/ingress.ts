@@ -52,6 +52,7 @@ import type {
 import type { GitHubCursor, GitHubResource, InboundVia } from "./db/schema";
 import type { Dispatcher } from "./dispatch";
 import { githubRepoOf, pollRepo } from "./github";
+import type { JevAccess } from "./jev";
 import { JevFailed, jevRoute, offLine, TO_LEAD } from "./jev-placement";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { Routines } from "./routines";
@@ -392,8 +393,8 @@ export interface IngressDeps {
   >;
   /** Moves a task on when the pull request its attempt opened merges (dispatch.ts). */
   readonly dispatcher: Pick<Dispatcher, "pullRequestMerged">;
-  /** Jev's key while Jev is on (jev-placement.ts `jevKey`). */
-  readonly jevKey: () => string | undefined;
+  /** Jev's route while Jev is on (jev.ts `jevAccess`). */
+  readonly jevAccess: () => JevAccess | undefined;
   readonly lifetime: HubLifetimeShape;
   /** Runs a routine once with an event as its input (routines.ts). */
   readonly routines: Pick<Routines, "runForEvent">;
@@ -451,7 +452,7 @@ export const createIngress = ({
   connections,
   db,
   dispatcher,
-  jevKey,
+  jevAccess,
   lifetime,
   routines,
 }: IngressDeps) => {
@@ -510,8 +511,8 @@ export const createIngress = ({
     event: InboundEvent,
     routineIds: string[]
   ): Promise<string | undefined> => {
-    const key = jevKey();
-    if (!key) {
+    const access = jevAccess();
+    if (!access) {
       offLine(
         "routing",
         row.projectId,
@@ -521,7 +522,7 @@ export const createIngress = ({
     }
     try {
       return await jevRoute(
-        key,
+        access,
         row.projectId,
         event,
         routineIds.flatMap((id) => {

@@ -8,6 +8,7 @@
   import { dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import {
+    type JevState,
     type OpenRouterState,
     saveSuggestSetting,
     suggestions,
@@ -20,16 +21,19 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
-  import { IconGlobe, IconRules } from "#lib/icons.js";
+  import { IconGlobe, IconKey, IconRules } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
 
   /**
-   * The models the hub itself talks to. OpenRouter is connected by OAuth
-   * PKCE: the hub holds the verifier and the key, the browser only carries the
-   * operator to OpenRouter and the `code` back here. The supervisor is the
-   * OpenAI-compatible server that judges turns for LLM rules and autopilot.
+   * The models the hub itself talks to. Jev is reached one of two ways: a
+   * TypeSafe key the hub holds (straight to TypeSafe), or OpenRouter,
+   * connected by OAuth PKCE: the hub holds the verifier and the key, the
+   * browser only carries the operator to OpenRouter and the `code` back here.
+   * A held TypeSafe key is the route; neither is Jev off. The supervisor is
+   * the OpenAI-compatible server that judges turns for LLM rules and
+   * autopilot.
    */
   const section = sectionOf("models");
   const HUE = section.hue;
@@ -49,12 +53,87 @@
       }
 
       openrouter = (await response.json()) as OpenRouterState;
-      suggestions.enabled =
-        openrouter.connected && openrouter.suggestWhileTyping;
     } catch (error) {
       openrouterError = `Could not read the OpenRouter connection — ${error instanceof Error ? error.message : String(error)}.`;
     }
+    await readJev();
   }
+
+  // ── Jev: its route and the TypeSafe key ────────────────────────────────
+  let jev = $state<JevState | null>(null);
+  let typesafeError = $state<string | null>(null);
+  let typesafeKey = $state("");
+  let savingKey = $state(false);
+  let removingKey = $state(false);
+
+  /** Takes the hub's view of Jev: its route, the key's state and the switch. */
+  function takeJev(next: JevState) {
+    jev = next;
+    suggestions.enabled = next.route !== null && next.suggestWhileTyping;
+  }
+
+  async function readJev() {
+    try {
+      const response = await fetch("/api/jev");
+      if (!response.ok) {
+        throw new Error(`the hub answered ${response.status}`);
+      }
+      takeJev((await response.json()) as JevState);
+    } catch (error) {
+      typesafeError = `Could not read Jev's settings — ${error instanceof Error ? error.message : String(error)}.`;
+    }
+  }
+
+  async function saveKey(event: SubmitEvent) {
+    event.preventDefault();
+    if (typesafeKey.trim() === "") {
+      typesafeError =
+        "Paste a TypeSafe API key first. Nothing was saved, and Jev's route is unchanged.";
+      return;
+    }
+    savingKey = true;
+    typesafeError = null;
+    const response = await fetch("/api/jev/typesafe-key", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: typesafeKey.trim() }),
+    });
+    if (response.ok) {
+      typesafeKey = "";
+      takeJev((await response.json()) as JevState);
+    } else {
+      typesafeError = `The hub did not save the key (${response.status}): ${await response.text()}. Jev's route is unchanged.`;
+    }
+    savingKey = false;
+  }
+
+  async function removeKey() {
+    removingKey = true;
+    typesafeError = null;
+    const response = await fetch("/api/jev/typesafe-key", { method: "DELETE" });
+    if (response.ok) {
+      takeJev((await response.json()) as JevState);
+    } else {
+      typesafeError = `The hub did not remove the key (${response.status}): ${await response.text()}. It is still held.`;
+    }
+    removingKey = false;
+  }
+
+  /** The key's state line: held (and how it ends) or not set. */
+  const keyPhase = $derived(jev?.typesafe ? "held" : "unset");
+
+  /** Which route Jev takes now, in words. */
+  const routeLine = $derived.by((): string => {
+    switch (jev?.route) {
+      case "typesafe":
+        return "Jev goes to TypeSafe directly with this key.";
+      case "openrouter":
+        return "Jev goes through OpenRouter. A key saved here takes over from it.";
+      default:
+        return "Jev is off. Save a TypeSafe key here, or connect OpenRouter above.";
+    }
+  });
+  let keyHeight = $state(0);
 
   async function connect() {
     connecting = true;
@@ -103,14 +182,14 @@
   }
 
   async function setSuggest(on: boolean) {
-    if (!openrouter) {
+    if (!jev) {
       return;
     }
     savingSuggest = true;
     openrouterError = null;
     try {
       await saveSuggestSetting(on);
-      openrouter.suggestWhileTyping = on;
+      jev.suggestWhileTyping = on;
     } catch (error) {
       openrouterError = error instanceof Error ? error.message : String(error);
     }
@@ -163,7 +242,7 @@
    * the switch's hint and both status lines are already their final size.
    */
   const ready = $derived(
-    supervisor !== null && (openrouter !== null || exchanging)
+    supervisor !== null && ((openrouter !== null && jev !== null) || exchanging)
   );
 
   /**
@@ -222,6 +301,8 @@
     if (code) {
       // biome-ignore lint/complexity/noVoid: the exchange reports its own outcome in page state
       void finishConnect(code);
+      // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
+      void readJev();
     } else {
       // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
       void readOpenRouter();
@@ -232,7 +313,7 @@
 </script>
 
 <SectionFrame
-  problem={ready ? null : (openrouterError ?? supervisorError)}
+  problem={ready ? null : (openrouterError ?? typesafeError ?? supervisorError)}
   purpose={section.purpose}
   {ready}
   title={section.label}
@@ -264,7 +345,8 @@
       {/snippet}
     </SectionHeader>
     <p class="note">
-      Used to ask Jev yes/no questions for meaning-based rules.
+      One way to reach Jev, for meaning rules, suggestions and the hub's own
+      judgments. A TypeSafe key below takes over from it while held.
     </p>
     <div
       class="morph"
@@ -305,11 +387,11 @@
       </div>
     </div>
     <SwitchField
-      checked={openrouter?.suggestWhileTyping ?? false}
-      disabled={!openrouter?.connected || savingSuggest}
-      hint={openrouter?.connected
+      checked={jev?.suggestWhileTyping ?? false}
+      disabled={!jev?.route || savingSuggest}
+      hint={jev?.route
         ? "Jev reads the message as you write it and offers chips you can add to it. The session's tools are not changed."
-        : "Needs OpenRouter — connect it above."}
+        : "Needs Jev — connect OpenRouter above, or save a TypeSafe key below."}
       id="suggest-while-typing"
       label="Suggest skills and MCP servers while typing"
       onchange={setSuggest}
@@ -318,6 +400,89 @@
       <p class="problem" role="alert" transition:unfold>{openrouterError}</p>
     {/if}
   </div>
+
+  <form class="group" onsubmit={saveKey}>
+    <SectionHeader hue={HUE} icon={IconKey} label="TypeSafe key">
+      {#snippet right()}
+        <div class="actions">
+          {#if jev?.typesafe}
+            <Button
+              disabled={savingKey}
+              label="Remove key"
+              onclick={removeKey}
+              pending={removingKey}
+              pendingLabel="Removing…"
+              size="sm"
+              variant="outline"
+            />
+          {/if}
+          <Button
+            disabled={removingKey}
+            failed={typesafeError !== null}
+            label="Save key"
+            pending={savingKey}
+            pendingLabel="Saving…"
+            size="sm"
+            type="submit"
+          />
+        </div>
+      {/snippet}
+    </SectionHeader>
+    <p class="note">
+      Reaches Jev straight at TypeSafe with your own API key. While a key is
+      held, Jev uses it instead of OpenRouter.
+    </p>
+    <div
+      class="morph"
+      style:block-size={keyHeight ? `${keyHeight}px` : undefined}
+    >
+      <div class="stack" bind:clientHeight={keyHeight}>
+        {#key keyPhase}
+          <p
+            aria-live="polite"
+            class="status num"
+            data-tone={keyPhase === "held" ? "ok" : "off"}
+            in:blur={{
+              duration: dur("--dur-panel"),
+              easing: easeOut,
+              amount: 2,
+            }}
+            out:blur={{
+              duration: dur("--dur-exit"),
+              easing: easeOut,
+              amount: 2,
+            }}
+          >
+            {#if jev?.typesafe}
+              <svg aria-hidden="true" class="check" viewBox="0 0 20 20">
+                <circle cx="10" cy="10" r="10"></circle>
+                <path d="M6.2 10.4l2.5 2.5 5.1-5.6"></path>
+              </svg>
+              Held, ends …{jev.typesafe.ends}
+            {:else}
+              <span aria-hidden="true" class="dot"></span>
+              Not set
+            {/if}
+          </p>
+        {/key}
+      </div>
+    </div>
+    <p aria-live="polite" class="note" data-testid="jev-route">{routeLine}</p>
+    <Field id="typesafe-key" label="API key">
+      <Input
+        autocomplete="off"
+        id="typesafe-key"
+        placeholder={jev?.typesafe
+          ? "Paste a new key to replace the held one"
+          : "Paste your TypeSafe API key"}
+        type="password"
+        bind:value={typesafeKey}
+      />
+    </Field>
+    {#if typesafeError}
+      <p class="problem" role="alert" transition:unfold>{typesafeError}</p>
+    {/if}
+  </form>
 
   <form class="group" onsubmit={saveSupervisor}>
     <SectionHeader hue={HUE} icon={IconRules} label="Supervisor">
@@ -417,6 +582,10 @@
   .group + .group {
     padding-top: 18px;
     border-top: 1px solid var(--border-hairline);
+  }
+  .actions {
+    display: flex;
+    gap: 8px;
   }
   .note {
     max-width: 72ch;

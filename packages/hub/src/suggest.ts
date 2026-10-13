@@ -1,6 +1,6 @@
 import type { JevResult } from "@cawco/core/workflow-program";
 import type { DbShape } from "./db";
-import { askJev } from "./jev";
+import { askJev, type JevAccess } from "./jev";
 import { usageScores } from "./usage-count";
 
 /** Suggestions answer while the reader types, so they are asked briefly. */
@@ -112,7 +112,7 @@ export function rankCandidates(
  */
 export async function suggest(
   db: DbShape,
-  key: string,
+  access: JevAccess,
   text: string,
   candidates: SuggestCandidate[]
 ): Promise<
@@ -146,14 +146,16 @@ export async function suggest(
   );
   let result: JevResult<typeof questions>;
   try {
-    result = await askJev(key, { prompt: text }, questions, {
+    result = await askJev(access, { prompt: text }, questions, {
       timeoutMs: SUGGEST_TIMEOUT_MS,
     });
   } catch (error) {
-    return { error: error instanceof Error ? error.message : String(error) };
+    const words = error instanceof Error ? error.message : String(error);
+    console.warn(`[suggest] route=${access.route} failed: ${words}`);
+    return { error: words };
   }
   console.debug(
-    `[suggest] ${asked.length} of ${candidates.length} candidates asked, ${result.usage.inputTokens} input tokens, cost=$${result.usage.costUsd}`
+    `[suggest] route=${access.route} ${asked.length} of ${candidates.length} candidates asked, ${result.usage.inputTokens} input tokens, cost=$${result.usage.costUsd}`
   );
   // One chip per capability: a name offered as both an MCP server and a skill
   // (claude-in-chrome) keeps only its likelier entry.

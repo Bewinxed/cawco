@@ -170,7 +170,8 @@ public struct HubAPI: Sendable {
         public func windows(_ input: Operations.GetApiModelWindows.Input = .init()) async throws -> Operations.GetApiModelWindows.Output { try await client.getApiModelWindows(input) }
         public func openRouter(_ input: Operations.GetApiOpenrouter.Input = .init()) async throws -> Operations.GetApiOpenrouter.Output { try await client.getApiOpenrouter(input) }
         public func disconnect(_ input: Operations.DeleteApiOpenrouter.Input = .init()) async throws -> Operations.DeleteApiOpenrouter.Output { try await client.deleteApiOpenrouter(input) }
-        public func setSuggest(_ input: Operations.PutApiOpenrouterSuggest.Input) async throws -> Operations.PutApiOpenrouterSuggest.Output { try await client.putApiOpenrouterSuggest(input) }
+        public func jev(_ input: Operations.GetApiJev.Input = .init()) async throws -> Operations.GetApiJev.Output { try await client.getApiJev(input) }
+        public func setSuggest(_ input: Operations.PutApiJevSuggest.Input) async throws -> Operations.PutApiJevSuggest.Output { try await client.putApiJevSuggest(input) }
         public func connect(_ input: Operations.PostApiOpenrouterConnect.Input) async throws -> Operations.PostApiOpenrouterConnect.Output { try await client.postApiOpenrouterConnect(input) }
         public func exchange(_ input: Operations.PostApiOpenrouterExchange.Input) async throws -> Operations.PostApiOpenrouterExchange.Output { try await client.postApiOpenrouterExchange(input) }
     }

@@ -109,6 +109,7 @@ import {
   fleetSkillHistory,
   instanceAliases,
   instances,
+  jevSettings,
   leadTurns,
   limitEvents,
   limitHolds,
@@ -665,6 +666,15 @@ export interface DbShape {
    * from a derived one.
    */
   readonly getInstancesByIds: (ids: string[]) => PublicInstanceRow[];
+  /**
+   * Jev's own settings: the TypeSafe key the hub holds (null while none is,
+   * or when the hub's key does not open it) and the suggestions switch.
+   */
+  readonly getJevSettings: () => {
+    suggestWhileTyping: boolean;
+    typesafeKey: string | null;
+    typesafeKeySetAt: Date | null;
+  };
   readonly getMcpOauth: (
     name: string
   ) => typeof fleetMcpOauth.$inferSelect | undefined;
@@ -675,7 +685,7 @@ export interface DbShape {
     | undefined;
   /** The stored OpenRouter key and when it was connected, or undefined while not connected. */
   readonly getOpenRouterConnection: () =>
-    | { apiKey: string; connectedAt: Date; suggestWhileTyping: boolean }
+    | { apiKey: string; connectedAt: Date }
     | undefined;
   /** One rule, or nothing when it has been deleted out from under a caller. */
   readonly getRule: (id: string) => Rule | undefined;
@@ -1629,8 +1639,10 @@ export interface DbShape {
   readonly setSessionLimits: (limits: SessionLimits) => void;
   /** What reaching a cap does where a project sets nothing. */
   readonly setSpendOnCap: (onCap: OnCap) => void;
-  /** Turn composer suggestions on or off. Only meaningful while connected. */
+  /** Turn composer suggestions on or off. Only meaningful while Jev is on. */
   readonly setSuggestWhileTyping: (enabled: boolean) => void;
+  /** Hold (or replace) the TypeSafe key; null forgets it. */
+  readonly setTypesafeKey: (key: string | null) => void;
   /** Closes it. An ask this hub never recorded is nothing to close. */
   readonly settleDelegateAsk: (
     requestId: string,
@@ -2097,6 +2109,7 @@ const MEMORY_ID = "memory";
 /** The one row the supervisor config ever takes — same precedent as `MEMORY_ID`. */
 const SUPERVISOR_CONFIG_ID = "supervisor";
 const OPENROUTER_CONNECTION_ID = "openrouter";
+const JEV_SETTINGS_ID = "jev";
 
 /** How many supervisor event rows to keep — bounded without a scheduler (plan: our choice). */
 const SUPERVISOR_EVENTS_RETENTION = 5000;
@@ -7337,12 +7350,30 @@ const make = async (path: string): Promise<DbShape> => {
         .get();
       // A key the hub's key does not open reads as not connected: connect again.
       return row?.apiKey
-        ? {
-            apiKey: row.apiKey,
-            connectedAt: row.connectedAt,
-            suggestWhileTyping: row.suggestWhileTyping,
-          }
+        ? { apiKey: row.apiKey, connectedAt: row.connectedAt }
         : undefined;
+    },
+    getJevSettings: () => {
+      const row = db
+        .select()
+        .from(jevSettings)
+        .where(eq(jevSettings.id, JEV_SETTINGS_ID))
+        .get();
+      return {
+        typesafeKey: row?.typesafeKey || null,
+        typesafeKeySetAt: row?.typesafeKey ? row.typesafeKeySetAt : null,
+        suggestWhileTyping: row?.suggestWhileTyping ?? false,
+      };
+    },
+    setTypesafeKey: (key) => {
+      const typesafeKeySetAt = key === null ? null : new Date();
+      db.insert(jevSettings)
+        .values({ id: JEV_SETTINGS_ID, typesafeKey: key, typesafeKeySetAt })
+        .onConflictDoUpdate({
+          target: jevSettings.id,
+          set: { typesafeKey: key, typesafeKeySetAt },
+        })
+        .run();
     },
     addCapabilityUsage: (rows) => {
       db.transaction((tx) => {
@@ -7383,9 +7414,12 @@ const make = async (path: string): Promise<DbShape> => {
         .all()
         .map((row) => row.name),
     setSuggestWhileTyping: (enabled) => {
-      db.update(openrouterConnection)
-        .set({ suggestWhileTyping: enabled })
-        .where(eq(openrouterConnection.id, OPENROUTER_CONNECTION_ID))
+      db.insert(jevSettings)
+        .values({ id: JEV_SETTINGS_ID, suggestWhileTyping: enabled })
+        .onConflictDoUpdate({
+          target: jevSettings.id,
+          set: { suggestWhileTyping: enabled },
+        })
         .run();
     },
     setOpenRouterConnection: (apiKey) => {

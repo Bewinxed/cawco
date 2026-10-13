@@ -1280,6 +1280,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/DeleteApiJevTypesafeKey200Route`.
+    public enum DeleteApiJevTypesafeKey200Route: OpenEnum {
+        case openrouter
+        case typesafe
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "openrouter": self = .openrouter
+            case "typesafe": self = .typesafe
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .openrouter: "openrouter"
+            case .typesafe: "typesafe"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.openrouter, .typesafe]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/DiscoveredSkillScope`.
     public enum DiscoveredSkillScope: OpenEnum {
         case local

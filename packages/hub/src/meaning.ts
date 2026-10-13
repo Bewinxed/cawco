@@ -2,7 +2,7 @@ import type { NeutralMessage, Rule, RuleFacts } from "@cawco/core";
 import { ruleInScope } from "@cawco/core";
 import type { JevResult } from "@cawco/core/workflow-program";
 import type { DbShape } from "./db";
-import { askJev } from "./jev";
+import { askJev, jevAccess } from "./jev";
 
 /** A meaning rule answers inside the turn it judges, so it is asked briefly. */
 const MEANING_TIMEOUT_MS = 10_000;
@@ -139,10 +139,10 @@ export class MeaningJudge {
     if (asked.length === 0) {
       return new Set();
     }
-    const connection = this.#db.getOpenRouterConnection();
-    if (!connection) {
+    const access = jevAccess(this.#db);
+    if (!access) {
       console.log(
-        `[meaning] ${instanceId}: meaning rules skipped: OpenRouter not connected`
+        `[meaning] ${instanceId}: meaning rules skipped: Jev is off (no TypeSafe key, OpenRouter not connected)`
       );
       return new Set();
     }
@@ -158,12 +158,12 @@ export class MeaningJudge {
       );
     let result: JevResult<typeof questions>;
     try {
-      result = await askJev(connection.apiKey, state, questions, {
+      result = await askJev(access, state, questions, {
         timeoutMs: MEANING_TIMEOUT_MS,
       });
     } catch (error) {
       console.error(
-        `[meaning] ${instanceId}: Jev failed for rules ${asked
+        `[meaning] ${instanceId}: Jev (route=${access.route}) failed for rules ${asked
           .map(({ rule }) => rule.id)
           .join(", ")}: ${error instanceof Error ? error.message : error}`
       );
@@ -173,7 +173,7 @@ export class MeaningJudge {
     for (const { rule } of asked) {
       const { noul } = result.answers[rule.id];
       console.debug(
-        `[meaning] ${instanceId}: rule ${rule.id} noul=${noul} cost=$${result.usage.costUsd}`
+        `[meaning] ${instanceId}: rule ${rule.id} route=${access.route} noul=${noul} cost=$${result.usage.costUsd}`
       );
       if (noul >= MEANING_THRESHOLD) {
         yes.add(rule.id);

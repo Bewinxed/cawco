@@ -21,6 +21,7 @@
   } from "#lib/cawco/motion/curves.svelte.js";
   import { folds, unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import type { JevState } from "#lib/cawco/suggest.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
@@ -91,17 +92,17 @@
   let failed = $state<string | undefined>(undefined);
   let touched = $state<Record<string, boolean>>({});
   let attempted = $state(false);
-  let openrouterConnected = $state(true);
+  let jevOn = $state(true);
 
   onMount(() => {
-    fetch("/api/openrouter")
+    fetch("/api/jev")
       .then(async (response) => {
-        openrouterConnected = response.ok
-          ? ((await response.json()) as { connected: boolean }).connected
+        jevOn = response.ok
+          ? ((await response.json()) as JevState).route !== null
           : false;
       })
       .catch(() => {
-        openrouterConnected = false;
+        jevOn = false;
       });
   });
 
@@ -472,19 +473,17 @@
           ]}
           value={draft.matchKind}
         />
-        {#snippet needsOpenrouter()}
-          Meaning rules need OpenRouter —
+        {#snippet needsJev()}
+          Meaning rules need Jev —
           <a class="underline underline-offset-2" href="/config/models"
-            >connect it in Models CawCo uses</a
+            >set a TypeSafe key or connect OpenRouter in Models CawCo uses</a
           >
         {/snippet}
         <Field
           id="rule-pattern"
           label={PATTERN_LABEL[draft.matchKind]}
           problem={shown("pattern")}
-          warn={draft.matchKind === "meaning" && !openrouterConnected
-            ? needsOpenrouter
-            : undefined}
+          warn={draft.matchKind === "meaning" && !jevOn ? needsJev : undefined}
         >
           {#snippet hint()}
             {#if draft.matchKind === "meaning"}

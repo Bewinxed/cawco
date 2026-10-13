@@ -25,6 +25,7 @@ import { Elysia, status, t } from "elysia";
 import type { Caw } from "./caw";
 import type { DbShape } from "./db";
 import type { Dispatcher } from "./dispatch";
+import { type JevAccess, jevAccess } from "./jev";
 import {
   attachByRule,
   DUPLICATE_CANDIDATES_MAX,
@@ -33,7 +34,6 @@ import {
   JevFailed,
   jevAttach,
   jevDuplicate,
-  jevKey,
   jevPhone,
   jevTriage,
   offLine,
@@ -60,6 +60,7 @@ export interface JevTasksDeps {
   readonly db: Pick<
     DbShape,
     | "getInstancesByIds"
+    | "getJevSettings"
     | "getOpenRouterConnection"
     | "projectAttempts"
     | "threadOfTask"
@@ -109,7 +110,7 @@ export const createJevTasks = ({
   tasks,
   warmth,
 }: JevTasksDeps) => {
-  const key = () => jevKey(db);
+  const key = () => jevAccess(db);
 
   /**
    * The open tasks filed before `newTask`, newest changed first, as their
@@ -159,7 +160,7 @@ export const createJevTasks = ({
 
   /** Duplicates with Jev on: Jev compares; a yes drops the task. */
   const duplicateByJev = async (
-    jev: string,
+    jev: JevAccess,
     projectId: string,
     task: TaskView,
     candidates: TaskView[]
@@ -508,7 +509,7 @@ export const createJevTasks = ({
 
   /** Jev's reading of a phone sentence, over the project's stages and open tasks. */
   const phoneByJev = async (
-    jev: string,
+    jev: JevAccess,
     projectId: string,
     sentence: string,
     task: TaskView | undefined

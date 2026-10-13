@@ -590,7 +590,7 @@ export function adminTools() {
           .optional()
           .describe(
             "How to read the pattern. Default 'phrase'. 'meaning' makes the pattern a yes/no " +
-              "question Jev answers about the output (needs OpenRouter connected in Settings; " +
+              "question Jev answers about the output (needs Jev on: a TypeSafe key or OpenRouter set in Settings; " +
               "timing 'turn' or 'message' only)."
           ),
         caseSensitive: z.boolean().optional(),

@@ -20,7 +20,17 @@ export interface SuggestCandidate {
 export interface OpenRouterState {
   connected: boolean;
   connectedAt: number | null;
+}
+
+/**
+ * What `GET /api/jev` answers with: the route Jev takes now (null: off), the
+ * TypeSafe key's last four characters while one is held, and the
+ * suggestions switch. The key itself never leaves the hub.
+ */
+export interface JevState {
+  route: "typesafe" | "openrouter" | null;
   suggestWhileTyping: boolean;
+  typesafe: { ends: string; setAt: number | null } | null;
 }
 
 /**
@@ -39,16 +49,16 @@ export function loadSuggestSetting(): void {
   }
   loaded = true;
   // biome-ignore lint/complexity/noVoid: fire-and-forget; the result lands in shared state
-  void fetch("/api/openrouter")
-    .then((response) => response.json() as Promise<OpenRouterState>)
+  void fetch("/api/jev")
+    .then((response) => response.json() as Promise<JevState>)
     .then((state) => {
-      suggestions.enabled = state.connected && state.suggestWhileTyping;
+      suggestions.enabled = state.route !== null && state.suggestWhileTyping;
     });
 }
 
 /** Turns suggestions on or off for every composer. */
 export async function saveSuggestSetting(enabled: boolean): Promise<void> {
-  const response = await fetch("/api/openrouter/suggest", {
+  const response = await fetch("/api/jev/suggest", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ enabled }),

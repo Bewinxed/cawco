@@ -60,6 +60,10 @@ Usage
                                           give a connection its key: typed unseen, or
                                           piped (pbpaste | cawco connections set-key x)
                                           straight to the hub, never through a session
+  cawco jev set-key [--hub <url>]         give the hub a TypeSafe key for Jev: typed
+                                          unseen, or piped (pbpaste | cawco jev set-key);
+                                          while held, Jev goes to TypeSafe directly
+  cawco jev remove-key [--hub <url>]      forget it: Jev goes through OpenRouter, or is off
   cawco relay on <project> [--provider github|stripe|generic] [--connection <name>]
              [--signature-header <h>] [--timestamp-header <h>] [--id-path <path>] [--yes]
                                           open the project's public webhook path through
@@ -586,6 +590,27 @@ const runConnections = async (args: Args): Promise<number> => {
   return signedIn ? 0 : 1;
 };
 
+/** `cawco jev <set-key|remove-key>`: the TypeSafe key Jev is reached with, from this terminal to the hub. */
+const runJev = async (args: Args): Promise<number> => {
+  if (args.action !== "set-key" && args.action !== "remove-key") {
+    throw new UsageError("jev needs set-key or remove-key");
+  }
+  const found = await resolve(args);
+  if (!found) {
+    console.error(NO_HUB);
+    return 1;
+  }
+  const { removeJevKey, setJevKey } = await import("./jev-key");
+  const lines =
+    args.action === "set-key"
+      ? await setJevKey(found.httpUrl)
+      : await removeJevKey(found.httpUrl);
+  for (const line of lines) {
+    console.log(line);
+  }
+  return 0;
+};
+
 /** `cawco relay <on|off|list|set-secret>`: a project's public webhook path. */
 const runRelayCommand = async (args: Args): Promise<number> => {
   const { insideBoundary, runRelay } = await import("./relay");
@@ -719,6 +744,8 @@ const run = async (argv: string[]): Promise<number> => {
       return gitCredential(args);
     case "connections":
       return runConnections(args);
+    case "jev":
+      return runJev(args);
     case "relay":
       return runRelayCommand(args);
     case "service":

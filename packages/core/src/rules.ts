@@ -21,8 +21,8 @@ import type { HarnessKind } from "./harness";
  * How {@link Rule.pattern} is read.
  *
  * - `phrase` / `regex` — text to find in what the session said.
- * - `meaning` — a yes/no question the hub puts to TypeSafe's Jev (through
- *   OpenRouter) about what the session said; the rule fires when the answer
+ * - `meaning` — a yes/no question the hub puts to TypeSafe's Jev (directly
+ *   with a TypeSafe key, or through OpenRouter) about what the session said; the rule fires when the answer
  *   is yes. Decided by the hub asynchronously, so nothing here matches it.
  */
 export type RuleMatchKind = "phrase" | "regex" | "meaning";

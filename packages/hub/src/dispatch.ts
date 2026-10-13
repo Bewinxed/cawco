@@ -72,6 +72,7 @@ import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, PlaceRow, ProjectRow, WorkItemRow } from "./db";
 import type { Origin, WorkBudget, WorkItemCheck } from "./db/schema";
+import type { JevAccess } from "./jev";
 import {
   criteriaOf,
   DISPATCH_ASKED_MAX,
@@ -162,8 +163,8 @@ export interface DispatchDeps {
       taskId: string,
       text: string
     ) => void;
-    /** Jev's key while Jev is on. */
-    readonly key: () => string | undefined;
+    /** Jev's route while Jev is on (jev.ts `jevAccess`). */
+    readonly access: () => JevAccess | undefined;
     /** The delegate types a session of the project may name. */
     readonly typesFor: (
       projectId: string
@@ -720,8 +721,8 @@ export const createDispatcher = ({
     project: ProjectRow,
     task: TaskView
   ): Promise<string | undefined> => {
-    const key = placement.key();
-    if (!key) {
+    const access = placement.access();
+    if (!access) {
       offLine(
         "type",
         project.id,
@@ -734,7 +735,7 @@ export const createDispatcher = ({
       return;
     }
     const type = await jevType(
-      key,
+      access,
       project.id,
       {
         title: task.title,
@@ -772,9 +773,9 @@ export const createDispatcher = ({
     const views = await Promise.all(
       triaged.map((id) => tasks.get(project.id, id))
     );
-    const key = placement.key();
-    return key
-      ? await readyByJev(project, key, views, all)
+    const access = placement.access();
+    return access
+      ? await readyByJev(project, access, views, all)
       : readyByLead(project, views, byId);
   };
 
@@ -819,7 +820,7 @@ export const createDispatcher = ({
    */
   const judgeFresh = async (
     project: ProjectRow,
-    key: string,
+    access: JevAccess,
     views: TaskView[],
     all: TaskSummary[]
   ): Promise<boolean> => {
@@ -832,7 +833,7 @@ export const createDispatcher = ({
     let answered: Map<string, DispatchJudgement>;
     try {
       answered = await jevDispatch(
-        key,
+        access,
         project.id,
         fresh.map((task) => ({
           id: task.id,
@@ -870,11 +871,11 @@ export const createDispatcher = ({
   /** Ready to dispatch and Dispatch order with Jev on: the ones Jev scores ready, by its order scores. */
   const readyByJev = async (
     project: ProjectRow,
-    key: string,
+    access: JevAccess,
     views: TaskView[],
     all: TaskSummary[]
   ): Promise<string[]> => {
-    if (!(await judgeFresh(project, key, views, all))) {
+    if (!(await judgeFresh(project, access, views, all))) {
       return [];
     }
     const ready = views
@@ -1516,11 +1517,17 @@ export const createDispatcher = ({
     item: WorkItemRow
   ): Promise<"done" | "lead" | "you"> => {
     const report = item.digest ?? item.result ?? "";
-    const key = placement.key();
+    const access = placement.access();
     const about = hubActor(`attempt ${short(item.id)} judged`);
-    if (key) {
+    if (access) {
       try {
-        const judged = await jevJudged(key, projectId, task, criteria, report);
+        const judged = await jevJudged(
+          access,
+          projectId,
+          task,
+          criteria,
+          report
+        );
         const unmet = judged.filter((each) => !each.met);
         if (unmet.length === 0) {
           return "done";

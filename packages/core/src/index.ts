@@ -1358,6 +1358,8 @@ export const CAWCO_ENV = {
   telegramApi: "CAWCO_TELEGRAM_API",
   /** GitHub's REST API origin the hub's pollers call, for pointing them at a proxy. */
   githubApi: "CAWCO_GITHUB_API",
+  /** TypeSafe's System One URL Jev's typesafe route posts to, for pointing it at a local stand-in in its live proof. */
+  typesafeUrl: "CAWCO_TYPESAFE_URL",
   /** The loopback port the hub's relay receiver listens on (default: one the OS picks free). */
   relayPort: "CAWCO_RELAY_PORT",
   telegramAsrUrl: "CAWCO_TELEGRAM_ASR_URL",

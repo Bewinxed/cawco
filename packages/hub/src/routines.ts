@@ -65,6 +65,7 @@ import type { Decide, RoutineRow, RoutineRunRow } from "./db/routines";
 import type { RoutineOutcome, RoutineTarget, WorkBudget } from "./db/schema";
 import { defaultCheck } from "./dispatch";
 import { eventData } from "./ingress";
+import type { JevAccess } from "./jev";
 import { jevType, offLine } from "./jev-placement";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { Push } from "./push";
@@ -261,8 +262,8 @@ export interface RoutineDeps {
   readonly hubCheckout: () => Promise<
     { cwd: string; machineId: string } | string
   >;
-  /** Jev's key while Jev is on (jev-placement.ts `jevKey`). */
-  readonly jevKey: () => string | undefined;
+  /** Jev's route while Jev is on (jev.ts `jevAccess`). */
+  readonly jevAccess: () => JevAccess | undefined;
   readonly lifetime: HubLifetimeShape;
   /** Whether a machine is connected now. */
   readonly online: (machineId: string) => boolean;
@@ -365,7 +366,7 @@ export const createRoutines = ({
   curatorBrief,
   db,
   hubCheckout,
-  jevKey,
+  jevAccess,
   lifetime,
   online,
   pauses,
@@ -384,8 +385,8 @@ export const createRoutines = ({
     if (routine.delegateType) {
       return routine.delegateType;
     }
-    const key = jevKey();
-    if (!key) {
+    const access = jevAccess();
+    if (!access) {
       offLine(
         "type",
         routine.projectId,
@@ -396,7 +397,7 @@ export const createRoutines = ({
     const catalog = types(routine.projectId);
     return catalog.length > 0
       ? await jevType(
-          key,
+          access,
           routine.projectId,
           { title: routine.name, text: routine.prompt },
           catalog
