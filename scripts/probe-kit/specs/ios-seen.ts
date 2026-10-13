@@ -181,12 +181,16 @@ async function run(kit: Kit): Promise<void> {
       id: `probe-item-${crypto.randomUUID().slice(0, 8)}`,
       workspace_id: workspace,
       parent_instance_id: parent,
-      instance_id: crypto.randomUUID(),
+      // A session the hub has a row for: an item whose session is gone is
+      // failed by its 30 s sweep (work-items.ts `endGone`).
+      instance_id: delegateSession,
       harness: "claude",
       state: "running",
     });
   };
   const session = await fleet.spawn("claude", TITLE);
+  /** The session each delegate's work item runs in: one that stays idle. */
+  const delegateSession = await fleet.spawn("claude", `${TITLE} delegate`);
   await fleet.send(session, "Say hello.");
   await until(
     "the first turn ended",
@@ -349,7 +353,13 @@ async function run(kit: Kit): Promise<void> {
         (at) => at >= ended,
         LOOK_MS
       ).catch(() => undefined);
-      const line = marked(from);
+      // The app logs its look once the hub has answered it: after the mark.
+      const line = await until(
+        `${label}: the app's look`,
+        () => marked(from),
+        Boolean,
+        LOOK_MS
+      ).catch(() => undefined);
       kit.check(
         `${label}: the turn that ended in front is marked seen within ${LOOK_MS / 1000}s`,
         seen !== undefined && line !== undefined && (!delegate || running > 0),
@@ -373,7 +383,12 @@ async function run(kit: Kit): Promise<void> {
       JSON.stringify(shown, null, 2)
     );
     const field = shown.find((n) => n.id === "steer-message");
-    const hubFrom = (await fleet.logs("hub")).split("\n").length;
+    /** The hub's `[presence]` lines for an iOS client, in the order it said them. */
+    const presence = async () =>
+      (await fleet.logs("hub"))
+        .split("\n")
+        .filter((l) => l.includes("[presence] ios "));
+    const hubFrom = (await presence()).length;
     const appFrom = heard.length;
     const readStart = Date.now();
     const scrollUntil = readStart + READ_MS / 3;
@@ -405,18 +420,22 @@ async function run(kit: Kit): Promise<void> {
     );
     await tap(opener, "the session's tab");
     await pause(1500);
+    const card = await tree();
     await writeFile(
       join(kit.out, "sheet-tree.json"),
-      JSON.stringify(await tree(), null, 2)
+      JSON.stringify(card, null, 2)
+    );
+    kit.check(
+      "the session's details card is open over it",
+      card.some((n) => n.label === "Session details"),
+      "its tab tapped"
     );
     await turnInFront("details card open", true);
     await pause(Math.max(0, readStart + READ_MS - Date.now()));
     const readFor = Date.now() - readStart;
 
-    const client = (lines: string[]) =>
-      lines.filter((l) => l.includes("[presence] ios "));
-    const during = client((await fleet.logs("hub")).split("\n").slice(hubFrom));
-    const all = client((await fleet.logs("hub")).split("\n"));
+    const all = await presence();
+    const during = all.slice(hubFrom);
     const beats = heard
       .slice(appFrom)
       .filter(
@@ -436,14 +455,12 @@ async function run(kit: Kit): Promise<void> {
     );
 
     // ── Leaving ──────────────────────────────────────────────────────────
-    const leftFrom = (await fleet.logs("hub")).split("\n").length;
+    const leftFrom = (await presence()).length;
     await sh(`${AXE} button home --udid ${udid}`);
     const left = await until(
       "the hub hears him leave",
       async () =>
-        client((await fleet.logs("hub")).split("\n").slice(leftFrom)).find(
-          (l) => l.includes("inactive")
-        ),
+        (await presence()).slice(leftFrom).find((l) => l.includes("inactive")),
       Boolean,
       15_000
     ).catch(() => undefined);
