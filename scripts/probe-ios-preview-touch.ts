@@ -18,21 +18,30 @@
  *     query) and a button counting its own clicks; the page posts
  *     `cawco:probe` with its state and the rects of what is tapped;
  *  3. on an iPhone 16 Pro simulator on iOS 18.5 (mac-slot.sh sim --runtime
- *     …iOS-18-5, as probe-ios-recall.ts and build-both.sh's floor launch;
- *     axe's touches time out on the 27.2 runtime) launches the
- *     app on that session with `-preview-probe`, which logs the preview's
+ *     …iOS-18-5, the app's floor, as probe-ios-recall.ts and build-both.sh's
+ *     floor launch) launches the app on that session with `-preview-probe`, which logs the preview's
  *     mode, documents, picks and the page's posts (PreviewController.swift)
- *     in the Probe category, each rect as its centre in window points;
- *  4. taps and drags by simulator touch (axe, as the composer probe does) at
- *     the places the app logs, and reads the page's answers from that log.
+ *     in the Probe category, each rect as its centre in window points, and
+ *     the web view's frame in the window;
+ *  4. reads what stands in front with Maestro's runner (CawCo, or the run
+ *     stops with a screenshot of what does), then taps and drags with that
+ *     runner's touches at the places the app logs, each page point inside
+ *     the web view's frame, and reads the page's answers from that log.
  *
- * axe's touches need testmanagerd's socket, which a CawCo workspace's
- * boundary refuses ("Operation not permitted"; so does idb_companion, which
- * cannot write the simulator's data folder there): run it from the owner's
- * shell on the Mac.
+ * Not axe: every axe tap, touch and drag first reads the frontmost app
+ * through the host's accessibility translator (OrientationAwareCoordinates
+ * fetches the app's frame), which reaches only the app's own process. With
+ * the preview's page drawn by WebKit's web content process it returns
+ * nothing, and axe refuses the tap whatever the point: "No translation
+ * object returned for simulator", as the Caw and Safari probes met it
+ * (532f5489). Maestro's runner reads and touches from inside the simulator.
  *
- * It stops only what it started: the fleet's processes by PID and the
- * simulator it took (deleted at the end). `--keep` keeps the fleet's sandbox.
+ * The runner is an XCTest bundle kept up by `xcodebuild test-without-building`,
+ * which needs testmanagerd, which a CawCo workspace's boundary refuses
+ * ("Operation not permitted"): run it from the owner's shell on the Mac.
+ *
+ * It stops only what it started: the fleet's processes by PID, the runner,
+ * and the simulator it took (deleted at the end). `--keep` keeps the fleet's sandbox.
  * Prints `PASS <step>` / `FAIL <step>` per check, then `TAP_REACHED_PAGE`
  * only if every check passed (exit 0), else the first failing check.
  */
@@ -43,7 +52,17 @@ import { scratchFleet, until } from "./scratch-fleet";
 const keep = process.argv.includes("--keep");
 const build = !process.argv.includes("--no-build");
 const root = resolve(import.meta.dir, "..");
-const AXE = "/opt/homebrew/bin/axe";
+/**
+ * Maestro on the Mac, as probe-ios-caw-panel.ts runs it: on the JDK Homebrew
+ * keeps for it, its analytics, update check and analysis notice off, and
+ * JDK 26's final-field warning answered (MAESTRO_OPTS reaches its `java` line).
+ */
+const MAESTRO =
+  'JAVA_HOME="$(/opt/homebrew/bin/brew --prefix openjdk)" MAESTRO_OPTS=--enable-final-field-mutation=ALL-UNNAMED MAESTRO_CLI_NO_ANALYTICS=1 MAESTRO_DISABLE_UPDATE_CHECK=true MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED=true /opt/homebrew/bin/maestro';
+/** Maestro's runner app in the simulator. */
+const RUNNER = "dev.mobile.maestro-driver-iosUITests.xctrunner";
+/** What Maestro's CLI prints after its error, before the stack. */
+const MAESTRO_STACK = "The stack trace was:";
 console.log(
   `  at ${(await Bun.$`git -C ${root} log -1 --format=%h\ %s`.text()).trim()}`
 );
@@ -145,7 +164,7 @@ const PROBE_PREFIX = /^.*\[dev\.cawco\.app:Probe\]\s*/;
 /** PreviewController's `preview page …` and `preview head …` lines. */
 const PAGE_LINE = /^preview page view=(\S+) selected=(\S+) count=(\d+)(.*)$/;
 const HEAD_LINE =
-  /^preview head select=(.+)@(-?\d+),(-?\d+) reload=(-?\d+),(-?\d+) grabber=(?:none|(-?\d+),(-?\d+)) note=(\d+)$/;
+  /^preview head select=(.+)@(-?\d+),(-?\d+) reload=(-?\d+),(-?\d+) grabber=(?:none|(-?\d+),(-?\d+)) note=(\d+) web=(-?\d+),(-?\d+),(\d+),(\d+)$/;
 const seen: string[] = [];
 
 interface Page {
@@ -198,12 +217,19 @@ interface Point {
   x: number;
   y: number;
 }
-/** The header as the app logs it before each page post: Select's words and centre, Reload's, the grabber's, the selecting line's height. */
+interface Frame {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}
+/** The header as the app logs it before each page post: Select's words and centre, Reload's, the grabber's, the selecting line's height, the web view's frame. */
 interface Head {
   grabber?: Point;
   note: number;
   reload: Point;
   select: Point;
+  web: Frame;
   words: string;
 }
 const headOf = (line: string): Head | undefined => {
@@ -218,8 +244,18 @@ const headOf = (line: string): Head | undefined => {
     grabber:
       m[6] === undefined ? undefined : { x: Number(m[6]), y: Number(m[7]) },
     note: Number(m[8]),
+    web: {
+      x: Number(m[9]),
+      y: Number(m[10]),
+      width: Number(m[11]),
+      height: Number(m[12]),
+    },
   };
 };
+/** The newest header line so far. */
+const headLast = () =>
+  seen.map(headOf).filter(Boolean).at(-1) as Head | undefined;
+const frameText = (f: Frame) => `${f.x},${f.y} ${f.width}×${f.height}`;
 /** The header as the app logs it now (with the page's next post), or the probe stops. */
 const headNow = async (what: string): Promise<Head> => {
   const from = seen.length;
@@ -240,6 +276,8 @@ const fleet = await scratchFleet({
 });
 let sim: MacSim | undefined;
 let stream: ReturnType<typeof Bun.spawn> | undefined;
+/** Maestro's runner's port on the Mac, once picked. */
+let runnerPort: number | undefined;
 
 try {
   fleet.launch("sessiond");
@@ -259,9 +297,8 @@ try {
   const port = Number(new URL(fleet.base).port);
 
   // ── 4. The simulator ───────────────────────────────────────────────────
-  // iOS 18.5, as probe-ios-recall.ts and build-both.sh's floor launch take:
-  // axe on the 27.2 runtime timed out "creating the simulator remote
-  // automation session" at its first touch, twice.
+  // iOS 18.5, the app's floor, as probe-ios-recall.ts and build-both.sh's
+  // floor launch take.
   sim = await macSim({
     runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
     device: "iPhone 16 Pro",
@@ -313,17 +350,71 @@ xcrun simctl install ${udid} "${app}"`);
   await pause(1500);
 
   // Where things are comes from the app's own log (its views' frames and the
-  // page's rects), not the accessibility tree. axe's touches (and its
-  // describe-ui) go through testmanagerd's socket, which a CawCo workspace's
-  // boundary refuses ("Operation not permitted"): run this from the owner's
-  // shell on the Mac.
-  const tap = (point: Point) =>
-    sh(`${AXE} tap -x ${point.x} -y ${point.y} --udid ${udid}`);
-  /** One finger from `from` to `to` over half a second (axe `drag`: down, moves, up). */
-  const drag = (from: Point, to: Point) =>
-    sh(
-      `${AXE} drag --start-x ${from.x} --start-y ${from.y} --end-x ${to.x} --end-y ${to.y} --duration 0.5 --steps 30 --udid ${udid}`
+  // page's rects), not the accessibility tree. The touches are Maestro's
+  // runner's, in points: its first read (`maestro hierarchy`) starts it on a
+  // free port of its own (the default, 22087, is every simulator's).
+  const free = Bun.listen({
+    hostname: "127.0.0.1",
+    port: 0,
+    socket: { data: () => undefined },
+  });
+  runnerPort = free.port;
+  free.stop(true);
+  /** The foreground app's name as Maestro's runner reads it from inside the simulator. */
+  const front = async () => {
+    const text = await sh(
+      `${MAESTRO} --device ${udid} --driver-host-port ${runnerPort} hierarchy --no-reinstall-driver`
+    ).catch((error: unknown) => {
+      const words = (error instanceof Error ? error.message : String(error))
+        .split(MAESTRO_STACK)[0]
+        .trim();
+      throw new Error(`Maestro's read of the screen failed: ${words}`);
+    });
+    const whole = JSON.parse(
+      text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)
+    ) as { children?: { attributes?: Record<string, string> }[] };
+    return (
+      whole.children?.[0]?.attributes?.accessibilityText || "nothing named"
     );
+  };
+  const runner = (route: string, body: Record<string, number>) =>
+    sh(
+      `curl -sS --fail-with-body --max-time 30 -H 'Content-Type: application/json' -d '${JSON.stringify(body)}' http://127.0.0.1:${runnerPort}/${route}`
+    );
+  /** One finger's tap, the runner's `POST /touch` (where every `tapOn` of Maestro's ends). */
+  const tap = (point: Point) =>
+    runner("touch", { x: Math.round(point.x), y: Math.round(point.y) });
+  /** One finger from `from` to `to` over half a second, the runner's `POST /swipeV2`. */
+  const drag = (from: Point, to: Point) =>
+    runner("swipeV2", {
+      startX: Math.round(from.x),
+      startY: Math.round(from.y),
+      endX: Math.round(to.x),
+      endY: Math.round(to.y),
+      duration: 0.5,
+    });
+  /** A tap on what the page named, at its centre, which must lie in the web view's frame of the same post. */
+  const tapPage = async (name: string, now: Page) => {
+    const at = now.at[name];
+    const web = headLast()?.web;
+    if (!(at && web)) {
+      throw new Error(`no point for ${name}, or no web view frame, in the log`);
+    }
+    const inside =
+      at.x >= web.x &&
+      at.x <= web.x + web.width &&
+      at.y >= web.y &&
+      at.y <= web.y + web.height;
+    console.log(
+      `  tap ${name} at ${at.x},${at.y}: ${inside ? "inside" : "OUTSIDE"} the web view at ${frameText(web)}`
+    );
+    if (!inside) {
+      throw new Error(
+        `${name} at ${at.x},${at.y} lies outside the web view at ${frameText(web)}`
+      );
+    }
+    await tap(at);
+  };
   const grabber = async () => (await headNow("the grabber")).grabber;
 
   await sh(
@@ -334,7 +425,10 @@ xcrun simctl install ${udid} "${app}"`);
     "page loads in the drawer",
     page?.view === "table" && "tab-board" in page.at,
     page
-      ? `view=${page.view} selected=${page.selected} count=${page.count}`
+      ? `view=${page.view} selected=${page.selected} count=${page.count}; tab-board at ${page.at["tab-board"]?.x},${page.at["tab-board"]?.y}, button at ${page.at.button?.x},${page.at.button?.y}, web view at ${(() => {
+          const web = headLast()?.web;
+          return web ? frameText(web) : "unlogged";
+        })()}`
       : `no page line; log: ${seen.slice(-5).join(" | ") || "nothing"}`
   );
   if (!page) {
@@ -342,11 +436,28 @@ xcrun simctl install ${udid} "${app}"`);
   }
   // The overlay's ready, the app's buttons enabled.
   await pause(1500);
+  // What stands in front before the first tap: the app, or a system alert,
+  // the paywall or SpringBoard, saved as a screenshot in the sandbox.
+  const inFront = await front();
+  const shot = join(fleet.sandbox, "front.png");
+  if (inFront !== "CawCo") {
+    await sh(
+      `xcrun simctl io ${udid} screenshot "${shot}" >/dev/null 2>&1`
+    ).catch(() => undefined);
+  }
+  check(
+    "the app stands in front before the first tap",
+    inFront === "CawCo",
+    `Maestro reads "${inFront}" in front${inFront === "CawCo" ? "" : `; the screen: ${shot}`}`
+  );
+  if (inFront !== "CawCo") {
+    throw new Error(`"${inFront}" stands over the app`);
+  }
   const grabAt = await grabber();
 
   // ── 5. Select off: a tab and the button reach the page ────────────────
   let mark = seen.length;
-  await tap(page.at["tab-board"]);
+  await tapPage("tab-board", page);
   const doc = await lineAfter(
     "a new document after the tab",
     mark,
@@ -369,7 +480,7 @@ xcrun simctl install ${udid} "${app}"`);
   await pause(800);
   let before = (pageAfter(mark) ?? page).count;
   mark = seen.length;
-  await tap(page.at.button);
+  await tapPage("button", page);
   page = await until(
     "the counter up",
     () => pageAfter(mark),
@@ -411,7 +522,7 @@ xcrun simctl install ${udid} "${app}"`);
   page = await pageNow("the page after the note");
   before = page.count;
   mark = seen.length;
-  await tap(page.at.button);
+  await tapPage("button", page);
   await lineAfter(
     "the pick",
     mark,
@@ -441,7 +552,7 @@ xcrun simctl install ${udid} "${app}"`);
   page = await pageNow("the page after Done");
   before = page.count;
   mark = seen.length;
-  await tap(page.at.button);
+  await tapPage("button", page);
   page = await until(
     "the counter up",
     () => pageAfter(mark),
@@ -478,7 +589,7 @@ xcrun simctl install ${udid} "${app}"`);
   page = await pageNow("the page after Reload");
   before = page.count;
   const reloadMark = seen.length;
-  await tap(page.at.button);
+  await tapPage("button", page);
   page = await until(
     "the counter up",
     () => pageAfter(reloadMark),
@@ -512,7 +623,7 @@ xcrun simctl install ${udid} "${app}"`);
     page = await pageNow(`the page at ${height} height`);
     before = page.count;
     mark = seen.length;
-    await tap(page.at.button);
+    await tapPage("button", page);
     page = await until(
       "the counter up",
       () => pageAfter(mark),
@@ -532,6 +643,14 @@ xcrun simctl install ${udid} "${app}"`);
   check("probe", false, error instanceof Error ? error.message : String(error));
 } finally {
   stream?.kill();
+  // The runner app and the `xcodebuild` keeping it up (the bracket keeps
+  // the pattern off the shell running the match).
+  if (sim && runnerPort !== undefined) {
+    await sh(`xcrun simctl terminate ${sim.udid} ${RUNNER} >/dev/null 2>&1 || true
+pkill -f "[x]codebuild test-without-building .*-destination id=${sim.udid} " || true`).catch(
+      () => undefined
+    );
+  }
   await sim?.release();
   await fleet.close();
   await fleet.clean(keep || failed.length > 0);

@@ -452,8 +452,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// The probe's page posts `cawco:probe` with its state and the viewport
     /// rects of what the probe taps: logged with each rect's centre in the
     /// window's points, where a simulator touch lands, after the header's own
-    /// line (Select's words and its centre, Reload's, the grabber's, and the
-    /// selecting line's height), so every post says where everything is now.
+    /// line (Select's words and its centre, Reload's, the grabber's, the
+    /// selecting line's height, and the web view's frame in the window), so
+    /// every post says where everything is now.
     private func probePage(_ body: [String: Any]) {
         guard Self.probing, let web else { return }
         let centre = { (control: UIView) -> String in
@@ -462,7 +463,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         }
         let words = selectButton.configuration?.attributedTitle.map { String($0.characters) } ?? "?"
         let grab = grabArea.isHidden ? "none" : centre(grabber)
-        probe("preview head select=\(words)@\(centre(selectButton)) reload=\(centre(reloadButton)) grabber=\(grab) note=\(Int(selectingNote.bounds.height))")
+        let page = web.convert(web.bounds, to: nil)
+        probe("preview head select=\(words)@\(centre(selectButton)) reload=\(centre(reloadButton)) grabber=\(grab) note=\(Int(selectingNote.bounds.height)) web=\(Int(page.minX.rounded())),\(Int(page.minY.rounded())),\(Int(page.width.rounded())),\(Int(page.height.rounded()))")
         var parts = [Self.text(body["state"], 200) ?? ""]
         let rects = body["rects"] as? [String: Any] ?? [:]
         for name in rects.keys.sorted() {
