@@ -486,6 +486,12 @@ public enum Size {
     public static let cRailRowHCompact: Double = 44
     /// A row of the artifact panel's list: the kind's glyph, the name, its age (DESIGN.md Artifact panel, canvas and ink).
     public static let cArtifactRowH: Double = 44
+    /// tsk-3's numbered pin: the coral disc on the page, in the pins list and on the card (DESIGN.md Artifact panel, canvas and ink).
+    public static let cPin: Double = 20
+    /// A pin's card over the page, at its widest: the anchor line, the thread, the reply field (DESIGN.md Artifact panel, canvas and ink).
+    public static let cPinCardW: Double = 320
+    /// A pin's picture on its card: the element's crop or the ink's, opening full size in the lightbox.
+    public static let cPinThumb: Double = 56
     public static let cMark: Double = 26
     public static let cMarkGlyph: Double = 16
     public static let cRowMark: Double = 18

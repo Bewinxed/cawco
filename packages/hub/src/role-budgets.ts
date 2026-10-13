@@ -49,12 +49,16 @@ import type { Tasks } from "./tasks";
  * role of its own, lists five tools (1,019 measured). P5's fleet watch makes
  * the overseer a triage run: its one decision, `triage_decide`, with the
  * fleet and its task to read, and nothing that messages a session (668
- * measured).
+ * measured). The person's pins (§5.7, slice 4b) add `comment_read`,
+ * `comment_reply` and `comment_resolve` beside the artifact tools, the
+ * agent's only way to read and answer a pin's thread: about 634 tokens more
+ * for the worker, the delegate and the lead (worker 23,136, delegate 6,160,
+ * lead 14,978 measured).
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 22_700,
-  delegate: 5600,
-  lead: 14_400,
+  worker: 23_500,
+  delegate: 6200,
+  lead: 15_200,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,

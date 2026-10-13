@@ -109,7 +109,6 @@ export function keepDraft(
           images: [],
           texts: [],
           files: [],
-          selections: [],
           canvas: null,
         });
       }

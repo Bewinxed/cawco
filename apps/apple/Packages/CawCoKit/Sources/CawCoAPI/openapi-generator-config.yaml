@@ -72,12 +72,14 @@ typeOverrides:
     NeutralStatus: OpenEnums.NeutralStatus
     NeutralTaskPriority: OpenEnums.NeutralTaskPriority
     OnCap: OpenEnums.OnCap
+    PageAnchorFramework: OpenEnums.PageAnchorFramework
     PermissionMode: OpenEnums.PermissionMode
     PermissionSettledFrameOutcome: OpenEnums.PermissionSettledFrameOutcome
     PermissionUpdateBehavior: OpenEnums.PermissionUpdateBehavior
     PermissionUpdateDestination: OpenEnums.PermissionUpdateDestination
     PhoneDoneAction: OpenEnums.PhoneDoneAction
     PhoneDoneDecidedBy: OpenEnums.PhoneDoneDecidedBy
+    PinKind: OpenEnums.PinKind
     PlaceKind: OpenEnums.PlaceKind
     PlacementStrategy: OpenEnums.PlacementStrategy
     PlanSnapshotSource: OpenEnums.PlanSnapshotSource
@@ -113,6 +115,7 @@ typeOverrides:
     TaskHistoryActorMover: OpenEnums.TaskHistoryActorMover
     TaskHistoryKind: OpenEnums.TaskHistoryKind
     TaskHistoryState: OpenEnums.TaskHistoryState
+    ThreadEntryBy: OpenEnums.ThreadEntryBy
     ThreadStatus: OpenEnums.ThreadStatus
     ToolPlatform: OpenEnums.ToolPlatform
     ToolState: OpenEnums.ToolState

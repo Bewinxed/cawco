@@ -3,7 +3,7 @@
 /**
  * Ink on any artifact (Projects spec §5.10, D27; DESIGN.md, Artifact panel,
  * canvas and ink: "Ink on any artifact"). A pen inks at once; a finger and a
- * mouse never do (Select is its own mode, and while it is on nothing inks).
+ * mouse never do (Comment is its own mode, and while it is on nothing inks).
  *
  * The ink is an `<svg>` in the page's own document, at its origin and as big
  * as its scroll, so it scrolls with the page and never shifts; it takes the
@@ -19,24 +19,26 @@
  * kept in the doc's `ink` (core ink.ts) as fractions of that element's box,
  * so it is drawn again from the element's box wherever the element stands
  * now: on load, on a resize, when the element itself resizes, after a
- * re-publish. A page's group whose element is gone goes to `moved`.
+ * re-publish. The element is found as a pin's is (core comments.ts
+ * `findAnchor`); a page's group whose element is gone goes to `moved`.
+ * Its pins are pins.ts's.
  *
  * On a canvas the pen draws the canvas's own freedraw (Excalidraw), so this
  * layer stays off; the canvas's page tells the overlay where a stroke ended
  * (`cawco:stroke-end`) and the icon and its picks run on that element.
  */
-import type { PreviewElement } from "@cawco/core";
 import {
-  INK_LIMITS,
-  type InkAnchor,
-  type InkGroup,
-  type InkPin,
-  type InkPoint,
+  type PageAnchor,
+  type Pin,
   type PinnedElement,
-} from "@cawco/core/ink";
+  pinUnsent,
+} from "@cawco/core/comments";
+import { INK_LIMITS, type InkGroup, type InkPoint } from "@cawco/core/ink";
 import { getStroke } from "perfect-freehand";
 import type { Map as YMap } from "yjs";
 import { artifact } from "./artifact";
+import { newId } from "./id";
+import type { Pins } from "./pins";
 import type { InkChrome, Pick } from "./radial";
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -54,8 +56,6 @@ const STROKE = {
   last: true,
 } as const;
 
-/** A numbered pin's disc: 20px. */
-const PIN_R = 10;
 /** Elements a pin names at most. Our call. */
 const PINNED_MAX = 20;
 /** A pen's pressure when it reports none (a pen that does not measure it). */
@@ -83,24 +83,33 @@ interface Box {
   y: number;
 }
 
-/** What the overlay lends the ink: its own describers, the host's chrome, its word to the host. */
+/** What the overlay lends the ink: its own describers, the pins, the host's chrome, its word to the host. */
 export interface InkDeps {
+  /** What a page's mark stands on, read from `el` as it is now. */
+  anchorOf: (el: Element) => PageAnchor;
   /** The page as a picture at `scale`, ink and all, the overlay's own UI left out. */
   capture: (scale?: number) => Promise<{ png: string | null; error?: string }>;
   chrome: InkChrome;
-  describe: (el: Element) => PreviewElement;
+  /** Whether Comment mode is on: nothing inks while it is. */
+  commenting: () => boolean;
+  describe: (el: Element) => PinnedElement;
   elementAt: (x: number, y: number) => Element | null;
+  /** Where a page's anchor stands now, and by what; null when nothing on the page matches it. */
+  locate: (
+    anchor: PageAnchor
+  ) => { by: "source" | "selector" | "text"; el: Element } | null;
+  /** The pins, drawn after the ink each time it is drawn. */
+  pins: () => Pins;
   post: (type: string, payload?: object) => void;
-  selecting: () => boolean;
-  selectorOf: (el: Element) => string;
-  sourceOf: (el: Element) => PreviewElement["source"];
 }
 
 export interface Ink {
   /** The doc's ink changed, or the doc was replaced: drawn again, and the host told. */
   changed: () => void;
-  /** The page's pins and a picture with the ink on it, for the person's Send. */
+  /** The page's pins and a picture with the ink on it, for the composer's Ink chip. */
   exported: () => Promise<{ md: string; png: string | null; canvas: boolean }>;
+  /** A placed group's box in the page, px; null when it is not on the page. */
+  groupBox: (id: string) => Box | null;
   /** The svg the ink is drawn in: a re-publish keeps it (overlay `kept`). */
   layer: SVGSVGElement;
   /** Draw every group again where its element stands now (after a morph). */
@@ -164,6 +173,19 @@ const pathOf = (points: Point[]): string => {
   return `${d} Z`;
 };
 
+/** An svg layer at the page's origin, as big as its scroll. */
+export const fitToPage = (svg: SVGSVGElement) => {
+  const root = document.documentElement;
+  svg.setAttribute(
+    "width",
+    String(Math.max(root.scrollWidth, document.body?.scrollWidth ?? 0))
+  );
+  svg.setAttribute(
+    "height",
+    String(Math.max(root.scrollHeight, document.body?.scrollHeight ?? 0))
+  );
+};
+
 /** A pen's pressure, or the middle one where it reports none. */
 const pressureOf = (event: PointerEvent) =>
   event.pressure > 0 ? event.pressure : NO_PRESSURE;
@@ -178,15 +200,15 @@ export function startInk(deps: InkDeps): Ink {
   document.documentElement.append(layer);
 
   const onCanvas = () => artifact.kind() === "canvas";
-  /** Whether a pen inks here now: a page with a doc to keep it, not selecting. */
-  const inks = () => !(onCanvas() || deps.selecting()) && artifact.keeps();
+  /** Whether a pen inks here now: a page with a doc to keep it, not in Comment mode. */
+  const inks = () => !(onCanvas() || deps.commenting()) && artifact.keeps();
   const maps = () => {
     const doc = artifact.doc();
     return {
       doc,
       ink: doc.getMap("ink") as YMap<InkGroup>,
       moved: doc.getMap("moved") as YMap<InkGroup>,
-      pins: doc.getMap("pins") as YMap<InkPin>,
+      pins: doc.getMap("pins") as YMap<Pin>,
     };
   };
 
@@ -415,11 +437,6 @@ export function startInk(deps: InkDeps): Ink {
     return el;
   };
 
-  const anchorOf = (el: Element): InkAnchor => ({
-    selector: deps.selectorOf(el),
-    source: deps.sourceOf(el),
-  });
-
   /** Why a stroke may not be kept (WORDS.md's error formula), or null: the bounds the hub keeps. */
   const refusal = (
     points: Point[],
@@ -463,8 +480,8 @@ export function startInk(deps: InkDeps): Ink {
       round(p[2]),
     ];
     return {
-      id: open?.id ?? crypto.randomUUID(),
-      anchor: anchorOf(anchor),
+      id: open?.id ?? newId(),
+      anchor: deps.anchorOf(anchor),
       box: {
         x: round((groupBox.x - ab.x) / ab.w),
         y: round((groupBox.y - ab.y) / ab.h),
@@ -515,17 +532,9 @@ export function startInk(deps: InkDeps): Ink {
 
   // --- placing --------------------------------------------------------------
 
-  /** A group's element now: by its selector; null when nothing matches. */
-  const elementOf = (group: InkGroup): Element | null => {
-    if (!("selector" in group.anchor)) {
-      return null;
-    }
-    try {
-      return document.querySelector(group.anchor.selector);
-    } catch {
-      return null;
-    }
-  };
+  /** A group's element now (core `findAnchor`'s order); null when nothing matches. */
+  const elementOf = (group: InkGroup): Element | null =>
+    "selector" in group.anchor ? (deps.locate(group.anchor)?.el ?? null) : null;
 
   /** A group's strokes where its element stands now, in the page's px. */
   const strokesInPage = (group: InkGroup) => {
@@ -566,80 +575,64 @@ export function startInk(deps: InkDeps): Ink {
     if (onCanvas()) {
       return;
     }
-    const root = document.documentElement;
-    layer.setAttribute(
-      "width",
-      String(Math.max(root.scrollWidth, document.body?.scrollWidth ?? 0))
-    );
-    layer.setAttribute(
-      "height",
-      String(Math.max(root.scrollHeight, document.body?.scrollHeight ?? 0))
-    );
-    const { doc, ink, moved, pins } = maps();
+    fitToPage(layer);
+    const { ink } = maps();
     const gone: InkGroup[] = [];
+    const found: InkGroup[] = [];
     const brand = chrome.token("--brand-solid");
     for (const group of ink.values()) {
-      const el = elementOf(group);
+      const at = "selector" in group.anchor ? deps.locate(group.anchor) : null;
+      const el = at?.el;
       if (!el) {
         gone.push(group);
         continue;
       }
-      anchors.observe(el);
-      const strokes = strokesInPage(group);
-      const g = document.createElementNS(SVG, "g");
-      g.setAttribute("data-ink-group", group.id);
-      for (const [index, stroke] of strokes.entries()) {
-        const path = document.createElementNS(SVG, "path");
-        path.setAttribute("data-stroke", String(index));
-        path.setAttribute("d", pathOf(stroke.points));
-        path.setAttribute("fill", brand);
-        g.append(path);
+      if (at.by !== "selector") {
+        found.push({ ...group, anchor: deps.anchorOf(el) });
       }
-      layer.append(g);
-      placed.set(group.id, {
-        box: strokes.map((one) => boxOf(one.points)).reduce(union),
-        anchor: el,
-      });
+      drawGroup(group, el, brand);
     }
-    drawPins(pins);
-    if (gone.length > 0 && settled()) {
-      doc.transact(() => {
-        for (const group of gone) {
-          ink.delete(group.id);
-          moved.set(group.id, group);
-        }
-      });
+    if (settled()) {
+      settleGroups(found, gone);
     }
+    deps.pins().draw();
   }
 
-  /** tsk-3's numbered pin: a 20px coral disc with its number, at its group's top-right. */
-  function drawPins(pins: YMap<InkPin>) {
-    const fill = chrome.token("--action-solid");
-    const ink = chrome.token("--on-action");
-    const font = chrome.token("--type-label", "font");
-    for (const pin of pins.values()) {
-      const at = placed.get(pin.ink);
-      if (!at) {
-        continue;
-      }
-      const g = document.createElementNS(SVG, "g");
-      g.setAttribute("data-ink-pin", String(pin.number));
-      g.setAttribute(
-        "transform",
-        `translate(${(at.box.x + at.box.w).toFixed(1)} ${at.box.y.toFixed(1)})`
-      );
-      const disc = document.createElementNS(SVG, "circle");
-      disc.setAttribute("r", String(PIN_R));
-      disc.setAttribute("fill", fill);
-      const number = document.createElementNS(SVG, "text");
-      number.setAttribute("text-anchor", "middle");
-      number.setAttribute("dominant-baseline", "central");
-      number.setAttribute("fill", ink);
-      number.style.font = font;
-      number.textContent = String(pin.number);
-      g.append(disc, number);
-      layer.append(g);
+  /** One group's strokes over `el`, where `el` stands now. */
+  function drawGroup(group: InkGroup, el: Element, brand: string) {
+    anchors.observe(el);
+    const strokes = strokesInPage(group);
+    const g = document.createElementNS(SVG, "g");
+    g.setAttribute("data-ink-group", group.id);
+    for (const [index, stroke] of strokes.entries()) {
+      const path = document.createElementNS(SVG, "path");
+      path.setAttribute("data-stroke", String(index));
+      path.setAttribute("d", pathOf(stroke.points));
+      path.setAttribute("fill", brand);
+      g.append(path);
     }
+    layer.append(g);
+    placed.set(group.id, {
+      box: strokes.map((one) => boxOf(one.points)).reduce(union),
+      anchor: el,
+    });
+  }
+
+  /** Writes the groups found again by their source or text, and moves aside those no anchor finds. */
+  function settleGroups(found: InkGroup[], gone: InkGroup[]) {
+    if (found.length === 0 && gone.length === 0) {
+      return;
+    }
+    const { doc, ink, moved } = maps();
+    doc.transact(() => {
+      for (const group of found) {
+        ink.set(group.id, group);
+      }
+      for (const group of gone) {
+        ink.delete(group.id);
+        moved.set(group.id, group);
+      }
+    });
   }
 
   // --- picks ----------------------------------------------------------------
@@ -653,30 +646,8 @@ export function startInk(deps: InkDeps): Ink {
     const crossed = [at.anchor, ...at.anchor.querySelectorAll("*")].filter(
       (el) => touches(pageBox(el), at.box)
     );
-    return crossed.slice(0, PINNED_MAX).map((el) => {
-      const { html: _html, ...rest } = deps.describe(el);
-      return rest;
-    });
+    return crossed.slice(0, PINNED_MAX).map(deps.describe);
   };
-
-  const nextNumber = (pins: YMap<InkPin>) =>
-    Math.max(0, ...[...pins.values()].map((pin) => pin.number)) + 1;
-
-  const pinOf = (
-    pins: YMap<InkPin>,
-    group: InkGroup,
-    kind: InkPin["kind"],
-    elements: PinnedElement[] | string[]
-  ): InkPin => ({
-    id: crypto.randomUUID(),
-    number: nextNumber(pins),
-    kind,
-    anchor: group.anchor,
-    elements,
-    ink: group.id,
-    at: new Date().toISOString(),
-    ...(kind === "comment" ? { thread: [] } : {}),
-  });
 
   /** What a pick does to the group `id`. */
   function act(id: string, choice: Pick, under?: string[]) {
@@ -685,10 +656,8 @@ export function startInk(deps: InkDeps): Ink {
     if (!group) {
       return;
     }
-    const pinAs = (kind: InkPin["kind"]) => {
-      const pin = pinOf(pins, group, kind, under ?? elementsUnder(id));
-      pins.set(pin.id, pin);
-    };
+    const pinAs = (kind: Pin["kind"]) =>
+      deps.pins().pinInk(group, kind, under ?? elementsUnder(id));
     const picks: Record<Pick, () => void> = {
       annotate: () => pinAs("annotation"),
       comment: () => pinAs("comment"),
@@ -778,56 +747,12 @@ export function startInk(deps: InkDeps): Ink {
     queueMicrotask(changed);
   }
 
-  const lineOf = (pin: InkPin, group: InkGroup | undefined) => {
-    const lines: string[] = [];
-    const page = group?.page;
-    if ("selector" in pin.anchor) {
-      lines.push(`## ${pin.number}. ${pin.kind} on ${pin.anchor.selector}`);
-      const { source } = pin.anchor;
-      if (source?.file) {
-        lines.push(
-          `- Source: ${source.file}${source.line ? `:${source.line}` : ""}`
-        );
-      }
-      lines.push(`- Page: ${location.href}`);
-      const named = (pin.elements as PinnedElement[])
-        .map((el) => el.selector)
-        .join(", ");
-      if (named) {
-        lines.push(`- Under the ink: ${named}`);
-      }
-    } else {
-      lines.push(
-        `## ${pin.number}. ${pin.kind} on the canvas's element ${pin.anchor.element}`
-      );
-      const named = (pin.elements as string[]).join(", ");
-      if (named) {
-        lines.push(`- Under the ink: elements ${named}`);
-      }
-    }
-    if (page) {
-      lines.push(
-        `- Ink: ${page.w} × ${page.h} px at ${page.x}, ${page.y} in the page`
-      );
-    }
-    if (pin.kind === "comment") {
-      lines.push(
-        `- Thread: ${pin.thread?.length ? JSON.stringify(pin.thread) : "nothing written yet"}`
-      );
-    }
-    return lines.join("\n");
-  };
-
   return {
     layer,
     replace: () => draw(),
+    groupBox: (id) => placed.get(id)?.box ?? null,
     exported: async () => {
-      const { ink, pins } = maps();
-      const md = [...pins.values()]
-        .filter((pin) => !pin.sentAt)
-        .sort((a, b) => a.number - b.number)
-        .map((pin) => lineOf(pin, ink.get(pin.ink)))
-        .join("\n\n");
+      const md = deps.pins().markdown();
       if (onCanvas()) {
         return { md, png: null, canvas: true };
       }
@@ -843,10 +768,16 @@ export function startInk(deps: InkDeps): Ink {
             ink.set(group.id, { ...group, sentAt: at });
           }
         }
-        for (const pin of [...pins.values()]) {
-          if (!pin.sentAt) {
-            pins.set(pin.id, { ...pin, sentAt: at });
-          }
+        for (const pin of [...pins.values()].filter(pinUnsent)) {
+          pins.set(pin.id, {
+            ...pin,
+            sentAt: pin.sentAt ?? at,
+            thread: pin.thread.map((entry) =>
+              entry.by === "person" && !entry.sentAt
+                ? { ...entry, sentAt: at }
+                : entry
+            ),
+          });
         }
       });
     },

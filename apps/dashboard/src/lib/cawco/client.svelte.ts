@@ -136,7 +136,6 @@ import {
 import { notices } from "./notices.svelte";
 import { unpickedMode } from "./permission-modes";
 import { type HeldPlan, handlePlanMessage } from "./plan";
-import { type PendingSelection, selectionExtras } from "./preview/selection";
 import { send as askHub, json } from "./project-tasks";
 import { placedOn } from "./projects";
 import { type ReloadHold, reloadWhenIdle } from "./reload.svelte";
@@ -3299,7 +3298,7 @@ function wirePayload<K extends CommandKind>(
           ...userMessage(text, commandId),
           ...(replaces ? { replaces } : {}),
         },
-        ...selectionExtras(extras),
+        ...extras,
       };
     }
     case "permission.answer": {
@@ -3504,19 +3503,6 @@ interface OutboxEntry {
  * base64 image data alive.
  */
 const sendOutbox = new Map<string, OutboxEntry>();
-const selectionSends = $state<
-  Record<string, { instanceId: string; selectionIds: string[]; at: number }>
->({});
-
-export function selectionCommands(instanceId: string) {
-  return Object.entries(selectionSends)
-    .filter(([, entry]) => entry.instanceId === instanceId)
-    .map(([commandId, entry]) => ({
-      commandId,
-      selectionIds: entry.selectionIds,
-      stage: commandRecord(commandId)?.stage,
-    }));
-}
 
 /**
  * Bumped on every mutation of the Map above, and read by {@link canResend}.
@@ -3557,13 +3543,6 @@ function rememberSend(
     extras,
     at: Date.now(),
   });
-  if (extras.selections?.length) {
-    selectionSends[commandId] = {
-      instanceId,
-      selectionIds: extras.selections.map(({ id }) => id),
-      at: Date.now(),
-    };
-  }
   outboxVersion += 1;
   pruneOutbox();
 }
@@ -3578,17 +3557,6 @@ function rememberSend(
 function pruneOutbox(): void {
   const before = sendOutbox.size;
   const now = Date.now();
-  const selections = Object.entries(selectionSends).sort(
-    (a, b) => b[1].at - a[1].at
-  );
-  for (const [index, [commandId, entry]] of selections.entries()) {
-    if (
-      index >= SETTLED_COMMAND_LIMIT ||
-      now - entry.at >= SETTLED_COMMAND_TTL_MS
-    ) {
-      delete selectionSends[commandId];
-    }
-  }
   for (const [commandId, entry] of sendOutbox) {
     const record = streamState.commands[commandId];
     if (record?.stage === "submitted") {
@@ -4845,9 +4813,7 @@ export async function forkSession({
 }
 
 /** What a turn carries besides its typed text — pastes turned into chips, images. */
-export type SendExtras = Pick<SendPayload, "attachments" | "images"> & {
-  selections?: PendingSelection[];
-};
+export type SendExtras = Pick<SendPayload, "attachments" | "images">;
 
 /**
  * What a send does to the LOCAL store: the row it draws under the message's
@@ -4878,9 +4844,7 @@ function noteSendSubmitted(
     // A send the hub already placed is drawn by the hub's row for it.
     !target.messages.some((message) => message.id === commandId)
   ) {
-    target.local.push(
-      localUserMessage(instanceId, commandId, text, selectionExtras(extras))
-    );
+    target.local.push(localUserMessage(instanceId, commandId, text, extras));
     place(target);
   }
   // A new attempt replaces the last one's announcement rather than stacking on

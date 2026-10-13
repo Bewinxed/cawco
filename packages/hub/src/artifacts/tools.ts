@@ -1,11 +1,13 @@
 /**
- * The four artifact tools' names, words and inputs (Projects spec §5.10),
+ * The artifact tools' names, words and inputs (Projects spec §5.10), and
+ * the three for the person's pins and their threads (§5.7),
  * written for the agent that reads them: one trigger per branch, every field
  * bounded, answers that say only what the hub stored. Their handlers call
  * the artifact routes (delegation-actions.ts).
  */
 import { ARTIFACT_NAME, PREVIEW_START_PATH } from "@cawco/core";
 import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
+import { COMMENT_LIMITS } from "@cawco/core/comments";
 import { z } from "zod";
 import { PAGE_LIMIT } from "../decision-page";
 
@@ -20,6 +22,9 @@ export const ARTIFACT_TOOLS = [
   "artifact_update",
   "artifact_read",
   "artifact_show",
+  "comment_read",
+  "comment_reply",
+  "comment_resolve",
 ] as const;
 
 const id = z
@@ -154,4 +159,47 @@ export const artifactShow = {
     "Bring one of your artifacts to the front of your panel when the person should look at it again. Answers `opened`: " +
     "true once a dashboard showing your session has it on screen (up to 10 s), else false with `why`.",
   input: { id },
+};
+
+const pin = z
+  .string()
+  .regex(/^[0-9a-f-]{36}$/)
+  .describe("The pin's id, from comment_read.");
+
+export const commentRead = {
+  name: "comment_read",
+  description:
+    "Read the person's pins on your artifacts: each numbered, what it stands on (selector, source file:line, text), " +
+    "and its thread. Their sends tell you which pins are new. No artifact: all of yours.",
+  input: {
+    artifact: id.optional(),
+    filter: z.enum(["open", "resolved", "all"]).default("open"),
+    since: z
+      .string()
+      .datetime()
+      .optional()
+      .describe("The `at` of your last read: only pins with something newer."),
+  },
+};
+
+export const commentReply = {
+  name: "comment_reply",
+  description:
+    "Answer a pin in its thread, where the person reads it on the page. After a change, name the files you changed; " +
+    "after a question, ask it here and leave the pin open.",
+  input: {
+    pin,
+    text: z.string().min(1).max(COMMENT_LIMITS.text),
+    files: z
+      .array(z.string().min(1).max(COMMENT_LIMITS.file))
+      .max(COMMENT_LIMITS.files)
+      .optional(),
+  },
+};
+
+export const commentResolve = {
+  name: "comment_resolve",
+  description:
+    "Resolve a pin once your change answers it, with a last line when it helps. The person can reopen it.",
+  input: { pin, text: z.string().min(1).max(COMMENT_LIMITS.text).optional() },
 };

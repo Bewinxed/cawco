@@ -28,6 +28,15 @@ import {
   excalidrawFile,
   NO_SCREEN,
 } from "@cawco/core/canvas";
+import {
+  COMMENT_LIMITS,
+  type Pin,
+  pinSection,
+  pinUnsent,
+  type SendBody,
+  type ThreadEntry,
+} from "@cawco/core/comments";
+import type { InkGroup } from "@cawco/core/ink";
 import { pageHash } from "@cawco/core/preview-proxy";
 import { applyPatch, type Operation } from "rfc6902";
 import { Doc, encodeStateAsUpdate } from "yjs";
@@ -241,6 +250,12 @@ export interface ShownAck {
   revision: string;
 }
 
+/** What `comment_read` answers: each of the session's artifacts with pins that match, and the time to pass as the next `since`. */
+export interface CommentRead {
+  artifacts: { id: string; kind: ArtifactKind; name: string; pins: Pin[] }[];
+  at: string;
+}
+
 /** A canvas's export: the `.excalidraw` file, its outline and its latest picture. */
 export interface CanvasExport {
   file: ReturnType<typeof excalidrawFile>;
@@ -376,8 +391,12 @@ export interface ArtifactServiceDeps {
    * delegated, or one of a project it leads (as `stop_delegate` decides).
    */
   delegatesIn: (instance: InstanceRow, workspaceId: string) => boolean;
-  /** Puts the person's message into the session. */
-  deliver: (instance: InstanceRow, content: string) => void;
+  /** Puts the person's message into the session, its pictures before its words. */
+  deliver: (
+    instance: InstanceRow,
+    content: string,
+    images?: { data: string; mediaType: string }[]
+  ) => void;
   docs: ArtifactDocs;
   instance: (id: string) => InstanceRow | undefined;
   /** The machines the hub knows. */
@@ -444,6 +463,23 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       throw new ArtifactRefusal(404, `This session has no artifact ${id}.`);
     }
     return row;
+  };
+
+  /** Pin `pinId` on one of the session's artifacts, and that artifact; refused when no artifact of the session holds it. */
+  const pinOf = (
+    instance: InstanceRow,
+    pinId: string
+  ): { pin: Pin; row: ArtifactRow } => {
+    for (const row of db.ofInstance(instance.id)) {
+      const pin = docs.doc(row.id).getMap("pins").get(pinId) as Pin | undefined;
+      if (pin) {
+        return { pin, row };
+      }
+    }
+    throw new ArtifactRefusal(
+      404,
+      `No artifact of this session holds pin ${pinId}. comment_read lists its pins with their ids.`
+    );
   };
 
   const writePage = (id: string, html: string) => {
@@ -1281,33 +1317,197 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * The person sends, by any path: what the send applies first (`sending`),
-     * then every pick to the session as one message, at once; `sentAt` kept
-     * in the doc.
+     * The pins on the session's artifacts (one, or all of them), with their
+     * threads and anchors: `open` (unresolved), `resolved`, or `all`; with
+     * `since`, only pins with something newer than it.
+     */
+    commentRead: (
+      instanceId: string,
+      query: {
+        artifact?: string | undefined;
+        filter: "open" | "resolved" | "all";
+        since?: string | undefined;
+      }
+    ): CommentRead => {
+      const instance = sessionOf(instanceId);
+      const rows =
+        query.artifact === undefined
+          ? db.ofInstance(instance.id)
+          : [own(instance, query.artifact)];
+      const newest = (pin: Pin) =>
+        [pin.resolvedAt, pin.movedAt, ...pin.thread.map((entry) => entry.at)]
+          .filter((at): at is string => !!at)
+          .reduce((a, b) => (b > a ? b : a), pin.at);
+      const artifacts = rows.flatMap((row) => {
+        const pins = Object.values(
+          docs.doc(row.id).getMap("pins").toJSON() as Record<string, Pin>
+        )
+          .filter((pin) =>
+            query.filter === "all"
+              ? true
+              : (query.filter === "resolved") === !!pin.resolvedAt
+          )
+          .filter((pin) => !query.since || newest(pin) > query.since)
+          .sort((a, b) => a.number - b.number);
+        return pins.length > 0
+          ? [{ id: row.id, kind: row.kind, name: row.name, pins }]
+          : [];
+      });
+      return { artifacts, at: new Date().toISOString() };
+    },
+
+    /** The agent answers a pin: an entry in its thread, by the agent, shown at once wherever the artifact is open. */
+    commentReply: (
+      instanceId: string,
+      pinId: string,
+      text: string,
+      files?: string[]
+    ): { entry: ThreadEntry; number: number; pin: string } => {
+      const { row, pin } = pinOf(sessionOf(instanceId), pinId);
+      if (pin.thread.length >= COMMENT_LIMITS.entries) {
+        throw new ArtifactRefusal(
+          409,
+          `Pin ${pin.number}'s thread holds ${COMMENT_LIMITS.entries} entries, so this reply wasn't kept. Resolve the pin, or answer in the conversation.`
+        );
+      }
+      const entry: ThreadEntry = {
+        id: crypto.randomUUID(),
+        by: "agent",
+        text,
+        at: new Date().toISOString(),
+        ...(files && files.length > 0 ? { files } : {}),
+      };
+      docs.transact(row.id, "hub", (doc) =>
+        doc
+          .getMap("pins")
+          .set(pin.id, { ...pin, thread: [...pin.thread, entry] })
+      );
+      return { pin: pin.id, number: pin.number, entry };
+    },
+
+    /** The agent resolves a pin, with a last reply when given; the person can reopen it. */
+    commentResolve: (
+      instanceId: string,
+      pinId: string,
+      text?: string
+    ): { number: number; pin: string; resolvedAt: string } => {
+      const { row, pin } = pinOf(sessionOf(instanceId), pinId);
+      const at = new Date().toISOString();
+      const thread = text
+        ? [
+            ...pin.thread,
+            {
+              id: crypto.randomUUID(),
+              by: "agent" as const,
+              text,
+              at,
+            },
+          ].slice(-COMMENT_LIMITS.entries)
+        : pin.thread;
+      docs.transact(row.id, "hub", (doc) =>
+        doc.getMap("pins").set(pin.id, { ...pin, thread, resolvedAt: at })
+      );
+      return { pin: pin.id, number: pin.number, resolvedAt: at };
+    },
+
+    /**
+     * The person sends, by any path (the panel's Send N, a page's
+     * `cawco.send`): what the send applies first (`sending`), then every
+     * unsent pick, pin and thread entry to the session as one message, at
+     * once, with the pins' pictures; each of them stamped `sentAt`.
      */
     send: async (
       instanceId: string,
       id: string,
-      text?: string
+      body: SendBody
     ): Promise<ArtifactChoices> => {
       const instance = sessionOf(instanceId);
       const row = own(instance, id);
       const doc = docs.doc(row.id);
       const state = stateOf(doc);
-      if (Object.keys(state).length === 0) {
-        throw new ArtifactRefusal(409, "Nothing is picked yet.");
+      const { sentAt } = metaOf(doc);
+      const picked = Object.values(state).some(
+        (entry) => !sentAt || entry.at > sentAt
+      );
+      const pins = doc.getMap("pins").toJSON() as Record<string, Pin>;
+      const owed = Object.values(pins)
+        .filter(pinUnsent)
+        .sort((a, b) => a.number - b.number);
+      if (!(picked || owed.length > 0 || body.text)) {
+        throw new ArtifactRefusal(
+          409,
+          "Nothing new to send: every pick and pin here has gone to the session."
+        );
       }
-      await deps.sending(instance, row, state);
+      if (picked) {
+        await deps.sending(instance, row, state);
+      }
       clearTimeout(timers.get(id));
       timers.delete(id);
       const current = metaOf(doc).pageHash ?? newestHash(state);
+      const groups = doc.getMap("ink").toJSON() as Record<string, InkGroup>;
+      const moved = doc.getMap("moved").toJSON() as Record<string, InkGroup>;
+      const url = body.url ?? routeOf(row.id);
+      const parts = [
+        picked
+          ? `I sent my picks from ${named(row)}:\n\n${summary(Object.entries(state), current)}`
+          : `I sent my pins on ${named(row)}.`,
+        ...(owed.length > 0
+          ? [
+              owed
+                .map((pin) =>
+                  pinSection(pin, {
+                    url,
+                    ...(pin.ink
+                      ? { ink: (groups[pin.ink] ?? moved[pin.ink])?.page }
+                      : {}),
+                  })
+                )
+                .join("\n\n"),
+            ]
+          : []),
+        ...(body.text ? [body.text] : []),
+        [
+          picked
+            ? "artifact_read returns the picks in full, with the page hash each was made on."
+            : null,
+          owed.length > 0
+            ? "comment_read returns the pins with their threads; answer one with comment_reply, and resolve it with comment_resolve once it is done."
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      ].filter(Boolean);
       deps.deliver(
         instance,
-        `I sent my picks from ${named(row)}:\n\n${summary(Object.entries(state), current)}${text ? `\n\n${text}` : ""}\n\nartifact_read returns them in full, with the page hash each was made on.`
+        parts.join("\n\n"),
+        (body.pictures ?? []).map(({ png }) => ({
+          mediaType: "image/png",
+          data: png,
+        }))
       );
-      docs.transact(row.id, "hub", (live) =>
-        live.getMap("meta").set("sentAt", new Date().toISOString())
-      );
+      const at = new Date().toISOString();
+      docs.transact(row.id, "hub", (live) => {
+        live.getMap("meta").set("sentAt", at);
+        const livePins = live.getMap("pins");
+        for (const pin of owed) {
+          livePins.set(pin.id, {
+            ...pin,
+            sentAt: pin.sentAt ?? at,
+            thread: pin.thread.map((entry) =>
+              entry.by === "person" && !entry.sentAt
+                ? { ...entry, sentAt: at }
+                : entry
+            ),
+          });
+        }
+        const ink = live.getMap("ink");
+        for (const group of Object.values(groups)) {
+          if (!group.sentAt) {
+            ink.set(group.id, { ...group, sentAt: at });
+          }
+        }
+      });
       db.update(row.id, { deliveredSeq: (db.get(row.id) as ArtifactRow).seq });
       return { choices: state, ...metaOf(doc) };
     },

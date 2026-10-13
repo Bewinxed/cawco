@@ -9,7 +9,6 @@
    * together. A session's composer and New session's first prompt both draw
    * it.
    */
-  import type { Snippet } from "svelte";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { IconArtifactCanvas, IconClose, IconPen } from "#lib/icons.js";
@@ -19,8 +18,6 @@
 
   let {
     draft,
-    notes,
-    hasNotes = false,
     canvasChip = $bindable(),
     canvasHidden = false,
     onopencanvas,
@@ -28,10 +25,6 @@
     ink,
   }: {
     draft: ComposerDraft;
-    /** Chips that lead the row, the composer's element notes. */
-    notes?: Snippet;
-    /** Whether `notes` has any to show. */
-    hasNotes?: boolean;
     /** The folded canvas's chip, which the canvas folds into and opens out of. */
     canvasChip?: HTMLElement;
     /** Drawn but not shown: the canvas is flying into it. */
@@ -59,7 +52,6 @@
 
 {#if folded ||
   ink ||
-  hasNotes ||
   draft.images.length ||
   draft.texts.length ||
   draft.files.length}
@@ -117,7 +109,6 @@
         <span class="att-name">Ink</span>
       </span>
     {/if}
-    {@render notes?.()}
     {#each draft.images as img, i (img.name + i)}
       <span class="att" data-flip="pop">
         <img alt="" src="data:{img.mediaType};base64,{img.data}">

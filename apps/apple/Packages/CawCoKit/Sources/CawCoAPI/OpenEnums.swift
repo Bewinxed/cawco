@@ -2795,6 +2795,50 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/PageAnchorFramework`.
+    public enum PageAnchorFramework: OpenEnum {
+        case codeInspector
+        case react
+        case svelte
+        case vue
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "code-inspector": self = .codeInspector
+            case "react": self = .react
+            case "svelte": self = .svelte
+            case "vue": self = .vue
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .codeInspector: "code-inspector"
+            case .react: "react"
+            case .svelte: "svelte"
+            case .vue: "vue"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.codeInspector, .react, .svelte, .vue]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/PermissionMode`.
     public enum PermissionMode: OpenEnum {
         case acceptEdits
@@ -3052,6 +3096,44 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.jev, .lead]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/PinKind`.
+    public enum PinKind: OpenEnum {
+        case annotation
+        case comment
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "annotation": self = .annotation
+            case "comment": self = .comment
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .annotation: "annotation"
+            case .comment: "comment"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.annotation, .comment]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -4577,6 +4659,44 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.archived, .deleted, .live]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/ThreadEntryBy`.
+    public enum ThreadEntryBy: OpenEnum {
+        case agent
+        case person
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "agent": self = .agent
+            case "person": self = .person
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .agent: "agent"
+            case .person: "person"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.agent, .person]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

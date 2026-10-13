@@ -10,6 +10,9 @@ import {
   artifactRead,
   artifactShow,
   artifactUpdate,
+  commentRead,
+  commentReply,
+  commentResolve,
 } from "./artifacts/tools";
 import {
   type HandoffDeps,
@@ -1101,6 +1104,51 @@ export function handoffTools(deps: HandoffDeps) {
       async ({ id }) =>
         json(
           await actions.artifactCall("POST", `/${encodeURIComponent(id)}/show`)
+        )
+    ),
+    tool(
+      commentRead.name,
+      commentRead.description,
+      commentRead.input,
+      async ({ artifact, filter, since }) => {
+        const query = new URLSearchParams({
+          filter,
+          ...(artifact ? { artifact } : {}),
+          ...(since ? { since } : {}),
+        }).toString();
+        return json(await actions.artifactCall("GET", `/comments?${query}`));
+      },
+      {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      }
+    ),
+    tool(
+      commentReply.name,
+      commentReply.description,
+      commentReply.input,
+      async ({ pin, ...reply }) =>
+        json(
+          await actions.artifactCall(
+            "POST",
+            `/comments/${encodeURIComponent(pin)}/reply`,
+            reply
+          )
+        )
+    ),
+    tool(
+      commentResolve.name,
+      commentResolve.description,
+      commentResolve.input,
+      async ({ pin, ...resolve }) =>
+        json(
+          await actions.artifactCall(
+            "POST",
+            `/comments/${encodeURIComponent(pin)}/resolve`,
+            resolve
+          )
         )
     ),
   ];

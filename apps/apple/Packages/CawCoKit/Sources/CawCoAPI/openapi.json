@@ -3982,6 +3982,210 @@
         }
       }
     },
+    "/api/instances/{id}/artifacts/comments": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "pattern": "^[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "name": "filter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "open",
+                "resolved",
+                "all"
+              ]
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "maxLength": 40,
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiInstancesByIdArtifactsComments",
+        "responses": {
+          "200": {
+            "description": "getApiInstancesByIdArtifactsComments 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommentRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiInstancesByIdArtifactsComments 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/instances/{id}/artifacts/comments/{pin}/reply": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pin",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
+                  "files": {
+                    "maxItems": 20,
+                    "type": "array",
+                    "items": {
+                      "minLength": 1,
+                      "maxLength": 300,
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "text"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiInstancesByIdArtifactsCommentsByPinReply",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdArtifactsCommentsByPinReply 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsCommentsByPinReply200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstancesByIdArtifactsCommentsByPinReply 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/instances/{id}/artifacts/comments/{pin}/resolve": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "pin",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "text": {
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiInstancesByIdArtifactsCommentsByPinResolve",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdArtifactsCommentsByPinResolve 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdArtifactsCommentsByPinResolve200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstancesByIdArtifactsCommentsByPinResolve 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/instances/{id}/artifacts/{artifact}/show": {
       "post": {
         "parameters": [
@@ -19238,6 +19442,44 @@
           "$ref": "#/components/schemas/ArtifactSummary"
         }
       },
+      "postApiInstancesByIdArtifactsCommentsByPinReply200": {
+        "type": "object",
+        "properties": {
+          "entry": {
+            "$ref": "#/components/schemas/ThreadEntry"
+          },
+          "number": {
+            "type": "number"
+          },
+          "pin": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry",
+          "number",
+          "pin"
+        ]
+      },
+      "postApiInstancesByIdArtifactsCommentsByPinResolve200": {
+        "type": "object",
+        "properties": {
+          "number": {
+            "type": "number"
+          },
+          "pin": {
+            "type": "string"
+          },
+          "resolvedAt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "number",
+          "pin",
+          "resolvedAt"
+        ]
+      },
       "postApiInstancesByIdArtifactsByArtifactShow200": {
         "anyOf": [
           {
@@ -27021,6 +27263,459 @@
           "state"
         ]
       },
+      "CommentRead": {
+        "description": "What `comment_read` answers: each of the session's artifacts with pins that match, and the time to pass as the next `since`.",
+        "type": "object",
+        "properties": {
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "$ref": "#/components/schemas/ArtifactKind"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "pins": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Pin"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "kind",
+                "name",
+                "pins"
+              ]
+            }
+          },
+          "at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifacts",
+          "at"
+        ]
+      },
+      "Pin": {
+        "type": "object",
+        "properties": {
+          "anchor": {
+            "$ref": "#/components/schemas/Anchor"
+          },
+          "at": {
+            "type": "string"
+          },
+          "by": {
+            "type": "string",
+            "enum": [
+              "person"
+            ]
+          },
+          "elements": {
+            "description": "The page's elements under it (a comment: the one tapped); a canvas's, by id.",
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/PinnedElement"
+                }
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "ink": {
+            "description": "The stroke group it stands on, when it stands on ink.",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PinKind"
+          },
+          "movedAt": {
+            "description": "Its element is gone from the page since then; it waits in the moved tray.",
+            "type": "string"
+          },
+          "number": {
+            "description": "In order of creation, per artifact, from 1.",
+            "type": "number"
+          },
+          "point": {
+            "description": "Where on its element a tapped pin stands: fractions of the element's box.",
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ]
+          },
+          "resolvedAt": {
+            "type": "string"
+          },
+          "sentAt": {
+            "description": "When it first went to the session with a send.",
+            "type": "string"
+          },
+          "thread": {
+            "description": "Oldest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ThreadEntry"
+            }
+          }
+        },
+        "required": [
+          "anchor",
+          "at",
+          "by",
+          "elements",
+          "id",
+          "kind",
+          "number",
+          "thread"
+        ]
+      },
+      "Anchor": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/PageAnchor"
+          },
+          {
+            "$ref": "#/components/schemas/CanvasAnchor"
+          }
+        ]
+      },
+      "PageAnchor": {
+        "description": "What a page's mark stands on: the element, by where it is written, its selector and its text.",
+        "type": "object",
+        "properties": {
+          "box": {
+            "description": "The element's box in the page when it was anchored, px: what the moved tray shows.",
+            "type": "object",
+            "properties": {
+              "h": {
+                "type": "number"
+              },
+              "w": {
+                "type": "number"
+              },
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "h",
+              "w",
+              "x",
+              "y"
+            ]
+          },
+          "selector": {
+            "type": "string"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "line": {
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "column": {
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "framework": {
+                "$ref": "#/components/schemas/PageAnchorFramework"
+              },
+              "of": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^ancestor:.*$"
+                  },
+                  {
+                    "const": "self",
+                    "type": "string"
+                  }
+                ]
+              },
+              "component": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "column",
+              "file",
+              "framework",
+              "line",
+              "of"
+            ]
+          },
+          "text": {
+            "description": "The element's text, at most {@link COMMENT_LIMITS.anchorText} characters.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "selector"
+        ]
+      },
+      "CanvasAnchor": {
+        "description": "A canvas's mark stands on one of its elements, by id.",
+        "type": "object",
+        "properties": {
+          "element": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "element"
+        ]
+      },
+      "PinnedElement": {
+        "description": "An element under a pin, as the overlay describes it, without its markup.",
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "page": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ]
+          },
+          "url": {
+            "type": "string"
+          },
+          "source": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "line": {
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "column": {
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "framework": {
+                "$ref": "#/components/schemas/PageAnchorFramework"
+              },
+              "of": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "pattern": "^ancestor:.*$"
+                  },
+                  {
+                    "const": "self",
+                    "type": "string"
+                  }
+                ]
+              },
+              "component": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "column",
+              "file",
+              "framework",
+              "line",
+              "of"
+            ]
+          },
+          "tag": {
+            "type": "string"
+          },
+          "classes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rect": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number"
+              },
+              "y": {
+                "type": "number"
+              },
+              "width": {
+                "type": "number"
+              },
+              "height": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "height",
+              "width",
+              "x",
+              "y"
+            ]
+          },
+          "selector": {
+            "type": "string"
+          },
+          "styles": {
+            "type": "object",
+            "properties": {
+              "color": {
+                "type": "string"
+              },
+              "position": {
+                "type": "string"
+              },
+              "backgroundColor": {
+                "type": "string"
+              },
+              "fontFamily": {
+                "type": "string"
+              },
+              "fontSize": {
+                "type": "string"
+              },
+              "fontWeight": {
+                "type": "string"
+              },
+              "lineHeight": {
+                "type": "string"
+              },
+              "display": {
+                "type": "string"
+              },
+              "padding": {
+                "type": "string"
+              },
+              "margin": {
+                "type": "string"
+              },
+              "borderRadius": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "backgroundColor",
+              "borderRadius",
+              "color",
+              "display",
+              "fontFamily",
+              "fontSize",
+              "fontWeight",
+              "lineHeight",
+              "margin",
+              "padding",
+              "position"
+            ]
+          }
+        },
+        "required": [
+          "classes",
+          "id",
+          "page",
+          "rect",
+          "selector",
+          "styles",
+          "tag",
+          "text",
+          "url"
+        ]
+      },
+      "ThreadEntry": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "by": {
+            "$ref": "#/components/schemas/ThreadEntryBy"
+          },
+          "files": {
+            "description": "Files an agent's reply names as changed.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "sentAt": {
+            "description": "When it went to the session with a send; a person's entry only.",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "by",
+          "id",
+          "text"
+        ]
+      },
       "CanvasExport": {
         "description": "A canvas's export: the `.excalidraw` file, its outline and its latest picture.",
         "type": "object",
@@ -34775,6 +35470,10 @@
             "description": "Fire again on every later match. Off makes the rule fire once per session\nand then go quiet.",
             "type": "boolean"
           },
+          "reply": {
+            "description": "What the session is sent when the rule fires.",
+            "type": "string"
+          },
           "interrupt": {
             "description": "`immediate` only: cut into the running turn rather than queueing.",
             "type": "boolean"
@@ -34794,10 +35493,6 @@
           "wholeWord": {
             "description": "Phrase mode only: refuse matches that sit inside a longer word.",
             "type": "boolean"
-          },
-          "reply": {
-            "description": "What the session is sent when the rule fires.",
-            "type": "string"
           },
           "timing": {
             "$ref": "#/components/schemas/RuleTiming"
@@ -41575,6 +42270,15 @@
           "medium"
         ]
       },
+      "PageAnchorFramework": {
+        "type": "string",
+        "enum": [
+          "code-inspector",
+          "react",
+          "svelte",
+          "vue"
+        ]
+      },
       "PermissionSettledFrameOutcome": {
         "type": "string",
         "enum": [
@@ -41606,6 +42310,13 @@
         "enum": [
           "jev",
           "lead"
+        ]
+      },
+      "PinKind": {
+        "type": "string",
+        "enum": [
+          "annotation",
+          "comment"
         ]
       },
       "PlanSnapshotSource": {
@@ -41721,6 +42432,13 @@
           "routine",
           "session",
           "you"
+        ]
+      },
+      "ThreadEntryBy": {
+        "type": "string",
+        "enum": [
+          "agent",
+          "person"
         ]
       },
       "TranscriptBlockState": {

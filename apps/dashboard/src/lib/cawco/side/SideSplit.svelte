@@ -38,7 +38,6 @@
   import { waiting as departing, land } from "../motion/share.svelte";
   import PlanPane, { planShows } from "../plan/PlanPane.svelte";
   import PreviewPane from "../preview/PreviewPane.svelte";
-  import type { CapturedSelection, SelectionShot } from "../preview/selection";
   import SideSheet from "./SideSheet.svelte";
 
   let {
@@ -48,9 +47,6 @@
     visible,
     active,
     phone,
-    onselect,
-    oncapture,
-    onescape,
     share = $bindable(0),
     children,
   }: {
@@ -72,11 +68,6 @@
     visible: boolean;
     /** Under 900px: the surface is a sheet, not a split. */
     phone: boolean;
-    onselect: (
-      selection: CapturedSelection
-    ) => "added" | "duplicate" | "full" | undefined;
-    oncapture: (pick: string, shot: SelectionShot | null) => void;
-    onescape: () => boolean;
     /** The surface's share of the width, in percent: 0 while closed or a sheet. */
     share?: number;
     /** The transcript's side. */
@@ -85,7 +76,7 @@
 
   let root = $state<HTMLDivElement>();
   let width = $state(0);
-  /** The preview on show, for the sheet's Escape (its selection mode). */
+  /** The preview on show, for the sheet's Escape (its Comment mode and card). */
   let previewPane = $state<ReturnType<typeof PreviewPane>>();
   let sidePane = $state<ReturnType<typeof Resizable.Pane>>();
   /** The conversation's own width for the surface, in percent: read untracked. */
@@ -299,9 +290,6 @@
     <PreviewPane
       instanceId={previewId}
       linkSession={previewId !== viewId}
-      {oncapture}
-      {onescape}
-      {onselect}
       switcher={planOpen ? switcher : undefined}
       bind:this={previewPane}
     />
@@ -377,9 +365,6 @@
       <PreviewPane
         instanceId={previewId}
         linkSession={previewId !== viewId}
-        {oncapture}
-        {onescape}
-        {onselect}
         sheet
         bind:this={previewPane}
       />

@@ -647,6 +647,12 @@
     --c-rail-row-h: 38px;
     /* A row of the artifact panel's list: the kind's glyph, the name, its age (DESIGN.md Artifact panel, canvas and ink). */
     --c-artifact-row-h: 44px;
+    /* tsk-3's numbered pin: the coral disc on the page, in the pins list and on the card (DESIGN.md Artifact panel, canvas and ink). */
+    --c-pin: 20px;
+    /* A pin's card over the page, at its widest: the anchor line, the thread, the reply field (DESIGN.md Artifact panel, canvas and ink). */
+    --c-pin-card-w: 320px;
+    /* A pin's picture on its card: the element's crop or the ink's, opening full size in the lightbox. */
+    --c-pin-thumb: 56px;
     --c-mark: 26px;
     --c-mark-glyph: 16px;
     --c-row-mark: 18px;

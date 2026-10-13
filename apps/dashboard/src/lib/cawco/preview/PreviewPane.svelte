@@ -1,11 +1,11 @@
 <script lang="ts">
   import {
-    type ArtifactChoices,
     machineLabel,
     PREVIEW_DOWN_META,
     type PreviewDown,
     type ShownFailure,
   } from "@cawco/core";
+  import { pinUnsent, type SendPicture } from "@cawco/core/comments";
   import { type Snippet, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
@@ -14,7 +14,7 @@
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import {
     IconAlert,
-    IconCursor,
+    IconComment,
     IconExternal,
     IconPlus,
     IconRefresh,
@@ -33,41 +33,45 @@
     cawco,
     closePreview,
     createDraftCanvas,
+    exportCanvas,
     showArtifact,
   } from "../client.svelte";
   import { conversationHref, resolveSessionTitle } from "../links";
   import { appear, dur } from "../motion/curves.svelte";
-  import { closeInto, depart } from "../motion/share.svelte";
+  import { closeInto } from "../motion/share.svelte";
   import { watchInput } from "../reload.svelte";
   import SideSurface from "../side/SideSurface.svelte";
+  import { lightbox } from "../transcript/lightbox-state.svelte";
   import ArtifactMenu from "./ArtifactMenu.svelte";
-  import { artifactSyncPath, joinArtifact, sendArtifact } from "./artifact-doc";
-  import { heardInk } from "./ink.svelte";
-  import PlacePick from "./PlacePick.svelte";
   import {
-    type CapturedSelection,
-    type SelectionShot,
-    selectionShare,
-  } from "./selection";
+    type ArtifactDoc,
+    type ArtifactView,
+    artifactSyncPath,
+    joinArtifact,
+    sendArtifact,
+  } from "./artifact-doc";
+  import { heardInk } from "./ink.svelte";
+  import PinCard from "./PinCard.svelte";
+  import PinList from "./PinList.svelte";
+  import PlacePick from "./PlacePick.svelte";
+  import { pinName } from "./pin-name";
   import { isSetupPage } from "./setup-page";
   import { previewPlace } from "./source";
   import {
-    previewElement,
     previewError,
     previewErrorOf,
-    previewPickId,
+    previewKey,
     previewPickPlace,
+    previewPictures,
+    previewPinAt,
+    previewPinId,
     previewPng,
-    previewScale,
     previewTitle,
     previewUrl,
   } from "./wire";
 
   let {
     instanceId,
-    onselect,
-    oncapture,
-    onescape,
     switcher,
     sheet = false,
     linkSession = false,
@@ -92,19 +96,10 @@
     sheet?: boolean;
     /** The Plan | Preview switch, when the conversation has a plan beside it (SideSplit). */
     switcher?: Snippet;
-    /**
-     * A selected element goes to the conversation's composer; with no
-     * composer beside the pane (its own tab) there is no Select.
-     */
-    onselect?: (
-      selection: CapturedSelection
-    ) => "added" | "duplicate" | "full" | undefined;
-    /** A pick's screenshot arrived (null: it could not be drawn). */
-    oncapture?: (pick: string, shot: SelectionShot | null) => void;
-    onescape?: () => boolean;
   } = $props();
   let iframe = $state<HTMLIFrameElement>();
-  let selecting = $state(false);
+  /** Comment mode: a tap on the page pins a comment to what it lands on (key C). */
+  let commenting = $state(false);
   let connected = $state(false);
   let loaded = $state(false);
   let captured = false;
@@ -336,17 +331,25 @@
   /*
    * The page keeps its own state (Projects spec §5.10): the overlay joins
    * the artifact's live document itself, on the path `cawco:hello` names.
-   * The pane joins the same doc for its head alone (artifact-doc.ts): the
-   * picks the session has not heard, which Send sends.
+   * The pane joins the same doc too (artifact-doc.ts): the picks and pins
+   * the session has not heard, which Send N sends, and the pins' threads,
+   * which the list and the card read and the person writes.
    */
-  let choices = $state.raw<ArtifactChoices | null>(null);
-  /** Picks the session has not heard sent: what Send picks would send. */
-  const unsent = $derived(
-    !!choices &&
-      Object.values(choices.choices).some(
-        (entry) => !choices?.sentAt || entry.at > choices.sentAt
-      )
+  let view = $state.raw<ArtifactView | null>(null);
+  let doc: ArtifactDoc | null = null;
+  /** Picks the session has not heard sent. */
+  const unsentPicks = $derived(
+    view
+      ? Object.values(view.choices).filter(
+          (entry) => !view?.sentAt || entry.at > view.sentAt
+        ).length
+      : 0
   );
+  /** N on Send N: every pick, pin and reply the session has not heard. */
+  const owed = $derived(
+    unsentPicks + (view ? view.pins.filter(pinUnsent).length : 0)
+  );
+  const pins = $derived(view?.pins ?? []);
   let sending = $state(false);
   const artifactId = $derived(artifact?.id);
   $effect(() => {
@@ -355,16 +358,71 @@
     if (!(id && base)) {
       return;
     }
-    const joined = joinArtifact(base, id, (state) => {
-      choices = state;
+    const joined = joinArtifact(base, id, (next) => {
+      view = next;
     });
-    choices = null;
-    return () => joined.destroy();
+    doc = joined;
+    view = null;
+    return () => {
+      joined.destroy();
+      doc = null;
+    };
   });
+
   /**
-   * Send: every pick to the session, through the hub's send, which applies
-   * a setup page's fleet choices and place first. A refusal stands in the
-   * band over the page, its way back sending again.
+   * A page's answers to the pane's asks (pictures for a send, a pin's
+   * picture), each under the ask's number.
+   */
+  let nextAsk = 1;
+  const asks = new Map<
+    number,
+    (pictures: SendPicture[] | null, url: string | null) => void
+  >();
+  /** How long a page has to draw a send's pictures. Our call: a page's rasters take a second or two. */
+  const PICTURES_MS = 20_000;
+  function pagePictures(): Promise<{
+    pictures: SendPicture[];
+    url: string | null;
+  }> {
+    const ask = nextAsk;
+    nextAsk += 1;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        asks.delete(ask);
+        reject(
+          new Error(
+            "The page didn't draw its pins' pictures, so nothing was sent. Send again."
+          )
+        );
+      }, PICTURES_MS);
+      asks.set(ask, (pictures, address) => {
+        clearTimeout(timer);
+        asks.delete(ask);
+        if (pictures) {
+          resolve({ pictures, url: address });
+        } else {
+          reject(
+            new Error(
+              "The page's pictures weren't ones the hub takes, so nothing was sent. Send again."
+            )
+          );
+        }
+      });
+      post({ type: "cawco:send-pictures", ask });
+    });
+  }
+  /** A canvas's own picture, as the hub keeps it, with its pins. */
+  async function canvasPictures(id: string): Promise<SendPicture[]> {
+    const { png } = await exportCanvas(id);
+    return png ? [{ pin: null, png }] : [];
+  }
+
+  /**
+   * Send N: every unsent pick, pin and reply to the session as one turn,
+   * through the hub's send, which applies a setup page's fleet choices and
+   * place first, with each pin's picture. A refusal is said where the person
+   * is: under the open card's field, else in the band over the page, its way
+   * back sending again.
    */
   async function send() {
     if (!artifact) {
@@ -372,15 +430,24 @@
     }
     sending = true;
     try {
-      await sendArtifact(previewBase, artifact.id);
+      const drawn = isCanvas
+        ? { pictures: await canvasPictures(artifact.id), url: null }
+        : await pagePictures();
+      await sendArtifact(previewBase, artifact.id, {
+        pictures: drawn.pictures,
+        ...(drawn.url ? { url: drawn.url } : {}),
+      });
+      cardError = null;
       if (failure?.again === "send") {
         failure = null;
       }
     } catch (error) {
-      failure = {
-        message: error instanceof Error ? error.message : String(error),
-        again: "send",
-      };
+      const message = error instanceof Error ? error.message : String(error);
+      if (openPin) {
+        cardError = message;
+      } else {
+        failure = { message, again: "send" };
+      }
       return;
     } finally {
       sending = false;
@@ -429,9 +496,172 @@
         : {}),
     });
   }
-  function select(on: boolean) {
-    selecting = on;
-    post({ type: "cawco:mode", mode: on ? "select" : "off" });
+  /** Comment mode on or off; `place` is the moved pin the next tap places again. */
+  function comment(on: boolean, place: string | null = null) {
+    commenting = on;
+    placing = on ? place : null;
+    post({ type: "cawco:mode", mode: on ? "comment" : "off", place: placing });
+  }
+
+  /*
+   * The pins (Projects spec §5.7; tsk-3): the list under the head, the
+   * card over the page beside its pin, J and K stepping through them.
+   */
+  /** The pin whose card is open. */
+  let openPin = $state<string | null>(null);
+  /** Its disc in the page's viewport, as the page tells it while it scrolls. */
+  let pinAt = $state<{ r: number; x: number; y: number } | null>(null);
+  /** The pin J and K stand on. */
+  let focusedPin = $state<string | null>(null);
+  /** The moved pin a tap places again, and whether Comment mode was off before. */
+  let placing = $state<string | null>(null);
+  let placingLeaves = false;
+  let thumbs = $state<Record<string, string | null>>({});
+  /** What went wrong with the open card's reply, resolve or send. */
+  let cardError = $state<string | null>(null);
+  let roomW = $state(0);
+  let roomH = $state(0);
+  const cardPin = $derived(pins.find((pin) => pin.id === openPin) ?? null);
+  /** Pins the agent is working on: the last send carried them and its turn runs. */
+  const live = $derived.by(() => {
+    const sentAt = view?.sentAt;
+    if (!sentAt || cawco.activityOf(instanceId) !== "working") {
+      return new Set<string>();
+    }
+    return new Set(
+      pins
+        .filter(
+          (pin) =>
+            !pin.resolvedAt &&
+            (pin.sentAt === sentAt ||
+              pin.thread.some((entry) => entry.sentAt === sentAt))
+        )
+        .map((pin) => pin.id)
+    );
+  });
+  /** The pins J and K step through: those on the page, by number. */
+  const stepping = $derived(pins.filter((pin) => !pin.movedAt));
+
+  function openCard(id: string) {
+    openPin = id;
+    focusedPin = id;
+    cardError = null;
+    pinAt = null;
+    post({ type: "cawco:track-pin", id });
+    post({ type: "cawco:focus-pin", id, scroll: true });
+    if (!(id in thumbs)) {
+      post({ type: "cawco:picture", id, thumb: true });
+    }
+  }
+  function closeCard() {
+    openPin = null;
+    pinAt = null;
+    cardError = null;
+    post({ type: "cawco:track-pin", id: null });
+  }
+  /** J and K: the next or the previous pin on the page, outlined and scrolled to. */
+  function step(by: 1 | -1) {
+    if (stepping.length === 0) {
+      return;
+    }
+    const at = stepping.findIndex((pin) => pin.id === focusedPin);
+    const next =
+      stepping[(at + by + stepping.length) % stepping.length] ?? stepping[0];
+    focusedPin = next.id;
+    post({ type: "cawco:focus-pin", id: next.id, scroll: true });
+    if (openPin) {
+      openCard(next.id);
+    }
+  }
+  /** Place again: Comment mode until the next tap pins the moved pin anew. */
+  function placeAgain(id: string) {
+    placingLeaves = !commenting;
+    closeCard();
+    comment(true, id);
+  }
+  function reply(text: string) {
+    if (!openPin) {
+      return;
+    }
+    cardError = doc
+      ? doc.reply(openPin, text)
+      : "The pane lost the page's document, so the reply wasn't kept. Reload, then reply again.";
+  }
+  function resolvePin(resolved: boolean) {
+    if (openPin) {
+      doc?.resolve(openPin, resolved);
+    }
+  }
+  /** A pin's picture full size, in the lightbox, out of its thumbnail. */
+  let lightboxFrom: HTMLElement | null = null;
+  function pictureOf(from: HTMLElement) {
+    if (openPin) {
+      lightboxFrom = from;
+      post({ type: "cawco:picture", id: openPin, thumb: false });
+    }
+  }
+  async function showPicture(id: string, png: string) {
+    const src = `data:image/png;base64,${png}`;
+    const image = new Image();
+    image.src = src;
+    await image.decode();
+    const pin = pins.find((one) => one.id === id);
+    lightbox.open({
+      kind: "image",
+      index: 0,
+      shots: [
+        {
+          alt: pin ? `Pin ${pin.number}: ${pinName(pin)}` : "A pin's picture",
+          src,
+          width: image.naturalWidth,
+          height: image.naturalHeight,
+          cropped: true,
+          ...(lightboxFrom ? { element: lightboxFrom } : {}),
+        },
+      ],
+    });
+  }
+
+  /** The pane's keys: C toggles Comment, J and K step through the pins, Enter opens one, Esc closes. */
+  function pressKey(name: "c" | "j" | "k" | "Enter" | "Escape") {
+    if (name === "c" && !isCanvas) {
+      comment(!commenting);
+    } else if (name === "j") {
+      step(1);
+    } else if (name === "k") {
+      step(-1);
+    } else if (name === "Enter" && focusedPin) {
+      openCard(focusedPin);
+    } else if (name === "Escape") {
+      if (openPin) {
+        closeCard();
+      } else if (commenting) {
+        comment(false);
+      }
+    }
+  }
+  /** A key pressed inside the pane, outside a field: the page's are heard as `cawco:key`. */
+  function paneKey(event: KeyboardEvent) {
+    const { target } = event;
+    if (
+      event.defaultPrevented ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.altKey ||
+      !(target instanceof Node && section?.contains(target)) ||
+      (target instanceof HTMLElement &&
+        (target.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)))
+    ) {
+      return;
+    }
+    const name = previewKey(
+      event.key.length === 1 ? event.key.toLowerCase() : event.key
+    );
+    if (name && name !== "Escape") {
+      event.preventDefault();
+      pressKey(name);
+    }
   }
   export function parentEscape(event: KeyboardEvent) {
     if (
@@ -441,12 +671,8 @@
     ) {
       return;
     }
-    if (onescape?.()) {
-      event.preventDefault();
-      return;
-    }
-    if (selecting) {
-      select(false);
+    if (openPin || commenting) {
+      pressKey("Escape");
       event.preventDefault();
     }
   }
@@ -479,7 +705,10 @@
         preview.title = previewTitle(message.title) ?? "";
         if (message.type === "cawco:ready") {
           connected = true;
-          select(selecting);
+          comment(commenting, placing);
+          if (openPin) {
+            post({ type: "cawco:track-pin", id: openPin });
+          }
           if (!captured) {
             captured = true;
             post({ type: "cawco:capture" });
@@ -496,62 +725,59 @@
         retrying = false;
         break;
       }
-      case "cawco:selected": {
-        if (!(selecting && onselect)) {
+      case "cawco:pin-open": {
+        const id = previewPinId(message.id);
+        if (!id) {
           return;
         }
-        const element = previewElement(message.element, location.origin);
-        const pick = previewPickId(message.id);
-        if (!(element && pick)) {
-          return;
+        if (id === placing || (placing && message.made !== true)) {
+          // Placed again: the mode goes back to how it was before.
+          if (placingLeaves) {
+            comment(false);
+          } else {
+            placing = null;
+          }
         }
-        if (iframe) {
-          flyFrom(element.rect, selectionShare(element));
-        }
-        if (
-          well &&
-          onselect({
-            capturing: pick,
-            element,
-            png: null,
-            note: "",
-            scale: 1,
-          }) === "full"
-        ) {
-          const style = getComputedStyle(well);
-          well?.animate(
-            [
-              { outlineColor: style.getPropertyValue("--accent") },
-              { outlineColor: style.getPropertyValue("--focus-ring") },
-              { outlineColor: style.getPropertyValue("--accent") },
-            ],
-            {
-              duration: matchMedia("(prefers-reduced-motion: reduce)").matches
-                ? 1
-                : dur("--dur-panel"),
-            }
-          );
+        openCard(id);
+        break;
+      }
+      case "cawco:pin-at": {
+        if (previewPinId(message.id) === openPin) {
+          pinAt = previewPinAt(message);
         }
         break;
       }
-      case "cawco:selected-png": {
-        const pick = previewPickId(message.id);
-        if (!pick) {
+      case "cawco:picture": {
+        const id = previewPinId(message.id);
+        if (!id) {
           return;
         }
-        const error = previewError(message.error);
-        if (error) {
-          failure = frameError(error);
-          oncapture?.(pick, null);
-          break;
-        }
         const png = previewPng(message.png);
-        const scale = previewScale(message.scale);
-        oncapture?.(pick, png && scale ? { png, scale } : null);
+        if (message.thumb === true) {
+          thumbs = { ...thumbs, [id]: png };
+        } else if (png) {
+          showPicture(id, png);
+        }
+        break;
+      }
+      case "cawco:send-pictures": {
+        const answer = asks.get(Number(message.ask));
+        answer?.(
+          previewPictures(message.pictures),
+          previewUrl(message.url, location.origin)
+        );
+        break;
+      }
+      case "cawco:key": {
+        const name = previewKey(message.key);
+        if (name) {
+          pressKey(name);
+        }
         break;
       }
       case "cawco:escape":
-        select(false);
+        commenting = false;
+        placing = null;
         break;
       case "cawco:error": {
         const said = previewError(message.message);
@@ -578,33 +804,6 @@
       default:
         break;
     }
-  }
-  /**
-   * The picked element's chip flies out of the element into the composer
-   * (motion/share.svelte.ts): a stand-in is laid over the element's box in
-   * this page's coordinates, taken as the flight's source, and dropped.
-   */
-  function flyFrom(
-    rect: { x: number; y: number; width: number; height: number },
-    key: string
-  ) {
-    const frame = iframe?.getBoundingClientRect();
-    if (!frame) {
-      return;
-    }
-    const stand = document.createElement("div");
-    stand.dataset.share = key;
-    Object.assign(stand.style, {
-      position: "fixed",
-      left: `${frame.left + rect.x}px`,
-      top: `${frame.top + rect.y}px`,
-      width: `${rect.width}px`,
-      height: `${rect.height}px`,
-      pointerEvents: "none",
-    });
-    document.body.append(stand);
-    depart(stand);
-    stand.remove();
   }
   /**
    * Closing goes back where it came from: the preview opened out of its tool
@@ -753,21 +952,28 @@
   }
 </script>
 
-<svelte:window onkeydown={parentEscape} onmessage={receive} />
+<svelte:window
+  onkeydown={(event) => {
+    parentEscape(event);
+    paneKey(event);
+  }}
+  onmessage={receive}
+/>
 
 {#snippet controls()}
-  {#if unsent || sending}
+  {#if artifact}
+    <!-- Send N: every unsent pick, pin and reply as one turn (WORDS.md: the count is a number). -->
     <button
       aria-busy={sending || undefined}
       aria-disabled={sending || undefined}
-      class="touch-hit"
+      class="send touch-hit"
+      disabled={owed === 0 && !sending}
       onclick={whileIdle(() => sending, send)}
-      title="Send picks"
+      title={owed === 0 ? "Nothing new to send" : `Send ${owed} to the session`}
       type="button"
-      transition:appear
     >
       <PendingContent icon={IconSend} pending={sending} />
-      <span class="send-label">Send picks</span>
+      <span class="send-label">Send {owed}</span>
     </button>
   {/if}
   {#if !(ownTab || linkSession)}
@@ -807,16 +1013,17 @@
       ><IconExternal /></a
     >
   {/if}
-  {#if onselect && !isCanvas}
+  {#if !isCanvas}
     <button
-      aria-pressed={selecting}
+      aria-keyshortcuts="C"
+      aria-pressed={commenting}
       class="touch-hit"
       disabled={!connected}
-      onclick={() => select(!selecting)}
-      title="Select"
+      onclick={() => comment(!commenting)}
+      title="Comment (C)"
       type="button"
     >
-      <IconCursor /><span class="select-label">Select</span>
+      <IconComment /><span class="comment-label">Comment</span>
     </button>
   {/if}
   <button
@@ -845,9 +1052,21 @@
   {/if}
 {/snippet}
 
+{#snippet pinList()}
+  <PinList
+    focused={focusedPin}
+    {live}
+    onopen={openCard}
+    onplace={placeAgain}
+    {pins}
+    {placing}
+  />
+{/snippet}
+
 <SideSurface
   actions={controls}
-  class={selecting ? "preview-pane selecting" : "preview-pane"}
+  below={pins.length > 0 ? pinList : undefined}
+  class={commenting ? "preview-pane commenting" : "preview-pane"}
   closeFailed={failure?.again === "close"}
   {closing}
   label="Preview"
@@ -963,6 +1182,24 @@
   {#if picking}
     <PlacePick oncancel={cancelPick} onpick={pickedPlace} />
   {/if}
+  <!-- The open pin's card, over the page beside its pin (the frame fills the well). -->
+  <div class="pin-room" bind:clientHeight={roomH} bind:clientWidth={roomW}>
+    {#if cardPin}
+      <PinCard
+        at={pinAt}
+        live={live.has(cardPin.id)}
+        onclose={closeCard}
+        onpicture={pictureOf}
+        onreply={reply}
+        onresolve={resolvePin}
+        pin={cardPin}
+        problem={cardError}
+        room={{ w: roomW, h: roomH }}
+        {sheet}
+        thumb={thumbs[cardPin.id] ?? null}
+      />
+    {/if}
+  </div>
   {#if failure}
     <div class="error" role="alert" transition:appear>
       <p>{failure.message}</p>
@@ -999,21 +1236,35 @@
 </SideSurface>
 
 <style>
-  /* The header's controls are the card's (SideSurface); while selecting,
+  /* The header's controls are the card's (SideSurface); in Comment mode
      the ones that would leave the page wait. */
-  :global(.preview-pane.selecting .other) {
+  :global(.preview-pane.commenting .other) {
     opacity: 0.5;
   }
-  /* The well is the card's (SideSurface). Selecting turns the well's own border the accent, 2px, inside its
+  /* The well is the card's (SideSurface). Comment mode turns the well's own border the accent, 2px, inside its
        box: never a second ring round it. */
   :global(.preview-pane .side-well) {
     outline: var(--focus-ring-width) solid transparent;
     outline-offset: var(--focus-ring-inset);
     transition: outline-color var(--dur-control) var(--ease-in-out);
   }
-  :global(.preview-pane.selecting .side-well) {
+  :global(.preview-pane.commenting .side-well) {
     outline-color: var(--accent);
     cursor: crosshair;
+  }
+  /* The room the open pin's card stands in: the well's box, letting every
+     press through to the page but the card's own. */
+  .pin-room {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+
+    & > :global(*) {
+      pointer-events: auto;
+    }
+  }
+  .send-label {
+    font-variant-numeric: tabular-nums;
   }
   /* The replacement's load releases the old paint independently of the overlay. */
   iframe {
@@ -1094,7 +1345,7 @@
     }
   }
   @container (max-width: 469px) {
-    .select-label {
+    .comment-label {
       display: none;
     }
   }

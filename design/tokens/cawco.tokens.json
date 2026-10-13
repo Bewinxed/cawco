@@ -2301,6 +2301,21 @@
       "$value": "44px",
       "$description": "A row of the artifact panel's list: the kind's glyph, the name, its age (DESIGN.md Artifact panel, canvas and ink)."
     },
+    "c-pin": {
+      "$type": "dimension",
+      "$value": "20px",
+      "$description": "tsk-3's numbered pin: the coral disc on the page, in the pins list and on the card (DESIGN.md Artifact panel, canvas and ink)."
+    },
+    "c-pin-card-w": {
+      "$type": "dimension",
+      "$value": "320px",
+      "$description": "A pin's card over the page, at its widest: the anchor line, the thread, the reply field (DESIGN.md Artifact panel, canvas and ink)."
+    },
+    "c-pin-thumb": {
+      "$type": "dimension",
+      "$value": "56px",
+      "$description": "A pin's picture on its card: the element's crop or the ink's, opening full size in the lightbox."
+    },
     "c-mark": {
       "$type": "dimension",
       "$value": "26px"

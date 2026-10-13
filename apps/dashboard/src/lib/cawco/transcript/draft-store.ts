@@ -1,7 +1,7 @@
 /**
  * Where a conversation's unsent message waits out a reload: IndexedDB, one
  * record per session id, holding everything the composer holds — the text,
- * the images, the file attachments and the element notes.
+ * the images, the file attachments and the canvas.
  *
  * IndexedDB rather than localStorage because the attachments are binary and
  * large: images are stored as Blobs, not as base64 strings in a 5 MB string
@@ -10,7 +10,6 @@
  * written.
  */
 import { newId } from "../id";
-import type { PendingSelection } from "../preview/selection";
 import type {
   DraftCanvas,
   PendingFile,
@@ -36,7 +35,6 @@ interface DraftRecord {
   /** Absent on a record stored before files could be attached. */
   files?: StoredFile[];
   images: { blob: Blob; mediaType: string; name: string }[];
-  selections: PendingSelection[];
   sessionId: string;
   /** What the record weighs, for the cap: blob bytes plus two per character. */
   size: number;
@@ -108,7 +106,6 @@ export interface DraftContent {
   canvas: DraftCanvas | null;
   files: PendingFile[];
   images: PendingImage[];
-  selections: PendingSelection[];
   text: string;
   texts: PendingText[];
 }
@@ -141,12 +138,6 @@ export async function loadDraft(
       progress: file.ref ? 1 : 0,
       ...(file.ref ? {} : { error: "The page reloaded before it finished." }),
     })),
-    // The page that was drawing a note's screenshot went with the reload:
-    // nothing will answer it now, so the note stands without one.
-    selections: record.selections.map((selection) => ({
-      ...selection,
-      capturing: null,
-    })),
     // Back as its chip: a reload opens nothing over the field by itself.
     canvas: record.canvas ? { ...record.canvas, folded: true } : null,
   };
@@ -158,8 +149,7 @@ const isEmpty = (draft: DraftContent) =>
     draft.text ||
     draft.images.length ||
     draft.texts.length ||
-    draft.files.length ||
-    draft.selections.length
+    draft.files.length
   );
 
 /**
@@ -183,7 +173,6 @@ export async function saveDraft(
     mediaType: image.mediaType,
     blob: blobOf(image),
   }));
-  const { selections } = draft;
   // The hub keeps a file it has; only one it does not have keeps its bytes here.
   const files: StoredFile[] = draft.files.map((file) =>
     file.ref
@@ -206,15 +195,13 @@ export async function saveDraft(
     2 *
       (draft.text.length +
         (draft.canvas?.thumb?.length ?? 0) +
-        draft.texts.reduce((sum, t) => sum + t.content.length, 0) +
-        JSON.stringify(selections).length);
+        draft.texts.reduce((sum, t) => sum + t.content.length, 0));
   const record: DraftRecord = {
     sessionId,
     text: draft.text,
     images,
     texts: draft.texts,
     files,
-    selections,
     canvas: draft.canvas,
     size,
     updatedAt: Date.now(),

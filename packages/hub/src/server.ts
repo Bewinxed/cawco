@@ -8102,7 +8102,7 @@ export const createServer = (
     db: db.artifacts,
     docs: artifactDocs,
     root: ARTIFACTS_ROOT,
-    deliver: (instance, content) =>
+    deliver: (instance, content, images = []) =>
       deliverSend({
         verb: "send",
         machineId: instance.machineId,
@@ -8112,7 +8112,23 @@ export const createServer = (
           message: {
             type: "user",
             uuid: crypto.randomUUID(),
-            message: { role: "user", content },
+            message: {
+              role: "user",
+              content:
+                images.length === 0
+                  ? content
+                  : [
+                      ...images.map(({ mediaType, data }) => ({
+                        type: "image" as const,
+                        source: {
+                          type: "base64" as const,
+                          media_type: mediaType,
+                          data,
+                        },
+                      })),
+                      { type: "text" as const, text: content },
+                    ],
+            },
             parent_tool_use_id: null,
             origin: { kind: "human" },
           },

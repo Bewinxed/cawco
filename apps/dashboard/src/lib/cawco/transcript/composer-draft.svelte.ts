@@ -1,6 +1,5 @@
 /**
- * What one conversation has half-written: the text, the attachments, and
- * the element notes picked out of its preview.
+ * What one conversation has half-written: the text and the attachments.
  *
  * It belongs to the conversation, not to whichever composer is drawing it.
  * A desk draws one composer per pane, each over its own draft; a phone
@@ -13,11 +12,6 @@
 import { SvelteSet } from "svelte/reactivity";
 import type { SendExtras } from "../client.svelte";
 import { newId } from "../id";
-import type {
-  CapturedSelection,
-  PendingSelection,
-  SelectionShot,
-} from "../preview/selection";
 import type { DraftContent } from "./draft-store";
 import { uploadFile } from "./file-upload";
 
@@ -105,9 +99,6 @@ export interface DraftCanvas {
   thumb: string | null;
 }
 
-/** The most element notes one message carries. */
-const MAX_SELECTIONS = 12;
-
 /**
  * The queued messages whose words are in a composer, by uuid, whichever
  * conversation's: their bubbles fold to their tag while the words are away.
@@ -133,13 +124,7 @@ export class ComposerDraft {
   images = $state<PendingImage[]>([]);
   texts = $state<PendingText[]>([]);
   files = $state<PendingFile[]>([]);
-  selections = $state<PendingSelection[]>([]);
   canvas = $state<DraftCanvas | null>(null);
-  /** The note whose editor is (or was last) open, and whether it is open. */
-  editing = $state<PendingSelection | null>(null);
-  editorOpen = $state(false);
-  /** Each note's chip, so closing its editor can hand focus back to it. */
-  anchors = $state<Record<string, HTMLButtonElement | undefined>>({});
   /**
    * Set when something outside the composer put words back — a failed send
    * restored by Edit. The composer drawing this draft focuses its field and
@@ -163,8 +148,6 @@ export class ComposerDraft {
   /**
    * What should survive a reload right now: the message being written, or,
    * while nothing new is being written, the one sent and not yet taken.
-   * Element notes are not "new writing": they stay in the draft through a
-   * send until the hub accepts them.
    */
   get keep(): DraftContent {
     // A queued message's words in the field are its, not new writing: what
@@ -188,24 +171,22 @@ export class ComposerDraft {
       images: this.images,
       texts: $state.snapshot(this.texts),
       files: $state.snapshot(this.files),
-      selections: $state.snapshot(this.selections),
       canvas: $state.snapshot(this.canvas),
     };
   }
 
-  /** Takes back a stored message, as it was: names, notes and all. */
+  /** Takes back a stored message, as it was: names and all. */
   fill(content: DraftContent): void {
     this.text = content.text;
     this.images = content.images;
     this.texts = content.texts;
     this.files = content.files;
-    this.selections = content.selections;
     this.canvas = content.canvas;
   }
 
   /**
    * A queued message's words come into the field to be edited; what the
-   * field held steps aside, notes and attachments with it.
+   * field held steps aside, attachments with it.
    */
   lift(id: string, instanceId: string, words: string): void {
     this.lifted = {
@@ -217,18 +198,14 @@ export class ComposerDraft {
         images: this.images,
         texts: $state.snapshot(this.texts),
         files: $state.snapshot(this.files),
-        selections: $state.snapshot(this.selections),
         canvas: $state.snapshot(this.canvas),
       },
     };
     liftedIds.add(id);
-    this.editorOpen = false;
-    this.editing = null;
     this.text = words;
     this.images = [];
     this.texts = [];
     this.files = [];
-    this.selections = [];
     this.canvas = null;
   }
 
@@ -266,7 +243,6 @@ export class ComposerDraft {
       this.images.length > 0 ||
       this.texts.length > 0 ||
       this.files.length > 0 ||
-      this.selections.length > 0 ||
       this.canvas !== null
   );
 
@@ -369,87 +345,14 @@ export class ComposerDraft {
     return false;
   }
 
-  /** Lets every attachment go: the draft keeps its text and notes. */
+  /** Lets every attachment go: the draft keeps its text. */
   dropAttachments(): void {
     this.images = [];
     this.texts = [];
     this.files = [];
   }
 
-  /** An element picked in the preview becomes a note on the next message. */
-  attach(selection: CapturedSelection): "added" | "duplicate" | "full" {
-    this.editorOpen = false;
-    if (
-      this.selections.some(
-        ({ element }) =>
-          element.url === selection.element.url &&
-          element.selector === selection.element.selector
-      )
-    ) {
-      return "duplicate";
-    }
-    if (this.selections.length === MAX_SELECTIONS) {
-      return "full";
-    }
-    const note = { ...selection, id: newId() };
-    this.selections.push(note);
-    this.editing = this.selections.at(-1) ?? null;
-    this.editorOpen = true;
-    return "added";
-  }
-
-  /** A note whose element screenshot is still on its way: Send waits for it. */
-  capturing = $derived(this.selections.some((s) => s.capturing !== null));
-
-  /**
-   * A picked element's screenshot arrived (or failed, null) under the
-   * overlay's pick id; the note waiting on it takes it.
-   */
-  captured(pick: string, shot: SelectionShot | null): void {
-    const note = this.selections.find((s) => s.capturing === pick);
-    if (note) {
-      if (shot) {
-        note.png = shot.png;
-        note.scale = shot.scale;
-      }
-      note.capturing = null;
-    }
-  }
-
-  /** The hub took these notes with a message; they leave the draft. */
-  acceptSelections(selectionIds: string[]): void {
-    this.selections = this.selections.filter(
-      ({ id }) => !selectionIds.includes(id)
-    );
-  }
-
-  removeSelection(selection: PendingSelection): void {
-    if (this.editing === selection) {
-      this.editorOpen = false;
-      this.editing = null;
-    }
-    this.selections = this.selections.filter((item) => item !== selection);
-  }
-
-  /** Closes an open note editor, focus back on its chip. True when one was open. */
-  closeSelectionEditor(): boolean {
-    if (!this.editorOpen) {
-      return false;
-    }
-    this.editorOpen = false;
-    if (this.editing) {
-      this.anchors[
-        `${this.editing.element.url}:${this.editing.element.selector}`
-      ]?.focus({ preventScroll: true });
-    }
-    return true;
-  }
-
-  /**
-   * Empties the draft into a message: the text and everything riding with
-   * it. Element notes stay until the hub accepts them (`acceptSelections`),
-   * so a refused send still has them.
-   */
+  /** Empties the draft into a message: the text and everything riding with it. */
   take(): { text: string; extras: SendExtras } {
     const extras = this.extras();
     const text = this.text.trim();
@@ -458,7 +361,6 @@ export class ComposerDraft {
       images: this.images,
       texts: $state.snapshot(this.texts),
       files: $state.snapshot(this.files),
-      selections: $state.snapshot(this.selections),
       canvas: $state.snapshot(this.canvas),
     };
     this.text = "";
@@ -466,20 +368,15 @@ export class ComposerDraft {
     this.texts = [];
     this.files = [];
     this.canvas = null;
-    this.editorOpen = false;
-    this.editing = null;
     return { text, extras };
   }
 
   /**
-   * What rides a message besides its text, as a send carries it: the notes,
-   * the texts and the files the hub has, and the images.
+   * What rides a message besides its text, as a send carries it: the texts
+   * and the files the hub has, and the images.
    */
   extras(): SendExtras {
     const extras: SendExtras = {};
-    if (this.selections.length) {
-      extras.selections = $state.snapshot(this.selections);
-    }
     if (this.texts.length || this.files.length) {
       extras.attachments = [
         ...this.texts.map((t) => ({ ...t })),
@@ -511,7 +408,6 @@ export class ComposerDraft {
     this.text = text;
     // A canvas that went out rides back as its file, outline and picture.
     this.canvas = null;
-    this.selections = extras.selections ?? [];
     this.texts = (extras.attachments ?? []).flatMap((attachment) =>
       attachment.kind === "text"
         ? [{ kind: "text", name: attachment.name, content: attachment.content }]

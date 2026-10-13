@@ -1,4 +1,4 @@
-import type { PreviewElement } from "@cawco/core";
+import { COMMENT_LIMITS, type SendPicture } from "@cawco/core/comments";
 
 /**
  * What the pane accepts from the previewed page. The overlay is ours, but it
@@ -8,28 +8,13 @@ import type { PreviewElement } from "@cawco/core";
  * come in, and the rest of the pane works on shapes it knows.
  */
 
-const SELECTOR_MAX = 1000;
-const HTML_MAX = 2000;
-const TEXT_MAX = 200;
-const CLASSES_MAX = 50;
 const ERROR_MAX = 300;
-/** A base64 PNG this long is ~3 MB — more than any element thumbnail needs. */
+/** A base64 PNG this long is ~3 MB: a page's thumbnail, a pin's picture. */
 const PNG_MAX = 4_000_000;
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
-const FRAMEWORKS = new Set(["svelte", "code-inspector", "react", "vue"]);
-const STYLE_KEYS = [
-  "color",
-  "backgroundColor",
-  "fontFamily",
-  "fontSize",
-  "fontWeight",
-  "lineHeight",
-  "display",
-  "position",
-  "padding",
-  "margin",
-  "borderRadius",
-] as const;
+const PIN_ID = /^[0-9a-f-]{36}$/;
+/** The keys a page hands the pane (overlay `PANE_KEYS`). */
+const PANE_KEYS = new Set(["c", "j", "k", "Enter", "Escape"]);
 
 const text = (value: unknown, max: number): string | null =>
   typeof value === "string" ? value.slice(0, max) : null;
@@ -65,63 +50,12 @@ export function previewPng(value: unknown): string | null {
     : null;
 }
 
-const PICK_ID = /^[a-z0-9-]{1,64}$/;
-
-/** The id the overlay sends a pick and, later, its screenshot under. */
-export function previewPickId(value: unknown): string | null {
-  return typeof value === "string" && PICK_ID.test(value) ? value : null;
-}
-
-/** The raster scale a screenshot was drawn at: above 0, at most 2. */
-export function previewScale(value: unknown): number | null {
-  const scale = finite(value);
-  return scale !== null && scale > 0 && scale <= 2 ? scale : null;
-}
-
 export function previewError(value: unknown): string | null {
   return text(value, ERROR_MAX);
 }
 
 export function previewTitle(value: unknown): string | null {
   return text(value, 300);
-}
-
-function source(value: unknown): PreviewElement["source"] {
-  const raw = record(value);
-  if (!raw) {
-    return null;
-  }
-  const { framework, of } = raw;
-  if (
-    typeof framework !== "string" ||
-    !FRAMEWORKS.has(framework) ||
-    typeof of !== "string" ||
-    !(of === "self" || of.startsWith("ancestor:"))
-  ) {
-    return null;
-  }
-  const component = text(raw.component, TEXT_MAX);
-  return {
-    file: text(raw.file, SELECTOR_MAX),
-    line: finite(raw.line),
-    column: finite(raw.column),
-    framework: framework as NonNullable<PreviewElement["source"]>["framework"],
-    of: of as NonNullable<PreviewElement["source"]>["of"],
-    ...(component ? { component } : {}),
-  };
-}
-
-function box(
-  value: unknown
-): { x: number; y: number; width: number; height: number } | null {
-  const raw = record(value);
-  const x = finite(raw?.x);
-  const y = finite(raw?.y);
-  const width = finite(raw?.width);
-  const height = finite(raw?.height);
-  return x === null || y === null || width === null || height === null
-    ? null
-    : { x, y, width, height };
 }
 
 const RPC_ID_MAX = 100;
@@ -148,56 +82,49 @@ export function previewErrorOf(value: unknown): "field" | "send" | null {
   return value === "field" || value === "send" ? value : null;
 }
 
-/** A selected element as the pane will hold it, or null when the shape is wrong. */
-export function previewElement(
-  value: unknown,
-  origin: string
-): PreviewElement | null {
+/** A pin's id, as the overlay names one. */
+export function previewPinId(value: unknown): string | null {
+  return typeof value === "string" && PIN_ID.test(value) ? value : null;
+}
+
+/** Where a pin's disc stands in the page's viewport, px; null when it is not on the page. */
+export function previewPinAt(
+  value: unknown
+): { r: number; x: number; y: number } | null {
   const raw = record(value);
-  if (!raw) {
+  const x = finite(raw?.x);
+  const y = finite(raw?.y);
+  const r = finite(raw?.r);
+  return x === null || y === null || r === null ? null : { x, y, r };
+}
+
+/** One of the pane's keys pressed while the page had the keyboard. */
+export function previewKey(
+  value: unknown
+): "c" | "j" | "k" | "Enter" | "Escape" | null {
+  return typeof value === "string" && PANE_KEYS.has(value)
+    ? (value as "c" | "j" | "k" | "Enter" | "Escape")
+    : null;
+}
+
+/** The pictures a page drew for a send: at most a send's, each a pin's or the page's. */
+export function previewPictures(value: unknown): SendPicture[] | null {
+  if (!Array.isArray(value) || value.length > COMMENT_LIMITS.pictures) {
     return null;
   }
-  const selector = text(raw.selector, SELECTOR_MAX);
-  const tag = text(raw.tag, TEXT_MAX);
-  const id = text(raw.id, TEXT_MAX);
-  const html = text(raw.html, HTML_MAX);
-  const body = text(raw.text, TEXT_MAX);
-  const url = previewUrl(raw.url, origin);
-  const rect = box(raw.rect);
-  const page = record(raw.page);
-  const pageX = finite(page?.x);
-  const pageY = finite(page?.y);
-  const styles = record(raw.styles);
-  if (
-    selector === null ||
-    tag === null ||
-    id === null ||
-    html === null ||
-    body === null ||
-    url === null ||
-    rect === null ||
-    pageX === null ||
-    pageY === null ||
-    styles === null ||
-    !Array.isArray(raw.classes)
-  ) {
-    return null;
+  const pictures: SendPicture[] = [];
+  for (const item of value) {
+    const raw = record(item);
+    const png = previewPng(raw?.png);
+    const pin = raw?.pin === null ? null : previewPinId(raw?.pin);
+    if (
+      !png ||
+      png.length > COMMENT_LIMITS.pictureChars ||
+      (raw?.pin !== null && pin === null)
+    ) {
+      return null;
+    }
+    pictures.push({ pin, png });
   }
-  return {
-    selector,
-    tag,
-    id,
-    classes: raw.classes
-      .slice(0, CLASSES_MAX)
-      .flatMap((name) => (typeof name === "string" ? [name] : [])),
-    html,
-    text: body,
-    rect,
-    page: { x: pageX, y: pageY },
-    styles: Object.fromEntries(
-      STYLE_KEYS.map((key) => [key, text(styles[key], TEXT_MAX) ?? ""])
-    ) as PreviewElement["styles"],
-    source: source(raw.source),
-    url,
-  };
+  return pictures;
 }

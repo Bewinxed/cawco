@@ -36,6 +36,8 @@ export { default as IconFork } from "~icons/solar/branching-paths-up-bold-duoton
 /** A release's Fixed section (ReleaseNotes). */
 export { default as IconBug } from "~icons/solar/bug-bold-duotone";
 export { default as IconUsage } from "~icons/solar/chart-2-bold-duotone";
+/** Comment: the artifact panel's mode and the radial menu's sector (DESIGN.md, Artifact panel, canvas and ink). */
+export { default as IconComment } from "~icons/solar/chat-round-dots-bold-duotone";
 export { default as IconChat } from "~icons/solar/chat-square-bold-duotone";
 export { default as IconSuccess } from "~icons/solar/check-circle-bold-duotone";
 export { default as IconCheck } from "~icons/solar/check-read-bold-duotone";
@@ -54,10 +56,7 @@ export {
 export { default as IconToolNavigate } from "~icons/solar/compass-bold-duotone";
 export { default as IconCopy } from "~icons/solar/copy-bold-duotone";
 export { default as IconCpu } from "~icons/solar/cpu-bold-duotone";
-export {
-  default as IconCursor,
-  default as IconToolScreen,
-} from "~icons/solar/cursor-bold-duotone";
+export { default as IconToolScreen } from "~icons/solar/cursor-bold-duotone";
 export { default as IconAlert } from "~icons/solar/danger-circle-bold-duotone";
 export { default as IconWarningTriangle } from "~icons/solar/danger-triangle-bold-duotone";
 // A new thread: a conversation of two. Its full-weight marks are as large as
@@ -145,6 +144,8 @@ export { default as IconDot } from "~icons/solar/record-circle-bold-duotone";
 export { default as IconRefresh } from "~icons/solar/refresh-bold-duotone";
 /** Working: the session status glyph (DESIGN.md, Session status). */
 export { default as IconWorking } from "~icons/solar/refresh-circle-bold-duotone";
+/** Reopen a resolved pin. */
+export { default as IconReopen } from "~icons/solar/restart-bold-duotone";
 /*
  * The marks a folder can be given by hand (see `FOLDER_MARKS` in
  * lib/cawco/folder-prefs.svelte.ts), picked to span the kinds of work a

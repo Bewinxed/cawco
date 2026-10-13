@@ -39,7 +39,6 @@
     type ServerTail,
     type SessionState,
     seededSession,
-    selectionCommands,
     sendFailureNotice,
     submitCommand,
   } from "./client.svelte";
@@ -783,14 +782,6 @@
     }
   });
 
-  $effect(() => {
-    for (const { selectionIds, stage } of selectionCommands(viewId)) {
-      if (stage === "accepted" || stage === "applied") {
-        untrack(() => draft.acceptSelections(selectionIds));
-      }
-    }
-  });
-
   /** Why this session's last send failed, said over its composer's field. */
   const sendFailure = $derived(sendFailureNotice(viewId));
 
@@ -939,9 +930,6 @@
     get paneVisible() {
       return visible;
     },
-    get previewPhone() {
-      return phone;
-    },
     get transcriptShare() {
       return (100 - previewShare) / 100;
     },
@@ -1049,9 +1037,6 @@
   {:else if session}
     <SideSplit
       {active}
-      oncapture={(pick, shot) => draft.captured(pick, shot)}
-      onescape={() => draft.closeSelectionEditor()}
-      onselect={(selection) => draft.attach(selection)}
       {phone}
       planOf={viewId}
       {viewId}
@@ -1135,7 +1120,6 @@
             {onstop}
             {onsubmit}
             paneVisible={visible}
-            previewPhone={phone}
             prompts={offer}
             recallOf={viewId}
             sendError={sendFailure}

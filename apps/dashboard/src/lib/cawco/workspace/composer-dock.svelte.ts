@@ -46,7 +46,6 @@ export interface ComposerBinding {
   readonly placeholder?: string;
   /** The plan's ring, which opens it beside the conversation; none without a plan. */
   readonly planRing?: Snippet;
-  readonly previewPhone: boolean;
   /** What stands on the tray row above the composer: an offer to the reader. */
   prompts?: Snippet;
   /** The conversation whose sent messages the composer recalls. */

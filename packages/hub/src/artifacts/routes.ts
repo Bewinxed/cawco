@@ -7,6 +7,7 @@
  */
 import { ARTIFACT_NAME, PREVIEW_START_PATH, SHOWN_FAILURES } from "@cawco/core";
 import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
+import { COMMENT_LIMITS } from "@cawco/core/comments";
 import { Elysia, t } from "elysia";
 import type { Operation } from "rfc6902";
 import { PAGE_LIMIT } from "../decision-page";
@@ -176,6 +177,79 @@ export const artifactRoutes = (artifacts: Artifacts) =>
             params.artifact,
             changeOf(body)
           );
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    // The person's pins on the session's artifacts, with their threads (comment_read).
+    .get(
+      "/api/instances/:id/artifacts/comments",
+      {
+        query: t.Object({
+          artifact: t.Optional(t.String({ pattern: "^[0-9a-f-]{36}$" })),
+          filter: t.Optional(
+            t.Union([
+              t.Literal("open"),
+              t.Literal("resolved"),
+              t.Literal("all"),
+            ])
+          ),
+          since: t.Optional(t.String({ maxLength: 40 })),
+        }),
+      },
+      ({ params, query }) => {
+        try {
+          return artifacts.commentRead(params.id, {
+            artifact: query.artifact,
+            filter: query.filter ?? "open",
+            since: query.since,
+          });
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    // The agent answers a pin in its thread (comment_reply).
+    .post(
+      "/api/instances/:id/artifacts/comments/:pin/reply",
+      {
+        body: t.Object({
+          text: t.String({ minLength: 1, maxLength: COMMENT_LIMITS.text }),
+          files: t.Optional(
+            t.Array(
+              t.String({ minLength: 1, maxLength: COMMENT_LIMITS.file }),
+              { maxItems: COMMENT_LIMITS.files }
+            )
+          ),
+        }),
+      },
+      ({ params, body }) => {
+        try {
+          return artifacts.commentReply(
+            params.id,
+            params.pin,
+            body.text,
+            body.files
+          );
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    // The agent resolves a pin (comment_resolve).
+    .post(
+      "/api/instances/:id/artifacts/comments/:pin/resolve",
+      {
+        body: t.Object({
+          text: t.Optional(
+            t.String({ minLength: 1, maxLength: COMMENT_LIMITS.text })
+          ),
+        }),
+      },
+      ({ params, body }) => {
+        try {
+          return artifacts.commentResolve(params.id, params.pin, body.text);
         } catch (error) {
           return refused(error);
         }

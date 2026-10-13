@@ -23,6 +23,11 @@ import {
   choiceEntryProblem,
 } from "@cawco/core";
 import { CANVAS_LIMITS } from "@cawco/core/canvas";
+import {
+  COMMENT_LIMITS,
+  pinsProblem,
+  type SendBody,
+} from "@cawco/core/comments";
 import { inkProblem } from "@cawco/core/ink";
 import type { ServerWebSocket } from "bun";
 import { createDecoder, readVarUint, readVarUint8Array } from "lib0/decoding";
@@ -167,15 +172,18 @@ const filesProblem = (
     : null;
 };
 
-/** The maps a person's ink writes, on any artifact (core ink.ts). */
+/** The maps a person's ink and pins write, on any artifact (core ink.ts, comments.ts). */
 const INK_MAPS = ["ink", "moved", "pins"];
 
-/** Why the ink, moved groups and pins in `trial` may not be kept; null when they may. */
-const inkMapsProblem = (trial: Doc): string | null =>
+/** Why the ink, moved groups and pins in `trial`, `doc` after a person's update, may not be kept; null when they may. */
+const inkMapsProblem = (doc: Doc, trial: Doc): string | null =>
   inkProblem(
     [...trial.getMap("ink").entries()],
-    [...trial.getMap("moved").entries()],
-    [...trial.getMap("pins").entries()]
+    [...trial.getMap("moved").entries()]
+  ) ??
+  pinsProblem(
+    new Map(doc.getMap("pins").entries()),
+    new Map(trial.getMap("pins").entries())
   );
 
 /** Why `trial`, a canvas's doc after its screen's update, may not be kept; null when it may. */
@@ -201,7 +209,7 @@ const canvasProblem = (doc: Doc, trial: Doc): string | null => {
       doc.getMap("requests") as YMap<YMap<unknown>>,
       trial.getMap("requests") as YMap<YMap<unknown>>
     ) ??
-    inkMapsProblem(trial)
+    inkMapsProblem(doc, trial)
   );
 };
 
@@ -221,7 +229,7 @@ const stateProblem = (doc: Doc, trial: Doc): string | null => {
       return `A page changes its artifact's state and ink only, not its ${name}.`;
     }
   }
-  const ink = inkMapsProblem(trial);
+  const ink = inkMapsProblem(doc, trial);
   if (ink) {
     return ink;
   }
@@ -343,21 +351,72 @@ const holdClaims = (docs: ArtifactDocs, artifactId: string) => {
   });
 };
 
-/** The longest send body read: its text at the note's bound, as JSON. */
-const SEND_BODY_MAX = 4 * CHOICE_LIMITS.note;
+/** The longest send body read: its text, its address and its pictures at their bounds, as JSON. */
+const SEND_BODY_MAX =
+  4 * CHOICE_LIMITS.note +
+  COMMENT_LIMITS.pictures * (COMMENT_LIMITS.pictureChars + 100) +
+  4096;
+
+/** The longest page address a send names. Our call. */
+const URL_MAX = 2048;
+
+const PNG_BASE64 = /^iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/;
+
+/** Why a send's body is not one, or its fields; null when it is. */
+const sendBodyProblem = (body: unknown): string | null => {
+  if (!(body && typeof body === "object" && !Array.isArray(body))) {
+    return "Send takes JSON: { text?, url?, pictures? }.";
+  }
+  const { text, url, pictures } = body as Record<string, unknown>;
+  if (
+    text !== undefined &&
+    !(typeof text === "string" && text.length <= CHOICE_LIMITS.note)
+  ) {
+    return `text is a string of at most ${CHOICE_LIMITS.note} characters.`;
+  }
+  if (
+    url !== undefined &&
+    !(typeof url === "string" && url.length <= URL_MAX)
+  ) {
+    return `url is a string of at most ${URL_MAX} characters.`;
+  }
+  if (pictures === undefined) {
+    return null;
+  }
+  if (
+    !(Array.isArray(pictures) && pictures.length <= COMMENT_LIMITS.pictures)
+  ) {
+    return `pictures is a list of at most ${COMMENT_LIMITS.pictures}.`;
+  }
+  for (const picture of pictures as (Record<string, unknown> | null)[]) {
+    if (
+      !(
+        picture &&
+        (picture.pin === null || typeof picture.pin === "string") &&
+        typeof picture.png === "string" &&
+        picture.png.length <= COMMENT_LIMITS.pictureChars &&
+        PNG_BASE64.test(picture.png)
+      )
+    ) {
+      return `A picture is { pin, png }: a base64 PNG of at most ${COMMENT_LIMITS.pictureChars.toLocaleString()} characters.`;
+    }
+  }
+  return null;
+};
 
 /**
- * The person sends (`cawco.send`, and the panel's Send): what the send
+ * The person sends (`cawco.send`, and the panel's Send N): what the send
  * applies first (a project's setup page: its fleet choices and place), then
- * the session hears every pick as one message, at once, with the page's text
- * below them. `instanceId` already owns `artifactId` (the listener checked).
+ * the session hears every unsent pick, pin and thread entry as one message,
+ * at once, with the page's text below them and the pins' pictures.
+ * `instanceId` already owns `artifactId` (the listener checked).
  */
 export const artifactSend =
   (
     send: (
       instanceId: string,
       artifactId: string,
-      text?: string
+      body: SendBody
     ) => Promise<ArtifactChoices>
   ) =>
   async (
@@ -371,30 +430,33 @@ export const artifactSend =
         headers: { allow: "POST" },
       });
     }
-    const body = await request.text();
-    if (body.length > SEND_BODY_MAX) {
+    const raw = await request.text();
+    if (raw.length > SEND_BODY_MAX) {
       return new Response(
-        `A page's text stops at ${CHOICE_LIMITS.note} characters.`,
+        `A send carries at most ${COMMENT_LIMITS.pictures} pictures and ${CHOICE_LIMITS.note} characters of text.`,
         { status: 413 }
       );
     }
-    let text: unknown;
+    let body: unknown;
     try {
-      text = body ? (JSON.parse(body) as { text?: unknown }).text : undefined;
+      body = raw ? JSON.parse(raw) : {};
     } catch {
-      return new Response("Send takes JSON: { text? }.", { status: 400 });
+      return new Response("Send takes JSON: { text?, url?, pictures? }.", {
+        status: 400,
+      });
     }
-    if (
-      text !== undefined &&
-      !(typeof text === "string" && text.length <= CHOICE_LIMITS.note)
-    ) {
-      return new Response(
-        `text is a string of at most ${CHOICE_LIMITS.note} characters.`,
-        { status: 400 }
-      );
+    const problem = sendBodyProblem(body);
+    if (problem) {
+      return new Response(problem, { status: 400 });
     }
+    const { text, ...rest } = body as SendBody;
     try {
-      return Response.json(await send(instanceId, artifactId, text?.trim()));
+      return Response.json(
+        await send(instanceId, artifactId, {
+          ...rest,
+          ...(text?.trim() ? { text: text.trim() } : {}),
+        })
+      );
     } catch (error) {
       if (error instanceof ArtifactRefusal) {
         return new Response(error.message, { status: error.status });

@@ -97,8 +97,6 @@
   import { newId } from "../id";
   import { minimizedAsks } from "../minimized-asks.svelte";
   import { inkExtras, inks } from "../preview/ink.svelte";
-  import SelectionChip from "../preview/SelectionChip.svelte";
-  import SelectionPopover from "../preview/SelectionPopover.svelte";
   import {
     loadSuggestSetting,
     type SuggestCandidate,
@@ -142,7 +140,6 @@
     sendError = "",
     held = false,
     paneVisible = true,
-    previewPhone = false,
     commands = [],
     mentions = [],
     onsubmit,
@@ -190,7 +187,6 @@
      */
     held?: boolean;
     paneVisible?: boolean;
-    previewPhone?: boolean;
     /** What this session offers behind `/`. */
     commands?: AvailableCommand[];
     /** What `@` can name — the sessions and machines in reach. */
@@ -272,12 +268,6 @@
     field?.focus();
     field?.setSelectionRange(draft.text.length, draft.text.length);
   }
-
-  $effect(() => {
-    if (!paneVisible) {
-      draft.editorOpen = false;
-    }
-  });
 
   // On screen, this composer is what the desk's toasts rise above.
   const presence = {};
@@ -1144,23 +1134,7 @@
       : `Waiting for ${signingIn}: sign in in the tab that opened.`;
   });
 
-  /** A send pressed while a note's screenshot was still on its way. */
-  let awaiting = $state<{
-    draft: ComposerDraft;
-    via: (text: string, extras: SendExtras, id: string) => void;
-  } | null>(null);
-  const pending = $derived(
-    sending || awaiting?.draft === draft || canvasWorking()
-  );
-  $effect(() => {
-    if (awaiting && awaiting.draft !== draft) {
-      // The composer moved to another conversation: that press was the other's.
-      awaiting = null;
-    } else if (awaiting && !draft.capturing) {
-      const { via } = awaiting;
-      untrack(() => submit(via));
-    }
-  });
+  const pending = $derived(sending || canvasWorking());
 
   function submit(
     via: (text: string, extras: SendExtras, id: string) => void = onsubmit
@@ -1209,13 +1183,6 @@
       }
       return;
     }
-    // A picked element's screenshot is still being drawn: the press stands,
-    // pending, and the message goes with it the moment it arrives.
-    if (draft.capturing) {
-      awaiting = { draft, via };
-      return;
-    }
-    awaiting = null;
     if (draft.canvas || inkWaiting) {
       sendWithArtifacts(via);
       return;
@@ -3047,48 +3014,15 @@
       <div aria-hidden="true" class="canvas-slot" bind:this={canvasSlot}></div>
     {/if}
     <!-- The row of attachments is one block above the field, the canvas's
-         chip and the element notes picked in the preview leading it. -->
+         chip leading it. -->
     <AttachmentChips
       canvasHidden={room.chipHidden}
       {draft}
-      hasNotes={draft.selections.length > 0}
       ink={inkChip}
       onopencanvas={() => room.open()}
       onremovecanvas={() => room.remove()}
       bind:canvasChip
-    >
-      {#snippet notes()}
-        {#each draft.selections as selection (`${selection.element.url}:${selection.element.selector}`)}
-          <SelectionChip
-            onedit={() => {
-              draft.editing = selection;
-              draft.editorOpen = true;
-            }}
-            onremove={() => draft.removeSelection(selection)}
-            {selection}
-            bind:anchor={draft.anchors[
-              `${selection.element.url}:${selection.element.selector}`
-            ]}
-          />
-        {/each}
-      {/snippet}
-    </AttachmentChips>
-
-    {#if draft.editing}
-      <SelectionPopover
-        anchor={draft.anchors[
-          `${draft.editing.element.url}:${draft.editing.element.selector}`
-        ]}
-        onremove={() => {
-          if (draft.editing) {
-            draft.removeSelection(draft.editing);
-          }
-        }}
-        phone={previewPhone}
-        selection={draft.editing}
-        bind:open={draft.editorOpen}
-      />
-    {/if}
+    />
 
     <!-- A send that failed says so right over the field it left. -->
     {#if sendNotice}

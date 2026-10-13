@@ -454,7 +454,6 @@
         perch={lent.perch}
         placeholder={lent.placeholder}
         planRing={lent.planRing}
-        previewPhone={lent.previewPhone}
         prompts={lent.prompts}
         recallOf={lent.recallOf}
         sendError={lent.sendError}

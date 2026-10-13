@@ -436,9 +436,6 @@
     get paneVisible() {
       return visible;
     },
-    get previewPhone() {
-      return phone;
-    },
     get transcriptShare() {
       return (100 - sideShare) / 100;
     },
@@ -603,9 +600,6 @@
   >
     <SideSplit
       {active}
-      oncapture={(pick, shot) => draft.captured(pick, shot)}
-      onescape={() => draft.closeSelectionEditor()}
-      onselect={(selection) => draft.attach(selection)}
       {phone}
       planOf={lead}
       previewOf={lead}

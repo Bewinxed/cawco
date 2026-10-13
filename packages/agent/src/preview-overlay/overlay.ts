@@ -3,11 +3,23 @@
 
 import type { PreviewElement } from "@cawco/core";
 import type { ChoiceChange } from "@cawco/core/choices";
+import {
+  COMMENT_LIMITS,
+  findAnchor,
+  type PageAnchor,
+  type Pin,
+  type PinnedElement,
+  pinUnsent,
+  type SendPicture,
+} from "@cawco/core/comments";
+import type { InkGroup } from "@cawco/core/ink";
 import { domToPng } from "modern-screenshot";
+import type { Map as YMap } from "yjs";
 import { artifact, NO_ARTIFACT, type State } from "./artifact";
 import { fillFields, trackFields } from "./fields";
 import { startInk } from "./ink";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
+import { type Pins, startPins } from "./pins";
 import { inkChrome } from "./radial";
 
 const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/;
@@ -15,7 +27,10 @@ const PNG_PREFIX = /^data:image\/png;base64,/;
 /** The page hash on the overlay's tag in a page's HTML (core `injectOverlay`). */
 const SERVED_HASH =
   /<script src="\/__cawco\/overlay\.js" data-page-hash="([0-9a-f]{64})"/;
-let selecting = false;
+/** Comment mode is on: a tap on the page pins a comment to what it lands on. */
+let commenting = false;
+/** The moved pin a tap in Comment mode places again, instead of a new one. */
+let placing: string | null = null;
 /** The tag that loaded this script (core's `injectOverlay`). */
 const tag = document.currentScript as HTMLScriptElement | null;
 /** The page as it was served; a morph moves it to the revision morphed to. */
@@ -101,9 +116,9 @@ const sheet = document.createElement("style");
 sheet.textContent = `
   :host { color-scheme: light dark; }
   .layer { position:fixed; inset:0; pointer-events:none; cursor:crosshair; }
-  .layer.select { pointer-events:auto; }
-  .rect { position:fixed; pointer-events:none; outline:2px solid Highlight; background:color-mix(in srgb, Highlight 15%, transparent); }
-  .label { position:fixed; pointer-events:none; max-width:100%; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:4px 7px; background:Canvas; color:CanvasText; font:12px/1.4 monospace; border:1px solid Highlight; }
+  .layer.comment { pointer-events:auto; }
+  .rect { position:fixed; pointer-events:none; outline:var(--focus-ring-width, 2px) solid var(--brand-solid); outline-offset:2px; border-radius:var(--radius-xs); background:color-mix(in srgb, var(--brand-solid) 8%, transparent); }
+  .label { position:fixed; pointer-events:none; max-width:100%; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding:var(--space-1) var(--space-2); border-radius:var(--radius-xs); background:var(--surface-raised); color:var(--ink-strong); font:var(--type-meta); border:1px solid var(--border-control); box-shadow:var(--shadow-tile); }
 `;
 const layer = document.createElement("div");
 layer.className = "layer";
@@ -116,16 +131,53 @@ label.hidden = true;
 shadow.append(sheet, layer, highlight, label);
 document.documentElement.append(host);
 
+const chrome = inkChrome(shadow);
+
+/** The overlay's outline round `el`, the pin's element the person rests on or the host focuses; none hides it. */
+function outline(el: Element | null) {
+  if (commenting) {
+    return;
+  }
+  highlight.hidden = !el;
+  label.hidden = true;
+  if (el) {
+    cover(highlight, el.getBoundingClientRect());
+  }
+}
+
+/** Lays `node` over `rect`, the viewport's px. */
+function cover(node: HTMLElement, rect: DOMRect) {
+  Object.assign(node.style, {
+    left: `${rect.x}px`,
+    top: `${rect.y}px`,
+    width: `${rect.width}px`,
+    height: `${rect.height}px`,
+  });
+}
+
+/** The person's pins, drawn after the ink (pins.ts). */
+const pins: Pins = startPins({
+  anchorOf,
+  capture: (el, scale) => capture(el, scale),
+  chrome,
+  describe,
+  groupBox: (id) => ink.groupBox(id),
+  locate,
+  outline,
+  post,
+});
+
 /** The ink a pen draws on the page, and the icon and menu at a stroke's end (ink.ts, radial.ts). */
 const ink = startInk({
-  chrome: inkChrome(shadow),
+  anchorOf,
+  chrome,
   capture: pageCapture,
+  commenting: () => commenting,
   describe,
   elementAt,
+  locate,
+  pins: () => pins,
   post,
-  selecting: () => selecting,
-  selectorOf,
-  sourceOf,
 });
 
 /** Strip the preview prefix from a URL so the pane shows the app's own path. */
@@ -286,6 +338,7 @@ if (document.readyState === "loading") {
 const kept = (node: Node): boolean =>
   node === host ||
   node === ink.layer ||
+  node === pins.layer ||
   (node instanceof HTMLScriptElement &&
     node.getAttribute("src") === "/__cawco/overlay.js");
 
@@ -369,7 +422,7 @@ const toldHost = () => undefined;
 window.addEventListener(
   "click",
   (event) => {
-    if (selecting || !(event.target instanceof Element)) {
+    if (commenting || !(event.target instanceof Element)) {
       return;
     }
     const option = event.target.closest("[data-option]");
@@ -504,9 +557,11 @@ function navigated() {
   });
 }
 
-function mode(on: boolean) {
-  selecting = on;
-  layer.classList.toggle("select", on);
+/** Comment mode on or off; `again` names the moved pin the next tap places again. */
+function mode(on: boolean, again: string | null = null) {
+  commenting = on;
+  placing = on ? again : null;
+  layer.classList.toggle("comment", on);
   highlight.hidden = true;
   label.hidden = true;
 }
@@ -647,7 +702,73 @@ function elementAt(x: number, y: number): Element | null {
   return element === host ? null : element;
 }
 
-function describe(el: Element): PreviewElement {
+/** An element's own dev source, none of its ancestors': what a pin's file:line finds it by. */
+function ownSource(el: Element): Source | null {
+  return sourceAt(el as DevElement, "self");
+}
+
+/** The element's text as a pin keeps it: what it shows, cut to the anchor's bound. */
+function textOf(el: Element): string {
+  return ((el as HTMLElement).innerText || el.textContent || "")
+    .trim()
+    .slice(0, COMMENT_LIMITS.anchorText);
+}
+
+/** What a page's mark stands on, read from `el` as it is now. */
+function anchorOf(el: Element): PageAnchor {
+  const { x, y, width, height } = el.getBoundingClientRect();
+  return {
+    selector: selectorOf(el),
+    source: sourceOf(el),
+    text: textOf(el),
+    box: {
+      x: Math.round(x + scrollX),
+      y: Math.round(y + scrollY),
+      w: Math.round(width),
+      h: Math.round(height),
+    },
+  };
+}
+
+/** The page's own elements, the overlay's left out. */
+function pageElements(): Element[] {
+  return [...(document.body?.querySelectorAll("*") ?? [])].filter(
+    (el) =>
+      !(
+        host.contains(el) ||
+        el.closest("svg[data-cawco-ink], svg[data-cawco-pins]")
+      )
+  );
+}
+
+/** Where a page's anchor stands now (core `findAnchor`: file:line, then selector, then text). */
+function locate(anchor: PageAnchor) {
+  return findAnchor<Element>(anchor, {
+    bySource: (file, line) =>
+      pageElements().find((el) => {
+        const own = ownSource(el);
+        return own?.file === file && own.line === line;
+      }) ?? null,
+    bySelector: (selector) => {
+      try {
+        return document.querySelector(selector);
+      } catch {
+        return null;
+      }
+    },
+    byText: (text) => {
+      const matches = pageElements().filter((el) => textOf(el) === text);
+      // The deepest: the one holding no other match.
+      return (
+        matches.find(
+          (el) => !matches.some((other) => other !== el && el.contains(other))
+        ) ?? null
+      );
+    },
+  });
+}
+
+function describe(el: Element): PinnedElement {
   const { x, y, width, height } = el.getBoundingClientRect();
   const computed = getComputedStyle(el);
   const styles = Object.fromEntries(
@@ -665,26 +786,12 @@ function describe(el: Element): PreviewElement {
       "borderRadius",
     ].map((key) => [key, computed[key as keyof CSSStyleDeclaration]])
   ) as PreviewElement["styles"];
-  // The host hangs off <html>, so only a selection of the root itself can
-  // carry overlay nodes; everything else serialises as it is, without a
-  // subtree clone that a click on <body> would make expensive.
-  let html = el.outerHTML;
-  if (el.contains(host)) {
-    const clone = el.cloneNode(true) as Element;
-    for (const node of clone.querySelectorAll(
-      "cawco-overlay, script[src='/__cawco/overlay.js']"
-    )) {
-      node.remove();
-    }
-    html = clone.outerHTML;
-  }
   return {
     selector: selectorOf(el),
     tag: el.localName,
     id: el.id,
     classes: [...el.classList],
-    html: html.slice(0, 2000),
-    text: ((el as HTMLElement).innerText || el.textContent || "").slice(0, 200),
+    text: textOf(el),
     rect: { x, y, width, height },
     page: { x: x + scrollX, y: y + scrollY },
     styles,
@@ -744,7 +851,7 @@ async function capture(
 window.addEventListener(
   "mousemove",
   (event) => {
-    if (!selecting) {
+    if (!commenting) {
       return;
     }
     const el = elementAt(event.clientX, event.clientY);
@@ -754,12 +861,7 @@ window.addEventListener(
       return;
     }
     const rect = el.getBoundingClientRect();
-    Object.assign(highlight.style, {
-      left: `${rect.x}px`,
-      top: `${rect.y}px`,
-      width: `${rect.width}px`,
-      height: `${rect.height}px`,
-    });
+    cover(highlight, rect);
     const source = sourceOf(el);
     label.textContent = `${el.localName}${el.id ? `#${el.id}` : ""}${el.classList.length ? `.${el.classList[0]}` : ""}${source?.file ? ` — ${source.file}:${source.line ?? "?"}` : ""}`;
     label.style.left = `${Math.max(0, Math.min(rect.x, innerWidth - label.offsetWidth))}px`;
@@ -770,39 +872,23 @@ window.addEventListener(
 
 let touchCaptured = false;
 
-/** Resolves after the next frame has been drawn and handed on. */
-function afterNextPaint(): Promise<void> {
-  return new Promise((resolve) =>
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => setTimeout(resolve, 0))
-    )
-  );
-}
-let pickCount = 0;
-
-/**
- * A pick goes out at once so its chip flies while the element is still
- * being drawn; the screenshot follows under the same id when it is ready.
- */
-async function selectAt(clientX: number, clientY: number) {
+/** A tap in Comment mode: a comment pinned where it landed, or the moved pin being placed again. */
+function commentAt(clientX: number, clientY: number) {
   const el = elementAt(clientX, clientY);
-  if (el) {
-    pickCount += 1;
-    const id = `${Date.now().toString(36)}-${pickCount}`;
-    post("cawco:selected", { id, element: describe(el) });
-    // This page shares the dashboard's thread, and the raster's first part
-    // runs without a break: it starts only once the dashboard has taken the
-    // pick and drawn the first frame of its flight, which the compositor then
-    // carries on its own.
-    await afterNextPaint();
-    const { png, scale, error } = await capture(el);
-    post("cawco:selected-png", error ? { id, error } : { id, png, scale });
+  if (!(el && artifact.keeps())) {
+    return;
   }
+  if (placing) {
+    pins.placeAgain(placing, el, clientX, clientY);
+    placing = null;
+    return;
+  }
+  pins.commentAt(el, clientX, clientY);
 }
 
-// While selecting, the whole press belongs to the overlay: a document-level
+// In Comment mode the whole press belongs to the overlay: a document-level
 // outside-click handler in the app must not dismiss the thing being pointed
-// at on pointerdown, before the click that would have selected it arrives.
+// at on pointerdown, before the click that would pin it arrives.
 for (const type of [
   "pointerdown",
   "pointerup",
@@ -815,8 +901,12 @@ for (const type of [
 ] as const) {
   window.addEventListener(
     type,
-    async (event) => {
-      if (selecting) {
+    (event) => {
+      // A pen draws, in Comment mode too: only a finger or a mouse pins.
+      if (
+        commenting &&
+        !(event instanceof PointerEvent && event.pointerType === "pen")
+      ) {
         event.preventDefault();
         event.stopImmediatePropagation();
         if (event.type === "pointerdown") {
@@ -826,7 +916,7 @@ for (const type of [
           if (touch) {
             // Compatibility clicks belong to this same, already captured press.
             touchCaptured = true;
-            await selectAt(touch.clientX, touch.clientY);
+            commentAt(touch.clientX, touch.clientY);
           }
         }
       }
@@ -837,56 +927,146 @@ for (const type of [
 
 window.addEventListener(
   "click",
-  async (event) => {
-    if (!selecting) {
+  (event) => {
+    if (!commenting) {
       return;
     }
     event.preventDefault();
     event.stopImmediatePropagation();
     if (!touchCaptured) {
-      await selectAt(event.clientX, event.clientY);
+      commentAt(event.clientX, event.clientY);
     }
   },
   true
 );
 
+/** The pane's keys, heard while the page has the keyboard: C, J, K, Enter and Esc. */
+const PANE_KEYS = new Set(["c", "j", "k", "Enter", "Escape"]);
+
+/** Whether `target` takes typing: the page's own keys stay its own there. */
+const typing = (target: EventTarget | null) =>
+  target instanceof HTMLElement &&
+  (target.isContentEditable ||
+    ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName));
+
 window.addEventListener(
   "keydown",
   (event) => {
-    if (selecting && event.key === "Escape") {
+    if (commenting && event.key === "Escape") {
       event.preventDefault();
       event.stopImmediatePropagation();
       mode(false);
       post("cawco:escape");
+      return;
     }
+    const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+    if (
+      !PANE_KEYS.has(key) ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.altKey ||
+      typing(event.target) ||
+      !artifact.keeps() ||
+      artifact.kind() === "canvas"
+    ) {
+      return;
+    }
+    post("cawco:key", { key });
   },
   true
 );
+
+/** The pictures a send carries: each unsent pin's, and the page with its ink when ink no pin stands on is unsent. */
+async function sendPictures(): Promise<SendPicture[]> {
+  const doc = artifact.doc();
+  const all = [...(doc.getMap("pins") as YMap<Pin>).values()];
+  const owed = all.filter(pinUnsent).sort((a, b) => a.number - b.number);
+  const pinned = new Set(all.map((pin) => pin.ink));
+  const loose = [...(doc.getMap("ink") as YMap<InkGroup>).values()].some(
+    (group) => !(group.sentAt || pinned.has(group.id))
+  );
+  const pictures: SendPicture[] = [];
+  if (loose) {
+    const png = await pins.pagePicture();
+    if (png) {
+      pictures.push({ pin: null, png });
+    }
+  }
+  for (const pin of owed.slice(0, COMMENT_LIMITS.pictures - pictures.length)) {
+    // biome-ignore lint/performance/noAwaitInLoops: one raster at a time keeps the page responsive
+    const png = await pins.picture(pin.id, false);
+    if (png) {
+      pictures.push({ pin: pin.id, png });
+    }
+  }
+  return pictures;
+}
+
+type HostMessage = Record<string, unknown>;
+
+const idOf = (message: HostMessage) =>
+  typeof message.id === "string" ? message.id : null;
+
+/** What each of the host's messages does, by its type. */
+const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
+  {
+    "cawco:hello": (message) => {
+      ready();
+      // The host names the artifact this page is, and where its doc is synced.
+      const named = message as {
+        artifact: Parameters<typeof artifact.join>[0];
+        sync: Parameters<typeof artifact.join>[1];
+      };
+      if (!artifact.join(named.artifact, named.sync)) {
+        failed("artifact", NO_ARTIFACT);
+      }
+    },
+    "cawco:mode": (message) =>
+      mode(
+        message.mode === "comment",
+        typeof message.place === "string" ? message.place : null
+      ),
+    "cawco:focus-pin": (message) =>
+      pins.focus(idOf(message), message.scroll === true),
+    "cawco:track-pin": (message) => pins.track(idOf(message)),
+    // A card's thumbnail, or its full picture for the lightbox.
+    "cawco:picture": async (message) => {
+      const id = idOf(message);
+      if (id) {
+        const thumb = message.thumb === true;
+        post("cawco:picture", {
+          id,
+          thumb,
+          png: await pins.picture(id, thumb),
+        });
+      }
+    },
+    // The person's Send N: each unsent pin's picture, and the page with its ink.
+    "cawco:send-pictures": async (message) =>
+      post("cawco:send-pictures", {
+        ask: message.ask,
+        url: stripPrefix(location.href),
+        pictures: await sendPictures(),
+      }),
+    "cawco:capture": async () =>
+      post("cawco:capture", await capture(document.documentElement)),
+    // The composer's Send: the pins as text and the page with its ink as a picture.
+    "cawco:ink-export": async () =>
+      post("cawco:ink-exported", await ink.exported()),
+    "cawco:ink-sent": () => ink.sent(),
+  };
 
 window.addEventListener("message", async (event) => {
   if (event.source !== window.parent || event.origin !== location.origin) {
     return;
   }
-  const message = event.data;
+  const message = event.data as HostMessage | null;
   if (answered(message)) {
     return;
   }
-  if (message?.type === "cawco:hello") {
-    ready();
-    // The host names the artifact this page is, and where its doc is synced.
-    if (!artifact.join(message.artifact, message.sync)) {
-      failed("artifact", NO_ARTIFACT);
-    }
-  } else if (message?.type === "cawco:mode") {
-    mode(message.mode === "select");
-  } else if (message?.type === "cawco:capture") {
-    post("cawco:capture", await capture(document.documentElement));
-  } else if (message?.type === "cawco:ink-export") {
-    // The person sends: the pins as text and the page with its ink as a picture.
-    post("cawco:ink-exported", await ink.exported());
-  } else if (message?.type === "cawco:ink-sent") {
-    ink.sent();
-  }
+  const handle =
+    typeof message?.type === "string" ? fromHost[message.type] : undefined;
+  await handle?.(message as HostMessage);
 });
 
 window.addEventListener("popstate", navigated);
