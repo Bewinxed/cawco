@@ -23,6 +23,10 @@
  *
  * Only the hub registers a client at the stand-in, once.
  *
+ * The machine's row is each harness's: Claude Code's and the OpenCode 2.0
+ * server's, so `opencode2` (2.0.28, `npm install @opencode/cli@2.0.28`) must
+ * be on the PATH the probe runs with.
+ *
  *   bun scripts/probe-fleet-mcp-oauth.ts
  */
 import { existsSync } from "node:fs";
@@ -338,11 +342,20 @@ try {
     `  before sign-in: agent report ${JSON.stringify(before)}; fresh session ${unsigned.status} ${unsigned.error ?? ""}`
   );
   check(
-    "before sign-in, Claude Code is not asked to authorize",
+    "before sign-in, no harness is asked to authorize",
     unsigned.status !== "needs-auth" &&
       before.state !== "needs-auth" &&
-      !/registration|oauth/i.test(`${unsigned.error} ${before.detail}`),
+      !/registration|authoriz/i.test(`${unsigned.error} ${before.detail}`),
     `${unsigned.status}: ${unsigned.error ?? ""}`
+  );
+  const opencodeLine = before.detail
+    ?.split("\n")
+    .find((line) => line.startsWith("opencode: "));
+  check(
+    "before sign-in, OpenCode's line is what its server met: the hub's 503",
+    opencodeLine?.startsWith("opencode: failed") === true &&
+      opencodeLine.includes("Sign in to this server"),
+    opencodeLine ?? "(no OpenCode line)"
   );
   check(
     "before sign-in, Claude Code keeps no needs-auth entry",
@@ -384,17 +397,19 @@ try {
       (signed.tools ?? []).some((tool) => tool.name === TOOL),
     `${signed.status} ${signed.error ?? ""} tools=${(signed.tools ?? []).map((tool) => tool.name).join(",")}`
   );
-  // Claude Code's own line of the machine's report: the scratch machine's
-  // OpenCode server reports itself restarting whatever the server's state.
+  // The machine's row, each harness's line: what Claude Code and the
+  // OpenCode 2.0 server each loaded.
   const after = await until(
     "the agent's report after sign-in",
     reported,
-    (row) => row?.detail?.includes("claude: applied") === true,
-    120_000
+    (row) => row?.state === "applied",
+    240_000
   ).catch(async () => (await reported()) ?? { state: "no report" });
   check(
-    "the agent reports the server applied for Claude Code",
-    after.detail?.includes("claude: applied") === true,
+    "the agent reports the server applied by Claude Code and OpenCode",
+    after.state === "applied" &&
+      after.detail?.includes("claude: applied") === true &&
+      after.detail.includes("opencode: applied"),
     JSON.stringify(after)
   );
   const instanceId = await fleet.spawn("claude", "fleet oauth probe");

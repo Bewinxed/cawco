@@ -113,6 +113,7 @@ import {
   assertPluginLoaded,
   at,
   errorText,
+  MCP_CONNECT_TIMEOUT_MS,
   notFound,
   OPENCODE_BIN,
   OPENCODE_VERSION,
@@ -292,6 +293,14 @@ const cawcoMcp = () => ({
  * timeout here starts a second server.
  */
 export const SERVER_ANNOUNCE_TIMEOUT_MS = 30_000;
+
+/**
+ * How long a fleet report waits for the machine's server to run the config
+ * just written: a candidate's announce ({@link SERVER_ANNOUNCE_TIMEOUT_MS}),
+ * its plugin's load (30 s, `PLUGIN_LOAD_TIMEOUT_MS`) and its verification.
+ * Ours, with margin.
+ */
+const CONFIG_SETTLE_TIMEOUT_MS = 90_000;
 
 /**
  * How long one session's reattach goes on trying a server it cannot reach
@@ -4236,28 +4245,25 @@ export class OpencodeHarness implements Harness {
     });
     // Poke the watcher now rather than up to 2 s later.
     await this.#configTick();
-    // A control RPC reports a restart, never waits on it.
-    if (this.#applyGate) {
-      const restarting = {
-        state: "pending",
-        detail: "OpenCode server restarting.",
-      } as const;
-      report.mcp = Object.fromEntries([
-        ...Object.entries(placed).map(([key, state]) => [
-          key,
-          state.state === "applied" ? restarting : state,
-        ]),
-        ...mcp.map((name) => [name, restarting]),
-      ]);
+    // What follows talks to the server on the config just written, never to
+    // the one it replaces.
+    await this.#ensure();
+    const unsettled = await this.#configSettled();
+    if (unsettled) {
+      report.mcp = {
+        ...placed,
+        ...Object.fromEntries(mcp.map((name) => [name, unsettled])),
+      };
       return report;
     }
     // Every running server here, for the locations its sessions run in. An
     // account's never for its own directory: a location connects every
     // configured MCP server, a second copy of the fleet's local servers held
     // for nobody.
+    const machine = await this.#ensure();
     const places = [
       {
-        client: await this.#ensure(),
+        client: machine,
         directories: new Set(
           [...this.#sessions.values()]
             .filter((session) => session.account === undefined)
@@ -4296,6 +4302,16 @@ export class OpencodeHarness implements Harness {
         });
         await client.mcp.connect({ server: server.name, ...at(directory) });
       }
+      // And the machine server's own location, the one this report reads. A
+      // proxied server answers 503 until the hub signs in, and 2.0 does not
+      // try a failed server again on its own; the hub's sync after a sign-in
+      // is what connects it. Added first: a location just booted on a new
+      // config may not hold it yet ("MCP server not found").
+      await machine.mcp.add({
+        server: server.name,
+        config: toOpencodeMcp(server.config) as never,
+      });
+      await machine.mcp.connect({ server: server.name });
     }
     Object.assign(report.mcp, placed, await this.#readFleetMcp(mcp));
     return report;
@@ -4312,19 +4328,85 @@ export class OpencodeHarness implements Harness {
     };
   }
 
+  /**
+   * Undefined once the machine's server runs the config last written, else
+   * why not, as the report's state. A write's apply starts a moment after the
+   * tick that saw it (`#configTick` does not wait on `#attemptConfigApply`),
+   * and until it publishes, the server answering is the one on the old config:
+   * read then, the report named what that server had (a fleet server "not
+   * reported", or still connecting) and stayed so, as nothing reports again.
+   * 2.0's apply no longer waits for sessions to go idle, so the wait is
+   * bounded by a candidate's boot and verification. An agent that does not
+   * converge the config (not the machine's) has nothing to wait for.
+   */
+  async #configSettled(): Promise<FleetItemState | undefined> {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: #converging is set in #ensure, a different method
+    if (!this.#converging) {
+      return;
+    }
+    const deadline = Date.now() + CONFIG_SETTLE_TIMEOUT_MS;
+    for (;;) {
+      const gate = this.#applyGate;
+      if (gate) {
+        // biome-ignore lint/performance/noAwaitInLoops: an apply ends before the next look at its state
+        await Promise.race([
+          gate.promise,
+          Bun.sleep(Math.max(0, deadline - Date.now())),
+        ]);
+      } else if (this.#configState === "applied") {
+        return;
+      } else if (this.#configState === "error") {
+        return {
+          state: "failed",
+          detail: `OpenCode did not load its new config: ${this.#configError ?? "the apply failed"}`,
+        };
+      }
+      if (Date.now() >= deadline) {
+        return {
+          state: "pending",
+          detail: `OpenCode had not loaded its new config ${CONFIG_SETTLE_TIMEOUT_MS / 1000} s after it was written.`,
+        };
+      }
+      await Bun.sleep(250);
+    }
+  }
+
+  /**
+   * The server's MCP list once none of `names` is still `pending`: 2.0
+   * connects a location's servers after it answers, so a read right after a
+   * boot names them connecting. Bounded by OpenCode's own startup timeout
+   * ({@link MCP_CONNECT_TIMEOUT_MS}); a server the list does not name is not
+   * waited for, since the config it runs is already the one written.
+   */
+  async #settledMcpList(client: OpencodeClient, names: string[]) {
+    const deadline = Date.now() + MCP_CONNECT_TIMEOUT_MS;
+    for (;;) {
+      // biome-ignore lint/performance/noAwaitInLoops: each read decides whether the next is needed
+      const listed = await client.mcp.list(
+        {},
+        { signal: AbortSignal.timeout(10_000) }
+      );
+      const connecting = names.some((name) => {
+        const server = listed.data.find((one) => one.name === name);
+        return !server || server.status.status === "pending";
+      });
+      if (!connecting || Date.now() >= deadline) {
+        return listed;
+      }
+      await Bun.sleep(250);
+    }
+  }
+
   async #readFleetMcp(names: string[]): Promise<FleetSyncReport["mcp"]> {
     if (names.length === 0) {
       return {};
     }
-    if (this.#applyGate) {
-      return Object.fromEntries(
-        names.map((name) => [
-          name,
-          { state: "pending", detail: "OpenCode server restarting." },
-        ])
-      );
-    }
     try {
+      await this.#ensure();
+      const unsettled = await this.#configSettled();
+      if (unsettled) {
+        return Object.fromEntries(names.map((name) => [name, unsettled]));
+      }
       const client = await this.#ensure();
       const identity = this.#serverOwner.active;
       if (!identity) {
@@ -4333,10 +4415,7 @@ export class OpencodeHarness implements Harness {
       // The server's own directory: a read there boots its location, which
       // may also hold live sessions. Its release shares the location
       // release's attachment and running checks.
-      const listed = await client.mcp.list(
-        {},
-        { signal: AbortSignal.timeout(10_000) }
-      );
+      const listed = await this.#settledMcpList(client, names);
       await this.#disposeUnused(
         listed.location.directory,
         identity,
