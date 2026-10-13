@@ -817,6 +817,47 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/CawRunningKind`.
+    public enum CawRunningKind: OpenEnum {
+        case attempt
+        case delegate
+        case turn
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "attempt": self = .attempt
+            case "delegate": self = .delegate
+            case "turn": self = .turn
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .attempt: "attempt"
+            case .delegate: "delegate"
+            case .turn: "turn"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.attempt, .delegate, .turn]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/ColumnPropsAlign`.
     public enum ColumnPropsAlign: OpenEnum {
         case center

@@ -14,11 +14,41 @@ export interface CawView {
   /** The model Caw's session runs; null: its harness's default. */
   model: string | null;
   on: boolean;
-  /** Why Caw could not start now, while it is on; null when it could. */
+  /** Why Caw could not start now, on or off; null when he could. */
   problem: string | null;
+  /**
+   * What Caw started that still runs, as his off control lists it, each lead
+   * row followed by its delegates: the sessions his work items run, and his
+   * own turn while an event started it. Turning him off with any of these
+   * running asks whether they finish or stop; off, what still finishes.
+   */
+  running: CawRunning[];
   /** Dollars every Caw session of the project has cost. */
   spendUsd: number;
 }
+
+/**
+ * One thing Caw started that still runs: a session as a project's forget
+ * lists it (project-stops `RunningSession`), and what it is.
+ */
+export interface CawRunning {
+  cwd: string;
+  id: string;
+  /** An attempt at a task, a delegate of his, or his own turn an event started. */
+  kind: "attempt" | "delegate" | "turn";
+  machineId: string;
+  /** Its machine is not connected: it stops when its machine is back. */
+  offline: boolean;
+  /** The nearest running row it is a delegate of; null for a top row. */
+  parentId: string | null;
+  /** Its task, for an attempt. */
+  taskId: string | null;
+  /** Its name (a turn's: what it answers); null names it by its folder. */
+  title: string | null;
+}
+
+/** What happens to what Caw started as you turn him off: it runs to its end, or stops now. */
+export type CawInitiated = "finish" | "stop";
 
 /**
  * Where a thread stands, derived on every read and never stored: `working`

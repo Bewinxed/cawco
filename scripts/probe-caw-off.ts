@@ -1,21 +1,33 @@
 /**
- * Probe: you can always talk to a project's Caw, on or off (caw.ts, WORDS.md
- * Caw on / Caw off), on a scratch fleet (real hub, agent and sessiond on
- * loopback, Claude Code against the mock model). On means only that he also
- * acts on his own: events wake him.
+ * Probe: you can always talk to a project's Caw, on or off; work your words
+ * began is yours whoever carries it out, and off stops only his own (caw.ts,
+ * work_items.origin, WORDS.md Caw on / Caw off). On a scratch fleet (real
+ * hub, agent and sessiond on loopback, Claude Code against the mock model).
  *
  * a. Caw off: starting a thread is answered (not 409), his session starts,
  *    he answers in the thread, and his task_create makes a task.
- * b. Caw off: a lead routine is skipped, and an attempt's report does not
- *    wake him (the attempt started while he was on, then he was turned off).
- * c. Caw on: a lead routine wakes him, and so does an attempt's report.
- * d. Turning him off cuts a turn an event started; a turn your words started
- *    runs to its end.
+ * b. Caw off: a lead routine is skipped, in the off state's words.
+ * c. Caw on: a lead routine wakes him; his turn lists as running.
+ * d. Off with his own event turn in flight: without a choice it is refused
+ *    (409); `stop` cuts it (a `project.stop` frame for it); `finish` lets it
+ *    end. A turn your words started runs to its end with no choice asked.
  * e. With no machine for him, your words are refused with the problem's
  *    sentence.
+ * Needing delegate workspaces (a nested sandbox: run on a host, outside any
+ * CawCo workspace):
+ * f. Caw off: an attempt he starts at your ask is yours (origin `you`): its
+ *    report wakes him. An attempt the dispatcher starts is his own (`event`):
+ *    turned off with `finish`, it is kept, runs to its end, its end is noted
+ *    in its thread, and he is not woken.
+ * g. Caw on: both wake him.
+ * h. Off with a delegate he started running: without a choice, 409; `stop`
+ *    ends it (its item cancelled, a `project.stop` frame); `finish` (his own
+ *    delegate, from an event) lets it complete, noted in his thread, no wake.
  *
- * Run from the repo root:
+ * Run from the repo root, on a host (f to h need workspaces):
  *   bun scripts/probe-caw-off.ts [--keep]
+ * Inside a CawCo workspace, where no nested workspace can start, `--no-workspaces`
+ * runs a to e and reports f to h skipped.
  */
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -29,17 +41,26 @@ import {
 } from "./scratch-fleet";
 
 const keep = process.argv.includes("--keep");
-const LOGGED = /\[caw\]|work-items|routines|error/i;
+const LOGGED = /\[caw\]|\[dispatch\]|work-items|routines|error/i;
 const CAW = "You are Caw";
 const TASK_CREATE = "mcp__cawco__task_create";
+const TASK_START = "mcp__cawco__task_start";
+const DELEGATE = "mcp__cawco__delegate";
 const REPLY = "mcp__cawco__thread_reply";
 const FINISH = "mcp__cawco__finish_item";
 const THREAD_ID = /thread ([0-9a-f-]{36})/g;
 /** Where an event Caw reads begins, in his conversation. */
 const EVENT_START =
-  /You started a thread|You wrote in the thread|Routine “|The attempt at|PROBE-ATTEMPT-(?:OFF|ON)/g;
+  /You started a thread|You wrote in the thread|Routine “|The attempt at/g;
 const OFF_REASON = "Caw is off, so only your words wake him";
-const ATTEMPT_TAG = /PROBE-ATTEMPT-(OFF|ON)/;
+/** Your ask that Caw start an attempt at a task: `PROBE-CAW-START tsk-4`. */
+const START_ASK = /PROBE-CAW-START (tsk-\d+)/;
+/** Your ask (or a routine's) that Caw delegate: `PROBE-CAW-DELEGATE-STOP`. */
+const DELEGATE_ASK = /PROBE-CAW-DELEGATE-(STOP|FINISH)/;
+/** A worker's brief: an attempt's task title, or Caw's delegate's prompt. */
+const WORKER_TAG = /PROBE-(?:ATTEMPT|DELEGATE)-([A-Z]+)/;
+/** How long each worker sleeps before it finishes, by tag; absent: none. */
+const SLEEPS: Record<string, number> = { DISPATCH: 25, STOP: 120, FINISH: 25 };
 
 const results: Record<string, string> = {};
 let failed = false;
@@ -54,6 +75,16 @@ const section = async (name: string, body: () => Promise<void>) => {
   } catch (error) {
     check(name, false, error instanceof Error ? error.message : String(error));
   }
+};
+/** f to h start delegate workspaces: `--no-workspaces` skips them where none can start. */
+const workspaces = !process.argv.includes("--no-workspaces");
+const workspaceSection = (name: string, body: () => Promise<void>) => {
+  if (workspaces) {
+    return section(name, body);
+  }
+  results[name] = "SKIPPED — --no-workspaces";
+  console.log(`SKIP ${name}: --no-workspaces`);
+  return Promise.resolve();
 };
 
 const tool = (name: string, input: object, everyMs = 5): Reply => ({
@@ -80,6 +111,20 @@ const call = (
 
 /** When each slow reply began streaming, by its marker. */
 const slowFrom: Record<string, number> = {};
+/** The one-shot calls Caw has made, by what asked for them: each is made once. */
+const made = new Set<string>();
+
+/** One call Caw makes once for `key`: loaded first when deferred, then done. */
+const once = (request: Seen, key: string, name: string, input: object) => {
+  if (made.has(key)) {
+    return text("ok");
+  }
+  const reply = call(request, name, input);
+  if (reply.tool?.name === name) {
+    made.add(key);
+  }
+  return reply;
+};
 
 /** Caw's side: what he does for the event his conversation ends with. */
 const caw = (request: Seen): Reply => {
@@ -88,9 +133,26 @@ const caw = (request: Seen): Reply => {
   const thread = [...event.matchAll(THREAD_ID)][0]?.[1] ?? "";
   // Each tool's answer since the event: the step it is on.
   const replied = event.includes('"ok":true');
-  // The slow asks first: a later message in the first thread carries that
-  // thread's title, PROBE-TASK's words.
-  for (const marker of ["PROBE-SLOW-YOU", "PROBE-SLOW-EVENT"]) {
+  const start = START_ASK.exec(event);
+  if (start?.[1]) {
+    return once(request, `start ${start[1]}`, TASK_START, { id: start[1] });
+  }
+  const delegate = DELEGATE_ASK.exec(event)?.[1];
+  if (delegate) {
+    return once(request, `delegate ${delegate}`, DELEGATE, {
+      title: `Probe delegate ${delegate.toLowerCase()}`,
+      prompt: `PROBE-DELEGATE-${delegate}: wait, then finish.`,
+      checks: [{ name: "Probe check passes", command: "true" }],
+      lands: "none",
+    });
+  }
+  // The slow asks before the task: a later message in the first thread
+  // carries that thread's title, PROBE-TASK's words.
+  for (const marker of [
+    "PROBE-SLOW-YOU",
+    "PROBE-SLOW-FINISH",
+    "PROBE-SLOW-EVENT",
+  ]) {
     if (event.includes(marker)) {
       if (replied) {
         return text("done");
@@ -118,22 +180,35 @@ const caw = (request: Seen): Reply => {
   return text("ok");
 };
 
-/** An attempt's delegate: OFF sleeps 20 s first; both finish blocked. */
-const attempt = (request: Seen, tag: string): Reply => {
-  if (request.last.includes("The item")) {
+/**
+ * A worker (an attempt's session, or Caw's delegate): sleeps first when its
+ * tag says so; an attempt then finishes blocked, a delegate with its summary.
+ */
+const worker = (request: Seen, tag: string): Reply => {
+  if (
+    request.last.includes("The item") ||
+    request.last.includes("checks passed")
+  ) {
     return text("done");
   }
-  if (tag === "OFF" && !request.all.includes("SLEPT-OFF")) {
+  const seconds = SLEEPS[tag];
+  if (seconds && !request.all.includes(`SLEPT-${tag}`)) {
     return tool("Bash", {
-      command: "sleep 20 && echo SLEPT-OFF",
+      command: `sleep ${seconds} && echo SLEPT-${tag}`,
       description: "Take a while",
-      timeout: 60_000,
+      timeout: (seconds + 30) * 1000,
     });
   }
-  return call(request, FINISH, {
-    summary: "Probe attempt",
-    blocked: { command: "probe", error: "the probe blocks it" },
-  });
+  return call(
+    request,
+    FINISH,
+    request.all.includes("PROBE-DELEGATE-")
+      ? { summary: `Probe delegate ${tag} done` }
+      : {
+          summary: "Probe attempt",
+          blocked: { command: "probe", error: "the probe blocks it" },
+        }
+  );
 };
 
 const respond = (request: Seen): Reply => {
@@ -143,8 +218,8 @@ const respond = (request: Seen): Reply => {
   if (request.all.includes(CAW)) {
     return caw(request);
   }
-  const tag = ATTEMPT_TAG.exec(request.all)?.[1];
-  return tag ? attempt(request, tag) : text("ok");
+  const tag = WORKER_TAG.exec(request.all)?.[1];
+  return tag ? worker(request, tag) : text("ok");
 };
 
 const fleet = await scratchFleet({ name: "probe-caw-off", respond });
@@ -171,8 +246,21 @@ const hub = async (method: string, path: string, body?: unknown) => {
   }
   return { status: response.status, body: json, raw };
 };
-const turn = (projectId: string, on: boolean) =>
-  hub("PATCH", `/api/projects/${projectId}/caw`, { on });
+const turn = (projectId: string, on: boolean, initiated?: "finish" | "stop") =>
+  hub("PATCH", `/api/projects/${projectId}/caw`, {
+    on,
+    ...(initiated ? { initiated } : {}),
+  });
+interface Running {
+  id: string;
+  kind: string;
+  taskId: string | null;
+}
+const cawView = async (projectId: string) =>
+  (await hub("GET", `/api/projects/${projectId}/caw`)).body as {
+    on: boolean;
+    running: Running[];
+  };
 const cawSaid = (threadId: string) =>
   fleet
     .query<{ body: string }>(
@@ -180,6 +268,12 @@ const cawSaid = (threadId: string) =>
       threadId
     )
     .map((row) => row.body);
+const notes = (projectId: string, words: string) =>
+  fleet.query<{ note_title: string }>(
+    "SELECT m.note_title FROM thread_messages m JOIN project_threads t ON t.id = m.thread_id WHERE t.project_id = ? AND m.author = 'event' AND m.note_title LIKE ?",
+    projectId,
+    `%${words}%`
+  );
 const cawRequests = (since: number, words: string) =>
   fleet.seen.filter(
     (one) =>
@@ -190,11 +284,28 @@ const runsOf = (routineId: string) =>
     "SELECT state, reason, outcome FROM routine_runs WHERE routine_id = ? ORDER BY started_at",
     routineId
   );
+interface ItemRow {
+  id: string;
+  instance_id: string;
+  origin: string;
+  state: string;
+}
 const itemOf = (taskId: string) =>
-  fleet.query<{ id: string; state: string }>(
-    "SELECT id, state FROM work_items WHERE task_id = ? ORDER BY created_at DESC",
+  fleet.query<ItemRow>(
+    "SELECT id, instance_id, origin, state FROM work_items WHERE task_id = ? ORDER BY created_at DESC",
     taskId
   )[0];
+const itemTitled = (title: string) =>
+  fleet.query<ItemRow>(
+    "SELECT id, instance_id, origin, state FROM work_items WHERE title = ? ORDER BY created_at DESC",
+    title
+  )[0];
+const live = (item: ItemRow | undefined) => item?.state === "running";
+const over = (item: ItemRow | undefined) =>
+  item !== undefined && !["starting", "running"].includes(item.state);
+
+/** Every `project.stop` frame a dashboard hears, as raw text. */
+const stopFrames: string[] = [];
 
 try {
   fleet.launch("sessiond");
@@ -205,6 +316,15 @@ try {
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
+  const listener = new WebSocket(
+    `${fleet.base.replace("http", "ws")}/ws/dashboard`
+  );
+  listener.onmessage = (message) => {
+    const raw = String(message.data);
+    if (raw.includes("project.stop")) {
+      stopFrames.push(raw);
+    }
+  };
 
   const src = join(fleet.sandbox, "src");
   await mkdir(src, { recursive: true });
@@ -227,9 +347,33 @@ try {
       "SELECT lead_instance_id, caw FROM projects WHERE id = ?",
       project.id
     )[0];
+  const newTask = (title: string) =>
+    fleet.api<{ id: string }>(`/api/projects/${project.id}/tasks`, { title });
+  const routine = (name: string, prompt: string) =>
+    fleet.api<{ id: string }>("/api/routines", {
+      projectId: project.id,
+      timeZone: "UTC",
+      target: "lead",
+      name,
+      cron: "0 0 1 1 *",
+      prompt,
+    });
+  /** Your words in the first thread. */
+  let firstThread = "";
+  const say = (body: string) =>
+    hub("POST", `/api/projects/${project.id}/threads/${firstThread}/messages`, {
+      body,
+    });
+  /** Caw's session has no turn in flight. */
+  const cawIdle = () =>
+    until(
+      "Caw at rest",
+      () => cawView(project.id),
+      (view) => !view.running.some((one) => one.kind === "turn"),
+      120_000
+    );
 
   // ── a: Caw off, you start a thread ─────────────────────────────────────
-  let firstThread = "";
   await section("a: Caw off answers your thread", async () => {
     const started = await hub("POST", `/api/projects/${project.id}/threads`, {
       body: "PROBE-TASK: file a task for the README.",
@@ -255,30 +399,34 @@ try {
     const tasks = await fleet.api<{ tasks: { id: string; title: string }[] }>(
       `/api/projects/${project.id}/tasks`
     );
-    const made = tasks.tasks.find(
-      (task) => task.title === "Probe task from Caw"
+    const task = tasks.tasks.find(
+      (each) => each.title === "Probe task from Caw"
     );
     check(
       "a: he answered in the thread, and his task_create made a task",
-      said.includes("Made it") && Boolean(made),
-      `said ${JSON.stringify(said)}; task ${made?.id ?? "none"}`
+      said.includes("Made it") && Boolean(task),
+      `said ${JSON.stringify(said)}; task ${task?.id ?? "none"}`
     );
+    // Off the board, so the dispatcher (f) starts only what it is given.
+    if (task) {
+      await hub(
+        "POST",
+        `/api/projects/${project.id}/tasks/${task.id}/archive`,
+        {}
+      );
+    }
   });
 
   // ── b: Caw off, a lead routine is skipped ──────────────────────────────
   await section("b: a lead routine with Caw off", async () => {
     const before = Date.now();
-    const routine = await fleet.api<{ id: string }>("/api/routines", {
-      projectId: project.id,
-      timeZone: "UTC",
-      target: "lead",
-      name: "Off brief",
-      cron: "0 0 1 1 *",
-      prompt: "PROBE-ROUTINE-OFF: brief the board.",
-    });
+    const offBrief = await routine(
+      "Off brief",
+      "PROBE-ROUTINE-OFF: brief the board."
+    );
     const [run] = await until(
       "the off routine's test run decided",
-      () => runsOf(routine.id),
+      () => runsOf(offBrief.id),
       (runs) => runs.length > 0 && runs[0]?.state !== "starting"
     );
     await delay(3000);
@@ -291,62 +439,88 @@ try {
     );
   });
 
-  // ── c, d: Caw on, a lead routine wakes him; off cuts that turn ──────────
-  await section("c/d: an event's turn, then off", async () => {
+  // ── c, d: Caw on, a lead routine wakes him; off asks, then stop cuts ────
+  await section("c/d: an event's turn, then off with stop", async () => {
     const on = await turn(project.id, true);
     const before = Date.now();
-    await fleet.api("/api/routines", {
-      projectId: project.id,
-      timeZone: "UTC",
-      target: "lead",
-      name: "Slow event",
-      cron: "0 0 1 1 *",
-      prompt: "PROBE-SLOW-EVENT: brief the board.",
-    });
+    await routine("Slow event", "PROBE-SLOW-EVENT: brief the board.");
     await until(
       "Caw's slow reply to the routine began",
       () => slowFrom["PROBE-SLOW-EVENT"],
       (at) => at !== undefined && at >= before,
       180_000
     );
-    check(
-      "c: Caw on, a lead routine wakes him",
-      on.status === 200 &&
-        fleet.seen.some(
-          (one) =>
-            one.at >= before &&
-            one.all.includes(CAW) &&
-            one.all.includes("PROBE-SLOW-EVENT")
-        ),
-      `PATCH on: HTTP ${on.status}`
-    );
     await delay(2000);
-    const off = await turn(project.id, false);
+    const view = await cawView(project.id);
+    const leadNow = lead()?.lead_instance_id ?? "";
+    check(
+      "c: Caw on, a lead routine wakes him, and his turn lists as running",
+      on.status === 200 &&
+        view.running.some((one) => one.kind === "turn" && one.id === leadNow),
+      `PATCH on: HTTP ${on.status}; running ${JSON.stringify(view.running)}`
+    );
+    const blind = await turn(project.id, false);
+    check(
+      "d: off without a choice while his event turn runs is refused",
+      blind.status === 409 && blind.raw.includes("still running"),
+      `HTTP ${blind.status}: ${blind.raw}`
+    );
+    const off = await turn(project.id, false, "stop");
     await delay(25_000);
     const log = await fleet.logs("hub");
     const eventThread = fleet.query<{ thread_id: string }>(
       "SELECT thread_id FROM routines WHERE name = 'Slow event'"
     )[0]?.thread_id;
     const said = eventThread ? cawSaid(eventThread) : [];
+    const leadId = lead()?.lead_instance_id ?? "";
     check(
-      "d: turning Caw off cuts the turn an event started",
+      "d: off with `stop` cuts the turn an event started, and says so as it stops",
       off.status === 200 &&
         !said.includes("PROBE-SLOW-EVENT done") &&
         log.includes("cut the turn an event started") &&
-        lead()?.lead_instance_id !== null,
-      `PATCH off: HTTP ${off.status}; Caw said ${JSON.stringify(said)}; cut logged ${log.includes("cut the turn an event started")}; lead kept ${lead()?.lead_instance_id}`
+        stopFrames.some((frame) => frame.includes(leadId)) &&
+        Boolean(leadId),
+      `PATCH off: HTTP ${off.status}; Caw said ${JSON.stringify(said)}; cut logged ${log.includes("cut the turn an event started")}; stop frame ${stopFrames.some((frame) => frame.includes(leadId))}; lead kept ${leadId}`
     );
   });
 
-  // ── d: your turn runs to its end when he is turned off ─────────────────
-  await section("d: your turn, then off", async () => {
+  // ── d: off with `finish` lets his event turn end ───────────────────────
+  await section("d: an event's turn, then off with finish", async () => {
     await turn(project.id, true);
     const before = Date.now();
-    const sent = await hub(
-      "POST",
-      `/api/projects/${project.id}/threads/${firstThread}/messages`,
-      { body: "PROBE-SLOW-YOU: take your time." }
+    await routine("Slow finish", "PROBE-SLOW-FINISH: brief the board.");
+    await until(
+      "Caw's slow reply to the second routine began",
+      () => slowFrom["PROBE-SLOW-FINISH"],
+      (at) => at !== undefined && at >= before,
+      180_000
     );
+    await delay(2000);
+    const off = await turn(project.id, false, "finish");
+    const thread = fleet.query<{ thread_id: string }>(
+      "SELECT thread_id FROM routines WHERE name = 'Slow finish'"
+    )[0]?.thread_id;
+    const said = await until(
+      "Caw's reply to the second routine landed",
+      () => (thread ? cawSaid(thread) : []),
+      (bodies) => bodies.includes("PROBE-SLOW-FINISH done"),
+      90_000
+    );
+    check(
+      "d: off with `finish` lets the turn an event started run to its end",
+      off.status === 200 && said.includes("PROBE-SLOW-FINISH done"),
+      `PATCH off: HTTP ${off.status}; Caw said ${JSON.stringify(said)}`
+    );
+  });
+
+  // ── d: your turn runs to its end, and off asks nothing ─────────────────
+  await section("d: your turn, then off", async () => {
+    await turn(project.id, true);
+    // The kept turn before this one ends first: your words open a turn of
+    // their own rather than joining its tail.
+    await cawIdle();
+    const before = Date.now();
+    const sent = await say("PROBE-SLOW-YOU: take your time.");
     await until(
       "Caw's slow reply to you began",
       () => slowFrom["PROBE-SLOW-YOU"],
@@ -362,7 +536,7 @@ try {
       90_000
     );
     check(
-      "d: turning Caw off lets the turn your words started run to its end",
+      "d: off with your turn in flight asks nothing, and your turn runs to its end",
       sent.status === 200 &&
         off.status === 200 &&
         said.includes("PROBE-SLOW-YOU done"),
@@ -370,73 +544,203 @@ try {
     );
   });
 
-  // ── b: an attempt that ends while Caw is off does not wake him ─────────
-  await section("b: an attempt's report with Caw off", async () => {
-    await turn(project.id, true);
-    const task = await fleet.api<{ id: string }>(
-      `/api/projects/${project.id}/tasks`,
-      { title: "PROBE-ATTEMPT-OFF: take a while." }
-    );
-    const started = await hub(
-      "POST",
-      `/api/projects/${project.id}/tasks/${task.id}/attempts`,
-      {}
-    );
-    if (started.status !== 200) {
-      throw new Error(`the off attempt: HTTP ${started.status} ${started.raw}`);
-    }
-    await until(
-      "the off attempt running",
+  // ── f: Caw off, an attempt he starts at your ask is yours ──────────────
+  await workspaceSection("f: your attempt, Caw off", async () => {
+    await cawIdle();
+    const task = await newTask("PROBE-ATTEMPT-ASK: finish at once.");
+    const before = Date.now();
+    await say(`PROBE-CAW-START ${task.id}`);
+    const item = await until(
+      "the attempt Caw started at your ask",
       () => itemOf(task.id),
-      (item) => item?.state === "running",
+      Boolean,
       180_000
     );
-    await turn(project.id, false);
-    const offAt = Date.now();
-    const ended = await until(
-      "the off attempt ended",
-      () => itemOf(task.id),
-      (item) =>
-        item !== undefined && !["starting", "running"].includes(item.state),
-      180_000
+    // A report reads "[Work item <id> is …]": his request with it is its wake.
+    const woke = await until(
+      "Caw woken by its report",
+      () => cawRequests(before, `Work item ${item.id}`),
+      (requests) => requests.length > 0,
+      240_000
     );
-    await delay(10_000);
-    const woke = cawRequests(offAt, "PROBE-ATTEMPT-OFF");
     check(
-      "b: an attempt that ends while Caw is off does not wake him",
-      started.status === 200 && woke.length === 0,
-      `start: HTTP ${started.status}; item ${ended.state}; Caw requests with its report since off: ${woke.length}`
+      "f: Caw off, an attempt he starts at your ask is yours, and its report wakes him",
+      lead()?.caw === 0 && item.origin === "you" && woke.length > 0,
+      `caw ${lead()?.caw}; origin ${item.origin}; Caw requests with its report: ${woke.length}`
     );
   });
 
-  // ── c: an attempt's report wakes him while he is on ────────────────────
-  await section("c: an attempt's report with Caw on", async () => {
-    await turn(project.id, true);
-    const before = Date.now();
-    const task = await fleet.api<{ id: string }>(
-      `/api/projects/${project.id}/tasks`,
-      { title: "PROBE-ATTEMPT-ON: finish at once." }
-    );
-    const started = await hub(
-      "POST",
-      `/api/projects/${project.id}/tasks/${task.id}/attempts`,
-      {}
-    );
-    if (started.status !== 200) {
-      throw new Error(`the on attempt: HTTP ${started.status} ${started.raw}`);
+  // ── f: an attempt the dispatcher starts is his own; finish keeps it ─────
+  await workspaceSection(
+    "f: the dispatcher's attempt, then off with finish",
+    async () => {
+      await turn(project.id, true);
+      const task = await newTask("PROBE-ATTEMPT-DISPATCH: take a while.");
+      await hub("PATCH", `/api/projects/${project.id}/dispatch`, {
+        dispatch: true,
+      });
+      const item = await until(
+        "the dispatcher's attempt running",
+        () => itemOf(task.id),
+        live,
+        180_000
+      );
+      await hub("PATCH", `/api/projects/${project.id}/dispatch`, {
+        dispatch: false,
+      });
+      await cawIdle();
+      const blind = await turn(project.id, false);
+      const off = await turn(project.id, false, "finish");
+      const offAt = Date.now();
+      const kept = itemOf(task.id);
+      const ended = await until(
+        "the dispatcher's attempt ended",
+        () => itemOf(task.id),
+        over,
+        180_000
+      );
+      await delay(10_000);
+      const woke = cawRequests(offAt, `Work item ${item.id}`);
+      const noted = notes(project.id, `Attempt · ${task.id}`);
+      check(
+        "f: the dispatcher's attempt is his own; off asks, `finish` keeps it, it ends noted and wakes nobody",
+        item.origin === "event" &&
+          blind.status === 409 &&
+          off.status === 200 &&
+          kept?.origin === "kept" &&
+          woke.length === 0 &&
+          noted.length > 0,
+        `origin ${item.origin} → ${kept?.origin}; blind off HTTP ${blind.status}; off HTTP ${off.status}; item ${ended.state}; Caw requests since off ${woke.length}; notes ${JSON.stringify(noted)}`
+      );
     }
-    const woke = await until(
-      "Caw woken by the on attempt's report",
-      () => cawRequests(before, "PROBE-ATTEMPT-ON"),
-      (requests) => requests.length > 0,
+  );
+
+  // ── g: Caw on, both wake him ───────────────────────────────────────────
+  await workspaceSection("g: Caw on, both attempts wake him", async () => {
+    await turn(project.id, true);
+    await cawIdle();
+    const yours = await newTask("PROBE-ATTEMPT-ASKON: finish at once.");
+    const before = Date.now();
+    await say(`PROBE-CAW-START ${yours.id}`);
+    const yourItem = await until(
+      "your attempt",
+      () => itemOf(yours.id),
+      Boolean,
       180_000
     );
+    const woke = await until(
+      "Caw woken by your attempt's report",
+      () => cawRequests(before, `Work item ${yourItem.id}`),
+      (requests) => requests.length > 0,
+      240_000
+    );
+    await cawIdle();
+    const his = await newTask("PROBE-ATTEMPT-DISPATCHON: finish at once.");
+    const dispatchedAt = Date.now();
+    await hub("PATCH", `/api/projects/${project.id}/dispatch`, {
+      dispatch: true,
+    });
+    const item = await until(
+      "the dispatcher's second attempt",
+      () => itemOf(his.id),
+      Boolean,
+      180_000
+    );
+    await hub("PATCH", `/api/projects/${project.id}/dispatch`, {
+      dispatch: false,
+    });
+    const wokeToo = await until(
+      "Caw woken by the dispatcher's attempt",
+      () => cawRequests(dispatchedAt, `Work item ${item.id}`),
+      (requests) => requests.length > 0,
+      240_000
+    );
     check(
-      "c: Caw on, an attempt's report wakes him",
-      started.status === 200 && woke.length > 0,
-      `start: HTTP ${started.status}; Caw requests with its report: ${woke.length}`
+      "g: Caw on, your attempt's report and the dispatcher's both wake him",
+      woke.length > 0 && item.origin === "event" && wokeToo.length > 0,
+      `yours: ${woke.length}; dispatcher's (${item.origin}): ${wokeToo.length}`
     );
   });
+
+  // ── h: off with a delegate he started, `stop` ───────────────────────────
+  await workspaceSection("h: Caw's delegate, then off with stop", async () => {
+    await turn(project.id, true);
+    await cawIdle();
+    await say("PROBE-CAW-DELEGATE-STOP");
+    const item = await until(
+      "Caw's delegate running",
+      () => itemTitled("Probe delegate stop"),
+      live,
+      180_000
+    );
+    await cawIdle();
+    const view = await cawView(project.id);
+    const blind = await turn(project.id, false);
+    const off = await turn(project.id, false, "stop");
+    const stopped = await until(
+      "Caw's delegate cancelled",
+      () => itemTitled("Probe delegate stop"),
+      over,
+      120_000
+    );
+    await until(
+      "its stop frame",
+      () => stopFrames.some((frame) => frame.includes(item.instance_id)),
+      Boolean,
+      60_000
+    );
+    check(
+      "h: off with his delegate running asks; `stop` ends it, cancelled, its row confirmed",
+      view.running.some(
+        (one) => one.id === item.instance_id && one.kind === "delegate"
+      ) &&
+        blind.status === 409 &&
+        off.status === 200 &&
+        stopped.state === "cancelled",
+      `listed ${view.running.map((one) => `${one.kind} ${one.id}`).join(", ")}; blind off HTTP ${blind.status}; off HTTP ${off.status}; item ${stopped.state}`
+    );
+  });
+
+  // ── h: off with his own delegate (an event's), `finish` ────────────────
+  await workspaceSection(
+    "h: Caw's own delegate, then off with finish",
+    async () => {
+      await turn(project.id, true);
+      await cawIdle();
+      await routine(
+        "Delegate finish",
+        "PROBE-CAW-DELEGATE-FINISH: delegate it."
+      );
+      const item = await until(
+        "Caw's own delegate running",
+        () => itemTitled("Probe delegate finish"),
+        live,
+        180_000
+      );
+      await cawIdle();
+      const off = await turn(project.id, false, "finish");
+      const offAt = Date.now();
+      const ended = await until(
+        "Caw's own delegate ended",
+        () => itemTitled("Probe delegate finish"),
+        over,
+        180_000
+      );
+      await delay(10_000);
+      const woke = cawRequests(offAt, `Work item ${item.id}`);
+      const noted = notes(project.id, "Delegate · Probe delegate finish");
+      check(
+        "h: `finish` lets his own delegate complete; its end is noted, and he is not woken",
+        item.origin === "event" &&
+          off.status === 200 &&
+          ended.state === "done" &&
+          ended.origin === "kept" &&
+          woke.length === 0 &&
+          noted.length > 0,
+        `origin ${item.origin} → ${ended.origin}; off HTTP ${off.status}; item ${ended.state}; Caw requests since off ${woke.length}; notes ${JSON.stringify(noted)}`
+      );
+    }
+  );
 
   // ── e: no machine for Caw ──────────────────────────────────────────────
   await section("e: no machine for Caw", async () => {
@@ -460,6 +764,7 @@ try {
       `HTTP ${refused.status}: ${refused.raw}`
     );
   });
+  listener.close();
 } catch (error) {
   failed = true;
   console.error(

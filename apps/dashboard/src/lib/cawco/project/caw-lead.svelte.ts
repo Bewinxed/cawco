@@ -24,6 +24,7 @@
 
 import {
   type CawHarness,
+  type CawInitiated,
   type CawView,
   type ProjectCap,
   type ProjectSpend,
@@ -190,6 +191,8 @@ export class CawLead {
   /** Turns the lead on or off, or moves it to another harness or model. */
   async configure(change: {
     harness?: CawHarness;
+    /** Turning him off with what he started still running: it finishes or stops. */
+    initiated?: CawInitiated;
     model?: string | null;
     on?: boolean;
   }) {
@@ -342,8 +345,15 @@ export class CawLead {
   /** The panel's first line: what Caw is, in a sentence. */
   readonly sentence = $derived.by((): string => {
     switch (this.status) {
-      case "sleeping":
-        return "Off · answers when you write";
+      case "sleeping": {
+        // What he started and you let finish, still running.
+        const finishing = (this.view?.running ?? []).filter(
+          (one) => one.kind !== "turn"
+        ).length;
+        return finishing > 0
+          ? `Off · ${finishing} of his still finishing`
+          : "Off · answers when you write";
+      }
       case "working":
         return `Awake · ${this.#said?.text ?? "working"}`;
       case "needs-you":

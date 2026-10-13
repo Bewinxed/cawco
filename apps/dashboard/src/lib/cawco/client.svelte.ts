@@ -20,6 +20,7 @@ import type {
   AvailableCommand,
   BuildInfo,
   CawHarness,
+  CawInitiated,
   CawView,
   ClaudeLimits,
   CommandKind,
@@ -5545,7 +5546,13 @@ export const cawOf = (projectId: string): Promise<CawView> =>
 /** Turns a project's Caw on or off, or moves it to another harness or model (null: the harness's default). */
 export const configureCaw = (
   projectId: string,
-  change: { harness?: CawHarness; model?: string | null; on?: boolean }
+  change: {
+    harness?: CawHarness;
+    /** Turning him off with what he started still running: it finishes or stops. */
+    initiated?: CawInitiated;
+    model?: string | null;
+    on?: boolean;
+  }
 ): Promise<CawView> =>
   askHub(`${projectPath(projectId)}/caw`, json("PATCH", change));
 

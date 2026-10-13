@@ -990,6 +990,20 @@ export const workspaces = sqliteTable("workspaces", {
     .$defaultFn(() => new Date()),
 });
 
+/**
+ * Who began a piece of work, or a turn of Caw's: `you`, the person's own
+ * words; `event`, anything else (WORDS.md, Caw on / Caw off).
+ */
+export type Origin = "you" | "event";
+
+/**
+ * A work item's origin: an {@link Origin}, or `kept`, Caw's own work (an
+ * event's) you chose to let finish when you turned him off. Kept work runs
+ * to its end, past an account's limit, and its report is noted in his thread
+ * without waking him while he is off.
+ */
+export type WorkOrigin = Origin | "kept";
+
 /** A work item's life. Only `starting` and `running` take messages. */
 export type WorkItemState =
   | "starting"
@@ -1057,6 +1071,17 @@ export const workItems = sqliteTable(
      * found by the item alone, whatever becomes of its session.
      */
     projectId: text("project_id"),
+    /**
+     * Whose work it is (WORDS.md, Caw on / Caw off): `you` when it began with
+     * the person's words, whoever carries it out (a session's ask, an attempt
+     * you start, what Caw starts in a turn your words are in); `event` when it
+     * began with an event (the dispatcher, a routine, what Caw starts in a turn
+     * an event woke); `kept` once you let Caw's `event` work finish as you
+     * turned him off. A delegate's own delegates take its origin. Caw being
+     * off stops only `event` work and its reports (work-items `reportees`,
+     * caw-own.ts).
+     */
+    origin: text("origin").$type<WorkOrigin>().notNull().default("you"),
     /**
      * Where its commits go once its checks pass (landing.ts): onto the
      * workspace's base branch, to `cawco/<task or item>` on origin, to that

@@ -5465,6 +5465,13 @@
                   "on": {
                     "type": "boolean"
                   },
+                  "initiated": {
+                    "type": "string",
+                    "enum": [
+                      "finish",
+                      "stop"
+                    ]
+                  },
                   "harness": {
                     "type": "string",
                     "enum": [
@@ -18899,12 +18906,12 @@
                   "type": "string",
                   "format": "date-time"
                 },
+                "origin": {
+                  "$ref": "#/components/schemas/WorkflowOrigin"
+                },
                 "updatedAt": {
                   "type": "string",
                   "format": "date-time"
-                },
-                "origin": {
-                  "$ref": "#/components/schemas/WorkflowOrigin"
                 },
                 "slug": {
                   "type": "string"
@@ -18962,12 +18969,12 @@
             "type": "string",
             "format": "date-time"
           },
+          "origin": {
+            "$ref": "#/components/schemas/WorkflowOrigin"
+          },
           "updatedAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "origin": {
-            "$ref": "#/components/schemas/WorkflowOrigin"
           },
           "slug": {
             "type": "string"
@@ -19034,12 +19041,12 @@
             "type": "string",
             "format": "date-time"
           },
+          "origin": {
+            "$ref": "#/components/schemas/WorkflowOrigin"
+          },
           "updatedAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "origin": {
-            "$ref": "#/components/schemas/WorkflowOrigin"
           },
           "slug": {
             "type": "string"
@@ -19092,12 +19099,12 @@
             "type": "string",
             "format": "date-time"
           },
+          "origin": {
+            "$ref": "#/components/schemas/WorkflowOrigin"
+          },
           "updatedAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "origin": {
-            "$ref": "#/components/schemas/WorkflowOrigin"
           },
           "slug": {
             "type": "string"
@@ -26472,11 +26479,18 @@
             "type": "boolean"
           },
           "problem": {
-            "description": "Why Caw could not start now, while it is on; null when it could.",
+            "description": "Why Caw could not start now, on or off; null when he could.",
             "type": [
               "null",
               "string"
             ]
+          },
+          "running": {
+            "description": "What Caw started that still runs, as his off control lists it, each lead\nrow followed by its delegates: the sessions his work items run, and his\nown turn while an event started it. Turning him off with any of these\nrunning asks whether they finish or stop; off, what still finishes.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CawRunning"
+            }
           },
           "spendUsd": {
             "description": "Dollars every Caw session of the project has cost.",
@@ -26489,6 +26503,7 @@
           "model",
           "on",
           "problem",
+          "running",
           "spendUsd"
         ]
       },
@@ -26498,6 +26513,60 @@
         "enum": [
           "claude",
           "opencode"
+        ]
+      },
+      "CawRunning": {
+        "description": "One thing Caw started that still runs: a session as a project's forget\nlists it (project-stops `RunningSession`), and what it is.",
+        "type": "object",
+        "properties": {
+          "cwd": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CawRunningKind",
+            "description": "An attempt at a task, a delegate of his, or his own turn an event started."
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "offline": {
+            "description": "Its machine is not connected: it stops when its machine is back.",
+            "type": "boolean"
+          },
+          "parentId": {
+            "description": "The nearest running row it is a delegate of; null for a top row.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "taskId": {
+            "description": "Its task, for an attempt.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "description": "Its name (a turn's: what it answers); null names it by its folder.",
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "cwd",
+          "id",
+          "kind",
+          "machineId",
+          "offline",
+          "parentId",
+          "taskId",
+          "title"
         ]
       },
       "ProjectSpend": {
@@ -34808,6 +34877,9 @@
             "description": "The hub `projects` row this is bound to. Required unless `user`.",
             "type": "string"
           },
+          "event": {
+            "$ref": "#/components/schemas/HookEvent"
+          },
           "cwd": {
             "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
             "type": "string"
@@ -34819,9 +34891,6 @@
           "scope": {
             "$ref": "#/components/schemas/FleetScope",
             "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope."
-          },
-          "event": {
-            "$ref": "#/components/schemas/HookEvent"
           },
           "matcher": {
             "type": "string"
@@ -40735,6 +40804,14 @@
         "enum": [
           "fleet",
           "project"
+        ]
+      },
+      "CawRunningKind": {
+        "type": "string",
+        "enum": [
+          "attempt",
+          "delegate",
+          "turn"
         ]
       },
       "ColumnPropsAlign": {

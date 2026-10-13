@@ -120,6 +120,7 @@ export const measureRoles = (): RoleSize[] => {
         online: () => false,
         publish: () => undefined,
         send: () => undefined,
+        stops: { running: () => [], stop: () => undefined },
         spawn: () => Promise.resolve(),
         task: () => Promise.reject(new Error("measuring")),
         views: {} as never,

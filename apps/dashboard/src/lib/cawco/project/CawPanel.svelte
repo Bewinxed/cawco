@@ -6,10 +6,17 @@
    * the Usage page, and the way to talk to him, on or off. Off, he acts only
    * when you write to him: no event wakes him (WORDS.md, Caw on and off).
    */
-  import type { CawHarness } from "@cawco/core";
-  import { cawco, startThread, threadsOf } from "#lib/cawco/client.svelte.js";
+  import type { CawHarness, CawInitiated, CawRunning } from "@cawco/core";
+  import { askCawOff } from "#lib/cawco/caw-off.svelte.js";
+  import {
+    cawco,
+    onProjectStop,
+    startThread,
+    threadsOf,
+  } from "#lib/cawco/client.svelte.js";
   import CawFace from "#lib/cawco/home/CawFace.svelte";
   import ModelCombobox from "#lib/cawco/ModelCombobox.svelte";
+  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { usd } from "#lib/cawco/usage.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -27,6 +34,72 @@
   const on = $derived(lead.view?.on ?? false);
   const lastThread = $derived(threadsOf(projectId)[0] ?? null);
   let talking = $state(false);
+
+  /**
+   * Turning him off (The Stay In Context Rule): nothing he started runs,
+   * and it just flips. Only his own turn an event started is in flight: one
+   * line here asks whether it finishes or stops, a light choice about one
+   * thing. Sessions he started still run: the tray (CawOffDialog) names each
+   * one first, as a forget does. What runs is read again as you flip, so
+   * the choice is about what is true now.
+   */
+  let turnLine = $state<CawRunning | null>(null);
+  /** The turn's stop was asked: the line waits for the hub's word that it stopped. */
+  let cutting = $state(false);
+
+  async function flip(next: boolean): Promise<void> {
+    if (turnLine) {
+      // The switch again while the line asks: nothing changes.
+      turnLine = null;
+      return;
+    }
+    if (next) {
+      await lead.configure({ on: true });
+      return;
+    }
+    await lead.read();
+    const running = lead.view?.running ?? [];
+    if (running.length === 0) {
+      await lead.configure({ on: false });
+    } else if (running.every((one) => one.kind === "turn")) {
+      turnLine = running[0] ?? null;
+    } else {
+      askCawOff({
+        projectId,
+        projectName,
+        running,
+        settled: (view) => {
+          lead.view = view;
+        },
+      });
+    }
+  }
+
+  /** His own turn finishes or stops as he turns off; a stop's line stays until it has. */
+  async function offWithTurn(initiated: CawInitiated): Promise<void> {
+    const turn = turnLine;
+    if (!turn) {
+      return;
+    }
+    if (initiated === "finish") {
+      await lead.configure({ on: false, initiated });
+      turnLine = null;
+      return;
+    }
+    cutting = true;
+    const unhear = onProjectStop((frame) => {
+      if (frame.instanceId === turn.id) {
+        unhear();
+        cutting = false;
+        turnLine = null;
+      }
+    });
+    await lead.configure({ on: false, initiated });
+    if (lead.refused) {
+      unhear();
+      cutting = false;
+    }
+  }
   /** The harness picker's word: where he runs, or that he is moving there. */
   const harnessWord = $derived.by(() => {
     if (lead.moving) {
@@ -50,15 +123,39 @@
     <p class="capped">{lead.capLine}</p>
   {/if}
   <!-- biome-ignore lint/a11y/noLabelWithoutControl: the Switch component renders a native button the label names; Biome can't see through the component boundary -->
-  <label class="row switch">
+  <label class="row switch" data-share="caw-off:{projectId}">
     <!-- The hub's answer is the switch's state: a flip asks it, and a
          refusal leaves the switch where the hub says Caw is. -->
     <Switch
-      disabled={lead.moving || !lead.view}
-      bind:checked={() => on, (next) => lead.configure({ on: next })}
+      disabled={lead.moving || !lead.view || cutting}
+      bind:checked={() => on, (next) => flip(next)}
     />
     <span>Caw lead</span>
   </label>
+  {#if turnLine}
+    <div class="row turn-off" data-caw-turn-line transition:unfold>
+      <span class="turn-words"
+        >{turnLine.title ?? "Answering an event"}. Off, it can finish or stop
+        now.</span
+      >
+      <Button
+        disabled={cutting || lead.moving}
+        label="Let him finish"
+        onclick={() => offWithTurn("finish")}
+        size="sm"
+        variant="outline"
+      />
+      <Button
+        disabled={lead.moving}
+        label="Stop now"
+        onclick={() => offWithTurn("stop")}
+        pending={cutting}
+        pendingLabel="Stopping…"
+        size="sm"
+        variant="outline"
+      />
+    </div>
+  {/if}
   {#if lead.refused}
     <p class="refused" role="alert">{lead.refused}</p>
   {/if}
@@ -193,6 +290,13 @@
   }
   .actions {
     justify-content: flex-start;
+  }
+  /* His own turn, asked about under the switch: its words, then the two ways. */
+  .turn-words {
+    flex: 1 1 100%;
+    min-inline-size: 0;
+    font: var(--type-meta);
+    color: var(--ink-muted);
   }
   /* Past the cap: said in the needs-you ink, a fact about him, not an error. */
   .capped {

@@ -1817,6 +1817,7 @@ export interface DbShape {
         | "digest"
         | "turns"
         | "instanceId"
+        | "origin"
       >
     >
   ) => WorkItemRow | undefined;

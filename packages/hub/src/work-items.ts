@@ -75,9 +75,11 @@ import type {
   WorkspaceRow,
 } from "./db";
 import type {
+  Origin,
   WorkBudget,
   WorkItemCheck,
   WorkItemSubmission,
+  WorkOrigin,
 } from "./db/schema";
 import { leafOf, sessionLabel } from "./labels";
 import {
@@ -431,6 +433,12 @@ export interface WorkItemRequest {
   machineId?: string;
   model?: string;
   /**
+   * Whose work it is (work_items.origin). Left out, its parent's: Caw's, the
+   * origin of the turn he is in; a work item's session, its own item's; any
+   * other session's, `you`. The dispatcher and routines set it.
+   */
+  origin?: Origin;
+  /**
    * Files in its workspace, as paths from the clone's root, that the hub
    * copies into its project's folder when it finishes. Needs a project.
    */
@@ -525,6 +533,11 @@ export interface WorkItemDeps {
    * written. Called in the same step; whoever listens defers its own work.
    */
   readonly itemEnded?: (item: WorkItemRow) => void;
+  /**
+   * The origin of the turn a project's Caw is in (caw.ts `turnOrigin`), when
+   * `instanceId` is a project's lead; undefined for any other session.
+   */
+  readonly leadTurn?: (instanceId: string) => WorkOrigin | undefined;
   /** Runs the budget sweep and every wait's timer until the hub closes. */
   readonly lifetime: HubLifetimeShape;
   /** Tells every dashboard an item moved: its parent's delegate tray follows it. */
@@ -1268,6 +1281,7 @@ export const createWorkItems = ({
   publish,
   report,
   inTurn,
+  leadTurn,
   send,
   sessionUrl,
   spawn,
@@ -1443,20 +1457,24 @@ export const createWorkItems = ({
   const mayReopen = (item: WorkItemRow, origin: NeutralOrigin): boolean =>
     reopens(item.parentInstanceId, origin, leadFor(item)?.id);
 
-  /** The Caw an attempt at a task must not wake: its project's, while he is off; null otherwise. */
+  /**
+   * The Caw an item's report must not wake: its project's, while he is off
+   * and the item is not yours (its origin `event`, or `kept`, whose end is
+   * noted in his thread instead, caw.ts `itemEnded`); null otherwise.
+   */
   const cawOff = (item: WorkItemRow): string | null => {
     const led = item.projectId ? db.project(item.projectId) : undefined;
-    return item.taskId && led && !led.caw ? led.leadInstanceId : null;
+    return led && !led.caw && item.origin !== "you" ? led.leadInstanceId : null;
   };
 
   /**
    * Who hears a delegated session's reports: its parent, and its project's
    * lead as well when that is another session; only the lead once the parent
    * has ended (stopped or discarded, or gone), as it adopts the orphan.
-   * Without a lead, the parent alone, as before. An attempt at a task of a
-   * project whose Caw is off reaches no Caw at all, even one that started
-   * it: an attempt's report is an event, and off, only your words wake him
-   * (caw.ts).
+   * Without a lead, the parent alone, as before. While a project's Caw is
+   * off, an item whose work is not yours reaches no Caw at all, even one
+   * that started it: off, only your words wake him (caw.ts). Your work
+   * reaches him on or off.
    */
   const reportees = (row: InstanceRow): InstanceRow[] => {
     // A routine's run reports to nobody: its routine reads how it ended, and
@@ -2613,10 +2631,31 @@ export const createWorkItems = ({
    * Where an item lands and what it hands in, and the project it works for
    * (its task's, else its parent's), as its row keeps them.
    */
+  /**
+   * Whose work a new item is ({@link WorkItemRequest.origin}): the request's,
+   * else its parent's. A routine's run is an event's; Caw's, the turn he is
+   * in; a work item's session's, its own item's; anyone else's, yours.
+   */
+  const originOf = (request: WorkItemRequest, parent: Parent): WorkOrigin => {
+    if (request.origin) {
+      return request.origin;
+    }
+    if (isRoutineParent(parent.id)) {
+      return "event";
+    }
+    const turn = leadTurn?.(parent.id);
+    if (turn) {
+      return turn;
+    }
+    const [row] = db.getInstancesByIds([parent.id]);
+    return (row?.workItemId && db.workItem(row.workItemId)?.origin) || "you";
+  };
+
   const placing = (request: WorkItemRequest, parent: Parent) => {
     const projectId = request.task?.projectId ?? parent.projectId;
     const project = projectId ? db.project(projectId) : undefined;
     return {
+      origin: originOf(request, parent),
       ...(request.task ? { taskId: request.task.id } : {}),
       ...(projectId ? { projectId } : {}),
       lands: request.lands ?? "main",

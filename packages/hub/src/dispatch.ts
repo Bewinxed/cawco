@@ -58,7 +58,7 @@ import type { InstanceRow, LandsMode } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, PlaceRow, ProjectRow, WorkItemRow } from "./db";
-import type { WorkBudget, WorkItemCheck } from "./db/schema";
+import type { Origin, WorkBudget, WorkItemCheck } from "./db/schema";
 import { quote, statusCommand } from "./landing";
 import type { HubLifetimeShape } from "./lifetime";
 import { FolderRefusal, type FolderRefusalStatus } from "./project-folder";
@@ -70,6 +70,7 @@ import {
   onFrontier,
   type TaskActor,
   type TaskEvent,
+  type TaskMover,
   type TaskSummary,
   type Tasks,
   type TaskView,
@@ -99,10 +100,14 @@ export interface DispatchDeps {
     | "workItemByPrUrl"
   >;
   /**
-   * The project's lead: its Caw session, started now if Caw is on and it has
-   * none (caw.ts `lead`); undefined while Caw is off.
+   * The project's lead: its Caw session, started now if it has none (caw.ts
+   * `lead`): for your ask on or off, for the dispatcher's own (`event`) only
+   * while Caw is on; undefined otherwise.
    */
-  readonly lead: (projectId: string) => Promise<InstanceRow | undefined>;
+  readonly lead: (
+    projectId: string,
+    by: Origin
+  ) => Promise<InstanceRow | undefined>;
   /** Runs the safety net until the hub closes. */
   readonly lifetime: HubLifetimeShape;
   /** Whether a machine is connected now. */
@@ -183,6 +188,20 @@ export interface DispatchChange {
 }
 
 /** What a start nobody can take the report of says to do. */
+/**
+ * Whose work a hook's attempt is, by who moved its task in: yours for your
+ * move or an action you approved; an event's for a routine's or the hub's;
+ * a session's or Caw's, its parent's (work-items `origin`).
+ */
+const HOOK_ORIGIN: Record<TaskMover, Origin | undefined> = {
+  you: "you",
+  action: "you",
+  routine: "event",
+  hub: "event",
+  lead: undefined,
+  session: undefined,
+};
+
 const NO_LEAD =
   "Turn Caw on for the project so its lead takes the report, name a session you started in the project, or start it with task_start from one.";
 
@@ -518,9 +537,11 @@ export const createDispatcher = ({
 
   /** The project's lead, its Caw, started now when it has none; undefined while Caw is off. */
   const leadOf = async (
-    project: ProjectRow
+    project: ProjectRow,
+    by: Origin = "event"
   ): Promise<InstanceRow | undefined> => {
-    const row = project.caw ? await lead(project.id) : undefined;
+    const row =
+      by === "you" || project.caw ? await lead(project.id, by) : undefined;
     return row && !parentProblem(row, project.id) ? row : undefined;
   };
 
@@ -615,14 +636,15 @@ export const createDispatcher = ({
   /**
    * Files and spawns the attempt's work item; a failure is remembered on the
    * task. A retry names the attempt before it, whose workspace it runs in
-   * again when that clone is still there.
+   * again when that clone is still there. `origin` is whose work it is
+   * (work-items `origin`); left out, its parent's.
    */
   const launch = async (
     project: ProjectRow,
     task: TaskView,
     parent: InstanceRow,
     active: Stage | undefined,
-    previous?: WorkItemRow
+    { origin, previous }: { origin?: Origin; previous?: WorkItemRow }
   ): Promise<WorkItemStart> => {
     const place = placeFor(project, parent);
     if (!(place || previous)) {
@@ -652,6 +674,7 @@ export const createDispatcher = ({
         ...taskLimits(task),
         ...(place ? { cwd: place.path, machineId: place.machineId } : {}),
         ...(previous ? { reuse: previous.workspaceId } : {}),
+        ...(origin ? { origin } : {}),
         task: { id: task.id, projectId: project.id },
       });
       problems.delete(keyOf(project.id, task.id));
@@ -701,7 +724,8 @@ export const createDispatcher = ({
     ref: string,
     parent: InstanceRow,
     stage?: Stage,
-    retry = false
+    retry = false,
+    origin?: Origin
   ): Promise<AttemptStart> => {
     const project = projectOf(projectId);
     const unfit = parentProblem(parent, projectId, parent.id);
@@ -721,7 +745,10 @@ export const createDispatcher = ({
       const active = await activeFor(projectId, task, stage);
       let started: WorkItemStart;
       try {
-        started = await launch(project, task, parent, active, previous);
+        started = await launch(project, task, parent, active, {
+          origin,
+          previous,
+        });
       } catch (error) {
         if (!(error instanceof OwnsOverlap)) {
           throw error;
@@ -873,7 +900,14 @@ export const createDispatcher = ({
       }
       try {
         // biome-ignore lint/performance/noAwaitInLoops: one start at a time keeps the cap exact and the folder's commits in order
-        const started = await startAttempt(projectId, id, reportsTo);
+        const started = await startAttempt(
+          projectId,
+          id,
+          reportsTo,
+          undefined,
+          false,
+          "event"
+        );
         // One queued for owned files took no slot.
         if (!started.queued) {
           slots -= 1;
@@ -1050,7 +1084,14 @@ export const createDispatcher = ({
       return;
     }
     try {
-      await startAttempt(projectId, id, parent, stage);
+      await startAttempt(
+        projectId,
+        id,
+        parent,
+        stage,
+        false,
+        HOOK_ORIGIN[actor.mover]
+      );
     } catch (error) {
       console.warn(
         `[dispatch] ${id} entered ${to}, which runs ${stage.hooks.runs}, and did not start: ${failure(error).message}`
@@ -1124,7 +1165,8 @@ export const createDispatcher = ({
 
   /**
    * Who an attempt you start from the dashboard reports to: the session
-   * named, or the project's Caw; refused when neither can take reports.
+   * named, or the project's Caw, started for it on or off (it is your work);
+   * refused when neither can take reports.
    */
   const reporter = async (
     projectId: string,
@@ -1133,7 +1175,7 @@ export const createDispatcher = ({
     const project = projectOf(projectId);
     if (!parentInstanceId) {
       return (
-        (await leadOf(project)) ??
+        (await leadOf(project, "you")) ??
         refuse(409, `Nobody can take this attempt's report. ${NO_LEAD}`)
       );
     }
@@ -1227,7 +1269,8 @@ export const createDispatcher = ({
         ref,
         await reporter(projectId, parentInstanceId),
         undefined,
-        true
+        true,
+        "you"
       );
     },
 
@@ -1346,7 +1389,10 @@ export const createDispatcher = ({
       return startAttempt(
         projectId,
         ref,
-        await reporter(projectId, parentInstanceId)
+        await reporter(projectId, parentInstanceId),
+        undefined,
+        false,
+        "you"
       );
     },
 

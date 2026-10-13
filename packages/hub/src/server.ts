@@ -13613,6 +13613,9 @@ export const createServer = (
   const workItems = createWorkItems({
     db,
     lifetime,
+    // Whose turn a project's Caw is in, for what he starts in it. Caw is
+    // made further down; nothing starts an item before the hub is up.
+    leadTurn: (instanceId) => lead?.turnOrigin(instanceId),
     // Read through the plan panel's own read, so the link sees the list the
     // session keeps on any harness. Called only once the hub is up, after
     // `plans` below is made.
@@ -13920,6 +13923,12 @@ export const createServer = (
     publish: (payload) =>
       registry.broadcast({ verb: "frames", machineId: "hub", payload }),
     spawn: (machineId, payload) => spawnSession(machineId, payload),
+    // Turning Caw off stops what he started the way a forget stops a
+    // project's sessions: each row confirmed as its machine ends it.
+    stops: {
+      running: (projectId) => projectStops.running(projectId),
+      stop: (projectId, ids) => projectStops.stop(projectId, ids),
+    },
     send: (envelope) => {
       deliverSend(envelope);
     },
@@ -13932,7 +13941,7 @@ export const createServer = (
     db,
     lifetime,
     tasks,
-    lead: (projectId) => caw.lead(projectId),
+    lead: (projectId, by) => caw.lead(projectId, by),
     online: (machineId) => Boolean(registry.agent(machineId)),
     pauses: (projectId) => caps.pauses(projectId),
     start: (request) => workItems.start(request),
