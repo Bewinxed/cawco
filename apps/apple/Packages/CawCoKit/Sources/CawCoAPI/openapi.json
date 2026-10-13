@@ -35455,7 +35455,7 @@
                   "type": "number"
                 },
                 "left": {
-                  "description": "Planned but not moved: mid-turn or failed when looked at.",
+                  "description": "Planned and owed to their turn's end: mid-turn, or their process still running, when looked at.",
                   "type": "number"
                 }
               },
