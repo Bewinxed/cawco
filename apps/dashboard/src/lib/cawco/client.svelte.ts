@@ -104,6 +104,7 @@ import {
   WIRE_PROTOCOL,
 } from "@cawco/core";
 import { announcingParts, clientLine } from "@cawco/core/wire";
+import { untrack } from "svelte";
 import { SvelteMap } from "svelte/reactivity";
 import {
   CONTROL_TIMEOUT_MS,
@@ -154,6 +155,7 @@ import {
   createStreamState,
   disarmCommandSweep,
   failLocally,
+  following,
   forgetUnwatched,
   handleStreamMessage,
   latestCommand,
@@ -4181,11 +4183,13 @@ function subscriptionIds(): string[] {
 let lastSubscriptionKey = "";
 
 /**
- * Forgets the stream of every session the dashboard no longer watches, so
- * one opened again is read again. A watched one is followed by the read that
- * shows it ({@link readTranscript}: a tab, the peek, a delegate card), whose
- * page subscribes it; a reconnect reads each again ({@link hubReached}). A
- * no-op when the set is unchanged since the last sync.
+ * The watched set, applied: every session the dashboard no longer watches
+ * has its stream forgotten, and every watched one whose transcript this tab
+ * holds and does not follow on this socket is read, the read's page
+ * subscribing it ({@link followHeld}). A session a tab, the peek or a
+ * delegate card holds nothing of yet is read by what shows it
+ * ({@link readTranscript}). A no-op when the set is unchanged since the last
+ * sync.
  */
 export function syncSubscriptions(): void {
   const ids = subscriptionIds().sort();
@@ -4195,6 +4199,41 @@ export function syncSubscriptions(): void {
   }
   lastSubscriptionKey = key;
   forgetUnwatched(streamState, ids);
+  untrack(() => followHeld(ids, "follow"));
+}
+
+/**
+ * A watched transcript this tab holds (its rows, or a read of it that went
+ * out or failed) and does not follow on the socket open now, read again: its
+ * page subscribes it from the page's own `seq` ({@link adoptPage}). Held rows
+ * stand for everything the session said up to the moment its stream was let
+ * go (its tab closed or re-addressed, its read landing while it was not
+ * watched, the socket gone), and a reader shown them again with no read
+ * behind them sees that moment for good.
+ *
+ * `reconnect`: the socket is new, so every one of them is read again, and a
+ * read in flight was asked of the connection before (a page's first
+ * connection had none before it, and joins its read).
+ */
+function followHeld(ids: string[], cause: "follow" | "reconnect"): void {
+  if (state.status !== "connected") {
+    return;
+  }
+  const fresh = cause === "reconnect" && connections > 1;
+  for (const id of ids) {
+    const held = state.sessions[id];
+    const holds = Boolean(
+      streamState.cursors[id] ||
+        held?.blocks.length ||
+        held?.loading ||
+        held?.readFault ||
+        held?.behind
+    );
+    if (holds && (cause === "reconnect" || !following(streamState, id))) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and subscribes the stream when it lands
+      void readTranscript(id, cause, fresh);
+    }
+  }
 }
 
 /** The board peeking a session subscribes it for frames; `null` closes the peek. */
@@ -4386,31 +4425,15 @@ function connect(): void {
  * memory, from 1 again after a restart, so that cursor may sit inside
  * another hub process's numbering, and a resume from it would replay that
  * process's events onto rows they do not follow (iOS does the same,
- * `SessionsStore.reconnected`).
- *
- * The followed sessions this tab has read, is reading, or failed to read:
- * an open tab never read yet waits for its pane's own read. On a reconnect a
- * read in flight was asked of the connection before, so it is ended and read
- * again (`fresh`); on this page's first connection there was none before, and
- * the read in flight is the one this joins.
+ * `SessionsStore.reconnected`). An open tab never read yet waits for its
+ * pane's own read.
  */
 function rereadFollowed(): void {
   connections += 1;
-  const fresh = connections > 1;
-  lastSubscriptionKey = "";
-  syncSubscriptions();
-  for (const id of subscriptionIds()) {
-    const held = state.sessions[id];
-    if (
-      streamState.cursors[id] ||
-      held?.loading ||
-      held?.readFault ||
-      held?.behind
-    ) {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and subscribes the stream when it lands
-      void readTranscript(id, "reconnect", fresh);
-    }
-  }
+  const ids = subscriptionIds().sort();
+  lastSubscriptionKey = ids.join("\u0000");
+  forgetUnwatched(streamState, ids);
+  followHeld(ids, "reconnect");
 }
 
 /** How many times this page has reached the hub: past one, a connection is a reconnect. */
@@ -5999,8 +6022,10 @@ export type ReadCause =
   | "backlogBroken"
   /** The reader asked again after a failed read. */
   | "retry"
-  /** The socket came back while the last read had failed. */
+  /** The socket came back: every transcript the dashboard follows is read again. */
   | "reconnect"
+  /** A transcript this tab holds is watched again, its stream let go meanwhile. */
+  | "follow"
   /** The machine the last read found offline is online again. */
   | "machineOnline"
   /** The last read failed while the hub answered: read again on {@link READ_AGAIN_MS}. */

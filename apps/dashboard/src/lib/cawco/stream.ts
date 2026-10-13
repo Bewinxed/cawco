@@ -335,7 +335,8 @@ export function beginRead(state: StreamState, sessionId: string): void {
  * A transcript page landed, read at `seq`: the session's stream resumes from
  * there when the dashboard follows it. The hub replays what came after out of
  * its ring, or resets honestly when the page took longer than the ring holds.
- * One it does not follow is read again when it is followed.
+ * One it does not follow keeps no cursor, so it is read again when it is
+ * followed (client.svelte.ts `syncSubscriptions`).
  */
 export function adoptPage(
   state: StreamState,
@@ -343,15 +344,27 @@ export function adoptPage(
   sessionId: string,
   seq: number
 ): void {
+  if (!host.follows(sessionId)) {
+    delete state.cursors[sessionId];
+    return;
+  }
   const cursor = cursorFor(state, sessionId);
   cursor.reading = false;
   cursor.lastSeq = seq;
   cursor.seen = true;
   cursor.resyncFailures = 0;
   cursor.warned = false;
-  if (host.follows(sessionId)) {
-    subscribeSession(state, host, sessionId, seq);
-  }
+  subscribeSession(state, host, sessionId, seq);
+}
+
+/**
+ * Whether this tab's stream of a session is live on the socket open now, or
+ * is on its way to it: subscribed, or waiting on a page read whose page
+ * subscribes it.
+ */
+export function following(state: StreamState, sessionId: string): boolean {
+  const cursor = state.cursors[sessionId];
+  return Boolean(cursor?.subscribed || cursor?.reading);
 }
 
 /**
@@ -452,8 +465,13 @@ export function handleStreamMessage(
   }
 }
 
-/** What a delta did, for tests and for anyone reading a trace. */
-export type DeltaOutcome = "applied" | "duplicate" | "gap" | "malformed";
+/** What a delta did, for anyone reading a trace. */
+export type DeltaOutcome =
+  | "applied"
+  | "duplicate"
+  | "gap"
+  | "malformed"
+  | "unfollowed";
 
 function applyDelta(
   state: StreamState,
@@ -469,7 +487,13 @@ function applyDelta(
     host.warn("stream: a delta arrived without a sequenced event", message);
     return "malformed";
   }
-  const cursor = cursorFor(state, event.sessionId);
+  // The hub follows a session for a socket until the socket closes, past the
+  // tab letting it go: what it sends for one this tab keeps no cursor for is
+  // not this tab's, and the read that follows it again starts it afresh.
+  const cursor = state.cursors[event.sessionId];
+  if (!cursor) {
+    return "unfollowed";
+  }
   // A page read is out: what this event did is in the page, or after its
   // `seq`, which the resume that ends the read replays.
   if (cursor.reading) {
@@ -553,7 +577,10 @@ function applyBacklog(
 ): void {
   const { sessionId } = message;
   const events = Array.isArray(message.events) ? message.events : [];
-  const cursor = cursorFor(state, sessionId);
+  const cursor = state.cursors[sessionId];
+  if (!cursor) {
+    return;
+  }
   cursor.subscribed = true;
   // The page being read carries these; the resume that ends the read asks again.
   if (cursor.reading) {
@@ -626,7 +653,10 @@ function applyReset(
   host: StreamHost,
   message: StreamReset
 ): void {
-  const cursor = cursorFor(state, message.sessionId);
+  const cursor = state.cursors[message.sessionId];
+  if (!cursor) {
+    return;
+  }
   cursor.reading = true;
   cursor.subscribed = true;
   cursor.resyncAfter = null;
