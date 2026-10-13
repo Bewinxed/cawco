@@ -6,8 +6,9 @@
  * is hidden. Tools at the top-left (select, hand, pen, shapes as a menu,
  * arrow, text, eraser), view at the top-right (zoom as a menu, Dock, Done).
  * A tool is Excalidraw's own (`setActiveTool`); the chosen one is the one
- * Excalidraw reports (`appState.activeTool`). Dock and Done are the host's:
- * they post `cawco:dock` and `cawco:done` to it.
+ * Excalidraw reports (`appState.activeTool`). Dock (Undock while the host
+ * says the canvas is docked) and Done are the host's: they post
+ * `cawco:dock`, `cawco:undock` and `cawco:done` to it.
  *
  * Every control names what it does in `data-action`; the rail has one
  * press handler that reads it.
@@ -310,10 +311,13 @@ function Item({
 
 export function Rail({
   api,
+  docked,
   tool,
   reduced,
 }: {
   api: ExcalidrawImperativeAPI;
+  /** The host stands the canvas in its artifact panel: Dock reads Undock. */
+  docked: boolean;
   reduced: () => boolean;
   tool: string;
 }) {
@@ -367,7 +371,11 @@ export function Rail({
           <Item action="zoom:actual" glyph="actualSize" label="Actual size" />
           <Item action="zoom:fit" glyph="fit" label="Zoom to fit" />
         </MenuBox>
-        <Box action="host:dock" glyph="dock" label="Dock" />
+        <Box
+          action={docked ? "host:undock" : "host:dock"}
+          glyph="dock"
+          label={docked ? "Undock" : "Dock"}
+        />
         <Box action="host:done" glyph="done" label="Done" />
       </div>
     </Press.Provider>

@@ -194,6 +194,7 @@ const agentArrivals = (
 
 export interface BoundScene {
   destroy: () => void;
+  picture: () => Promise<void>;
 }
 
 /** Binds Excalidraw (`api`) to the artifact's doc (`hold`), converts the agent's writes, and draws the picture. */
@@ -526,6 +527,11 @@ export function bindScene(
   stops.push(serveRequests(live, options.ink));
 
   return {
+    /** The picture drawn and posted now, for a send that carries it. */
+    picture: async () => {
+      clearTimeout(pictureTimer);
+      await drawPicture();
+    },
     destroy: () => {
       for (const stop of stops.splice(0)) {
         stop();

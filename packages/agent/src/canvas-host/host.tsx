@@ -86,6 +86,48 @@ const holdStore = {
   now: () => current,
 };
 
+/** A word to the dashboard that hosts the canvas. */
+export const toHost = (what: "dock" | "done" | "pictured") =>
+  window.parent.postMessage({ type: `cawco:${what}` }, location.origin);
+
+/**
+ * Where the host stands the canvas (`cawco:place`): docked in the artifact
+ * panel, or in the composer. The rail's Dock reads Undock while docked.
+ */
+let placedDocked = false;
+const placeListeners = new Set<() => void>();
+window.addEventListener("message", (event) => {
+  if (
+    event.source === window.parent &&
+    event.origin === location.origin &&
+    event.data?.type === "cawco:place"
+  ) {
+    placedDocked = event.data.docked === true;
+    for (const listener of placeListeners) {
+      listener();
+    }
+  }
+});
+const placeStore = {
+  subscribe: (changed: () => void) => {
+    placeListeners.add(changed);
+    return () => placeListeners.delete(changed);
+  },
+  now: () => placedDocked,
+};
+
+// ⌘⇧D (Ctrl+Shift+D) with the canvas focused folds it, as it does from the field.
+window.addEventListener("keydown", (event) => {
+  if (
+    event.shiftKey &&
+    (event.metaKey || event.ctrlKey) &&
+    event.key.toLowerCase() === "d"
+  ) {
+    event.preventDefault();
+    toHost("done");
+  }
+});
+
 /** What the canvas holds before Excalidraw binds to it: its pen mode, and whether it is empty. */
 const firstLook = (hold: ArtifactHold | null) => {
   const doc = new Doc();
@@ -140,6 +182,7 @@ function Host() {
     []
   );
   const generation = hold?.generation;
+  const docked = useSyncExternalStore(placeStore.subscribe, placeStore.now);
   useEffect(() => {
     if (!(api && generation !== undefined)) {
       return;
@@ -149,7 +192,23 @@ function Host() {
       dark: darkScheme.now,
       reduced: lessMotion.now,
     });
-    return () => bound.destroy();
+    // The host asks for the picture before it sends or folds the canvas.
+    const asked = async (event: MessageEvent) => {
+      if (
+        event.source !== window.parent ||
+        event.origin !== location.origin ||
+        event.data?.type !== "cawco:picture"
+      ) {
+        return;
+      }
+      await bound.picture().catch(() => undefined);
+      toHost("pictured");
+    };
+    window.addEventListener("message", asked);
+    return () => {
+      window.removeEventListener("message", asked);
+      bound.destroy();
+    };
   }, [api, generation, ink]);
   const changed = useCallback(
     (elements: readonly ExcalidrawElement[], state: AppState) => {
@@ -198,7 +257,9 @@ function Host() {
         UIOptions={UI_OPTIONS}
         zenModeEnabled={false}
       />
-      {api ? <Rail api={api} reduced={lessMotion.now} tool={tool} /> : null}
+      {api ? (
+        <Rail api={api} docked={docked} reduced={lessMotion.now} tool={tool} />
+      ) : null}
       {empty ? <Empty onDraw={draw} /> : null}
     </div>
   );
