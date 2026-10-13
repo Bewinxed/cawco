@@ -14,9 +14,13 @@ import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
 import { chmod, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { parseProcId } from "../packages/agent/src/proc-id";
+import { JUDGE_FORM_LENGTH, parseProcId } from "../packages/agent/src/proc-id";
 import { SessiondClient } from "../packages/agent/src/sessiond-client";
 import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
+import {
+  SCRATCH_SOCKET_SUFFIX,
+  socketPathProblem,
+} from "../packages/core/src/paths";
 
 export type Harness = "claude" | "opencode" | "pi";
 export const HARNESSES: Harness[] = ["claude", "opencode", "pi"];
@@ -329,19 +333,42 @@ export async function scratchFleet(options: {
     `${options.name}-${crypto.randomUUID().slice(0, 8)}`
   );
   // The services' HOME and the agent's XDG_RUNTIME_DIR hold the paths of a
-  // delegate's sockets, and a unix socket's path holds 103 bytes on macOS
-  // (107 on Linux). Under HOME is each workspace's scratch dir, where Chromium
-  // puts `~/.cawco/tmp/<id8>/org.chromium.Chromium.XXXXXX/SingletonSocket`
-  // (paths.ts `scratchSocketProblem`): HOME has 38 bytes. Under the runtime
-  // dir srt puts `cawco-srt/<12 hex>/claude-socks-<16 hex>.sock`
-  // (boundary.ts `srtTmpOf`): it has 49. So both sit apart from the sandbox,
-  // two hex under the shortest root this can write: a CawCo workspace's own
-  // TMPDIR (`~/.cawco/tmp/<id8>`, 35 bytes, on disk), else the cache root
-  // (`~/.cache`, 22). Mode 700, as a runtime dir is.
-  const shortRoot =
+  // delegate's sockets, and a unix socket's path holds UNIX_SOCKET_PATH_MAX
+  // bytes (103 on macOS, 107 on Linux). The longest the agent derives:
+  //  - under HOME, on macOS a workspace's judge in its door dir (paths.ts
+  //    `workspaceDoorDir`, boundary.ts `judge-<form>.sock`),
+  //    `/.cawco/workspaces/<id>/ro/judge-<16 hex>.sock`, 86 bytes, so HOME
+  //    holds 17; on Linux, whose doors are under the runtime dir, Chromium's
+  //    in a workspace's scratch dir (paths.ts `scratchSocketProblem`),
+  //    `/.cawco/tmp/<id8>/org.chromium.Chromium.XXXXXX/SingletonSocket`, 66;
+  //  - under the runtime dir, a preview's bridge (preview-bridge.ts
+  //    `bridgeDir`), `/cawco/previews/<instance id>.sock`, 57.
+  // Both sit apart from the sandbox, two hex under the shortest root this can
+  // write: a CawCo workspace's own TMPDIR (`~/.cawco/tmp/<id8>`, 35 bytes, on
+  // disk); else on macOS `/private/tmp` (12), since no dir under a home is
+  // short enough (`/Users/<name>` alone is most of 17), on the boot volume's
+  // disk and the real path the Seatbelt profile matches (`/tmp` links to it);
+  // else the cache root (`~/.cache`, 22). Mode 700, as a runtime dir is.
+  const inWorkspace = Boolean(
     process.env.CAWCO_WORKSPACE && process.env.TMPDIR
-      ? process.env.TMPDIR
-      : scratch;
+  );
+  let shortRoot = scratch;
+  if (inWorkspace) {
+    shortRoot = process.env.TMPDIR as string;
+  } else if (process.platform === "darwin") {
+    shortRoot = "/private/tmp";
+  }
+  const anyId = crypto.randomUUID();
+  const longestUnderHome =
+    process.platform === "darwin"
+      ? join(
+          "/.cawco/workspaces",
+          anyId,
+          "ro",
+          `judge-${"0".repeat(JUDGE_FORM_LENGTH)}.sock`
+        )
+      : join("/.cawco/tmp", anyId.slice(0, 8), SCRATCH_SOCKET_SUFFIX);
+  const longestUnderRuntime = join("/cawco/previews", `${anyId}.sock`);
   const home = await shortDir(shortRoot);
   // In a folder of its own: a workspace boundary hides the database's folder.
   const dbPath = join(sandbox, "hub", "hub.db");
@@ -349,6 +376,26 @@ export async function scratchFleet(options: {
   await mkdir(join(home, ".config", "cawco"), { recursive: true });
   await mkdir(join(sandbox, "hub"), { recursive: true });
   const runtime = await shortDir(shortRoot);
+  const tooLong = [
+    socketPathProblem(
+      `${home}${longestUnderHome}`,
+      "The scratch agent's longest socket under its HOME,"
+    ),
+    socketPathProblem(
+      `${runtime}${longestUnderRuntime}`,
+      "The scratch agent's longest socket under its runtime dir,"
+    ),
+  ].filter((problem) => problem !== undefined);
+  // In a workspace only its TMPDIR is writable: on macOS the agent refuses a
+  // delegate's workspace there with these words, and every other part runs.
+  if (tooLong.length > 0 && !inWorkspace) {
+    throw new Error(tooLong.join("; "));
+  }
+  for (const problem of tooLong) {
+    console.log(
+      `… ${problem}; a delegate's workspace will not start in this fleet`
+    );
+  }
 
   const freePort = async (): Promise<number> => {
     const lease = Bun.serve({
