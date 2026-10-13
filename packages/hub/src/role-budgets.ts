@@ -17,6 +17,7 @@ import { createCaw } from "./caw";
 import { createDelegationMcp } from "./delegation-mcp";
 import { createIngress } from "./ingress";
 import { makeLifetime } from "./lifetime";
+import { createMemory, createTurnWatch } from "./memory";
 import { createRelay } from "./relay";
 import { createRoutines } from "./routines";
 import type { Tasks } from "./tasks";
@@ -41,14 +42,18 @@ import type { Tasks } from "./tasks";
  * `artifact_update` their bounded skeleton `elements`, `mermaid` and
  * `delete`, and `artifact_read` its `png`, its words cut to a clause each:
  * about 560 tokens more for all three (worker 22,463, delegate 5,422, lead
- * 14,035 measured).
+ * 14,035 measured). 2026-10-13: +memory_note, memory_propose and task
+ * context for PRD D8 memory tiers (measured lead 14,392, worker 22,680);
+ * raised deliberately, not to absorb drift. The memory curator (§5.4), a
+ * role of its own, lists five tools (1,019 measured).
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 22_600,
+  worker: 22_700,
   delegate: 5600,
-  lead: 14_100,
+  lead: 14_400,
   overseer: 2800,
   "web-facing": 3400,
+  curator: 1200,
 };
 
 /** A typical session of each role: a session you started, a leaf work item, a project's Caw, triage, a web-facing work item. */
@@ -64,6 +69,13 @@ const SAMPLES: Record<SessionRole, Partial<InstanceRow>> = {
   "web-facing": {
     role: "web-facing",
     parentInstanceId: "parent",
+    workItemId: "item",
+    canDelegate: false,
+  },
+  curator: {
+    role: "curator",
+    projectId: "project",
+    parentInstanceId: "routine:curator",
     workItemId: "item",
     canDelegate: false,
   },
@@ -122,6 +134,7 @@ export const measureRoles = (): RoleSize[] => {
         fleetChoicesSet: () => false,
         folderChanged: () => undefined,
         leadHome: () => Promise.resolve(undefined),
+        makeNote: () => Promise.reject(new Error("measuring")),
         online: () => false,
         publish: () => undefined,
         send: () => undefined,
@@ -135,6 +148,7 @@ export const measureRoles = (): RoleSize[] => {
       createRoutines({
         anyOnline: () => false,
         caw: {} as never,
+        curatorBrief: () => Promise.reject(new Error("measuring")),
         db: {} as never,
         hubCheckout: () => Promise.reject(new Error("measuring")),
         jevKey: () => undefined,
@@ -172,6 +186,18 @@ export const measureRoles = (): RoleSize[] => {
         funnel: {} as never,
         ingest: () => undefined,
         lifetime,
+      }).tools(actor),
+    memoryTools: (actor) =>
+      createMemory({
+        curator: () => ({
+          ensure: () => undefined,
+          inboxPassed: () => undefined,
+        }),
+        db: {} as never,
+        folderChanged: () => undefined,
+        park: () => undefined,
+        settle: () => undefined,
+        watch: createTurnWatch(),
       }).tools(actor),
   });
   try {

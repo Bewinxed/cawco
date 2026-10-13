@@ -404,6 +404,7 @@ import {
   storedFilePath,
   storeFile,
 } from "./media";
+import { createMemory, createTurnWatch, memoryRoutes } from "./memory";
 import { createMoves, MoveAway, MoveRefused } from "./moves";
 import { createNoticesSeen } from "./notices";
 import {
@@ -2478,6 +2479,11 @@ export const createServer = (
   // Each project's Caw (caw.ts), made further down once its services are; the
   // settlement, answer and process-end paths above it reach it through this.
   let lead: Caw | undefined;
+  /**
+   * What each session's turn has done that taints a memory note written in
+   * it (memory.ts): the web read, a subagent running, a routine's wake.
+   */
+  const memoryWatch = createTurnWatch();
   pending.onSettled((parked, outcome, why) => {
     if (!(parked.requestId && parked.instanceId)) {
       return;
@@ -3631,6 +3637,8 @@ export const createServer = (
     pulses.delete(instanceId);
     // A lead's turn ends with its process: its thread is no longer working.
     lead?.sessionEnded(instanceId);
+    // And whatever its turn had read or started with it (memory.ts).
+    memoryWatch.ended(instanceId);
     touched.delete(instanceId);
     // A session that died before it ever said anything is never going to name
     // itself; nothing should still be waiting to hear its first words.
@@ -4575,6 +4583,8 @@ export const createServer = (
       if (!isKeepAlive(row.body)) {
         db.updateKeepAlive(instanceId, { keepAliveTurn: null });
       }
+      // A routine's wake of a lead: the turn it joins is that run's (memory.ts).
+      memoryWatch.read(instanceId, row.body?.origin);
       readSend(row, true);
     }
     const latest = Math.max(
@@ -12574,6 +12584,15 @@ export const createServer = (
     const receipt: { outcome?: "answered" | "cancelled" } = {};
     answeringPermissions.set(requestId, receipt);
     try {
+      // A memory proposal (memory.ts): applied or rejected here, its ask
+      // settled once that is done; one that no longer applies stays parked.
+      if (projectMemory.owns(requestId)) {
+        await projectMemory.answer(requestId, result);
+        if (receipt.outcome !== "answered") {
+          throw new Error("That request is no longer pending.");
+        }
+        return;
+      }
       // A hub-raised ask is settled here, never delivered to a machine: a
       // workflow's question, or an admin write waiting on the person.
       if (
@@ -14016,6 +14035,9 @@ export const createServer = (
     // Whose turn a project's Caw is in, for what he starts in it. Caw is
     // made further down; nothing starts an item before the hub is up.
     leadTurn: (instanceId) => lead?.turnOrigin(instanceId),
+    // A routine run's turn makes the sessions it starts the run's (memory.ts).
+    spawnedUnder: (instanceId, parentId) =>
+      memoryWatch.spawned(instanceId, parentId),
     // Read through the plan panel's own read, so the link sees the list the
     // session keeps on any harness. Called only once the hub is up, after
     // `plans` below is made.
@@ -14329,9 +14351,28 @@ export const createServer = (
     projectName: (id) => db.project(id)?.name,
     tasks,
   });
+  // A project's memory (memory.ts): the agents' inbox, its curator's
+  // proposals as your asks, and "Make a note" into AGENTS.md.
+  const projectMemory = createMemory({
+    db,
+    watch: memoryWatch,
+    // The routines are made further down; a note reaches them only once the hub is up.
+    curator: () => ({
+      ensure: (projectId) => routines.ensureCurator(projectId),
+      inboxPassed: (projectId) => routines.inboxPassed(projectId),
+    }),
+    folderChanged: (projectId) => tasks.touched(projectId),
+    park: (envelope) => parkForPerson(envelope),
+    settle: (requestId) => {
+      pending.resolve(requestId);
+    },
+  });
+  // Open proposals are the person's asks again as the hub starts.
+  detach(projectMemory.start(), "memory proposals");
   // Each project's Caw: its lead session, woken by events only (caw.ts).
   const caw = createCaw({
     asks: () => pending.list(),
+    makeNote: (projectId, text) => projectMemory.makeNote(projectId, text),
     inTurn: (instanceId) => pulses.get(instanceId)?.busy === true,
     caps,
     db,
@@ -14386,6 +14427,8 @@ export const createServer = (
   });
   lead = caw;
   const dispatcher = createDispatcher({
+    // The brief's AGENTS.md and the knowledge files the task needs (memory.ts).
+    context: (projectId, task) => projectMemory.contextFor(projectId, task),
     db,
     lifetime,
     tasks,
@@ -14674,6 +14717,8 @@ export const createServer = (
   // Routines (routines.ts): prompts the hub runs on a schedule, once per slot.
   const routines = createRoutines({
     caw,
+    // A curator run's inbox, sorted first (memory.ts).
+    curatorBrief: (projectId) => projectMemory.curatorBrief(projectId),
     db,
     lifetime,
     anyOnline: () => onlineMachines().length > 0,
@@ -14790,6 +14835,7 @@ export const createServer = (
     ingressTools: (actor) => ingress.tools(actor),
     actionTools: (actor) => actions.tools(actor),
     relayTools: (actor) => relays.tools(actor),
+    memoryTools: (actor) => projectMemory.tools(actor),
     askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
     sendToUser: telegram
       ? (actor, message, attachments) =>
@@ -16577,6 +16623,7 @@ export const createServer = (
       .use(dispatchRoutes(dispatcher))
       .use(cawRoutes(caw))
       .use(phoneRequestRoutes(jevTasks))
+      .use(memoryRoutes(projectMemory))
       .use(routineRoutes(routines))
       .use(connectionRoutes(connections))
       .use(ingressRoutes(ingress))
@@ -22035,6 +22082,7 @@ export const createServer = (
                   turnUnderWay(message.instanceId);
                 }
                 observeTurn(message.instanceId, frame);
+                memoryWatch.frame(message.instanceId, frame.message);
               }
               if (message.requestId && kind === "permission_request") {
                 const [owner] = db.getInstancesByIds([

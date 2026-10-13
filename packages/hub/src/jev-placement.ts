@@ -39,6 +39,9 @@ export const ROWS = {
   order: "Dispatch order",
   voice: "Voice check",
   variants: "Design variants",
+  // Asked in memory.ts: the curator's inbox, and an attempt's brief.
+  inbox: "Memory inbox",
+  context: "Brief context",
 } as const;
 export type PlacementRow = keyof typeof ROWS;
 

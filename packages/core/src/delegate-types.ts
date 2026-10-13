@@ -156,8 +156,9 @@ export const NATIVE_TOOLS = {
  * toolset per role). A session's credential names its row, and the row its
  * role: `lead` is a project's Caw, `web-facing` a session that reads the
  * outside world and so gets no posting or admin tools, `overseer` fleet-watch
- * triage. A row with none is a `delegate` when something delegated it, else a
- * `worker` (a session you started).
+ * triage, `curator` a project's memory curator run (the hub starts it, never
+ * a type). A row with none is a `delegate` when something delegated it, else
+ * a `worker` (a session you started).
  */
 export const SESSION_ROLES = [
   "worker",
@@ -165,6 +166,7 @@ export const SESSION_ROLES = [
   "lead",
   "overseer",
   "web-facing",
+  "curator",
 ] as const;
 export type SessionRole = (typeof SESSION_ROLES)[number];
 
@@ -199,6 +201,18 @@ export const CAW_DENIED_TOOLS = {
 
 /** The harnesses a project's Caw can run on: the ones that deny its edit and shell tools. */
 export type CawHarness = keyof typeof CAW_DENIED_TOOLS;
+
+/**
+ * What a project's memory curator may never call (Projects spec §5.4): Caw's
+ * list, and the web. It reads agents' inbox notes, which are untrusted
+ * words, and answers only with proposals the person approves; it has no
+ * reason to fetch anything, so a note cannot send it to a page. Like Caw it
+ * gets CawCo's MCP server and no other (`SpawnPayload.lead`).
+ */
+export const CURATOR_DENIED_TOOLS = {
+  claude: [...CAW_DENIED_TOOLS.claude, "WebFetch", "WebSearch"],
+  opencode: [...CAW_DENIED_TOOLS.opencode, "WebFetch", "WebSearch"],
+} as const satisfies Record<CawHarness, readonly string[]>;
 
 /**
  * Claude Code's tool names as OpenCode 2.0's permission actions. Denied-tool

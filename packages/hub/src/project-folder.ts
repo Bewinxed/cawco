@@ -982,17 +982,69 @@ const putBackAll = async (
  * commit is made. A failed write or commit puts every file back as it was;
  * with `exclusive`, one file whose place is held refuses them all.
  */
-export const writeFolderFiles = async (
+export const writeFolderFiles = (
   projectId: string,
   files: { path: string; content: string | Uint8Array }[],
+  options: FolderWriteOptions & { message: string }
+): Promise<FolderCommits> =>
+  changeFolderFiles(projectId, { writes: files, deletes: [] }, options);
+
+/** Takes `rel` out of the tree, keeping in `before` what it held so a failed commit can put it back. */
+const removeFile = async (
+  root: string,
+  rel: string,
+  before: Map<string, Buffer | undefined>
+): Promise<void> => {
+  const abs = await writable(root, rel);
+  const info = await lstat(abs).catch(notFound(rel));
+  if (info.isDirectory()) {
+    throw new FolderRefusal(
+      409,
+      `${rel} is a folder; delete the files in it one by one.`
+    );
+  }
+  if (!before.has(abs)) {
+    before.set(abs, info.isFile() ? await readFile(abs) : undefined);
+  }
+  await unlink(abs);
+};
+
+/**
+ * {@link writeFolderFiles}, with files taken out in the same commit: what
+ * one change to the folder is (a note archived is its old path deleted and
+ * its new one written). A path both written and deleted is refused. Each
+ * deleted file must be there. A failed write, delete or commit puts every
+ * file back as it was.
+ */
+export const changeFolderFiles = async (
+  projectId: string,
+  change: {
+    deletes: string[];
+    writes: { path: string; content: string | Uint8Array }[];
+  },
   options: FolderWriteOptions & { message: string }
 ): Promise<FolderCommits> => {
   const asked = askedMessage(options.message);
   if (!asked) {
     throw new FolderRefusal(400, "Say what the files are in a commit message.");
   }
-  const writes = toWrite(files);
-  const rels = [...new Set(writes.map((write) => write.rel))];
+  const writes = change.writes.length > 0 ? toWrite(change.writes) : [];
+  const deletes = [...new Set(change.deletes.map((path) => folderPath(path)))];
+  if (deletes.some((rel) => !rel)) {
+    throw new FolderRefusal(400, "Name each file to delete.");
+  }
+  if (writes.length + deletes.length === 0) {
+    throw new FolderRefusal(400, "Name at least one file to change.");
+  }
+  const written = new Set(writes.map((write) => write.rel));
+  const both = deletes.find((rel) => written.has(rel));
+  if (both) {
+    throw new FolderRefusal(
+      400,
+      `${both} is both written and deleted; name it once.`
+    );
+  }
+  const rels = [...written, ...deletes];
   const root = projectRoot(projectId);
   return await inTurn(projectId, async () => {
     await prepare(projectId, root);
@@ -1003,6 +1055,10 @@ export const writeFolderFiles = async (
       for (const { rel, bytes } of writes) {
         // biome-ignore lint/performance/noAwaitInLoops: one file at a time, each checked before it is written
         await putFile(root, rel, bytes, before, exclusive);
+      }
+      for (const rel of deletes) {
+        // biome-ignore lint/performance/noAwaitInLoops: one file at a time, each checked before it goes
+        await removeFile(root, rel, before);
       }
       if (exclusive) {
         // A claim that landed on an earlier file while a later one went in.
@@ -1019,6 +1075,10 @@ export const writeFolderFiles = async (
         asked,
         options.author ?? YOU
       );
+      for (const rel of deletes) {
+        // biome-ignore lint/performance/noAwaitInLoops: each emptied folder, up to the root
+        await pruneEmpty(root, dirname(join(root, rel)));
+      }
       return { ...done, paths: rels };
     } catch (error) {
       await putBackAll(root, rels, before);

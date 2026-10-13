@@ -124,7 +124,7 @@ export interface ViewRoutineRun {
   outcome: string | null;
   /** Why it was skipped or queued, or how it failed. */
   reason: string | null;
-  /** `test`, `by-hand`, `event`, or the time of its scheduled slot in the routine's zone ("09:00"). */
+  /** `test`, `by-hand`, `event`, `inbox`, or the time of its scheduled slot in the routine's zone ("09:00"). */
   slot: string;
   startedAt: number;
   state: string;
@@ -142,7 +142,8 @@ export interface ViewRoutine {
   nextSlot: number;
   /** Newest first. */
   runs: ViewRoutineRun[];
-  target: "delegate" | "lead";
+  /** A fresh delegate each run, a message to Caw, or the project's memory curator. */
+  target: "delegate" | "lead" | "curator";
   timeZone: string;
 }
 

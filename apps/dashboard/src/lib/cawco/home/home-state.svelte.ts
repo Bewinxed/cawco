@@ -824,7 +824,13 @@ class Home {
         cwd: row?.cwd || item.cwd,
         thread: thread ? threadTabId(thread.id) : null,
         machineId: item.machineId,
-        title: thread?.title ?? (row ? instanceTitle(row) : item.hostname),
+        // An ask no session row stands behind (a memory proposal) is titled
+        // by who asked, as the hub named them.
+        title:
+          thread?.title ??
+          (row
+            ? instanceTitle(row)
+            : item.request.presentation.asker || item.hostname),
         place: row ? placeOfRow(row) : placeOf(item.machineId, item.cwd),
         project: projectAt(
           top?.machineId ?? item.machineId,

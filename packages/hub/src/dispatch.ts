@@ -115,6 +115,11 @@ import {
 
 /** What the dispatcher needs of the hub. */
 export interface DispatchDeps {
+  /**
+   * The brief's project context for an attempt at `task` (memory.ts
+   * `contextFor`): AGENTS.md and the knowledge files it needs, or "".
+   */
+  readonly context: (projectId: string, task: TaskView) => Promise<string>;
   readonly db: Pick<
     DbShape,
     | "dropQueuedTaskStart"
@@ -384,8 +389,8 @@ const titleOf = (task: TaskView): string => {
 
 /**
  * The brief: the task file as it stands, the open to-dos to start the plan
- * from (with their ids), the checks finish_item runs, and where the task
- * sits among its edges.
+ * from (with their ids), the checks finish_item runs, where the task sits
+ * among its edges, and the project's context (memory.ts `contextFor`).
  */
 const briefOf = (
   project: ProjectRow,
@@ -394,6 +399,7 @@ const briefOf = (
   checks: WorkItemCheck[],
   lands: LandsMode,
   comments: TaskComment[],
+  context: string,
   retry?: RetryContext
 ): string => {
   const byId = new Map(all.map((each) => [each.id, each]));
@@ -446,6 +452,7 @@ const briefOf = (
       task.checks.length === 0 ? `\n\n${uncheckedLine(lands, task)}` : ""
     }`,
     `## Where it sits\n\n${sits.length > 0 ? sits.join("\n") : "Nothing waits on it, and it waits for nothing."}`,
+    ...(context ? [context] : []),
     ...(retry ? [retrySection(task, retry)] : []),
     ...(comments.length > 0 ? [commentsSection(comments)] : []),
   ].join("\n\n");
@@ -561,6 +568,7 @@ const failure = (
 };
 
 export const createDispatcher = ({
+  context,
   db,
   lead,
   lifetime,
@@ -928,9 +936,19 @@ export const createDispatcher = ({
         )
       : [];
     try {
+      const known = await context(project.id, task);
       const started = await start({
         parentInstanceId: parent.id,
-        prompt: briefOf(project, task, all, checks, lands, comments, retry),
+        prompt: briefOf(
+          project,
+          task,
+          all,
+          checks,
+          lands,
+          comments,
+          known,
+          retry
+        ),
         title: titleOf(task),
         type,
         checks,

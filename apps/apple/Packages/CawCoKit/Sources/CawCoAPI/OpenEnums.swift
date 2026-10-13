@@ -1232,6 +1232,7 @@ public enum OpenEnums {
 
     /// `#/components/schemas/DelegateTypeRole`.
     public enum DelegateTypeRole: OpenEnum {
+        case curator
         case delegate
         case lead
         case overseer
@@ -1242,6 +1243,7 @@ public enum OpenEnums {
 
         public init(rawValue: String) {
             switch rawValue {
+            case "curator": self = .curator
             case "delegate": self = .delegate
             case "lead": self = .lead
             case "overseer": self = .overseer
@@ -1253,6 +1255,7 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
+            case .curator: "curator"
             case .delegate: "delegate"
             case .lead: "lead"
             case .overseer: "overseer"
@@ -1266,7 +1269,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.delegate, .lead, .overseer, .webFacing, .worker]
+        public static let allCases: [Self] = [.curator, .delegate, .lead, .overseer, .webFacing, .worker]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -3750,6 +3753,7 @@ public enum OpenEnums {
 
     /// `#/components/schemas/RoutineTarget`.
     public enum RoutineTarget: OpenEnum {
+        case curator
         case delegate
         case lead
         /// A value this app does not know: a newer hub's.
@@ -3757,6 +3761,7 @@ public enum OpenEnums {
 
         public init(rawValue: String) {
             switch rawValue {
+            case "curator": self = .curator
             case "delegate": self = .delegate
             case "lead": self = .lead
             default: self = .unrecognized(rawValue)
@@ -3765,6 +3770,7 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
+            case .curator: "curator"
             case .delegate: "delegate"
             case .lead: "lead"
             case let .unrecognized(rawValue): rawValue
@@ -3775,7 +3781,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.delegate, .lead]
+        public static let allCases: [Self] = [.curator, .delegate, .lead]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

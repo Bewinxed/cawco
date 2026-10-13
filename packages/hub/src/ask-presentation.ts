@@ -82,8 +82,12 @@ export const createAskPresenter = (
    */
   const askerOf = (
     instanceId: string | undefined,
-    payload: { workflowRunId?: unknown }
+    payload: { proposer?: unknown; workflowRunId?: unknown }
   ): string => {
+    // A memory proposal (memory.ts) is no session's: it names who proposed it.
+    if (typeof payload.proposer === "string") {
+      return payload.proposer;
+    }
     const [row] = instanceId ? db.getInstancesByIds([instanceId]) : [];
     if (row) {
       return boardTitle(row);
@@ -121,6 +125,7 @@ export const createAskPresenter = (
   /** Stamps the ask's presentation onto its payload, read from what the hub holds now. */
   return (envelope: Envelope): void => {
     const payload = envelope.payload as PermissionRequestFrame & {
+      proposer?: unknown;
       workflowRunId?: unknown;
     };
     payload.presentation = presentPermission(payload.toolName, payload.input, {

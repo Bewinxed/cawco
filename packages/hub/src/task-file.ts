@@ -13,6 +13,7 @@
  * duplicate_of: 101
  * checks: ["bun test", "bun run lint"]
  * outputs: [post.md]
+ * context: [knowledge/brand.md]
  * lands: pr
  * group: theme
  * owns: [src/theme/**]
@@ -79,6 +80,7 @@ export const TASK_FIELDS = [
   "duplicate_of",
   "checks",
   "outputs",
+  "context",
   "lands",
   "group",
   "owns",
@@ -117,6 +119,8 @@ export interface TaskFields {
   /** What an attempt may spend before the hub stops it; null: the project's default. */
   budget: WorkBudget | null;
   checks: string[];
+  /** Project folder files its attempt's brief carries (memory.ts `contextFor`): the lead's pick, `knowledge/…`. */
+  context: string[];
   /** The task this one repeats (`duplicate_of`); null when none. */
   duplicateOf: string | null;
   foundIn: string | null;
@@ -377,6 +381,7 @@ const FIELD_KEYS = {
   duplicate_of: "duplicateOf",
   checks: "checks",
   outputs: "outputs",
+  context: "context",
   lands: "lands",
   group: "group",
   owns: "owns",
@@ -428,6 +433,7 @@ const emptyFields = (): TaskFields => ({
   duplicateOf: null,
   checks: [],
   outputs: [],
+  context: [],
   lands: null,
   group: null,
   owns: [],
@@ -547,6 +553,7 @@ const readBudget = (
 const LIST_FIELDS: ReadonlySet<string> = new Set([
   "checks",
   "outputs",
+  "context",
   "owns",
   "labels",
   "accounts",
@@ -574,8 +581,9 @@ const readField = (
   } else if (field === "duplicate_of") {
     fields.duplicateOf = readEdge(field, line, problems);
   } else if (LIST_FIELDS.has(field)) {
-    fields[field as "checks" | "outputs" | "owns" | "labels" | "accounts"] =
-      readList(field, line, problems);
+    fields[
+      field as "checks" | "outputs" | "context" | "owns" | "labels" | "accounts"
+    ] = readList(field, line, problems);
   } else if (SCALAR_FIELDS.has(field)) {
     fields[field as "stage" | "type" | "group" | "rank"] = scalarOf(line);
   } else if (field === "budget") {

@@ -2324,8 +2324,30 @@ function adoptPending(
   }
   for (const envelope of pending) {
     if ((askSettledHeard.get(envelope.requestId ?? "") ?? 0) <= readFrom) {
+      adoptAskMachine(envelope);
       handleFrame(envelope.payload);
     }
+  }
+}
+
+/**
+ * An ask the hub parked for no session it keeps a row for (a project's
+ * memory proposal, hub memory.ts): its answer names the envelope's machine,
+ * since no row says one. A workflow's question is its run's, not a session's.
+ */
+function adoptAskMachine(envelope: Envelope<FramePayload>): void {
+  const frame = envelope.payload;
+  if (
+    frame.kind !== "permission_request" ||
+    "workflowRunId" in frame ||
+    !envelope.machineId ||
+    instanceIndex.byId.has(frame.instanceId)
+  ) {
+    return;
+  }
+  const target = session(frame.instanceId);
+  if (!target.machineId) {
+    target.machineId = envelope.machineId;
   }
 }
 
@@ -4543,6 +4565,7 @@ function bind(socket: WebSocket): void {
       return;
     }
     const { payload } = envelope;
+    adoptAskMachine(envelope);
     // The hub's own refusal names the request it answers on the envelope
     // alone: read from the payload only, it settled nothing, and whoever
     // asked waited out the timeout while the reason went to the console.

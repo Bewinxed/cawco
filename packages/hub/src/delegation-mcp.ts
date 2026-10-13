@@ -25,6 +25,7 @@ import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import type { AttemptStart } from "./dispatch";
 import { INGRESS_TOOLS, type Ingress } from "./ingress";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import { MEMORY_TOOLS, type Memory } from "./memory";
 import {
   type AcceptResult,
   mayMakeProject,
@@ -44,8 +45,14 @@ type RoutineTool = ReturnType<Routines["tools"]>[number];
 type IngressTool = ReturnType<Ingress["tools"]>[number];
 type ActionTool = ReturnType<Actions["tools"]>[number];
 type RelayTool = ReturnType<Relay["tools"]>[number];
-/** A tool of a project's own groups: routines, ingress, approved actions, relays. */
-type ProjectTool = RoutineTool | IngressTool | ActionTool | RelayTool;
+type MemoryTool = ReturnType<Memory["tools"]>[number];
+/** A tool of a project's own groups: routines, ingress, approved actions, relays, memory. */
+type ProjectTool =
+  | RoutineTool
+  | IngressTool
+  | ActionTool
+  | RelayTool
+  | MemoryTool;
 
 /** Tools that run for minutes, and what their progress heartbeat says meanwhile. */
 const LONG_CALLS: Record<string, string> = {
@@ -180,6 +187,8 @@ export function createDelegationMcp(options: {
   actionTools?: (actor: InstanceRow | undefined) => ActionTool[];
   /** The relay tools (relay.ts): a project's public webhook paths, opening one asks you. */
   relayTools?: (actor: InstanceRow | undefined) => RelayTool[];
+  /** The memory tools (memory.ts): notes into a project's inbox, the curator's sorting and proposals. */
+  memoryTools?: (actor: InstanceRow | undefined) => MemoryTool[];
   /**
    * Connections (connections.ts): the `conn__<name>__<tool>` tools a session
    * is granted, and the hub's call of one for it.
@@ -289,6 +298,7 @@ export function createDelegationMcp(options: {
           options.ingressTools,
           options.actionTools,
           options.relayTools,
+          options.memoryTools,
         ] as (((actor: undefined) => (ProjectTool | CawTool)[]) | undefined)[]
       ).flatMap((group) => group?.(undefined) ?? []),
     ];
@@ -560,16 +570,16 @@ export function createDelegationMcp(options: {
     return await projectToolCall(actor, name, input);
   };
 
-  /** A routine, ingress or approved-action tool (routines.ts, ingress.ts, actions.ts), bound to the caller. */
+  /** A routine, ingress, approved-action, relay or memory tool (routines.ts, ingress.ts, actions.ts, relay.ts, memory.ts), bound to the caller. */
   const projectToolCall = async (
     actor: InstanceRow,
     name: string,
     input: Record<string, unknown>
   ): Promise<CallToolResult | undefined> => {
-    let group:
-      | (RoutineTool | IngressTool | ActionTool | RelayTool)[]
-      | undefined;
-    if (RELAY_TOOLS.has(name)) {
+    let group: ProjectTool[] | undefined;
+    if (MEMORY_TOOLS.has(name)) {
+      group = options.memoryTools?.(actor);
+    } else if (RELAY_TOOLS.has(name)) {
       group = options.relayTools?.(actor);
     } else if (ROUTINE_TOOLS.has(name)) {
       group = options.routineTools?.(actor);

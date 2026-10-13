@@ -379,6 +379,8 @@ export interface TaskView extends TaskFlags, TaskTimes {
   checks: string[];
   /** Its `## Comments`, oldest first: each written by the hub with who and when. */
   comments: TaskComment[];
+  /** Project folder files its attempt's brief carries (`context:`), the lead's pick. */
+  context: string[];
   description: string;
   /** The task it repeats (`duplicate_of`); null when none. */
   duplicateOf: string | null;
@@ -420,6 +422,8 @@ export interface TaskDraft {
   after?: string[];
   budget?: WorkBudget;
   checks?: string[];
+  /** Project folder files its attempt's brief carries, like knowledge/brand.md. */
+  context?: string[];
   description?: string;
   /** Fields a task file does not know (`priority`, `due`): a scalar or a list each. */
   fields?: Record<string, ExtraValue>;
@@ -445,6 +449,7 @@ export interface TaskPatch {
   /** What an attempt may spend; null: the project's default. */
   budget?: WorkBudget | null;
   checks?: string[];
+  context?: string[];
   description?: string;
   /** Fields a task file does not know, each set (a scalar or a list) or taken out ("" or []); the others stay. */
   fields?: Record<string, ExtraValue>;
@@ -796,6 +801,7 @@ const viewOf = (
   duplicateOf: parsed.fields.duplicateOf,
   checks: parsed.fields.checks,
   outputs: parsed.fields.outputs,
+  context: parsed.fields.context,
   lands: parsed.fields.lands,
   group: parsed.fields.group,
   owns: parsed.fields.owns,
@@ -983,7 +989,7 @@ const applyPatch = (doc: TaskDoc, patch: TaskPatch): string => {
     const owns = ownsOf(patch.owns);
     set("owns", () => doc.setField("owns", owns));
   }
-  for (const field of ["checks", "outputs", "labels"] as const) {
+  for (const field of ["checks", "outputs", "context", "labels"] as const) {
     const list = patch[field];
     if (list !== undefined) {
       set(field, () => doc.setField(field, items(field, list)));
@@ -2530,6 +2536,7 @@ export const createTasks = (store: TaskStore) => {
           foundIn: await single(projectId, "found_in", draft.foundIn),
           checks: items("checks", draft.checks ?? []),
           outputs: items("outputs", draft.outputs ?? []),
+          context: items("context", draft.context ?? []),
           lands: draft.lands ?? null,
           ...limitsOf(draft),
           rank: draft.rank ? oneLine("rank", draft.rank, 64) : null,
@@ -3090,6 +3097,7 @@ export const taskRoutes = (tasks: Tasks) =>
           foundIn: t.Optional(t.String()),
           checks: t.Optional(t.Array(t.String())),
           outputs: t.Optional(t.Array(t.String())),
+          context: t.Optional(t.Array(t.String())),
           lands: t.Optional(LANDS),
           group: t.Optional(t.String()),
           owns: t.Optional(t.Array(t.String())),
@@ -3132,6 +3140,7 @@ export const taskRoutes = (tasks: Tasks) =>
           budget: t.Optional(t.Nullable(BUDGET)),
           checks: t.Optional(t.Array(t.String())),
           outputs: t.Optional(t.Array(t.String())),
+          context: t.Optional(t.Array(t.String())),
           labels: t.Optional(t.Array(t.String())),
           fields: t.Optional(FIELDS),
         }),

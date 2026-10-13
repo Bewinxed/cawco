@@ -52,6 +52,7 @@ import {
   type CawInitiated,
   type CawRunning,
   type CawView,
+  CURATOR_DENIED_TOOLS,
   type Envelope,
   type InstanceRow,
   type PermissionRequestFrame,
@@ -85,6 +86,7 @@ import type {
 } from "./db";
 import type { Origin, WorkOrigin } from "./db/schema";
 import { inboxText } from "./ingress";
+import { MAKE_A_NOTE, personsTier, ROUTINE_ORIGIN } from "./memory";
 import { VIEW_PROMPT } from "./openui";
 import type { Caps } from "./project-caps";
 import { readProjectTypes } from "./project-delegate-types";
@@ -135,12 +137,23 @@ export const cawDenied = (harness: string): readonly string[] => {
   return CAW_DENIED_TOOLS[harness as CawHarness];
 };
 
+/** A memory curator's denied tools on `harness` (core `CURATOR_DENIED_TOOLS`); refused on one that cannot deny them. */
+const curatorDenied = (harness: string): readonly string[] => {
+  if (!(harness in CURATOR_DENIED_TOOLS)) {
+    throw new Error(
+      `The memory curator does not run on ${harness}: it cannot deny the curator's edit, shell and web tools. Give the Memory curator routine a delegate type on Claude Code or OpenCode.`
+    );
+  }
+  return CURATOR_DENIED_TOOLS[harness as CawHarness];
+};
+
 /**
  * A spawn as it reaches a machine: a lead row's (a project's Caw) also denies
- * Caw's edit, shell and subagent tools on `harness`, whatever else it denies,
- * and says it is a lead ({@link SpawnPayload.lead}), so the machine gives it
- * CawCo's MCP server and no other. Any other row's spawn says it is none,
- * whatever its caller sent.
+ * Caw's edit, shell and subagent tools on `harness`, a curator row's (a
+ * project's memory curator run) those and the web, whatever else it denies;
+ * both say they are a lead ({@link SpawnPayload.lead}), so the machine gives
+ * them CawCo's MCP server and no other. Any other row's spawn says it is
+ * none, whatever its caller sent.
  */
 export const withCawDenials = (
   payload: SpawnPayload,
@@ -148,15 +161,19 @@ export const withCawDenials = (
   harness: string
 ): SpawnPayload => {
   const { lead: _callerLead, ...asked } = payload;
-  return row.role === "lead"
-    ? {
-        ...asked,
-        lead: true,
-        denyTools: [
-          ...new Set([...(asked.denyTools ?? []), ...cawDenied(harness)]),
-        ],
-      }
-    : asked;
+  let denied: readonly string[];
+  if (row.role === "lead") {
+    denied = cawDenied(harness);
+  } else if (row.role === "curator") {
+    denied = curatorDenied(harness);
+  } else {
+    return asked;
+  }
+  return {
+    ...asked,
+    lead: true,
+    denyTools: [...new Set([...(asked.denyTools ?? []), ...denied])],
+  };
 };
 
 /**
@@ -170,6 +187,8 @@ export const withCawDenials = (
 export interface CawEvent {
   by: Origin;
   note?: { body?: string; title: string };
+  /** The routine whose run this wake is (routines.ts): its turn is that run's, and a note in it is tainted (memory.ts). */
+  routine?: string;
   text: string;
   /** Its thread: the note goes there, and that thread is `working` while the turn it wakes runs. */
   threadId?: string;
@@ -284,7 +303,8 @@ const refuse = (code: 400 | 403 | 404 | 409, message: string): never => {
 const briefOf = (projectName: string): string =>
   [
     `You are Caw, the lead of the project “${projectName}” in CawCo.`,
-    "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft, view_query), its folder on the hub (folder_read, folder_write: stages.md, delegates/, AGENTS.md, decisions/), decision pages (artifact_create with kind page builds decisions/<name>/page.html and shows it; artifact_read has the picks), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate, set_item_checks), and send_to_user. You have no edit or shell tools: work that changes the project's code becomes a task or a delegate.",
+    "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft, view_query), its folder on the hub (folder_read, folder_write: stages.md, delegates/, decisions/), decision pages (artifact_create with kind page builds decisions/<name>/page.html and shows it; artifact_read has the picks), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate, set_item_checks), and send_to_user. You have no edit or shell tools: work that changes the project's code becomes a task or a delegate.",
+    "AGENTS.md and knowledge/ are the person's: you never write them. Propose a change with memory_propose (the file's whole new text and why); they approve or reject it. Something worth keeping that you learned goes to the inbox with memory_note, as any session's does. A task's `context` names the knowledge/ files its attempt's brief carries.",
     "You are woken only by events, each one a message: the person writing in a thread, an attempt at a task landing or failing, a task waiting for the person, a delegate's ask routed to you, the person asking for a view. Handle the event, then end your turn. Nothing wakes you on a timer. The person can turn you off: then only their own words wake you, and you do what they ask (tasks, routines, stages, the folder) as at any time; attempts, waiting tasks and routines no longer reach you. Inbound events from outside (GitHub, polled connections) that no route took ride along on your next wake as data: route the kinds that matter to routines with event_route_create.",
     "When the person writes in a thread, answer in that thread with thread_reply; the person does not see what you say outside it. Name the tasks a reply is about in its `tasks`. Code coordinates, models judge, the person decides: permissions, merges, configuration and public actions are theirs, so ask in the thread (AskUserQuestion lands there).",
     "A view-request event is the person asking for a view of the project: it carries how to write one. Answer it with view_draft, then say in that thread what you drafted; the person keeps or discards it.",
@@ -339,6 +359,11 @@ export interface CawDeps {
   readonly leadHome: (
     projectId: string
   ) => Promise<{ machineId: string; cwd: string } | undefined>;
+  /** "Make a note" (memory.ts): your words straight into the project's AGENTS.md, as your commit. */
+  readonly makeNote: (
+    projectId: string,
+    text: string
+  ) => Promise<{ sha: string }>;
   /** Whether a machine is connected now; without one, whether any is. */
   readonly online: (machineId?: string) => boolean;
   /**
@@ -383,6 +408,7 @@ export const createCaw = ({
   inTurn,
   interrupt,
   leadHome,
+  makeNote,
   online,
   publish,
   send,
@@ -654,7 +680,15 @@ export const createCaw = ({
       : "No machine is online, so Caw can't start. Bring a machine online, then write here.";
   };
 
-  const message = (target: InstanceRow, content: string): void =>
+  /**
+   * One message to Caw's session. A routine's wake says so in its origin
+   * (`routine:<id>`): the turn it starts is that run's (memory.ts).
+   */
+  const message = (
+    target: InstanceRow,
+    content: string,
+    routine?: string
+  ): void =>
     send({
       verb: "send",
       machineId: target.machineId,
@@ -666,7 +700,10 @@ export const createCaw = ({
           uuid: crypto.randomUUID(),
           message: { role: "user", content },
           parent_tool_use_id: null,
-          origin: { kind: "system", name: "caw" },
+          origin: {
+            kind: "system",
+            name: routine ? `${ROUTINE_ORIGIN}${routine}` : "caw",
+          },
         },
       },
     });
@@ -678,7 +715,8 @@ export const createCaw = ({
    */
   const startLead = async (
     project: ReturnType<typeof projectOf>,
-    event: string
+    event: string,
+    routine?: string
   ): Promise<InstanceRow> => {
     const place =
       (await placeFor(project)) ??
@@ -704,7 +742,7 @@ export const createCaw = ({
     if (!lead) {
       throw new Error(`Caw's session ${instanceId} has no row on this hub.`);
     }
-    message(lead, `${briefOf(project.name)}\n\n${event}`);
+    message(lead, `${briefOf(project.name)}\n\n${event}`, routine);
     console.log(
       `[caw] ${project.name}: started Caw on ${project.cawHarness} (${instanceId})`
     );
@@ -721,7 +759,8 @@ export const createCaw = ({
   const leadFor = async (
     projectId: string,
     event: string,
-    by: Origin
+    by: Origin,
+    routine?: string
   ): Promise<{ row: InstanceRow; started: boolean } | undefined> => {
     const project = projectOf(projectId);
     if (by === "event" && !project.caw) {
@@ -735,7 +774,7 @@ export const createCaw = ({
     if (pending !== undefined) {
       return { row: await pending, started: false };
     }
-    const start = startLead(project, event).finally(() =>
+    const start = startLead(project, event, routine).finally(() =>
       starting.delete(projectId)
     );
     starting.set(projectId, start);
@@ -818,7 +857,7 @@ export const createCaw = ({
       db.ingress.releaseInbox(inbox.map((line) => line.id));
     let lead: Awaited<ReturnType<typeof leadFor>>;
     try {
-      lead = await leadFor(projectId, text, event.by);
+      lead = await leadFor(projectId, text, event.by, event.routine);
     } catch (error) {
       giveBack();
       settle(threadId);
@@ -833,7 +872,7 @@ export const createCaw = ({
       follow(lead.row, projectId, threadId, event.by);
     }
     if (!lead.started) {
-      message(lead.row, text);
+      message(lead.row, text, event.routine);
     }
     return true;
   };
@@ -1116,6 +1155,32 @@ export const createCaw = ({
     };
   };
 
+  /**
+   * "Make a note: …" in a thread: the rest of your words go straight into
+   * AGENTS.md as your commit (memory.ts). No model is woken: there is
+   * nothing for Caw to do with it. Answers the commit.
+   */
+  const noteInAgents = async (
+    projectId: string,
+    body: string
+  ): Promise<string> => {
+    try {
+      return (await makeNote(projectId, body.replace(MAKE_A_NOTE, ""))).sha;
+    } catch (error) {
+      const code = (error as { status?: unknown }).status;
+      if (code === 400 || code === 404 || code === 409) {
+        return refuse(code, (error as Error).message);
+      }
+      throw error;
+    }
+  };
+
+  /** The thread's word on a note you made. */
+  const notedLine = (sha: string) => ({
+    title: "AGENTS.md · noted",
+    body: `Added to AGENTS.md as your commit ${sha.slice(0, 9)}.`,
+  });
+
   /** A message id the dashboard chose is a new one: a second send of it is refused. */
   const unsaid = (id: string | undefined): void => {
     if (id && db.threadMessage(id)) {
@@ -1374,7 +1439,7 @@ export const createCaw = ({
       return byProject;
     },
 
-    /** Starts a thread with your first message, and wakes Caw with it. */
+    /** Starts a thread with your first message, and wakes Caw with it; "Make a note: …" goes to AGENTS.md instead. */
     async start(
       projectId: string,
       raw: string,
@@ -1382,6 +1447,13 @@ export const createCaw = ({
     ): Promise<ThreadSaid> {
       const body = bodyOf(raw);
       unsaid(id);
+      if (MAKE_A_NOTE.test(body)) {
+        projectOf(projectId);
+        const sha = await noteInAgents(projectId, body);
+        const opened = open(projectId, body, id);
+        noteIn(projectId, opened.row.id, notedLine(sha));
+        return { ...opened.said, thread: summaryOf(opened.row) };
+      }
       listening(projectId);
       const opened = open(projectId, body, id);
       await wake(projectId, {
@@ -1393,7 +1465,8 @@ export const createCaw = ({
     },
 
     /**
-     * Adds your message to a thread, and wakes Caw with it. `id` is the
+     * Adds your message to a thread, and wakes Caw with it ("Make a note: …"
+     * goes to AGENTS.md instead, waking nobody). `id` is the
      * message's when the dashboard chose it, as a session's composer does:
      * the row your words fly into is then the one they went out as, however
      * soon the hub's frame draws it.
@@ -1407,6 +1480,18 @@ export const createCaw = ({
       const body = bodyOf(raw);
       threadIn(projectId, threadId);
       unsaid(id);
+      if (MAKE_A_NOTE.test(body)) {
+        const sha = await noteInAgents(projectId, body);
+        const added = db.addThreadMessage({
+          threadId,
+          author: "you",
+          body,
+          ...(id ? { id } : {}),
+        });
+        const out = said(added.thread, added.message, false);
+        noteIn(projectId, threadId, notedLine(sha));
+        return { ...out, thread: summaryOf(added.thread) };
+      }
       listening(projectId);
       const added = db.addThreadMessage({
         threadId,
@@ -1855,6 +1940,10 @@ export const createCaw = ({
           async ({ path, content }) => {
             const projectId = mine();
             const rel = await folderCall(() => folderPath(path));
+            const theirs = personsTier(rel);
+            if (theirs) {
+              throw new Error(`${rel} was not written: ${theirs}`);
+            }
             if (rel === STAGES_FILE) {
               const reading = readStages(content);
               if (!reading.ok) {

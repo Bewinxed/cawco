@@ -607,6 +607,36 @@ function adminWrite(
   }
 }
 
+/** The tool name a project memory proposal is parked under (hub memory.ts). */
+export const MEMORY_PROPOSAL_TOOL = "mcp__cawco__memory_propose";
+
+/**
+ * A memory proposal (Projects spec §5.4): a change to the project's AGENTS.md
+ * or a knowledge file, as the curator or Caw proposed it, citing the inbox
+ * notes it comes from. The hub puts the file as it stood (`before`) beside
+ * the proposed text (`content`) as it parks it.
+ */
+function memoryProposal(input: Record<string, unknown>): Presented {
+  const path = text(input.path) ?? "(no path)";
+  const before = typeof input.before === "string" ? input.before : "";
+  const content = typeof input.content === "string" ? input.content : "";
+  const { change: made, stat } = changeOf(path, before, content);
+  const notes = Array.isArray(input.notes)
+    ? input.notes.filter((note): note is string => typeof note === "string")
+    : [];
+  return {
+    summary: before === "" ? `Add ${path}` : `Change ${path}`,
+    detail: statWords(stat),
+    changes: [made],
+    fields: [
+      ...fieldsOf(input, ["path", "before", "content", "notes", "project"]),
+      ...(notes.length > 0
+        ? [{ key: "from notes", value: notes.join(", ") }]
+        : []),
+    ],
+  };
+}
+
 /** A file path, however the harness keys it (Claude Code, OpenCode, pi). */
 const filePathOf = (input: Record<string, unknown>): string | undefined =>
   text(input.file_path) ??
@@ -758,6 +788,9 @@ export function presentPermission(
       changes: [],
       fields: [],
     };
+  }
+  if (toolName === MEMORY_PROPOSAL_TOOL) {
+    return { asker: context.asker, ...memoryProposal(input) };
   }
   const admin = CAWCO_ADMIN_WRITE.exec(toolName);
   // An MCP tool is never a harness's own, whatever it is called.

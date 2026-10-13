@@ -242,9 +242,10 @@ export interface SpawnPayload {
   /** The in-flight maintenance send a surviving Claude process is answering. */
   keepAliveTurn?: string;
   /**
-   * This spawn is a project's Caw (a `lead` row): the machine gives it
-   * CawCo's MCP server and no other. Set by the hub alone, on every launch
-   * of a lead row, and never taken from a caller.
+   * This spawn is a project's Caw or its memory curator (a `lead` or
+   * `curator` row): the machine gives it CawCo's MCP server and no other.
+   * Set by the hub alone, on every launch of such a row, and never taken
+   * from a caller.
    */
   lead?: true;
   /**

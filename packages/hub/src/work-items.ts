@@ -47,6 +47,7 @@ import type {
   PlanStep,
   SendPayload,
   SendRefusal,
+  SessionRole,
   SpawnPayload,
   WorkItemSummary,
   WorkspaceCheckout,
@@ -463,6 +464,11 @@ export interface WorkItemRequest {
    * sessions of that workspace's earlier items are stopped first.
    */
   reuse?: string;
+  /**
+   * The toolset its session runs in, over its type's: set by the hub alone
+   * (a memory curator run's `curator`, routines.ts), never by a tool call.
+   */
+  role?: SessionRole;
   skills?: string[];
   /**
    * The project task the item is an attempt at (dispatch.ts). Only for a new
@@ -596,6 +602,11 @@ export interface WorkItemDeps {
     fallbackMode: PermissionMode,
     placed?: { accountId?: string }
   ) => void;
+  /**
+   * An item's session was filed under its parent's turn (memory.ts
+   * `TurnWatch.spawned`): a routine run's turn makes its children the run's.
+   */
+  readonly spawnedUnder?: (instanceId: string, parentId: string) => void;
   /** A task's title as its project's index has it: a pull request's title. */
   readonly taskTitle?: (
     projectId: string,
@@ -653,6 +664,8 @@ interface Settings {
   forkOf?: string;
   harness: HarnessKind;
   model?: string;
+  /** The request's role, over its type's ({@link WorkItemRequest.role}). */
+  role?: SessionRole;
   skills?: string[];
   type?: DelegateType;
 }
@@ -698,7 +711,7 @@ const sessionOf = (
   instanceId: string,
   title: string,
   parent: Parent,
-  { account, canDelegate, forkOf, harness, model, skills, type }: Settings
+  { account, canDelegate, forkOf, harness, model, role, skills, type }: Settings
 ): Omit<SpawnPayload, "cwd"> => ({
   instanceId,
   harness,
@@ -721,8 +734,9 @@ const sessionOf = (
     : {}),
   ...(type?.cawcoTodos ? { cawcoTodos: true } : {}),
   // Its type's toolset (§5.3), kept on its row: a web-facing type's
-  // sessions never see posting or admin tools.
-  ...(type?.role ? { role: type.role } : {}),
+  // sessions never see posting or admin tools. The hub's own role for it
+  // (a curator run's) stands over the type's.
+  ...((role ?? type?.role) ? { role: role ?? type?.role } : {}),
   // Nested under its parent, and kept out of the catalogs as a spin-off
   // is; the workspace, not the session, owns the checkout.
   scratch: {},
@@ -1261,6 +1275,7 @@ export const createWorkItems = ({
   send,
   sessionUrl,
   spawn,
+  spawnedUnder,
   taskTitle,
   todos,
   types,
@@ -2221,6 +2236,7 @@ export const createWorkItems = ({
       skills: request.skills?.length ? request.skills : type?.skills,
       canDelegate: request.canDelegate ?? type?.canDelegate ?? false,
       ...(request.account ? { account: request.account } : {}),
+      ...(request.role ? { role: request.role } : {}),
     };
     return request.fork
       ? { ...settings, ...forkOf(request, parent) }
@@ -2706,6 +2722,7 @@ export const createWorkItems = ({
       checks: request.checks,
     });
     published(item);
+    spawnedUnder?.(instanceId, parent.id);
 
     try {
       // A fork opens with what it is.
@@ -3712,8 +3729,10 @@ export const createWorkItems = ({
      * when it starts. Every other refusal is the caller's.
      */
     async delegate(
-      asked: WorkItemRequest
+      called: WorkItemRequest
     ): Promise<WorkItemStart | { queued: string; text: string }> {
+      // A role is the hub's to give (a curator run's), never a caller's.
+      const { role: _role, ...asked } = called;
       try {
         return await start(asked);
       } catch (error) {

@@ -364,6 +364,7 @@ export function taskTools(context: TaskToolContext | undefined) {
           .describe("The task whose work turned this one up."),
         checks: lines("Shell commands that must pass, like bun test."),
         outputs: lines("Files it produces that are not commits."),
+        context: lines("knowledge/ files for its brief."),
         lands: landsParameter().optional(),
         group: groupParameter().optional(),
         owns: ownsParameter().optional(),
@@ -399,6 +400,7 @@ export function taskTools(context: TaskToolContext | undefined) {
           .describe("A delegate type; null clears it."),
         checks: lines("Replaces the checks."),
         outputs: lines("Replaces the outputs."),
+        context: lines("Replaces the context."),
         lands: landsParameter()
           .nullable()
           .optional()

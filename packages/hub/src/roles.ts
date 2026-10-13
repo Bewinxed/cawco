@@ -23,6 +23,14 @@
  *   a session or you, and the fleet's hooks (a write asks you first).
  * - **web-facing**: a session that reads the outside world: it finishes its
  *   work and tells you, with no posting, spawning or admin tools.
+ * - **curator**: a project's memory curator run (memory.ts): it reads the
+ *   inbox, proposes changes to AGENTS.md and `knowledge/` for you to approve,
+ *   archives the notes that are not lasting facts, and finishes. No edit,
+ *   shell or web tools in its harness either (caw.ts `withCawDenials`).
+ *
+ * Memory (§5.4): the worker, the delegate and the lead write notes into
+ * their project's inbox (`memory_note`); only the lead and the curator
+ * propose (`memory_propose`), and only the curator sorts the inbox.
  */
 import type { InstanceRow, SessionRole } from "@cawco/core";
 import { ARTIFACT_TOOLS } from "./artifacts/tools";
@@ -109,6 +117,9 @@ const ACTION = ["action_propose", "action_list", "action_cancel"] as const;
  */
 const RELAY = ["relay_create", "relay_list", "relay_remove"] as const;
 
+/** A memory curator run's own (memory.ts): never a worker's. */
+const CURATOR_OWN = ["memory_read", "memory_classify"] as const;
+
 /** The session tools a delegate keeps from the worker's set. */
 const DELEGATE_SESSION = [
   "create_workflow",
@@ -142,12 +153,19 @@ const DELEGATE_SESSION = [
  * own ({@link allows}).
  */
 const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
-  delegate: new Set([...CORE, ...DELEGATE_SESSION, ...TASK_READ]),
+  delegate: new Set([
+    ...CORE,
+    ...DELEGATE_SESSION,
+    ...TASK_READ,
+    "memory_note",
+  ]),
   lead: new Set([
     ...CORE,
     ...TASK_READ,
     ...TASK_WRITE,
     ...CAW_TOOLS,
+    "memory_note",
+    "memory_propose",
     // Decision pages: Caw builds them from his folder's decisions/<name>/page.html.
     ...ARTIFACT_TOOLS,
     ...ROUTINE,
@@ -182,13 +200,24 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     "generate_image",
     "show_image",
   ]),
+  curator: new Set([
+    "set_title",
+    "finish_item",
+    "memory_propose",
+    ...CURATOR_OWN,
+  ]),
 };
 
-const CAWS: ReadonlySet<string> = new Set(CAW_TOOLS);
+/** What a worker never has: Caw's own, and the curator's (proposing is the lead's and the curator's). */
+const NOT_THE_WORKERS: ReadonlySet<string> = new Set([
+  ...CAW_TOOLS,
+  ...CURATOR_OWN,
+  "memory_propose",
+]);
 
 /** Whether a session in `role` may see and call the tool `name`. */
 export const allows = (role: SessionRole, name: string): boolean =>
-  role === "worker" ? !CAWS.has(name) : TOOLS[role].has(name);
+  role === "worker" ? !NOT_THE_WORKERS.has(name) : TOOLS[role].has(name);
 
 /**
  * Which of a granted connection's tools (connections.ts) a role gets: a
@@ -216,7 +245,14 @@ export const refusal = (role: SessionRole, name: string): string => {
       return `${name} isn't available to fleet-watch triage: it reads the fleet, stops or interrupts, and tells a session or you.`;
     case "delegate":
       return `${name} isn't available here: only sessions you started file, change or start tasks or change fleet settings, and this one is a delegate, work item or workflow step. Hand the change to the session that started it.`;
+    case "curator":
+      return `${name} isn't available to the memory curator: it reads the inbox, proposes with memory_propose, archives with memory_classify, and finishes.`;
     default:
-      return `${name} belongs to a project's Caw.`;
+      if (name === "memory_propose") {
+        return "memory_propose belongs to a project's Caw and its memory curator: write what you learned with memory_note, and the curator proposes it to the person.";
+      }
+      return CURATOR_OWN.includes(name as (typeof CURATOR_OWN)[number])
+        ? `${name} belongs to a project's memory curator.`
+        : `${name} belongs to a project's Caw.`;
   }
 };
