@@ -730,7 +730,7 @@ export function handoffTools(deps: HandoffDeps) {
           .enum(["live", "all"])
           .optional()
           .describe(
-            "live (default): items not ended, or ended in the last hour. all: every item."
+            "live (default): items not dismissed that are not ended, or ended in the last hour. all: every item."
           ),
       },
       async ({ include }) => {

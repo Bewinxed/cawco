@@ -12054,6 +12054,13 @@ export const createServer = (
     artifactSessions.refresh();
     const moved = boardMoved;
     boardMoved = new Set();
+    // A work item follows its session's life: of every row the database
+    // changed since the last publish (its change log, whichever path wrote
+    // it — a failed process, a register's settle, a refused restore), one in
+    // `error` or gone fails its live item (work-items `followSessions`).
+    if (moved.size > 0) {
+      workItems.followSessions(moved);
+    }
     const upserts: typeof rows = [];
     const present = new Set<string>();
     for (const row of rows) {
@@ -16301,9 +16308,11 @@ export const createServer = (
 
   /**
    * A session failed to start, or its process died of something the reader
-   * should see: the row records it, a live work item fails and its parent
-   * hears why, and what it was sent and never read waits, owed, for the
-   * session's next start — or fails with it, when its conversation is gone.
+   * should see: the row records it — and its live work item fails with it,
+   * its parent told why, as every row in `error` takes its item
+   * (work-items `followSessions`, on this publish) — and what it was sent
+   * and never read waits, owed, for the session's next start, or fails with
+   * it when its conversation is gone.
    */
   const processFailed = (
     machineId: string,
@@ -16313,15 +16322,6 @@ export const createServer = (
     turnWaiters.get(instanceId)?.reject(new Error(reason));
     db.failInstance(instanceId, reason);
     sayNestedBoundaryFix(reason);
-    // A live work item whose session never started failed, and its
-    // parent hears why rather than waiting on a report forever.
-    const [unstarted] = db.getInstancesByIds([instanceId]);
-    const line = unstarted?.workItemId
-      ? workItems.spawnFailed(unstarted, reason)
-      : undefined;
-    if (unstarted && line !== undefined) {
-      reportToParent(unstarted, `${reason}${line}`, true);
-    }
     workflowRuntime.observe(instanceId, reason);
     losePending(instanceId, reason !== CLAUDE_CONVERSATION_GONE, reason);
     escalateRoutedAsks(instanceId);
@@ -16434,9 +16434,10 @@ export const createServer = (
 
   /**
    * Once a hub start, at each machine's first register: every running work
-   * item whose session on it has no process, was not restored just now, and
-   * whose last turn never ended — work a restart cut that no restore reached
-   * (older than the restore's horizon, past its cap, or from before the hub
+   * item whose session on it is asleep (no process, not failed), was not
+   * restored just now, and whose last turn never ended — work a restart cut
+   * that no restore reached (older than the restore's horizon, past its
+   * cap, or from before the hub
    * kept the turn it cut). Its session is woken to carry on, once, when its
    * workspace is still there and someone still hears its reports; otherwise
    * the item fails, and they hear why ({@link settleCutItem}).
@@ -16457,6 +16458,10 @@ export const createServer = (
         restored.has(row.id) ||
         row.status === "running" ||
         row.status === "starting" ||
+        // Not asleep: failed, its item failing with it (work-items
+        // `followSessions`). Its conversation may be gone, and a turn
+        // handed back to it would only be refused.
+        row.status === "error" ||
         db.ownedInstance(row.id, row.machineId)?.endIntent ||
         item.state !== "running" ||
         item.checkingSince !== null ||
@@ -16540,7 +16545,7 @@ export const createServer = (
       workspace?.state === "active"
         ? "nobody is left to hear its reports"
         : `its workspace ${item.workspaceId} is gone`;
-    workItems.unresumed(
+    workItems.sessionFailed(
       row,
       `Its session's turn was cut by a restart after ${utcClock(cut.at)} and was not resumed: ${why}.`
     );

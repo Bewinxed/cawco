@@ -215,7 +215,7 @@ async function run(kit: Kit): Promise<void> {
       workspace_id: workspace,
       parent_instance_id: parent,
       // A session the hub has a row for: an item whose session is gone is
-      // failed by its 30 s sweep (work-items.ts `endGone`).
+      // failed by its 30 s sweep (work-items.ts `followSessions`).
       instance_id: delegateSession,
       harness: "claude",
       state: "running",

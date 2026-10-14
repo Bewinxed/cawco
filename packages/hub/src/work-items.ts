@@ -655,6 +655,9 @@ const BUDGET_SWEEP_MS = 30_000;
 
 /** Why a live item whose session row no longer exists fails. */
 const SESSION_GONE = "its session is gone";
+/** A session row in `error` that kept no words for why. */
+const SESSION_FAILED_UNSAID =
+  "Its session failed, and its machine sent no words for why.";
 
 /** How long an agent leaves a session at rest before it sleeps it (agent session.ts `IDLE_SLEEP_MS`). */
 const IDLE_SLEEP_MS = 30 * 60_000;
@@ -1660,14 +1663,63 @@ export const createWorkItems = ({
   };
 
   /**
-   * Every live item whose session row no longer exists fails with
-   * {@link SESSION_GONE}, and whoever hears its reports is told: nothing can
-   * run it or call finish_item. One whose checks this hub runs now is left
-   * to that run.
+   * A live item whose session can't go on — its row in `error`
+   * ({@link followSessions}), or a turn a restart cut that nothing can resume
+   * (server.ts `settleCutItem`): the item fails with `reason`, and whoever
+   * hears its reports is told, once — {@link finish} moves only a live item.
    */
-  const endGone = (): void => {
-    for (const item of db.liveWorkItems()) {
-      if (finishing.has(item.id) || db.ownedInstance(item.instanceId)) {
+  const sessionFailed = (row: InstanceRow, reason: string): void => {
+    const item = itemOf(row);
+    if (!(item && LIVE.has(item.state))) {
+      return;
+    }
+    quiet.delete(item.id);
+    clearWait(item);
+    const failed = finish(item, { state: "failed", error: reason });
+    console.log(`[work-items] ${item.id}: its session failed: ${reason}`);
+    report(row, `${reason}${reportLine(failed)}`, true);
+  };
+
+  /**
+   * THE RULE: a live item follows its session's life. Its session's row in
+   * `error` — a start refused, a process that failed, a conversation found
+   * gone at a register, nothing left to resume after a restart — the item
+   * fails with the row's own reason; its row gone, with {@link SESSION_GONE}.
+   * Whoever hears its reports is told, once: {@link finish} moves only a
+   * live item. It reads the row, never the path that wrote it, so no writer
+   * of `error` has an item to remember. An end (a stop, a discard) is filed
+   * with its item's cancel in one step (server.ts `sessionEnding`), before a
+   * discard can take the row. An item whose checks this hub runs now is left
+   * to that run; one whose session still has a row and whose checks a
+   * stopped hub left running is its checks' to settle ({@link resumeChecks}).
+   * `only` limits the read to those sessions: the ones whose rows just moved
+   * (server.ts, off the database's change log of `instances`); without it,
+   * every live item (the sweep, which reads what a hub before this one wrote).
+   */
+  const followSessions = (only?: ReadonlySet<string>): void => {
+    const live = db
+      .liveWorkItems()
+      .filter(
+        (item) =>
+          (!only || only.has(item.instanceId)) && !finishing.has(item.id)
+      );
+    if (live.length === 0) {
+      return;
+    }
+    const rows = new Map(
+      db
+        .getInstancesByIds(live.map((item) => item.instanceId))
+        .map((row) => [row.id, row])
+    );
+    for (const item of live) {
+      const row = rows.get(item.instanceId);
+      if (row && (row.workItemId !== item.id || item.checkingSince)) {
+        continue;
+      }
+      if (row) {
+        if (row.status === "error") {
+          sessionFailed(row, row.lastError ?? SESSION_FAILED_UNSAID);
+        }
         continue;
       }
       quiet.delete(item.id);
@@ -1748,7 +1800,7 @@ export const createWorkItems = ({
         enforceBudget(item);
       }
     }
-    endGone();
+    followSessions();
     tellAsleep();
   });
 
@@ -4296,34 +4348,11 @@ export const createWorkItems = ({
       return `Replaced the checks of ${item.title} (${item.id}): ${checkNames(checks)}. Its session was told.`;
     },
 
-    /**
-     * Its session never started: a live item failed, and the report line says
-     * why. An item that already ended has reported, so a session of it that
-     * does not come back (a restore after an agent restart, into a workspace
-     * since removed) is news for nobody: no line, and no report.
-     */
-    spawnFailed(row: InstanceRow, reason: string): string | undefined {
-      const item = itemOf(row);
-      return item && LIVE.has(item.state)
-        ? reportLine(finish(item, { state: "failed", error: reason }))
-        : undefined;
-    },
+    /** {@link sessionFailed}: a restart cut its turn and nothing can resume it. */
+    sessionFailed,
 
-    /**
-     * A restart cut the live item's turn and nothing resumed it, and nothing
-     * can (its workspace is gone, or nobody is left to hear it): the item
-     * fails with `reason`, and whoever hears its reports is told.
-     */
-    unresumed(row: InstanceRow, reason: string): void {
-      const item = itemOf(row);
-      if (!(item && LIVE.has(item.state))) {
-        return;
-      }
-      quiet.delete(item.id);
-      clearWait(item);
-      const failed = finish(item, { state: "failed", error: reason });
-      report(row, `${reason}${reportLine(failed)}`, true);
-    },
+    /** {@link followSessions}: the items of the sessions whose rows just moved follow them. */
+    followSessions,
 
     /** Its session was stopped or archived while the work was live. */
     cancelled(row: InstanceRow): void {
@@ -4460,10 +4489,36 @@ export const createWorkItems = ({
       return [...items, ...queued].sort((a, b) => a.createdAt - b.createdAt);
     },
 
-    /** The reader dismissed its chip: gone from the tray on every screen. */
+    /**
+     * The reader dismissed its chip: gone from the tray and from
+     * `delegate_list`'s live read on every screen. A dismissed item that is
+     * still live is over: cancelled, and its session ended if it still has a
+     * process. One whose checks this hub runs now ends with them.
+     */
     dismiss(id: string): WorkItemSummary | undefined {
-      const item = update(id, { dismissedAt: new Date() });
-      return item ? summaryOf(item) : undefined;
+      const item = db.workItem(id);
+      if (!item) {
+        return undefined;
+      }
+      const dismissedAt = new Date();
+      if (!LIVE.has(item.state) || finishing.has(item.id)) {
+        const kept = update(id, { dismissedAt });
+        return kept ? summaryOf(kept) : undefined;
+      }
+      quiet.delete(item.id);
+      const cancelled = finish(item, {
+        state: "cancelled",
+        dismissedAt,
+        checkingSince: null,
+        submission: null,
+      });
+      console.log(`[work-items] ${item.id}: dismissed while live; cancelled`);
+      end(item.instanceId).catch((error: unknown) =>
+        console.warn(
+          `[work-items] ${item.id} was dismissed, and its session did not end: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
+      return summaryOf(cancelled);
     },
   };
 };

@@ -12,7 +12,7 @@ import type { KeepAliveRow } from "./keep-alive";
 import { sessionLabel } from "./labels";
 import { roleOf } from "./roles";
 
-/** `live`: items not ended, and ended in the last hour; `all`: every one. */
+/** `live`: items not dismissed that are not ended or ended in the last hour; `all`: every one. */
 export type DelegateListInclude = "live" | "all";
 
 /** How long an ended item stays in a `live` read. */
@@ -83,11 +83,13 @@ const newestPerSession = (items: WorkItemRow[]): WorkItemRow[] => {
   );
 };
 
+/** In a `live` read: not dismissed (work-items `dismiss`), and not ended, or ended within the hour. */
 const isLive = (item: WorkItemRow, now: number): boolean =>
-  !item.endedAt ||
-  item.state === "starting" ||
-  item.state === "running" ||
-  now - item.endedAt.getTime() < ENDED_LIVE_MS;
+  item.dismissedAt === null &&
+  (!item.endedAt ||
+    item.state === "starting" ||
+    item.state === "running" ||
+    now - item.endedAt.getTime() < ENDED_LIVE_MS);
 
 export const createDelegationTree = (deps: DelegationTreeDeps) => {
   const { db } = deps;

@@ -1598,11 +1598,20 @@ export const handoffActions = ({
     if (withdrawn.status !== 404) {
       throw new Error(await withdrawn.text());
     }
-    const { peers, asleep } = roster(fleet, instanceId);
+    const { peers } = roster(fleet, instanceId);
     const followed = formerOf(formerIds(), asked);
     const target = followed?.now ?? asked;
+    // An id, full or short, names a session in any state: asleep, failed,
+    // its conversation gone. Only a name is looked up among the running.
+    const { rows, hosts } = fleetInstances(fleet);
     const ended =
-      instanceById(needleOf(target)) ?? resolveById(asleep, target)?.row;
+      instanceById(needleOf(target)) ??
+      resolveById(
+        rows
+          .filter((row) => row.id !== instanceId)
+          .map((row) => toPeer(row, hosts)),
+        target
+      )?.row;
     const peer = resolveDelegate(
       ended ? [toPeer(ended, new Map())] : peers,
       target,
