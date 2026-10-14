@@ -474,11 +474,19 @@ const briefOf = (
       task.checks.length === 0 ? `\n\n${uncheckedLine(lands, task)}` : ""
     }`,
     `## Where it sits\n\n${sits.length > 0 ? sits.join("\n") : "Nothing waits on it, and it waits for nothing."}`,
+    `## Handing it in\n\n${RESULT_LINE}`,
     ...(context ? [context] : []),
     ...(retry ? [retrySection(task, retry)] : []),
     ...(comments.length > 0 ? [commentsSection(comments)] : []),
   ].join("\n\n");
 };
+
+/**
+ * How an attempt hands in its work (task-tools.ts `task_result`): what the
+ * task's review shows first, its words over its artifacts.
+ */
+const RESULT_LINE =
+  "Before finish_item, call task_result: `summary`, what you did in a few sentences; `check`, what the reviewer should look at, one line each; `artifacts`, everything you made in the order to show it (a file or a post by its path from the project folder, a link by its url, a page artifact by its id), the one to see first marked `primary`. The reviewer reads it before anything else. A result in words alone is fine when there is nothing else to hand in.";
 
 /** The most comments a brief carries: the newest. */
 const BRIEF_COMMENTS_MAX = 20;

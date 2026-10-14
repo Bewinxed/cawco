@@ -5,10 +5,14 @@
    * the project page or a conversation's SideSplit), the board or the
    * transcript live beside it; on a phone its own page, with Back.
    *
-   * First what it needs from you, with the way to act (TaskNeeds); then its
-   * stage, title, description, acceptance criteria, to-dos, edges and
-   * attempts; then what happened on it (TaskActivity: outputs, comments,
-   * history). Every change is the hub's to make (each is a commit in the
+   * Its head (stage, dates, title, flags) stands still; under it a Review ·
+   * Details switch, while there is a review: the task waits on you, or an
+   * attempt handed in a result or it names outputs. Review is the four-band
+   * frame (TaskReview), where only the stage scrolls; it opens there. Details
+   * scroll: what else it needs from you (TaskNeeds), its description,
+   * acceptance criteria, to-dos, edges and attempts, then what happened on
+   * it (TaskActivity: comments, history; its outputs too when there is no
+   * review to draw them). Every change is the hub's to make (each is a commit in the
    * project folder), so each waits for the hub's answer and shows the task
    * as the hub wrote it back; a refusal is said beside what it refused, in
    * the hub's own words. The task is read again whenever the list says it
@@ -23,6 +27,11 @@
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import {
+    TabItem,
+    Tabs,
+    TabsList,
+  } from "#lib/components/ui/fluid-tabs/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Select from "#lib/components/ui/select/index.js";
@@ -43,6 +52,7 @@
     flagsOf,
     linkTask,
     readTask,
+    reviewOf,
     type StagesView,
     stageLabel,
     type TaskEdge,
@@ -52,8 +62,10 @@
   } from "../project-tasks";
   import RowFault from "../RowFault.svelte";
   import SideSurface from "../side/SideSurface.svelte";
+  import { resultStamp } from "./review-stamp";
   import TaskActivity from "./TaskActivity.svelte";
   import TaskNeeds from "./TaskNeeds.svelte";
+  import TaskReview from "./TaskReview.svelte";
   import TextSection from "./TextSection.svelte";
   import TodoList from "./TodoList.svelte";
 
@@ -132,6 +144,14 @@
     )
   );
 
+  /** It has a review to draw: it waits on you, or it has a result or outputs. */
+  const reviewable = $derived(
+    !!shown && (shown.kind === "you" || reviewOf(shown) !== null)
+  );
+  /** The switch's choice; null: Review while there is one, else Details. */
+  let picked = $state<"review" | "details" | null>(null);
+  const view = $derived(picked ?? (reviewable ? "review" : "details"));
+
   // A new task starts clean, and is read.
   let readFor = "";
   $effect(() => {
@@ -140,6 +160,7 @@
       return;
     }
     readFor = id;
+    picked = null;
     titleDraft = null;
     stageProblem = null;
     edgeProblem = null;
@@ -147,15 +168,18 @@
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the read sets its own state
     void read(id);
   });
-  // The list says it changed (a move, a comment, an attempt, from anywhere):
-  // the file is read again.
+  // The list says it changed (a move, a comment, an attempt or its result,
+  // from anywhere): the file is read again.
   $effect(() => {
     const at = summary?.updatedAt;
     const stage = summary?.stage;
     if (
       shown &&
+      summary &&
       at !== undefined &&
-      (at > shown.updatedAt || (stage !== undefined && stage !== shown.stage))
+      (at > shown.updatedAt ||
+        (stage !== undefined && stage !== shown.stage) ||
+        resultStamp(summary) !== resultStamp(shown))
     ) {
       // biome-ignore lint/complexity/noVoid: the read sets its own state
       void read(shown.id);
@@ -318,7 +342,7 @@
 {/snippet}
 
 {#snippet content()}
-  <div class="task-body" data-task-pane={taskId}>
+  <div class="task-frame" data-task-pane={taskId}>
     <header class="head">
       <div class="meta">
         {#if shown}
@@ -417,6 +441,20 @@
           {/each}
         </div>
       {/if}
+      {#if reviewable}
+        <Tabs
+          onValueChange={(next) => {
+            picked = next === "details" ? "details" : "review";
+          }}
+          size="compact"
+          value={view}
+        >
+          <TabsList aria-label="Review or details">
+            <TabItem label="Review" value="review" />
+            <TabItem label="Details" value="details" />
+          </TabsList>
+        </Tabs>
+      {/if}
     </header>
 
     {#if readProblem}
@@ -440,148 +478,152 @@
         <Skeleton class="h-3.5 w-11/12" />
         <Skeleton class="h-3.5 w-3/5" />
       </div>
-    {:else}
-      <TaskNeeds
+    {:else if view === "review"}
+      <TaskReview
         onchanged={took}
         onmove={moveTo}
-        {onopen}
         {projectId}
         {stages}
         task={shown}
-        {tasks}
         {version}
       />
+    {:else}
+      <div class="task-body">
+        <TaskNeeds onchanged={took} {onopen} {projectId} task={shown} {tasks} />
 
-      {#if shown.problems.length > 0}
-        <Alert variant="warning">
-          <AlertDescription>{shown.problems.join(" ")}</AlertDescription>
-        </Alert>
-      {/if}
+        {#if shown.problems.length > 0}
+          <Alert variant="warning">
+            <AlertDescription>{shown.problems.join(" ")}</AlertDescription>
+          </Alert>
+        {/if}
 
-      <TextSection
-        empty="Say what this task is for, so a session picking it up starts from it."
-        heading="Description"
-        onsave={async (description) => {
-          if (shown) {
-            took(await updateTask(projectId, shown.id, { description }));
-          }
-        }}
-        text={shown.description}
-      />
+        <TextSection
+          empty="Say what this task is for, so a session picking it up starts from it."
+          heading="Description"
+          onsave={async (description) => {
+            if (shown) {
+              took(await updateTask(projectId, shown.id, { description }));
+            }
+          }}
+          text={shown.description}
+        />
 
-      <TextSection
-        empty="List what has to be true for this task to count as done."
-        heading="Acceptance criteria"
-        onsave={async (acceptance) => {
-          if (shown) {
-            took(await updateTask(projectId, shown.id, { acceptance }));
-          }
-        }}
-        text={shown.acceptance}
-      />
+        <TextSection
+          empty="List what has to be true for this task to count as done."
+          heading="Acceptance criteria"
+          onsave={async (acceptance) => {
+            if (shown) {
+              took(await updateTask(projectId, shown.id, { acceptance }));
+            }
+          }}
+          text={shown.acceptance}
+        />
 
-      <TodoList
-        onadd={async (text, under) => {
-          if (shown) {
-            took(await addTodo(projectId, shown.id, { text, under }));
-          }
-        }}
-        onedit={async (todo, text) => {
-          if (shown) {
-            took(await changeTodo(projectId, shown.id, todo, { text }));
-          }
-        }}
-        ontick={async (todo, done) => {
-          if (shown) {
-            took(await changeTodo(projectId, shown.id, todo, { done }));
-          }
-        }}
-        todos={shown.todos}
-      />
+        <TodoList
+          onadd={async (text, under) => {
+            if (shown) {
+              took(await addTodo(projectId, shown.id, { text, under }));
+            }
+          }}
+          onedit={async (todo, text) => {
+            if (shown) {
+              took(await changeTodo(projectId, shown.id, todo, { text }));
+            }
+          }}
+          ontick={async (todo, done) => {
+            if (shown) {
+              took(await changeTodo(projectId, shown.id, todo, { done }));
+            }
+          }}
+          todos={shown.todos}
+        />
 
-      <section class="part">
-        <h3 class="kit-section-head">Edges</h3>
-        <RowFault reason={edgeProblem} />
-        <div class="edge">
-          <span class="edge-name">After</span>
-          <div class="edge-list">
-            {#each shown.after as id (id)}
-              {@render ref(id, () => link("after", id, true))}
-            {/each}
-            {@render pick(
-              shown.after.length > 0 ? "Add another" : "Add a task it waits on",
-              "after"
-            )}
-          </div>
-        </div>
-        <div class="edge">
-          <span class="edge-name">Parent</span>
-          <div class="edge-list">
-            {#if shown.parent}
-              {@render ref(shown.parent, () =>
-                link("parent", shown?.parent ?? "", true)
-              )}
-            {:else}
-              {@render pick("Set a parent", "parent")}
-            {/if}
-          </div>
-        </div>
-        {#if shown.related.length > 0}
+        <section class="part">
+          <h3 class="kit-section-head">Edges</h3>
+          <RowFault reason={edgeProblem} />
           <div class="edge">
-            <span class="edge-name">Related</span>
+            <span class="edge-name">After</span>
             <div class="edge-list">
-              {#each shown.related as id (id)}
-                {@render ref(id)}
+              {#each shown.after as id (id)}
+                {@render ref(id, () => link("after", id, true))}
               {/each}
+              {@render pick(
+                shown.after.length > 0
+                  ? "Add another"
+                  : "Add a task it waits on",
+                "after"
+              )}
             </div>
           </div>
-        {/if}
-      </section>
-
-      {#if shown.attempts.length > 0 || flags.startProblem}
-        <section class="part">
-          <h3 class="kit-section-head">
-            Attempts
-            {#if shown.attempts.length > 0}
-              <span class="count num">{shown.attempts.length}</span>
-            {/if}
-          </h3>
-          <RowFault reason={flags.startProblem} />
-          <ol class="attempts">
-            {#each shown.attempts as attempt, index (attempt.workItemId)}
-              {@const word = attemptWord(attempt.state)}
-              <li class="attempt">
-                <a
-                  class="attempt-name focus-inset"
-                  href={rowHref(attempt.instanceId)}
-                  >Attempt {shown.attempts.length - index}</a
-                >
-                <Badge variant={TINT[word] ?? "secondary"}>
-                  {#if word === "Failed"}
-                    <IconError />
-                  {/if}
-                  {word}
-                </Badge>
-                <span class="attempt-when"
-                  >{when(attempt.endedAt ?? attempt.startedAt)}</span
-                >
-              </li>
-            {/each}
-          </ol>
+          <div class="edge">
+            <span class="edge-name">Parent</span>
+            <div class="edge-list">
+              {#if shown.parent}
+                {@render ref(shown.parent, () =>
+                  link("parent", shown?.parent ?? "", true)
+                )}
+              {:else}
+                {@render pick("Set a parent", "parent")}
+              {/if}
+            </div>
+          </div>
+          {#if shown.related.length > 0}
+            <div class="edge">
+              <span class="edge-name">Related</span>
+              <div class="edge-list">
+                {#each shown.related as id (id)}
+                  {@render ref(id)}
+                {/each}
+              </div>
+            </div>
+          {/if}
         </section>
-      {/if}
 
-      <TaskActivity
-        onchanged={took}
-        outputs={shown.kind !== "you"}
-        {projectId}
-        task={shown}
-        {version}
-      />
+        {#if shown.attempts.length > 0 || flags.startProblem}
+          <section class="part">
+            <h3 class="kit-section-head">
+              Attempts
+              {#if shown.attempts.length > 0}
+                <span class="count num">{shown.attempts.length}</span>
+              {/if}
+            </h3>
+            <RowFault reason={flags.startProblem} />
+            <ol class="attempts">
+              {#each shown.attempts as attempt, index (attempt.workItemId)}
+                {@const word = attemptWord(attempt.state)}
+                <li class="attempt">
+                  <a
+                    class="attempt-name focus-inset"
+                    href={rowHref(attempt.instanceId)}
+                    >Attempt {shown.attempts.length - index}</a
+                  >
+                  <Badge variant={TINT[word] ?? "secondary"}>
+                    {#if word === "Failed"}
+                      <IconError />
+                    {/if}
+                    {word}
+                  </Badge>
+                  <span class="attempt-when"
+                    >{when(attempt.endedAt ?? attempt.startedAt)}</span
+                  >
+                </li>
+              {/each}
+            </ol>
+          </section>
+        {/if}
 
-      <p class="path" title="The task's file in the project folder">
-        {shown.path}
-      </p>
+        <TaskActivity
+          onchanged={took}
+          outputs={!reviewable}
+          {projectId}
+          task={shown}
+          {version}
+        />
+
+        <p class="path" title="The task's file in the project folder">
+          {shown.path}
+        </p>
+      </div>
     {/if}
   </div>
 {/snippet}
@@ -631,22 +673,37 @@
     font-variant-ligatures: none;
     color: var(--ink-subtle);
   }
+  /* The pane never scrolls as a whole: its head stands, and the review's
+     stage or the details' body scrolls under it. `--pane-inline` is the
+     pane's inline padding, which the review's bands (TaskReview) share. */
+  .task-frame {
+    --pane-inline: var(--space-3);
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-block-size: 0;
+    overflow: hidden;
+  }
+  .task-page .task-frame {
+    --pane-inline: var(--space-5);
+  }
   .task-body {
     display: flex;
     flex: 1 1 auto;
     flex-direction: column;
     gap: var(--space-5);
     min-block-size: 0;
-    padding: var(--space-2) var(--space-3) var(--space-6);
+    padding: var(--space-3) var(--pane-inline) var(--space-6);
+    border-block-start: 1px solid var(--border-hairline);
     overflow-y: auto;
-  }
-  .task-page .task-body {
-    padding-inline: var(--space-5);
+    overscroll-behavior: contain;
   }
   .head {
     display: flex;
+    flex: none;
     flex-direction: column;
     gap: var(--space-2);
+    padding: var(--space-2) var(--pane-inline) var(--space-3);
   }
   .meta {
     display: flex;
@@ -689,6 +746,10 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+  }
+  .task-frame > :global(.alert),
+  .task-frame > .skeleton {
+    margin-inline: var(--pane-inline);
   }
   .part {
     display: flex;

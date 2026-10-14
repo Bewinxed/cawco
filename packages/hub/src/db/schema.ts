@@ -42,6 +42,7 @@ import type {
   SigninState,
   SkillFile,
   StrategyChoice,
+  TaskResult,
   ThreadAnswer,
   ThreadEvent,
   ThreadMessage,
@@ -1121,6 +1122,12 @@ export const workItems = sqliteTable(
      * finishes; one missing sends it back to its session. Null: none.
      */
     outputs: text("outputs", { mode: "json" }).$type<string[]>(),
+    /**
+     * What its session handed in on its task (`task_result`): its words,
+     * what to check, and its artifacts. A later call replaces it. Null:
+     * none yet, or the item is no task's attempt.
+     */
+    taskResult: text("task_result", { mode: "json" }).$type<TaskResult>(),
     /**
      * The pull request its landing opened or found open, when it lands `pr`:
      * what a poller watches to move its task on when it merges.

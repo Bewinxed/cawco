@@ -18,6 +18,9 @@ import {
   PLAN_STEP_STATUSES,
   type PlanStep,
   POST_OUTPUT_NAME,
+  RESULT_ARTIFACT_KINDS,
+  type ResultArtifact,
+  type ResultArtifactKind,
   type SessionPlan,
 } from "@cawco/core";
 import { z } from "zod";
@@ -44,6 +47,7 @@ export const TASK_TOOLS: ReadonlySet<string> = new Set([
   "todo_write",
   "task_comment",
   "task_archive",
+  "task_result",
 ]);
 
 export interface TaskToolContext {
@@ -142,6 +146,46 @@ const compact = (list: TaskList, stages: StagesView) => ({
   tasks: list.tasks.map(taskLine),
   ...(list.problems.length > 0 ? { problems: list.problems } : {}),
 });
+
+/**
+ * One artifact as `task_result` takes it, read as the kind it names: a file
+ * or a post its `path`, a link its `url`, a page artifact its `artifactId`.
+ */
+const resultArtifact = (written: {
+  kind: ResultArtifactKind;
+  path?: string;
+  url?: string;
+  artifactId?: string;
+  name?: string;
+  primary?: boolean;
+}): ResultArtifact => {
+  const shown = {
+    ...(written.name ? { name: written.name } : {}),
+    ...(written.primary ? { primary: true } : {}),
+  };
+  const need = (value: string | undefined, field: string): string => {
+    if (!value?.trim()) {
+      throw new Error(`A ${written.kind} artifact names its ${field}.`);
+    }
+    return value.trim();
+  };
+  switch (written.kind) {
+    case "link":
+      return { kind: "link", url: need(written.url, "url"), ...shown };
+    case "artifact":
+      return {
+        kind: "artifact",
+        artifactId: need(written.artifactId, "artifactId"),
+        ...shown,
+      };
+    default:
+      return {
+        kind: written.kind,
+        path: need(written.path, "path"),
+        ...shown,
+      };
+  }
+};
 
 const taskRef = () =>
   z.string().trim().min(1).describe("A task id, like tsk-12.");
@@ -569,6 +613,43 @@ export function taskTools(context: TaskToolContext | undefined) {
           actor
         );
         return ok({ id: done.id, comments: done.comments });
+      }
+    ),
+    tool(
+      "task_result",
+      "Hand in your task's work before you finish, what its reviewer reads first: what you did, what to check, what you made (folder paths). Again replaces it.",
+      {
+        summary: z.string().trim().min(1),
+        check: z.array(z.string()).optional(),
+        artifacts: z
+          .array(
+            z.object({
+              kind: z.enum(RESULT_ARTIFACT_KINDS),
+              path: z.string().optional(),
+              url: z.string().optional(),
+              artifactId: z.string().optional(),
+              name: z.string().optional(),
+              primary: z.boolean().optional(),
+            })
+          )
+          .optional(),
+      },
+      async ({ summary, check, artifacts }) => {
+        const { projectId, tasks } = scope();
+        const workItemId = context?.actor.workItemId;
+        const own = context?.workItemTask ?? null;
+        if (!(workItemId && own)) {
+          throw new Error(
+            "task_result hands in an attempt at a task, and this session works none. Say what you did in finish_item instead."
+          );
+        }
+        return ok(
+          await tasks.result(projectId, own, workItemId, {
+            summary,
+            check,
+            artifacts: artifacts?.map(resultArtifact),
+          })
+        );
       }
     ),
     tool(

@@ -61,11 +61,16 @@ import type { Tasks } from "./tasks";
  * project_settings' `set_runs_on`: an Apple task named a Mac nowhere, so
  * task_start placed it on Linux (tsk-7, tsk-15). About 80 tokens for the
  * worker, 95 for the lead, descriptions cut to a clause (worker 23,830,
- * lead 15,583 measured).
+ * lead 15,583 measured). `task_result` (task-tools.ts), the one way an
+ * attempt hands in its words, what to check and its artifacts for the
+ * task's review, is listed to a work item's session alone: about 140
+ * tokens more for the delegate, its description already cut to a line
+ * (delegate 6,565 measured beside finish_item's headline); the worker's
+ * measure is a session with no work item, which is not listed it.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 23_880,
-  delegate: 6500,
+  delegate: 6700,
   lead: 15_630,
   overseer: 770,
   "web-facing": 3400,

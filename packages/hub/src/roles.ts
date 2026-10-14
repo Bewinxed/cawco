@@ -174,6 +174,8 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     ...CORE,
     ...DELEGATE_SESSION,
     ...TASK_READ,
+    // An attempt at a task hands in its result (task-tools.ts).
+    "task_result",
     "memory_note",
   ]),
   lead: new Set([

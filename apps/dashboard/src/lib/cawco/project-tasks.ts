@@ -9,6 +9,7 @@
  * Not to be confused with `tasks.svelte.ts`, which reads a session's own plan
  * off its machine (WORDS.md: plan).
  */
+import { outputArtifacts, type TaskResult } from "@cawco/core";
 import { HUB_UNREACHABLE, HubUnreachable, unreachedAnswer } from "./hub-read";
 
 /** The fixed kinds a stage belongs to (WORDS.md: kind). */
@@ -116,10 +117,38 @@ export interface TaskAttempt {
   endedAt: number | null;
   /** The session running it. */
   instanceId: string;
+  /** What its session handed in (`task_result`); null while it has not. */
+  result: TaskResult | null;
   /** When it was filed, ms epoch. */
   startedAt: number;
   state: AttemptState;
   workItemId: string;
+}
+
+/**
+ * What a task's review shows: the newest result an attempt handed in, with
+ * that attempt; else, while none did, its `outputs` as artifacts, with its
+ * newest attempt (no words). Null when there is neither.
+ */
+export function reviewOf(
+  task: Pick<TaskView, "attempts" | "outputs">
+): { attempt: TaskAttempt | null; result: TaskResult } | null {
+  const handed = task.attempts.find((attempt) => attempt.result !== null);
+  if (handed?.result) {
+    return { attempt: handed, result: handed.result };
+  }
+  if (task.outputs.length === 0) {
+    return null;
+  }
+  return {
+    attempt: task.attempts[0] ?? null,
+    result: {
+      summary: "",
+      check: [],
+      artifacts: outputArtifacts(task.outputs),
+      at: 0,
+    },
+  };
 }
 
 /** Where an attempt's work lands (`@cawco/core`'s `LandsMode`). */

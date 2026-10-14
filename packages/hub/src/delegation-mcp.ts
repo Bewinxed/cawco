@@ -339,7 +339,15 @@ export function createDelegationMcp(options: {
       return [...all, ...connections];
     }
     const role = roleOf(actor);
-    return [...all.filter((tool) => allows(role, tool.name)), ...connections];
+    return [
+      ...all.filter(
+        (tool) =>
+          allows(role, tool.name) &&
+          // Only a work item hands in a result on its task.
+          (tool.name !== "task_result" || !!actor.workItemId)
+      ),
+      ...connections,
+    ];
   };
 
   /**

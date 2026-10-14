@@ -585,8 +585,6 @@ public enum Size {
     public static let cStarterW: Double = 176
     /// A Caw starter card's shortest: one line of words with its padding, a thumb's height on a phone.
     public static let cStarterH: Double = 56
-    /// A task's deliverable under its card in a thread, collapsed: a post card's first lines or a draft's opening, before Show all.
-    public static let cNeedsPeekH: Double = 192
     /// The column an empty state with starters takes at most: four cards across with their gaps.
     public static let cStartersW: Double = 725
     /// The delegate tray's row: a chip, and the step down to the pill.

@@ -33,7 +33,12 @@
  * Changes to one project's tasks are taken one at a time: two to-dos ticked
  * at once both land.
  */
-import type { InstanceRow, LandsMode } from "@cawco/core";
+import type {
+  InstanceRow,
+  LandsMode,
+  ResultArtifact,
+  TaskResult,
+} from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, t } from "elysia";
 import type { TaskIndexRow, WorkItemRow } from "./db";
@@ -45,8 +50,10 @@ import {
   FolderRefusal,
   FolderTaken,
   folderFileNames,
+  folderFileRaw,
   folderFileTimes,
   folderHistory,
+  folderPath,
   folderUncommitted,
   HISTORY_LIMIT,
   hasProjectFolder,
@@ -192,6 +199,8 @@ export interface TaskAttempt {
   endedAt: number | null;
   /** The session running it. */
   instanceId: string;
+  /** What its session handed in (`task_result`); null while it has not. */
+  result: TaskResult | null;
   /** When it was filed, ms epoch. */
   startedAt: number;
   state: WorkItemState;
@@ -268,7 +277,13 @@ export interface TaskStore {
     projectId: string
   ) => Pick<
     WorkItemRow,
-    "createdAt" | "endedAt" | "id" | "instanceId" | "state" | "taskId"
+    | "createdAt"
+    | "endedAt"
+    | "id"
+    | "instanceId"
+    | "state"
+    | "taskId"
+    | "taskResult"
   >[];
   readonly drop: (projectId: string, paths: string[]) => void;
   readonly index: (projectId: string) => TaskIndexRow[];
@@ -292,6 +307,8 @@ export interface TaskStore {
   readonly put: (rows: TaskIndexRow[]) => void;
   /** The tasks whose hook start waits for a slot (dispatch.ts). */
   readonly queuedStarts?: (projectId: string) => string[];
+  /** Keeps an attempt's result, replacing the one it had. */
+  readonly saveResult: (workItemId: string, result: TaskResult) => void;
   /** Records the template a project's stages came from: its starter skills follow it. */
   readonly setTemplate: (id: string, template: StagesTemplate) => void;
   readonly setTracker: (id: string, tracker: Tracker) => void;
@@ -558,6 +575,45 @@ const refuse = (code: 400 | 403 | 404 | 409 | 422, message: string): never => {
 const hashOf = (content: string): string =>
   new Bun.CryptoHasher("sha256").update(content).digest("hex");
 
+const WEB_LINK = /^https?:\/\//i;
+
+/**
+ * Refuses an artifact a result may not hand in, in a sentence naming it: a
+ * file or a post that is neither one of the task's `outputs` nor in the
+ * project folder, a post that is no `*.post.json`, a link that is not http(s).
+ */
+const artifactProblem = async (
+  projectId: string,
+  outputs: string[],
+  artifact: ResultArtifact
+): Promise<void> => {
+  if (artifact.kind === "link") {
+    if (!WEB_LINK.test(artifact.url)) {
+      refuse(422, `${artifact.url} is not an http(s) link.`);
+    }
+    return;
+  }
+  if (artifact.kind === "artifact") {
+    if (!artifact.artifactId.trim()) {
+      refuse(422, "Name the page artifact by its id.");
+    }
+    return;
+  }
+  const path = folderPath(artifact.path);
+  if (artifact.kind === "post" && !path.endsWith(".post.json")) {
+    refuse(422, `${path} is no post: a post is a <task>.post.json file.`);
+  }
+  if (outputs.includes(path)) {
+    return;
+  }
+  await folderFileRaw(projectId, path).catch(() =>
+    refuse(
+      422,
+      `${path} is neither one of the task's outputs nor a file in the project folder. Name it as the task's outputs do, from the folder's root.`
+    )
+  );
+};
+
 // --- what a caller may write ------------------------------------------------------
 
 const oneLine = (what: string, text: string, limit: number): string => {
@@ -739,6 +795,7 @@ const attemptOf = (
   workItemId: item.id,
   state: item.state,
   instanceId: item.instanceId,
+  result: item.taskResult ?? null,
   startedAt: item.createdAt.getTime(),
   endedAt: item.endedAt?.getTime() ?? null,
 });
@@ -2927,6 +2984,60 @@ export const createTasks = (store: TaskStore) => {
           task
         )
       );
+    },
+
+    /**
+     * Keeps what an attempt's session handed in on its task (`task_result`),
+     * replacing what it handed in before. A file or a post names one of the
+     * task's `outputs` (the hub copies those in as the attempt finishes) or a
+     * file the project folder holds; a post is a `*.post.json`; a link is
+     * http(s). One artifact at most is primary; none marked, the first is.
+     * Listeners hear the task changed, so every screen reads it again.
+     */
+    async result(
+      projectId: string,
+      ref: string,
+      workItemId: string,
+      written: {
+        summary: string;
+        check?: string[];
+        artifacts?: ResultArtifact[];
+      }
+    ): Promise<TaskResult> {
+      known(projectId);
+      const { path, number } = await locate(projectId, ref);
+      const { content } = await readFolderFile(projectId, path);
+      const { outputs } = new TaskDoc(path, content).read().fields;
+      const summary = written.summary.trim();
+      if (!summary) {
+        refuse(
+          422,
+          "Say what you did in `summary`: the reviewer reads it first."
+        );
+      }
+      const artifacts = written.artifacts ?? [];
+      for (const artifact of artifacts) {
+        // biome-ignore lint/performance/noAwaitInLoops: a handful of artifacts, each checked in turn
+        await artifactProblem(projectId, outputs, artifact);
+      }
+      if (artifacts.filter((artifact) => artifact.primary).length > 1) {
+        refuse(
+          422,
+          "Mark one artifact `primary` at most: the one the reviewer sees first."
+        );
+      }
+      const result: TaskResult = {
+        summary,
+        check: (written.check ?? []).map((line) => line.trim()).filter(Boolean),
+        artifacts: artifacts.map((artifact) =>
+          artifact.kind === "link" || artifact.kind === "artifact"
+            ? artifact
+            : { ...artifact, path: folderPath(artifact.path) }
+        ),
+        at: Date.now(),
+      };
+      store.saveResult(workItemId, result);
+      return told({ kind: "changed", projectId, id: taskId(number) }, result);
     },
 
     /**

@@ -26974,6 +26974,10 @@
             "description": "The session running it.",
             "type": "string"
           },
+          "result": {
+            "description": "What its session handed in (`task_result`); null while it has not.",
+            "$ref": "#/components/schemas/TaskResult"
+          },
           "startedAt": {
             "description": "When it was filed, ms epoch.",
             "type": "number"
@@ -26992,6 +26996,131 @@
           "state",
           "workItemId"
         ]
+      },
+      "TaskResult": {
+        "description": "An attempt's result (`task_result`, hub task-tools.ts): what the session\nthat worked it says it did, what the reviewer should check, and what it\nhanded in, in the order it is drawn. One per attempt; a later call\nreplaces it.",
+        "type": "object",
+        "properties": {
+          "artifacts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResultArtifact"
+            }
+          },
+          "at": {
+            "description": "When it was handed in, ms epoch.",
+            "type": "number"
+          },
+          "check": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifacts",
+          "at",
+          "check",
+          "summary"
+        ]
+      },
+      "ResultArtifact": {
+        "description": "One thing an attempt handed in, as the review draws it.",
+        "anyOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ArtifactBase"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "file",
+                      "post"
+                    ],
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "path"
+                ]
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ArtifactBase"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "link"
+                    ]
+                  },
+                  "url": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "url"
+                ]
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ArtifactBase"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "artifact"
+                    ]
+                  },
+                  "artifactId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "artifactId",
+                  "kind"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "ArtifactBase": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "description": "What its chip says; left out, the file's name, the link's host or the artifact's id.",
+            "type": "string"
+          },
+          "primary": {
+            "description": "The one the reviewer sees first.",
+            "type": "boolean"
+          }
+        }
       },
       "WorkItemState": {
         "description": "A work item's life. Only `starting` and `running` take messages.",

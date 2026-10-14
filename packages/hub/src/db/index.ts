@@ -1937,6 +1937,7 @@ export interface DbShape {
         | "turns"
         | "instanceId"
         | "origin"
+        | "taskResult"
       >
     >
   ) => WorkItemRow | undefined;

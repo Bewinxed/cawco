@@ -134,3 +134,70 @@ export const POST_OUTPUT_RULE =
 
 /** A task tool's word on a post output: its file's name, so the brief carries {@link POST_OUTPUT_RULE}. */
 export const POST_OUTPUT_NAME = "a post: <task>.post.json";
+
+// --- an attempt's result ------------------------------------------------------
+
+/** What a result can hand in: a project folder file, a post, a link, or a page artifact. */
+export const RESULT_ARTIFACT_KINDS = [
+  "file",
+  "post",
+  "link",
+  "artifact",
+] as const;
+export type ResultArtifactKind = (typeof RESULT_ARTIFACT_KINDS)[number];
+
+interface ArtifactBase {
+  /** What its chip says; left out, the file's name, the link's host or the artifact's id. */
+  name?: string;
+  /** The one the reviewer sees first. */
+  primary?: boolean;
+}
+
+/** One thing an attempt handed in, as the review draws it. */
+export type ResultArtifact =
+  | (ArtifactBase & { kind: "file" | "post"; path: string })
+  | (ArtifactBase & { kind: "link"; url: string })
+  | (ArtifactBase & { kind: "artifact"; artifactId: string });
+
+/**
+ * An attempt's result (`task_result`, hub task-tools.ts): what the session
+ * that worked it says it did, what the reviewer should check, and what it
+ * handed in, in the order it is drawn. One per attempt; a later call
+ * replaces it.
+ */
+export interface TaskResult {
+  artifacts: ResultArtifact[];
+  /** When it was handed in, ms epoch. */
+  at: number;
+  check: string[];
+  summary: string;
+}
+
+/**
+ * A task's `outputs` as the artifacts of a result its attempt never handed
+ * in: each file in order, a `*.post.json` a post.
+ */
+export const outputArtifacts = (outputs: string[]): ResultArtifact[] =>
+  outputs.map((path) => ({
+    kind: deliverableKind(path) === "post" ? "post" : "file",
+    path,
+  }));
+
+/** What an artifact's chip says. */
+export function artifactName(artifact: ResultArtifact): string {
+  if (artifact.name) {
+    return artifact.name;
+  }
+  switch (artifact.kind) {
+    case "link":
+      try {
+        return new URL(artifact.url).host;
+      } catch {
+        return artifact.url;
+      }
+    case "artifact":
+      return artifact.artifactId;
+    default:
+      return artifact.path.split("/").at(-1) ?? artifact.path;
+  }
+}
