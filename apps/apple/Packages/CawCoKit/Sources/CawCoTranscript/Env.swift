@@ -128,6 +128,10 @@ final class RowStore {
     /// The row for `item`, as `type`, drawn for it at `width`: the one held
     /// when there is one, set again only where its item or width changed.
     func row<V: RowContent>(_ type: V.Type, for item: Item, width: CGFloat?) -> V {
+        Pace.time(.build) { kept(type, for: item, width: width) }
+    }
+
+    private func kept<V: RowContent>(_: V.Type, for item: Item, width: CGFloat?) -> V {
         clock += 1
         if var entry = entries[item.id], let view = entry.view as? V {
             let widthChanged = !Self.same(entry.width, width)
@@ -157,6 +161,10 @@ final class RowStore {
     /// there was anything to do.
     @discardableResult
     func warm(_ type: any RowContent.Type, item: Item, width: CGFloat) -> Bool {
+        Pace.time(.warm) { stand(type, item: item, width: width) }
+    }
+
+    private func stand(_ type: any RowContent.Type, item: Item, width: CGFloat) -> Bool {
         // A row standing in a cell is that cell's to measure: one on the
         // screen, or one prepared to come on it (a prefetched cell).
         guard !isReady(item, width: width), entries[item.id]?.view.superview == nil else { return false }
@@ -338,11 +346,13 @@ final class HostCell<Content: RowContent>: UICollectionViewCell, ItemCell {
             attributes.size.height = margin + height
             return attributes
         }
-        if abs(bounds.width - width) > 0.5 { bounds.size.width = width }
-        layoutIfNeeded()
-        let fitted = super.preferredLayoutAttributesFitting(attributes)
-        if let shown { store?.measured(shown.id, height: fitted.size.height - margin, width: width) }
-        return fitted
+        return Pace.time(.measure) {
+            if abs(bounds.width - width) > 0.5 { bounds.size.width = width }
+            layoutIfNeeded()
+            let fitted = super.preferredLayoutAttributesFitting(attributes)
+            if let shown { store?.measured(shown.id, height: fitted.size.height - margin, width: width) }
+            return fitted
+        }
     }
 }
 

@@ -117,7 +117,8 @@ export interface Seen {
 /**
  * What the mock answers a request with: its words, one every `everyMs`; or,
  * with `tool`, one call of that tool (Anthropic messages and chat
- * completions alike).
+ * completions alike), after its words when it has any, as a model says what
+ * it is about to do and calls the tool in one message.
  */
 export interface Reply {
   /**
@@ -336,10 +337,28 @@ const anthropicEvents = (words: string[], tool?: Reply["tool"]): string[] => {
     },
   });
   if (tool) {
+    // The words first, a text block of their own, then the call after them.
+    const said = words.length > 0;
+    const at = said ? 1 : 0;
     return [
       start,
+      ...(said
+        ? [
+            ev("content_block_start", {
+              index: 0,
+              content_block: { type: "text", text: "" },
+            }),
+            ...words.map((text) =>
+              ev("content_block_delta", {
+                index: 0,
+                delta: { type: "text_delta", text },
+              })
+            ),
+            ev("content_block_stop", { index: 0 }),
+          ]
+        : []),
       ev("content_block_start", {
-        index: 0,
+        index: at,
         content_block: {
           type: "tool_use",
           id: `toolu_${crypto.randomUUID().replaceAll("-", "")}`,
@@ -348,13 +367,13 @@ const anthropicEvents = (words: string[], tool?: Reply["tool"]): string[] => {
         },
       }),
       ev("content_block_delta", {
-        index: 0,
+        index: at,
         delta: {
           type: "input_json_delta",
           partial_json: JSON.stringify(tool.input),
         },
       }),
-      ev("content_block_stop", { index: 0 }),
+      ev("content_block_stop", { index: at }),
       ev("message_delta", {
         delta: { stop_reason: "tool_use", stop_sequence: null },
         usage: { output_tokens: 5 },
@@ -389,6 +408,12 @@ const chatEvents = (words: string[], tool?: Reply["tool"]): string[] => {
   const usage = `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 0, model: "mock", choices: [], usage: { prompt_tokens: 10, completion_tokens: 2, total_tokens: 12 } })}\n\n`;
   if (tool) {
     return [
+      ...(words.length > 0
+        ? [
+            chunk({ role: "assistant", content: "" }, null),
+            ...words.map((content) => chunk({ content }, null)),
+          ]
+        : []),
       chunk(
         {
           role: "assistant",

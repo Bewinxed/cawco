@@ -141,6 +141,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private let signposter = OSSignposter(subsystem: "dev.cawco.app", category: "Transcript")
     #if DEBUG
     private let probe = DisclosureProbe()
+    /// The rows a blank was said for (`probeBlanks`), each said once.
+    private var blankSaid = Set<String>()
     #endif
 
     /// The list's layout, which is asked where the list stands when rows join it.
@@ -161,7 +163,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         /// The list is moved to where it is to stand as soon as the rows have
         /// their places and before any is built, so only rows it shows are.
         override func prepare() {
-            super.prepare()
+            Pace.time(.layout) { super.prepare() }
             settle()
         }
 
@@ -275,6 +277,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             hub?.sessions.read(id, because: .retry)
         }
         paneState.onReturn = { [weak self] in self?.onReturnToFleet() }
+        #if DEBUG
+        if Pace.probing { Pace.afterCommit.append { [weak self] in self?.probeBlanks() } }
+        #endif
         // Only the type size: the words are set in faces at it. Light and dark
         // are not this view's: the rendered words carry the colour sets, which
         // resolve as they draw, and each row that paints a colour of its own
@@ -1161,6 +1166,14 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // out of the reply the reader was watching stream. What it owes is
         // drawn before the first frame it shows in (`drawOwed`).
         let inSight = inView
+        #if DEBUG
+        Pace.inFrame = true
+        defer { Pace.inFrame = false }
+        if inSight {
+            Pace.tick(link, scrolling: collection.isDragging || collection.isDecelerating)
+            Pace.streaming = transcript?.tail?.busy == true
+        }
+        #endif
         let yielding = !inSight && PagingScrollView.anyPaging
         if dirty {
             if inSight || (!caughtUp && !yielding && Pace.taken < Self.budget / 2) {
@@ -1576,6 +1589,10 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         layout.hold = nil
     }
 
+    #if DEBUG
+    public func scrollViewDidEndDecelerating(_: UIScrollView) { sayRest() }
+    #endif
+
     /// A drag let go past the rows' foot, in the blank room a fold left
     /// (`slack`), comes to rest at the foot rather than in the blank.
     public func scrollViewWillEndDragging(_: UIScrollView, withVelocity _: CGPoint, targetContentOffset target: UnsafeMutablePointer<CGPoint>) {
@@ -1584,6 +1601,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     }
 
     public func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {
+        #if DEBUG
+        if !decelerate { sayRest() }
+        #endif
         guard !decelerate, slack > 0, scrollView.contentOffset.y > realFoot + 0.5 else { return }
         gliding = true
         settlingFoot = true
@@ -1609,14 +1629,17 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// out, and the frame it enters in only shows it. A frame that has
     /// already taken its share builds nothing. Says whether rows were left
     /// unvisited when the frame's share ran out: the next frame has them.
+    ///
+    /// Each row's height, once measured here, is given to the list's layout
+    /// at once (`tellHeights`), so a row comes on the screen at its height.
     private func warm(since start: Double, frame: Double) -> Bool {
         let offset = collection.contentOffset.y
         let up = offset < lastOffset - 0.5
         let down = offset > lastOffset + 0.5
         lastOffset = offset
         guard landed, fed == nil, !collection.isHidden, let width = rowWidth else { return false }
-        let budget = min(Self.warmBudget, frame * 0.4)
-        guard CACurrentMediaTime() - start < budget else { return false }
+        let until = start + min(Self.warmBudget, frame * 0.4)
+        guard CACurrentMediaTime() < until else { return false }
         let ids = listed.settled
         let shown = collection.indexPathsForVisibleItems.filter { $0.section == 0 }.map(\.item)
         guard let first = shown.min(), let last = shown.max(), last < ids.count else { return false }
@@ -1626,12 +1649,51 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             : (0 ..< max(above.count, below.count)).flatMap { i in
                 (i < above.count ? [above[i]] : []) + (i < below.count ? [below[i]] : [])
             }
+        var known: [(index: Int, item: Item)] = []
+        defer { tellHeights(known, width: width) }
         for index in order {
-            guard CACurrentMediaTime() - start < budget else { return true }
             guard let item = items[ids[index]] else { continue }
-            store.warm(Self.rowType(item.kind), item: item, width: width)
+            if !store.isReady(item, width: width) {
+                guard CACurrentMediaTime() < until else { return true }
+                store.warm(Self.rowType(item.kind), item: item, width: width)
+            }
+            known.append((index, item))
         }
         return false
+    }
+
+    /// Gives the list's layout the heights of rows built off the screen, as a
+    /// cell gives its row's on coming on it (`resize`). Laid out with only
+    /// the list's estimate (`estimated(44)`), a row came on the screen at
+    /// that height and was measured there, every row above it moved by the
+    /// difference, and more rows came into the view to be built and measured
+    /// in the same pass: a fling up through rows never shown held the main
+    /// thread 50–100 ms a turn (probe-kit spec `ios-scroll-up`). The first
+    /// row in view keeps its place on the screen while rows above it take
+    /// their heights, as when older history joins (`commit`'s anchor).
+    private func tellHeights(_ rows: [(index: Int, item: Item)], width: CGFloat) {
+        guard moving.isEmpty, !gliding, revealing == nil else { return }
+        var told = false
+        var anchor: (index: IndexPath, y: CGFloat)?
+        for (index, item) in rows {
+            let path = IndexPath(item: index, section: 0)
+            guard let height = store.height(item.id, print: item.print, width: width),
+                  let original = layout.layoutAttributesForItem(at: path) else { continue }
+            let want = CGFloat(item.top) + height
+            guard abs(original.size.height - want) > 0.5, let asked = original.copy() as? UICollectionViewLayoutAttributes else { continue }
+            asked.size.height = want
+            guard layout.shouldInvalidateLayout(forPreferredLayoutAttributes: asked, withOriginalAttributes: original) else { continue }
+            if !told, let first = collection.indexPathsForVisibleItems.min(), let frame = layout.layoutAttributesForItem(at: first)?.frame {
+                anchor = (first, frame.minY - collection.contentOffset.y)
+            }
+            told = true
+            layout.invalidateLayout(with: layout.invalidationContext(forPreferredLayoutAttributes: asked, withOriginalAttributes: original))
+        }
+        guard told else { return }
+        collection.layoutIfNeeded()
+        guard let anchor, let frame = layout.layoutAttributesForItem(at: anchor.index)?.frame else { return }
+        let moved = frame.minY - collection.contentOffset.y - anchor.y
+        if abs(moved) > 0.5 { collection.contentOffset.y += moved }
     }
 
     // MARK: A queued message in the composer
@@ -2189,6 +2251,105 @@ extension TranscriptView: RevealDriver {
         wake()
     }
 }
+
+#if DEBUG
+/// What a simulator pass reads of the list's own screen (probe-kit spec
+/// `ios-scroll-up`, the app launched with `-probe-pace`).
+extension TranscriptView {
+    /// Where the list came to rest: at the conversation's top or not,
+    /// whether a page before the first row is left to read, the rows it holds.
+    fileprivate func sayRest() {
+        let top = collection.contentOffset.y <= -collection.adjustedContentInset.top + 1
+        let first = collection.indexPathsForVisibleItems.min().flatMap { dataSource.itemIdentifier(for: $0) } ?? "-"
+        Self.dockLog.notice("probe rest \(self.env.sessionId.prefix(8), privacy: .public): top=\(top ? 1 : 0) older=\(self.transcript?.cursor != nil ? 1 : 0) rows=\(self.rowCount) first=\(first, privacy: .public) offset=\(Double(self.collection.contentOffset.y), format: .fixed(precision: 0)) height=\(Double(self.collection.contentSize.height), format: .fixed(precision: 0))")
+    }
+
+    /// Run after each turn's commit (`Pace.afterCommit`): whether the screen
+    /// it committed shows a visible row blank where its words should be. Blank
+    /// is a stretch of the list's view no cell covers; a cell with no row in
+    /// it; or a text with words in sight that stands 0pt tall, shows more than
+    /// a line of its own view past its words, or whose lines in sight are not
+    /// laid out or not in its viewport (TextKit 2 draws only what its
+    /// viewport holds). A row fading in as a live arrival is not blank: that
+    /// is drawn so. Every turn with one counts a blank frame, and each row is
+    /// said once, with why.
+    fileprivate func probeBlanks() {
+        guard inView, landed, fed == nil, !collection.isHidden, collection.alpha > 0.99 else { return }
+        let seen = visibleBox.intersection(CGRect(origin: .zero, size: collection.contentSize))
+        guard !seen.isNull, seen.height > 1 else { return }
+        Pace.checkedScreen()
+        var found: [(why: String, id: String)] = []
+        let cells = collection.visibleCells.filter { !$0.isHidden && $0.frame.intersects(seen) }.sorted { $0.frame.minY < $1.frame.minY }
+        var reach = seen.minY
+        for cell in cells {
+            if cell.frame.minY - reach > 1 { found.append(("no cell over \(Int(reach))…\(Int(cell.frame.minY))", "gap@\(Int(reach))")) }
+            reach = max(reach, cell.frame.maxY)
+        }
+        if seen.maxY - reach > 1 { found.append(("no cell over \(Int(reach))…\(Int(seen.maxY))", "gap@\(Int(reach))")) }
+        for cell in cells where cell.contentView.alpha > 0.99 {
+            let id = collection.indexPath(for: cell).flatMap { dataSource.itemIdentifier(for: $0) } ?? "?"
+            guard let row = cell.contentView.subviews.first(where: { !$0.isHidden }) else {
+                found.append(("no row in its cell", id))
+                continue
+            }
+            for text in Self.texts(in: row) {
+                if let why = Self.blank(text, cell: cell, in: seen, of: collection) {
+                    found.append((why, id))
+                    break
+                }
+            }
+        }
+        for (why, id) in found {
+            let fresh = blankSaid.insert(id).inserted
+            Pace.blank(fresh: fresh)
+            guard fresh else { continue }
+            Self.dockLog.notice("probe blank \(self.env.sessionId.prefix(8), privacy: .public): \(why, privacy: .public), row \(id, privacy: .public), offset \(Double(self.collection.contentOffset.y), format: .fixed(precision: 0))")
+        }
+    }
+
+    /// The text views shown in `view`: none under a hidden or clear view.
+    private static func texts(in view: UIView) -> [ProseView] {
+        guard !view.isHidden, view.alpha > 0.01 else { return [] }
+        if let text = view as? ProseView { return [text] }
+        return view.subviews.flatMap(texts(in:))
+    }
+
+    /// Why `text`, in `cell`, is blank where `list` shows it inside `seen`; nil when it is not.
+    private static func blank(_ text: ProseView, cell: UIView, in seen: CGRect, of list: UIView) -> String? {
+        guard text.textStorage.length > 0 else { return nil }
+        // The part in sight: inside the list's view and every clipping view between.
+        var part = text.convert(text.bounds, to: list)
+        var view = text.superview
+        while let current = view, current !== cell {
+            if current.clipsToBounds { part = part.intersection(current.convert(current.bounds, to: list)) }
+            view = current.superview
+        }
+        part = part.intersection(seen)
+        guard !part.isNull else { return nil }
+        if text.bounds.height < 1 { return "a text of \(text.textStorage.length) characters 0pt tall" }
+        guard part.height > 0.5, let manager = text.textLayoutManager else { return nil }
+        let local = list.convert(part, to: text)
+        let inset = text.textContainerInset.top
+        let used = manager.usageBoundsForTextContainer
+        let wordsTop = inset + used.minY
+        let wordsBottom = inset + used.maxY
+        let past = local.maxY - max(local.minY, wordsBottom)
+        if past > 24 { return "\(Int(past))pt of its view in sight past its words (words end at \(Int(wordsBottom)) of \(Int(text.bounds.height)))" }
+        let top = max(local.minY, wordsTop)
+        let bottom = min(local.maxY, wordsBottom)
+        guard bottom > top else { return nil }
+        let y = (top + bottom) / 2
+        guard let fragment = manager.textLayoutFragment(for: CGPoint(x: 1, y: y - inset)) else {
+            return "no line laid out at \(Int(y)) of \(Int(text.bounds.height))"
+        }
+        if fragment.state != .layoutAvailable { return "its lines at \(Int(y)) not laid out" }
+        guard let viewport = manager.textViewportLayoutController.viewportRange else { return "no viewport laid out" }
+        let lines = fragment.textElement?.elementRange ?? fragment.rangeInElement
+        if !viewport.intersects(lines) { return "its lines at \(Int(y)) of \(Int(text.bounds.height)) outside its viewport" }
+        return nil
+    }
+}
+#endif
 
 /// Raises a dock surface into view, or lets it go: it rises in over
 /// --dur-panel and out over --dur-exit, and is hidden once gone (`shown`,
