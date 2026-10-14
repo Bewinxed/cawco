@@ -27,6 +27,7 @@
  */
 import { chmod, mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { commandOf } from "../../../packages/core/src/permission-presentation";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -55,6 +56,7 @@ interface Ask {
   machineId: string;
   payload: {
     input: Record<string, unknown>;
+    presentation?: { summary: string };
     threadId?: string;
     toolName: string;
   };
@@ -234,7 +236,7 @@ const run = async (kit: Kit) => {
   script.push(bash("rm notes.txt"));
   await say("main", "PROBE-B: clean up the notes.");
   const rm = await cardFor(
-    (ask) => ask.payload.input.command === "rm notes.txt",
+    (ask) => commandOf(ask.payload.input) === "rm notes.txt",
     "b: the card for rm"
   );
   await answer(rm, false);
@@ -243,13 +245,17 @@ const run = async (kit: Kit) => {
     () => true,
     () => false
   );
+  const shown = rm.payload.presentation?.summary ?? "";
   kit.check(
-    "b: `rm somefile` raises the Approve card, in his thread; Deny means it does not run",
+    "b: `rm somefile` raises the Approve card, in his thread, saying his command; Deny means it does not run",
     rm.payload.threadId === threads.get("main") &&
+      shown.includes("rm notes.txt") &&
+      !shown.includes("--cwd-out") &&
       callOf("rm notes.txt")?.outcome === "denied" &&
       kept,
     JSON.stringify({
       thread: rm.payload.threadId,
+      shown,
       row: callOf("rm notes.txt"),
       kept,
     })
@@ -285,7 +291,7 @@ const run = async (kit: Kit) => {
     prompt: "PROBE-C: triage what came in.",
   });
   const cat = await cardFor(
-    (ask) => ask.payload.input.command === "cat vault/key.txt",
+    (ask) => commandOf(ask.payload.input) === "cat vault/key.txt",
     "c: the card for cat"
   );
   await answer(cat, true);
@@ -470,7 +476,7 @@ const run = async (kit: Kit) => {
       "PROBE-W: read example.com and sum it up here, then list the docs."
     );
     const ls = await cardFor(
-      (ask) => ask.payload.input.command === "ls docs",
+      (ask) => commandOf(ask.payload.input) === "ls docs",
       "w: the card for ls after the web read"
     );
     await answer(ls, true);

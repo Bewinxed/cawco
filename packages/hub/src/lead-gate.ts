@@ -43,6 +43,7 @@ import {
   type NeutralOrigin,
   type PermissionRequestFrame,
   type PermissionResult,
+  unboundedCommand,
 } from "@cawco/core";
 import type { DbShape, LeadCallRow } from "./db";
 import type { WebContext } from "./web-reads";
@@ -668,21 +669,6 @@ const shellFiles = (command: string): string[] => {
   return [...new Set(files)];
 };
 
-/**
- * The boundary's rewrite of a shell call (boundary-judge.ts): the command
- * run through the place's executor, the directory it ended in carried out.
- * Claude Code runs the boundary's PreToolUse hook before it asks, so the ask
- * may carry the rewritten command.
- */
-const BOUNDED =
-  /^'[^']+' --cwd-out '[^']+' '((?:[^']|'\\'')*)'; __cawco_status=\$\?; /;
-
-/** The command a shell call runs, out of the boundary's rewrite once when it is in one. */
-const unbounded = (command: string): string => {
-  const inner = BOUNDED.exec(command)?.[1];
-  return inner === undefined ? command : inner.replaceAll("'\\''", "'");
-};
-
 // --- edits -----------------------------------------------------------------
 
 /** The files an edit call names: Claude's `file_path`/`notebook_path`, OpenCode's `filepath` or its resources. */
@@ -936,7 +922,7 @@ export const createLeadGate = ({
   const describe = (lead: InstanceRow, ask: PermissionRequestFrame): Call => {
     const shell = LEAD_SHELL_TOOLS.has(ask.toolName);
     if (shell) {
-      const command = unbounded(
+      const command = unboundedCommand(
         typeof ask.input.command === "string" ? ask.input.command : ""
       );
       return { shell, command, files: shellFiles(command) };

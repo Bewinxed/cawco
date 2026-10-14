@@ -724,12 +724,16 @@ function builtIn(
       );
     case "bash": {
       const described = text(input.description);
-      const command = text(input.command)?.split("\n")[0] ?? "";
+      const whole = commandOf(input);
+      const command = whole?.split("\n")[0] ?? "";
       return only(
         described
           ? `Run a command: ${described}`
           : `Run: ${cut(command, COMMAND_CAP)}`,
-        fieldsOf(input, ["command", "description"])
+        fieldsOf(whole === null ? input : { ...input, command: whole }, [
+          "command",
+          "description",
+        ])
       );
     }
     case "webfetch":
@@ -765,9 +769,29 @@ function builtIn(
   }
 }
 
+/**
+ * A workspace boundary's rewrite of a shell call (agent boundary-judge.ts):
+ * the command run through the place's executor, the directory it ended in
+ * carried out. Claude Code runs the boundary's PreToolUse hook before it
+ * asks, so a bounded session's ask carries the rewrite (a project's Caw's,
+ * every time).
+ */
+const BOUNDED =
+  /^'[^']+' --cwd-out '[^']+' '((?:[^']|'\\'')*)'; __cawco_status=\$\?; /;
+
+/**
+ * The command a shell call runs, out of the boundary's rewrite once when it
+ * is in one: what an ask shows and what the hub's gate judges. The call's
+ * own input keeps the rewrite, so an answer never runs it unbounded.
+ */
+export const unboundedCommand = (command: string): string => {
+  const inner = BOUNDED.exec(command)?.[1];
+  return inner === undefined ? command : inner.replaceAll("'\\''", "'");
+};
+
 /** The shell command a permission is about, said whole under the summary. */
 export const commandOf = (input: Record<string, unknown>): string | null =>
-  typeof input.command === "string" ? input.command : null;
+  typeof input.command === "string" ? unboundedCommand(input.command) : null;
 
 /**
  * What a parked tool call will do, for every surface that shows the ask. A
