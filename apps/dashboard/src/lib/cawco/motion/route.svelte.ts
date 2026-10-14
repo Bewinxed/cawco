@@ -3,7 +3,7 @@
  * that move the outgoing and incoming page. The Shell's content slot keys
  * its page on the route and Configure keys its pane on the section; both
  * stack the two pages in one grid cell while they overlap, and both read
- * the plan `onNavigate` (routes/+layout.svelte) writes here before the DOM
+ * the plan `onNavigate` (routes/(app)/+layout.svelte) writes here before the DOM
  * changes.
  *
  * Distances are percentages of the page's own box, so a phone and a desk

@@ -7,7 +7,7 @@
  *
  * A source carries `data-share="<key>"`. It departs — its rect is taken —
  * when it is clicked, and every source on the page departs when a
- * navigation starts (routes/+layout.svelte), so a page going away hands its
+ * navigation starts (routes/(app)/+layout.svelte), so a page going away hands its
  * shared pieces to the page arriving. A destination lands with
  * `{@attach land(() => key)}`: when it mounts, or its key changes, and a
  * fresh departure waits under that key, it flies from the source's rect to

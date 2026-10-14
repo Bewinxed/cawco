@@ -292,8 +292,13 @@ export class Run {
         });
         let served: Promise<{ base: string; child: Bun.Subprocess }> | null =
           null;
+        let servedDev: Promise<{
+          base: string;
+          child: Bun.Subprocess;
+        }> | null = null;
         ends.push(async () => {
           (await served)?.child.kill();
+          (await servedDev)?.child.kill();
           await fleet.close();
           await fleet.clean(false);
         });
@@ -305,6 +310,12 @@ export class Run {
               })
             );
             return served.then((s) => s.base);
+          },
+          devDashboard: () => {
+            servedDev ??= serve("dev", fleet.base, {
+              CAWCO_PREVIEW_PORT: fleet.env.CAWCO_PREVIEW_PORT ?? "",
+            });
+            return servedDev.then((s) => s.base);
           },
         });
       },
@@ -375,6 +386,11 @@ export class Run {
 export type KitFleet = Fleet & {
   /** The built dashboard served against this fleet's hub: its address. */
   dashboard: () => Promise<string>;
+  /**
+   * The dev server against this fleet's hub: every module is its own URL,
+   * so a spec can name which source files a page fetched.
+   */
+  devDashboard: () => Promise<string>;
 };
 
 /** Opens `url` and waits for `ready` in the page, fonts loaded. */

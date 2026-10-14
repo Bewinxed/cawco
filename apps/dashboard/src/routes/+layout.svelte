@@ -1,42 +1,27 @@
 <script lang="ts">
+  /**
+   * What every route stands on, the app's and the bare ones alike (an
+   * artifact in its own tab, a custom view): the styles, the theme, the one
+   * socket and its upkeep, and the toasts. The app around a page (the Shell)
+   * is the `(app)` group's layout, so a bare route downloads none of it.
+   */
   import "../app.css";
   import "#lib/theme.svelte.js";
   import type { Snippet } from "svelte";
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import CanvasStages from "#lib/cawco/canvas/CanvasStages.svelte";
   import { ensureConnected } from "#lib/cawco/client.svelte.js";
-  import { GROUPS } from "#lib/cawco/config/sections.js";
   import { trackDevicePixel } from "#lib/cawco/device-pixel.js";
-  import { PREFETCHES as CAW_PREFETCHES } from "#lib/cawco/home/Caw.svelte";
   import { restWhenHidden } from "#lib/cawco/motion/rest.js";
-  import { leaving, plan, route } from "#lib/cawco/motion/route.svelte.js";
-  import { departAll } from "#lib/cawco/motion/share.svelte.js";
-  import Overlays from "#lib/cawco/Overlays.svelte";
-  import Shell from "#lib/cawco/Shell.svelte";
   import { tabIcon } from "#lib/cawco/tab-icon/tab-icon.svelte.js";
   import { tallestComposer } from "#lib/cawco/transcript/composer-presence.svelte.js";
   import { startUpdateWatch } from "#lib/cawco/updates/update-notice.svelte.js";
   import { trackVisibleViewport } from "#lib/cawco/visible-viewport.svelte.js";
   import { workspace } from "#lib/cawco/workspace/workspace.svelte.js";
   import { Toaster } from "#lib/components/ui/sonner/index.js";
-  import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { enableLongPressMenus } from "#lib/utils/longpress.js";
-  import { onNavigate } from "$app/navigation";
-  import { page } from "$app/state";
-  import type { LayoutServerData } from "./$types";
 
-  /** One custom view and nothing around it: what the app's web view shows (PRD §5.2). */
-  const VIEW_ALONE = "/project/[id]/view/[name]";
-  /**
-   * An artifact opened in its own tab: the artifact and nothing of the app
-   * around it, so the tab stays light. Only what the pane stands in comes
-   * with it (Overlays: the tooltip provider and the lightbox).
-   */
-  const ARTIFACT_ALONE = "/artifact/[id]";
-
-  let { children, data }: { children: Snippet; data: LayoutServerData } =
-    $props();
+  let { children }: { children: Snippet } = $props();
 
   /**
    * Where toasts appear. A phone's bottom edge belongs to the composer, so
@@ -83,50 +68,7 @@
   $effect(() =>
     tabIcon(document.querySelector('link[rel="icon"]') as HTMLLinkElement)
   );
-
-  /** Configure's sections in the rail's order, top to bottom. */
-  const SECTION_ORDER = GROUPS.flatMap(({ sections }) =>
-    sections.map((section) => section.slug as string)
-  );
-  const narrow = new MediaQuery(NARROW_QUERY);
-
-  // Every route change moves the page the way the navigation went; the
-  // sidebar, the top bar and the tab strips sit outside the keyed page and
-  // hold still. The plan is written here, before the DOM changes, and read
-  // by the page's own transitions (motion/route.svelte.ts). Same-page param
-  // changes and moves between conversations re-key nothing, so they are
-  // instant: the workspace store shows a pane and writes the URL with
-  // `pushState`, which runs no navigation at all.
-  onNavigate((navigation) => {
-    if (navigation.shallow) {
-      return;
-    }
-
-    if (!(navigation.from && navigation.to)) {
-      return;
-    }
-    // What the page going away shares with the page arriving hands itself
-    // over: its rects are taken now, before the DOM changes.
-    departAll();
-    leaving(navigation.from.url);
-    route.travel = plan({
-      from: navigation.from.url.pathname,
-      to: navigation.to.url.pathname,
-      history: navigation.type === "popstate" ? Math.sign(navigation.delta) : 0,
-      rtl: getComputedStyle(document.documentElement).direction === "rtl",
-      narrow: narrow.current,
-      sections: SECTION_ORDER,
-    });
-  });
 </script>
-
-<svelte:head>
-  <!-- Caw's runtime and his waiting file go to the HTTP cache at idle
-       priority, so a wait that outlasts its grace shows him without fetching. -->
-  {#each CAW_PREFETCHES as href (href)}
-    <link crossorigin="anonymous" {href} rel="prefetch">
-  {/each}
-</svelte:head>
 
 <Toaster
   data-safe-bottom
@@ -134,26 +76,4 @@
   offset={toastOffset}
   position={narrowToasts.current ? "top-center" : "bottom-right"}
 />
-{#if page.route.id === VIEW_ALONE}
-  {@render children()}
-{:else if page.route.id === ARTIFACT_ALONE}
-  <Overlays>
-    <div class="alone">{@render children()}</div>
-  </Overlays>
-  <!-- A canvas's stage stands over the pane's slot. -->
-  <CanvasStages />
-{:else}
-  <Shell railWidth={data.railWidth}> {@render children()} </Shell>
-  <CanvasStages />
-{/if}
-
-<style>
-  /* The artifact's tab: one full-height column on the page's surface. */
-  .alone {
-    display: flex;
-    flex-direction: column;
-    height: 100dvh;
-    background: var(--surface-page);
-    overflow: hidden;
-  }
-</style>
+{@render children()}

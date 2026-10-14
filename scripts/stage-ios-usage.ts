@@ -9,7 +9,7 @@
  * temp HOME and database) with the bench's sessions written into its
  * `instances`, and in front of it a proxy on `--port` that the app points at
  * (`-cawco-hub-url http://127.0.0.1:<port>`). The proxy serves the bench's
- * stage (apps/dashboard/src/routes/motion/usage-relay/stage-data.ts) where
+ * stage (apps/dashboard/src/routes/(app)/motion/usage-relay/stage-data.ts) where
  * the hub would serve its own: `/api/accounts`, `/api/accounts/forecast` and
  * `/api/usage/limits`; everything else, the dashboard socket included, goes
  * to the hub. The hub calls a running session on a machine with no agent
@@ -44,7 +44,7 @@ import {
 import {
   type StagedData,
   stagedData,
-} from "../apps/dashboard/src/routes/motion/usage-relay/stage-data";
+} from "../apps/dashboard/src/routes/(app)/motion/usage-relay/stage-data";
 import { scratchFleet } from "./scratch-fleet";
 
 const arg = (name: string, fallback: string) => {

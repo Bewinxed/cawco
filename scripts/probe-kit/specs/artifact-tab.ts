@@ -14,9 +14,11 @@
  * 3. Hovering a pane control shows its tip (its title) and says no error.
  * 4. A pin's picture, from its card's thumbnail, opens in the lightbox.
  * 5. No console error in either tab.
- *
- * And a note: the JS bytes each tab transferred, to compare against the
- * same reading on main.
+ * 6. The JS each tab transferred (built dashboard) is within its budget,
+ *    against main's reading with the app around it.
+ * 7. On the dev server, where each source file is its own URL, neither tab
+ *    fetches a module of the app's shell, session surface or transcript
+ *    beyond what the pane and the hub client use (APP_MODULE).
  */
 import type { Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
@@ -47,6 +49,22 @@ const APP_PARTS = [
   ".skip",
 ] as const;
 const TOLERANCE = 2;
+/** The JS each tab transferred on main (94508c8d's parent), with the app around it. */
+const MAIN_KB = { page: 1289, canvas: 2728 } as const;
+/** What each tab may transfer now, outside the app's group (measured 649 and 2088 KB). */
+const BUDGET_KB = { page: 700, canvas: 2150 } as const;
+/**
+ * A source file only the app around a page uses: the Shell and what it
+ * mounts, the session surface and its panes, and the transcript's own
+ * modules. Of transcript/, the tab keeps only:
+ * - the pane's: Lightbox (a pin's picture), its lightbox-state and the
+ *   extension helper, and MessageBody (a pin's thread);
+ * - the hub client store's message model, which client.svelte.ts (the one
+ *   socket every route reads) imports: rows, present, local, compaction-mark;
+ * - composer-presence, which the root layout's toasts stand above.
+ */
+const APP_MODULE =
+  /\/lib\/cawco\/(?:Shell|Sidebar|SessionSurface|SessionPane|ThreadPane|NeedsCaw|MachinesButton|GlassCard|CawPanel)\.svelte|\/lib\/cawco\/workspace\/Pane[A-Za-z]*\.svelte|\/lib\/cawco\/transcript\/(?!(?:Lightbox\.svelte|lightbox-state\.svelte\.ts|extension\.ts|MessageBody\.svelte|rows\.ts|present\.ts|local\.ts|compaction-mark\.ts|composer-presence\.svelte\.ts)(?:$|\?))[^/?]+/;
 
 const PAGE = `<!doctype html>
 <html lang="en">
@@ -153,7 +171,6 @@ const boxes = (page: Page, filler: string) =>
       : 0;
     return {
       viewport: { left: 0, top: 0, right: innerWidth, bottom: innerHeight },
-      column: box(".alone"),
       tab: box(".artifact-tab"),
       card: box(".side-card"),
       well: box(".side-well"),
@@ -205,9 +222,8 @@ const alone = async (
     b.viewport.right - b.well.right <= b.pad * 2 + TOLERANCE &&
     b.viewport.bottom - b.well.bottom <= b.pad * 2 + TOLERANCE;
   kit.check(
-    `2: the ${kind}'s column is the viewport, its well spans it, and ${filler} fills the well (±${TOLERANCE}px)`,
-    same(b.column, b.viewport) &&
-      same(b.tab, b.viewport) &&
+    `2: the ${kind}'s tab is the viewport, its well spans it, and ${filler} fills the well (±${TOLERANCE}px)`,
+    same(b.tab, b.viewport) &&
       wellSpans &&
       same(b.filler, inset(b.well, b.border)),
     JSON.stringify(b)
@@ -376,9 +392,44 @@ const run = async (kit: Kit) => {
     heard.errors.join(" | ") || "none"
   );
 
-  kit.note(
-    `JS transferred: page tab ${pageBytes.kb} KB in ${pageBytes.files} files; canvas tab ${canvasBytes.kb} KB in ${canvasBytes.files} files`
+  // 6. The JS each tab transferred, against main's reading with the app around it.
+  kit.check(
+    `6: the page tab's JS is at most ${BUDGET_KB.page} KB (main: ${MAIN_KB.page} KB with the app around it)`,
+    pageBytes.kb <= BUDGET_KB.page,
+    `${pageBytes.kb} KB in ${pageBytes.files} files`
   );
+  kit.check(
+    `6: the canvas tab's JS is at most ${BUDGET_KB.canvas} KB (main: ${MAIN_KB.canvas} KB with the app around it)`,
+    canvasBytes.kb <= BUDGET_KB.canvas,
+    `${canvasBytes.kb} KB in ${canvasBytes.files} files`
+  );
+
+  // 7. By module, on the dev server, where each source file is its own URL.
+  const dev = await fleet.devDashboard();
+  for (const [kind, id, ready] of [
+    ["page", pageId, FRAME],
+    ["canvas", canvasId, `${stage} iframe`],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one tab at a time, each its own list
+    const devTab = await kit.page("desk");
+    const fetched: string[] = [];
+    devTab.on("request", (request) => {
+      if (request.resourceType() === "script") {
+        fetched.push(new URL(request.url()).pathname);
+      }
+    });
+    await open(devTab, `${dev}/artifact/${id}`, ready, 120_000);
+    await settle(devTab);
+    const strays = fetched.filter((path) => APP_MODULE.test(path));
+    const transcript = fetched
+      .filter((path) => path.includes("/lib/cawco/transcript/"))
+      .map((path) => path.split("/").pop());
+    kit.check(
+      `7: the ${kind} tab fetches none of the app's shell, session or transcript modules`,
+      strays.length === 0,
+      `${strays.slice(0, 8).join(", ") || "none"} of ${fetched.length} modules; the pane's own from transcript/: ${transcript.join(", ") || "none"}`
+    );
+  }
 };
 
 const spec: Spec = { name: "artifact-tab", run };

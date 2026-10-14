@@ -34,7 +34,7 @@
   } from "#lib/icons.js";
   import { dur, ease, motionOk } from "../motion/curves.svelte";
   import { closeInto, land } from "../motion/share.svelte";
-  import { extensionOf } from "./DocThumb.svelte";
+  import { extensionOf } from "./extension";
   import {
     type LightboxShot,
     type LightboxView,

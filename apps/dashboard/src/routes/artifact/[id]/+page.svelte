@@ -4,11 +4,13 @@
      there. The session's panel shows this artifact while the tab is open on
      it: the hub serves a session one artifact at a time. -->
 <script lang="ts">
+  import CanvasStages from "#lib/cawco/canvas/CanvasStages.svelte";
   import {
     cawco,
     findArtifact,
     showArtifact,
   } from "#lib/cawco/client.svelte.js";
+  import Overlays from "#lib/cawco/Overlays.svelte";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -50,37 +52,45 @@
 
 <svelte:head><title>{found?.name ?? "Artifact"} · CawCo</title></svelte:head>
 
-<div class="artifact-tab">
-  {#if problem}
-    <EmptyState icon={IconAlert} title="This artifact didn't open">
-      {#snippet line()}
-        {problem}
-        Open it again from its session's panel.
-      {/snippet}
-      {#snippet action()}
-        <Button href="/session" label="Back to the fleet" variant="outline" />
-      {/snippet}
-    </EmptyState>
-  {:else if found && open}
-    <PreviewPane instanceId={found.instanceId} ownTab />
-  {:else}
-    <div aria-hidden="true" class="opening">
-      <span
-        class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
-      ></span>
-    </div>
-  {/if}
-</div>
+<!-- Outside the app's group: nothing of the app around it, only what the pane
+     stands in (Overlays: the tooltip provider and the lightbox) and the stage
+     a canvas stands on over the pane's slot. -->
+<Overlays>
+  <div class="artifact-tab">
+    {#if problem}
+      <EmptyState icon={IconAlert} title="This artifact didn't open">
+        {#snippet line()}
+          {problem}
+          Open it again from its session's panel.
+        {/snippet}
+        {#snippet action()}
+          <Button href="/session" label="Back to the fleet" variant="outline" />
+        {/snippet}
+      </EmptyState>
+    {:else if found && open}
+      <PreviewPane instanceId={found.instanceId} ownTab />
+    {:else}
+      <div aria-hidden="true" class="opening">
+        <span
+          class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
+        ></span>
+      </div>
+    {/if}
+  </div>
+</Overlays>
+<CanvasStages />
 
 <style>
-  /* The panel's card at the page's full width and height, with the gap the
-     card keeps from its column beside a conversation. */
+  /* The panel's card at the tab's full width and height, on the page's
+     surface, with the gap the card keeps from its column beside a
+     conversation. */
   .artifact-tab {
-    flex: 1;
-    min-height: 0;
     display: flex;
     flex-direction: column;
+    height: 100dvh;
+    overflow: hidden;
     padding: var(--space-2);
+    background: var(--surface-page);
   }
   .opening {
     flex: 1;

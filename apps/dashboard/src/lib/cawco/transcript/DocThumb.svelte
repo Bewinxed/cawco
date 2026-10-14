@@ -1,10 +1,4 @@
 <script lang="ts" module>
-  /** A file name's extension, lower-cased; "" for none. */
-  export function extensionOf(name: string): string {
-    const dot = name.lastIndexOf(".");
-    return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
-  }
-
   const KB = 1024;
   /** "12 lines · 2.3 KB": what the thumb says under the name. */
   function sizeLine(content: string): string {
@@ -43,6 +37,7 @@
     IconFileMarkdown,
     IconFileTable,
   } from "#lib/icons.js";
+  import { extensionOf } from "./extension";
   import { lightbox } from "./lightbox-state.svelte";
 
   type Props =
