@@ -432,28 +432,29 @@ const huskPhase = async (
     `boundaries: ${left.join(", ") || "none"}; something at: ${at().join(", ") || "none"}`
   );
 
+  // The agent's start-up pass (boundary.ts `rearmHooks`) rewrites each
+  // workspace whose boundary runs, and says so once it is done; one with
+  // none running, as each of these three is once its boundary closed, waits
+  // unarmed for a session there. Its line, counted per launch, is the pass
+  // done; no boundary of the three running after it is each known gone.
+  const PASS_DONE = "[workspace] boundary hooks written for ";
+  const passes = async () =>
+    (await fleet.logs("agent")).split(PASS_DONE).length - 1;
+  const passesBefore = await passes();
   await fleet.stop("agent");
   fleet.launch("agent");
   await fleet.agentUp();
-  // The start-up pass over each held workspace (boundary.ts `rearmOne`)
-  // reached all three when it has said why each clone's mount points could
-  // not be rewritten: there is no clone.
-  const rearmed = (log: string) =>
-    three.every((workspace) =>
-      log.includes(
-        `[workspace] ${workspace.id}: the mount points its sandbox left could not be rewritten`
-      )
-    );
-  const lines = await until(
-    "the restarted agent's pass over the three workspaces",
-    () => fleet.logs("agent"),
-    rearmed,
+  const passesAfter = await until(
+    "the restarted agent's start-up pass done",
+    passes,
+    (count) => count > passesBefore,
     60_000
-  ).catch(() => fleet.logs("agent"));
+  ).catch(passes);
+  const running = await boundaries();
   check(
-    "(f) after an agent restart, its start-up pass over the three done, still nothing at any of their paths",
-    rearmed(lines) && at().length === 0 && (await boundaries()).length === 0,
-    `something at: ${at().join(", ") || "none"}; pass reached all: ${rearmed(lines)}`
+    "(f) after an agent restart, its start-up pass done, none of the three has a boundary and nothing is at any of their paths",
+    passesAfter > passesBefore && running.length === 0 && at().length === 0,
+    `start-up passes logged: ${passesBefore} before, ${passesAfter} after; boundaries: ${running.join(", ") || "none"}; something at: ${at().join(", ") || "none"}`
   );
 
   await makeHusk(wg.path);
