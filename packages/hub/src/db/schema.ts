@@ -2498,8 +2498,18 @@ export const leadTurns = sqliteTable("lead_turns", {
   }),
   /** What it answers when no thread does: "a report from site#4f2a1c". */
   what: text("what"),
-  /** Its first frame was noted: the idle after it ends it. */
+  /** The turn under way read a send: the idle after it ends that turn. */
   started: integer("started", { mode: "boolean" }).notNull().default(false),
+  /** Threads whose wake the turn under way read: `working` until it ends. */
+  reading: text("reading", { mode: "json" })
+    .$type<string[]>()
+    .notNull()
+    .default([]),
+  /** Wakes sent and not yet read, by send uuid: the thread each woke (`""` for none), `working` until read and answered. */
+  waiting: text("waiting", { mode: "json" })
+    .$type<Record<string, string>>()
+    .notNull()
+    .default({}),
 });
 
 /** A harness subagent a session started and that has not ended: its task, and the call that started it. */

@@ -236,6 +236,8 @@ const TASK_ID = /^tsk-\d{1,9}$/;
 /** The most files one reply names. */
 const FILES_MAX = 40;
 const STAGES_FILE = "stages.md";
+/** Attempts whose thread is kept for the other half of their end ({@link createCaw}'s `attemptThread`). */
+const ATTEMPT_THREADS_KEPT = 200;
 
 /** A folder call, its refusal as the sentence Caw reads. */
 const folderCall = async <T>(call: () => T | Promise<T>): Promise<T> => {
@@ -376,8 +378,8 @@ export interface CawDeps {
   readonly publish: (
     frame: ThreadUpsertFrame | ThreadMessageFrame | ProjectStopFrame
   ) => void;
-  /** Delivers one message to a session through the hub's one send path. */
-  readonly send: (envelope: Envelope<SendPayload>) => void;
+  /** Delivers one message to a session through the hub's one send path: whether the hub took it (its record `pending`). */
+  readonly send: (envelope: Envelope<SendPayload>) => boolean;
   /** Starts a session, resolved once its machine says it is in place. */
   readonly spawn: (machineId: string, payload: SpawnPayload) => Promise<void>;
   /**
@@ -450,23 +452,30 @@ export const createCaw = ({
   /** Lead sessions being started now, by project: one start per project at a time. */
   const starting = new Map<string, Promise<InstanceRow>>();
   /**
-   * The turn each lead is in, by lead session: the working copy of the
+   * What each lead is answering, by lead session: the working copy of the
    * `lead_turns` rows ({@link keep} writes both), read back from them as the
-   * hub starts, so a turn outlives a hub restart. `started` once the turn's
-   * first busy pulse came, so the idle one after ends it. `by` is whose turn
-   * it is: `you` once your words are in it, `kept` once you let his own turn
-   * finish as you turned him off, else `event`. What he starts in it is that
-   * work's (work-items `origin`), and turning him off asks about his own
-   * turn while yours runs to its end. `threadId` is the thread it answers,
-   * which then reads `working`; a turn no thread woke (a report or a
-   * question reaching him as the lead) has none and says `what` it answers,
-   * on his panel rather than on any thread.
+   * hub starts, so it outlives a hub restart. Its one source is the hub's
+   * sends to him ({@link sendLeft}): `waiting` are the sends that woke him
+   * and that his harness has not read, by send uuid, with the thread each
+   * woke (`""` for none); `reading` the threads whose wake the turn under
+   * way read; `started` once that turn read a send. A thread is `working`
+   * while either names it. The idle after a started turn ends that turn
+   * ({@link endTurn}): its threads go `ready`, and what still waits keeps
+   * the record. `by` is whose it is: `you` once your words are in it, `kept`
+   * once you let his own turn finish as you turned him off, else `event`.
+   * What he starts in it is that work's (work-items `origin`), and turning
+   * him off asks about his own turn while yours runs to its end.
+   * `threadId` is the thread it last answered (his questions, what he
+   * starts, the turn's cost); one no thread woke (a question reaching him as
+   * the lead) has none and says `what` it answers, on his panel.
    */
   interface Turn {
     by: WorkOrigin;
     projectId: string;
+    reading: string[];
     started: boolean;
     threadId?: string;
+    waiting: Record<string, string>;
     what?: string;
   }
   const turns = new Map<string, Turn>(
@@ -475,7 +484,9 @@ export const createCaw = ({
       {
         by: stored.origin,
         projectId: stored.projectId,
+        reading: stored.reading,
         started: stored.started,
+        waiting: stored.waiting,
         ...(stored.threadId ? { threadId: stored.threadId } : {}),
         ...(stored.what ? { what: stored.what } : {}),
       },
@@ -491,9 +502,18 @@ export const createCaw = ({
       origin: turn.by,
       threadId: turn.threadId ?? null,
       what: turn.threadId ? null : (turn.what ?? null),
+      reading: turn.reading,
       started: turn.started,
+      waiting: turn.waiting,
     });
   };
+
+  /** The threads a turn keeps `working`: those its turn under way read, and those its unread wakes woke. */
+  const threadsOf = (turn: Turn): string[] => [
+    ...new Set(
+      [...turn.reading, ...Object.values(turn.waiting)].filter(Boolean)
+    ),
+  ];
 
   /** Whose a turn is when `next` joins it: yours over his kept own over an event's. */
   const RANK: Record<WorkOrigin, number> = { event: 0, kept: 1, you: 2 };
@@ -526,7 +546,7 @@ export const createCaw = ({
       return "needs-you";
     }
     for (const turn of turns.values()) {
-      if (turn.threadId === threadId) {
+      if (threadsOf(turn).includes(threadId)) {
         return "working";
       }
     }
@@ -567,32 +587,49 @@ export const createCaw = ({
   };
 
   /**
-   * The lead's turn now answers `threadId`: it is `working`, and the thread
-   * before it no longer. A turn your words are in stays yours when an event
-   * joins it ({@link joined}); a wake that joins a turn already under way
-   * keeps its start, so the idle after it still ends it.
+   * A send woke the lead (`sent`, its uuid): what woke it waits for his
+   * harness to read it, and `threadId`, when it names one, is `working`
+   * from now until the turn that reads it ends. A turn your words are in
+   * stays yours when an event joins it ({@link joined}). Without a thread
+   * it says `what` it answers, on his panel.
    */
   const follow = (
-    lead: InstanceRow,
+    leadId: string,
     projectId: string,
-    threadId: string,
-    by: Origin
+    by: WorkOrigin,
+    sent: string,
+    to: { threadId: string } | { what: string }
   ) => {
-    answered.set(lead.id, threadId);
-    const before = turns.get(lead.id);
-    keep(lead.id, {
+    const before = turns.get(leadId);
+    const threadId = "threadId" in to ? to.threadId : before?.threadId;
+    if ("threadId" in to) {
+      answered.set(leadId, to.threadId);
+    }
+    keep(leadId, {
       by: joined(before?.by, by),
       projectId,
-      threadId,
+      reading: before?.reading ?? [],
       started: before?.started ?? false,
+      waiting: {
+        ...before?.waiting,
+        [sent]: "threadId" in to ? to.threadId : "",
+      },
+      ...(threadId ? { threadId } : {}),
+      ...("what" in to ? { what: to.what } : {}),
     });
-    if (before?.threadId && before.threadId !== threadId) {
-      upsert(db.thread(before.threadId));
+    if ("threadId" in to) {
+      upsert(db.thread(to.threadId));
     }
-    upsert(db.thread(threadId));
   };
 
-  /** A lead's turn is over: its idle came, or its session ended. */
+  /** Publishes the rows of the threads a turn kept working that no longer are. */
+  const released = (before: string[]): void => {
+    for (const threadId of before) {
+      upsert(db.thread(threadId));
+    }
+  };
+
+  /** A lead's record is over: his session ended, his machine went, or he was replaced. */
   const unfollow = (instanceId: string): void => {
     // Every stored turn is in the working copy: one it lacks has no row.
     const turn = turns.get(instanceId);
@@ -601,8 +638,70 @@ export const createCaw = ({
     }
     turns.delete(instanceId);
     db.dropLeadTurn(instanceId);
-    if (turn.threadId) {
-      upsert(db.thread(turn.threadId));
+    released(threadsOf(turn));
+  };
+
+  /**
+   * The lead's turn under way ended (its idle, or it was cut): the threads
+   * it read go `ready`; the wakes still unread keep the record, and their
+   * threads `working`, for the turn that reads them.
+   */
+  const endTurn = (instanceId: string): void => {
+    const turn = turns.get(instanceId);
+    if (!turn) {
+      return;
+    }
+    if (Object.keys(turn.waiting).length === 0) {
+      unfollow(instanceId);
+      return;
+    }
+    const before = threadsOf(turn);
+    keep(instanceId, { ...turn, reading: [], started: false });
+    released(before);
+  };
+
+  /**
+   * A send to a session left `pending` (server.ts `changeSend`): `read` by
+   * its harness, or never to be. A lead's wake read is his turn under way
+   * reading it, and its thread is that turn's; one never read releases its
+   * thread, and the record with it when nothing else holds it.
+   */
+  const sendLeft = (
+    instanceId: string,
+    uuid: string,
+    wasRead: boolean
+  ): void => {
+    const turn = turns.get(instanceId);
+    if (!turn) {
+      return;
+    }
+    const woke = turn.waiting[uuid];
+    if (woke === undefined) {
+      // Another send read (your words straight into his session): the turn
+      // under way is reading, so the idle after it ends it.
+      if (wasRead && !turn.started) {
+        keep(instanceId, { ...turn, started: true });
+      }
+      return;
+    }
+    const { [uuid]: _taken, ...waiting } = turn.waiting;
+    const reading =
+      wasRead && woke && !turn.reading.includes(woke)
+        ? [...turn.reading, woke]
+        : turn.reading;
+    const next = {
+      ...turn,
+      waiting,
+      reading,
+      started: turn.started || wasRead,
+    };
+    if (!next.started && Object.keys(waiting).length === 0) {
+      unfollow(instanceId);
+      return;
+    }
+    keep(instanceId, next);
+    if (woke) {
+      upsert(db.thread(woke));
     }
   };
 
@@ -692,14 +791,16 @@ export const createCaw = ({
 
   /**
    * One message to Caw's session. A routine's wake says so in its origin
-   * (`routine:<id>`): the turn it starts is that run's (memory.ts).
+   * (`routine:<id>`): the turn it starts is that run's (memory.ts). Answers
+   * the send's uuid when the hub took it, for {@link follow}.
    */
   const message = (
     target: InstanceRow,
     content: string,
     routine?: string
-  ): void =>
-    send({
+  ): string | undefined => {
+    const uuid = crypto.randomUUID();
+    const taken = send({
       verb: "send",
       machineId: target.machineId,
       instanceId: target.id,
@@ -707,7 +808,7 @@ export const createCaw = ({
         instanceId: target.id,
         message: {
           type: "user",
-          uuid: crypto.randomUUID(),
+          uuid,
           message: { role: "user", content },
           parent_tool_use_id: null,
           origin: {
@@ -717,6 +818,8 @@ export const createCaw = ({
         },
       },
     });
+    return taken ? uuid : undefined;
+  };
 
   /**
    * Starts the project's Caw session, makes it the lead, and sends it its
@@ -727,7 +830,7 @@ export const createCaw = ({
     project: ReturnType<typeof projectOf>,
     event: string,
     routine?: string
-  ): Promise<InstanceRow> => {
+  ): Promise<{ lead: InstanceRow; sent: string | undefined }> => {
     const place =
       (await placeFor(project)) ??
       refuse(
@@ -752,11 +855,11 @@ export const createCaw = ({
     if (!lead) {
       throw new Error(`Caw's session ${instanceId} has no row on this hub.`);
     }
-    message(lead, `${briefOf(project.name)}\n\n${event}`, routine);
+    const sent = message(lead, `${briefOf(project.name)}\n\n${event}`, routine);
     console.log(
       `[caw] ${project.name}: started Caw on ${project.cawHarness} (${instanceId})`
     );
-    return lead;
+    return { lead, sent };
   };
 
   /**
@@ -764,14 +867,17 @@ export const createCaw = ({
    * `event` (its first message, after its brief): for your words on or off,
    * for an event while Caw is on. Undefined for an event while he is off.
    * Callers at once share one start; `started` says whether this call's
-   * event went out with it.
+   * event went out with it, as the send `sent`.
    */
   const leadFor = async (
     projectId: string,
     event: string,
     by: Origin,
     routine?: string
-  ): Promise<{ row: InstanceRow; started: boolean } | undefined> => {
+  ): Promise<
+    | { row: InstanceRow; sent?: string | undefined; started: boolean }
+    | undefined
+  > => {
     const project = projectOf(projectId);
     if (by === "event" && !project.caw) {
       return undefined;
@@ -787,8 +893,12 @@ export const createCaw = ({
     const start = startLead(project, event, routine).finally(() =>
       starting.delete(projectId)
     );
-    starting.set(projectId, start);
-    return { row: await start, started: true };
+    const shared = start.then((made) => made.lead);
+    // A start that fails is the starter's to answer; those sharing it hear it too.
+    shared.catch(() => undefined);
+    starting.set(projectId, shared);
+    const begun = await start;
+    return { row: begun.lead, sent: begun.sent, started: true };
   };
 
   /**
@@ -878,11 +988,17 @@ export const createCaw = ({
       settle(threadId);
       return false;
     }
-    if (threadId) {
-      follow(lead.row, projectId, threadId, event.by);
+    const sent = lead.started
+      ? lead.sent
+      : message(lead.row, text, event.routine);
+    if (!sent) {
+      // His session refused it: nothing woke him, and the thread is not his.
+      giveBack();
+      settle(threadId);
+      return false;
     }
-    if (!lead.started) {
-      message(lead.row, text, event.routine);
+    if (threadId) {
+      follow(lead.row.id, projectId, event.by, sent, { threadId });
     }
     return true;
   };
@@ -985,7 +1101,7 @@ export const createCaw = ({
     }
     cut.set(turn.id, project.id);
     interrupt(turn.id);
-    unfollow(turn.id);
+    endTurn(turn.id);
     console.log(
       `[caw] ${project.name}: turned off; cut the turn an event started (${turn.id})`
     );
@@ -1049,8 +1165,47 @@ export const createCaw = ({
       lead.id,
       turn
         ? { ...turn, by: joined(turn.by, "kept") }
-        : { by: "kept", projectId: project.id, started: true }
+        : {
+            by: "kept",
+            projectId: project.id,
+            reading: [],
+            started: true,
+            waiting: {},
+          }
     );
+  };
+
+  /**
+   * The thread an attempt's end is noted in, and its report follows: the
+   * one that named its task, else the project's newest; kept by item, as
+   * its note ({@link attemptEnded}) and its report reaching Caw
+   * ({@link heard}) come in either order: the second of them takes it.
+   */
+  const attemptThreads = new Map<string, string>();
+  const attemptThread = (
+    projectId: string,
+    item: WorkItemRow
+  ): string | undefined => {
+    const known = attemptThreads.get(item.id);
+    if (known) {
+      attemptThreads.delete(item.id);
+      return known;
+    }
+    const found =
+      db.threadOfTask(projectId, item.taskId ?? "")?.id ??
+      db.newestThread(projectId)?.id;
+    if (found) {
+      attemptThreads.set(item.id, found);
+      // One whose other half never comes (a report that reached someone
+      // else) is let go with the oldest.
+      for (const old of attemptThreads.keys()) {
+        if (attemptThreads.size <= ATTEMPT_THREADS_KEPT) {
+          break;
+        }
+        attemptThreads.delete(old);
+      }
+    }
+    return found;
   };
 
   /** What an item's end reads in a thread: its report, or why it failed. */
@@ -1071,9 +1226,10 @@ export const createCaw = ({
   });
 
   /**
-   * An attempt at a task ended: noted in the thread that named the task,
-   * and, when Caw `hears` it, that thread follows the turn its report starts
-   * (`by`'s), or Caw starts for it when he has no session.
+   * An attempt at a task ended: noted in the thread that named the task
+   * ({@link attemptThread}), or Caw starts for it when he `hears` it and
+   * has no session. With a session, its report reaching him is the wake
+   * that thread follows ({@link heard}).
    */
   const attemptEnded = (
     project: ReturnType<typeof projectOf>,
@@ -1093,13 +1249,7 @@ export const createCaw = ({
       wakeQuietly(project.id, event);
       return;
     }
-    const threadId = noteIn(project.id, event.threadId, endNote(item), false);
-    const lead = hears ? standing(project) : undefined;
-    if (lead) {
-      follow(lead, project.id, threadId, by);
-    } else {
-      upsert(db.thread(threadId));
-    }
+    noteIn(project.id, attemptThread(project.id, item), endNote(item));
   };
 
   const view = (projectId: string): CawView => {
@@ -1717,22 +1867,31 @@ export const createCaw = ({
      * A report or a question from `from` reached `leadId` (server.ts
      * `reportTo`, `deliverDelegateAsk`): when `leadId` is a project's Caw,
      * the turn it starts, or joins, is that work's (its item's origin; a
-     * session's own ask is yours). Woken by no thread, it says `what` it
-     * answers on his panel, never on a thread it would only be guessed from.
+     * session's own ask is yours), and its send (`sent`, when the hub took
+     * it) waits to be read as any wake does. An attempt's report is the wake
+     * of the thread its end is noted in ({@link attemptThread}), which reads
+     * `working` until the turn that reads it ends; anything else says `what`
+     * it answers on his panel, never on a thread it would only be guessed
+     * from.
      */
-    heard(leadId: string, from: InstanceRow, what: string): void {
+    heard(
+      leadId: string,
+      from: InstanceRow,
+      what: string,
+      sent: string | undefined,
+      report: boolean
+    ): void {
       const project = leadOf(row(leadId));
-      if (!project) {
+      if (!(project && sent)) {
         return;
       }
       const item = from.workItemId ? db.workItem(from.workItemId) : undefined;
-      const before = turns.get(leadId);
-      keep(leadId, {
-        by: joined(before?.by, item?.origin ?? "you"),
-        projectId: project.id,
-        started: before?.started ?? false,
-        ...(before?.threadId ? { threadId: before.threadId } : { what }),
-      });
+      const by = item?.origin ?? "you";
+      const threadId =
+        report && item?.taskId && (item.origin === "you" || project.caw)
+          ? attemptThread(project.id, item)
+          : undefined;
+      follow(leadId, project.id, by, sent, threadId ? { threadId } : { what });
     },
 
     /**
@@ -1789,32 +1948,28 @@ export const createCaw = ({
     },
 
     /**
-     * A session's pulse: a lead's turn that a thread woke ends at its first
-     * idle after busy, and any idle ends the routine runs whose wake its turn
-     * read (routines.ts).
+     * A session's idle pulse: a lead's turn that read a send ends
+     * ({@link endTurn}), and so do the routine runs whose wake it read
+     * (routines.ts). An idle before any read ends nothing: what woke him is
+     * still to be read.
      */
     pulse(instanceId: string, busy: boolean): void {
-      if (!busy) {
-        turnEnded(
-          instanceId,
-          cut.has(instanceId)
-            ? "Caw was turned off before he said how the run went"
-            : undefined
-        );
-        cutConfirmed(instanceId);
-      }
-      const turn = turns.get(instanceId);
-      if (!turn) {
+      if (busy) {
         return;
       }
-      if (busy && !turn.started) {
-        // Its first frame: stored as under way, so a hub that starts again
-        // ends it at the idle that follows.
-        keep(instanceId, { ...turn, started: true });
-      } else if (!busy && turn.started) {
-        unfollow(instanceId);
+      turnEnded(
+        instanceId,
+        cut.has(instanceId)
+          ? "Caw was turned off before he said how the run went"
+          : undefined
+      );
+      cutConfirmed(instanceId);
+      if (turns.get(instanceId)?.started) {
+        endTurn(instanceId);
       }
     },
+
+    sendLeft,
 
     /**
      * The thread a session started by the project's Caw works for: an

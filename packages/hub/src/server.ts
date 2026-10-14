@@ -474,7 +474,7 @@ import {
 } from "./rebalance";
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
 import { createRelay, type Relay, relayRoutes } from "./relay";
-import { createRoutines, routineRoutes } from "./routines";
+import { createRoutines, type Routines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
 import { createSessionIdentities } from "./session-identity";
 import { createSessionLifecycle } from "./session-lifecycle";
@@ -2482,6 +2482,8 @@ export const createServer = (
   // Each project's Caw (caw.ts), made further down once its services are; the
   // settlement, answer and process-end paths above it reach it through this.
   let lead: Caw | undefined;
+  // The routines (routines.ts), likewise: a send record moves before they are made.
+  let leadRuns: Routines | undefined;
   /**
    * What each session's turn has done that taints a memory note written in
    * it (memory.ts): the web read, a subagent running, a routine's wake.
@@ -3794,13 +3796,12 @@ export const createServer = (
     ask: { requestId?: string; payload: unknown }
   ): void => {
     const { name, tag: label } = sessionLabel(delegate);
-    lead?.heard(parent.id, delegate, `a question from ${label}`);
     const body = renderDelegateAsk(ask.payload);
     const instruction =
       "Answer it with the answer_delegate tool: answer_delegate(target, requestId, answers) — " +
       "answers are keyed by the exact question text and the value is the chosen option label " +
       "(pass deny=true to refuse it).";
-    deliverSend({
+    const sent = deliverSend({
       verb: "send",
       machineId: parent.machineId,
       instanceId: parent.id,
@@ -3830,6 +3831,15 @@ export const createServer = (
         },
       },
     });
+    // To a project's Caw: the turn that reads it is the delegate's work's
+    // (caw.ts `heard`).
+    lead?.heard(
+      parent.id,
+      delegate,
+      `a question from ${label}`,
+      sent.state === "pending" ? sent.uuid : undefined,
+      false
+    );
     const toolName = peek(ask.payload, "toolName");
     publishDelegateEvent(
       delegate.machineId,
@@ -3886,10 +3896,7 @@ export const createServer = (
     notice = false
   ): void => {
     const { name, tag: label } = sessionLabel(delegate);
-    // To a project's Caw: the turn it wakes is the delegate's work's, and
-    // answers this report, on his panel (caw.ts `heard`).
-    lead?.heard(parent.id, delegate, `a report from ${label}`);
-    deliverSend({
+    const sent = deliverSend({
       verb: "send",
       machineId: parent.machineId,
       instanceId: parent.id,
@@ -3913,6 +3920,16 @@ export const createServer = (
         },
       },
     });
+    // To a project's Caw: the turn that reads it is the delegate's work's,
+    // and answers this report: an attempt's in its task's thread, else on
+    // his panel (caw.ts `heard`).
+    lead?.heard(
+      parent.id,
+      delegate,
+      `a report from ${label}`,
+      sent.state === "pending" ? sent.uuid : undefined,
+      true
+    );
     publishDelegateEvent(
       delegate.machineId,
       db.recordDelegateEvent({
@@ -3981,6 +3998,16 @@ export const createServer = (
   ): SentMessageRow => {
     const moved = db.updateSend(row.uuid, change) ?? row;
     publishSend(moved);
+    // A send leaving `pending`, read or never to be: what a lead's turn and
+    // a lead routine's run wait on (caw.ts `sendLeft`, routines.ts `sendLeft`).
+    if (
+      row.state === "pending" &&
+      moved.state !== "pending" &&
+      !isKeepAlive(moved.body)
+    ) {
+      lead?.sendLeft(moved.instanceId, moved.uuid, moved.state === "read");
+      leadRuns?.sendLeft(moved);
+    }
     return moved;
   };
 
@@ -4567,10 +4594,8 @@ export const createServer = (
       if (!isKeepAlive(row.body)) {
         db.updateKeepAlive(instanceId, { keepAliveTurn: null });
       }
-      // A routine's wake of a lead: the turn it joins is that run's (memory.ts),
-      // and its end ends the run (routines.ts).
+      // A routine's wake of a lead: the turn it joins is that run's (memory.ts).
       memoryWatch.read(instanceId, row.body?.origin);
-      routines.leadRead(instanceId, row.body?.origin);
       readSend(row, true);
     }
     const latest = Math.max(
@@ -14456,9 +14481,7 @@ export const createServer = (
       running: (projectId) => projectStops.running(projectId),
       stop: (projectId, ids) => projectStops.stop(projectId, ids),
     },
-    send: (envelope) => {
-      deliverSend(envelope);
-    },
+    send: (envelope) => deliverSend(envelope).state === "pending",
     end: (instanceId) =>
       endSession(instanceId, "stop", { kind: "session", name: "Caw" }),
     task: (projectId, id) => tasks.get(projectId, id),
@@ -14823,6 +14846,7 @@ export const createServer = (
         : `the hub does not run from a git checkout (${(found.stderr || found.stdout).trim() || `exit ${found.exitCode}`})`;
     },
   });
+  leadRuns = routines;
   if (resumeWorkflows) {
     // The dispatcher's safety net: a slow look at every dispatching project.
     dispatcher.watch();

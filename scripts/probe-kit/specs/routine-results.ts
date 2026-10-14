@@ -14,6 +14,11 @@
  *    2), failed again, and the thread says it needs you.
  * 5. Run now, Caw ends his turn without the call: failed with “Caw ended
  *    its turn without saying how the run went”, retried once, failed again.
+ * 6. A thread's status (caw.ts `Turn`, read from every `thread.upsert` the
+ *    hub publishes): your words start a slow turn; your second message,
+ *    sent while it runs, waits in Claude's queue past that turn's end. The
+ *    thread reads `working` from the first message until the turn that read
+ *    the second ends, never `ready` between, then `ready`.
  *
  *   bun scripts/probe-kit/run.ts routine-results
  */
@@ -44,9 +49,31 @@ const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 /** The runs Caw has answered, by id: each is answered once. */
 const answered = new Set<string>();
 
+/** Step 6's two messages, and when the mock began each one's turn. */
+const FIRST = "PROBE-FIRST";
+const SECOND = "PROBE-SECOND";
+const began: { first?: number; second?: number } = {};
+/** The first turn: four seconds of words, with no tool call to fold a send in at. */
+const FIRST_MS = 4000;
+const SECOND_MS = 1500;
+const slow = (ms: number, word: string): Reply => ({
+  everyMs: ms / 10,
+  words: Array.from({ length: 10 }, () => `${word} `),
+});
+
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("Probe title");
+  }
+  if (request.all.includes(CAW) && !request.afterTool) {
+    if (request.last.includes(SECOND)) {
+      began.second ??= Date.now();
+      return slow(SECOND_MS, "second");
+    }
+    if (request.last.includes(FIRST)) {
+      began.first ??= Date.now();
+      return slow(FIRST_MS, "first");
+    }
   }
   const run = request.last.match(RUN_ID)?.[1];
   const how = request.last.match(STEER)?.[1];
@@ -248,6 +275,87 @@ const run = async (kit: Kit) => {
     runs(routine.id).every((row) =>
       ["silent", "delivered", "failed"].includes(row.outcome ?? "")
     )
+  );
+
+  // ── 6. a wake sent mid-turn keeps its thread working ────────────────
+  /** Every status the hub published for a thread, in order, with when. */
+  const published: { at: number; status: string; thread: string }[] = [];
+  const listener = new WebSocket(
+    `${fleet.base.replace("http", "ws")}/ws/dashboard`
+  );
+  const upserts = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      value.forEach(upserts);
+      return;
+    }
+    if (!value || typeof value !== "object") {
+      return;
+    }
+    const frame = value as {
+      kind?: string;
+      thread?: { id: string; status: string };
+    };
+    if (frame.kind === "thread.upsert" && frame.thread) {
+      published.push({
+        at: Date.now(),
+        status: frame.thread.status,
+        thread: frame.thread.id,
+      });
+      return;
+    }
+    Object.values(value).forEach(upserts);
+  };
+  listener.onmessage = (message) => upserts(JSON.parse(String(message.data)));
+  await new Promise<void>((done) => {
+    listener.onopen = () => done();
+  });
+  const opened = await fleet.api<{ thread: { id: string } }>(
+    `/api/projects/${project.id}/threads`,
+    { body: `${FIRST}: walk me through the board.` }
+  );
+  const threadId = opened.thread.id;
+  await until("the first turn begun", () => began.first, Boolean, 60_000);
+  await Bun.sleep(1000);
+  const secondAt = Date.now();
+  await fleet.api(`/api/projects/${project.id}/threads/${threadId}/messages`, {
+    body: `${SECOND}: and the tasks waiting for me?`,
+  });
+  await until(
+    "the thread ready again",
+    () => published.filter((one) => one.thread === threadId).at(-1)?.status,
+    (status) => status === "ready" && began.second !== undefined,
+    60_000
+  );
+  listener.close();
+  const mine = published.filter((one) => one.thread === threadId);
+  const sequence = mine
+    .map((one) => one.status)
+    .filter((status, i, all) => status !== all[i - 1]);
+  const firstEnd = (began.first ?? 0) + FIRST_MS;
+  const readyAt = mine.at(-1)?.at ?? 0;
+  const timeline = mine
+    .map((one) => `${one.status}@${one.at - (began.first ?? 0)}ms`)
+    .join(", ");
+  kit.check(
+    "6: the second message waited past the first turn's end, in a turn of its own",
+    began.second !== undefined && began.second >= firstEnd - 200,
+    `second turn began ${(began.second ?? 0) - (began.first ?? 0)}ms after the first (which ran ${FIRST_MS}ms); sent at ${secondAt - (began.first ?? 0)}ms`
+  );
+  kit.check(
+    "6: the thread reads working from the first message to the second turn's end, never ready between",
+    sequence.join(" → ") === "working → ready" &&
+      readyAt >= (began.second ?? Number.POSITIVE_INFINITY) + SECOND_MS - 500,
+    timeline
+  );
+  kit.check(
+    "6: the first turn's end republished it, still working",
+    mine.some(
+      (one) =>
+        one.status === "working" &&
+        one.at >= firstEnd - 500 &&
+        one.at <= (began.second ?? 0) + 100
+    ),
+    timeline
   );
 };
 

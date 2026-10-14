@@ -32,8 +32,8 @@
  * - **Lead runs** note the slot in the routine's thread and wake Caw there
  *   (caw.ts `wake`), as any event does, and run on. Caw answers with
  *   `routine_result` under the same output contract, settled the same way.
- *   The turn that read the wake (server.ts `takeRead`) ending without that
- *   answer fails the run.
+ *   The turn that read the wake (server.ts `changeSend`) ending without that
+ *   answer fails the run; so does a wake his session never reads.
  * - **Event runs**: an inbound event a route sends here (ingress.ts) runs the
  *   routine once, slot `event:<event id>`, the event carried after the
  *   routine's prompt as untrusted data. An event is a delivery, never
@@ -64,7 +64,7 @@ import { Elysia, status, t } from "elysia";
 import { z } from "zod";
 import { tool } from "./admin-tools";
 import type { Caw } from "./caw";
-import type { DbShape, ProjectRow, WorkItemRow } from "./db";
+import type { DbShape, ProjectRow, SentMessageRow, WorkItemRow } from "./db";
 import type { Decide, RoutineRow, RoutineRunRow } from "./db/routines";
 import type { RoutineOutcome, RoutineTarget, WorkBudget } from "./db/schema";
 import { defaultCheck } from "./dispatch";
@@ -785,9 +785,20 @@ export const createRoutines = ({
       store.setRun(run.id, { state: "running" });
       return;
     }
+    const gate = projectGate(routine);
+    if (!gate) {
+      // Caw on and under his cap, and his session refused the wake.
+      settle(run.id, {
+        outcome: "failed",
+        output: null,
+        reason: "Caw's session did not take the wake",
+        usd: null,
+      });
+      return;
+    }
     store.setRun(run.id, {
       state: "skipped",
-      reason: projectGate(routine) ?? CAW_OFF,
+      reason: gate,
       endedAt: new Date(),
     });
     drain(routine.id);
@@ -1016,15 +1027,16 @@ export const createRoutines = ({
   };
 
   /**
-   * A lead run's wake, read by Caw's harness (server.ts `takeRead`, the send's
-   * origin `routine:<id>`): the run is that session's turn's, and the end of
-   * the turn ends it. A routine has one run going at a time, so the routine
-   * names it.
+   * A send left `pending` (server.ts `changeSend`). A lead run's wake (its
+   * origin `routine:<id>`; a routine has one run going at a time, so the
+   * routine names it) read by Caw's harness makes the run that session's
+   * turn's, and the end of the turn ends it; one never to be read fails the
+   * run, as any failure.
    */
-  const leadRead = (
-    instanceId: string,
-    origin: NeutralOrigin | undefined
+  const sendLeft = (
+    send: Pick<SentMessageRow, "body" | "instanceId" | "reason" | "state">
   ): void => {
+    const origin: NeutralOrigin | undefined = send.body?.origin;
     const routineId =
       origin?.kind === "system" && origin.name?.startsWith(ROUTINE_ORIGIN)
         ? origin.name.slice(ROUTINE_ORIGIN.length)
@@ -1040,9 +1052,25 @@ export const createRoutines = ({
               each.leadInstanceId === null
           )
       : undefined;
-    if (run) {
-      store.setRun(run.id, { leadInstanceId: instanceId });
-      armed.add(instanceId);
+    if (!run) {
+      return;
+    }
+    if (send.state === "read") {
+      store.setRun(run.id, { leadInstanceId: send.instanceId });
+      armed.add(send.instanceId);
+      return;
+    }
+    if (send.state === "failed" || send.state === "cancelled") {
+      settle(
+        run.id,
+        {
+          outcome: "failed",
+          output: null,
+          reason: `Caw's session never read the wake: ${send.reason ?? send.state}`,
+          usd: null,
+        },
+        send.instanceId
+      );
     }
   };
 
@@ -1615,7 +1643,7 @@ export const createRoutines = ({
     get,
     inboxPassed,
     itemEnded,
-    leadRead,
+    sendLeft,
     leadTurnEnded,
     list,
     remove,
