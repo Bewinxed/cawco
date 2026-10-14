@@ -28,8 +28,6 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Sheet from "#lib/components/ui/sheet/index.js";
   import { setSidebar } from "#lib/components/ui/sidebar/context.svelte.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { DRAWER_QUERY, NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import { IconChevronLeft, IconSearch, IconSidebar } from "#lib/icons.js";
@@ -51,6 +49,7 @@
   import MachinesButton from "./MachinesButton.svelte";
   import { hangShadow } from "./motion/hung-shadow";
   import NeedsCaw from "./NeedsCaw.svelte";
+  import Overlays from "./Overlays.svelte";
   import SessionSurface from "./SessionSurface.svelte";
   import Sidebar from "./Sidebar.svelte";
   import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
@@ -849,8 +848,8 @@
      component writes; the server's cookie width is the fallback under it. SSR
      therefore emits no committed width of its own, and there is nothing to
      snap away from on hydration. -->
-<!-- One provider: every tooltip in the app shares its delay and its skip. -->
-<Tooltip.Provider>
+<!-- The tooltip provider and the lightbox, shared with an artifact's own tab. -->
+<Overlays>
   <!-- As tall as the visible area reaches, so the composer and a page's
        footer stand on a keyboard (cawco/visible-viewport `floor`). -->
   <div
@@ -1130,7 +1129,7 @@
     prefill={continuing.source ? undefined : spawning.prefill}
     restore={continuing.restore ?? undefined}
   />
-</Tooltip.Provider>
+</Overlays>
 
 <style>
   .skip {

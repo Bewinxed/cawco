@@ -15,7 +15,6 @@
   import SessionPane from "../SessionPane.svelte";
   import ThreadPane from "../ThreadPane.svelte";
   import { isThreadTab } from "../thread-tabs";
-  import Lightbox from "../transcript/Lightbox.svelte";
   import { runIdOf } from "../workflow-runs";
   import { dock, shownPanes, slots } from "./dock.svelte";
   import { contextOf, workspace } from "./workspace.svelte";
@@ -119,8 +118,6 @@
     </div>
   {/each}
 </div>
-
-<Lightbox />
 
 <style>
   .pen {

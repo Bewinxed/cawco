@@ -12,6 +12,7 @@
   import { restWhenHidden } from "#lib/cawco/motion/rest.js";
   import { leaving, plan, route } from "#lib/cawco/motion/route.svelte.js";
   import { departAll } from "#lib/cawco/motion/share.svelte.js";
+  import Overlays from "#lib/cawco/Overlays.svelte";
   import Shell from "#lib/cawco/Shell.svelte";
   import { tabIcon } from "#lib/cawco/tab-icon/tab-icon.svelte.js";
   import { tallestComposer } from "#lib/cawco/transcript/composer-presence.svelte.js";
@@ -27,6 +28,12 @@
 
   /** One custom view and nothing around it: what the app's web view shows (PRD §5.2). */
   const VIEW_ALONE = "/project/[id]/view/[name]";
+  /**
+   * An artifact opened in its own tab: the artifact and nothing of the app
+   * around it, so the tab stays light. Only what the pane stands in comes
+   * with it (Overlays: the tooltip provider and the lightbox).
+   */
+  const ARTIFACT_ALONE = "/artifact/[id]";
 
   let { children, data }: { children: Snippet; data: LayoutServerData } =
     $props();
@@ -129,7 +136,24 @@
 />
 {#if page.route.id === VIEW_ALONE}
   {@render children()}
+{:else if page.route.id === ARTIFACT_ALONE}
+  <Overlays>
+    <div class="alone">{@render children()}</div>
+  </Overlays>
+  <!-- A canvas's stage stands over the pane's slot. -->
+  <CanvasStages />
 {:else}
   <Shell railWidth={data.railWidth}> {@render children()} </Shell>
   <CanvasStages />
 {/if}
+
+<style>
+  /* The artifact's tab: one full-height column on the page's surface. */
+  .alone {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    background: var(--surface-page);
+    overflow: hidden;
+  }
+</style>
