@@ -30,11 +30,13 @@
  * check passed.
  */
 import { mkdir } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { projectClaudeDir } from "../packages/core/src/paths";
+import { macSideApp, macSideStale, sshOnly } from "./lib/apple-app";
 import { type MacSim, macSim } from "./lib/mac-sim";
 import { scratchFleet, until } from "./scratch-fleet";
 
+sshOnly("probe-ios-composer.ts");
 const keep = process.argv.includes("--keep");
 const root = resolve(import.meta.dir, "..");
 const home = process.env.HOME ?? "";
@@ -92,12 +94,18 @@ async function mac(script: string): Promise<string> {
     process.exit(1);
   }
 }
-// The Mac-side build folder build-both.sh used (its BUILD naming).
+// The Mac-side app build-both.sh made, run only when built from this tree.
 const top = (
   await Bun.$`git -C ${root} rev-parse --show-toplevel`.text()
 ).trim();
-const build = top === join(home, "cockpit") ? "main" : basename(top);
-const app = `$HOME/build/cawco-apple/${build}/DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app`;
+const app = macSideApp(top);
+{
+  const stale = await macSideStale(top, mac);
+  check("the app is built from this tree", !stale, stale ?? app);
+  if (stale) {
+    process.exit(1);
+  }
+}
 
 // ── 2. The scratch fleet ─────────────────────────────────────────────────
 const fleet = await scratchFleet({

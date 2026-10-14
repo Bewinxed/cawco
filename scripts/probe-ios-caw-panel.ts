@@ -46,7 +46,8 @@
  * driving; what the Maestro calls took is printed before the verdict.
  */
 import { mkdir } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { macSideApp, macSideStale, sshOnly } from "./lib/apple-app";
 import { type MacSim, macSim } from "./lib/mac-sim";
 import {
   ACCOUNT,
@@ -57,6 +58,7 @@ import {
   untilGone,
 } from "./scratch-fleet";
 
+sshOnly("probe-ios-caw-panel.ts");
 const keep = process.argv.includes("--keep");
 const root = resolve(import.meta.dir, "..");
 const home = process.env.HOME ?? "";
@@ -122,8 +124,14 @@ async function mac(script: string, retried = false): Promise<string> {
 const top = (
   await Bun.$`git -C ${root} rev-parse --show-toplevel`.text()
 ).trim();
-const build = top === join(home, "cockpit") ? "main" : basename(top);
-const app = `$HOME/build/cawco-apple/${build}/DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app`;
+const app = macSideApp(top);
+{
+  const stale = await macSideStale(top, mac);
+  check("the app is built from this tree", !stale, stale ?? app);
+  if (stale) {
+    process.exit(1);
+  }
+}
 
 // ── 2. The scratch fleet ─────────────────────────────────────────────────
 const tag = crypto.randomUUID().slice(0, 6);

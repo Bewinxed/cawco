@@ -88,6 +88,51 @@ export function freshApp(top: string): { path: string; problem?: string } {
 }
 
 /**
+ * A probe that reaches the Mac as `ssh mac` (a Linux shell's): build-both.sh
+ * builds there into `~/build/cawco-apple/<build>`, which is the app it
+ * names. Run on the Mac itself, build-both.sh builds into APPLE_BUILDS
+ * instead, so such a probe refuses to start there and says where to go.
+ */
+export function sshOnly(probe: string): void {
+  if (process.platform === "darwin") {
+    console.error(
+      `${probe} runs from a Linux shell that reaches the Mac as \`ssh mac\`. On the Mac itself, run the app through the probe kit (bun scripts/probe-kit/run.ts <spec>).`
+    );
+    process.exit(2);
+  }
+}
+
+/**
+ * build-both.sh's simulator app for the checkout at `top`, as a probe's
+ * shell on the Mac names it: on the Mac itself its one root (absolute),
+ * from a Linux shell the Mac's own `~/build` over SSH.
+ */
+export const macSideApp = (top: string): string =>
+  process.platform === "darwin"
+    ? simulatorApp(top)
+    : `$HOME/build/cawco-apple/${buildName(top)}/DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app`;
+
+/**
+ * Why that app cannot be run against the checkout at `top`, its stamp read
+ * by `mac` (the probe's own bash on the Mac, local or over SSH); nothing
+ * when the stamp is this tree's.
+ */
+export async function macSideStale(
+  top: string,
+  mac: (script: string) => Promise<string>
+): Promise<string | undefined> {
+  const app = macSideApp(top);
+  const built = (await mac(`cat "${app}.tree" 2>/dev/null || true`)).trim();
+  const tree = treeStamp(top);
+  if (!built) {
+    return `the app at ${app} carries no tree stamp: run bash apps/apple/scripts/build-both.sh ios`;
+  }
+  return built === tree
+    ? undefined
+    : `the app at ${app} was built from apps/apple ${built.slice(0, 12)}, the tree is ${tree.slice(0, 12)}`;
+}
+
+/**
  * A probe's own Mac Catalyst build (ios-accounts `MAC_PROBE_BUILD`): built
  * by hand, signed ad hoc, from the apps/apple build-both.sh last synced
  * into the checkout's build folder, whose stamp that sync left beside it

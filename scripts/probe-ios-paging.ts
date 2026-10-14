@@ -52,9 +52,9 @@
  * created (deleted at the end). `--keep` keeps the fleet's sandbox.
  */
 import { mkdir } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
-import { APPLE_BUILDS } from "./lib/apple-app";
+import { macSideApp, macSideStale } from "./lib/apple-app";
 import { type MacSim, macSim } from "./lib/mac-sim";
 import { type Reply, type Seen, scratchFleet, until } from "./scratch-fleet";
 
@@ -115,18 +115,27 @@ async function mac(script: string): Promise<string> {
 }
 
 // ── 1. Compile ───────────────────────────────────────────────────────────
-/** The Mac-side folder build-both.sh builds `dir` in (its BUILD naming). */
-const buildOf = async (dir: string) => {
+/**
+ * The simulator app build-both.sh made for the checkout at `dir` (on the Mac
+ * itself its one build root, lib/apple-app.ts; over SSH the Mac's ~/build).
+ * One not built from that checkout's tree ends the run, as a failed compile
+ * does, taking away the `--before` worktree.
+ */
+const appOf = async (dir: string) => {
   const top = (
     await Bun.$`git -C ${dir} rev-parse --show-toplevel`.text()
   ).trim();
-  return top === join(home, "cockpit") ? "main" : basename(top);
+  const app = macSideApp(top);
+  const stale = await macSideStale(top, mac);
+  check(`the app is built from ${dir}'s tree`, !stale, stale ?? app);
+  if (stale) {
+    if (beforeDir) {
+      await Bun.$`git -C ${root} worktree remove --force ${beforeDir}`.nothrow();
+    }
+    process.exit(1);
+  }
+  return app;
 };
-/** build-both.sh's APPLE_ROOT: on the Mac itself its one build root (lib/apple-app.ts), over SSH the Mac's ~/build. */
-const APPLE_ROOT = local ? APPLE_BUILDS : "$HOME/build/cawco-apple";
-/** Where build-both.sh leaves the simulator app. */
-const appOf = (build: string) =>
-  `${APPLE_ROOT}/${build}/DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app`;
 const BUILT_IOS = /^BUILT iOS$/m;
 const BUILT_IOS_18 = /^BUILT iOS 18\.5$/m;
 const compile = async (dir: string, label: string): Promise<boolean> => {
@@ -170,8 +179,8 @@ if (beforeRef) {
 if (!(await compile(root, ""))) {
   process.exit(1);
 }
-const afterApp = appOf(await buildOf(root));
-const beforeApp = beforeDir ? appOf(await buildOf(beforeDir)) : undefined;
+const afterApp = await appOf(root);
+const beforeApp = beforeDir ? await appOf(beforeDir) : undefined;
 
 // ── 2. The scratch fleet, its session seeded ─────────────────────────────
 const MARK = `paging probe ${crypto.randomUUID().slice(0, 6)}`;

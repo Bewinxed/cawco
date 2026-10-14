@@ -48,7 +48,7 @@
  * the fix starts from. Exits 0 only if every check of this checkout passed.
  */
 import { mkdir } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { type MacSim, macSim } from "./lib/mac-sim";
 import { scratchFleet, until } from "./scratch-fleet";
 
@@ -554,10 +554,11 @@ async function compile(run: Run, dir: string): Promise<string | undefined> {
   const top = (
     await Bun.$`git -C ${dir} rev-parse --show-toplevel`.text()
   ).trim();
-  const name = top === join(home, "cockpit") ? "main" : basename(top);
   // On this Mac, build-both.sh's one build root (lib/apple-app.ts); over SSH, the Mac's ~/build.
-  const base = onMac ? APPLE_BUILDS : "$HOME/build/cawco-apple";
-  return `${base}/${name}/DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app`;
+  const app = macSideApp(top);
+  const stale = await macSideStale(top, mac);
+  run.check("the app is built from this tree", !stale, stale ?? app);
+  return stale ? undefined : app;
 }
 
 /** Gives the simulator `udid` its own Simulator setting, the hardware
@@ -577,7 +578,7 @@ else:
 subprocess.run(["defaults", "import", "com.apple.iphonesimulator", "-"], input=plistlib.dumps(prefs), check=True)
 PY`);
 
-import { APPLE_BUILDS } from "./lib/apple-app";
+import { macSideApp, macSideStale } from "./lib/apple-app";
 
 /** A simulator of the probe's own, and what drives it. */
 interface Sim {

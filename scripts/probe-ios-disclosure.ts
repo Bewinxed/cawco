@@ -44,10 +44,12 @@
  * `--keep` keeps the fleet's sandbox. Exits 0 only if every check passed.
  */
 import { mkdir, rm } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { macSideApp, macSideStale, sshOnly } from "./lib/apple-app";
 import { type MacSim, macSim } from "./lib/mac-sim";
 import { scratchFleet, until } from "./scratch-fleet";
 
+sshOnly("probe-ios-disclosure.ts");
 const argv = process.argv.slice(2);
 const keep = argv.includes("--keep");
 const beforeAt = argv.indexOf("--before");
@@ -130,15 +132,17 @@ async function compile(dir: string, label: Build["label"]): Promise<Build> {
     // Thrown, so the caller takes away the `--before` worktree before it exits.
     throw new Error(`build-both.sh exited ${code} for ${label}`);
   }
-  // The Mac-side build folder build-both.sh used (its BUILD naming).
+  // The Mac-side app build-both.sh made, run only when built from `dir`'s tree.
   const top = (
     await Bun.$`git -C ${dir} rev-parse --show-toplevel`.text()
   ).trim();
-  const name = top === join(home, "cockpit") ? "main" : basename(top);
-  return {
-    label,
-    app: `$HOME/build/cawco-apple/${name}/DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app`,
-  };
+  const app = macSideApp(top);
+  const stale = await macSideStale(top, mac);
+  check(`the ${label} app is built from its tree`, !stale, stale ?? app);
+  if (stale) {
+    throw new Error(`the ${label} app is stale: ${stale}`);
+  }
+  return { label, app };
 }
 
 let beforeTree: string | undefined;

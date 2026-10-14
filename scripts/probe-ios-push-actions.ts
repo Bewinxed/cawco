@@ -79,9 +79,9 @@
  * check passed.
  */
 import { mkdir } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import type { DbShape, WorkItemRow } from "../packages/hub/src/db";
-import { APPLE_BUILDS } from "./lib/apple-app";
+import { macSideApp, macSideStale } from "./lib/apple-app";
 import { type MacSim, macSim } from "./lib/mac-sim";
 import { MACHINE, scratchFleet, until } from "./scratch-fleet";
 
@@ -618,10 +618,13 @@ try {
   const top = (
     await Bun.$`git -C ${root} rev-parse --show-toplevel`.text()
   ).trim();
-  const name = top === join(home, "cockpit") ? "main" : basename(top);
   // On this Mac, build-both.sh's one build root (lib/apple-app.ts); over SSH, the Mac's ~/build.
-  const base = onMac ? APPLE_BUILDS : "$HOME/build/cawco-apple";
-  const app = `${base}/${name}/DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app`;
+  const app = macSideApp(top);
+  const stale = await macSideStale(top, mac);
+  check("the app is built from this tree", !stale, stale ?? app);
+  if (stale) {
+    throw new Error(stale);
+  }
 
   // ── 2. The fleet ───────────────────────────────────────────────────────
   fleet.launch("sessiond");
