@@ -2,6 +2,8 @@
 // biome-ignore-all lint/performance/noAwaitInLoops: the owner requires one build at a time, including signing and promotion.
 import { createPublicKey } from "node:crypto";
 import {
+  cp,
+  lstat,
   mkdir,
   readdir,
   readFile,
@@ -11,7 +13,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { freemem, homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join, relative, resolve } from "node:path";
 import type { Subprocess } from "bun";
 import {
   AGENT_BUNDLE,
@@ -173,12 +175,16 @@ async function run(
     const text = capture
       ? await new Response(child.stdout as ReadableStream).text()
       : "";
-    if ((await child.exited) !== 0) {
+    const status = await child.exited;
+    if (status !== 0) {
       // Killed by a stop: the stop finishes the run, not a failure path.
       if (stopped) {
         await stopped;
       }
-      throw new Error(`Release command failed: ${command.join(" ")}`);
+      // Its own output went to this run's stdout and stderr as it ran.
+      throw new Error(
+        `Release command failed with exit status ${status}: ${command.join(" ")}`
+      );
     }
     return text.trim();
   } finally {
@@ -301,6 +307,50 @@ const clear = async (checkout?: string, staging?: string): Promise<void> => {
   if (staging) {
     await rm(staging, { recursive: true, force: true });
   }
+};
+/** Where a failed build's proof evidence outlives its staging; the newest few are kept. */
+const failedEvidence = join(homedir(), ".cache", "cawco-release");
+const KEPT_FAILURES = 5;
+/** The proof's own working state: container storage and scratch, not evidence. */
+const PROOF_SCRATCH = new Set(["storage", "run", "tmp", "cache", "config"]);
+/**
+ * Copies the container proof's logs and outputs out of `staging` before it is
+ * cleared, and prunes older copies. Undefined when the build never reached it.
+ */
+const keepEvidence = async (
+  commitId: string,
+  staging: string
+): Promise<string | undefined> => {
+  const proof = join(staging, "container-proof");
+  if (!(await stat(proof).catch(() => undefined))) {
+    return;
+  }
+  const time = new Date().toISOString().replace(/[:.]/g, "-");
+  const kept = join(failedEvidence, `failed-${commitId.slice(0, 12)}-${time}`);
+  await cp(proof, kept, {
+    recursive: true,
+    filter: async (source) => {
+      const rel = relative(proof, source);
+      if (PROOF_SCRATCH.has(rel)) {
+        return false;
+      }
+      const info = await lstat(source);
+      return info.isFile() || info.isDirectory();
+    },
+  });
+  const older = await Promise.all(
+    (await readdir(failedEvidence))
+      .filter((name) => name.startsWith("failed-"))
+      .map(async (name) => {
+        const path = join(failedEvidence, name);
+        return { path, time: (await stat(path)).mtimeMs };
+      })
+  );
+  older.sort((a, b) => b.time - a.time);
+  for (const { path } of older.slice(KEPT_FAILURES)) {
+    await rm(path, { recursive: true, force: true });
+  }
+  return kept;
 };
 /**
  * Takes the lock, or says it is held by a live build. A lock whose holder
@@ -665,6 +715,15 @@ const build = async (current: Request): Promise<void> => {
     if (argv.includes("--publish")) {
       await publishRelease(published, manifest);
     }
+  } catch (error) {
+    const kept = await keepEvidence(current.commit, staging);
+    if (!kept) {
+      throw error;
+    }
+    throw new Error(
+      `${error instanceof Error ? error.message : String(error)}; proof evidence kept at ${kept}`,
+      { cause: error }
+    );
   } finally {
     await clear(checkout, staging);
     me.checkout = undefined;

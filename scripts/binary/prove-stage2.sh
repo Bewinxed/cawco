@@ -81,6 +81,8 @@ free_gb=$(df -BG --output=avail "$out" | tail -n 1 | tr -dc 0-9)
 # A heavy run: one of the machine's slots (scripts/lib/heavy-run.ts) for this shell's whole life, its cleanup included.
 # shellcheck source=../lib/heavy-run.sh
 source "$here/../lib/heavy-run.sh"
+# shellcheck source=base-image.sh
+source "$here/base-image.sh"
 heavy_run bash "$0" "$@"
 mkdir -p "$out/tmp" "$out/config" "$out/cache" "$out/logs" "$out/release" "$out/shared" "$out/image-host" "$out/image-machine"
 export TMPDIR="$out/tmp" XDG_CONFIG_HOME="$out/config" XDG_CACHE_HOME="$out/cache"
@@ -113,7 +115,7 @@ status=0
 cleanup() {
   $P rm -f "$hubc" "$joinerc" "$releasec" "$freshc" "$hub2c" >/dev/null 2>&1 || true
   $P network rm -f "$net" >/dev/null 2>&1 || true
-  $P rmi -f "localhost/$prefix-machine:latest" "localhost/$prefix-host:latest" docker.io/library/ubuntu:24.04 >/dev/null 2>&1 || true
+  $P rmi -f "localhost/$prefix-machine:latest" "localhost/$prefix-host:latest" "$BASE_LOCAL" >/dev/null 2>&1 || true
   rm -f "$bins/keys/test-release-private.pem" "$bins/keys/test-release-public.pem"
   # Image storage is written by mapped user ids: reset it, then remove it from inside the user namespace.
   $P system reset -f >/dev/null 2>&1 || true
@@ -458,8 +460,9 @@ export -f boot
 
 # ---------------------------------------------------------------- images, network, release host
 
+# Both images build on $BASE_LOCAL (scripts/binary/base-image.sh), seeded below from the host's store.
 cat > "$out/image-host/Containerfile" <<'EOF'
-FROM docker.io/library/ubuntu:24.04
+FROM localhost/cawco-proof-ubuntu:24.04
 RUN apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*
 EOF
 # A machine with nothing CawCo uses: no git, Bun, Node or openssl. Its only package
@@ -471,7 +474,7 @@ EOF
 # The installer offers git only at a terminal and installs nothing without one
 # (offerTools in packages/cli/src/binary-install.ts), so git stays uninstalled.
 cat > "$out/image-machine/Containerfile" <<'EOF'
-FROM docker.io/library/ubuntu:24.04
+FROM localhost/cawco-proof-ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
  && apt-get install -y --no-install-recommends systemd systemd-sysv dbus dbus-user-session curl sudo socat bubblewrap \
@@ -491,9 +494,9 @@ RUN apt-get update \
  && printf '[Manager]\nDefaultTasksMax=49152\n' > /etc/systemd/user.conf.d/proof-tasks.conf
 EOF
 echo "building images (network on for this step only)"
-setup "pull the base image" "$out/logs/pull.log" $P pull docker.io/library/ubuntu:24.04
-setup "build the release host image" "$out/logs/build-host.log" $P build -t "localhost/$prefix-host:latest" "$out/image-host"
-setup "build the machine image" "$out/logs/build-machine.log" $P build -t "localhost/$prefix-machine:latest" "$out/image-machine"
+setup "seed the pinned base image from the host's store" "$out/logs/pull.log" seed_base_image "$out/tmp/base-image.tar" $P
+setup "build the release host image" "$out/logs/build-host.log" $P build --pull=never -t "localhost/$prefix-host:latest" "$out/image-host"
+setup "build the machine image" "$out/logs/build-machine.log" $P build --pull=never -t "localhost/$prefix-machine:latest" "$out/image-machine"
 
 # Releases: a good one, and three that must be refused.
 sha1111=1111111111111111111111111111111111111111
