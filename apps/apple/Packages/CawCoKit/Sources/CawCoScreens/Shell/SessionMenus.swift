@@ -12,7 +12,10 @@ import UIKit
 // row until the hub answers, and a refusal stays there in the hub's words
 // (`HubConnection.acts`). Fork and Keep stay open in the menu while they run
 // and say why there when refused. Rename turns the row into a field.
-// Delete and Discard ask in a dialog that comes out of the row.
+// Delete transcript, Remove session and Discard ask under their row, in the
+// list (AskHere; DESIGN.md, The Open Page Rule): the page stays live, the
+// question's confirm pends while the hub works, and a refusal stays under
+// the question in the hub's words, its confirm the way to try again.
 
 /// What the menus need from where they are shown.
 @MainActor
@@ -24,8 +27,54 @@ struct SessionMenuContext {
     let continueInNewSession: ((String) -> Void)?
     /// The same flow for a stored transcript the hub holds no row for: it is named whole.
     let continueStored: (ContinueSource) -> Void
-    /// What the dialogs present over.
-    let presenter: () -> UIViewController
+    /// The window's one question about its sessions, drawn under the row that asked.
+    let asks: SessionAsks
+    /// The list the menu opened in ("page-work", "page-recent", …): a
+    /// question is asked at `<place>/<id>`, so it stands under the row in
+    /// that list and in no other that also lists the session.
+    var place = ""
+
+    /// This context, for the rows of the list at `place`.
+    func at(_ place: String) -> SessionMenuContext {
+        var context = self
+        context.place = place
+        return context
+    }
+
+    /// Where a question about session `id` stands in this list.
+    func askAt(_ id: String) -> String { "\(place)/\(id)" }
+}
+
+/// A question about a session, and where it stands (`<list>/<session>`).
+typealias SessionQuestion = (at: String, request: AskHere.Request)
+
+/// The window's one question about a session (AskHere): the question and
+/// where it stands, `<list>/<session>`. The list whose place that is draws
+/// a line under the row for it, and holds the question there; `revision`
+/// moves whenever it changes height or state, so the line is measured again.
+@MainActor
+@Observable
+final class SessionAsks {
+    /// Where the question stands, nil when none does.
+    private(set) var at: String?
+    private(set) var revision = 0
+    @ObservationIgnored let view = AskHere()
+
+    init() {
+        view.onResize = { [weak self] in self?.moved() }
+    }
+
+    /// Asks `request` under the row at `at`, in place of any question standing.
+    func ask(_ request: AskHere.Request, at: String) {
+        self.at = at
+        view.ask(request)
+        revision += 1
+    }
+
+    private func moved() {
+        if view.asked == nil { at = nil }
+        revision += 1
+    }
 }
 
 @MainActor
@@ -89,28 +138,17 @@ enum SessionMenus {
 
         let asleepWithTranscript = row.sessionId != nil && !running
         let neverStarted = row.sessionId == nil && !running
-        if asleepWithTranscript, let key = row.sessionId {
+        if asleepWithTranscript, let question = deleteQuestion(row, context: context) {
             sections.append(UIMenu(options: .displayInline, children: [
                 UIAction(title: "Delete transcript", image: Glyph.trash.image, attributes: .destructive) { _ in
-                    confirm(ConfirmDialog(
-                        title: "Delete this transcript?",
-                        body: "“\(title)” is removed from \(row.cwd.isEmpty ? "this machine" : row.cwd), for good. Nothing else on the machine is touched.",
-                        confirmLabel: "Delete transcript", pendingLabel: "Deleting…", destructive: true
-                    ) {
-                        try await deleteTranscript(hub: hub, machineId: row.machineId, sessionKey: key, dir: row.cwd.isEmpty ? nil : row.cwd, harness: row.harness)
-                    }, from: host, context: context)
+                    ask(question, from: host, context: context)
                 },
             ]))
         }
         if neverStarted {
             sections.append(UIMenu(options: .displayInline, children: [
                 UIAction(title: "Remove session", image: Glyph.trash.image, attributes: .destructive) { _ in
-                    confirm(ConfirmDialog(
-                        title: "Remove this session?", body: "It never started, so there is no transcript to lose.",
-                        confirmLabel: "Remove session", pendingLabel: "Removing…", destructive: true
-                    ) {
-                        try await hub.removeSession(id: id)
-                    }, from: host, context: context)
+                    ask(removeQuestion(row, context: context), from: host, context: context)
                 },
             ]))
         }
@@ -121,14 +159,7 @@ enum SessionMenus {
                     return nil
                 },
                 UIAction(title: "Discard", image: Glyph.trash.image, attributes: .destructive) { _ in
-                    confirm(ConfirmDialog(
-                        title: "Discard this spin-off?",
-                        body: "The session stops, and whatever the spawn created for it — its worktree, its transcript — goes with it, for good.",
-                        confirmLabel: "Discard spin-off", pendingLabel: "Discarding…", destructive: true
-                    ) {
-                        try await hub.stopSession(instanceId: id, machineId: row.machineId, discard: true)
-                        _ = await hub.refresh()
-                    }, from: host, context: context)
+                    ask(discardQuestion(row, context: context), from: host, context: context)
                 },
             ]))
         }
@@ -191,13 +222,13 @@ enum SessionMenus {
         ]
         let third: [UIMenuElement] = [
             UIAction(title: "Delete transcript", image: Glyph.trash.image, attributes: .destructive) { _ in
-                confirm(ConfirmDialog(
+                ask((context.askAt(to), AskHere.Request(
                     title: "Delete this transcript?",
-                    body: "“\(title)” is removed from \(info.cwd ?? "this machine"), for good. Nothing else on the machine is touched.",
+                    body: ["“\(title)” is removed from \(info.cwd.flatMap { $0.isEmpty ? nil : $0 } ?? "this machine"), for good. Nothing else on the machine is touched."],
                     confirmLabel: "Delete transcript", pendingLabel: "Deleting…", destructive: true
                 ) {
                     try await deleteTranscript(hub: hub, machineId: machineId, sessionKey: info.sessionId, dir: info.cwd, harness: harness)
-                }, from: host, context: context)
+                }), from: host, context: context)
             },
         ]
         return UIMenu(children: [UIMenu(options: .displayInline, children: first), UIMenu(options: .displayInline, children: second),
@@ -272,14 +303,54 @@ enum SessionMenus {
         }
     }
 
-    /// A confirm that comes out of the row it was asked on and goes back into
-    /// it (KitDialogController `origin`), once the menu has gone.
-    static func confirm(_ dialog: ConfirmDialog, from host: MenuHost, context: SessionMenuContext) {
+    /// Delete transcript (LiveSessionMenu `askDeleteTranscript`): a session at
+    /// rest whose conversation lives on its machine; deleting it there is how
+    /// it leaves, and the hub drops the row once the machine confirms.
+    static func deleteQuestion(_ row: InstanceRow, context: SessionMenuContext) -> SessionQuestion? {
+        guard let key = row.sessionId else { return nil }
+        let hub = context.hub
+        return (context.askAt(row.id), AskHere.Request(
+            title: "Delete this transcript?",
+            body: ["“\(hub.fleet.title(row))” is removed from \(row.cwd.isEmpty ? "this machine" : row.cwd), for good. Nothing else on the machine is touched."],
+            confirmLabel: "Delete transcript", pendingLabel: "Deleting…", destructive: true
+        ) {
+            try await deleteTranscript(hub: hub, machineId: row.machineId, sessionKey: key, dir: row.cwd.isEmpty ? nil : row.cwd, harness: row.harness)
+        })
+    }
+
+    /// Remove session (LiveSessionMenu `askRemove`): one that never started.
+    static func removeQuestion(_ row: InstanceRow, context: SessionMenuContext) -> SessionQuestion {
+        let hub = context.hub
+        let id = row.id
+        return (context.askAt(id), AskHere.Request(
+            title: "Remove this session?", body: ["It never started, so there is no transcript to lose."],
+            confirmLabel: "Remove session", pendingLabel: "Removing…", destructive: true
+        ) {
+            try await hub.removeSession(id: id)
+        })
+    }
+
+    /// Discard (LiveSessionMenu `askDiscard`): a spin-off and whatever its spawn made.
+    static func discardQuestion(_ row: InstanceRow, context: SessionMenuContext) -> SessionQuestion {
+        let hub = context.hub
+        let id = row.id
+        return (context.askAt(id), AskHere.Request(
+            title: "Discard this spin-off?",
+            body: ["The session stops, and whatever the spawn created for it — its worktree, its transcript — goes with it, for good."],
+            confirmLabel: "Discard spin-off", pendingLabel: "Discarding…", destructive: true
+        ) {
+            try await hub.stopSession(instanceId: id, machineId: row.machineId, discard: true)
+            _ = await hub.refresh()
+        })
+    }
+
+    /// Asks under the row the menu opened on, once the menu has gone.
+    static func ask(_ question: SessionQuestion, from host: MenuHost, context: SessionMenuContext) {
         host.whenClosed {
-            dialog.origin = host.view
-            context.presenter().present(dialog, animated: true)
+            context.asks.ask(question.request, at: question.at)
         }
     }
+
 
     /// client.svelte.ts `deleteTranscript`: the machine deletes it, then its catalog is read again.
     private static func deleteTranscript(hub: HubConnection, machineId: String, sessionKey: String, dir: String?, harness: String?) async throws {

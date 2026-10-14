@@ -498,7 +498,7 @@ final class PinCard: UIView, UITextViewDelegate {
     /// keyboard gives the card back to the question.
     private func askDelete() {
         field.resignFirstResponder()
-        asks.ask(AskHere.Request(title: "Delete pin \(number)?", body: deleteBody, confirmLabel: "Delete pin",
+        asks.ask(AskHere.Request(title: "Delete pin \(number)?", body: [deleteBody], confirmLabel: "Delete pin",
                                  pendingLabel: "Deleting…", destructive: true) { [weak self] in
                 try await self?.onDelete()
             })

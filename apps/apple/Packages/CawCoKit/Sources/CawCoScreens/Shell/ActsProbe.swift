@@ -9,7 +9,7 @@ import UIKit
 /// hub seeded with the probe sessions (p-stop-ok, p-keep-refuse, …) and a
 /// scripted machine that answers, stalls or refuses each request. Each flow
 /// runs through the function its menu item runs, and what the rows, the
-/// peek, the rename field, the confirm and the machine menu draw is read off
+/// peek, the rename field and the machine menu draw is read off
 /// their views at each stage into the ActsProbe log, beside the hub's word.
 @MainActor
 enum ActsProbe {
@@ -219,26 +219,7 @@ enum ActsProbe {
         await until { !hub.acts.inFlight("p-arch-busy") }
         await wait(1)
         say("archive refused", "p-arch-busy", shell)
-
-        if let deleting = row("p-del", shell) {
-            let dialog = ConfirmDialog(title: "Delete this transcript?", body: "“Delete refused” is removed from /tmp/probe, for good.",
-                                       confirmLabel: "Delete transcript", pendingLabel: "Deleting…", destructive: true) {
-                try await hub.deleteSession(machineId: "probe-mac", sessionKey: "s-del", dir: "/tmp/probe", harness: .claude)
-                try await hub.reloadCatalog("probe-mac")
-            }
-            let from = MenuHost(copier: host.copier, view: deleting, refresh: {}, close: {}, whenClosed: { $0() })
-            SessionMenus.confirm(dialog, from: from, context: shell.sessionMenus)
-            await wait(1.5)
-            log.notice("delete confirm [p-del]: shown \(dialog.view.window != nil, privacy: .public), grows out of its row \(dialog.origin === deleting, privacy: .public)")
-            let confirm = views(UIButton.self, in: dialog.view).first { $0.configuration?.attributedTitle.map { String($0.characters) } == "Delete transcript" }
-            confirm?.sendActions(for: .primaryActionTriggered)
-            await wait(2.5)
-            let said = views(KitLabel.self, in: dialog.view).filter { !$0.isHidden && $0.ink == Palette.statusFailInk }.compactMap(\.text)
-            log.notice("delete refused [p-del]: dialog says \(said.joined(separator: " / "), privacy: .public); still shown \(dialog.view.window != nil, privacy: .public)")
-            dialog.dismiss(animated: true)
-            await wait(1)
-            say("delete refused", "p-del", shell)
-        }
+        // Delete transcript, Remove session, Discard and Remove machine ask in place: AskProbe.
 
         // 7. The machine menu: Reload on an offline machine; Sign in an account on probe-mac.
         let ghost = MachineMenu(machineId: "ghost-mac", host: shell)

@@ -107,8 +107,15 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             open: { [weak self] id in self?.openSession(id) },
             continueInNewSession: panes.continueHandler.map { _ in { [weak self] id in self?.panes.continueInNewSession(id) } },
             continueStored: { [weak self] source in self?.newSession.continueSession(source) },
-            presenter: { [weak self] in self?.dialogPresenter ?? UIViewController() }
+            asks: sessionAsks
         )
+    }
+
+    /// This window's one question about a session, under the row that asked.
+    let sessionAsks = SessionAsks()
+
+    func markStatus(_ row: InstanceRow) -> MarkStatus {
+        HomeViewController.status(row, home: home)
     }
 
     var activeSessionId: String? { currentId }
@@ -548,12 +555,30 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             actsProbed = true
             ActsProbe.start(shell: self, home: home, continuations: newSession)
         }
+        if AskProbe.on, !askProbed {
+            askProbed = true
+            AskProbe.start(shell: self, home: home)
+        }
         #endif
     }
 
     #if DEBUG
     private var shellProbe: Timer?
     private var actsProbed = false
+    private var askProbed = false
+
+    /// The machines card, as the bar's Machines button opens it.
+    func probeOpenMachines() {
+        if machinesCard?.open == true { return }
+        openMachines(from: frontCluster.machinesItem)
+    }
+
+    func probeCloseMachines() {
+        if machinesCard?.open == true { machinesCard?.close() }
+    }
+
+    /// The homes this window shows: the rail's and the page's, whichever stand.
+    var probeHomes: [HomeViewController] { [railHome, board] }
 
     /// A simulator pass's `-shell-probe`: once a second, in the Probe log,
     /// the tab in front, how many tabs its group has, whether the sidebar's

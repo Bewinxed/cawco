@@ -65,6 +65,10 @@ public enum KitButton {
         /// What can't be undone (button.svelte `destructive`): the error
         /// edge and ink on no fill, `error-3` under the press.
         case destructive
+        /// A grant wider than the one asked for (button.svelte `grant`, The
+        /// Consequential Grant Rule): the warning tint, its ink and a real
+        /// edge, the same under the press. Its shield is the caller's glyph.
+        case grant
     }
 
     public enum Height: Sendable {
@@ -185,6 +189,10 @@ public enum KitButton {
             config.background.strokeColor = Palette.error9
             config.background.strokeWidth = 1
             config.activityIndicatorColorTransformer = UIConfigurationColorTransformer { _ in Palette.error11 }
+        case .grant:
+            config.background.strokeColor = Palette.statusAttnInk
+            config.background.strokeWidth = 1
+            config.activityIndicatorColorTransformer = UIConfigurationColorTransformer { _ in Palette.statusAttnInk }
         }
         return config
     }
@@ -195,6 +203,7 @@ public enum KitButton {
         case .fail: Palette.statusFailInk
         case .done: Palette.statusDoneInk
         case .destructive: Palette.error11
+        case .grant: Palette.statusAttnInk
         case .secondary, .outline, .ghost: Palette.inkStrong
         }
     }
@@ -204,6 +213,7 @@ public enum KitButton {
         case .fail: return Palette.statusFailBg
         case .done: return Palette.statusDoneBg
         case .destructive: return pressed ? Palette.error3 : .clear
+        case .grant: return Palette.statusAttnBg
         case .action, .secondary, .outline, .ghost: break
         }
         if pressed {
@@ -213,7 +223,7 @@ public enum KitButton {
         case .action: return Palette.actionSolid
         case .secondary: return Palette.surfaceRecess
         case .outline: return Palette.surfaceRaised
-        case .ghost, .fail, .done, .destructive: return .clear
+        case .ghost, .fail, .done, .destructive, .grant: return .clear
         }
     }
 }

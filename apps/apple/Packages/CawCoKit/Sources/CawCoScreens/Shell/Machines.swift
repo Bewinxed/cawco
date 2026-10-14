@@ -238,6 +238,8 @@ protocol MachinesHost: AnyObject {
     func changeHub()
     /// What the machine dialogs present over.
     var dialogPresenter: UIViewController { get }
+    /// A session's mark, as every row draws it.
+    func markStatus(_ row: InstanceRow) -> MarkStatus
 }
 
 extension MachinesHost {
@@ -364,6 +366,17 @@ final class MachinesListView: UIView {
             rows[id] = nil
             menus[id] = nil
         }
+        // The question about a machine stands under its row (AskHere); what
+        // it names is read here, so a session that ends while it stands shows it.
+        var asked = askedMachine.flatMap { id in machines.first { $0.machineId == id } }
+        if asked?.status == "online" {
+            // Back online, it would register straight back: the question goes.
+            asked = nil
+            Task { @MainActor [askView] in askView.dismiss() }
+        } else {
+            askView.refresh()
+        }
+        var at = 0
         for (index, machine) in machines.enumerated() {
             let row = rows[machine.machineId] ?? makeRow(machine.machineId)
             let up = machine.status == "online"
@@ -375,16 +388,65 @@ final class MachinesListView: UIView {
                                   meta: ["\(live) live", fault].compactMap(\.self).joined(separator: " · "), presence: presence)
             row.accessibilityLabel = machine.name
             row.accessibilityValue = ["\(live) live", fault].compactMap(\.self).joined(separator: ", ")
-            list.insertArrangedSubview(row, at: index)
+            list.insertArrangedSubview(row, at: at)
+            at += 1
+            if asked?.machineId == machine.machineId {
+                list.insertArrangedSubview(askView, at: at)
+                at += 1
+            }
         }
         onChange()
     }
+
+    /// The question standing under a machine's row (MachineMenu.svelte
+    /// `machineAsks`), and which machine's.
+    private lazy var askView: AskHere = {
+        let ask = AskHere()
+        ask.onResize = { [weak self, weak ask] in
+            guard let self else { return }
+            if ask?.asked == nil {
+                askedMachine = nil
+                ask?.removeFromSuperview()
+            }
+            onChange()
+        }
+        return ask
+    }()
+
+    private var askedMachine: String?
+
+    /// Asks `request` under `machineId`'s row, in place of any question standing.
+    private func ask(_ request: AskHere.Request, about machineId: String) {
+        guard let row = rows[machineId], let at = list.arrangedSubviews.firstIndex(of: row) else { return }
+        askedMachine = machineId
+        if askView.superview != nil { askView.removeFromSuperview() }
+        list.insertArrangedSubview(askView, at: at + 1)
+        askView.ask(request)
+        onChange()
+    }
+
+    #if DEBUG
+    /// The question on screen in this list, and whether it is the line right under `machineId`'s row.
+    func probeAsk(_ machineId: String) -> (view: AskHere, under: Bool)? {
+        guard askView.asked != nil, let at = list.arrangedSubviews.firstIndex(of: askView) else { return nil }
+        let row = rows[machineId].flatMap { list.arrangedSubviews.firstIndex(of: $0) }
+        return (askView, row.map { $0 + 1 == at } ?? false)
+    }
+
+    /// Remove machine…, as `machineId`'s menu item asks it.
+    func probeAskRemove(_ machineId: String) { menus[machineId]?.probeAskRemove() }
+    var probeRunning: Bool { askView.running }
+
+    /// Whether `machineId` has a row in this list.
+    func probeHasRow(_ machineId: String) -> Bool { rows[machineId] != nil }
+    #endif
 
     private func makeRow(_ machineId: String) -> MachinesListRow {
         let row = MachinesListRow()
         rows[machineId] = row
         if let host {
             let menu = MachineMenu(machineId: machineId, host: host)
+            menu.ask = { [weak self] request in self?.ask(request, about: machineId) }
             menus[machineId] = menu
             menu.attach(to: row)
         }
@@ -470,6 +532,8 @@ final class MachineMenu: NSObject, UIContextMenuInteractionDelegate {
     /// Why the dashboard's Accounts could not be opened, under its item.
     private var accountsFailed: String?
     private var copied: String?
+    /// Asks under this machine's row, in the list the menu stands in.
+    var ask: (AskHere.Request) -> Void = { _ in }
 
     init(machineId: String, host: MachinesHost) {
         self.machineId = machineId
@@ -598,6 +662,8 @@ final class MachineMenu: NSObject, UIContextMenuInteractionDelegate {
     #if DEBUG
     func probeReload() { runReload() }
     func probeAccounts() { openAccounts() }
+    /// Remove machine…, as its item asks it.
+    func probeAskRemove() { askRemove() }
     /// The menu's first section as it would draw now: each item's title and the words under it.
     var probeItems: [String] {
         (menu().children.first as? UIMenu)?.children.compactMap { element in
@@ -660,24 +726,41 @@ final class MachineMenu: NSObject, UIContextMenuInteractionDelegate {
     }
 
     /// Forgets a machine the fleet no longer has: only while it is offline,
-    /// since a connected agent would register straight back.
+    /// since a connected agent would register straight back. The question
+    /// stands under the machine's row, in the page (MachineMenu.svelte
+    /// `askRemove`): its sessions are what the removal reaches, named and
+    /// read live; what stays is said too.
     private func askRemove() {
         guard let machine, let host else { return }
         let hub = host.hub
         let count = { (n: Int, noun: String) in "\(n) \(noun)\(n == 1 ? "" : "s")" }
-        let sessions = hub.fleet.rows.filter { $0.machineId == machine.machineId }.count
-        let projects = hub.fleet.projects.filter { $0.placed(on: machine.machineId) }.count
         let id = machine.machineId
-        let dialog = ConfirmDialog(
+        let sessions = hub.fleet.rows.filter { $0.machineId == id }.count
+        // Every project keeps its folder on the hub: only its places here go.
+        let projects = hub.fleet.projects.filter { $0.placed(on: id) }.count
+        let removed = sessions > 0
+            ? "\(sessions == 1 ? "Its session is" : "Its sessions are") removed from the fleet"
+            : "It has no sessions to remove"
+        let places = projects > 0
+            ? ", and \(count(projects, "project")) \(projects == 1 ? "loses its folders" : "lose their folders") on it; the projects stay"
+            : ""
+        ask(AskHere.Request(
             title: "Remove \(machine.name)?",
-            // MachineMenu.svelte: removing a machine takes its places from projects, never the projects.
-            body: "Its \(count(sessions, "session")) are removed from the fleet\(projects > 0 ? ", and \(count(projects, "project")) \(projects == 1 ? "loses its folders" : "lose their folders") on it; the projects stay" : ""). Its spend history stays. If its agent starts again, it rejoins the fleet.",
+            body: ["\(removed)\(places). Its spend history stays. If its agent starts again, it rejoins the fleet."],
             confirmLabel: "Remove machine",
             pendingLabel: "Removing…",
-            destructive: true
+            destructive: true,
+            items: { [weak host] in
+                guard let host else { return [] }
+                return host.hub.fleet.rows.filter { $0.machineId == id }.map { row in
+                    let mark = host.markStatus(row)
+                    return AskItem(id: row.id, parentId: row.parentInstanceId, title: host.hub.fleet.title(row),
+                                   place: row.cwd.isEmpty ? row.machineId : row.cwd, mark: mark,
+                                   status: row.status == .stopped ? "Stopped" : mark.word)
+                }
+            }
         ) {
             try await hub.removeMachine(id: id)
-        }
-        host.dialogPresenter.present(dialog, animated: true)
+        })
     }
 }

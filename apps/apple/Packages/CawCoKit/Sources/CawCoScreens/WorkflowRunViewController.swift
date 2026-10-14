@@ -8,7 +8,7 @@ import UIKit
 /// run, what it was given, Cancel or Re-run and Edit workflow; its steps hung
 /// under it on the nesting rails (RunSteps.svelte), each folding open its
 /// result and opening its own session or run; the question it waits on; and
-/// its log. Cancel asks first, in the house confirm.
+/// its log. Cancel asks first, under the run's head (AskHere).
 final class WorkflowRunViewController: ObservedViewController, UIGestureRecognizerDelegate {
     let runId: String
     private let hub: HubConnection
@@ -32,6 +32,8 @@ final class WorkflowRunViewController: ObservedViewController, UIGestureRecogniz
     private var clock: Timer?
     private var headDuration: KitLabel?
     private var hintObserver: (any NSObjectProtocol)?
+    /// Cancel's question, under the run's head (AskHere; WorkflowRunView.svelte `asks`).
+    private let askView = AskHere()
     var onReturn: () -> Void = {}
     var onOpen: (String) -> Void = { _ in }
     /// Opens the run's workflow for editing.
@@ -93,7 +95,8 @@ final class WorkflowRunViewController: ObservedViewController, UIGestureRecogniz
         loading.accessibilityLabel = "Loading workflow run"
         head.axis = .vertical
         head.spacing = Space.space2
-        let run = UIStackView(arrangedSubviews: [head, steps])
+        askView.onResize = { [weak self] in self?.animateLayout() }
+        let run = UIStackView(arrangedSubviews: [head, askView, steps])
         run.axis = .vertical
         run.spacing = Space.space1
         answer.axis = .vertical
@@ -176,6 +179,7 @@ final class WorkflowRunViewController: ObservedViewController, UIGestureRecogniz
             steps.configure(model, going: model.going, live: hub.state == .connected, rerun: { [weak self] stepId in self?.rerun(from: stepId) })
             durations = (headDuration.map { [($0, model.startedAt, model.endedAt)] } ?? []) + steps.durations
         }
+        drawCancelAsk(going: model.going)
         if let ask = run.ask, run.status == .waiting {
             if askId != ask.stepId { buildAnswer(ask); askId = ask.stepId }
             answer.isHidden = false
@@ -399,19 +403,75 @@ final class WorkflowRunViewController: ObservedViewController, UIGestureRecogniz
         requestRefresh()
     }
 
+    /// Cancel asks under the run's head, in the page (The Open Page Rule:
+    /// nothing elsewhere breaks while it stands). What it reaches is named and
+    /// read live: the steps running now, each as the rail names a session; a
+    /// step that ends while the question stands leaves it.
     private func confirmCancel(_ model: RunModel) {
-        let names = model.steps.filter { $0.status == "running" && $0.instanceId != nil }.map(\.title)
-        ConfirmSheetController.present(
-            from: self,
-            title: "Cancel workflow run?",
-            body: "Stops these live sessions and any child runs: \(names.isEmpty ? "No live step sessions reported" : names.joined(separator: ", ")). Pending steps will be skipped.",
+        let runId = runId
+        askView.ask(AskHere.Request(
+            title: "Cancel this run?",
+            body: ["The steps running now stop, with any child runs, and pending steps are skipped."],
             confirmLabel: "Cancel run",
             pendingLabel: "Cancelling…",
-            destructive: true
-        ) { [weak self] done in
+            cancelLabel: "Keep running",
+            destructive: true,
+            items: { [weak self] in self?.liveSteps() ?? [] }
+        ) { [weak self] in
             guard let self else { return }
-            hub.workflowRuns.cancel(runId, done: done)
+            // A refusal is the question's to show, under it, in the hub's words.
+            let refusal: String? = await withCheckedContinuation { done in
+                self.hub.workflowRuns.cancel(runId) { done.resume(returning: $0) }
+            }
+            if let refusal { throw CancelRefused(message: refusal) }
+        })
+    }
+
+    /// The run's steps running now, each as the rail names its session.
+    private func liveSteps() -> [AskItem] {
+        guard let run = detail.run else { return [] }
+        let model = RunModel(run, name: "")
+        return model.steps.compactMap { step in
+            guard step.status == "running", let id = step.instanceId else { return nil }
+            let row = hub.fleet.byId[id]
+            let mark: MarkStatus = row?.isFailed == true ? .fail : .live
+            return AskItem(id: id, parentId: nil, title: row.map { hub.fleet.title($0) } ?? step.title,
+                           place: row.map { $0.cwd.isEmpty ? $0.machineId : $0.cwd } ?? id, mark: mark, status: mark.word)
         }
+    }
+
+    /// Reads Cancel's question again: the steps it names, and a run that
+    /// ended while asked has nothing left to cancel.
+    private func drawCancelAsk(going: Bool) {
+        if going {
+            askView.refresh()
+        } else {
+            askView.dismiss()
+        }
+    }
+
+    #if DEBUG
+    /// Cancel run, as its button asks it.
+    func probeAskCancel() {
+        guard let run = detail.run else { return }
+        confirmCancel(RunModel(run, name: ""))
+    }
+
+    /// What stands under the run's head now.
+    var probeAsk: String { askView.probeState }
+    /// The question is the line right after the run's head.
+    var probeUnder: Bool {
+        !askView.isHidden && (askView.superview as? UIStackView)?.arrangedSubviews.firstIndex(of: askView) == 1
+    }
+
+    var probeRunning: Bool { askView.running }
+    var probeStatus: String { detail.run.map { String(describing: $0.status) } ?? "unread" }
+    func probeConfirm() { askView.probeConfirm() }
+    #endif
+
+    private struct CancelRefused: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
     }
 
     @objc private func endFormEditing() { view.endEditing(true) }

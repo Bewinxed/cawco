@@ -37,6 +37,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         case recent(String)
         case recentNone
         case recentMore
+        /// A question about a session, under the row that asked (AskHere), by where it stands.
+        case ask(String)
     }
 
     private struct RowLine {
@@ -376,8 +378,54 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             ObjectIdentifier(UICollectionView.CellRegistration<RecentHeadCell, Item>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<RowCell, Item>.self),
             ObjectIdentifier(UICollectionView.CellRegistration<SearchCell, Item>.self),
+            ObjectIdentifier(UICollectionView.CellRegistration<AskCell, Item>.self),
         ]
     }
+
+    /// Where this home's lists ask their questions: the rail's work list
+    /// and the page's are each their own place, Recent another.
+    private var workPlace: String { variant == .rail ? "rail-work" : "page-work" }
+    private static let recentPlace = "page-recent"
+
+    /// The window's question about a session, read where the board is read.
+    private var asks: SessionAsks? { sessionMenus?()?.asks }
+
+    #if DEBUG
+    /// Session `id`'s row on screen in this home, and the list's place for its questions.
+    func probeRow(_ id: String) -> (place: String, row: SessionRowView, item: Item)? {
+        guard isViewLoaded, view.window != nil else { return nil }
+        for item in dataSource.snapshot().itemIdentifiers {
+            guard let path = dataSource.indexPath(for: item) else { continue }
+            let mine: Bool = switch item {
+            case let .row(rid): rid == id
+            case let .recent(rid): rid == id || recentItems[rid]?.instance?.id == id
+            default: false
+            }
+            // Brought into view, as a finger would scroll to it.
+            if mine, collectionView.cellForItem(at: path) == nil {
+                collectionView.scrollToItem(at: path, at: .centeredVertically, animated: false)
+                collectionView.layoutIfNeeded()
+            }
+            switch item {
+            case let .row(rid) where rid == id:
+                if let cell = collectionView.cellForItem(at: path) as? RowCell { return (workPlace, cell.row, item) }
+            case let .recent(rid) where rid == id || recentItems[rid]?.instance?.id == id:
+                if let cell = collectionView.cellForItem(at: path) as? RecentRowCell { return (Self.recentPlace, cell.row, item) }
+            default:
+                continue
+            }
+        }
+        return nil
+    }
+
+    /// The question standing at `at` in this home, and whether it is the line right after `rowItem`'s.
+    func probeAsk(_ at: String, after rowItem: Item) -> (view: AskHere, under: Bool)? {
+        guard let askPath = dataSource.indexPath(for: .ask(at)),
+              let cell = collectionView.cellForItem(at: askPath) as? AskCell, let held = cell.held else { return nil }
+        let rowPath = dataSource.indexPath(for: rowItem)
+        return (held, rowPath.map { $0.section == askPath.section && $0.item + 1 == askPath.item } ?? false)
+    }
+    #endif
 
     private func makeDataSource() -> UICollectionViewDiffableDataSource<Section, Item> {
         let usage = UICollectionView.CellRegistration<UsageCell, Item> { [weak self] cell, _, _ in
@@ -420,7 +468,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             cell.row.configure(content)
             // LiveSessionMenu, read from the fleet as it opens; a workflow run takes no session commands.
             cell.row.menu = { [weak self] copy in
-                guard let self, let context = sessionMenus?(), BoardRun.runId(of: id) == nil, let now = hub.fleet.byId[id] else { return nil }
+                guard let self, let context = sessionMenus?()?.at(workPlace), BoardRun.runId(of: id) == nil, let now = hub.fleet.byId[id] else { return nil }
                 let archive: (() -> Void)? = content.archives ? { [weak self] in
                     guard let self else { return }
                     home.archive(home.treeOf(id))
@@ -475,7 +523,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             cell.actions.configure(title: content.title, peeks: false, archives: false)
             // LiveSessionMenu for a session the hub holds, StoredSessionMenu for a stored transcript.
             cell.row.menu = { [weak self] copy in
-                guard let self, let context = sessionMenus?(), let recent = recentItems[id] else { return nil }
+                guard let self, let context = sessionMenus?()?.at(Self.recentPlace), let recent = recentItems[id] else { return nil }
                 if let held = recent.instance {
                     guard BoardRun.runId(of: held.id) == nil, let now = hub.fleet.byId[held.id] else { return nil }
                     return SessionMenus.live(now, context: context, copy: copy)
@@ -500,6 +548,12 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
                 requestRefresh()
             }
         }
+        let ask = UICollectionView.CellRegistration<AskCell, Item> { [weak self] cell, _, item in
+            guard let self, case let .ask(at) = item, let asks, asks.at == at else { return }
+            // Under the row's own words, as deep as the row stands.
+            let id = String(at.drop { $0 != "/" }.dropFirst())
+            cell.hold(asks.view, indent: Double(rows[id]?.line.line.depth ?? 0) * Nest.indent)
+        }
 
         return UICollectionViewDiffableDataSource(collectionView: collectionView) { view, index, item in
             switch item {
@@ -515,6 +569,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             case .recent: view.dequeueConfiguredReusableCell(using: recentRow, for: index, item: item)
             case .recentNone: view.dequeueConfiguredReusableCell(using: note, for: index, item: item)
             case .recentMore: view.dequeueConfiguredReusableCell(using: showMore, for: index, item: item)
+            case .ask: view.dequeueConfiguredReusableCell(using: ask, for: index, item: item)
             }
         }
     }
@@ -623,6 +678,9 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             return recentContent(id).map(AnyHashable.init) ?? AnyHashable(contentRevision)
         case .caw:
             return AnyHashable([cawLine, cawStatus.rawValue])
+        case .ask:
+            // Pending, refused, what it names: the question draws again in place.
+            return asks.map { AnyHashable($0.revision) } ?? AnyHashable(contentRevision)
         default:
             return AnyHashable(contentRevision)
         }
@@ -634,6 +692,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         drawnTab = tab
         contentRevision += 1
         var snapshot = NSDiffableDataSourceSnapshot<Section, Item>()
+        // The question standing about a session goes under the row that asked it.
+        let asked = asks?.at
         let live = home.live
         let ready = home.ready
         let needList = home.needs
@@ -674,6 +734,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
                     lastAt[depth] = line.line.last
                     rows[line.id] = RowLine(line: line, tab: tab, group: group.machineId, through: through)
                     items.append(.row(line.id))
+                    if asked == "\(workPlace)/\(line.id)", let asked { items.append(.ask(asked)) }
                     // The list's echoes, top to bottom: a working tile and a needs-you dot each take a beat.
                     let status = Self.status(line.line.row, home: home, done: tab == .finished)
                     if status == .live || status == .attn {
@@ -715,6 +776,9 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
                 for item in matches.prefix(recentShown) {
                     recentItems[item.id] = item
                     items.append(.recent(item.id))
+                    // Its live menu asks by the instance, its stored menu by the conversation.
+                    let here = [item.id, item.instance?.id].compactMap { $0.map { "\(Self.recentPlace)/\($0)" } }
+                    if let asked, here.contains(asked) { items.append(.ask(asked)) }
                 }
                 if matches.isEmpty {
                     items.append(.recentNone)
@@ -885,7 +949,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         case let .machine(id): return .line(key: RelayPlan.head(id), group: id)
         case let .row(id): return .line(key: id, group: rows[id]?.group ?? "")
         case let .more(id): return .line(key: RelayPlan.more(id), group: id)
-        case .caw, .recentHead, .recentSearch, .recent, .recentNone, .recentMore: return .tail
+        case .caw, .recentHead, .recentSearch, .recent, .recentNone, .recentMore, .ask: return .tail
         case .status, .usage, .tabs: return .none
         }
     }

@@ -488,15 +488,20 @@ struct FullSendCopy {
 
 /// Permission mode (PermissionSection.svelte, embedded): one row a mode,
 /// the chosen one filled and checked; a mode the harness cannot honour is
-/// listed, faded and inert. Every pick of Full Send is confirmed first, in
-/// the app's one confirm, which says what it allows beyond Bypass and what
-/// still stops; only its own button applies it.
+/// listed, faded and inert. Every pick of Full Send is confirmed first, under
+/// the list (AskHere; DESIGN.md, The Open Page Rule), saying what it allows
+/// beyond Bypass and what still stops; only its own button applies it. The
+/// rows still answer while it stands, and picking another mode puts it away.
+/// Its yes is the pick: the picker closes on it, and a restart or a refusal
+/// is said where every permission pick reports (SessionDetails' feedback line).
 final class PermissionPopover: NsPopoverController {
     private let modes: [(value: String, disabled: Bool)]
     private let value: String
     private let harness: String?
     private let restarts: Bool
     private let onPick: (String) -> Void
+    /// Full Send's question, after the last row (AskHere).
+    private let askView = AskHere()
 
     init(modes: [(value: String, disabled: Bool)], value: String, harness: String?, restarts: Bool = false,
          onPick: @escaping (String) -> Void) {
@@ -519,23 +524,52 @@ final class PermissionPopover: NsPopoverController {
             row.addAction(UIAction { [weak self] _ in self?.pick(mode.value) }, for: .touchUpInside)
             rows.addArrangedSubview(row)
         }
+        // After the last row, never between them: the rows stay where they are.
+        rows.addArrangedSubview(askView)
+        askView.onResize = { [weak self] in self?.askMoved() }
         fit()
         arrive()
     }
 
     private func pick(_ mode: String) {
         guard mode == "fullSend", value != "fullSend" else {
+            askView.dismiss()
             onPick(mode)
             return
         }
         // Offered only where it has words: never applied unread.
         guard let copy = FullSendCopy.of(harness) else { return }
-        let body = (restarts ? copy.confirm + [copy.restarts] : copy.confirm).joined(separator: "\n\n")
-        present(ConfirmDialog(title: "Switch to Full Send?", body: body, confirmLabel: "Switch to Full Send",
-                              pendingLabel: "Switching…", grant: true) { [weak self] in
+        askView.ask(AskHere.Request(
+            title: "Switch to Full Send?", body: restarts ? copy.confirm + [copy.restarts] : copy.confirm,
+            confirmLabel: "Switch to Full Send", pendingLabel: "Switching…", grant: true
+        ) { [weak self] in
             self?.onPick("fullSend")
-        }, animated: true)
+        })
     }
+
+    /// The question unfolded, folded or grew: the popover takes its height,
+    /// and scrolls inside to show it when it is taller than its cap.
+    private func askMoved() {
+        fit()
+        guard askView.asked != nil else { return }
+        view.layoutIfNeeded()
+        scroll.scrollRectToVisible(askView.convert(askView.bounds, to: scroll), animated: !UIAccessibility.isReduceMotionEnabled)
+    }
+
+    #if DEBUG
+    /// The probe's Full Send pick, as a finger's.
+    func probePick(_ mode: String) { pick(mode) }
+    /// What stands under the list now.
+    var probeAsk: String { askView.probeState }
+    /// The question is the line right after the last mode's row.
+    var probeUnder: Bool { askView.asked != nil && rows.arrangedSubviews.last === askView && rows.arrangedSubviews.count == modes.count + 1 }
+    /// Every mode's row still answers while the question stands.
+    var probeRowsLive: Bool {
+        rows.arrangedSubviews.compactMap { $0 as? UIControl }.allSatisfy { $0.isEnabled && $0.isUserInteractionEnabled }
+    }
+    func probeCancelAsk() { askView.probeCancel() }
+    func probeConfirmAsk() { askView.probeConfirm() }
+    #endif
 }
 
 // MARK: Effort

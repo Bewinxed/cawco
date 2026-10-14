@@ -65,11 +65,35 @@ extension HubConnection {
         return id
     }
 
+    /// How a session runs again (core `relaunchOf`, the one rule): on the
+    /// conversation it named when it has one, fresh under the same id when it
+    /// never named one, and not at all when its conversation is gone.
+    public enum Relaunch: Equatable, Sendable {
+        case resume(sessionKey: String)
+        case fresh
+        case refused(String)
+
+        /// Core `CLAUDE_CONVERSATION_GONE`: the row's `lastError` when its conversation can't be resumed.
+        public static let conversationGone = "This Claude Code conversation is gone and cannot be resumed. Start a new session to continue working."
+
+        public static func of(sessionId: String?, lastError: String?) -> Relaunch {
+            if lastError == conversationGone { return .refused(conversationGone) }
+            return sessionId.map { .resume(sessionKey: $0) } ?? .fresh
+        }
+    }
+
     /// Spawn-in-place is the hub's atomic replacement operation. It stops the
     /// previous process itself, just as the web's relaunch and rewind do.
-    public func relaunch(machineId: String, payload: Components.Schemas.SpawnPayload, sessionKey: String, continuePrompt: String? = nil) async throws {
+    /// `relaunch` says so to the machine: without it, a resume of a session
+    /// it runs is a recovery, and the old process is kept.
+    public func relaunch(machineId: String, payload: Components.Schemas.SpawnPayload, plan: Relaunch, continuePrompt: String? = nil) async throws {
         var payload = payload
-        payload.resume = .init(sessionKey: sessionKey)
+        switch plan {
+        case let .refused(reason): throw ControlError(message: reason)
+        case let .resume(sessionKey): payload.resume = .init(sessionKey: sessionKey)
+        case .fresh: payload.resume = nil
+        }
+        payload.relaunch = true
         _ = try await spawn(machineId: machineId, payload: payload, prompt: continuePrompt)
     }
 

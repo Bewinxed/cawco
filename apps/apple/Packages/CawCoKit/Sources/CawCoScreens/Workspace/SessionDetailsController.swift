@@ -346,8 +346,11 @@ public final class SessionDetailsController: ObservedViewController {
             requestRefresh()
             return
         }
-        guard let row, let sessionKey = row.sessionId else {
-            relaunchFailure = "no session key on record for \(id); cannot resume"
+        guard let row else { return }
+        // On its own conversation, or fresh under the same id before its first message.
+        let plan = HubConnection.Relaunch.of(sessionId: row.sessionId, lastError: row.lastError)
+        if case let .refused(reason) = plan {
+            relaunchFailure = reason
             requestRefresh()
             return
         }
@@ -363,7 +366,7 @@ public final class SessionDetailsController: ObservedViewController {
         payload.scratch = row.kind == "scratch" ? .init() : nil
         Task { [weak self, hub] in
             do {
-                try await hub.relaunch(machineId: machineId, payload: hub.explicit(machineId: machineId, payload), sessionKey: sessionKey)
+                try await hub.relaunch(machineId: machineId, payload: hub.explicit(machineId: machineId, payload), plan: plan)
             } catch {
                 if self?.sessionId == id { self?.relaunchFailure = error.localizedDescription }
             }

@@ -973,6 +973,35 @@ final class RecentRowCell: HomeCell {
     }
 }
 
+/// A question about a session, standing in the list under the row that
+/// asked it (AskHere): the rows around it scroll and answer as ever. The
+/// window has one question, so the cell holds it rather than a copy: it is
+/// moved here from wherever it stood, and keeps its state on the way.
+final class AskCell: HomeCell {
+    private(set) weak var held: AskHere?
+    private var lead: NSLayoutConstraint?
+
+    /// Holds `ask` in this line, `indent` in from the list's edge (under the row's own words).
+    func hold(_ ask: AskHere, indent: Double) {
+        if ask.superview !== contentView {
+            ask.removeFromSuperview()
+            contentView.addSubview(ask)
+            let lead = ask.leadingAnchor.constraint(equalTo: contentView.leadingAnchor)
+            let bottom = ask.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
+            bottom.priority = .required - 1
+            NSLayoutConstraint.activate([
+                lead,
+                ask.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+                ask.topAnchor.constraint(equalTo: contentView.topAnchor),
+                bottom,
+            ])
+            self.lead = lead
+        }
+        held = ask
+        lead?.constant = indent
+    }
+}
+
 /// A line of words under a list: no match, or a button to show more.
 final class NoteCell: HomeCell {
     let label = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
