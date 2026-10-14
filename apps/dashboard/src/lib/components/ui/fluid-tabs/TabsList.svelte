@@ -17,7 +17,12 @@
   import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { cn } from "#lib/utils.js";
-  import { provideList, TabsListState, useTabs } from "./context.svelte";
+  import {
+    provideList,
+    restRank,
+    TabsListState,
+    useTabs,
+  } from "./context.svelte";
   import { TabRects } from "./rects.svelte";
 
   let {
@@ -63,35 +68,37 @@
     return () => cancelAnimationFrame(frame);
   });
 
-  /* ── Folder tabs: the stack hands over at equal depth ──────────────
+  /* ── Folder tabs: one stack, shuffled on a switch ──────────────────
      Folder tabs overlap like a drawer of real folders (owner: "spacing
      between inactive tabs should overlap a bit just like actual folder
-     tabs"), so which one is drawn over which is a choice. The tabs make no
-     stacks of their own: every tab's card, sheet and contents meet in the
-     track's one stack (TabItem), at the tab's rank (`--z`, written here on
-     the item the track lays out, which a host may wrap), with anything a
-     host draws on every outline (PaneTabs' rims) and the focus ring above
-     them all (`--stack-top`, in the markup). Until the track has measured
-     its tabs (the first render, the server's included), each tab stands at
-     its rank at rest, drawn from the order and the value (TabItem
-     `--z-rest`, `restRank`, the same ranking as below).
+     tabs"), so which one is drawn over which is a choice. Each tab, as the
+     track lays it out (the tab, or the box a host wraps round it), is one
+     stack of its own at its rank (`--z`, written here): its sheet and rim,
+     one path (TabItem), and everything written on it. The chosen tab is on
+     top, then each tab above those farther from it, the nearer the first
+     (`restRank`); until the track has measured its tabs (the first render,
+     the server's included) each stands at that rank from the order and the
+     value alone (`--z-rest`). A side under its neighbour's tab draws no
+     foot (`list.folds`, read by TabItem): its foot would lie under that
+     neighbour, and the path, not a mask, says so.
 
-     A tab's rank follows how far back it stands now (its depth: 0 chosen,
-     1 receded), not where the choice has gone. On a switch each tab's depth
-     travels from where it was to where it is going on the switch's own
-     clock (the eased progress of the sheets' fade, read every frame, so a
-     slowed clock slows it too), and the stack is ranked again from those
-     depths each frame. Two tabs trade places only when they stand equally
-     far back, which is when they look the same, so the trade shows nothing
-     (transitions.dev, banner stacking: "the swap happens at identity").
-     Ties go to the order the choice ends in: nearer the chosen tab on top,
-     the first tab on top with none chosen. A switch caught mid-way starts
-     from the depths it has reached. Under a gesture (the root's `travel`)
-     the depths are the gesture's, so the tab it is heading to takes the
-     top as it passes half way. A tap on an overlap goes to the tab drawn
-     there. */
-  const depthNow = new WeakMap<HTMLElement, number>();
-  const rankNow = new WeakMap<HTMLElement, number>();
+     A switch is a shuffle, not a fold (owner: "instead of the fold we can
+     have a fold like right-forward-left, so the tab that is "behind" slides
+     to be in front of the other tabs"): the tab being chosen slides out
+     sideways, away from its neighbour toward the tab it leaves, just far
+     enough to clear that neighbour's foot (the overlap, the flare and
+     `--space-1`); at the furthest point the stack is ranked for the new
+     choice, so it comes in front and the tab it leaves drops back; and it
+     slides back into its slot, in front. Out and back are one run of
+     `translate` on the compositor (`tab-shuffle`), each half on the
+     choice's curve over half its length (`--choose-dur`,
+     `--choose-ease`), and the stack is read off that run's own clock each
+     frame, so a slowed or seeked clock swaps it with the slide. Under a
+     gesture (the root's `travel`) the run stands where the gesture's
+     fraction puts it. With less motion the choice is instant: the stack
+     ranked for it at once, nothing slides. A tab lifted by a drag
+     (`data-lifted`, workspace/tab-drag) stands over every tab, both its
+     feet drawn. */
   /** The item a tab is laid out as: the tab, or the host's box round it. */
   function laidOf(item: HTMLElement, track: HTMLElement): HTMLElement {
     let laid = item;
@@ -100,244 +107,230 @@
     }
     return laid;
   }
-  /** The eased progress of a switch under way, read off the sheets' fade: 1 when none runs. */
-  function switchProgress(items: HTMLElement[]): number {
-    for (const item of items) {
-      for (const run of item.getAnimations({ subtree: true })) {
-        if (
-          run instanceof CSSTransition &&
-          run.transitionProperty === "opacity" &&
-          run.effect instanceof KeyframeEffect &&
-          run.effect.target === item &&
-          run.effect.pseudoElement === "::after"
-        ) {
-          const { progress } = run.effect.getComputedTiming();
-          if (typeof progress === "number") {
-            return progress;
-          }
-        }
-      }
-    }
-    return 1;
-  }
+  /** The shuffle's run's id, on the tab being chosen. */
+  const SHUFFLE = "tab-shuffle";
+  /** The item a drag has lifted, laid out (`data-lifted`), if one is. */
+  let lifted = $state<HTMLElement | null>(null);
   /**
-   * The stack's ranks for the tabs standing at these depths, farthest back
-   * lowest; ties go to the order the choice ends in (nearer `chosen` on
-   * top).
+   * Ranks the stack for the choice at `chosen` (the lifted tab over every
+   * other), writes each tab's rank (`--z`) and folds each side that stands
+   * under its neighbour (`list.folds`).
    */
-  function ranksBy(
-    items: HTMLElement[],
-    depthOf: (item: HTMLElement, i: number) => number,
-    chosen: number
-  ): Map<HTMLElement, number> {
-    const order = items
-      .map((item, i) => ({ item, i, depth: depthOf(item, i) }))
-      .sort(
-        (a, b) =>
-          b.depth - a.depth ||
-          Math.abs(b.i - Math.max(chosen, 0)) -
-            Math.abs(a.i - Math.max(chosen, 0))
-      );
-    return new Map(order.map(({ item }, at) => [item, at + 1]));
-  }
-  /** Each tab's depth as last written, with its neighbours'. */
-  const depthWritten = new WeakMap<HTMLElement, string>();
-  /**
-   * Ranks the stack from each tab's depth now, and hands each tab its depth
-   * and its two neighbours' (`--depth`, `--depth-prev`, `--depth-next`, 0
-   * chosen to 1 receded, its own where it has no neighbour), so a host can
-   * draw what follows the choice on the switch's own clock (PaneTabs'
-   * rims, whose strength does, and whose sides at a gliding seam meet
-   * their neighbour's).
-   */
-  function rank(track: HTMLElement, items: HTMLElement[], chosen: number) {
-    const ranks = ranksBy(items, (item) => depthNow.get(item) ?? 1, chosen);
-    for (const [item, z] of ranks) {
-      if (rankNow.get(item) !== z) {
-        rankNow.set(item, z);
-        laidOf(item, track).style.setProperty("--z", String(z));
-      }
-    }
-    const depth = (item: HTMLElement | undefined) =>
-      item ? String(Math.round((depthNow.get(item) ?? 1) * 1000) / 1000) : null;
+  function stack(track: HTMLElement, items: HTMLElement[], chosen: number) {
+    const n = items.length;
+    const ranks = items.map((item, i) =>
+      lifted !== null && laidOf(item, track) === lifted
+        ? n + 1
+        : restRank(n, chosen, i)
+    );
     items.forEach((item, i) => {
-      const own = depth(item) as string;
-      const prev = depth(items[i - 1]) ?? own;
-      const next = depth(items[i + 1]) ?? own;
-      const key = `${own} ${prev} ${next}`;
-      if (depthWritten.get(item) !== key) {
-        depthWritten.set(item, key);
-        const laid = laidOf(item, track);
-        laid.style.setProperty("--depth", own);
-        laid.style.setProperty("--depth-prev", prev);
-        laid.style.setProperty("--depth-next", next);
+      const laid = laidOf(item, track);
+      const z = String(ranks[i]);
+      if (laid.style.getPropertyValue("--z") !== z) {
+        laid.style.setProperty("--z", z);
+      }
+      const start = i > 0 && (ranks[i - 1] ?? 0) > (ranks[i] ?? 0);
+      const end = i < n - 1 && (ranks[i + 1] ?? 0) > (ranks[i] ?? 0);
+      const was = list.folds.get(item);
+      if (!was || was[0] !== start || was[1] !== end) {
+        list.folds.set(item, [start, end]);
       }
     });
   }
-
-  /* ── Where two tabs meet: one edge, gliding ─────────────────────────
-     Where two folder tabs overlap, the edge that shows is the front
-     tab's: its card covers the other's, and the other's side stands at
-     its own edge under it (a host's outline drawn at each tab's rank,
-     PaneTabs' rims, does the same). On a switch that changes which of
-     the two is in front, the edge glides from where it stood to where it
-     will stand, on the switch's clock: whichever of the two is in front
-     at that frame draws it there, its card and outline standing in from
-     its own edge by `--cut-start`/`--cut-end` (0 to 1 of the overlap
-     less a host's stroke, `--seam-tuck`), and the one behind stands at
-     its own edge. The front changes at equal depth, where the two stand
-     in on the same pixels, so the handover moves nothing (transitions.dev,
-     banner stacking: "the swap happens at identity"). Under a gesture the
-     gesture's fraction is the clock. */
-  /** Each seam's place, keyed by the tab on its left: 0 on that tab's own edge, 1 on its right neighbour's. */
-  const seamAt = new WeakMap<HTMLElement, { right: HTMLElement; q: number }>();
-  /** Each tab's start and end cut as written. */
-  const cutNow = new WeakMap<HTMLElement, string>();
-  /** Where each seam rests for a ranking: on the edge of the tab in front. */
-  const seamsAtRest = (items: HTMLElement[], ranks: Map<HTMLElement, number>) =>
-    items
-      .slice(0, -1)
-      .map((left, i) =>
-        (ranks.get(left) ?? 0) > (ranks.get(items[i + 1]) ?? 0) ? 0 : 1
-      );
-  /** Where each seam stands now, or rests for `ranks` when it is a new one. */
-  const seamsNow = (items: HTMLElement[], ranks: Map<HTMLElement, number>) => {
-    const atRest = seamsAtRest(items, ranks);
-    return items.slice(0, -1).map((left, i) => {
-      const seam = seamAt.get(left);
-      return seam?.right === items[i + 1] ? seam.q : atRest[i];
-    });
+  /** The shuffle under way, from one choice to another, and its frame. */
+  let shuffle: {
+    run: Animation;
+    from: number;
+    to: number;
+    frame: number;
+    swapped: boolean;
+    /** Placed by a gesture, not playing on its own. */
+    held: boolean;
+  } | null = null;
+  /** Its length, ms, and its curve, the choice's own. */
+  const timing = (track: HTMLElement) => {
+    const style = getComputedStyle(track);
+    const length = style.getPropertyValue("--choose-dur").trim();
+    return {
+      duration: length.endsWith("ms")
+        ? Number.parseFloat(length)
+        : Number.parseFloat(length) * 1000,
+      easing: style.getPropertyValue("--choose-ease").trim() || "ease",
+    };
   };
-  /** Places every seam `f` of the way from `from` to `to`, drawn by the tab in front now. */
-  function placeSeams(
+  /** How far the tab being chosen slides out, px: past its neighbour's foot. */
+  const clearance = (track: HTMLElement) => {
+    const style = getComputedStyle(track);
+    const px = (name: string) =>
+      Number.parseFloat(style.getPropertyValue(name)) || 0;
+    return px("--overlap") + px("--flare") + px("--space-1");
+  };
+  /** Ends the shuffle, its slide gone, the stack ranked for `chosen`. */
+  function settleShuffle(
     track: HTMLElement,
     items: HTMLElement[],
-    from: number[],
-    to: number[],
-    f: number
+    chosen: number,
+    how: "finish" | "cancel"
   ) {
-    const cuts = items.map(() => [0, 0]);
-    /* Which of each tab's sides stands under its neighbour's card now. */
-    const under = items.map(() => [false, false]);
-    /* How far each seam beside a tab stands between the two tabs' edges,
-       for both tabs alike: 0 on either edge, 1 half way. */
-    const glides = items.map(() => [0, 0]);
-    for (let i = 0; i < items.length - 1; i += 1) {
-      const left = items[i];
-      const right = items[i + 1];
-      const q = from[i] + (to[i] - from[i]) * f;
-      seamAt.set(left, { right, q });
-      const glide = Math.round(2 * Math.min(q, 1 - q) * 1000) / 1000;
-      glides[i][1] = glide;
-      glides[i + 1][0] = glide;
-      if ((rankNow.get(left) ?? 0) > (rankNow.get(right) ?? 0)) {
-        cuts[i][1] = q;
-        under[i + 1][0] = true;
-      } else {
-        cuts[i + 1][0] = 1 - q;
-        under[i][1] = true;
-      }
+    const was = shuffle;
+    if (!was) {
+      return;
     }
-    items.forEach((item, i) => {
-      const [start, end] = cuts[i];
-      const [startUnder, endUnder] = under[i];
-      const [glideStart, glideEnd] = glides[i];
-      const key = `${start} ${end} ${startUnder} ${endUnder} ${glideStart} ${glideEnd}`;
-      if (cutNow.get(item) !== key) {
-        cutNow.set(item, key);
-        const laid = laidOf(item, track);
-        laid.style.setProperty("--cut-start", String(start));
-        laid.style.setProperty("--cut-end", String(end));
-        // The seams' glide (`--glide-start`, `--glide-end`), on the tab in
-        // front and the one behind alike, so a host can ease what meets
-        // at the handover through it on both tabs with no step (PaneTabs'
-        // seam sides meet at one strength there).
-        laid.style.setProperty("--glide-start", String(glideStart));
-        laid.style.setProperty("--glide-end", String(glideEnd));
-        // A side under a neighbour (1, else 0) draws no foot where a host
-        // paints on it: the card over it covers it, but on a switch the
-        // card is a compositor layer whose foot row is filtered half
-        // clear, and a rim's foot under it showed through on the shelf.
-        laid.style.setProperty("--under-start", startUnder ? "1" : "0");
-        laid.style.setProperty("--under-end", endUnder ? "1" : "0");
-      }
-    });
+    shuffle = null;
+    cancelAnimationFrame(was.frame);
+    if (how === "finish") {
+      was.run.finish();
+    } else {
+      was.run.cancel();
+    }
+    track.removeAttribute("data-shuffling");
+    stack(track, items, chosen);
   }
+  /**
+   * The tab at `to` slides out from under its neighbour toward `from` and
+   * back, coming in front at the furthest point. Started playing, or held
+   * (`paused`) for a gesture to place.
+   */
+  function startShuffle(
+    track: HTMLElement,
+    items: HTMLElement[],
+    from: number,
+    to: number,
+    paused: boolean
+  ) {
+    const mover = items[to];
+    if (!mover) {
+      return;
+    }
+    stack(track, items, from);
+    const out = clearance(track) * Math.sign(to - from);
+    const { duration, easing } = timing(track);
+    const run = laidOf(mover, track).animate(
+      [
+        { translate: "0px 0px", easing },
+        { translate: `${out}px 0px`, easing, offset: 0.5 },
+        { translate: "0px 0px" },
+      ],
+      { id: SHUFFLE, duration }
+    );
+    if (paused) {
+      run.pause();
+    }
+    track.toggleAttribute("data-shuffling", true);
+    const now = { run, from, to, frame: 0, swapped: false, held: paused };
+    shuffle = now;
+    const step = () => {
+      if (shuffle !== now) {
+        return;
+      }
+      const at = Number(run.currentTime ?? 0) / duration;
+      const past = at >= 0.5;
+      if (past !== now.swapped) {
+        now.swapped = past;
+        stack(track, items, past ? to : from);
+      }
+      if (run.playState === "finished") {
+        settleShuffle(track, items, to, "finish");
+        return;
+      }
+      now.frame = requestAnimationFrame(step);
+    };
+    now.frame = requestAnimationFrame(step);
+  }
+  /** The choice the stack was last ranked for, at rest. */
+  let shown: number | null = null;
   $effect(() => {
     const track = node;
     const { items } = rects;
     const chosen = list.optimisticIndex ?? -1;
     const { travel } = tabs;
+    const lift = lifted;
     if (!track?.closest('[data-variant="folder"]')) {
       return;
     }
-    const toward = travel ? tabs.order.indexOf(travel.toward) : -1;
-    const f = travel ? Math.min(1, Math.max(0, travel.fraction)) : 0;
-    /** How far back a tab stands once the switch lands, or as the gesture holds it. */
-    const target = (i: number) => {
-      let pick = i === chosen ? 1 : 0;
-      if (toward >= 0 && toward !== chosen) {
-        pick += ((i === toward ? 1 : 0) - pick) * f;
-      }
-      return 1 - pick;
-    };
-    if (travel) {
-      // The seams glide by the gesture's fraction, from where they rest
-      // with the choice where it is to where they would with it landed.
-      const at = (pick: number) => (_: HTMLElement, i: number) =>
-        i === pick ? 0 : 1;
-      const restFrom = seamsAtRest(items, ranksBy(items, at(chosen), chosen));
-      const restTo =
-        toward >= 0
-          ? seamsAtRest(items, ranksBy(items, at(toward), toward))
-          : restFrom;
-      for (const [i, item] of items.entries()) {
-        depthNow.set(item, target(i));
-      }
-      rank(track, items, toward >= 0 && f > 0.5 ? toward : chosen);
-      placeSeams(track, items, restFrom, restTo, f);
-      return;
-    }
-    const from = items.map((item, i) => depthNow.get(item) ?? target(i));
-    // Where the seams stand before the switch moves anything: read before
-    // the stack is ranked for it.
-    const seamsFrom = seamsNow(
-      items,
-      ranksBy(items, (item, i) => from[i], chosen)
-    );
-    const seamsTo = seamsAtRest(
-      items,
-      ranksBy(items, (_, i) => target(i), chosen)
-    );
-    for (const [i, item] of items.entries()) {
-      depthNow.set(item, from[i]);
-    }
-    rank(track, items, chosen);
-    placeSeams(track, items, seamsFrom, seamsTo, 0);
-    // While a switch runs, what a host draws from the depths follows them
-    // frame by frame and eases nothing of its own (`data-switching`).
-    track.toggleAttribute("data-switching", true);
-    // Read in the next frame's callbacks, where the frame lays the page out
-    // anyway, once the switch's transitions have started.
-    let frame = requestAnimationFrame(function step() {
-      const p = switchProgress(items);
-      items.forEach((item, i) => {
-        depthNow.set(item, from[i] + (target(i) - from[i]) * p);
-      });
-      rank(track, items, chosen);
-      placeSeams(track, items, seamsFrom, seamsTo, p);
-      if (p < 1) {
-        frame = requestAnimationFrame(step);
+    untrack(() => {
+      const toward = travel ? tabs.order.indexOf(travel.toward) : -1;
+      if (travel && toward >= 0 && chosen >= 0 && toward !== chosen) {
+        follow(track, items, chosen, toward, travel.fraction);
       } else {
-        // A frame after the last depths land, so the style pass that takes
-        // them still eases nothing (a host's own easing, back on with the
-        // attribute gone, eased that last step instead).
-        frame = requestAnimationFrame(() => {
-          track.toggleAttribute("data-switching", false);
-        });
+        land(track, items, chosen, lift === null);
       }
     });
-    return () => cancelAnimationFrame(frame);
+  });
+  /** A gesture places the shuffle toward the tab it heads to, by its fraction. */
+  function follow(
+    track: HTMLElement,
+    items: HTMLElement[],
+    chosen: number,
+    toward: number,
+    fraction: number
+  ) {
+    if (!(shuffle?.held && shuffle.from === chosen && shuffle.to === toward)) {
+      settleShuffle(track, items, chosen, "cancel");
+      startShuffle(track, items, chosen, toward, true);
+    }
+    const run = shuffle?.run;
+    if (run) {
+      run.currentTime =
+        Math.min(1, Math.max(0, fraction)) * timing(track).duration;
+    }
+  }
+  /**
+   * The choice where it now stands: a gesture let go (landed on its tab, or
+   * back where it began), a choice that shuffles to it, or the stack ranked
+   * for it at once.
+   */
+  function land(
+    track: HTMLElement,
+    items: HTMLElement[],
+    chosen: number,
+    shuffles: boolean
+  ) {
+    if (shuffle?.held) {
+      settleShuffle(
+        track,
+        items,
+        chosen,
+        chosen === shuffle.to ? "finish" : "cancel"
+      );
+    } else if (
+      shuffles &&
+      shown !== null &&
+      shown >= 0 &&
+      chosen >= 0 &&
+      shown !== chosen &&
+      motionOk.current
+    ) {
+      settleShuffle(track, items, shown, "finish");
+      startShuffle(track, items, shown, chosen, false);
+    } else if (!shuffle) {
+      stack(track, items, chosen);
+    }
+    shown = chosen;
+  }
+  /** A drag's lift (`data-lifted` on a tab's box), heard as it comes and goes. */
+  $effect(() => {
+    const track = node;
+    if (!track) {
+      return;
+    }
+    const read = () => {
+      lifted = track.querySelector<HTMLElement>(":scope > [data-lifted]");
+    };
+    const watch = new MutationObserver(read);
+    watch.observe(track, {
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-lifted"],
+    });
+    return () => watch.disconnect();
+  });
+  $effect(() => () => {
+    if (shuffle) {
+      cancelAnimationFrame(shuffle.frame);
+      shuffle.run.cancel();
+      shuffle = null;
+    }
   });
 
   const selectedRect = $derived(rects.at(list.optimisticIndex));
@@ -557,19 +550,17 @@
       lastChosen = now;
     });
   });
-  /* A switch lands, on every track, once the sheets' fade has run its
-     course (`switchProgress`; 1 at once on a track that draws no sheets):
-     the tab it left is no longer drawn chosen, so the edges' fades stop
-     standing aside for it. Not under a gesture, whose landing is the
-     gesture's release. */
+  /* A switch lands, on every track, once its shuffle has run its course (at
+     once on a track that draws no folder tabs): the tab it left is no
+     longer drawn chosen, so the edges' fades stop standing aside for it.
+     Not under a gesture, whose landing is the gesture's release. */
   $effect(() => {
-    const { items } = rects;
     const { travel } = tabs;
     if (list.optimisticIndex === null || travel) {
       return;
     }
     let frame = requestAnimationFrame(function step() {
-      if (switchProgress(items) < 1) {
+      if (shuffle) {
         frame = requestAnimationFrame(step);
         return;
       }
@@ -747,6 +738,7 @@
     scrollable && "scrollable kit-edge-fade",
     className
   )}
+  data-overflows={overflows ? "" : undefined}
   data-ride={ride ? "" : undefined}
   {onfocusin}
   {onfocusout}
@@ -871,35 +863,32 @@
     padding-block-end: 0;
     border-radius: 0;
     background: none;
-    /* The tabs' layers meet in this one stack (the script above), kept in
-       the track. */
+    /* The tabs' stacks meet in this one (the script above), kept in the
+       track. */
     isolation: isolate;
-    /* Folder tabs in depth (owner: the chosen tab "approaches from the
-       horizon when it's selected, while the others recede and fold
-       neatly"). Every tab is hinged on its foot, the shelf's line: the
-       chosen one stands upright, every other leans back `--lean` (TabItem),
-       all one step back. The sides of every outline (card, sheet, a host's
-       rim) bring their top corners in by `--slope-start` and `--slope-end`
-       from the foot (the owner's pick: 1px and 0px). A choice travels over
-       `--choose-dur` on `--choose-ease`, every part of it together (the
-       owner's pick, "Slow · 400ms"; DESIGN.md, Folder tabs). */
-    --lean: 18deg;
-    /* How much of its lean a receded tab gives up under a fine pointer. */
-    --lean-lift: 0.6;
+    /* The sides of every outline bring their top corners in by
+       `--slope-start` and `--slope-end` from the foot (the owner's pick:
+       1px and 0px). A choice travels over `--choose-dur` on
+       `--choose-ease`, every part of it together (the owner's pick, "Slow ·
+       400ms"; DESIGN.md, Folder tabs). */
     --slope-start: 1px;
     --slope-end: 0px;
-    /* How far a tab's side stands in at most where it draws a seam that
-       is gliding (`--cut-start`, `--cut-end`, the script above): the
-       overlap, less the stroke a host draws on the outline (PaneTabs). */
-    --seam-tuck: calc(var(--overlap) - var(--seam-stroke, 0px));
     --choose-dur: var(--dur-settle);
     --choose-ease: var(--ease-crossfade);
+
+    /* While a shuffle runs on a track with nothing past its ends, the tab
+       sliding out past the first or last tab is drawn whole, not cut at
+       the track's box; a track that scrolls keeps its clip, its ends faded. */
+    &.scrollable[data-shuffling]:not([data-overflows]) {
+      overflow: visible;
+    }
   }
 
   /* Each folder tab, or the host's box round it, steps back over its
-     leading neighbour by the overlap, and makes no stack of its own: its
-     layers take their rank in the track's (`--z`, the script). The track's
-     own layers are not tabs: the highlight's ghost and pills (absolutely
+     leading neighbour by the overlap, and is one stack at its rank (`--z`,
+     the script; `--z-rest` until the track has ranked it): its sheet, rim
+     and everything written on it rise and fall together. The track's own
+     layers are not tabs: the highlight's ghost and pills (absolutely
      placed, app.css .kit-highlight) taken into the flow with the overlap's
      margin pulled every tab 16px back past the track's leading flare
      room. */
@@ -907,6 +896,8 @@
     .ff-tabs-list
     > :global(:not(.segment, .ring, .kit-ghost, .kit-pill, .kit-pill-trail)) {
     position: relative;
+    z-index: var(--z, var(--z-rest, 1));
+    isolation: isolate;
     margin-inline-start: calc(-1 * var(--overlap));
   }
   /* Placed by `transform`, not `left`/`top`: moving between tabs is then a

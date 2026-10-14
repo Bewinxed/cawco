@@ -140,10 +140,11 @@ function carry(
     return;
   }
   const tabs = tabsOf(track, order);
-  // A slide still playing lands now, so every tab is measured where it rests.
+  // A slide or a switch's shuffle still playing lands now, so every tab is
+  // measured where it rests.
   for (const el of tabs) {
     for (const run of el.getAnimations()) {
-      if (run.id === "tab-slide") {
+      if (run.id === "tab-slide" || run.id === "tab-shuffle") {
         run.finish();
       }
     }
