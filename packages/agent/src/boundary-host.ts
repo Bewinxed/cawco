@@ -484,8 +484,45 @@ interface Sandbox {
   detached?: string;
   readonly guarded: readonly string[];
   readonly inner: number;
-  readonly proc: Subprocess<"ignore", "pipe", "inherit">;
+  readonly proc: Subprocess<"ignore", "pipe", "pipe">;
 }
+
+/** A sandbox that ended before its runner was ready: bwrap's status. */
+interface Unstarted {
+  readonly status: number;
+}
+
+/**
+ * This process's AppArmor label, as the kernel names it; none where AppArmor
+ * is not there.
+ */
+const apparmorLabel = (): string | undefined => {
+  try {
+    return readFileSync("/proc/self/attr/apparmor/current", "utf8").trim();
+  } catch {
+    // No AppArmor here.
+    return undefined;
+  }
+};
+
+/**
+ * Why no sandbox can start here, in this host's words, when this process
+ * already runs inside a bwrap sandbox under Ubuntu's `bwrap-userns-restrict`
+ * profile (/etc/apparmor.d/bwrap-userns-restrict, apparmor 4.1+): "bwrap is
+ * allowed access to user namespaces and capabilities within the user
+ * namespace, but its children do not have capabilities", and its
+ * `unpriv_bwrap` stacks onto every process beneath (`audit deny capability`,
+ * `allow pix /** -> &unpriv_bwrap`). A bwrap started in there makes its user
+ * namespace but is refused the CAP_SYS_ADMIN its mount, pid and net
+ * namespaces need ("No permissions to create a new namespace"): a workspace
+ * boundary cannot start inside another one on such a host.
+ */
+const nestedRefusal = (): string | undefined => {
+  const label = apparmorLabel();
+  return label?.includes("unpriv_bwrap")
+    ? `cawco: this process runs inside another bwrap sandbox (AppArmor ${label}), whose profile denies every capability to what runs beneath it, so the boundary's own bwrap cannot make its namespaces here`
+    : undefined;
+};
 
 // What the runner starts with: nothing of this process's own environment but
 // who the user is. Each command brings its own (the executor's request).
@@ -513,8 +550,14 @@ const runnerEnv = {
  * ready, after `<state>/sandbox` names it; the runner's ready line is passed
  * on only then, so whoever waits for it finds the file. Every line the
  * runner says is passed on.
+ *
+ * What bwrap and srt say on stderr before the runner is ready is passed on
+ * as lines too: sessiond streams a process's stdout alone, and the agent
+ * says why a boundary did not start from the lines it heard (`ready` in
+ * boundary.ts), so a refused sandbox is named with bwrap's own words, not
+ * an exit status alone. After that, stderr is this process's own, as before.
  */
-const startSandbox = async (): Promise<Sandbox | undefined> => {
+const startSandbox = async (): Promise<Sandbox | Unstarted> => {
   makePlaces();
   standIn();
   const protect = toProtect();
@@ -527,11 +570,47 @@ const startSandbox = async (): Promise<Sandbox | undefined> => {
     env: runnerEnv,
     stdin: "ignore",
     stdout: "pipe",
-    stderr: "inherit",
+    stderr: "pipe",
   });
   const outer = proc.pid;
-  const { promise, resolve } = Promise.withResolvers<Sandbox | undefined>();
-  proc.exited.then(() => resolve(undefined));
+  let started = false;
+  const { promise, resolve } = Promise.withResolvers<Sandbox | Unstarted>();
+  // Each of stderr's lines reaches the agent as a line until the runner is
+  // ready: what refused the sandbox is said with it.
+  const stderrDone = (async () => {
+    const decoder = new TextDecoder();
+    let pending = "";
+    for await (const chunk of proc.stderr) {
+      if (started) {
+        process.stderr.write(chunk);
+        continue;
+      }
+      pending += decoder.decode(chunk, { stream: true });
+      let end = pending.indexOf("\n");
+      while (end >= 0) {
+        const line = pending.slice(0, end).trim();
+        pending = pending.slice(end + 1);
+        end = pending.indexOf("\n");
+        if (line) {
+          console.log(line);
+        }
+      }
+    }
+    if (pending.trim()) {
+      console.log(pending.trim());
+    }
+  })();
+  proc.exited.then(async (status) => {
+    if (started) {
+      return;
+    }
+    await stderrDone;
+    const why = nestedRefusal();
+    if (why) {
+      console.log(why);
+    }
+    resolve({ status });
+  });
   (async () => {
     const decoder = new TextDecoder();
     let pending = "";
@@ -567,6 +646,7 @@ const startSandbox = async (): Promise<Sandbox | undefined> => {
           return now && `${now.dev}:${now.ino}` === inode ? [] : [path];
         });
         const sandbox: Sandbox = { proc, inner, guarded };
+        started = true;
         writeStateFileSync(
           guardedFile,
           guarded.map((path) => `${mountinfoSpelling(path)}\n`).join("")
@@ -642,11 +722,12 @@ for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
 
 for (;;) {
   // biome-ignore lint/performance/noAwaitInLoops: one sandbox at a time, the next only after the last is gone
-  current = await startSandbox();
+  const sandbox = await startSandbox();
+  current = "proc" in sandbox ? sandbox : undefined;
   if (current) {
     watchGuarded(current);
   }
-  const status = current ? await current.proc.exited : 1;
+  const status = "proc" in sandbox ? await sandbox.proc.exited : sandbox.status;
   const lost = current?.detached;
   SandboxManager.cleanupAfterCommand();
   if (stopping || !lost) {
