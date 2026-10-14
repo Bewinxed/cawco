@@ -36,6 +36,7 @@
   } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
   import { decideAction } from "../client.svelte";
+  import { failureWords as message } from "../hub-read";
   import { rowHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
   import {
@@ -81,8 +82,6 @@
     onopen: (id: string) => void;
   } = $props();
 
-  const message = (error: unknown) =>
-    error instanceof Error ? error.message : String(error);
   const ago = (at: number) => formatDistanceToNow(new Date(at));
 
   // --- the reasons ---------------------------------------------------------------

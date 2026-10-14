@@ -11,6 +11,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
+  import { failureWords } from "../hub-read";
   import MessageBody from "../MessageBody.svelte";
   import {
     commentTask,
@@ -58,7 +59,7 @@
       onchanged(await commentTask(projectId, task.id, text));
       draft = "";
     } catch (error) {
-      commentProblem = error instanceof Error ? error.message : String(error);
+      commentProblem = failureWords(error);
     } finally {
       saving = false;
     }
@@ -82,8 +83,7 @@
       })
       .catch((error: unknown) => {
         if (!gone) {
-          historyProblem =
-            error instanceof Error ? error.message : String(error);
+          historyProblem = failureWords(error);
         }
       });
     return () => {

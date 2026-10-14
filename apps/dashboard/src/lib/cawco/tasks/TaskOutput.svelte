@@ -15,6 +15,7 @@
   import { deliverableKind, type PostFile, parsePost } from "@cawco/core";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconArrowUpRight, IconDocument } from "#lib/icons.js";
+  import { failureWords } from "../hub-read";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
   import MessageBody from "../MessageBody.svelte";
   import { folderRawHref, readFolderFile } from "../project-tasks";
@@ -74,7 +75,7 @@
       })
       .catch((error: unknown) => {
         if (!gone) {
-          problem = error instanceof Error ? error.message : String(error);
+          problem = failureWords(error);
         }
       });
     return () => {

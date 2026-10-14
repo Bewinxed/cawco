@@ -97,7 +97,7 @@
       {#if post.community}
         <div class="fact">
           <dt>Community</dt>
-          <dd>{post.community}</dd>
+          <dd class="name">{post.community}</dd>
         </div>
       {/if}
       {#if media.length > 0}
@@ -127,7 +127,7 @@
       {:else if post.media}
         <div class="fact">
           <dt>Media plan</dt>
-          <dd>{post.media.plan}</dd>
+          <dd class="sentence">{post.media.plan}</dd>
         </div>
       {/if}
     </dl>
@@ -242,10 +242,19 @@
     font: var(--type-meta);
     color: var(--ink-muted);
   }
+  /* What the reviewer reads, by its role (The Role, Not Size Rule): the
+     community is a name, the media plan a sentence. */
   dd {
     margin: 0;
     font: var(--type-meta);
     color: var(--ink-strong);
+  }
+  dd.name {
+    font: var(--type-label);
+  }
+  dd.sentence {
+    font: var(--type-body);
+    text-wrap: pretty;
   }
   .media {
     display: flex;
