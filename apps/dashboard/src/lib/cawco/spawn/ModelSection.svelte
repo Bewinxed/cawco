@@ -31,6 +31,7 @@
     motionOk,
     pinned,
   } from "../motion/curves.svelte";
+  import { unfold } from "../motion/fold.svelte";
   import { ListSwap } from "../motion/list-swap.svelte";
   import Rail from "../motion/Rail.svelte";
   import AccountChip, { type AccountTool } from "./AccountChip.svelte";
@@ -158,6 +159,41 @@
     }
     const glide = send(node, TOOLS);
     return () => lifting(node, pinned(node), glide());
+  };
+  /**
+   * The chips' line, on a line of its own under the name (a phone), folds
+   * open and shut from its drawn height (motion/fold `unfold`): the option
+   * leaving and the one picked change height together, so no row between
+   * them steps by a line (DESIGN, The Interruptible Rule). Only the fold's
+   * height and edges: its clip would cut the chips gliding in through the
+   * line, and its fade would fade them twice. Beside the name the line is
+   * the row's own, and has no height of its own to fold.
+   */
+  const FOLDS = /^(height|padding|border|margin)/;
+  const line = (
+    node: HTMLElement,
+    _: unknown,
+    options: { direction?: "in" | "out" | "both" }
+  ) => {
+    if (node.offsetTop === 0) {
+      return { duration: 0 };
+    }
+    const fold = unfold(node, {}, options);
+    const { css } = fold;
+    // A whole line to itself while it folds: emptied of its chips as they
+    // glide away, it would fit beside the name again and leave its line at once.
+    return {
+      ...fold,
+      css:
+        css &&
+        ((t: number, u: number) =>
+          [
+            "flex-basis: 100%",
+            ...css(t, u)
+              .split("; ")
+              .filter((one) => FOLDS.test(one)),
+          ].join("; ")),
+    };
   };
 
   $effect(() => {
@@ -419,8 +455,12 @@
               {@render rowBody(entry, reason)}
             </button>
             {#if picked && tools}
-              <div class="tools" in:toolsIn out:toolsOut>
-                <ToolChips {tools} />
+              <!-- The chips' line folds open and shut under the name, so the
+                   rows after it glide; the chips glide between rows in it. -->
+              <div class="tools" in:line out:line>
+                <div class="chips" in:toolsIn out:toolsOut>
+                  <ToolChips {tools} />
+                </div>
               </div>
             {/if}
           </div>
@@ -630,9 +670,14 @@
     display: flex;
     flex: none;
     align-items: center;
-    gap: 4px;
+    justify-content: flex-end;
     height: 44px;
     padding-inline: 4px 6px;
+  }
+  .chips {
+    display: flex;
+    align-items: center;
+    gap: 4px;
   }
   .tools :global(.ns-chip-btn.tool) {
     height: 28px;

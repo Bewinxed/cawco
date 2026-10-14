@@ -28,6 +28,7 @@
 // biome-ignore-all lint/performance/noAwaitInLoops: one hand, one step at a time.
 import type { CDPSession, Page } from "playwright-core";
 import { ACCOUNT, MACHINE, until } from "../../../scratch-fleet";
+import { Clock } from "../../anim";
 import { type Box, overlap } from "../../geom";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../../kit";
 import { B, furnishAccount } from "../account-move";
@@ -441,8 +442,92 @@ async function newSession(kit: Kit, page: Page, hand: Hand, view: string) {
       Math.abs(read.fill.bottom - read.option.bottom) <= 1,
     read.fill ? `fill ${fmt(read.fill)}, option ${fmt(read.option)}` : "no fill"
   );
+  if (view === "phone") {
+    await glide(kit, page, hand, name);
+  }
   await page.keyboard.press("Escape");
   await settle(page, 300);
+}
+
+/**
+ * A pick two options down, on a phone, where the chips stand on a line of
+ * their own: the line leaving folds shut as the one arriving folds open, so
+ * the option between them glides up by a line, never steps (DESIGN, The
+ * Interruptible Rule). The clock holds every run the press starts in the
+ * list and seeks it; the option's top is read at 0, ¼, ½, ¾ and 1.
+ */
+async function glide(kit: Kit, page: Page, hand: Hand, name: string) {
+  const LIST = "[role='listbox']";
+  // The first option and the one two below it, the one between marked.
+  const ends = await page.evaluate((list) => {
+    const options = [
+      ...document.querySelectorAll<HTMLElement>(`${list} .option`),
+    ];
+    const model = (i: number) =>
+      options[i]?.querySelector<HTMLElement>("[role='option']:not([disabled])")
+        ?.dataset.model ?? null;
+    options[1]?.setAttribute("data-probe-between", "");
+    return { first: model(0), target: model(2) };
+  }, LIST);
+  const { first, target } = ends;
+  if (!(first && target)) {
+    kit.check(`${name}: three options to pick between`, false);
+    return;
+  }
+  const inView = async (model: string) => {
+    const option = `${LIST} [data-model="${model}"]`;
+    await page.locator(option).scrollIntoViewIfNeeded();
+    await settle(page, 200);
+    return centre(page, option);
+  };
+  const firstAt = await inView(first);
+  await hand.press(firstAt.x, firstAt.y);
+  await settle(page, 400);
+  const at = await inView(target);
+  /** The option between: its top on the screen, and the list's scroll. */
+  const between = () =>
+    page.evaluate(
+      (list) => ({
+        top:
+          document
+            .querySelector("[data-probe-between]")
+            ?.getBoundingClientRect().top ?? Number.NaN,
+        scroll: document.querySelector(list)?.scrollTop ?? Number.NaN,
+      }),
+      LIST
+    );
+  const before = await between();
+  const clock = await Clock.on(page);
+  await clock.catchRuns(() => hand.press(at.x, at.y), LIST);
+  // The option between moves with the line leaving above it, whose fold
+  // runs on --dur-exit (The Fast Exit Rule): the scrub is that fold's clock.
+  const exit = await page.evaluate(() => {
+    const value = getComputedStyle(document.documentElement)
+      .getPropertyValue("--dur-exit")
+      .trim();
+    const n = Number.parseFloat(value);
+    return value.endsWith("ms") ? n : n * 1000;
+  });
+  const reads: { top: number; scroll: number }[] = [];
+  for (const fraction of [0, 0.25, 0.5, 0.75, 1]) {
+    await clock.seek((fraction * exit) / clock.length());
+    reads.push(await between());
+  }
+  await clock.release();
+  await settle(page, 300);
+  const tops = reads.map((read) => read.top);
+  const [start = 0, , half = 0, , end = 0] = tops;
+  const steps = tops.slice(1).map((top, i) => top - (tops[i] ?? 0));
+  kit.check(
+    `${name}: picked two down, the option between glides up a line, never a step (top before the press, then at 0, ¼, ½, ¾, 1)`,
+    Math.abs(start - before.top) <= 0.5 &&
+      Math.abs(start - end - 44) <= 1 &&
+      half < start - 1 &&
+      half > end + 1 &&
+      steps.every((step) => step <= 0.5 && step > -40) &&
+      reads.every((read) => read.scroll === before.scroll),
+    `${before.top.toFixed(1)} | ${tops.map((top) => top.toFixed(1)).join(" → ")}, scroll ${before.scroll}`
+  );
 }
 
 const spec: Spec = {
