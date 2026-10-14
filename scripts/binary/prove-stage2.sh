@@ -96,8 +96,13 @@ mkdir -p "$out/config/containers"
 printf '[containers]\nkeyring = false\n' > "$out/config/containers/containers.conf"
 # Rootless networking cannot use a run folder under the home directory on every host.
 rr="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/cawco-proof-stage2-$$"
-mkdir -p "$rr"
-export P="podman --root $out/storage --runroot $rr --storage-driver vfs"
+# Its own libpod tmp dir too: `system reset` in cleanup deletes the tmp dir, and without
+# --tmpdir that is $XDG_RUNTIME_DIR/libpod/tmp, shared by every podman on the host. Deleting
+# it took the exit files of containers other podmans were running (prove-stage1's
+# "install systemd in the systemd image" got 127 with no output, nightly fa3bfcb84).
+lt="$rr/libpod-tmp"
+mkdir -p "$rr" "$lt"
+export P="podman --root $out/storage --runroot $rr --tmpdir $lt --storage-driver vfs"
 export out bins here
 export prefix="cawco-binary-stage2-$$"
 export net="$prefix-net" hubc="$prefix-hub" joinerc="$prefix-joiner" releasec="$prefix-release" freshc="$prefix-fresh" hub2c="$prefix-hub2"

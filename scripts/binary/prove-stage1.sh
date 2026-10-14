@@ -14,6 +14,7 @@ cleanup(){
   (( ${#p[@]} )) || return 0
   "${p[@]}" rm -f "$prefix-setup" "$prefix-clean" "$prefix-systemd-setup" "$prefix-systemd" >/dev/null 2>&1 || true
   "${p[@]}" rmi -f "localhost/$prefix-clean:latest" "localhost/$prefix-systemd:latest" "$BASE_LOCAL" >/dev/null 2>&1 || true
+  rm -rf "$lt" || true
 }
 finish(){
   local rc=$?
@@ -41,7 +42,14 @@ mkdir -p "$out/tmp" "$out/config" "$out/cache" "$out/run"
 export TMPDIR="$out/tmp" XDG_CONFIG_HOME="$out/config" XDG_CACHE_HOME="$out/cache"
 export REGISTRY_AUTH_FILE="$out/config/auth.json"
 printf '{"auths":{}}\n' > "$REGISTRY_AUTH_FILE"
-p=(podman --root "$out/storage" --runroot "$out/run" --storage-driver vfs)
+# The proof's own libpod tmp dir, where conmon writes each container's exit file.
+# Without --tmpdir every podman on the host shares $XDG_RUNTIME_DIR/libpod/tmp, and
+# another one's `system reset` (prove-stage2's cleanup) deletes it whole: a container
+# that exits then has no exit file, and `podman run` reports 127 and prints nothing
+# (nightly fa3bfcb84, "install systemd in the systemd image", log ending at apt's last line).
+lt="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/cawco-proof-stage1-$$"
+mkdir -p "$lt"
+p=(podman --root "$out/storage" --runroot "$out/run" --tmpdir "$lt" --storage-driver vfs)
 run_step "seed the pinned base image from the host's store" "$out/image.log" seed_base_image "$out/tmp/base-image.tar" "${p[@]}"
 run_step "install packages in the clean image" "$out/packages-setup.log" "${p[@]}" run --name "$prefix-setup" "$BASE_LOCAL" bash -c 'apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*'
 run_step "commit the clean image" "$out/clean-commit.log" "${p[@]}" commit "$prefix-setup" "localhost/$prefix-clean:latest"
