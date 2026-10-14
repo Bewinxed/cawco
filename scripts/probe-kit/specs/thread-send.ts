@@ -28,6 +28,10 @@ import { type Kit, open, type Spec } from "../kit";
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 
+/** The thread's note for a wake that did not go out: what, why, the words kept, the way back. */
+const NOT_WOKEN =
+  /^noted: Caw hasn't read your message: .+\. Your message is kept in this thread\. Write again to wake him with it\.$/;
+
 /** The hub's lines about Caw and the limit, for a failed check to show. */
 const LIMIT_LINE = /\[at-limit\]|\[caw\]|limit/;
 
@@ -109,54 +113,75 @@ const run = async (kit: Kit) => {
     "(b) the first message is in its thread",
     await inThread(threadId, "FIRST-WORDS hello")
   );
-  const leadId = await until(
-    "Caw's session",
-    () =>
-      fleet.query<{ lead_instance_id: string | null }>(
-        "SELECT lead_instance_id FROM projects WHERE id = ?",
-        project.id
-      )[0]?.lead_instance_id ?? "",
+  // His first turn answered, or the thread's word that his wake did not go
+  // out: inside a CawCo workspace his place's boundary refuses his start
+  // (caw-threads.ts), and that refusal is the thread's to say.
+  const woke = await until(
+    "Caw's first turn answered, or the thread saying he was not woken",
+    async () => {
+      if (fleet.seen.some((one) => one.all.includes("FIRST-WORDS"))) {
+        return "answered";
+      }
+      const read = await fleet.api<{
+        messages: { body?: string; noteTitle?: string }[];
+      }>(`/api/projects/${project.id}/threads/${threadId}`);
+      const note = read.messages.find(
+        (one) => one.noteTitle === "Caw · not woken"
+      );
+      return note ? `noted: ${note.body ?? ""}` : "";
+    },
     Boolean,
     180_000
   );
-  await until(
-    "Caw's first turn answered",
-    () => fleet.seen.some((one) => one.all.includes("FIRST-WORDS")),
-    Boolean,
-    120_000
-  );
+  if (woke !== "answered") {
+    kit.check(
+      "(b) a wake that did not go out is said in the thread: what, why, the words kept, the way back",
+      NOT_WOKEN.test(woke),
+      woke
+    );
+    console.log(
+      "… Caw cannot start inside this workspace's boundary: the at-limit half of (b) runs on a host (caw-threads.ts says the same)."
+    );
+  }
+  const leadId =
+    fleet.query<{ lead_instance_id: string | null }>(
+      "SELECT lead_instance_id FROM projects WHERE id = ?",
+      project.id
+    )[0]?.lead_instance_id ?? "";
 
   // (b) Caw's account at its limit: his turn is refused and he is held.
-  limitedUntil = Date.now() + 4 * 60 * 60_000;
-  await post(`/api/projects/${project.id}/threads/${threadId}/messages`, {
-    body: "LIMIT-WAKE",
-  });
-  const held = await until(
-    "Caw held at his account's limit",
-    () =>
-      fleet.query<{ instance_id: string }>(
-        "SELECT instance_id FROM limit_holds WHERE instance_id = ?",
-        leadId
-      )[0],
-    Boolean,
-    120_000
-  ).catch(() => undefined);
-  kit.check("(b) Caw's session is held at his account's limit", !!held);
-  if (!held) {
-    console.log(
-      (await fleet.logs("hub"))
-        .split("\n")
-        .filter((one) => one.includes(leadId) || LIMIT_LINE.test(one))
-        .slice(-40)
-        .join("\n")
-    );
+  if (woke === "answered") {
+    limitedUntil = Date.now() + 4 * 60 * 60_000;
+    await post(`/api/projects/${project.id}/threads/${threadId}/messages`, {
+      body: "LIMIT-WAKE",
+    });
+    const held = await until(
+      "Caw held at his account's limit",
+      () =>
+        fleet.query<{ instance_id: string }>(
+          "SELECT instance_id FROM limit_holds WHERE instance_id = ?",
+          leadId
+        )[0],
+      Boolean,
+      120_000
+    ).catch(() => undefined);
+    kit.check("(b) Caw's session is held at his account's limit", !!held);
+    if (!held) {
+      console.log(
+        (await fleet.logs("hub"))
+          .split("\n")
+          .filter((one) => one.includes(leadId) || LIMIT_LINE.test(one))
+          .slice(-40)
+          .join("\n")
+      );
+    }
   }
   const atLimit = await post(
     `/api/projects/${project.id}/threads/${threadId}/messages`,
     { body: "WHILE-AT-LIMIT" }
   );
   kit.check(
-    `(b) a message while Caw's account is at its limit answers ${atLimit.status} in ${atLimit.ms} ms`,
+    `(b) a later message answers ${atLimit.status} in ${atLimit.ms} ms${woke === "answered" ? ", Caw held at his limit" : ", Caw's start refused"}`,
     atLimit.status >= 200 && atLimit.status < 300 && atLimit.ms < 2000
   );
   kit.check(
