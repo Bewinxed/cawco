@@ -600,9 +600,14 @@ xcrun simctl install ${udid} "${app}"`);
     });
   };
   /** One finger from `from` to `to` over `seconds`, the runner's `POST /swipeV2`. */
-  const drag = (from: Point, to: Point, seconds: number) => {
+  const drag = (
+    from: Point,
+    to: Point,
+    seconds: number,
+    what = "the grabber, from the newest header"
+  ) => {
     console.log(
-      `  drag from ${from.x},${from.y} to ${to.x},${to.y} over ${seconds}s (the grabber, from the newest header)`
+      `  drag from ${from.x},${from.y} to ${to.x},${to.y} over ${seconds}s (${what})`
     );
     return runner("swipeV2", {
       startX: Math.round(from.x),
@@ -1109,9 +1114,29 @@ xcrun simctl install ${udid} "${app}"`);
   // The card as it stands once the sheet has gone and it has laid out: its newest line.
   await pause(1200);
   card = cardLast();
-  if (card?.number !== 1 || !card.resolve) {
+  // On the phone the card is at most 70% of the well and scrolls what it
+  // holds past that: its footer can stand under its own lower edge (Resolve
+  // at 274,748 under a card ending at 734). A person scrolls the card to
+  // reach it; so does the probe, a drag inside the card, then its newest line.
+  const box = cardFrameLast();
+  if (card?.resolve && box && card.resolve.y > box.y + box.height - 8) {
+    await drag(
+      { x: box.x + box.width / 2, y: box.y + box.height - 12 },
+      { x: box.x + box.width / 2, y: box.y + 12 },
+      0.6,
+      "inside pin 1's card, scrolling its footer into view"
+    );
+    await pause(1200);
+    card = cardLast();
+  }
+  const cardNow = cardFrameLast();
+  if (
+    card?.number !== 1 ||
+    !card.resolve ||
+    (cardNow && card.resolve.y > cardNow.y + cardNow.height)
+  ) {
     throw new Error(
-      `no card for pin 1 up after the sheet went (newest card line: ${seen.findLast((l) => cardOf(l) !== undefined) ?? "none"})`
+      `no Resolve in view on pin 1's card after the sheet went (card at ${cardNow ? frameText(cardNow) : "unlogged"}; newest card line: ${seen.findLast((l) => cardOf(l) !== undefined) ?? "none"})`
     );
   }
   mark = seen.length;
