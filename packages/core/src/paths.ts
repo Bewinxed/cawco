@@ -725,6 +725,55 @@ export const hostPlaywrightBrowsers = (): string =>
         "ms-playwright"
       );
 
+/**
+ * The user's own git config dir, `~/.config/git` (`config`, `ignore`,
+ * `attributes`): every workspace reads it, as it reads `~/.gitconfig`
+ * (workspace-policy.ts `workspacePolicy`).
+ */
+export const userGitConfigDir = (): string => join(homedir(), ".config", "git");
+
+/**
+ * A workspace's own XDG config, data and state homes, in its scratch dir: so
+ * made with it and gone with it (boundary.ts `makeDirs`, `closeBoundary`). A
+ * CLI that writes its own state there as it starts (OpenCode makes
+ * `$XDG_DATA_HOME/opencode/log` at boot) runs inside the boundary, and the
+ * person's real ones (OpenCode's `auth.json`, its `opencode.json`, its
+ * database) stay hidden: the boundary refuses every write under home, which
+ * on macOS failed that start with EEXIST.
+ */
+export const workspaceXdgDirs = (
+  id: string
+): { config: string; data: string; state: string } => {
+  const root = join(workspaceScratchDir(id), "xdg");
+  return {
+    config: join(root, "config"),
+    data: join(root, "data"),
+    state: join(root, "state"),
+  };
+};
+
+/**
+ * The environment every command of workspace `id` runs with for its XDG base
+ * dirs: its own config, data and state homes ({@link workspaceXdgDirs}). The
+ * cache home stays the workspaces' shared one ({@link workspaceCacheEnv}),
+ * where the Apple build root and every tool's cache already are. Two readers
+ * of the host's data home keep reading it, read-only as before: uv's managed
+ * Pythons and its tools (`uv python dir`, `uv tool dir` follow
+ * `XDG_DATA_HOME`), so `uv` finds the interpreters it found before and never
+ * downloads one per workspace. Git's own config dir goes on being read
+ * through a link in the config home (boundary.ts `makeDirs`).
+ */
+export const workspaceXdgEnv = (id: string): Record<string, string> => {
+  const own = workspaceXdgDirs(id);
+  return {
+    XDG_CONFIG_HOME: own.config,
+    XDG_DATA_HOME: own.data,
+    XDG_STATE_HOME: own.state,
+    UV_PYTHON_INSTALL_DIR: join(xdgDataHome(), "uv", "python"),
+    UV_TOOL_DIR: join(xdgDataHome(), "uv", "tools"),
+  };
+};
+
 /** The environment every workspace command runs with, pointing each tool at {@link workspaceCacheDir}. */
 export const workspaceCacheEnv = (): Record<string, string> => {
   const cache = workspaceCacheDir();

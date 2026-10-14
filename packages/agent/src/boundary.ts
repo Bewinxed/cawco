@@ -88,6 +88,7 @@ import {
   linkWorkspaceTmp,
   scratchSocketProblem,
   sessionIdentityDir,
+  userGitConfigDir,
   workspaceAccountsFile,
   workspaceCacheDir,
   workspaceCacheEnv,
@@ -100,6 +101,8 @@ import {
   workspaceStateDir,
   workspacesDir,
   workspaceTmpDir,
+  workspaceXdgDirs,
+  workspaceXdgEnv,
 } from "@cawco/core/paths";
 import {
   commandLine as commandLineOf,
@@ -2735,7 +2738,8 @@ fi`
 
 /**
  * What every command runs with besides its caller's environment: the
- * workspaces' own cache (`workspaceCacheEnv`), its scratch dir as `TMPDIR`
+ * workspaces' own cache (`workspaceCacheEnv`), its own XDG config, data and
+ * state homes (`workspaceXdgEnv`), its scratch dir as `TMPDIR`
  * (by its short name on macOS, `workspaceTmpDir`),
  * the empty git template, gh's empty config dir ({@link ghConfigOf}), git's
  * system config naming gh's helper ({@link gitSystemConfigOf}), the tool and
@@ -2747,6 +2751,7 @@ const commandEnv = (id: string, clone: string): string[] => [
   `unset ${AGENT_SOCKET_ENV.join(" ")}`,
   ...Object.entries({
     ...workspaceCacheEnv(),
+    ...workspaceXdgEnv(id),
     TMPDIR: workspaceTmpDir(id),
     GIT_TEMPLATE_DIR: gitTemplateOf(id),
     GH_CONFIG_DIR: ghConfigOf(id),
@@ -2904,10 +2909,11 @@ exit "$status"
 
 /**
  * The folders a boundary needs before it starts: its state dir, the part of
- * it a command reads (with the empty git template), its scratch dir, and the
- * caches it writes. Never nested in one another (srt #446). A HOME so long
- * that a browser's socket in the scratch dir cannot fit is said in the log:
- * everything else in the workspace still runs.
+ * it a command reads (with the empty git template), its scratch dir with its
+ * XDG homes in it, and the caches it writes. Never nested in one another
+ * (srt #446), but for the XDG homes, which are only the scratch dir's
+ * contents. A HOME so long that a browser's socket in the scratch dir cannot
+ * fit is said in the log: everything else in the workspace still runs.
  */
 const makeDirs = async (id: string): Promise<void> => {
   const tooLong = scratchSocketProblem(id);
@@ -2915,6 +2921,7 @@ const makeDirs = async (id: string): Promise<void> => {
     console.warn(`[workspace] ${id}: ${tooLong}`);
   }
   await mkdir(sessionIdentityDir(), { recursive: true, mode: 0o700 });
+  const xdg = workspaceXdgDirs(id);
   await Promise.all(
     [
       stateDir(id),
@@ -2922,11 +2929,32 @@ const makeDirs = async (id: string): Promise<void> => {
       gitTemplateOf(id),
       ghConfigOf(id),
       scratchOf(id),
+      xdg.config,
+      xdg.data,
+      xdg.state,
       ...workspaceCaches(),
     ].map((path) => mkdir(path, { recursive: true }))
   );
+  await linkGitConfig(xdg.config);
   // Its `TMPDIR`'s short name on macOS, made again after a restart cleared it.
   linkWorkspaceTmp(id);
+};
+
+/**
+ * `<config home>/git`, a link to the user's own git config dir: git reads
+ * `$XDG_CONFIG_HOME/git/config` and `…/ignore` (git-config(1) "FILES",
+ * gitignore(5) `core.excludesFile`), so with the workspace's own config home
+ * it reads the user's, as it did before. A link the workspace replaced is
+ * its own to keep.
+ */
+const linkGitConfig = async (configHome: string): Promise<void> => {
+  try {
+    await symlink(userGitConfigDir(), join(configHome, "git"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
+      throw error;
+    }
+  }
 };
 
 /** How many files {@link ownInodes} copies at once. */
