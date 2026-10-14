@@ -1128,6 +1128,8 @@ async function standUp(
     HOST: "127.0.0.1",
     CAWCO_HUB_URL: `ws://127.0.0.1:${hubPort}/ws`,
     CAWCO_NO_MDNS: "1",
+    // The hub's debug lines, for a spec that reads its log (routine-results 4b).
+    CAWCO_DEBUG: "1",
     CAWCO_MACHINE_ID: MACHINE,
     CAWCO_SESSIOND_ENDPOINT: sessiondSocket,
     ANTHROPIC_BASE_URL: mockBase,

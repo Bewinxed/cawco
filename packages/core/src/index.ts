@@ -1421,6 +1421,12 @@ export const CAWCO_ENV = {
   /** `1` stops the hub advertising itself over mDNS. */
   noMdns: "CAWCO_NO_MDNS",
   /**
+   * `1` turns on the hub's debug log lines: per-frame traces a production
+   * log should not carry (routines.ts's run sessions' frames). Scratch
+   * fleets run their hub with it on.
+   */
+  debug: "CAWCO_DEBUG",
+  /**
    * Overrides the socket `sessiondEndpoint()` derives — the daemon listens on
    * it and every client dials it, so both ends must read the same variable.
    */

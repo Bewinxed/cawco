@@ -7,6 +7,9 @@ export const HUB_VERSION = standalone ? runtimeVersion : "0.1.0";
 
 export const HUB_PORT = Number(readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT);
 
+/** Whether the hub writes its debug lines (`CAWCO_DEBUG=1`). */
+export const HUB_DEBUG = readEnv(CAWCO_ENV.debug) === "1";
+
 /** The address the hub and its preview listeners bind (`HOST`): every interface unless set. */
 export const BIND_HOST = process.env.HOST ?? "0.0.0.0";
 

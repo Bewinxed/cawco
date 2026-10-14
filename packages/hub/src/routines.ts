@@ -72,6 +72,7 @@ import { Elysia, status, t } from "elysia";
 import { z } from "zod";
 import { tool } from "./admin-tools";
 import type { Caw } from "./caw";
+import { HUB_DEBUG } from "./config";
 import type { DbShape, ProjectRow, SentMessageRow, WorkItemRow } from "./db";
 import type { Decide, RoutineRow, RoutineRunRow } from "./db/routines";
 import type { RoutineOutcome, RoutineTarget, WorkBudget } from "./db/schema";
@@ -1219,7 +1220,7 @@ export const createRoutines = ({
     if (!(watched || lead)) {
       return;
     }
-    if (watched) {
+    if (watched && HUB_DEBUG) {
       debugFrame(instanceId, neutral);
     }
     if (neutral.type === "result") {
@@ -1232,7 +1233,7 @@ export const createRoutines = ({
   };
 
   /**
-   * DEBUG (routine-results 4b on the host): each frame a run's session's
+   * A debug line (`CAWCO_DEBUG=1`, config.ts `HUB_DEBUG`): each frame a run's session's
    * stream admits, its blocks in order, and each call's name and `run`.
    */
   const debugFrame = (instanceId: string, neutral: NeutralMessage): void => {
@@ -1308,9 +1309,11 @@ export const createRoutines = ({
       return;
     }
     const run = runOf(input);
-    console.log(
-      `[routines] answer call ${instanceId.slice(0, 8)} ${name} run=${JSON.stringify(run)} before=${text ? JSON.stringify(text.slice(0, 60)) : "nothing"}`
-    );
+    if (HUB_DEBUG) {
+      console.log(
+        `[routines] answer call ${instanceId.slice(0, 8)} ${name} run=${JSON.stringify(run)} before=${text ? JSON.stringify(text.slice(0, 60)) : "nothing"}`
+      );
+    }
     if (!text) {
       return;
     }
@@ -1390,9 +1393,11 @@ export const createRoutines = ({
     if (send.state === "read") {
       store.setRun(run.id, { leadInstanceId: send.instanceId });
       armed.add(send.instanceId);
-      console.log(
-        `[routines] armed ${send.instanceId.slice(0, 8)} for ${run.id.slice(0, 8)} (wake read)`
-      );
+      if (HUB_DEBUG) {
+        console.log(
+          `[routines] armed ${send.instanceId.slice(0, 8)} for ${run.id.slice(0, 8)} (wake read)`
+        );
+      }
       return;
     }
     if (send.state === "failed" || send.state === "cancelled") {
