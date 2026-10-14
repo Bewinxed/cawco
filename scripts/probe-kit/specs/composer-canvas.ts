@@ -527,12 +527,16 @@ const SEND = ".ctrls .stop";
 const SWAP = ".stop .swap";
 
 /**
- * Each glyph carrier in the button as the engine draws it, by the run that
- * moves it now: `out` for one the Svelte transition takes away (its Web
- * Animation; the carrier's own finished keyframes in are not what moves it),
- * else `in` for one its CSS keyframes bring in (Svelte scopes their name:
- * `svelte-<hash>-icon-swap`, `…-icon-swap-still`). Svelte's 0 ms bookkeeping
- * run, with no keys, is no run. Carriers with neither are left out.
+ * Each run moving a glyph carrier in the button, by its own kind: `out` for
+ * the Svelte transition that takes a carrier away (its Web Animation), `in`
+ * for the CSS keyframes that bring one in (Svelte scopes their name:
+ * `svelte-<hash>-icon-swap`, `…-icon-swap-still`). One press swaps twice
+ * (Send to the pending spinner, and back once the hub takes the message), so
+ * a carrier can be going out while its own way in still runs: each of its
+ * runs is read for itself, and `alone` says whether it is the only one moving
+ * the carrier, which is when the carrier's drawn style is that run's (an
+ * outro, a Web Animation, draws over the keyframes). Svelte's 0 ms
+ * bookkeeping run, with no keys, is no run. Carriers with neither are left out.
  */
 const swapNow = (page: Page) =>
   page.evaluate((sel) => {
@@ -568,26 +572,22 @@ const swapNow = (page: Page) =>
           };
         })
         .filter((run) => run.duration > 0 && run.props.length > 0);
-      const out = runs.find((run) => run.name === "svelte");
-      const into = runs.find((run) => run.name.includes("icon-swap"));
-      const moving = out ?? into;
-      if (!moving) {
-        return [];
-      }
+      const moving = runs.filter(
+        (run) => run.name === "svelte" || run.name.includes("icon-swap")
+      );
       const s = getComputedStyle(el);
-      return [
-        {
-          side: out ? ("out" as const) : ("in" as const),
-          run: moving,
-          others: runs
-            .filter((one) => one !== moving)
-            .map((one) => `${one.name} [${one.props.join()}]`),
-          opacity: Number(s.opacity),
-          transform: s.transform,
-          scale: s.scale,
-          filter: s.filter,
-        },
-      ];
+      return moving.map((run) => ({
+        side: run.name === "svelte" ? ("out" as const) : ("in" as const),
+        run,
+        alone: moving.length === 1,
+        others: runs
+          .filter((one) => one !== run)
+          .map((one) => `${one.name} [${one.props.join()}]`),
+        opacity: Number(s.opacity),
+        transform: s.transform,
+        scale: s.scale,
+        filter: s.filter,
+      }));
     });
   }, SWAP);
 
@@ -681,10 +681,11 @@ const swapCheck = async (on: On, clock: Clock) => {
     looks.map((one) => ({ side: one.side, ...one.run }));
   const stillRuns = runsOf([...still0, ...stillHalf, ...still1]);
   const movingRuns = runsOf([...moving0, ...movingHalf, ...moving1]);
+  /** The carriers one run of `which` side alone moves: their drawn style is that run's. */
   const side = (
     looks: Awaited<ReturnType<typeof swapNow>>,
     which: "in" | "out"
-  ) => looks.filter((one) => one.side === which);
+  ) => looks.filter((one) => one.side === which && one.alone);
   const flat = (looks: Awaited<ReturnType<typeof swapNow>>) =>
     looks.every(
       (one) =>
@@ -726,11 +727,19 @@ const swapCheck = async (on: On, clock: Clock) => {
           run.props.join() === "filter,opacity,scale" &&
           run.duration === control
       ) &&
-      side(movingHalf, "in").every(
-        (one) => one.transform !== "none" && one.filter !== "none"
-      ) &&
-      side(movingHalf, "out").every(
-        (one) => one.scale !== "none" && one.filter !== "none"
+      // At ½ each travels by its own key: only the way in sets `transform` and
+      // only the way out `scale`, so a carrier going both ways shows both;
+      // the shared `filter` is read where one run alone moves the carrier.
+      movingHalf.some((one) => one.side === "in") &&
+      movingHalf.some((one) => one.side === "out") &&
+      movingHalf
+        .filter((one) => one.side === "in")
+        .every((one) => one.transform !== "none") &&
+      movingHalf
+        .filter((one) => one.side === "out")
+        .every((one) => one.scale !== "none") &&
+      [...side(movingHalf, "in"), ...side(movingHalf, "out")].every(
+        (one) => one.filter !== "none"
       ),
     `runs ${JSON.stringify(movingRuns)}; ½ ${JSON.stringify(movingHalf)}; 1 ${JSON.stringify(moving1)}`
   );
