@@ -150,9 +150,10 @@ export interface WorkflowRun {
   parentRunId: string | null;
   parentStepId: string | null;
   /**
-   * How many steps the run has in total: a graph-origin run's step nodes,
-   * start and end excluded. Null for a code-origin run, whose steps are only
-   * known as each one starts.
+   * How many steps the run makes at most: a graph-origin run's `step`, `ask`
+   * and `workflow` nodes. Null for a code-origin run, whose steps are only
+   * known as each one starts, and for a graph with a map or a loop, which can
+   * make more steps than it has nodes.
    */
   planned: number | null;
   program: string;

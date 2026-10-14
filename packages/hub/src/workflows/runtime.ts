@@ -293,12 +293,28 @@ export function publicRun(
       run.graph.edges.map((edge) => [edge.id, "skipped" as const])
     );
   }
-  const planned = run.graph
-    ? run.graph.nodes.filter(
-        (node) => node.kind !== "start" && node.kind !== "end"
-      ).length
-    : null;
-  return { ...run, edges, loops, planned };
+  return { ...run, edges, loops, planned: plannedOf(run.graph) };
+}
+
+/**
+ * How many steps a graph-origin run makes: its `step`, `ask` and `workflow`
+ * nodes, the only ones that open a step row. Null where the graph can make
+ * more steps than it has nodes: a map runs its body once per item, and its
+ * item count lives only inside the program (the compiled `.map` over
+ * `over`), never reaching the hub; a cycle-closing edge runs its loop again.
+ */
+function plannedOf(graph: WorkflowGraph | null): number | null {
+  if (
+    !graph ||
+    graph.nodes.some((node) => node.kind === "map") ||
+    graph.edges.some((edge) => edge.maxIterations !== undefined)
+  ) {
+    return null;
+  }
+  return graph.nodes.filter(
+    (node) =>
+      node.kind === "step" || node.kind === "ask" || node.kind === "workflow"
+  ).length;
 }
 
 /**

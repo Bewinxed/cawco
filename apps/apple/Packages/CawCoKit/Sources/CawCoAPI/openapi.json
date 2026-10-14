@@ -21092,7 +21092,7 @@
             "type": "object"
           },
           "planned": {
-            "description": "How many steps the run has in total: a graph-origin run's step nodes,\nstart and end excluded. Null for a code-origin run, whose steps are only\nknown as each one starts.",
+            "description": "How many steps the run makes at most: a graph-origin run's `step`, `ask`\nand `workflow` nodes. Null for a code-origin run, whose steps are only\nknown as each one starts, and for a graph with a map or a loop, which can\nmake more steps than it has nodes.",
             "type": [
               "null",
               "number"
@@ -21274,7 +21274,7 @@
                 "type": "object"
               },
               "planned": {
-                "description": "How many steps the run has in total: a graph-origin run's step nodes,\nstart and end excluded. Null for a code-origin run, whose steps are only\nknown as each one starts.",
+                "description": "How many steps the run makes at most: a graph-origin run's `step`, `ask`\nand `workflow` nodes. Null for a code-origin run, whose steps are only\nknown as each one starts, and for a graph with a map or a loop, which can\nmake more steps than it has nodes.",
                 "type": [
                   "null",
                   "number"
@@ -42542,7 +42542,7 @@
             ]
           },
           "planned": {
-            "description": "How many steps the run has in total: a graph-origin run's step nodes,\nstart and end excluded. Null for a code-origin run, whose steps are only\nknown as each one starts.",
+            "description": "How many steps the run makes at most: a graph-origin run's `step`, `ask`\nand `workflow` nodes. Null for a code-origin run, whose steps are only\nknown as each one starts, and for a graph with a map or a loop, which can\nmake more steps than it has nodes.",
             "type": [
               "null",
               "number"
