@@ -414,8 +414,10 @@
     &.start {
       clip-path: inset(0 calc(var(--chev) * var(--room)) 0 0);
     }
-    /* While it runs there is no line. */
-    .live & {
+  }
+  /* With less motion, while it runs there is no line. */
+  @media (prefers-reduced-motion: reduce) {
+    .live .arm {
       opacity: 0;
     }
   }
@@ -485,6 +487,34 @@
        as the row settles. */
     .settled .wave path {
       animation: wave-draw var(--dur-pop) var(--ease-out) backwards;
+    }
+    /* While it compacts the line breathes, two breaths a loop: it draws out
+       from the word over the first, then fades where it stands over the
+       second, and draws again. Two animations on one clock, since an easing
+       per keyframe can't name a token: each easing runs its own half, and
+       the other half holds. */
+    .live .wave path {
+      animation:
+        wave-breath-draw calc(var(--breath) * 2) var(--ease-out) infinite,
+        wave-breath-fade calc(var(--breath) * 2) var(--ease-in-out) infinite;
+    }
+  }
+  @keyframes wave-breath-draw {
+    0% {
+      stroke-dashoffset: var(--run);
+    }
+    50%,
+    100% {
+      stroke-dashoffset: 0;
+    }
+  }
+  @keyframes wave-breath-fade {
+    0%,
+    50% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
     }
   }
   /* With less motion the line is not drawn: it fades in where it stands. */
