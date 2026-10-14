@@ -18,8 +18,9 @@
  *     nested paths is tracked, and the place's own `git status` is clean;
  *     the project's thread has the note naming each of them.
  * (b) The attempt's session runs in a clone of the place: its cwd is the
- *     workspace's, that is a git work tree holding the place's commit, and
- *     the delegate's own `pwd` and `git log` say so.
+ *     workspace's, and that folder's own git (read from the file system,
+ *     never from what the model says) is a work tree whose first commit is
+ *     the place's, by CawCo.
  * (c) The attempt ends done and its output is in the project's
  *     `assets/<task>/`.
  * (d) A second task_start: the place still has its one commit, and the
@@ -40,14 +41,9 @@ const TAG = /PROBE-TASK-(\w+)/;
 /** Only an attempt's brief opens this way: its parent's report never does. */
 const BRIEF = "Your work item is an attempt at";
 const NEWLINES = /\n/g;
-/** What the delegate's Bash printed, read back from the conversation. */
-const PWD = /pwd: (\S+)/;
-const FIRST = /first: ([^\n"]+)/;
 
 /** What each attempt's mock has had it do. */
 const steps = new Map<string, { finish?: boolean; searched?: boolean }>();
-/** Each attempt's conversation once its Bash has run: where its output is read. */
-const seen = new Map<string, string>();
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const call = (name: string, input: object): Reply => ({
@@ -70,11 +66,10 @@ const respond = (request: Seen): Reply => {
   steps.set(tag, step);
   if (!request.all.includes(`DONE-${tag}`)) {
     return call("Bash", {
-      command: `echo 'a post from ${tag}' > post.md; echo "pwd: $(pwd)"; echo "first: $(git log --format='%an' --reverse | head -1)"; echo DONE-${tag}`,
+      command: `echo 'a post from ${tag}' > post.md; echo DONE-${tag}`,
       description: "Write the post",
     });
   }
-  seen.set(tag, request.all);
   if (!step.finish && request.toolNames.includes(FINISH)) {
     step.finish = true;
     return call(FINISH, { summary: `Wrote post.md for ${tag}.` });
@@ -295,16 +290,22 @@ const checkAttempt = async (
       )
     : [];
   const head = await probe.sh(place, "git rev-parse HEAD");
-  const said = seen.get("a") ?? "";
+  // The clone's own git, read from the file system: its root commit is the
+  // place's one commit, by CawCo.
+  // With no workspace, `/`: no repository, so both reads say so.
+  const clone = ws?.path ?? "/";
+  const inTree = await probe.sh(clone, "git rev-parse --is-inside-work-tree");
+  const [root] = (
+    await probe.sh(clone, "git log --reverse --format=%H%x09%an")
+  ).split("\n");
   kit.check(
-    "b: the attempt's session runs in a clone holding the place's commit",
+    "b: the attempt's session runs in a clone whose first commit is the place's",
     ws !== undefined &&
       session?.cwd === ws.path &&
       ws.repo_root === place &&
-      (await probe.sh(ws.path, `git cat-file -t ${head}`)) === "commit" &&
-      PWD.exec(said)?.[1] === ws.path &&
-      FIRST.exec(said)?.[1] === "CawCo",
-    `workspace ${JSON.stringify(ws)}, session cwd ${session?.cwd}; its Bash: pwd ${PWD.exec(said)?.[1]}, first commit by ${FIRST.exec(said)?.[1]}`
+      inTree === "true" &&
+      root === `${head}\tCawCo`,
+    `workspace ${JSON.stringify(ws)}, session cwd ${session?.cwd}; in a work tree: ${inTree}; its first commit ${root?.replace("\t", " by ")}, the place's HEAD ${head}`
   );
   const projects = join(
     dirname(probe.fleet.env.CAWCO_DB_PATH as string),
