@@ -1199,7 +1199,19 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
   const tapped = [
     await tapPin(second.x + second.w * 0.7, second.y + second.h / 2),
   ];
-  const openCard = await on.page.locator(".pin-card").boundingBox();
+  // The card stands beside its pin once the page says where the pin is
+  // (`cawco:pin-at`), a message from the preview's own process: it is read
+  // once it stands still.
+  let openCard = await on.page.locator(".pin-card").boundingBox();
+  for (let reads = 0; reads < 20; reads += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: one read every 100 ms until two agree
+    await on.page.waitForTimeout(100);
+    const now = await on.page.locator(".pin-card").boundingBox();
+    if (JSON.stringify(now) === JSON.stringify(openCard)) {
+      break;
+    }
+    openCard = now;
+  }
   const tall = await screenBox(on, frame, ".tall");
   tapped.push(
     await tapPin(
