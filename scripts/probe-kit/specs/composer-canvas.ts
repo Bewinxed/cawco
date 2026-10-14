@@ -53,14 +53,28 @@
  * 15. The rail stands inside the host's chrome: over the composer
  *    --space-2 under the 44px grab band and --space-3 in from the shape's
  *    sides as drawn; docked, --space-2 from the top and --space-3 in.
+ * 16. By touch, the rail fits its page at every width: a phone (docked in
+ *    the drawer 374px wide, the tools wrapping to two rows) and a tablet at
+ *    1024, 768 and 516px (docked 1008, 752 and 500px wide): both groups
+ *    inside the page, 44px boxes, --space-3 in from its sides (inside the
+ *    shoulders over the field), apart; over a phone's field at the foot,
+ *    docked at the top, the view's under the tools' where they don't fit
+ *    side by side.
  *
  * (9: `canvas` and `artifacts` are their own specs, run beside this one.)
  */
-import type { CDPSession, Page } from "playwright-core";
+import type { CDPSession, Frame, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { Clock } from "../anim";
 import { type Box, box } from "../geom";
-import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
+import {
+  type Kit,
+  type KitFleet,
+  open,
+  type Spec,
+  settle,
+  VIEWS,
+} from "../kit";
 
 const PILL = "form.cin";
 const FIELD = "form.cin textarea";
@@ -491,7 +505,11 @@ const probe = async (kit: Kit) => {
   await reducedCheck(on, clock);
   await removeCheck(on, clock, pen);
   await syncCheck(on);
-  await phoneCheck(on);
+  await phoneCheck(on, "phone");
+  await phoneCheck(on, "tablet");
+  await phoneCheck(on, "tablet", 768);
+  // A docked canvas about 500px wide under a finger: the iPad's panel width.
+  await phoneCheck(on, "tablet", 516);
   kit.check(
     "the page said no error",
     on.said.length === 0,
@@ -1798,66 +1816,190 @@ const reducedCheck = async (on: On, clock: Clock) => {
 };
 
 /**
- * 10. A phone, by touch (§5.10: "A phone has no swipe: Attach → Draw, the
- * morph to the window's height, Dock to the drawer"): Attach's menu opens
- * the canvas over the field, and the rail's Dock sends the same iframe into
- * the drawer's well.
+ * The rail's two groups in a touch page's canvas, as its page draws them:
+ * each group's box, the page's size, and the tokens and insets they stand by.
  */
-const phoneCheck = async (on: On) => {
+const touchRail = (frame: Frame) =>
+  frame.evaluate(() => {
+    const rect = (sel: string) => {
+      const at = document.querySelector(sel)?.getBoundingClientRect();
+      return at
+        ? {
+            left: at.left,
+            top: at.top,
+            right: at.right,
+            bottom: at.bottom,
+            width: at.width,
+            height: at.height,
+          }
+        : null;
+    };
+    const root = getComputedStyle(document.documentElement);
+    const px = (name: string) => Number.parseFloat(root.getPropertyValue(name));
+    const rows = new Set(
+      [
+        ...document.querySelectorAll(
+          ".rail-tools > .rail-box, .rail-tools .rail-menu-holder"
+        ),
+      ].map((one) => Math.round(one.getBoundingClientRect().top))
+    ).size;
+    return {
+      tools: rect(".rail-tools"),
+      view: rect(".rail-view"),
+      toolRows: rows,
+      box:
+        document.querySelector(".rail-box")?.getBoundingClientRect().width ?? 0,
+      page: { width: innerWidth, height: innerHeight },
+      docked:
+        document.querySelector(".canvas-host")?.hasAttribute("data-docked") ??
+        false,
+      insetTop: px("--canvas-inset-top"),
+      insetSide: px("--canvas-inset-side"),
+      space2: px("--space-2"),
+      space3: px("--space-3"),
+    };
+  });
+
+/**
+ * The rail fits its page, by touch: both groups inside the page, their
+ * boxes 44px, the tools' --space-3 in from the left and the view's from the
+ * right (inside the shoulders over the field), apart. Over the field (a
+ * phone) the groups stand at the foot, the tools' --space-3 above it and the
+ * view's above them; docked, at the top, the tools' --space-2 down and the
+ * view's beside them or under them.
+ */
+const railFits = (
+  kit: Kit,
+  label: string,
+  rail: Awaited<ReturnType<typeof touchRail>>,
+  at: { docked: boolean; foot: boolean }
+) => {
+  const { foot } = at;
+  const { tools, view, page } = rail;
+  const side = rail.insetSide + rail.space3;
+  // Inside the page, and no nearer its sides than the inset and --space-3.
+  const inside = (group: typeof tools) =>
+    !!group &&
+    group.left >= side - 0.5 &&
+    group.top >= -0.5 &&
+    group.right <= page.width - side + 0.5 &&
+    group.bottom <= page.height + 0.5;
+  const apart =
+    !!(tools && view) &&
+    (view.left >= tools.right ||
+      view.right <= tools.left ||
+      view.top >= tools.bottom ||
+      view.bottom <= tools.top);
+  let placed = false;
+  if (tools && view) {
+    placed = foot
+      ? near(page.height - tools.bottom, rail.space3, 0.5) &&
+        near(view.bottom, tools.top - rail.space2, 0.5)
+      : near(tools.top, rail.insetTop + rail.space2, 0.5) &&
+        (near(view.top, tools.top, 0.5) ||
+          near(view.top, tools.bottom + rail.space2, 0.5));
+  }
+  kit.check(
+    `16 (${label}): the rail fits the page: both groups inside it, 44px boxes, ${side.toFixed(1)}px in from its sides, ${foot ? "at the foot" : `${(rail.insetTop + rail.space2).toFixed(0)}px from the top`}, apart`,
+    inside(tools) &&
+      inside(view) &&
+      rail.box === 44 &&
+      rail.docked === at.docked &&
+      !!tools &&
+      !!view &&
+      near(tools.left, side, 0.5) &&
+      near(page.width - view.right, side, 0.5) &&
+      apart &&
+      placed,
+    JSON.stringify(rail)
+  );
+};
+
+/**
+ * 10. By touch (§5.10: "A phone has no swipe: Attach → Draw, the morph to
+ * the window's height, Dock to the drawer"): Attach's menu opens the canvas
+ * over the field, and the rail's Dock sends the same iframe into the panel's
+ * well (the drawer's on a phone). 16: at each, the rail fits the page.
+ */
+const phoneCheck = async (on: On, view: "phone" | "tablet", width?: number) => {
   const { kit } = on;
-  const page = await kit.page("phone");
+  const label = width ? `${view} ${width}px` : view;
+  // The session's panel shows what an earlier run docked: closed, so its
+  // drawer stands over nothing this run presses.
+  await fetch(
+    `${on.fleet.base}/api/instances/${encodeURIComponent(on.session)}/preview`,
+    { method: "DELETE" }
+  );
+  const page = await kit.page(view);
+  if (width) {
+    await page.setViewportSize({ width, height: VIEWS[view].height });
+  }
   await open(page, `${on.base}/session/${on.session}`, FIELD);
   await settle(page);
+  /** This page's own canvas, once Draw has made it (the panel may show another the session docked). */
+  let mine = ".canvas-stage.standing iframe";
+  /** A tap on `selector`'s centre: Playwright's box of an element in a frame is already in the page's terms. */
   const tap = async (selector: string, within = page.mainFrame()) => {
     const at = await within.locator(selector).first().boundingBox();
-    const outer =
-      within === page.mainFrame()
-        ? { x: 0, y: 0 }
-        : ((await page.locator(FRAME).boundingBox()) ?? { x: 0, y: 0 });
     if (!at) {
       throw new Error(`nothing to tap at ${selector}`);
     }
-    await page.touchscreen.tap(
-      outer.x + at.x + at.width / 2,
-      outer.y + at.y + at.height / 2
-    );
+    await page.touchscreen.tap(at.x + at.width / 2, at.y + at.height / 2);
   };
   await tap(".att-btn");
   await page.getByRole("menuitem", { name: "Draw" }).waitFor();
   await tap('[role="menuitem"]:has-text("Draw")');
   const standing = await until(
     "the canvas over the field",
-    () => box(page, STAGE),
+    () => box(page, ".canvas-stage.standing"),
     (at) => !!at && at.height > 300,
     20_000
   ).catch(() => null);
+  const id = await page.getAttribute(".canvas-stage.standing", "data-artifact");
+  mine = `.canvas-stage[data-artifact="${id}"] iframe`;
   const room = await column(page);
   await page.evaluate((sel) => {
     (window as unknown as { __canvas: Element | null }).__canvas =
       document.querySelector(sel);
-  }, FRAME);
+  }, mine);
   const frame = await (
-    await page.locator(FRAME).elementHandle()
+    await page.locator(mine).elementHandle()
   )?.contentFrame();
   await frame?.waitForSelector(".canvas-host .excalidraw", { timeout: 60_000 });
   await settle(page, 300);
   kit.check(
-    "10 (phone): Attach → Draw opens the canvas over the field, the column's height less the field",
+    `10 (${label}): Attach → Draw opens the canvas over the field, the column's height less the field`,
     !!(standing && room) &&
       near(standing.bottom, room.foot, 2) &&
       near(standing.top, room.foot - room.max, 2),
     `stage ${JSON.stringify(standing)}; column ${JSON.stringify(room)}`
   );
+  // Over the field the host's inset reaches the page with the grab band.
+  const over = frame
+    ? await until(
+        "the page's rail under the composer's inset",
+        () => touchRail(frame),
+        (rail) => rail.insetTop > 0,
+        5000
+      ).catch(() => touchRail(frame))
+    : null;
+  if (over) {
+    // The phone's foot layout over the field; wider, the top.
+    railFits(kit, `${label}, over the field`, over, {
+      docked: false,
+      foot: over.page.width < 640,
+    });
+  }
   if (frame) {
     await tap('.rail-box[aria-label="Dock"]', frame);
   }
   const docked = await until(
-    "the canvas in the drawer",
+    "the canvas in the panel's well",
     () =>
       page.evaluate((sel) => {
         const node = document.querySelector(sel);
         const well = document
-          .querySelector(".preview-sheet .side-well")
+          .querySelector(".side-well")
           ?.getBoundingClientRect();
         const at = node?.getBoundingClientRect();
         return well && at && at.width > 0
@@ -1874,16 +2016,30 @@ const phoneCheck = async (on: On) => {
               ],
             }
           : null;
-      }, FRAME),
+      }, mine),
     (seen) =>
       !!seen && seen.frame.every((v, i) => near(v, seen.well[i] ?? 0, 1.5)),
     20_000
   ).catch(() => null);
   kit.check(
-    "10 (phone): the rail's Dock sends the same iframe into the drawer's well",
+    `10 (${label}): the rail's Dock sends the same iframe into the panel's well`,
     !!docked?.same,
-    JSON.stringify(docked)
+    `${JSON.stringify(docked)}; said under the field: ${await page.evaluate(
+      () => document.querySelector(".send-error")?.textContent ?? "nothing"
+    )}`
   );
+  if (frame) {
+    const inPanel = await until(
+      "the page's rail docked",
+      () => touchRail(frame),
+      (rail) => rail.docked && rail.insetTop === 0,
+      5000
+    ).catch(() => touchRail(frame));
+    railFits(kit, `${label}, docked ${inPanel.page.width}px wide`, inPanel, {
+      docked: true,
+      foot: false,
+    });
+  }
   await page.close();
 };
 

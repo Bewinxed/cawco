@@ -408,6 +408,24 @@ export function Rail({
 }) {
   /** The Image box's file picker (images.ts): its own, so a picked file is checked as a pasted one is. */
   const picker = useRef<HTMLInputElement>(null);
+  /**
+   * The tools' group, which wraps to more rows where the page is too narrow
+   * for it: its height, as drawn, is what the view's group stands clear of
+   * where the two stack (canvas.css `--rail-tools-h`, on the host).
+   */
+  const tools = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const group = tools.current;
+    const host = group?.parentElement;
+    if (!(group && host)) {
+      return;
+    }
+    const measured = new ResizeObserver(() =>
+      host.style.setProperty("--rail-tools-h", `${group.offsetHeight}px`)
+    );
+    measured.observe(group);
+    return () => measured.disconnect();
+  }, []);
   const picked = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const input = event.currentTarget;
@@ -482,7 +500,12 @@ export function Rail({
   );
   return (
     <Press.Provider value={pressed}>
-      <div aria-label="Tools" className="rail rail-tools" role="toolbar">
+      <div
+        aria-label="Tools"
+        className="rail rail-tools"
+        ref={tools}
+        role="toolbar"
+      >
         {BEFORE_SHAPES.map(box)}
         <MenuBox
           chosen={SHAPES.some((one) => one.tool === chosen)}

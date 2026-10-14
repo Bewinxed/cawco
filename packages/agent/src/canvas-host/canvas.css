@@ -63,6 +63,11 @@ body {
   z-index: 4;
   top: calc(var(--canvas-inset-top) + var(--space-2));
   display: flex;
+  /* Too narrow a page for a group's boxes in one row: they wrap, the group
+     never past the page's sides less --space-3 each. */
+  flex-wrap: wrap;
+  box-sizing: border-box;
+  max-width: calc(100% - 2 * (var(--canvas-inset-side) + var(--space-3)));
   gap: var(--space-1);
   padding: var(--space-2);
   border: 1px solid var(--border-control);
@@ -86,46 +91,54 @@ body {
   right: calc(var(--canvas-inset-side) + var(--space-3));
 }
 
-/* A group's height: its box, its inset each side, its edge. */
+/* A group's height in one row: its box, its inset each side, its edge.
+   The tools' group as drawn, rows and all, is `--rail-tools-h` (rail.tsx
+   measures it); until it is measured, one row. */
 .canvas-host {
   --rail-box: 34px;
   --rail-h: calc(var(--rail-box) + 2 * var(--space-2) + 2px);
+  --rail-tools-row: var(--rail-tools-h, var(--rail-h));
 
   @media (pointer: coarse) {
     --rail-box: var(--c-btn-h-lg);
   }
 }
 
-/* Too narrow for the two groups side by side: the view's stands under the
-   tools'. Our call; DESIGN.md places them only for the desk and the phone. */
-@media (max-width: 559px) {
+/* Too narrow for the two groups side by side (under 560px, or under 640px
+   with 44px boxes under a finger): the view's stands under the tools', clear
+   of them however many rows they take. Our call; DESIGN.md places them only
+   for the desk and the phone. */
+@media (max-width: 559px), (max-width: 639px) and (pointer: coarse) {
   .rail-view {
     top: calc(
       var(--canvas-inset-top) +
       var(--space-2) +
-      var(--rail-h) +
+      var(--rail-tools-row) +
       var(--space-2)
     );
   }
 }
 
-/* A phone: the groups stand at the foot, above the field, and their menus
-   open upward. */
+/* A phone, the canvas over the field: the groups stand at the foot, above
+   the field, the view's above the tools', and their menus open upward.
+   Docked in the panel, nothing stands under it: they stay at its top. */
 @media (max-width: 639px) and (pointer: coarse) {
-  .rail {
-    top: auto;
-    bottom: var(--space-3);
-  }
-  .rail-view {
-    bottom: calc(var(--space-3) + var(--rail-h) + var(--space-2));
-  }
-  .rail .rail-menu {
-    top: auto;
-    bottom: calc(100% + var(--space-2) + 1px);
-    transform-origin: bottom left;
-  }
-  .rail-view .rail-menu {
-    transform-origin: bottom right;
+  .canvas-host:not([data-docked]) {
+    .rail {
+      top: auto;
+      bottom: var(--space-3);
+    }
+    .rail-view {
+      bottom: calc(var(--space-3) + var(--rail-tools-row) + var(--space-2));
+    }
+    .rail .rail-menu {
+      top: auto;
+      bottom: calc(100% + var(--space-2) + 1px);
+      transform-origin: bottom left;
+    }
+    .rail-view .rail-menu {
+      transform-origin: bottom right;
+    }
   }
 }
 
@@ -354,7 +367,7 @@ body {
   --refusal-top: calc(
     var(--canvas-inset-top) +
     var(--space-2) +
-    var(--rail-h) +
+    var(--rail-tools-row) +
     var(--space-2)
   );
   position: absolute;
@@ -380,19 +393,24 @@ body {
   }
 }
 
-@media (max-width: 559px) {
+/* Under the two groups where they stack (canvas.css above). */
+@media (max-width: 559px), (max-width: 639px) and (pointer: coarse) {
   .canvas-refusal {
     --refusal-top: calc(
       var(--canvas-inset-top) +
       var(--space-2) +
-      2 *
-      (var(--rail-h) + var(--space-2))
+      var(--rail-tools-row) +
+      var(--space-2) +
+      var(--rail-h) +
+      var(--space-2)
     );
   }
 }
 
+/* A phone, the canvas over the field: the groups stand at the foot, so the
+   band stands at the top. */
 @media (max-width: 639px) and (pointer: coarse) {
-  .canvas-refusal {
+  .canvas-host:not([data-docked]) .canvas-refusal {
     --refusal-top: calc(var(--canvas-inset-top) + var(--space-3));
   }
 }

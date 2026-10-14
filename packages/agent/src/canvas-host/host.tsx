@@ -526,7 +526,11 @@ function Host() {
   const unlinked = hold?.refused ?? true;
   const unlinkedShown = useUnlinkedShown(hold);
   return (
-    <div className="canvas-host" ref={surface}>
+    <div
+      className="canvas-host"
+      data-docked={docked ? "" : undefined}
+      ref={surface}
+    >
       <Excalidraw
         detectScroll
         excalidrawAPI={setApi}
