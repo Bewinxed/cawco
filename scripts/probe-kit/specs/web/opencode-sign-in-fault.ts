@@ -1,31 +1,39 @@
 /**
- * A machine's own OpenCode sign-in its provider refuses stands on the
- * machine's row, with its fix, until a turn on that provider answers.
+ * A machine's own OpenCode sign-in that does not work stands on the
+ * machine's row, with its fix: found by the agent's own check before any
+ * turn uses it, and by a turn its provider refuses; gone once it works.
  *
  * The owner's case (the Mac, 2026-10-14): OpenCode's own Anthropic sign-in
- * there answered "401 OAuth access token is invalid", and nothing said so
- * until a delegate on `anthropic/…` failed. CawCo never moves an Anthropic
- * sign-in out of OpenCode's own store, so it stays the machine's.
+ * there, an OAuth login 1.x kept and 2.0 imported, answered "401 OAuth access
+ * token is invalid", and nothing said so until a delegate on `anthropic/…`
+ * failed. OpenCode 2.0.28 cannot refresh an Anthropic OAuth sign-in (its
+ * Anthropic integration has no OAuth method), so one past its expiry is dead.
+ * CawCo never moves an Anthropic sign-in out of OpenCode's own store.
  *
  * A scratch fleet whose machine's OpenCode holds its own `anthropic`
- * credential (put by a standalone server on the same data dir before the
- * agent starts), its Anthropic provider pointed at the mock, and the agent
- * holding the live catalog (models.opencode.ai) as a machine does:
+ * credential (put and replaced by a standalone server on the same data dir),
+ * its Anthropic provider pointed at the mock, and the agent holding the live
+ * catalog (models.opencode.ai) as a machine does:
  *
- * 1. The mock refuses with 401: a session's turn on
- *    `anthropic/claude-haiku-4-5` fails, and the machine's OpenCode report
- *    carries the refusal with its fix ("Run `opencode auth login` on … and
- *    pick Anthropic").
- * 2. The dashboard's machine row says it.
- * 3. The mock answers: the next turn answers, and the report and the row
- *    carry it no more.
+ * 1. An OAuth sign-in past its expiry with a refresh token OpenCode cannot
+ *    use: once the agent is up, before any session, the machine's report and
+ *    its row in the dashboard say it, with the fix ("Run `opencode auth
+ *    login` on … and pick Anthropic").
+ * 2. Signed in again with a valid one: the report and the row carry it no
+ *    more.
+ * 3. The mock refuses with 401: a session's turn on
+ *    `anthropic/claude-haiku-4-5` fails, and the report and the row say it.
+ * 4. The mock answers: the next turn answers, and they carry it no more.
  *
  *   bun scripts/probe-kit/run.ts web opencode-sign-in-fault
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import { opencodeClient } from "../../../../packages/agent/src/harnesses/opencode-client";
+import {
+  type OpencodeClient,
+  opencodeClient,
+} from "../../../../packages/agent/src/harnesses/opencode-client";
 import { MACHINE, until } from "../../../scratch-fleet";
 import type { KitFleet, Spec } from "../../kit";
 import { open, settle } from "../../kit";
@@ -36,6 +44,9 @@ const REFUSAL = "OAuth access token is invalid";
 const MACHINES_BUTTON = /^\d+ machines?/;
 const SERVER_LINE = /listening on (http:\/\/\S+)/;
 const PASSWORD_LINE = /server password (\S+)/;
+const DAY_MS = 24 * 60 * 60_000;
+/** The sentence's fix, as every fault ends. */
+const FIX = "Run `opencode auth login` on";
 
 /** The proxy settings a CawCo workspace's processes reach public hosts through, passed on when this runs in one. */
 const PROXY_ENV = [
@@ -54,21 +65,22 @@ interface Report {
   signInFaults?: { provider: string; words: string }[];
 }
 
-/** The machine's OpenCode sign-in faults, as the hub holds its report. */
-const faultsOf = async (fleet: KitFleet) =>
+/** The machine's OpenCode `anthropic` sign-in fault's words, as the hub holds its report; empty when none. */
+const faultOf = async (fleet: KitFleet): Promise<string> =>
   (
     await fleet.api<{ machineId: string; harnesses?: Report[] }[]>(
       "/api/agents"
     )
   )
     .find((row) => row.machineId === MACHINE)
-    ?.harnesses?.find((one) => one.harness === "opencode")?.signInFaults ?? [];
+    ?.harnesses?.find((one) => one.harness === "opencode")
+    ?.signInFaults?.find((one) => one.provider === "anthropic")?.words ?? "";
 
-/**
- * The machine's own `anthropic` credential, put on its OpenCode database by
- * a standalone server on the machine's data dir, ended once it is put.
- */
-async function putOwnCredential(fleet: KitFleet): Promise<void> {
+/** `work` with a standalone OpenCode server on the machine's data dir, ended after. */
+async function standalone(
+  fleet: KitFleet,
+  work: (client: OpencodeClient) => Promise<void>
+): Promise<void> {
   const server = Bun.spawn(
     ["opencode", "serve", "--hostname=127.0.0.1", "--port=0"],
     { cwd: fleet.workdir, env: fleet.env, stdout: "pipe", stderr: "pipe" }
@@ -92,22 +104,26 @@ async function putOwnCredential(fleet: KitFleet): Promise<void> {
       said += decoder.decode(value);
     }
     reader.releaseLock();
-    const client = opencodeClient({
-      url: SERVER_LINE.exec(said)?.[1] ?? "",
-      password: PASSWORD_LINE.exec(said)?.[1] ?? "",
-    } as never);
-    await client.credential.create({
-      id: "cred_probe_anthropic",
-      integrationID: "anthropic",
-      label: "the machine's own Anthropic sign-in",
-      value: { type: "key", key: "sk-ant-probe-own-sign-in" },
-      activate: true,
-    } as never);
+    await work(
+      opencodeClient({
+        url: SERVER_LINE.exec(said)?.[1] ?? "",
+        password: PASSWORD_LINE.exec(said)?.[1] ?? "",
+      } as never)
+    );
   } finally {
     server.kill();
     await server.exited;
   }
 }
+
+/** An `anthropic` OAuth sign-in as 1.x kept it and 2.0 imported it. */
+const oauth = (access: string, expires: number) => ({
+  type: "oauth",
+  methodID: "claude-pro",
+  access,
+  refresh: "sk-ant-ort01-not-a-refresh-token",
+  expires,
+});
 
 /** The text of the machine's row in the dashboard's machines list. */
 async function rowText(page: Page): Promise<string> {
@@ -120,16 +136,24 @@ async function rowText(page: Page): Promise<string> {
   return text;
 }
 
+/** The row's text once `accept` holds, or what it last said. */
+const rowUntil = (page: Page, accept: (text: string) => boolean) =>
+  until("the machine's row", () => rowText(page), accept, 30_000).catch(() =>
+    rowText(page)
+  );
+
 const spec: Spec = {
   name: "opencode-sign-in-fault",
   run: async (kit) => {
-    let refusing = true;
+    let refusing = false;
     let answered = 0;
+    let turns = 0;
     const fleet = await kit.fleet((request) => {
       if (!request.tools) {
         return { everyMs: 5, words: ["Probe title"] };
       }
-      // biome-ignore lint/suspicious/noUnnecessaryConditions: the spec turns it off before step 3, after this closure is made
+      turns += 1;
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: the spec turns it on for step 3, after this closure is made
       if (refusing) {
         return {
           everyMs: 5,
@@ -150,7 +174,41 @@ const spec: Spec = {
         fleet.env[name] = value;
       }
     }
-    // OpenCode's Anthropic provider sends to the mock.
+    // OpenCode's Anthropic provider sends to the mock, through a door that
+    // answers a key's check (`GET /v1/models`) as Anthropic would, by the key.
+    let validKey = "";
+    const modelsAsked: string[] = [];
+    const door = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request) {
+        const url = new URL(request.url);
+        if (request.method === "GET" && url.pathname.endsWith("/models")) {
+          const key = request.headers.get("x-api-key") ?? "";
+          modelsAsked.push(key);
+          return key === validKey
+            ? Response.json({ data: [] })
+            : Response.json(
+                {
+                  type: "error",
+                  error: {
+                    type: "authentication_error",
+                    message: "invalid x-api-key",
+                  },
+                },
+                { status: 401 }
+              );
+        }
+        return fetch(
+          `${fleet.env.ANTHROPIC_BASE_URL}${url.pathname}${url.search}`,
+          {
+            method: request.method,
+            headers: request.headers,
+            body: request.body,
+          }
+        );
+      },
+    });
     const configFile = join(fleet.home, ".config", "opencode", "opencode.json");
     const config = JSON.parse(await readFile(configFile, "utf8")) as {
       providers?: Record<string, unknown>;
@@ -158,11 +216,20 @@ const spec: Spec = {
     config.providers = {
       ...config.providers,
       anthropic: {
-        settings: { baseURL: `${fleet.env.ANTHROPIC_BASE_URL}/v1` },
+        settings: { baseURL: `http://127.0.0.1:${door.port}/v1` },
       },
     };
     await writeFile(configFile, JSON.stringify(config));
-    await putOwnCredential(fleet);
+    // 1. Signed in with an OAuth login past its expiry.
+    await standalone(fleet, async (client) => {
+      await client.credential.create({
+        id: "cred_probe_expired",
+        integrationID: "anthropic",
+        label: "the machine's own Anthropic sign-in",
+        value: oauth("sk-ant-oat01-expired", Date.now() - DAY_MS),
+        activate: true,
+      } as never);
+    });
 
     fleet.launch("sessiond");
     await fleet.sessiondUp();
@@ -170,22 +237,15 @@ const spec: Spec = {
     await fleet.hubUp();
     fleet.launch("agent");
     await fleet.agentUp();
+    const base = await fleet.dashboard();
+    const page = await kit.page("desk");
+    await open(page, base, "[data-needs-caw]");
 
-    // 1. Refused.
-    const session = await fleet.spawn(
-      "opencode",
-      "own sign-in",
-      fleet.workdir,
-      {
-        model: MODEL,
-      }
-    );
-    await fleet.send(session, "Say hello.");
-    const faults = await until(
-      "the machine's report of the refused sign-in",
-      () => faultsOf(fleet),
-      (found) => found.some((one) => one.provider === "anthropic"),
-      180_000
+    const checked = await until(
+      "the check's fault on the report",
+      () => faultOf(fleet),
+      Boolean,
+      60_000
     ).catch(async (error: unknown) => {
       throw new Error(
         `${String(error)}; the agent's OpenCode lines: ${(
@@ -197,28 +257,67 @@ const spec: Spec = {
           .join(" | ")}`
       );
     });
-    const words =
-      faults.find((one) => one.provider === "anthropic")?.words ?? "";
+    const expiredRow = await rowUntil(page, (text) => text.includes(checked));
     kit.check(
-      "1. the machine's report carries the refused sign-in with its fix",
-      words.includes(`401 ${REFUSAL}`) &&
-        words.includes("Run `opencode auth login` on") &&
-        words.endsWith("and pick Anthropic."),
-      words
+      "1. before any turn, an expired sign-in OpenCode cannot refresh is on the report and the row, with its fix",
+      turns === 0 &&
+        checked.includes("does not work: its token expired") &&
+        checked.includes("OpenCode cannot refresh this sign-in") &&
+        checked.includes(FIX) &&
+        checked.endsWith("and pick Anthropic.") &&
+        expiredRow.includes(checked),
+      `turns: ${turns}; report: ${checked}; row: ${expiredRow}`
     );
 
-    // 2. On the machine's row.
-    const base = await fleet.dashboard();
-    const page = await kit.page("desk");
-    await open(page, base, "[data-needs-caw]");
-    const before = await rowText(page);
+    // 2. Signed in again with a valid one.
+    await standalone(fleet, async (client) => {
+      await client.credential.create({
+        id: "cred_probe_valid",
+        integrationID: "anthropic",
+        label: "the machine's own Anthropic sign-in",
+        value: oauth("sk-ant-oat01-valid", Date.now() + DAY_MS),
+        activate: true,
+      } as never);
+      await client.credential.remove({ credentialID: "cred_probe_expired" });
+    });
+    const renewed = await until(
+      "the report without the fault",
+      () => faultOf(fleet),
+      (words) => words === "",
+      60_000
+    ).catch((words: unknown) => String(words));
+    const validRow = await rowUntil(page, (text) => !text.includes(FIX));
     kit.check(
-      "2. the machine's row in the dashboard says it",
-      before.includes(words),
-      before
+      "2. signed in again with a valid one, the report and the row carry it no more",
+      renewed === "" && !validRow.includes(FIX) && turns === 0,
+      `report: ${renewed || "(none)"}; row: ${validRow}; turns: ${turns}`
     );
 
-    // 3. Answered: gone from the report and the row.
+    // 3. A turn the provider refuses.
+    refusing = true;
+    const session = await fleet.spawn(
+      "opencode",
+      "own sign-in",
+      fleet.workdir,
+      { model: MODEL }
+    );
+    await fleet.send(session, "Say hello.");
+    const refused = await until(
+      "the refused turn's fault on the report",
+      () => faultOf(fleet),
+      Boolean,
+      180_000
+    ).catch(() => "");
+    const refusedRow = await rowUntil(page, (text) => text.includes(refused));
+    kit.check(
+      "3. a turn the provider refuses is on the report and the row, with its fix",
+      refused.includes(`401 ${REFUSAL}`) &&
+        refused.endsWith("and pick Anthropic.") &&
+        refusedRow.includes(refused),
+      `report: ${refused}; row: ${refusedRow}`
+    );
+
+    // 4. A turn that answers.
     refusing = false;
     await fleet.send(session, "Say hello again.");
     await until(
@@ -229,24 +328,77 @@ const spec: Spec = {
     );
     const cleared = await until(
       "the report without the fault",
-      () => faultsOf(fleet),
-      (found) => !found.some((one) => one.provider === "anthropic"),
+      () => faultOf(fleet),
+      (words) => words === "",
       60_000
     ).then(
       () => true,
       () => false
     );
-    const after = await until(
-      "the row without the fault",
-      () => rowText(page),
-      (text) => !text.includes("opencode auth login"),
-      30_000
-    ).catch(() => "(the row still says it)");
+    const answeredRow = await rowUntil(page, (text) => !text.includes(FIX));
     kit.check(
-      "3. once a turn on the provider answers, the report and the row carry it no more",
-      cleared && !after.includes("opencode auth login"),
-      `report cleared: ${cleared}; row: ${after}`
+      "4. once a turn on the provider answers, the report and the row carry it no more",
+      cleared && !answeredRow.includes(FIX),
+      `report cleared: ${cleared}; row: ${answeredRow}`
     );
+
+    // 5. A key Anthropic does not take: found by one request, before a turn.
+    const turnsBefore = turns;
+    await standalone(fleet, async (client) => {
+      await client.credential.create({
+        id: "cred_probe_bad_key",
+        integrationID: "anthropic",
+        label: "the machine's own Anthropic key",
+        value: { type: "key", key: "sk-ant-api03-not-taken" },
+        activate: true,
+      } as never);
+      await client.credential.remove({ credentialID: "cred_probe_valid" });
+    });
+    const badKey = await until(
+      "the key check's fault on the report",
+      () => faultOf(fleet),
+      Boolean,
+      60_000
+    ).catch(() => "");
+    const badKeyRow = await rowUntil(page, (text) => text.includes(badKey));
+    kit.check(
+      "5. a key its provider refuses is on the report and the row, found by one request to its list of models, before any turn",
+      badKey.includes("does not work: 401 invalid x-api-key") &&
+        badKey.endsWith("and pick Anthropic.") &&
+        badKeyRow.includes(badKey) &&
+        turns === turnsBefore &&
+        modelsAsked.filter((key) => key === "sk-ant-api03-not-taken").length ===
+          1,
+      `report: ${badKey}; row: ${badKeyRow}; model list asked with: ${modelsAsked.join(", ")}`
+    );
+
+    // 6. A key it takes.
+    validKey = "sk-ant-api03-taken";
+    await standalone(fleet, async (client) => {
+      await client.credential.create({
+        id: "cred_probe_good_key",
+        integrationID: "anthropic",
+        label: "the machine's own Anthropic key",
+        value: { type: "key", key: validKey },
+        activate: true,
+      } as never);
+      await client.credential.remove({ credentialID: "cred_probe_bad_key" });
+    });
+    const goodKey = await until(
+      "the report without the fault",
+      () => faultOf(fleet),
+      (words) => words === "",
+      60_000
+    ).catch((words: unknown) => String(words));
+    const goodKeyRow = await rowUntil(page, (text) => !text.includes(FIX));
+    kit.check(
+      "6. a key its provider takes carries no fault",
+      goodKey === "" &&
+        !goodKeyRow.includes(FIX) &&
+        modelsAsked.includes(validKey),
+      `report: ${goodKey || "(none)"}; row: ${goodKeyRow}; model list asked with: ${modelsAsked.join(", ")}`
+    );
+    await door.stop(true);
   },
 };
 

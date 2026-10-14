@@ -102,6 +102,7 @@ import {
   onAccountCredential,
   opencodeAccountEnv,
   opencodeCredentialOf,
+  opencodeOwnChanges,
   opencodeOwnIntegrations,
   opencodeProviderOf,
   readHeld,
@@ -1077,6 +1078,82 @@ const ACCOUNT_CATALOGS = join(OPENCODE_DIR, "cawco-account-catalogs.json");
 /** The machine's own OpenCode sign-ins their providers last refused, by provider ({@link HarnessReport.signInFaults}), kept across an agent's restart. */
 const SIGN_IN_FAULTS = join(OPENCODE_DIR, "cawco-sign-in-faults.json");
 
+/** How often the machine's own sign-ins are checked when none changed, and the least time between two requests for one key. Ours: an hour, so a check spends at most one request per key an hour. */
+const SIGN_IN_CHECK_MS = 60 * 60_000;
+
+/** How long a key's check request may take. Ours: a list of models answers in well under a second; past this it says nothing. */
+const KEY_CHECK_TIMEOUT_MS = 20_000;
+
+/** Anthropic's API, where OpenCode's Anthropic provider sends when its config names no other (`@ai-sdk/anthropic`'s default). */
+const ANTHROPIC_API = "https://api.anthropic.com/v1";
+
+/**
+ * The free, read-only request that says whether a key works with its
+ * provider, by the package OpenCode sends its requests through and the base
+ * URL it sends them to: Anthropic's list of models (`x-api-key`), or an
+ * OpenAI-compatible provider's (a bearer token, at the base URL its config
+ * or catalog names). None for any other provider.
+ */
+const keyCheckRequest = (
+  key: string,
+  providerPackage: string | undefined,
+  baseURL: unknown
+): { headers: Record<string, string>; url: string } | undefined => {
+  const base = typeof baseURL === "string" && baseURL ? baseURL : undefined;
+  if (providerPackage?.endsWith("/anthropic")) {
+    return {
+      url: `${(base ?? ANTHROPIC_API).replace(TRAILING_SLASH, "")}/models`,
+      headers: { "x-api-key": key, "anthropic-version": "2023-06-01" },
+    };
+  }
+  if (providerPackage?.endsWith("/openai-compatible") && base) {
+    return {
+      url: `${base.replace(TRAILING_SLASH, "")}/models`,
+      headers: { authorization: `Bearer ${key}` },
+    };
+  }
+};
+
+const TRAILING_SLASH = /\/+$/;
+
+/** What a check of one of the machine's own sign-ins found: it cannot work (and why), it works, or it cannot tell. */
+type SignInVerdict =
+  | { state: "fault"; why: string }
+  | { state: "works" }
+  | { state: "unknown" };
+
+/**
+ * An OAuth sign-in's check, read locally: past its expiry, one OpenCode
+ * cannot refresh (its integration has no method for it, or it holds no
+ * refresh token) cannot work; one it can refresh, it refreshes as it is used
+ * (CawCo never spends a rotating refresh token for it), so this cannot tell.
+ * Unexpired, it works when it was signed in again since its fault, else a
+ * turn says.
+ */
+const oauthVerdict = (
+  value: Record<string, unknown>,
+  refreshable: boolean,
+  renewedSince: boolean
+): SignInVerdict => {
+  const expires = Number(value.expires);
+  if (!(Number.isFinite(expires) && expires <= Date.now())) {
+    return renewedSince ? { state: "works" } : { state: "unknown" };
+  }
+  const expired = new Date(expires).toISOString();
+  if (!refreshable) {
+    return {
+      state: "fault",
+      why: `its token expired ${expired}, and OpenCode cannot refresh this sign-in`,
+    };
+  }
+  return value.refresh
+    ? { state: "unknown" }
+    : {
+        state: "fault",
+        why: `its token expired ${expired} and it holds no refresh token`,
+      };
+};
+
 /** The id CawCo puts an account's credential on its server under: its own, named for its value. */
 const CREDENTIAL_PREFIX = "cred_cawco_";
 
@@ -1553,6 +1630,7 @@ export class OpencodeHarness implements Harness {
     if (!this.#converging) {
       return;
     }
+    this.#signInChecksDue();
     const hash = await this.#hashConfig();
     const version = await this.#installedVersion();
     for (const slot of this.#slots()) {
@@ -2517,11 +2595,188 @@ export class OpencodeHarness implements Harness {
       faults.set(provider, { provider, words, at: Date.now() });
       console.warn(`[opencode] ${words}`);
     }
+    this.#saveFaults();
+  }
+
+  #saveFaults(): void {
     writeJson(SIGN_IN_FAULTS, this.signInFaults).catch((error: unknown) =>
       console.warn(
         `[opencode] ${SIGN_IN_FAULTS} was not written: ${errorText(error)}`
       )
     );
+  }
+
+  /** When the machine's own sign-ins were last checked, and their rows then: a check is due hourly, or when a row changed. */
+  #signInsCheckedAt = 0;
+  #signInRows: string | undefined;
+  #checkingSignIns: Promise<void> | null = null;
+  /** Each key credential's last request, by credential id: its value's hash and when. */
+  readonly #keyAsked = new Map<string, { at: number; value: string }>();
+
+  /**
+   * The machine's own OpenCode sign-ins checked, before any turn finds them
+   * refused: when the agent starts, every {@link SIGN_IN_CHECK_MS}, and when
+   * one of them changed (a sign-in, a refresh, a removal). One at a time.
+   */
+  #signInChecksDue(): void {
+    const rows = JSON.stringify(opencodeOwnChanges());
+    if (
+      this.#checkingSignIns ||
+      (rows === this.#signInRows &&
+        Date.now() < this.#signInsCheckedAt + SIGN_IN_CHECK_MS)
+    ) {
+      return;
+    }
+    this.#signInRows = rows;
+    this.#signInsCheckedAt = Date.now();
+    this.#checkingSignIns = this.#checkOwnSignIns()
+      .catch((error: unknown) =>
+        console.warn(
+          `[opencode] the machine's own sign-ins were not checked: ${errorText(error)}`
+        )
+      )
+      .finally(() => {
+        this.#checkingSignIns = null;
+      });
+  }
+
+  /**
+   * Each of the machine's own OpenCode sign-ins, as OpenCode would use it
+   * ({@link signInCheck}): one that cannot work is a fault, in the words a
+   * refused turn has; one that works clears its provider's. A provider no
+   * sign-in is held for any more has none.
+   */
+  async #checkOwnSignIns(): Promise<void> {
+    const client = await this.#ensure();
+    const options = { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) };
+    const [own, integrations, models] = await Promise.all([
+      this.#ownCredentials(),
+      client.integration.list({}, options),
+      client.model.list({}, options),
+    ]);
+    const refreshable = new Set(
+      (
+        integrations.data as {
+          id: string;
+          methods?: { type: string; id?: string }[];
+        }[]
+      ).flatMap((integration) =>
+        (integration.methods ?? []).flatMap((method) =>
+          method.type === "oauth" && method.id
+            ? [`${integration.id}/${method.id}`]
+            : []
+        )
+      )
+    );
+    const changed = opencodeOwnChanges();
+    const faults = this.#faultsHeld();
+    let moved = false;
+    for (const provider of [...faults.keys()]) {
+      if (!own.some((one) => one.integrationID === provider)) {
+        faults.delete(provider);
+        moved = true;
+      }
+    }
+    if (moved) {
+      this.#saveFaults();
+    }
+    for (const credential of own) {
+      const provider = credential.integrationID;
+      const model = models.data.find((one) => one.providerID === provider);
+      // biome-ignore lint/performance/noAwaitInLoops: one credential at a time, each at most one request
+      const verdict = await this.#signInCheck(credential, {
+        refreshable: refreshable.has(
+          `${provider}/${String(credential.value.methodID ?? "")}`
+        ),
+        package: model?.package,
+        baseURL: (model?.settings as { baseURL?: unknown } | undefined)
+          ?.baseURL,
+        renewedSince:
+          (changed[credential.id] ?? 0) > (faults.get(provider)?.at ?? 0),
+      });
+      if (verdict.state === "fault") {
+        this.#signInOutcome(provider, verdict.why);
+      } else if (verdict.state === "works") {
+        this.#signInOutcome(provider, undefined);
+      }
+    }
+  }
+
+  /**
+   * Whether one of the machine's own sign-ins works, as OpenCode 2.0.28 uses
+   * it (`Integration.connection.get`): an OAuth sign-in is refreshed only
+   * through its integration's method for it, when it expires within five
+   * minutes, else sent as it is; a key is sent as it is.
+   *
+   * - OAuth, past its expiry, that OpenCode cannot refresh (its integration
+   *   has no method for it, as Anthropic's has none in 2.0.28, or it holds
+   *   no refresh token): a fault, read locally. Unexpired: it works when it
+   *   was signed in again since its fault, else this cannot tell (a turn
+   *   says). Refreshable: OpenCode refreshes it as it is used, and CawCo
+   *   never spends a rotating refresh token for it.
+   * - A key, where its provider has a free read-only list of models
+   *   (Anthropic's `/models`, an OpenAI-compatible `/models`): one request,
+   *   at most once an {@link SIGN_IN_CHECK_MS} for the same key. A 401 or
+   *   403 is a fault in the provider's words, a 2xx works, anything else
+   *   cannot tell.
+   */
+  async #signInCheck(
+    credential: OpencodeOwnCredential,
+    read: {
+      baseURL: unknown;
+      package: string | undefined;
+      refreshable: boolean;
+      renewedSince: boolean;
+    }
+  ): Promise<SignInVerdict> {
+    const { value } = credential;
+    if (value.type === "oauth") {
+      return oauthVerdict(value, read.refreshable, read.renewedSince);
+    }
+    if (value.type !== "key" || typeof value.key !== "string") {
+      return { state: "unknown" };
+    }
+    return await this.#keyVerdict(credential.id, value.key, read);
+  }
+
+  /** A key's check: one request to its provider's list of models, at most once an {@link SIGN_IN_CHECK_MS} for the same key. */
+  async #keyVerdict(
+    id: string,
+    key: string,
+    read: { baseURL: unknown; package: string | undefined }
+  ): Promise<SignInVerdict> {
+    const request = keyCheckRequest(key, read.package, read.baseURL);
+    if (!request) {
+      return { state: "unknown" };
+    }
+    const hash = createHash("sha256").update(key).digest("hex");
+    const asked = this.#keyAsked.get(id);
+    if (asked?.value === hash && Date.now() < asked.at + SIGN_IN_CHECK_MS) {
+      return { state: "unknown" };
+    }
+    this.#keyAsked.set(id, { at: Date.now(), value: hash });
+    const response = await fetch(request.url, {
+      headers: request.headers,
+      signal: AbortSignal.timeout(KEY_CHECK_TIMEOUT_MS),
+    }).catch(() => undefined);
+    if (!response) {
+      return { state: "unknown" };
+    }
+    if (response.ok) {
+      return { state: "works" };
+    }
+    if (response.status === 401 || response.status === 403) {
+      const body = (await response.json().catch(() => undefined)) as
+        | { error?: { message?: unknown } }
+        | undefined;
+      const message =
+        typeof body?.error?.message === "string" ? body.error.message : "";
+      return {
+        state: "fault",
+        why: `${response.status}${message ? ` ${message}` : ""}`,
+      };
+    }
+    return { state: "unknown" };
   }
 
   /**

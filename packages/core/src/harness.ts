@@ -1255,17 +1255,18 @@ export interface SignInFault {
 }
 
 /**
- * What the home says of a machine's own OpenCode sign-in its provider
- * refused: the provider by name, the refusal in its words, and the fix,
- * signing in again on that machine. One source for every surface (the web's
- * machine row and the Apple app's read it from the report).
+ * What the home says of a machine's own OpenCode sign-in that does not work:
+ * the provider by name, why (its refusal in the provider's words, or what
+ * the machine's check found), and the fix, signing in again on that machine.
+ * One source for every surface (the web's machine row and the Apple app's
+ * read it from the report).
  */
 export const opencodeSignInFaultWords = (
   machine: string,
   providerName: string,
-  refusal: string
+  why: string
 ): string =>
-  `OpenCode's own ${providerName} sign-in on ${machine} was refused: ${refusal}. Run \`opencode auth login\` on ${machine} and pick ${providerName}.`;
+  `OpenCode's own ${providerName} sign-in on ${machine} does not work: ${why}. Run \`opencode auth login\` on ${machine} and pick ${providerName}.`;
 
 /** What a machine knows about one harness: is it installed, can it work, what can it do. */
 export interface HarnessReport {
