@@ -27520,7 +27520,7 @@
         ]
       },
       "PageAnchor": {
-        "description": "What a page's mark stands on: the element, by where it is written, its selector and its text.",
+        "description": "What a page's mark stands on: the element, by where it is written, its\nselector and its text. An element inside a same-origin frame names the\nframes it stands in, outermost first, each by its selector in the document\nthat holds it; its selector, source and text are read in the innermost\nframe's document.",
         "type": "object",
         "properties": {
           "box": {
@@ -27546,6 +27546,13 @@
               "x",
               "y"
             ]
+          },
+          "frames": {
+            "description": "The frames it stands in, outermost first, each by its selector in its parent's document; none at the top.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "selector": {
             "type": "string"
