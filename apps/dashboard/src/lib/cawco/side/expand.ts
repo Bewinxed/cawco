@@ -9,7 +9,7 @@ import { getContext, setContext } from "svelte";
 export interface SideExpand {
   /** The split can expand here: a desk or tablet, with the surface open. */
   readonly available: boolean;
-  /** Back to the split; false when it was not expanded. */
+  /** Esc: back to the split at once, with no slide; false when it was not expanded. */
   readonly collapse: () => boolean;
   /** The surface has the whole split; the conversation is put away. */
   readonly expanded: boolean;

@@ -89,6 +89,7 @@
   import MessageBody from "../MessageBody.svelte";
   import { branch, nestFrom } from "../motion/branch.svelte";
   import { reflow } from "../motion/rows.svelte";
+  import { sideExpand } from "../side/expand";
   import SideSurface from "../side/SideSurface.svelte";
 
   let {
@@ -106,6 +107,8 @@
     onclose: () => void;
   } = $props();
 
+  /** The split's expansion, beside a conversation on a desk (SideSplit). */
+  const expand = sideExpand();
   const plan = $derived(cawco.planOf(instanceId));
   const steps = $derived(
     treeOf(
@@ -182,7 +185,10 @@
 <!-- The parts, flat on the surface: a heading, then what it names. -->
 {#snippet body()}
   <div
-    class={["body kit-edge-fade-block", { sheet, "kit-sheet-scroll": sheet }]}
+    class={[
+      "body kit-edge-fade-block",
+      { sheet, "kit-sheet-scroll": sheet, expanded: !!expand?.expanded },
+    ]}
   >
     {#if steps.length > 0}
       {#if stepsHeaded}
@@ -254,6 +260,14 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+  }
+  /* Expanded over the whole session area (SideSplit), the column keeps the
+     house measure (72ch, as the reading well and the transcript's cards),
+     centred on the surface. */
+  .body.expanded {
+    inline-size: 100%;
+    max-inline-size: 72ch;
+    margin-inline: auto;
   }
   /* In the sheet the column starts under the header's seam, so only its
      foot fades: a line scrolled up under the title is cut on the seam. */

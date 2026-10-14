@@ -203,10 +203,20 @@
       if (!expanded) {
         return false;
       }
-      setExpanded(false);
+      collapseByKey();
       return true;
     },
   });
+  /** The next change of size is the keyboard's: it is taken at once. */
+  let snapNext = false;
+  /**
+   * Esc gives the split back at once: a keyboard action is not watched, and
+   * it repeats (emil-design-eng). The control and the drag keep the slide.
+   */
+  function collapseByKey(): void {
+    snapNext = true;
+    setExpanded(false);
+  }
   // Closing the surface ends the expansion: what opens next opens beside the
   // conversation. Only a close counts; a page still reading its previews
   // after a reload has not closed anything.
@@ -245,7 +255,7 @@
       return;
     }
     event.preventDefault();
-    setExpanded(false);
+    collapseByKey();
   }
   /**
    * The surface's share while it is open: the conversation's own width, held
@@ -320,7 +330,10 @@
       fromRow = untrack(() => !mounted) && departing(`preview:${viewId}`);
       mounted = true;
     }
-    const seen = untrack(() => visible && !fromRow) && motionOk.current;
+    const snapped = snapNext;
+    snapNext = false;
+    const seen =
+      untrack(() => visible && !fromRow) && motionOk.current && !snapped;
     sliding = seen;
     let settle = 0;
     let gone = false;

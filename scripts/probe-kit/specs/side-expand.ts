@@ -21,12 +21,15 @@
  * 5. Dragged (CDP mouse) to the session area's far edge, the conversation's
  *    pane is 0, the head reads Back to conversation and the frame fills the
  *    width (±1px); dragged back to the middle, the split follows the pointer
- *    (±1%); Expand then Esc gives back that dragged width (±0.5%).
+ *    (±1%); Expand then Esc gives back that dragged width (±0.5%), at once:
+ *    one frame after Esc nothing runs on the split and it stands at its
+ *    final width.
  * 6. A reload keeps the expansion; a second session is not expanded.
  * 7. At 1280 (a pane still 900px or wider) the kept expansion fills the
  *    session area (±1px). At 1024 (the tablet) the rail leaves the pane
  *    under 900px: the preview is the sheet, with no Expand.
  * 8. No console error.
+ * 9. The plan expanded at 1440 keeps the 72ch measure, centred (±1px).
  */
 import type { Frame, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
@@ -34,6 +37,8 @@ import { Clock } from "../anim";
 import { type Kit, open, type Spec, settle } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
+const PLAN = "mcp__cawco__todo_write";
+const BACK_TO = '.side-head button[aria-label="Back to conversation"]';
 const COMMAND = /PROBE-CALL:(\d+)/g;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 const FRAME = '.side-split .side-pane iframe[title="Preview"]';
@@ -328,6 +333,35 @@ const dragAcross = async (kit: Kit, desk: Page, sid: string): Promise<void> => {
   await settle(desk);
   const full = await measure(desk, sid);
   await desk.keyboard.press("Escape");
+  // One frame after the key: nothing with an end runs on the split (a
+  // loop, a live status's pulse, is not motion of the split), and the side
+  // pane stands where it settles.
+  const snap = await desk.evaluate(
+    () =>
+      new Promise<{ running: string[]; side: number | null }>((done) =>
+        requestAnimationFrame(() => {
+          const split = document.querySelector(".side-split");
+          done({
+            running: (split?.getAnimations({ subtree: true }) ?? [])
+              .filter(
+                (going) =>
+                  going.playState === "running" &&
+                  Number.isFinite(
+                    Number(going.effect?.getComputedTiming().endTime)
+                  )
+              )
+              .map((going) =>
+                going instanceof CSSTransition
+                  ? `transition ${going.transitionProperty}`
+                  : `${going.constructor.name} ${(going as CSSAnimation).animationName ?? going.id}`
+              ),
+            side:
+              split?.querySelector(".side-pane")?.getBoundingClientRect()
+                .width ?? null,
+          });
+        })
+      )
+  );
   await settle(desk);
   const after = await measure(desk, sid);
   kit.check(
@@ -335,6 +369,60 @@ const dragAcross = async (kit: Kit, desk: Page, sid: string): Promise<void> => {
     full.expanded && !after.expanded && near(after.size, back.size, 0.5),
     JSON.stringify({ dragged: back.size, full: full.size, after: after.size })
   );
+  kit.check(
+    "5: Esc snaps: one frame after it nothing runs on the split and the side pane is at its final width (±0.5px)",
+    snap.running.length === 0 && near(snap.side, after.side, 0.5),
+    JSON.stringify({ snap, settled: after.side })
+  );
+};
+
+/** 9: the plan, expanded at 1440: its column keeps the 72ch measure, centred. */
+const planMeasure = async (
+  kit: Kit,
+  desk: Page,
+  url: string,
+  sid: string
+): Promise<void> => {
+  await open(desk, url, FRAME, 120_000);
+  await desk.locator(".plan-ring").click({ timeout: 30_000 });
+  await desk.locator(".plan-pane .body").waitFor({ timeout: 20_000 });
+  // The plan's own head: the first session's split stays mounted beside it.
+  await desk.locator(`.plan-pane ${EXPAND}`).click();
+  await settle(desk);
+  const read = await desk.evaluate(() => {
+    const body = document.querySelector(".plan-pane .body");
+    const surface = body?.closest(".side-pane");
+    if (!(body && surface)) {
+      return null;
+    }
+    // The measure in the column's own font.
+    const ruler = document.createElement("span");
+    ruler.style.cssText = "position:absolute;visibility:hidden;width:72ch";
+    body.append(ruler);
+    const ch72 = ruler.getBoundingClientRect().width;
+    ruler.remove();
+    const b = body.getBoundingClientRect();
+    const s = surface.getBoundingClientRect();
+    return {
+      measure: ch72,
+      body: b.width,
+      before: b.left - s.left,
+      after: s.right - b.right,
+      surface: s.width,
+    };
+  });
+  const state = await measure(desk, sid);
+  kit.check(
+    "9: the plan expanded at 1440 keeps the 72ch measure, centred (±1px)",
+    !!read &&
+      state.expanded &&
+      read.body <= read.measure + 0.5 &&
+      read.surface > read.measure + 100 &&
+      near(read.before, read.after, 1),
+    JSON.stringify({ read, expanded: state.expanded })
+  );
+  await desk.locator(`.plan-pane ${BACK_TO}`).click();
+  await settle(desk);
 };
 
 /** 7: a narrower desk, 1280, where the pane is still 900px or wider. */
@@ -400,6 +488,12 @@ const run = async (kit: Kit) => {
       return;
     }
   }
+  // A plan for the second session: a spec long enough to wrap (a Claude
+  // Code session keeps its steps in its harness's own list; todo_write
+  // writes its spec).
+  await call(second, PLAN, {
+    spec: `# The plan, read wide\n\n${"A line of the spec that runs on past any reasonable measure, so the column's width is the measure's and not the words'. ".repeat(6)}`,
+  });
   const base = await fleet.dashboard();
 
   const errors: string[] = [];
@@ -531,6 +625,7 @@ const run = async (kit: Kit) => {
     JSON.stringify(other)
   );
 
+  await planMeasure(kit, desk, `${base}/session/${second}`, second);
   await at1280(kit, desk, `${base}/session/${first}`, first);
   await onTablet(kit, `${base}/session/${second}`, second, errors);
   kit.check(
