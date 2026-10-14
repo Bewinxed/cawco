@@ -331,6 +331,14 @@ final class Figure {
     private var captions: [KitLabel] = []
 
     /// A colour resolved for this figure's theme, at an alpha.
+    /// A label the figure places by its frame. KitLabel is made for Auto
+    /// Layout (no autoresizing mask); with no constraints of its own here,
+    /// layout would stand every one at the stage's corner, over the others.
+    static func placed(_ label: KitLabel) -> KitLabel {
+        label.translatesAutoresizingMaskIntoConstraints = true
+        return label
+    }
+
     func rc(_ color: UIColor, _ alpha: Double = 1) -> CGColor {
         Self.resolve(color, alpha, traits)
     }
@@ -390,7 +398,7 @@ final class Figure {
         stage.addSubview(group)
 
         // The clock's words, the wash behind them, and the blocked word in their place.
-        let clock = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+        let clock = Self.placed(KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted))
         clock.tabular = true
         clock.text = spec.clock(0)
         clock.sizeToFit()
@@ -399,10 +407,12 @@ final class Figure {
         wash.backgroundColor = UIColor(cgColor: rc(color, 0.26))
         wash.layer.cornerRadius = Radius.radiusXs
         group.addSubview(wash)
+        // Right-aligned to the wash's inner edge, as wide as its words (a
+        // clock that counts down only ever gets shorter).
         clock.textAlignment = .right
-        clock.frame = CGRect(x: width - (Self.pad - 5) - 5 - 140, y: y, width: 140, height: 14)
+        clock.frame = CGRect(x: width - Self.pad - (clockW - 10), y: y, width: clockW - 10, height: 14)
         group.addSubview(clock)
-        let blocked = KitLabel(TypeScale.typeMeta.withWeight(TypeScale.weightStrong), ink: Palette.dataBad)
+        let blocked = Self.placed(KitLabel(TypeScale.typeMeta.withWeight(TypeScale.weightStrong), ink: Palette.dataBad))
         blocked.text = spec.blocked
         blocked.sizeToFit()
         blocked.frame = CGRect(x: width - Self.pad - blocked.bounds.width, y: y, width: blocked.bounds.width, height: 14)
@@ -412,7 +422,7 @@ final class Figure {
         let dot = UIView(frame: CGRect(x: 0, y: 3.5, width: 7, height: 7))
         dot.backgroundColor = color
         dot.layer.cornerRadius = 3.5
-        let name = KitLabel(TypeScale.typeMeta.withWeight(TypeScale.weightStrong), ink: Palette.inkRow)
+        let name = Self.placed(KitLabel(TypeScale.typeMeta.withWeight(TypeScale.weightStrong), ink: Palette.inkRow))
         name.text = spec.lane.name
         name.lineBreakMode = .byTruncatingTail
         name.sizeToFit()
@@ -566,7 +576,7 @@ final class Figure {
 
     /// A caption fades in at `a` and out at `b`; `b` = 99 holds it to the seam.
     func cap(_ a: Double, _ b: Double, _ text: String) {
-        let label = KitLabel(TypeScale.typeMeta, ink: Palette.inkRow, lines: 0)
+        let label = Self.placed(KitLabel(TypeScale.typeMeta, ink: Palette.inkRow, lines: 0))
         label.text = text
         label.wrap = .pretty
         fades.addSubview(label)
@@ -834,7 +844,7 @@ extension Figure {
         }
         /// A tag naming the conversation's size, its top left at `x, y`.
         func tag(_ text: String, x: Double, y: Double, in parent: UIView) -> UILabel {
-            let label = KitLabel(TypeScale.typeCaps, ink: Palette.inkRow)
+            let label = Figure.placed(KitLabel(TypeScale.typeCaps, ink: Palette.inkRow))
             label.tabular = true
             label.text = text
             label.textAlignment = .center
@@ -1058,7 +1068,25 @@ final class StrategyFigureView: UIView {
     /// The figure's loop as it stands: playing and where, for the probe.
     var probeState: String {
         guard let timeline = figure?.timeline else { return "\(board.rawValue): not built" }
-        return "\(board.rawValue) \(lanes.count) lanes \(timeline.playing ? "playing" : "still") loop \(String(format: "%.1f", timeline.length))s"
+        // Words that stand at the same time and overlap: none should.
+        var labels: [CGRect] = []
+        func walk(_ node: UIView, _ shown: Float) {
+            for child in node.subviews {
+                let opacity = shown * child.layer.opacity
+                if let label = child as? UILabel, !(label.text ?? "").isEmpty, opacity > 0.01 {
+                    labels.append(label.convert(label.bounds, to: stage))
+                }
+                walk(child, opacity)
+            }
+        }
+        walk(stage, 1)
+        var overlaps = 0
+        for i in labels.indices {
+            for j in labels.indices where j > i && labels[i].insetBy(dx: 0.5, dy: 0.5).intersects(labels[j]) {
+                overlaps += 1
+            }
+        }
+        return "\(board.rawValue) \(lanes.count) lanes \(timeline.playing ? "playing" : "still") loop \(String(format: "%.1f", timeline.length))s overlaps \(overlaps)"
     }
     #endif
 }

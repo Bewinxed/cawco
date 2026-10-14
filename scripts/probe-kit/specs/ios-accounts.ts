@@ -76,6 +76,8 @@ const TRAILING_SLASH = /\/$/;
 /** "hub accounts 2 → 3": the count before the setup's sign-in and after. */
 const COUNTS = /hub accounts (\d+) → (\d+)/;
 /** The Delegates tab with Fill first chosen: its figure plays, the others stand still. */
+/** A figure's overlapping words, as its probe state counts them. */
+const OVERLAPS = /overlaps (\d+)/g;
 const FIGURES = [
   /pinned \d lanes still/,
   /fill \d lanes playing/,
@@ -371,6 +373,16 @@ async function probe(kit: Kit, platform: Platform): Promise<void> {
     ),
     FIGURES.every((one) => one.test(show("routing dirty"))) &&
       show("routing dirty").includes("limit figure limit 2 lanes playing"),
+    show("routing dirty")
+  );
+  // Each figure's words, as laid out: a clock, a name, a blocked word or a
+  // caption standing on another is the overprinting this reads (geometry, not ink).
+  const overlaps = [...show("routing dirty").matchAll(OVERLAPS)].map((m) =>
+    Number(m[1])
+  );
+  kit.check(
+    label("no figure's words stand on each other"),
+    overlaps.length === 5 && overlaps.every((n) => n === 0),
     show("routing dirty")
   );
   kit.check(
