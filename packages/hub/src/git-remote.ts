@@ -23,6 +23,7 @@ import { dirname, join } from "node:path";
 import { detach } from "@cawco/core/detach";
 import { placeStreamedFile } from "@cawco/core/state-file";
 import { Elysia } from "elysia";
+import { HUB_DEBUG } from "./config";
 import { hidden } from "./hidden";
 
 export interface GitRemoteDeps {
@@ -597,12 +598,15 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
           return lfsError(404, "Not an object.");
         }
         const range = request.headers.get("range");
-        logLfs(
-          request,
-          user,
-          `object ${params.oid.slice(0, 12)}`,
-          range ? ` Range: ${range}` : " whole"
-        );
+        // One line per object is a debug line; the batch above is the log's.
+        if (HUB_DEBUG) {
+          logLfs(
+            request,
+            user,
+            `object ${params.oid.slice(0, 12)}`,
+            range ? ` Range: ${range}` : " whole"
+          );
+        }
         return download(params.oid, request);
       })
       .put("/git/:repo/info/lfs/objects/:oid", opts, ({ params, request }) => {
@@ -613,7 +617,9 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
         if (!OID.test(params.oid)) {
           return lfsError(422, "Not an object id.");
         }
-        logLfs(request, user, `object ${params.oid.slice(0, 12)}`);
+        if (HUB_DEBUG) {
+          logLfs(request, user, `object ${params.oid.slice(0, 12)}`);
+        }
         return upload(params.oid, request);
       })
   );

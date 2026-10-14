@@ -1,4 +1,5 @@
 import type { JevResult } from "@cawco/core/workflow-program";
+import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
 import { askJev, type JevAccess } from "./jev";
 import { usageScores } from "./usage-count";
@@ -154,9 +155,11 @@ export async function suggest(
     console.warn(`[suggest] route=${access.route} failed: ${words}`);
     return { error: words };
   }
-  console.debug(
-    `[suggest] route=${access.route} ${asked.length} of ${candidates.length} candidates asked, ${result.usage.inputTokens} input tokens, cost=$${result.usage.costUsd}`
-  );
+  if (HUB_DEBUG) {
+    console.debug(
+      `[suggest] route=${access.route} ${asked.length} of ${candidates.length} candidates asked, ${result.usage.inputTokens} input tokens, cost=$${result.usage.costUsd}`
+    );
+  }
   // One chip per capability: a name offered as both an MCP server and a skill
   // (claude-in-chrome) keeps only its likelier entry.
   const named = new Set<string>();

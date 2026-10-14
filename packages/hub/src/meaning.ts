@@ -1,6 +1,7 @@
 import type { NeutralMessage, Rule, RuleFacts } from "@cawco/core";
 import { ruleInScope } from "@cawco/core";
 import type { JevResult } from "@cawco/core/workflow-program";
+import { HUB_DEBUG } from "./config";
 import type { DbShape } from "./db";
 import { askJev, jevAccess } from "./jev";
 
@@ -170,9 +171,11 @@ export class MeaningJudge {
     const yes = new Set<string>();
     for (const { rule } of asked) {
       const { noul } = result.answers[rule.id];
-      console.debug(
-        `[meaning] ${instanceId}: rule ${rule.id} route=${access.route} noul=${noul} cost=$${result.usage.costUsd}`
-      );
+      if (HUB_DEBUG) {
+        console.debug(
+          `[meaning] ${instanceId}: rule ${rule.id} route=${access.route} noul=${noul} cost=$${result.usage.costUsd}`
+        );
+      }
       if (noul >= MEANING_THRESHOLD) {
         yes.add(rule.id);
       }

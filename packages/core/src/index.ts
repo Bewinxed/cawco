@@ -1422,8 +1422,9 @@ export const CAWCO_ENV = {
   noMdns: "CAWCO_NO_MDNS",
   /**
    * `1` turns on the hub's debug log lines: per-frame traces a production
-   * log should not carry (routines.ts's run sessions' frames). Scratch
-   * fleets run their hub with it on.
+   * log should not carry: routines.ts's run sessions' frames, suggest.ts's
+   * and meaning.ts's per-call Jev lines, git-remote.ts's per-object LFS
+   * lines. Scratch fleets run their hub with it on.
    */
   debug: "CAWCO_DEBUG",
   /**
