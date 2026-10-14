@@ -62,32 +62,17 @@ public final class ConfirmDialog: KitDialogController {
             [title, description, failure].forEach { $0.textAlignment = .center }
         }
 
-        if destructive || grant {
-            let style = grant ? Self.grantStyle(confirmLabel) : Self.destructiveStyle(confirmLabel)
-            confirm = UIButton(configuration: style, primaryAction: UIAction { [weak self] _ in self?.accept() })
+        if grant {
+            confirm = UIButton(configuration: Self.grantStyle(confirmLabel), primaryAction: UIAction { [weak self] _ in self?.accept() })
             confirm.houseStyle()
             confirm.translatesAutoresizingMaskIntoConstraints = false
             confirm.heightAnchor.constraint(greaterThanOrEqualToConstant: Size.cBtnH).isActive = true
         } else {
-            confirm = KitButton.make(confirmLabel, variant: .action) { [weak self] in self?.accept() }
+            confirm = KitButton.make(confirmLabel, variant: destructive ? .destructive : .action) { [weak self] in self?.accept() }
         }
         let cancel = KitButton.make(cancelLabel, variant: .outline) { [weak self] in self?.dismiss(animated: true) }
         body.addArrangedSubview(header)
         body.addArrangedSubview(KitDialogController.footer([cancel, confirm]))
-    }
-
-    /// A destructive confirm: the error border and ink on no fill (button.svelte `destructive`).
-    private static func destructiveStyle(_ title: String) -> UIButton.Configuration {
-        var config = UIButton.Configuration.plain()
-        config.attributedTitle = AttributedString(title, attributes: TypeScale.typeButton.container(color: Palette.error11, tracking: -0.01))
-        config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Space.space4, bottom: 0, trailing: Space.space4)
-        config.background.cornerRadius = Radius.radiusMd
-        config.background.backgroundColor = .clear
-        config.background.strokeColor = Palette.error9
-        config.background.strokeWidth = 1
-        config.imagePadding = 8
-        config.activityIndicatorColorTransformer = UIConfigurationColorTransformer { _ in Palette.error11 }
-        return config
     }
 
     /// A grant wider than the one asked for (button.svelte `grant`): the

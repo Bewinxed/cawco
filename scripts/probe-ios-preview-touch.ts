@@ -192,7 +192,7 @@ const HEAD_LINE =
   /^preview head comment=(.+)@(-?\d+),(-?\d+) pins=(\d+)@(none|-?\d+,-?\d+) send=(.+)@(none|-?\d+,-?\d+) reload=(-?\d+),(-?\d+) grabber=(?:none|(-?\d+),(-?\d+)) note=(\d+) web=(-?\d+),(-?\d+),(\d+),(\d+)$/;
 /** Pins.swift's `preview card …` line: the open pin's number, where its controls stand, whether it wears the live dot. */
 const CARD_LINE =
-  /^preview card pin=(\d+) field=(none|-?\d+,-?\d+) reply=(none|-?\d+,-?\d+) resolve=(\S+)@(none|-?\d+,-?\d+) close=(none|-?\d+,-?\d+) live=(yes|no) thread=(\d+) problem=(.*)$/;
+  /^preview card pin=(\d+) field=(none|-?\d+,-?\d+) reply=(none|-?\d+,-?\d+) resolve=(\S+)@(none|-?\d+,-?\d+) close=(none|-?\d+,-?\d+) live=(yes|no) thread=(\d+) delete=(?:none|-?\d+,-?\d+) writing=(?:true|false) asking=(?:true|false) problem=(.*)$/;
 /** Pins.swift's `preview list …` line, logged once the sheet is in its window: the counts, the filter, each row's number and centre, the live rows. */
 const LIST_LINE =
   /^preview list open=(\d+) resolved=(\d+) moved=(\d+) filter=(\S+)@(none|-?\d+,-?\d+) rows=(\S*) live=(\S*) scrim=(none|-?\d+,-?\d+)$/;

@@ -62,6 +62,9 @@ public enum KitButton {
         case fail
         /// The done status's fill and ink, no edge (NeedsCard.svelte `.approve`).
         case done
+        /// What can't be undone (button.svelte `destructive`): the error
+        /// edge and ink on no fill, `error-3` under the press.
+        case destructive
     }
 
     public enum Height: Sendable {
@@ -178,6 +181,10 @@ public enum KitButton {
             // `border-color: transparent` over a border-box fill: the tint
             // runs to the box's edge.
             config.background.strokeWidth = 0
+        case .destructive:
+            config.background.strokeColor = Palette.error9
+            config.background.strokeWidth = 1
+            config.activityIndicatorColorTransformer = UIConfigurationColorTransformer { _ in Palette.error11 }
         }
         return config
     }
@@ -187,6 +194,7 @@ public enum KitButton {
         case .action: Palette.onAction
         case .fail: Palette.statusFailInk
         case .done: Palette.statusDoneInk
+        case .destructive: Palette.error11
         case .secondary, .outline, .ghost: Palette.inkStrong
         }
     }
@@ -195,6 +203,7 @@ public enum KitButton {
         switch variant {
         case .fail: return Palette.statusFailBg
         case .done: return Palette.statusDoneBg
+        case .destructive: return pressed ? Palette.error3 : .clear
         case .action, .secondary, .outline, .ghost: break
         }
         if pressed {
@@ -204,7 +213,7 @@ public enum KitButton {
         case .action: return Palette.actionSolid
         case .secondary: return Palette.surfaceRecess
         case .outline: return Palette.surfaceRaised
-        case .ghost, .fail, .done: return .clear
+        case .ghost, .fail, .done, .destructive: return .clear
         }
     }
 }

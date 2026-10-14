@@ -294,11 +294,16 @@ private final class MovedRow: UIView {
 /// What the pin stands on (its text, its file:line in mono) with its
 /// picture as a 56pt thumbnail that opens the lightbox; its thread, the
 /// agent's replies as the transcript sets markdown; the 16pt reply field,
-/// then Resolve or Reopen and Reply. What goes wrong is said under the field.
+/// then Delete at the footer's start, Resolve or Reopen and Reply. Delete is
+/// asked in the card itself before it runs (AskHere under the footer, The
+/// Open Page Rule). What goes wrong is said under the field, a refused
+/// delete under its question.
 final class PinCard: UIView, UITextViewDelegate {
     var onClose: () -> Void = {}
     var onReply: (String) -> Void = { _ in }
     var onResolve: (Bool) -> Void = { _ in }
+    /// Deletes the pin once the person confirmed; throws the refusal's sentence.
+    var onDelete: () async throws -> Void = {}
     var onPicture: () -> Void = {}
     /// The reply field took the keyboard, or gave it back.
     var onWriting: (Bool) -> Void = { _ in }
@@ -320,7 +325,12 @@ final class PinCard: UIView, UITextViewDelegate {
     private var resolveButton: UIButton!
     private var replyButton: UIButton!
     private var closeButton: UIButton!
+    private var deleteButton: UIButton!
+    /// The card's one question: Delete, asked under its footer.
+    private let asks = AskHere()
     private var resolved = false
+    /// The pin stands on ink: its delete takes that ink with it.
+    private var inked = false
     private var shownThread: [PinEntry] = []
     /// As a phone's drawer: flush with the well's sides and foot, rounded on top.
     var drawer = false { didSet { paint() } }
@@ -375,16 +385,29 @@ final class PinCard: UIView, UITextViewDelegate {
         }
         replyButton = KitButton.make("Reply", variant: .action, height: .sm) { [weak self] in self?.reply() }
         replyButton.isEnabled = false
-        actions = UIStackView(arrangedSubviews: [UIView(), resolveButton, replyButton])
+        // Delete stands apart from Resolve and Reply, at the footer's start;
+        // while its question stands it wears `surface-hover`, as the web's
+        // `aria-expanded` ghost does.
+        deleteButton = KitButton.make("Delete", glyph: .trash, variant: .ghost, height: .sm) { [weak self] in self?.askDelete() }
+        let restingDelete = deleteButton.configurationUpdateHandler
+        deleteButton.configurationUpdateHandler = { button in
+            restingDelete?(button)
+            if button.isSelected { button.configuration?.background.backgroundColor = Palette.surfaceHover }
+        }
+        asks.onResize = { [weak self] in self?.askMoved() }
+        actions = UIStackView(arrangedSubviews: [deleteButton, UIView(), resolveButton, replyButton])
         actions.spacing = Space.space2
         actions.alignment = .center
 
-        for part in [head, thumbRow, thread, field, problem, actions] as [UIView] { column.addArrangedSubview(part) }
+        for part in [head, thumbRow, thread, field, problem, actions, asks] as [UIView] { column.addArrangedSubview(part) }
         column.axis = .vertical
         column.spacing = Space.space2
         column.translatesAutoresizingMaskIntoConstraints = false
         scroll.translatesAutoresizingMaskIntoConstraints = false
-        scroll.resized = { [weak self] in self?.keepWritingInView() }
+        scroll.resized = { [weak self] in
+            self?.keepWritingInView()
+            self?.keepAskInView()
+        }
         // A drag of what the card holds puts the keyboard away with it, as iOS's lists do.
         scroll.keyboardDismissMode = .interactive
         scroll.addSubview(column)
@@ -423,9 +446,12 @@ final class PinCard: UIView, UITextViewDelegate {
     func show(_ pin: Pin, live: Bool, thumbnail: Data?, problem said: String?, replying: Bool) {
         liveMark.isHidden = !live
         let fresh = pin.id != pinId
+        // Another pin in the same card: a question asked of the last one goes.
+        if fresh { asks.dismiss() }
         pinId = pin.id
         number = pin.label
         resolved = pin.resolved
+        inked = pin.ink != nil
         disc.show(pin)
         name.text = pin.name
         source.text = pin.source
@@ -458,6 +484,59 @@ final class PinCard: UIView, UITextViewDelegate {
     func say(_ said: String?) {
         problem.text = said
         problem.isHidden = said == nil
+    }
+
+    /// What a delete takes with it, named before it runs (PinCard.svelte
+    /// `deleteBody`; WORDS.md, destructive confirm).
+    private var deleteBody: String {
+        let parts = [shownThread.isEmpty ? nil : "its thread", inked ? "the ink it stands on" : nil].compactMap(\.self)
+        let taking = parts.isEmpty ? "It goes from the page. " : "It goes from the page with \(parts.joined(separator: " and ")). "
+        return taking + "The other pins keep their numbers. This can't be undone."
+    }
+
+    /// Delete, asked under the footer. Cancel takes the focus, so the
+    /// keyboard gives the card back to the question.
+    private func askDelete() {
+        field.resignFirstResponder()
+        asks.ask(AskHere.Request(title: "Delete pin \(number)?", body: deleteBody, confirmLabel: "Delete pin",
+                                 pendingLabel: "Deleting…", destructive: true) { [weak self] in
+                try await self?.onDelete()
+            })
+        #if DEBUG
+        PreviewProbe.say(probeLine())
+        PreviewProbe.say(askLine())
+        #endif
+    }
+
+    /// Esc: a question standing goes first. False when there was none to put away.
+    func escape() -> Bool { asks.escape() }
+
+    /// The card closed: its question goes with it, as the web's card unmounts with its own.
+    func closed() { asks.dismiss() }
+
+    /// The question unfolded, folded or said a refusal: Delete says whether
+    /// it stands, the card takes its new height, and the question is in view.
+    private func askMoved() {
+        deleteButton.isSelected = asks.asked != nil
+        deleteButton.accessibilityValue = asks.asked != nil ? "Asking" : nil
+        window?.layoutIfNeeded()
+        keepAskInView()
+        #if DEBUG
+        PreviewProbe.say(askLine())
+        #endif
+    }
+
+    /// The question in view, at the card's foot (AskHere.svelte `scrollIntoView({ block: "nearest" })`),
+    /// unless the person is writing.
+    private func keepAskInView() {
+        guard asks.asked != nil, !field.isFirstResponder else { return }
+        scroll.layoutIfNeeded()
+        let box = column.convert(asks.frame, to: scroll)
+        let room = scroll.bounds.height
+        let most = max(0, scroll.contentSize.height - room)
+        let offset = scroll.contentOffset.y
+        let wanted = box.maxY + 11 > offset + room ? min(most, box.maxY + 11 - room) : offset
+        if abs(wanted - offset) > 0.5 { scroll.contentOffset.y = wanted }
     }
 
     /// The reply went in: the field empties.
@@ -572,7 +651,14 @@ final class PinCard: UIView, UITextViewDelegate {
 
     func probeLine() -> String {
         let words = resolveButton.configuration?.attributedTitle.map { String($0.characters) } ?? "?"
-        return "preview card pin=\(number) field=\(PreviewProbe.centre(field)) reply=\(PreviewProbe.centre(replyButton)) resolve=\(words)@\(PreviewProbe.centre(resolveButton)) close=\(PreviewProbe.centre(closeButton)) live=\(liveMark.isHidden ? "no" : "yes") thread=\(shownThread.count) problem=\(problem.isHidden ? "none" : problem.text ?? "")"
+        return "preview card pin=\(number) field=\(PreviewProbe.centre(field)) reply=\(PreviewProbe.centre(replyButton)) resolve=\(words)@\(PreviewProbe.centre(resolveButton)) close=\(PreviewProbe.centre(closeButton)) live=\(liveMark.isHidden ? "no" : "yes") thread=\(shownThread.count) delete=\(PreviewProbe.centre(deleteButton)) writing=\(field.isFirstResponder) asking=\(asks.asked != nil) problem=\(problem.isHidden ? "none" : problem.text ?? "")"
+    }
+
+    /// The card's question as it stands: where Cancel and the confirm are, then its words.
+    func askLine() -> String {
+        guard asks.asked != nil else { return "preview ask pin=\(number) none" }
+        let (cancel, confirm) = asks.probeControls
+        return "preview ask pin=\(number) cancel=\(PreviewProbe.centre(cancel)) confirm=\(confirm.map(PreviewProbe.centre) ?? "none") \(asks.probeWords)"
     }
     #endif
 }

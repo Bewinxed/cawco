@@ -109,7 +109,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var resolving = false
     private weak var list: PinListController?
     /// The overlay's answers waited on, by what was asked and of which pin
-    /// ("reply:<id>", "resolve:<id>"): nil when it was kept, else why not.
+    /// ("reply:<id>", "resolve:<id>", "delete:<id>"): nil when it was kept, else why not.
     private var answers: [String: CheckedContinuation<String?, Never>] = [:]
     /// How long the page has to answer a reply or a resolve. Our call: the overlay writes its doc at once.
     private static let answerWithin = Duration.seconds(10)
@@ -326,6 +326,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         card.onClose = { [weak self] in self?.closeCard() }
         card.onReply = { [weak self] text in self?.reply(text) }
         card.onResolve = { [weak self] resolved in self?.resolve(resolved) }
+        card.onDelete = { [weak self] in try await self?.delete() }
         card.onPicture = { [weak self] in self?.pictureOfOpenPin() }
         card.onWriting = { [weak self] on in
             guard let self else { return }
@@ -439,9 +440,16 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         return false
     }
 
-    /// Esc on the pane (PreviewPane.svelte `pressKey`): an open pin's card
-    /// closes first, then Comment mode ends. False when neither was there.
+    /// Esc on the pane (PreviewPane.svelte `pressKey`): a question standing
+    /// in the card goes first, then the card closes, then Comment mode ends.
+    /// False when none was there.
     func escape() -> Bool {
+        if openPin != nil, card.escape() {
+            #if DEBUG
+            PreviewProbe.say("preview escape ask")
+            #endif
+            return true
+        }
         if openPin != nil {
             closeCard()
             #if DEBUG
@@ -596,6 +604,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             answered("reply", body)
         case "cawco:resolve-result":
             answered("resolve", body)
+        case "cawco:delete-result":
+            answered("delete", body)
         #if DEBUG
         case "cawco:probe":
             probePage(body)
@@ -770,6 +780,13 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     private func adopt(_ read: ArtifactComments) {
+        #if DEBUG
+        // Every read, changed or not, with the card as it stands when it lands.
+        defer {
+            let card = openPin == nil ? "closed" : self.card.isHidden ? "waiting" : "open:\(self.card.number) writing=\(writing)"
+            PreviewProbe.say("preview read pins=\(read.pins.map { "\($0.label)" }.joined(separator: ",")) card=\(card)")
+        }
+        #endif
         guard read != comments else { return }
         // A pin just made reaches the hub after its card opened: a read that
         // does not hold it yet leaves the card open; only a pin the last read
@@ -890,7 +907,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         cardError = nil
         card.isHidden = true
         card.endEditing(true)
+        card.closed()
         deliver(["type": "cawco:track-pin", "id": NSNull()])
+        #if DEBUG
+        PreviewProbe.say("preview card closed")
+        #endif
     }
 
     /// The open card as its pin stands in the hub's last read.
@@ -1029,6 +1050,27 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         }
     }
 
+    /// Delete, once the person confirmed it in the card (`cawco:delete`): the
+    /// page's overlay takes the pin, and the ink only it stands on, from the
+    /// artifact's doc; the other pins keep their numbers. Gone, the card
+    /// closes and the pins are read again at once; a refusal is thrown, and
+    /// stays under the card's question in the page's words.
+    private func delete() async throws {
+        guard let pin = openPin else { return }
+        if let refused = await ask("delete", pin: pin, ["type": "cawco:delete", "pin": pin],
+                                   silent: "The page didn't answer, so the pin wasn't deleted. Try again.") {
+            throw Refused(sentence: refused)
+        }
+        if openPin == pin { closeCard() }
+        refresh()
+    }
+
+    /// The page's refusal, as the card's question says it.
+    private struct Refused: LocalizedError {
+        let sentence: String
+        var errorDescription: String? { sentence }
+    }
+
     /// Hands the page `message` and waits for its overlay's answer
     /// (`cawco:<what>-result` for `pin`): nil when it was kept, else the
     /// page's own sentence; `silent` when no answer came within `answerWithin`.
@@ -1051,7 +1093,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         }
     }
 
-    /// The overlay's answer to an ask (`cawco:reply-result`, `cawco:resolve-result`).
+    /// The overlay's answer to an ask (`cawco:reply-result`, `cawco:resolve-result`, `cawco:delete-result`).
     private func answered(_ what: String, _ body: [String: Any]) {
         guard let pin = Self.pinId(body["pin"]), let answer = answers.removeValue(forKey: "\(what):\(pin)") else { return }
         let kept = body["ok"] as? Bool == true
@@ -1239,7 +1281,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// The header as last logged on a layout: logged again only when it moved.
     private var laidHead = ""
 
-    /// The card as last logged on a layout.
+    /// The card and its question as last logged on a layout.
     private var laidCard = ""
 
     /// A layout that moved the header (a drawer drag, a mode) says so at once,
@@ -1255,10 +1297,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         DispatchQueue.main.async { [weak self] in
             guard let self, openPin != nil, !card.isHidden else { return }
             view.layoutIfNeeded()
-            let now = card.probeLine()
+            let now = card.probeLine() + "\n" + card.askLine()
             guard now != laidCard else { return }
             laidCard = now
-            PreviewProbe.say(now)
+            PreviewProbe.say(card.probeLine())
+            PreviewProbe.say(card.askLine())
         }
     }
 
@@ -1285,7 +1328,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private func probePage(_ body: [String: Any]) {
         guard PreviewProbe.on, let web else { return }
         PreviewProbe.say(headLine())
-        if openPin != nil, !card.isHidden { PreviewProbe.say(card.probeLine()) }
+        if openPin != nil, !card.isHidden {
+            PreviewProbe.say(card.probeLine())
+            PreviewProbe.say(card.askLine())
+        }
         var parts = [Self.text(body["state"], 200) ?? ""]
         let rects = body["rects"] as? [String: Any] ?? [:]
         for name in rects.keys.sorted() {
