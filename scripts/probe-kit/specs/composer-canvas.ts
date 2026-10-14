@@ -85,6 +85,7 @@ import {
   settle,
   VIEWS,
 } from "../kit";
+import { emulateMotion } from "../motion";
 
 const PILL = "form.cin";
 const FIELD = "form.cin textarea";
@@ -684,7 +685,7 @@ const swapCheck = async (on: On, clock: Clock) => {
   // that a later press brings back.
   for (const motion of ["reduce", "no-preference"] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one press at a time, each read once it has played out
-    await page.emulateMedia({ reducedMotion: motion });
+    await emulateMotion(page, motion);
     await until(
       "the button back on Send",
       () => page.locator(SEND).getAttribute("aria-label"),
@@ -748,7 +749,7 @@ const swapCheck = async (on: On, clock: Clock) => {
       settledNow(ready),
       JSON.stringify(ready)
     );
-    await page.emulateMedia({ reducedMotion: motion });
+    await emulateMotion(page, motion);
     await page.focus(FIELD);
     await page.keyboard.type("Swap");
     // Each press reads only its own runs: what stands on the page as it is
@@ -1279,7 +1280,7 @@ const cornerCheck = async (on: On, clock: Clock) => {
     `${JSON.stringify(reopened)} (was ${JSON.stringify(chosen)})`
   );
   // Reduced motion: the corner's drag lands where it is let go, no settle run.
-  await page.emulateMedia({ reducedMotion: "reduce" });
+  await emulateMotion(page, "reduce");
   grip = await gripAt(page, CORNER_RIGHT);
   const from = (await canvasBox(page)) as NonNullable<
     Awaited<ReturnType<typeof canvasBox>>
@@ -1297,7 +1298,7 @@ const cornerCheck = async (on: On, clock: Clock) => {
       ),
     };
   });
-  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await emulateMotion(page, null);
   await settle(page);
   kit.check(
     "12: with reduced motion the corner's drag lands at once where it is let go (no settle animation): wider by 60, its top up by 40",
@@ -2203,7 +2204,7 @@ const sendCheck = async (on: On, id: string) => {
 /** 8. Reduced motion: opening and Done fade, nothing travels or clips. */
 const reducedCheck = async (on: On, clock: Clock) => {
   const { kit, page } = on;
-  await page.emulateMedia({ reducedMotion: "reduce" });
+  await emulateMotion(page, "reduce");
   // ⌘⇧D makes a new canvas, its page loading inside the catch.
   await page.focus(FIELD);
   await clock.catchRuns(
@@ -2230,7 +2231,7 @@ const reducedCheck = async (on: On, clock: Clock) => {
     only(opening) && only(folding),
     `open ${JSON.stringify(opening)}; Done ${JSON.stringify(folding)}`
   );
-  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await emulateMotion(page, null);
 };
 
 /**

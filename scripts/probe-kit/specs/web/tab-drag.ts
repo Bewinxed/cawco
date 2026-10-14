@@ -36,6 +36,7 @@ import type { Page } from "playwright-core";
 import type { Seen } from "../../../scratch-fleet";
 import { Clock } from "../../anim";
 import { type Kit, open, type Spec } from "../../kit";
+import { emulateMotion } from "../../motion";
 
 const TITLES = ["Alpha", "Bravo", "Charlie", "Delta"];
 const SLOW = "Keep working slowly";
@@ -56,7 +57,7 @@ async function strip(
   const page = await kit.page("desk");
   page.setDefaultTimeout(60_000);
   if (reduced) {
-    await page.emulateMedia({ reducedMotion: "reduce" });
+    await emulateMotion(page, "reduce");
   }
   const ws = {
     v: 1,

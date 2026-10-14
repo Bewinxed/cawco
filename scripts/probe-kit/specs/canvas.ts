@@ -51,6 +51,7 @@
 import type { CDPSession, Frame, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
+import { emulateMotion } from "../motion";
 
 const CREATE = "mcp__cawco__artifact_create";
 const UPDATE = "mcp__cawco__artifact_update";
@@ -2237,7 +2238,7 @@ const swapUnder = async (
   stroke: { at: Pt; points: Pt[] },
   motion: "reduce" | "no-preference"
 ) => {
-  await on.page.emulateMedia({ reducedMotion: motion });
+  await emulateMotion(on.page, motion);
   const runs = catchNamed(cdp, "shape-swap");
   const known = (await sceneOf(frame)).map((el) => el.id);
   await watchSwap(frame);
@@ -2306,7 +2307,7 @@ const motionCheck = async (
   const stroke = { at, points: strokes.rectangle };
   const moving = await swapUnder(on, frame, pen, runs, stroke, "no-preference");
   const reduced = await swapUnder(on, frame, pen, runs, stroke, "reduce");
-  await on.page.emulateMedia({ reducedMotion: "no-preference" });
+  await emulateMotion(on.page, null);
   const said = (swap: typeof moving) =>
     `${swap.runs} run ${JSON.stringify(swap.run?.source)}, scrubbed ${JSON.stringify(swap.samples)}, first frame ${JSON.stringify(swap.first)}`;
   on.kit.check(
@@ -2329,7 +2330,7 @@ const arrivalCheck = async (
   cdp: CDPSession,
   id: string
 ) => {
-  await on.page.emulateMedia({ reducedMotion: "reduce" });
+  await emulateMotion(on.page, "reduce");
   const tokens = await motionTokens(frame);
   const runs = catchNamed(cdp, "agent-arrival");
   const ids = ["arrive-a", "arrive-b"];
@@ -2376,7 +2377,7 @@ const arrivalCheck = async (
   }
   await letGo(cdp, runs);
   await settle(on.page, 400);
-  await on.page.emulateMedia({ reducedMotion: "no-preference" });
+  await emulateMotion(on.page, null);
   const opacity = (line = "") => Number(line.split(" ")[1]);
   const [start, half, end] = samples;
   const step = tokens.stagger / ids.length;

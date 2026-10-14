@@ -30,6 +30,7 @@
 // biome-ignore-all lint/performance/noAwaitInLoops: one Caw on one bench at a time, each case from a fresh page.
 import type { Page } from "playwright-core";
 import { type Kit, open, type Spec } from "../../kit";
+import { emulateMotion } from "../../motion";
 
 interface Bench {
   change: (next: string) => void;
@@ -119,7 +120,7 @@ const run = async (kit: Kit) => {
   for (const motion of ["reduce", "no-preference"] as const) {
     const label = motion === "reduce" ? "less motion" : "full motion";
     const page = await kit.page("desk");
-    await page.emulateMedia({ reducedMotion: motion });
+    await emulateMotion(page, motion);
     const errors = await errorsOn(page);
     const fresh = async () => {
       await open(page, `${base}/motion/caw`, () => "__caw" in window);

@@ -33,6 +33,7 @@ import type { Page } from "playwright-core";
 import { Clock } from "../../anim";
 import { r2 } from "../../geom";
 import { frames, type Kit, open, type Spec, settle, THEMES } from "../../kit";
+import { emulateMotion } from "../../motion";
 
 type Face = "caw" | "machines" | "jump";
 const ROUTE = "/motion/echo";
@@ -411,7 +412,7 @@ async function readAt(kit: Kit, view: "desk" | "phone", theme: string) {
     );
 
     // With less motion.
-    await page.emulateMedia({ reducedMotion: "reduce" });
+    await emulateMotion(page, "reduce");
     await press("caw");
     await rest();
     await press("machines");
@@ -435,7 +436,7 @@ async function readAt(kit: Kit, view: "desk" | "phone", theme: string) {
     await rest();
     await page.keyboard.press("Escape");
     await rest();
-    await page.emulateMedia({ reducedMotion: null });
+    await emulateMotion(page, null);
   }
 
   // Any other text field keeps ⌘K: typed there, it opens nothing.
