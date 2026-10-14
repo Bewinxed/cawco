@@ -85,7 +85,17 @@ const paneTitle = async (page: Page): Promise<string> => {
       // biome-ignore lint/performance/noAwaitInLoops: the newest frame first, one at a time
       const frame = await handle.contentFrame();
       const title = (await frame?.title().catch(() => "")) ?? "";
-      last = title || "an untitled frame";
+      // The proxy's own page names the hop that failed, and why.
+      const said = await frame
+        ?.evaluate(() =>
+          [...document.querySelectorAll("meta[name^=cawco-preview-]")]
+            .map(
+              (m) => `${m.getAttribute("name")}=${m.getAttribute("content")}`
+            )
+            .join(" ")
+        )
+        .catch(() => "");
+      last = `${title || "an untitled frame"}${said ? ` [${said}]` : ""}`;
       if (title === TITLE) {
         return title;
       }
@@ -151,11 +161,27 @@ const run = async (kit: Kit) => {
     await tab.reload({ waitUntil: "domcontentloaded" });
     await tab.waitForSelector(FRAME, { timeout: 60_000 });
     const title = await paneTitle(tab);
-    kit.check(
+    const shown = kit.check(
       `${step}: ${label}, the next load shows the page`,
       title === TITLE,
       title
     );
+    if (!shown) {
+      for (const role of ["hub", "agent"] as const) {
+        // biome-ignore lint/performance/noAwaitInLoops: one journal at a time
+        const lines = await fleet
+          .logs(role)
+          .then((text) =>
+            text
+              .split("\n")
+              .filter((line) => line.includes("preview"))
+              .slice(-8)
+              .join(" | ")
+          )
+          .catch((error: Error) => `unreadable: ${error.message}`);
+        kit.note(`${step}: the ${role}'s preview lines: ${lines || "none"}`);
+      }
+    }
   };
 
   // 2. The agent restarts: its listener goes with it.

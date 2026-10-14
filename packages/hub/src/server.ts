@@ -7898,8 +7898,11 @@ export const createServer = (
    * the listener it names gets stopped instead.
    */
   const previewGeneration = new Map<string, number>();
+  /** An instance's counter now; 0 before anything moved it in this hub process (a target restored at start). */
+  const previewGenerationOf = (instanceId: string): number =>
+    previewGeneration.get(instanceId) ?? 0;
   const nextPreviewGeneration = (instanceId: string): number => {
-    const generation = (previewGeneration.get(instanceId) ?? 0) + 1;
+    const generation = previewGenerationOf(instanceId) + 1;
     previewGeneration.set(instanceId, generation);
     return generation;
   };
@@ -8023,7 +8026,7 @@ export const createServer = (
         error,
       };
     }
-    if (previewGeneration.get(instanceId) !== generation) {
+    if (previewGenerationOf(instanceId) !== generation) {
       stopLate();
       return {
         ok: false,
@@ -8118,7 +8121,7 @@ export const createServer = (
         error: `machine ${target.machineId} is not connected`,
       });
     }
-    const generation = previewGeneration.get(instanceId) ?? 0;
+    const generation = previewGenerationOf(instanceId);
     const reach = (async (): Promise<PreviewReach> => {
       const started = await startListener(
         instanceId,
@@ -8130,7 +8133,7 @@ export const createServer = (
         return started;
       }
       const now = previewTargets.get(instanceId);
-      if (!now || previewGeneration.get(instanceId) !== generation) {
+      if (!now || previewGenerationOf(instanceId) !== generation) {
         return {
           ok: false,
           down: "closed",
