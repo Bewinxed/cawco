@@ -426,7 +426,7 @@ export function taskTools(context: TaskToolContext | undefined) {
           .optional()
           .describe("A delegate type; null clears it."),
         checks: lines("Replaces the checks."),
-        outputs: lines(`Replaces the outputs. ${POST_OUTPUT_RULE}`),
+        outputs: lines("Replaces the outputs (a post: as task_create says)."),
         context: lines("Replaces the context."),
         lands: landsParameter()
           .nullable()

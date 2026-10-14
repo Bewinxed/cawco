@@ -129,4 +129,4 @@ export function withFirstParagraph(text: string, first: string): string {
  * writer reads them).
  */
 export const POST_OUTPUT_RULE =
-  'A social post is written as `<task>.post.json`: {"kind":"x-post","account":"@handle","text":"…","alternates":["another first paragraph"],"media":{"plan":"…","files":["media/…"]},"community":"…","thread":["a reply under it"]} (only kind, account and text are required; text keeps its line breaks). A plan or notes beside it is markdown. Both are listed in the task\'s outputs.';
+  'A social post is `<task>.post.json`: {"kind":"x-post","account":"@handle","text":"…","alternates":["first paragraph"],"media":{"plan":"…","files":[]},"community":"…","thread":["reply"]}; kind, account, text required. Plan notes beside it as .md; list both.';
