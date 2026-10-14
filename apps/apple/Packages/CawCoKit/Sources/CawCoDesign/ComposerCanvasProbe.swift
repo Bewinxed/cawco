@@ -13,7 +13,9 @@ import UIKit
 ///   the cut on the page following the shape at every paint (one clock);
 ///   standing, the page fills the column above the field, and the field
 ///   takes the keys; the grab's drag settles at 40% of the column and at the
-///   column less the field, one spring each; Dock stands the canvas's own
+///   column less the field, one spring each; the right edge dragged out
+///   120pt widens it by 120 with the left edge still, on one spring, holds
+///   at its bounds, and the width survives Done and reopen; Dock stands the canvas's own
 ///   view on the artifact panel's page, and its page's Undock brings it
 ///   back over the field; Send with nothing drawn sends
 ///   nothing and says so; drawn on (as the agent draws, through the hub),
@@ -22,7 +24,8 @@ import UIKit
 /// - `-canvas-probe-wheel`: the same drag without the pencil stand-in brings
 ///   the wheel up, never the canvas; the recognizers' touch types.
 /// - `-canvas-probe-still`, with Reduce Motion on: Draw opens the canvas and
-///   Done folds it with opacity animations only, nothing travelling.
+///   Done folds it with opacity animations only, nothing travelling; a side
+///   edge's release lands at once.
 /// - `-canvas-probe-sync`: the canvas page's sync socket goes through a gate
 ///   (CanvasWeb's DEBUG `gate`), refused from the start: the canvas shows
 ///   its refusal, a pen stroke adds nothing and Send says it isn't
@@ -175,6 +178,8 @@ enum CanvasProbe {
                   "rested at \(f(rested)), wanted \(f(want)) (\(f(want / Double(column.height) * 100))% of the column), \(room.probeSettles - settles) spring")
         }
 
+        await sidePass(composer, room)
+
         // Dock: the same view flies into the panel and stands on its page; the page's Undock brings it back.
         room.web?.onDock()
         let docked = await until(15) { room.docked && !room.moving && composer.canvasChip != nil }
@@ -239,6 +244,57 @@ enum CanvasProbe {
               "sent \(carried.count) message, carrying \(names.joined(separator: ", ")); the draft holds a canvas \(binding.canvas != nil)")
         say("sent canvas \(canvas.id) to \(binding.sessionId)")
         binding.onSend = send
+    }
+
+    /// The side edges: the right edge dragged out by 120pt (as far as the
+    /// column lets it) widens the canvas by that, the left edge still, on one
+    /// spring; past its reach it holds at the reach, under the pill's width
+    /// at the pill's; the width it is left at survives Done and reopen.
+    private static func sidePass(_ composer: ComposerView, _ room: CanvasRoom) async {
+        guard let reach = room.probeReach, let wide = room.probeWide else {
+            return check("the side grabs stand over the canvas", false, "no sizes")
+        }
+        let grabs = [room.leftGrab, room.rightGrab].map { !$0.isHidden && $0.isUserInteractionEnabled && $0.superview != nil }
+        let before = room.probeBox
+        let out = min(120, reach.right - wide.right)
+        let settles = room.probeSettles
+        room.probeDrag(.right, to: wide.right + out, speed: 0)
+        _ = await until(3) { !room.probeSpringRunning }
+        await wait(0.2)
+        let after = room.probeBox
+        check("the right edge dragged out by \(f(out, 0))pt widens the canvas by that, the left edge still, on one spring",
+              grabs.allSatisfy(\.self) && out > 0 && abs(after.width - before.width - out) <= 0.5 && abs(after.minX - before.minX) <= 0.5
+                  && room.probeSettles == settles + 1,
+              "side grabs live \(grabs), reach right \(f(reach.right)), width \(f(before.width)) → \(f(after.width)), left edge \(f(before.minX)) → \(f(after.minX)), \(room.probeSettles - settles) spring")
+
+        // Past the reach, the edge holds at the reach; in past the pill, at the pill's edge.
+        room.probeDrag(.right, to: reach.right + 400, speed: 900)
+        _ = await until(3) { !room.probeSpringRunning }
+        await wait(0.2)
+        let most = room.probeWide?.right ?? .nan
+        room.probeDrag(.right, to: -400, speed: -900)
+        _ = await until(3) { !room.probeSpringRunning }
+        await wait(0.2)
+        let least = room.probeWide?.right ?? .nan
+        let pillWidth = room.probeBox.width
+        check("a side edge holds at the column less space3 at most and at the pill's width at least",
+              abs(most - reach.right) < 0.5 && abs(least) < 0.5,
+              "right edge rested \(f(most)) past the pill (reach \(f(reach.right))), then \(f(least)) (the canvas \(f(pillWidth))pt wide)")
+
+        // The width it is left at survives Done and reopen.
+        room.probeDrag(.right, to: out, speed: 0)
+        _ = await until(3) { !room.probeSpringRunning }
+        await wait(0.2)
+        let kept = room.probeBox.width
+        composer.foldCanvas()
+        let folded = await until(10) { !room.up && !room.moving }
+        await wait(0.6)
+        composer.openCanvas()
+        let reopened = await until(10) { room.up && !room.moving }
+        await wait(0.4)
+        let again = room.probeBox.width
+        check("the width survives Done and reopen", folded && reopened && abs(again - kept) <= 0.5,
+              "\(f(kept))pt before Done, \(f(again))pt reopened (folded \(folded), reopened \(reopened))")
     }
 
     /// Draws a rectangle with a word in it on the canvas, as `artifact_update` does.
@@ -413,6 +469,16 @@ enum CanvasProbe {
         check("Reduce Motion: the canvas fades in, nothing travels", opening.travelled == 0 && travels(opening.keys).isEmpty && opening.faded,
               "animated keys \(opening.keys.sorted()), travelling \(travels(opening.keys).sorted()), the shape grown from the first look \(opening.travelled == 0), faded \(opening.faded)")
         _ = await until(5) { !room.moving }
+        // A side edge's release lands at once: no spring runs.
+        if let wide = room.probeWide, let reach = room.probeReach {
+            let settles = room.probeSettles
+            room.probeDrag(.right, to: wide.right, speed: 900)
+            let rested = room.probeRested ?? .nan
+            let at = room.probeWide?.right ?? .nan
+            check("Reduce Motion: a side edge's release lands at once",
+                  !room.probeSpringRunning && room.probeSettles == settles + 1 && abs(rested - at) < 0.5 && abs(at - reach.right) < 0.5,
+                  "spring running \(room.probeSpringRunning), rested at \(f(rested)) with the edge \(f(at)) past the pill (reach \(f(reach.right)))")
+        }
         composer.foldCanvas()
         let folding = await watch(room, for: Motion.durFade + 0.1)
         check("Reduce Motion: Done fades it out, nothing travels", folding.travelled == 0 && travels(folding.keys).isEmpty,

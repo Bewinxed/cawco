@@ -16,8 +16,13 @@ import WebKit
 //   listener) is cut to the shape as it grows. Reopened from its chip, it
 //   opens out of the chip's box on the same clock.
 // - Resize: its top edge's 44pt grab drags its height between 40% of the
-//   column and the column less the field, settling on the house spring at
-//   the finger's speed; a press mid-settle takes it from where it stands.
+//   column and the column less the field; each side's 44pt grab, straddling
+//   that edge, drags that edge alone, from the pill's width to the column's
+//   less `space3` each side, the shape's shoulders stepping out over the
+//   pill's upper side to meet it. Each settles on the house spring at the
+//   finger's speed (none after the finger stood still); a press mid-settle
+//   takes it from where it stands; height and width are kept across Done
+//   and reopen.
 // - Done folds it over `durGrowExit` into its chip, the export's picture
 //   the chip's thumbnail.
 // - Remove (the rail's, or the chip's ✕) takes it out of the message: an
@@ -642,22 +647,32 @@ private final class PenDown: UIGestureRecognizer {
 
 // MARK: The grab
 
-/// The canvas's top edge (CanvasStages.svelte `.grab`): a 160 × 44 band with
-/// the drawer's 100 × 6 grabber laid flat in it, `space1` from its top. It
-/// drags the canvas's height; VoiceOver adjusts it a step at a time.
+/// An edge of the composer's canvas that resizes it (stage.svelte.ts `Edge`).
+enum CanvasEdge: CaseIterable {
+    case top, left, right
+}
+
+/// One of the canvas's resizing edges (CanvasStages.svelte `.grab`, `.grab-left`,
+/// `.grab-right`). The top: a 160 × 44 band with the drawer's 100 × 6
+/// grabber laid flat in it, `space1` from its top, dragging the height. A
+/// side: a 44 × 160 band straddling the visible edge at mid-height, the
+/// grabber upright (6 × 100) `space1` inside the edge, dragging that edge
+/// alone. VoiceOver adjusts each a step at a time.
 @MainActor
 final class CanvasGrab: UIView {
+    let edge: CanvasEdge
     private let grabber = UIView()
     var onStep: (Double) -> Void = { _ in }
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
+    init(_ edge: CanvasEdge) {
+        self.edge = edge
+        super.init(frame: .zero)
         grabber.backgroundColor = Palette.borderControl
         grabber.layer.cornerRadius = 3
         grabber.isUserInteractionEnabled = false
         addSubview(grabber)
         isAccessibilityElement = true
-        accessibilityLabel = "Canvas height"
+        accessibilityLabel = edge == .top ? "Canvas height" : edge == .left ? "Canvas width, left edge" : "Canvas width, right edge"
         accessibilityTraits = .adjustable
     }
 
@@ -668,7 +683,12 @@ final class CanvasGrab: UIView {
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        grabber.frame = CGRect(x: (bounds.width - 100) / 2, y: Space.space1, width: 100, height: 6)
+        let mid = bounds.width / 2
+        switch edge {
+        case .top: grabber.frame = CGRect(x: (bounds.width - 100) / 2, y: Space.space1, width: 100, height: 6)
+        case .left: grabber.frame = CGRect(x: mid + Space.space1, y: (bounds.height - 100) / 2, width: 6, height: 100)
+        case .right: grabber.frame = CGRect(x: mid - Space.space1 - 6, y: (bounds.height - 100) / 2, width: 6, height: 100)
+        }
     }
 
     override func accessibilityIncrement() { onStep(CanvasMeasure.step) }
@@ -689,16 +709,21 @@ final class CanvasRoom: NSObject {
     /// docked, so it can still draw its picture for a send.
     let stage = UIView()
     private let cut = CAShapeLayer()
-    let grab = CanvasGrab()
+    /// The top edge's grab, and each side's.
+    let grab = CanvasGrab(.top)
+    let leftGrab = CanvasGrab(.left)
+    let rightGrab = CanvasGrab(.right)
+    var grabs: [CanvasGrab] { [grab, leftGrab, rightGrab] }
     private var halo: RecallHalo?
     /// Standing over the field (growing, grown or folding).
     private(set) var up = false
-    /// A grow, a fold or a flight is running: the grab and a relayout wait.
+    /// A grow, a fold or a flight is running: the grabs and a relayout wait.
     private(set) var moving = false
 
     /// Every size, read once before anything is written: the pill's width
     /// and height, how far the composer's top stands over the pill's (the
-    /// chips, the tray), the canvas's bounds and its height now.
+    /// chips, the tray), the canvas's bounds, its height now, and how far
+    /// each side stands past the pill and may.
     struct Sizes: Equatable {
         var width: Double
         var base: Double
@@ -708,11 +733,19 @@ final class CanvasRoom: NSObject {
         var height: Double
         /// The pill's top, in the window, as measured.
         var top: Double
+        /// How far each side stands past the pill now.
+        var wide: Wide
+        /// How far each side may: to the column's edge less `space3`.
+        var reach: Wide
     }
 
     private(set) var sizes: Sizes?
     /// The height the reader chose by the grab, kept while it fits.
     private var chosen: Double?
+    /// How far past the pill the reader dragged each side, kept while it fits.
+    private var chosenWide = Wide()
+    /// When the dragging finger last moved: a release after it stood still carries no speed.
+    private var lastMove: CFTimeInterval = 0
     /// What the stage is cut to: the shape, or a box between the chip's and its own.
     private enum Cut {
         case shape
@@ -749,11 +782,36 @@ final class CanvasRoom: NSObject {
         cut.actions = ["path": NSNull(), "bounds": NSNull(), "position": NSNull()]
         stage.alpha = 0
         stage.isUserInteractionEnabled = false
-        let drag = UIPanGestureRecognizer(target: self, action: #selector(dragged(_:)))
-        drag.maximumNumberOfTouches = 1
-        grab.addGestureRecognizer(drag)
-        grab.onStep = { [weak self] by in self?.step(by) }
-        grab.isHidden = true
+        for one in grabs {
+            let drag = UIPanGestureRecognizer(target: self, action: #selector(dragged(_:)))
+            drag.maximumNumberOfTouches = 1
+            one.addGestureRecognizer(drag)
+            let edge = one.edge
+            one.onStep = { [weak self] by in self?.step(edge, by) }
+            one.isHidden = true
+        }
+    }
+
+    /// The grabs stand in the ring over the stage.
+    private func raiseGrabs() {
+        for one in grabs { composer.ring.insertSubview(one, aboveSubview: stage) }
+    }
+
+    /// The grabs show over the canvas, taking a drag once it stands still (`live`).
+    private func showGrabs(live: Bool) {
+        for one in grabs {
+            one.isHidden = false
+            one.isUserInteractionEnabled = live
+        }
+    }
+
+    /// The grabs go: hidden, and out of the ring when `out`.
+    private func hideGrabs(out: Bool) {
+        for one in grabs {
+            if out { one.removeFromSuperview() }
+            one.isHidden = true
+            one.isUserInteractionEnabled = false
+        }
     }
 
     private var host: CanvasHost? { composer.binding?.canvasHost }
@@ -795,8 +853,11 @@ final class CanvasRoom: NSObject {
         let most = max(0, Double(box.minY) - lift - ceiling - 1)
         let least = min(most, CanvasMeasure.floor * Double(column.height))
         let height = min(most, max(least, chosen ?? most))
+        let reach = Wide(left: max(0, Double(box.minX - column.minX) - Space.space3),
+                         right: max(0, Double(column.maxX - box.maxX) - Space.space3))
+        let wide = Wide(left: min(reach.left, chosenWide.left), right: min(reach.right, chosenWide.right))
         return Sizes(width: Double(ring.bounds.width), base: Double(ring.bounds.height), lift: lift, min: least, max: most,
-                     height: height, top: Double(box.minY))
+                     height: height, top: Double(box.minY), wide: wide, reach: reach)
     }
 
     /// How far the shape reaches over the pill: the chips' row and the canvas.
@@ -804,9 +865,10 @@ final class CanvasRoom: NSObject {
         sizes.lift + sizes.height + 1
     }
 
-    /// The stage's box over the field, in the ring: a point inside the shape's edge.
+    /// The stage's box over the field, in the ring: a point inside the shape's edge, as wide as its sides stand.
     private func stageBox(_ sizes: Sizes) -> CGRect {
-        CGRect(x: 1, y: -sizes.lift - sizes.height, width: sizes.width - 2, height: sizes.height)
+        CGRect(x: 1 - sizes.wide.left, y: -sizes.lift - sizes.height,
+               width: sizes.width - 2 + sizes.wide.left + sizes.wide.right, height: sizes.height)
     }
 
     private func place(_ sizes: Sizes) {
@@ -816,16 +878,25 @@ final class CanvasRoom: NSObject {
         stage.transform = .identity
         stage.frame = box
         cut.frame = stage.bounds
-        grab.frame = CGRect(x: (sizes.width - CanvasMeasure.grabWidth) / 2, y: box.minY, width: CanvasMeasure.grabWidth, height: CanvasMeasure.grabHeight)
+        grab.frame = CGRect(x: box.midX - CanvasMeasure.grabWidth / 2, y: box.minY, width: CanvasMeasure.grabWidth, height: CanvasMeasure.grabHeight)
+        // Each side's band straddles the shape's side where it stands at mid-height (CanvasStages.svelte `--edge-in`).
+        let geometry = RecallGeometry(width: sizes.width, base: sizes.base, spread: 1, taperRows: 1, wide: sizes.wide)
+        let inset = max(0, Recall.taperAt(1 + sizes.height / 2, geometry: geometry, extra: extra(sizes)) - 1)
+        let half = CanvasMeasure.grabHeight / 2
+        let y = box.midY - CanvasMeasure.grabWidth / 2
+        leftGrab.frame = CGRect(x: box.minX + inset - half, y: y, width: CanvasMeasure.grabHeight, height: CanvasMeasure.grabWidth)
+        rightGrab.frame = CGRect(x: box.maxX - inset - half, y: y, width: CanvasMeasure.grabHeight, height: CanvasMeasure.grabWidth)
         CATransaction.commit()
         grab.accessibilityValue = "\(Int((sizes.height / max(1, sizes.max) * 100).rounded())) percent of the room"
+        let width = Int((sizes.width + sizes.wide.left + sizes.wide.right).rounded())
+        for side in [leftGrab, rightGrab] { side.accessibilityValue = "\(width) points wide" }
     }
 
     // MARK: The shape and the cut
 
     private func newHalo(_ sizes: Sizes) -> RecallHalo {
         halo?.remove()
-        let geometry = RecallGeometry(width: sizes.width, base: sizes.base, spread: 1, taperRows: 1)
+        let geometry = RecallGeometry(width: sizes.width, base: sizes.base, spread: 1, taperRows: 1, wide: sizes.wide)
         let halo = RecallHalo(geometry, extra: extra(sizes), fades: false)
         composer.ring.insertSubview(halo, belowSubview: composer.pill)
         halo.onPaint = { [weak self] path, box in self?.cutTo(path, box) }
@@ -877,13 +948,12 @@ final class CanvasRoom: NSObject {
         let ring = composer.ring
         if stage.superview !== ring { ring.addSubview(stage) }
         ring.insertSubview(stage, aboveSubview: halo)
-        ring.insertSubview(grab, aboveSubview: stage)
+        raiseGrabs()
         place(sizes)
         web.web.frame = stage.bounds
         stage.alpha = 1
         stage.isUserInteractionEnabled = true
-        grab.isHidden = false
-        grab.isUserInteractionEnabled = false
+        showGrabs(live: false)
         cutting = chip.map { .box(from: stage.convert($0, from: nil), to: stage.bounds, grow: true) } ?? .shape
         #if DEBUG
         probePaints = []
@@ -895,7 +965,7 @@ final class CanvasRoom: NSObject {
             moving = false
             cutting = .shape
             halo.paint()
-            grab.isUserInteractionEnabled = true
+            showGrabs(live: true)
             UIAccessibility.post(notification: .layoutChanged, argument: web.web)
             #if DEBUG
             let paints = probePaints
@@ -928,7 +998,7 @@ final class CanvasRoom: NSObject {
         stopAll()
         halo.unsettle()
         moving = true
-        grab.isUserInteractionEnabled = false
+        showGrabs(live: false)
         stage.isUserInteractionEnabled = false
         place(sizes)
         cutting = chip.map { .box(from: stage.bounds, to: stage.convert($0, from: nil), grow: false) } ?? .shape
@@ -952,13 +1022,12 @@ final class CanvasRoom: NSObject {
         }
     }
 
-    /// The shape and the grab go; the page stays, parked out of sight.
+    /// The shape and the grabs go; the page stays, parked out of sight.
     func putAway() {
         stopAll()
         halo?.remove()
         halo = nil
-        grab.removeFromSuperview()
-        grab.isHidden = true
+        hideGrabs(out: true)
         stage.alpha = 0
         stage.isUserInteractionEnabled = false
         stage.transform = .identity
@@ -998,8 +1067,7 @@ final class CanvasRoom: NSObject {
         stopAll()
         halo?.remove()
         halo = nil
-        grab.removeFromSuperview()
-        grab.isHidden = true
+        hideGrabs(out: true)
         up = false
         moving = false
         sizes = nil
@@ -1076,7 +1144,7 @@ final class CanvasRoom: NSObject {
         stopAll()
         halo.unsettle()
         moving = true
-        grab.isHidden = true
+        hideGrabs(out: false)
         stage.isUserInteractionEnabled = false
         place(sizes)
         cut.path = nil
@@ -1133,12 +1201,12 @@ final class CanvasRoom: NSObject {
         let ring = composer.ring
         if stage.superview !== ring { ring.addSubview(stage) }
         ring.insertSubview(stage, aboveSubview: halo)
-        ring.insertSubview(grab, aboveSubview: stage)
+        raiseGrabs()
         place(sizes)
         web?.web.frame = stage.bounds
         stage.layer.mask = nil
         stage.alpha = 1
-        grab.isHidden = true
+        hideGrabs(out: false)
         let landed = { [weak self, weak halo] in
             guard let self, let halo, self.halo === halo else { return }
             moving = false
@@ -1146,8 +1214,7 @@ final class CanvasRoom: NSObject {
             cutting = .shape
             halo.paint()
             stage.isUserInteractionEnabled = true
-            grab.isHidden = false
-            grab.isUserInteractionEnabled = true
+            showGrabs(live: true)
             halo.settle()
         }
         if UIAccessibility.isReduceMotionEnabled {
@@ -1181,55 +1248,121 @@ final class CanvasRoom: NSObject {
 
     // MARK: Resize
 
-    /// Writes the canvas at `height` this frame: its box, the grab, the shape and the cut.
-    private func write(_ height: Double) {
+    /// Writes the canvas at `height` with its sides at `wide` this frame: its box, the grabs, the shape and the cut.
+    private func stand(height: Double, wide: Wide) {
         guard var sizes, let halo else { return }
         sizes.height = height
+        sizes.wide = wide
         self.sizes = sizes
         place(sizes)
+        halo.wide = wide
         halo.stand(extra: extra(sizes))
     }
 
-    /// The height under the finger: 1:1 inside its bounds, rubber-banded past them.
-    private func follow(_ height: Double, _ sizes: Sizes) -> Double {
-        let past = height > sizes.max ? height - sizes.max : min(0, height - sizes.min)
-        guard past != 0 else { return height }
-        let bound = past > 0 ? sizes.max : sizes.min
-        let reach = min(abs(past) * CanvasMeasure.rubber, bound * CanvasMeasure.rubberMax)
+    /// What an edge's drag moves: the height for the top, how far that side stands past the pill for a side.
+    private func value(_ edge: CanvasEdge, _ sizes: Sizes) -> Double {
+        switch edge {
+        case .top: sizes.height
+        case .left: sizes.wide.left
+        case .right: sizes.wide.right
+        }
+    }
+
+    /// An edge's bounds, and the size its rubber band's furthest reach is a share of.
+    private func bounds(_ edge: CanvasEdge, _ sizes: Sizes) -> (min: Double, max: Double, scale: (Double) -> Double) {
+        switch edge {
+        case .top: (sizes.min, sizes.max, { $0 })
+        case .left: (0, sizes.reach.left, { sizes.width + sizes.wide.right + $0 })
+        case .right: (0, sizes.reach.right, { sizes.width + sizes.wide.left + $0 })
+        }
+    }
+
+    /// Writes `edge` at `value` this frame, every other edge where it stands.
+    private func write(_ edge: CanvasEdge, _ value: Double) {
+        guard let sizes else { return }
+        var wide = sizes.wide
+        switch edge {
+        case .top: return stand(height: value, wide: wide)
+        case .left: wide.left = value
+        case .right: wide.right = value
+        }
+        stand(height: sizes.height, wide: wide)
+    }
+
+    /// The value under the finger: 1:1 inside its bounds, rubber-banded past them.
+    private func follow(_ edge: CanvasEdge, _ value: Double, _ sizes: Sizes) -> Double {
+        let (low, high, scale) = bounds(edge, sizes)
+        let past = value > high ? value - high : min(0, value - low)
+        guard past != 0 else { return value }
+        let bound = past > 0 ? high : low
+        let reach = min(abs(past) * CanvasMeasure.rubber, scale(bound) * CanvasMeasure.rubberMax)
         return bound + (past > 0 ? reach : -reach)
     }
 
+    /// How far a drag's translation grows its edge's value: up is taller, outward is wider.
+    private func grown(_ edge: CanvasEdge, by moved: CGPoint) -> Double {
+        switch edge {
+        case .top: -Double(moved.y)
+        case .left: -Double(moved.x)
+        case .right: Double(moved.x)
+        }
+    }
+
+    /// How long the finger may stand still before it lets go and still carry
+    /// its last speed (canvas-room.svelte.ts `STILL_MS`): UIKit sends no
+    /// `.changed` while a finger rests, so the pan's velocity at the lift is
+    /// the last movement's, and a pause, then a lift, flew to the bound.
+    private static let stillFor: CFTimeInterval = 0.1
+
     @objc private func dragged(_ pan: UIPanGestureRecognizer) {
-        guard up, !moving, let sizes else { return }
+        guard up, !moving, let sizes, let edge = (pan.view as? CanvasGrab)?.edge else { return }
         switch pan.state {
         case .began:
             // A settle caught mid-way is taken from where it stands.
             spring.stop()
             halo?.unsettle()
-            dragFrom = sizes.height
+            dragFrom = value(edge, sizes)
+            lastMove = CACurrentMediaTime()
         case .changed:
-            write(follow(dragFrom - Double(pan.translation(in: composer).y), sizes))
+            lastMove = CACurrentMediaTime()
+            write(edge, follow(edge, dragFrom + grown(edge, by: pan.translation(in: composer)), sizes))
         case .ended, .cancelled:
-            // Up is taller: the height's speed, points a second.
-            let speed = -Double(pan.velocity(in: composer).y)
-            let now = sizes.height
-            let target = min(sizes.max, max(sizes.min, now + speed * CanvasMeasure.project * 1000))
-            chosen = target
-            settle(from: now, to: target, speed: speed)
+            // The value's speed, points a second; none when the finger stood still before it lifted.
+            let fresh = CACurrentMediaTime() - lastMove <= Self.stillFor
+            let speed = fresh ? grown(edge, by: pan.velocity(in: composer)) : 0
+            release(edge, at: value(edge, sizes), speed: speed, sizes)
         default:
             break
         }
     }
 
+    /// A release: the value projected by its speed, held to its bounds, kept, and settled on the house spring.
+    private func release(_ edge: CanvasEdge, at now: Double, speed: Double, _ sizes: Sizes) {
+        let (low, high, _) = bounds(edge, sizes)
+        let target = min(high, max(low, now + speed * CanvasMeasure.project * 1000))
+        choose(edge, target)
+        settle(edge, from: now, to: target, speed: speed)
+    }
+
+    /// The reader's choice for `edge`, kept across Done and reopen while it fits.
+    private func choose(_ edge: CanvasEdge, _ value: Double) {
+        switch edge {
+        case .top: chosen = value
+        case .left: chosenWide.left = value
+        case .right: chosenWide.right = value
+        }
+    }
+
     /// The house spring from `now` to `target`, leaving at `speed`: one
     /// spring, stepped each frame, which a new press catches where it is.
-    private func settle(from now: Double, to target: Double, speed: Double) {
+    /// With Reduce Motion it lands at once.
+    private func settle(_ edge: CanvasEdge, from now: Double, to target: Double, speed: Double) {
         #if DEBUG
         probeSettles += 1
         probeRested = nil
         #endif
         guard !UIAccessibility.isReduceMotionEnabled, composer.window != nil else {
-            rest(at: target)
+            rest(edge, at: target)
             return
         }
         var house = HouseSpring(x: now - target, v: speed, target: target)
@@ -1240,61 +1373,68 @@ final class CanvasRoom: NSObject {
             then = time
             let still = house.step(dt)
             guard !still else {
-                rest(at: target)
+                rest(edge, at: target)
                 return false
             }
-            write(target + house.x)
+            write(edge, target + house.x)
             return true
         }
     }
 
-    private func rest(at target: Double) {
-        write(target)
+    private func rest(_ edge: CanvasEdge, at target: Double) {
+        write(edge, target)
         halo?.settle()
         #if DEBUG
         probeRested = target
-        CanvasDebug.log.notice("canvas rests at \(Int(target.rounded()))pt of \(Int(self.sizes?.min ?? 0))–\(Int(self.sizes?.max ?? 0))")
+        if let sizes {
+            let (low, high, _) = bounds(edge, sizes)
+            CanvasDebug.log.notice("canvas \(String(describing: edge), privacy: .public) rests at \(Int(target.rounded()))pt of \(Int(low))–\(Int(high))")
+        }
         #endif
     }
 
-    /// VoiceOver's step on the grab.
-    private func step(_ by: Double) {
+    /// VoiceOver's step on a grab: taller, or that side wider.
+    private func step(_ edge: CanvasEdge, _ by: Double) {
         guard up, !moving, let sizes else { return }
-        let height = min(sizes.max, max(sizes.min, sizes.height + by))
-        chosen = height
+        let (low, high, _) = bounds(edge, sizes)
+        let next = min(high, max(low, value(edge, sizes) + by))
+        choose(edge, next)
         spring.stop()
-        rest(at: height)
+        rest(edge, at: next)
     }
 
-    /// The window, the keyboard or the field moved the pill: the canvas keeps its height where it fits.
+    /// The window, the keyboard or the field moved the pill: the canvas keeps its height and width where they fit.
     func relayout() {
         // Docked, it stands over the panel's page, wherever the composer moved.
         if docked { return follow() }
         guard up, !moving, !spring.running, let before = sizes, let next = measure() else { return }
         guard abs(next.width - before.width) > 0.5 || abs(next.base - before.base) > 0.5 || abs(next.lift - before.lift) > 0.5
-            || abs(next.top - before.top) > 0.5 || abs(next.max - before.max) > 0.5 else { return }
+            || abs(next.top - before.top) > 0.5 || abs(next.max - before.max) > 0.5 || next.wide != before.wide else { return }
         sizes = next
         if abs(next.width - before.width) > 0.5 {
             newHalo(next).morph(to: 1, extra: extra(next), duration: 0)
         } else {
             halo?.base = next.base
         }
-        write(next.height)
+        stand(height: next.height, wide: next.wide)
         halo?.settle()
     }
 
     #if DEBUG
-    /// The probe's grab: a drag to `height` released at `speed`, as the finger's.
-    func probeDrag(to height: Double, speed: Double) {
+    /// The probe's grab: `edge` dragged to `value`, released at `speed`, as the finger's.
+    func probeDrag(_ edge: CanvasEdge = .top, to value: Double, speed: Double) {
         guard up, !moving, let sizes else { return }
         spring.stop()
         halo?.unsettle()
-        write(follow(height, sizes))
-        let now = self.sizes?.height ?? height
-        let target = min(sizes.max, max(sizes.min, now + speed * CanvasMeasure.project * 1000))
-        chosen = target
-        settle(from: now, to: target, speed: speed)
+        write(edge, follow(edge, value, sizes))
+        guard let now = self.sizes else { return }
+        release(edge, at: self.value(edge, now), speed: speed, now)
     }
+
+    /// The canvas's box over the field in the window, and how far each side stands past the pill and may.
+    var probeBox: CGRect { stage.convert(stage.bounds, to: nil) }
+    var probeWide: Wide? { sizes?.wide }
+    var probeReach: Wide? { sizes?.reach }
 
     var probeSpringRunning: Bool { spring.running }
     var probeHalo: RecallHalo? { halo }

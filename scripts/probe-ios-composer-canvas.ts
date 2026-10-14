@@ -3,8 +3,9 @@
  * iOS composer canvas probe (DESIGN.md Composer, The pen's swipe; Artifact
  * panel, canvas and ink): a pencil's swipe up on the composer's pill grows
  * it into the canvas over the field, a finger's swipe stays the recall
- * wheel's, and the canvas resizes, folds to its chip and goes out with a
- * send as its file, outline and picture.
+ * wheel's, and the canvas resizes by its top and side edges (the width kept
+ * across Done and reopen), folds to its chip and goes out with a send as
+ * its file, outline and picture.
  *
  *   bun scripts/probe-ios-composer-canvas.ts [--keep] [--no-build] [--draw]
  *

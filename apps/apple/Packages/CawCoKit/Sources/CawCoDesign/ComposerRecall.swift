@@ -72,34 +72,66 @@ enum Recall {
     }
 
     /// The grown composer at `p` (0: the composer's own pill, 1: grown), in
-    /// its own box, with its height and how far above the pill it reaches
-    /// (composer-recall `outline()`). The whole pill rises from its top,
-    /// evenly across its width, its top corners rounding all the way; then
-    /// the shoulders curve in by the taper.
+    /// the pill's box (x from its left edge, past it where it stands wide),
+    /// with its height and how far above the pill it reaches (composer-recall
+    /// `outline()`, grown.ts). The whole pill rises from its top, evenly
+    /// across its width, its top corners rounding all the way; then the
+    /// shoulders curve in by the taper. A canvas standing wider than the
+    /// pill (`geometry.wide`) steps each side out from the pill's edge over
+    /// the pill's upper side, so it stands whole on the pill's top and its
+    /// shoulders meet the pill's edges.
     static func outline(_ geometry: RecallGeometry, open p: Double, extra: Double) -> (path: CGPath, height: Double, up: Double) {
         let w = geometry.width
         let r = Radius.radiusLg
         let up = extra * drawer(p * 1.25 - 0.075), height = geometry.base + up
         let pw = drawer((p - 0.25) / 0.75)
         let k = taper(width: w, extra: extra, spread: geometry.spread, rows: geometry.taperRows)
-        let left = k * pw, right = w - k * pw
-        // Each side runs straight up to the pill's top, then sweeps in to its rounded top corner.
+        // How far each side stands out past the pill, and the band of the pill's upper side its step out takes.
+        let eL = geometry.wide.left * pw, eR = geometry.wide.right * pw
+        let left = -eL + k * pw, right = w + eR - k * pw
         let s = max(r, up)
+        let bL = min(abs(eL), max(0, height - r - s)), bR = min(abs(eR), max(0, height - r - s))
         let path = CGMutablePath()
         func point(_ x: Double, _ y: Double) -> CGPoint { CGPoint(x: x, y: y) }
         path.move(to: point(r, height))
         path.addLine(to: point(w - r, height))
         path.addArc(tangent1End: point(w, height), tangent2End: point(w, height - r), radius: r)
-        path.addLine(to: point(w, s))
-        path.addCurve(to: point(right, r), control1: point(w, s - (s - r) * 0.55), control2: point(right, r + (s - r) * 0.35))
+        // Each side runs straight up the pill, steps out to its reach at the
+        // pill's top, then sweeps in to its rounded top corner.
+        path.addLine(to: point(w, s + bR))
+        path.addCurve(to: point(w + eR, s), control1: point(w, s + bR * 0.45), control2: point(w + eR, s + bR * 0.55))
+        path.addCurve(to: point(right, r), control1: point(w + eR, s - (s - r) * 0.55), control2: point(right, r + (s - r) * 0.35))
         path.addQuadCurve(to: point(right - r, 0), control: point(right, 0))
         path.addLine(to: point(left + r, 0))
         path.addQuadCurve(to: point(left, r), control: point(left, 0))
-        path.addCurve(to: point(0, s), control1: point(left, r + (s - r) * 0.35), control2: point(0, s - (s - r) * 0.55))
+        path.addCurve(to: point(-eL, s), control1: point(left, r + (s - r) * 0.35), control2: point(-eL, s - (s - r) * 0.55))
+        path.addCurve(to: point(0, s + bL), control1: point(-eL, s + bL * 0.55), control2: point(0, s + bL * 0.45))
         path.addLine(to: point(0, height - r))
         path.addArc(tangent1End: point(0, height), tangent2End: point(r, height), radius: r)
         path.closeSubpath()
         return (path, height, up)
+    }
+
+    /// How far in from its reach each side of the grown outline stands `y`
+    /// points below its top (grown.ts `taperAt`): the shoulder's curve, which
+    /// runs from the pill's top to the top corner, found by halving.
+    static func taperAt(_ y: Double, geometry: RecallGeometry, extra: Double) -> Double {
+        let r = Radius.radiusLg
+        let k = taper(width: geometry.width, extra: extra, spread: geometry.spread, rows: geometry.taperRows)
+        let s = max(r, extra), d = s - r
+        guard y < s else { return 0 }
+        // y(t) falls from s at t = 0 to r at t = 1; x(t) moves in by k·(3t² − 2t³).
+        func yAt(_ t: Double) -> Double {
+            let u = 1 - t
+            return u * u * u * s + 3 * u * u * t * (s - d * 0.55) + 3 * u * t * t * (r + d * 0.35) + t * t * t * r
+        }
+        var lo = 0.0, hi = 1.0
+        for _ in 0 ..< 24 {
+            let mid = (lo + hi) / 2
+            if yAt(mid) > y { lo = mid } else { hi = mid }
+        }
+        let t = (lo + hi) / 2
+        return k * (3 * t * t - 2 * t * t * t)
     }
 
     /// A ghost row `off` rows above the field's line (below it when negative):
@@ -158,6 +190,16 @@ struct RecallGeometry {
     /// The most rows' worth the shoulders curve in by: all of them for the
     /// wheel, one for the canvas (grown.ts `taperRows`).
     var taperRows = Double.infinity
+    /// How far the grown top reaches past the pill's left and right edges:
+    /// the canvas's, where its side edges were dragged out (grown.ts
+    /// `wide`); the wheel's and the queued edit's are never wider.
+    var wide = Wide()
+}
+
+/// How far a canvas stands past the pill's left and right edges, points.
+struct Wide: Equatable {
+    var left = 0.0
+    var right = 0.0
 }
 
 // MARK: The frame clock
@@ -291,18 +333,28 @@ final class RecallHalo: UIView {
         layer.shadowRadius = close.blur * BoxShadow.blurScale
     }
 
-    /// Writes only: every size it needs was measured when it grew.
+    /// How far the canvas's grown top stands past the pill's sides, taken by the next paint.
+    var wide: Wide {
+        get { geometry.wide }
+        set { geometry.wide = newValue }
+    }
+
+    /// Writes only: every size it needs was measured when it grew. Its box
+    /// reaches past the pill's sides as far as the canvas stands wide.
     func paint() {
         let shape = Recall.outline(geometry, open: open, extra: extra)
-        path = shape.path
-        let box = CGRect(x: 0, y: geometry.base - shape.height, width: geometry.width, height: shape.height)
+        let left = max(0, geometry.wide.left), right = max(0, geometry.wide.right)
+        var shift = CGAffineTransform(translationX: left, y: 0)
+        let local = shape.path.copy(using: &shift) ?? shape.path
+        path = local
+        let box = CGRect(x: -left, y: geometry.base - shape.height, width: geometry.width + left + right, height: shape.height)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         frame = box
-        let local = CGRect(origin: .zero, size: box.size)
-        for layer in [body, fill, fillShape, edge, edgeShape] as [CALayer] { layer.frame = local }
-        fillShape.path = shape.path
-        edgeShape.path = shape.path
+        let bounds = CGRect(origin: .zero, size: box.size)
+        for layer in [body, fill, fillShape, edge, edgeShape] as [CALayer] { layer.frame = bounds }
+        fillShape.path = local
+        edgeShape.path = local
         // Only the top of the grown part fades: behind every row it is solid.
         let height = max(1, shape.height)
         let middle = min(24, shape.up * 0.25) / height
@@ -310,7 +362,7 @@ final class RecallHalo: UIView {
         fill.locations = [0, NSNumber(value: middle), 1]
         edge.locations = [0.04, NSNumber(value: edgeBase), 1]
         CATransaction.commit()
-        onPaint(shape.path, box)
+        onPaint(local, box)
     }
 
     /// Runs the shape to `open` and `extra` over `duration`; the drop and the
