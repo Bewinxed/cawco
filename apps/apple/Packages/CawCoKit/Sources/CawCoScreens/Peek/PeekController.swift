@@ -290,10 +290,9 @@ final class PeekController: ObservedViewController {
             },
         ]
         if let row, row.isLive {
-            let stopping = hub.acts.act(id, status: status).map { $0.verb == .stop && $0.stage == .inFlight } ?? false
+            // Once the hub records it the session is `stopping`, not live, and this item goes.
             let midTurn = hub.fleet.activityPulse(id)?.activity == .working
-            first.append(UIAction(title: stopping ? "Stopping…" : midTurn ? "Stop mid-turn" : "Stop", image: Glyph.stop.image,
-                                  attributes: stopping ? .disabled : []) { [hub] _ in
+            first.append(UIAction(title: midTurn ? "Stop mid-turn" : "Stop", image: Glyph.stop.image) { [hub] _ in
                 Task { @MainActor in
                     await SessionMenus.stop(row.id, machineId: row.machineId, hub: hub)
                 }
@@ -396,7 +395,9 @@ final class PeekController: ObservedViewController {
         mark.configure(id: target.viewId, place: row.map { $0.cwd.isEmpty ? $0.machineId : $0.cwd } ?? target.viewId,
                        status: HomeViewController.status(row, home: home))
         let word: String
-        if failed { word = "Failed" } else if sleeping { word = "Sleeping" } else if stale { word = "Unknown" } else {
+        if failed { word = "Failed" } else if let ended = row?.endWord { word = ended } else if sleeping { word = "Sleeping" } else if stale {
+            word = "Unknown"
+        } else {
             word = switch activity {
             case .working: "Working"
             case .blocked: "Needs you"

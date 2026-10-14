@@ -1,3 +1,4 @@
+import CawCoAPI
 import Foundation
 import Observation
 import OSLog
@@ -8,10 +9,15 @@ import OSLog
 /// reads the same record, so the answer lands where it was asked:
 ///
 /// - in flight from the press until the hub answers: the row says what is
-///   happening to it ("Stopping…") and nothing claims it done;
+///   happening to it ("Archiving…") and nothing claims it done;
 /// - answered: the record goes, and the row is what the hub's frames say;
 /// - refused: the hub's reason stays on the row, for as long as the session
 ///   still stands as it did when it was asked, or until it is acted on again.
+///
+/// A stop is never in flight here: the hub publishes `stopping` the moment
+/// it records one, from whichever client asked, until its machine confirms
+/// the process gone, and `words` says it from that status. Only a stop's
+/// refusal is recorded (`refuse(_:_:_:status:)`).
 @MainActor
 @Observable
 public final class SessionActs {
@@ -33,9 +39,14 @@ public final class SessionActs {
         /// What the session was when the hub refused (`InstanceRow.status`):
         /// a refusal stands only while it still is, so it never outlives its
         /// news. Read at the refusal, not the ask: the hub files a Stop as
-        /// stopped at once, then may answer that the machine is offline.
+        /// stopping at once, then may answer that the machine is offline.
         fileprivate(set) var status: String?
     }
+
+    /// What a session says while its end is recorded and its machine has not
+    /// confirmed the process gone (`stopping`).
+    /// A constant, read from nonisolated code (`InstanceRow.endWord`).
+    public nonisolated static let stopping = "Stopping…"
 
     public private(set) var acts: [String: Act] = [:]
     private let log = Logger(subsystem: "dev.cawco.app", category: "Acts")
@@ -50,8 +61,11 @@ public final class SessionActs {
     }
 
     /// The words a row shows in place of its own second line, and whether they are a fault.
+    /// A session the hub is stopping says so from its status, whoever asked.
     public func words(_ id: String, status: String?) -> (text: String, failed: Bool)? {
-        guard let act = act(id, status: status) else { return nil }
+        guard let act = act(id, status: status) else {
+            return status == Components.Schemas.InstanceStatus.stopping.rawValue ? (Self.stopping, false) : nil
+        }
         return switch act.stage {
         case .inFlight: (Self.pending(act.verb), false)
         case let .refused(reason): (Self.refusal(act.verb, reason), true)
@@ -85,11 +99,16 @@ public final class SessionActs {
 
     /// The hub refused: its reason, on the session it concerns, as it stands now (`status`).
     public func refuse(_ id: String, _ reason: String, status: String?) {
-        guard var act = acts[id] else { return }
-        act.stage = .refused(reason)
-        act.status = status
-        acts[id] = act
-        log.notice("act \(act.verb.rawValue, privacy: .public) \(id, privacy: .public): refused: \(reason, privacy: .public)")
+        guard let act = acts[id] else { return }
+        refuse(act.verb, id, reason, status: status)
+    }
+
+    /// The hub refused `verb`, asked with nothing recorded in flight (a stop,
+    /// whose flight the hub's `stopping` status says): its reason, on the
+    /// session as it stands now.
+    public func refuse(_ verb: Verb, _ id: String, _ reason: String, status: String?) {
+        acts[id] = Act(verb: verb, stage: .refused(reason), status: status)
+        log.notice("act \(verb.rawValue, privacy: .public) \(id, privacy: .public): refused: \(reason, privacy: .public)")
     }
 
     /// Carried to its end: `text` on the row, and the session it made.
@@ -122,7 +141,8 @@ public final class SessionActs {
 
     private static func pending(_ verb: Verb) -> String {
         switch verb {
-        case .stop: "Stopping…"
+        // Never begun in flight (the hub's `stopping` says it); its word is that one.
+        case .stop: stopping
         case .archive: "Archiving…"
         case .keep: "Keeping…"
         case .discard: "Discarding…"

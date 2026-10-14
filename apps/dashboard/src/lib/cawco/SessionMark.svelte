@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import { STOPPED_LABEL } from "./activity";
+  import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
   import { cawco, type InstanceRow, isFailed, isStale } from "./client.svelte";
   import TreeMark, { type MarkStatus as TreeStatus } from "./TreeMark.svelte";
 
@@ -15,13 +15,17 @@
 
   /**
    * A session's status word, for its row's accessible name: colour is never
-   * the only signal. A session the operator stopped says so; its mark is an
+   * the only signal. A session the operator stopped says so, and says
+   * "Stopping…" until its machine confirms the process gone; its mark is an
    * ended session's (no dot, no echo), so the word is where it differs.
    */
   export function statusWord(
     instance: InstanceRow | null | undefined,
     status: MarkStatus
   ): string {
+    if (instance?.status === "stopping") {
+      return STOPPING_LABEL;
+    }
     return instance?.status === "stopped" ? STOPPED_LABEL : STATUS_WORD[status];
   }
 
@@ -44,8 +48,13 @@
       return "idle";
     }
     // At rest with no process: a session put to sleep, or a workflow run
-    // that ended and stopped. Listed as finished, it is done.
-    if (instance.status === "sleeping" || instance.status === "stopped") {
+    // that ended and stopped (or is stopping: ended, its word says the
+    // rest). Listed as finished, it is done.
+    if (
+      instance.status === "sleeping" ||
+      instance.status === "stopping" ||
+      instance.status === "stopped"
+    ) {
       return done ? "done" : "idle";
     }
     const activity = cawco.activityOf(instance.id);

@@ -828,7 +828,7 @@ final class MachineMenu: NSObject, UIContextMenuInteractionDelegate {
                     let mark = host.markStatus(row)
                     return AskItem(id: row.id, parentId: row.parentInstanceId, title: host.hub.fleet.title(row),
                                    place: row.cwd.isEmpty ? row.machineId : row.cwd, mark: mark,
-                                   status: row.status == .stopped ? "Stopped" : mark.word)
+                                   status: row.endWord ?? mark.word)
                 }
             }
         ) {

@@ -16,7 +16,9 @@
    * (kit-highlight), so a card drawn inside it would paint under the panes.
    */
   import { Portal } from "bits-ui";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconAsk, IconSuccess, IconWarningTriangle } from "#lib/icons.js";
+  import { STOPPING_LABEL } from "./activity";
   import {
     cawco,
     isFailed,
@@ -271,7 +273,7 @@
     };
   });
 
-  type Tone = "live" | "needs" | "done" | "failed" | "idle";
+  type Tone = "live" | "needs" | "stopping" | "done" | "failed" | "idle";
   const toneOf = (id: string): Tone => {
     const thread = cawco.threadOf(id);
     if (thread) {
@@ -283,6 +285,10 @@
     const row = cawco.instanceIndex.byId.get(id);
     if (row && isFailed(row)) {
       return "failed";
+    }
+    // Asked to end, its machine yet to confirm the process gone.
+    if (row?.status === "stopping") {
+      return "stopping";
     }
     if (
       (runIdOf(id) && cawco.activityOf(id) === "blocked") ||
@@ -298,6 +304,7 @@
   const WORD: Record<Tone, string> = {
     live: "Working",
     needs: "Needs you",
+    stopping: STOPPING_LABEL,
     done: "Finished",
     failed: "Failed",
     idle: "Idle",
@@ -369,6 +376,8 @@
               <span class="dot"></span>
             {:else if tone === "needs"}
               <IconAsk />
+            {:else if tone === "stopping"}
+              <Spinner aria-hidden="true" role="presentation" />
             {:else if tone === "done"}
               <IconSuccess />
             {:else if tone === "failed"}

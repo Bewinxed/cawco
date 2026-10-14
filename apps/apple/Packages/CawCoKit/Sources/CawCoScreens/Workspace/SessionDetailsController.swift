@@ -283,6 +283,7 @@ public final class SessionDetailsController: ObservedViewController {
         if row.isFailed { return .failed }
         if row.isStale { return .unreachable }
         if row.status == .sleeping { return .sleeping }
+        if row.status == .stopping { return .stopping }
         if row.status == .stopped { return .stopped }
         if hub.needs.blocked(sessionId) || fleet.activityPulse(sessionId)?.activity == .blocked { return .needsYou }
         if fleet.activityPulse(sessionId)?.activity == .working { return .working }

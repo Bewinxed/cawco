@@ -71,6 +71,7 @@
   import { page } from "$app/state";
   import AskHere from "./AskHere.svelte";
   import { shownAccount } from "./accounts/switch.svelte";
+  import { STOPPING_LABEL } from "./activity";
   import { Asker, type AskHereRequest } from "./ask-here.svelte";
   import type { InstanceRow } from "./client.svelte";
   import { openPeek, peekable, peekTipOff } from "./home/peek.svelte";
@@ -177,6 +178,15 @@
 
   /** What was asked of this session and is on its way, or did not go (session-acts). */
   const act = $derived(sessionId ? sessionAct(sessionId) : undefined);
+  /**
+   * The word for what is on its way: what this person asked and is waiting
+   * on (session-acts), or a stop the hub holds until the machine confirms it
+   * (`stopping`, whoever asked it, from whichever client).
+   */
+  const pending = $derived(
+    act?.pending ??
+      (instance?.status === "stopping" ? STOPPING_LABEL : undefined)
+  );
 
   /**
    * What its menu asks before a delete, said under this row, the one it was
@@ -293,17 +303,17 @@
     {:else}
       <span class="cell title"
         ><span class="sr-only"
-          >{act?.pending ?? statusWord(instance, status)}:
+          >{pending ?? statusWord(instance, status)}:
         </span>
         {title}</span
       >
     {/if}
     {#if !compact}
       <span class="cell line">
-        {#if act?.pending || renaming !== null}
+        {#if pending || renaming !== null}
           <span class="doing"
             ><Spinner aria-hidden="true" />
-            {renaming === null ? act?.pending : "Renaming…"}</span
+            {renaming === null ? pending : "Renaming…"}</span
           >
         {:else}
           <AccountDot
@@ -314,8 +324,8 @@
     {/if}
   </span>
   <span class="end" {@attach trailWidth}>
-    <span class="cell num trail" title={act?.pending ?? hint}>
-      {#if compact && (act?.pending || renaming !== null)}
+    <span class="cell num trail" title={pending ?? hint}>
+      {#if compact && (pending || renaming !== null)}
         <Spinner aria-hidden="true" class="size-3.5" />
       {:else}
         {trail}
@@ -364,7 +374,7 @@
     {:else}
       <a
         {...trigger}
-        aria-busy={act?.pending ? true : undefined}
+        aria-busy={pending ? true : undefined}
         aria-current={active ? "page" : undefined}
         class={cn(
           "row press-tint focus-inset",

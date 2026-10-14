@@ -834,7 +834,16 @@ export const AGENT_BUSY = "agentBusy";
  *   to report as `error` with {@link RESTART_RESUMABLE} in `lastError`; that
  *   encoding conflated "gone but fine" with a real failure, so `sleeping` rows
  *   carry `lastError: null` — nothing went wrong, there's just nothing running.
- * - `stopped` — deliberate: the operator (or a `stop` call) ended it.
+ * - `stopping` — an end (stop, discard, or a delete that waits on its
+ *   process) is recorded and owed to its machine, which has not yet
+ *   confirmed the process is gone. It may still be running. Its machine's
+ *   confirmation files it `stopped` (or `discarded`); an away machine leaves
+ *   it here until it is back and confirms. For everything that asks whether
+ *   the person ended it (filters, the Finished list, wake and resume
+ *   gating), it is ended; for everything that asks whether a process
+ *   remains, it is not gone yet.
+ * - `stopped` — deliberate: the operator (or a `stop` call) ended it, and its
+ *   machine confirmed the process gone.
  * - `error` — an actual failure. `lastError` is required here, and this is
  *   where {@link RESTART_LOST} still lands: a restart with nothing to resume
  *   from is a real loss, not a nap.
@@ -851,10 +860,22 @@ export type InstanceStatus =
   | "starting"
   | "running"
   | "sleeping"
+  | "stopping"
   | "stopped"
   | "discarded"
   | "unknown"
   | "error";
+
+/**
+ * Statuses of a session its person, parent or the hub ended: confirmed gone
+ * or still being stopped. What asks "was it ended?" reads this set; what asks
+ * "is its process gone?" reads `stopped`/`discarded` alone.
+ */
+export const ENDED_STATUSES: ReadonlySet<InstanceStatus> = new Set([
+  "stopping",
+  "stopped",
+  "discarded",
+]);
 
 /** A missing Claude conversation is terminal; restarting cannot recreate its history. */
 export const CLAUDE_CONVERSATION_GONE =

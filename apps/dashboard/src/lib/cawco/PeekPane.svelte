@@ -47,6 +47,7 @@
     ACTIVITY_LABEL,
     SLEEPING_LABEL,
     STOPPED_LABEL,
+    STOPPING_LABEL,
     UNKNOWN_HINT,
     UNKNOWN_LABEL,
   } from "./activity";
@@ -136,6 +137,9 @@
     }
     if (failed) {
       return "Failed";
+    }
+    if (row?.status === "stopping") {
+      return STOPPING_LABEL;
     }
     if (row?.status === "stopped") {
       return STOPPED_LABEL;

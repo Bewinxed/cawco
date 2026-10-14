@@ -593,7 +593,7 @@ final class DelegateView: RailRow, RowContent, Disclosing {
         lastMark = nil
     }
 
-    enum Phase: String { case spawning, working, blocked, reported, idle, sleeping, stopped, failed }
+    enum Phase: String { case spawning, working, blocked, reported, idle, sleeping, stopping, stopped, failed }
 
     struct Report { let body: String; let failed: Bool; let count: Int; let at: Date? }
 
@@ -622,6 +622,7 @@ final class DelegateView: RailRow, RowContent, Disclosing {
         else if !waiting.isEmpty || activity == "blocked" { phase = .blocked }
         else if live, activity == "working" { phase = .working }
         else if row?.status == .sleeping { phase = .sleeping }
+        else if row?.status == .stopping { phase = .stopping }
         else if row?.status == .stopped { phase = .stopped }
         else { phase = report == nil ? .idle : .reported }
         let failure = spawnFailed ? headline(block.toolResult ?? "The spawn failed.")

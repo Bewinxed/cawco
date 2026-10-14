@@ -899,7 +899,7 @@ final class SidebarViewController: ObservedViewController {
                 let count = node.count
                 let failed = node.failed
                 // `statusWord`: a session the operator stopped says so; its mark is an ended session's.
-                let word = node.row.status == .stopped ? "Stopped" : status.word
+                let word = node.row.endWord ?? status.word
                 // The row view itself is part of the print: a rebuilt row is filled whatever it last drew.
                 row.ageHint = hint
                 let print = SessionPrint(view: ObjectIdentifier(row), title: title, status: status, place: place,
@@ -937,7 +937,7 @@ final class SidebarViewController: ObservedViewController {
         let at = hub.fleet.lastAt(node.row)
         let status = HomeViewController.status(node.row, home: home)
         row.configure(title: hub.fleet.title(node.row), status: status,
-                      word: node.row.status == .stopped ? "Stopped" : status.word,
+                      word: node.row.endWord ?? status.word,
                       place: node.row.cwd.isEmpty ? node.row.machineId : node.row.cwd,
                       age: at == 0 ? "" : RailAge.short(at, now: home.now),
                       count: node.count, failed: node.failed, open: openTrees.contains(node.row.id))

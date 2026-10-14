@@ -2257,8 +2257,14 @@ const make = async (path: string): Promise<DbShape> => {
       ne(instances.status, "discarded"),
       or(isNull(instances.endIntent), eq(instances.endIntent, "stop")),
       or(
-        // A move's row is work in hand however long its yes or its copy takes.
-        inArray(instances.status, ["running", "sleeping", "moving"]),
+        // A move's row is work in hand however long its yes or its copy takes;
+        // a stopping one however long its away machine takes to confirm.
+        inArray(instances.status, [
+          "running",
+          "sleeping",
+          "moving",
+          "stopping",
+        ]),
         gt(instances.updatedAt, new Date(Date.now() - STALE_AFTER_MS))
       )
     );
@@ -2701,7 +2707,7 @@ const make = async (path: string): Promise<DbShape> => {
           endAttempts: 0,
           keepAliveEnabled: false,
           keepAliveTurn: null,
-          status: "stopped",
+          status: "stopping",
           workItemId: null,
           parentInstanceId: null,
         })
@@ -2979,9 +2985,14 @@ const make = async (path: string): Promise<DbShape> => {
   return {
     close: () => db.$client.close(),
     dateStoredSessions,
+    // A confirmed end whose process its machine turns out to hold: owed again,
+    // and stopping again until the machine confirms it.
     clearEndConfirmation: (id) => {
       db.update(instances)
-        .set({ endConfirmedAt: null })
+        .set({
+          endConfirmedAt: null,
+          status: sql`CASE WHEN ${instances.status} = 'discarded' THEN 'discarded' ELSE 'stopping' END`,
+        })
         .where(and(eq(instances.id, id), isNotNull(instances.endIntent)))
         .run();
     },
@@ -3156,20 +3167,31 @@ const make = async (path: string): Promise<DbShape> => {
             !row.sessionId &&
             !row.scratchWorktree &&
             next !== "discard";
+          let confirmedAt = row.endIntent === next ? row.endConfirmedAt : null;
+          if (neverStarted) {
+            confirmedAt = new Date();
+          }
+          // The one place an end's status is filed: `stopping` until its
+          // machine confirms the process gone ({@link confirmInstanceEnd}),
+          // which files it `stopped` or `discarded`.
+          let status: "discarded" | "stopped" | "stopping" = "stopping";
+          if (row.status === "discarded") {
+            status = "discarded";
+          } else if (confirmedAt) {
+            status = "stopped";
+          }
           const ended = tx
             .update(instances)
             .set({
               endIntent: next,
-              endConfirmedAt:
-                row.endIntent === next ? row.endConfirmedAt : null,
+              endConfirmedAt: confirmedAt,
               endReason: neverStarted ? "never started" : row.endReason,
               endRetryAt: null,
               endAttempts: 0,
               keepAliveEnabled: false,
               keepAliveTurn: null,
               keepAliveStopped: null,
-              ...(neverStarted ? { endConfirmedAt: new Date() } : {}),
-              status: row.status === "discarded" ? "discarded" : "stopped",
+              status,
               updatedAt: new Date(),
             })
             .where(eq(instances.id, id))
@@ -3232,7 +3254,7 @@ const make = async (path: string): Promise<DbShape> => {
           ...patch,
           ...(patch.keepAliveEnabled === true
             ? {
-                keepAliveEnabled: sql`CASE WHEN ${instances.status} IN ('stopped', 'discarded', 'error') THEN 0 ELSE 1 END`,
+                keepAliveEnabled: sql`CASE WHEN ${instances.status} IN ('stopping', 'stopped', 'discarded', 'error') THEN 0 ELSE 1 END`,
               }
             : {}),
         })
@@ -4336,7 +4358,11 @@ const make = async (path: string): Promise<DbShape> => {
               eq(instances.machineRemoved, false),
               or(eq(instances.harness, "claude"), isNull(instances.harness)),
               isNotNull(instances.sessionId),
-              notInArray(instances.status, ["stopped", "discarded"]),
+              notInArray(instances.status, [
+                "stopping",
+                "stopped",
+                "discarded",
+              ]),
               alive.length ? notInArray(instances.id, alive) : undefined,
               resumable.length
                 ? notInArray(instances.sessionId, resumable)

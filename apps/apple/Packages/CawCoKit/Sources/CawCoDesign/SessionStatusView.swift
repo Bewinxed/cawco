@@ -42,6 +42,8 @@ public final class SessionStatusView: UIView {
         public static let failed = Face(label: "Failed", glyph: .failed, tone: .failed)
         public static let unreachable = Face(label: "Unreachable", glyph: .ask, tone: .quiet)
         public static let sleeping = Face(label: "Sleeping", glyph: .sleeping, tone: .quiet)
+        /// Its end is recorded and its machine has not confirmed the process gone.
+        public static let stopping = Face(label: "Stopping…", glyph: .pause, tone: .quiet)
         public static let stopped = Face(label: "Stopped", glyph: .pause, tone: .quiet)
         public static let stored = Face(label: "Stored", glyph: .pause, tone: .quiet)
         public static let idle = Face(label: "Idle", glyph: .pause, tone: .quiet)

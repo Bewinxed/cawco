@@ -143,7 +143,7 @@ export const keepAliveResult = (
   if (ping && sent >= keepAliveCap({ ...row, cacheTtl: ttl })) {
     stopped = "stopped-cap";
   }
-  if (["stopped", "discarded", "error"].includes(row.status)) {
+  if (["stopping", "stopped", "discarded", "error"].includes(row.status)) {
     stopped = null;
   }
   return {

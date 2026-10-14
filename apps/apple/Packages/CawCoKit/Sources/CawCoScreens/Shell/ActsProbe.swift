@@ -109,12 +109,13 @@ enum ActsProbe {
         // 1. Stop, which the machine carries out after 4 s: its row and a peek on it.
         await peek("p-stop-ok", "Stop answers", shell, home: home, boards: boards) { peek in
             say("stop before", "p-stop-ok", shell)
-            Task { await SessionMenus.stop("p-stop-ok", machineId: "probe-mac", hub: hub) }
+            // Its flight is the hub's `stopping`, read off the rows; the ask ends with the machine's word.
+            let stopping = Task { await SessionMenus.stop("p-stop-ok", machineId: "probe-mac", hub: hub) }
             await wait(1)
             say("stop in flight", "p-stop-ok", shell)
             let during = peek()?.probeState ?? "none"
             log.notice("stop in flight [p-stop-ok] peek: \(during, privacy: .public)")
-            await until { !hub.acts.inFlight("p-stop-ok") }
+            await stopping.value
             await wait(1)
             say("stop confirmed", "p-stop-ok", shell)
             let after = peek()?.probeState ?? "none"
@@ -123,10 +124,10 @@ enum ActsProbe {
 
         // 2. Stop, which the machine refuses: the reason on its row and in a peek.
         await peek("p-stop-refuse", "Stop refused", shell, home: home, boards: boards) { peek in
-            Task { await SessionMenus.stop("p-stop-refuse", machineId: "probe-mac", hub: hub) }
+            let stopping = Task { await SessionMenus.stop("p-stop-refuse", machineId: "probe-mac", hub: hub) }
             await wait(0.2)
             say("stop in flight", "p-stop-refuse", shell)
-            await until { !hub.acts.inFlight("p-stop-refuse") }
+            await stopping.value
             await wait(1)
             say("stop refused", "p-stop-refuse", shell)
             let refusedPeek = peek()?.probeState ?? "none"

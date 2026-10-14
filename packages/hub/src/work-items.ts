@@ -64,6 +64,7 @@ import {
   CONTROL_WORKSPACE_MIGRATE,
   DEPS_INSTALLING,
   depsScript,
+  ENDED_STATUSES,
   handoffMarker,
   machineLabel,
   queueWords,
@@ -364,8 +365,8 @@ export const budgetFrom = (
   return Object.keys(merged).length > 0 ? merged : null;
 };
 
-/** Statuses of a session that has ended: its work items are orphans its project's lead adopts. */
-const ENDED: ReadonlySet<string> = new Set(["stopped", "discarded"]);
+/** Statuses of a session whose process its machine confirmed gone. */
+const GONE: ReadonlySet<string> = new Set(["stopped", "discarded"]);
 
 /** The delegate type a session the fleet starts runs as when its caller names none. */
 export const DEFAULT_DELEGATE_TYPE = "medium";
@@ -1504,7 +1505,9 @@ export const createWorkItems = ({
     if (!lead) {
       return parent && parent.id !== sleeping ? [parent] : [];
     }
-    if (!parent || ENDED.has(parent.status)) {
+    // An ended parent (stopping or stopped): its items are orphans its
+    // project's lead adopts.
+    if (!parent || ENDED_STATUSES.has(parent.status)) {
       return [lead];
     }
     return parent.id === lead.id ? [parent] : [parent, lead];
@@ -2399,15 +2402,16 @@ export const createWorkItems = ({
   };
 
   /**
-   * The sessions of a workspace's items that have not ended (a failed
-   * attempt's session stays up after its item fails).
+   * The sessions of a workspace's items whose process is not confirmed gone
+   * (a failed attempt's session stays up after its item fails; a stopping
+   * one may still run until its machine confirms).
    */
   const sessionsUpIn = (workspaceId: string): InstanceRow[] =>
     db
       .getInstancesByIds([
         ...new Set(db.workItemsIn(workspaceId).map((item) => item.instanceId)),
       ])
-      .filter((row) => !ENDED.has(row.status));
+      .filter((row) => !GONE.has(row.status));
 
   /**
    * Stops the sessions of a workspace's earlier items as `stop_delegate`

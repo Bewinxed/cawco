@@ -381,7 +381,7 @@ const messageOf = (error: unknown): string =>
 
 /** A session past caring: its process will not be woken by anything the hub does here. */
 const over = (row: LimitRow | undefined): boolean =>
-  !row || ["stopped", "discarded", "error"].includes(row.status);
+  !row || ["stopping", "stopped", "discarded", "error"].includes(row.status);
 
 /** The carry-on the hub sends at a reset: a turn the limit itself resumed. */
 const CARRY_ON_ORIGIN = "limit";

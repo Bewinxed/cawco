@@ -4,8 +4,9 @@
  * row names its session by (the instance id, or a stored transcript's session
  * id), so every list that draws the session says the same thing:
  *
- * - `pending`: the word for what is on its way ("Stopping…"), set at the ask
- *   and cleared on the answer, never on the hope;
+ * - `pending`: the word for what is on its way ("Archiving…"), set at the ask
+ *   and cleared on the answer, never on the hope. A stop has none: the hub's
+ *   `stopping` status says it, on every client (SessionRow);
  * - `fault`: why it did not go, with the way on (RowFault under the row);
  * - `note`: what it came to when the result is elsewhere (a continuation
  *   that started in a new session), with the place to go.
@@ -99,18 +100,22 @@ export async function onRow(
 }
 
 /**
- * Stops a running session: its rows say "Stopping…" until its machine
- * answers, and stopped once it has; a refusal stays under them with the
- * machine's words and Try again.
+ * Stops a running session. Its rows say "Stopping…" from the hub's own
+ * status (`stopping`, published the moment the stop is recorded, on every
+ * client) and "Stopped" once its machine confirms; this only puts a refusal
+ * under them, with the hub's words and Try again (an away machine's "Stop is
+ * recorded, but the machine is offline" among them).
  */
 export function stopOnRow(instanceId: string, machineId: string): void {
-  // biome-ignore lint/complexity/noVoid: the row is the report; nothing awaits it
-  void onRow(
-    instanceId,
-    "Stopping…",
-    () => stopSession(instanceId, machineId),
-    () => stopOnRow(instanceId, machineId)
-  );
+  put(instanceId, { fault: undefined, note: undefined });
+  stopSession(instanceId, machineId).catch((error: unknown) => {
+    put(instanceId, {
+      fault: {
+        reason: messageOf(error),
+        again: () => stopOnRow(instanceId, machineId),
+      },
+    });
+  });
 }
 
 /** Which session a row renames: one the hub keeps, or a transcript only its machine has. */

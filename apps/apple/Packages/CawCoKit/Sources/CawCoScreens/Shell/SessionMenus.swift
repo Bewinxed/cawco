@@ -117,8 +117,8 @@ enum SessionMenus {
         if running {
             // Stopping cuts a turn short when one is running: the item says so.
             let midTurn = hub.fleet.activityPulse(id)?.activity == .working
-            first.append(UIAction(title: busy(.stop) ? "Stopping…" : midTurn ? "Stop mid-turn" : "Stop", image: Glyph.stop.image,
-                                  attributes: busy(.stop) ? .disabled : []) { _ in
+            // Once the hub records it the session is `stopping`, not running, and this item goes.
+            first.append(UIAction(title: midTurn ? "Stop mid-turn" : "Stop", image: Glyph.stop.image) { _ in
                 Task { @MainActor in
                     await stop(id, machineId: row.machineId, hub: hub)
                 }
@@ -286,20 +286,20 @@ enum SessionMenus {
         }
     }
 
-    /// Stops a session from wherever it is listed: "Stopping…" on its row
-    /// until the hub answers, then the row is what the hub's instance list
-    /// says; a refusal stays on the row in the hub's words, read against
-    /// the list as the hub left it (it files a Stop at once, even one its
-    /// machine has not carried out).
+    /// Stops a session from wherever it is listed. Its row says "Stopping…"
+    /// from the hub's own status (`stopping`, filed the moment the stop is
+    /// recorded, on every client) and "Stopped" once its machine confirms;
+    /// a refusal stays on the row in the hub's words, read against the list
+    /// as the hub left it (an away machine's stop is recorded, and stays
+    /// stopping, while the hub answers that the machine is offline).
     static func stop(_ id: String, machineId: String, hub: HubConnection) async {
-        await hub.acts.run(.stop, on: id, status: { hub.fleet.byId[id]?.status.rawValue }) {
-            do {
-                try await hub.stopSession(instanceId: id, machineId: machineId)
-            } catch {
-                _ = await hub.refresh()
-                throw error
-            }
+        hub.acts.clear(id)
+        do {
+            try await hub.stopSession(instanceId: id, machineId: machineId)
             _ = await hub.refresh()
+        } catch {
+            _ = await hub.refresh()
+            hub.acts.refuse(.stop, id, error.localizedDescription, status: hub.fleet.byId[id]?.status.rawValue)
         }
     }
 

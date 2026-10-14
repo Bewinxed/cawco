@@ -64,6 +64,13 @@ export const SLEEPING_LABEL = "Sleeping";
 export const STOPPED_LABEL = "Stopped";
 
 /**
+ * A session whose end is asked and not yet confirmed by its machine
+ * (`stopping`): its process may still run. Said in flight, as StopTray says
+ * a row it is stopping, until the hub files it stopped.
+ */
+export const STOPPING_LABEL = "Stopping…";
+
+/**
  * The sixth word, for a session whose process exited badly (`isFailed`). A row
  * carries it as its mark's dot (SessionMark), the word as its accessible name
  * and tooltip.

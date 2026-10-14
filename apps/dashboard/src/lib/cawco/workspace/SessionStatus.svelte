@@ -2,6 +2,7 @@
   import type { WorkflowStep } from "@cawco/core";
   import type { TransitionConfig } from "svelte/transition";
   import { TextMorph } from "torph/svelte";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
     dur,
     easeOut,
@@ -57,7 +58,11 @@
   <span class="glyph">
     {#key status.icon}
       <span class="mark" in:glyphIn out:glyphOut>
-        <status.icon aria-hidden="true" />
+        {#if status.icon}
+          <status.icon aria-hidden="true" />
+        {:else}
+          <Spinner aria-hidden="true" role="presentation" />
+        {/if}
       </span>
     {/key}
   </span>
@@ -95,7 +100,8 @@
     height: 16px;
   }
   /* The glyph wears its status hue; the word beside it stays text ink.
-     Nothing loops: a change cross-fades once (glyphIn) and then holds. */
+     Nothing loops but the stopping spinner (StopTray's, until the machine
+     confirms): a change cross-fades once (glyphIn) and then holds. */
   .working .glyph {
     color: var(--status-live-glyph);
   }

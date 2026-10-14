@@ -13,6 +13,7 @@ import Sleeping from "~icons/solar/moon-sleep-bold-duotone";
 import Pause from "~icons/solar/pause-circle-bold-duotone";
 import Unknown from "~icons/solar/question-circle-bold-duotone";
 import Working from "~icons/solar/refresh-circle-bold-duotone";
+import { STOPPED_LABEL, STOPPING_LABEL } from "../activity";
 import { cawco, isFailed, isStale } from "../client.svelte";
 import { runIdOf } from "../workflow-runs";
 import { workflowState } from "../workflow-state.svelte";
@@ -20,7 +21,8 @@ import { workflowState } from "../workflow-state.svelte";
 export type StatusTone = "working" | "attention" | "failed" | "done" | "quiet";
 
 export interface SessionStatusOf {
-  icon: Component;
+  /** None while it is on its way (stopping): the glyph is StopTray's spinner. */
+  icon: Component | null;
   label: string;
   tone: StatusTone;
 }
@@ -64,8 +66,13 @@ export function sessionStatus(
   if (row?.status === "sleeping") {
     return { label: "Sleeping", icon: Sleeping, tone: "quiet" };
   }
+  // Its end is asked and its machine has not confirmed the process gone: in
+  // flight, as StopTray says it, until the hub files it stopped.
+  if (row?.status === "stopping") {
+    return { label: STOPPING_LABEL, icon: null, tone: "quiet" };
+  }
   if (row?.status === "stopped") {
-    return { label: "Stopped", icon: Pause, tone: "quiet" };
+    return { label: STOPPED_LABEL, icon: Pause, tone: "quiet" };
   }
   const activity = cawco.activityOf(sessionId);
   if (activity === "blocked") {

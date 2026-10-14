@@ -217,6 +217,7 @@
     | "reported"
     | "idle"
     | "sleeping"
+    | "stopping"
     | "stopped"
     | "failed";
   const phase = $derived.by((): Phase => {
@@ -231,6 +232,10 @@
     }
     if (live && activity === "working") {
       return "working";
+    }
+    // Asked to end, its machine yet to confirm the process gone.
+    if (row?.status === "stopping") {
+      return "stopping";
     }
     if (row?.status === "stopped") {
       return "stopped";

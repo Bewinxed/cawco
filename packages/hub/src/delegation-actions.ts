@@ -289,6 +289,7 @@ function roster(
         relaunchOf(row).kind !== "refused" &&
         (row.status === "sleeping" ||
           row.status === "error" ||
+          row.status === "stopping" ||
           row.status === "stopped")
     )
     .map((row) => toPeer(row, hosts));

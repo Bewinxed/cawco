@@ -741,8 +741,8 @@ final class SessionRowView: UIView, HoverSessionRow {
         var hover: String?
         /// A finished row a pointer can archive from its end (`onarchive`).
         var archives = false
-        /// The operator stopped it: its mark is an ended session's, so the word is where it differs (`statusWord`).
-        var stopped = false
+        /// "Stopping…" or "Stopped" (`InstanceRow.endWord`): its mark is an ended session's, so the word is where it differs (`statusWord`).
+        var endWord: String?
         /// Its place among its list's echoes and how many the list has (motion/echo).
         var beat = 0
         var beats = 1
@@ -776,7 +776,7 @@ final class SessionRowView: UIView, HoverSessionRow {
         trail.text = content.trail
         line.text = content.line
         alpha = content.stale ? 0.55 : 1
-        summary.accessibilityLabel = "\(content.stopped ? "Stopped" : content.status.word): \(content.title)"
+        summary.accessibilityLabel = "\(content.endWord ?? content.status.word): \(content.title)"
         summary.accessibilityValue = [content.line, content.trail].filter { !$0.isEmpty }.joined(separator: ", ")
         // The row reads as one element, and a parent's mark is a second one, its own switch.
         accessibilityElements = [summary] + (mark.switchElement.map { [$0] } ?? [])

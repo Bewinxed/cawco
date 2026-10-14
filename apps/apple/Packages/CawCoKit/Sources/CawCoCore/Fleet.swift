@@ -34,15 +34,30 @@ extension Components.Schemas.InstanceRow {
     /// hub cannot ask about right now. A stopped session has ended, so it is
     /// listed as ended sessions are (Finished until seen, Recent, its
     /// project's tree); left out, it stood in no list at all, its menu and
-    /// its transcript out of reach. Only a discarded one is off the board; a
-    /// status a newer hub added stays on it, read as its activity says.
+    /// its transcript out of reach. A stopping one has ended too, its machine
+    /// yet to confirm the process gone. Only a discarded one is off the board;
+    /// a status a newer hub added stays on it, read as its activity says.
     public var isListed: Bool {
-        isLive || status == .error || status == .sleeping || status == .stopped || status == .unknown || status.isUnrecognized
+        isLive || status == .error || status == .sleeping || status == .stopping || status == .stopped || status == .unknown
+            || status.isUnrecognized
     }
     /// Its machine cannot be reached, so the hub does not know what it is doing.
     public var isStale: Bool { status == .unknown }
     public var isFailed: Bool { status == .error }
-    public var isResumable: Bool { status == .sleeping || (status == .stopped && sessionId != nil) }
+    /// A stopped or stopping session with a conversation comes back on it: a
+    /// resume replaces the process its machine is ending.
+    public var isResumable: Bool { status == .sleeping || ((status == .stopping || status == .stopped) && sessionId != nil) }
+    /// The word an ended session says where its activity's would stand
+    /// (SessionMark.svelte `statusWord`): "Stopping…" from the moment its end
+    /// is recorded until its machine confirms the process gone, then
+    /// "Stopped". Nil for every other status.
+    public var endWord: String? {
+        switch status {
+        case .stopping: SessionActs.stopping
+        case .stopped: "Stopped"
+        default: nil
+        }
+    }
 }
 
 /// What a session is doing now, in the fleet view's three words.

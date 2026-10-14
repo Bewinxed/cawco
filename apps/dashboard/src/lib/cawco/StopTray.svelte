@@ -92,6 +92,7 @@
   import Attention from "~icons/solar/hand-shake-bold-duotone";
   import Pause from "~icons/solar/pause-circle-bold-duotone";
   import Working from "~icons/solar/refresh-circle-bold-duotone";
+  import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
   import { cawco, onProjectStop } from "./client.svelte";
   import { machineName, span } from "./home/home-state.svelte";
   import { resolveSessionTitle } from "./links";
@@ -688,10 +689,10 @@
   /** What a row says it is doing, before and through its stop. */
   function statusOf(row: Row) {
     if (row.state === "stopping") {
-      return { word: "Stopping…", icon: null, tone: "busy" } as const;
+      return { word: STOPPING_LABEL, icon: null, tone: "busy" } as const;
     }
     if (row.state === "stopped") {
-      return { word: "Stopped", icon: Pause, tone: "quiet" } as const;
+      return { word: STOPPED_LABEL, icon: Pause, tone: "quiet" } as const;
     }
     if (row.state === "failed") {
       return { word: "Couldn't stop", icon: Failed, tone: "failed" } as const;

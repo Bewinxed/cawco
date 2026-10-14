@@ -297,12 +297,14 @@ const isLive = (row: InstanceRow): boolean =>
  * the board. `stopped` was left out here by omission, not by rule: a session
  * stopped from its row's menu then stood in no list at all, its menu and its
  * transcript out of reach. It has ended, so it is listed as ended sessions
- * are (Finished until seen, Recent, its project's tree).
+ * are (Finished until seen, Recent, its project's tree). A `stopping` one has
+ * ended too, its machine yet to confirm the process gone, and is listed so.
  */
 const isListed = (row: InstanceRow): boolean =>
   isLive(row) ||
   row.status === "error" ||
   row.status === "sleeping" ||
+  row.status === "stopping" ||
   row.status === "stopped" ||
   row.status === "unknown";
 
@@ -322,11 +324,13 @@ export const isStale = (row: InstanceRow): boolean => row.status === "unknown";
  * now (ARCHITECTURE.md's status table) — the hub never reports it any other
  * way, so this reads the status directly rather than inferring it from
  * `lastError`. A `stopped` row with a session id is the other resumable case:
- * deliberately ended, but nothing stops it being picked back up.
+ * deliberately ended, but nothing stops it being picked back up; so is a
+ * `stopping` one, whose resume replaces the process its machine is ending.
  */
 export const isResumable = (row: InstanceRow): boolean =>
   row.status === "sleeping" ||
-  (row.status === "stopped" && Boolean(row.sessionId));
+  ((row.status === "stopping" || row.status === "stopped") &&
+    Boolean(row.sessionId));
 
 /**
  * A session that died of something, and is not coming back by being opened.
@@ -4897,6 +4901,7 @@ export async function ensureAlive(
   const dead =
     row &&
     (row.status === "error" ||
+      row.status === "stopping" ||
       row.status === "stopped" ||
       row.status === "sleeping");
   if (dead) {

@@ -640,7 +640,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             stale: !home.live,
             hover: session.id,
             archives: entry.tab == .finished && !line.context && home.archivable(session),
-            stopped: session.status == .stopped,
+            endWord: session.endWord,
             beat: echoing[id] ?? 0,
             beats: max(1, echoing.count)
         )
@@ -660,7 +660,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             trail: recent.at > 0 ? Naming.span(ms: home.now - recent.at) : "",
             stale: !home.live,
             hover: recent.instance?.id,
-            stopped: recent.instance?.status == .stopped
+            endWord: recent.instance?.endWord
         )
     }
 
@@ -1130,8 +1130,9 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             return .idle
         }
         // At rest with no process: a session put to sleep, or one that
-        // stopped. Listed as finished, it is done (SessionMark.svelte `sessionStatus`).
-        if row.status == .sleeping || row.status == .stopped {
+        // stopped (or is stopping: ended, its word says the rest). Listed as
+        // finished, it is done (SessionMark.svelte `sessionStatus`).
+        if row.status == .sleeping || row.status == .stopping || row.status == .stopped {
             return done ? .done : .idle
         }
         switch home.activity(row.id) {

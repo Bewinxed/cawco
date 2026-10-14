@@ -274,6 +274,7 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
             if row.isFailed { return .failed }
             if row.isStale || context.hub.state != .connected { return .unreachable }
             if row.status == .sleeping { return .sleeping }
+            if row.status == .stopping { return .stopping }
             if row.status == .stopped { return .stopped }
             if activity == .blocked { return .needsYou }
             if activity == .working { return .working }

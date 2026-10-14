@@ -935,6 +935,7 @@ const RECONNECTING_MS = 60_000;
  * is decided: whether a process still runs is its machine's custody to say.
  */
 const NO_PROCESS_STATUSES: ReadonlySet<string> = new Set([
+  "stopping",
   "stopped",
   "discarded",
   "error",
@@ -3002,7 +3003,11 @@ export const createServer = (
     title?: string | null;
   }): string => row.title || row.derivedTitle || row.id.slice(0, 8);
   /**
-   * A session a send wakes: its process is gone, its conversation on record.
+   * A session a send wakes: its process is gone, or ended and on its way out
+   * (`stopping`), its conversation on record. A stopping one is woken as a
+   * stopped one is: the resume spawn replaces its process (the machine
+   * settles the old one first) and takes the end back, and the old
+   * generation's late confirmation no longer matches the row.
    * Never one a move holds: the move's start is its first launch. Never one
    * whose launch is on its way ({@link launches}): the send goes behind it.
    */
@@ -3017,12 +3022,14 @@ export const createServer = (
     !launchInFlight(row.id) &&
     (row.status === "sleeping" ||
       row.status === "error" ||
+      row.status === "stopping" ||
       row.status === "stopped");
   /**
    * Whether a send from `origin` may start a turn in `row` when its process
-   * is gone ({@link wakesForSend}). A stopped session, ended by its person,
-   * its parent or the hub, is woken only by a person (their words, or their
-   * Send on one of its artifacts: core `byPerson`) or by its own parent:
+   * is gone ({@link wakesForSend}). A stopped or stopping session, ended by
+   * its person, its parent or the hub, is woken only by a person (their
+   * words, or their Send on one of its artifacts: core `byPerson`) or by its
+   * own parent:
    * a delegate's report, another session's hand-off and every hub notice
    * wait for one of them. A sleeping or failed one is woken by anything but
    * the hub's word that a message did not arrive, which asks nothing of it.
@@ -3042,7 +3049,7 @@ export const createServer = (
     ) {
       return true;
     }
-    if (row.status === "stopped") {
+    if (row.status === "stopping" || row.status === "stopped") {
       return false;
     }
     return !(origin.kind === "system" && origin.name === UNDELIVERED_ORIGIN);
@@ -13513,7 +13520,9 @@ export const createServer = (
           resetsAt: null,
         }
       : null;
-    const running = !["sleeping", "stopped", "error"].includes(row.status);
+    const running = !["sleeping", "stopping", "stopped", "error"].includes(
+      row.status
+    );
     const title = sessionName(row);
     const fromName = accountWords(row.accountId);
     const toName = accountName(account);

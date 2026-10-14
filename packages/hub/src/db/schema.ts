@@ -874,6 +874,7 @@ export const instances = sqliteTable("instances", {
       | "starting"
       | "running"
       | "sleeping"
+      | "stopping"
       | "stopped"
       | "discarded"
       | "unknown"

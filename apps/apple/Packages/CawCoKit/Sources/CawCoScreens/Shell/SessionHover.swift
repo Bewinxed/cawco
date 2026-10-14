@@ -180,11 +180,13 @@ final class SessionHover: NSObject {
 
     // MARK: The card
 
-    private enum Tone { case live, needs, done, failed, idle }
+    private enum Tone { case live, needs, stopping, done, failed, idle }
 
     private func tone(_ id: String) -> Tone {
         let row = hub.fleet.byId[id]
         if row?.isFailed == true { return .failed }
+        // Asked to end, its machine yet to confirm the process gone.
+        if row?.status == .stopping { return .stopping }
         if hub.needs.blocked(id) || (BoardRun.runId(of: id) != nil && home.activity(id) == .blocked) { return .needs }
         if home.activity(id) == .working { return .live }
         return row?.status == .stopped ? .done : .idle
@@ -291,6 +293,15 @@ final class SessionHover: NSObject {
         case .failed:
             inner = GlyphView(.warning, size: 16, tint: Palette.statusFailInk)
             box.accessibilityLabel = "Failed"
+        case .stopping:
+            // In flight until its machine confirms, as the web's card spins (SessionHover.svelte).
+            let spinner = UIActivityIndicatorView(style: .medium)
+            spinner.color = Palette.inkMuted
+            spinner.transform = CGAffineTransform(scaleX: 0.8, y: 0.8)
+            spinner.translatesAutoresizingMaskIntoConstraints = false
+            spinner.startAnimating()
+            inner = spinner
+            box.accessibilityLabel = SessionActs.stopping
         case .idle:
             inner = nil
             box.accessibilityLabel = "Idle"
