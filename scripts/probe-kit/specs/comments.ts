@@ -876,8 +876,11 @@ const innerFrameOf = async (outer: Frame): Promise<Frame> =>
  * script but the outer overlay's (the outer's watch of the inner window is
  * the outer's own).
  */
-const innerOverlay = async (on: On) => {
-  const cdp = await on.page.context().newCDPSession(on.page);
+const innerOverlay = async (on: On, preview: Frame) => {
+  // The preview is an origin of its own, in a process of its own (the
+  // dashboard sends Origin-Agent-Cluster): its frames are read through its
+  // own DevTools session, never the dashboard page's.
+  const cdp = await on.page.context().newCDPSession(preview);
   try {
     const { frameTree } = await cdp.send("Page.getFrameTree");
     type Tree = typeof frameTree;
@@ -1012,7 +1015,7 @@ const frameChecks = async (on: On) => {
     )) as Frame;
     await innerFrameOf(outer);
     await settle(on.page, 600);
-    const standing = await innerOverlay(on);
+    const standing = await innerOverlay(on, outer);
     const outerHost = await outer.locator("cawco-overlay").count();
     on.kit.check(
       "b: the preview runs one overlay: the inner frame loaded the script (its mark) but holds no cawco-overlay element, layer or global, and every listener on its window and document is the outer overlay's; the outer page holds its own",
@@ -1176,6 +1179,10 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
   /** A tap on the page at the screen's `x`, `y` in Comment mode: the new pin's number, and its card as it opens. */
   const tapPin = async (x: number, y: number) => {
     const held = Object.keys(await numbersNow()).length;
+    // The pointer comes to the spot first, as a hand's does: the preview is a
+    // frame of its own process, which the browser routes input to by where
+    // the pointer last stood.
+    await on.page.mouse.move(x, y, { steps: 4 });
     await on.page.mouse.click(x, y);
     const now = await until(
       "the tapped pin in the doc",

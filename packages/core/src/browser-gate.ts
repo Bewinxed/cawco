@@ -8,10 +8,11 @@
  *   are refused. A client that is no browser (the Apple app's URLSession,
  *   the CLI, a machine's agent) sends none and passes.
  * - An `Origin`, when present, must be the server's own, port included.
- * - A top-level navigation (`navigate`, GET or HEAD, not into a frame)
- *   passes from anywhere: a link from elsewhere, a sign-in coming back. It
- *   cannot read what it gets, and a frame of the dashboard is refused by its
- *   own `frame-ancestors 'self'`.
+ * - A navigation (`navigate`, GET or HEAD, never into an object or embed)
+ *   passes from anywhere: a link from elsewhere, a sign-in coming back, a
+ *   previewed copy of the dashboard loading in a pane. It cannot read what
+ *   it gets, and where the dashboard may be framed is its own
+ *   `frame-ancestors 'self'` to say.
  *
  * Answers why a request is refused, or null.
  */
@@ -39,7 +40,8 @@ export function crossSiteRefusal(
   return null;
 }
 
-const FRAMED = new Set(["iframe", "frame", "object", "embed"]);
+/** Where a navigation's document may run a plugin's: never let through. */
+const FRAMED = new Set(["object", "embed"]);
 
 /** The headers a relay that passed the gate removes before it goes on: the hop behind it is not the page's origin. */
 export const BROWSER_HEADERS = [

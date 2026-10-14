@@ -30,7 +30,7 @@
 
   const read = (answer: PreviewSettings) => {
     settings = answer;
-    mode = answer.mode;
+    ({ mode } = answer);
     pattern = answer.mode === "host" ? answer.pattern : "";
   };
 

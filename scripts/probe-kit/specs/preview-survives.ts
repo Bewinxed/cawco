@@ -170,6 +170,8 @@ const run = async (kit: Kit) => {
     );
   }
   const first = appOf(TITLE);
+  /** Read now: a stopped server names no port. */
+  const firstAppPort = first.server.port as number;
   const second = appOf(OTHER);
 
   const fleet = await kit.fleet(respond);
@@ -255,27 +257,26 @@ const run = async (kit: Kit) => {
     );
 
     // 10. From the preview's origin, the hub and the dashboard refuse.
+    // A page may POST anywhere without CORS (`no-cors`): the browser sends
+    // it with its cookies and its own Sec-Fetch-Site, and only the server's
+    // gate stands in the way.
+    const target = `/api/instances/${session}/preview-address`;
     await shown.frame.evaluate(
-      (hub) =>
-        fetch(`${hub}/api/preview-settings`, {
-          method: "PUT",
+      (url) =>
+        fetch(url, {
+          method: "POST",
           mode: "no-cors",
           credentials: "include",
           headers: { "content-type": "text/plain" },
-          body: JSON.stringify({
-            mode: "host",
-            pattern: "p-{session}.localhost",
-          }),
+          body: "{}",
         }).catch(() => undefined),
-      fleet.base
+      `${fleet.base}${target}`
     );
     await tab.waitForTimeout(500);
     const hubLine = (await fleet.logs("hub"))
       .split("\n")
       .find((line) =>
-        line.includes(
-          "[hub] refused a same-site request to PUT /api/preview-settings"
-        )
+        line.includes(`[hub] refused a same-site request to POST ${target}`)
       );
     const still = (await (
       await fetch(`${fleet.base}/api/preview-settings`)
@@ -326,13 +327,15 @@ const run = async (kit: Kit) => {
 
   // 12. A previewed copy of the dashboard routes by its own paths.
   const viewer = await fleet.spawn("claude", "Viewer", fleet.repo);
-  await create(viewer, {
+  const copyId = await create(viewer, {
     name: "dashboard-copy",
     port: Number(new URL(base).port),
     path: `/session/${session}`,
   });
+  // The artifact's own tab: the same pane at the desk's full width, where
+  // the copy draws its desk layout, rail and all.
   const viewerTab = await kit.page("desk");
-  await open(viewerTab, `${base}/session/${viewer}`, FRAME);
+  await open(viewerTab, `${base}/artifact/${copyId}`, FRAME);
   /** The panel's frame once it holds the previewed dashboard routed at `/session/<id>`, with that session's link. */
   const routedCopy = async (): Promise<Frame | null> => {
     const handles = (await viewerTab.locator(FRAME).elementHandles()).reverse();
@@ -364,44 +367,120 @@ const run = async (kit: Kit) => {
   } catch {
     copy = null;
   }
-  /** Where the previewed dashboard stands, and whether its window is the one marked before the click. */
+  /** Where the previewed dashboard stands: its path, and whether its window is the one marked before the clicks. */
   const standing = async (frame: Frame): Promise<string> => {
     try {
       return await frame.evaluate(
-        (id) =>
-          location.pathname === `/session/${id}` &&
-          (window as unknown as { __kept?: number }).__kept === 1
-            ? "moved in place"
-            : `${location.pathname}, kept ${(window as unknown as { __kept?: number }).__kept ?? "lost"}`,
-        other
+        () =>
+          `${location.pathname}${(window as unknown as { __kept?: number }).__kept === 1 ? "" : " (reloaded)"}`
       );
     } catch {
       return "the frame reloaded";
     }
   };
-  let moved = "no previewed dashboard";
-  if (copy) {
-    await copy.evaluate(() => {
-      (window as unknown as { __kept: number }).__kept = 1;
-    });
-    await copy.locator(`a[href="/session/${other}"]`).first().click();
-    const frame = copy;
+  /** Every in-app link the copy draws now. */
+  const hrefs = (frame: Frame): Promise<string[]> =>
+    frame.evaluate(() =>
+      [...document.querySelectorAll("a[href]")].map(
+        (a) => a.getAttribute("href") ?? ""
+      )
+    );
+  /** A click on the copy's link to `href`, and where it then stands: `href`, its window kept, or what it reached. */
+  const go = async (frame: Frame, href: string): Promise<string> => {
+    // The pane is narrow: the copy may draw a link twice, one of them hidden.
+    await frame
+      .locator(`a[href="${href}"]:visible`)
+      .first()
+      .click({ timeout: 20_000 });
     try {
-      moved = (await until(
-        "the previewed dashboard on the other session",
-        async () => {
-          const now = await standing(frame);
-          return now === "moved in place" ? now : null;
-        },
+      return (await until(
+        `the previewed dashboard at ${href}`,
+        async () => ((await standing(frame)) === href ? href : null),
         Boolean,
         30_000
       )) as string;
     } catch {
-      moved = await standing(frame);
+      return await standing(frame);
+    }
+  };
+  let moved = "no previewed dashboard";
+  if (!copy) {
+    // What the panel holds instead: each frame's address, path, title and
+    // the session links it carries.
+    const frames = await Promise.all(
+      (await viewerTab.locator(FRAME).elementHandles()).map(async (handle) => {
+        const frame = await handle.contentFrame();
+        const seen = await frame
+          ?.evaluate(() => ({
+            path: location.pathname,
+            title: document.title,
+            links: [...document.querySelectorAll('a[href^="/session"]')]
+              .map((a) => a.getAttribute("href"))
+              .slice(0, 6),
+            body: document.body?.innerText.slice(0, 160) ?? "",
+          }))
+          .catch((error: Error) => ({ error: error.message }));
+        return `${frame?.url() ?? "?"} ${JSON.stringify(seen)}`;
+      })
+    );
+    const pane = await viewerTab
+      .locator(".preview-pane")
+      .innerText()
+      .catch(() => "no pane");
+    moved = `no previewed dashboard; frames ${frames.join(" | ") || "none"}; pane ${JSON.stringify(pane.slice(0, 200))}`;
+  }
+  if (copy) {
+    // The copy's own workspace, in its own origin's storage, holds both
+    // sessions as tabs; one load of the copy takes it up.
+    const firstTab = `/session/${session}`;
+    const secondTab = `/session/${other}`;
+    await copy.evaluate(
+      ([a, b]) => {
+        localStorage.setItem(
+          "cawco-workspace",
+          JSON.stringify({
+            v: 1,
+            root: { t: "l", id: "probe-leaf", tabs: [a, b], active: a },
+            focusedLeaf: "probe-leaf",
+            ctx: {},
+          })
+        );
+      },
+      [session, other]
+    );
+    await copy.goto(new URL(firstTab, copy.url()).href, {
+      waitUntil: "domcontentloaded",
+    });
+    copy = (await until(
+      "the copy again, both tabs drawn",
+      async () => {
+        const frame = await routedCopy();
+        return frame && (await hrefs(frame)).includes(secondTab) ? frame : null;
+      },
+      Boolean,
+      60_000
+    ).catch(() => copy)) as Frame;
+    await copy.evaluate(() => {
+      (window as unknown as { __kept: number }).__kept = 1;
+    });
+    // To the other session's tab and back: in-app moves, the window the
+    // one marked before them.
+    const path: string[] = [];
+    if ((await hrefs(copy)).includes(secondTab)) {
+      path.push(await go(copy, secondTab));
+      if (path[0] === secondTab) {
+        path.push(await go(copy, firstTab));
+      }
+      moved =
+        path.join(" → ") === `${secondTab} → ${firstTab}`
+          ? "moved in place"
+          : path.join(" → ");
+    } else {
+      moved = `no tab for the other session; links ${JSON.stringify((await hrefs(copy)).slice(0, 12))}`;
     }
   }
   kit.check(
-    "12: a previewed dashboard routes /session/<id> at its own root and moves to another session without a reload",
+    "12: a previewed dashboard routes /session/<id> at its own root, and switches to its other session's tab and back without a reload",
     !!copy && moved === "moved in place",
     `${copy ? new URL(copy.url()).origin : "none"}: ${moved}`
   );
@@ -516,7 +595,7 @@ const run = async (kit: Kit) => {
       (line) =>
         line.includes(
           `[preview] agent listener: preview of ${session} failed:`
-        ) && line.includes(`port ${first.server.port}`)
+        ) && line.includes(`port ${firstAppPort}`)
     );
   kit.check(
     "6: a stopped server draws the worded state with Try again, and the agent logs one line naming the port",

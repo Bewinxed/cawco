@@ -27538,6 +27538,9 @@
       "Created": {
         "type": "object",
         "properties": {
+          "host": {
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },
@@ -27562,9 +27565,6 @@
           "port": {
             "description": "A draft canvas's: its session's preview origin (core `PreviewAddress`),\nwhere a client loads the canvas at `/__cawco/canvas/<id>/`: a port on\nthe hub's host, or a host name of its own.",
             "type": "number"
-          },
-          "host": {
-            "type": "string"
           },
           "route": {
             "description": "Its live document on the hub's preview listener.",
@@ -28266,6 +28266,9 @@
               "version"
             ]
           },
+          "host": {
+            "type": "string"
+          },
           "outline": {
             "type": "string"
           },
@@ -28279,9 +28282,6 @@
           "port": {
             "description": "Its session's preview origin, where the canvas's page stands (`Created.port` / `host`).",
             "type": "number"
-          },
-          "host": {
-            "type": "string"
           }
         },
         "required": [
@@ -38386,6 +38386,9 @@
               "name"
             ]
           },
+          "host": {
+            "type": "string"
+          },
           "instanceId": {
             "type": "string"
           },
@@ -38398,9 +38401,6 @@
           "port": {
             "description": "Where the preview is its own origin, never the dashboard's: the session's\npreview listener's port on the host the client reached the hub by (port\nmode), or its own host name (host mode, `name[:port]`, from the fleet's\npattern). Exactly one is set ({@link PreviewAddress}).",
             "type": "number"
-          },
-          "host": {
-            "type": "string"
           },
           "revision": {
             "description": "Identifies one successful open, including a rebuild of the same source.",
