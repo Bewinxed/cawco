@@ -1851,6 +1851,62 @@ workspace_archived() {
 export -f workspace_archived
 check "the proof's workspace is archived through the hub, and nothing of it is left on the joined machine" workspace_archived 300 "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential"
 
+# ---------------------------------------------------------------- Install now on a joined machine, through a failure
+# The owner's Mac on 2026-10-13: Install now for a joined machine answered `installed`, and the machine then said
+# installing, with no helper and nothing applied, until its agent was restarted by hand. A joined machine applies on
+# the command, its agent restarted only by the update's own helper; a download its hub cannot supply leaves it failed,
+# saying why, never installing, and the same command tries the build again by itself once the hub can supply it.
+# Build 11 is the build it installs; it comes after build 10 (the workspace checks above), on the nightly channel.
+export RETRY_BUILD=0.0.1-nightly.11+bbbbbbbbbbbb RETRY_COMMIT=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+# Moves the retry build's archive ($1) `aside` where the hub gets it, its own copy and the release host's, or `back`.
+retry_archive() {
+  local cached="/home/cawco/.local/share/cawco/binary-releases/$RETRY_BUILD/$1" hosted="$out/release/ok/nightly/$1"
+  if [[ $2 == aside ]]; then
+    as_user "$hubc" mv "$cached" "$cached.aside"
+    mv "$hosted" "$hosted.aside"
+    return
+  fi
+  as_user "$hubc" sh -c 'test ! -e "$1.aside" || mv "$1.aside" "$1"' sh "$cached"
+  [[ ! -e "$hosted.aside" ]] || mv "$hosted.aside" "$hosted"
+}
+agent_pid() { as_user "$1" systemctl --user show -p MainPID --value cawco-agent.service; }
+joiner_install_retries() {
+  need_hub
+  local archive agent answer
+  # One update at a time, each asked for: the hub's machine, then the joined one.
+  put_policy nightly false
+  sleep 15
+  wait_until 300 '[[ "$(phase $hid)" != installing && "$(phase $jid)" != installing ]]'
+  if [[ "$(build_version $jid)" != "$(build_version $hid)" ]]; then install_now_request "$jid" > /dev/null; fi
+  wait_until 600 '[[ "$(build_version $jid)" == "$(build_version $hid)" && "$(phase $jid)" != installing ]]'
+  publish ok nightly "$RETRY_BUILD" "$RETRY_COMMIT" "$bins/cawco-11" "$key" 48 "$schema"
+  learn
+  install_now_request "$hid" > /dev/null
+  wait_until 400 '[[ "$(build_version $hid)" == "$RETRY_BUILD" && "$(phase $hid)" == installed ]]'
+  wait_until 120 '[[ "$(field $jid availableVersion)" == "$RETRY_BUILD" ]]'
+  # The hub cannot supply the build: the copy it fetched for its own machine, and the release host's, are aside.
+  archive=$(hub_api /api/binary-updates/release | json "d => d.manifest.artifacts.find(a => a.target === 'linux-x64')?.archive")
+  [[ -n $archive ]]
+  on_exit "retry_archive '$archive' back"
+  retry_archive "$archive" aside
+  agent=$(agent_pid "$joinerc")
+  answer=$(install_now_request "$jid")
+  echo "the joined machine answered: $answer"
+  grep -q '"installed":false' <<< "$answer"
+  # It says failed, and why, at once: it is never installing with nothing applying it.
+  wait_until 45 '[[ "$(phase $jid)" == failed ]]'
+  echo "its error: $(field $jid error)"
+  [[ "$(field $jid error)" == *"could not supply the build"* ]]
+  [[ "$(agent_pid "$joinerc")" == "$agent" ]]
+  # The archive is back: the command tries the build again by itself once its delay has passed, and one helper
+  # applies it, with no agent restart by hand.
+  retry_archive "$archive" back
+  wait_until 300 '[[ "$(build_version $jid)" == "$RETRY_BUILD" && "$(phase $jid)" == installed ]]'
+  [[ "$(as_user "$joinerc" sh -c 'grep -c "start $1 keeperOnly=false" /home/cawco/.local/share/cawco/binary/apply.log || true' sh "$RETRY_BUILD")" == 1 ]]
+}
+export -f retry_archive agent_pid joiner_install_retries
+check "an install commanded on a joined machine whose hub cannot supply the build says failed and why, then applies it by itself once the hub can, with no agent restart by hand" joiner_install_retries 1200 "Install now applies the newer build|a second container joins the hub" "$RETRY_BUILD"
+
 # ---------------------------------------------------------------- the keeper's children cgroup
 # A keeper's unit delegates the pids, memory and cpu controllers (Delegate=pids memory cpu, DelegateSubgroup=keeper):
 # systemd starts the keeper in …/cawco-sessiond-<build>.service/keeper, and the keeper puts every child in a cgroup

@@ -10,7 +10,7 @@
  * applies only the build its hub is running, and the hub's machine never
  * installs a build with fewer migrations than its database holds.
  */
-import { readdir, readFile, rename, rm } from "node:fs/promises";
+import { readFile, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { UpdateReport } from "@cawco/core";
 import {
@@ -61,14 +61,21 @@ import { machineId } from "@cawco/core/machine-id";
 import { verifyManifest } from "@cawco/core/release-manifest";
 import { runtimeVersion } from "@cawco/core/runtime";
 import { leaveRetiringKeepers } from "./boundary";
+import {
+  HELPER_START_MS,
+  type HelperJob,
+  helperJobSays,
+  launchHelper,
+  removeFinishedHelpers,
+} from "./helper-jobs";
 import { keeperJob, keeperJobsHere } from "./keeper-jobs";
 import { withKeepers } from "./keepers";
 import { lowerFence, raiseFence, restartReadiness } from "./restart";
 import { heldSessions } from "./sessiond-client";
 
 const POLL_MS = 60_000;
-/** An update that says it is installing for longer than this, with no helper and no trial, has lost its helper. */
-const INSTALL_STALE_MS = 10 * 60_000;
+/** The lease of the fence an install raises: the helper restarts the services well within it. */
+const INSTALL_FENCE_MS = 10 * 60_000;
 /** How many of the last commands' ids the state keeps, so one delivered again is not acted on twice. */
 const COMMANDS_KEPT = 20;
 /** Minutes to wait before trying a failed download or verification again; the last repeats. */
@@ -80,8 +87,6 @@ const DRAIN_POLL_MS = 1000;
 const DRAIN_GRACE_MS = 15_000;
 /** The updater's name for its fence on this agent ({@link raiseFence}). */
 const FENCE = "update";
-/** How long a launched helper has to take its lock; one that holds none after it has gone. */
-const HELPER_START_MS = 10_000;
 
 /** Each hold's pieces, by kind: what tells one piece of work from another. */
 const holdKeys = (holds: readonly RestartHold[]): string[] =>
@@ -180,6 +185,13 @@ const logFailure = (error: unknown): void => {
 /** The hub could not be reached at all: no answer, not an answer that refused. */
 class HubUnreachable extends Error {}
 
+/**
+ * An attempt at an offered build failed (its download, its verification, the
+ * drain, or its helper's start): recorded with its retry time, and the command
+ * that asked for it stands, so the build is tried again on the retry schedule.
+ */
+class AttemptFailed extends Error {}
+
 interface Failure {
   count: number;
   error: string;
@@ -207,103 +219,12 @@ async function recordFailure(version: string, error: string): Promise<void> {
 }
 
 /**
- * The forwarded environment: CawCo's own settings, and the PATH, HOME and XDG
- * directories a one-shot job would otherwise lack. The same set the wrapper's
- * resume path forwards (binary-wrapper.ts `forwarded`): the helper rewrites
- * the keeper's unit (`cawco binary-units`), whose path and text come from
- * XDG_CONFIG_HOME, XDG_DATA_HOME and PATH as the installer saw them.
- */
-function helperEnvironment(): [string, string][] {
-  return Object.entries(process.env).filter(
-    (entry): entry is [string, string] =>
-      entry[1] !== undefined &&
-      (entry[0].startsWith("CAWCO_") ||
-        entry[0].startsWith("XDG_") ||
-        entry[0] === "PATH" ||
-        entry[0] === "HOME")
-  );
-}
-
-/**
  * The update helper (`cawco binary-apply`, given `args`), as a job of the
  * service manager so it outlives the restarts it performs. It is this build,
  * by its own folder, never through `current`, which the helper moves.
  */
-async function launchApplyHelper(args: readonly string[]) {
-  const executable = versionExecutable(runtimeVersion);
-  const forwarded = helperEnvironment();
-  if (process.platform === "linux") {
-    const child = Bun.spawn(
-      [
-        "systemd-run",
-        "--user",
-        "--collect",
-        `--unit=cawco-binary-apply-${Date.now()}`,
-        "--property=Type=exec",
-        ...forwarded.map(([key, value]) => `--setenv=${key}=${value}`),
-        executable,
-        ...args,
-      ],
-      { stdout: "pipe", stderr: "pipe" }
-    );
-    if ((await child.exited) !== 0) {
-      throw new Error(
-        `The update helper could not start: ${(await new Response(child.stderr).text()).trim()}`
-      );
-    }
-    return;
-  }
-  const label = `dev.cawco.binary-apply.${Date.now()}`;
-  const plist = join(binaryRoot(), `${label}.plist`);
-  const text = (value: string) =>
-    `<string>${value.replaceAll("&", "&amp;").replaceAll("<", "&lt;")}</string>`;
-  await Bun.write(
-    plist,
-    `<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-<key>Label</key>${text(label)}
-<key>ProgramArguments</key><array>${[executable, ...args].map(text).join("")}</array>
-<key>EnvironmentVariables</key><dict>${forwarded.map(([key, value]) => `<key>${key}</key>${text(value)}`).join("")}</dict>
-<key>RunAtLoad</key><true/>
-</dict></plist>
-`
-  );
-  const child = Bun.spawn(
-    ["launchctl", "bootstrap", `gui/${process.getuid?.()}`, plist],
-    { stdout: "pipe", stderr: "pipe" }
-  );
-  if ((await child.exited) !== 0) {
-    throw new Error(
-      `The update helper could not start: ${(await new Response(child.stderr).text()).trim()}`
-    );
-  }
-}
-
-/**
- * A finished one-shot macOS job and its file are removed on the updater's next
- * pass. The helper restarts the agent itself mid-update, so a helper that is
- * still running is left alone: booting its job out would kill it half-way.
- */
-async function removeFinishedHelpers(): Promise<void> {
-  if (process.platform !== "darwin" || (await helperIsLive())) {
-    return;
-  }
-  const files = (await readdir(binaryRoot())).filter(
-    (name) =>
-      name.startsWith("dev.cawco.binary-apply.") && name.endsWith(".plist")
-  );
-  await Promise.all(
-    files.map(async (name) => {
-      const label = name.slice(0, -".plist".length);
-      await Bun.spawn(
-        ["launchctl", "bootout", `gui/${process.getuid?.()}/${label}`],
-        { stdout: "ignore", stderr: "ignore" }
-      ).exited;
-      await rm(join(binaryRoot(), name), { force: true });
-    })
-  );
-}
+const launchApplyHelper = (args: readonly string[]): Promise<HelperJob> =>
+  launchHelper([versionExecutable(runtimeVersion), ...args]);
 
 export class BinaryUpdater {
   #state: BinaryUpdateState = {
@@ -337,7 +258,16 @@ export class BinaryUpdater {
    * hub when its restart is part of the update (the hub's url then). Lowered
    * on every way out but the restart it was raised for.
    */
-  #fence: { hub: string | undefined; launchedAt?: number } | undefined;
+  #fence: { hub: string | undefined } | undefined;
+  /**
+   * The helper this agent handed an install to, until it takes the lock or
+   * the install says otherwise: when, its job, and the command that asked
+   * for the install (`version`: the build it named), which stands again if
+   * the helper never takes over ({@link #settleLostHelper}).
+   */
+  #launched:
+    | { at: number; command?: { version?: string }; job: HelperJob }
+    | undefined;
   /**
    * The work that outlasted the last drain auto-update ran, by {@link holdKeys}.
    * While any of it still runs, no fence goes up again for it: the work is
@@ -394,6 +324,10 @@ export class BinaryUpdater {
    */
   async cancel(): Promise<BinaryUpdateState> {
     this.#flags.commanded = false;
+    // Nor does the command stand again should the helper it went to never take over.
+    if (this.#launched) {
+      this.#launched = { ...this.#launched, command: undefined };
+    }
     this.#outlasted.clear();
     if (this.#running) {
       // The drain's own state is in memory; the file says `ready` meanwhile.
@@ -484,6 +418,18 @@ export class BinaryUpdater {
     this.#report(this.#state);
   }
 
+  /** {@link #set}, only when a value it names changes: every write moves `updatedAt`, which the board reads as news. */
+  async #setChanged(update: Partial<BinaryUpdateState>): Promise<void> {
+    const changed = Object.entries(update).some(
+      ([key, value]) =>
+        JSON.stringify(this.#state[key as keyof BinaryUpdateState]) !==
+        JSON.stringify(value)
+    );
+    if (changed) {
+      await this.#set(update);
+    }
+  }
+
   /** The keeper watchdog restarted a wedged keeper: the dashboard says so once. */
   async noteKeeperRestart(
     restart: NonNullable<BinaryUpdateState["keeperRestart"]>
@@ -500,24 +446,66 @@ export class BinaryUpdater {
   async #watch(): Promise<void> {
     if (!this.#running) {
       await this.#load();
-      // The helper gave up before it restarted this agent (it says so in the
-      // state), or it is gone without a word (it found another helper's lock):
-      // the fence it was raised for has nothing left to wait for.
-      const launched = this.#fence?.launchedAt;
-      if (
-        this.#fence &&
-        (this.#state.phase !== "installing" ||
-          (launched !== undefined &&
-            Date.now() - launched > HELPER_START_MS &&
-            !(await helperIsLive())))
-      ) {
-        await this.#lowerFence();
+      if (this.#state.phase === "installing") {
+        await this.#settleLostHelper();
+      } else {
+        // The install ended, or its helper gave up before it restarted this
+        // agent and said so: the fence raised for it has nothing to wait for.
+        this.#launched = undefined;
+        if (this.#fence) {
+          await this.#lowerFence();
+        }
       }
     }
     await this.#keepDecider();
     await this.#ownWrapper();
     await this.#advanceKeeper();
     await this.#tendKeepers();
+  }
+
+  /**
+   * AN INSTALL NO HELPER TOOK OVER HAS FAILED, AND IS TRIED AGAIN. The state
+   * says installing, yet no helper holds the lock and no trial is open,
+   * {@link HELPER_START_MS} after the install was handed to its helper (by
+   * this agent; after a restart, since the state last moved): the helper never
+   * ran, was ended before it took its lock, or found another's and left.
+   * Nothing was applied. The state says failed, with what the service manager
+   * says of the helper's job; the failure is recorded with its retry time, and
+   * the command that asked for the install stands again, so the build is
+   * tried again on the retry schedule. Nothing here asks the hub: a machine
+   * whose hub does not answer says it all the same.
+   */
+  async #settleLostHelper(): Promise<void> {
+    const launched = this.#launched;
+    if (await helperIsLive()) {
+      // It took over: from here the state is the helper's to move.
+      this.#launched = undefined;
+      return;
+    }
+    if (
+      Date.now() - (launched?.at ?? this.#state.updatedAt) < HELPER_START_MS ||
+      (await readTrial())
+    ) {
+      return;
+    }
+    const says = launched ? await helperJobSays(launched.job) : undefined;
+    // A pass that began meanwhile owns the state; the next watch looks again.
+    if (this.#running || this.#state.phase !== "installing") {
+      return;
+    }
+    const version = this.#state.availableVersion;
+    const error = `The update helper${launched ? ` (${launched.job.name})` : ""} did not take over the install of ${version ?? "the build"} within ${HELPER_START_MS / 1000} s${says ? `: ${says}` : ""}`;
+    console.warn(`[update] ${error}; it is tried again`);
+    this.#launched = undefined;
+    await this.#lowerFence();
+    if (version) {
+      await recordFailure(version, error);
+    }
+    if (launched?.command) {
+      this.#flags.commanded = true;
+      this.#flags.version = launched.command.version;
+    }
+    await this.#set({ phase: "failed", error });
   }
 
   /** Each retiring keeper's first look at which it held nothing, by its endpoint. */
@@ -778,7 +766,14 @@ export class BinaryUpdater {
       await this.#load();
       await this.#check();
     } catch (error) {
-      this.#flags.commanded = false;
+      // A command stands through a failed attempt, which is tried again on
+      // the retry schedule, and through a hub that did not answer, before
+      // which nothing was tried; a refusal of what the hub offers spends it.
+      if (
+        !(error instanceof AttemptFailed || error instanceof HubUnreachable)
+      ) {
+        this.#flags.commanded = false;
+      }
       await this.#lowerFence();
       if (error instanceof HubUnreachable) {
         // Nothing was tried, and the state reaches a person only through the
@@ -854,24 +849,14 @@ export class BinaryUpdater {
     this.#policy = (await settings.json()) as BinaryUpdatePolicy;
     const { release, dbSchemaVersion } = await this.#offer(installation);
     const running = await readRunningManifest();
-    // Only a change is written: every write moves `updatedAt`, and the lost-helper rule below reads it.
+    // Only a change is written: every write moves `updatedAt`, and the lost-helper rule (#settleLostHelper) reads it.
     if (this.#state.channel !== this.#policy.channel) {
       await this.#set({ channel: this.#policy.channel });
     }
-    // A live helper, or an open trial (which #keepDecider gives a helper), owns an install.
-    if (
-      this.#state.phase === "installing" &&
-      Date.now() - this.#state.updatedAt > INSTALL_STALE_MS &&
-      !(await helperIsLive()) &&
-      !(await readTrial())
-    ) {
-      await this.#set({
-        phase: "failed",
-        error: "The update helper did not report back",
-      });
-    }
     // A helper is applying a build, or deciding one whose state already says
-    // installed: nothing else stages, applies, moves the keeper or counts anything now.
+    // installed: nothing else stages, applies, moves the keeper or counts
+    // anything now. An install no helper took over is the watch's to settle
+    // (#settleLostHelper).
     if (this.#state.phase === "installing" || (await readTrial())) {
       return;
     }
@@ -884,35 +869,48 @@ export class BinaryUpdater {
       await this.#settleNothingNewer(this.#policy.channel !== running.channel);
       return;
     }
-    this.#spendCommandFor(release.manifest.version);
-    const failedBefore = this.#state.failedVersion === release.manifest.version;
+    await this.#takeUp(release, installation);
+  }
+
+  /**
+   * A newer build is offered: the state says it is available (or, while a
+   * failed attempt at it waits out its delay, failed, and why), and a command
+   * or auto-update attempts it: staged, then applied. An attempt that fails
+   * is recorded with its retry time ({@link AttemptFailed}).
+   */
+  async #takeUp(
+    release: SignedRelease,
+    installation: BinaryInstallation
+  ): Promise<void> {
+    const { version, notes } = release.manifest;
+    this.#spendCommandFor(version);
+    const failedBefore = this.#state.failedVersion === version;
+    const attempt =
+      this.#flags.commanded || (this.#policy.autoUpdate && !failedBefore);
+    const failure = attempt ? await readFailure(version) : undefined;
+    const waiting = failure !== undefined && Date.now() < failure.nextAt;
     if (
       !["installing", "waiting-sessions", "ready"].includes(this.#state.phase)
     ) {
-      await this.#set({
+      let said: Partial<BinaryUpdateState> = {
         phase: failedBefore ? "failed-rolled-back" : "available",
-        availableVersion: release.manifest.version,
-        notes: release.manifest.notes,
-      });
+      };
+      if (waiting) {
+        said = { phase: "failed", error: failure.error };
+      }
+      await this.#setChanged({ ...said, availableVersion: version, notes });
     }
-    if (
-      !(this.#flags.commanded || (this.#policy.autoUpdate && !failedBefore))
-    ) {
-      return;
-    }
-    if (!(await this.#retryAllowed(release.manifest.version))) {
+    if (!attempt || waiting) {
       return;
     }
     try {
       await this.#stage(release, installation);
+      await this.#apply(release);
     } catch (error) {
-      await recordFailure(
-        release.manifest.version,
-        error instanceof Error ? error.message : String(error)
-      );
-      throw error;
+      const said = error instanceof Error ? error.message : String(error);
+      await recordFailure(version, said);
+      throw new AttemptFailed(said, { cause: error });
     }
-    await this.#apply(release);
   }
 
   /** A command for a build other than the one offered now is spent: it named that build only. */
@@ -950,18 +948,6 @@ export class BinaryUpdater {
         error: undefined,
       });
     }
-  }
-
-  /** A failed download or verification waits out a growing delay; the state keeps saying why. */
-  async #retryAllowed(version: string): Promise<boolean> {
-    const failure = await readFailure(version);
-    if (!failure || Date.now() >= failure.nextAt) {
-      return true;
-    }
-    if (this.#state.phase !== "failed") {
-      await this.#set({ phase: "failed", error: failure.error });
-    }
-    return false;
   }
 
   /** Download through the hub, verify, extract into a partial folder of its own, then put it in place. */
@@ -1100,14 +1086,14 @@ export class BinaryUpdater {
    */
   async #replace(
     hub: string | undefined,
-    launch: () => Promise<void>
+    launch: () => Promise<HelperJob>
   ): Promise<void> {
     const cut = await this.#drain(hub);
     if (!cut) {
       return;
     }
     try {
-      await this.#raiseFence(hub, INSTALL_STALE_MS);
+      await this.#raiseFence(hub, INSTALL_FENCE_MS);
       await this.#set({
         phase: "installing",
         heldChildren: undefined,
@@ -1115,11 +1101,18 @@ export class BinaryUpdater {
         waitingSince: undefined,
         cut: cut.length > 0 ? cut : undefined,
       });
+      await this.#tellHub();
+      const job = await launch();
+      // The command is the helper's now; it stands again only if the helper never takes over.
+      this.#launched = {
+        at: Date.now(),
+        command: this.#flags.commanded
+          ? { version: this.#flags.version }
+          : undefined,
+        job,
+      };
       this.#flags.commanded = false;
       this.#outlasted.clear();
-      await this.#tellHub();
-      await launch();
-      this.#fence = { hub, launchedAt: Date.now() };
     } catch (error) {
       await this.#lowerFence();
       throw error;
