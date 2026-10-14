@@ -82,6 +82,12 @@ mkdir -p "$out/tmp" "$out/config" "$out/cache" "$out/logs" "$out/release" "$out/
 export TMPDIR="$out/tmp" XDG_CONFIG_HOME="$out/config" XDG_CACHE_HOME="$out/cache"
 export REGISTRY_AUTH_FILE="$out/config/auth.json"
 printf '{"auths":{}}\n' > "$REGISTRY_AUTH_FILE"
+# The proof's containers take no kernel keyring of their own. Each one crun
+# starts otherwise holds a session keyring against the user's kernel.keys.maxkeys
+# (200 by default); on a host whose own containers already hold most of them,
+# every boot failed with "crun: create keyring …: Disk quota exceeded".
+mkdir -p "$out/config/containers"
+printf '[containers]\nkeyring = false\n' > "$out/config/containers/containers.conf"
 # Rootless networking cannot use a run folder under the home directory on every host.
 rr="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/cawco-proof-stage2-$$"
 mkdir -p "$rr"
