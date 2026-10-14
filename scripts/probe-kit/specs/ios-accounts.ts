@@ -276,6 +276,17 @@ async function probe(kit: Kit, platform: Platform): Promise<void> {
   }
 
   await writeFile(join(kit.out, `${platform}.log`), `${lines.join("\n")}\n`);
+  judge(kit, label, lines, captures);
+  console.log(`  ${platform} captures: ${out}`);
+}
+
+/** What one platform's run said, checked step by step against the hub's word. */
+function judge(
+  kit: Kit,
+  label: (what: string) => string,
+  lines: string[],
+  captures: string[]
+): void {
   const said = (step: string) =>
     lines
       .find(
@@ -426,7 +437,6 @@ async function probe(kit: Kit, platform: Platform): Promise<void> {
     captures.length >= 10,
     captures.join(", ")
   );
-  console.log(`  ${platform} captures: ${out}`);
 }
 
 const spec: Spec = {
