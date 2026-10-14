@@ -51,6 +51,12 @@ export type PiHostCommand =
   | { type: "stop"; id: string };
 
 export interface PiHostState {
+  /**
+   * The shell commands a send moved to the background that still run, by
+   * task id (pi-runtime `PiShells`): stopping the host ends them. Absent from
+   * a host started before hosts reported them.
+   */
+  background?: string[];
   busy: boolean;
   /**
    * The gate form the host's file tools were started on, for a workspace
@@ -68,6 +74,25 @@ export type PiHostEvent =
   | { type: "failed"; error: string }
   | { type: "rejected"; uuid: string; error: string }
   | { type: "reply"; id: string; value?: unknown; error?: string };
+
+/**
+ * A frame about a shell command a pi host moved to the background: its
+ * `task_started` (running) or its `task_notification` (ended). pi has no
+ * subagents, so every pi `task_*` frame is one of these.
+ */
+export const backgroundShell = (
+  message: NeutralMessage
+): { running: boolean; taskId: string } | undefined => {
+  if (message.type !== "system" || !message.task_id) {
+    return;
+  }
+  if (message.subtype === "task_started") {
+    return { taskId: message.task_id, running: true };
+  }
+  return message.subtype === "task_notification"
+    ? { taskId: message.task_id, running: false }
+    : undefined;
+};
 
 /** The machine's keepers as pi's hosts reach them: new hosts start on the current one, each host is read on the one that holds it. */
 export const piKeepers = new KeeperPool();
@@ -109,6 +134,12 @@ export class PiRemoteSession implements HarnessSession {
    * ({@link holding}).
    */
   readonly #unread = new Set<string>();
+  /**
+   * The shell commands the host moved to the background that still run, by
+   * task id: from their `task_started` (or the host's own list,
+   * {@link applyState}) until their `task_notification` ({@link holding}).
+   */
+  readonly #background = new Set<string>();
 
   constructor(
     client: SessiondClient,
@@ -197,6 +228,12 @@ export class PiRemoteSession implements HarnessSession {
         this.#unread.delete(uuid);
       }
     }
+    const moved = backgroundShell(message);
+    if (moved?.running) {
+      this.#background.add(moved.taskId);
+    } else if (moved) {
+      this.#background.delete(moved.taskId);
+    }
     if (message.type === "result" && seq <= this.#recoveryHead) {
       message.recovered = true;
     }
@@ -230,6 +267,9 @@ export class PiRemoteSession implements HarnessSession {
     // as frames. One sent since it answered is in the set already.
     for (const uuid of state.held) {
       this.#unread.add(uuid);
+    }
+    for (const taskId of state.background ?? []) {
+      this.#background.add(taskId);
     }
     this.#setBusy(state.busy);
     if (state.sessionId) {
@@ -320,8 +360,12 @@ export class PiRemoteSession implements HarnessSession {
   }
 
   holding(): string | undefined {
-    return this.#unread.size > 0
-      ? `it holds ${this.#unread.size} send(s) it has not read yet`
+    if (this.#unread.size > 0) {
+      return `it holds ${this.#unread.size} send(s) it has not read yet`;
+    }
+    // Its host runs them, and a resume brings none back.
+    return this.#background.size > 0
+      ? `${this.#background.size} shell command(s) it moved to the background are still running`
       : undefined;
   }
   control(method: string, args: unknown[]): Promise<unknown> {

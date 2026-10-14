@@ -3,7 +3,12 @@ import { createInterface } from "node:readline";
 import { INSTALL_SESSION_CREDENTIAL, MESSAGES_READ } from "@cawco/core";
 import type { HarnessContext, HarnessSession } from "../harness";
 import { startPiHost } from "./pi-runtime";
-import type { PiHostCommand, PiHostEvent, PiHostState } from "./pi-sessiond";
+import {
+  backgroundShell,
+  type PiHostCommand,
+  type PiHostEvent,
+  type PiHostState,
+} from "./pi-sessiond";
 
 // SDK/extension diagnostics must never enter the sequenced protocol stream.
 console.log = console.error;
@@ -12,7 +17,12 @@ console.debug = console.error;
 const output = (event: PiHostEvent): void => {
   process.stdout.write(`${JSON.stringify(event)}\n`);
 };
-const state: PiHostState = { sessionId: null, busy: false, held: [] };
+const state: PiHostState = {
+  sessionId: null,
+  busy: false,
+  held: [],
+  background: [],
+};
 let session: HarnessSession | undefined;
 let starting: Promise<void> | undefined;
 
@@ -33,6 +43,13 @@ function start(
       if (message.type === "system" && message.subtype === MESSAGES_READ) {
         const read = new Set(message.read);
         state.held = state.held.filter((held) => !read.has(held));
+      }
+      const moved = backgroundShell(message);
+      if (moved) {
+        const others = (state.background ?? []).filter(
+          (taskId) => taskId !== moved.taskId
+        );
+        state.background = moved.running ? [...others, moved.taskId] : others;
       }
       output({ type: "frame", message });
     },

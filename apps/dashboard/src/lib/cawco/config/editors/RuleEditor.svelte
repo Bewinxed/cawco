@@ -482,7 +482,7 @@
       {#if draft.timing === "immediate"}
         <div in:unfold out:unfold>
           <SwitchField
-            hint="A claude session reads it mid-turn without stopping. Other harnesses cut the turn short to deliver it, which loses whatever they were partway through."
+            hint="Every session reads it at its next step without stopping. A command it is running moves to the background and keeps going."
             id="rule-interrupt"
             label="Interrupt the running turn"
             bind:checked={draft.interrupt}

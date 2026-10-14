@@ -29,6 +29,7 @@ import type { AssistantMessage, Usage } from "@earendil-works/pi-ai";
 import {
   type AgentSession,
   type AgentSessionEvent,
+  type BashOperations,
   createAgentSession,
   createBashToolDefinition,
   createEditToolDefinition,
@@ -54,6 +55,8 @@ import type { HarnessContext, HarnessSession, TurnExtras } from "../harness";
 import { acknowledgeSessionCredential } from "../session-identity";
 import { accountRuntime } from "./pi-accounts";
 import {
+  BACKGROUND_SHELL,
+  type BackgroundShellEnd,
   compactBoundaryId,
   contentOf,
   modelCatalog,
@@ -65,15 +68,156 @@ import {
 } from "./pi-services";
 import { piOpenTurns } from "./pi-sessiond";
 
+type BashExec = BashOperations["exec"];
+
+/** How a moved command ended, as its notice says it. */
+const shellEnd = (
+  taskId: string,
+  command: string,
+  end: { exitCode: number | null } | { error: unknown }
+): BackgroundShellEnd => {
+  let how: string;
+  let failed: boolean;
+  if ("error" in end) {
+    failed = true;
+    how = end.error instanceof Error ? end.error.message : String(end.error);
+  } else {
+    failed = end.exitCode !== 0;
+    how = `exit code ${end.exitCode ?? "none"}`;
+  }
+  const status = failed ? "failed" : "completed";
+  return {
+    taskId,
+    status,
+    summary: `Background command "${command}" ${status} (${how})`,
+  };
+};
+
+/** How much of a moved command's output its end reports: its last characters. */
+const MOVED_OUTPUT_TAIL = 8000;
+
+/**
+ * The session's shell commands, which a send moves to the background. pi has
+ * no way to: a send steered into a turn is "Delivered after the current
+ * assistant turn finishes executing its tool calls" (agent-session.d.ts
+ * `steer`), and its abort kills a running command's whole process tree
+ * (tools/bash.js: "Handle abort signal by killing the entire process tree").
+ * Each command runs on a signal of its own, which pi's abort reaches until
+ * the command is moved: then its call returns at once with what it wrote so
+ * far, the command runs on, and its end is said to the session
+ * ({@link PiSession}). The session's stop ends the moved ones.
+ */
+class PiShells {
+  /** The commands pi's bash waits on, by task id: each one's move. */
+  readonly #foreground = new Map<string, () => void>();
+  /** The moved commands still running, by task id. */
+  readonly #background = new Map<string, AbortController>();
+  /** Said when a command is moved, and when a moved one ends. */
+  report: {
+    moved: (taskId: string, command: string) => void;
+    ended: (end: BackgroundShellEnd, output: string) => void;
+  } = {
+    moved: () => undefined,
+    ended: () => undefined,
+  };
+
+  get running(): number {
+    return this.#foreground.size;
+  }
+
+  /** Moves every command pi's bash waits on to the background; how many. */
+  moveAll(): number {
+    const moves = [...this.#foreground.values()];
+    for (const move of moves) {
+      move();
+    }
+    return moves.length;
+  }
+
+  /** Ends the moved commands still running. */
+  stopAll(): void {
+    for (const own of this.#background.values()) {
+      own.abort();
+    }
+  }
+
+  /** `exec` run so a send can move what it runs ({@link moveAll}). */
+  exec(exec: BashExec): BashExec {
+    return (command, cwd, options) => {
+      const taskId = `pi-shell-${crypto.randomUUID().slice(0, 8)}`;
+      const own = new AbortController();
+      const parent = options.signal;
+      let moved = false;
+      let tail = "";
+      const abort = () => own.abort();
+      if (parent?.aborted) {
+        own.abort();
+      }
+      parent?.addEventListener("abort", abort, { once: true });
+      const running = exec(command, cwd, {
+        ...options,
+        signal: own.signal,
+        onData: (data) => {
+          if (moved) {
+            tail = (tail + data.toString()).slice(-MOVED_OUTPUT_TAIL);
+          } else {
+            options.onData(data);
+          }
+        },
+      });
+      return new Promise((resolve, reject) => {
+        this.#foreground.set(taskId, () => {
+          moved = true;
+          this.#foreground.delete(taskId);
+          this.#background.set(taskId, own);
+          parent?.removeEventListener("abort", abort);
+          options.onData(
+            Buffer.from(
+              `\n\nCommand moved to the background (ID: ${taskId}) so that a message that arrived while it was running can reach you; it was not interrupted. Its result is delivered to you automatically when it finishes; carry on without waiting for it.\n`
+            )
+          );
+          this.report.moved(taskId, command);
+          resolve({ exitCode: 0 });
+        });
+        const settled = () => {
+          this.#foreground.delete(taskId);
+          this.#background.delete(taskId);
+          parent?.removeEventListener("abort", abort);
+        };
+        running.then(
+          ({ exitCode }) => {
+            settled();
+            if (moved) {
+              this.report.ended(shellEnd(taskId, command, { exitCode }), tail);
+            } else {
+              resolve({ exitCode });
+            }
+          },
+          (error: unknown) => {
+            settled();
+            if (moved) {
+              this.report.ended(shellEnd(taskId, command, { error }), tail);
+            } else {
+              reject(error);
+            }
+          }
+        );
+      });
+    };
+  }
+}
+
 /**
  * pi's bash, in place of its built-in: every shell gets this host's
  * environment as a session gets it (core `sessionEnvironment`), never the
  * embedded pi's package dir this host runs on or the gateway port it was
- * told. In a workspace, each command runs inside its boundary.
+ * told. In a workspace, each command runs inside its boundary. Each runs
+ * through `shells`, which a send moves to the background.
  */
 const sessionBash = (
   cwd: string,
-  boundary: Boundary | undefined
+  boundary: Boundary | undefined,
+  shells: PiShells
 ): ToolDefinition => {
   const local = createLocalBashOperations();
   return createBashToolDefinition(cwd, {
@@ -81,14 +225,14 @@ const sessionBash = (
       ...context,
       env: sessionEnvironment(context.env),
     }),
-    ...(boundary
-      ? {
-          operations: {
-            exec: (command, dir, options) =>
-              local.exec(boundaryCommand(boundary, command), dir, options),
-          },
-        }
-      : {}),
+    operations: {
+      exec: shells.exec(
+        boundary
+          ? (command, dir, options) =>
+              local.exec(boundaryCommand(boundary, command), dir, options)
+          : local.exec
+      ),
+    },
   }) as unknown as ToolDefinition;
 };
 
@@ -219,6 +363,8 @@ class PiSession implements HarnessSession {
   readonly #tools: CawcoTools;
   /** The runtime the session runs on: its account's, or the machine's own. */
   readonly #runtime: ModelRuntime;
+  /** Its shell commands, which a send moves to the background. */
+  readonly #shells: PiShells;
   #busy = false;
   readonly #unread: string[] = [];
   #reading: string | undefined;
@@ -284,13 +430,26 @@ class PiSession implements HarnessSession {
     session: AgentSession,
     credential: { value?: string },
     tools: CawcoTools,
-    runtime: ModelRuntime
+    runtime: ModelRuntime,
+    shells: PiShells
   ) {
     this.#ctx = ctx;
     this.#session = session;
     this.#credential = credential;
     this.#tools = tools;
     this.#runtime = runtime;
+    this.#shells = shells;
+    shells.report = {
+      moved: (taskId, command) =>
+        ctx.frame({
+          type: "system",
+          subtype: "task_started",
+          session_id: session.sessionId,
+          task_id: taskId,
+          description: command,
+        }),
+      ended: (end, output) => this.#shellEnded(end, output),
+    };
     this.sessionId = session.sessionId;
     session.subscribe((event) => this.#handle(event));
     ctx.session(session.sessionId);
@@ -529,29 +688,67 @@ class PiSession implements HarnessSession {
       )
       .join("");
     this.#unread.push(message.uuid);
-    if (extras.urgent && this.#busy) {
-      const prompt = `[Urgent — your previous turn was interrupted to deliver this]\n\n${text}${attachments}`;
-      this.#session
-        .abort()
-        .catch(() => {
-          /* an urgent abort may race the turn's own close */
-        })
-        .then(() => {
-          this.#setBusy(true);
-          return this.#session.prompt(prompt, { images: images as never });
-        })
-        .catch((error: unknown) => this.#refused(message.uuid, error));
-      return;
-    }
     this.#setBusy(true);
+    const streaming = this.#session.isStreaming;
     this.#session
       .prompt(text + attachments, {
         images: images as never,
-        ...(this.#session.isStreaming
-          ? { streamingBehavior: "steer" as const }
-          : {}),
+        ...(streaming ? { streamingBehavior: "steer" as const } : {}),
+      })
+      .then(() => {
+        // Any send — the person's, urgent or not, a hand-off, a report, a
+        // rule's reply — is steered into a running turn, which reads it once
+        // its tool calls end. Once it is queued (pi's `prompt` returns from
+        // `_queueSteer` while streaming), the shell commands the turn waits
+        // on are moved to the background: it reads the send now, and they
+        // run on.
+        if (streaming) {
+          this.#moveShells();
+        }
       })
       .catch((error: unknown) => this.#refused(message.uuid, error));
+  }
+
+  #moveShells(): void {
+    const moved = this.#shells.moveAll();
+    if (moved > 0) {
+      console.info(
+        `[pi] ${this.#ctx.instanceId}: a send moved ${moved} running shell command(s) to the background`
+      );
+    }
+  }
+
+  /**
+   * A moved shell command ended: said to the model as a notice of its own
+   * ({@link BACKGROUND_SHELL}), which pi hands the model as a user message
+   * (messages.js `case "custom"`), at the running turn's next boundary or as
+   * a turn of its own; and to the transcript as its `task_notification` row,
+   * the one a stored read gives it (pi-services).
+   */
+  #shellEnded(end: BackgroundShellEnd, output: string): void {
+    this.#ctx.frame({
+      type: "system",
+      subtype: "task_notification",
+      session_id: this.sessionId ?? undefined,
+      task_id: end.taskId,
+      status: end.status,
+      summary: end.summary,
+    });
+    this.#session
+      .sendCustomMessage<BackgroundShellEnd>(
+        {
+          customType: BACKGROUND_SHELL,
+          content: `${end.summary}.${output ? `\nIts last output:\n${output}` : ""}`,
+          display: true,
+          details: end,
+        },
+        { triggerTurn: true, deliverAs: "steer" }
+      )
+      .catch((error: unknown) =>
+        console.warn(
+          `[pi] ${this.#ctx.instanceId}: telling the session background command ${end.taskId} ended failed: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
   }
 
   #refused(uuid: string, error: unknown): void {
@@ -655,6 +852,7 @@ class PiSession implements HarnessSession {
     await this.#session.abort();
   }
   async stop(): Promise<void> {
+    this.#shells.stopAll();
     await this.#session.abort().catch(() => {
       /* teardown continues */
     });
@@ -726,6 +924,7 @@ export async function startPiHost(
   // agentDir, settingsManager })`), plus the CawCo tools as an inline
   // extension, so the hub can have them replaced on the live session.
   const tools = new CawcoTools(ctx.instanceId, credential);
+  const shells = new PiShells();
   const agentDir = getAgentDir();
   const settingsManager = SettingsManager.create(ctx.cwd, agentDir);
   const resourceLoader = new DefaultResourceLoader({
@@ -769,9 +968,9 @@ export async function startPiHost(
     settingsManager,
     resourceLoader,
     customTools: [
-      sessionBash(ctx.cwd, ctx.boundary),
+      sessionBash(ctx.cwd, ctx.boundary, shells),
       ...(ctx.boundary ? boundedFileTools(ctx.cwd, ctx.boundary) : []),
     ],
   });
-  return new PiSession(ctx, session, credential, tools, runtime);
+  return new PiSession(ctx, session, credential, tools, runtime, shells);
 }

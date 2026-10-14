@@ -403,10 +403,10 @@ export interface SendPayload {
   /** The user turn, under the uuid it keeps everywhere it is shown. */
   message: import("./harness").SentMessage;
   /**
-   * Force delivery: a busy claude session reads it mid-turn via `streamInput`;
-   * opencode/pi interrupt the turn and deliver it as the immediate next one. The
-   * hub honours urgency only when the target is `from`'s own delegate; otherwise
-   * it downgrades to a normal queued send.
+   * Force delivery: a busy session reads it at its next step (claude mid-turn
+   * via `streamInput`), and a shell command holding the turn is moved to the
+   * background, never stopped. The hub honours urgency only when the target is
+   * `from`'s own delegate; otherwise it downgrades to a normal queued send.
    */
   urgent?: boolean;
 }

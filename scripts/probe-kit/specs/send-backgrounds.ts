@@ -2,12 +2,14 @@
  * A send that reaches a session while a foreground shell command holds its
  * turn is read within seconds: the command is moved to the background, not
  * stopped, and its end reaches the session later. On a scratch fleet (real
- * hub, agent and sessiond; Claude Code and OpenCode against the mock), per
- * harness:
+ * hub, agent and sessiond; Claude Code, OpenCode and pi against the mock),
+ * per harness (Claude Code's `backgroundTasks`, OpenCode's `session.background`,
+ * CawCo's own move of pi's bash):
  *
  * 1. A prompt whose turn runs a foreground shell loop of ~90 s; 5 s into
- *    it, a person's send. The request that answers the send reaches the
- *    model within 20 s of the send.
+ *    it, a person's send. A request that carries the send reaches the model
+ *    within 20 s of the send (not necessarily as its newest words: OpenCode
+ *    adds its own note of the move after it), and the hub reads it as read.
  * 2. The call returned as moved to the background: its result says so, in
  *    the request the model was sent and in the hub's stored transcript.
  * 3. The loop is still running after that reply, and its end reaches the
@@ -62,6 +64,10 @@ const CASES: Case[] = [
       input: { command: loopCommand(loop), timeout: 600_000 },
     }),
   },
+  {
+    harness: "pi",
+    tool: (loop) => ({ name: "bash", input: { command: loopCommand(loop) } }),
+  },
 ];
 
 const marks = (harness: Harness) => ({
@@ -83,7 +89,10 @@ const respond = (request: Seen): Reply => {
     if (!request.all.includes(mark.first)) {
       continue;
     }
-    if (request.last.includes(mark.second)) {
+    // The send need not be the newest words: OpenCode's background move adds
+    // its own note after it ("User requested that active blocking work be
+    // moved to the background.", `Session.background`, OpenCode 2.0.28).
+    if (request.all.includes(mark.second)) {
       return text(mark.reply);
     }
     if (request.last.includes(mark.first) && !request.afterTool) {
@@ -136,12 +145,12 @@ const spec: Spec = {
       );
       await Bun.sleep(SEND_AFTER_MS);
       const sentAt = Date.now();
-      await fleet.send(session, mark.second);
+      const sent = await fleet.send(session, mark.second);
       const reply = await until(
-        `${harness}: a request whose newest words are the send`,
+        `${harness}: a request that carries the send`,
         () =>
           fleet.seen.find(
-            (one) => one.at >= sentAt && one.last.includes(mark.second)
+            (one) => one.at >= sentAt && one.all.includes(mark.second)
           ),
         Boolean,
         LOOP_S * 1000
@@ -155,8 +164,21 @@ const spec: Spec = {
             at: one.at - sentAt,
             afterTool: one.afterTool,
             last: one.last.slice(0, 160),
+            all: one.all.slice(-400),
           }))
         )}`
+      );
+      // The hub's word that the harness gave the model the send.
+      const row = await until(
+        `${harness}: the send read`,
+        () => fleet.sendRow(sent),
+        (one) => one?.state === "read",
+        REPLY_WITHIN_MS
+      ).catch(() => fleet.sendRow(sent));
+      kit.check(
+        `${harness}: the send is read within ${REPLY_WITHIN_MS / 1000} s of being sent`,
+        row?.state === "read",
+        `state ${row?.state ?? "no row"} at +${Date.now() - sentAt} ms`
       );
       kit.check(
         `${harness}: the loop is still running after the reply`,
@@ -205,7 +227,7 @@ const spec: Spec = {
     }
     const agentLog = await fleet.logs("agent");
     kit.check(
-      "the agent says it moved each call to the background for a send",
+      "the agent says it moved the claude and opencode calls to the background for a send",
       CLAUDE_MOVED.test(agentLog) && OPENCODE_MOVED.test(agentLog),
       agentLog
         .split("\n")

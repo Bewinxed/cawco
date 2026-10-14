@@ -52,6 +52,63 @@ const PI_SIDECAR = join(PI_DIR, "cawco-fleet.json");
  * The id a compaction's boundary goes by, live and read back alike: pi stores
  * one entry per compaction, and its own id is the summary's.
  */
+/**
+ * The notice a pi session's moved shell command leaves when it ends
+ * (pi-runtime `PiShells`): a pi custom message of this type, which pi hands
+ * the model as a user message, read back as the `task_notification` row the
+ * live stream drew for it.
+ */
+export const BACKGROUND_SHELL = "cawco-background-shell";
+
+/** The `details` of a {@link BACKGROUND_SHELL} notice: its `task_notification` frame's fields. */
+export interface BackgroundShellEnd {
+  status: "completed" | "failed";
+  summary: string;
+  taskId: string;
+}
+
+/** A stored message as {@link backgroundShellEntries} reads it. */
+interface BackgroundShellMessage {
+  customType?: string;
+  details?: unknown;
+  role?: string;
+}
+
+/** A stored message, as the `task_notification` row it is when it is a {@link BACKGROUND_SHELL} notice; none else. */
+const backgroundShellEntries = (
+  sessionKey: string,
+  entry: { id: string; timestamp: string },
+  message: BackgroundShellMessage
+): SessionMessage[] => {
+  const end = message.details as BackgroundShellEnd | undefined;
+  if (
+    message.role !== "custom" ||
+    message.customType !== BACKGROUND_SHELL ||
+    !end
+  ) {
+    return [];
+  }
+  return [
+    {
+      type: "system",
+      uuid: entry.id,
+      session_id: sessionKey,
+      message: {
+        type: "system",
+        subtype: "task_notification",
+        uuid: entry.id,
+        session_id: sessionKey,
+        task_id: end.taskId,
+        status: end.status,
+        summary: end.summary,
+      },
+      parent_tool_use_id: null,
+      parent_agent_id: null,
+      timestamp: entry.timestamp,
+    },
+  ];
+};
+
 export const compactBoundaryId = (compaction: string): string =>
   `${compaction}:boundary`;
 
@@ -612,6 +669,13 @@ export class PiProfile {
           timestamp: entry.timestamp,
         });
       }
+      entries.push(
+        ...backgroundShellEntries(
+          sessionKey,
+          entry,
+          message as BackgroundShellMessage
+        )
+      );
       if (entries.length > before) {
         made.push({ index, uuid: entries[before].uuid });
       }

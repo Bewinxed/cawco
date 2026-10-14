@@ -303,7 +303,7 @@ export function ruleSentence(rule: Partial<RuleDraft>): string {
   let when: string;
   if (rule.timing === "immediate") {
     when = rule.interrupt
-      ? "interrupt it straight away and send"
+      ? "send straight away, moving any command it is running to the background"
       : "send, without waiting for the message to finish";
   } else if (rule.timing === "message") {
     when = "wait for that message to finish, then send";

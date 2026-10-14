@@ -449,8 +449,8 @@ export function handoffTools(deps: HandoffDeps) {
           .boolean()
           .optional()
           .describe(
-            "Force delivery to one of YOUR delegates: a busy claude delegate reads it mid-turn; " +
-              "other harnesses interrupt their turn to read it now. Only valid toward your own delegates."
+            "Force delivery to one of YOUR delegates: a busy delegate reads it at its next step, " +
+              "its running shell command moved to the background, never stopped. Only valid toward your own delegates."
           ),
       },
       async ({ target, message, urgent }) => ({

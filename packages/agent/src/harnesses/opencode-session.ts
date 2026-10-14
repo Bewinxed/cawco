@@ -2247,12 +2247,11 @@ export class OpencodeSession implements HarnessSession {
             )
             .map((block) => block.text)
             .join("\n");
-    // Urgent delivery: start a turn now, busy or not. Busy: the running turn
-    // is interrupted first, with a factual note.
+    // An urgent send is not held for a server being retired (the config
+    // gate's `urgent`). Into a running turn it goes like any send: admitted
+    // to the inbox, where its arrival moves the turn's blocking calls to the
+    // background ({@link #moveToBackground}), and read at that boundary.
     const urgent = Boolean(extras.urgent);
-    if (urgent && this.#busy) {
-      text = `[Urgent — your previous turn was interrupted to deliver this]\n\n${text}`;
-    }
     for (const attachment of extras.attachments ?? []) {
       text += `\n\n<pasted-text name="${attachment.name}">\n${attachment.content}\n</pasted-text>`;
     }
@@ -2281,16 +2280,12 @@ export class OpencodeSession implements HarnessSession {
       this.#drainQueue();
       return;
     }
-    if (urgent) {
-      if (retiredUrgent) {
-        this.#draining = messageID;
-      }
-      // biome-ignore lint/complexity/noVoid: fire-and-forget: send() itself is not awaited by its callers
-      void this.#client.session
-        .interrupt({ sessionID: this.#opencodeSessionId() })
-        // biome-ignore lint/suspicious/noEmptyBlockStatements: the interrupt's own failure is not actionable; the prompt below runs regardless
-        .catch(() => {})
-        .then(() => this.#prompt(text, files, messageID, uuid));
+    // Past a retiring server's hold: admitted ahead of what it holds, and
+    // what it holds waits until this one is in ({@link #drained}).
+    if (retiredUrgent) {
+      this.#draining = messageID;
+      this.#ctx.busy(true);
+      this.#prompt(text, files, messageID, uuid);
       return;
     }
     // Idle or busy, every send is admitted at once: OpenCode's inbox keeps it
