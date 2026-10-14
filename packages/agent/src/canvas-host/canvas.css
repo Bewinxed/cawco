@@ -47,11 +47,21 @@ body {
   display: none !important;
 }
 
-/* ---- The rail: two floating groups, 11px in from the canvas's edges. */
+/* ---- The rail: two floating groups, --space-3 in from the canvas's sides
+   and --space-2 under the host's chrome over its top: what the host says
+   its chrome takes, in its hello and as it places the canvas (host.tsx):
+   over the composer its grab band (`--canvas-inset-top`) and its shape's
+   shoulders, which stand in from the page's box (`--canvas-inset-side`);
+   none in the panel. */
+:root {
+  --canvas-inset-top: 0px;
+  --canvas-inset-side: 0px;
+}
+
 .rail {
   position: absolute;
   z-index: 4;
-  top: var(--space-3);
+  top: calc(var(--canvas-inset-top) + var(--space-2));
   display: flex;
   gap: var(--space-1);
   padding: var(--space-2);
@@ -69,11 +79,11 @@ body {
 }
 
 .rail-tools {
-  left: var(--space-3);
+  left: calc(var(--canvas-inset-side) + var(--space-3));
 }
 
 .rail-view {
-  right: var(--space-3);
+  right: calc(var(--canvas-inset-side) + var(--space-3));
 }
 
 /* A group's height: its box, its inset each side, its edge. */
@@ -90,7 +100,12 @@ body {
    tools'. Our call; DESIGN.md places them only for the desk and the phone. */
 @media (max-width: 559px) {
   .rail-view {
-    top: calc(var(--space-3) + var(--rail-h) + var(--space-2));
+    top: calc(
+      var(--canvas-inset-top) +
+      var(--space-2) +
+      var(--rail-h) +
+      var(--space-2)
+    );
   }
 }
 
@@ -336,7 +351,12 @@ body {
    fades out over --dur-exit, by opacity alone, so reduced motion keeps it
    as it is. No timer takes it away. It takes no press. */
 .canvas-refusal {
-  --refusal-top: calc(var(--space-3) + var(--rail-h) + var(--space-2));
+  --refusal-top: calc(
+    var(--canvas-inset-top) +
+    var(--space-2) +
+    var(--rail-h) +
+    var(--space-2)
+  );
   position: absolute;
   z-index: 5;
   top: var(--refusal-top);
@@ -362,13 +382,18 @@ body {
 
 @media (max-width: 559px) {
   .canvas-refusal {
-    --refusal-top: calc(var(--space-3) + 2 * (var(--rail-h) + var(--space-2)));
+    --refusal-top: calc(
+      var(--canvas-inset-top) +
+      var(--space-2) +
+      2 *
+      (var(--rail-h) + var(--space-2))
+    );
   }
 }
 
 @media (max-width: 639px) and (pointer: coarse) {
   .canvas-refusal {
-    --refusal-top: var(--space-3);
+    --refusal-top: calc(var(--canvas-inset-top) + var(--space-3));
   }
 }
 

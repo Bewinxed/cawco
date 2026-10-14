@@ -2423,6 +2423,21 @@
       "$value": "44px",
       "$description": "The handle between a conversation and the side surface beside it, under a finger: its hit area about the hairline (Apple HIG's 44pt touch target). While the surface is expanded the hit area stands just inside the session area's edge, space-3 wide."
     },
+    "c-corner-grip-leg": {
+      "$type": "dimension",
+      "$value": "12px",
+      "$description": "The composer canvas's corner resize grip: each leg of its L, drawn along the corner's two edges (the typical window corner grip)."
+    },
+    "c-corner-grip-inset": {
+      "$type": "dimension",
+      "$value": "6px",
+      "$description": "How far inside the canvas's top corner its resize grip stands from each edge; the grip turns concentric with the corner's radius, so it sits under it."
+    },
+    "c-corner-grip-stroke": {
+      "$type": "dimension",
+      "$value": "1.5px",
+      "$description": "The corner resize grip's line, in border-control."
+    },
     "c-bar-phone-gap": {
       "$type": "dimension",
       "$value": "8px",

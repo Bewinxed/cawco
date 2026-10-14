@@ -11,11 +11,13 @@
  * - **Resize.** Its top edge's grab drags its height between 40% of the
  *   column and the column less the field, and settles on the house spring
  *   (motion/spring.ts) at the finger's speed; a press mid-settle takes it
- *   from where it stands. Its left and right edges' grabs drag that edge
- *   alone, the other staying, its width from the pill's to the column's
- *   less `--space-3` each side, settling the same way; the grown shape's
- *   shoulders step out from the pill's edges to it (grown.ts `wide`). The
- *   height and the width chosen are kept across Done and reopen.
+ *   from where it stands. A top corner's handle drags its size: the height
+ *   as the top grab does, and the width by twice the pointer's sideways
+ *   travel, both sides moving so the canvas stays centred on the pill, from
+ *   the pill's width to the column's less `--space-3` each side; both
+ *   settle on one spring. The grown shape's shoulders step out from the
+ *   pill's edges to it (grown.ts `wide`, the same each side). The height
+ *   and the width chosen are kept across Done and reopen.
  * - **Done** folds it over `--dur-grow-exit` into its chip, its picture the
  *   chip's thumbnail. The rail's **Remove** folds it back into the pill on
  *   the same clock, leaves no chip, and takes it out of the message as the
@@ -42,8 +44,8 @@ import {
 } from "../artifact-api";
 import {
   type Box,
-  type Edge,
   type GrabValue,
+  type Handle,
   type handBack,
   holdStage,
   LOST_REFUSES_MS,
@@ -54,7 +56,7 @@ import {
 } from "../canvas/stage.svelte";
 import { closePreview, type SendExtras } from "../client.svelte";
 import { CURVE, dur, motionOk } from "../motion/curves.svelte";
-import { integrate, spring } from "../motion/spring";
+import { integrate, type Sample, spring } from "../motion/spring";
 import { inks } from "../preview/ink.svelte";
 import type { ComposerDraft, DraftCanvas } from "./composer-draft.svelte";
 import { boxCut, type ClipBox, GrownShape, measureShape } from "./grown";
@@ -112,10 +114,14 @@ export interface RoomParts {
   slot: () => HTMLElement | undefined;
 }
 
-/** How far the canvas stands past the pill's left and right edges, px. */
-interface Wide {
-  left: number;
-  right: number;
+/**
+ * The canvas's size as a resize moves it, px: its height (the slot's, the
+ * stage a pixel inside it) and its spread, how far it stands past the
+ * pill's edges, the same each side.
+ */
+interface Size {
+  h: number;
+  s: number;
 }
 
 /** What the room's motion reads once before it writes: every box in px. */
@@ -126,15 +132,20 @@ interface Sizes {
   lift: number;
   max: number;
   min: number;
-  /** How far each side may reach past the pill: to the column's edge less `--space-3`. */
-  reach: Wide;
+  /** How far each side may reach past the pill, centred on it: to the column's nearer edge less `--space-3`. */
+  reach: number;
   size: ReturnType<typeof measureShape>["size"];
+  /** How far each side stands past the pill now. */
+  spread: number;
   stage: ClipBox;
-  wide: Wide;
 }
 
-/** A drag's coordinate grows the edge's value (+1) or shrinks it (-1): up is taller, outward is wider. */
-const SIGN: Record<Edge, number> = { top: -1, left: -1, right: 1 };
+/** Which way a corner's sideways travel spreads the canvas: outward is wider. */
+const SPREADS: Record<Handle, number> = {
+  top: 0,
+  "top-left": -1,
+  "top-right": 1,
+};
 
 const errorOf = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
@@ -181,21 +192,24 @@ export class CanvasRoom {
   #sizes: Sizes | null = null;
   /** The height the reader chose by the grab, kept while it fits. */
   #chosen: number | null = null;
-  /** How far past the pill each side was dragged, kept while it fits. */
-  #chosenWide: Wide = { left: 0, right: 0 };
+  /** How far past the pill each side was spread by a corner, kept while it fits. */
+  #chosenSpread = 0;
   /** The motion running now, which the next one replaces from where it is drawn. */
   #runs: Animation[] = [];
-  #settle: { run: Animation; frame: number; edge: Edge } | null = null;
+  #settle: { run: Animation; frame: number } | null = null;
   #drag: {
-    edge: Edge;
+    handle: Handle;
     id: number;
-    /** The pointer's coordinate along the drag (y for the top, x for a side) at the press. */
-    at: number;
-    from: number;
-    last: number;
+    /** The pointer at the press. */
+    x: number;
+    y: number;
+    /** The size at the press. */
+    from: Size;
+    lastX: number;
+    lastY: number;
     lastAt: number;
-    /** The value's speed, px/s. */
-    v: number;
+    /** The size's speed, px/s: taller and wider are positive. */
+    v: Size;
   } | null = null;
 
   constructor(parts: RoomParts) {
@@ -224,17 +238,10 @@ export class CanvasRoom {
       remove: () => this.discard(),
     };
     stage.grab = {
-      down: (edge, event) => this.#grabDown(edge, event),
-      key: (edge, event) => this.#grabKey(edge, event),
+      down: (handle, event) => this.#grabDown(handle, event),
+      key: (handle, event) => this.#grabKey(handle, event),
     };
     return stage;
-  }
-
-  /** The side grabs show while the canvas stands still over the field, and go as it moves. */
-  #edges(shown: boolean): void {
-    if (this.#stage) {
-      this.#stage.edgesShown = shown;
-    }
   }
 
   #letGoStage(): void {
@@ -248,7 +255,6 @@ export class CanvasRoom {
     stage.actions.composer = undefined;
     stage.grab = null;
     stage.grabValue = null;
-    stage.edgesShown = false;
     stage.slots.composer = undefined;
     if (stage.el) {
       stage.el.style.clipPath = "";
@@ -281,31 +287,24 @@ export class CanvasRoom {
       const max = Math.max(0, columnTop - room.top - gap);
       const min = Math.min(max, FLOOR * room.height);
       const height = Math.min(max, Math.max(min, this.#chosen ?? max));
-      const reach = {
-        left: Math.max(0, at.left - room.left - gap),
-        right: Math.max(0, room.right - gap - at.right),
-      };
-      const wide = {
-        left: Math.min(reach.left, this.#chosenWide.left),
-        right: Math.min(reach.right, this.#chosenWide.right),
-      };
-      return this.#boxes({ size, lift, min, max, reach, wide }, height);
+      // Centred on the pill, each side reaches as far as the nearer one may.
+      const reach = Math.max(
+        0,
+        Math.min(at.left - room.left - gap, room.right - gap - at.right)
+      );
+      const spread = Math.min(reach, this.#chosenSpread);
+      return this.#boxes({ size, lift, min, max, reach, spread }, height);
     });
   }
 
   #boxes(at: Omit<Sizes, "halo" | "stage">, height: number): Sizes {
     this.height = height;
-    const { size, lift, min, max, reach, wide } = at;
+    const { size, lift, spread } = at;
     return {
-      size,
-      lift,
-      min,
-      max,
-      reach,
-      wide,
+      ...at,
       halo: { left: 0, bottom: 0, height: size.base + lift + height },
       stage: {
-        left: 1 - wide.left,
+        left: 1 - spread,
         bottom: size.base + lift,
         height: height - 1,
       },
@@ -317,44 +316,48 @@ export class CanvasRoom {
     return sizes ? sizes.lift + sizes.stage.height + 1 : 0;
   }
 
-  /** The slot written to the canvas's box: its height and how far each side stands past the pill. */
+  /** The slot written to the canvas's box: its height and how far it stands past the pill each side. */
   #slotTo(slot: HTMLElement, sizes: Sizes): void {
     slot.style.height = `${sizes.stage.height}px`;
-    slot.style.left = `${1 - sizes.wide.left}px`;
-    slot.style.right = `${1 - sizes.wide.right}px`;
+    slot.style.left = `${1 - sizes.spread}px`;
+    slot.style.right = `${1 - sizes.spread}px`;
   }
 
-  /** Each grab's value and bounds, for a screen reader: the height, and the width each side holds. */
-  #grabValues(sizes: Sizes): Record<Edge, GrabValue> {
+  /** The handles' values and bounds, for a screen reader: the height; the width, and both sizes in words. */
+  #grabValues(sizes: Sizes): NonNullable<Stage["grabValue"]> {
     const { w } = sizes.size;
-    const { wide, reach } = sizes;
-    const now = w + wide.left + wide.right;
+    const width = w + 2 * sizes.spread;
+    const top: GrabValue = { min: sizes.min, max: sizes.max, now: this.height };
     return {
-      top: { min: sizes.min, max: sizes.max, now: this.height },
-      left: { min: w + wide.right, max: w + wide.right + reach.left, now },
-      right: { min: w + wide.left, max: w + wide.left + reach.right, now },
+      top,
+      corner: {
+        min: w,
+        max: w + 2 * sizes.reach,
+        now: width,
+        text: `${Math.round(width)} by ${Math.round(this.height)} px`,
+      },
     };
   }
 
   /**
-   * The canvas at `height` and `wide`: the shape, the stage's cut and its
-   * grabs written (the slot is written by whoever moves it).
+   * The canvas at `height` and `spread`: the shape, the stage's cut and its
+   * handles written (the slot is written by whoever moves it).
    */
-  #standAt(height: number, wide = this.#sizes?.wide): void {
+  #standAt(height: number, spread = this.#sizes?.spread): void {
     const sizes = this.#sizes;
     const shape = this.#shape;
-    if (!(sizes && shape && wide)) {
+    if (!(sizes && shape && spread !== undefined)) {
       return;
     }
-    this.#sizes = this.#boxes({ ...sizes, wide }, height);
+    this.#sizes = this.#boxes({ ...sizes, spread }, height);
     shape.ext = this.#ext();
-    shape.wide = { ...wide };
+    shape.wide = { left: spread, right: spread };
     shape.paint();
     this.#restCut();
     this.#tellStage();
   }
 
-  /** The stage's grabs: their values, and how far in the shape's sides stand at the side grabs' height. */
+  /** The stage's handles: their values, and where the shape's top corners stand, which the corner handles sit at. */
   #tellStage(): void {
     const stage = this.#stage;
     const sizes = this.#sizes;
@@ -362,10 +365,14 @@ export class CanvasRoom {
       return;
     }
     stage.grabValue = this.#grabValues(sizes);
-    stage.edgeInset = Math.max(
-      0,
-      (this.#shape?.taperAt(1 + sizes.stage.height / 2) ?? 0) - 1
-    );
+    // The top corner stands in by the shoulder's whole curve, less the pixel the stage stands inside the slot.
+    const inset = Math.max(0, (this.#shape?.taperAt(1) ?? 0) - 1);
+    const radius = sizes.size.r;
+    if (stage.corner.inset !== inset || stage.corner.radius !== radius) {
+      stage.corner = { inset, radius };
+      // The page's rail stands inside the shoulders: it hears where they are.
+      stage.tellPlace();
+    }
     stage.place();
   }
 
@@ -384,7 +391,7 @@ export class CanvasRoom {
       taperRows: 1,
       fade: false,
     });
-    shape.wide = { ...sizes.wide };
+    shape.wide = { left: sizes.spread, right: sizes.spread };
     this.#shape = shape;
     return shape;
   }
@@ -491,7 +498,6 @@ export class CanvasRoom {
     }
     this.#stop();
     const stage = this.#hold(canvas);
-    this.#edges(false);
     this.up = true;
     await tick();
     const sizes = this.#measure();
@@ -565,7 +571,6 @@ export class CanvasRoom {
       stage.place();
       this.#runs = [];
       shape.morphTo(1, shape.ext, 0);
-      this.#edges(true);
     }
   }
 
@@ -599,7 +604,6 @@ export class CanvasRoom {
       return false;
     }
     this.#stop();
-    this.#edges(false);
     shape.unsettle();
     const from = boxOf(stage.el);
     stage.pinned = from;
@@ -705,7 +709,6 @@ export class CanvasRoom {
     if (stage) {
       stage.slots.composer = undefined;
       stage.grabValue = null;
-      stage.edgesShown = false;
       if (stage.el) {
         stage.el.style.clipPath = "";
       }
@@ -795,7 +798,6 @@ export class CanvasRoom {
       return;
     }
     this.#stop();
-    this.#edges(false);
     shape.unsettle();
     const from = boxOf(stage.el);
     stage.pinned = from;
@@ -844,7 +846,6 @@ export class CanvasRoom {
           stage.slots.composer = this.#parts.slot();
           stage.standAt("composer");
           this.refit();
-          this.#edges(true);
         }
       }
       this.error = `The canvas couldn't dock: ${errorOf(error)}. It stays over the field.`;
@@ -964,13 +965,12 @@ export class CanvasRoom {
       this.#restCut();
       stage.place();
       shape.morphTo(1, shape.ext, 0);
-      this.#edges(true);
     }
   }
 
   // --- resize -----------------------------------------------------------------
 
-  #grabDown(edge: Edge, event: PointerEvent): void {
+  #grabDown(handle: Handle, event: PointerEvent): void {
     const sizes = this.#sizes;
     const slot = this.#parts.slot();
     if (!(sizes && slot && this.up) || this.#runs.length > 0) {
@@ -981,15 +981,16 @@ export class CanvasRoom {
     // A settle caught mid-way is taken from where it stands.
     this.#stopSettle(true);
     this.#shape?.unsettle();
-    const at = edge === "top" ? event.clientY : event.clientX;
     this.#drag = {
-      edge,
+      handle,
       id: event.pointerId,
-      at,
-      from: this.#valueOf(edge),
-      last: at,
+      x: event.clientX,
+      y: event.clientY,
+      from: this.#size(),
+      lastX: event.clientX,
+      lastY: event.clientY,
       lastAt: event.timeStamp,
-      v: 0,
+      v: { h: 0, s: 0 },
     };
     const target = event.currentTarget as HTMLElement;
     const move = (e: PointerEvent) => this.#grabMove(e);
@@ -1004,33 +1005,32 @@ export class CanvasRoom {
     target.addEventListener("pointercancel", up);
   }
 
-  /** What an edge's drag moves: the height for the top, how far that side stands past the pill for a side. */
-  #valueOf(edge: Edge): number {
-    const sizes = this.#sizes as Sizes;
-    return edge === "top" ? this.height : sizes.wide[edge];
+  /** The canvas's size now: its height, and how far it stands past the pill each side. */
+  #size(): Size {
+    return { h: this.height, s: (this.#sizes as Sizes).spread };
   }
 
-  /** An edge's bounds, and the size the rubber band's furthest reach is a share of. */
-  #bounds(edge: Edge): {
+  /** A dimension's bounds, and the size the rubber band's furthest reach is a share of. */
+  #bounds(dim: keyof Size): {
     min: number;
     max: number;
     scale: (bound: number) => number;
   } {
     const sizes = this.#sizes as Sizes;
-    if (edge === "top") {
+    if (dim === "h") {
       return { min: sizes.min, max: sizes.max, scale: (bound) => bound };
     }
-    const other = sizes.wide[edge === "left" ? "right" : "left"];
+    // A side's share of the width: the band reaches a share of the width, half each side.
     return {
       min: 0,
-      max: sizes.reach[edge],
-      scale: (bound) => sizes.size.w + other + bound,
+      max: sizes.reach,
+      scale: (bound) => (sizes.size.w + 2 * bound) / 2,
     };
   }
 
-  /** The value under the finger: 1:1 inside its bounds, rubber-banded past them. */
-  #follow(edge: Edge, value: number): number {
-    const { min, max, scale } = this.#bounds(edge);
+  /** The value under the pointer: 1:1 inside its bounds, rubber-banded past them. */
+  #follow(dim: keyof Size, value: number): number {
+    const { min, max, scale } = this.#bounds(dim);
     const past = value > max ? value - max : Math.min(0, value - min);
     if (past === 0) {
       return value;
@@ -1040,52 +1040,54 @@ export class CanvasRoom {
     return bound + Math.sign(past) * reach;
   }
 
+  /**
+   * The top grab moves the height by the pointer's travel up; a corner the
+   * height so, and the spread by its travel outward, so the width moves by
+   * twice it and the canvas stays centred on the pill.
+   */
   #grabMove(event: PointerEvent): void {
     const drag = this.#drag;
     if (!drag || event.pointerId !== drag.id) {
       return;
     }
-    const at = drag.edge === "top" ? event.clientY : event.clientX;
-    const sign = SIGN[drag.edge];
+    const out = SPREADS[drag.handle];
     const dt = event.timeStamp - drag.lastAt;
     if (dt > 0) {
-      // The value's speed, px/s: up is taller, outward is wider.
-      drag.v = ((sign * (at - drag.last)) / dt) * 1000;
+      // The size's speed, px/s: up is taller, outward is wider.
+      drag.v = {
+        h: (-(event.clientY - drag.lastY) / dt) * 1000,
+        s: ((out * (event.clientX - drag.lastX)) / dt) * 1000,
+      };
     }
-    drag.last = at;
+    drag.lastX = event.clientX;
+    drag.lastY = event.clientY;
     drag.lastAt = event.timeStamp;
-    this.#write(
-      drag.edge,
-      this.#follow(drag.edge, drag.from + sign * (at - drag.at))
-    );
+    this.#write({
+      h: this.#follow("h", drag.from.h - (event.clientY - drag.y)),
+      s:
+        out === 0
+          ? drag.from.s
+          : this.#follow("s", drag.from.s + out * (event.clientX - drag.x)),
+    });
   }
 
-  /** Writes the canvas with `edge` at `value` this frame: the slot, the shape, the cut. */
-  #write(edge: Edge, value: number): void {
+  /** Writes the canvas at `size` this frame: the slot, the shape, the cut. */
+  #write(size: Size): void {
     const slot = this.#parts.slot();
-    const sizes = this.#sizes;
-    if (!(slot && sizes)) {
+    if (!(slot && this.#sizes)) {
       return;
     }
-    if (edge === "top") {
-      slot.style.height = `${value - 1}px`;
-      this.#standAt(value);
-      return;
-    }
-    slot.style[edge] = `${1 - value}px`;
-    this.#standAt(this.height, { ...sizes.wide, [edge]: value });
+    slot.style.height = `${size.h - 1}px`;
+    slot.style.left = `${1 - size.s}px`;
+    slot.style.right = `${1 - size.s}px`;
+    this.#standAt(size.h, size.s);
   }
 
-  /** Where the slot stands now for `edge`, the settle's motion included. */
-  #readSlot(edge: Edge, slot: HTMLElement): number {
+  /** Where the slot stands now, the settle's motion included. */
+  #readSlot(slot: HTMLElement): Size {
     const at = slot.getBoundingClientRect();
-    if (edge === "top") {
-      return at.height + 1;
-    }
     const pill = (this.#parts.shell() as HTMLElement).getBoundingClientRect();
-    return edge === "left"
-      ? pill.left - at.left + 1
-      : at.right - pill.right + 1;
+    return { h: at.height + 1, s: pill.left - at.left + 1 };
   }
 
   #grabUp(event: PointerEvent): void {
@@ -1095,63 +1097,81 @@ export class CanvasRoom {
     if (!(drag && sizes) || event.pointerId !== drag.id) {
       return;
     }
-    const { edge } = drag;
-    const now = this.#valueOf(edge);
-    const { min, max } = this.#bounds(edge);
-    const v = event.timeStamp - drag.lastAt > STILL_MS ? 0 : drag.v;
-    const target = Math.min(max, Math.max(min, now + v * PROJECT * 1000));
-    this.#choose(edge, target);
-    this.#settleTo(edge, now, target, v);
-  }
-
-  /** The reader's choice for `edge`, kept across Done and reopen. */
-  #choose(edge: Edge, value: number): void {
-    if (edge === "top") {
-      this.#chosen = value;
-    } else {
-      this.#chosenWide = { ...this.#chosenWide, [edge]: value };
+    const now = this.#size();
+    const corner = SPREADS[drag.handle] !== 0;
+    // A pointer held still before it lets go carries nothing.
+    const still = event.timeStamp - drag.lastAt > STILL_MS;
+    const v = still
+      ? { h: 0, s: 0 }
+      : { h: drag.v.h, s: corner ? drag.v.s : 0 };
+    const land = (dim: keyof Size) => {
+      const { min, max } = this.#bounds(dim);
+      return Math.min(max, Math.max(min, now[dim] + v[dim] * PROJECT * 1000));
+    };
+    const target = { h: land("h"), s: corner ? land("s") : now.s };
+    this.#chosen = target.h;
+    if (corner) {
+      this.#chosenSpread = target.s;
     }
+    this.#settleTo(now, target, v);
   }
 
-  /** The house spring from `now` to `target`, at the finger's speed: one animation on the slot's edge. */
-  #settleTo(edge: Edge, now: number, target: number, v: number): void {
+  /**
+   * The house spring from `now` to `target` at the pointer's speed: one
+   * animation of the slot on one clock, its height and, when it spreads,
+   * its sides. Each dimension is integrated on the spring's own steps; the
+   * run's clock is their step index, so one keyframe holds both.
+   */
+  #settleTo(now: Size, target: Size, v: Size): void {
     const slot = this.#parts.slot();
     if (!slot) {
       return;
     }
     if (!motionOk.current) {
-      this.#write(edge, target);
+      this.#write(target);
       this.#shape?.morphTo(1, this.#ext(), 0);
       return;
     }
-    const path = integrate(now - target, v);
-    const [run] = spring(path, [
+    const paths = {
+      h: integrate(now.h - target.h, v.h),
+      s: integrate(now.s - target.s, v.s),
+    };
+    const moves = {
+      h: now.h !== target.h || v.h !== 0,
+      s: now.s !== target.s || v.s !== 0,
+    };
+    const at = (path: Sample[], i: number) =>
+      path[Math.min(i, path.length - 1)].x;
+    const long = paths.h.length >= paths.s.length ? paths.h : paths.s;
+    const clock = long.map((sample, i) => ({ t: sample.t, x: i, v: 0 }));
+    const [run] = spring(clock, [
       {
         el: slot,
-        frame: (x) =>
-          edge === "top"
-            ? { height: `${target + x - 1}px` }
-            : { [edge]: `${1 - (target + x)}px` },
+        frame: (i) => {
+          const side = `${1 - (target.s + at(paths.s, i))}px`;
+          return {
+            ...(moves.h
+              ? { height: `${target.h + at(paths.h, i) - 1}px` }
+              : {}),
+            ...(moves.s ? { left: side, right: side } : {}),
+          };
+        },
       },
     ]);
     run.id = "canvas-settle";
     const follow = () => {
-      const at = this.#readSlot(edge, slot);
-      if (edge === "top") {
-        this.#standAt(at);
-      } else if (this.#sizes) {
-        this.#standAt(this.height, { ...this.#sizes.wide, [edge]: at });
-      }
+      const size = this.#readSlot(slot);
+      this.#standAt(size.h, size.s);
       if (this.#settle?.run === run) {
         this.#settle.frame = requestAnimationFrame(follow);
       }
     };
-    this.#settle = { run, frame: requestAnimationFrame(follow), edge };
+    this.#settle = { run, frame: requestAnimationFrame(follow) };
     run.finished.then(
       () => {
         if (this.#settle?.run === run) {
           this.#stopSettle(false);
-          this.#write(edge, target);
+          this.#write(target);
           this.#shape?.morphTo(1, this.#ext(), 0);
         }
       },
@@ -1168,51 +1188,55 @@ export class CanvasRoom {
     this.#settle = null;
     cancelAnimationFrame(settle.frame);
     const slot = this.#parts.slot();
-    const at = slot ? this.#readSlot(settle.edge, slot) : null;
+    const at = slot ? this.#readSlot(slot) : null;
     settle.run.cancel();
     if (keep && at !== null) {
-      this.#write(settle.edge, at);
+      this.#write(at);
     }
   }
 
-  #grabKey(edge: Edge, event: KeyboardEvent): void {
+  /**
+   * A handle's keys: up and down the height; on a corner, toward its own
+   * side wider and away narrower (both sides at once), Home and End the
+   * narrowest and widest. The top grab's Home and End are its tallest and
+   * shortest.
+   */
+  #grabKey(handle: Handle, event: KeyboardEvent): void {
     const sizes = this.#sizes;
     if (!(sizes && this.up)) {
       return;
     }
-    const { min, max } = this.#bounds(edge);
-    // Up is taller; toward its own side, a side's edge stands wider.
-    const steps: Record<Edge, Record<string, number>> = {
-      top: {
-        ArrowUp: KEY_STEP,
-        ArrowDown: -KEY_STEP,
-        PageUp: max,
-        PageDown: -max,
-        Home: max,
-        End: -max,
-      },
-      left: {
-        ArrowLeft: KEY_STEP,
-        ArrowRight: -KEY_STEP,
-        Home: -max,
-        End: max,
-      },
-      right: {
-        ArrowRight: KEY_STEP,
-        ArrowLeft: -KEY_STEP,
-        Home: -max,
-        End: max,
-      },
+    const tall = this.#bounds("h");
+    const wide = this.#bounds("s");
+    const out = SPREADS[handle];
+    const steps: Record<string, Partial<Size>> = {
+      ArrowUp: { h: KEY_STEP },
+      ArrowDown: { h: -KEY_STEP },
+      PageUp: { h: tall.max },
+      PageDown: { h: -tall.max },
+      ...(out === 0
+        ? { Home: { h: tall.max }, End: { h: -tall.max } }
+        : {
+            ArrowRight: { s: out * KEY_STEP },
+            ArrowLeft: { s: -out * KEY_STEP },
+            Home: { s: -wide.max },
+            End: { s: wide.max },
+          }),
     };
-    const by = steps[edge][event.key];
+    const by = steps[event.key];
     if (by === undefined) {
       return;
     }
     event.preventDefault();
     this.#stopSettle(false);
-    const value = Math.min(max, Math.max(min, this.#valueOf(edge) + by));
-    this.#choose(edge, value);
-    this.#write(edge, value);
+    const now = this.#size();
+    const next = {
+      h: Math.min(tall.max, Math.max(tall.min, now.h + (by.h ?? 0))),
+      s: Math.min(wide.max, Math.max(wide.min, now.s + (by.s ?? 0))),
+    };
+    this.#chosen = next.h;
+    this.#chosenSpread = next.s;
+    this.#write(next);
     this.#shape?.morphTo(1, this.#ext(), 0);
   }
 

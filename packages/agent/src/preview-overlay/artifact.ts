@@ -43,6 +43,16 @@ const REFUSED = 4400;
  */
 const RESYNC_MS = 10_000;
 
+/**
+ * How long one attempt at the socket may stand connecting before it is
+ * closed and tried again, ms. y-websocket (3.1.0, its latest) watches only
+ * an open socket (its 30 s `messageReconnectTimeout`), so an upgrade that
+ * is never answered would stand connecting for ever. Our call.
+ */
+const OPEN_WITHIN_MS = 10_000;
+/** Attempts in a row that never opened, after which the link is said lost. */
+const STALLS_LOST = 2;
+
 const KINDS = new Set(["page", "canvas", "preview"]);
 
 /** Where an artifact's doc is synced: the listener's path, under the dashboard's preview prefix in its frame. */
@@ -324,6 +334,40 @@ const connect = () => {
     state: link.state === "lost" ? "lost" : "connecting",
     error: link.error,
   });
+  // An attempt that hasn't opened within OPEN_WITHIN_MS is closed and tried
+  // again through y-websocket's own disconnect and connect; the second in a
+  // row that never opened says the link is lost.
+  let stalls = 0;
+  let stallTimer: ReturnType<typeof setTimeout> | undefined;
+  let closingStalled = false;
+  const watchAttempt = () => {
+    clearTimeout(stallTimer);
+    const attempt = own.ws;
+    stallTimer = setTimeout(() => {
+      if (own !== provider || own.ws !== attempt || !own.wsconnecting) {
+        return;
+      }
+      stalls += 1;
+      closingStalled = true;
+      own.disconnect();
+      closingStalled = false;
+      own.connect();
+    }, OPEN_WITHIN_MS);
+  };
+  own.on("status", ({ status: attempt }) => {
+    if (attempt === "connecting") {
+      watchAttempt();
+      return;
+    }
+    clearTimeout(stallTimer);
+    if (attempt === "connected") {
+      stalls = 0;
+    }
+  });
+  // The first attempt began in the constructor, before anything heard it.
+  if (own.wsconnecting) {
+    watchAttempt();
+  }
   own.on("sync", (isSynced: boolean) => {
     if (!isSynced || own !== provider) {
       return;
@@ -337,6 +381,15 @@ const connect = () => {
   });
   own.on("connection-close", (event) => {
     if (own !== provider) {
+      return;
+    }
+    if (closingStalled) {
+      if (stalls >= STALLS_LOST) {
+        linked({
+          state: "lost",
+          error: `Its link to ${location.host} didn't open`,
+        });
+      }
       return;
     }
     if (event?.code !== REFUSED) {

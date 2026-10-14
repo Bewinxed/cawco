@@ -53,8 +53,11 @@ export interface Box {
   width: number;
 }
 
-/** An edge of the composer's canvas that resizes it. */
-export type Edge = "top" | "left" | "right";
+/**
+ * A handle of the composer's canvas that resizes it: the top grab its
+ * height, a top corner its width (both sides at once) and its height.
+ */
+export type Handle = "top" | "top-left" | "top-right";
 
 export interface GrabValue {
   max: number;
@@ -96,25 +99,24 @@ export class Stage {
   readonly holders = new Set<symbol>();
   /** The page's answer to an asked picture. */
   pictured: (() => void) | null = null;
-  /** The resize grabs' handlers, by edge: the composer's while it stands there. */
+  /** The resize handles' handlers: the composer's while it stands there. */
   grab: {
-    down: (edge: Edge, event: PointerEvent) => void;
-    key: (edge: Edge, event: KeyboardEvent) => void;
+    down: (handle: Handle, event: PointerEvent) => void;
+    key: (handle: Handle, event: KeyboardEvent) => void;
   } | null = null;
   /**
-   * Each grab's state for a screen reader, px: the top's the height and its
-   * bounds, a side's the width and the bounds that side's drag holds it to.
+   * The handles' state for a screen reader, px: the top's the height and its
+   * bounds, the corners' the width and its bounds (`text` both sizes).
    */
-  grabValue = $state<Record<Edge, GrabValue> | null>(null);
+  grabValue = $state<{
+    top: GrabValue;
+    corner: GrabValue & { text: string };
+  } | null>(null);
   /**
-   * The side edges' grabs, a layer placed on the stage's box but not cut to
-   * its shape: each grab's hit zone straddles the edge (CanvasStages).
+   * Where the shape's top corners stand, px: how far in from the stage's
+   * box sides, and their radius, which the corner grips sit under.
    */
-  edges = $state<HTMLElement>();
-  /** The side grabs show: the canvas stands still over the composer. */
-  edgesShown = $state(false);
-  /** How far inside its box the shape's sides stand at the side grabs' height, px. */
-  edgeInset = $state(0);
+  corner = $state({ inset: 0, radius: 0 });
 
   readonly #waiting = new Set<() => void>();
 
@@ -241,6 +243,7 @@ export class Stage {
       artifact: { id: this.id, kind: "canvas", name: this.name },
       sync: artifactSyncPath(this.base, this.id),
       theme: theme.resolved,
+      inset: this.#inset(),
     });
     this.tellPlace();
   }
@@ -251,7 +254,32 @@ export class Stage {
   }
 
   tellPlace(): void {
-    this.post({ type: "cawco:place", docked: this.at === "panel" });
+    this.post({
+      type: "cawco:place",
+      docked: this.at === "panel",
+      inset: this.#inset(),
+    });
+  }
+
+  /**
+   * What of the page's edges our chrome takes, which its rail stands inside:
+   * over the composer the grab band over its top (`--c-btn-h-lg`: the top
+   * grab in its middle, the corner handles at its ends), and at its sides
+   * the grown shape's shoulders, which stand in from the page's box by the
+   * corner's inset; none in the panel.
+   */
+  #inset(): { side: number; top: number } {
+    if (this.at !== "composer") {
+      return { side: 0, top: 0 };
+    }
+    return {
+      side: this.corner.inset,
+      top: Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue(
+          "--c-btn-h-lg"
+        )
+      ),
+    };
   }
 
   /** Stands over `slot` (null: folded away) and places itself there now. */
@@ -286,31 +314,23 @@ export class Stage {
     }
     const box = this.target();
     const hidden = box === null;
-    for (const layer of [el, this.edges]) {
-      if (layer && layer.hidden !== hidden) {
-        layer.hidden = hidden;
-      }
+    if (el.hidden !== hidden) {
+      el.hidden = hidden;
     }
     if (!box) {
       return;
     }
-    const write = (layer: HTMLElement) => {
-      const s = layer.style;
-      const set = (prop: "left" | "top" | "width" | "height", v: number) => {
-        const px = `${v}px`;
-        if (s[prop] !== px) {
-          s[prop] = px;
-        }
-      };
-      set("left", box.left);
-      set("top", box.top);
-      set("width", box.width);
-      set("height", box.height);
+    const s = el.style;
+    const set = (prop: "left" | "top" | "width" | "height", v: number) => {
+      const px = `${v}px`;
+      if (s[prop] !== px) {
+        s[prop] = px;
+      }
     };
-    write(el);
-    if (this.edges) {
-      write(this.edges);
-    }
+    set("left", box.left);
+    set("top", box.top);
+    set("width", box.width);
+    set("height", box.height);
     el.classList.toggle(
       "over-sheet",
       this.at === "panel" && !!this.slots.panel?.closest(".preview-sheet")

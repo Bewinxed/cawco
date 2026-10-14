@@ -526,6 +526,12 @@ public enum Size {
     public static let cBarPhoneEdge: Double = 12
     /// The handle between a conversation and the side surface beside it, under a finger: its hit area about the hairline (Apple HIG's 44pt touch target). While the surface is expanded the hit area stands just inside the session area's edge, space-3 wide.
     public static let cSideDividerHit: Double = 44
+    /// The composer canvas's corner resize grip: each leg of its L, drawn along the corner's two edges (the typical window corner grip).
+    public static let cCornerGripLeg: Double = 12
+    /// How far inside the canvas's top corner its resize grip stands from each edge; the grip turns concentric with the corner's radius, so it sits under it.
+    public static let cCornerGripInset: Double = 6
+    /// The corner resize grip's line, in border-control.
+    public static let cCornerGripStroke: Double = 1.5
     /// On the phone bar, the first tab starts this far after the toggle glyph, and the strip stops this far short of Caw's glass.
     public static let cBarPhoneGap: Double = 8
     /// On a phone, the strip along the screen's left edge where a finger that travels right pulls the sidebar out; a drag that starts further in is the page's (the chat swipe).

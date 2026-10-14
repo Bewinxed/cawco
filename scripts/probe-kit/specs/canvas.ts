@@ -334,8 +334,8 @@ const emptyChecks = async (on: OnCanvas) => {
     };
   });
   on.kit.check(
-    "rail: tools 11px in, 34px boxes at 5px, the chosen one on surface-fill, the two groups apart, Excalidraw's chrome hidden",
-    rail.tools?.join() === "11,11" &&
+    "rail: tools --space-3 (11px) in and --space-2 (7px) down in the panel (no host chrome over it), 34px boxes at 5px, the chosen one on surface-fill, the two groups apart, Excalidraw's chrome hidden",
+    rail.tools?.join() === "11,7" &&
       rail.boxes.every((size) => size === "34×34") &&
       rail.radius === "5px" &&
       rail.chosenFill &&
