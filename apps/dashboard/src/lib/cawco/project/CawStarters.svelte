@@ -63,13 +63,11 @@
    * them. The starters are the hub's, written for the project's template
    * (stages.ts `startersFor`), so they name this kind of project's work.
    *
-   * A press sends the starter's sentence as it stands, exactly as typing it
-   * into the field and sending would: the same `onsend`, a new message id,
-   * and the words fly from the card to the row they become (`flies`). The
-   * card is pending (the kit's icon slot: its glyph gives way to the
-   * spinner) until the hub has it; the other cards hold still meanwhile. A
-   * refusal stands under the cards in the hub's words, and the card is
-   * there to press again.
+   * A press puts the starter's sentence into the field and the caret after
+   * it: nothing is sent. The words are written for Caw and editable before
+   * they go; the field's own send sends them (CawField: pending, the hub's
+   * refusal under it, the words flying to their row with `flies`). Another
+   * press replaces the field's words with that card's.
    *
    * Starters are cards on the kit's card recipe (12px radius, raised
    * surface, the tile shadow, no border), every card the tallest card's
@@ -78,10 +76,7 @@
    * at least --c-starter-w as fit (3 + 1, then 4 across at
    * --c-starters-w).
    */
-  import { newId } from "#lib/cawco/id.js";
-  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { departBox } from "#lib/cawco/motion/share.svelte.js";
-  import PendingContent from "#lib/components/ui/button/pending-content.svelte";
+  import { tick } from "svelte";
   import CawField from "./CawField.svelte";
 
   let {
@@ -101,67 +96,47 @@
     flies?: boolean;
   } = $props();
 
-  /** The starter whose words the hub is taking. */
-  let sending = $state<string | null>(null);
-  /** The starter the hub refused, and its words for it. */
-  let refused = $state<{ text: string; reason: string } | null>(null);
+  /** The field's words: a starter's once pressed, then the person's. */
+  let text = $state("");
+  let root = $state<HTMLElement | null>(null);
 
-  async function start(starter: Starter, card: HTMLElement) {
-    if (sending) {
-      return;
-    }
-    sending = starter.text;
-    refused = null;
-    const id = newId();
-    const words = card.querySelector<HTMLElement>(".starter-text");
-    if (flies && words) {
-      departBox(`sent:${id}`, words);
-    }
-    try {
-      await onsend(starter.text, id);
-    } catch (error) {
-      refused = {
-        text: starter.text,
-        reason: error instanceof Error ? error.message : String(error),
-      };
-    } finally {
-      sending = null;
+  /** The starter's words go into the field, the caret after them; nothing is sent. */
+  async function start(starter: Starter) {
+    ({ text } = starter);
+    await tick();
+    const field = root?.querySelector<HTMLTextAreaElement>(
+      "textarea:not([aria-hidden])"
+    );
+    if (field) {
+      field.focus({ preventScroll: true });
+      field.setSelectionRange(field.value.length, field.value.length);
     }
   }
 
-  async function send(text: string, id: string) {
-    refused = null;
-    await onsend(text, id);
+  async function send(words: string, id: string) {
+    await onsend(words, id);
   }
 </script>
 
-<div class="caw-starters">
+<div class="caw-starters" bind:this={root}>
   {#if starters.length > 0}
     <ul aria-label="Starters" class="cards">
       {#each starters as starter (starter.text)}
+        {@const Glyph = GLYPHS[starter.glyph]}
         <li>
           <button
-            aria-busy={sending === starter.text || undefined}
-            aria-disabled={sending !== null || undefined}
             class="starter press-tint"
-            onclick={(event) => start(starter, event.currentTarget)}
+            onclick={() => start(starter)}
             type="button"
           >
-            <PendingContent
-              failed={refused?.text === starter.text}
-              icon={GLYPHS[starter.glyph]}
-              pending={sending === starter.text}
-            />
+            <Glyph aria-hidden="true" class="starter-glyph" />
             <span class="starter-text">{starter.text}</span>
           </button>
         </li>
       {/each}
     </ul>
   {/if}
-  {#if refused}
-    <p class="refused" role="alert" transition:unfold>{refused.reason}</p>
-  {/if}
-  <CawField {flies} {label} onsend={send} {placeholder} />
+  <CawField {flies} {label} onsend={send} {placeholder} bind:text />
 </div>
 
 <style>
@@ -192,11 +167,9 @@
     }
   }
   .starter {
-    --btn-icon: var(--icon-md);
-    --btn-gap: var(--space-2);
     display: flex;
     align-items: center;
-    gap: var(--btn-gap);
+    gap: var(--space-2);
     inline-size: 100%;
     block-size: 100%;
     min-block-size: var(--c-starter-h);
@@ -212,25 +185,19 @@
     cursor: pointer;
     transition: background-color var(--dur-control) var(--ease-out);
   }
-  .starter :global(.kit-slot) {
+  .starter :global(.starter-glyph) {
+    flex: none;
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
     color: var(--ink-muted);
   }
   @media (hover: hover) {
-    .starter:hover:not([aria-disabled="true"]) {
+    .starter:hover {
       background: var(--surface-hover);
     }
-  }
-  /* While one is sending the others wait: no hover, no press. */
-  .starter[aria-disabled="true"] {
-    cursor: default;
   }
   .starter:focus-visible {
     outline: var(--focus-ring-width) solid var(--focus-ring);
     outline-offset: var(--focus-ring-offset);
-  }
-  .refused {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-    text-align: start;
   }
 </style>

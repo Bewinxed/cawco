@@ -8,8 +8,10 @@
  *    at the grid's width (one at 390; 3 + 1 at 680, where the board's
  *    column is narrower than four cards; four across at 768 and 1440),
  *    every card the same height and at least 56px.
- * 2. Pressing one marks that card pending, then sends its sentence to the
- *    project's Caw: the hub holds a thread whose first words are it.
+ * 2. Pressing one puts its sentence in the field, focused with the caret at
+ *    its end, and sends nothing (the hub's threads are as they were);
+ *    pressing another replaces the words. The field's Send then sends it:
+ *    the hub holds a thread whose first words are it.
  * 3. An empty code project shows the code starters.
  * 4. A project with a task shows no starters.
  *
@@ -39,22 +41,6 @@ const CODE = [
   "Grill me on the next feature until it has a spec",
   "Find the riskiest bugs and file a task for each",
 ];
-
-/** Whether any starter card has carried aria-busy, recorded as it happens. */
-const RECORD_BUSY = () => {
-  const seen = { busy: [] as string[] };
-  (window as unknown as { probeBusy: typeof seen }).probeBusy = seen;
-  new MutationObserver(() => {
-    for (const card of document.querySelectorAll(
-      ".caw-starters .starter[aria-busy='true']"
-    )) {
-      const words = card.querySelector(".starter-text")?.textContent ?? "";
-      if (!seen.busy.includes(words)) {
-        seen.busy.push(words);
-      }
-    }
-  }).observe(document, { subtree: true, childList: true, attributes: true });
-};
 
 interface Layout {
   /** The last card's bottom is above the field's top. */
@@ -175,7 +161,7 @@ const run = async (kit: Kit) => {
   await phone.screenshot({ path: join(kit.out, "social-390.png") });
   const at390 = await layout(phone);
 
-  const desk = await kit.page("desk", { init: [RECORD_BUSY] });
+  const desk = await kit.page("desk");
   await desk.setViewportSize({ width: 768, height: 1024 });
   await open(desk, `${base}/project/${social.id}`, STARTERS);
   await settle(desk);
@@ -213,9 +199,53 @@ const run = async (kit: Kit) => {
     );
   }
 
-  // ── 2. pressing one sends its sentence to the project's Caw ─────────
+  // ── 2. a press fills the field; Send sends it ───────────────────────
+  const threadCount = async () =>
+    (await fleet.api<{ id: string }[]>(`/api/projects/${social.id}/threads`))
+      .length;
+  const before = await threadCount();
+  const fieldState = () =>
+    desk.evaluate(() => {
+      const field = document.querySelector<HTMLTextAreaElement>(
+        ".caw-starters textarea:not([aria-hidden])"
+      );
+      const active = document.activeElement;
+      return {
+        value: field?.value ?? "",
+        focused: field !== null && active === field,
+        caret: field?.selectionStart === field?.value.length,
+        active: `${active?.tagName.toLowerCase()}.${String(active?.className).split(" ")[0]}`,
+      };
+    });
+  await desk.locator(STARTERS, { hasText: SOCIAL[1] as string }).click();
+  const first = await fieldState();
   const pressed = SOCIAL[0] as string;
   await desk.locator(STARTERS, { hasText: pressed }).click();
+  // The field takes the focus once its words are drawn (the press awaits
+  // Svelte's tick), a moment after the click has returned.
+  await desk
+    .waitForFunction(
+      () =>
+        document.activeElement ===
+        document.querySelector(".caw-starters textarea:not([aria-hidden])"),
+      null,
+      { timeout: 1000 }
+    )
+    .catch(() => undefined);
+  const filled = await fieldState();
+  // Long enough for a send the press must not have made to reach the hub.
+  await desk.waitForTimeout(1500);
+  const unsent = (await threadCount()) === before;
+  kit.check(
+    "2: a press puts its sentence in the field, focused, caret at the end, and sends nothing; another press replaces it",
+    first.value === SOCIAL[1] &&
+      filled.value === pressed &&
+      filled.focused &&
+      filled.caret &&
+      unsent,
+    `first “${first.value}”; then “${filled.value}”, focused ${filled.focused} (${filled.active}), caret at end ${filled.caret}; threads unchanged ${unsent}`
+  );
+  await desk.click(".caw-starters form.caw-field button[type='submit']");
   const thread = await until(
     "a thread opened by the starter",
     async () => {
@@ -227,8 +257,8 @@ const run = async (kit: Kit) => {
         const read = await fleet.api<{
           messages: { author: string; body?: string }[];
         }>(`/api/projects/${social.id}/threads/${each.id}`);
-        const first = read.messages.find((m) => m.author === "you");
-        if (first?.body === pressed) {
+        const opening = read.messages.find((m) => m.author === "you");
+        if (opening?.body === pressed) {
           return each.id;
         }
       }
@@ -236,14 +266,10 @@ const run = async (kit: Kit) => {
     Boolean,
     60_000
   );
-  const busySeen = await desk.evaluate(
-    () =>
-      (window as unknown as { probeBusy: { busy: string[] } }).probeBusy.busy
-  );
   kit.check(
-    "2: the pressed card goes pending, and the hub's thread opens with its sentence",
-    Boolean(thread) && same(busySeen, [pressed]),
-    `thread ${thread}; pending ${busySeen.join(" | ")}`
+    "2: Send opens the project's thread with those words",
+    Boolean(thread),
+    `thread ${thread}`
   );
 
   // ── 3. an empty code project shows the code starters ────────────────
