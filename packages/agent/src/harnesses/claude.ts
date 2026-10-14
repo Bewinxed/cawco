@@ -920,6 +920,14 @@ export class InputStream implements AsyncIterable<SDKUserMessage> {
   }
 }
 
+/**
+ * The tools whose running call the CLI can move to the background: its shell
+ * commands and its subagents ("Background in-flight foreground tasks (Bash
+ * commands and subagents)", `Query.backgroundTasks`, sdk.d.ts 0.3.296).
+ * `Task` is the subagent tool's former name.
+ */
+const BACKGROUNDABLE_TOOLS = new Set(["Bash", "PowerShell", "Agent", "Task"]);
+
 /** A main-loop frame only a running turn sends: the model answering. */
 const runsTurn = (message: SDKMessage): boolean =>
   (message.type === "stream_event" || message.type === "assistant") &&
@@ -1440,6 +1448,14 @@ class ClaudeSession implements HarnessSession {
    */
   #background = new Set<string>();
   /**
+   * The main thread's tool calls that block its turn and can be moved to the
+   * background (a shell command, a subagent), by `tool_use` id, from their
+   * `tool_use` until their `tool_result`. While one runs, a send waits for
+   * its end: the CLI reads what it was sent only between tool calls. A send
+   * that meets one moves it to the background ({@link #moveToBackground}).
+   */
+  readonly #foreground = new Set<string>();
+  /**
    * The sends the CLI has been handed and has not started, by uuid: from
    * {@link send} (or a `queued` lifecycle an attach replays) until its
    * `started`, `cancelled` or `completed` lifecycle, a withdrawal, or a
@@ -1821,6 +1837,15 @@ class ClaudeSession implements HarnessSession {
           const uuid = lifecycle.command_uuid;
           if (lifecycle.state === "queued") {
             this.#unread.add(uuid);
+            // Any send queued behind a running shell command or subagent — the
+            // person's, a hand-off, a report, a rule's reply — would wait for
+            // its end: it is moved to the background, and the send is read at
+            // that boundary. Keyed on `queued`, not on the send: the call
+            // returns at once, and the send is in the CLI's queue by then.
+            if (this.#foreground.size > 0) {
+              // biome-ignore lint/complexity/noVoid: the move reports itself; nothing waits for it
+              void this.#moveToBackground([...this.#foreground]);
+            }
           } else {
             this.#unread.delete(uuid);
           }
@@ -1877,6 +1902,7 @@ class ClaudeSession implements HarnessSession {
               .map((task) => task.task_id)
           );
         }
+        this.#trackForeground(message);
         const seq =
           message.type === "result" && message.uuid
             ? this.#seqs.get(message.uuid)
@@ -2034,6 +2060,85 @@ class ClaudeSession implements HarnessSession {
       });
     }
     return true;
+  }
+
+  /**
+   * Keeps {@link #foreground} from the main thread's frames: a call of a tool
+   * that blocks the turn and can be backgrounded, not started in the
+   * background, joins at its `tool_use`; its `tool_result` (its own, or the
+   * placeholder a backgrounded call returns) and the turn's end take it out.
+   * A shell command becomes a task the CLI can move only once it has run two
+   * seconds (Claude Code 2.1.296 registers it once `elapsed >= wOn/1000`,
+   * `wOn=2000`); its `task_started` says so, and one that starts while a
+   * send waits is moved then.
+   */
+  #trackForeground(message: SDKMessage): void {
+    if (message.type === "result") {
+      this.#foreground.clear();
+      return;
+    }
+    if (
+      message.type === "system" &&
+      message.subtype === "task_started" &&
+      message.is_backgrounded === false &&
+      message.tool_use_id !== undefined &&
+      this.#foreground.has(message.tool_use_id) &&
+      this.#unread.size > 0
+    ) {
+      // biome-ignore lint/complexity/noVoid: the move reports itself; nothing waits for it
+      void this.#moveToBackground([message.tool_use_id]);
+      return;
+    }
+    if (
+      (message.type !== "assistant" && message.type !== "user") ||
+      message.parent_tool_use_id !== null
+    ) {
+      return;
+    }
+    const { content } = message.message;
+    if (!Array.isArray(content)) {
+      return;
+    }
+    for (const block of content) {
+      if (
+        block.type === "tool_use" &&
+        BACKGROUNDABLE_TOOLS.has(block.name) &&
+        (block.input as { run_in_background?: unknown } | undefined)
+          ?.run_in_background !== true
+      ) {
+        this.#foreground.add(block.id);
+      } else if (block.type === "tool_result") {
+        this.#foreground.delete(block.tool_use_id);
+      }
+    }
+  }
+
+  /**
+   * Moves the foreground calls `ids` to the background so a send waiting
+   * behind them is read now (the SDK's `backgroundTasks`, what Ctrl+B does in
+   * the terminal): each returns at once with a "running in the background"
+   * result, keeps running, and its `task_notification` reaches the session
+   * when it settles, as any background task's does. A call the CLI has not
+   * yet made a task (a shell command younger than two seconds) is not moved
+   * here; its `task_started` moves it ({@link #trackForeground}). A CLI with
+   * background tasks disabled refuses: the send waits for the call's end, and
+   * the refusal is logged.
+   */
+  async #moveToBackground(ids: readonly string[]): Promise<void> {
+    for (const id of ids) {
+      try {
+        // biome-ignore lint/performance/noAwaitInLoops: one control request per call, in turn
+        const moved = await this.#handle.backgroundTasks(id);
+        console.info(
+          `[claude] ${this.instanceId}: a send waits behind tool call ${id}: ${moved ? "moved it to the background" : "not yet a task; it is moved when it becomes one"}`
+        );
+      } catch (error) {
+        console.warn(
+          `[claude] ${this.instanceId}: a send waits behind tool call ${id}, and moving it to the background was refused: ${error instanceof Error ? error.message : String(error)}`
+        );
+        return;
+      }
+    }
   }
 
   /**

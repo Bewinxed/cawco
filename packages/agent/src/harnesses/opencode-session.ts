@@ -645,6 +645,15 @@ export class OpencodeSession implements HarnessSession {
   #openThinking: string | null = null;
   /** The kind of each inbox item, by id, so a delivered send is read and a compaction is not. */
   readonly #inbox = new Map<string, string>();
+  /**
+   * The turn's tool calls running, by id, from `session.tool.called` until
+   * their success or failure. A send waits behind them: OpenCode delivers
+   * its inbox at the next step. A send that meets one moves the session's
+   * blocking calls to the background ({@link #moveToBackground}).
+   */
+  readonly #running = new Set<string>();
+  /** A {@link #moveToBackground} request is in flight. */
+  #movingToBackground = false;
   /** A compaction is under way, by its message id. */
   #compacting: string | undefined;
   #busy = false;
@@ -922,6 +931,11 @@ export class OpencodeSession implements HarnessSession {
     switch (event.type) {
       case "session.inbox.enqueued":
         this.#inbox.set(event.data.inboxID, event.data.item.type);
+        // Any send behind a running tool call — the person's, a hand-off, a
+        // report, a rule's reply — would wait for its end.
+        if (event.data.item.type === "user" && this.#running.size > 0) {
+          this.#moveToBackground();
+        }
         break;
       case "session.inbox.delivered": {
         // The model is given the send now: it is read. A compaction or a
@@ -1056,6 +1070,11 @@ export class OpencodeSession implements HarnessSession {
       case "session.tool.called":
         this.#toolInputs.set(event.data.id, event.data.input);
         this.#toolUse(event.data.assistantMessageID, event.data.id);
+        this.#running.add(event.data.id);
+        // A call that starts while a send waits in the inbox would hold it.
+        if ([...this.#inbox.values()].includes("user")) {
+          this.#moveToBackground();
+        }
         break;
       case "session.tool.progress":
         this.#toolProgress(
@@ -1068,6 +1087,7 @@ export class OpencodeSession implements HarnessSession {
       case "session.tool.success":
       case "session.tool.failed": {
         const { id, assistantMessageID } = event.data;
+        this.#running.delete(id);
         this.#toolUse(assistantMessageID, id);
         this.#toolProgress(
           assistantMessageID,
@@ -1212,6 +1232,40 @@ export class OpencodeSession implements HarnessSession {
   }
 
   /** A turn ended on the server: its blocks drawn, its result, and the held sends go. */
+  /**
+   * Moves the session's blocking tool calls to the background so a send
+   * waiting in the inbox is delivered at once (`POST
+   * /api/session/:id/background`, OpenCode 2.0.28: "Move active foreground
+   * backgroundable tools for this session into background observation. Idle
+   * requests are a no-op."). A moved shell call returns "Command moved to the
+   * background" and keeps running; OpenCode adds a note with its output to
+   * the session when it ends. A call OpenCode cannot move (a file read) runs
+   * on; a refusal is logged and the send waits for the call's end.
+   */
+  #moveToBackground(): void {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: set below and cleared in the request's finally, which the checker doesn't follow
+    if (this.#movingToBackground) {
+      return;
+    }
+    this.#movingToBackground = true;
+    const calls = [...this.#running].join(", ");
+    this.#client.session
+      .background({ sessionID: this.#opencodeSessionId() })
+      .then(
+        () =>
+          console.info(
+            `[opencode] ${this.instanceId}: a send waits behind tool call(s) ${calls}: asked OpenCode to move them to the background`
+          ),
+        (error: unknown) =>
+          console.warn(
+            `[opencode] ${this.instanceId}: a send waits behind tool call(s) ${calls}, and moving them to the background was refused: ${errorText(error)}`
+          )
+      )
+      .finally(() => {
+        this.#movingToBackground = false;
+      });
+  }
+
   #turnEnded(closing?: {
     subtype: string;
     is_error: boolean;
@@ -1219,6 +1273,7 @@ export class OpencodeSession implements HarnessSession {
   }): void {
     this.#turnRevision += 1;
     this.#busy = false;
+    this.#running.clear();
     this.#ctx.busy(false);
     if (this.#compacting) {
       this.#compacting = undefined;
