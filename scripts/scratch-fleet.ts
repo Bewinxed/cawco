@@ -205,8 +205,12 @@ export async function until<T>(
 ): Promise<T> {
   const deadline = Date.now() + ms;
   for (;;) {
+    // A read that throws, synchronously (the hub holding the db: SQLITE_CANTOPEN)
+    // or by rejecting, is no reading yet: `.then(read)` makes both a rejection.
     // biome-ignore lint/performance/noAwaitInLoops: each look follows the scratch services' last state
-    const value = await Promise.resolve(read()).catch(() => undefined as T);
+    const value = await Promise.resolve()
+      .then(read)
+      .catch(() => undefined as T);
     if (value !== undefined && accept(value)) {
       return value;
     }
@@ -513,7 +517,9 @@ class FleetDirs {
     LIVE.delete(this);
     for (const stop of this.#stops.splice(0)) {
       // biome-ignore lint/performance/noAwaitInLoops: one at a time, in order
-      await Promise.resolve(stop()).catch(() => undefined);
+      await Promise.resolve()
+        .then(stop)
+        .catch(() => undefined);
     }
     for (const dir of this.dirs.splice(0)) {
       // biome-ignore lint/performance/noAwaitInLoops: a handful of dirs
