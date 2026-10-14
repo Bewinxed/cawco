@@ -29,6 +29,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type {
   EffortLevel,
+  FleetMcpChange,
   McpServerStatus,
   ModelInfo,
   ModelTurnUsage,
@@ -43,6 +44,7 @@ import {
   ASK_USER_QUESTION,
   CONTROL_CONTEXT_USAGE,
   CONTROL_INTERRUPT,
+  CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MCP_RECONNECT,
   CONTROL_MCP_STATUS,
   CONTROL_MCP_TOGGLE,
@@ -2729,6 +2731,15 @@ export class OpencodeSession implements HarnessSession {
           : this.#client.mcp.disconnect(target));
         return;
       }
+      case CONTROL_MCP_FLEET_CHANGED:
+        // Already taken by the fleet sync that came before this: a written
+        // config restarts the server, and each session moves to the new one
+        // once idle; every proxied server is added and connected again at
+        // each live session's directory (opencode.ts `#syncFleet`).
+        console.info(
+          `[opencode] ${this.instanceId}: fleet MCP ${(args[0] as FleetMcpChange[]).map(({ name, kind }) => `${name} ${kind}`).join(", ")}: taken by the fleet sync`
+        );
+        return { taken: "fleet sync" };
       default:
         // An unsupported control verb is a silent no-op, never a user-facing
         // failure: the hub may send a verb this harness has none for.

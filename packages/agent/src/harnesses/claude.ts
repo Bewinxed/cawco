@@ -45,6 +45,7 @@ import type {
   AccountKind,
   AuthState,
   EffortLevel,
+  FleetMcpChange,
   HarnessCapabilities,
   HarnessReport,
   ModelInfo,
@@ -70,6 +71,7 @@ import {
   CONTROL_FORGET_ACCOUNT,
   CONTROL_GET_TODOS,
   CONTROL_JOIN_ACCOUNT_LOGIN,
+  CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MOVE_HOME_LOGIN,
   CONTROL_PROBE_ACCOUNT,
   CONTROL_READ_HOME_LOGIN,
@@ -101,6 +103,7 @@ import {
   accountIds,
   claudeConfigDirs,
   claudeHome,
+  configDirClaudeJson,
   projectSlug,
   sessionConfigDir,
 } from "@cawco/core/paths";
@@ -1287,6 +1290,126 @@ const sessionSettingsOptions = (
 };
 
 /**
+ * What a client dials for one MCP server config, as the CLI reports it in
+ * `mcpServerStatus` and as `.claude.json` holds it: two that read the same
+ * here make the same connection.
+ */
+const dialed = (config: unknown): string => {
+  const c = (config ?? {}) as {
+    type?: string;
+    url?: string;
+    headers?: Record<string, string>;
+    command?: string;
+    args?: string[];
+    env?: Record<string, string>;
+  };
+  return JSON.stringify(
+    c.url === undefined
+      ? { command: c.command, args: c.args ?? [], env: c.env ?? {} }
+      : { type: c.type, url: c.url, headers: c.headers ?? {} }
+  );
+};
+
+/** What one fleet MCP change came to in a session. */
+interface FleetMcpOutcome {
+  error?: string;
+  kind: FleetMcpChange["kind"];
+  name: string;
+  /** The CLI's word for it afterwards, `gone`, or why it was kept as it was. */
+  status: string;
+  tools?: number;
+}
+
+const outcomeLine = ({ name, kind, status, tools, error }: FleetMcpOutcome) =>
+  `${name} ${kind}: ${status}${tools === undefined ? "" : ` (${tools} tools)`}${error ? ` — ${error}` : ""}`;
+
+/**
+ * How a session takes fleet MCP changes (`ClaudeSession.#takeFleetMcp`):
+ * - `dynamic`, the whole set `setMcpServers` is to hold, each as the files
+ *   have it: the servers it holds now that the files still name, a server
+ *   the session lacks, and a config-file one whose dialled config changed;
+ * - `leaving`, config-file servers the files no longer name, with the config
+ *   the session holds: named once in `setMcpServers`, then left out;
+ * - `redial`, servers kept on the config they have, dialled again;
+ * - `kept`, servers left as they are, with why.
+ */
+const planFleetMcp = (
+  changes: readonly FleetMcpChange[],
+  configured: Record<string, McpServerConfig>,
+  before: readonly McpServerStatus[],
+  launch: ReadonlySet<string>
+) => {
+  const held = new Map(before.map((server) => [server.name, server]));
+  const dynamic = new Map(
+    before.flatMap((server) =>
+      server.scope === "dynamic" &&
+      !launch.has(server.name) &&
+      configured[server.name]
+        ? [[server.name, configured[server.name]] as const]
+        : []
+    )
+  ) as Map<string, McpServerConfig>;
+  const leaving: Record<string, McpServerConfig> = {};
+  const redial = new Set<string>();
+  const kept = new Map<string, string>();
+  for (const { name, kind } of changes) {
+    const step: FleetMcpStep = launch.has(name)
+      ? { do: "keep", why: "launched with this session" }
+      : fleetMcpStep(kind, configured[name], held.get(name));
+    if (step.do === "keep") {
+      kept.set(name, step.why);
+    } else if (step.do === "leave") {
+      leaving[name] = step.config;
+    } else {
+      if (step.do === "set") {
+        dynamic.set(name, step.config);
+      }
+      if (step.redial) {
+        redial.add(name);
+      }
+    }
+  }
+  return { dynamic, leaving, redial, kept };
+};
+
+type FleetMcpStep =
+  | { do: "keep"; why: string }
+  | { do: "leave"; config: McpServerConfig }
+  | { do: "set"; config: McpServerConfig; redial: boolean }
+  | { do: "hold"; redial: boolean };
+
+/** What one change asks of one server a session holds (`has`) or lacks, the files wanting `wanted`. */
+const fleetMcpStep = (
+  kind: FleetMcpChange["kind"],
+  wanted: McpServerConfig | undefined,
+  has: McpServerStatus | undefined
+): FleetMcpStep => {
+  const again =
+    kind === "signed-in" ||
+    kind === "signed-out" ||
+    (has !== undefined && has.status !== "connected");
+  if (!wanted) {
+    if (!has || has.scope === "dynamic") {
+      // Not here, or `setMcpServers` holds it and drops it with the files.
+      return { do: "hold", redial: false };
+    }
+    return has.config
+      ? { do: "leave", config: has.config as McpServerConfig }
+      : { do: "keep", why: "its CLI reports no config to replace it with" };
+  }
+  if (has?.status === "disabled") {
+    return { do: "keep", why: "turned off in this session" };
+  }
+  if (!has || has.scope === "dynamic") {
+    return { do: "set", config: wanted, redial: has !== undefined && again };
+  }
+  if (kind === "config" || dialed(has.config) !== dialed(wanted)) {
+    return { do: "set", config: wanted, redial: false };
+  }
+  return { do: "hold", redial: again };
+};
+
+/**
  * The MCP servers a session launches with: the caller's and CawCo's, or
  * CawCo's alone for a fenced session.
  */
@@ -1486,6 +1609,15 @@ class ClaudeSession implements HarnessSession {
   #lastRequestAt: number | undefined;
   /** The permission mode: the one it started (or was adopted) with, each `setPermissionMode`, and the CLI's own word. */
   readonly #mode: SessionMode;
+  /** The MCP servers it was launched with (CawCo's, a caller's): the CLI's own to keep, never changed by a fleet change. */
+  readonly #launchMcp: ReadonlySet<string>;
+  /** Launched with CawCo's MCP server alone ({@link SpawnPayload.fence}): it takes no fleet server. */
+  readonly #fence: boolean;
+  readonly #workdir: string;
+  /** The `.claude.json` its CLI reads: its account's, or the machine's. */
+  readonly #claudeJson: string;
+  /** One fleet MCP change taken at a time, in the order they came. */
+  #fleetMcp: Promise<unknown> = Promise.resolve();
 
   constructor(
     instanceId: string,
@@ -1535,6 +1667,16 @@ class ClaudeSession implements HarnessSession {
     this.#launchCredential = ctx.sessionCredential;
     this.#boundaryHook = workspaceHook(ctx.boundary);
     const mcpServers = sessionMcpServers(instanceId, ctx, options, fence);
+    this.#launchMcp = new Set(Object.keys(mcpServers));
+    this.#fence = fence;
+    this.#workdir = workdir;
+    const env = sessionEnv(
+      (options as { env?: Record<string, string | undefined> } | undefined)
+        ?.env,
+      model,
+      ctx
+    );
+    this.#claudeJson = configDirClaudeJson(env.CLAUDE_CONFIG_DIR);
     this.#sessiond = sessiond;
     this.#stored = persistSession !== false;
     const seqs = this.#seqs;
@@ -1606,12 +1748,7 @@ class ClaudeSession implements HarnessSession {
         ...(persistSession === false ? { persistSession: false } : {}),
         ...(cliMode ? { permissionMode: cliMode } : {}),
         ...(model && { model }),
-        env: sessionEnv(
-          (options as { env?: Record<string, string | undefined> } | undefined)
-            ?.env,
-          model,
-          ctx
-        ),
+        env,
         // Left out entirely when nobody chose: the SDK's own default is the
         // model's, and writing a level here would put cawco's guess in its
         // place on every model whose scale we cannot see.
@@ -2553,6 +2690,12 @@ class ClaudeSession implements HarnessSession {
     if (method === VERIFY_SESSION_CREDENTIAL) {
       return await this.#verifyHeldCredential();
     }
+    if (method === CONTROL_MCP_FLEET_CHANGED) {
+      const changes = args[0] as FleetMcpChange[];
+      const taking = this.#fleetMcp.then(() => this.#takeFleetMcp(changes));
+      this.#fleetMcp = taking.catch(() => undefined);
+      return await taking;
+    }
     // Effort is the one neutral verb with no `Query` method behind it: it is a
     // flag setting, applied over user/project/local settings and never written
     // to any of them, which is exactly a session-scoped switch. `max` is only
@@ -2588,6 +2731,134 @@ class ClaudeSession implements HarnessSession {
       await this.#readEffort();
     }
     return answer;
+  }
+
+  /**
+   * The MCP servers a session starting here now would read: the user scope
+   * of its `.claude.json`, and its folder's own map over that (where a
+   * project's placed servers go). The fleet sync has written both before a
+   * change reaches the session.
+   */
+  async #configuredMcp(): Promise<Record<string, McpServerConfig>> {
+    let root: {
+      mcpServers?: Record<string, McpServerConfig>;
+      projects?: Record<
+        string,
+        { mcpServers?: Record<string, McpServerConfig> }
+      >;
+    };
+    try {
+      root = JSON.parse(await readFile(this.#claudeJson, "utf8"));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+      root = {};
+    }
+    const projects = root.projects ?? {};
+    let folder: string | undefined;
+    for (let dir = this.#workdir; ; dir = dirname(dir)) {
+      if (projects[dir]) {
+        folder = dir;
+        break;
+      }
+      if (dirname(dir) === dir) {
+        break;
+      }
+    }
+    return {
+      ...root.mcpServers,
+      ...(folder ? projects[folder]?.mcpServers : {}),
+    };
+  }
+
+  /**
+   * Fleet MCP servers changed at the hub, and this machine's files say so:
+   * the session takes each change in place, with no new session. Measured on
+   * CLI 2.1.296 against a scratch config dir (MCP hot-reload probe,
+   * 2026-10-14):
+   * - `reconnectMcpServer` dials a server the session already holds with the
+   *   config it read at launch: a sign-in or sign-out at the hub is that.
+   * - A server the session never read is "Server not found" to both
+   *   `reconnectMcpServer` and `toggleMcpServer`; `setMcpServers` connects
+   *   it. The set it governs is only its own: the launch's servers
+   *   (CawCo's) stay whatever it is sent, and an unchanged config in it is
+   *   no change at all.
+   * - A server named in `setMcpServers` takes the place of the config-file
+   *   one of that name, and is gone when left out of the next call. That is
+   *   how a config-file server leaves, and how one whose config changed is
+   *   dialled again on its new config (`reconnectMcpServer` keeps the old).
+   *   `toggleMcpServer(name, false)` would write the name into the folder's
+   *   `disabledMcpServers` in `.claude.json`, turning the server off for every
+   *   later session there, so it is never used.
+   * A server the person turned off in this session stays off. Answers what
+   * each named server reads afterwards, and says it on the machine's log.
+   */
+  async #takeFleetMcp(
+    changes: FleetMcpChange[]
+  ): Promise<{ servers: FleetMcpOutcome[] }> {
+    if (this.#fence) {
+      console.info(
+        `[claude] ${this.instanceId}: fleet MCP ${changes.map(({ name, kind }) => `${name} ${kind}`).join(", ")}: not taken, as a fenced session runs CawCo's MCP server alone`
+      );
+      return {
+        servers: changes.map(({ name, kind }) => ({
+          name,
+          kind,
+          status: "fenced",
+        })),
+      };
+    }
+    const plan = planFleetMcp(
+      changes,
+      await this.#configuredMcp(),
+      await this.#handle.mcpServerStatus(),
+      this.#launchMcp
+    );
+    const errors: Record<string, string> = {};
+    if (Object.keys(plan.leaving).length > 0) {
+      await this.#handle.setMcpServers({
+        ...Object.fromEntries(plan.dynamic),
+        ...plan.leaving,
+      });
+    }
+    const set = await this.#handle.setMcpServers(
+      Object.fromEntries(plan.dynamic)
+    );
+    Object.assign(errors, set.errors);
+    for (const name of set.added) {
+      plan.redial.delete(name);
+    }
+    for (const name of plan.redial) {
+      try {
+        // biome-ignore lint/performance/noAwaitInLoops: one server's dial at a time, as the CLI takes them
+        await this.#handle.reconnectMcpServer(name);
+      } catch (error) {
+        errors[name] = error instanceof Error ? error.message : String(error);
+      }
+    }
+    const after = new Map(
+      (await this.#handle.mcpServerStatus()).map((server) => [
+        server.name,
+        server,
+      ])
+    );
+    const servers = changes.map(({ name, kind }): FleetMcpOutcome => {
+      const now = after.get(name);
+      const why = plan.kept.get(name);
+      const error = errors[name] ?? now?.error;
+      return {
+        name,
+        kind,
+        status: why ? `kept: ${why}` : (now?.status ?? "gone"),
+        ...(now?.tools ? { tools: now.tools.length } : {}),
+        ...(error ? { error } : {}),
+      };
+    });
+    console.info(
+      `[claude] ${this.instanceId}: fleet MCP ${servers.map(outcomeLine).join("; ")}`
+    );
+    return { servers };
   }
 
   async #withdraw(uuid: string): Promise<"withdrawn" | "started"> {

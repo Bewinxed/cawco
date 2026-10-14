@@ -2,6 +2,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
+  FleetMcpChange,
   NeutralMessage,
   PermissionResult,
   SentMessage,
@@ -11,6 +12,7 @@ import {
   BOUNDARY_RELAUNCH,
   CAWCO_ENV,
   CONTROL_INTERRUPT,
+  CONTROL_MCP_FLEET_CHANGED,
   MESSAGES_HELD,
   MESSAGES_READ,
   mcpGatewayPort,
@@ -369,6 +371,13 @@ export class PiRemoteSession implements HarnessSession {
       : undefined;
   }
   control(method: string, args: unknown[]): Promise<unknown> {
+    if (method === CONTROL_MCP_FLEET_CHANGED) {
+      // pi has no MCP client (pi-services.ts reports every fleet server so).
+      console.info(
+        `[pi] ${this.#ctx.instanceId}: fleet MCP ${(args[0] as FleetMcpChange[]).map(({ name, kind }) => `${name} ${kind}`).join(", ")}: not taken, as pi has no MCP support`
+      );
+      return Promise.resolve({ taken: false, why: "pi has no MCP support" });
+    }
     return this.request({ type: "control", method, args });
   }
   async interrupt(): Promise<void> {

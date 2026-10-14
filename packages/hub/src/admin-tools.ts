@@ -556,7 +556,9 @@ export function adminTools() {
           })
         );
       },
-      " A stdio server needs a 'command' in its config; a remote server needs 'type' and 'url'."
+      " A stdio server needs a 'command' in its config; a remote server needs 'type' and 'url'." +
+        " A change reaches sessions already running within seconds: a server put, enabled or signed in" +
+        " connects in them, and one removed, disabled or signed out leaves them. No new session is needed."
     ),
 
     // ── rules ────────────────────────────────────────────────────────────

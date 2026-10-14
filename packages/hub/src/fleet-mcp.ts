@@ -84,11 +84,16 @@ const reach = async (
  * machine's gateway or the hub), where no `/register` exists; Claude Code then
  * reports "Dynamic Client Registration rejected (HTTP 404)" and keeps the
  * server in its needs-auth cache for 15 minutes, past the hub's sign-in.
+ *
+ * Its words are what a session reads in its harness's notice of a server that
+ * failed to connect, so they say the sign-in reaches it where it runs: the
+ * hub hands every live session the change (`sendMcpChanges` in server.ts).
  */
 const signedOut = () =>
-  new Response("Sign in to this server from Configure → MCP servers.", {
-    status: 503,
-  });
+  new Response(
+    "Sign in to this server from Configure → MCP servers. Its tools then arrive in sessions already running, within seconds; no new session is needed.",
+    { status: 503 }
+  );
 
 export class FleetMcp {
   readonly #db: DbShape;

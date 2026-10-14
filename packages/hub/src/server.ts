@@ -140,6 +140,7 @@ import {
   CONTROL_JOIN_PROVIDER_ACCOUNT,
   CONTROL_LEND_ACCOUNT,
   CONTROL_LIST_SESSIONS,
+  CONTROL_MCP_FLEET_CHANGED,
   CONTROL_MODEL_CATALOG,
   CONTROL_MOVE_HOME_CREDENTIAL,
   CONTROL_MOVE_HOME_LOGIN,
@@ -392,6 +393,7 @@ import {
   setFleetChoices,
 } from "./fleet-choices";
 import { FleetMcp } from "./fleet-mcp";
+import { FleetMcpChanges, type RidingChanges } from "./fleet-mcp-changes";
 import { createFleetWatch, type FleetWatch } from "./fleet-watch";
 import { accountForecasts, carrySequence } from "./forecast";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
@@ -6976,6 +6978,8 @@ export const createServer = (
    * account of the fleet config rather than an answer for whoever asked.
    */
   const pendingFleet = new Map<string, string>();
+  /** The fleet MCP changes each of those syncs carries, by `requestId` (fleet-mcp-changes.ts). */
+  const fleetMcpRiding = new Map<string, RidingChanges>();
   /**
    * Controls a REST call is waiting on, by `requestId`. A dashboard's control is
    * answered over the socket it asked on; a route has nothing to hold the reply
@@ -12466,6 +12470,9 @@ export const createServer = (
     agent: HubSocket,
     config: FleetConfig
   ): void => {
+    // Taken with `config`, before anything below reads the fleet again: every
+    // change it carries is in the files this sync writes.
+    const riding = mcpChanges.ride(machineId);
     // Startup discovery finishes before any harness can see a remote fleet URL.
     // The control result arrives through pendingFleet.
     detach(
@@ -12547,6 +12554,9 @@ export const createServer = (
           args: [outbound],
         };
         pendingFleet.set(requestId, machineId);
+        if (riding.size > 0) {
+          fleetMcpRiding.set(requestId, riding);
+        }
         sendFrame(agent, {
           verb: "control",
           machineId,
@@ -12607,6 +12617,42 @@ export const createServer = (
           payload,
         } satisfies Envelope<ControlPayload>);
       }
+    }
+  };
+
+  /**
+   * The fleet MCP changes a landed sync carried, to every live session on
+   * that machine: each takes them in place, conversation and all, and its
+   * harness says on the machine what it did with each (or why it took none).
+   * Fire-and-forget like {@link refreshSessions}.
+   */
+  const sendMcpChanges = (
+    machineId: string,
+    agent: HubSocket,
+    riding: RidingChanges | undefined
+  ): void => {
+    const changes = riding ? mcpChanges.landed(machineId, riding) : [];
+    if (changes.length === 0) {
+      return;
+    }
+    const live = db.liveInstancesOn(machineId);
+    console.info(
+      `[fleet-mcp] ${machineName(machineId)}: ${changes.map(({ name, kind }) => `${name} ${kind}`).join(", ")} → ${live.length} live session${live.length === 1 ? "" : "s"}`
+    );
+    for (const row of live) {
+      const requestId = crypto.randomUUID();
+      sendFrame(agent, {
+        verb: "control",
+        machineId,
+        instanceId: row.id,
+        requestId,
+        payload: {
+          instanceId: row.id,
+          requestId,
+          method: CONTROL_MCP_FLEET_CHANGED,
+          args: [changes],
+        },
+      } satisfies Envelope<ControlPayload>);
     }
   };
 
@@ -13106,11 +13152,23 @@ export const createServer = (
     publishInstances(machineId);
   });
 
+  const mcpChanges = new FleetMcpChanges(db.fleetConfig().mcp);
+  /**
+   * Every change of the fleet's MCP servers passes here: a write, a removal, a
+   * sign-in, a sign-out (a refused refresh, an upstream 401), a re-probe that
+   * moved a server's auth. Each machine is synced, and once its sync has
+   * written the change, its live sessions take it in place ({@link sendMcpChanges}).
+   */
   const announceMcp = (): void => {
+    const servers = db.fleetConfig().mcp;
+    mcpChanges.note(
+      servers,
+      db.listAgents().map((row) => row.machineId)
+    );
     registry.broadcast({
       verb: "frames",
       machineId: "",
-      payload: { kind: "fleet_mcp", servers: db.fleetConfig().mcp },
+      payload: { kind: "fleet_mcp", servers },
     } satisfies Envelope<FramePayload>);
     fanOutFleet();
   };
@@ -23575,6 +23633,8 @@ export const createServer = (
                 pendingFleet.has(message.requestId)
               ) {
                 pendingFleet.delete(message.requestId);
+                const riding = fleetMcpRiding.get(message.requestId);
+                fleetMcpRiding.delete(message.requestId);
                 const peeked = peekFleetReport(message.payload);
                 // A project-bound hook, MCP server or skill went out once per
                 // place; the hub keeps one state per row, the worst of its places.
@@ -23625,6 +23685,7 @@ export const createServer = (
                       : []),
                     ...(hooksChanged ? ["reinitialize"] : []),
                   ]);
+                  sendMcpChanges(message.machineId, ws, riding);
                 }
               }
               // A control a route is waiting on: the reply is that request's

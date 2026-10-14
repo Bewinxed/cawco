@@ -1351,6 +1351,30 @@ export const CONTROL_RELOAD_SKILLS = "reloadSkills";
 export const CONTROL_MCP_STATUS = "mcpServerStatus";
 export const CONTROL_MCP_RECONNECT = "reconnectMcpServer";
 export const CONTROL_MCP_TOGGLE = "toggleMcpServer";
+
+/** What became of one fleet MCP server at the hub. */
+export type FleetMcpChangeKind =
+  | "signed-in"
+  | "signed-out"
+  | "config"
+  | "added"
+  | "removed"
+  | "enabled"
+  | "disabled";
+
+export interface FleetMcpChange {
+  kind: FleetMcpChangeKind;
+  name: string;
+}
+
+/**
+ * Fleet MCP servers changed at the hub (arg: `FleetMcpChange[]`), sent to
+ * every live session on a machine once that machine's fleet sync has written
+ * the change to its harness files. The session takes it in place: its
+ * conversation stays and no new session starts. Answers what each named
+ * server reads in the session afterwards, or why the harness took none.
+ */
+export const CONTROL_MCP_FLEET_CHANGED = "fleetMcpChanged";
 /**
  * Puts a session to sleep now if it is at rest: its machine stops everything
  * the session runs (the harness, the MCP servers it started, their browsers)
@@ -1371,11 +1395,12 @@ export const CONTROL_SLEEP = "sleep";
 export const CONTROL_RESTLESS = "restless";
 
 /**
- * The live-session controls that only answer a question: nothing sent after
- * one depends on its answer. A daemon runs each after whatever is already on
- * its way to the session, but nothing waits for it — `reloadSkills` re-reads
- * every skill (0.7 s measured), and a send behind it sat in the daemon,
- * never reaching the harness, for as long as that took.
+ * The live-session controls nothing sent after them depends on. A daemon runs
+ * each after whatever is already on its way to the session, but nothing waits
+ * for it — `reloadSkills` re-reads every skill (0.7 s measured), and a send
+ * behind it sat in the daemon, never reaching the harness, for as long as
+ * that took. A fleet MCP change connects servers, which takes as long as
+ * their servers take to answer.
  */
 export const CONTROL_QUERIES: ReadonlySet<string> = new Set([
   CONTROL_CONTEXT_USAGE,
@@ -1383,6 +1408,7 @@ export const CONTROL_QUERIES: ReadonlySet<string> = new Set([
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_RELOAD_SKILLS,
   CONTROL_MCP_STATUS,
+  CONTROL_MCP_FLEET_CHANGED,
 ]);
 
 /** Machine-scoped session-catalog controls, answered by whichever harness owns the id. */

@@ -57,6 +57,13 @@ export const userLayerPath = (...parts: string[]): string =>
 export const claudeHomeJson = (): string => join(homedir(), CLAUDE_JSON_NAME);
 
 /**
+ * The `.claude.json` a Claude Code run with this `CLAUDE_CONFIG_DIR` reads
+ * (inside it), or {@link claudeHomeJson} for one run with none.
+ */
+export const configDirClaudeJson = (configDir: string | undefined): string =>
+  configDir ? join(configDir, CLAUDE_JSON_NAME) : claudeHomeJson();
+
+/**
  * One account's Claude Code config dir on this machine: its own credential,
  * transcripts and `.claude.json`, and the fleet's user layer linked in.
  */
