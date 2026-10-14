@@ -25,8 +25,9 @@
  *   this module reads how each ended.
  * - **The output contract**, on the run's `finish_item` summary: exactly
  *   `NO_REPLY` is silent; `AUTOMATION_FAILED: <why>` (or an item that
- *   failed) is a failure, its reason the why (a bare token's is the last
- *   text the run's session said, read once its turn's result frame is in;
+ *   failed) is a failure, its reason the why (a bare token's is the text
+ *   the run's session said before its answer's call, settled once its
+ *   turn's result frame is in;
  *   a failed item's its error's first line),
  *   retried once at once (same slot, attempt 2), and a
  *   second failure needs you (a push, and a note in the routine's thread);
@@ -408,6 +409,10 @@ const FAILED_ANSWER = new RegExp(
   `^${AUTOMATION_FAILED}(?:\\s*[:\\-—–]\\s*|\\s+|$)([\\s\\S]*)$`
 );
 
+/** A call of `routine_result` or `finish_item`, under any harness's MCP prefix. */
+const ROUTINE_RESULT_CALL = /(?:^|__|_)routine_result$/;
+const FINISH_CALL = /(?:^|__|_)finish_item$/;
+
 /** The longest reason a run keeps: the owner's "Failed: …" line, not a transcript. */
 const REASON_MAX = 500;
 
@@ -501,6 +506,12 @@ export const createRoutines = ({
    * that restarts mid-run has not heard it.
    */
   const lastSaid = new Map<string, string>();
+  /**
+   * The text a session said before its answer's tool call, seen on its frame
+   * stream: by {@link answerKey}. A bare failure's reason is this, never what
+   * the session says after its answer returned.
+   */
+  const before = new Map<string, string>();
   /**
    * Runs failed with a bare `AUTOMATION_FAILED`, by the session that
    * answered, waiting for its turn's end to read their reason
@@ -987,6 +998,8 @@ export const createRoutines = ({
     if (instanceId) {
       running.delete(instanceId);
       lastSaid.delete(instanceId);
+      before.delete(answerKey(instanceId, runId));
+      before.delete(answerKey(instanceId));
     }
     const run = store.setRun(runId, {
       state: "ended",
@@ -1081,18 +1094,34 @@ export const createRoutines = ({
       );
   };
 
-  /** The reason of a bare {@link AUTOMATION_FAILED} from `instanceId`: the last text its session said. */
-  const bareReason = (instanceId: string, who: string): string => {
-    const why = lastSaid.get(instanceId);
+  /**
+   * Where the text said before an answer is kept: Caw's `routine_result`
+   * names its run; a delegate's `finish_item` is its session's one answer.
+   */
+  const answerKey = (instanceId: string, runId?: string): string =>
+    runId ? `${instanceId} ${runId}` : instanceId;
+
+  /**
+   * The reason of a bare {@link AUTOMATION_FAILED} from `instanceId` for
+   * `runId`: the text its session said before the call that answered it.
+   */
+  const bareReason = (
+    instanceId: string,
+    runId: string,
+    who: string
+  ): string => {
+    const why =
+      before.get(answerKey(instanceId, runId)) ??
+      before.get(answerKey(instanceId));
     return why
       ? clipReason(why)
       : `${who} answered ${AUTOMATION_FAILED} and said nothing about why`;
   };
 
   /**
-   * The session's turn is over (its result frame, after every text frame of
-   * the turn was admitted, or the session itself is gone): its held bare
-   * failures settle, each with the last text it said.
+   * The session's turn is over (its result frame, after every frame of the
+   * turn was admitted, or the session itself is gone): its held bare
+   * failures settle, each with what it said before its answer.
    */
   const turnOver = (instanceId: string): void => {
     const runs = held.get(instanceId);
@@ -1103,7 +1132,7 @@ export const createRoutines = ({
     // Read once: settling the first clears the session's words.
     const ends = runs.map((each) => ({
       ...each,
-      reason: bareReason(instanceId, each.who),
+      reason: bareReason(instanceId, each.runId, each.who),
     }));
     for (const each of ends) {
       settle(
@@ -1116,7 +1145,8 @@ export const createRoutines = ({
 
   /**
    * A run failed with a bare {@link AUTOMATION_FAILED}: its reason is the
-   * last text its session says this turn, so it settles when the turn is
+   * text its session said before the call that answered ({@link before},
+   * read off the frame carrying that call), so it settles when the turn is
    * over, never as the answer arrives. The answer (`routine_result`, or the
    * `finish_item` whose item ends inside the call) comes over MCP within the
    * turn, and the turn's text over the session's frame stream: only the
@@ -1161,8 +1191,10 @@ export const createRoutines = ({
   };
 
   /**
-   * A session's frame: a run's session's last text is kept, for a failure
-   * that gives no reason, and its turn's result frame settles what it held
+   * A session's frame: a run's session's last text is kept, and when a
+   * frame carries its answer's tool call (`routine_result` for a run,
+   * `finish_item`) the text before that call is kept for the answer
+   * ({@link before}); its turn's result frame settles what it held
    * ({@link failBare}).
    */
   const said = (instanceId: string, neutral: NeutralMessage): void => {
@@ -1179,16 +1211,51 @@ export const createRoutines = ({
       turnOver(instanceId);
       return;
     }
-    if (neutral.type !== "assistant") {
-      return;
+    if (neutral.type === "assistant") {
+      spoke(instanceId, neutral);
     }
-    const text = neutral.message.content
-      .flatMap((block) => (block.type === "text" ? [block.text] : []))
-      .join("\n")
-      .trim();
+  };
+
+  /** A model message's blocks in order: its text, and the text before each answer's call. */
+  const spoke = (
+    instanceId: string,
+    neutral: Extract<NeutralMessage, { type: "assistant" }>
+  ): void => {
+    const words: string[] = [];
+    const sofar = () => words.join("\n").trim() || lastSaid.get(instanceId);
+    for (const block of neutral.message.content) {
+      if (block.type === "text") {
+        words.push(block.text);
+        continue;
+      }
+      const key =
+        block.type === "tool_use"
+          ? answerOf(instanceId, block.name, block.input)
+          : null;
+      const text = key ? sofar() : undefined;
+      if (key && text) {
+        before.set(key, text);
+      }
+    }
+    const text = words.join("\n").trim();
     if (text) {
       lastSaid.set(instanceId, text);
     }
+  };
+
+  /** The {@link answerKey} a tool call answers with, when it is a run's answer. */
+  const answerOf = (
+    instanceId: string,
+    name: string,
+    input: unknown
+  ): string | null => {
+    if (ROUTINE_RESULT_CALL.test(name)) {
+      const run = (input as { run?: unknown } | null)?.run;
+      return typeof run === "string" ? answerKey(instanceId, run.trim()) : null;
+    }
+    return FINISH_CALL.test(name) && running.has(instanceId)
+      ? answerKey(instanceId)
+      : null;
   };
 
   /**
