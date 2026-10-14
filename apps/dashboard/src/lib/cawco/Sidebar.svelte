@@ -831,7 +831,7 @@
     <!-- The wordmark, and in the header's corner what is started from
          anywhere: a session (⇧⌘N). Jump lives on the tab row (Shell), beside
          the conversations it jumps between. -->
-    <div class="flex items-center gap-1">
+    <div class="brand-row flex items-center gap-1">
       <Sidebar.Menu aria-label="Workspace" class="min-w-0 flex-1">
         <Sidebar.MenuItem>
           <Sidebar.MenuButton class={NAV_ROW} isActive={false}>

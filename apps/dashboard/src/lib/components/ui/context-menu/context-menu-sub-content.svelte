@@ -45,7 +45,7 @@
 <ContextMenuPortal {...portalProps}>
   <ContextMenuPrimitive.SubContent
     class={cn(
-      "kit-pop relative z-50 min-w-32 origin-(--bits-context-menu-content-transform-origin)",
+      "kit-pop relative z-50 max-h-(--bits-menu-content-available-height) min-w-32 origin-(--bits-menu-content-transform-origin) overflow-y-auto overflow-x-hidden",
       className
     )}
     collisionPadding={inset}

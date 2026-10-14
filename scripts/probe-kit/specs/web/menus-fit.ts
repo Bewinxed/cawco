@@ -155,10 +155,30 @@ async function account(
       vw: document.documentElement.clientWidth,
       vh: document.documentElement.clientHeight,
       side: sub.getAttribute("data-side"),
+      // It grows from its row: bits-ui's origin, as its wrapper holds it, is
+      // the submenu's own (`--bits-menu-content-transform-origin`).
+      origin: {
+        drawn: getComputedStyle(sub).transformOrigin,
+        bits:
+          sub.parentElement?.style
+            .getPropertyValue("--bits-floating-transform-origin")
+            .trim() ?? "",
+      },
       items,
     };
   }, OPEN_SUB);
   const b = read.box;
+  const [ox = "", oy = ""] = read.origin.bits.split(" ");
+  const resolve = (value: string, size: number) =>
+    value.endsWith("%")
+      ? `${(Number.parseFloat(value) / 100) * size}px`
+      : `${Number.parseFloat(value)}px`;
+  kit.check(
+    `${name}: the submenu grows from its row (its transform-origin is bits-ui's placement's)`,
+    read.origin.bits !== "" &&
+      read.origin.drawn === `${resolve(ox, b.width)} ${resolve(oy, b.height)}`,
+    `drawn ${read.origin.drawn}, bits-ui ${read.origin.bits}`
+  );
   kit.check(
     `${name}: the Account submenu lies inside the viewport`,
     b.left >= 0 && b.top >= 0 && b.right <= read.vw && b.bottom <= read.vh,
@@ -259,6 +279,34 @@ async function rowMenu(
     await hand.press(burger.x, burger.y);
     await page.waitForSelector(`.rail-sheet [data-hover-session="${id}"]`);
     await settle(page, 300);
+    // The sheet's close stands in its header's corner: Start session, on the
+    // same header row, keeps clear of it and takes a press at its centre.
+    const start = await page.evaluate(() => {
+      const button = document.querySelector<HTMLElement>(
+        ".rail-sheet button[aria-label='Start session']"
+      );
+      const close = document
+        .querySelector(".rail-sheet [data-slot='sheet-close']")
+        ?.getBoundingClientRect();
+      if (!(button && close)) {
+        return null;
+      }
+      const b = button.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        b.left + b.width / 2,
+        b.top + b.height / 2
+      );
+      return {
+        hit: hit?.closest("button") === button,
+        start: [b.left, b.right].map(Math.round),
+        close: [close.left, close.right].map(Math.round),
+      };
+    });
+    kit.check(
+      "phone, rail sheet: Start session takes a press at its centre, clear of the sheet's close",
+      Boolean(start?.hit && start.start[1] <= start.close[0]),
+      JSON.stringify(start)
+    );
   }
   const row = `${view === "phone" ? ".rail-sheet " : ""}[data-hover-session="${id}"]`;
   await page.locator(row).first().scrollIntoViewIfNeeded();

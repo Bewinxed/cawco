@@ -1197,10 +1197,9 @@
     border-right: 1px solid var(--border-hairline);
   }
   /* In the sheet the close button sits in the brand row's corner (16px in,
-     30px wide, and 7px of touch area around it): the brand row stops short of
-     it, so neither one's area lies under the other. */
-  :global(.rail-sheet [aria-label="Workspace"]) {
-    width: auto;
+     30px wide, and 7px of touch area around it): the brand row, the wordmark
+     and Start session both, stops short of it, so no area lies under it. */
+  :global(.rail-sheet .brand-row) {
     margin-inline-end: 46px;
   }
   .grip {
