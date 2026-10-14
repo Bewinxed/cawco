@@ -19,6 +19,7 @@ import {
   type Page,
   webkit,
 } from "playwright-core";
+import { heavySlot } from "../lib/heavy-run";
 import {
   type Fleet,
   type Reply,
@@ -289,6 +290,11 @@ export class Run {
       bench: () => this.bench(),
       built: () => this.builtBench(),
       fleet: async (respond) => {
+        // A fleet spec is a heavy run, its build and fleet both: it holds one
+        // of the machine's slots (heavy-run.ts) until the spec ends, after
+        // its fleets have stopped (ends run last-added first).
+        const slot = await heavySlot();
+        ends.push(async () => slot.release());
         // Built before the fleet starts, never between its start and the
         // dashboard's: the build runs once per run, so a fleet left waiting
         // on it ran its sessions on for the build's length when its spec

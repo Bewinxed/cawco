@@ -3475,6 +3475,7 @@ public enum OpenEnums {
     /// `#/components/schemas/QueueSlot`.
     public enum QueueSlot: OpenEnum {
         case build
+        case heavy
         case sim
         case template
         /// A value this app does not know: a newer hub's.
@@ -3483,6 +3484,7 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "build": self = .build
+            case "heavy": self = .heavy
             case "sim": self = .sim
             case "template": self = .template
             default: self = .unrecognized(rawValue)
@@ -3492,6 +3494,7 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .build: "build"
+            case .heavy: "heavy"
             case .sim: "sim"
             case .template: "template"
             case let .unrecognized(rawValue): rawValue
@@ -3502,7 +3505,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.build, .sim, .template]
+        public static let allCases: [Self] = [.build, .heavy, .sim, .template]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

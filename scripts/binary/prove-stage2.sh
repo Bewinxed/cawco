@@ -78,6 +78,10 @@ for need in cawco-1 cawco-2 cawco-3 cawco-4 cawco-5 cawco-6 cawco-7 cawco-8 cawc
 done
 free_gb=$(df -BG --output=avail "$out" | tail -n 1 | tr -dc 0-9)
 (( free_gb >= 15 )) || { echo "only ${free_gb}G is free where $out is; the proof needs 15G (a full disk made podman fail with 'database or disk is full' in an earlier run)" >&2; exit 2; }
+# A heavy run: one of the machine's slots (scripts/lib/heavy-run.ts) for this shell's whole life, its cleanup included.
+# shellcheck source=../lib/heavy-run.sh
+source "$here/../lib/heavy-run.sh"
+heavy_run bash "$0" "$@"
 mkdir -p "$out/tmp" "$out/config" "$out/cache" "$out/logs" "$out/release" "$out/shared" "$out/image-host" "$out/image-machine"
 export TMPDIR="$out/tmp" XDG_CONFIG_HOME="$out/config" XDG_CACHE_HOME="$out/cache"
 export REGISTRY_AUTH_FILE="$out/config/auth.json"

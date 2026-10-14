@@ -13,7 +13,7 @@
  * it answered in `seen`.
  */
 import { Database } from "bun:sqlite";
-import { existsSync, readFileSync, rmSync, unlinkSync } from "node:fs";
+import { existsSync, renameSync, rmSync, unlinkSync } from "node:fs";
 import {
   chmod,
   mkdir,
@@ -29,6 +29,8 @@ import { SessiondClient } from "../packages/agent/src/sessiond-client";
 import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
 import { DEPS_INSTALLING, depsScript } from "../packages/core/src/move";
 import { socketPathProblem } from "../packages/core/src/paths";
+import { openLockFile, tryLock, unlock } from "./lib/flock";
+import { heavySlot } from "./lib/heavy-run";
 import { STARTER_ENV } from "./scratch-fleet-leash";
 
 /**
@@ -61,23 +63,44 @@ for (const name of GIT_REPOSITORY_ENV) {
 export type Harness = "claude" | "opencode" | "pi";
 export const HARNESSES: Harness[] = ["claude", "opencode", "pi"];
 
+/**
+ * How Claude Code opens the words a person sent while a turn ran, which it
+ * delivers mid-turn one of two ways: in a `<system-reminder>` block of the
+ * next user message, beside a tool's result (the scratch fleet's Claude
+ * Code, probe-kit spec `mid-turn`, 2026-10-14), or as a `role: "system"`
+ * message of their own (its `api_system` message, `{type:"api_system",
+ * message:{role:"system",content:e}}` in Claude Code 2.1.299; Caw's
+ * session, probe-kit spec `caw-threads`).
+ */
+export const MID_TURN = "The user sent a new message while you were working:";
+
 /** One request the mock answered. */
 export interface Seen {
   /**
    * The request answers a tool call: its last message is the tool's result
    * (a `tool` message on chat completions, a `tool_result` block on
-   * Anthropic messages). `last` is still the user's prompt then.
+   * Anthropic messages).
    */
   afterTool: boolean;
-  /** Every user message's text, joined: the conversation so far. */
+  /**
+   * The person's words so far, joined in order: every user message's text,
+   * and every system message of words read mid-turn, each whole as sent
+   * (words read mid-turn open with {@link MID_TURN}).
+   */
   all: string;
   at: number;
   /** The credential the request carried (its `authorization`, else its `x-api-key`): which account it ran on. */
   auth: string;
   /** The request's body as sent: where a catalog tool (OpenCode's Code Mode) is named. */
   body: string;
-  /** The last user message's text: what started this request. */
+  /**
+   * What started this request: the last user message's text, or, when the
+   * newest message carries words read mid-turn, those words from
+   * {@link MID_TURN} on (then {@link lastMidTurn}).
+   */
   last: string;
+  /** `last` is words read mid-turn, opening with {@link MID_TURN}. */
+  lastMidTurn: boolean;
   /** The names of the tools it offered, loaded ones only. */
   toolNames: string[];
   /** Whether the harness offered tools: a session's turn, not a side call (a title). */
@@ -319,11 +342,14 @@ function fleetRoots(): { scratch: string; short: string } {
 }
 
 /**
- * The file in each folder a fleet makes that names the process it belongs
- * to (`{ pid, at }`): what proves a folder left behind is a dead fleet's
- * ({@link sweepDeadFleets}). A folder without one is never swept.
+ * The file in each folder a fleet makes whose lock (lib/flock.ts) the
+ * fleet's process holds for the folder's whole life: what proves a folder
+ * left behind is a dead fleet's, across pid namespaces, a pid in a file
+ * proving nothing there ({@link sweepDeadFleets}). It is locked before it
+ * has this name, so no sweep finds it unheld while its fleet lives. A
+ * folder without one is never swept.
  */
-const OWNER_FILE = ".scratch-fleet";
+const OWNER_FILE = ".scratch-fleet.lock";
 
 /** Every two-hex name, in an order of its own each draw. */
 function shuffledHex(): string[] {
@@ -347,17 +373,36 @@ function shuffledHex(): string[] {
 class FleetDirs {
   readonly dirs: string[] = [];
   readonly #stops: (() => Promise<void> | void)[] = [];
+  /** The held locks of the folders' {@link OWNER_FILE}s, let go once the folders are gone. */
+  readonly #locks: number[] = [];
 
-  /** `dir`, made (with its parents) and stamped as this process's. */
+  /**
+   * `dir`, made (with its parents) and stamped as this process's: its
+   * {@link OWNER_FILE}, made and locked under a name of its own, then
+   * renamed into place.
+   */
   async own(dir: string, mode?: number): Promise<string> {
     await mkdir(dir, { recursive: true, mode });
     this.dirs.push(dir);
     LIVE.add(this);
-    await writeFile(
-      join(dir, OWNER_FILE),
-      JSON.stringify({ pid: process.pid, at: Date.now() })
+    const staged = join(
+      dir,
+      `${OWNER_FILE}.${crypto.randomUUID().slice(0, 8)}`
     );
+    const fd = openLockFile(staged, true);
+    if (!tryLock(fd)) {
+      throw new Error(`${staged}, made just now, is locked by another process`);
+    }
+    this.#locks.push(fd);
+    renameSync(staged, join(dir, OWNER_FILE));
     return dir;
+  }
+
+  /** Lets every folder's lock go. */
+  #unlockAll(): void {
+    for (const fd of this.#locks.splice(0)) {
+      unlock(fd);
+    }
   }
 
   /**
@@ -405,6 +450,7 @@ class FleetDirs {
       // biome-ignore lint/performance/noAwaitInLoops: a handful of dirs
       await rm(dir, { recursive: true, force: true });
     }
+    this.#unlockAll();
   }
 
   /** Deletes every folder now, from an exit or a signal, where nothing can wait. */
@@ -413,6 +459,7 @@ class FleetDirs {
     for (const dir of this.dirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
     }
+    this.#unlockAll();
   }
 
   /** Leaves the folders for reading: unstamped, so no sweep takes them. */
@@ -425,6 +472,7 @@ class FleetDirs {
         // already gone
       }
     }
+    this.#unlockAll();
   }
 }
 
@@ -458,10 +506,11 @@ const PID_ENTRY = /^\d+$/;
 /**
  * Whether a live process holds `dir`: has it as its working directory, an
  * open file under it, or a path under it in its environment (a service's
- * HOME, XDG_RUNTIME_DIR, database). Read from /proc; a process this one may
- * not read is not counted. Elsewhere (macOS) none is known to, and the
- * owner's pid answers alone: a fleet's services end under the leash once it
- * is gone.
+ * HOME, XDG_RUNTIME_DIR, database). Read from /proc, which shows only this
+ * process's pid namespace, so it can keep a folder, never prove one dead
+ * (the folder's lock does that); a process this one may not read is not
+ * counted. Elsewhere (macOS) none is known to, and the lock answers alone: a
+ * fleet's services end under the leash once its process is gone.
  */
 async function heldByLive(dir: string): Promise<boolean> {
   if (process.platform !== "linux") {
@@ -469,7 +518,8 @@ async function heldByLive(dir: string): Promise<boolean> {
   }
   const under = (path: string) => path === dir || path.startsWith(`${dir}/`);
   for (const entry of await readdir("/proc")) {
-    if (!PID_ENTRY.test(entry)) {
+    // Never this process: the sweep holds the folder's lock file open.
+    if (!PID_ENTRY.test(entry) || entry === String(process.pid)) {
       continue;
     }
     const at = `/proc/${entry}`;
@@ -497,25 +547,16 @@ async function heldByLive(dir: string): Promise<boolean> {
   return false;
 }
 
-/** Whether `pid` names a running process (one this process may signal or not). */
-const alive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
-};
-
 /**
  * Removes the folders of scratch fleets that died before they cleaned up (a
  * SIGKILL, a host that went down), from the roots every fleet uses: those
- * stamped before `before` by a process that is gone, which no live process
- * holds. A folder whose owner's pid runs (its own, or a pid given to another
- * process since) is kept. The probe kit runs it as a run starts. Answers the
- * folders removed.
+ * whose {@link OWNER_FILE} lock no process holds, in any workspace or on the
+ * host (the kernel let it go when the fleet's process ended), and which no
+ * live process this one can see holds ({@link heldByLive}). The sweep holds
+ * the lock while it removes the folder. The probe kit runs it as a run
+ * starts. Answers the folders removed.
  */
-export async function sweepDeadFleets(before: number): Promise<string[]> {
+export async function sweepDeadFleets(): Promise<string[]> {
   const { scratch, short } = fleetRoots();
   const removed: string[] = [];
   for (const root of new Set([scratch, short])) {
@@ -523,24 +564,25 @@ export async function sweepDeadFleets(before: number): Promise<string[]> {
     const entries = await readdir(root).catch(() => [] as string[]);
     for (const entry of entries) {
       const dir = join(root, entry);
-      let owner: { at?: unknown; pid?: unknown };
+      let fd: number;
       try {
-        owner = JSON.parse(readFileSync(join(dir, OWNER_FILE), "utf8"));
+        fd = openLockFile(join(dir, OWNER_FILE), false);
       } catch {
         continue;
       }
-      if (
-        typeof owner.at !== "number" ||
-        typeof owner.pid !== "number" ||
-        owner.at >= before ||
-        alive(owner.pid) ||
-        // biome-ignore lint/performance/noAwaitInLoops: one folder at a time, each read against every process
-        (await heldByLive(dir))
-      ) {
-        continue;
+      try {
+        if (
+          !tryLock(fd) ||
+          // biome-ignore lint/performance/noAwaitInLoops: one folder at a time, each read against every process
+          (await heldByLive(dir))
+        ) {
+          continue;
+        }
+        await rm(dir, { recursive: true, force: true });
+        removed.push(dir);
+      } finally {
+        unlock(fd);
       }
-      await rm(dir, { recursive: true, force: true });
-      removed.push(dir);
     }
   }
   return removed;
@@ -627,16 +669,31 @@ export interface SendSnapshot {
  * the mock, a signed-in fake Claude account, a repository with a remote) and
  * returns what drives it. Nothing runs until the probe launches it. A setup
  * that fails takes what it made and started with it.
+ *
+ * A fleet is a heavy run: it holds one of the machine's slots
+ * (lib/heavy-run.ts) from its setup until `close`, waiting for one when all
+ * are held; a probe kit spec's fleet shares the spec's.
  */
 export async function scratchFleet(options: {
   name: string;
   respond: (request: Seen) => Reply;
 }) {
+  const slot = await heavySlot();
   const dirs = new FleetDirs();
   try {
-    return await standUp(options, dirs);
+    const fleet = await standUp(options, dirs);
+    const { close } = fleet;
+    fleet.close = async () => {
+      try {
+        await close();
+      } finally {
+        slot.release();
+      }
+    };
+    return fleet;
   } catch (error) {
     await dirs.remove();
+    slot.release();
     throw error;
   }
 }
@@ -721,9 +778,24 @@ async function standUp(
       if (path.endsWith("/count_tokens")) {
         return Response.json({ input_tokens: 100 });
       }
-      const users = (body.messages ?? []).filter(
-        (message) => message.role === "user"
-      );
+      // The person's words, in order: user messages, and the system
+      // messages that carry words read mid-turn; never another system
+      // message (a chat completion's system prompt). `text` is the whole
+      // message, for `all`; `said` is what `last` reads: from `MID_TURN` on
+      // when the message carries words read mid-turn.
+      const words = (body.messages ?? []).flatMap((message) => {
+        if (message.role !== "user" && message.role !== "system") {
+          return [];
+        }
+        const text = textOf(message.content);
+        const at = text.indexOf(MID_TURN);
+        if (at >= 0) {
+          return [{ text, said: text.slice(at), midTurn: true }];
+        }
+        return message.role === "user"
+          ? [{ text, said: text, midTurn: false }]
+          : [];
+      });
       const final = body.messages?.at(-1);
       const one: Seen = {
         at: Date.now(),
@@ -737,9 +809,10 @@ async function standUp(
             (final.content as { type?: string }[]).some(
               (block) => block.type === "tool_result"
             )),
-        all: users.map((user) => textOf(user.content)).join("\n"),
+        all: words.map((said) => said.text).join("\n"),
         body: JSON.stringify(body),
-        last: textOf(users.at(-1)?.content),
+        last: words.at(-1)?.said ?? "",
+        lastMidTurn: words.at(-1)?.midTurn === true,
         tools: (body.tools?.length ?? 0) > 0,
         // Anthropic names a tool at its top; chat completions, in `function`.
         toolNames: (body.tools ?? []).flatMap((tool) => {

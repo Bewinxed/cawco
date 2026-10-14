@@ -72,6 +72,14 @@ if [[ -n ${CAWCO_WORKSPACE:-} && $PLATFORM != ios ]]; then
   echo "Signed builds, device builds and TestFlight run from the orchestrator's shell, not a CawCo workspace: hand the commit to your parent. Here, build the iOS Simulator only: build-both.sh ios [--compile-only]." >&2
   exit 2
 fi
+# Built on this Mac, the build is a heavy run here: one of this machine's slots
+# (scripts/lib/heavy-run.ts) for this shell's life. Over SSH the build is the
+# Mac's, behind its build slot.
+if [[ $(uname -s) == Darwin ]]; then
+  # shellcheck source=../../../scripts/lib/heavy-run.sh
+  source scripts/lib/heavy-run.sh
+  heavy_run bash apps/apple/scripts/build-both.sh "$@"
+fi
 
 # Pass the authoritative workspace inventory from this host, never the Mac's
 # copies. Fail before retirement if the inventory cannot be read.

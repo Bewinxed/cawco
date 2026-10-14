@@ -124,12 +124,10 @@ const respond = (request: Seen): Reply => {
     return reply;
   }
   // Every plain ask not yet answered, wherever the turn read it: words sent
-  // beside his question reach the model mid-turn, after its answer, as a
-  // `system` message ("The user sent a new message while you were working"),
-  // which `last` and `all` (user messages only) do not carry; the request's
-  // own body does.
+  // beside his question reach the model mid-turn, after its answer (`all`
+  // carries them, scratch-fleet.ts `MID_TURN`).
   const plain = [
-    ...new Set([...request.body.matchAll(PLAIN)].map((m) => m[1] ?? "")),
+    ...new Set([...request.all.matchAll(PLAIN)].map((m) => m[1] ?? "")),
   ].filter((tag) => tag && !answeredPlain.has(tag));
   if (plain.length > 0) {
     for (const tag of plain) {

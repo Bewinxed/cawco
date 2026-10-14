@@ -1631,8 +1631,8 @@ export const CONTROL_RUN_COMMAND = "runCommand";
 
 /**
  * The line a command prints, on stdout or stderr, as it starts and stops
- * waiting for a shared machine slot (apps/apple/scripts/mac-slot.sh and
- * build-both.sh print it):
+ * waiting for a shared machine slot (apps/apple/scripts/mac-slot.sh,
+ * build-both.sh and scripts/lib/heavy-run.ts print it):
  *
  *   CAWCO-QUEUE wait <slot>: <who holds it, and for how long>
  *   CAWCO-QUEUE held <slot>
@@ -1648,6 +1648,7 @@ export const QUEUE_MARKER = "CAWCO-QUEUE";
 /** The shared slots a command may queue for, as the status names each. */
 export const QUEUE_SLOTS = {
   build: "the Mac's build slot",
+  heavy: "a heavy-run slot",
   sim: "a simulator slot",
   template: "the simulator template lock",
 } as const;

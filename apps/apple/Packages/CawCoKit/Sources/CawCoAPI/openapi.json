@@ -41702,6 +41702,7 @@
         "type": "string",
         "enum": [
           "build",
+          "heavy",
           "sim",
           "template"
         ]

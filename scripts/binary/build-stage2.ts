@@ -11,10 +11,14 @@
  * fleet's own: an older agent applies a build whose keeper runs beside its
  * own, and that build's agent hands the keeper over. Builds 2 to 12 are this
  * tree's.
+ *
+ * A heavy run: it holds one of the machine's slots (lib/heavy-run.ts) for
+ * its whole life, waiting for one when all are held.
  */
 import { mkdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { agentSdkVersion, buildBinary } from "../build-binary";
+import { heavySlot } from "../lib/heavy-run";
 import { stageNativeClaude } from "./native-tarball";
 
 /** The commit before keepers ran side by side (packages/core/src/keepers.ts). */
@@ -24,6 +28,8 @@ const [, , output] = Bun.argv;
 if (!output?.startsWith("/")) {
   throw new Error("Usage: bun scripts/binary/build-stage2.ts /absolute/output");
 }
+// Held until this process exits: the kernel frees it then.
+await heavySlot();
 const run = async (argv: string[], cwd?: string) => {
   const child = Bun.spawn(argv, {
     stdout: "inherit",

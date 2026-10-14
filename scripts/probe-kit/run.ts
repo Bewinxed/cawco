@@ -67,7 +67,7 @@ const chosen = named.length > 0 ? named : all;
 const started = performance.now();
 // Folders of scratch fleets that died before they cleaned up (a SIGKILL), out
 // of the 256 names a fleet's HOME and runtime dir are drawn from.
-const swept = await sweepDeadFleets(Date.now());
+const swept = await sweepDeadFleets();
 if (swept.length > 0) {
   console.log(
     `… removed ${swept.length} folder(s) of scratch fleets that died: ${swept.join(", ")}`
