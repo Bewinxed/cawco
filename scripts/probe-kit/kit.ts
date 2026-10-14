@@ -10,7 +10,7 @@
  * Compositing is in software (`--disable-gpu`), so a host with a GPU and
  * one without draw the same frame.
  */
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
   type Browser,
@@ -269,6 +269,9 @@ export class Run {
       "probe-kit",
       spec.name
     );
+    // Its folder holds this run's files alone: one an earlier run left there
+    // would read as this run's evidence.
+    await rm(out, { recursive: true, force: true });
     await mkdir(out, { recursive: true });
     const kit: Kit = {
       spec: spec.name,

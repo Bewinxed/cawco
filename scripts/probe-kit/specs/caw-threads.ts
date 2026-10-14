@@ -237,7 +237,11 @@ function appPath(): string {
   );
 }
 
-/** What a failed run leaves in its out folder: the mock's last asks, every thread's rows, the hub's log. */
+/**
+ * What every run leaves in its out folder, however it ends: the mock's last
+ * asks, every thread's rows, the sends, the services' logs. A check can fail
+ * and the run still end, so the files are this run's whichever check failed.
+ */
 const evidence = async (kit: Kit, fleet: KitFleet): Promise<void> => {
   await mkdir(kit.out, { recursive: true });
   await writeFile(
@@ -298,9 +302,12 @@ const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
   try {
     await steps(kit, fleet);
-  } catch (error) {
-    await evidence(kit, fleet).catch(() => undefined);
-    throw error;
+  } finally {
+    await evidence(kit, fleet).catch((error: unknown) =>
+      kit.note(
+        `its evidence was not written: ${error instanceof Error ? error.message : String(error)}`
+      )
+    );
   }
 };
 
