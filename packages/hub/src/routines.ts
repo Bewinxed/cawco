@@ -348,17 +348,32 @@ export const slotLabel = (slot: string, timeZone: string): string => {
   }).format(new Date(slot));
 };
 
+/** A cron field that repeats (`*`, `*\/15`, `0-30/5`) rather than naming fixed values. */
+const REPEATS = /[*/]/;
+const CRON_FIELDS = /\s+/;
+
+/**
+ * Whether a schedule runs at fixed times of day: its minute and hour fields
+ * name values, with no `*` or `/` (a six-field cron has seconds first).
+ */
+const atFixedTimes = (cron: string): boolean => {
+  const fields = cron.trim().split(CRON_FIELDS);
+  const [minute, hour] = fields.length >= 6 ? fields.slice(1) : fields;
+  return !(REPEATS.test(minute ?? "*") || REPEATS.test(hour ?? "*"));
+};
+
 /**
  * A routine's schedule as the person reads it: its cron in words
  * (cronstrue, on a 24-hour clock), in its zone, and its next run while it
- * is on.
+ * is on. Verbose only at fixed times of day ("At 03:00, every day"): an
+ * interval's verbose words repeat themselves ("every hour, every day").
  */
 export const scheduleOf = (
   routine: Pick<RoutineRow, "cron" | "enabled" | "nextSlot" | "timeZone">
 ): RoutineSchedule => ({
   cron: routine.cron,
   timeZone: routine.timeZone,
-  words: `${cronstrue.toString(routine.cron, { use24HourTimeFormat: true, verbose: true })} (${routine.timeZone})`,
+  words: `${cronstrue.toString(routine.cron, { use24HourTimeFormat: true, verbose: atFixedTimes(routine.cron) })} (${routine.timeZone})`,
   nextAt: routine.enabled ? routine.nextSlot.getTime() : null,
 });
 
