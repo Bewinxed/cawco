@@ -14,9 +14,10 @@
  *   is folded exactly where a tab ranked above covers its foot as the two
  *   are drawn: at rest, under the lift, through a neighbour's slide and the
  *   release's settle, and at every 5% of a switch (DESIGN.md, Folder tabs).
- * - shuffle: a switch slides the tab being chosen out past its neighbour's
- *   foot and back on one run of translate, the stack swapping at the
- *   furthest point with no foot changing there; with less motion, at once.
+ * - shuffle: a switch parts the tab being chosen and the tab it leaves,
+ *   half the clearance each, and brings them back, a run of translate on
+ *   each on one clock, the stack swapping at the furthest point with no
+ *   foot changing there; with less motion, at once.
  * - follow: every pointermove puts the dragged tab's left edge where the
  *   pointer's travel says, within 1px, clamped to the strip's ends.
  * - no capture: nothing is added to the page during a drag that is an img,
@@ -861,16 +862,18 @@ const drawn = (page: Page) =>
   );
 
 /**
- * Alpha chosen, Bravo clicked: Bravo slides out away from Alpha, past
- * Alpha's foot (the overlap, the flare and --space-1), comes in front at
- * the furthest point, and slides back, now in front; one run of translate,
- * scrubbed over the Animation domain. With less motion the swap is instant.
+ * Alpha chosen, Bravo clicked: the two part by the clearance (the overlap,
+ * the flare and --space-1 between them, each clear of the other's foot),
+ * Bravo away from Alpha and Alpha the other way as far as its room goes
+ * (none: its foot stands on the pane's edge); Bravo comes in front at the
+ * furthest point and both slide back. A run of translate on each, scrubbed
+ * over the Animation domain. With less motion the swap is instant.
  */
 async function shuffled(kit: Kit, base: string, ids: string[]) {
   const [alpha, bravo] = ids as [string, string];
   const page = await strip(kit, base, ids, alpha);
   const rest = await drawn(page);
-  const out = await page.evaluate(() => {
+  const clear = await page.evaluate(() => {
     const s = getComputedStyle(
       document.querySelector(".ff-tabs-list") as Element
     );
@@ -880,13 +883,14 @@ async function shuffled(kit: Kit, base: string, ids: string[]) {
   const clock = await Clock.on(page);
   const at = await grip(page, bravo);
   await clock.catchRuns(() => page.mouse.click(at.x, at.y), STRIPS);
-  const shuffle = clock.runs.find((run) => run.name === "tab-shuffle");
+  const slides = clock.runs.filter((run) => run.name === "tab-shuffle");
+  const [shuffle] = slides;
   const picks = clock.runs.filter((run) => run.name === "--pick");
   kit.check(
-    "shuffle: the switch is one run of translate on Bravo (tab-shuffle) with the tabs' --pick on its clock (one start, one length)",
-    Boolean(shuffle) &&
+    "shuffle: the switch is a run of translate on each of Bravo and Alpha (tab-shuffle) with the tabs' --pick on their clock (one start, one length)",
+    slides.length === 2 &&
       picks.length >= 2 &&
-      picks.every(
+      [...slides, ...picks].every(
         (run) =>
           run.start !== null &&
           shuffle?.start !== null &&
@@ -910,22 +914,33 @@ async function shuffled(kit: Kit, base: string, ids: string[]) {
     bare.push(...(await covers(page)).map((w) => `${f * 100}%: ${w}`));
     const [a, b] = now as [(typeof now)[number], (typeof now)[number]];
     frames.push(
-      `${Math.round(f * 100)}%: Bravo +${(b.left - (rest[1]?.left ?? 0)).toFixed(1)}px, z Alpha ${a.z} Bravo ${b.z}, Bravo start ${b.foldStart ? "folded" : "flared"}, Alpha end ${a.foldEnd ? "folded" : "flared"}, pick ${a.pick.toFixed(2)}/${b.pick.toFixed(2)}`
+      `${Math.round(f * 100)}%: Bravo +${(b.left - (rest[1]?.left ?? 0)).toFixed(1)}px, Alpha ${(a.left - (rest[0]?.left ?? 0)).toFixed(1)}px, z Alpha ${a.z} Bravo ${b.z}, Bravo start ${b.foldStart ? "folded" : "flared"}, Alpha end ${a.foldEnd ? "folded" : "flared"}, pick ${a.pick.toFixed(2)}/${b.pick.toFixed(2)}`
     );
   }
   await clock.release();
-  const offset = (f: number) =>
-    (rows[f]?.[1]?.left ?? 0) - (rest[1]?.left ?? 0);
+  /** How far tab `k` stands out at `f`, away from the other (Bravo right, Alpha left). */
+  const offset = (k: 0 | 1, f: number) =>
+    ((rows[f]?.[k]?.left ?? 0) - (rest[k]?.left ?? 0)) * (k === 1 ? 1 : -1);
+  /** Tab `k` out to its furthest at 50% and back, never past it. */
+  const parts = (k: 0 | 1) => {
+    const peak = offset(k, 0.5);
+    return (
+      near(offset(k, 0), 0, 0.5) &&
+      [0.25, 0.75].every(
+        (f) => offset(k, f) > -0.5 && offset(k, f) < peak + 0.5
+      ) &&
+      near(offset(k, 1), 0, 0.5)
+    );
+  };
+  // Alpha, the strip's first tab, stands with its foot on the pane's edge,
+  // which clips: it has no room to go, and Bravo goes the whole way.
   const front = (f: number) => (rows[f]?.[1]?.z ?? 0) > (rows[f]?.[0]?.z ?? 0);
   kit.check(
-    `shuffle: Bravo slides out away from Alpha to the furthest point at 50% (${out}px: the overlap, the flare and --space-1) and back to its slot`,
-    near(offset(0), 0, 0.5) &&
-      offset(0.25) > 1 &&
-      offset(0.25) < out - 1 &&
-      near(offset(0.5), out, 0.5) &&
-      offset(0.75) > 1 &&
-      offset(0.75) < out - 1 &&
-      near(offset(1), 0, 0.5),
+    `shuffle: Bravo and Alpha part by ${clear}px at 50% (the overlap, the flare and --space-1), Alpha at the pane's edge staying and Bravo going the whole of it, and back to their slots`,
+    parts(1) &&
+      parts(0) &&
+      near(offset(1, 0.5) + offset(0, 0.5), clear, 0.5) &&
+      near(offset(0, 0.5), 0, 0.5),
     frames.join(" | ")
   );
   kit.check(

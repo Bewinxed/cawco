@@ -92,20 +92,31 @@
      A switch is a shuffle, not a fold (owner: "instead of the fold we can
      have a fold like right-forward-left, so the tab that is "behind" slides
      to be in front of the other tabs"): the tab being chosen slides out
-     sideways, away from its neighbour toward the tab it leaves, just far
-     enough to clear that neighbour's foot (the overlap, the flare and
-     `--space-1`); at the furthest point the stack is ranked for the new
-     choice, so it comes in front and the tab it leaves drops back; and it
-     slides back into its slot, in front. Out and back are one run of
-     `translate` on the compositor (`tab-shuffle`), each half on the
-     choice's curve over half its length (`--choose-dur`,
-     `--choose-ease`), and the stack is read off that run's own clock each
-     frame, so a slowed or seeked clock swaps it with the slide. Under a
-     gesture (the root's `travel`) the run stands where the gesture's
-     fraction puts it. With less motion the choice is instant: the stack
-     ranked for it at once, nothing slides. A tab lifted by a drag
-     (`data-lifted`, workspace/tab-drag) stands over every tab, both its
-     feet drawn. */
+     sideways, away from the tab it leaves, and the tab it leaves slides out
+     the other way, so each parts from the neighbour it changes places with
+     by the clearance (the overlap, the flare and `--space-1`) and stands
+     clear of that neighbour's foot; at the furthest point the stack is
+     ranked for the new choice, so the one comes in front and the other
+     drops back; and both slide back into their slots. Side by side the two
+     part from each other, each going half the clearance, and where one has
+     less room before something cuts its foot off (a strip's end, a column's
+     edge) the other goes the rest; on a jump each parts from the tab
+     between them, which stays, and goes the whole of it (`slidesOf`,
+     `roomOf`). Seams between
+     two tabs neither of which moves (a jump past more than one) change
+     places in place at the furthest point: both stand unchosen there, in
+     the same fill. Out and back are a run of `translate` on each moving tab
+     on the compositor (`tab-shuffle`), each half on the choice's curve over
+     half its length (`--choose-dur`, `--choose-ease`), and the stack is
+     read off their clock each frame, so a slowed or seeked clock swaps it
+     with the slide. The strip's scroll and its fades leave each moving tab
+     room for its slide (`slideRoom`), and a track with nothing past its
+     ends draws neither mask nor clip while a shuffle runs, so a tab sliding
+     past its end is drawn whole. Under a gesture (the root's `travel`) the
+     runs stand where the gesture's fraction puts them. With less motion the
+     choice is instant: the stack ranked for it at once, nothing slides. A
+     tab lifted by a drag (`data-lifted`, workspace/tab-drag) stands over
+     every tab, both its feet drawn. */
   /** The item a tab is laid out as: the tab, or the host's box round it. */
   function laidOf(item: HTMLElement, track: HTMLElement): HTMLElement {
     let laid = item;
@@ -114,7 +125,7 @@
     }
     return laid;
   }
-  /** The shuffle's run's id, on the tab being chosen. */
+  /** The shuffle's runs' id, on each tab a switch moves. */
   const SHUFFLE = "tab-shuffle";
   /** The item a drag has lifted, laid out (`data-lifted`), if one is. */
   let lifted = $state<HTMLElement | null>(null);
@@ -205,7 +216,10 @@
   }
   /** The shuffle under way, from one choice to another, and its frame. */
   let shuffle: {
-    run: Animation;
+    /** Each moving tab's slide, the tab being chosen's first: one clock. */
+    runs: Animation[];
+    /** How far each moving tab goes out, px, signed, by its index. */
+    slides: Map<number, number>;
     from: number;
     to: number;
     frame: number;
@@ -224,13 +238,98 @@
       easing: style.getPropertyValue("--choose-ease").trim() || "ease",
     };
   };
-  /** How far the tab being chosen slides out, px: past its neighbour's foot. */
+  /** How far two tabs part to change places, px: each clear of the other's foot. */
   const clearance = (track: HTMLElement) => {
     const style = getComputedStyle(track);
     const px = (name: string) =>
       Number.parseFloat(style.getPropertyValue(name)) || 0;
     return px("--overlap") + px("--flare") + px("--space-1");
   };
+  /**
+   * How far a tab's foot can go each way before something cuts it off, px,
+   * as the track stands: the strip's own ends while it runs past them (it
+   * scrolls, and clips at its content), else the boxes round it that clip
+   * (up to a fixed one, which nothing round it clips) and the window.
+   */
+  function roomOf(track: HTMLElement) {
+    const flare =
+      Number.parseFloat(getComputedStyle(track).getPropertyValue("--flare")) ||
+      0;
+    let lo = 0;
+    let hi = innerWidth;
+    if (overflows) {
+      lo =
+        track.getBoundingClientRect().left +
+        track.clientLeft -
+        track.scrollLeft;
+      hi = lo + track.scrollWidth;
+    } else {
+      for (
+        let up = track.parentElement;
+        up && up !== document.documentElement;
+        up = up.parentElement
+      ) {
+        const style = getComputedStyle(up);
+        if (style.overflowX !== "visible") {
+          const left = up.getBoundingClientRect().left + up.clientLeft;
+          lo = Math.max(lo, left);
+          hi = Math.min(hi, left + up.clientWidth);
+        }
+        if (style.position === "fixed") {
+          break;
+        }
+      }
+    }
+    return (item: HTMLElement | undefined, way: number) => {
+      if (!item) {
+        return 0;
+      }
+      const box = item.getBoundingClientRect();
+      return Math.max(
+        0,
+        way < 0 ? box.left - flare - lo : hi - (box.right + flare)
+      );
+    };
+  }
+  /**
+   * How far each of the two tabs a switch from `from` to `to` moves slides
+   * out, px, signed, by index: the tab being chosen away from the tab it
+   * leaves, that one the other way. Side by side they part from each other
+   * by the clearance, half each, and where one has less room than that the
+   * other goes the rest; on a jump each parts from the tab between, which
+   * stays, by the whole of it, as far as its room goes.
+   */
+  function slidesOf(
+    track: HTMLElement,
+    items: HTMLElement[],
+    from: number,
+    to: number
+  ): Map<number, number> {
+    const way = Math.sign(to - from);
+    const clear = clearance(track);
+    const room = roomOf(track);
+    const moverRoom = room(items[to], way);
+    const leaverRoom = room(items[from], -way);
+    let mover = Math.min(clear, moverRoom);
+    let leaver = Math.min(clear, leaverRoom);
+    if (Math.abs(to - from) === 1) {
+      mover = Math.min(clear / 2, moverRoom);
+      leaver = Math.min(clear - mover, leaverRoom);
+      mover = Math.min(clear - leaver, moverRoom);
+    }
+    return new Map([
+      [to, way * mover],
+      [from, -way * leaver],
+    ]);
+  }
+  /** How far, and which way, the tab at `i` slides out in the shuffle under way, px; 0 for one it does not move. */
+  const slideRoom = (i: number | null) =>
+    i === null ? 0 : (shuffle?.slides.get(i) ?? 0);
+  /** A box with `out` px more room on the side its slide goes. */
+  const reach = (box: { left: number; width: number }, out: number) => ({
+    left: box.left + Math.min(0, out),
+    width: box.width + Math.abs(out),
+  });
   /** Ends the shuffle, its slide gone, the stack ranked for `chosen`. */
   function settleShuffle(
     track: HTMLElement,
@@ -244,18 +343,21 @@
     }
     shuffle = null;
     cancelAnimationFrame(was.frame);
-    if (how === "finish") {
-      was.run.finish();
-    } else {
-      was.run.cancel();
+    for (const run of was.runs) {
+      if (how === "finish") {
+        run.finish();
+      } else {
+        run.cancel();
+      }
     }
     track.removeAttribute("data-shuffling");
     stack(track, items, chosen);
   }
   /**
-   * The tab at `to` slides out from under its neighbour toward `from` and
-   * back, coming in front at the furthest point. Started playing, or held
-   * (`paused`) for a gesture to place.
+   * The tab at `to` slides out away from `from` and back, coming in front
+   * at the furthest point, and the tab at `from` slides out the other way
+   * and back, dropping behind there. Started playing, or held (`paused`)
+   * for a gesture to place.
    */
   function startShuffle(
     track: HTMLElement,
@@ -269,42 +371,72 @@
       return;
     }
     stack(track, items, from);
-    const out = clearance(track) * Math.sign(to - from);
+    const slides = slidesOf(track, items, from, to);
     const { duration, easing } = timing(track);
-    const run = laidOf(mover, track).animate(
-      [
-        { translate: "0px 0px", easing },
-        { translate: `${out}px 0px`, easing, offset: 0.5 },
-        { translate: "0px 0px" },
-      ],
-      { id: SHUFFLE, duration }
-    );
+    const slide = (item: HTMLElement | undefined, by: number) =>
+      item
+        ? [
+            laidOf(item, track).animate(
+              [
+                { translate: "0px 0px", easing },
+                { translate: `${by}px 0px`, easing, offset: 0.5 },
+                { translate: "0px 0px" },
+              ],
+              { id: SHUFFLE, duration }
+            ),
+          ]
+        : [];
+    const runs = [
+      ...slide(mover, slides.get(to) ?? 0),
+      ...slide(items[from], slides.get(from) ?? 0),
+    ];
+    const [lead] = runs as [Animation];
     if (paused) {
-      run.pause();
+      for (const run of runs) {
+        run.pause();
+      }
     }
     track.toggleAttribute("data-shuffling", true);
-    const now = { run, from, to, frame: 0, swapped: false, held: paused };
+    const now = {
+      runs,
+      slides,
+      from,
+      to,
+      frame: 0,
+      swapped: false,
+      held: paused,
+    };
     shuffle = now;
+    // Ranked by the tabs themselves, in the strip as it stands each frame:
+    // a tab that opens or closes meanwhile moves the others' places.
+    const leaving = items[from] as HTMLElement;
+    const rank = (around: HTMLElement) => {
+      const fresh = rects.items;
+      return { fresh, at: fresh.indexOf(around) };
+    };
     const step = () => {
       if (shuffle !== now) {
         return;
       }
-      const at = Number(run.currentTime ?? 0) / duration;
+      const at = Number(lead.currentTime ?? 0) / duration;
       const past = at >= 0.5;
       if (past !== now.swapped) {
         now.swapped = past;
-        stack(track, items, past ? to : from);
+        const { fresh, at: chosen } = rank(past ? mover : leaving);
+        stack(track, fresh, chosen);
       }
-      if (run.playState === "finished") {
-        settleShuffle(track, items, to, "finish");
+      if (lead.playState === "finished") {
+        const { fresh, at: chosen } = rank(mover);
+        settleShuffle(track, fresh, chosen, "finish");
         return;
       }
       now.frame = requestAnimationFrame(step);
     };
     now.frame = requestAnimationFrame(step);
   }
-  /** The choice the stack was last ranked for, at rest. */
-  let shown: number | null = null;
+  /** The tab the stack was last ranked for, and the tabs the strip held then. */
+  let shown: HTMLElement | null = null;
+  let held = new Set<HTMLElement>();
   $effect(() => {
     const track = node;
     const { items } = rects;
@@ -335,16 +467,19 @@
       settleShuffle(track, items, chosen, "cancel");
       startShuffle(track, items, chosen, toward, true);
     }
-    const run = shuffle?.run;
-    if (run) {
-      run.currentTime =
-        Math.min(1, Math.max(0, fraction)) * timing(track).duration;
+    const at = Math.min(1, Math.max(0, fraction)) * timing(track).duration;
+    for (const run of shuffle?.runs ?? []) {
+      run.currentTime = at;
     }
   }
   /**
    * The choice where it now stands: a gesture let go (landed on its tab, or
-   * back where it began), a choice that shuffles to it, or the stack ranked
-   * for it at once.
+   * back where it began), a choice between two tabs the strip already held
+   * that shuffles to it, or the stack ranked for it at once. A tab that has
+   * just opened grows in at its place in front (PaneTabs `entering`), and a
+   * choice that moves because its tab closed moves at once: neither is a
+   * shuffle. The same choice again (the tabs measured anew) leaves a
+   * shuffle under way to run its course.
    */
   function land(
     track: HTMLElement,
@@ -352,6 +487,8 @@
     chosen: number,
     shuffles: boolean
   ) {
+    const next = items[chosen] ?? null;
+    const from = shown ? items.indexOf(shown) : -1;
     if (shuffle?.held) {
       settleShuffle(
         track,
@@ -359,20 +496,25 @@
         chosen,
         chosen === shuffle.to ? "finish" : "cancel"
       );
+    } else if (next === shown) {
+      if (!shuffle) {
+        stack(track, items, chosen);
+      }
     } else if (
       shuffles &&
-      shown !== null &&
-      shown >= 0 &&
-      chosen >= 0 &&
-      shown !== chosen &&
+      from >= 0 &&
+      next &&
+      held.has(next) &&
       motionOk.current
     ) {
-      settleShuffle(track, items, shown, "finish");
-      startShuffle(track, items, shown, chosen, false);
-    } else if (!shuffle) {
+      settleShuffle(track, items, from, "finish");
+      startShuffle(track, items, from, chosen, false);
+    } else {
+      settleShuffle(track, items, chosen, "finish");
       stack(track, items, chosen);
     }
-    shown = chosen;
+    shown = next;
+    held = new Set(items);
   }
   /** A drag's lift (`data-lifted` on a tab's box), heard as it comes and goes. */
   $effect(() => {
@@ -396,7 +538,9 @@
     watching = 0;
     if (shuffle) {
       cancelAnimationFrame(shuffle.frame);
-      shuffle.run.cancel();
+      for (const run of shuffle.runs) {
+        run.cancel();
+      }
       shuffle = null;
     }
   });
@@ -533,13 +677,16 @@
           Math.min(1, Math.max(0, travel.fraction))
         );
       } else {
+        // Each tab a switch moves, with the room its slide takes.
         rideFrom = null;
+        const left = outgoing === null ? undefined : rects.at(outgoing);
         to = inView(
           at,
-          rect,
+          reach(rect, slideRoom(list.optimisticIndex)),
           width,
           room,
-          outgoing === null ? undefined : rects.at(outgoing)
+          left && reach(left, slideRoom(outgoing)),
+          Number.parseFloat(style.getPropertyValue("--flare")) || 0
         );
       }
       if (Math.abs(to - at) > 0.5) {
@@ -575,7 +722,8 @@
     chosen: { left: number; width: number },
     width: number,
     room: { end: number; start: number },
-    keep?: { left: number; width: number }
+    keep?: { left: number; width: number },
+    feet = 0
   ): number {
     const fit = (r: { end: number; start: number }) => {
       const least = chosen.left + chosen.width + r.end - width;
@@ -587,18 +735,25 @@
     };
     const roomy = fit(room);
     /* While a switch runs, the tab it leaves is still drawn chosen: it
-       stays whole too, the edges' fades standing aside for both
-       (`capFades`), when the two fit the track together. Where they do
-       not, the tab being chosen is the one shown whole. */
+       stays whole too, its feet with it (`feet`, a folder tab's flare), the
+       edges' fades standing aside for both (`capFades`), when the two fit
+       the track together. Where they do not, the tab being chosen is the
+       one shown whole, feet and all. */
+    const shod = (r: { left: number; width: number }) => ({
+      left: r.left - feet,
+      width: r.width + 2 * feet,
+    });
     const whole = (s: number, r: { left: number; width: number }) =>
       r.left >= s - 0.5 && r.left + r.width <= s + width + 0.5;
-    if (!keep || whole(roomy, keep)) {
+    if (!keep || whole(roomy, shod(keep))) {
       return roomy;
     }
-    const least = Math.max(chosen.left + chosen.width, keep.left + keep.width);
-    const most = Math.min(chosen.left, keep.left);
+    const a = shod(chosen);
+    const b = shod(keep);
+    const least = Math.max(a.left + a.width, b.left + b.width);
+    const most = Math.min(a.left, b.left);
     if (least - width > most) {
-      return fit({ start: 0, end: 0 });
+      return fit({ start: feet, end: feet });
     }
     return Math.max(0, Math.min(most, Math.max(least - width, at)));
   }
@@ -658,7 +813,9 @@
     let start = Number.POSITIVE_INFINITY;
     let end = Number.POSITIVE_INFINITY;
     for (const i of [list.optimisticIndex, outgoing]) {
-      const r = i === null ? undefined : rects.at(i);
+      const box = i === null ? undefined : rects.at(i);
+      // Where its slide takes it, while a switch moves it.
+      const r = box && reach(box, slideRoom(i));
       if (r) {
         const before = r.left - at;
         const after = at + width - (r.left + r.width);
@@ -944,11 +1101,14 @@
     --choose-dur: var(--dur-settle);
     --choose-ease: var(--ease-crossfade);
 
-    /* While a shuffle runs on a track with nothing past its ends, the tab
+    /* While a shuffle runs on a track with nothing past its ends, a tab
        sliding out past the first or last tab is drawn whole, not cut at
-       the track's box; a track that scrolls keeps its clip, its ends faded. */
+       the track's box: no clip, and no edge-fade mask, which clips at the
+       box though it fades nothing there. A track that scrolls keeps both,
+       its scroll leaving room for the slide (`slideRoom`). */
     &.scrollable[data-shuffling]:not([data-overflows]) {
       overflow: visible;
+      mask-image: none;
     }
   }
 
