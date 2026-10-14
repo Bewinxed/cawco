@@ -662,7 +662,8 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
       return { images: images.length, filed: images.filter((el) => el.fileId && files.has(el.fileId)).length,
         focus: active ? `${active.tagName}.${active.className}`.slice(0, 80) : "none", carried, pointed };
     };
-    for (let i = 0; i < 50; i += 1) {
+    // Excalidraw writes the image's element first and its file once it has read and sized it.
+    for (let i = 0; i < 150; i += 1) {
       const now = read();
       if (now.filed > 0) return JSON.stringify(now);
       await new Promise((done) => setTimeout(done, 100));

@@ -170,7 +170,7 @@ enum CanvasProbe {
         await wait(0.8)
 
         // The rail stands clear of the top grab's band (44pt, then space2) and space3 in from the sides.
-        let rail = await room.web?.probeRail()
+        let rail = await railOf(room)
         railCheck(rail, over: "over the field", top: CanvasMeasure.grabHeight + Space.space2, side: room.probeShoulder)
 
         // The grab: 40% of the column, then the column less the field, each on one spring.
@@ -200,7 +200,7 @@ enum CanvasProbe {
         check("Dock stands the canvas's own view on the panel's page, its chip in the composer",
               docked && gap <= 1 && binding.canvas?.docked == true,
               "docked \(room.docked), the view against the panel's page \(f(gap, 2))pt off, chip \(composer.canvasChip != nil), note \(composer.probeCanvasNote ?? "none")")
-        railCheck(await room.web?.probeRail(), over: "docked", top: Space.space2, side: 0)
+        railCheck(await railOf(room), over: "docked", top: Space.space2, side: 0)
         room.web?.onUndock()
         let back = await until(15) { room.up && !room.moving && binding.canvas?.docked == false }
         await wait(1.0)
@@ -275,6 +275,21 @@ enum CanvasProbe {
             check("\(place) the rail stands at the foot, \(f(Space.space3))pt above it and \(f(room))pt in from its sides, inside the page",
                   abs(rail.bottom - Space.space3) <= 1 && sides, detail)
         }
+    }
+
+    /// The rail's groups, read once the page has bound its scene (its first
+    /// `cawco:drawn`: the rail renders once Excalidraw hands out its API),
+    /// and again until they stand, for up to 10 s.
+    private static func railOf(_ room: CanvasRoom) async -> (top: Double, bottom: Double, left: Double, right: Double, said: String)? {
+        guard let web = room.web, await until(15, { web.drawn != nil }) else { return nil }
+        var rail = await web.probeRail()
+        var waited = 0.0
+        while rail == nil, waited < 10 {
+            await wait(0.25)
+            waited += 0.25
+            rail = await web.probeRail()
+        }
+        return rail
     }
 
     /// Waits for a settle to come to rest.
@@ -419,12 +434,16 @@ enum CanvasProbe {
         do { pasted = try await refused.probePaste() } catch { pasteError = error.localizedDescription }
         let synced2 = await until(5) { refused.drawn == drawn.count + pasted.images && refused.link == .synced }
         try? await refused.picture()
+        // The hub holds the image's file once the page's doc has synced it: read until it does, up to 10 s.
         var exported = (images: 0, filed: 0, png: 0)
-        if let export = try? await host.hub.exportCanvas(refused.page.id, name: refused.page.name),
-           let file = (try? JSONSerialization.jsonObject(with: Data(export.file.utf8))) as? [String: Any] {
-            let images = (file["elements"] as? [[String: Any]] ?? []).filter { $0["type"] as? String == "image" && $0["isDeleted"] as? Bool != true }
-            let files = file["files"] as? [String: Any] ?? [:]
-            exported = (images.count, images.count { ($0["fileId"] as? String).map { files[$0] != nil } ?? false }, export.png?.count ?? 0)
+        for _ in 0 ..< 40 where exported.filed == 0 {
+            if let export = try? await host.hub.exportCanvas(refused.page.id, name: refused.page.name),
+               let file = (try? JSONSerialization.jsonObject(with: Data(export.file.utf8))) as? [String: Any] {
+                let images = (file["elements"] as? [[String: Any]] ?? []).filter { $0["type"] as? String == "image" && $0["isDeleted"] as? Bool != true }
+                let files = file["files"] as? [String: Any] ?? [:]
+                exported = (images.count, images.count { ($0["fileId"] as? String).map { files[$0] != nil } ?? false }, export.png?.count ?? 0)
+            }
+            if exported.filed == 0 { await wait(0.25) }
         }
         check("a PNG pasted into the canvas is an image element with its file in the doc, the export and its picture",
               pasted.images == 1 && pasted.filed == 1 && synced2 && exported.images == 1 && exported.filed == 1 && exported.png > 0,
