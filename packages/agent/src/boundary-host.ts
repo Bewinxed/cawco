@@ -32,8 +32,9 @@
  * working directory.
  *
  * A plain Bun script, never a module of cawco, importing nothing of it but
- * core's dependency-free dir names (`claude-dirs.ts`) and mount table
- * (`mount-table.ts`): a binary install runs
+ * core's dependency-free dir names (`claude-dirs.ts`), mount table
+ * (`mount-table.ts`) and nested-boundary words (`boundary-nesting.ts`),
+ * with safe git and state files: a binary install runs
  * its bundle (srt inside) on cawco's own runtime (`BUN_BE_BUN=1`), a checkout
  * runs it on bun.
  */
@@ -58,6 +59,10 @@ import {
   SandboxManager,
   type SandboxRuntimeConfig,
 } from "@anthropic-ai/sandbox-runtime";
+import {
+  NESTED_BOUNDARY_LABEL,
+  nestedBoundaryReason,
+} from "@cawco/core/boundary-nesting";
 import { projectClaudeRelative } from "@cawco/core/claude-dirs";
 import { mountedAnywhere, mountPointsOf } from "@cawco/core/mount-table";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
@@ -506,21 +511,14 @@ const apparmorLabel = (): string | undefined => {
 };
 
 /**
- * Why no sandbox can start here, in this host's words, when this process
- * already runs inside a bwrap sandbox under Ubuntu's `bwrap-userns-restrict`
- * profile (/etc/apparmor.d/bwrap-userns-restrict, apparmor 4.1+): "bwrap is
- * allowed access to user namespaces and capabilities within the user
- * namespace, but its children do not have capabilities", and its
- * `unpriv_bwrap` stacks onto every process beneath (`audit deny capability`,
- * `allow pix /** -> &unpriv_bwrap`). A bwrap started in there makes its user
- * namespace but is refused the CAP_SYS_ADMIN its mount, pid and net
- * namespaces need ("No permissions to create a new namespace"): a workspace
- * boundary cannot start inside another one on such a host.
+ * Why no sandbox can start here, when this process already runs inside a
+ * bwrap sandbox under the host's `bwrap-userns-restrict` profile: a host
+ * setting, said as one (`boundary-nesting.ts`).
  */
 const nestedRefusal = (): string | undefined => {
   const label = apparmorLabel();
-  return label?.includes("unpriv_bwrap")
-    ? `cawco: this process runs inside another bwrap sandbox (AppArmor ${label}), whose profile denies every capability to what runs beneath it, so the boundary's own bwrap cannot make its namespaces here`
+  return label?.includes(NESTED_BOUNDARY_LABEL)
+    ? nestedBoundaryReason(label)
     : undefined;
 };
 
@@ -575,8 +573,10 @@ const startSandbox = async (): Promise<Sandbox | Unstarted> => {
   const outer = proc.pid;
   let started = false;
   const { promise, resolve } = Promise.withResolvers<Sandbox | Unstarted>();
-  // Each of stderr's lines reaches the agent as a line until the runner is
-  // ready: what refused the sandbox is said with it.
+  // What stderr says before the runner is ready is kept: said as lines if
+  // the sandbox ends there, what refused it first when that is the host's
+  // AppArmor (bwrap's own words then blame the kernel), on stderr if it starts.
+  const early: string[] = [];
   const stderrDone = (async () => {
     const decoder = new TextDecoder();
     let pending = "";
@@ -588,26 +588,22 @@ const startSandbox = async (): Promise<Sandbox | Unstarted> => {
       pending += decoder.decode(chunk, { stream: true });
       let end = pending.indexOf("\n");
       while (end >= 0) {
-        const line = pending.slice(0, end).trim();
+        early.push(pending.slice(0, end).trim());
         pending = pending.slice(end + 1);
         end = pending.indexOf("\n");
-        if (line) {
-          console.log(line);
-        }
       }
     }
-    if (pending.trim()) {
-      console.log(pending.trim());
-    }
+    early.push(pending.trim());
   })();
   proc.exited.then(async (status) => {
     if (started) {
       return;
     }
     await stderrDone;
-    const why = nestedRefusal();
-    if (why) {
-      console.log(why);
+    for (const line of [nestedRefusal(), ...early]) {
+      if (line) {
+        console.log(line);
+      }
     }
     resolve({ status });
   });
@@ -647,6 +643,11 @@ const startSandbox = async (): Promise<Sandbox | Unstarted> => {
         });
         const sandbox: Sandbox = { proc, inner, guarded };
         started = true;
+        for (const said of early.splice(0)) {
+          if (said) {
+            console.error(said);
+          }
+        }
         writeStateFileSync(
           guardedFile,
           guarded.map((path) => `${mountinfoSpelling(path)}\n`).join("")

@@ -272,6 +272,7 @@ import {
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
 } from "@cawco/core/binary-updates";
+import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
 import { crossSiteRefusal } from "@cawco/core/browser-gate";
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
@@ -16363,6 +16364,7 @@ export const createServer = (
   ): void => {
     turnWaiters.get(instanceId)?.reject(new Error(reason));
     db.failInstance(instanceId, reason);
+    sayNestedBoundaryFix(reason);
     // A live work item whose session never started failed, and its
     // parent hears why rather than waiting on a report forever.
     const [unstarted] = db.getInstancesByIds([instanceId]);

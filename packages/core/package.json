@@ -37,6 +37,7 @@
     "./workspace-policy": "./src/workspace-policy.ts",
     "./workspace-judge": "./src/workspace-judge.ts",
     "./claude-dirs": "./src/claude-dirs.ts",
+    "./boundary-nesting": "./src/boundary-nesting.ts",
     "./mount-table": "./src/mount-table.ts",
     "./safe-git": "./src/safe-git.ts",
     "./tool-presentation": "./src/tool-presentation.ts",

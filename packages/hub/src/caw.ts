@@ -79,6 +79,7 @@ import {
   VIEW_TOOLS,
   type WorkspaceRef,
 } from "@cawco/core";
+import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
 import { LEAD_PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
@@ -1264,20 +1265,22 @@ export const createCaw = ({
         }
       })
       .catch((error: unknown) => {
+        const why = error instanceof Error ? error.message : String(error);
         console.warn(
-          `[caw] ${projectId}: your words in thread ${threadId} did not wake Caw: ${error instanceof Error ? error.message : String(error)}`
+          `[caw] ${projectId}: your words in thread ${threadId} did not wake Caw: ${why}`
         );
-        notWoken(error instanceof Error ? error.message : String(error));
+        sayNestedBoundaryFix(why);
+        notWoken(why);
       });
   };
 
   /** Logs a wake that failed: an event is never lost silently. */
   const wakeQuietly = (projectId: string, event: CawEvent): void => {
-    wake(projectId, event).catch((error: unknown) =>
-      console.warn(
-        `[caw] ${projectId}: Caw was not woken: ${error instanceof Error ? error.message : String(error)}`
-      )
-    );
+    wake(projectId, event).catch((error: unknown) => {
+      const why = error instanceof Error ? error.message : String(error);
+      console.warn(`[caw] ${projectId}: Caw was not woken: ${why}`);
+      sayNestedBoundaryFix(why);
+    });
   };
 
   /** Ends the project's Caw session and clears the lead: his harness or model moved. */
