@@ -341,6 +341,8 @@ export interface TaskSummary extends TaskFlags, TaskTimes {
    */
   needsYou: boolean;
   number: number;
+  /** The project folder files its work produces (`outputs:`). */
+  outputs: string[];
   parent: string | null;
   path: string;
   /** What in the file could not be read, or a stage the project lacks, in a sentence; null when all is well. */
@@ -793,6 +795,7 @@ const summaryOf = (
     duplicateOf: row.duplicateOf,
     rank: row.rank,
     labels: row.labels,
+    outputs: row.outputs,
     fields: row.fields,
     todos: { done: row.todosDone, total: row.todosTotal },
     ...times,
@@ -1428,6 +1431,7 @@ export const createTasks = (store: TaskStore) => {
       duplicateOf: parsed.fields.duplicateOf,
       rank: parsed.fields.rank,
       labels: parsed.fields.labels,
+      outputs: parsed.fields.outputs,
       fields: doc.extraFields(),
       todosDone: parsed.todos.filter((todo) => todo.done).length,
       todosTotal: parsed.todos.length,

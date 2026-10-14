@@ -73,7 +73,12 @@
  * changing, a machine with a checkout coming online. A slow timer looks
  * again as a safety net and starts nothing when nothing is ready.
  */
-import type { InstanceRow, LandsMode } from "@cawco/core";
+import {
+  deliverableKind,
+  type InstanceRow,
+  type LandsMode,
+  POST_OUTPUT_RULE,
+} from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
 import type { DbShape, PlaceRow, ProjectRow, WorkItemRow } from "./db";
@@ -446,6 +451,9 @@ const briefOf = (
     ...(task.parent ? [`Its parent: ${line(task.parent)}.`] : []),
     ...(task.outputs.length > 0
       ? [`It produces: ${task.outputs.join(", ")}.`]
+      : []),
+    ...(task.outputs.some((path) => deliverableKind(path) === "post")
+      ? [POST_OUTPUT_RULE]
       : []),
     ...(task.owns.length > 0
       ? [

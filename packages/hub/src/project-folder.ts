@@ -677,6 +677,37 @@ export const readFolderFile = async (
   return { path: rel, content, size: bytes.byteLength };
 };
 
+/** The largest file the raw route serves: a task's video or audio output. */
+export const FOLDER_RAW_LIMIT = 256 * 1024 * 1024;
+
+/**
+ * One file of the folder as its bytes, for what is drawn rather than read
+ * as text: a task's image, video or audio output. The same path rules as a
+ * read (links followed only inside the folder, never into `.git`).
+ */
+export const folderFileRaw = async (
+  projectId: string,
+  rawPath: string
+): Promise<{ path: string; real: string; size: number }> => {
+  const rel = folderPath(rawPath);
+  if (!rel) {
+    throw new FolderRefusal(400, "Name a file to open, like media/cover.png.");
+  }
+  const root = await forReading(projectId);
+  const real = await readable(root, rel);
+  const info = await stat(real).catch(notFound(rel));
+  if (info.isDirectory()) {
+    throw new FolderRefusal(409, `${rel} is a folder, not a file to open.`);
+  }
+  if (info.size > FOLDER_RAW_LIMIT) {
+    throw new FolderRefusal(
+      413,
+      `${rel} is ${size(info.size)}; files open up to ${size(FOLDER_RAW_LIMIT)}.`
+    );
+  }
+  return { path: rel, real, size: info.size };
+};
+
 const COMMIT_SHA = /^[0-9a-f]{40}$/;
 /** Files as a commit held them, by commit and path: a commit never changes, so neither does its reading. */
 const readAt = new Map<string, string | undefined>();
@@ -1681,6 +1712,31 @@ export const projectFolderRoutes = (
         try {
           known(params.id);
           return await readFolderFile(params.id, query.path);
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    .get(
+      "/api/projects/:id/folder/raw",
+      { query: t.Object({ path: t.String() }) },
+      async ({ params, query }) => {
+        try {
+          known(params.id);
+          const file = await folderFileRaw(params.id, query.path);
+          const body = Bun.file(file.real);
+          // Served on the dashboard's own origin: a page or a drawing in the
+          // folder is shown, never run (no script, no frame, no form).
+          return new Response(body, {
+            headers: {
+              "Content-Type": body.type || "application/octet-stream",
+              "Content-Length": String(file.size),
+              "Content-Disposition": "inline",
+              "Content-Security-Policy": "sandbox; default-src 'none'",
+              "X-Content-Type-Options": "nosniff",
+              "Cache-Control": "no-cache",
+            },
+          });
         } catch (error) {
           return refused(error);
         }

@@ -2574,6 +2574,11 @@
       "$value": "56px",
       "$description": "A Caw starter card's shortest: one line of words with its padding, a thumb's height on a phone."
     },
+    "c-needs-peek-h": {
+      "$type": "dimension",
+      "$value": "12rem",
+      "$description": "A task's deliverable under its card in a thread, collapsed: a post card's first lines or a draft's opening, before Show all."
+    },
     "c-starters-w": {
       "$type": "dimension",
       "$value": "calc({size.c-starter-w} * 4 + {space.space-2} * 3)",

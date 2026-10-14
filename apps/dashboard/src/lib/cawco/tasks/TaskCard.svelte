@@ -7,7 +7,9 @@
    * again, a wait on you, or the date it is set for.
    *
    * The card is a link to the task (`?task=tsk-12`), so it opens in a new
-   * tab and is shared like one; a plain click opens the drawer in place. It
+   * tab and is shared like one; a plain click opens it beside what it was
+   * pressed in (`onopen`), or follows the link where nothing stands beside
+   * it (a thread on a phone: the task's own page). It
    * is also what a drag carries, and the one object a move flies (`land`):
    * a card that changes column travels there from where it was drawn.
    */
@@ -42,7 +44,8 @@
     date?: string | null;
     /** The kind of another task's stage, to say whether what it waits on has landed. */
     kindOf: (id: string) => StageKind | null | undefined;
-    onopen: (id: string) => void;
+    /** Opens it in place; left out, the card is a plain link. */
+    onopen?: (id: string) => void;
     /**
      * A drag carries it to another column (the board). Off where a drag is
      * the surface's own (the canvas pans).
@@ -69,6 +72,7 @@
 
   function open(event: MouseEvent) {
     if (
+      !onopen ||
       event.button !== 0 ||
       event.metaKey ||
       event.ctrlKey ||

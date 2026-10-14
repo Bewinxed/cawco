@@ -167,6 +167,8 @@ export interface TaskSummary extends TaskFlags, TaskTimes {
   labels: string[];
   needsYou: boolean;
   number: number;
+  /** The project folder files its work produces (`outputs:`). */
+  outputs: string[];
   parent: string | null;
   path: string;
   problem: string | null;
@@ -215,11 +217,75 @@ export interface Todo {
   text: string;
 }
 
+/** Who wrote a task's comment (the hub's `TaskCommentAuthor`). */
+export interface TaskCommentAuthor {
+  /** The session's instance id, or the approved action's; null when none. */
+  id: string | null;
+  /** The mover they wrote as (`you`, `lead`, `session`, …); null when the heading names none. */
+  mover: string | null;
+  /** The commit author's name: you, Caw, the session's title. */
+  name: string;
+}
+
+/** One entry of a task's `## Comments`, written only by the hub. */
+export interface TaskComment {
+  /** When it was written, ms epoch. */
+  at: number;
+  author: TaskCommentAuthor;
+  /** Its markdown, as written. */
+  text: string;
+}
+
+/** Who made a change in a task's history (the hub's `TaskHistoryActor`). */
+export interface TaskHistoryActor {
+  id: string | null;
+  mover: string | null;
+  name: string;
+}
+
+/** What kind of commit a history entry is (task-history.ts `TaskHistoryKind`). */
+export type TaskHistoryKind =
+  | "created"
+  | "moved"
+  | "changed"
+  | "commented"
+  | "edited"
+  | "archived"
+  | "unarchived"
+  | "renamed"
+  | "deleted";
+
+/** One commit to a task's file, as its history shows it. */
+export interface TaskHistoryEvent {
+  actor: TaskHistoryActor;
+  /** When, ms epoch, by commit time. */
+  at: number;
+  commit: string;
+  kind: TaskHistoryKind;
+  path: string;
+  /** Why, when the change said: a close reason, the hub's cause. */
+  reason: string | null;
+  /** The stage it went from and to; from is null for a new task. */
+  stage: { from: string | null; to: string } | null;
+  /** What changed, in the commit's words: `stage draft → review`, `update title`. */
+  what: string;
+}
+
+/** A task's history as the hub answers it: every commit to its file, oldest first. */
+export interface TaskHistory {
+  events: TaskHistoryEvent[];
+  id: string;
+  path: string;
+  state: "live" | "archived" | "deleted";
+}
+
 /** One task, its file read whole. */
 export interface TaskView extends TaskFlags, TaskTimes {
   acceptance: string;
   after: string[];
   checks: string[];
+  /** Its `## Comments`, oldest first: each written by the hub with who and when. */
+  comments: TaskComment[];
   description: string;
   /** Front matter keys the file carries that a task file does not know. */
   extra: string[];
@@ -367,6 +433,31 @@ export const retryTask = (
     json("POST", parentInstanceId ? { parentInstanceId } : {})
   );
 
+/** Adds your comment at the end of the task's `## Comments`, as one commit. */
+export const commentTask = (
+  projectId: string,
+  taskId: string,
+  text: string
+): Promise<TaskView> =>
+  send(`${one(projectId, taskId)}/comments`, json("POST", { text }));
+
+/** The task's history: every commit to its file, oldest first. */
+export const readTaskHistory = (
+  projectId: string,
+  taskId: string
+): Promise<TaskHistory> => send(`${one(projectId, taskId)}/history`);
+
+/** A file of the project's folder as its bytes, for an image, video or audio output. */
+export const folderRawHref = (projectId: string, path: string): string =>
+  `${base(projectId)}/folder/raw?${new URLSearchParams({ path })}`;
+
+/** A file of the project's folder on the hub, as it reads there (a task's outputs land there). */
+export const readFolderFile = (
+  projectId: string,
+  path: string
+): Promise<{ content: string }> =>
+  send(`${base(projectId)}/folder/file?${new URLSearchParams({ path })}`);
+
 export const readTemplates = (): Promise<StagesTemplateView[]> =>
   send("/api/stage-templates");
 
@@ -420,6 +511,49 @@ export const movesFrom = (stages: StagesView, from: string): Set<string> =>
       )
       .map((to) => to.name)
   );
+
+/**
+ * Where a task waiting on you goes once you approve it: the first stage
+ * after its own, in the project's order, that the moves allow you, short
+ * of a dropped one (social: review → scheduled; seo: review → approved).
+ * Null when none is open to you.
+ */
+export const approveTarget = (
+  stages: StagesView,
+  from: string
+): Stage | null => {
+  const allowed = movesFrom(stages, from);
+  const at = stages.stages.findIndex((stage) => stage.name === from);
+  return (
+    stages.stages
+      .slice(at + 1)
+      .find((stage) => stage.kind !== "dropped" && allowed.has(stage.name)) ??
+    null
+  );
+};
+
+/**
+ * Where a task you send back goes: the nearest stage before its own, in
+ * the project's order, where the work is done (kind `active`), else the
+ * nearest to-do one, that the moves allow you (social: review → draft).
+ * Null when none is open to you.
+ */
+export const sendBackTarget = (
+  stages: StagesView,
+  from: string
+): Stage | null => {
+  const allowed = movesFrom(stages, from);
+  const at = stages.stages.findIndex((stage) => stage.name === from);
+  const before = stages.stages
+    .slice(0, Math.max(at, 0))
+    .reverse()
+    .filter((stage) => allowed.has(stage.name));
+  return (
+    before.find((stage) => stage.kind === "active") ??
+    before.find((stage) => stage.kind === "todo") ??
+    null
+  );
+};
 
 /** What a card and a row say about a task's attempts and edges. */
 export function flagsOf(task: TaskSummary | TaskView): {

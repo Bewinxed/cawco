@@ -505,6 +505,11 @@ export const projectTasks = sqliteTable(
       .$type<string[]>()
       .notNull()
       .default([]),
+    /** The project folder files its work produces (`outputs:`): what the project's Made list draws. */
+    outputs: text("outputs", { mode: "json" })
+      .$type<string[]>()
+      .notNull()
+      .default([]),
     /** The front matter fields a task file does not know that hold one scalar (`priority`, `due`), as written: what lists filter and sort on. */
     fields: text("fields", { mode: "json" })
       .$type<Record<string, string>>()
