@@ -255,7 +255,7 @@ const run = async (kit: Kit) => {
   // boundary keeps read-only, so a read-only git command shows the allowlist.
   const placeRepo = await until(
     "a: the place made a repository by CawCo",
-    () => stat(join(place, ".git", "HEAD")).then(() => true),
+    () => exists(join(place, ".git", "HEAD")),
     Boolean,
     120_000
   ).catch(() => false);
@@ -400,7 +400,7 @@ const run = async (kit: Kit) => {
   await until(
     "the neighbour gone",
     () => fleet.instance(neighbour)?.status,
-    (status) => status !== "running" && status !== "starting",
+    (now) => now !== "running" && now !== "starting",
     60_000
   );
 
