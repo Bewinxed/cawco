@@ -56,11 +56,17 @@
       button click that lands before the app has mounted is held here and
       replayed by the root layout's onMount, once every handler is attached.
       Links are left alone: before hydration they navigate as plain links.
+      A right-click on something that has the app's menu (a session's tab or
+      row: `data-context-menu-trigger`, drawn by the server too) is held the
+      same way and asked again where it was pressed, so the menu opens on
+      whatever stands there once hydrated, the node the server drew or the
+      one that replaced it. Anything else keeps the browser's own menu.
     -->
     <script>
       "use strict";
       (() => {
         const held = [];
+        let menuAt = null;
         const hold = (event) => {
           const button =
             event.target instanceof Element
@@ -73,11 +79,38 @@
           event.stopImmediatePropagation();
           held.push(button);
         };
+        const holdMenu = (event) => {
+          if (
+            !(
+              event.target instanceof Element &&
+              event.target.closest("[data-context-menu-trigger]")
+            )
+          ) {
+            return;
+          }
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          menuAt = { x: event.clientX, y: event.clientY };
+        };
         document.addEventListener("click", hold, true);
+        document.addEventListener("contextmenu", holdMenu, true);
         window.releaseHeldTaps = () => {
           document.removeEventListener("click", hold, true);
+          document.removeEventListener("contextmenu", holdMenu, true);
           for (const button of held) {
             button.click();
+          }
+          if (menuAt) {
+            const { x, y } = menuAt;
+            document.elementFromPoint(x, y)?.dispatchEvent(
+              new MouseEvent("contextmenu", {
+                bubbles: true,
+                cancelable: true,
+                clientX: x,
+                clientY: y,
+                button: 2,
+              })
+            );
           }
         };
       })();

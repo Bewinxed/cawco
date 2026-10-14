@@ -666,7 +666,12 @@ async function openDetails(kit: Kit, page: Page, tab: string) {
     const seen: string[] = [];
     const start = performance.now();
     const at = () => `${Math.round(performance.now() - start)}ms`;
-    const mark = (nodes: NodeList, how: string) => {
+    /** Which pane group a node was taken from or put in, by its parent. */
+    const groupOf = (parent: Node) =>
+      parent instanceof Element
+        ? (parent.closest("[data-leaf]")?.getAttribute("data-leaf") ?? "none")
+        : "none";
+    const mark = (nodes: NodeList, how: string, parent: Node) => {
       for (const node of nodes) {
         if (!(node instanceof Element)) {
           continue;
@@ -675,16 +680,22 @@ async function openDetails(kit: Kit, page: Page, tab: string) {
           seen.push(`${at()} menu ${how}`);
         }
         if (node.matches(selector) || node.querySelector(selector)) {
-          seen.push(`${at()} tab ${how}`);
+          // Which node went, and in which group: the tab alone or what held it.
+          seen.push(
+            `${at()} tab ${how}: ${node.tagName}.${String(node.className).slice(0, 40)} in group ${groupOf(parent)}`
+          );
         }
       }
     };
     new MutationObserver((records) => {
       for (const record of records) {
-        mark(record.addedNodes, "added");
-        mark(record.removedNodes, "removed");
+        mark(record.addedNodes, "added", record.target);
+        mark(record.removedNodes, "removed", record.target);
       }
     }).observe(document.body, { childList: true, subtree: true });
+    seen.push(
+      `groups: ${[...document.querySelectorAll("[data-leaf]")].map((leaf) => leaf.getAttribute("data-leaf")).join(",")}; saved: ${localStorage.getItem("cawco-workspace")?.slice(0, 400)}`
+    );
     const tabNode = document.querySelector(selector);
     const box = tabNode?.getBoundingClientRect();
     const top = box

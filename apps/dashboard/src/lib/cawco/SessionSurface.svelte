@@ -327,7 +327,7 @@
     if (type !== "enter" && opened) {
       picked.delete(opened);
     }
-    reconcileFromUrl();
+    workspace.followUrl(location.href);
   });
 
   /* ── URL → workspace ─────────────────────────────────────────────────
@@ -337,51 +337,13 @@
      tab clicks and two back presses, leaving the store a whole history entry
      behind the address bar. There are exactly two ways the URL can move
      without this store having moved first, and both are events: the browser
-     walking history, and a real navigation from another route. */
-
-  function reconcileFromUrl(): void {
-    const url = new URL(location.href);
-    const parts = url.pathname.split("/").filter(Boolean);
-    // Another route entirely — leave the workspace holding what it holds, so
-    // a trip to Usage and back does not cost the reader their place.
-    if (parts[0] !== "session") {
-      return;
-    }
-    const urlId = parts[1] ?? null;
-    if (urlId === workspace.activeSessionId) {
-      return;
-    }
-    // Only carry context when the URL actually names a machine. A stored
-    // conversation's machine and folder are how it is addressed at all, and
-    // `workingSet.visit` SPREADS what it is given over what it holds — so a
-    // blank context from a URL with no query string erases the real one, and
-    // a pane that was reading a transcript reports itself unreachable.
-    const machine = url.searchParams.get("machine");
-    workspace.reveal(
-      urlId,
-      urlId && machine
-        ? {
-            machine,
-            cwd: url.searchParams.get("cwd") ?? "",
-            harness: url.searchParams.get("harness") ?? "claude",
-          }
-        : undefined
-    );
-  }
-
-  // Synchronously, during the first client render. The store restores what
-  // was open from localStorage at module load, so without this the first
-  // paint showed whatever conversation was last active and only corrected to
-  // the URL's answer on mount — the view visibly changing under the reader a
-  // frame after it appeared. The URL is the address; it wins before anything
-  // is drawn, not after.
-  if (browser) {
-    reconcileFromUrl();
-  }
+     walking history, and a real navigation from another route. The first
+     client render's is the Shell's (`workspace.followUrl`), before the bar's
+     strip reads the store. */
 
   onMount(() => {
-    reconcileFromUrl();
-    const onPop = () => reconcileFromUrl();
+    workspace.followUrl(location.href);
+    const onPop = () => workspace.followUrl(location.href);
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   });

@@ -439,7 +439,15 @@
      is the burger's. The same width line the session layout draws — and, on
      the server, the same cookie — so the bar and the groups agree on who
      draws the tabs before anything is painted. */
-  if (!browser) {
+  if (browser) {
+    // The URL is the address, and it wins before anything is drawn: the
+    // store restores what was open from localStorage at module load, and the
+    // bar's strip below reads it ahead of the session surface. Placed later,
+    // the tab the server drew (it placed the URL's conversation in the
+    // cookie's tree) came back a frame after hydration as a new tab, and a
+    // menu opened on it in that moment went with it.
+    workspace.followUrl(location.href);
+  } else {
     workspace.serve(
       (page.data as { workspace?: WorkspaceV1 | null }).workspace ?? null
     );

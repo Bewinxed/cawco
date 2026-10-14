@@ -636,6 +636,46 @@ export const workspace = {
   },
 
   /**
+   * The address bar into the store: a `/session[/<id>]` address puts its
+   * conversation in front (`reveal`), as the server's first paint already
+   * did from the cookie ((app)/+layout.server.ts). Any other route leaves
+   * the workspace holding what it holds, so a trip to Usage and back does
+   * not cost the reader their place.
+   *
+   * The Shell calls it before anything is drawn (the bar's strip reads the
+   * workspace ahead of the session surface), so the first client render
+   * holds the tab the server drew, under the same key; it is called again
+   * on each history move and real navigation (SessionSurface).
+   */
+  followUrl(href: string): void {
+    const url = new URL(href);
+    const parts = url.pathname.split("/").filter(Boolean);
+    if (parts[0] !== "session") {
+      return;
+    }
+    const urlId = parts[1] ?? null;
+    if (urlId === this.activeSessionId) {
+      return;
+    }
+    // Only carry context when the URL actually names a machine. A stored
+    // conversation's machine and folder are how it is addressed at all, and
+    // `workingSet.visit` SPREADS what it is given over what it holds — so a
+    // blank context from a URL with no query string erases the real one, and
+    // a pane that was reading a transcript reports itself unreachable.
+    const machine = url.searchParams.get("machine");
+    this.reveal(
+      urlId,
+      urlId && machine
+        ? {
+            machine,
+            cwd: url.searchParams.get("cwd") ?? "",
+            harness: url.searchParams.get("harness") ?? "claude",
+          }
+        : undefined
+    );
+  },
+
+  /**
    * Re-address a tab without moving it. A conversation opened by its session
    * id — an old link, a message from the phone — lives at its instance's
    * address once the instance list names one, the same address every link in
