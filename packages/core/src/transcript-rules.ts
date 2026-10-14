@@ -1661,7 +1661,11 @@ function injectedBlock(text: string, base: BlockBase): TranscriptBlock | null {
       ...base,
       type: "user.peer",
       content: handoff.body,
-      metadata: { peerName: handoff.from },
+      metadata: {
+        peerName: handoff.from,
+        // Only the short id survives storage, as with a report.
+        ...(handoff.short ? { peerSession: handoff.short } : {}),
+      },
     };
   }
   return null;

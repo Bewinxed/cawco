@@ -1367,7 +1367,7 @@ export const handoffActions = ({
     const whose =
       peer.row.id === own?.parentInstanceId ? ", your parent session" : "";
     const from = senderName(own, cwd);
-    const body = `${handoffMarker(from)}${message}`;
+    const body = `${handoffMarker(from, instanceId)}${message}`;
     const payload: SendPayload = {
       instanceId: peer.row.id,
       message: {
@@ -1451,7 +1451,7 @@ export const handoffActions = ({
     // the transcript builder (`sentRow`, @cawco/core) can still detect the
     // opening prompt as a peer message and render it as `user.peer` instead of
     // the reader's own words — the same marker `handoff()` already uses.
-    const body = `${handoffMarker(from)}${prompt}`;
+    const body = `${handoffMarker(from, instanceId)}${prompt}`;
     const opening: SendPayload = {
       instanceId: id,
       message: {

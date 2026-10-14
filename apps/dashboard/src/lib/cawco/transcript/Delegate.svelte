@@ -19,7 +19,7 @@
     unwatchDelegate,
     watchDelegate,
   } from "../client.svelte";
-  import { conversationHref, delegateHandle } from "../links";
+  import { conversationHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
   import { markHue, sessionSprite } from "../mark";
   import { modelLabel } from "../models.svelte";
@@ -68,16 +68,14 @@
       : {};
   });
 
-  const label = $derived.by(() => {
-    if (row) {
-      return delegateHandle(row);
-    }
-    const stub = message.content.split("/").filter(Boolean).pop();
-    if (id) {
-      return `${stub ?? "session"}#${id.slice(0, 8)}`;
-    }
-    return stub ?? "delegate";
-  });
+  /**
+   * The delegate's title: the spawn result's once it returned, the title the
+   * call gave it while it is in flight. Never its id.
+   */
+  const label = $derived(
+    meta.delegateTitle ??
+      (typeof toolInput.title === "string" ? toolInput.title : "")
+  );
   const type = $derived(
     typeof toolInput.type === "string" ? toolInput.type : ""
   );

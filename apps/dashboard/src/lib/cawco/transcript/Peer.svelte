@@ -72,9 +72,9 @@
     };
   });
 
-  /** A report's delegate, linked where the fleet still has its row. */
+  /** A report's delegate or a hand-off's sender, linked where the fleet still has its row. */
   const senderId = $derived(
-    row.kind === "report"
+    row.kind === "report" || row.kind === "handoff"
       ? resolveInstanceId(meta.peerSession, cawco.instanceIndex)
       : undefined
   );

@@ -2499,7 +2499,7 @@ export const createWorkItems = ({
       parentInstanceId: parent.id,
     });
     published(item);
-    const brief = `${handoffMarker(sessionLabel(parent).name)}${request.prompt}`;
+    const brief = `${handoffMarker(sessionLabel(parent).name, parent.id)}${request.prompt}`;
     // The session read how its last item landed; this one is told when it
     // lands otherwise or hands in outputs.
     const told =
@@ -2938,7 +2938,7 @@ export const createWorkItems = ({
           workspace.machineId,
           parent,
           withWorkspaceLine(
-            `${handoffMarker(sessionLabel(parent).name)}${fork}${request.prompt}`,
+            `${handoffMarker(sessionLabel(parent).name, parent.id)}${fork}${request.prompt}`,
             workspace.repoRoot,
             workspace.base,
             landingOf(item)

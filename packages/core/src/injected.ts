@@ -12,9 +12,12 @@
  */
 import type { ArtifactKind } from "./index";
 
-/** A hand-off from another session. */
-export const handoffMarker = (from: string): string =>
-  `[Hand-off from the ${from} session — another agent, not the user]\n\n`;
+/**
+ * A hand-off from another session, named `<name>#<first 8 of its id>` as a
+ * report names its delegate, so a reader can link, mark and relate the sender.
+ */
+export const handoffMarker = (from: string, id: string): string =>
+  `[Hand-off from the ${from}#${id.slice(0, 8)} session — another agent, not the user]\n\n`;
 
 /** A workflow step's brief, handed to the session that runs the step. */
 export const workflowStepMarker = (workflow: string, step: string): string =>
@@ -25,7 +28,7 @@ export const workflowStepMarker = (workflow: string, step: string): string =>
  * a blank line, and folded to spaces in a harness catalog's first prompt.
  */
 const HANDOFF =
-  /^\[Hand-off from the (.+?) (?:session — another agent|workflow — step (.+?)), not the user\]\s+/;
+  /^\[Hand-off from the (?:(.+?)(?:#([0-9a-f]{8}))? session — another agent|(.+?) workflow — step (.+?)), not the user\]\s+/;
 
 /** `text` with `line` right after any hand-off marker it opens with. */
 const afterMarker = (text: string, line: string): string => {
@@ -136,20 +139,23 @@ export const withWorkspaceLine = (
 
 /**
  * A hand-off read back into who sent it and what it says. `from` names the
- * sending session, or the workflow and step for a step's brief.
+ * sending session, or the workflow and step for a step's brief; `short` is the
+ * sending session's 8-character short id, which consumers pair with its full
+ * id by prefix (none for a workflow's brief, nor a marker written before the
+ * id was).
  */
 export function parseHandoffMarker(
   text: string
-): { from: string; body: string } | null {
+): { from: string; short?: string; body: string } | null {
   const marker = HANDOFF.exec(text);
   if (!marker) {
     return null;
   }
-  const [line, from, step] = marker;
-  return {
-    from: step === undefined ? from : `${from} workflow · ${step}`,
-    body: text.slice(line.length).trim(),
-  };
+  const [line, session, short, workflow, step] = marker;
+  const body = text.slice(line.length).trim();
+  return workflow === undefined
+    ? { from: session, ...(short ? { short } : {}), body }
+    : { from: `${workflow} workflow · ${step}`, body };
 }
 
 /**
