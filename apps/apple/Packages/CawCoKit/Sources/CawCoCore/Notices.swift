@@ -15,19 +15,38 @@ public struct Notice: Identifiable, Equatable, Sendable {
         /// The hub sent a value this app does not know: it is newer than the
         /// app. Closed for the launch, on this device only (`HubConnection.showsHubNewer`).
         case hubNewer
+        /// The hub's notices record is damaged: notices are off until Reset
+        /// (CawPanel.svelte's damaged row). Its ✕ closes it for the launch.
+        case noticesDamaged
     }
 
     /// The notice's one act.
     public enum Action: Equatable, Sendable {
-        case retry, installAll, openTestFlight
+        case retry, installAll, openTestFlight, resetNotices
 
         public var label: String {
             switch self {
             case .retry: "Retry"
             case .installAll: "Install now"
             case .openTestFlight: "Open TestFlight"
+            case .resetNotices: "Reset"
             }
         }
+    }
+
+    /// What a damaged hub record says (core `damagedHubRecordWords`), word for word.
+    public static func damagedRecordWords(_ feature: String, file: String, reason: String) -> String {
+        "This hub's \(feature) record is damaged: \(file) (\(reason)). \(feature == "notices" ? "Notices are off" : "Updates are off") until you reset it; Reset writes a fresh record."
+    }
+
+    /// The hub's notices record is damaged (`Fleet.noticesDamaged`): its words,
+    /// Reset its act, and why the last Reset did not take, when one did not.
+    public static func noticesDamaged(_ words: String, problem: String?) -> Notice {
+        Notice(
+            id: "notices-damaged", kind: .noticesDamaged, lead: .caw(.needsYou), label: "Notices are off", dismissLabel: "Dismiss",
+            failed: true, entries: [Entry(title: "Notices are off", lines: [words])],
+            closing: problem, action: .resetNotices, machineIds: [], acks: []
+        )
     }
 
     /// An account's tile (AccountTile.svelte): its provider's mark in the account's hue.

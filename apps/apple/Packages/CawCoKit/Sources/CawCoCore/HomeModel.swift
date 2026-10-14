@@ -114,7 +114,12 @@ public final class HomeModel {
     /// then what the hub keeps until acknowledged, once its record of what
     /// was seen has arrived.
     public var notices: [Notice] {
-        let local = hub.showsHubNewer ? [Notice.hubNewer] : []
+        var local = hub.showsHubNewer ? [Notice.hubNewer] : []
+        // The hub's notices record is damaged: notices are off, and this row
+        // says so with Reset (CawPanel.svelte's damaged row).
+        if let words = fleet.noticesDamaged, !hub.noticesDamagedClosed {
+            local.append(.noticesDamaged(words, problem: fleet.noticesResetProblem))
+        }
         guard fleet.noticesKnown else { return local }
         return local + Notice.unseen(machines: fleet.machines, accounts: fleet.accounts, providers: fleet.accountProviders ?? [],
                                      policy: fleet.updatePolicy, commanded: fleet.commanded, seen: fleet.noticesSeen)
@@ -122,7 +127,10 @@ public final class HomeModel {
 
     /// The notices' sources are all read (the seen record, the accounts and
     /// the update policy): a notice that appears after this is new, and Caw beats for it.
-    public var noticesRead: Bool { fleet.noticesKnown && fleet.accounts != nil && fleet.updatePolicy != nil }
+    public var noticesRead: Bool {
+        (fleet.noticesKnown || fleet.noticesDamaged != nil) && fleet.accounts != nil
+            && (fleet.updatePolicy != nil || fleet.updatePolicyDamaged)
+    }
 
     /// A notice's ✕: acknowledged everywhere (update-notice.svelte.ts
     /// `dismissUpdate`); the hub being newer is closed for this launch.
@@ -135,6 +143,8 @@ public final class HomeModel {
         switch notice.kind {
         case .hubNewer:
             hub.dismissHubNewer()
+        case .noticesDamaged:
+            hub.closeNoticesDamaged()
         case .update(landedAll: true):
             hub.acknowledge(notices: notice.acks)
             hub.forgetCommanded()
@@ -157,6 +167,8 @@ public final class HomeModel {
             for machineId in notice.machineIds { hub.installUpdate(machineId: machineId) }
         case .openTestFlight:
             hub.dismissHubNewer()
+        case .resetNotices:
+            hub.resetNotices()
         case nil:
             break
         }

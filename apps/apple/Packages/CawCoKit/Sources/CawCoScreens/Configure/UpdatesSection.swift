@@ -56,6 +56,12 @@ final class UpdatesSectionController: ConfigSectionController {
     /// The tick the switch holds after the hub took it, before it leaves.
     private var holding = false
     private var checking = false
+    // Reset of a damaged policy record.
+    private lazy var resetButton = KitButton.make("Reset", variant: .action, height: .sm) { [weak self] in self?.resetPolicy() }
+    private var resetting = false
+    private var resetShown = false
+    /// What the hub said when it did not take the Reset.
+    private var resetProblem: String?
     /// Auto-update on its way to the hub.
     private var autoSending: Bool?
     /// Why the hub refused an install, by machine, kept on its row.
@@ -173,7 +179,14 @@ final class UpdatesSectionController: ConfigSectionController {
     override func refreshContent() {
         let fleet = hub.fleet
         ready = fleet.updatePolicy != nil
-        problem = fleet.updatePolicy == nil ? fleet.updatePolicyProblem : nil
+        problem = fleet.updatePolicy == nil ? (resetProblem ?? fleet.updatePolicyProblem) : nil
+        // A damaged policy record: the hub's words above, Reset in the header.
+        resetButton.configuration?.showsActivityIndicator = resetting
+        resetButton.isEnabled = !resetting
+        if fleet.updatePolicyDamaged != resetShown {
+            resetShown = fleet.updatePolicyDamaged
+            setActions(resetShown ? [resetButton] : [])
+        }
         guard let policy = fleet.updatePolicy else { return }
         let machines = UpdateRows.ordered(fleet.machines)
         drawChannel(policy, channels: fleet.updateChannels, machines: machines)
@@ -330,6 +343,22 @@ final class UpdatesSectionController: ConfigSectionController {
             autoSending = nil
             // A refused save shows the stored value again, and says so where it was asked.
             if !ok { autoProblem.set("Couldn't turn automatic updates \(next ? "on" : "off"). Nothing changed.") }
+            requestRefresh()
+        }
+    }
+
+    /// Reset of a damaged policy record: the hub writes a fresh one and the
+    /// section reads it; a refusal stays above the rows, in the hub's words.
+    private func resetPolicy() {
+        guard !resetting else { return }
+        resetting = true
+        resetProblem = nil
+        requestRefresh()
+        Task { @MainActor [weak self, hub] in
+            let refused = await hub.resetUpdatePolicy()
+            guard let self else { return }
+            resetting = false
+            resetProblem = refused
             requestRefresh()
         }
     }

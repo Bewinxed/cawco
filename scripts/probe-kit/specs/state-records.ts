@@ -38,6 +38,7 @@ import type {
   DamagedHubRecord,
   DamagedRow,
 } from "../../../packages/core/src/index";
+import { clientLine } from "../../../packages/core/src/wire";
 import { MACHINE, MODEL, type Reply, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
@@ -71,18 +72,19 @@ const board = (base: string): Promise<Board> =>
       socket.close();
       fail(new Error("no board within 20s"));
     }, 20_000);
-    socket.onmessage = (event) => {
-      try {
-        const frame = JSON.parse(String(event.data)) as Board;
-        if (frame.kind === "instances") {
-          clearTimeout(timer);
-          socket.close();
-          done(frame);
-        }
-      } catch {
-        // A frame in parts: not the board's first.
+    // Read as the dashboard reads it: through the wire's own line, which
+    // puts a message sent in parts back together.
+    const line = clientLine(socket);
+    line.listen((message) => {
+      // Every dashboard frame rides a `frames` envelope.
+      const frame = (message as { payload?: Board } | undefined)?.payload;
+      if (frame?.kind === "instances") {
+        clearTimeout(timer);
+        socket.close();
+        done(frame);
       }
-    };
+    });
+    socket.onmessage = (event) => line.receive(String(event.data));
     socket.onerror = () => fail(new Error("the dashboard socket failed"));
   });
 

@@ -11970,6 +11970,12 @@ export const createServer = (
         Object.assign(delta, { [key]: extras[key] });
       }
     }
+    // The notices record's damage moved (a Reset): its ids go with it, so a
+    // client that cannot tell a null from an absent field (the Apple app's
+    // generated decoder) still hears the record is whole again.
+    if ("noticesDamaged" in delta) {
+      delta.noticesSeen = extras.noticesSeen;
+    }
     return delta;
   };
 

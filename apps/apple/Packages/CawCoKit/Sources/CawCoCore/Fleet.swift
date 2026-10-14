@@ -240,8 +240,16 @@ public final class FleetStore {
     /// notices.ts), plus this device's own on their way to the hub
     /// (notices.svelte.ts). The hub only ever adds to it.
     public internal(set) var noticesSeen: Set<String> = []
-    /// The hub's record has arrived: until then no notice can know it was seen.
+    /// The hub's record has arrived whole: until then no notice can know it was seen.
     public internal(set) var noticesKnown = false
+    /// The hub found its notices record damaged as it started (`noticesDamaged`):
+    /// its words, while notices are off until Reset (notices.svelte.ts `damaged`).
+    public internal(set) var noticesDamaged: String?
+    /// Why the last Reset of the notices record did not take.
+    public internal(set) var noticesResetProblem: String?
+    /// The hub's update policy record is damaged: `updatePolicyProblem` holds
+    /// the hub's words, and Reset is offered beside them (updates.svelte.ts `damaged`).
+    public internal(set) var updatePolicyDamaged = false
     /// The fleet's update policy (`/api/binary-updates/settings`): its channel
     /// and auto-update. Nil until read, and no update notice is said until it is.
     public internal(set) var updatePolicy: Components.Schemas.BinaryUpdatePolicy?
@@ -259,7 +267,15 @@ public final class FleetStore {
     /// Takes the hub's record, keeping what this device acknowledged that the hub has not echoed yet.
     func adopt(noticesSeen ids: [String]) {
         noticesSeen.formUnion(ids)
-        noticesKnown = true
+        noticesKnown = noticesDamaged == nil
+    }
+
+    /// The hub's word on its notices record: damaged (notices off, its words
+    /// kept for Caw's panel), or whole (`nil`), its ids adopted.
+    func adopt(noticesDamaged damaged: Components.Schemas.DamagedHubRecord?, seen ids: [String]) {
+        noticesDamaged = damaged.map { Notice.damagedRecordWords("notices", file: $0.file, reason: $0.reason) }
+        if noticesDamaged == nil { noticesResetProblem = nil }
+        adopt(noticesSeen: ids)
     }
 
     public internal(set) var claudeLimits: [String: Components.Schemas.ClaudeLimits] = [:]

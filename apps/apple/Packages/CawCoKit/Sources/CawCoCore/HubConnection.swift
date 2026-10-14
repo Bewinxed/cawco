@@ -692,13 +692,74 @@ public final class HubConnection {
         guard let client else { return }
         Task { [weak self] in
             do {
-                self?.fleet.updatePolicy = try await client.getApiBinaryUpdatesSettings().ok.body.json
-                self?.fleet.updatePolicyProblem = nil
+                switch try await client.getApiBinaryUpdatesSettings() {
+                case let .ok(ok):
+                    self?.fleet.updatePolicy = try ok.body.json
+                    self?.fleet.updatePolicyDamaged = false
+                    self?.fleet.updatePolicyProblem = nil
+                case let .conflict(refused):
+                    // Its record is damaged: the hub's own words, and Reset offered.
+                    let words = try await String(collecting: try refused.body.plainText, upTo: 64 * 1024)
+                    self?.fleet.updatePolicy = nil
+                    self?.fleet.updatePolicyDamaged = true
+                    self?.fleet.updatePolicyProblem = words
+                case let .undocumented(statusCode, _):
+                    self?.fleet.updatePolicyProblem = "Could not read the update settings — the hub answered \(statusCode)."
+                }
             } catch {
                 self?.fleet.updatePolicyProblem = "Could not read the update settings — \(error.localizedDescription)."
             }
         }
     }
+
+    /// Reset of a damaged update policy record (updates.svelte.ts
+    /// `resetPolicy`): the hub writes a fresh one and updates are on again.
+    /// The hub's refusal, in its words, when it did not take.
+    public func resetUpdatePolicy() async -> String? {
+        guard let client else { return "Not connected to the hub." }
+        do {
+            switch try await client.postApiBinaryUpdatesSettingsReset() {
+            case let .ok(ok):
+                fleet.updatePolicy = try ok.body.json
+                fleet.updatePolicyDamaged = false
+                fleet.updatePolicyProblem = nil
+                await readUpdateChannels()
+                return nil
+            case let .conflict(refused):
+                return try await String(collecting: try refused.body.plainText, upTo: 64 * 1024)
+            case let .undocumented(statusCode, _):
+                return "The hub answered \(statusCode), so the update policy was not reset. Try again."
+            }
+        } catch {
+            return "The update policy was not reset — \(error.localizedDescription)."
+        }
+    }
+
+    /// Reset of a damaged notices record (notices.svelte.ts `reset`): the hub
+    /// writes a fresh one, and the board that follows turns notices on. A
+    /// refusal stays on the notice's row, in the hub's words.
+    public func resetNotices() {
+        guard let client else { return }
+        Task { [weak self] in
+            do {
+                switch try await client.postApiNoticesReset() {
+                case .ok:
+                    self?.fleet.noticesResetProblem = nil
+                case let .conflict(refused):
+                    self?.fleet.noticesResetProblem = try await String(collecting: try refused.body.plainText, upTo: 64 * 1024)
+                case let .undocumented(statusCode, _):
+                    self?.fleet.noticesResetProblem = "The hub answered \(statusCode), so the notices record was not reset. Try Reset again."
+                }
+            } catch {
+                self?.log.error("notices not reset: \(String(describing: error), privacy: .public)")
+                self?.fleet.noticesResetProblem = "The notices record was not reset — \(error.localizedDescription)."
+            }
+        }
+    }
+
+    /// The damaged-notices row closed with its ✕: gone for this launch, on this device only.
+    public private(set) var noticesDamagedClosed = false
+    public func closeNoticesDamaged() { noticesDamagedClosed = true }
 
     /// The fleet's channel and auto-update, as one choice for every machine
     /// (updates.svelte.ts `savePolicy`); the channels are read again after.
@@ -1102,7 +1163,7 @@ public final class HubConnection {
             fleet.moves = board.moves
             // A damaged notices record on the hub: notices stay off, and the
             // empty list beside it is not a record of anything.
-            if board.noticesDamaged == nil { fleet.adopt(noticesSeen: board.noticesSeen) }
+            fleet.adopt(noticesDamaged: board.noticesDamaged, seen: board.noticesSeen)
             adopt(machines: board.agents)
             fleet.adopt(rows: board.instances)
             previews.reconcile(board.previews)
@@ -1111,7 +1172,9 @@ public final class HubConnection {
         case let .instancesDelta(delta, hubBuild):
             if let hubBuild { fleet.hubBuild = hubBuild }
             if let continuations = delta.continuations { fleet.continuations = continuations }
-            if let seen = delta.noticesSeen { fleet.adopt(noticesSeen: seen) }
+            // The hub sends the ids with every move of the record's damage, so
+            // ids with no damage beside them are a whole record (a Reset among them).
+            if let seen = delta.noticesSeen { fleet.adopt(noticesDamaged: delta.noticesDamaged, seen: seen) }
             if delta.agents != nil || delta.removedAgents != nil {
                 patchMachines(delta.agents ?? [], removed: delta.removedAgents ?? [])
             }
