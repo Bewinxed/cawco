@@ -297,9 +297,14 @@ private final class MovedRow: UIView {
 /// then Delete at the footer's start, Resolve or Reopen and Reply. Delete is
 /// asked in the card itself before it runs (AskHere under the footer, The
 /// Open Page Rule). What goes wrong is said under the field, a refused
-/// delete under its question.
+/// delete under its question. A tap anywhere outside it closes it, as Esc
+/// and its Close do (PreviewController's outside tap, PinCard.svelte's
+/// outside press); what the field holds is the pin's draft, which the
+/// controller keeps with the pin.
 final class PinCard: UIView, UITextViewDelegate {
     var onClose: () -> Void = {}
+    /// The person typed: the pin's unsaid words as they stand.
+    var onDraft: (String) -> Void = { _ in }
     var onReply: (String) -> Void = { _ in }
     var onResolve: (Bool) -> Void = { _ in }
     /// Deletes the pin once the person confirmed; throws the refusal's sentence.
@@ -442,8 +447,9 @@ final class PinCard: UIView, UITextViewDelegate {
 
     /// The card's pin as the hub has it now, its thumbnail when drawn, and
     /// what went wrong with the last reply, resolve or send. The reply
-    /// being written stays as it is.
-    func show(_ pin: Pin, live: Bool, thumbnail: Data?, problem said: String?, replying: Bool) {
+    /// being written stays as it is; another pin's card starts from that
+    /// pin's own `draft`.
+    func show(_ pin: Pin, live: Bool, thumbnail: Data?, problem said: String?, replying: Bool, draft: String) {
         liveMark.isHidden = !live
         let fresh = pin.id != pinId
         // Another pin in the same card: a question asked of the last one goes.
@@ -467,7 +473,7 @@ final class PinCard: UIView, UITextViewDelegate {
             for entry in pin.thread { thread.addArrangedSubview(Self.entry(entry)) }
         }
         thread.isHidden = pin.thread.isEmpty
-        if fresh { field.text = "" }
+        if fresh { field.text = draft }
         field.placeholder = pin.thread.isEmpty ? "Say what to change here" : "Reply"
         field.accessibilityLabel = pin.thread.isEmpty ? "Comment" : "Reply"
         problem.text = said
@@ -550,7 +556,10 @@ final class PinCard: UIView, UITextViewDelegate {
         onReply(text)
     }
 
-    func textViewDidChange(_: UITextView) { paintReply() }
+    func textViewDidChange(_: UITextView) {
+        paintReply()
+        onDraft(field.text)
+    }
 
     func textViewDidBeginEditing(_: UITextView) {
         onWriting(true)
@@ -694,7 +703,8 @@ private final class PinField: UITextView {
     }
 
     override var text: String! {
-        didSet { hint.isHidden = !text.isEmpty }
+        // A draft put back grows the field to it, as typing it would.
+        didSet { changed() }
     }
 
     init() {
@@ -730,6 +740,8 @@ private final class PinField: UITextView {
 
     @objc private func changed() {
         hint.isHidden = !text.isEmpty
+        // UIKit may set the text while the field is still being made, before its height is.
+        guard tall != nil else { return }
         let line = font?.lineHeight ?? 20
         let fits = sizeThatFits(CGSize(width: bounds.width, height: .greatestFiniteMagnitude)).height
         tall.constant = min(max(fits, line * 2 + Space.space2 * 2), line * 5 + Space.space2 * 2)

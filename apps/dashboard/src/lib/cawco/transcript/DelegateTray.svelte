@@ -34,6 +34,7 @@
   import { CURVE, dur, easeOut, motionOk } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
   import { land } from "../motion/share.svelte";
+  import { pressOutside } from "../press-outside";
   import RowFault from "../RowFault.svelte";
   import DelegateTail, { type TailNote } from "./DelegateTail.svelte";
   import { askDetailOf, askShortOf, matchesSession } from "./present";
@@ -724,16 +725,10 @@
 
   // An outside press closes a pinned panel, and a pinned fan.
   $effect(() => {
-    if (!((openKey && pinned) || (fanOpen && fanPinned))) {
+    if (!(root && ((openKey && pinned) || (fanOpen && fanPinned)))) {
       return;
     }
-    const press = (event: PointerEvent) => {
-      if (!root?.contains(event.target as Node)) {
-        shut();
-      }
-    };
-    document.addEventListener("pointerdown", press, true);
-    return () => document.removeEventListener("pointerdown", press, true);
+    return pressOutside(root, () => shut());
   });
 
   /** How long the pointer rests on a chip before what it opens opens. */

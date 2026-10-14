@@ -580,11 +580,16 @@ const menuChecks = async (on: On, frame: Frame) => {
   await strokeOver(on, frame, "#para");
   await on.page.waitForTimeout(350);
   await dragFromIcon(on, frame, -90, 40);
-  // Comment on the second paragraph's group: it opens the pin's card, which Esc puts away.
+  // Comment on the second paragraph's group: it opens the pin's card, which
+  // Esc puts away; with words in it, so its dismissal keeps the pin.
   await strokeOver(on, frame, "#second");
   await on.page.waitForTimeout(350);
   await dragFromIcon(on, frame, 0, 40);
   await on.page.locator(".pin-card").waitFor({ timeout: 5000 });
+  await on.page
+    .locator(".pin-card")
+    .getByRole("textbox")
+    .fill("This one, thicker.");
   await on.page.keyboard.press("Escape");
   await settle(on.page, 300);
   // Erase the third.

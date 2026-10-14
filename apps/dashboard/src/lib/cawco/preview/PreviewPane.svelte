@@ -58,6 +58,7 @@
   import PinList from "./PinList.svelte";
   import PlacePick from "./PlacePick.svelte";
   import { paneFleet } from "./pane-fleet";
+  import { pinDrafts } from "./pin-drafts.svelte";
   import { pinName } from "./pin-name";
   import { isSetupPage } from "./setup-page";
   import { previewPlace } from "./source";
@@ -638,22 +639,53 @@
   /** The pins J and K step through: those on the page, by number. */
   const stepping = $derived(pins.filter((pin) => !pin.movedAt));
 
-  function openCard(id: string) {
+  /** Each pin's half-written words, kept with the pin while its card is shut and across a reload. */
+  const drafts = pinDrafts(() => artifactId);
+  /**
+   * The pin the open card was opened for as it was made (a tap in Comment
+   * mode, the radial's Comment), until it is said something: dismissed with
+   * nothing said or written, it is taken back.
+   */
+  let madePin: string | null = null;
+
+  /** Pin `id`'s card opens; `made`, for the pin the person just made. Another pin's card is dismissed first. */
+  function openCard(id: string, made = false) {
+    if (openPin && openPin !== id) {
+      closeCard();
+    }
+    if (made) {
+      madePin = id;
+    }
     openPin = id;
     focusedPin = id;
     cardError = null;
     pinAt = null;
+    drafts.open(id);
     post({ type: "cawco:track-pin", id });
     post({ type: "cawco:focus-pin", id, scroll: true });
     if (!(id in thumbs)) {
       post({ type: "cawco:picture", id, thumb: true });
     }
   }
+  /**
+   * The card is dismissed: a press outside it, on the page or anywhere in
+   * the dashboard, Esc, its Close, another pin opened. Its words stay with
+   * its pin; a pin just made that holds neither words nor a thread is taken
+   * back (core `withdrawPin`), its ink left as it was.
+   */
   function closeCard() {
+    const id = openPin;
     openPin = null;
     pinAt = null;
     cardError = null;
     post({ type: "cawco:track-pin", id: null });
+    if (id && id === madePin) {
+      madePin = null;
+      if (!drafts.text(id).trim()) {
+        doc?.withdraw(id);
+        drafts.discard(id);
+      }
+    }
   }
   /** J and K: the next or the previous pin on the page, outlined and scrolled to. */
   function step(by: 1 | -1) {
@@ -682,6 +714,13 @@
     cardError = doc
       ? doc.reply(openPin, text)
       : "The pane lost the page's document, so the reply wasn't kept. Reload, then reply again.";
+    if (cardError === null) {
+      // Said: the words are in the thread, so no draft is left to keep, and the pin stays.
+      drafts.discard(openPin);
+      if (madePin === openPin) {
+        madePin = null;
+      }
+    }
     return cardError === null;
   }
   function resolvePin(resolved: boolean) {
@@ -710,6 +749,7 @@
     if (focusedPin === id) {
       focusedPin = null;
     }
+    drafts.discard(id);
     closeCard();
     return Promise.resolve();
   }
@@ -874,9 +914,15 @@
             placing = null;
           }
         }
-        openCard(id);
+        openCard(id, message.made === true);
         break;
       }
+      case "cawco:press":
+        // A press on the page, outside the card: the outside-press rule, heard from the page's own process.
+        if (openPin) {
+          closeCard();
+        }
+        break;
       case "cawco:pin-at": {
         if (previewPinId(message.id) === openPin) {
           pinAt = previewPinAt(message);
@@ -1376,6 +1422,10 @@
         room={{ w: roomW, h: roomH }}
         {sheet}
         thumb={thumbs[cardPin.id] ?? null}
+        bind:draft={
+          () => drafts.text(cardPin.id),
+          (text) => drafts.set(cardPin.id, text)
+        }
       />
     {/if}
   </div>

@@ -3,7 +3,9 @@
  * iOS preview touch probe: in the app's preview drawer a tap reaches the
  * page unless the person turned Comment on; while commenting a tap writes
  * a numbered pin on the page instead, and that shows (Done, the line on the
- * well's top edge); the pin's card and the Pins sheet carry it, a reply and
+ * well's top edge); a tap outside the pin's card (the header, the page)
+ * closes it, a new pin with nothing written is taken back, one with words
+ * keeps them for its next opening; the pin's card and the Pins sheet carry it, a reply and
  * Resolve go to the page's overlay, which writes the doc and answers, Send 1
  * sends its section with its picture, the pin then wears the live dot while
  * the session works (`-preview-working` holds it working) until it is
@@ -751,14 +753,73 @@ xcrun simctl install ${udid} "${app}"`);
       : "no card line"
   );
 
-  // ── 7. The Pins sheet lists it; its row opens the card ────────────────
-  // The card goes first, so the row is what opens it again.
-  if (card?.close) {
+  // ── 6b. A tap outside the card dismisses it (the owner, 2026-10-14: "if
+  // i click away from a comment it needs to dismiss the popover i don't
+  // have to keep clicking X"): pin 1, nothing written, closes on a tap on
+  // Done (the header, outside the card), which ends the mode too, and is
+  // taken back; made again and given words, it closes on the same tap and
+  // keeps its pin and its words.
+  const REPLY = "Make the count bigger";
+  /** The app's line for the card's dismissal after `from`. */
+  const dismissedAfter = (what: string, from: number) =>
+    lineAfter(what, from, (l) => l.startsWith("preview card dismissed "));
+  head = await headNow("the header with pin 1's card open");
+  mark = seen.length;
+  await tap(head.comment, `Done ("${head.words}"), outside the empty card`);
+  const dismissedEmpty = await dismissedAfter("the empty card dismissed", mark);
+  const takenBack = await until(
+    "the empty pin taken back",
+    pinsOnHub,
+    (pins) => pins.length === 0,
+    10_000
+  ).catch(pinsOnHub);
+  check(
+    "a tap outside a new pin's card, nothing written in it, closes it and the pin is taken back",
+    dismissedEmpty ===
+      "preview card dismissed by=outside draft=0 withdrawn=true" &&
+      takenBack.length === 0,
+    `${dismissedEmpty ?? "no dismissed line"}; ${takenBack.length} pin(s) on the hub`
+  );
+  head = await headNow("the header with Comment off again");
+  mark = seen.length;
+  await tap(head.comment, `Comment ("${head.words}"), on again`);
+  await lineAfter("Comment on again", mark, (l) => l === "preview comment on");
+  page = await pageNow("the page with Comment on again");
+  mark = seen.length;
+  await tapPage("button", page);
+  card = await cardAfter("pin 1's card again", mark, (c) => c.number === 1);
+  if (card?.field) {
     await tap(
-      card.close,
-      `pin ${card.number}'s card Close (from its newest line)`
+      card.field,
+      `pin ${card.number}'s card field (from its newest line)`
     );
   }
+  await pause(800);
+  await type(REPLY);
+  await pause(800);
+  head = await headNow("the header with words in pin 1's card");
+  mark = seen.length;
+  await tap(
+    head.comment,
+    `Done ("${head.words}"), outside the card with words in it`
+  );
+  const dismissedKept = await dismissedAfter(
+    "the card with words dismissed",
+    mark
+  );
+  await pause(1500);
+  const keptPins = await pinsOnHub();
+  check(
+    "a tap outside a new pin's card with words in it closes it, and the pin and its words stay",
+    dismissedKept ===
+      `preview card dismissed by=outside draft=${REPLY.length} withdrawn=false` &&
+      keptPins.length === 1 &&
+      keptPins[0].number === 1,
+    `${dismissedKept ?? "no dismissed line"}; ${keptPins.length} pin(s) on the hub`
+  );
+
+  // ── 7. The Pins sheet lists it; its row opens the card ────────────────
+  // The card was dismissed, so the row is what opens it again.
   await pause(1200);
   /** The Pins sheet opened from the header, as it lists the pins once it stands. */
   const openSheet = async (what: string) => {
@@ -798,11 +859,54 @@ xcrun simctl install ${udid} "${app}"`);
       ? `card for pin ${card.number} after a tap on its row at ${row?.x},${row?.y}`
       : "no card line after the row"
   );
+  /** The words the app put back in the open card's field, as its line after `from` counts them. */
+  const draftAfter = (what: string, from: number) =>
+    lineAfter(what, from, (l) => l.startsWith("preview card-draft pin=1 "));
+  const back = await draftAfter("pin 1's words back in its field", mark);
+  check(
+    "pin 1's words are back in its field when its card opens again",
+    back === `preview card-draft pin=1 chars=${REPLY.length}`,
+    back ?? "no card-draft line"
+  );
+
+  // A tap on the page, outside the card (Comment off: it reaches the page),
+  // closes the card; the page says it (`cawco:press`).
+  page = await pageNow("the page under pin 1's card");
+  mark = seen.length;
+  await tapPage("button", page);
+  const byPage = await dismissedAfter("the card dismissed by the page", mark);
+  check(
+    "a tap on the page outside the card closes it, and its words stay",
+    byPage ===
+      `preview card dismissed by=page draft=${REPLY.length} withdrawn=false`,
+    byPage ?? "no dismissed line"
+  );
+  await pause(1200);
+  sheet = await openSheet("the Pins sheet again");
+  await pause(800);
+  mark = seen.length;
+  const rowAgain = sheet.list?.rows["1"];
+  if (rowAgain) {
+    await tap(rowAgain, "pin 1's row in the sheet, again");
+  }
+  card = await cardAfter(
+    "the card from its row again",
+    mark,
+    (c) => c.number === 1
+  );
+  const backAgain = await draftAfter("pin 1's words back again", mark);
+  check(
+    "its row opens the card again, its words in the field",
+    card !== undefined &&
+      backAgain === `preview card-draft pin=1 chars=${REPLY.length}`,
+    `${card ? `card for pin ${card.number}` : "no card line"}; ${backAgain ?? "no card-draft line"}`
+  );
 
   // ── 8. Reply, Send 1, the live dot, Resolve ───────────────────────────
   // The card's Reply and Resolve go to the page's overlay (`cawco:reply`,
-  // `cawco:resolve`), which writes the doc and answers with its result.
-  const REPLY = "Make the count bigger";
+  // `cawco:resolve`), which writes the doc and answers with its result. The
+  // field holds pin 1's words from 6b already: a space after them (which
+  // the reply trims) moves the card as typing does.
   if (card?.field) {
     await tap(
       card.field,
@@ -810,7 +914,7 @@ xcrun simctl install ${udid} "${app}"`);
     );
   }
   await pause(800);
-  await type(REPLY);
+  await type(" ");
   await pause(800);
   // Where Reply stands once the keyboard moved the card.
   card = await cardAfter("the card with words in it", seen.length);
@@ -964,6 +1068,17 @@ xcrun simctl install ${udid} "${app}"`);
 
   // ── 9. Done: the page takes taps again ────────────────────────────────
   head = await headNow("the header before Done");
+  if (head.words !== "Done") {
+    // 6b's tap on Done ended the mode: Comment goes on again for its Done.
+    mark = seen.length;
+    await tap(head.comment, `Comment ("${head.words}"), on for Done`);
+    await lineAfter(
+      "Comment on for Done",
+      mark,
+      (l) => l === "preview comment on"
+    );
+    head = await headNow("the header with Comment on for Done");
+  }
   mark = seen.length;
   await tap(head.comment, `Comment ("${head.words}", from the newest header)`);
   const off = await lineAfter(

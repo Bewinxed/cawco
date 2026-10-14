@@ -323,6 +323,19 @@ export function deletePin(doc: Doc, pin: string): string | null {
 }
 
 /**
+ * The person dismissed the card of pin `pin`, which they had just made and
+ * said nothing in (no thread, no draft): the pin is taken back, as if the
+ * tap had not been made. Ink it stands on stays, as it was before its
+ * Comment was picked. A pin that holds a thread, or is gone, is left alone.
+ */
+export function withdrawPin(doc: Doc, pin: string): void {
+  const pins = pinsOf(doc);
+  if (pins.get(pin)?.thread.length === 0) {
+    doc.transact(() => pins.delete(pin));
+  }
+}
+
+/**
  * How a page looks an anchor up, in a document `D`: the same-origin frame
  * `selector` names in `within` (its document, or null when it is not there,
  * not loaded, or of another origin), then, in the document the anchor's frames
@@ -335,8 +348,8 @@ export interface AnchorLookup<E, D> {
   bySelector: (within: D, selector: string) => E | null;
   bySource: (within: D, file: string, line: number) => E[];
   byText: (within: D, text: string) => E | null;
-  textOf: (el: E) => string;
   frame: (within: D, selector: string) => D | null;
+  textOf: (el: E) => string;
   /** The top document, where an anchor's frames start. */
   top: D;
 }

@@ -5,6 +5,7 @@ import {
   replyToPin,
   resolvePin,
   type SendBody,
+  withdrawPin,
 } from "@cawco/core/comments";
 import { WebsocketProvider } from "y-websocket";
 import { Doc } from "yjs";
@@ -42,6 +43,8 @@ export interface ArtifactDoc {
   reply: (pin: string, text: string) => string | null;
   /** The person resolves pin `pin`, or reopens it; a sentence when it was not. */
   resolve: (pin: string, resolved: boolean) => string | null;
+  /** The person dismissed pin `pin`'s card having said nothing in it: the pin is taken back (core `withdrawPin`). */
+  withdraw: (pin: string) => void;
 }
 
 const viewOf = (doc: Doc): ArtifactView => {
@@ -114,6 +117,7 @@ export function joinArtifact(
     reply: (pin, text) => replyToPin(doc, pin, text),
     resolve: (pin, resolved) => resolvePin(doc, pin, resolved),
     delete: (pin) => deletePin(doc, pin),
+    withdraw: (pin) => withdrawPin(doc, pin),
     destroy: () => {
       provider.destroy();
       doc.destroy();

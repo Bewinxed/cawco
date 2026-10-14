@@ -9,6 +9,11 @@
    * Resolve or Reopen; Delete, asked in the card itself before it runs (The
    * Open Page Rule: AskHere under the footer, the page still live). What goes
    * wrong is said under the field, a refused delete under its question.
+   *
+   * A press anywhere outside it closes it (the house's outside-press rule,
+   * press-outside.ts), as Esc and its Close do; the page in the well, whose
+   * presses this document never hears, says its own (`cawco:press`). What
+   * the field holds is the pin's draft, which the pane keeps with the pin.
    */
   import type { Pin } from "@cawco/core/comments";
   import { untrack } from "svelte";
@@ -19,6 +24,7 @@
   import AskHere from "../AskHere.svelte";
   import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import MessageBody from "../MessageBody.svelte";
+  import { pressOutside } from "../press-outside";
   import PinDisc from "./PinDisc.svelte";
   import { pinName } from "./pin-name";
 
@@ -30,6 +36,7 @@
     live = false,
     thumb,
     problem,
+    draft = $bindable(""),
     onreply,
     onresolve,
     ondelete,
@@ -49,6 +56,8 @@
     thumb: string | null;
     /** What went wrong with the last reply, resolve or send, in the error formula. */
     problem: string | null;
+    /** What the person has written and not yet said: the pin's, kept by the pane. */
+    draft?: string;
     /** Keeps the person's words in the thread: true once kept, false when refused (its reason is `problem`). */
     onreply: (text: string) => boolean;
     onresolve: (resolved: boolean) => void;
@@ -58,10 +67,28 @@
     onpicture: (from: HTMLElement) => void;
   } = $props();
 
-  let draft = $state("");
   let height = $state(0);
   let width = $state(0);
   let field = $state<HTMLTextAreaElement | null>(null);
+  let card = $state<HTMLDivElement | null>(null);
+
+  // A press outside the card closes it; one in the picture's lightbox, a
+  // modal layer the card opened over everything, is that layer's.
+  $effect(() => {
+    if (!card) {
+      return;
+    }
+    return pressOutside(card, (event) => {
+      if (
+        !(
+          event.target instanceof Element &&
+          event.target.closest("[aria-modal='true'], dialog[open]")
+        )
+      ) {
+        onclose();
+      }
+    });
+  });
 
   /** The card's gap from its pin and from the well's edge, px: the space scale's. */
   const GAP = 12;
@@ -143,6 +170,7 @@
   class="pin-card"
   data-pin-card={pin.number}
   role="dialog"
+  bind:this={card}
   style:left={place ? `${place.left}px` : undefined}
   style:top={place ? `${place.top}px` : undefined}
   class:sheet

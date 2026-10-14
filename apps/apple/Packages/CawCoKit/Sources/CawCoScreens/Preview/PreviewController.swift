@@ -99,6 +99,14 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var pinAt: (x: Double, y: Double, r: Double)?
     /// The pin J and K stand on.
     private var focusedPin: String?
+    /// Each pin's unsaid words, by its id: kept with the pin while its card
+    /// is shut and while the page reloads, as the composer keeps its draft
+    /// for as long as its screen lives.
+    private var drafts: [String: String] = [:]
+    /// The pin the open card was opened for as it was made (a tap in Comment
+    /// mode, the radial's Comment), until it is said something: dismissed
+    /// with nothing said or written, it is taken back.
+    private var madePin: String?
     private var thumbs: [String: Data] = [:]
     /// What went wrong with the open card's reply, resolve or send.
     private var cardError: String?
@@ -321,6 +329,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         ])
         placeCardConstraints()
         card.onClose = { [weak self] in self?.closeCard() }
+        card.onDraft = { [weak self] text in
+            guard let self, let openPin else { return }
+            drafts[openPin] = text
+        }
         card.onReply = { [weak self] text in self?.reply(text) }
         card.onResolve = { [weak self] resolved in self?.resolve(resolved) }
         card.onDelete = { [weak self] in try await self?.delete() }
@@ -447,7 +459,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             return true
         }
         if openPin != nil {
-            closeCard()
+            closeCard(by: "escape")
             #if DEBUG
             PreviewProbe.say("preview escape card")
             #endif
@@ -577,8 +589,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
                 // Placed again: the mode goes back to how it was before.
                 if placingLeaves { comment(false) } else { placing = nil }
             }
-            openCard(id)
+            openCard(id, made: body["made"] as? Bool == true)
             refresh()
+        case "cawco:press":
+            // A press on the page outside the card: the outside-press rule, heard from the page.
+            if openPin != nil { closeCard(by: "page") }
         case "cawco:pin-at":
             guard Self.pinId(body["id"]) == openPin else { return }
             pinAt = Self.pinAt(body)
@@ -898,7 +913,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     // MARK: The card
 
-    private func openCard(_ id: String) {
+    /// Pin `id`'s card opens; `made`, for the pin the person just made.
+    /// Another pin's card is dismissed first (PreviewPane.svelte `openCard`).
+    private func openCard(_ id: String, made: Bool = false) {
+        if let open = openPin, open != id { closeCard(by: "another") }
+        if made { madePin = id }
         openPin = id
         focusedPin = id
         cardError = nil
@@ -909,18 +928,56 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         paintCard()
     }
 
-    private func closeCard() {
-        guard openPin != nil else { return }
+    /// The card is dismissed (PreviewPane.svelte `closeCard`): a tap outside
+    /// it, in the app or on the page, Esc, its Close, another pin opened, a
+    /// delete; `by` names which, for the probe. Its words stay with its pin;
+    /// a pin just made that holds neither words nor a thread is taken back
+    /// by the page's overlay (`cawco:withdraw`, core `withdrawPin`), its ink
+    /// left as it was.
+    private func closeCard(by: String = "close") {
+        guard let id = openPin else { return }
         openPin = nil
         pinAt = nil
         cardError = nil
         card.isHidden = true
         card.endEditing(true)
         card.closed()
+        outsideTap.view?.removeGestureRecognizer(outsideTap)
         deliver(["type": "cawco:track-pin", "id": NSNull()])
+        var withdrawn = false
+        if id == madePin {
+            madePin = nil
+            if (drafts[id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                drafts[id] = nil
+                deliver(["type": "cawco:withdraw", "pin": id])
+                withdrawn = true
+            }
+        }
         #if DEBUG
         PreviewProbe.say("preview card closed")
+        PreviewProbe.say("preview card dismissed by=\(by) draft=\(drafts[id]?.count ?? 0) withdrawn=\(withdrawn)")
+        #else
+        _ = withdrawn
         #endif
+    }
+
+    /// A tap outside the open card, anywhere in the window, closes it: the
+    /// house's outside-press rule (press-outside.ts), as UIKit's own
+    /// popovers dismiss. Touches on the card are its own, those in a layer
+    /// the preview presented (the pins' sheet, the picture's lightbox) are
+    /// that layer's, and the page says its own (`cawco:press`), where a tap
+    /// on a pin's disc opens that pin instead. It never takes a touch from
+    /// what it lands on.
+    private lazy var outsideTap: UITapGestureRecognizer = {
+        let tap = UITapGestureRecognizer(target: self, action: #selector(tappedOutside))
+        tap.cancelsTouchesInView = false
+        tap.delaysTouchesEnded = false
+        tap.delegate = self
+        return tap
+    }()
+
+    @objc private func tappedOutside() {
+        closeCard(by: "outside")
     }
 
     /// The open card as its pin stands in the hub's last read.
@@ -933,7 +990,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         }
         let arriving = card.isHidden
         card.isHidden = false
-        card.show(pin, live: live.contains(openPin), thumbnail: thumbs[openPin], problem: cardError, replying: replying)
+        card.show(pin, live: live.contains(openPin), thumbnail: thumbs[openPin], problem: cardError, replying: replying,
+                  draft: drafts[openPin] ?? "")
+        if outsideTap.view == nil, let window = view.window { window.addGestureRecognizer(outsideTap) }
         placeCard()
         if arriving {
             // It arrives as a floating card does: rising `popRise` from 0.96 over `durPop`.
@@ -951,6 +1010,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         #if DEBUG
         view.layoutIfNeeded()
         PreviewProbe.say(card.probeLine())
+        PreviewProbe.say("preview card-draft pin=\(card.number) chars=\((drafts[openPin] ?? "").count)")
         let frame = { (box: CGRect) in "\(Int(box.minX)),\(Int(box.minY)),\(Int(box.width)),\(Int(box.height))" }
         PreviewProbe.say("preview card-geometry card=\(frame(card.convert(card.bounds, to: nil))) well=\(frame(well.convert(well.bounds, to: nil))) keyboard=\(frame(view.keyboardLayoutGuide.layoutFrame)) view=\(frame(view.convert(view.bounds, to: nil))) \(card.probeScroll)")
         #endif
@@ -1034,7 +1094,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             guard let self else { return }
             let refused = await ask("reply", pin: pin, ["type": "cawco:reply", "pin": pin, "text": text],
                                     silent: "The page didn't answer, so the reply wasn't kept. Try again.")
-            if refused == nil, openPin == pin { card.replied() }
+            if refused == nil {
+                // Said: the words are in the thread, so no draft is left, and the pin stays.
+                drafts[pin] = nil
+                if madePin == pin { madePin = nil }
+                if openPin == pin { card.replied() }
+            }
             cardError = refused
             replying = false
             paintCard()
@@ -1070,7 +1135,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
                                    silent: "The page didn't answer, so the pin wasn't deleted. Try again.") {
             throw Refused(sentence: refused)
         }
-        if openPin == pin { closeCard() }
+        drafts[pin] = nil
+        if openPin == pin { closeCard(by: "delete") }
         refresh()
     }
 
@@ -1444,6 +1510,24 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
       });
     })();
     """
+}
+
+extension PreviewController: UIGestureRecognizerDelegate {
+    /// The outside tap hears a touch only while the card is open, and only
+    /// one outside the card, the page, and any layer the preview presented.
+    func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+        guard recognizer === outsideTap else { return true }
+        guard openPin != nil, !card.isHidden, let touched = touch.view else { return false }
+        if touched.isDescendant(of: card) || touched.isDescendant(of: web) { return false }
+        if let presented = presentedViewController, touched.isDescendant(of: presented.view) { return false }
+        return true
+    }
+
+    /// Whatever the touch lands on keeps it: the outside tap only listens.
+    func gestureRecognizer(_ recognizer: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith _: UIGestureRecognizer) -> Bool {
+        recognizer === outsideTap
+    }
 }
 
 /// The grabber's hit area: 44pt about the grabber, except where one of the

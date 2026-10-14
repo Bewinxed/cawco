@@ -61,6 +61,14 @@
  *    the card under its edge, and both are back when it scrolls back. A
  *    revision that moves the card to the list's third place, and a reload:
  *    the pin stands on that card, not on the one now at its old place.
+ *
+ * And the owner's report (2026-10-14: "if i click away from a comment it
+ * needs to dismiss the popover i don't have to keep clicking X"):
+ * e. An open card closes on a press outside it: on the pane's chrome,
+ *    elsewhere in the dashboard, on the page; and on Esc. A new pin with
+ *    nothing written is taken back; one with words keeps them, back in its
+ *    field when it opens again and after the desk reloads. A press on
+ *    another pin's disc opens that pin's card in its place.
  */
 import { join } from "node:path";
 import type { Frame } from "playwright-core";
@@ -300,6 +308,7 @@ const run = async (kit: Kit) => {
   await frameChecks(on);
   await scrollChecks(on, "window");
   await scrollChecks(on, "container");
+  await dismissChecks(on);
   await cutoverCheck(kit);
   kit.check(
     "the pages said no error",
@@ -383,6 +392,8 @@ const commentChecks = async (on: On, frame: Frame) => {
     JSON.stringify(first)
   );
 
+  // Words in its field, so the card's dismissal keeps the pin (the said reply comes in 3).
+  await writeIn(on, 1, "Bolder, perhaps.");
   await on.page.keyboard.press("Escape");
   const closed = (await card.count()) === 0;
   await on.page.keyboard.press("Escape");
@@ -452,6 +463,7 @@ const inkCommentChecks = async (on: On, frame: Frame) => {
       !!box.h,
     `pin ${JSON.stringify(pin && { kind: pin.kind, ink: pin.ink })}; box ${JSON.stringify(box)}`
   );
+  await writeIn(on, 2, "This stroke, thicker.");
   await on.page.keyboard.press("Escape");
   const rows = await on.page.locator(".pin-list .pin-row").count();
 
@@ -554,6 +566,8 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
     `label ${label} → ${after} (disabled ${disabled}); pictures ${pictures}; lines ${lines}; person's rows ${rows} → ${ownRows}; heard ${message?.last.slice(0, 300)}`
   );
 
+  // The press on Send, outside the card, closed it: it opens again from its row.
+  await on.page.locator('.pin-list .pin-row[data-pin-row="1"]').click();
   await card.getByRole("textbox").fill("And a little larger.");
   await card.getByRole("button", { name: "Reply" }).click();
   await settle(on.page, 400);
@@ -1114,11 +1128,12 @@ const frameChecks = async (on: On) => {
         card.focused,
       `anchor ${JSON.stringify(made?.anchor)}; resolves ${resolves}; card ${JSON.stringify(card)}`
     );
-    await on.page.keyboard.press("Escape");
-    await on.page.keyboard.press("Escape");
     if (!made) {
       return;
     }
+    await writeIn(on, made.number, "Run it on a schedule.");
+    await on.page.keyboard.press("Escape");
+    await on.page.keyboard.press("Escape");
 
     await on.page.locator('.preview-pane button[aria-label="Reload"]').click();
     const reloaded = (await until(
@@ -1209,7 +1224,10 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
       10_000
     ).catch(numbersNow);
     const number = Math.max(...Object.values(now));
-    return { number, ...(await focusedCard(on, number)) };
+    const card = await focusedCard(on, number);
+    // Words in it, so its dismissal keeps the pin.
+    await writeIn(on, number, "Keep this pin.");
+    return { number, ...card };
   };
   // The second tap of the run, then a third made while the second's card is
   // open, on the page below that card (it stands over the paragraphs).
@@ -1712,6 +1730,211 @@ const inkAt = (frame: Frame) =>
       },
     };
   });
+
+/**
+ * (e) The owner's report (2026-10-14: "if i click away from a comment it
+ * needs to dismiss the popover i don't have to keep clicking X"), on the
+ * cards page the pane shows last: a press outside an open card closes it,
+ * on the pane's chrome, elsewhere in the dashboard and on the page; Esc
+ * does; a new pin with nothing said is taken back, one with words keeps
+ * them, back in its field when it opens again and after the desk reloads;
+ * a press on another pin's disc opens that pin.
+ */
+const dismissChecks = async (on: On) => {
+  let frame = await pageFrame(on);
+  const comment = on.page.locator(
+    ".preview-pane button[aria-keyshortcuts='C']"
+  );
+  const cards = () => on.page.locator(".pin-card").count();
+  const pinsNow = async () => (await docOf(frame)).pins as Pins;
+  const field = (number: number) =>
+    on.page
+      .locator(`.pin-card[data-pin-card="${number}"]`)
+      .getByRole("textbox")
+      .inputValue({ timeout: 3000 })
+      .catch(() => null);
+  const shut = () =>
+    until("the card closed", cards, (count) => count === 0, 3000).catch(cards);
+  /**
+   * The card after card 8 (which holds a pin), card 8 in the middle of the
+   * view: the new pin stands below the other, so its card, which hangs down
+   * from its pin, leaves the other's disc clear to press.
+   */
+  const n = await frame.evaluate(() => {
+    const eight = document.querySelector('.card[data-n="8"]');
+    eight?.scrollIntoView({ block: "center" });
+    const next = eight?.nextElementSibling as HTMLElement | null | undefined;
+    const r = next?.getBoundingClientRect();
+    return r && r.bottom <= innerHeight - 60 ? (next?.dataset.n ?? null) : null;
+  });
+  if (!n) {
+    on.kit.check("e: a card of the page in view", false, "none");
+    return;
+  }
+  /** A Comment-mode tap on card `n`: the new pin's number. */
+  const tapNew = async () => {
+    const held = Object.keys(await pinsNow()).length;
+    const pane = await on.page.locator(FRAME).boundingBox();
+    const box = await boxIn(frame, `.card[data-n="${n}"]`);
+    const at = {
+      x: (pane?.x ?? 0) + box.x + box.w * 0.7,
+      y: (pane?.y ?? 0) + box.y + box.h * 0.5,
+    };
+    await on.page.mouse.move(at.x, at.y, { steps: 4 });
+    await on.page.mouse.click(at.x, at.y);
+    const now = await until(
+      "the new pin in the doc",
+      pinsNow,
+      (all) => Object.keys(all).length > held,
+      10_000
+    ).catch(pinsNow);
+    const number = Math.max(
+      ...Object.values(now).map((pin) => Number(pin.number))
+    );
+    await focusedCard(on, number);
+    return { held, number };
+  };
+
+  // A new pin, nothing said: a press on the pane's chrome (Comment, which also ends the mode).
+  await comment.click();
+  await pageInComment(frame, true);
+  const empty = await tapNew();
+  const openedEmpty = await cards();
+  await comment.click();
+  await pageInComment(frame, false);
+  const closedEmpty = await shut();
+  const takenBack = await until(
+    "the empty pin taken back",
+    async () => Object.keys(await pinsNow()).length,
+    (count) => count === empty.held,
+    5000
+  ).catch(async () => Object.keys(await pinsNow()).length);
+  on.kit.check(
+    "e: a new pin's card, nothing written in it, closes on a press on the pane's chrome, and the pin is taken back",
+    openedEmpty === 1 && closedEmpty === 0 && takenBack === empty.held,
+    `cards ${openedEmpty} → ${closedEmpty}; pins ${empty.held} → ${takenBack}`
+  );
+
+  // A new pin with words: a press elsewhere in the dashboard (the composer).
+  await comment.click();
+  await pageInComment(frame, true);
+  const kept = await tapNew();
+  await writeIn(on, kept.number, "Draft kept.");
+  await on.page.locator("textarea:not(.pin-card textarea)").first().click();
+  const closedKept = await shut();
+  await comment.click();
+  await pageInComment(frame, false);
+  const stays =
+    String(kept.number) in
+    Object.fromEntries(
+      Object.values(await pinsNow()).map((pin) => [String(pin.number), true])
+    );
+  const row = on.page.locator(
+    `.pin-list .pin-row[data-pin-row="${kept.number}"]`
+  );
+  await row.click();
+  const reopened = await field(kept.number);
+  on.kit.check(
+    "e: a new pin's card with words written in it closes on a press elsewhere in the dashboard; the pin stays, and its words are back in its field when it opens again",
+    closedKept === 0 && stays && reopened === "Draft kept.",
+    `cards after the press ${closedKept}; pin ${kept.number} kept ${stays}; field ${JSON.stringify(reopened)}`
+  );
+
+  // A press on the page, outside the card (the page's header, clear of the card).
+  const pane = await on.page.locator(FRAME).boundingBox();
+  const openBox = await on.page.locator(".pin-card").boundingBox();
+  const spots = [
+    { x: (pane?.x ?? 0) + 200, y: (pane?.y ?? 0) + HEADER / 2 },
+    { x: (pane?.x ?? 0) + 12, y: (pane?.y ?? 0) + HEADER / 2 },
+  ];
+  const spot =
+    spots.find(
+      (one) =>
+        !(
+          openBox &&
+          one.x >= openBox.x &&
+          one.x <= openBox.x + openBox.width &&
+          one.y >= openBox.y &&
+          one.y <= openBox.y + openBox.height
+        )
+    ) ?? spots[0];
+  await on.page.mouse.move(spot.x, spot.y, { steps: 4 });
+  await on.page.mouse.click(spot.x, spot.y);
+  const closedByPage = await shut();
+  await row.click();
+  const again = await field(kept.number);
+  await on.page.keyboard.press("Escape");
+  const closedByEsc = await shut();
+  on.kit.check(
+    "e: an open card closes on a press on the page outside it, its words still there when it opens again; Esc closes it",
+    closedByPage === 0 && again === "Draft kept." && closedByEsc === 0,
+    `after the page's press ${closedByPage} cards; field ${JSON.stringify(again)}; after Esc ${closedByEsc} cards`
+  );
+
+  // A press on another pin's disc, with this card open, opens that pin.
+  const other = Object.values(await pinsNow()).find(
+    (pin) => Number(pin.number) !== kept.number
+  ) as { number: number } | undefined;
+  await frame.evaluate(() =>
+    document
+      .querySelector('.card[data-n="8"]')
+      ?.scrollIntoView({ block: "center" })
+  );
+  await settle(on.page, 300);
+  await row.click();
+  // The card stands beside its pin once the page says where it is.
+  await settle(on.page, 600);
+  const disc = other ? await discAt(frame, other.number) : null;
+  if (disc && pane) {
+    await on.page.mouse.move(pane.x + disc.x, pane.y + disc.y, { steps: 4 });
+    await on.page.mouse.click(pane.x + disc.x, pane.y + disc.y);
+  }
+  const switched = await until(
+    "the other pin's card",
+    async () => ({
+      cards: await cards(),
+      other: await on.page
+        .locator(`.pin-card[data-pin-card="${other?.number}"]`)
+        .count(),
+    }),
+    (seen) => seen.cards === 1 && seen.other === 1,
+    5000
+  ).catch(() => null);
+  on.kit.check(
+    "e: with a pin's card open, a press on another pin's disc on the page opens that pin's card in its place",
+    !!other && !!disc && !!switched,
+    `other ${JSON.stringify(other)}; disc ${JSON.stringify(disc)}; cards ${JSON.stringify(switched)}`
+  );
+  await on.page.keyboard.press("Escape");
+
+  // The desk reloads: the words wait in the draft store.
+  await on.page.reload({ waitUntil: "domcontentloaded" });
+  frame = await pageFrame(on);
+  const back = on.page.locator(
+    `.pin-list .pin-row[data-pin-row="${kept.number}"]`
+  );
+  await back.waitFor({ timeout: 30_000 }).catch(() => undefined);
+  await back.click({ timeout: 5000 }).catch(() => undefined);
+  const afterReload = await until(
+    "the words back after the reload",
+    () => field(kept.number),
+    (words) => words === "Draft kept.",
+    5000
+  ).catch(() => field(kept.number));
+  on.kit.check(
+    "e: after the desk reloads, the pin's unsaid words are back in its field",
+    afterReload === "Draft kept.",
+    `field ${JSON.stringify(afterReload)}`
+  );
+  await on.page.keyboard.press("Escape");
+};
+
+/** Types `words` into pin `number`'s open card, unsaid: its draft. */
+const writeIn = (on: On, number: number, words: string) =>
+  on.page
+    .locator(`.pin-card[data-pin-card="${number}"]`)
+    .getByRole("textbox")
+    .fill(words);
 
 /** Pin `number`'s card in the pane, and whether its field has the keyboard. */
 const focusedCard = async (on: On, number: number | undefined) => {

@@ -206,11 +206,12 @@ const escOrder = async (
   sid: string
 ): Promise<void> => {
   await pinOne(frame);
+  // Comment on first: a press on it, outside an open card, would close the card.
+  const commentButton = desk.locator('.side-head button[title="Comment (C)"]');
+  await commentButton.click();
   await desk.locator('.pin-list .pin-row[data-pin-row="1"]').click();
   const card = desk.locator('.pin-card[data-pin-card="1"]');
   await card.waitFor({ timeout: 20_000 });
-  const commentButton = desk.locator('.side-head button[title="Comment (C)"]');
-  await commentButton.click();
   await desk.locator('.pin-list .pin-row[data-pin-row="1"]').focus();
   const state = async () => ({
     card: await card.count(),

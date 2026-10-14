@@ -15,6 +15,7 @@ import {
   replyToPin,
   resolvePin,
   type SendPicture,
+  withdrawPin,
 } from "@cawco/core/comments";
 import type { InkGroup } from "@cawco/core/ink";
 import { domToPng } from "modern-screenshot";
@@ -1002,6 +1003,12 @@ function commentAt(clientX: number, clientY: number) {
   if (!(el && artifact.keeps())) {
     return;
   }
+  // A tap on a pin's own disc opens that pin, as it does out of Comment mode.
+  const disc = el.closest("[data-pin-id]")?.getAttribute("data-pin-id");
+  if (disc) {
+    post("cawco:pin-open", { id: disc });
+    return;
+  }
   if (placing) {
     pins.placeAgain(placing, el, clientX, clientY);
     placing = null;
@@ -1009,6 +1016,30 @@ function commentAt(clientX: number, clientY: number) {
   }
   pins.commentAt(el, clientX, clientY);
 }
+
+/*
+ * A press on the page, out of Comment mode, tells the host (`cawco:press`):
+ * a press outside the open pin's card closes it, and the page is a frame of
+ * its own origin and process, whose presses the host's document never hears.
+ * One on a pin's disc opens that pin instead, and the overlay's own chrome
+ * (the ink's icon and menu) is the overlay's. A Comment-mode tap opens a pin
+ * of its own (`cawco:pin-open`), which closes the last one's card.
+ */
+window.addEventListener(
+  "pointerdown",
+  (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (
+      commenting ||
+      target?.closest("[data-pin-id], cawco-overlay") ||
+      !artifact.keeps()
+    ) {
+      return;
+    }
+    post("cawco:press");
+  },
+  { capture: true, passive: true }
+);
 
 // In Comment mode the whole press belongs to the overlay: a document-level
 // outside-click handler in the app must not dismiss the thing being pointed
@@ -1194,6 +1225,13 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       personWrite(message, "cawco:delete-result", (pin) =>
         deletePin(artifact.doc(), pin)
       ),
+    // The app dismissed the card of a pin it just made, said nothing in it: taken back.
+    "cawco:withdraw": async (message) => {
+      if (typeof message.pin === "string" && artifact.keeps()) {
+        await artifact.whenKnown();
+        withdrawPin(artifact.doc(), message.pin);
+      }
+    },
     "cawco:mode": (message) =>
       mode(
         message.mode === "comment",
