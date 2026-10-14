@@ -1504,6 +1504,34 @@ export type PlaceRepo =
       leftOut: PlaceLeftOut[];
     };
 
+/**
+ * Pushes a project's place, a git repository, to the hub's own remote of
+ * the project, with this machine's credential: what `create_repo`
+ * publishes from (hub project-settings.ts), so an outside service's token
+ * never leaves the hub. A place with no origin gets the hub's remote as
+ * its origin, as a workspace's cut gives it; one whose origin is anywhere
+ * else is refused. Args `[path, projectId, dryRun?]`: a dry run reads what
+ * would go (its branch, its commit, the files and bytes its tree holds)
+ * and pushes nothing. Answers {@link PlacePush}. Machine-scoped.
+ */
+export const CONTROL_PLACE_PUSH = "placePush";
+
+/**
+ * What {@link CONTROL_PLACE_PUSH} read, or pushed. Refused, naming them,
+ * when the branch's commits hold what the first commit's rules or the
+ * credential scan keep out, or a secret's name anywhere in its history.
+ */
+export interface PlacePush {
+  branch: string;
+  bytes: number;
+  commit: string;
+  files: number;
+  /** What stays out: every path in the place the first commit's rules keep out, with why. */
+  leftOut: PlaceLeftOut[];
+  pushed: boolean;
+  root: string;
+}
+
 /** Total git budget for cutting a workspace, including its remote fetch and checkout. */
 export const WORKSPACE_GIT_TIMEOUT_MS = 300_000;
 /** How long a new boundary may take to announce readiness. */

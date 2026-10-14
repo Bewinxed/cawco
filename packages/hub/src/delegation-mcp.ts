@@ -33,6 +33,7 @@ import {
   PROJECT_FROM_SESSION,
   projectFromSessionTool,
 } from "./project-offers";
+import { PROJECT_SETTINGS, type ProjectSettings } from "./project-settings";
 import { RELAY_TOOLS, type Relay } from "./relay";
 import { admitToolCall } from "./restart-holds";
 import { allows, CAW_TOOLS, refusal, roleOf, TRIAGE_TOOLS } from "./roles";
@@ -84,6 +85,13 @@ export const REDACTED_CREDENTIAL = "[cawco credential]";
  */
 const CREDENTIAL_TOKEN =
   /(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g;
+
+/**
+ * Where Claude Code names a call's tool_use id in `tools/call`'s `_meta`
+ * (`"_meta": {"claudecode/toolUseId": "toolu_…", "progressToken": 14}`,
+ * github.com/modelcontextprotocol/python-sdk/issues/2579).
+ */
+const TOOL_USE_META = "claudecode/toolUseId";
 
 /** What an admin write's progress heartbeat says while the person decides. */
 const ASKING = "Waiting for the person to approve this fleet-settings change";
@@ -189,8 +197,18 @@ export function createDelegationMcp(options: {
   actionTools?: (actor: InstanceRow | undefined) => ActionTool[];
   /** The relay tools (relay.ts): a project's public webhook paths, opening one asks you. */
   relayTools?: (actor: InstanceRow | undefined) => RelayTool[];
-  /** The memory tools (memory.ts): notes into a project's inbox, the curator's sorting and proposals. */
-  memoryTools?: (actor: InstanceRow | undefined) => MemoryTool[];
+  /**
+   * The memory tools (memory.ts): notes into a project's inbox, Caw's
+   * memory writes, the curator's sorting and proposals. `toolUseId` is the
+   * call's own (Claude Code's `_meta`): a proposal parked for the person is
+   * drawn at it.
+   */
+  memoryTools?: (
+    actor: InstanceRow | undefined,
+    toolUseId?: string
+  ) => MemoryTool[];
+  /** Caw's `project_settings` (project-settings.ts): his own project's settings, applied or asked about. */
+  projectSettings?: Pick<ProjectSettings, "call" | "definition">;
   /** Fleet watch's `triage_decide` (fleet-watch.ts), for a triage run. */
   triageTools?: (actor: InstanceRow | undefined) => TriageTool[];
   /**
@@ -205,7 +223,8 @@ export function createDelegationMcp(options: {
   askPerson: (
     actor: InstanceRow,
     name: string,
-    input: Record<string, unknown>
+    input: Record<string, unknown>,
+    toolUseId?: string
   ) => Promise<void>;
   /** `send_to_user` through the Telegram bridge: what did not arrive, and why (telegram.ts `deliver`). */
   sendToUser?: (
@@ -295,6 +314,7 @@ export function createDelegationMcp(options: {
       ...admin,
       ...(options.tasks ? taskTools(undefined) : []),
       ...(options.projectFromSession ? [projectFromSessionTool()] : []),
+      ...(options.projectSettings ? [options.projectSettings.definition] : []),
       ...(
         [
           options.cawTools,
@@ -414,7 +434,8 @@ export function createDelegationMcp(options: {
   const administer = async (
     actor: InstanceRow,
     name: string,
-    input: Record<string, unknown>
+    input: Record<string, unknown>,
+    toolUseId: string | undefined
   ): Promise<CallToolResult> => {
     const entry = admin.find((tool) => tool.name === name);
     if (!entry) {
@@ -427,7 +448,7 @@ export function createDelegationMcp(options: {
       return { content: [{ type: "text", text: answered }] };
     }
     if (isAdminWrite(name)) {
-      await options.askPerson(actor, name, input);
+      await options.askPerson(actor, name, input, toolUseId);
     }
     return (await entry.handler(input)) as CallToolResult;
   };
@@ -542,7 +563,8 @@ export function createDelegationMcp(options: {
     binding: string | null,
     name: string,
     args: Record<string, unknown>,
-    authorization?: string
+    authorization?: string,
+    toolUseId?: string
   ): Promise<CallToolResult> => {
     const admitted = admitToolCall(name, binding ?? "unbound");
     if ("refused" in admitted) {
@@ -552,7 +574,7 @@ export function createDelegationMcp(options: {
       };
     }
     try {
-      return await answer(binding, name, args, authorization);
+      return await answer(binding, name, args, authorization, toolUseId);
     } finally {
       admitted.release();
     }
@@ -562,10 +584,14 @@ export function createDelegationMcp(options: {
   const route = async (
     actor: InstanceRow,
     name: string,
-    input: Record<string, unknown>
+    input: Record<string, unknown>,
+    toolUseId: string | undefined
   ): Promise<CallToolResult | undefined> => {
     if (adminNames.has(name)) {
-      return await administer(actor, name, input);
+      return await administer(actor, name, input, toolUseId);
+    }
+    if (name === PROJECT_SETTINGS && options.projectSettings) {
+      return await options.projectSettings.call(actor, input, toolUseId);
     }
     if (name === PROJECT_FROM_SESSION && options.projectFromSession) {
       return await projectCall(actor, name, input);
@@ -585,18 +611,19 @@ export function createDelegationMcp(options: {
       }
       return (await entry.handler(input)) as CallToolResult;
     }
-    return await projectToolCall(actor, name, input);
+    return await projectToolCall(actor, name, input, toolUseId);
   };
 
   /** A routine, ingress, approved-action, relay or memory tool (routines.ts, ingress.ts, actions.ts, relay.ts, memory.ts), bound to the caller. */
   const projectToolCall = async (
     actor: InstanceRow,
     name: string,
-    input: Record<string, unknown>
+    input: Record<string, unknown>,
+    toolUseId: string | undefined
   ): Promise<CallToolResult | undefined> => {
     let group: ProjectTool[] | undefined;
     if (MEMORY_TOOLS.has(name)) {
-      group = options.memoryTools?.(actor);
+      group = options.memoryTools?.(actor, toolUseId);
     } else if (RELAY_TOOLS.has(name)) {
       group = options.relayTools?.(actor);
     } else if (ROUTINE_TOOLS.has(name)) {
@@ -620,7 +647,8 @@ export function createDelegationMcp(options: {
     binding: string | null,
     name: string,
     args: Record<string, unknown>,
-    authorization?: string
+    authorization?: string,
+    toolUseId?: string
   ): Promise<CallToolResult> => {
     try {
       // Routing context belongs to the bridge, not to a tool's input schema.
@@ -660,7 +688,7 @@ export function createDelegationMcp(options: {
         throw new Error(refusal(role, name));
       }
       return (
-        (await route(actor, name, input)) ??
+        (await route(actor, name, input, toolUseId)) ??
         (await sessionCall(actor, name, input, authorization))
       );
     } catch (error) {
@@ -862,7 +890,10 @@ export function createDelegationMcp(options: {
       // An admin write waits on the person as long as they take.
       const doing =
         LONG_CALLS[message.params.name] ??
-        (isAdminWrite(message.params.name) ? ASKING : undefined);
+        (isAdminWrite(message.params.name) ? ASKING : undefined) ??
+        (message.params.name === PROJECT_SETTINGS
+          ? "Applying, or waiting for the person to answer, this project-settings change"
+          : undefined);
       const heartbeat =
         doing && token !== undefined
           ? options.lifetime.every(15_000, () => {
@@ -883,6 +914,9 @@ export function createDelegationMcp(options: {
               );
             })
           : undefined;
+      // The tool call this request is, as Claude Code names it in `_meta`
+      // (`claudecode/toolUseId`): an ask it parks is drawn at that call.
+      const toolUseId = message.params._meta?.[TOOL_USE_META];
       try {
         return await call(
           binding,
@@ -890,7 +924,8 @@ export function createDelegationMcp(options: {
           message.params.arguments ?? {},
           typeof extra.requestInfo?.headers.authorization === "string"
             ? extra.requestInfo.headers.authorization
-            : undefined
+            : undefined,
+          typeof toolUseId === "string" ? toolUseId : undefined
         );
       } finally {
         options.lifetime.cancel(heartbeat);

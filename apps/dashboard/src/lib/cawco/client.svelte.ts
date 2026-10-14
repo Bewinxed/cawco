@@ -352,6 +352,11 @@ export interface PendingPermission {
   heard: number;
   input: Record<string, unknown>;
   instanceId: string;
+  /**
+   * The session whose pane draws the ask when it is not its own (a memory
+   * curator run's proposal, parked under its own id on machine "hub").
+   */
+  originInstanceId?: string;
   /** What the ask says, as the hub read it parking it: the same words on every surface. */
   presentation: PermissionPresentation;
   /**
@@ -363,7 +368,7 @@ export interface PendingPermission {
   /** Set when the hub routed the ask to its parent rather than to the user. */
   routedTo?: "parent";
   suggestions?: PermissionUpdate[];
-  /** A project lead's question: the thread it was asked in, where its answer lands. */
+  /** An ask a project's Caw made: the thread it was made in, drawn and answered there. */
   threadId?: string;
   toolName: string;
   /**
@@ -2975,6 +2980,7 @@ function handleFrame(frame: FramePayload): void {
         toolUseId: frame.toolUseId,
         raisedAt: frame.raisedAt,
         threadId: frame.threadId,
+        originInstanceId: frame.originInstanceId,
       });
       break;
     }

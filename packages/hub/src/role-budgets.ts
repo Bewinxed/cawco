@@ -19,6 +19,7 @@ import { createFleetWatch } from "./fleet-watch";
 import { createIngress } from "./ingress";
 import { makeLifetime } from "./lifetime";
 import { createMemory, createTurnWatch } from "./memory";
+import { createProjectSettings } from "./project-settings";
 import { createRelay } from "./relay";
 import { createRoutines } from "./routines";
 import type { Tasks } from "./tasks";
@@ -209,8 +210,10 @@ export const measureRoles = (): RoleSize[] => {
         }),
         db: {} as never,
         folderChanged: () => undefined,
+        notice: () => undefined,
         park: () => undefined,
         settle: () => undefined,
+        threadOf: () => undefined,
         watch: createTurnWatch({
           fleetHosts: () => [],
           get: () => undefined,
@@ -218,6 +221,14 @@ export const measureRoles = (): RoleSize[] => {
           put: () => undefined,
         }),
       }).tools(actor),
+    projectSettings: createProjectSettings({
+      ask: () => Promise.reject(new Error("measuring")),
+      connections: {} as never,
+      db: {} as never,
+      lands: () => Promise.reject(new Error("measuring")),
+      note: () => undefined,
+      publish: {} as never,
+    }),
     triageTools: (actor) =>
       createFleetWatch({
         asking: () => false,

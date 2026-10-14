@@ -637,6 +637,114 @@ function memoryProposal(input: Record<string, unknown>): Presented {
   };
 }
 
+/** The tool name a project's Caw changes his own project's settings by (hub project-settings.ts). */
+export const PROJECT_SETTINGS_TOOL = "mcp__cawco__project_settings";
+
+/** Where a project's work lands, as a project setting can set it. */
+export type ProjectLands = "main" | "branch" | "pr";
+
+/**
+ * One change `project_settings` makes, as the hub stores it on the ask and
+ * the thread note: a connection carries the account it signs in as.
+ */
+export type ProjectSettingChange =
+  | {
+      account?: string;
+      connection: string;
+      kind: "grant_connection";
+      service?: string;
+    }
+  | { github: string; kind: "link_repo" }
+  | { kind: "set_lands"; lands: ProjectLands }
+  | {
+      /** The account the GitHub connection signs in as: the repository's owner. */
+      account?: string;
+      /** What the project's place publishes: its tree's files and bytes. */
+      bytes: number;
+      connection: string;
+      files: number;
+      kind: "create_repo";
+      /** What CawCo's first commit of the place left out, and why (agent place-repo.ts). */
+      leftOut: { path: string; why: string }[];
+      name: string;
+      private: boolean;
+    };
+
+const LANDS_WORDS: Record<ProjectLands, string> = {
+  main: "Land this project's work on its default branch",
+  branch: "Land this project's work on a branch of its own",
+  pr: "Land this project's work as pull requests",
+};
+
+/** What one project setting change does, in the card's and the thread's words. */
+export const projectSettingWords = (change: ProjectSettingChange): string => {
+  switch (change.kind) {
+    case "grant_connection":
+      return `Let this project's sessions use ${change.connection}${
+        change.service && change.account
+          ? ` (${change.service} as ${change.account})`
+          : ""
+      }`;
+    case "link_repo":
+      return `Link this project to github.com/${change.github}`;
+    case "create_repo":
+      return `Publish this project to a ${change.private ? "private" : "public"} GitHub repository, ${change.account ? `${change.account}/` : ""}${change.name}`;
+    default:
+      return LANDS_WORDS[change.lands];
+  }
+};
+
+const MB = 1024 * 1024;
+
+/** What a `create_repo` publishes and leaves out, in the card's words. */
+export const publishedWords = (
+  change: Extract<ProjectSettingChange, { kind: "create_repo" }>
+): string => {
+  const size = `${change.files} ${change.files === 1 ? "file" : "files"}, ${(change.bytes / MB).toFixed(1)} MB`;
+  if (change.leftOut.length === 0) {
+    return `${size}. Nothing was left out.`;
+  }
+  return `${size}. Left out, ${change.leftOut.length} ${change.leftOut.length === 1 ? "path" : "paths"}: ${change.leftOut
+    .map((each) => `${each.path} (${each.why})`)
+    .join("; ")}.`;
+};
+
+/** The changes a parked `project_settings` ask carries, those that read as one. */
+const settingChanges = (input: Record<string, unknown>) =>
+  (Array.isArray(input.changes) ? input.changes : []).filter(
+    (one): one is ProjectSettingChange =>
+      typeof one === "object" &&
+      one !== null &&
+      ["grant_connection", "link_repo", "set_lands", "create_repo"].includes(
+        (one as { kind?: unknown }).kind as string
+      )
+  );
+
+/** A project setting change Caw asked about: each change in plain words, what a publish takes, and why. */
+function projectSettings(input: Record<string, unknown>): Presented {
+  const changes = settingChanges(input);
+  const published = changes.find(
+    (one): one is Extract<ProjectSettingChange, { kind: "create_repo" }> =>
+      one.kind === "create_repo"
+  );
+  const linked = changes.some((one) => one.kind === "link_repo");
+  let detail: string | undefined;
+  if (published) {
+    detail = publishedWords(published);
+  } else if (linked) {
+    detail =
+      "Linking sets the repository GitHub events and pull requests use; no file in the project changes.";
+  }
+  return {
+    summary:
+      changes.map(projectSettingWords).join(" · ") ||
+      "Change this project's settings",
+    ...(detail ? { detail } : {}),
+    changes: [],
+    fields: fieldsOf(input, ["changes", "ask", "project"]),
+  };
+}
+
 /** A file path, however the harness keys it (Claude Code, OpenCode, pi). */
 const filePathOf = (input: Record<string, unknown>): string | undefined =>
   text(input.file_path) ??
@@ -825,6 +933,9 @@ export function presentPermission(
   }
   if (toolName === MEMORY_PROPOSAL_TOOL) {
     return { asker: context.asker, ...memoryProposal(input) };
+  }
+  if (toolName === PROJECT_SETTINGS_TOOL) {
+    return { asker: context.asker, ...projectSettings(input) };
   }
   const admin = CAWCO_ADMIN_WRITE.exec(toolName);
   // An MCP tool is never a harness's own, whatever it is called.

@@ -40668,6 +40668,10 @@
               "permission_request"
             ]
           },
+          "originInstanceId": {
+            "description": "The session whose conversation made this ask, when the ask is not\nparked on that session's own row (a memory curator run's proposal,\nparked under its own id on machine \"hub\"). The ask is drawn and answered\nin that session's pane, at `toolUseId`, as its own asks are.",
+            "type": "string"
+          },
           "presentation": {
             "$ref": "#/components/schemas/PermissionPresentation",
             "description": "What the ask says on every surface, read once by the hub as it parks it\n(permission-presentation.ts): the daemon's leg does not carry it, and the\nhub fills it before anything else reads the frame."
@@ -40694,7 +40698,7 @@
             }
           },
           "threadId": {
-            "description": "A project lead's question: the thread it was asked in (the one whose\nmessage woke that turn, else the project's newest). Its answer lands in\nthat thread as your message.",
+            "description": "An ask a project's Caw made (his question, a project setting or a\nmemory proposal he asked about): the thread it was made in (the one\nwhose message woke that turn, else the project's newest). It is drawn\nand answered in that thread, and its answer lands there.",
             "type": "string"
           },
           "toolName": {

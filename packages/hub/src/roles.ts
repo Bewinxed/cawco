@@ -16,10 +16,11 @@
  * - **lead**: a project's Caw. Board tools only: tasks and to-dos, threads,
  *   drafting views, its project's folder on the hub and decision pages in it,
  *   its routines, its ingress and relays (opening a relay asks you),
- *   proposing approved actions, delegating and steering the
- *   project's work, the person's phone. Its harness's shell and edit tools
- *   run inside its place's boundary, each call decided by the hub first
- *   (lead-gate.ts).
+ *   proposing approved actions, its own project's settings and memory
+ *   (applied at once, or asked about first: project-settings.ts, memory.ts),
+ *   delegating and steering the project's work, the person's phone. Its
+ *   harness's shell and edit tools run inside its place's boundary, each
+ *   call decided by the hub first (lead-gate.ts).
  * - **overseer**: fleet-watch triage (fleet-watch.ts): it reads the fleet
  *   and the session's task, and decides once with `triage_decide` (nudge the
  *   lead, interrupt, stop, tell you, or leave it), which the hub carries
@@ -34,7 +35,8 @@
  *
  * Memory (§5.4): the worker, the delegate and the lead write notes into
  * their project's inbox (`memory_note`); only the lead and the curator
- * propose (`memory_propose`), and only the curator sorts the inbox.
+ * call `memory_propose` (the lead's commits, the curator's waits for you),
+ * and only the curator sorts the inbox.
  */
 import type { InstanceRow, SessionRole } from "@cawco/core";
 import { ARTIFACT_TOOLS } from "./artifacts/tools";
@@ -81,8 +83,11 @@ export const CAW_TOOLS = [
   "folder_write",
 ] as const;
 
-/** How a routine's run that woke Caw went (routines.ts), the lead's alone. */
-const LEAD_OWN = ["routine_result"] as const;
+/**
+ * The lead's alone: how a routine's run that woke Caw went (routines.ts),
+ * and his own project's settings (project-settings.ts).
+ */
+const LEAD_OWN = ["routine_result", "project_settings"] as const;
 
 /** Fleet watch's triage decision (fleet-watch.ts), the overseer's alone. */
 export const TRIAGE_TOOLS = ["triage_decide"] as const;

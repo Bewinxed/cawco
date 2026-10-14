@@ -343,6 +343,39 @@ const credentialHits = async (
   return hits;
 };
 
+/** Whether `rule` (a file, or a folder ending in `/`) covers `path`. */
+const covers = (rule: PlaceLeftOut, path: string): boolean =>
+  path === rule.path || (rule.path.endsWith("/") && path.startsWith(rule.path));
+
+/**
+ * A place that is already a repository, read for publishing
+ * (CONTROL_PLACE_PUSH): `leftOut`, every path the first commit's rules keep
+ * out that its commits do not hold, with why; `refused`, every committed
+ * path those rules or the credential scan would have kept out, which no
+ * publish takes.
+ */
+export const publishCheck = async (
+  root: string,
+  tracked: readonly string[]
+): Promise<{ leftOut: PlaceLeftOut[]; refused: PlaceLeftOut[] }> => {
+  const { leftOut } = await walk(root);
+  const refused = tracked.flatMap((path) => {
+    const rule = leftOut.find((one) => covers(one, path));
+    return rule ? [{ path, why: rule.why }] : [];
+  });
+  const ruled = new Set(refused.map((one) => one.path));
+  const scanned = await credentialHits(
+    root,
+    tracked.filter((path) => !ruled.has(path))
+  );
+  return {
+    leftOut: leftOut
+      .filter((rule) => !tracked.some((path) => covers(rule, path)))
+      .sort((a, b) => a.path.localeCompare(b.path)),
+    refused: [...refused, ...scanned],
+  };
+};
+
 /** What a first commit would take, read without writing in the place. */
 interface Plan {
   bytes: number;

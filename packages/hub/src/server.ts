@@ -140,6 +140,7 @@ import {
   CONTROL_MOVE_HOME_CREDENTIAL,
   CONTROL_MOVE_HOME_LOGIN,
   CONTROL_PI_DEFAULT_MODEL,
+  CONTROL_PLACE_PUSH,
   CONTROL_PLACE_REPO,
   CONTROL_PROBE_ACCOUNT,
   CONTROL_READ_HOME_CREDENTIALS,
@@ -382,7 +383,7 @@ import {
 import { FleetMcp } from "./fleet-mcp";
 import { createFleetWatch, type FleetWatch } from "./fleet-watch";
 import { accountForecasts, carrySequence } from "./forecast";
-import { gitRemoteRoutes } from "./git-remote";
+import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import type { HarnessPlanDeps } from "./harness-plans";
 import { hidden } from "./hidden";
 import { hubId } from "./hub-id";
@@ -476,6 +477,11 @@ import {
   placesChanged,
   unbound,
 } from "./project-placements";
+import {
+  createProjectSettings,
+  PROJECT_SETTINGS,
+  type ProjectSettings,
+} from "./project-settings";
 import { createProjectStops } from "./project-stops";
 import { placePath, readRemote } from "./projects";
 import { createPush, pushRoutes } from "./push";
@@ -487,6 +493,7 @@ import {
 } from "./rebalance";
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
 import { createRelay, type Relay, relayRoutes } from "./relay";
+import { createRepoPublish } from "./repo-publish";
 import { createRoutines, type Routines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
 import { createSessionIdentities } from "./session-identity";
@@ -2451,13 +2458,21 @@ export const createServer = (
       pending.resolve(requestId);
     },
     // An ask approved after a restart: the hub runs the write itself.
-    run: async (name, input) => {
+    run: async (name, input, instanceId) => {
       // A relay's opening asks as an admin write does (relay.ts).
       if (name === "relay_create") {
         if (!relay) {
           throw new Error("The hub's relay isn't made yet.");
         }
         return await relay.runApproved(input);
+      }
+      // Caw's project setting he asked about (project-settings.ts).
+      if (name === PROJECT_SETTINGS) {
+        const [asker] = db.getInstancesByIds([instanceId]);
+        if (!(asker && projectSettings)) {
+          throw new Error("The session that asked is gone; nothing changed.");
+        }
+        return await projectSettings.runApproved(asker, input);
       }
       const entry = adminTools().find((tool) => tool.name === name);
       if (!entry) {
@@ -2492,10 +2507,14 @@ export const createServer = (
         },
       });
     },
+    // A project's Caw asks in his thread (caw.ts, made further down).
+    threadOf: (actor) => lead?.askThread(actor),
   });
   // Each project's Caw (caw.ts), made further down once its services are; the
   // settlement, answer and process-end paths above it reach it through this.
   let lead: Caw | undefined;
+  // Caw's own project settings (project-settings.ts), made with connections.
+  let projectSettings: ProjectSettings | undefined;
   // The routines (routines.ts), likewise: a send record moves before they are made.
   let leadRuns: Routines | undefined;
   /**
@@ -14250,7 +14269,8 @@ export const createServer = (
       method === CONTROL_WORKSPACE_ARCHIVE ||
       method === CONTROL_WORKSPACE_BUNDLE ||
       method === CONTROL_WORKSPACE_AT ||
-      method === CONTROL_PLACE_REPO
+      method === CONTROL_PLACE_REPO ||
+      method === CONTROL_PLACE_PUSH
         ? WORKSPACE_CREATE_TIMEOUT_MS
         : WORKSPACE_TIMEOUT_MS;
     const answer = await callAgent(machineId, method, args, timeout);
@@ -14599,6 +14619,11 @@ export const createServer = (
       inboxPassed: (projectId) => routines.inboxPassed(projectId),
     }),
     folderChanged: (projectId) => tasks.touched(projectId),
+    // Caw is made further down; his thread is read only once a call runs.
+    notice: (projectId, threadId, note) => {
+      lead?.notice(projectId, threadId, note);
+    },
+    threadOf: (actor) => lead?.askThread(actor),
     park: (envelope) => parkForPerson(envelope),
     settle: (requestId) => {
       pending.resolve(requestId);
@@ -15091,6 +15116,27 @@ export const createServer = (
   });
   // The stage engine's one door for a `by: action` move (tasks.ts).
   actionMoves = actions.actionMove;
+  // Caw's own project settings, applied through the settings' own paths, or
+  // asked about as an admin write is (project-settings.ts).
+  const settings = createProjectSettings({
+    ask: (actor, input, toolUseId) =>
+      adminAsks.ask(actor, PROJECT_SETTINGS, input, toolUseId),
+    connections,
+    db,
+    lands: (projectId, lands) => dispatcher.configure(projectId, { lands }),
+    publish: createRepoPublish({
+      bare: (projectId) => bareRepoPath(GIT_ROOT, projectId),
+      call: callMachine,
+      connections,
+      places: placeRepos,
+    }),
+    note: (actor, note) => {
+      if (actor.projectId) {
+        caw.notice(actor.projectId, caw.askThread(actor) ?? null, note);
+      }
+    },
+  });
+  projectSettings = settings;
   const delegationMcp = createDelegationMcp({
     lifetime,
     tasks,
@@ -15111,9 +15157,11 @@ export const createServer = (
     ingressTools: (actor) => ingress.tools(actor),
     actionTools: (actor) => actions.tools(actor),
     relayTools: (actor) => relays.tools(actor),
-    memoryTools: (actor) => projectMemory.tools(actor),
+    memoryTools: (actor, toolUseId) => projectMemory.tools(actor, toolUseId),
+    projectSettings: settings,
     triageTools: (actor) => watch?.tools(actor) ?? [],
-    askPerson: (actor, name, input) => adminAsks.ask(actor, name, input),
+    askPerson: (actor, name, input, toolUseId) =>
+      adminAsks.ask(actor, name, input, toolUseId),
     sendToUser: telegram
       ? (actor, message, attachments) =>
           telegram.deliver(actor.machineId, actor.id, message, attachments)

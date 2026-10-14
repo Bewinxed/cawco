@@ -41,6 +41,7 @@ import {
   MEMORY_PROPOSAL_TOOL,
   machineLabel,
   type PermissionRequestFrame,
+  PROJECT_SETTINGS_TOOL,
   questionsOf,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
@@ -104,6 +105,8 @@ const LOOK_GRACE_MS = 5000;
 const TURN_ENDED = "Finished its turn";
 /** A memory proposal's visible title (memory.ts): what it is, its project under it. */
 const MEMORY_PROPOSAL_NAME = "Memory proposal";
+/** A project setting Caw asked about (project-settings.ts): what it is, its project under it. */
+const PROJECT_SETTING_NAME = "Project setting";
 
 /** Tools whose approval must be read in full: a push never offers Approve for them. */
 const OPEN_ONLY_TOOLS = new Set([
@@ -120,8 +123,16 @@ export type PushData =
       kind: "ask";
       instanceId: string;
       machineId: string;
+      /**
+       * The session whose pane the ask is drawn in when it is not its own
+       * (a memory curator run's proposal): a tap opens that session at the
+       * card. Null otherwise.
+       */
+      originInstanceId: string | null;
       projectId: string | null;
       requestId: string;
+      /** The Caw thread the ask was made in: a tap opens it at the card. Null otherwise. */
+      threadId: string | null;
       workflowRunId: string | null;
     }
   | {
@@ -727,6 +738,25 @@ export const createPush = ({
     );
   };
 
+  /**
+   * An ask's visible title: a memory proposal and a project setting by what
+   * they are ("Memory proposal", "Project setting"), never by what they say;
+   * any other by its session or workflow ({@link askName}).
+   */
+  const askTitle = (
+    row: { title: string | null; titleSource: string | null } | undefined,
+    payload: Partial<PermissionRequestFrame> & { workflowRunId?: string },
+    instanceId: string
+  ): string => {
+    if (payload.toolName === MEMORY_PROPOSAL_TOOL) {
+      return MEMORY_PROPOSAL_NAME;
+    }
+    if (payload.toolName === PROJECT_SETTINGS_TOOL) {
+      return PROJECT_SETTING_NAME;
+    }
+    return askName(row, payload.workflowRunId, instanceId);
+  };
+
   return {
     /**
      * A session (or a workflow) is blocked on you: a permission or a question.
@@ -763,10 +793,9 @@ export const createPush = ({
       moment(
         {
           shown: alertOf(
-            // A proposal is named by what it is, never by what it says.
-            !row && payload.toolName === MEMORY_PROPOSAL_TOOL
-              ? MEMORY_PROPOSAL_NAME
-              : askName(row, payload.workflowRunId, instanceId),
+            // A proposal and a project setting are named by what they are,
+            // never by what they say.
+            askTitle(row, payload, instanceId),
             project
           ),
           sealed: {
@@ -780,8 +809,10 @@ export const createPush = ({
             kind: "ask",
             instanceId,
             machineId: envelope.machineId,
+            originInstanceId: payload.originInstanceId ?? null,
             projectId,
             requestId,
+            threadId: payload.threadId ?? null,
             workflowRunId: payload.workflowRunId ?? null,
           },
         },

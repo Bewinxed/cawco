@@ -30,15 +30,18 @@ export interface AdminAsksDeps {
   readonly park: (envelope: Envelope) => void;
   /** The parked ask by request id, while it is pending (kept ones included). */
   readonly parked: (requestId: string) => Envelope | undefined;
-  /** Runs an admin write as the hub; answers what the tool said. */
+  /** Runs an approved write as the hub for the session that asked; answers what the tool said. */
   readonly run: (
     name: string,
-    input: Record<string, unknown>
+    input: Record<string, unknown>,
+    instanceId: string
   ) => Promise<string>;
   /** Takes a settled ask off the pending ledger. */
   readonly settle: (requestId: string) => void;
   /** Says something to a session, as the hub. */
   readonly tell: (instanceId: string, text: string) => void;
+  /** The thread a project's Caw asks in (caw.ts `askThread`); undefined for any other session. */
+  readonly threadOf: (actor: InstanceRow) => string | undefined;
 }
 
 interface Waiter {
@@ -55,8 +58,14 @@ interface AdminPayload {
 }
 
 /** What the ask was for, in the refusal's words: a relay opens a public path, everything else is a fleet setting. */
-const askedFor = (name: string) =>
-  name === "relay_create" ? "opening this relay" : "this fleet-settings change";
+const askedFor = (name: string) => {
+  if (name === "relay_create") {
+    return "opening this relay";
+  }
+  return name === "project_settings"
+    ? "this project-settings change"
+    : "this fleet-settings change";
+};
 
 const refusalText = (result: PermissionResult, name: string): string => {
   const reason = result.behavior === "deny" ? result.message.trim() : "";
@@ -69,6 +78,7 @@ export const createAdminAsks = ({
   run,
   settle,
   tell,
+  threadOf,
 }: AdminAsksDeps) => {
   /** Calls waiting on the person, by the ask's request id. */
   const waiting = new Map<string, Waiter>();
@@ -108,7 +118,7 @@ export const createAdminAsks = ({
     console.log(
       `[admin-asks] ${ask.name} (${requestId}) approved after a hub restart; the hub runs it for ${ask.instanceId}`
     );
-    run(ask.name, ask.input).then(
+    run(ask.name, ask.input, ask.instanceId).then(
       (said) =>
         tell(
           ask.instanceId,
@@ -126,17 +136,21 @@ export const createAdminAsks = ({
     /**
      * Parks `name(input)` from `actor` as the person's ask and waits for the
      * answer: resolves once approved, rejects with the refusal when denied or
-     * withdrawn.
+     * withdrawn. A project's Caw asks in his thread: the ask carries it, and
+     * the tool call it gates (`toolUseId`, Claude Code's `_meta`), so it is
+     * drawn and answered there.
      */
     ask(
       actor: InstanceRow,
       name: string,
-      input: Record<string, unknown>
+      input: Record<string, unknown>,
+      toolUseId?: string
     ): Promise<void> {
       const requestId = crypto.randomUUID();
       const answered = new Promise<void>((resolve, reject) => {
         waiting.set(requestId, { name, resolve, reject });
       });
+      const threadId = threadOf(actor);
       park({
         verb: "frames",
         machineId: actor.machineId,
@@ -151,6 +165,8 @@ export const createAdminAsks = ({
           toolName: `mcp__cawco__${name}`,
           input,
           adminWrite: name,
+          ...(threadId ? { threadId } : {}),
+          ...(toolUseId ? { toolUseId } : {}),
         },
       });
       console.log(
@@ -199,7 +215,7 @@ export const createAdminAsks = ({
       waiting.delete(requestId);
       waiter.reject(
         new Error(
-          "The ask for this fleet-settings change was withdrawn before the person answered it; nothing changed."
+          `The ask for ${askedFor(waiter.name)} was withdrawn before the person answered it; nothing changed.`
         )
       );
     },

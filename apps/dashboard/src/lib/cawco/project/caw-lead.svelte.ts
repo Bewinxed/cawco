@@ -37,6 +37,7 @@ import {
   cawOf,
   configureCaw,
   projectSpend,
+  threadsOf,
 } from "../client.svelte";
 import type { CawStatus } from "../home/Caw.svelte";
 import { dur } from "../motion/curves.svelte";
@@ -212,14 +213,21 @@ export class CawLead {
     return id ? (cawco.instanceIndex.byId.get(id) ?? null) : null;
   });
 
-  /** The questions the lead has parked in threads, oldest first. */
+  /**
+   * What the lead has asked in his threads, oldest first: his questions and
+   * project settings (on his row), and memory proposals he asked about
+   * (parked under their own id, tagged to one of this project's threads).
+   */
   readonly asks = $derived.by((): BlockedRequest[] => {
     const id = this.view?.leadInstanceId;
-    return id
-      ? cawco.blocked.filter(
-          (row) => row.instanceId === id && row.request.threadId
-        )
-      : [];
+    const threads = new Set(
+      threadsOf(this.#projectId()).map((thread) => thread.id)
+    );
+    return cawco.blocked.filter(
+      (row) =>
+        row.request.threadId &&
+        (row.instanceId === id || threads.has(row.request.threadId))
+    );
   });
 
   /** The attempt running again after a failed one, if any. */
@@ -307,7 +315,9 @@ export class CawLead {
         )?.[0]?.question;
         return {
           kind: "ask",
-          text: question ?? "Caw asks you something",
+          text:
+            question ??
+            (first.request.presentation.summary || "Caw asks you something"),
           more: this.asks.length - 1,
           threadId: first.request.threadId as string,
         };

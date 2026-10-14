@@ -40,6 +40,7 @@ import {
   CONTROL_MOVE_PREPARE,
   CONTROL_MOVE_REMOTE_CREDENTIAL,
   CONTROL_MOVE_SNAPSHOT,
+  CONTROL_PLACE_PUSH,
   CONTROL_PLACE_REPO,
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_RUN_COMMAND,
@@ -104,6 +105,7 @@ import {
   setHubCredential,
   setMoveProgress,
 } from "./move";
+import { placePush } from "./place-push";
 import { placeRepo } from "./place-repo";
 import { servingPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
@@ -2362,6 +2364,14 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : placeRepo(path, dryRun)
+    );
+    // A place published to GitHub goes through the hub's remote first.
+    supervisor.registerDaemonFunction(
+      CONTROL_PLACE_PUSH,
+      (path, projectId, dryRun) =>
+        fenced()
+          ? Promise.reject(new Error(AGENT_RESTARTING))
+          : placePush(path, projectId, dryRun)
     );
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_BOUNDARY,

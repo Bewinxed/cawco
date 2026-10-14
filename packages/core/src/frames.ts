@@ -170,6 +170,13 @@ export interface PermissionRequestFrame {
   instanceId: string;
   kind: "permission_request";
   /**
+   * The session whose conversation made this ask, when the ask is not
+   * parked on that session's own row (a memory curator run's proposal,
+   * parked under its own id on machine "hub"). The ask is drawn and answered
+   * in that session's pane, at `toolUseId`, as its own asks are.
+   */
+  originInstanceId?: string;
+  /**
    * What the ask says on every surface, read once by the hub as it parks it
    * (permission-presentation.ts): the daemon's leg does not carry it, and the
    * hub fills it before anything else reads the frame.
@@ -184,9 +191,10 @@ export interface PermissionRequestFrame {
   requestKind?: "tool" | "question";
   suggestions?: PermissionUpdate[];
   /**
-   * A project lead's question: the thread it was asked in (the one whose
-   * message woke that turn, else the project's newest). Its answer lands in
-   * that thread as your message.
+   * An ask a project's Caw made (his question, a project setting or a
+   * memory proposal he asked about): the thread it was made in (the one
+   * whose message woke that turn, else the project's newest). It is drawn
+   * and answered in that thread, and its answer lands there.
    */
   threadId?: string;
   toolName: string;

@@ -61,7 +61,7 @@ type Git = (root: string, ...args: string[]) => Promise<string>;
  * create's one `deadline`; `env` in place of the host's (the hub's
  * credential, env-only). git's stderr, credential taken out, is the error.
  */
-const gitUntil =
+export const gitUntil =
   (deadline: number, env: Record<string, string> = hostEnvironment()): Git =>
   async (root, ...args) => {
     const late = `workspace git exceeded ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`;

@@ -587,8 +587,7 @@ export function handoffTools(deps: HandoffDeps) {
             "A named delegate type — see the types listed above. Sets harness/model/effort/skills " +
               "for you; an explicit harness/model/skills below still overrides what the type says. " +
               "Default: Jev's pick when the hub has Jev, else 'medium'; with a harness other than medium's and no type, `model` is required. " +
-              "The description below is a startup snapshot; execution reads the current hub definition. " +
-              "Use list_delegate_types to see edits made since this session started."
+              "The list above is from this session's start; list_delegate_types reads the live catalog, which the call uses."
           ),
         harness: z
           .enum(["claude", "opencode", "pi"])
@@ -626,10 +625,7 @@ export function handoffTools(deps: HandoffDeps) {
           .array(z.string())
           .optional()
           .describe(
-            "Skill names to load natively into the delegate session. Each skill is invoked " +
-              "via the harness's own slash-command mechanism before the prompt — the same as " +
-              "if the user typed /skill-name in that session. Works cross-harness. Overrides " +
-              "`type`'s skills when both are set."
+            "Skills the delegate loads before the prompt, as if /skill-name were typed there, on any harness. Overrides `type`'s skills."
           ),
         workspace: z
           .string()
@@ -653,10 +649,8 @@ export function handoffTools(deps: HandoffDeps) {
           .boolean()
           .optional()
           .describe(
-            "Let the delegate spawn delegates and sessions of its own. Default false: a delegate is a " +
-              "leaf and does the work itself, which keeps the tree one level deep and every report " +
-              'visible here. A type marked "may delegate by default" flips that default; an explicit ' +
-              "value here wins either way. Set true only for an orchestrator-style delegate that must fan out."
+            "Let the delegate spawn delegates and sessions of its own. Default false, a leaf that does the work itself and reports here, " +
+              'unless its type is marked "may delegate by default"; a value here wins. Set true only for an orchestrator that must fan out.'
           ),
         checks: checksParameter().describe(
           "The item's acceptance checks. The hub runs each command in the item's worktree, inside its workspace boundary exactly as the delegate's own shell commands run (same sandbox, same $TMPDIR), when the delegate calls finish_item; the item is done only when every command exits 0 and its stdout contains `expect` where one is given. Write the checks a reviewer would run: build, lint, type-check, a grep that proves a removal, one script run for a live assertion. The delegate runs nothing beyond these to prove the work."
@@ -674,9 +668,9 @@ export function handoffTools(deps: HandoffDeps) {
           .array(z.string())
           .optional()
           .describe(
-            "Files the work produces that are the deliverable rather than commits, as paths from the repository's root, e.g. ['report.md']. " +
-              "When the checks pass, the hub copies each into the project's folder under assets/<task or item>/ and the report lists them; " +
-              "a missing one goes back to the delegate like a failing check. Needs this session to be in a project."
+            "Deliverable files that are not commits, as paths from the repository's root, e.g. ['report.md']. " +
+              "Once the checks pass, the hub copies each into the project's folder under assets/<task or item>/ and the report lists them; " +
+              "a missing one fails like a check. Needs this session to be in a project."
           ),
         group: groupParameter().optional(),
         owns: ownsParameter().optional(),

@@ -29,13 +29,22 @@
  *   `curator` role: no edit, shell or web tools, CawCo's MCP server only, and
  *   of CawCo's tools only these: it reads, proposes, and archives what is not
  *   a lasting fact.
- * - **Proposals** (`memory_propose`, the curator's and Caw's): a file's whole
- *   new text, citing its notes. Each is the person's ask through the hub's
- *   one needs-you path (pending.ts), drawn as a diff on every surface
- *   (core permission-presentation.ts), kept as `memory/proposals/<id>.json`
- *   and parked again when the hub starts. Approve commits it as the person;
- *   a file changed since is merged three ways, and refused when it no longer
- *   applies. Reject archives its notes.
+ * - **Caw's memory writes** (`memory_propose` from a project's lead): the
+ *   owner's word, "caw should be able to do whatever it wants". The file's
+ *   whole new text, checked as a proposal is (the file, the notes it cites,
+ *   their taint), commits at once as Caw, its notes archived as applied, and
+ *   is noted in the thread his turn answers. With `ask: true` it is a
+ *   proposal instead, parked in that thread.
+ * - **Proposals** (`memory_propose` from the curator, or Caw's `ask`): a
+ *   file's whole new text, citing its notes. Each is the person's ask through
+ *   the hub's one needs-you path (pending.ts), drawn as a diff on every
+ *   surface (core permission-presentation.ts), kept as
+ *   `memory/proposals/<id>.json` and parked again when the hub starts. It
+ *   carries where it was made: Caw's thread, or the curator run's session,
+ *   and the tool call; it is drawn and answered there as well as in Needs
+ *   you. Approve commits it as the person; a file changed since is merged
+ *   three ways, and refused when it no longer applies. Reject archives its
+ *   notes. Caw's thread hears either.
  * - **Make a note** (the person's): straight to AGENTS.md as a diff commit,
  *   from a hub route or a Caw thread message that opens with "Make a note:".
  * - **Brief context** (dispatch.ts): AGENTS.md and the `knowledge/` files a
@@ -112,6 +121,9 @@ const ANCESTRY = 12;
 
 const HUB: FolderAuthor = { name: "CawCo hub" };
 const JEV: FolderAuthor = { name: "Jev" };
+const CAW: FolderAuthor = { name: "Caw" };
+/** Who a curator run's proposals are by. */
+const CURATOR_NAME = "Memory curator";
 
 /** Why a session's note is never a candidate, as the hub saw it. */
 export type Taint = "routine" | "heartbeat" | "subagent" | "web";
@@ -153,10 +165,10 @@ const refuse = (code: 400 | 403 | 404 | 409, message: string): never => {
  */
 export const personsTier = (rel: string): string | undefined => {
   if (rel === AGENTS_FILE) {
-    return "AGENTS.md is the person's: propose a change with memory_propose, and they approve it.";
+    return "AGENTS.md is written with memory_propose, which checks the notes it cites.";
   }
   if (rel === KNOWLEDGE_DIR || rel.startsWith(`${KNOWLEDGE_DIR}/`)) {
-    return "knowledge/ is the curated tier, the person's: propose a change with memory_propose, and they approve it.";
+    return "knowledge/ is the curated tier: write it with memory_propose, which checks the notes it cites.";
   }
   if (rel === MEMORY_DIR || rel.startsWith(`${MEMORY_DIR}/`)) {
     return "memory/ is the agents' inbox: write a note with memory_note.";
@@ -621,7 +633,11 @@ export interface Proposal {
   projectId: string;
   /** The proposing session. */
   session: string;
+  /** Caw's thread it was asked in; none for the curator's, which is its session's. */
+  threadId?: string;
   time: string;
+  /** The `memory_propose` call that made it (Claude Code's `_meta`): where it is drawn. */
+  toolUseId?: string;
   why: string;
 }
 
@@ -844,10 +860,18 @@ export interface MemoryDeps {
   >;
   /** The project's folder changed under its tasks (a commit landed). */
   readonly folderChanged: (projectId: string) => void;
+  /** Notes a line in a project's thread, else its newest (caw.ts `notice`); wakes no model. */
+  readonly notice: (
+    projectId: string,
+    threadId: string | null,
+    note: { body?: string; title: string }
+  ) => void;
   /** Parks an ask for the person: the pending ledger, every dashboard, push. */
   readonly park: (envelope: Envelope) => void;
   /** Takes a settled ask off the pending ledger. */
   readonly settle: (requestId: string) => void;
+  /** The thread a project's Caw's turn answers (caw.ts `askThread`); undefined for any other session. */
+  readonly threadOf: (actor: InstanceRow) => string | undefined;
   readonly watch: TurnWatch;
 }
 
@@ -855,8 +879,10 @@ export const createMemory = ({
   curator,
   db,
   folderChanged,
+  notice,
   park,
   settle,
+  threadOf,
   watch,
 }: MemoryDeps) => {
   /** Open proposals, by id: the project each is in. */
@@ -1244,6 +1270,14 @@ export const createMemory = ({
       projectId: proposal.projectId,
       proposer: `${proposal.by} · ${projectName}`,
       raisedAt: new Date(proposal.time).getTime(),
+      // Where it was made: Caw's thread, or the curator run's session. One
+      // Caw proposed before proposals kept their thread has neither: its
+      // pane is the card alone.
+      ...(proposal.threadId ? { threadId: proposal.threadId } : {}),
+      ...(proposal.by === CURATOR_NAME
+        ? { originInstanceId: proposal.session }
+        : {}),
+      ...(proposal.toolUseId ? { toolUseId: proposal.toolUseId } : {}),
     },
   });
 
@@ -1286,10 +1320,21 @@ export const createMemory = ({
     return notes;
   };
 
-  /** A change to AGENTS.md or a knowledge file, proposed: kept as a file, then parked for the person. */
+  /**
+   * A change to AGENTS.md or a knowledge file. Caw's commits at once as Caw
+   * and is noted in his thread; Caw's with `ask`, and the curator's, are
+   * kept as a file, then parked for the person where they were made.
+   */
   const propose = async (
     actor: InstanceRow,
-    asked: { content: string; notes: string[]; path: string; why: string }
+    asked: {
+      ask: boolean;
+      content: string;
+      notes: string[];
+      path: string;
+      why: string;
+    },
+    toolUseId: string | undefined
   ) => {
     const projectId =
       actor.projectId ??
@@ -1301,10 +1346,11 @@ export const createMemory = ({
     const notes = await citable(projectId, asked.notes, curatorRun);
     const before = await fileOr(projectId, path);
     if (before === asked.content) {
-      refuse(409, `${path} already says exactly that; nothing to propose.`);
+      refuse(409, `${path} already says exactly that; nothing to change.`);
     }
     const [head] = (await folderHistory(projectId, "", 1)).commits;
     const at = new Date();
+    const threadId = curatorRun ? undefined : threadOf(actor);
     const proposal: Proposal = {
       id: idAt("p", at),
       projectId,
@@ -1314,10 +1360,20 @@ export const createMemory = ({
       content: asked.content,
       notes,
       why,
-      by: curatorRun ? "Memory curator" : boardTitle(actor),
+      by: curatorRun ? CURATOR_NAME : boardTitle(actor),
       session: actor.id,
       time: at.toISOString(),
+      ...(threadId ? { threadId } : {}),
+      ...(toolUseId ? { toolUseId } : {}),
     };
+    if (!(curatorRun || asked.ask)) {
+      const sha = await apply(proposal, CAW, false);
+      notice(projectId, threadId ?? null, {
+        title: `Caw wrote ${path}`,
+        body: `Committed as Caw ${sha.slice(0, 9)}.\n\nWhy: ${why}`,
+      });
+      return { path, sha, notes, committed: true };
+    }
     const written = await writeFolderFile(
       projectId,
       `${PROPOSALS_DIR}/${proposal.id}.json`,
@@ -1357,8 +1413,27 @@ export const createMemory = ({
       proposal.notes.includes(each.id)
     );
 
-  /** Approve: the change, merged into the file as it is now, committed as the person; its notes archived. */
-  const apply = async (proposal: Proposal): Promise<string> => {
+  /** A memory change's commit message: the file and why, then the proposal kept and the notes cited. */
+  const commitMessage = (proposal: Proposal, kept: boolean): string => {
+    const trailers = [
+      ...(kept ? [`Proposal: ${proposal.id}`] : []),
+      ...(proposal.notes.length > 0
+        ? [`Notes: ${proposal.notes.join(", ")}`]
+        : []),
+    ];
+    return `${proposal.path}: ${proposal.why}${trailers.length > 0 ? `\n\n${trailers.join("\n")}` : ""}`;
+  };
+
+  /**
+   * The change, merged into the file as it is now, committed as `author`
+   * (the person approving, or Caw writing), its notes archived as applied;
+   * a kept proposal's file goes with them.
+   */
+  const apply = async (
+    proposal: Proposal,
+    author: FolderAuthor,
+    kept: boolean
+  ): Promise<string> => {
     const { projectId, path } = proposal;
     const now = await fileOr(projectId, path);
     // What it was proposed against: the file as it stood then.
@@ -1372,34 +1447,36 @@ export const createMemory = ({
       );
     }
     const written = await writeFolderFile(projectId, path, next, {
-      author: YOU,
-      message: `${path}: ${proposal.why}\n\nProposal: ${proposal.id}${proposal.notes.length > 0 ? `\nNotes: ${proposal.notes.join(", ")}` : ""}`,
+      author,
+      message: commitMessage(proposal, kept),
     });
     const notes = await citedNotes(projectId, proposal);
-    await changeFolderFiles(
-      projectId,
-      {
-        writes: notes.map((each) => ({
-          path: archived(each),
-          content: renderNote({
-            ...each,
-            verdict: "lasting",
-            outcome: `applied ${written.sha.slice(0, 12)}`,
-          }),
-        })),
-        deletes: [
-          ...notes.map((each) => each.path),
-          `${PROPOSALS_DIR}/${proposal.id}.json`,
-        ],
-      },
-      {
-        author: HUB,
-        message: `memory: ${proposal.id} applied to ${path}`,
-      }
-    );
+    if (notes.length > 0 || kept) {
+      await changeFolderFiles(
+        projectId,
+        {
+          writes: notes.map((each) => ({
+            path: archived(each),
+            content: renderNote({
+              ...each,
+              verdict: "lasting",
+              outcome: `applied ${written.sha.slice(0, 12)}`,
+            }),
+          })),
+          deletes: [
+            ...notes.map((each) => each.path),
+            ...(kept ? [`${PROPOSALS_DIR}/${proposal.id}.json`] : []),
+          ],
+        },
+        {
+          author: HUB,
+          message: `memory: ${kept ? proposal.id : "Caw's write"} applied to ${path}`,
+        }
+      );
+    }
     folderChanged(projectId);
     console.log(
-      `[memory] ${projectId}: ${proposal.id} approved, ${path} at ${written.sha.slice(0, 9)}`
+      `[memory] ${projectId}: ${kept ? `${proposal.id} approved` : "Caw wrote"}, ${path} at ${written.sha.slice(0, 9)}`
     );
     return written.sha;
   };
@@ -1689,18 +1766,36 @@ export const createMemory = ({
       }
       const proposal = await proposalFile(projectId, requestId);
       if (proposal) {
-        if (result.behavior === "allow") {
-          await apply(proposal);
+        const approved = result.behavior === "allow";
+        let sha = "";
+        if (approved) {
+          sha = await apply(proposal, YOU, true);
         } else {
           await reject(proposal, result.message.trim());
+        }
+        // Caw's thread hears it, where he asked.
+        if (proposal.threadId) {
+          notice(projectId, proposal.threadId, {
+            title: approved
+              ? `You approved the change to ${proposal.path}`
+              : `You declined the change to ${proposal.path}`,
+            body: approved
+              ? `Committed as your commit ${sha.slice(0, 9)}.`
+              : (result.behavior === "deny" && result.message.trim()) ||
+                "Nothing changed.",
+          });
         }
       }
       open.delete(requestId);
       settle(requestId);
     },
 
-    /** The memory tools, bound to the calling session; with none, the same definitions for discovery. */
-    tools(actor: InstanceRow | undefined) {
+    /**
+     * The memory tools, bound to the calling session and the call
+     * (`toolUseId`, where a proposal it parks is drawn); with no session,
+     * the same definitions for discovery.
+     */
+    tools(actor: InstanceRow | undefined, toolUseId?: string) {
       const me = (): InstanceRow => {
         if (!actor) {
           throw new Error("Discovery cannot execute tools");
@@ -1719,15 +1814,22 @@ export const createMemory = ({
         ),
         tool(
           "memory_propose",
-          "AGENTS.md or knowledge/<topic>.md's whole new text, citing the inbox notes it comes from, for the person to approve or reject.",
+          "AGENTS.md or knowledge/<topic>.md's whole new text, citing its inbox notes. Caw's commits now (ask: true asks the person first); the curator's waits for the person.",
           {
             path: z.string(),
             content: z.string(),
             notes: z.array(z.string()).optional(),
             why: z.string().describe("One line."),
+            ask: z.boolean().optional(),
           },
-          async ({ path, content, notes, why }) =>
-            ok(await propose(me(), { path, content, notes: notes ?? [], why }))
+          async ({ path, content, notes, why, ask }) =>
+            ok(
+              await propose(
+                me(),
+                { path, content, notes: notes ?? [], why, ask: ask ?? false },
+                toolUseId
+              )
+            )
         ),
         tool(
           "memory_classify",

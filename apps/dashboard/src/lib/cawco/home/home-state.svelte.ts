@@ -271,6 +271,11 @@ export interface AskItem {
   /** Its machine: the name the fleet gives it and the daemon's `platform-arch` fingerprint (OsMark). */
   machine: { name: string; os: string };
   machineId: string;
+  /**
+   * The session whose pane draws the ask when it is not its own (a memory
+   * curator run's proposal): the row opens that session; null otherwise.
+   */
+  origin: string | null;
   /** machine · project */
   place: string;
   /** The project it runs in, named as the rail names it, with its mark's hue; null outside any. */
@@ -832,16 +837,17 @@ class Home {
       // The project is the top of its chain's, as the rail places it (`projectOfRow`).
       const top = row ? topsIn(cawco.instanceIndex.byId)(row) : undefined;
       const questions = questionsOf(item.request.toolName, item.request.input);
-      // A project's Caw asks in a thread: the card is the thread's.
-      const thread =
-        row?.role === "lead" && item.request.threadId
-          ? cawco.threadOf(threadTabId(item.request.threadId))
-          : undefined;
+      // An ask a project's Caw made is his thread's (his question, a project
+      // setting, a memory proposal he asked about): the card opens the thread.
+      const thread = item.request.threadId
+        ? cawco.threadOf(threadTabId(item.request.threadId))
+        : undefined;
       return {
         kind: "ask",
         key: `${item.instanceId}:${item.request.requestId}`,
         instanceId: item.instanceId,
         cwd: row?.cwd || item.cwd,
+        origin: item.request.originInstanceId ?? null,
         thread: thread ? threadTabId(thread.id) : null,
         machineId: item.machineId,
         // An ask no session row stands behind (a memory proposal) is titled

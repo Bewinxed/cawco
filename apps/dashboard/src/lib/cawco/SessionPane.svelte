@@ -55,7 +55,7 @@
   import PlanRing from "./plan/PlanRing.svelte";
   import SideSplit from "./side/SideSplit.svelte";
   import { clip, type SuggestCandidate, suggestions } from "./suggest.svelte";
-  import { inLists, threadIdOf } from "./thread-tabs";
+  import { inLists, threadIdOf, threadTabId } from "./thread-tabs";
   import Composer, {
     type ComposerAsk,
     type Mention,
@@ -160,15 +160,39 @@
    */
   const isLive = $derived(cawco.instances.some((row) => row.id === viewId));
 
+  /** Asks the hub holds under this id with no session behind it (a project's memory proposal, hub memory.ts). */
+  const rowless = $derived(
+    isLive ? [] : parkedAsks(cawco.session(viewId)?.pending ?? [])
+  );
   /**
-   * The hub holds an ask under this id and no session (a project's memory
-   * proposal, hub memory.ts): the pane is that ask's card and nothing else.
-   * No transcript is read and no "no such session" is said; the composer is
+   * An ask is answered where it was made: one Caw made opens his thread,
+   * one a curator run made opens that run's session, each drawing it in
+   * its composer. This tab goes there.
+   */
+  const madeIn = $derived.by((): string | null => {
+    const ask = rowless.find((one) => one.threadId || one.originInstanceId);
+    if (!ask) {
+      return null;
+    }
+    return ask.threadId
+      ? threadTabId(ask.threadId)
+      : (ask.originInstanceId ?? null);
+  });
+  $effect(() => {
+    const to = madeIn;
+    if (to) {
+      untrack(() => workspace.retarget(viewId, to));
+    }
+  });
+  /**
+   * An ask made in no conversation (a proposal Caw made before proposals
+   * kept their thread): the pane is that ask's card and nothing else. No
+   * transcript is read and no "no such session" is said; the composer is
    * the card (it grows into the ask). Kept once seen, so the pane does not
    * read or say anything in the moment between the answer and its close.
    */
   const asking = $derived(
-    !isLive && parkedAsks(cawco.session(viewId)?.pending ?? []).length > 0
+    rowless.some((one) => !(one.threadId || one.originInstanceId))
   );
   let askHeld = $state(false);
   const askAlone = $derived(asking || askHeld);
@@ -749,30 +773,44 @@
    */
   function onanswer(
     request: PendingPermission,
+    on: string | undefined,
     result: PermissionResult
   ): string | null {
-    if (!machineId) {
+    if (!on) {
       return null;
     }
-    return submitCommand(request.instanceId, machineId, "permission.answer", {
+    return submitCommand(request.instanceId, on, "permission.answer", {
       requestId: request.requestId,
       result,
     });
   }
 
-  // A delegate's ask belongs to its parent, never the reader's queue.
-  const parked = $derived<PendingPermission[]>(
-    parkedAsks(session?.pending ?? [])
-  );
+  /**
+   * The asks this conversation made: its own (a delegate's belongs to its
+   * parent, never the reader's queue), then those parked elsewhere that it
+   * made (a memory curator run's proposal, on machine "hub"), each answered
+   * on the machine it is parked on.
+   */
+  const parked = $derived<
+    { machine: string | undefined; request: PendingPermission }[]
+  >([
+    ...parkedAsks(session?.pending ?? []).map((request) => ({
+      request,
+      machine: machineId || undefined,
+    })),
+    ...cawco.blocked
+      .filter((row) => row.request.originInstanceId === viewId)
+      .map((row) => ({ request: row.request, machine: row.machineId })),
+  ]);
   /** The first of them, which the composer grows into: one ask at a time. */
   const firstAsk = $derived.by((): ComposerAsk | null => {
-    const [request] = parked;
-    return request
+    const [first] = parked;
+    return first
       ? {
-          request,
+          request: first.request,
           asker: agentName,
           more: parked.length - 1,
-          onanswer: (result) => onanswer(request, result),
+          onanswer: (result) => onanswer(first.request, first.machine, result),
         }
       : null;
   });
