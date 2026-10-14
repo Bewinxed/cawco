@@ -204,6 +204,8 @@ const LIST_LINE =
 const RESULT_LINE =
   /^preview (reply|resolve)-result (?:pin=(\d+) (ok|refused: .*)|none)$/;
 const POINT = /^(-?\d+),(-?\d+)$/;
+/** The app's lines a failure keeps on their own: the card's, the mode's, the pins'. */
+const CARD_STORY = /^preview (card|comment|pins |read |escape|list )/;
 /** "x,y" as a point; "none" (hidden, or not in a window) as none. */
 const pointOf = (text: string | undefined): Point | undefined => {
   const m = text?.match(POINT);
@@ -767,6 +769,12 @@ xcrun simctl install ${udid} "${app}"`);
   mark = seen.length;
   await tap(head.comment, `Done ("${head.words}"), outside the empty card`);
   const dismissedEmpty = await dismissedAfter("the empty card dismissed", mark);
+  // The same tap is Done's own: the mode ends with it.
+  const endedEmpty = await lineAfter(
+    "Comment off with the empty card's dismissal",
+    mark,
+    (l) => l === "preview comment off"
+  );
   const takenBack = await until(
     "the empty pin taken back",
     pinsOnHub,
@@ -777,13 +785,18 @@ xcrun simctl install ${udid} "${app}"`);
     "a tap outside a new pin's card, nothing written in it, closes it and the pin is taken back",
     dismissedEmpty ===
       "preview card dismissed by=outside draft=0 withdrawn=true" &&
+      endedEmpty !== undefined &&
       takenBack.length === 0,
-    `${dismissedEmpty ?? "no dismissed line"}; ${takenBack.length} pin(s) on the hub`
+    `${dismissedEmpty ?? "no dismissed line"}; Done ${endedEmpty ? "ended" : "did not end"} the mode; ${takenBack.length} pin(s) on the hub`
   );
   head = await headNow("the header with Comment off again");
   mark = seen.length;
   await tap(head.comment, `Comment ("${head.words}"), on again`);
-  await lineAfter("Comment on again", mark, (l) => l === "preview comment on");
+  const onAgain = await lineAfter(
+    "Comment on again",
+    mark,
+    (l) => l === "preview comment on"
+  );
   page = await pageNow("the page with Comment on again");
   mark = seen.length;
   await tapPage("button", page);
@@ -815,7 +828,7 @@ xcrun simctl install ${udid} "${app}"`);
       `preview card dismissed by=outside draft=${REPLY.length} withdrawn=false` &&
       keptPins.length === 1 &&
       keptPins[0].number === 1,
-    `${dismissedKept ?? "no dismissed line"}; ${keptPins.length} pin(s) on the hub`
+    `Comment ${onAgain ? "on" : "not on"} again; ${card ? `pin ${card.number}'s card opened` : "no card for pin 1"}; ${dismissedKept ?? "no dismissed line"}; ${keptPins.length} pin(s) on the hub`
   );
 
   // ── 7. The Pins sheet lists it; its row opens the card ────────────────
@@ -1239,6 +1252,18 @@ pkill -f "[x]codebuild test-without-building .*-destination id=${sim.udid} " || 
   }
   await sim?.release();
   await fleet.close();
+  if (failed.length > 0) {
+    // The app's own words, kept with the sandbox a failure keeps: every Probe
+    // line, and the card's, the mode's and the pins' alone, in order.
+    const all = join(fleet.sandbox, "app-probe.log");
+    const cards = join(fleet.sandbox, "app-card.log");
+    await Bun.write(all, `${seen.join("\n")}\n`);
+    await Bun.write(
+      cards,
+      `${seen.filter((line) => CARD_STORY.test(line)).join("\n")}\n`
+    );
+    console.log(`  the app's log: ${all}\n  its card lines: ${cards}`);
+  }
   await fleet.clean(keep || failed.length > 0);
 }
 

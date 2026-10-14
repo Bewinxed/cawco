@@ -2,6 +2,7 @@ import CawCoCore
 import CawCoDesign
 import CawCoTranscript
 import UIKit
+import UIKit.UIGestureRecognizerSubclass
 import WebKit
 
 /// A session's preview (preview/PreviewPane.svelte): its header (the
@@ -942,7 +943,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         card.isHidden = true
         card.endEditing(true)
         card.closed()
-        outsideTap.view?.removeGestureRecognizer(outsideTap)
+        outsidePress.view?.removeGestureRecognizer(outsidePress)
         deliver(["type": "cawco:track-pin", "id": NSNull()])
         var withdrawn = false
         if id == madePin {
@@ -961,24 +962,29 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         #endif
     }
 
-    /// A tap outside the open card, anywhere in the window, closes it: the
-    /// house's outside-press rule (press-outside.ts), as UIKit's own
-    /// popovers dismiss. Touches on the card are its own, those in a layer
-    /// the preview presented (the pins' sheet, the picture's lightbox) are
-    /// that layer's, and the page says its own (`cawco:press`), where a tap
-    /// on a pin's disc opens that pin instead. It never takes a touch from
-    /// what it lands on.
-    private lazy var outsideTap: UITapGestureRecognizer = {
-        let tap = UITapGestureRecognizer(target: self, action: #selector(tappedOutside))
-        tap.cancelsTouchesInView = false
-        tap.delaysTouchesEnded = false
-        tap.delegate = self
-        return tap
+    /// A press outside the open card, anywhere in the window, closes it: the
+    /// house's outside-press rule (press-outside.ts, a `pointerdown` in the
+    /// capture phase), heard as the touch begins. Touches on the card are
+    /// its own, those in a layer the preview presented (the pins' sheet, the
+    /// picture's lightbox) are that layer's, and the page says its own
+    /// (`cawco:press`), where a tap on a pin's disc opens that pin instead.
+    /// It only watches: it never recognizes, so the press reaches what it
+    /// lands on whole. A tap recognizer here competed with the head's
+    /// buttons for the same tap (a control's action and a single-tap
+    /// recognizer over it each take it, UIKit's rule picks one), so Done
+    /// could close the card and not end the mode.
+    private lazy var outsidePress: PressWatcher = {
+        let watcher = PressWatcher(target: nil, action: nil)
+        watcher.cancelsTouchesInView = false
+        watcher.delaysTouchesBegan = false
+        watcher.delaysTouchesEnded = false
+        watcher.delegate = self
+        watcher.pressed = { [weak self] in
+            // After the touch's own delivery: the watcher leaves the window as the card closes.
+            Task { @MainActor in self?.closeCard(by: "outside") }
+        }
+        return watcher
     }()
-
-    @objc private func tappedOutside() {
-        closeCard(by: "outside")
-    }
 
     /// The open card as its pin stands in the hub's last read.
     private func paintCard() {
@@ -992,7 +998,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         card.isHidden = false
         card.show(pin, live: live.contains(openPin), thumbnail: thumbs[openPin], problem: cardError, replying: replying,
                   draft: drafts[openPin] ?? "")
-        if outsideTap.view == nil, let window = view.window { window.addGestureRecognizer(outsideTap) }
+        if outsidePress.view == nil, let window = view.window { window.addGestureRecognizer(outsidePress) }
         placeCard()
         if arriving {
             // It arrives as a floating card does: rising `popRise` from 0.96 over `durPop`.
@@ -1513,20 +1519,37 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 }
 
 extension PreviewController: UIGestureRecognizerDelegate {
-    /// The outside tap hears a touch only while the card is open, and only
+    /// The outside press hears a touch only while the card is open, and only
     /// one outside the card, the page, and any layer the preview presented.
     func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        guard recognizer === outsideTap else { return true }
+        guard recognizer === outsidePress else { return true }
         guard openPin != nil, !card.isHidden, let touched = touch.view else { return false }
         if touched.isDescendant(of: card) || touched.isDescendant(of: web) { return false }
         if let presented = presentedViewController, touched.isDescendant(of: presented.view) { return false }
         return true
     }
 
-    /// Whatever the touch lands on keeps it: the outside tap only listens.
+    /// Whatever the touch lands on keeps it: the outside press only listens.
     func gestureRecognizer(_ recognizer: UIGestureRecognizer,
                            shouldRecognizeSimultaneouslyWith _: UIGestureRecognizer) -> Bool {
-        recognizer === outsideTap
+        recognizer === outsidePress
+    }
+}
+
+/// A press heard as it begins, and nothing more: it calls `pressed` for the
+/// first touch its delegate lets it hear, then fails at once, so it never
+/// recognizes, never delays or cancels a touch, and never stands in the way
+/// of a control's own action (UIKit gives a single tap over a button to the
+/// button or to a tap recognizer, not to both).
+private final class PressWatcher: UIGestureRecognizer {
+    var pressed: () -> Void = {}
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesBegan(touches, with: event)
+        if state == .possible {
+            pressed()
+            state = .failed
+        }
     }
 }
 
