@@ -128,7 +128,9 @@ final class CawPanel: GlassContent {
     func configure(needs: [HomeModel.NeedsItem], answers: Answers, notices: [Notice], quiet: String, now: Double, live: Bool) {
         let needWords = needs.map { item -> String in
             let stage = Self.stageWords(answers.sent[item.id])
-            return "\(item.id)\u{1f}\(item.title)\u{1f}\(item.place)\u{1f}\(item.raisedAt.map { Naming.span(ms: now - $0) } ?? "")\u{1f}\(item.stale)\u{1f}\(stage?.text ?? "")\u{1f}\(answers.sent[item.id].map { $0.stage != .failed } ?? false)"
+            // A notice the hub replaced on the same session says something new.
+            let watched = if case let .watch(notice) = item.kind { notice.title } else { "" }
+            return "\(item.id)\u{1f}\(watched)\u{1f}\(item.title)\u{1f}\(item.place)\u{1f}\(item.raisedAt.map { Naming.span(ms: now - $0) } ?? "")\u{1f}\(item.stale)\u{1f}\(stage?.text ?? "")\u{1f}\(answers.sent[item.id].map { $0.stage != .failed } ?? false)"
         }
         let noticeWords = notices.map { notice -> String in
             let head: [String] = [notice.id, notice.closing ?? "", notice.action?.label ?? "", "\(notice.count ?? 0)"]
@@ -417,6 +419,11 @@ private final class NeedRow: UIControl {
             actions.distribution = .equalSpacing
             column.addArrangedSubview(actions)
             column.setCustomSpacing(Space.space2, after: ask)
+        case let .watch(notice):
+            // What fleet watch saw, and where (NeedsCard.svelte `want`,
+            // `meta`): the row itself opens the session; nothing is answered here.
+            ask.text = notice.title
+            place.text = "Fleet watch · \(item.place)"
         }
         if let words = CawPanel.stageWords(sent) {
             let stage = KitLabel(TypeScale.typeMeta, ink: words.failed ? Palette.statusFailInk : Palette.inkMuted, lines: 0)
@@ -428,9 +435,9 @@ private final class NeedRow: UIControl {
         // draws it, in the needs-you status; a run its workflow glyph.
         let mark: UIView
         switch item.kind {
-        case let .ask(parked):
+        case .ask, .watch:
             let session = SessionMarkView()
-            session.configure(id: parked.instanceId, place: item.cwd.isEmpty ? item.machineId : item.cwd, status: .attn)
+            session.configure(id: item.instanceId ?? "", place: item.cwd.isEmpty ? item.machineId : item.cwd, status: .attn)
             mark = session
         case .run:
             mark = GlyphView(.workflow, size: Size.iconMd, tint: Palette.inkMuted)
@@ -457,7 +464,18 @@ private final class NeedRow: UIControl {
         ])
         alpha = stale ? 0.55 : 1
         addTarget(self, action: #selector(choose), for: .touchUpInside)
-        accessibilityIdentifier = "caw-need"
+        if case .watch = item.kind {
+            // No control of its own stands in it (an ask has its peers, a run
+            // its Open): the row is the one button VoiceOver reads and presses.
+            accessibilityIdentifier = "caw-need-watch"
+            isAccessibilityElement = true
+            accessibilityTraits = .button
+            accessibilityLabel = [item.title, item.raisedAt.map { "waiting \(Naming.span(ms: now - $0))" }, ask.text, place.text]
+                .compactMap(\.self).joined(separator: ", ")
+            accessibilityHint = "Opens the session"
+        } else {
+            accessibilityIdentifier = "caw-need"
+        }
     }
 
     @available(*, unavailable)

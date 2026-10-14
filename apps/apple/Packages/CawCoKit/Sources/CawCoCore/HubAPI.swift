@@ -176,7 +176,10 @@ public struct HubAPI: Sendable {
         public func setSuggest(_ input: Operations.PutApiJevSuggest.Input) async throws -> Operations.PutApiJevSuggest.Output { try await client.putApiJevSuggest(input) }
         public func connect(_ input: Operations.PostApiOpenrouterConnect.Input) async throws -> Operations.PostApiOpenrouterConnect.Output { try await client.postApiOpenrouterConnect(input) }
         public func exchange(_ input: Operations.PostApiOpenrouterExchange.Input) async throws -> Operations.PostApiOpenrouterExchange.Output { try await client.postApiOpenrouterExchange(input) }
-    }
+        public func setTypeSafeKey(_ input: Operations.PutApiJevTypesafeKey.Input) async throws -> Operations.PutApiJevTypesafeKey.Output { try await client.putApiJevTypesafeKey(input) }
+        public func removeTypeSafeKey(_ input: Operations.DeleteApiJevTypesafeKey.Input = .init()) async throws -> Operations.DeleteApiJevTypesafeKey.Output { try await client.deleteApiJevTypesafeKey(input) }
+        public func fleetWatch(_ input: Operations.GetApiFleetWatch.Input = .init()) async throws -> Operations.GetApiFleetWatch.Output { try await client.getApiFleetWatch(input) }
+        public func setFleetWatch(_ input: Operations.PutApiFleetWatch.Input) async throws -> Operations.PutApiFleetWatch.Output { try await client.putApiFleetWatch(input) }    }
     public struct Search: Sendable {
         let client: Client
         public func transcripts(_ input: Operations.GetApiSearch.Input) async throws -> Operations.GetApiSearch.Output { try await client.getApiSearch(input) }

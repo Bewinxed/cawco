@@ -47,7 +47,14 @@ enum ConfigSections {
     /// The groups the list is drawn in, in this order (`GROUPS`).
     static let groupOrder = ["Automation", "Agents", "Tools", "Memory", "Hub"]
 
-    static let all: [ConfigSection] = [phone, updates]
+    static let all: [ConfigSection] = [models, phone, updates]
+
+    static let models = ConfigSection(
+        slug: "models", group: "Hub", label: "Models CawCo uses",
+        purpose: "Jev's route (OpenRouter or a TypeSafe key), and fleet watch",
+        glyph: .cpu, hue: Palette.hueOrange500,
+        make: { section, context in ModelsSectionController(section: section, context: context) }
+    )
 
     static let phone = ConfigSection(
         slug: "phone", group: "Hub", label: "Phone",

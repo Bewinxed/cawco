@@ -1261,11 +1261,13 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     /// A Needs you row goes to what is waiting, never to a place: its
     /// session's tab comes to the front, the composer already holding the
-    /// parked ask, the transcript where it was left. A run is answered in its run.
+    /// parked ask, the transcript where it was left. A run is answered in its
+    /// run; a fleet-watch notice opens the session it is about.
     private func openWaiting(_ item: HomeModel.NeedsItem) {
         switch item.kind {
         case let .ask(ask): openSession(ask.instanceId)
         case let .run(run): openSession(run.rowId)
+        case let .watch(notice): openSession(notice.instanceId)
         }
     }
 

@@ -250,6 +250,10 @@ public final class FleetStore {
     public internal(set) var updateChannels: Components.Schemas.BinaryUpdateChannels?
     /// The machines whose install this device asked for (updates.svelte.ts `commanded`).
     public internal(set) var commanded: Set<String> = []
+    /// Fleet watch's needs-you notices (core `FleetWatchNotice`), as the hub
+    /// holds them now: read on connect, then whole on each
+    /// `fleet_watch.notices` frame (client.svelte.ts `watchNotices`).
+    public internal(set) var watchNotices: [Components.Schemas.FleetWatchNotice] = []
 
     /// Takes the hub's record, keeping what this device acknowledged that the hub has not echoed yet.
     func adopt(noticesSeen ids: [String]) {

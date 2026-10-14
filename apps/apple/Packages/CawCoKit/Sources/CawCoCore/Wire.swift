@@ -240,6 +240,8 @@ enum Frame {
     case tasksChanged(projectId: String)
     /// One session a forget asked to stop: stopped as its machine confirmed, refused, or owed to its machine's return.
     case projectStop(Components.Schemas.ProjectStopFrame)
+    /// Every open fleet-watch notice, whole, on each change: a session fleet watch tells you about.
+    case watchNotices([Components.Schemas.FleetWatchNotice])
     case ignored
 
     /// `answering`: the envelope's own `requestId`, which an error frame takes
@@ -282,6 +284,8 @@ enum Frame {
             self = .tasksChanged(projectId: frame.projectId)
         case .project_stop(let frame):
             self = .projectStop(frame)
+        case .fleetWatch_notices(let frame):
+            self = .watchNotices(frame.notices)
         default:
             self = .ignored
         }

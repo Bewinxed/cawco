@@ -202,11 +202,14 @@ public final class HomeModel {
     // MARK: Groups
 
     /// One thing parked on the operator: a session's permission or question,
-    /// or a workflow run's question, which is answered in its run.
+    /// a workflow run's question, which is answered in its run, or fleet
+    /// watch telling you about a session (home-state.svelte.ts `WatchItem`),
+    /// which opens the session and leaves once you write to it or it moves on.
     public struct NeedsItem: Identifiable {
         public enum Kind {
             case ask(ParkedAsk)
             case run(BoardRun)
+            case watch(Components.Schemas.FleetWatchNotice)
         }
 
         public let id: String
@@ -224,12 +227,13 @@ public final class HomeModel {
         /// `item.cwd || item.machineId`); empty for a run.
         public var cwd = ""
 
-        /// The session whose ask it is, for a session's.
+        /// The session whose ask or notice it is, for a session's.
         public var instanceId: String? {
-            if case let .ask(ask) = kind {
-                return ask.instanceId
+            switch kind {
+            case let .ask(ask): ask.instanceId
+            case let .watch(notice): notice.instanceId
+            case .run: nil
             }
-            return nil
         }
     }
 
@@ -269,6 +273,20 @@ public final class HomeModel {
                 place: fleet.machineName(run.machineId),
                 raisedAt: fleet.runAskRaisedAt[run.id]
             ))
+        }
+        // Fleet watch's notices, each on its session (home-state.svelte.ts `watched`).
+        for notice in fleet.watchNotices {
+            let row = fleet.byId[notice.instanceId]
+            var item = NeedsItem(
+                id: "watch:\(notice.instanceId)",
+                kind: .watch(notice),
+                machineId: notice.machineId,
+                title: row.map(fleet.title) ?? notice.title,
+                place: Naming.unbroken(fleet.placeOf(notice.machineId, row?.cwd)),
+                raisedAt: notice.at
+            )
+            item.cwd = row?.cwd ?? ""
+            items.append(item)
         }
         return items.sorted { ($0.raisedAt ?? .infinity, $0.id) < ($1.raisedAt ?? .infinity, $1.id) }
     }

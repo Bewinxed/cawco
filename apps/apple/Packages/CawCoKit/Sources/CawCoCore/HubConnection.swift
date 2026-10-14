@@ -805,6 +805,8 @@ public final class HubConnection {
         async let carried = try? await client.getApiContinuations().ok.body.json
         // Likewise a project move.
         async let moving = try? await client.getApiMoves().ok.body.json
+        // Fleet watch's notices to you: frames keep them from here.
+        async let watched = try? await client.getApiFleetWatchNotices().ok.body.json.notices
         // Read on connect, not only pushed on change: a device that connects
         // between reports has missed every `usage` frame.
         async let limits = try? await client.getApiUsageLimits().ok.body.json
@@ -812,6 +814,7 @@ public final class HubConnection {
         let (machines, rows, projects, readPending, readLimits, readSpend, readCarried) =
             await (machinesRead, rowsRead, projectsRead, pending, limits, spend, carried)
         let readMoves = await moving
+        let readWatched = await watched
         let readMachines = try? machines.get()
         let readRows = try? rows.get()
         let readProjects = try? projects.get()
@@ -876,6 +879,9 @@ public final class HubConnection {
             }
             if let readMoves {
                 hub.fleet.moves = readMoves
+            }
+            if let readWatched {
+                hub.fleet.watchNotices = readWatched
             }
             if !unreadable.isEmpty {
                 hub.cannotRead(unreadable)
@@ -1140,6 +1146,8 @@ public final class HubConnection {
             tasksChanged[projectId, default: 0] += 1
         case let .projectStop(frame):
             for listener in projectStopListeners.values { listener(frame) }
+        case let .watchNotices(notices):
+            fleet.watchNotices = notices
         case .ignored:
             break
         }
