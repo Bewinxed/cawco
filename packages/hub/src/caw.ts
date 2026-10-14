@@ -757,9 +757,6 @@ export const createCaw = ({
     const threadId = "threadId" in to ? to.threadId : before?.threadId;
     if ("threadId" in to) {
       answered.set(leadId, to.threadId);
-      if (by === "you") {
-        yourWakes.set(sent, to.threadId);
-      }
     }
     keep(leadId, {
       by: joined(before?.by, by),
@@ -1184,7 +1181,7 @@ export const createCaw = ({
     }
     wakeSent(sent, sourceOf(event, inbox.length));
     if (threadId) {
-      follow(lead.row.id, projectId, event.by, sent, { threadId });
+      followWake(lead.row.id, projectId, event.by, sent, threadId);
     }
     return true;
   };
@@ -1201,6 +1198,24 @@ export const createCaw = ({
     if (lead && !lead.started) {
       await refreshPlace(lead.row);
     }
+  };
+
+  /**
+   * A wake went out to the lead as `sent`: its thread follows the turn
+   * ({@link follow}), and one of your words (a thread's message, your setup,
+   * your ask for a view) owes that thread what the turn that reads it says.
+   */
+  const followWake = (
+    leadId: string,
+    projectId: string,
+    by: Origin,
+    sent: string,
+    threadId: string
+  ): void => {
+    if (by === "you") {
+      yourWakes.set(sent, threadId);
+    }
+    follow(leadId, projectId, by, sent, { threadId });
   };
 
   /** Logs a wake that failed: an event is never lost silently. */
