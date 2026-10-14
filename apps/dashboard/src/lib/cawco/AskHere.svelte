@@ -144,8 +144,12 @@
     padding-block: var(--space-1);
     padding-inline: var(--ask-indent, 0) var(--ask-end, 0);
   }
+  /* One track no wider than the question: a long word in its words (a path
+     it names) wraps rather than widening the tile past a narrow rail, where
+     its buttons went under the pane beside it. */
   .tile {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--space-2);
     padding: var(--space-3);
     border: 1px solid var(--border-hairline);
@@ -158,12 +162,14 @@
     font: var(--type-label);
     color: var(--ink-strong);
     text-wrap: balance;
+    overflow-wrap: anywhere;
   }
   .body {
     margin: 0;
     font: var(--type-meta);
     color: var(--ink-muted);
     text-wrap: pretty;
+    overflow-wrap: anywhere;
   }
   .actions {
     display: flex;

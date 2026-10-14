@@ -5,6 +5,7 @@ import {
   mkdirSync,
   readdirSync,
   readlinkSync,
+  statSync,
   symlinkSync,
   unlinkSync,
 } from "node:fs";
@@ -736,6 +737,51 @@ export const darwinUserDirs = async (): Promise<string[]> =>
  */
 export const hostImpeccableEngines = (): string =>
   join(homedir(), ".impeccable", "bin");
+
+/**
+ * Where the host's operating system keeps its trusted CA certificates: the
+ * bundles and dirs Go's crypto/x509 looks for, in its order
+ * (src/crypto/x509/root_linux.go: "Possible certificate files; stop after
+ * finding one"), on macOS the bundle the system ships at /etc/ssl/cert.pem.
+ */
+const HOST_CA_FILES: Record<string, readonly string[]> = {
+  linux: [
+    "/etc/ssl/certs/ca-certificates.crt", // Debian, Ubuntu, Gentoo
+    "/etc/pki/tls/certs/ca-bundle.crt", // Fedora, RHEL 6
+    "/etc/ssl/ca-bundle.pem", // openSUSE
+    "/etc/pki/tls/cacert.pem", // OpenELEC
+    "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem", // CentOS, RHEL 7
+    "/etc/ssl/cert.pem", // Alpine
+  ],
+  darwin: ["/etc/ssl/cert.pem"],
+};
+const HOST_CA_DIRS: Record<string, readonly string[]> = {
+  linux: ["/etc/ssl/certs", "/etc/pki/tls/certs"],
+  darwin: [],
+};
+
+/**
+ * `SSL_CERT_FILE` and `SSL_CERT_DIR` naming the host's own CA store (the
+ * first bundle and dir of {@link HOST_CA_FILES} and {@link HOST_CA_DIRS}
+ * this host has), for every command a workspace runs: OpenSSL reads them
+ * before the CA paths it was built with, so whatever binary is first on
+ * PATH verifies TLS against the host's store. A curl from a relocated
+ * package prefix was built with one that does not exist (zerobrew's,
+ * `/home/linuxbrew/.linuxbrew/etc/openssl@3`) and verified no certificate.
+ * Empty on a host that has neither.
+ */
+export const hostCaEnv = (): Record<string, string> => {
+  const isFile = (path: string): boolean =>
+    existsSync(path) && statSync(path).isFile();
+  const isDir = (path: string): boolean =>
+    existsSync(path) && statSync(path).isDirectory();
+  const file = (HOST_CA_FILES[process.platform] ?? []).find(isFile);
+  const dir = (HOST_CA_DIRS[process.platform] ?? []).find(isDir);
+  return {
+    ...(file ? { SSL_CERT_FILE: file } : {}),
+    ...(dir ? { SSL_CERT_DIR: dir } : {}),
+  };
+};
 
 /** Where Playwright's browsers are on the host: a workspace runs them from there, read-only. */
 export const hostPlaywrightBrowsers = (): string =>

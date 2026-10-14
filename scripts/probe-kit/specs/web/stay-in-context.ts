@@ -351,6 +351,7 @@ const sessionAskState = ([at, link]: [string, string]) => {
   return {
     open: Boolean(ask),
     title: ask?.querySelector("p.title")?.textContent?.trim() ?? null,
+    text: ask?.textContent?.replace(/\s+/g, " ").trim() ?? null,
     fault:
       ask
         ?.querySelector(".row-fault")
@@ -367,6 +368,49 @@ const sessionAskState = ([at, link]: [string, string]) => {
     rejections: (window as unknown as { __rejections: string[] }).__rejections
       .length,
     count: asks.length,
+    // Every one of its buttons inside the question, and the topmost thing
+    // where it stands: nothing beside it (a pane past a narrow rail) covers it.
+    // Each one that is not: its label, its box, the question's, what covers it.
+    outOfHand: [...(ask?.querySelectorAll(".actions button") ?? [])].flatMap(
+      (button) => {
+        const box = button.getBoundingClientRect();
+        const frame = ask?.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          box.left + box.width / 2,
+          box.top + box.height / 2
+        );
+        const inside =
+          frame !== undefined &&
+          box.right <= frame.right + 0.5 &&
+          box.left >= frame.left - 0.5;
+        if (inside && button.contains(hit)) {
+          return [];
+        }
+        // Every box around it up to what is hit: one of them clips it.
+        const around: string[] = [];
+        for (
+          let up = button.parentElement;
+          up && up !== hit && around.length < 16;
+          up = up.parentElement
+        ) {
+          const edge = up.getBoundingClientRect();
+          const style = getComputedStyle(up);
+          around.push(
+            `${up.tagName}.${up.className.toString().slice(0, 24)} ${edge.top.toFixed(0)}..${edge.bottom.toFixed(0)} ${style.display} ${style.overflowX}/${style.overflowY}${style.contain === "none" ? "" : ` contain:${style.contain}`}${style.clipPath === "none" ? "" : ` clip:${style.clipPath}`}${
+              up.getAnimations().length
+                ? ` anims:${up
+                    .getAnimations()
+                    .map((run) => run.playState)
+                    .join("+")}`
+                : ""
+            }`
+          );
+        }
+        return [
+          `${button.textContent?.trim()} ${box.left.toFixed(0)}..${box.right.toFixed(0)}x${box.top.toFixed(0)}..${box.bottom.toFixed(0)} in ${frame?.left.toFixed(0)}..${frame?.right.toFixed(0)}x${frame?.top.toFixed(0)}..${frame?.bottom.toFixed(0)}, under ${hit?.tagName}.${hit?.className.toString().slice(0, 30)}; around: ${around.join(" < ")}`,
+        ];
+      }
+    ),
     underRow: Boolean(
       row && (row.matches(link) || row.querySelector(link) !== null)
     ),
@@ -391,6 +435,8 @@ interface RowQuestion {
   refusal: string;
   /** Refuses what is held, with `refusal`. */
   refuse: () => Promise<unknown>;
+  /** Words the question says, each in its text, when what it names is the point. */
+  says?: string[];
   /** The question's title. */
   title: string;
   /** Waits until what the confirm sent is held. */
@@ -413,12 +459,42 @@ async function rowQuestion(kit: Kit, page: Page, q: RowQuestion) {
   await q.menu();
   await menuItem(page, q.item);
   await ask.waitFor();
-  await page.waitForTimeout(400);
+  // Read once it has unfolded: no finite animation is still running on it,
+  // in the row it opens under, or on any box around it (its own `unfold`,
+  // the tree's fold, a list revealing the height it grew by).
+  await page.waitForFunction(
+    (at) => {
+      const opened = document.querySelector(`[data-ask="${CSS.escape(at)}"]`);
+      if (!opened) {
+        return false;
+      }
+      const moving = (runs: Animation[]) =>
+        runs.some(
+          (run) =>
+            run.playState === "running" &&
+            run.effect?.getTiming().iterations !== Number.POSITIVE_INFINITY
+        );
+      const branch = opened.closest("li") ?? opened;
+      if (moving(branch.getAnimations({ subtree: true }))) {
+        return false;
+      }
+      for (let up = branch.parentElement; up; up = up.parentElement) {
+        if (moving(up.getAnimations())) {
+          return false;
+        }
+      }
+      return true;
+    },
+    q.at,
+    { timeout: 10_000 }
+  );
   const asked = await read();
   note(kit, `${q.what}, the question`, asked);
   kit.check(
-    `${q.what}: the question stands under the row it was asked from, and only there, Cancel in hand; nothing holds the page`,
+    `${q.what}: the question stands under the row it was asked from, and only there, Cancel in hand, its buttons inside it and uncovered; nothing holds the page${q.says ? `; it says ${q.says.map((words) => `“${words}”`).join(", ")}` : ""}`,
     asked.title === q.title &&
+      (q.says ?? []).every((words) => asked.text?.includes(words)) &&
+      asked.outOfHand.length === 0 &&
       asked.count === 1 &&
       asked.underRow &&
       asked.focused &&
@@ -777,11 +853,29 @@ async function sessionQuestions(
   socket: Socket
 ) {
   // ── Discard a spin-off ───────────────────────────────────────────────
-  const spin = await fleet.spawn("claude", "Probe spin-off", fleet.workdir, {
-    scratch: {},
+  // With a worktree of its own holding two files that are nowhere else: the
+  // question names them and that they are kept as a carry (agent carry.ts),
+  // and the confirmed Discard leaves that carry.
+  const repo = join(fleet.sandbox, "spin-repo");
+  await mkdir(repo, { recursive: true });
+  await Bun.$`sh -c ${"git init -q -b main && echo spin > README.md && git add -A && git -c user.name=Owner -c user.email=o@probe.test commit -qm 'First commit'"}`
+    .cwd(repo)
+    .quiet();
+  const spin = await fleet.spawn("claude", "Probe spin-off", repo, {
+    scratch: { worktree: true },
   });
   await fleet.send(spin, "hello");
   await turnEnds(fleet, spin);
+  const tree = (await Bun.$`git -C ${repo} worktree list --porcelain`.quiet())
+    .text()
+    .split("\n")
+    .find((line) => line.endsWith(`-${spin.slice(0, 8)}`))
+    ?.slice("worktree ".length);
+  if (!tree) {
+    throw new Error(`git lists no worktree of spin-off ${spin}`);
+  }
+  await writeFile(join(tree, "loose-a.txt"), "loose a\n");
+  await writeFile(join(tree, "loose-b.txt"), "loose b\n");
   await homeShowing(page, base, spin);
   await rowQuestion(kit, page, {
     what: "Discard spin-off",
@@ -789,6 +883,11 @@ async function sessionQuestions(
     link: `[data-hover-session="${spin}"]`,
     item: DISCARD_ITEM,
     title: "Discard this spin-off?",
+    says: [
+      `Its worktree ${tree} holds work that is nowhere else: 2 changed files.`,
+      "That work is saved first, as a carry on",
+      "(in ~/.cawco/carries)",
+    ],
     menu: () => rightClickRow(page, spin),
     ...atSocket(
       socket,
@@ -798,6 +897,22 @@ async function sessionQuestions(
       DISCARD_REFUSAL
     ),
   });
+  const carries = join(fleet.home, ".cawco", "carries");
+  const [carry] = (await readdir(carries).catch(() => [] as string[])).filter(
+    (name) => name.startsWith(`${spin}-`)
+  );
+  const diff = carry
+    ? await readFile(join(carries, carry, "uncommitted.patch"), "utf8").catch(
+        () => ""
+      )
+    : "";
+  kit.check(
+    "Discard spin-off: its worktree is gone, and a carry named by it holds both files",
+    !(await Bun.file(join(tree, "loose-a.txt")).exists()) &&
+      diff.includes("+loose a") &&
+      diff.includes("+loose b"),
+    `carry ${carry ?? "none"}: ${diff.slice(0, 400)}`
+  );
 
   // ── A session that never started ────────────────────────────────────
   // A start its machine fails before the harness names a conversation: its
@@ -1221,20 +1336,43 @@ async function cawOff(kit: Kit, fleet: KitFleet, page: Page, base: string) {
   await fleet.api(`/api/projects/${project.id}/threads`, {
     body: "Probe: hello, Caw.",
   });
-  const lead = await until(
-    "Caw's lead session started and running",
-    async () => {
-      const rows = await fetch(`${fleet.base}/api/projects`).then(
-        (r) =>
-          r.json() as Promise<{ id: string; leadInstanceId: string | null }[]>
-      );
-      const id =
-        rows.find((row) => row.id === project.id)?.leadInstanceId ?? "";
-      return fleet.instance(id)?.status === "running" ? id : "";
-    },
-    (id) => id.length > 0,
-    120_000
-  );
+  const leadOf = async (): Promise<string | null> => {
+    const response = await fetch(`${fleet.base}/api/projects`);
+    const rows = (await response.json()) as {
+      id: string;
+      leadInstanceId: string | null;
+    }[];
+    return rows.find((row) => row.id === project.id)?.leadInstanceId ?? null;
+  };
+  let lead: string;
+  try {
+    lead = await until(
+      "Caw's lead session started and running",
+      async () => {
+        const id = (await leadOf()) ?? "";
+        return fleet.instance(id)?.status === "running" ? id : "";
+      },
+      (id) => id.length > 0,
+      120_000
+    );
+  } catch (error) {
+    // Why not, in the hub's words: the lead it named and how that row
+    // stands (his lead runs in a workspace boundary: on a host that cannot
+    // start one, the hub says so here).
+    const named = await leadOf();
+    const said = (await fleet.logs("hub"))
+      .split("\n")
+      .filter(
+        (line) =>
+          line.includes(project.id) || (named ? line.includes(named) : false)
+      )
+      .slice(-12)
+      .join("\n");
+    throw new Error(
+      `${error instanceof Error ? error.message : String(error)}; lead ${named ?? "none"} ${JSON.stringify(named ? fleet.instance(named) : null)}; hub said:\n${said}`,
+      { cause: error }
+    );
+  }
   const delegate = await fleet.spawn("claude", "Probe delegate", fleet.repo, {
     projectId: project.id,
     parent: { instanceId: lead },
@@ -2192,7 +2330,8 @@ async function accountMove(
   const path = new URL(page.url()).pathname;
   await rightClickRow(page, mover);
   await page.getByRole("menuitem", { name: ACCOUNT_ITEM }).first().click();
-  await page.getByRole("menuitem", { name: SECOND_ACCOUNT }).click();
+  // The submenu's accounts are radio items (AccountSubmenu).
+  await page.getByRole("menuitemradio", { name: SECOND_ACCOUNT }).click();
   await moves.waitHeld();
   await page.waitForFunction(
     (id) =>
@@ -3108,30 +3247,22 @@ const spec: Spec = {
     const path = new URL(page.url()).pathname;
 
     // ── Stop ─────────────────────────────────────────────────────────────
+    // A stop's pending word is the hub's own `stopping` status, published
+    // the moment the hub records the stop and held until the machine
+    // confirms the process ended (session-acts.svelte.ts `stopOnRow`,
+    // SessionRow's `pending`): refused at the wire, the stop never reaches
+    // the hub; reaching it with the machine frozen, it waits on the machine.
     note(kit, "the keeper on the hub before Stop", fleet.instance(kept));
     socket.hold((frame) => frame.verb === "stop");
     await rightClickRow(page, kept);
     await menuItem(page, STOP_ITEM);
-    await page.waitForFunction(
-      (id) =>
-        document
-          .querySelector(`[data-hover-session="${id}"]`)
-          ?.closest(".item")
-          ?.querySelector(".doing")
-          ?.textContent?.includes("Stopping…") ?? false,
-      kept
+    await until(
+      "the stop held at the wire",
+      () => socket.held.length,
+      (held) => held === 1,
+      30_000
     );
-    const stopBefore: RowState = await read(kept);
-    note(kit, "stop, before the machine answers", stopBefore);
     note(kit, "frames the page sent", socket.sent.slice(-20));
-    kit.check(
-      "Stop: before the machine answers, the row says Stopping… and nothing says stopped",
-      stopBefore.doing === "Stopping…" &&
-        stopBefore.busy === "true" &&
-        socket.held.length === 1 &&
-        fleet.instance(kept)?.status === "running",
-      JSON.stringify({ ...stopBefore, hub: fleet.instance(kept)?.status })
-    );
     socket.refuseHeld(errorFrame(STOP_REFUSAL));
     await page.waitForSelector(`.row-fault >> text=${STOP_REFUSAL}`);
     const stopRefused = await read(kept);
@@ -3147,10 +3278,40 @@ const spec: Spec = {
       JSON.stringify(stopRefused)
     );
     socket.passAll();
-    await page
-      .locator(".row-fault", { hasText: STOP_REFUSAL })
-      .getByRole("button", { name: TRY_AGAIN })
-      .click();
+    // The machine cannot confirm while frozen: the hub holds `stopping`.
+    fleet.freeze("agent", true);
+    try {
+      await page
+        .locator(".row-fault", { hasText: STOP_REFUSAL })
+        .getByRole("button", { name: TRY_AGAIN })
+        .click();
+      await page.waitForFunction(
+        (id) =>
+          document
+            .querySelector(`[data-hover-session="${id}"]`)
+            ?.closest(".item")
+            ?.querySelector(".doing")
+            ?.textContent?.includes("Stopping…") ?? false,
+        kept
+      );
+      // The refusal folds away (RowFault's `unfold`) as the stop goes again.
+      await page
+        .locator(".row-fault", { hasText: STOP_REFUSAL })
+        .waitFor({ state: "detached" });
+      const stopBefore: RowState = await read(kept);
+      note(kit, "stop, before the machine answers", stopBefore);
+      kit.check(
+        "Stop: before the machine answers, the row says Stopping…, its fault gone, the hub says stopping and nothing says stopped",
+        stopBefore.doing === "Stopping…" &&
+          stopBefore.busy === "true" &&
+          stopBefore.faults.length === 0 &&
+          !(stopBefore.title ?? "").startsWith("Stopped") &&
+          fleet.instance(kept)?.status === "stopping",
+        JSON.stringify({ ...stopBefore, hub: fleet.instance(kept)?.status })
+      );
+    } finally {
+      fleet.freeze("agent", false);
+    }
     await until(
       "the session stopped",
       () => fleet.instance(kept)?.status,
