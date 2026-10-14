@@ -121,6 +121,7 @@ const respond = (request: Seen): Reply => {
     return text("done");
   }
   return call(request, FINISH, {
+    headline: "Wrote the theme file and checked it exists.",
     summary: "Wrote the theme file and checked it exists.",
   });
 };

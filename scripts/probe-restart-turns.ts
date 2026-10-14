@@ -649,7 +649,7 @@ async function finishItem(
       parentInstanceId: parent,
       title: "Restart probe item",
       prompt:
-        'Call finish_item now with the summary "probe". Do nothing else, and run no command yourself.',
+        'Call finish_item now with the headline "probe" and the summary "probe". Do nothing else, and run no command yourself.',
       harness,
       model,
       cwd: repo,

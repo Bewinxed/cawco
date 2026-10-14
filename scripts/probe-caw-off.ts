@@ -270,8 +270,12 @@ const worker = (request: Seen, tag: string): Reply => {
     request,
     FINISH,
     request.all.includes("PROBE-DELEGATE-")
-      ? { summary: `Probe delegate ${tag} done` }
+      ? {
+          headline: `Probe delegate ${tag} done`,
+          summary: `Probe delegate ${tag} done`,
+        }
       : {
+          headline: "Probe attempt",
           summary: "Probe attempt",
           blocked: { command: "probe", error: "the probe blocks it" },
         }

@@ -1643,6 +1643,7 @@ function injectedBlock(text: string, base: BlockBase): TranscriptBlock | null {
         peerName: `${report.name}#${report.short}`,
         peerSession: report.short,
         reportKind: report.failed ? "failed" : "report",
+        ...(report.headline ? { reportHeadline: report.headline } : {}),
       },
     };
   }

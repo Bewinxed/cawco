@@ -82,6 +82,8 @@
   /** Open or folded, kept per session by the message, as tool rows are. */
   const disclosed = $derived(disclosure(message));
   const open = $derived(disclosed.get());
+  /** A delegate report's own short outcome, which the folded line shows whole. */
+  const headline = $derived(meta.reportHeadline ?? "");
   /** What the folded line shows of the body: its first line, bare of markup. */
   const excerpt = $derived(
     message.content
@@ -96,7 +98,8 @@
      will never read says so in words, with why on hover.
 
      Every one of these arrives folded to its line: what it is, from whom,
-     its state, and the first line of what it says. The line is the
+     its state, and a report's headline whole (else the first line of what
+     it says). The line is the
      disclosure (the trigger stretches over it; the sender's link stands
      above it), the body opens under it on the tool rows' own reveal, and it
      stays however the reader left it. `data-message` on the outer element
@@ -141,7 +144,9 @@
       {:else if message.state === "pending"}
         <span class="pending">queued</span>
       {/if}
-      {#if !open && excerpt}
+      {#if !open && headline}
+        <span class="excerpt headline">{headline}</span>
+      {:else if !open && excerpt}
         <span class="excerpt">{excerpt}</span>
       {/if}
       <Collapsible.Trigger
@@ -182,6 +187,13 @@
     white-space: nowrap;
     font-weight: var(--weight-body);
     color: var(--ink-muted);
+  }
+  /* A report's headline is written to be read whole: it wraps under the
+     label rather than being cut to the one line. */
+  .excerpt.headline {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
   }
   /* The trigger is a bits-ui element, so it is addressed globally. Its
      chevron trails the line, as a tool row's does; its ::after is the whole

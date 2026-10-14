@@ -778,7 +778,16 @@ export function handoffTools(deps: HandoffDeps) {
       "finish_item",
       finishItemDescription(deps.lands),
       {
-        summary: z.string().describe("What was done, in plain words."),
+        headline: z
+          .string()
+          .trim()
+          .min(1)
+          .describe(
+            "The outcome in one or two plain sentences that stand alone, shown whole at a glance: what changed and whether it passed. No ids or file names."
+          ),
+        summary: z
+          .string()
+          .describe("The full report: what was done and how it was proven."),
         findings: z
           .array(z.object({ title: z.string(), detail: z.string() }))
           .optional()

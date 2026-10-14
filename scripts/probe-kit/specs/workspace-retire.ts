@@ -97,10 +97,14 @@ const respond = (request: Seen): Reply => {
       FINISH,
       tag === "K"
         ? {
+            headline: "Committed retire-K.txt and stopped.",
             summary: "Committed retire-K.txt and stopped.",
             blocked: { command: "probe", error: "K stops here on purpose" },
           }
-        : { summary: `Committed retire-${tag}.txt.` }
+        : {
+            headline: `Committed retire-${tag}.txt.`,
+            summary: `Committed retire-${tag}.txt.`,
+          }
     );
   }
   if (

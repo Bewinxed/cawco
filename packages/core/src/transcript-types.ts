@@ -119,6 +119,8 @@ export interface BlockMetadata {
   /** `init` only, and re-reported every turn: what the session answers tools with. */
   permissionMode?: PermissionMode;
   preTokens?: number;
+  /** A delegate report's one-or-two-sentence outcome, from `finish_item`'s `headline`; the body is the full report. */
+  reportHeadline?: string;
   /** Set when a `user.peer` is a delegate's auto-report rather than a hand-off. */
   reportKind?: "report" | "failed";
   result?: string;

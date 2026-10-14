@@ -1045,6 +1045,9 @@ export interface WorkItemCheck {
 export interface WorkItemSubmission {
   blocked?: { command: string; error: string };
   findings?: { title: string; detail: string }[];
+  /** The outcome in one or two sentences, shown whole wherever a report is glanced at. */
+  headline: string;
+  /** The full report. */
   summary: string;
 }
 
@@ -1147,10 +1150,16 @@ export const workItems = sqliteTable(
     result: text("result"),
     /**
      * Its session's own words for what it did: the `summary` of the
-     * `finish_item` whose checks passed. A routine's run reads its output
-     * contract here (routines.ts). Null until then.
+     * `finish_item` whose checks passed, its full report. Null until then.
      */
     summary: text("summary"),
+    /**
+     * That `finish_item`'s `headline`: its outcome in one or two sentences,
+     * what a glance at its report shows (the delegate tree, a routine's
+     * thread note). A routine's run reads its output contract here. Null
+     * until then.
+     */
+    headline: text("headline"),
     /** Why it failed. */
     error: text("error"),
     createdAt: timestamp("created_at")

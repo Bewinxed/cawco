@@ -72,7 +72,10 @@ const respond = (request: Seen): Reply => {
   }
   if (!step.finish && request.toolNames.includes(FINISH)) {
     step.finish = true;
-    return call(FINISH, { summary: `Wrote post.md for ${tag}.` });
+    return call(FINISH, {
+      headline: `Wrote post.md for ${tag}.`,
+      summary: `Wrote post.md for ${tag}.`,
+    });
   }
   if (
     !(step.finish || step.searched) &&

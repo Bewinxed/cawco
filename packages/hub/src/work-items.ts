@@ -640,12 +640,16 @@ export interface WorkItemDeps {
    */
   readonly planSteps: (instanceId: string) => Promise<PlanStep[]>;
   readonly publish: (item: WorkItemSummary) => void;
-  /** Hands a report to the parent of the item's session. */
+  /**
+   * Hands a report to the parent of the item's session: `body` the full
+   * report, `headline` its one-or-two-sentence outcome when there is one.
+   */
   readonly report: (
     row: InstanceRow,
     body: string,
     failed: boolean,
-    notice?: boolean
+    notice?: boolean,
+    headline?: string
   ) => void;
   /** The one send path; its record says whether the machine took it. */
   readonly send: (envelope: Envelope<SendPayload>) => {
@@ -1487,7 +1491,7 @@ export const createWorkItems = ({
     checkQueue: checkQueues.get(item.id) ?? null,
     firstLines: {
       brief: firstLine(item.brief),
-      result: firstLine(item.result),
+      result: item.headline ?? firstLine(item.result),
       error: firstLine(item.error),
     },
   });
@@ -1904,10 +1908,13 @@ export const createWorkItems = ({
       done === members.length
         ? `all ${members.length} done`
         : `${done} done, ${members.length - done} not`;
+    const headline = `Group “${item.group}”: every item has ended (${tally}).`;
     report(
       row,
-      `Group “${item.group}”: every item has ended (${tally}).\n\n${members.map(groupPart).join("\n\n")}`,
-      false
+      `${headline}\n\n${members.map(groupPart).join("\n\n")}`,
+      false,
+      false,
+      headline
     );
   };
 
@@ -3573,12 +3580,19 @@ export const createWorkItems = ({
   const reportOrHold = (
     row: InstanceRow,
     ended: WorkItemRow,
-    body: string
+    body: string,
+    headline: string
   ): string => {
     if (heldForGroup(ended)) {
       return `; your parent hears of it with the rest of group “${ended.group}”`;
     }
-    report(row, `${body}${reportLine(ended)}`, ended.state === "failed");
+    report(
+      row,
+      `${body}${reportLine(ended)}`,
+      ended.state === "failed",
+      false,
+      headline
+    );
     return "";
   };
 
@@ -3821,13 +3835,14 @@ export const createWorkItems = ({
       ...(failure ? { state: "failed", error: failure } : { state: "done" }),
       result: body,
       summary: submission.summary,
+      headline: submission.headline,
       digest: `${submission.summary.trim()}\n${landing.line}${collected.line}`,
       ...(landing.kind === "done" && landing.prUrl
         ? { prUrl: landing.prUrl }
         : {}),
       ...settled,
     });
-    const held = reportOrHold(row, ended, body);
+    const held = reportOrHold(row, ended, body, submission.headline);
     if (landing.kind !== "done") {
       return {
         done: false,
@@ -4369,11 +4384,17 @@ export const createWorkItems = ({
 
       if (request.blocked) {
         const error = `Blocked: ${request.blocked.command}${fenced(request.blocked.error)}`;
-        const failed = finish(item, { state: "failed", error });
+        const failed = finish(item, {
+          state: "failed",
+          error,
+          headline: request.headline,
+        });
         report(
           row,
           `${request.summary}\n\n${error}${findingsBlock(request.findings)}${reportLine(failed)}`,
-          true
+          true,
+          false,
+          request.headline
         );
         return "The item failed as blocked; your parent has the command and the error. End your turn.";
       }

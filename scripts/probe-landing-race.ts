@@ -96,7 +96,10 @@ const respond = (request: Seen): Reply => {
   }
   if (!step.finish && request.toolNames.includes(FINISH)) {
     step.finish = true;
-    return tool(FINISH, { summary: `Committed delegate-${tag}.txt.` });
+    return tool(FINISH, {
+      headline: `Committed delegate-${tag}.txt.`,
+      summary: `Committed delegate-${tag}.txt.`,
+    });
   }
   if (
     !(step.finish || step.searched) &&

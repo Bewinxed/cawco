@@ -126,7 +126,10 @@ const respond = (request: Seen): Reply => {
         words: [],
         tool: {
           name: FINISH,
-          input: { summary: `Committed delegate-${tag}.txt.` },
+          input: {
+            headline: `Committed delegate-${tag}.txt.`,
+            summary: `Committed delegate-${tag}.txt.`,
+          },
         },
       },
       "finish_item"

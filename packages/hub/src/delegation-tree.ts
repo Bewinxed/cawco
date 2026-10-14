@@ -108,7 +108,10 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
     children: DelegateNode[]
   ): Promise<DelegateNode> => {
     const waiting = item.waitUntil && item.waitReason;
-    const report = firstLine(item.result) ?? firstLine(item.error);
+    // A finished item's headline is its report at a glance; an item without
+    // checks never calls finish_item, so its last turn's first line stands.
+    const report =
+      item.headline ?? firstLine(item.result) ?? firstLine(item.error);
     const checkQueue = deps.checkQueue(item.id);
     const plan = await deps.plan(item.instanceId).catch(() => undefined);
     const activity = row

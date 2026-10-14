@@ -588,6 +588,17 @@ import { createWorkspaceRetire } from "./workspace-retire";
 /** The frame a forwarded `control` comes back as, whoever asked for it. */
 type ControlResult = Extract<FramePayload, { kind: "control_result" }>;
 
+/**
+ * What a delegate's report carries beside its body: the turn it closes, that
+ * it is a hub notice rather than a turn's end, and the delegate's
+ * one-or-two-sentence `headline` from `finish_item`.
+ */
+interface ReportTold {
+  completion?: { resultId: string; completedAt?: string };
+  headline?: string;
+  notice?: boolean;
+}
+
 /** A search hit as returned by the agent's TranscriptIndex. */
 interface SearchHitWire {
   cwd: string | null;
@@ -4031,17 +4042,17 @@ export const createServer = (
    * turn said (or why it never started), under the marker the parent's
    * transcript renders as a report. A work item of a project with a lead
    * reports to the lead too, and to the lead alone once its parent has ended
-   * (work-items.ts `reportees`).
+   * (work-items.ts `reportees`). `headline` is the delegate's
+   * one-or-two-sentence outcome from `finish_item`, carried on the marker.
    */
   const reportToParent = (
     delegate: InstanceRow,
     body: string,
     failed: boolean,
-    completion?: { resultId: string; completedAt?: string },
-    notice = false
+    told: ReportTold = {}
   ): void => {
     for (const parent of workItems.reportees(delegate)) {
-      reportTo(parent, delegate, body, failed, completion, notice);
+      reportTo(parent, delegate, body, failed, told);
     }
   };
 
@@ -4051,8 +4062,7 @@ export const createServer = (
     delegate: InstanceRow,
     body: string,
     failed: boolean,
-    completion?: { resultId: string; completedAt?: string },
-    notice = false
+    { completion, notice = false, headline }: ReportTold
   ): void => {
     const { name, tag: label } = sessionLabel(delegate);
     const sent = deliverSend({
@@ -4066,7 +4076,7 @@ export const createServer = (
           uuid: crypto.randomUUID(),
           message: {
             role: "user",
-            content: `${reportMarker(label, failed, notice)}${body}`,
+            content: `${reportMarker(label, failed, notice, headline)}${body}`,
           },
           parent_tool_use_id: null,
           origin: {
@@ -4098,6 +4108,7 @@ export const createServer = (
         payload: {
           body,
           failed,
+          ...(headline ? { headline } : {}),
           ...(notice ? { notice: true } : {}),
           ...completion,
         },
@@ -14917,8 +14928,8 @@ export const createServer = (
       }),
     command: runOnMachine,
     inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
-    report: (row, body, failed, notice) => {
-      reportToParent(row, body, failed, undefined, notice);
+    report: (row, body, failed, notice, headline) => {
+      reportToParent(row, body, failed, { notice, headline });
       // An item that ends while its session is at rest (checks a restarted
       // hub ran again) has no turn's end left to stop it at.
       sleepFinished(row.id);
@@ -17254,13 +17265,9 @@ export const createServer = (
     refusedMove: (row, move) => {
       const [listed] = db.listedInstancesByIds([row.id]);
       if (listed?.parentInstanceId) {
-        reportToParent(
-          listed,
-          accountMoveSentence(move, Date.now()),
-          false,
-          undefined,
-          true
-        );
+        reportToParent(listed, accountMoveSentence(move, Date.now()), false, {
+          notice: true,
+        });
       }
     },
     // What its process was last handed: what it kept for later never reached
@@ -20818,6 +20825,7 @@ export const createServer = (
           ...hidden,
           body: t.Object({
             instanceId: t.String({ minLength: 1 }),
+            headline: t.String({ minLength: 1 }),
             summary: t.String(),
             findings: t.Optional(
               t.Array(t.Object({ title: t.String(), detail: t.String() }))
@@ -23638,10 +23646,12 @@ export const createServer = (
                     const handed = workItems.turnEnded(from, turn, endedAt);
                     if (handed) {
                       reportToParent(from, handed.body, handed.failed, {
-                        resultId: neutral.uuid as string,
-                        ...(neutral.timestamp
-                          ? { completedAt: neutral.timestamp }
-                          : {}),
+                        completion: {
+                          resultId: neutral.uuid as string,
+                          ...(neutral.timestamp
+                            ? { completedAt: neutral.timestamp }
+                            : {}),
+                        },
                       });
                     }
                     // Its item is over and its parent has the report: the

@@ -371,7 +371,7 @@ const respond = (request: Seen): Reply => {
       timeout: 60_000,
     });
   }
-  return call(request, FINISH, { summary: "NO_REPLY" });
+  return call(request, FINISH, { headline: "NO_REPLY", summary: "NO_REPLY" });
 };
 
 // ── The run ──────────────────────────────────────────────────────────────────
@@ -916,7 +916,7 @@ try {
         Date.now()
       );
       fleet.write(
-        "INSERT INTO work_items (id, workspace_id, parent_instance_id, instance_id, brief, title, project_id, lands, harness, state, summary, created_at, ended_at) VALUES (?, ?, ?, 'probe', 'b', 'Slow triage', ?, 'none', 'claude', 'done', 'NO_REPLY', ?, ?)",
+        "INSERT INTO work_items (id, workspace_id, parent_instance_id, instance_id, brief, title, project_id, lands, harness, state, summary, headline, created_at, ended_at) VALUES (?, ?, ?, 'probe', 'b', 'Slow triage', ?, 'none', 'claude', 'done', 'NO_REPLY', 'NO_REPLY', ?, ?)",
         item,
         workspace,
         `routine:${slowRoutine.id}`,

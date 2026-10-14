@@ -98,6 +98,8 @@
   const report = $derived.by(
     (): {
       body: string;
+      /** The delegate's own short outcome, when it finished with finish_item. */
+      headline: string | undefined;
       failed: boolean;
       count: number;
       at: number | undefined;
@@ -106,6 +108,7 @@
       if (last) {
         return {
           body: last.payload.body,
+          headline: last.payload.headline,
           failed: last.payload.failed,
           count: reportEvents.length,
           at: new Date(last.createdAt).getTime(),
@@ -126,6 +129,7 @@
       }
       return {
         body: latest.content,
+        headline: latest.metadata?.reportHeadline,
         failed: latest.metadata?.reportKind === "failed",
         count: peers.length,
         at: latest.timestamp ? Date.parse(latest.timestamp) : undefined,
@@ -298,7 +302,8 @@
   const failure = $derived(
     spawnFailed
       ? headline(String(meta.toolResult ?? "The spawn failed."))
-      : (row?.lastError ?? (report?.failed ? headline(report.body) : ""))
+      : (row?.lastError ??
+          (report?.failed ? (report.headline ?? headline(report.body)) : ""))
   );
 
   /**
@@ -341,7 +346,7 @@
       if (report && !open) {
         return {
           kind: "report",
-          text: headline(report.body),
+          text: report.headline ?? headline(report.body),
           err: report.failed,
           beat: false,
         };

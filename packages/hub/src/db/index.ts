@@ -1915,6 +1915,7 @@ export interface DbShape {
         | "state"
         | "result"
         | "summary"
+        | "headline"
         | "error"
         | "endedAt"
         | "dismissedAt"

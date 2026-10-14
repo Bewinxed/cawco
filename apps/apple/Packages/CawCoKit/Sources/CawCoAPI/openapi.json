@@ -35000,6 +35000,10 @@
           "preTokens": {
             "type": "number"
           },
+          "reportHeadline": {
+            "description": "A delegate report's one-or-two-sentence outcome, from `finish_item`'s `headline`; the body is the full report.",
+            "type": "string"
+          },
           "reportKind": {
             "$ref": "#/components/schemas/BlockMetadataReportKind",
             "description": "Set when a `user.peer` is a delegate's auto-report rather than a hand-off."
@@ -35957,6 +35961,10 @@
                       "failed": {
                         "type": "boolean"
                       },
+                      "headline": {
+                        "description": "The delegate's one-or-two-sentence outcome, when it finished with `finish_item`.",
+                        "type": "string"
+                      },
                       "resultId": {
                         "type": "string"
                       },
@@ -36065,7 +36073,7 @@
             ]
           },
           "firstLines": {
-            "description": "The first line of each: what it was asked, what it reported, why it failed.",
+            "description": "The glance of each: what it was asked, what it reported (its\n`finish_item` headline whole, else its report's first line), why it\nfailed (first lines).",
             "type": "object",
             "properties": {
               "brief": {

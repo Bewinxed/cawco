@@ -272,26 +272,33 @@ export function parseWorkflowNotice(
 /**
  * The header of a delegate's report to its parent, written when the
  * delegate's turn ends, or the hub issues a notice without ending the item.
- * `label` is `<name>#<first 8 of its id>`.
+ * `label` is `<name>#<first 8 of its id>`. A report from `finish_item`
+ * carries the delegate's `headline` on the line under it, folded to one
+ * line; the full report is the body after the blank line.
  */
 export const reportMarker = (
   label: string,
   failed: boolean,
-  notice = false
-): string =>
-  `[Report from delegate ${label} — ${notice ? "notice" : `turn ${failed ? "failed" : "complete"}`}]\n\n`;
+  notice = false,
+  headline?: string
+): string => {
+  const said = headline?.replace(/\s+/g, " ").trim();
+  return `[Report from delegate ${label} — ${notice ? "notice" : `turn ${failed ? "failed" : "complete"}`}]\n${said ? `Headline: ${said}\n` : ""}\n`;
+};
 
 const REPORT =
-  /^\[Report from delegate (.+?)#([0-9a-f]{8}) — (turn complete|turn failed|notice)\]\n\n/;
+  /^\[Report from delegate (.+?)#([0-9a-f]{8}) — (turn complete|turn failed|notice)\]\n(?:Headline: ([^\n]+)\n)?\n/;
 
 /**
  * A report read back. Only the 8-character short id survives, so consumers
- * pair it with the delegate's full id by prefix.
+ * pair it with the delegate's full id by prefix. `headline` is absent on a
+ * report without one (a turn's own words, a hub notice, one stored before).
  */
 export function parseReportMarker(text: string): {
   name: string;
   short: string;
   failed: boolean;
+  headline?: string;
   body: string;
 } | null {
   const marker = REPORT.exec(text);
@@ -302,6 +309,7 @@ export function parseReportMarker(text: string): {
     name: marker[1],
     short: marker[2],
     failed: marker[3] === "turn failed",
+    ...(marker[4] ? { headline: marker[4].trim() } : {}),
     body: text.slice(marker[0].length).trim(),
   };
 }

@@ -4,7 +4,7 @@
  * fires exactly once per slot, across a hub restart.
  *
  * Each delegate run's mock reads its routine's prompt (`PROBE-ROUTINE-<tag>`)
- * and calls finish_item with the summary its tag says.
+ * and calls finish_item with the headline its tag says.
  *
  * 1. restart: an every-minute routine answering NO_REPLY. The hub is stopped
  *    after one slot's run ended and started again past the next slot, before
@@ -129,7 +129,8 @@ const respond = (request: Seen): Reply => {
       timeout: 120_000,
     });
   }
-  return call(request, FINISH, { summary: SAYS[tag] ?? "NO_REPLY" });
+  const says = SAYS[tag] ?? "NO_REPLY";
+  return call(request, FINISH, { headline: says, summary: says });
 };
 
 interface RunRow {

@@ -23,7 +23,7 @@
  *   `none` unless the routine says, carrying the routine's budget. Their
  *   parent is the routine (`routine:<id>`): they report to no session, and
  *   this module reads how each ended.
- * - **The output contract**, on the run's `finish_item` summary: exactly
+ * - **The output contract**, on the run's `finish_item` headline: exactly
  *   `NO_REPLY` is silent; `AUTOMATION_FAILED: <why>` (or an item that
  *   failed) is a failure, its reason the why (a bare token's is the text
  *   the run's session said before its answer's call, settled once its
@@ -93,9 +93,9 @@ import {
   type WorkItems,
 } from "./work-items";
 
-/** What a delegate's summary says to stay silent. */
+/** What a delegate's headline says to stay silent. */
 export const NO_REPLY = "NO_REPLY";
-/** What a delegate's summary says to fail the run. */
+/** What a delegate's headline says to fail the run. */
 export const AUTOMATION_FAILED = "AUTOMATION_FAILED";
 
 /**
@@ -136,7 +136,7 @@ For each note below, decide what it is: a lasting fact (a convention, a command,
 - Lasting facts: memory_propose them, one call per file, with the file's whole new text and the ids of the notes it comes from. How the project's work is done goes in AGENTS.md; a topic's facts go in knowledge/<topic>.md. Keep everything the file says; add or change only what the notes ground, in the file's own voice.
 - Every other note: memory_classify it.
 
-Nothing you propose changes a file until the person approves it. Finish with finish_item: ${NO_REPLY} when you proposed nothing, else one line naming what you proposed.`;
+Nothing you propose changes a file until the person approves it. Finish with finish_item, its headline ${NO_REPLY} when you proposed nothing, else one line naming what you proposed.`;
 
 /** A refusal, with the status a route answers and the words a tool returns. */
 export class RoutineRefusal extends Error {
@@ -429,7 +429,7 @@ const clipReason = (words: string): string => {
 };
 
 /** What a delegate run is told about its output, after the routine's prompt. */
-const CONTRACT = `## Your answer\n\nWhen you are done, call finish_item. Its summary is this run's output, read by the hub: ${ANSWERS}`;
+const CONTRACT = `## Your answer\n\nWhen you are done, call finish_item. Its headline is this run's output, read by the hub: ${ANSWERS}`;
 
 /** What Caw is told about a lead run's output, after the routine's prompt. */
 const leadContract = (runId: string): string =>
@@ -1325,7 +1325,7 @@ export const createRoutines = ({
 
   /**
    * A run's answer under the output contract, a delegate's `finish_item`
-   * summary or Caw's `routine_result`: exactly {@link NO_REPLY} is silent,
+   * headline or Caw's `routine_result`: exactly {@link NO_REPLY} is silent,
    * `AUTOMATION_FAILED: <why>` failed with that why, a bare
    * {@link AUTOMATION_FAILED} `"bare"` (its reason comes at its turn's end,
    * {@link failBare}), anything else delivered.
@@ -1358,7 +1358,7 @@ export const createRoutines = ({
         reason: why?.trim() || "its work item failed",
       };
     }
-    return resultOf(item.summary ?? "");
+    return resultOf(item.headline ?? "");
   };
 
   /**
@@ -1462,7 +1462,7 @@ export const createRoutines = ({
 
   /**
    * Caw's answer for a lead run (`routine_result`): settled as a delegate's
-   * summary is. Refused for a run that is not his project's, not a lead
+   * headline is. Refused for a run that is not his project's, not a lead
    * run, or not going.
    */
   const leadResult = (
@@ -1881,7 +1881,7 @@ export const createRoutines = ({
     return [
       tool(
         "routine_create",
-        `Make a routine in your project: a prompt the hub runs on a schedule. target 'delegate' starts a fresh delegate each run; its finish_item summary is the output: exactly ${NO_REPLY} is silent, ${AUTOMATION_FAILED}: <one sentence on why> fails it with that reason, retried once then the owner is asked, anything else is noted in the routine's thread. target 'lead' messages Caw (skipped while Caw is off). It runs once at once as a test, and turns itself off after 7 days unless kept.`,
+        `Make a routine in your project: a prompt the hub runs on a schedule. target 'delegate' starts a fresh delegate each run; its finish_item headline is the output: exactly ${NO_REPLY} is silent, ${AUTOMATION_FAILED}: <one sentence on why> fails it with that reason, retried once then the owner is asked, anything else is noted in the routine's thread. target 'lead' messages Caw (skipped while Caw is off). It runs once at once as a test, and turns itself off after 7 days unless kept.`,
         {
           name: z.string().describe("3–6 plain words."),
           prompt: z.string().describe("What each run does."),

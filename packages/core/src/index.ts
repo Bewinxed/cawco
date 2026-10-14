@@ -1083,7 +1083,11 @@ export interface WorkItemSummary {
   createdAt: number;
   dismissedAt: number | null;
   endedAt: number | null;
-  /** The first line of each: what it was asked, what it reported, why it failed. */
+  /**
+   * The glance of each: what it was asked, what it reported (its
+   * `finish_item` headline whole, else its report's first line), why it
+   * failed (first lines).
+   */
   firstLines: { brief: string; result: string; error: string };
   id: string;
   instanceId: string;
@@ -1151,6 +1155,8 @@ export type DelegateEvent =
       payload: {
         body: string;
         failed: boolean;
+        /** The delegate's one-or-two-sentence outcome, when it finished with `finish_item`. */
+        headline?: string;
         resultId?: string;
         completedAt?: string;
       };

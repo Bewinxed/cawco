@@ -303,6 +303,7 @@ const curator = (request: Seen): Reply => {
     return text("done");
   }
   return call(request, FINISH, {
+    headline: "Proposed AGENTS.md and knowledge/time.md.",
     summary: "Proposed AGENTS.md and knowledge/time.md.",
   });
 };
@@ -349,12 +350,14 @@ const respond = (request: Seen): Reply => {
   }
 };
 
-/** A work item (an attempt, a routine's run): notes `words`, then finishes with `summary`. */
-const briefed = (request: Seen, words: string, summary: string): Reply => {
+/** A work item (an attempt, a routine's run): notes `words`, then finishes with `said` as its headline and summary. */
+const briefed = (request: Seen, words: string, said: string): Reply => {
   if (!noted(request.all)) {
     return call(request, NOTE, { text: words });
   }
-  return finished(request) ? text("done") : call(request, FINISH, { summary });
+  return finished(request)
+    ? text("done")
+    : call(request, FINISH, { headline: said, summary: said });
 };
 
 /** A case of (w): its call once, on the person's message; then its note. */
@@ -455,7 +458,7 @@ const sleeper = (
   if (!summary || finished(request)) {
     return text("done");
   }
-  return call(request, FINISH, { summary });
+  return call(request, FINISH, { headline: summary, summary });
 };
 
 interface Note {
