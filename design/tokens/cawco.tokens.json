@@ -2418,6 +2418,11 @@
       "$value": "12px",
       "$description": "The phone bar's two ends: the toggle glyph's leading edge and Caw's glass stand this far in from the screen's edges."
     },
+    "c-side-divider-hit": {
+      "$type": "dimension",
+      "$value": "44px",
+      "$description": "The handle between a conversation and the side surface beside it, under a finger: its hit area about the hairline (Apple HIG's 44pt touch target). While the surface is expanded the hit area stands just inside the session area's edge, space-3 wide."
+    },
     "c-bar-phone-gap": {
       "$type": "dimension",
       "$value": "8px",

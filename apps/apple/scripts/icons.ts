@@ -79,6 +79,7 @@ const SOLAR_ICONS = [
   "arrow-down-bold-duotone", // Latest.svelte
   "square-top-down-bold-duotone", // IconExternal
   "maximize-bold-duotone", // IconMaximize
+  "minimize-bold-duotone", // IconMinimize
   "danger-circle-bold-duotone", // IconAlert
   "chat-square-bold-duotone", // IconChat
   "file-text-bold-duotone", // IconDocument

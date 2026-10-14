@@ -688,6 +688,8 @@
     --c-bar-toggle-glyph: 18px;
     /* The phone bar's two ends: the toggle glyph's leading edge and Caw's glass stand this far in from the screen's edges. */
     --c-bar-phone-edge: 12px;
+    /* The handle between a conversation and the side surface beside it, under a finger: its hit area about the hairline (Apple HIG's 44pt touch target). While the surface is expanded the hit area stands just inside the session area's edge, space-3 wide. */
+    --c-side-divider-hit: 44px;
     /* On the phone bar, the first tab starts this far after the toggle glyph, and the strip stops this far short of Caw's glass. */
     --c-bar-phone-gap: 8px;
     /* On a phone, the strip along the screen's left edge where a finger that travels right pulls the sidebar out; a drag that starts further in is the page's (the chat swipe). */

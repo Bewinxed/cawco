@@ -31,9 +31,21 @@ final class ComposerDock {
     /// conversation's transcript holds (composer-dock.svelte.ts
     /// `transcriptShare`): 1, unless a side preview has the rest. The
     /// composer stands over the transcript, never over the preview beside it.
+    /// With no share at all (the preview expanded over the whole
+    /// conversation) the composer is put away with the transcript
+    /// (PaneLeaf.svelte `.dock.away`).
     var transcriptShare: CGFloat = 1 {
-        didSet { if abs(transcriptShare - oldValue) > 0.001 { host.setNeedsLayout() } }
+        didSet {
+            guard abs(transcriptShare - oldValue) > 0.001 else { return }
+            if away { composer.endEditing(true) }
+            paint()
+        }
     }
+
+    /// A conversation is bound to the composer.
+    private var bound = false
+    /// The transcript under the composer has no share of the group: nothing to write into.
+    private var away: Bool { transcriptShare <= 0.001 }
 
     /// A swipe is carrying the conversation.
     var held: Bool {
@@ -107,8 +119,14 @@ final class ComposerDock {
     }
 
     private func show(_ shown: Bool) {
-        composer.isHidden = !shown
-        fade.isHidden = !shown
+        bound = shown
+        paint()
+    }
+
+    private func paint() {
+        let hidden = !bound || away
+        composer.isHidden = hidden
+        fade.isHidden = hidden
         host.setNeedsLayout()
     }
 
@@ -127,6 +145,8 @@ final class ComposerDock {
 
     /// Duo: the composer stands clear of the fold, displaced, never hidden.
     private func avoidFold() {
+        // Put away, it keeps where it stood: there is no room to stand in.
+        guard !away else { return }
         var lead = Space.space3
         var trail = -Space.space3
         var foot = -Space.space2

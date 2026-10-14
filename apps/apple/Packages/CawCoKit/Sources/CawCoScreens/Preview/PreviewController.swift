@@ -28,7 +28,25 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private let pinsBadge = KitBadge("0")
     private var commentButton: UIButton!
     private var reloadButton: UIButton!
+    /// Expand / Back to conversation (SideSurface.svelte): beside a
+    /// transcript only, never in the phone's drawer.
+    private var expandButton: UIButton!
     private var closeButton: UIButton!
+    /// Expand or Back pressed: the session's split moves to the edge or back.
+    var onExpand: () -> Void = {}
+    /// Esc with neither a card nor Comment mode left to close
+    /// (PreviewPane.svelte `pressKey`): the session's split gives the conversation back.
+    var onEscapeLeft: () -> Void = {}
+    /// The preview has the whole session area: the card meets its edges.
+    private var expanded = false
+    private var headLeading: NSLayoutConstraint!
+    private var headTrailing: NSLayoutConstraint!
+    private var wellLeading: NSLayoutConstraint!
+    private var wellTrailing: NSLayoutConstraint!
+    private var wellBottom: NSLayoutConstraint!
+    /// Expanded, the well keeps only its top edge (SideSurface.svelte `border-width: 1px 0 0`).
+    private let wellEdge = UIView()
+    private var wellEdgeHeight: NSLayoutConstraint!
     /// The header: on a phone, a handle of the drawer (SessionViewController drags it).
     private(set) var dragArea: UIView!
     /// The drawer's grabber and its 44pt hit area (SideSheet.svelte `.preview-grab`):
@@ -167,15 +185,18 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             if self?.commenting == true { button.alpha = 0.5 }
         }
         reloadButton = reload
+        expandButton = KitButton.make("", glyph: .maximize, variant: .ghost, height: .sm) { [weak self] in self?.onExpand() }
+        expandButton.accessibilityLabel = "Expand"
+        expandButton.toolTip = "Expand"
         closeButton = KitButton.make("", glyph: .close, variant: .ghost, height: .sm) { [weak self] in self?.close() }
         closeButton.accessibilityLabel = "Close"
         commentButton.isEnabled = false
-        let head = UIStackView(arrangedSubviews: [identity, sendButton, pinsButton, commentButton, reload, closeButton])
+        let head = UIStackView(arrangedSubviews: [identity, sendButton, pinsButton, commentButton, reload, expandButton, closeButton])
         head.spacing = Space.space1
         head.alignment = .center
         head.translatesAutoresizingMaskIntoConstraints = false
         dragArea = head
-        for button in [sendButton!, pinsButton!, commentButton!, reload, closeButton!] {
+        for button in [sendButton!, pinsButton!, commentButton!, reload, expandButton!, closeButton!] {
             button.setContentHuggingPriority(.required, for: .horizontal)
             button.setContentCompressionResistancePriority(.required, for: .horizontal)
         }
@@ -228,12 +249,15 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         cover.addSubview(line)
         failure.isHidden = true
         card.isHidden = true
-        for part in [commentingNote, web!, cover, card, failure] as [UIView] { well.addSubview(part) }
+        wellEdge.translatesAutoresizingMaskIntoConstraints = false
+        wellEdge.isUserInteractionEnabled = false
+        wellEdge.isHidden = true
+        for part in [commentingNote, web!, cover, wellEdge, card, failure] as [UIView] { well.addSubview(part) }
 
         // The grabber, `space-1` from the top, centred, 100×6 in the control
         // edge; its hit area is 44pt tall about it (vaul's handle hit area),
         // over the header, which yields to the header's actions.
-        grabArea.yields = [sendButton, pinsButton, commentButton, reload, closeButton]
+        grabArea.yields = [sendButton, pinsButton, commentButton, reload, expandButton, closeButton]
         grabber.translatesAutoresizingMaskIntoConstraints = false
         grabber.backgroundColor = Palette.borderControl
         grabber.layer.cornerRadius = 3
@@ -249,7 +273,17 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         view.addSubview(well)
         view.addSubview(grabArea)
         headTop = head.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor)
+        headLeading = head.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: Space.space2)
+        headTrailing = head.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Space.space2)
+        wellLeading = well.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: Space.space2)
+        wellTrailing = well.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Space.space2)
+        wellBottom = well.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -Space.space2)
+        wellEdgeHeight = wellEdge.heightAnchor.constraint(equalToConstant: 1)
         NSLayoutConstraint.activate([
+            wellEdge.topAnchor.constraint(equalTo: well.topAnchor),
+            wellEdge.leadingAnchor.constraint(equalTo: well.leadingAnchor),
+            wellEdge.trailingAnchor.constraint(equalTo: well.trailingAnchor),
+            wellEdgeHeight,
             grabArea.topAnchor.constraint(equalTo: view.topAnchor),
             grabArea.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             grabArea.widthAnchor.constraint(equalToConstant: 100 + 44),
@@ -259,13 +293,13 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             grabber.widthAnchor.constraint(equalToConstant: 100),
             grabber.heightAnchor.constraint(equalToConstant: 6),
             headTop,
-            head.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: Space.space2),
-            head.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Space.space2),
+            headLeading,
+            headTrailing,
             head.heightAnchor.constraint(equalToConstant: 44),
             well.topAnchor.constraint(equalTo: head.bottomAnchor),
-            well.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: Space.space2),
-            well.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Space.space2),
-            well.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -Space.space2),
+            wellLeading,
+            wellTrailing,
+            wellBottom,
             commentingNote.topAnchor.constraint(equalTo: well.topAnchor),
             commentingNote.leadingAnchor.constraint(equalTo: well.leadingAnchor),
             commentingNote.trailingAnchor.constraint(equalTo: well.trailingAnchor),
@@ -356,8 +390,70 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         loadViewIfNeeded()
         self.drawer = drawer
         grabArea.isHidden = !drawer
-        headTop.constant = drawer ? Space.space3 : 0
+        // The drawer has no Expand: it is the phone's sheet (SideSplit.svelte's `available` is a desk's).
+        expandButton.isHidden = drawer
+        if drawer { expanded = false }
+        placeHead()
         placeCardConstraints()
+    }
+
+    /// Expanded over the whole session area (SideSurface.svelte `.expanded`):
+    /// the card meets the area's edges and the well its sides, so a page is
+    /// drawn at the full width. The head stands where it stood, so the
+    /// control just pressed is still under the finger to press back. The
+    /// session lays it out on its slide's clock.
+    func standsExpanded(_ expanded: Bool) {
+        loadViewIfNeeded()
+        self.expanded = expanded
+        let glyph: Glyph = expanded ? .minimize : .maximize
+        expandButton.configuration?.image = glyph.image.resized(to: Size.iconMd)
+        expandButton.accessibilityLabel = expanded ? "Back to conversation" : "Expand"
+        expandButton.toolTip = expanded ? "Back to conversation (Esc)" : "Expand"
+        placeHead()
+        well.layer.cornerRadius = expanded ? 0 : Radius.radiusSm
+        paintWell()
+    }
+
+    /// The head's and the well's insets: a drawer's head stands `space-3`
+    /// under its top; beside the transcript the card's own insets; expanded,
+    /// the card's inset moves onto the head so it holds still while the well
+    /// meets the edges.
+    private func placeHead() {
+        let card = Space.space2
+        headTop.constant = drawer ? Space.space3 : expanded ? card : 0
+        headLeading.constant = expanded ? card * 2 : card
+        headTrailing.constant = expanded ? -card * 2 : -card
+        wellLeading.constant = expanded ? 0 : card
+        wellTrailing.constant = expanded ? 0 : -card
+        wellBottom.constant = expanded ? 0 : -card
+    }
+
+    /// Something in the preview has the keyboard: the page, or the card's reply field.
+    var holdsKeys: Bool {
+        guard isViewLoaded else { return false }
+        var views: [UIView] = [view]
+        while let next = views.popLast() {
+            if next.isFirstResponder { return true }
+            views += next.subviews
+        }
+        return false
+    }
+
+    /// Esc on the pane (PreviewPane.svelte `pressKey`): an open pin's card
+    /// closes first, then Comment mode ends. False when neither was there.
+    func escape() -> Bool {
+        if openPin != nil {
+            closeCard()
+            #if DEBUG
+            PreviewProbe.say("preview escape card")
+            #endif
+            return true
+        }
+        if commenting {
+            comment(false)
+            return true
+        }
+        return false
     }
 
     /// The preview as the hub says it now: a new revision (another page, or
@@ -575,8 +671,14 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     private func paintWell() {
-        well.layer.borderColor = (commenting ? Palette.accent : Palette.borderHairline).resolvedColor(with: traitCollection).cgColor
-        well.layer.borderWidth = commenting ? Size.focusRingWidth : 1
+        let edge = (commenting ? Palette.accent : Palette.borderHairline).resolvedColor(with: traitCollection)
+        let width = commenting ? Size.focusRingWidth : 1
+        // Expanded, only the top edge is drawn: the sides are the session area's own.
+        well.layer.borderColor = edge.cgColor
+        well.layer.borderWidth = expanded ? 0 : width
+        wellEdge.isHidden = !expanded
+        wellEdge.backgroundColor = edge
+        wellEdgeHeight.constant = width
     }
 
     /// Hands the page a message from its host, as the dashboard's pane posts to its iframe.
@@ -595,7 +697,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         case "k": step(-1)
         case "Enter": if let focusedPin { openCard(focusedPin) }
         case "Escape":
-            if openPin != nil { closeCard() } else if commenting { comment(false) }
+            if !escape() { onEscapeLeft() }
         default: break
         }
     }
@@ -1123,6 +1225,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let grab = grabArea.isHidden ? "none" : centre(grabber)
         let page = web.convert(web.bounds, to: nil)
         return "preview head comment=\(words)@\(centre(commentButton)) pins=\(comments.open)@\(centre(pinsButton)) send=\(sendWords)@\(centre(sendButton)) reload=\(centre(reloadButton)) grabber=\(grab) note=\(Int(commentingNote.bounds.height)) web=\(Int(page.minX.rounded())),\(Int(page.minY.rounded())),\(Int(page.width.rounded())),\(Int(page.height.rounded()))"
+    }
+
+    /// Expand's words and centre and Close's centre, for the session's `split` line.
+    var probeExpand: String {
+        "expand=\(expandButton.accessibilityLabel ?? "?")@\(PreviewProbe.centre(expandButton)) close=\(PreviewProbe.centre(closeButton))"
     }
 
     /// The header as last logged on a layout: logged again only when it moved.

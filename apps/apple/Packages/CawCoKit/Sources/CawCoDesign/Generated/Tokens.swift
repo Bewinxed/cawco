@@ -524,6 +524,8 @@ public enum Size {
     public static let cBarToggleGlyph: Double = 18
     /// The phone bar's two ends: the toggle glyph's leading edge and Caw's glass stand this far in from the screen's edges.
     public static let cBarPhoneEdge: Double = 12
+    /// The handle between a conversation and the side surface beside it, under a finger: its hit area about the hairline (Apple HIG's 44pt touch target). While the surface is expanded the hit area stands just inside the session area's edge, space-3 wide.
+    public static let cSideDividerHit: Double = 44
     /// On the phone bar, the first tab starts this far after the toggle glyph, and the strip stops this far short of Caw's glass.
     public static let cBarPhoneGap: Double = 8
     /// On a phone, the strip along the screen's left edge where a finger that travels right pulls the sidebar out; a drag that starts further in is the page's (the chat swipe).

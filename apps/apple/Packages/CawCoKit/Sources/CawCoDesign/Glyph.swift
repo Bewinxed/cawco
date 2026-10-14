@@ -61,6 +61,7 @@ public enum Glyph: String, CaseIterable, Sendable {
     case arrowDown = "arrow-down-bold-duotone"
     case external = "square-top-down-bold-duotone"
     case maximize = "maximize-bold-duotone"
+    case minimize = "minimize-bold-duotone"
     case alert = "danger-circle-bold-duotone"
     case chat = "chat-square-bold-duotone"
     case document = "file-text-bold-duotone"

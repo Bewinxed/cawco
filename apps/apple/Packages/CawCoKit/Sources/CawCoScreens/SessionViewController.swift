@@ -187,6 +187,8 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         view.addSubview(transcriptHost.view)
         transcriptHost.didMove(toParent: self)
         transcriptTrailing = transcriptHost.view.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+        transcriptFill = transcriptView.trailingAnchor.constraint(equalTo: transcriptHost.view.trailingAnchor)
+        transcriptPinned = transcriptView.widthAnchor.constraint(equalToConstant: 0)
         NSLayoutConstraint.activate([
             transcriptHost.view.topAnchor.constraint(equalTo: view.topAnchor),
             transcriptHost.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -194,7 +196,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
             transcriptHost.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             transcriptView.topAnchor.constraint(equalTo: transcriptHost.view.topAnchor),
             transcriptView.leadingAnchor.constraint(equalTo: transcriptHost.view.leadingAnchor),
-            transcriptView.trailingAnchor.constraint(equalTo: transcriptHost.view.trailingAnchor),
+            transcriptFill,
             transcriptView.bottomAnchor.constraint(equalTo: transcriptHost.view.bottomAnchor),
         ])
         clearComposer()
@@ -203,6 +205,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     override func viewSafeAreaInsetsDidChange() {
         super.viewSafeAreaInsetsDidChange()
         clearComposer()
+        placeSplit()
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -215,6 +218,8 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         shownOnce = true
         // An open preview whose sheet could not be shown off screen is shown now.
         syncPreview()
+        // Laid out expanded before it had a window (a relaunch): Esc is the pane's now.
+        if expanded { takeKeys() }
     }
 
     /// Ends the subscription; PaneHost calls it when the tab closes.
@@ -411,7 +416,13 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     // MARK: The preview (SessionPane's preview split, PreviewSheet)
 
     private var preview: PreviewController?
+    /// The transcript to the pane's trailing edge: active unless the preview stands beside it.
     private var transcriptTrailing: NSLayoutConstraint!
+    /// The transcript fills its host; collapsed, it keeps the width it had
+    /// (`transcriptPinned`) while its host closes over it, so it is covered
+    /// rather than laid out again at every frame of the slide.
+    private var transcriptFill: NSLayoutConstraint!
+    private var transcriptPinned: NSLayoutConstraint!
     /// The preview's key the transcript's cards were last drawn against.
     private var drawnPreview: String?
 
@@ -465,6 +476,8 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         placeDrawer()
+        // A new width (a rotation, a resized window) holds the split to its floors again.
+        placeSplit()
         // A docked canvas stands over the panel's page: it follows it as it moves.
         composerBinding.panelMoved()
         // The group's composer stands over this share of the pane: all of it,
@@ -477,6 +490,9 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
             transcriptShare = share
             onTranscriptShare()
         }
+        #if DEBUG
+        probeSplit()
+        #endif
     }
 
     /// How much of the pane's width, from its leading edge, the transcript
@@ -646,18 +662,30 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
             }
             return
         }
+        // Beside the transcript, past the divider (SideSplit.svelte): every
+        // edge a constant `placeSplit` sets from the kept share, so dragging,
+        // Expand and Back move one set of constraints on one clock.
         transcriptTrailing.isActive = false
-        let share = controller.view.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.45)
-        share.priority = .defaultHigh
-        transcriptTrailing = transcriptHost.view.trailingAnchor.constraint(equalTo: controller.view.leadingAnchor, constant: -Space.space2)
-        NSLayoutConstraint.activate([
-            controller.view.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: Space.space2),
-            controller.view.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -Space.space2),
-            controller.view.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Space.space2),
-            share,
-            controller.view.widthAnchor.constraint(greaterThanOrEqualToConstant: 320),
-            transcriptTrailing,
+        view.addSubview(divider)
+        let split = Split(
+            transcriptWidth: transcriptHost.view.widthAnchor.constraint(equalToConstant: 0),
+            previewLeading: controller.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            previewTrailing: controller.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            previewTop: controller.view.topAnchor.constraint(equalTo: view.topAnchor),
+            previewBottom: controller.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            dividerCentre: divider.centerXAnchor.constraint(equalTo: view.leadingAnchor),
+            dividerWidth: divider.widthAnchor.constraint(equalToConstant: Size.cSideDividerHit)
+        )
+        self.split = split
+        NSLayoutConstraint.activate(split.all + [
+            divider.topAnchor.constraint(equalTo: controller.view.topAnchor),
+            divider.bottomAnchor.constraint(equalTo: controller.view.bottomAnchor),
         ])
+        divider.onDrag = { [weak self] pan in self?.dragSplit(pan) }
+        divider.onStep = { [weak self] step in self?.stepSplit(step) }
+        controller.onExpand = { [weak self] in self?.toggleExpanded() }
+        controller.onEscapeLeft = { [weak self] in self?.collapse() }
+        applySplit(sliding: false)
         controller.didMove(toParent: self)
     }
 
@@ -676,13 +704,321 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         controller.view.transform = .identity
         drawerHeight = nil
         drawerFloor = nil
-        if !drawer {
-            transcriptTrailing.isActive = false
-            transcriptTrailing = transcriptHost.view.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+        if let split {
+            // The split goes with the preview: the transcript has the whole pane again.
+            slide?.stopAnimation(true)
+            slide = nil
+            NSLayoutConstraint.deactivate(split.all)
+            self.split = nil
+            divider.removeFromSuperview()
+            controller.onExpand = {}
+            controller.onEscapeLeft = {}
+            controller.standsExpanded(false)
+            putTranscript(away: false)
+            transcriptHost.view.clipsToBounds = false
             transcriptTrailing.isActive = true
+            if isFirstResponder { resignFirstResponder() }
         }
         view.setNeedsLayout()
     }
+
+    // MARK: The split (SideSplit.svelte)
+
+    /// The split's edges, each a constant `placeSplit` sets.
+    private struct Split {
+        let transcriptWidth: NSLayoutConstraint
+        let previewLeading: NSLayoutConstraint
+        let previewTrailing: NSLayoutConstraint
+        let previewTop: NSLayoutConstraint
+        let previewBottom: NSLayoutConstraint
+        let dividerCentre: NSLayoutConstraint
+        let dividerWidth: NSLayoutConstraint
+        var all: [NSLayoutConstraint] {
+            [transcriptWidth, previewLeading, previewTrailing, previewTop, previewBottom, dividerCentre, dividerWidth]
+        }
+    }
+
+    /// The preview beside the transcript: nil in the phone's drawer or with no preview.
+    private var split: Split?
+    private let divider = SplitDivider()
+    /// Expand or Back sliding on the panel's clock.
+    private var slide: UIViewPropertyAnimator?
+    /// The kept share when the divider was taken: a drag that ends at the edge gives it back.
+    private var splitFrom = 0.0
+    /// How far right of the divider's place the finger went down: the drag holds the handle there.
+    private var splitGrip = 0.0
+
+    /// Between the transcript and the preview's card, the divider's hairline at its middle.
+    private static let splitGap = Space.space2
+    /// The preview's narrowest beside the transcript.
+    private static let previewFloor = 320.0
+    /// The transcript's narrowest share beside the preview (SideSplit.svelte
+    /// `CONVERSATION_MIN`). Dragged past it, the transcript collapses: the preview is expanded.
+    private static let conversationMin = 0.3
+    /// A first visit's share (SideSplit.svelte `savedWidth`).
+    private static let firstShare = 0.45
+
+    private var widthKey: String { "cawco.preview.width.\(sessionId)" }
+    private var expandedKey: String { "cawco.preview.expanded.\(sessionId)" }
+
+    /// The preview's share of the pane beside the transcript, from the
+    /// divider to the trailing edge: this conversation's own, kept across launches.
+    private lazy var sideShare: Double = {
+        let kept = UserDefaults.standard.double(forKey: widthKey)
+        return kept > 0 ? min(1 - Self.conversationMin, kept) : Self.firstShare
+    }()
+
+    /// Expand asked for, by the head or by the divider reaching the edge: one
+    /// state, kept per conversation beside its share, and ended by a close.
+    private lazy var expandAsked = UserDefaults.standard.bool(forKey: expandedKey)
+
+    /// The preview has the whole pane: asked for, with the preview beside the
+    /// transcript. The phone's drawer keeps the word for a wider screen.
+    private var expanded: Bool { expandAsked && split != nil }
+
+    private func keepExpanded(_ next: Bool) {
+        expandAsked = next
+        if next {
+            UserDefaults.standard.set(true, forKey: expandedKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: expandedKey)
+        }
+    }
+
+    /// The preview's narrowest share of a pane `width` wide: its floor, the gap and the card's inset.
+    private func floorShare(_ width: Double) -> Double {
+        min(1, (Self.previewFloor + Self.splitGap * 1.5) / width)
+    }
+
+    /// The share beside the transcript: the kept one, held to the transcript's narrowest and the preview's floor.
+    private func besideShare(_ width: Double) -> Double {
+        max(floorShare(width), min(1 - Self.conversationMin, sideShare))
+    }
+
+    /// The share the split stands at: all of the pane while expanded.
+    private func shownShare(_ width: Double) -> Double {
+        expanded ? 1 : besideShare(width)
+    }
+
+    /// Every edge of the split from the share it stands at. Beside the
+    /// transcript the card keeps its inset and the divider's hairline stands
+    /// in the gap; expanded, the card meets the pane's edges and the
+    /// divider's hit area stands just inside the leading one, past the rail's
+    /// grip over it (SideSplit.svelte `.expanded .side-divider::after`).
+    private func placeSplit() {
+        guard let split, isViewLoaded else { return }
+        let width = view.bounds.width
+        guard width > 0 else { return }
+        let gap = Self.splitGap
+        let whole = expanded
+        let at = width * (1 - shownShare(width))
+        let insets = view.safeAreaInsets
+        Self.place(split.transcriptWidth, whole ? 0 : max(0, at - gap / 2))
+        Self.place(split.previewLeading, whole ? 0 : at + gap / 2)
+        Self.place(split.previewTrailing, whole ? 0 : -gap)
+        Self.place(split.previewTop, whole ? 0 : insets.top + gap)
+        Self.place(split.previewBottom, whole ? 0 : -(insets.bottom + gap))
+        Self.place(split.dividerWidth, whole ? Space.space3 : Size.cSideDividerHit)
+        Self.place(split.dividerCentre, whole ? Space.space1 + Space.space3 / 2 : at)
+        Self.place(transcriptPinned, max(0, width * (1 - besideShare(width)) - gap / 2))
+    }
+
+    private static func place(_ constraint: NSLayoutConstraint, _ value: Double) {
+        if abs(constraint.constant - value) > 0.25 { constraint.constant = value }
+    }
+
+    /// Collapsed under the expanded preview, the transcript is put away
+    /// (SideSplit.svelte's `inert`): it keeps the width it had under its
+    /// closing host, and nothing in it takes a touch, the keyboard or VoiceOver.
+    private func putTranscript(away: Bool) {
+        let host: UIView = transcriptHost.view
+        if away {
+            host.endEditing(true)
+            transcriptFill.isActive = false
+            transcriptPinned.isActive = true
+            host.clipsToBounds = true
+        } else {
+            transcriptPinned.isActive = false
+            transcriptFill.isActive = true
+        }
+        host.isUserInteractionEnabled = !away
+        host.accessibilityElementsHidden = away
+    }
+
+    /// Lays the split out as `expanded` says, and the card's look with it:
+    /// sliding on the panel's clock (`durPanel`, the drawer's ease, as the
+    /// web's `.sliding`) when the reader watches it change by Expand, Back or
+    /// Esc; at once under a drag, when the split is made, and with Reduce Motion.
+    private func applySplit(sliding: Bool) {
+        guard let preview, split != nil else { return }
+        let whole = expanded
+        slide?.stopAnimation(true)
+        slide = nil
+        divider.expanded = whole
+        putTranscript(away: whole)
+        // The card's shadow would fall outside the pane once it meets the edges.
+        preview.view.boxShadow = whole ? [] : Shadow.shadowDrawer
+        placeSplit()
+        if whole {
+            takeKeys()
+        } else if isFirstResponder {
+            resignFirstResponder()
+        }
+        let lay = { [self] in
+            preview.standsExpanded(whole)
+            preview.view.layer.cornerRadius = whole ? 0 : Radius.radiusLg
+            view.layoutIfNeeded()
+        }
+        guard sliding, view.window != nil, !UIAccessibility.isReduceMotionEnabled else {
+            lay()
+            transcriptHost.view.clipsToBounds = whole
+            return
+        }
+        let animator = Motion.easeDrawer.animator(Motion.durPanel) { lay() }
+        animator.addCompletion { [weak self] position in
+            guard let self, position == .end else { return }
+            transcriptHost.view.clipsToBounds = expanded
+        }
+        animator.startAnimation()
+        slide = animator
+        #if DEBUG
+        scrubSlide()
+        #endif
+    }
+
+    /// The head's Expand, or Back to conversation: the same state as the divider at the edge.
+    private func toggleExpanded() {
+        guard split != nil else { return }
+        keepExpanded(!expanded)
+        applySplit(sliding: true)
+    }
+
+    /// Back to the last share beside the transcript (Back, Esc); false when it was not expanded.
+    @discardableResult
+    private func collapse() -> Bool {
+        guard expanded else { return false }
+        keepExpanded(false)
+        applySplit(sliding: true)
+        return true
+    }
+
+    /// The divider follows the finger or the pointer with no animation. The
+    /// transcript dragged under its narrowest stands at it, and past halfway
+    /// to nothing collapses (paneforge 1.0.2 `getAdjustedSizeForCollapsible`,
+    /// the web's handle): the preview is expanded. Dragged back out, the
+    /// transcript stands at its narrowest, then follows. A drag that ends at
+    /// the edge was never a width: Back gives the one it started from.
+    private func dragSplit(_ pan: UIPanGestureRecognizer) {
+        let width = view.bounds.width
+        guard split != nil, width > 0 else { return }
+        switch pan.state {
+        case .began:
+            slide?.stopAnimation(true)
+            slide = nil
+            splitFrom = sideShare
+            splitGrip = divider.downX - width * (1 - shownShare(width))
+        case .changed, .ended:
+            follow(transcript: (pan.location(in: view).x - splitGrip) / width, width: width)
+            if pan.state == .ended { endDrag() }
+        case .cancelled, .failed:
+            endDrag()
+        default:
+            break
+        }
+    }
+
+    private func follow(transcript raw: Double, width: Double) {
+        var transcript = raw
+        if transcript < Self.conversationMin {
+            transcript = transcript < Self.conversationMin / 2 ? 0 : Self.conversationMin
+        }
+        let whole = transcript <= 0
+        if !whole { sideShare = max(floorShare(width), min(1 - Self.conversationMin, 1 - transcript)) }
+        if whole != expandAsked {
+            keepExpanded(whole)
+            applySplit(sliding: false)
+        } else {
+            placeSplit()
+            view.layoutIfNeeded()
+        }
+    }
+
+    private func endDrag() {
+        if expandAsked { sideShare = splitFrom }
+        UserDefaults.standard.set(sideShare, forKey: widthKey)
+    }
+
+    /// VoiceOver's increment widens the preview 5% of the pane, its decrement
+    /// narrows it, and from expanded gives the conversation back.
+    private func stepSplit(_ step: Int) {
+        let width = view.bounds.width
+        guard split != nil, width > 0 else { return }
+        if expanded {
+            if step < 0 { collapse() }
+            return
+        }
+        follow(transcript: 1 - (besideShare(width) + Double(step) * 0.05), width: width)
+        UserDefaults.standard.set(sideShare, forKey: widthKey)
+    }
+
+    // Expanded, Esc is the pane's (SideSplit.svelte `escapeExpanded`): it
+    // takes the keyboard unless something in the preview has it, whose own
+    // Esc reaches it up the chain, or from the page through `onEscapeLeft`.
+    override var canBecomeFirstResponder: Bool { expanded }
+
+    private func takeKeys() {
+        guard view.window != nil, preview?.holdsKeys != true, !isFirstResponder else { return }
+        becomeFirstResponder()
+    }
+
+    /// Esc, expanded: an open pin's card first, then Comment mode, then the conversation comes back.
+    @objc private func escapeKey() {
+        if preview?.escape() == true { return }
+        collapse()
+    }
+
+    #if DEBUG
+    private var probedSplit = ""
+
+    /// The split as a simulator pass reads it, logged when it moved: the
+    /// pane's bounds, the preview's frame, the transcript's width, the kept
+    /// and shown shares, the state, and the composer's share.
+    private func probeSplit() {
+        guard PreviewProbe.on, let preview, split != nil, view.window != nil else { return }
+        let width = view.bounds.width
+        let line = "split pane=\(Self.probeRect(view.bounds)) preview=\(Self.probeRect(preview.view.frame)) transcript=\(Int(transcriptHost.view.frame.width.rounded())) divider=\(Int(divider.center.x.rounded())),\(Int(divider.bounds.width.rounded())) kept=\(String(format: "%.3f", sideShare)) shown=\(String(format: "%.3f", shownShare(width))) expanded=\(expanded) away=\(!transcriptHost.view.isUserInteractionEnabled) composerShare=\(String(format: "%.3f", transcriptShare)) keys=\(isFirstResponder) \(preview.probeExpand) dividerAt=\(PreviewProbe.centre(divider))"
+        guard line != probedSplit else { return }
+        probedSplit = line
+        PreviewProbe.say(line)
+    }
+
+    /// `-split-scrub`: a slide is held still and read at 0, 50 and 100% of
+    /// its clock (the pane's layer at `speed` 0, `timeOffset` stepped from the
+    /// slide's begin), then let go.
+    private func scrubSlide() {
+        guard PreviewProbe.on, ProcessInfo.processInfo.arguments.contains("-split-scrub"), let preview else { return }
+        CATransaction.flush()
+        let pane = view.layer
+        let card = preview.view.layer
+        let begun = card.animationKeys()?.compactMap { card.animation(forKey: $0)?.beginTime }.first { $0 > 0 }
+        let begin = begun ?? pane.convertTime(CACurrentMediaTime(), from: nil)
+        pane.speed = 0
+        for fraction in [0.0, 0.5, 1.0] {
+            pane.timeOffset = begin + Motion.durPanel * fraction
+            CATransaction.flush()
+            let drawn = card.presentation()?.frame ?? card.frame
+            let transcript = transcriptHost.view.layer.presentation()?.bounds.width ?? -1
+            let corner = card.presentation()?.cornerRadius ?? -1
+            PreviewProbe.say("split scrub t=\(fraction) preview=\(Self.probeRect(drawn)) transcript=\(Int(transcript.rounded())) corner=\(String(format: "%.1f", corner)) eased=\(String(format: "%.3f", Motion.easeDrawer.value(at: fraction))) begin=\(begun == nil ? "now" : "animation") keys=\(card.animationKeys()?.joined(separator: ",") ?? "none")")
+        }
+        pane.speed = 1
+        pane.timeOffset = 0
+    }
+
+    private static func probeRect(_ box: CGRect) -> String {
+        "\(Int(box.minX.rounded())),\(Int(box.minY.rounded())),\(Int(box.width.rounded())),\(Int(box.height.rounded()))"
+    }
+    #endif
 
     /// Back to its middle height (client.svelte.ts `revealPreview`).
     private func reveal(_ controller: PreviewController) {
@@ -695,6 +1031,10 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         guard let controller = preview else { return }
         preview = nil
         if controller.parent === self { unembed(controller) }
+        // Closing the preview ends the expansion: what opens next opens beside
+        // the conversation. Only a close counts: before the hub's first word
+        // after a launch there was no preview to close.
+        if expandAsked { keepExpanded(false) }
     }
 
     override func traitCollectionDidChange(_ previous: UITraitCollection?) {
@@ -1199,6 +1539,14 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
                 keys.append(UIKeyCommand(input: "\(digit)", modifierFlags: [], action: #selector(cardKey(_:))))
             }
             keys.append(UIKeyCommand(input: "\r", modifierFlags: [], action: #selector(cardKey(_:))))
+        }
+        // Expanded, Esc gives the conversation back, after the preview's own
+        // card and Comment mode; the composer, and its cards, are put away.
+        if expanded {
+            let escape = UIKeyCommand(title: "Back to Conversation", action: #selector(escapeKey),
+                                      input: UIKeyCommand.inputEscape)
+            escape.wantsPriorityOverSystemBehavior = true
+            keys.append(escape)
         }
         return keys
     }
