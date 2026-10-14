@@ -70,10 +70,9 @@ export const artifactSyncPath = (base: string, artifactId: string): string =>
   `${base}__cawco/artifact/${artifactId}`;
 
 /**
- * The person sends (the head's Send N): every unsent pick, pin and thread
- * entry to the session as one message, with the pins' pictures, through the
- * listener's send beside the doc's socket, the path a page's `cawco.send`
- * takes.
+ * The person sends (the head's Send N): the session hears it has new
+ * responses to read, with the pins' pictures, through the listener's send
+ * beside the doc's socket, the path a page's `cawco.send` takes.
  */
 export async function sendArtifact(
   base: string,

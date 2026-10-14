@@ -13,8 +13,8 @@
  *    (`data-cawco-picked`).
  * 4. `artifact_update` with a JSON Patch changes the state, and the page
  *    reads it back (the other option marked).
- * 5. The session hears the person's change as one message, after the 3 s
- *    quiet, and nothing for the agent's own patch.
+ * 5. The session hears nothing of the person's change, or of the agent's own
+ *    patch: only a Send tells it (artifact-responses.ts).
  * 6. No cawco tool about previews or choices is among the session's tools
  *    (the ones the artifact tools replaced); the artifact tools are.
  *
@@ -23,7 +23,7 @@
  *
  * 7. Typing into `title` is in artifact_read within 2 s as its `value`;
  *    picking a radio and an option is there as `options`; the session hears
- *    them as picks.
+ *    nothing of them.
  * 8. A dashboard reload shows all three from the doc on the page's
  *    DOMContentLoaded plus one frame.
  * 9. With `title` focused and holding typed text, artifact_update with new
@@ -79,13 +79,15 @@ const ANSWERED_COMMIT = /"commit":"([0-9a-f]{40})"/;
 const NO_PROJECT =
   "This session belongs to no project, so there is nowhere to promote to.";
 const COMMAND = /PROBE-CALL:(\d+)/g;
-const CHANGED = "I changed my picks";
+/** Anything the hub would tell the session of the person's responses, or the person's picks as words. */
+const TOLD =
+  /\[CawCo\] The (?:page|canvas|preview) "|changed my picks|sent my picks/;
 /** A cawco tool named for previews or choices: the tools the artifact tools replaced. */
 const PREVIEW_TOOL = /mcp__cawco__\w*(?:preview|choices)\w*/g;
 /** The id in artifact_create's answer, as the tool result carries it. */
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
-/** The quiet the hub waits for before it tells the session (artifacts/service.ts). */
-const QUIET_MS = 3000;
+/** How long a probe listens for a word the session must not hear. Our call: past any debounce the hub could have. */
+const LISTEN_MS = 6000;
 /** How long a show waits for a view's word (artifacts/service.ts `SHOWN_WAIT_MS`). */
 const SHOWN_WAIT_MS = 10_000;
 /** A pane's word to the hub: `POST /api/instances/:id/artifacts/:artifact/shown`. */
@@ -263,7 +265,7 @@ const respond = (request: Seen): Reply => {
   }
   const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
   const ask = marker ? asks.get(marker) : undefined;
-  if (!(marker && ask) || request.last.includes(CHANGED)) {
+  if (!(marker && ask) || TOLD.test(request.last)) {
     return text("ok");
   }
   if (issued.has(marker)) {
@@ -454,14 +456,6 @@ const run = async (kit: Kit) => {
       : `${heard} ms`
   );
 
-  // 5 (first half). The session hears it once, after the quiet.
-  const delivered = (await until(
-    "the session told of the change",
-    () => fleet.seen.find((one) => one.last.includes(CHANGED)),
-    Boolean,
-    20_000
-  )) as Seen;
-
   // 3. A reload of the dashboard still marks the pick.
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector(".artifact-trigger");
@@ -494,14 +488,13 @@ const run = async (kit: Kit) => {
     `tool: ${updated.slice(0, 200)}; page marks ${readBack.join() || "nothing"}`
   );
 
-  // 5. One message for the person's change, after the quiet; none for the patch.
-  await Bun.sleep(QUIET_MS * 2);
-  const told = fleet.seen.filter((one) => one.last.includes(CHANGED));
-  const gap = delivered.at - clickedAt;
+  // 5. Nothing for the person's change, nothing for the patch: only a Send tells the session.
+  await Bun.sleep(LISTEN_MS);
+  const told = fleet.seen.filter((one) => TOLD.test(one.all));
   kit.check(
-    "5: the session hears one message, after the quiet",
-    told.length === 1 && gap >= QUIET_MS,
-    `${told.length} message(s), the first ${gap} ms after the click: ${delivered.last.slice(delivered.last.indexOf(CHANGED), delivered.last.indexOf(CHANGED) + 120)}`
+    "5: the session hears nothing of the person's change or the agent's patch",
+    told.length === 0,
+    told.map((one) => one.last.slice(0, 160)).join(" | ") || "nothing"
   );
 
   // 6. The session's own tool list.
@@ -953,26 +946,12 @@ const fieldChecks = async ({
     typed !== null && pickedIn !== null,
     `typed ${typed ?? "not within 2 s"} ms, picked ${pickedIn ?? "not within 2 s"} ms; state ${JSON.stringify(fieldsRead.state).slice(0, 300)}; said: ${said.slice(-6).join(" | ") || "nothing"}`
   );
-  const fieldsHeard = (await until(
-    "the session told of the fields",
-    () =>
-      fleet.seen.find(
-        (one) =>
-          one.last.includes('"fields"') && one.last.includes("- tone: bright")
-      ),
-    Boolean,
-    20_000
-  ).catch(() => null)) as Seen | null;
-  const heardLines = fieldsHeard?.last.slice(
-    fieldsHeard.last.indexOf(CHANGED),
-    fieldsHeard.last.indexOf(CHANGED) + 200
-  );
+  await Bun.sleep(LISTEN_MS);
+  const fieldsTold = fleet.seen.filter((one) => TOLD.test(one.all));
   kit.check(
-    "7: the session hears the fields as picks, by key and value",
-    !!heardLines?.includes('- title: value "Hello probe"') &&
-      heardLines.includes("- size: m") &&
-      heardLines.includes("- tone: bright"),
-    heardLines ?? "no message naming the fields"
+    "7: the session hears nothing of the fields until a Send",
+    fieldsTold.length === 0,
+    fieldsTold.map((one) => one.last.slice(0, 160)).join(" | ") || "nothing"
   );
   const rpcBefore = await rpcSeen(page);
 

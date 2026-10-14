@@ -143,8 +143,8 @@ export const artifactRead = {
   name: "artifact_read",
   description:
     "Read the person's picks, notes and values on one of your artifacts, each with the page hash it was made on. " +
-    "`since` (the `seq` of your last read or delivery) returns only what changed after it. No id: your newest. " +
-    "Their changes also reach you as a message once they pause, and at once while your turn runs. A canvas answers " +
+    "`since` (the `seq` of your last read) returns only what changed after it. No id: your newest. " +
+    "When the person sends, you hear that the artifact has new responses, with the `since` to read from. A canvas answers " +
     "its outline (a line per element; the person's pen strokes as ink over the ids they cross) and `changed`, what " +
     "the person changed since `since` or your last read; `png: true` adds its picture.",
   input: {
@@ -179,8 +179,8 @@ const pin = z
 export const commentRead = {
   name: "comment_read",
   description:
-    "Read the person's pins on your artifacts: each numbered, what it stands on (selector, source file:line, text), " +
-    "and its thread. Their sends tell you which pins are new. No artifact: all of yours.",
+    "Read the person's pins on your artifacts: each numbered, what it stands on (selector, source file:line, text, " +
+    "ink box), its thread, and the page address they sent from. No artifact: all of yours.",
   input: {
     artifact: id.optional(),
     filter: z.enum(["open", "resolved", "all"]).default("open"),

@@ -14,10 +14,12 @@
  *    box; the list shows two rows; J and K move the focus between the pins
  *    and the overlay's outline follows.
  * 3. A reply typed in the card is in pin 1's thread, by the person; "Send 2"
- *    posts one message with both sections and both pins' pictures, after
- *    which N is 0 and every pin and entry has `sentAt`; a second reply
- *    makes N 1.
- * 4. comment_read answers both pins; comment_reply on pin 1 is in its card
+ *    tells the session it has responses to read (pins with comment_read),
+ *    both pins' pictures with it, drawn as one quiet line and no row of the
+ *    person's, after which N is 0 and every pin and entry has `sentAt`; a
+ *    second reply makes N 1.
+ * 4. comment_read answers both pins, what pin 1 stands on and its reply, and
+ *    pin 2's ink box; comment_reply on pin 1 is in its card
  *    within 2 s, the live dot showing while the agent's turn runs;
  *    comment_resolve dims pin 1 to 40% and moves it to Resolved; Reopen
  *    brings it back. A host that holds no doc (the app) posts `cawco:reply`
@@ -64,7 +66,10 @@ const REPLY = "mcp__cawco__comment_reply";
 const RESOLVE = "mcp__cawco__comment_resolve";
 const COMMAND = /PROBE-CALL:(\d+)/g;
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
-const SECTION = /^## \d+\. comment on /gm;
+/** The responses notice a Send puts to the session (core injected.ts `artifactResponsesNotice`). */
+const NOTICE = /\[CawCo\] The page "[a-z0-9-]+" has new responses since \d+\./;
+/** An image block in a request's body. */
+const IMAGE_BLOCK = /"type":"image"/g;
 const RESOLVED_TAB = /^Resolved/;
 const OPEN_TAB = /^Open/;
 const ROOT = join(import.meta.dir, "..", "..", "..");
@@ -104,15 +109,15 @@ const answered = new Map<string, string>();
 const answeredAt = new Map<string, number>();
 /** Calls whose turn the model draws out after the tool's answer: the agent at work. */
 const slow = new Set<string>();
-/** Every message the session was sent, as the model read it. */
-const heard: string[] = [];
+/** Every message the session was sent, as the model read it, with the request that carried it. */
+const heard: { body: string; last: string }[] = [];
 
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   if (!request.tools) {
     return text("Probe title");
   }
-  heard.push(request.last);
+  heard.push({ last: request.last, body: request.body });
   const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
   const ask = marker ? asks.get(marker) : undefined;
   if (!(marker && ask)) {
@@ -487,18 +492,22 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
   const before = heard.length;
   const rows = await on.page.locator(".turn.you").count();
   await on.page.locator(".preview-pane .send").click();
-  const message =
-    (await until(
-      "the pins' message at the model",
-      () => heard.slice(before).find((text) => text.includes("## 1.")),
-      Boolean,
-      60_000
-    ).catch(() => "")) ?? "";
-  const sections = message.match(SECTION)?.length ?? 0;
-  const row = on.page.locator(".turn.you").nth(rows);
-  await row.waitFor({ timeout: 30_000 }).catch(() => undefined);
+  const message = await until(
+    "the responses event at the model",
+    () => heard.slice(before).find((said) => NOTICE.test(said.last)),
+    Boolean,
+    60_000
+  ).catch(() => undefined);
+  // The event's pictures ride with it: the only images in that request.
+  const pictures = message?.body.match(IMAGE_BLOCK)?.length ?? 0;
+  const line = on.page.locator("[data-artifact-responses]");
+  await line
+    .first()
+    .waitFor({ timeout: 30_000 })
+    .catch(() => undefined);
   await settle(on.page, 500);
-  const pictures = await row.locator("img").count();
+  const ownRows = await on.page.locator(".turn.you").count();
+  const lines = await line.count();
   const stamped = await until(
     "sentAt on every pin and entry",
     () => docOf(frame),
@@ -515,17 +524,16 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
   const after = await sendLabel(on);
   const disabled = await on.page.locator(".preview-pane .send").isDisabled();
   on.kit.check(
-    "3: Send 2 posts one message with both pins' sections and pictures; then N is 0 and every pin and entry has sentAt",
+    "3: Send 2 tells the session it has responses to read, pins with comment_read, with both pins' pictures; one quiet line, no row of the person's; then N is 0 and every pin and entry has sentAt",
     label?.trim() === "Send 2" &&
-      sections === 2 &&
-      message.includes("src/Hero.svelte:12") &&
-      message.includes("Make it bolder.") &&
-      message.includes("- Ink: ") &&
+      !!message?.last.includes("and its pins with comment_read") &&
       pictures === 2 &&
+      lines === 1 &&
+      ownRows === rows &&
       after?.trim() === "Send 0" &&
       disabled &&
       Object.values(stamped.pins).every((pin) => !!pin.sentAt),
-    `label ${label} → ${after} (disabled ${disabled}); sections ${sections}; pictures ${pictures}; message ${message.slice(0, 600)}`
+    `label ${label} → ${after} (disabled ${disabled}); pictures ${pictures}; lines ${lines}; person's rows ${rows} → ${ownRows}; heard ${message?.last.slice(0, 300)}`
   );
 
   await card.getByRole("textbox").fill("And a little larger.");
@@ -543,9 +551,14 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
 const agentChecks = async (on: On, frame: Frame, one: string, two: string) => {
   const read = await on.call(READ, { filter: "all" });
   on.kit.check(
-    "4: comment_read answers both pins",
-    read.includes(one) && read.includes(two),
-    read.slice(read.indexOf("{"), read.indexOf("{") + 300)
+    "4: comment_read answers both pins, pin 1's source and reply, pin 2's ink box, and the page's address",
+    read.includes(one) &&
+      read.includes(two) &&
+      read.includes("src/Hero.svelte") &&
+      read.includes("Make it bolder.") &&
+      read.includes('"inkBox"') &&
+      read.includes('"address"'),
+    read.slice(read.indexOf("{"), read.indexOf("{") + 600)
   );
 
   const card = on.page.locator('.pin-card[data-pin-card="1"]');

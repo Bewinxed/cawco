@@ -502,7 +502,7 @@ declare global {
       ) => Promise<void>;
       note: (choice: string, text: string) => Promise<void>;
       set: (key: string, value: unknown) => Promise<void>;
-      /** Sends the picks to the session as one message, with `text` added when given. */
+      /** The person's Send: the session hears it has new responses to read; `text` is kept with them. */
       send: (text?: string) => Promise<void>;
       on: (event: "picks", listener: (picks: State) => void) => () => void;
       /**

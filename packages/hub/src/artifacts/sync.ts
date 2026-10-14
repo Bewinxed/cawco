@@ -362,10 +362,12 @@ const URL_MAX = 2048;
 
 const PNG_BASE64 = /^iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/;
 
+const SEND_SHAPE = "Send takes JSON: { text?, url?, pictures? }.";
+
 /** Why a send's body is not one, or its fields; null when it is. */
 const sendBodyProblem = (body: unknown): string | null => {
   if (!(body && typeof body === "object" && !Array.isArray(body))) {
-    return "Send takes JSON: { text?, url?, pictures? }.";
+    return SEND_SHAPE;
   }
   const { text, url, pictures } = body as Record<string, unknown>;
   if (
@@ -407,9 +409,9 @@ const sendBodyProblem = (body: unknown): string | null => {
 /**
  * The person sends (`cawco.send`, and the panel's Send N): what the send
  * applies first (a project's setup page: its fleet choices and place), then
- * the session hears every unsent pick, pin and thread entry as one message,
- * at once, with the page's text below them and the pins' pictures.
- * `instanceId` already owns `artifactId` (the listener checked).
+ * the session hears it has new responses to read, with the pins' pictures
+ * (service.ts `send`). `instanceId` already owns `artifactId` (the listener
+ * checked).
  */
 export const artifactSend =
   (
@@ -441,9 +443,7 @@ export const artifactSend =
     try {
       body = raw ? JSON.parse(raw) : {};
     } catch {
-      return new Response("Send takes JSON: { text?, url?, pictures? }.", {
-        status: 400,
-      });
+      return new Response(SEND_SHAPE, { status: 400 });
     }
     const problem = sendBodyProblem(body);
     if (problem) {

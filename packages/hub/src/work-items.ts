@@ -55,6 +55,7 @@ import type {
   WorkspaceRef,
 } from "@cawco/core";
 import {
+  byPerson,
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_AT,
   CONTROL_WORKSPACE_BOUNDARY,
@@ -801,15 +802,16 @@ const messageOf = (
 
 /**
  * Who may give finished work another turn: the reader (dashboard or
- * Telegram), the session that delegated it, or its project's lead (a
- * co-parent of every item of its project).
+ * Telegram, their words or their Send on its artifact: core `byPerson`), the
+ * session that delegated it, or its project's lead (a co-parent of every
+ * item of its project).
  */
 const reopens = (
   parentInstanceId: string | null,
   origin: NeutralOrigin,
   leadInstanceId?: string | null
 ): boolean =>
-  origin.kind === "human" ||
+  byPerson(origin) ||
   (origin.kind === "peer" &&
     (origin.fromSession === parentInstanceId ||
       (!!leadInstanceId && origin.fromSession === leadInstanceId)));

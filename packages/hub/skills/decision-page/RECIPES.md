@@ -56,7 +56,7 @@ For values the person tunes rather than picks (a radius, a colour, a spring), ke
 - `cawco.choose(id, option | [options] | null)` — the same as clicks.
 - `cawco.note(id, text)` — the card's note.
 - `cawco.set(key, value)` — any JSON value under a key of its own.
-- `cawco.send(text?)` — sends the picks to the session as one message, your text below them.
+- `cawco.send(text?)` — the person's Send: you hear that the page has new responses, and `artifact_read` returns your text as `sentText`.
 - `cawco.on("picks", (picks) => …)` — the stored picks now and after every change, yours included (`artifact_update`'s patches arrive here too): `{ [id]: { options, note, value, pageHash, at } }`. Returns a function that stops listening.
 
 Each returns a promise that settles when the change is in the page's artifact, which the hub keeps: the page reads and writes the artifact's document itself, so a pick made in the panel, in the page's own tab or by your `artifact_update` patch shows in every open view.

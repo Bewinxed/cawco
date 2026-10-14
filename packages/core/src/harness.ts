@@ -172,6 +172,31 @@ export const ACCOUNT_MOVE = "account_move";
 export const CONTINUATION_ORIGIN = "continuation";
 
 /**
+ * The `system` origin name of the hub's word that the person sent responses
+ * on one of the session's artifacts (core injected.ts
+ * `artifactResponsesNotice`): the session reads them with its tools. It is
+ * the person's act, so it reaches the session as their own words do
+ * ({@link byPerson}). Its row is the note {@link ARTIFACT_RESPONSES}.
+ */
+export const ARTIFACT_ORIGIN = "artifact";
+
+/**
+ * The `ui.system_note` subtype of an artifact's responses event: one quiet
+ * line naming the artifact, which opens it, and whether the agent has read
+ * it yet. Never the person's bubble.
+ */
+export const ARTIFACT_RESPONSES = "artifact_responses";
+
+/**
+ * Whether a send is the person's own act: their words, or their Send on one
+ * of the session's artifacts ({@link ARTIFACT_ORIGIN}). Either may wake a
+ * stopped session and reopen finished work.
+ */
+export const byPerson = (origin: NeutralOrigin): boolean =>
+  origin.kind === "human" ||
+  (origin.kind === "system" && origin.name === ARTIFACT_ORIGIN);
+
+/**
  * The hub's line in a session's transcript where it started again fresh
  * under its id ({@link import("./index").relaunchOf}): its first start never
  * began, so it had no conversation to resume. Drawn as a note titled

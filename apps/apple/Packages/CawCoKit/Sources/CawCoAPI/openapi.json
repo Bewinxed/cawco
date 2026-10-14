@@ -27426,6 +27426,10 @@
               "string"
             ]
           },
+          "sentText": {
+            "description": "What the page's `cawco.send(text)` sent with the person's last send.",
+            "type": "string"
+          },
           "seq": {
             "description": "The cursor for the next read's `since`.",
             "type": "number"
@@ -27458,7 +27462,7 @@
         ]
       },
       "CommentRead": {
-        "description": "What `comment_read` answers: each of the session's artifacts with pins that match, and the time to pass as the next `since`.",
+        "description": "What `comment_read` answers: each of the session's artifacts with pins\nthat match, the page's address the person last sent from, and the time to\npass as the next `since`. A pin on ink carries the ink's box in the page.",
         "type": "object",
         "properties": {
           "artifacts": {
@@ -27466,6 +27470,10 @@
             "items": {
               "type": "object",
               "properties": {
+                "address": {
+                  "description": "The page's address the person last sent from; its own route before any send.",
+                  "type": "string"
+                },
                 "id": {
                   "type": "string"
                 },
@@ -27478,11 +27486,44 @@
                 "pins": {
                   "type": "array",
                   "items": {
-                    "$ref": "#/components/schemas/Pin"
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/Pin"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "inkBox": {
+                            "type": "object",
+                            "properties": {
+                              "x": {
+                                "type": "number"
+                              },
+                              "y": {
+                                "type": "number"
+                              },
+                              "w": {
+                                "type": "number"
+                              },
+                              "h": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "h",
+                              "w",
+                              "x",
+                              "y"
+                            ]
+                          }
+                        }
+                      }
+                    ]
                   }
                 }
               },
               "required": [
+                "address",
                 "id",
                 "kind",
                 "name",
@@ -33978,6 +34019,18 @@
                 ]
               }
             ]
+          },
+          "artifactId": {
+            "description": "An artifact responses note's artifact ({@link import (\"./harness\").ARTIFACT_RESPONSES}): what its line opens.",
+            "type": "string"
+          },
+          "artifactKind": {
+            "$ref": "#/components/schemas/ArtifactKind",
+            "description": "That artifact's kind, which picks its line's glyph."
+          },
+          "artifactName": {
+            "description": "That artifact's name, as its line says it.",
+            "type": "string"
           },
           "askLabel": {
             "description": "A `user.delegate_ask`'s display label, e.g. `cawco#506dfafb`.",

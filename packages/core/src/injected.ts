@@ -10,6 +10,7 @@
  * and the dashboard parses it here, and a stored copy renders exactly as the
  * live one did — never as the reader's own words.
  */
+import type { ArtifactKind } from "./index";
 
 /** A hand-off from another session. */
 export const handoffMarker = (from: string): string =>
@@ -170,6 +171,51 @@ export function parseUndelivered(
     return null;
   }
   return { to: marker[1], reason: text.slice(marker[0].length).trim() };
+}
+
+/**
+ * The person sent responses on one of the session's artifacts (hub
+ * artifacts/service.ts `send`): the session reads them itself, with
+ * `artifact_read` from `since` and, when pins came with them, `comment_read`.
+ * Picks never travel as the person's words. Sent under the system origin
+ * {@link import("./harness").ARTIFACT_ORIGIN}; a transcript draws it as one
+ * quiet line ({@link import("./harness").ARTIFACT_RESPONSES}).
+ */
+export interface ArtifactResponses {
+  id: string;
+  kind: ArtifactKind;
+  name: string;
+  /** Whether pins came with them, which `comment_read` returns. */
+  pins: boolean;
+  /** The `seq` to read from: the last one the session was told of. */
+  since: number;
+}
+
+export const artifactResponsesNotice = ({
+  id,
+  kind,
+  name,
+  pins,
+  since,
+}: ArtifactResponses): string =>
+  `[CawCo] The ${kind} "${name}" has new responses since ${since}. Read them with artifact_read({ id: "${id}", since: ${since} })${pins ? `, and its pins with comment_read({ artifact: "${id}" })` : ""}.`;
+
+const ARTIFACT_RESPONSES_LINE =
+  /^\[CawCo\] The (page|canvas|preview) "([a-z0-9][a-z0-9-]{0,62})" has new responses since (\d+)\. Read them with artifact_read\(\{ id: "([0-9a-f-]{36})", since: \d+ \}\)(, and its pins with comment_read)?/;
+
+/** An artifact's responses notice read back into what it names. */
+export function parseArtifactResponses(text: string): ArtifactResponses | null {
+  const line = ARTIFACT_RESPONSES_LINE.exec(text);
+  if (!line) {
+    return null;
+  }
+  return {
+    kind: line[1] as ArtifactKind,
+    name: line[2],
+    since: Number(line[3]),
+    id: line[4],
+    pins: line[5] !== undefined,
+  };
 }
 
 /**

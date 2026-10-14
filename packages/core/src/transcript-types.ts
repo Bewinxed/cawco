@@ -58,6 +58,12 @@ export interface BlockTooling {
 export interface BlockMetadata {
   /** A `system.account_move`: what the hub did at the session's account's limit. */
   accountMove?: import("./accounts").AccountMove;
+  /** An artifact responses note's artifact ({@link import("./harness").ARTIFACT_RESPONSES}): what its line opens. */
+  artifactId?: string;
+  /** That artifact's kind, which picks its line's glyph. */
+  artifactKind?: import("./index").ArtifactKind;
+  /** That artifact's name, as its line says it. */
+  artifactName?: string;
   /** A `user.delegate_ask`'s display label, e.g. `cawco#506dfafb`. */
   askLabel?: string;
   /** A `user.delegate_ask`'s hub permission requestId — what it waits on to be answered. */

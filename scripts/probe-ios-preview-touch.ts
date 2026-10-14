@@ -849,6 +849,13 @@ xcrun simctl install ${udid} "${app}"`);
     (l) => l.startsWith("preview send "),
     30_000
   );
+  /** The artifact's responses note (core ARTIFACT_RESPONSES), never a row of the person's. */
+  const isResponses = (block: {
+    metadata?: { subtype?: string };
+    type?: string;
+  }) =>
+    block.type === "ui.system_note" &&
+    block.metadata?.subtype === "artifact_responses";
   const blocks = await until(
     "the send in the session's transcript",
     async () =>
@@ -856,32 +863,27 @@ xcrun simctl install ${udid} "${app}"`);
         await fleet.api<{
           blocks?: {
             content?: string;
-            metadata?: { images?: unknown[] };
+            metadata?: { artifactName?: string; subtype?: string };
             type?: string;
           }[];
         }>(`/api/instances/${id}/transcript?limit=200`)
       ).blocks ?? [],
-    (all) =>
-      all.some(
-        (block) =>
-          block.type === "user" && block.content?.includes("## 1. comment on")
-      ),
+    (all) => all.some(isResponses),
     20_000
   ).catch(() => []);
-  const message = blocks.find(
-    (block) =>
-      block.type === "user" && block.content?.includes("## 1. comment on")
+  const message = blocks.find(isResponses);
+  const asWords = blocks.filter(
+    (block) => block.type === "user" && block.content?.includes(REPLY)
   );
   const [sentPin] = await pinsOnHub();
   check(
-    '"Send 1" posts one message carrying the pin\'s section and a picture',
+    '"Send 1" tells the session it has responses to read: one responses note, no row of the person\'s carrying the pin',
     head.sendWords === "Send 1" &&
       sent?.startsWith("preview send ok") === true &&
       message !== undefined &&
-      (message.metadata?.images?.length ?? 0) >= 1 &&
-      message.content?.includes(REPLY) === true &&
+      asWords.length === 0 &&
       !!sentPin?.sentAt,
-    `header read "${head.sendWords}"; ${sent ?? "no send line"}; message ${message ? `with ${message.metadata?.images?.length ?? 0} picture(s): ${JSON.stringify(message.content?.slice(0, 160))}` : "not in the transcript"}; pin sentAt ${sentPin?.sentAt ?? "none"}`
+    `header read "${head.sendWords}"; ${sent ?? "no send line"}; note ${message ? JSON.stringify(message.metadata) : "not in the transcript"}; person's rows with the reply: ${asWords.length}; pin sentAt ${sentPin?.sentAt ?? "none"}`
   );
   // The send stamped the frame's sentAt on the pin; the session counts as
   // working (-preview-working): its card and its row wear the live dot.

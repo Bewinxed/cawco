@@ -103,6 +103,14 @@ export const choiceEntryProblem = (
   return null;
 };
 
+/**
+ * A note as kept and read: the person's words as typed, line breaks and
+ * all, with no trailing whitespace (a textarea's last Return); none when
+ * nothing is left.
+ */
+export const noteText = (note: string | null | undefined): string | null =>
+  note?.trimEnd() || null;
+
 /** The entry `change` makes of `before` (absent: nothing kept yet), stamped `at`. */
 export const changedEntry = (
   before: ChoiceEntry | undefined,
@@ -110,7 +118,7 @@ export const changedEntry = (
   at: string
 ): ChoiceEntry => ({
   options: "options" in change ? change.options : (before?.options ?? []),
-  note: "note" in change ? change.note || null : (before?.note ?? null),
+  note: "note" in change ? noteText(change.note) : (before?.note ?? null),
   value: "value" in change ? (change.value ?? null) : (before?.value ?? null),
   pageHash: change.pageHash,
   at,

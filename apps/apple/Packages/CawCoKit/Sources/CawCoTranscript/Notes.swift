@@ -20,6 +20,8 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
     private let opened = UIStackView()
     private let reveal: Reveal
     private var key = ""
+    /// The artifact an artifact-responses line opens; nil on every other line.
+    private var responses: String?
 
     required init(env: RowEnv) {
         reveal = Reveal(opened)
@@ -52,8 +54,22 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
     }
 
     @objc private func tap() {
+        if let responses {
+            open(responses)
+            return
+        }
         guard !chevron.isHidden else { return }
         env.toggle(key, self)
+    }
+
+    /// SystemLine.svelte `openResponses`: the hub brings the artifact to the
+    /// front of the session's panel (`artifact_show`'s route), then the
+    /// preview comes into view, as a preview tool row's card does.
+    private func open(_ artifact: String) {
+        guard let hub = env.hub else { return }
+        hub.openArtifact(artifact, in: env.sessionId) { [weak self] didOpen in
+            if didOpen { self?.env.openPreview([:]) }
+        }
     }
 
     func toggled(open: Bool) -> (() -> Void, () -> Void) {
@@ -109,6 +125,8 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
         summary.isHidden = true
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         railColor = RailInk.rail
+        responses = nil
+        alpha = 1
         var openable = false
         switch item.kind {
         case let .harness(note, key):
@@ -150,6 +168,38 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
                 let spaced = UIView()
                 spaced.pin(hung(why), insets: UIEdgeInsets(top: Space.space1, left: 0, bottom: 0, right: 0))
                 below.addArrangedSubview(spaced)
+            case "ui.system_note" where block.string("subtype") == "artifact_responses":
+                // The person sent responses on one of the session's artifacts
+                // (core ARTIFACT_RESPONSES): one quiet line, its name the way
+                // to the artifact, and whether the agent has read them yet.
+                responses = block.string("artifactId")
+                let glyph: Glyph = switch block.string("artifactKind") {
+                case "canvas": .toolWrite
+                case "preview": .window
+                default: .toolRead
+                }
+                set(glyph, title: "")
+                let said = NSMutableAttributedString(attributedString: words("Responses on ", ink: Palette.inkMuted))
+                let name = NSMutableAttributedString(attributedString: words(block.string("artifactName") ?? "", ink: Palette.inkStrong))
+                name.addAttributes([.underlineStyle: NSUnderlineStyle.single.rawValue,
+                                    .underlineColor: Palette.inkStrong.withAlphaComponent(0.35)],
+                                   range: NSRange(location: 0, length: name.length))
+                said.append(name)
+                title.attributedText = said
+                let failed = block.state == "failed"
+                let waiting = block.state == "pending" || block.queued
+                let word = failed ? "not sent" : waiting ? "waiting for the agent" : "read"
+                status.attributedText = words(word, ink: failed ? Palette.statusFailInk : Palette.inkMuted, strong: false)
+                status.isHidden = false
+                if failed, let why = block.string("sendFailed") {
+                    let reason = WrapLabel(wrap: .pretty)
+                    reason.attributedText = Styled.string(why, TypeScale.typeMeta, color: Palette.statusFailInk,
+                                                          leading: TypeScale.leadingBody, lineBreak: .byWordWrapping)
+                    let spaced = UIView()
+                    spaced.pin(hung(reason), insets: UIEdgeInsets(top: Space.space1, left: 0, bottom: 0, right: 0))
+                    below.addArrangedSubview(spaced)
+                }
+                alpha = waiting ? Effect.ghostPresence : 1
             case "ui.system_note" where block.string("subtype") == "moved_here":
                 // Where the project came from (core MOVED_HERE): what moved
                 // with the done glyph, and what stayed under it, open.
@@ -186,8 +236,9 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
         chevron.set(open: open, animated: false)
         reveal.set(open: open)
         line.accessibilityLabel = [title.text, status.isHidden ? nil : status.text, summary.isHidden ? nil : summary.text].compactMap(\.self).joined(separator: ", ")
-        line.accessibilityTraits = openable ? .button : .staticText
+        line.accessibilityTraits = openable || responses != nil ? .button : .staticText
         line.accessibilityValue = openable ? (open ? "Expanded" : "Collapsed") : nil
+        line.accessibilityHint = responses != nil ? "Opens it in the preview" : nil
     }
 }
 

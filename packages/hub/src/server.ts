@@ -101,6 +101,7 @@ import {
   type AccountReport,
   type AccountSigninResult,
   AGENT_BUSY,
+  ARTIFACT_ORIGIN,
   ARTIFACT_SESSION_PATH,
   type ArtifactSessionFrame,
   ASK_USER_QUESTION,
@@ -110,10 +111,12 @@ import {
   accountProvidersOf,
   agentProblem,
   archiveRefusal,
+  artifactResponsesNotice,
   attachedFileLine,
   attachedFileName,
   BOUNDARY_RELAUNCH,
   BUCKET_MS,
+  byPerson,
   CANCEL_BINARY_UPDATE,
   CLAUDE_CONVERSATION_GONE,
   CLAUDE_PROVIDER,
@@ -219,6 +222,7 @@ import {
   type ProviderSigninChallenge,
   type ProviderSigninResult,
   parseAgentFrontMatter,
+  parseArtifactResponses,
   providerChoices,
   providerLimitRefused,
   QUESTION_DISMISSED,
@@ -298,6 +302,7 @@ import { importLegacyCanvases } from "./artifacts/legacy";
 import { artifactRoutes } from "./artifacts/routes";
 import {
   ArtifactRefusal,
+  type ArtifactServiceDeps,
   type Artifacts,
   createArtifacts,
 } from "./artifacts/service";
@@ -3010,7 +3015,8 @@ export const createServer = (
   /**
    * Whether a send from `origin` may start a turn in `row` when its process
    * is gone ({@link wakesForSend}). A stopped session, ended by its person,
-   * its parent or the hub, is woken only by a person or by its own parent:
+   * its parent or the hub, is woken only by a person (their words, or their
+   * Send on one of its artifacts: core `byPerson`) or by its own parent:
    * a delegate's report, another session's hand-off and every hub notice
    * wait for one of them. A sleeping or failed one is woken by anything but
    * the hub's word that a message did not arrive, which asks nothing of it.
@@ -3023,7 +3029,7 @@ export const createServer = (
     origin: NeutralOrigin
   ): boolean => {
     if (
-      origin.kind === "human" ||
+      byPerson(origin) ||
       (origin.kind === "peer" &&
         !!row.parentInstanceId &&
         origin.fromSession === row.parentInstanceId)
@@ -4586,6 +4592,50 @@ export const createServer = (
         }
       }
     );
+  };
+
+  /**
+   * Takes back a pending send before its session reads it: one the hub still
+   * holds (owed) is cancelled here, never having reached the machine; one the
+   * harness holds is withdrawn there, and the harness's atomic answer decides
+   * the race with its read. "started" when the session took it first.
+   */
+  const withdrawPending = async (
+    row: SentMessageRow,
+    machineId: string
+  ): Promise<"withdrawn" | "started"> => {
+    if (row.owed !== null && db.takeOwedSend(row.uuid) !== undefined) {
+      changeSend(row, { state: "cancelled" });
+      return "withdrawn";
+    }
+    const reply = await callAgent(
+      machineId,
+      "withdrawSend",
+      [row.uuid],
+      READ_TIMEOUT_MS,
+      undefined,
+      row.instanceId
+    );
+    if (typeof reply === "string") {
+      throw new Error(`Withdrawal ${reply}.`);
+    }
+    if (!reply.ok) {
+      throw new Error(reply.error ?? "Withdrawal failed.");
+    }
+    const now = db.sendRecord(row.uuid);
+    if (now?.state === "cancelled") {
+      return "withdrawn";
+    }
+    if (reply.result === "withdrawn") {
+      if (now?.state === "pending") {
+        changeSend(now, { state: "cancelled" });
+      }
+      return "withdrawn";
+    }
+    if (now?.state === "pending") {
+      readSend(now, true);
+    }
+    return "started";
   };
 
   /** A retry or queued edit has superseded a send the harness no longer holds. */
@@ -8442,55 +8492,145 @@ export const createServer = (
     };
   };
 
+  /**
+   * The person's Send on an artifact, to its session: one event (core
+   * `artifactResponsesNotice`, origin {@link ARTIFACT_ORIGIN}) saying it has
+   * new responses to read, never the picks as the person's words. A session
+   * hears one event per artifact at a time: one it has not read yet is
+   * withdrawn and this one stands in its place ({@link withdrawPending},
+   * `replaces`), from the earlier `since`, its pins and pictures carried
+   * over. One it already read is not repeated; this one starts after it.
+   * Sends for one artifact settle one after another.
+   */
+  const responsesInFlight = new Map<string, Promise<void>>();
+  const signalResponses: ArtifactServiceDeps["signal"] = (
+    instance,
+    artifact,
+    responses
+  ) => {
+    const before = responsesInFlight.get(artifact.id) ?? Promise.resolve();
+    const next = before
+      .catch(() => undefined)
+      .then(() => supersedeResponses(instance, artifact, responses));
+    responsesInFlight.set(artifact.id, next);
+    return next.finally(() => {
+      if (responsesInFlight.get(artifact.id) === next) {
+        responsesInFlight.delete(artifact.id);
+      }
+    });
+  };
+  /** The base64 pictures a held send's envelope carries, in order. */
+  const picturesOf = (
+    whole: string | null
+  ): { data: string; mediaType: string }[] => {
+    const content = whole
+      ? (JSON.parse(whole) as Envelope<SendPayload>).payload.message.message
+          .content
+      : "";
+    return typeof content === "string"
+      ? []
+      : content.flatMap((block) =>
+          block.type === "image" && block.source.type === "base64"
+            ? [{ data: block.source.data, mediaType: block.source.media_type }]
+            : []
+        );
+  };
+  const supersedeResponses: ArtifactServiceDeps["signal"] = async (
+    instance,
+    artifact,
+    { images, pins, since }
+  ) => {
+    let told = { images, pins, since };
+    let replaces: string | undefined;
+    for (const row of db.sendsIn(instance.id, ["pending"])) {
+      const body = row.body as SentMessage | null;
+      if (
+        !(
+          body?.origin?.kind === "system" &&
+          body.origin.name === ARTIFACT_ORIGIN
+        )
+      ) {
+        continue;
+      }
+      const earlier = parseArtifactResponses(
+        transcriptUserText(body.message) ?? ""
+      );
+      if (earlier?.id !== artifact.id) {
+        continue;
+      }
+      // Read before the withdrawal, which clears what the record held.
+      const pictures = picturesOf(row.owed ?? row.envelope);
+      // biome-ignore lint/performance/noAwaitInLoops: each withdrawal is the harness's atomic answer, taken one at a time so what each carried is folded in order
+      const outcome = await withdrawPending(row, instance.machineId).catch(
+        (error: unknown) => {
+          console.warn(
+            `[artifacts] ${artifact.name}: its unread responses event ${row.uuid} could not be withdrawn, so it stands: ${error instanceof Error ? error.message : String(error)}`
+          );
+          return "started" as const;
+        }
+      );
+      if (outcome === "withdrawn") {
+        told = {
+          images: [...pictures, ...told.images],
+          pins: told.pins || earlier.pins,
+          since: Math.min(told.since, earlier.since),
+        };
+        replaces = row.uuid;
+      }
+    }
+    const text = artifactResponsesNotice({
+      id: artifact.id,
+      kind: artifact.kind,
+      name: artifact.name,
+      pins: told.pins,
+      since: told.since,
+    });
+    deliverSend({
+      verb: "send",
+      machineId: instance.machineId,
+      instanceId: instance.id,
+      payload: {
+        instanceId: instance.id,
+        message: {
+          type: "user",
+          uuid: crypto.randomUUID(),
+          message: {
+            role: "user",
+            content:
+              told.images.length === 0
+                ? text
+                : [
+                    ...told.images.map(({ mediaType, data }) => ({
+                      type: "image" as const,
+                      source: {
+                        type: "base64" as const,
+                        media_type: mediaType,
+                        data,
+                      },
+                    })),
+                    { type: "text" as const, text },
+                  ],
+          },
+          parent_tool_use_id: null,
+          origin: { kind: "system", name: ARTIFACT_ORIGIN },
+          ...(replaces ? { replaces } : {}),
+        },
+      },
+    });
+  };
+
   // Artifacts (Projects spec §5.10): one Yjs doc each, synced on the preview
-  // listener, the person's changes delivered to the session (artifacts/).
-  const artifactDocs = createArtifactDocs({
-    db: db.artifacts,
-    // Called on a person's update, long after both are made.
-    personChanged: (id) => artifacts.personChanged(id),
-  });
+  // listener; the person's Send tells the session to read it (artifacts/).
+  const artifactDocs = createArtifactDocs({ db: db.artifacts });
   const artifacts: Artifacts = createArtifacts({
     db: db.artifacts,
     docs: artifactDocs,
     root: ARTIFACTS_ROOT,
     // Your picks and pins on a session's own page reach that session as the
-    // page's word for its tools to read (artifact_read, comment_read), not as
-    // a message: Caw's decision page is his to read, never a thread line.
-    deliver: (instance, content, images = []) =>
-      deliverToSession(
-        {
-          verb: "send",
-          machineId: instance.machineId,
-          instanceId: instance.id,
-          payload: {
-            instanceId: instance.id,
-            message: {
-              type: "user",
-              uuid: crypto.randomUUID(),
-              message: {
-                role: "user",
-                content:
-                  images.length === 0
-                    ? content
-                    : [
-                        ...images.map(({ mediaType, data }) => ({
-                          type: "image" as const,
-                          source: {
-                            type: "base64" as const,
-                            media_type: mediaType,
-                            data,
-                          },
-                        })),
-                        { type: "text" as const, text: content },
-                      ],
-              },
-              parent_tool_use_id: null,
-              origin: { kind: "human" },
-            },
-          },
-        },
-        false
-      ),
+    // page's word for its tools to read (artifact_read, comment_read), never
+    // as your message: Caw's decision page is his to read, never a thread line.
+    signal: (instance, artifact, responses) =>
+      signalResponses(instance, artifact, responses),
     instance: (id) => db.getInstancesByIds([id])[0],
     machines: () => db.listAgents(),
     // A page is the hub's: its target names no machine.
@@ -8515,7 +8655,6 @@ export const createServer = (
         },
       }),
     showing: (instanceId) => previewTargets.get(instanceId)?.artifact.id,
-    turnRunning: (instanceId) => pulses.get(instanceId)?.busy === true,
     // Its parent's, or its project's lead's, as stop_delegate decides.
     delegatesIn: (instance, workspaceId) =>
       db
@@ -13747,7 +13886,6 @@ export const createServer = (
     lifetime,
     // A follower's plan whole (plans.ts), built below with the tasks it reads.
     planSnapshot: (instanceId, send) => plans.snapshotTo(instanceId, send),
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates ownership and settles the send once against the harness's atomic withdrawal receipt, including concurrent recalls
     withdrawSend: async (machineId, instanceId, sendId) => {
       const row = db.sendRecord(sendId);
       const [instance] = db.getInstancesByIds([instanceId]);
@@ -13764,34 +13902,7 @@ export const createServer = (
       if (row.state !== "pending") {
         return "started";
       }
-      const reply = await callAgent(
-        machineId,
-        "withdrawSend",
-        [sendId],
-        READ_TIMEOUT_MS,
-        undefined,
-        instanceId
-      );
-      if (typeof reply === "string") {
-        throw new Error(`Withdrawal ${reply}.`);
-      }
-      if (!reply.ok) {
-        throw new Error(reply.error ?? "Withdrawal failed.");
-      }
-      const now = db.sendRecord(sendId);
-      if (now?.state === "cancelled") {
-        return "withdrawn";
-      }
-      if (reply.result === "withdrawn") {
-        if (now?.state === "pending") {
-          changeSend(now, { state: "cancelled" });
-        }
-        return "withdrawn";
-      }
-      if (now?.state === "pending") {
-        readSend(now, true);
-      }
-      return "started";
+      return await withdrawPending(row, machineId);
     },
     isMachineConnected: (machineId) => registry.agent(machineId) !== undefined,
     relaySend,

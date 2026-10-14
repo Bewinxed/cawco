@@ -88,7 +88,8 @@ public extension HubConnection {
         let (comments, artifactRead) = try await (read, state)
         guard case let .ok(found) = comments else { throw await TaskRefusal.reading(comments) }
         guard case let .ok(doc) = artifactRead else { throw await TaskRefusal.reading(artifactRead) }
-        let pins = try found.body.json.artifacts.first { $0.id == artifact }?.pins ?? []
+        // Each pin as the doc keeps it; the ink's box beside it is the agent's.
+        let pins = try found.body.json.artifacts.first { $0.id == artifact }?.pins.map(\.value1) ?? []
         let held = try doc.body.json
         // artifact-doc.ts `unsentPicks`: every pick when nothing was sent yet, else those made since.
         let picks = held.state.value.values.count { entry in

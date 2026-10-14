@@ -22,6 +22,7 @@ import type {
 } from "./harness";
 import {
   ACCOUNT_MOVE,
+  ARTIFACT_RESPONSES,
   CONTINUATION_ORIGIN,
   CUSTODY_HELD,
   FLEET_WATCH,
@@ -36,6 +37,7 @@ import {
   SESSION_STOPPED,
 } from "./harness";
 import {
+  parseArtifactResponses,
   parseDelegateAsk,
   parseFleetWatchNudge,
   parseHandoffMarker,
@@ -1571,6 +1573,24 @@ function injectedBlock(text: string, base: BlockBase): TranscriptBlock | null {
       metadata: {
         noteKind: "Not delivered",
         noteTitle: `Your message to ${undelivered.to} wasn't delivered.`,
+      },
+    };
+  }
+  // The person sent responses on one of this session's artifacts: one
+  // quiet line naming it, never their bubble; the sentence to the agent is
+  // not drawn.
+  const responses = parseArtifactResponses(text);
+  if (responses) {
+    return {
+      ...base,
+      type: "ui.system_note",
+      content: "",
+      metadata: {
+        subtype: ARTIFACT_RESPONSES,
+        noteTitle: `Responses on ${responses.name}`,
+        artifactId: responses.id,
+        artifactKind: responses.kind,
+        artifactName: responses.name,
       },
     };
   }

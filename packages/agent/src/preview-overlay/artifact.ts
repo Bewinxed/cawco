@@ -515,9 +515,9 @@ export const artifact = {
   },
 
   /**
-   * The person sends (`cawco.send`): every pick to the session as one
-   * message, `text` below them, through the listener's send beside the
-   * doc's socket. Waits for the doc to hold the hub's state first, so what
+   * The person sends (`cawco.send`): the session hears it has new
+   * responses to read, `text` kept with them, through the listener's send
+   * beside the doc's socket. Waits for the doc to hold the hub's state first, so what
    * this page wrote is on the hub before the hub reads it.
    */
   send: async (text?: string): Promise<void> => {

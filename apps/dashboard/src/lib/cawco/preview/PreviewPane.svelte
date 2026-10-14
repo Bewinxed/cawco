@@ -447,11 +447,11 @@
   }
 
   /**
-   * Send N: every unsent pick, pin and reply to the session as one turn,
-   * through the hub's send, which applies a setup page's fleet choices and
-   * place first, with each pin's picture. A refusal is said where the person
-   * is: under the open card's field, else in the band over the page, its way
-   * back sending again.
+   * Send N: the hub's send, which applies a setup page's fleet choices and
+   * place first, then tells the session it has new responses here to read,
+   * with each pin's picture. A refusal is said where the person is: under
+   * the open card's field, else in the band over the page, its way back
+   * sending again.
    */
   async function send() {
     if (!artifact) {

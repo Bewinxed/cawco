@@ -804,6 +804,14 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         guard said != sendsSaid else { return }
         sendsSaid = said
         Self.dockLog.notice("probe sends \(transcript.id.prefix(8), privacy: .public): \(said, privacy: .public)")
+        // What each of them is drawn as: its block's type, a note's subtype
+        // after it (an artifact's responses are `ui.system_note/artifact_responses`).
+        let drawn = sendsSeen.compactMap { id -> String? in
+            guard let row = (queued + blocks).first(where: { $0.id == id }) else { return nil }
+            let kind = row.type == "ui.system_note" ? "\(row.type)/\(row.string("subtype") ?? "-")" : row.type
+            return "\(id.prefix(8))=\(kind)"
+        }.joined(separator: " ")
+        Self.dockLog.notice("probe drawn \(transcript.id.prefix(8), privacy: .public): \(drawn, privacy: .public)")
     }
     #endif
 

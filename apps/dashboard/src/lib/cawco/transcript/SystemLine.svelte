@@ -1,14 +1,24 @@
 <script lang="ts">
-  import { MOVED_HERE } from "@cawco/core";
+  import {
+    ARTIFACT_RESPONSES,
+    type ArtifactKind,
+    MOVED_HERE,
+  } from "@cawco/core";
+  import type { Component } from "svelte";
+  import { showArtifact } from "#lib/cawco/artifact-api.js";
+  import { revealPreview } from "#lib/cawco/client.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import {
+    IconArtifactCanvas,
+    IconArtifactPage,
     IconChevronRight,
     IconError,
     IconInfo,
     IconStop,
     IconSuccess,
     IconTerminal,
+    IconWindow,
   } from "#lib/icons.js";
   import MessageBody from "../MessageBody.svelte";
   /**
@@ -90,6 +100,52 @@
    * where the project came from, kept in history, so nothing is folded.
    */
   const moved = $derived(message?.metadata?.subtype === MOVED_HERE);
+  /**
+   * The person sent responses on one of the session's artifacts (core
+   * `ARTIFACT_RESPONSES`): one quiet line, its name opening the artifact,
+   * and whether the agent has read them yet. The sentence the agent reads
+   * is never drawn.
+   */
+  const responses = $derived(
+    message?.metadata?.subtype === ARTIFACT_RESPONSES &&
+      message.metadata.artifactId
+      ? {
+          id: message.metadata.artifactId,
+          name: message.metadata.artifactName ?? "",
+          kind: message.metadata.artifactKind ?? "page",
+        }
+      : null
+  );
+  const RESPONSE_GLYPHS: Record<ArtifactKind, Component> = {
+    page: IconArtifactPage,
+    canvas: IconArtifactCanvas,
+    preview: IconWindow,
+  };
+  const ResponseGlyph = $derived(RESPONSE_GLYPHS[responses?.kind ?? "page"]);
+  const responsesState = $derived.by(() => {
+    if (message?.state === "failed") {
+      return "not sent";
+    }
+    return message?.state === "pending" ? "waiting for the agent" : "read";
+  });
+  let opening = $state(false);
+  let openFailed = $state<string | null>(null);
+  /** Brings the artifact to the front of the session's panel, as its tool row's card does. */
+  async function openResponses() {
+    if (!(message && responses) || opening) {
+      return;
+    }
+    opening = true;
+    openFailed = null;
+    try {
+      await showArtifact(message.instanceId, responses.id);
+      revealPreview(message.instanceId);
+    } catch (error) {
+      openFailed = error instanceof Error ? error.message : String(error);
+    } finally {
+      opening = false;
+    }
+  }
   const eventAt = $derived(
     wokeCaw && message?.timestamp ? new Date(message.timestamp) : null
   );
@@ -175,6 +231,36 @@
       <span class="rail-cell"><IconStop /></span>
       <span class="ftitle">Interrupted</span>
     </span>
+  </div>
+{:else if responses}
+  <div
+    class="note responses rail-row"
+    data-artifact-responses={responses.id}
+    class:waiting={message?.state === "pending"}
+  >
+    <span class="hline rail-line">
+      <span class="rail-cell"><ResponseGlyph /></span>
+      <span class="ftitle"
+        >Responses on
+        <button
+          aria-busy={opening}
+          class="aname"
+          onclick={openResponses}
+          title="Open {responses.name}"
+          type="button"
+        >
+          {responses.name}
+        </button></span
+      >
+      <span class="hstatus" class:bad={message?.state === "failed"}
+        >{responsesState}</span
+      >
+    </span>
+    {#if message?.state === "failed" && message.metadata?.sendFailed}
+      <p class="reason rail-hang">{message.metadata.sendFailed}</p>
+    {:else if openFailed}
+      <p class="reason rail-hang">{openFailed}</p>
+    {/if}
   </div>
 {:else if moved}
   <div class="note moved rail-row">
@@ -336,6 +422,55 @@
     font-weight: var(--weight-body);
     line-height: var(--leading-body);
     color: var(--ink-muted);
+  }
+  /* An artifact's responses: the line names it, and the name is the way to
+     it — Peer's sender link, as a button, since it opens the panel rather
+     than going anywhere. The state word follows it. */
+  .note.responses .hline {
+    gap: var(--space-2);
+    align-items: baseline;
+  }
+  .aname {
+    padding: var(--space-1) 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    color: var(--ink-strong);
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: color-mix(in oklab, currentColor 35%, transparent);
+    text-underline-offset: 0.2em;
+
+    &:focus-visible {
+      outline: var(--focus-ring-width) solid var(--focus-ring);
+      outline-offset: var(--focus-ring-offset);
+      border-radius: var(--radius-xs);
+    }
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .aname:hover {
+      color: var(--brand-ink);
+    }
+  }
+  @media (hover: hover) and (pointer: fine) and (
+      prefers-reduced-motion: no-preference
+    ) {
+    .aname {
+      transition: color var(--dur-control) var(--ease-out);
+    }
+  }
+  .note.responses .hstatus {
+    font-weight: var(--weight-body);
+  }
+  /* Waiting for the agent: MessageRow's queued presence, as Peer has it. */
+  .note.responses.waiting {
+    opacity: var(--ghost-presence);
+  }
+  .reason {
+    margin-block: var(--space-1) 0;
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
+    color: var(--status-fail-ink);
   }
   /* The task line's verb holds body ink; only failure carries colour. */
   .tverb {

@@ -118,11 +118,7 @@ const elementsIn = (
       return element ? [element] : [];
     });
 
-export const createArtifactDocs = (deps: {
-  db: ArtifactsDb;
-  /** The person changed `keys` of `state`; the seq the update was kept at. */
-  personChanged: (id: string, keys: readonly string[], seq: number) => void;
-}): ArtifactDocs => {
+export const createArtifactDocs = (deps: { db: ArtifactsDb }): ArtifactDocs => {
   const loaded = new Map<string, Loaded>();
 
   const sleep = (id: string, entry: Loaded) => {
@@ -138,7 +134,7 @@ export const createArtifactDocs = (deps: {
     }, IDLE_MS);
   };
 
-  /** One update the doc took: kept in the log, sent to every other client, owed to the session when a person made it. */
+  /** One update the doc took: kept in the log, by who made it, and sent to every other client. */
   const keep = (
     id: string,
     entry: Loaded,
@@ -148,7 +144,7 @@ export const createArtifactDocs = (deps: {
   ) => {
     const client = clientOf(origin);
     const by: CanvasAuthor = client ? "person" : "agent";
-    const seq = deps.db.append(id, update, {
+    deps.db.append(id, update, {
       ...Object.fromEntries(changed.keys.map((key) => [key, by])),
       ...Object.fromEntries(changed.elements),
     });
@@ -159,9 +155,6 @@ export const createArtifactDocs = (deps: {
     }
     if (deps.db.updateCount(id) >= COMPACT_EVERY) {
       deps.db.compact(id, encodeStateAsUpdate(entry.doc));
-    }
-    if (client && changed.keys.length > 0) {
-      deps.personChanged(id, changed.keys, seq);
     }
   };
 

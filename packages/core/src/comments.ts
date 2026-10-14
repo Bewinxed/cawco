@@ -5,8 +5,9 @@
  * group's ink (core ink.ts); a comment stands on the element the person
  * tapped in Comment mode, or on ink by the radial menu's Comment, and carries
  * a thread the person and the agent both write. Nothing of it reaches the
- * session until the person's Send, which carries every unsent pin and thread
- * entry as one message ({@link pinSections}) and stamps them `sentAt`.
+ * session until the person's Send, which tells the session it has new
+ * responses to read with `comment_read` and stamps every unsent pin and
+ * thread entry `sentAt`.
  *
  * A pin is placed again after every revision of the page by its anchor, in
  * one order ({@link findAnchor}): the element at its source's file:line,
@@ -54,7 +55,7 @@ export interface SendPicture {
   png: string;
 }
 
-/** What the person's Send carries beside the doc: their words, the page's address, the pictures. */
+/** What the person's Send carries beside the doc: the page's words (`cawco.send(text)`), the page's address, the pictures. */
 export interface SendBody {
   pictures?: SendPicture[];
   text?: string;
