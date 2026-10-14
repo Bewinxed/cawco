@@ -240,13 +240,10 @@ function watchRail(): void {
 }
 
 /*
- * The scripts below run in the canvas's frame. The stage's iframe is
- * attached before its address is set, so they run once, in its first
- * about:blank document, and the canvas's page then takes that window over
- * (the initial about:blank Window is reused for a same-origin navigation):
- * what they set on the window, and the window's listeners, carry over;
- * what they bind to that first document does not, and the address is read
- * when each event comes, never as they run.
+ * The scripts below run in every document the canvas's frame loads: its
+ * first about:blank one, then the canvas's page on its session's preview
+ * origin, a window of its own (another origin's navigation reuses none). The
+ * address is read when each event comes, never as they run.
  */
 
 /**
