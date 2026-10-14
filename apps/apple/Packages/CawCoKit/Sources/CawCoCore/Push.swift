@@ -82,10 +82,18 @@ public struct PushNote: Sendable {
 
     /// By `cawco.kind`. A task opens its sheet over its project's page; an
     /// attempt opens the same sheet at that attempt.
-    public var route: PushRoute {
+    public var route: PushRoute { Self.route(fields) }
+
+    /// Where a push whose `cawco` object holds `fields` opens.
+    public static func route(_ fields: [String: String]) -> PushRoute {
+        let kind = fields["kind"]
+        let instanceId = fields["instanceId"]
         switch kind {
         case "ask":
             if let runId = fields["workflowRunId"], !runId.isEmpty { return .session(BoardRun.prefix + runId) }
+            // An ask is opened where it was made: the session whose pane
+            // draws it (a memory curator run's proposal), else its own.
+            if let origin = fields["originInstanceId"], !origin.isEmpty { return .session(origin) }
             if let instanceId, !instanceId.isEmpty { return .session(instanceId) }
             return .board
         case "turn":

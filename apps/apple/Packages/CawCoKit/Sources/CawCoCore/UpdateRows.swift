@@ -138,6 +138,22 @@ public enum UpdateRows {
     /// The machine's whole update error, for "Read the error".
     public static func error(_ machine: MachineRow) -> String? { state(machine)?.error }
 
+    /// The phases an update is under way or failed in (MachinesList.svelte `MOVING`).
+    private static let moving: Set = ["ready", "downloading", "installing", "waiting-sessions", "failed", "failed-rolled-back"]
+
+    /// What a machine's row says of its update (MachinesList.svelte
+    /// `updateOf`): the Update cell's words while one is under way or failed,
+    /// on the machine's word; nil otherwise, or before the policy is read.
+    public static func underWay(_ machine: MachineRow, policy: Components.Schemas.BinaryUpdatePolicy?) -> UpdateCell? {
+        guard let policy, isOnline(machine), let phase = state(machine)?.phase, moving.contains(phase) else { return nil }
+        return cell(machine, policy: policy)
+    }
+
+    /// A build waits for the person to install it (MachineMenu.svelte's "Install update now").
+    public static func installableNow(_ machine: MachineRow) -> Bool {
+        isOnline(machine) && state(machine)?.phase == "available"
+    }
+
     /// Machines waiting on the operator: a failed update, or (auto-update off) one to install. Updates' rail badge.
     public static func attention(_ machines: [MachineRow], policy: Components.Schemas.BinaryUpdatePolicy) -> Int {
         machines.filter { machine in

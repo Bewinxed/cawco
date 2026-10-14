@@ -298,6 +298,13 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     #endif
 
     private func syncAskAlone() {
+        // A row-less ask a session made (a curator run's proposal): the shell
+        // moves this tab to that session, whose composer draws it
+        // (ShellController `moveToOrigins`). Nothing is read or said here meanwhile.
+        if hub.askOrigin(sessionId) != nil {
+            transcriptHost.view.isHidden = true
+            return
+        }
         let asking = hub.askAlone(sessionId)
         if asking { askHeld = true }
         transcriptHost.view.isHidden = askHeld
@@ -1046,12 +1053,17 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         if previous?.horizontalSizeClass != traitCollection.horizontalSizeClass { syncPreview() }
     }
 
-    /// The parked asks as the composer's cards, in arrival order: a card that
+    /// The asks this conversation made: its own in arrival order, then those
+    /// parked elsewhere that it made (a memory curator run's proposal, on
+    /// machine "hub"; SessionPane.svelte `parked`).
+    private var madeAsks: [ParkedAsk] { (hub.needs.parked[sessionId] ?? []) + hub.needs.madeIn(sessionId) }
+
+    /// The asks this conversation made as the composer's cards: a card that
     /// comes in while the session is on screen settles in, and one the hub
-    /// has settled leaves. Each is answered on the machine its envelope named,
-    /// so one no session row stands behind (a memory proposal) answers too.
+    /// has settled leaves. Each is answered on the machine its envelope
+    /// named, so one no session row stands behind answers too.
     private func syncCards() {
-        let parked = hub.needs.parked[sessionId] ?? []
+        let parked = madeAsks
         let ids = Set(parked.map(\.requestId))
         for id in cards.keys where !ids.contains(id) { cards[id] = nil }
         var ordered: [UIView] = []
@@ -1084,6 +1096,15 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     #if DEBUG
     /// What each card last said to a simulator pass's log.
     private var probeCards: [String: String] = [:]
+
+    /// The asks this pane draws as cards, by request id, in their order.
+    var probeAsks: [String] { madeAsks.map(\.requestId) }
+
+    /// A card's Approve (or Deny), as its button answers it.
+    func probeAnswer(_ requestId: String, allow: Bool) {
+        guard let ask = madeAsks.first(where: { $0.requestId == requestId }) else { return }
+        answer(ask, allow ? .allow : .deny, [:])
+    }
     #endif
 
     private func answer(_ ask: ParkedAsk, _ choice: PromptCardView.Choice, _ picks: [String: [String]]) {
@@ -1156,8 +1177,8 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     /// Stop has a turn to end only in a live session (Composer.svelte `busy`).
     var canStop: Bool { hub.state == .connected && hub.fleet.byId[sessionId]?.isLive == true }
 
-    /// The first permission parked here, for the menu bar's Approve and Deny.
-    private var pendingAsk: ParkedAsk? { hub.needs.parked[sessionId]?.first { !$0.isQuestion } }
+    /// The first permission this conversation made, for the menu bar's Approve and Deny.
+    private var pendingAsk: ParkedAsk? { madeAsks.first { !$0.isQuestion } }
     var answerTarget: ParkedAsk? {
         guard hub.state == .connected, let ask = pendingAsk else { return nil }
         let sent = hub.needs.answerSent(for: ask)

@@ -3,22 +3,20 @@ import CawCoCore
 import CawCoDesign
 import UIKit
 
-// A machine's keychain dialog (UnlockKeychain.svelte),
-// what they show once sent (MachineAuthStatus.svelte), and an error read in
-// full (ErrorDialog.svelte).
+// A machine's keychain unlock, under its row (UnlockKeychain.svelte), and
+// what it shows once sent (MachineAuthStatus.svelte).
 
 /// What each answer says: a title and one sentence.
 typealias AuthSaid = [Components.Schemas.AuthState: (title: String, body: String)]
 
-/// The body a login dialog shows once sent (MachineAuthStatus.svelte): the
-/// wait, naming what the machine is doing until it answers, then the answer,
-/// a check for a machine that can start a turn and a warning for any
-/// other, which stays up until Done. Closing while it works only stops
-/// watching.
+/// What an unlock shows once the password is sent (MachineAuthStatus.svelte):
+/// the wait, naming what the machine does until it answers, then the answer,
+/// a check for a machine that can start a turn and a warning for any other,
+/// which stays up until Done. Closing while it works only stops watching.
 final class MachineAuthStatusView: UIStackView {
     private let mark = UIView()
-    private let title = KitLabel(TypeScale.typeTitle, ink: Palette.foreground, lines: 0)
-    private let line = CrossView()
+    private let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, lines: 0)
+    private let line = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
     private let onClose: () -> Void
     private var button: UIButton?
     private let buttonRow = UIStackView()
@@ -27,7 +25,7 @@ final class MachineAuthStatusView: UIStackView {
         self.onClose = onClose
         super.init(frame: .zero)
         axis = .vertical
-        spacing = Space.space4
+        spacing = Space.space3
         mark.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([mark.widthAnchor.constraint(equalToConstant: 36), mark.heightAnchor.constraint(equalToConstant: 36)])
         let head = UIStackView(arrangedSubviews: [mark, title, line])
@@ -36,8 +34,9 @@ final class MachineAuthStatusView: UIStackView {
         head.alignment = .leading
         title.accessibilityTraits = .header
         title.wrap = .balance
+        line.wrap = .pretty
         // The button stands at the end of the box at its own height (`mt-auto
-        // flex justify-end`): the height the dialog holds while it works is
+        // flex justify-end`): the height the tile holds while it works is
         // room above it, never a taller button.
         buttonRow.alignment = .center
         buttonRow.addArrangedSubview(UIView())
@@ -68,24 +67,17 @@ final class MachineAuthStatusView: UIStackView {
 
     private func setButton(_ label: String, variant: KitButton.Variant) {
         button?.removeFromSuperview()
-        let made = KitButton.make(label, variant: variant) { [weak self] in self?.onClose() }
+        let made = KitButton.make(label, variant: variant, height: .sm) { [weak self] in self?.onClose() }
         buttonRow.addArrangedSubview(made)
         button = made
     }
 
-    private func sayLine(_ text: String) {
-        let label = KitLabel(TypeScale.typeLabel, ink: Palette.mutedForeground, lines: 0)
-        label.text = text
-        label.wrap = .pretty
-        line.show(label)
-    }
-
-    /// One step, said until the machine answers: nothing the machine has not said is claimed as passed.
+    /// One line naming what the machine does, said until it answers: nothing it has not said is claimed as passed.
     func working(title text: String, step: String) {
-        setMark(KitSpinner(side: 24, tint: Palette.mutedForeground))
+        setMark(KitSpinner(side: 24, tint: Palette.inkMuted))
         title.text = text
-        sayLine(step)
-        setButton("Close", variant: .outline)
+        line.text = step
+        setButton("Close", variant: .ghost)
         UIAccessibility.post(notification: .announcement, argument: text)
     }
 
@@ -93,7 +85,7 @@ final class MachineAuthStatusView: UIStackView {
         let ok = state == .authenticated
         let glyph = GlyphView(ok ? .passed : .warning, size: 36, tint: ok ? Palette.success : Palette.warning)
         setMark(glyph)
-        // mark-in: from a quarter size, blurred, over durPop.
+        // mark-in: from a quarter size, over durPop.
         if !UIAccessibility.isReduceMotionEnabled {
             glyph.alpha = 0
             glyph.transform = CGAffineTransform(scaleX: 0.25, y: 0.25)
@@ -104,100 +96,110 @@ final class MachineAuthStatusView: UIStackView {
         }
         let answer = said[state] ?? (title: "", body: "")
         title.text = answer.title
-        sayLine(answer.body)
+        line.text = answer.body
         setButton("Done", variant: .action)
         UIAccessibility.post(notification: .announcement, argument: "\(answer.title). \(answer.body)")
     }
 }
 
-/// A machine's login form and its answer, the two views cross-fading in
-/// place with the dialog holding the form's height while it works.
-class MachineAuthDialog: KitDialogController {
-    let hub: HubConnection
-    let machine: MachineRow
-    let views = CrossView()
-    /// Which submit an answer belongs to: one that lands after the dialog moved on is dropped.
-    var attempt = 0
-
-    init(hub: HubConnection, machine: MachineRow, width: Width) {
-        self.hub = hub
-        self.machine = machine
-        super.init(width: width)
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("MachineAuthDialog is built in code")
-    }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        body.addArrangedSubview(views)
-    }
-
-    func showStatus(working title: String, step: String) -> MachineAuthStatusView {
-        let status = MachineAuthStatusView { [weak self] in self?.dismiss(animated: true) }
-        status.working(title: title, step: step)
-        morph { views.show(status, holdHeight: true) }
-        return status
-    }
-
-    /// The answer: the status says it, and the dialog lets go of the form's
-    /// height it held while it worked, settling to what the answer takes.
-    func answer(_ status: MachineAuthStatusView, _ state: Components.Schemas.AuthState, said: AuthSaid) {
-        status.answered(state, said: said)
-        morph { views.release() }
-    }
-}
-
-/// Unlocks a Mac's login keychain from here (UnlockKeychain.svelte). The
-/// password is sent, used once and dropped: the field clears the moment it
-/// goes, whatever the answer.
-final class UnlockKeychainController: MachineAuthDialog, UITextFieldDelegate {
+/// Unlocks a Mac's login keychain from here (UnlockKeychain.svelte), under
+/// the machine's row in the list (DESIGN.md, The Open Page Rule): nothing
+/// elsewhere breaks while the password is typed, so nothing else is held.
+/// Cancel or Escape puts it away. The password is sent, used once and
+/// dropped: the field clears the moment it goes, whatever the answer. The
+/// form and the answer cross-fade in place, the tile holding the form's
+/// height while the machine works.
+final class UnlockKeychainView: UIView, UITextFieldDelegate {
+    let machineId: String
+    private let hub: HubConnection
+    private let host: String
+    private let views = CrossView()
     private let password = KitField()
-    private let note = KitLabel(TypeScale.typeMeta, ink: Palette.mutedForeground, lines: 0)
-    private let problem = KitLabel(TypeScale.typeLabel, ink: Palette.destructive, lines: 0)
+    private let note = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+    private let problem = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
     private var submit: UIButton!
+    /// Which submit an answer belongs to: one that lands after the tile was put away is dropped.
+    private var attempt = 0
+    /// Put away (Cancel, Close, Done, Escape): the list takes it out.
+    var onClose: () -> Void = {}
+    /// It changed height: the list (and the card it stands in) measures again.
+    var onResize: () -> Void = {}
 
     init(hub: HubConnection, machine: MachineRow) {
-        super.init(hub: hub, machine: machine, width: .md)
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("UnlockKeychainController is built in code")
-    }
-
-    private var said: AuthSaid {
-        let host = machine.name
-        return [
-            .authenticated: ("\(host) is unlocked", "\(host) is logged in again. New sessions there can read its credentials."),
-            .unauthenticated: ("\(host) is not logged in", "\(host) unlocked, but nobody has logged in there yet."),
-            .unreadableCredentials: ("\(host) cannot read its login", "\(host) unlocked, but its credentials still cannot be read."),
-        ]
-    }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
+        self.hub = hub
+        machineId = machine.machineId
+        host = machine.name
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        accessibilityIdentifier = "machine-unlock"
+        // `.tile`: the raised surface on a hairline at `--radius-md`, `--shadow-raised`, `space-3` in.
+        let tile = TileView(radius: Radius.radiusMd)
+        tile.translatesAutoresizingMaskIntoConstraints = false
+        tile.backgroundColor = Palette.surfaceRaised
+        tile.layer.borderWidth = 1
+        tile.boxShadow = Shadow.shadowRaised
+        tile.addSubview(views)
+        addSubview(tile)
+        NSLayoutConstraint.activate([
+            // `.unlock`: `space-1` above and below, `space-2` in from the list's edges.
+            tile.topAnchor.constraint(equalTo: topAnchor, constant: Space.space1),
+            tile.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Space.space1),
+            tile.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Space.space2),
+            tile.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Space.space2),
+            views.topAnchor.constraint(equalTo: tile.topAnchor, constant: Space.space3),
+            views.bottomAnchor.constraint(equalTo: tile.bottomAnchor, constant: -Space.space3),
+            views.leadingAnchor.constraint(equalTo: tile.leadingAnchor, constant: Space.space3),
+            views.trailingAnchor.constraint(equalTo: tile.trailingAnchor, constant: -Space.space3),
+        ])
+        shouldGroupAccessibilityChildren = true
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (unlock: UnlockKeychainView, _: UITraitCollection) in
+            tile.layer.borderColor = Palette.borderHairline.resolvedColor(with: unlock.traitCollection).cgColor
+        }
+        tile.layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
         views.show(form())
     }
 
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-        password.becomeFirstResponder()
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("UnlockKeychainView is built in code")
+    }
+
+    /// The field takes the keys as it opens.
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard window != nil, views.current?.isDescendant(of: self) == true, attempt == 0 else { return }
+        DispatchQueue.main.async { [weak self] in _ = self?.password.becomeFirstResponder() }
+    }
+
+    private var said: AuthSaid {
+        [
+            .authenticated: ("\(host) is unlocked", "New sessions on \(host) can read its accounts' logins again."),
+            .unauthenticated: ("No account is signed in on \(host)",
+                               "\(host) unlocked, but no Claude account is signed in there. Add one in Configure → Accounts and sign it in there."),
+            .unreadableCredentials: ("\(host) cannot read its logins", "\(host) unlocked, but its accounts' logins still cannot be read."),
+        ]
     }
 
     private func form() -> UIView {
-        let header = KitDialogController.header(
-            title: "Unlock \(machine.name)",
-            description: "Its login keychain is locked, so Claude Code there cannot read its credentials. This is the macOS login password for that machine.",
-            glyph: .key, glyphTint: Palette.warning
-        )
+        let key = GlyphView(.key, size: Size.iconMd, tint: Palette.warning)
+        key.setContentHuggingPriority(.required, for: .horizontal)
+        let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, lines: 0)
+        title.text = "Unlock \(host)"
+        title.accessibilityTraits = .header
+        let titleLine = UIStackView(arrangedSubviews: [key, title])
+        titleLine.spacing = Space.space2
+        titleLine.alignment = .center
+        let body = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+        body.wrap = .pretty
+        body.text = "Its login keychain is locked, so Claude Code there cannot read its credentials. This is the macOS login password for that machine."
+        let head = UIStackView(arrangedSubviews: [titleLine, body])
+        head.axis = .vertical
+        head.spacing = Space.space1
         password.isSecureTextEntry = true
         password.textContentType = .password
-        password.attributedPlaceholder = NSAttributedString(string: "Login password for \(machine.name)",
+        password.attributedPlaceholder = NSAttributedString(string: "Login password for \(host)",
                                                             attributes: [.font: TypeScale.typeBody.font, .foregroundColor: Palette.mutedForeground])
-        password.accessibilityLabel = "Login password for \(machine.name)"
+        password.accessibilityLabel = "Login password for \(host)"
         password.delegate = self
         password.returnKeyType = .go
         password.addAction(UIAction { [weak self] _ in self?.submit.isEnabled = !(self?.password.text ?? "").isEmpty }, for: .editingChanged)
@@ -205,16 +207,26 @@ final class UnlockKeychainController: MachineAuthDialog, UITextFieldDelegate {
         note.wrap = .pretty
         problem.wrap = .pretty
         problem.isHidden = true
-        let cancel = KitButton.make("Cancel", variant: .outline) { [weak self] in self?.dismiss(animated: true) }
-        submit = KitButton.make("Unlock", variant: .action) { [weak self] in self?.unlock() }
-        submit.isEnabled = false
-        let fields = UIStackView(arrangedSubviews: [password, problem, note, KitDialogController.actions([cancel, submit])])
+        let cancel = KitButton.make("Cancel", variant: .ghost, height: .sm) { [weak self] in self?.close() }
+        submit = KitButton.make("Unlock", variant: .action, height: .sm) { [weak self] in self?.unlock() }
+        submit.isEnabled = !(password.text ?? "").isEmpty
+        let actions = UIStackView(arrangedSubviews: [UIView(), cancel, submit])
+        actions.spacing = Space.space2
+        actions.alignment = .center
+        let fields = UIStackView(arrangedSubviews: [password, problem, note, actions])
         fields.axis = .vertical
-        fields.spacing = Space.space3
-        let stack = UIStackView(arrangedSubviews: [header, fields])
+        fields.spacing = Space.space2
+        let stack = UIStackView(arrangedSubviews: [head, fields])
         stack.axis = .vertical
-        stack.spacing = 24
+        stack.spacing = Space.space3
         return stack
+    }
+
+    private func close() {
+        attempt += 1
+        password.text = ""
+        password.resignFirstResponder()
+        onClose()
     }
 
     private func unlock() {
@@ -222,15 +234,26 @@ final class UnlockKeychainController: MachineAuthDialog, UITextFieldDelegate {
         guard !sent.isEmpty else { return }
         attempt += 1
         let mine = attempt
+        // Cleared the moment it has been sent, whatever the answer will be.
         password.text = ""
         password.resignFirstResponder()
-        let status = showStatus(working: "Unlocking \(machine.name)…",
-                                step: "Unlocking the login keychain and checking \(machine.name) can read its credentials")
-        Task { @MainActor [weak self, hub, machine] in
+        let status = MachineAuthStatusView { [weak self] in self?.close() }
+        status.working(title: "Unlocking \(host)…", step: "Unlocking the login keychain and checking \(host) can read its credentials")
+        views.show(status, holdHeight: true)
+        #if DEBUG
+        Self.probe("unlock \(machineId) working")
+        #endif
+        onResize()
+        Task { @MainActor [weak self, hub, machineId] in
             do {
-                let state = try await hub.unlockKeychain(machineId: machine.machineId, password: sent)
+                let state = try await hub.unlockKeychain(machineId: machineId, password: sent)
                 guard let self, mine == attempt else { return }
-                answer(status, state, said: said)
+                status.answered(state, said: said)
+                views.release()
+                #if DEBUG
+                Self.probe("unlock \(machineId) answered \(state.rawValue)")
+                #endif
+                onResize()
             } catch {
                 guard let self, mine == attempt else { return }
                 views.show(form())
@@ -238,7 +261,10 @@ final class UnlockKeychainController: MachineAuthDialog, UITextFieldDelegate {
                 problem.isHidden = false
                 note.isHidden = true
                 password.becomeFirstResponder()
-                morph {}
+                #if DEBUG
+                Self.probe("unlock \(machineId) refused: \(error.localizedDescription)")
+                #endif
+                onResize()
             }
         }
     }
@@ -247,43 +273,41 @@ final class UnlockKeychainController: MachineAuthDialog, UITextFieldDelegate {
         unlock()
         return true
     }
-}
 
-/// An error read in full (ErrorDialog.svelte): the whole text, selectable,
-/// in a bordered box that scrolls past 60% of the screen, and Copy error,
-/// whose glyph turns to a check for `durHold`.
-final class ErrorDialogController: KitDialogController {
-    private let titleText: String
-    private let message: String
-
-    init(title: String, message: String) {
-        titleText = title
-        self.message = message
-        super.init(width: .xl2)
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("ErrorDialogController is built in code")
-    }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        body.addArrangedSubview(KitDialogController.header(title: titleText, glyph: .alert, glyphTint: Palette.destructive))
-        // `.error-text`: recess, hairline, `--radius-sm`, `--space-3` in, 1.55 leading, up to 60vh.
-        let inset = NSDirectionalEdgeInsets(top: Space.space3, leading: Space.space3, bottom: Space.space3, trailing: Space.space3)
-        body.addArrangedSubview(KitPre(message, fill: Palette.surfaceRecess, border: Palette.borderHairline, radius: Radius.radiusSm,
-                                       inset: inset, leading: 1.55, maxHeight: UIScreen.main.bounds.height * 0.6))
-        var copyButton: UIButton!
-        copyButton = KitButton.make("Copy error", glyph: .copy, variant: .outline) { [message] in
-            UIPasteboard.general.string = message
-            copyButton.configuration?.image = Glyph.check.image.resized(to: Size.iconMd)
-            Task { @MainActor in
-                try? await Task.sleep(for: .seconds(Motion.durHold))
-                copyButton.configuration?.image = Glyph.copy.image.resized(to: Size.iconMd)
-            }
+    /// Escape inside it puts it away.
+    override func pressesBegan(_ presses: Set<UIPress>, with event: UIPressesEvent?) {
+        if presses.contains(where: { $0.key?.keyCode == .keyboardEscape }) {
+            close()
+            return
         }
-        let close = KitButton.make("Close", variant: .action) { [weak self] in self?.dismiss(animated: true) }
-        body.addArrangedSubview(KitDialogController.footer([copyButton, close]))
+        super.pressesBegan(presses, with: event)
     }
+
+    #if DEBUG
+    static func probe(_ line: String) {
+        AskProbe.log.notice("machine \(line, privacy: .public)")
+    }
+
+    /// The password typed and Unlock pressed.
+    func probeSubmit(_ typed: String) {
+        password.text = typed
+        unlock()
+    }
+
+    /// The form or the status, and what each says.
+    var probeState: String {
+        let words = { (root: UIView) -> [String] in
+            var said: [String] = []
+            func walk(_ view: UIView) {
+                if view.isHidden { return }
+                if let label = view as? UILabel, let text = label.text, !text.isEmpty { said.append(text) }
+                if let button = view as? UIButton, let title = button.configuration?.title { said.append("[\(title)\(button.isEnabled ? "" : " off")]") }
+                view.subviews.forEach(walk)
+            }
+            walk(root)
+            return said
+        }
+        return views.current.map { words($0).joined(separator: " / ") } ?? "empty"
+    }
+    #endif
 }

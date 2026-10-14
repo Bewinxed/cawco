@@ -20,6 +20,8 @@ protocol SidebarHost: AnyObject {
     func search()
     /// The free week's line (paywall DESIGN.md T): the paywall in its Get Pro form.
     func keepPro()
+    /// What a session row's menu does, and the window's one question about a session.
+    var sessionMenus: SessionMenuContext { get }
 }
 
 /// The management rail (Sidebar.svelte): the wordmark with Start session in
@@ -589,6 +591,8 @@ final class SidebarViewController: ObservedViewController {
         _ = fleet.claudeLimits
         _ = fleet.openCodeGoLimits
         _ = fleet.limitsRead
+        // A question asked under one of its rows, or put away.
+        _ = host?.sessionMenus.asks.at
         for project in fleet.projects { _ = prefs.collapsed(project.id) }
         let inputs = RailModel.inputs(hub: hub, home: home, sort: prefs.sort)
         rowInputs = inputs.rows
@@ -731,7 +735,7 @@ final class SidebarViewController: ObservedViewController {
             let open = !prefs.collapsed(list.project.id)
             guard open else { return "\(list.project.id)-" }
             return "\(list.project.id)+\(nodes(list.recent))|\(olderShown(list) ? nodes(list.older) : "\(list.older.count)")"
-        }.joined(separator: ";") + "#\(hub.fleet.machines.isEmpty)"
+        }.joined(separator: ";") + "#\(hub.fleet.machines.isEmpty)?\(askedHere ?? "")"
     }
 
     private func olderShown(_ list: RailProjectList) -> Bool {
@@ -816,6 +820,35 @@ final class SidebarViewController: ObservedViewController {
     /// A session and, when it is open, the sessions it started on a rail of their own.
     private func rowKey(_ project: String, _ id: String) -> String { project + "\u{0}" + id }
 
+    /// Where a question about one of the rail's sessions stands
+    /// (`SessionMenuContext.place`): the split's rail and the phone's sheet
+    /// are lists of their own, so a question stands under one row only.
+    private var askPlace: String { inSheet ? "sheet-projects" : "rail-projects" }
+
+    #if DEBUG
+    /// Session `id`'s row in this rail, if it is drawn.
+    func probeRow(_ id: String) -> SessionRailRow? {
+        sessionRows.first { $0.value.id == id && $0.value.window != nil }?.value
+    }
+
+    /// Whether the window's question stands in the line right under session `id`'s row here.
+    func probeAskUnder(_ id: String) -> Bool {
+        guard let row = probeRow(id), let slot = host?.sessionMenus.asks.view.superview as? RailAskSlot,
+              let unit = row.superview as? UIStackView, unit === slot.superview,
+              let at = unit.arrangedSubviews.firstIndex(of: row) else { return false }
+        return unit.arrangedSubviews.firstIndex(of: slot) == at + 1
+    }
+
+    /// Where a question about a session in this rail stands.
+    var probeAskPlace: String { askPlace }
+    #endif
+
+    /// The session the window's one question stands under in this rail, if it is one of its rows.
+    private var askedHere: String? {
+        guard let at = host?.sessionMenus.asks.at, at.hasPrefix(askPlace + "/") else { return nil }
+        return String(at.dropFirst(askPlace.count + 1))
+    }
+
     private func nodeView(_ node: RailBranch, project: String, rows: inout [String: SessionRailRow]) -> UIView {
         let key = rowKey(project, node.row.id)
         let row = sessionRows[key] ?? SessionRailRow(id: node.row.id)
@@ -825,12 +858,26 @@ final class SidebarViewController: ObservedViewController {
         row.onToggle = { [weak self, weak row] id in
             if let row { self?.toggleTree(id, row: row) }
         }
-        guard openTrees.contains(node.row.id), !node.children.isEmpty else {
-            return row
+        // LiveSessionMenu, read from the fleet as it opens, as a home row's
+        // is; a rail row archives nothing (Sidebar.svelte's SessionRow).
+        let id = node.row.id
+        row.menu = { [weak self] copy in
+            guard let self, let context = host?.sessionMenus.at(askPlace), BoardRun.runId(of: id) == nil,
+                  let now = hub.fleet.byId[id] else { return nil }
+            return SessionMenus.live(now, context: context, copy: copy)
         }
-        let list = NestList()
-        for child in node.children { list.stack.addArrangedSubview(nodeView(child, project: project, rows: &rows)) }
-        let unit = UIStackView(arrangedSubviews: [row, list])
+        var parts: [UIView] = [row]
+        // A delete's question, under the row it was asked from (SessionRow.svelte `AskHere`).
+        if askedHere == id, let asks = host?.sessionMenus.asks {
+            parts.append(RailAskSlot(holding: asks.view))
+        }
+        if openTrees.contains(id), !node.children.isEmpty {
+            let list = NestList()
+            for child in node.children { list.stack.addArrangedSubview(nodeView(child, project: project, rows: &rows)) }
+            parts.append(list)
+        }
+        guard parts.count > 1 else { return row }
+        let unit = UIStackView(arrangedSubviews: parts)
         unit.axis = .vertical
         return unit
     }

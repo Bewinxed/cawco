@@ -135,11 +135,24 @@ public final class HubConnection {
     /// What the new-session form was last set to: every start without a form runs on it.
     public let spawnPrefs = SpawnPrefs()
     public let needs: NeedsYouStore
-    /// The hub holds an ask under `id` and no session (a project's memory
-    /// proposal, hub memory.ts): it has no transcript, and its pane is that
-    /// ask's card alone (SessionPane.svelte `askAlone`).
+    /// The asks the hub holds under `id` with no session behind it (a
+    /// project's memory proposal, hub memory.ts): `id` has no transcript.
+    public func rowlessAsks(_ id: String) -> [ParkedAsk] {
+        fleet.byId[id] == nil ? needs.parked[id] ?? [] : []
+    }
+
+    /// The session a row-less ask under `id` was made in (SessionPane.svelte
+    /// `madeIn`): a pane opened on `id` moves there, where the ask is drawn
+    /// and answered in the composer.
+    public func askOrigin(_ id: String) -> String? {
+        rowlessAsks(id).lazy.compactMap(\.originInstanceId).first
+    }
+
+    /// A row-less ask made in no session the app draws: its pane is that
+    /// ask's card alone (SessionPane.svelte `askAlone`). One Caw made in a
+    /// thread is here too until the app has a thread screen.
     public func askAlone(_ id: String) -> Bool {
-        fleet.byId[id] == nil && needs.blocked(id)
+        rowlessAsks(id).contains { $0.originInstanceId == nil }
     }
     public private(set) var sessions: SessionsStore!
     public private(set) var tasks: TasksStore!
@@ -795,16 +808,22 @@ public final class HubConnection {
         Task { _ = try? await client.postApiBinaryUpdatesMachinesByMachineIdCancel(path: .init(machineId: machineId)) }
     }
 
+    /// Why the hub refused the last install asked of each machine, in the
+    /// web's words (updates.svelte.ts `refused`): said on the machine's row
+    /// wherever it is listed, until it is asked again.
+    public private(set) var updateRefused: [String: String] = [:]
+
     /// Install now on one machine (updates.svelte.ts `installNow`): one
     /// command, acted on once, for the build it offers. A machine that is not
     /// connected or could not start it is no longer counted as asked, and
-    /// `refused` is told why in the web's words.
-    public func installUpdate(machineId: String, refused: (@MainActor (String) -> Void)? = nil) {
+    /// why is kept in `updateRefused`.
+    public func installUpdate(machineId: String) {
         guard let client else { return }
         let machine = fleet.machines.first { $0.machineId == machineId }
         let version = machine?.binaryUpdate?.availableVersion
         let name = machine?.name ?? machineId
         fleet.commanded.insert(machineId)
+        updateRefused[machineId] = nil
         Task { [weak self] in
             let answer = try? await client.postApiAgentsByMachineIdUpdate(
                 path: .init(machineId: machineId),
@@ -814,12 +833,12 @@ public final class HubConnection {
             case .notFound:
                 self?.log.error("install on \(machineId, privacy: .public) refused: not connected")
                 self?.fleet.commanded.remove(machineId)
-                refused?("\(name) is not connected, so nothing was installed. Try again when it is back.")
+                self?.updateRefused[machineId] = "\(name) is not connected, so nothing was installed. Try again when it is back."
             case let .internalServerError(failed):
                 let said = await Wire.words(try? failed.body.plainText)
                 self?.log.error("install on \(machineId, privacy: .public) refused: \(said ?? "", privacy: .public)")
                 self?.fleet.commanded.remove(machineId)
-                refused?("\(name) could not start the update. \(said ?? "")")
+                self?.updateRefused[machineId] = "\(name) could not start the update. \(said ?? "")"
             default:
                 break
             }

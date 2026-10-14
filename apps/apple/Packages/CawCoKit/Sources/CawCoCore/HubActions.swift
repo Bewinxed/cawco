@@ -268,11 +268,6 @@ extension HubConnection {
         let args = pinnedVersion.map { [id, $0] } ?? [id]
         return try await Self.decodeResult(await control(machineId, method: "installTool", args: args, timeout: .seconds(300)))
     }
-    public func updateMachine(machineId: String, restartAgent: Bool = true, force: Bool = false) async throws -> Components.Schemas.UpdateReport {
-        try await Self.decodeResult(await control(machineId, method: "updateCawco",
-            args: [["restartAgent": restartAgent, "force": force]], timeout: .seconds(180)))
-    }
-
     /// A send's uuid is the ledger command id, just as on the web. Attachments
     /// and images use the generated SendPayload entries without re-shaping.
     @discardableResult

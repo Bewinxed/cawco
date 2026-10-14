@@ -157,6 +157,8 @@ final class SessionRailRow: RailRow, HoverSessionRow {
     private let age = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     var onOpen: (String) -> Void = { _ in }
     var onToggle: (String) -> Void = { _ in }
+    /// Its session's menu (LiveSessionMenu.svelte), built as it opens.
+    var menu: ((MenuHost) -> UIMenu?)?
 
     init(id: String) {
         self.id = id
@@ -191,6 +193,8 @@ final class SessionRailRow: RailRow, HoverSessionRow {
         let hint = UIToolTipInteraction()
         hint.delegate = self
         addInteraction(hint)
+        // Right-click, or a long press under a finger, as a home row's (HomeCells `menu`).
+        ContextMenuHost.attach(to: self) { [weak self] host in self?.menu?(host) }
     }
 
     /// The age's `title`: when it last moved, in words.
@@ -220,6 +224,31 @@ extension SessionRailRow: UIToolTipInteractionDelegate {
         let box = age.convert(age.bounds, to: self)
         guard !ageHint.isEmpty, box.contains(point) else { return nil }
         return UIToolTipConfiguration(toolTip: ageHint, in: box)
+    }
+}
+
+/// A question about a session, under its rail row (SessionRow.svelte's
+/// compact `.session-ask`): set in to the row's words, `row-compact-gap`
+/// twice and the mark's box, and short of its end by its own padding. The
+/// window has one question, so this holds it rather than a copy: it is moved
+/// here from wherever it stood, and keeps its state on the way.
+final class RailAskSlot: UIView {
+    init(holding ask: AskHere) {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        ask.removeFromSuperview()
+        addSubview(ask)
+        NSLayoutConstraint.activate([
+            ask.topAnchor.constraint(equalTo: topAnchor),
+            ask.bottomAnchor.constraint(equalTo: bottomAnchor),
+            ask.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Size.rowCompactGap * 2 + Size.rowMarkBox),
+            ask.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Size.rowCompactPadEnd),
+        ])
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("RailAskSlot is built in code")
     }
 }
 

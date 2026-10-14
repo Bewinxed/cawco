@@ -78,51 +78,6 @@ enum MachineHealth {
     }
 }
 
-// MARK: Updates
-
-/// An update this app started on a machine (MachineMenu.svelte
-/// `machineUpdates`), which a machine's build chip reads: until the agent
-/// reports a new start it is "Updating…"; `said` is what the update did.
-@MainActor
-@Observable
-final class MachineUpdates {
-    struct Update {
-        var since: Double?
-        /// The update ran and restarted nothing: there is no new build to wait for.
-        var settled: Bool
-        var said: String?
-    }
-
-    static let shared = MachineUpdates()
-    var updates: [String: Update] = [:]
-    /// Why the last update on a machine failed, whole.
-    var failures: [String: String] = [:]
-
-    func isUpdating(_ machine: MachineRow) -> Bool {
-        guard let update = updates[machine.machineId] else { return false }
-        return !update.settled && machine.build?.startedAt == update.since
-    }
-
-    /// Pull, install, rebuild and restart, the agent once it is idle
-    /// (MachineMenu.svelte `updateMachine`).
-    func update(_ machine: MachineRow, hub: HubConnection) async throws {
-        failures[machine.machineId] = nil
-        let host = machine.name
-        updates[machine.machineId] = Update(since: machine.build?.startedAt, settled: false)
-        do {
-            let report = try await hub.updateMachine(machineId: machine.machineId)
-            let moved = report.to == report.from ? "\(host) was already on \(report.from ?? "")" : "\(host): \(report.from ?? "") → \(report.to ?? "")"
-            let restarted = report.restarted.isEmpty ? "" : ", restarted \(report.restarted.joined(separator: ", "))"
-            let said = report.skipped.map { "\(moved)\(restarted) — \($0)" } ?? "\(moved)\(restarted)"
-            updates[machine.machineId] = Update(since: updates[machine.machineId]?.since, settled: !report.restarted.contains("agent"), said: said)
-        } catch {
-            updates[machine.machineId] = nil
-            failures[machine.machineId] = error.localizedDescription
-            throw error
-        }
-    }
-}
-
 // MARK: Row
 
 /// One machine as a row (ui/machine-row): a 26pt raised tile at
@@ -236,7 +191,7 @@ protocol MachinesHost: AnyObject {
     func addMachine()
     /// Native only: point this window at another hub.
     func changeHub()
-    /// What the machine dialogs present over.
+    /// What a web page opened from a machine's menu presents over (`openWeb`).
     var dialogPresenter: UIViewController { get }
     /// A session's mark, as every row draws it.
     func markStatus(_ row: InstanceRow) -> MarkStatus
@@ -308,6 +263,8 @@ final class MachinesListView: UIView {
     private let stack = UIStackView()
     private var rows: [String: MachinesListRow] = [:]
     private var menus: [String: MachineMenu] = [:]
+    /// What did not go on each machine's update, under its row.
+    private var faults: [String: MachineFaultLine] = [:]
     /// Whatever stands the list on screen steps aside, then `then` runs.
     var leave: (@escaping () -> Void) -> Void = { then in then() }
     /// The list's rows changed: a popover sizes itself again.
@@ -365,6 +322,7 @@ final class MachinesListView: UIView {
             row.removeFromSuperview()
             rows[id] = nil
             menus[id] = nil
+            faults.removeValue(forKey: id)?.removeFromSuperview()
         }
         // The question about a machine stands under its row (AskHere); what
         // it names is read here, so a session that ends while it stands shows it.
@@ -376,25 +334,97 @@ final class MachinesListView: UIView {
         } else {
             askView.refresh()
         }
+        // The unlock goes with its machine; its answer stays until Done.
+        if let unlock = unlockView, !machines.contains(where: { $0.machineId == unlock.machineId }) {
+            putAwayUnlock()
+        }
+        let policy = hub.fleet.updatePolicy
         var at = 0
         for (index, machine) in machines.enumerated() {
-            let row = rows[machine.machineId] ?? makeRow(machine.machineId)
+            let id = machine.machineId
+            let row = rows[id] ?? makeRow(id)
             let up = machine.status == "online"
             let fault = MachineHealth.fault(machine, hubBuild: hub.fleet.hubBuild)
-            let live = running.filter { $0.machineId == machine.machineId }.count
+            let live = running.filter { $0.machineId == id }.count
             let presence: MachineRowView.Presence = !up ? .off : (fault == nil ? .online : .away)
+            // An update under way says where it stands on the row; one that failed says why under it (MachinesList.svelte).
+            let update = UpdateRows.underWay(machine, policy: policy)
+            let said = ["\(live) live", fault, update.flatMap { $0.fail ? nil : $0.text }].compactMap(\.self).filter { !$0.isEmpty }
             row.content.configure(glyph: MachineHealth.icon(machine.os), hue: MachineHealth.hue(index, online: up),
-                                  name: machine.name,
-                                  meta: ["\(live) live", fault].compactMap(\.self).joined(separator: " · "), presence: presence)
+                                  name: machine.name, meta: said.joined(separator: " · "), presence: presence)
             row.accessibilityLabel = machine.name
-            row.accessibilityValue = ["\(live) live", fault].compactMap(\.self).joined(separator: ", ")
+            row.accessibilityValue = said.joined(separator: ", ")
             list.insertArrangedSubview(row, at: at)
             at += 1
-            if asked?.machineId == machine.machineId {
+            if asked?.machineId == id {
                 list.insertArrangedSubview(askView, at: at)
                 at += 1
             }
+            if let unlock = unlockView, unlock.machineId == id {
+                list.insertArrangedSubview(unlock, at: at)
+                at += 1
+            }
+            if let failed = updateFault(machine, update: update) {
+                let line = faults[id] ?? MachineFaultLine()
+                faults[id] = line
+                line.show(failed.reason, again: failed.again)
+                list.insertArrangedSubview(line, at: at)
+                at += 1
+            } else if let line = faults.removeValue(forKey: id) {
+                line.removeFromSuperview()
+            }
         }
+        #if DEBUG
+        let shown = list.arrangedSubviews.compactMap { view -> String? in
+            if let unlock = view as? UnlockKeychainView { return "unlock:\(unlock.machineId)" }
+            if let line = view as? MachineFaultLine { return "fault:\(faults.first { $0.value === line }?.key ?? "")" }
+            return nil
+        }
+        if !shown.isEmpty, shown != probeShown {
+            UnlockKeychainView.probe("rows under: \(shown.joined(separator: ", ")), presented over the window: \(window?.rootViewController?.presentedViewController.map { String(describing: type(of: $0)) } ?? "none")")
+        }
+        probeShown = shown
+        #endif
+        onChange()
+    }
+
+    #if DEBUG
+    private var probeShown: [String] = []
+    #endif
+
+    /// What did not go on a machine's update, under its row (MachinesList.svelte
+    /// `updateFault`): the hub's refusal of an install asked here, else a
+    /// failed update in the Update cell's words with the machine's own, and
+    /// Try again where a retry is the person's to make.
+    private func updateFault(_ machine: MachineRow, update: UpdateCell?) -> (reason: String, again: (() -> Void)?)? {
+        let id = machine.machineId
+        let install = { [hub] in hub.installUpdate(machineId: id) }
+        if let refused = hub.updateRefused[id] { return (refused, install) }
+        guard let update, update.fail else { return nil }
+        let reason = UpdateRows.error(machine).map { "\(update.text) \($0)" } ?? update.text
+        return (reason, update.buttons.contains(.retry) ? install : nil)
+    }
+
+    /// The keychain unlock standing under a machine's row (UnlockKeychain.svelte), if one is open.
+    private var unlockView: UnlockKeychainView?
+
+    /// Opens the unlock under `machineId`'s row, from its form.
+    private func unlock(_ machineId: String) {
+        guard let machine = hub.fleet.machines.first(where: { $0.machineId == machineId }) else { return }
+        putAwayUnlock()
+        let view = UnlockKeychainView(hub: hub, machine: machine)
+        view.onClose = { [weak self] in self?.putAwayUnlock() }
+        view.onResize = { [weak self] in self?.onChange() }
+        unlockView = view
+        #if DEBUG
+        UnlockKeychainView.probe("unlock \(machineId) opened under its row")
+        #endif
+        refresh()
+    }
+
+    private func putAwayUnlock() {
+        unlockView?.removeFromSuperview()
+        unlockView = nil
         onChange()
     }
 
@@ -435,6 +465,24 @@ final class MachinesListView: UIView {
 
     /// Remove machine…, as `machineId`'s menu item asks it.
     func probeAskRemove(_ machineId: String) { menus[machineId]?.probeAskRemove() }
+    /// Unlock keychain…, as `machineId`'s menu item opens it.
+    func probeUnlock(_ machineId: String) { menus[machineId]?.probeUnlock() }
+
+    /// What stands in the lines right under `machineId`'s row, up to the next row.
+    func probeUnder(_ machineId: String) -> [String] {
+        guard let row = rows[machineId], let at = list.arrangedSubviews.firstIndex(of: row) else { return ["no row"] }
+        return list.arrangedSubviews[(at + 1)...].prefix { !($0 is MachinesListRow) }.map { view in
+            switch view {
+            case let unlock as UnlockKeychainView: "unlock(\(unlock.probeState))"
+            case let line as MachineFaultLine: "fault(\(line.probeState))"
+            case let ask as AskHere: "ask(\(ask.probeState))"
+            default: String(describing: type(of: view))
+            }
+        }
+    }
+
+    /// The unlock standing in this list, if any.
+    var probeUnlockView: UnlockKeychainView? { unlockView }
     var probeRunning: Bool { askView.running }
 
     /// Whether `machineId` has a row in this list.
@@ -447,6 +495,7 @@ final class MachinesListView: UIView {
         if let host {
             let menu = MachineMenu(machineId: machineId, host: host)
             menu.ask = { [weak self] request in self?.ask(request, about: machineId) }
+            menu.unlock = { [weak self] in self?.unlock(machineId) }
             menus[machineId] = menu
             menu.attach(to: row)
         }
@@ -507,24 +556,72 @@ private final class MachinesFootRow: TapControl {
     }
 }
 
+/// What did not go on a machine's update, under its row (RowFault.svelte in
+/// MachinesList.svelte `.machine-fault`): the reason in the fail status's
+/// meta ink from where the row's name starts (its padding, its 16pt glyph
+/// and gap), and Try again beside it when there is a way on, wrapping under
+/// it when narrow.
+final class MachineFaultLine: UIStackView {
+    private let reason = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
+    private var again: UIButton?
+    private var onAgain: (() -> Void)?
+
+    init() {
+        super.init(frame: .zero)
+        axis = .vertical
+        alignment = .leading
+        spacing = Space.space1
+        isLayoutMarginsRelativeArrangement = true
+        directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space1, leading: Space.space2 * 2 + 16, bottom: Space.space1, trailing: Space.space2)
+        reason.wrap = .pretty
+        reason.accessibilityTraits = .staticText
+        addArrangedSubview(reason)
+        accessibilityIdentifier = "machine-fault"
+    }
+
+    @available(*, unavailable)
+    required init(coder _: NSCoder) {
+        fatalError("MachineFaultLine is built in code")
+    }
+
+    func show(_ text: String, again way: (() -> Void)?) {
+        if reason.text != text {
+            reason.text = text
+            UIAccessibility.post(notification: .announcement, argument: text)
+        }
+        onAgain = way
+        if way == nil {
+            again?.removeFromSuperview()
+            again = nil
+        } else if again == nil {
+            let button = KitButton.make("Try again", glyph: .refresh, variant: .ghost, height: .xs) { [weak self] in self?.onAgain?() }
+            addArrangedSubview(button)
+            again = button
+        }
+    }
+
+    #if DEBUG
+    var probeState: String { "'\(reason.text ?? "")'\(again == nil ? "" : " + Try again")" }
+    #endif
+}
+
 // MARK: Menu
 
 /// A machine's menu (MachineMenu.svelte): what you can do to the box, not
 /// to a session. Reload sessions (it runs in the menu, and says there why
 /// it failed), New session here, Sign in an account… (a machine nobody is
 /// signed in on: accounts are signed in in Configure → Accounts, which this
-/// app has no screen for yet, so the web's opens), Unlock keychain… (a Mac whose
-/// credentials sit behind a locked keychain), Update this machine (the item
-/// spins while it runs and the menu stays up; a failure adds "Update
-/// failed", which opens the whole error), the two copies (the item's glyph
-/// turns to a check and holds it for `durHold` before the menu closes) and,
-/// while it is offline, Remove machine….
+/// app has no screen for yet, so the web's opens), Unlock keychain… (a Mac
+/// whose credentials sit behind a locked keychain; it opens under the row),
+/// Install update now (while a build waits; everything after the press, a
+/// failure included, is said on the machine's row), the two copies (the
+/// item's glyph turns to a check and holds it for `durHold` before the menu
+/// closes) and, while it is offline, Remove machine….
 @MainActor
 final class MachineMenu: NSObject, UIContextMenuInteractionDelegate {
     private let machineId: String
     private weak var host: MachinesHost?
     private var interaction: UIContextMenuInteraction?
-    private var updating = false
     private var reloading = false
     /// Why the last reload failed, said under its item until it is asked again.
     private var reloadFailed: String?
@@ -534,6 +631,8 @@ final class MachineMenu: NSObject, UIContextMenuInteractionDelegate {
     private var copied: String?
     /// Asks under this machine's row, in the list the menu stands in.
     var ask: (AskHere.Request) -> Void = { _ in }
+    /// Opens the keychain unlock under this machine's row.
+    var unlock: () -> Void = {}
 
     init(machineId: String, host: MachinesHost) {
         self.machineId = machineId
@@ -589,14 +688,9 @@ final class MachineMenu: NSObject, UIContextMenuInteractionDelegate {
         if MachineHealth.isMac(machine), machine.auth == .unreadableCredentials {
             first.append(UIAction(title: "Unlock keychain…", image: Glyph.key.image) { [weak self] _ in self?.unlock() })
         }
-        let update = UIAction(title: updating ? "Updating…" : "Update this machine", image: Glyph.download.image,
-                              attributes: updating ? [.keepsMenuPresented, .disabled] : .keepsMenuPresented) { [weak self] _ in
-            self?.runUpdate()
-        }
-        first.append(update)
-        if let failure = MachineUpdates.shared.failures[id] {
-            first.append(UIAction(title: "Update failed", image: Glyph.alert.image, attributes: .destructive) { [weak self] _ in
-                self?.showFailure(failure)
+        if UpdateRows.installableNow(machine) {
+            first.append(UIAction(title: "Install update now", image: Glyph.download.image) { _ in
+                host.hub.installUpdate(machineId: id)
             })
         }
         var sections = [UIMenu(options: .displayInline, children: first)]
@@ -698,32 +792,10 @@ final class MachineMenu: NSObject, UIContextMenuInteractionDelegate {
         }
     }
 
-    /// PendingSelect: the menu stays up while it runs and closes when it is done.
-    private func runUpdate() {
-        guard let machine, let hub = host?.hub, !updating else { return }
-        updating = true
-        refreshMenu()
-        Task { @MainActor [weak self] in
-            do {
-                try await MachineUpdates.shared.update(machine, hub: hub)
-                self?.updating = false
-                self?.interaction?.dismissMenu()
-            } catch {
-                self?.updating = false
-                self?.refreshMenu()
-            }
-        }
-    }
-
-    private func unlock() {
-        guard let machine, let host else { return }
-        host.dialogPresenter.present(UnlockKeychainController(hub: host.hub, machine: machine), animated: true)
-    }
-
-    private func showFailure(_ message: String) {
-        guard let machine, let host else { return }
-        host.dialogPresenter.present(ErrorDialogController(title: "Update failed on \(machine.name)", message: message), animated: true)
-    }
+    #if DEBUG
+    /// Unlock keychain…, as its item opens it.
+    func probeUnlock() { unlock() }
+    #endif
 
     /// Forgets a machine the fleet no longer has: only while it is offline,
     /// since a connected agent would register straight back. The question

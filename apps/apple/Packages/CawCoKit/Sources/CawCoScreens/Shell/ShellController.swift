@@ -331,9 +331,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         pushRoute = nil
         switch route {
         case let .session(id):
-            // An ask no session row stands behind (a memory proposal) opens as
-            // its own tab, its card answerable there; the read above holds the hub's asks.
-            guard id.hasPrefix(BoardRun.prefix) || hub.fleet.byId[id] != nil || hub.needs.blocked(id) else {
+            // An ask no session row stands behind (a memory proposal) opens
+            // where it was made (`PushNote.route`), else as its own tab, its
+            // card answerable there; the read above holds the hub's asks.
+            guard id.hasPrefix(BoardRun.prefix) || hub.fleet.byId[id] != nil || hub.needs.blocked(id)
+                || !hub.needs.madeIn(id).isEmpty else {
                 Self.pushLog.notice("route session \(id, privacy: .public) is not on the hub")
                 Toast.show("That session isn't on the hub any more.", in: view.window)
                 return
@@ -559,6 +561,10 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             askProbed = true
             AskProbe.start(shell: self, home: home)
         }
+        if ParityProbe.on, !parityProbed {
+            parityProbed = true
+            ParityProbe.start(shell: self, home: home)
+        }
         #endif
     }
 
@@ -566,6 +572,12 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private var shellProbe: Timer?
     private var actsProbed = false
     private var askProbed = false
+    private var parityProbed = false
+
+    /// The split's rail, the panes' screens, and whether the width is a phone's.
+    var probeRail: SidebarViewController { rail }
+    var probePanes: PaneHost { panes }
+    var probeCompact: Bool { compact }
 
     /// The machines card, as the bar's Machines button opens it.
     func probeOpenMachines() {
@@ -1289,12 +1301,36 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// A Needs you row goes to what is waiting, never to a place: its
     /// session's tab comes to the front, the composer already holding the
     /// parked ask, the transcript where it was left. A run is answered in its
-    /// run; a fleet-watch notice opens the session it is about.
+    /// run; a fleet-watch notice opens the session it is about. An ask opens
+    /// where it was made (NeedsCard.svelte `href`): the session that made it
+    /// (a curator run's proposal), else its own.
     private func openWaiting(_ item: HomeModel.NeedsItem) {
         switch item.kind {
-        case let .ask(ask): openSession(ask.instanceId)
+        case let .ask(ask): openSession(ask.originInstanceId ?? ask.instanceId)
         case let .run(run): openSession(run.rowId)
         case let .watch(notice): openSession(notice.instanceId)
+        }
+    }
+
+    /// An ask is answered where it was made (SessionPane.svelte `madeIn`): an
+    /// open tab on an ask no session stands behind, which a session made (a
+    /// memory curator run's proposal), moves to that session in place, whatever
+    /// opened it (a tap on an older push, a restored tab, Jump). Read on every
+    /// change of the tabs and of the hub's asks, so a tab restored before the
+    /// hub's asks were read moves once they are.
+    private func moveToOrigins() {
+        let moves = workspace.openIds.compactMap { id in hub.askOrigin(id).map { (from: id, to: $0) } }
+        guard !moves.isEmpty else { return }
+        // After this read: the move changes the tabs it observes.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            for move in moves where workspace.openIds.contains(move.from) {
+                #if DEBUG
+                Self.restoring.notice("probe alone \(move.from, privacy: .public): moves to \(move.to, privacy: .public)")
+                #endif
+                workspace.retarget(move.from, to: move.to)
+            }
+            rail.requestRefresh()
         }
     }
 
@@ -1310,6 +1346,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// the board, the wide screen lands when nothing is open.
     private func followWorkspace() {
         _ = workspace.version
+        moveToOrigins()
         guard isViewLoaded else { return }
         defer { hostTabs() }
         if compact {
@@ -1352,7 +1389,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private func landIfEmpty() {
         guard !compact, workspace.openIds.isEmpty, home.ready else { return }
         let ask = home.needs.lazy.compactMap { item -> String? in
-            if case let .ask(ask) = item.kind { return ask.instanceId }
+            if case let .ask(ask) = item.kind { return ask.originInstanceId ?? ask.instanceId }
             return nil
         }.first
         let latest = hub.fleet.rows.filter { $0.isLive && (home.delegates || $0.parentInstanceId == nil) }.max { hub.fleet.lastAt($0) < hub.fleet.lastAt($1) }?.id

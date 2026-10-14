@@ -64,8 +64,6 @@ final class UpdatesSectionController: ConfigSectionController {
     private var resetProblem: String?
     /// Auto-update on its way to the hub.
     private var autoSending: Bool?
-    /// Why the hub refused an install, by machine, kept on its row.
-    private var refusals: [String: String] = [:]
     /// Cancels asked for whose machine still reports `ready`.
     private var cancelling: Set<String> = []
     /// Landings drawn on this page, acknowledged once it has drawn them.
@@ -287,7 +285,7 @@ final class UpdatesSectionController: ConfigSectionController {
             // Asked and not yet moving: the row says so until the machine reports.
             let asking = commanded.contains(machine.machineId) && (cell.row == 11 || cell.row == 3)
             row.draw(machine, cell: cell, current: UpdateRows.isCurrent(machine), running: UpdateRows.running(machine),
-                     asking: asking, cancelling: cancelling.contains(machine.machineId), refusal: refusals[machine.machineId], first: index == 0)
+                     asking: asking, cancelling: cancelling.contains(machine.machineId), refusal: hub.updateRefused[machine.machineId], first: index == 0)
             row.wide = view.bounds.width >= 640
         }
     }
@@ -300,10 +298,6 @@ final class UpdatesSectionController: ConfigSectionController {
             cancelling.insert(id)
             hub.cancelUpdate(machineId: id)
             requestRefresh()
-        }
-        row.onError = { [weak self] in
-            guard let self, let machine = hub.fleet.machines.first(where: { $0.machineId == id }) else { return }
-            present(ErrorDialogController(title: "Update failed on \(machine.name)", message: UpdateRows.error(machine) ?? "The machine did not say why."), animated: true)
         }
         return row
     }
@@ -382,11 +376,7 @@ final class UpdatesSectionController: ConfigSectionController {
         let hosts = { (id: String) in self.hub.fleet.machines.first { $0.machineId == id }?.binaryUpdate?.hostsHub == true }
         // The hub's own machine last: its restart takes the hub with it.
         for id in ids.filter({ !hosts($0) }) + ids.filter(hosts) {
-            refusals[id] = nil
-            hub.installUpdate(machineId: id) { [weak self] said in
-                self?.refusals[id] = said
-                self?.requestRefresh()
-            }
+            hub.installUpdate(machineId: id)
         }
         requestRefresh()
     }
@@ -445,7 +435,6 @@ private final class Problem: UIStackView {
 private final class MachineUpdateRow: UIView {
     var onInstall: (() -> Void)?
     var onCancel: (() -> Void)?
-    var onError: (() -> Void)?
     var wide = true { didSet { if wide != oldValue { place() } } }
 
     private let os = GlyphView(.server, size: 16, tint: Palette.inkMuted)
@@ -483,7 +472,6 @@ private final class MachineUpdateRow: UIView {
         runningColumn.setContentHuggingPriority(.required, for: .horizontal)
         cell.onInstall = { [weak self] in self?.onInstall?() }
         cell.onCancel = { [weak self] in self?.onCancel?() }
-        cell.onError = { [weak self] in self?.onError?() }
         grid.translatesAutoresizingMaskIntoConstraints = false
         grid.isLayoutMarginsRelativeArrangement = true
         grid.directionalLayoutMargins = .init(top: Space.space2, leading: Space.space4, bottom: Space.space2, trailing: Space.space4)
@@ -543,18 +531,25 @@ private final class MachineUpdateRow: UIView {
         currentMark.isHidden = !current
         version.text = running
         version.accessibilityLabel = "Running \(running)"
-        cell.draw(model, name: machine.name, asking: asking, cancelling: cancelling, refusal: refusal)
+        cell.draw(model, name: machine.name, asking: asking, cancelling: cancelling, refusal: refusal,
+                  error: UpdateRows.error(machine) ?? "The machine did not say why.")
     }
 }
 
 /// One machine's Update cell (UpdateCell.svelte): the words `cell` gives,
 /// with their glyph or badge, a second line, and the buttons that go with
 /// them; while an ask is on its way, a spinner and what it waits for; a
-/// refusal, why, with Try again.
+/// refusal, why, with Try again. "Read the error" unfolds the machine's own
+/// words in a well under the cell, in place.
 private final class UpdateCellView: UIStackView {
     var onInstall: (() -> Void)?
     var onCancel: (() -> Void)?
-    var onError: (() -> Void)?
+
+    /// The machine's whole error, unfolded under the cell.
+    private var reading = false
+    private var said: KitPre?
+    private var error = ""
+    private var machineName = ""
 
     private let lead = UIStackView()
     private let glyph = GlyphView(.clock, size: 16, tint: Palette.inkStrong)
@@ -592,10 +587,12 @@ private final class UpdateCellView: UIStackView {
         fatalError("UpdateCellView is built in code")
     }
 
-    func draw(_ cell: UpdateCell, name: String, asking: Bool, cancelling: Bool, refusal: String?) {
-        if let drawn, drawn.0 == cell, drawn.1 == asking, drawn.2 == cancelling, drawn.3 == refusal { return }
+    func draw(_ cell: UpdateCell, name: String, asking: Bool, cancelling: Bool, refusal: String?, error: String) {
+        if let drawn, drawn.0 == cell, drawn.1 == asking, drawn.2 == cancelling, drawn.3 == refusal, self.error == error { return }
         let changed = drawn.map { $0.0.row != cell.row || $0.1 != asking || $0.2 != cancelling } ?? false
         drawn = (cell, asking, cancelling, refusal)
+        self.error = error
+        machineName = name
         let text: String
         var icon = cell.icon
         if asking {
@@ -625,7 +622,7 @@ private final class UpdateCellView: UIStackView {
             for button in cell.buttons {
                 let made = switch button {
                 case .retry: KitButton.make("Retry", variant: .ghost, height: .xs) { [weak self] in self?.onInstall?() }
-                case .error: KitButton.make("Read the error", variant: .ghost, height: .xs) { [weak self] in self?.onError?() }
+                case .error: errorButton()
                 case .cancel: KitButton.make("Cancel", variant: .ghost, height: .xs) { [weak self] in self?.onCancel?() }
                 case .install: KitButton.make("Install now", variant: .outline, height: .xs) { [weak self] in self?.onInstall?() }
                 }
@@ -640,6 +637,7 @@ private final class UpdateCellView: UIStackView {
         buttons.isHidden = buttons.arrangedSubviews.count == 1
         refusalLine.text = refusal
         refusalLine.isHidden = refusal == nil
+        showError(cell.buttons.contains(.error) && !asking && !cancelling)
         // A change of row cross-fades in from the pop scale; nothing around it moves.
         guard changed, !UIAccessibility.isReduceMotionEnabled else { return }
         lead.alpha = 0
@@ -648,6 +646,48 @@ private final class UpdateCellView: UIStackView {
             self.lead.alpha = 1
             self.lead.transform = .identity
         }.startAnimation()
+    }
+
+    /// "Read the error" / "Hide the error": the well under the cell, unfolding in place.
+    private func errorButton() -> UIButton {
+        let button = KitButton.make(reading ? "Hide the error" : "Read the error", variant: .ghost, height: .xs) { [weak self] in
+            guard let self, let last = drawn else { return }
+            reading.toggle()
+            let shown = reading
+            drawn = nil
+            draw(last.0, name: machineName, asking: last.1, cancelling: last.2, refusal: last.3, error: error)
+            if UIAccessibility.isReduceMotionEnabled { return }
+            said?.alpha = shown ? 0 : 1
+            Motion.easeOut.animator(shown ? Motion.durPanel : Motion.durExit) {
+                self.said?.alpha = shown ? 1 : 0
+                self.superview?.layoutIfNeeded()
+            }.startAnimation()
+        }
+        button.accessibilityValue = reading ? "Expanded" : "Collapsed"
+        return button
+    }
+
+    /// The machine's own words in a well (UpdateCell.svelte `.said`): `space-2`
+    /// in, at most 160pt tall and scrolling past it, selectable.
+    private func showError(_ allowed: Bool) {
+        if !allowed { reading = false }
+        guard reading else {
+            said?.isHidden = true
+            return
+        }
+        if let said, said.text == error {
+            said.isHidden = false
+            return
+        }
+        said?.removeFromSuperview()
+        let well = KitPre(error, fill: Palette.surfaceWell, border: Palette.borderWell, radius: Radius.radiusXs,
+                          inset: NSDirectionalEdgeInsets(top: Space.space2, leading: Space.space2, bottom: Space.space2, trailing: Space.space2),
+                          leading: 1.55, maxHeight: 160)
+        well.accessibilityIdentifier = "updates.error"
+        // Under the cell's words and buttons, above a refusal (UpdateCell.svelte's order).
+        insertArrangedSubview(well, at: arrangedSubviews.firstIndex(of: refusalLine) ?? arrangedSubviews.count)
+        setCustomSpacing(Space.space2, after: buttons)
+        said = well
     }
 }
 

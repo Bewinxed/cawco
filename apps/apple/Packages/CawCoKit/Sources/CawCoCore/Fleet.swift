@@ -561,6 +561,15 @@ public struct ParkedAsk: Sendable {
     /// names it. An ask no session row stands behind (a project's memory
     /// proposal, hub memory.ts) has only this; its machine is "hub".
     public let machineId: String
+    /// An ask a project's Caw made (his question, a project setting, a memory
+    /// proposal he asked about): the thread it was made in, where the web
+    /// draws and answers it. The app has no thread screen yet, so such an
+    /// ask parked under its own id stays its card alone (`HubConnection.askAlone`).
+    public let threadId: String?
+    /// The session whose conversation made this ask, when it is parked under
+    /// an id of its own (a memory curator run's proposal on machine "hub"):
+    /// that session's pane draws and answers it (SessionPane.svelte `parked`).
+    public let originInstanceId: String?
 
     init(_ frame: AskFrame, routedTo: String?, machineId: String) {
         instanceId = frame.instanceId
@@ -569,6 +578,8 @@ public struct ParkedAsk: Sendable {
         input = frame.input
         presentation = frame.presentation
         raisedAt = frame.raisedAt
+        threadId = frame.threadId
+        originInstanceId = frame.originInstanceId
         self.routedTo = routedTo
         self.machineId = machineId
     }
@@ -682,6 +693,16 @@ public final class NeedsYouStore {
 
     public func blocked(_ instanceId: String) -> Bool {
         !(parked[instanceId] ?? []).isEmpty
+    }
+
+    /// The asks parked elsewhere that `sessionId`'s conversation made (a
+    /// memory curator run's proposal, parked under its own id on machine
+    /// "hub"), oldest first: its pane draws them after its own, each answered
+    /// on the machine its envelope named.
+    public func madeIn(_ sessionId: String) -> [ParkedAsk] {
+        parked.values.joined()
+            .filter { $0.originInstanceId == sessionId && $0.instanceId != sessionId }
+            .sorted { ($0.raisedAt ?? .infinity, $0.requestId) < ($1.raisedAt ?? .infinity, $1.requestId) }
     }
 
     public enum Answer: Sendable {
