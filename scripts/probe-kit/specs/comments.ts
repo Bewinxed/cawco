@@ -45,6 +45,19 @@
  * c. Delete, asked in the card itself: the pin leaves the doc and the page,
  *    its card closes, the other pins keep their numbers; the app's
  *    `cawco:delete` on a gone pin answers the refusal.
+ *
+ * And the owner's report (2026-10-14: scrolled down, a tap on a subagent
+ * card scrolled the page smoothly to the top and put the pin on the top
+ * card): a page of cards all written by one line of markup (one file:line),
+ * scrolled by the window, and one scrolled by an inner container (a
+ * transcript under a header):
+ * d. Scrolled to the middle, the hover outline over a card there is the
+ *    card's box (±1px); a tap pins it, its card opens and a reply is kept,
+ *    and through all of it the scroller's offset never moves from where it
+ *    stood; the pin's anchor names that card, and its disc stands at the
+ *    tapped point on it (±2px), after 200px more scroll, and after a reload
+ *    scrolled back to the same offset. In the container, the disc is not
+ *    drawn while the container has scrolled the card under its edge.
  */
 import { join } from "node:path";
 import type { Frame } from "playwright-core";
@@ -282,6 +295,8 @@ const run = async (kit: Kit) => {
   await anchorChecks(on, frame, id, one);
   await tapAndDeleteChecks(on, frame);
   await frameChecks(on);
+  await scrollChecks(on, "window");
+  await scrollChecks(on, "container");
   await cutoverCheck(kit);
   kit.check(
     "the pages said no error",
@@ -1289,6 +1304,295 @@ const tapAndDeleteChecks = async (on: On, frame: Frame) => {
       kept.length === Object.keys(after).length &&
       kept.every(([id, number]) => after[id] === number),
     `asked ${asked}; blocking ${blocking}; before ${JSON.stringify(before)}; after ${JSON.stringify(after)}; disc ${disc}; card ${cardLeft}`
+  );
+};
+
+type Scroller = "window" | "container";
+/** The cards on the owner's page: one per subagent, every one written by the same line of markup. */
+const CARDS = 16;
+/** The header over the transcript, px: what the container's top edge stands under. */
+const HEADER = 48;
+/** Where the probe taps a card, as fractions of its box. */
+const TAP = { x: 0.3, y: 0.5 } as const;
+
+/**
+ * A transcript of subagent cards, each with the one `data-insp-path` its
+ * component's line gives it and no id, as a dev server's Svelte list is:
+ * scrolled by the window, or by a container under a header.
+ */
+const cardsPage = (scroller: Scroller) => `<!doctype html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { margin: 0; font: 16px/1.5 system-ui; }
+  header { height: ${HEADER}px; }
+  .card { box-sizing: border-box; height: 96px; margin: 0 24px 24px; padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
+  ${scroller === "container" ? `html, body { height: 100%; overflow: hidden; } .transcript { position: absolute; top: ${HEADER}px; right: 0; bottom: 0; left: 0; overflow: auto; }` : ""}
+</style></head>
+<body data-scroller="${scroller}"><header>Session</header><main class="transcript">
+${Array.from(
+  { length: CARDS },
+  (_, i) =>
+    `<article class="card" data-n="${i + 1}" data-insp-path="src/AgentCard.svelte:7:3">Subagent ${i + 1} ran the probe.</article>`
+).join("\n")}
+</main></body></html>`;
+
+/** The page's scroll offset, by its scroller (the window's or the container's), and the window's. */
+const offsetsIn = (frame: Frame) =>
+  frame.evaluate(() => {
+    const el =
+      document.body.dataset.scroller === "container"
+        ? document.querySelector(".transcript")
+        : document.scrollingElement;
+    return { top: el?.scrollTop ?? Number.NaN, window: scrollY };
+  });
+/** Scrolls the page's scroller to `top`. */
+const scrollPage = (frame: Frame, top: number) =>
+  frame.evaluate((to) => {
+    const el =
+      document.body.dataset.scroller === "container"
+        ? document.querySelector(".transcript")
+        : document.scrollingElement;
+    if (el) {
+      el.scrollTop = to;
+    }
+  }, top);
+
+/**
+ * (d) The owner's scenario: scrolled to the middle of a list of cards one
+ * line of markup writes, a tap pins the card under it without moving the
+ * page, and the pin stays on that card as it scrolls and after a reload.
+ */
+const scrollChecks = async (on: On, scroller: Scroller) => {
+  const made = await on.call(CREATE, {
+    kind: "page",
+    name: `cards-${scroller}`,
+    html: cardsPage(scroller),
+  });
+  if (!made.match(ANSWERED_ID)) {
+    on.kit.check(
+      `d (${scroller}): the page is made`,
+      false,
+      made.slice(0, 300)
+    );
+    return;
+  }
+  const loaded = async (not?: Frame) =>
+    (await until(
+      `the ${scroller} cards in the pane`,
+      async () => {
+        const frame = await pageFrame(on);
+        if (frame === not) {
+          return null;
+        }
+        const ready = await frame
+          .evaluate(
+            ([kind, cards]) =>
+              document.body?.dataset.scroller === kind &&
+              document.querySelectorAll(".card").length === cards &&
+              "cawcoArtifact" in window,
+            [scroller, CARDS] as const
+          )
+          .catch(() => false);
+        return ready ? frame : null;
+      },
+      Boolean,
+      60_000
+    )) as Frame;
+  const frame = await loaded();
+  await settle(on.page, 400);
+
+  // The middle of the scroll, and the card standing nearest the middle of the view.
+  const middle = await frame.evaluate(() => {
+    const el =
+      document.body.dataset.scroller === "container"
+        ? document.querySelector(".transcript")
+        : document.scrollingElement;
+    return el ? Math.round((el.scrollHeight - el.clientHeight) / 2) : 0;
+  });
+  await scrollPage(frame, middle);
+  await settle(on.page, 200);
+  const start = await offsetsIn(frame);
+  const n = await frame.evaluate(() => {
+    const mid = innerHeight / 2;
+    const away = (one: Element) => {
+      const r = one.getBoundingClientRect();
+      return Math.abs(r.top + r.height / 2 - mid);
+    };
+    const cards = [...document.querySelectorAll<HTMLElement>(".card")];
+    const nearest = cards.reduce((a, b) => (away(b) < away(a) ? b : a));
+    return Number(nearest.dataset.n);
+  });
+  const selector = `.card[data-n="${n}"]`;
+  // How far the scroller moved from `start`, at any frame or scroll event, from here on.
+  await frame.evaluate(
+    ([top, y]) => {
+      const el =
+        document.body.dataset.scroller === "container"
+          ? document.querySelector(".transcript")
+          : document.scrollingElement;
+      const w = window as unknown as { __moved: number; __watching: boolean };
+      w.__moved = 0;
+      w.__watching = true;
+      const look = () => {
+        w.__moved = Math.max(
+          w.__moved,
+          Math.abs((el?.scrollTop ?? top) - top),
+          Math.abs(scrollY - y)
+        );
+      };
+      const tick = () => {
+        look();
+        if (w.__watching) {
+          requestAnimationFrame(tick);
+        }
+      };
+      tick();
+      addEventListener("scroll", look, { capture: true, passive: true });
+    },
+    [start.top, start.window] as const
+  );
+
+  const comment = on.page.locator(
+    ".preview-pane button[aria-keyshortcuts='C']"
+  );
+  await comment.click();
+  await pageInComment(frame, true);
+  const pane = await on.page.locator(FRAME).boundingBox();
+  const box = await boxIn(frame, selector);
+  if (!pane) {
+    on.kit.check(`d (${scroller}): the pane's frame has a box`, false, "none");
+    return;
+  }
+  const tap = { x: box.x + box.w * TAP.x, y: box.y + box.h * TAP.y };
+  await on.page.mouse.move(pane.x + tap.x - 20, pane.y + tap.y - 20);
+  await on.page.mouse.move(pane.x + tap.x, pane.y + tap.y, { steps: 4 });
+  await settle(on.page, 200);
+  const hovered = await outlineOf(frame);
+  const held = Object.keys((await docOf(frame)).pins).length;
+  await on.page.mouse.click(pane.x + tap.x, pane.y + tap.y);
+  const pins = await until(
+    "the card's pin in the doc",
+    async () => (await docOf(frame)).pins,
+    (all) => Object.keys(all).length > held,
+    10_000
+  ).catch(() => ({}) as Pins);
+  const pin = Object.values(pins).sort(
+    (a, b) => Number(b.number) - Number(a.number)
+  )[0] as
+    | { anchor: { selector: string }; id: string; number: number }
+    | undefined;
+  const card = await focusedCard(on, pin?.number);
+  const pinCard = on.page.locator(`.pin-card[data-pin-card="${pin?.number}"]`);
+  await pinCard.getByRole("textbox").fill("This card, not the first.");
+  await pinCard.getByRole("button", { name: "Reply" }).click();
+  const kept = await until(
+    "the reply on the card's pin",
+    async () =>
+      (
+        (await docOf(frame)).pins[pin?.id ?? ""] as
+          | { thread?: unknown[] }
+          | undefined
+      )?.thread?.length ?? 0,
+    (count) => count === 1,
+    5000
+  ).catch(() => 0);
+  // A smooth scroll the card's opening set off would land within this.
+  await settle(on.page, 900);
+  const opened = await outlineOf(frame);
+  const moved = await frame.evaluate(() => {
+    const w = window as unknown as { __moved: number; __watching: boolean };
+    w.__watching = false;
+    return w.__moved;
+  });
+  const end = await offsetsIn(frame);
+  const now = await boxIn(frame, selector);
+  on.kit.check(
+    `d (${scroller}): scrolled to the middle, the hover outline over card ${n} is its box, a tap pins it, its card opens focused and a reply is kept, and the ${scroller}'s offset never moves (0px) through it all; the outline is still the card's box`,
+    near(hovered, box, 1) &&
+      !!pin &&
+      card.shown &&
+      card.focused &&
+      kept === 1 &&
+      moved === 0 &&
+      end.top === start.top &&
+      end.window === start.window &&
+      near(opened, now, 1),
+    `card ${n} ${JSON.stringify(box)}; outline ${JSON.stringify(hovered)} → ${JSON.stringify(opened)}; pin ${JSON.stringify(pin?.anchor)}; card ${JSON.stringify(card)}; reply ${kept}; offset ${JSON.stringify(start)} → ${JSON.stringify(end)}, moved at most ${moved}px`
+  );
+  await on.page.keyboard.press("Escape");
+  await on.page.keyboard.press("Escape");
+  if (!pin) {
+    return;
+  }
+
+  /** Where the disc stands against where the tap was on card `n`, as the card stands in `at` now. */
+  const standing = async (at: Frame) => {
+    const disc = await discAt(at, pin.number);
+    const r = await boxIn(at, selector);
+    const want = { x: r.x + r.w * TAP.x, y: r.y + r.h * TAP.y };
+    return {
+      disc,
+      want,
+      on:
+        !!disc &&
+        Math.abs(disc.x - want.x) <= 2 &&
+        Math.abs(disc.y - want.y) <= 2,
+    };
+  };
+  const names = (at: Frame) =>
+    at.evaluate(
+      (s) => document.querySelector(s)?.getAttribute("data-n") ?? null,
+      pin.anchor.selector
+    );
+  const tapped = await standing(frame);
+  const named = await names(frame);
+  await scrollPage(frame, start.top + 200);
+  await settle(on.page, 300);
+  const further = await standing(frame);
+  on.kit.check(
+    `d (${scroller}): the pin's anchor names card ${n}; its disc stands at the tapped point on it (±2px), and still does after 200px more scroll`,
+    named === String(n) && tapped.on && further.on,
+    `anchor ${pin.anchor.selector} → card ${named}; disc ${JSON.stringify(tapped)}; after 200px ${JSON.stringify(further)}`
+  );
+
+  if (scroller === "container") {
+    // The tapped point scrolled up under the container's top edge, still inside the window.
+    const r = await boxIn(frame, selector);
+    await scrollPage(frame, start.top + 200 + r.y + r.h * TAP.y - HEADER / 2);
+    await settle(on.page, 300);
+    const under = await discAt(frame, pin.number);
+    await scrollPage(frame, start.top + 200);
+    await settle(on.page, 300);
+    const back = await standing(frame);
+    on.kit.check(
+      "d (container): while the container has scrolled the tapped point under its top edge the disc is not drawn, and scrolled back it stands on the card again",
+      under === null && back.on,
+      `under the edge ${JSON.stringify(under)}; back ${JSON.stringify(back)}`
+    );
+  }
+
+  await on.page.locator('.preview-pane button[aria-label="Reload"]').click();
+  const reloaded = await loaded(frame);
+  await scrollPage(reloaded, start.top + 200);
+  const after = await until(
+    "the pin on the card after the reload",
+    () => standing(reloaded),
+    (seen) => seen.on,
+    10_000
+  ).catch(() => standing(reloaded));
+  const anchored = ((await docOf(reloaded)).pins[pin.id] ?? {}) as {
+    anchor?: { selector?: string };
+  };
+  const stillNames = anchored.anchor?.selector
+    ? await reloaded.evaluate(
+        (s) => document.querySelector(s)?.getAttribute("data-n") ?? null,
+        anchored.anchor.selector
+      )
+    : null;
+  on.kit.check(
+    `d (${scroller}): after a reload scrolled back to the same offset, the pin's anchor still names card ${n} and its disc stands at the tapped point on it (±2px)`,
+    after.on && stillNames === String(n),
+    `anchor ${anchored.anchor?.selector} → card ${stillNames}; ${JSON.stringify(after)}`
   );
 };
 

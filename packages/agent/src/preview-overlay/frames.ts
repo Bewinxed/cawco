@@ -100,32 +100,79 @@ export const rectOf = (el: Element): DOMRect => {
   return new DOMRect(x + dx, y + dy, width, height);
 };
 
+/** Displays whose box an `overflow` never clips to. */
+const UNCLIPPED = new Set(["inline", "contents", "none"]);
+
 /**
- * The part of the top viewport `el`'s frames show, where a mark on it may be
- * seen: each frame's viewport, mapped to the top one, intersected. Null for
- * the top document's own elements, which the whole page shows.
+ * The boxes in `el`'s own document's viewport that clip it: each ancestor's
+ * padding box whose `overflow` is not visible (a scroll container, a
+ * transcript, a pane; overflow hidden or clip), up to the first fixed one,
+ * which stands in the viewport, not in them. The root's overflow is the
+ * viewport's, and so is the body's while the root's is visible.
+ */
+const clipsIn = (el: Element): DOMRect[] => {
+  const doc = el.ownerDocument;
+  const view = doc.defaultView ?? window;
+  const root = doc.documentElement;
+  const clips = (of: CSSStyleDeclaration) =>
+    !UNCLIPPED.has(of.display) &&
+    (of.overflowX !== "visible" || of.overflowY !== "visible");
+  const bodyIsViewport = !clips(view.getComputedStyle(root));
+  const boxes: DOMRect[] = [];
+  let style = view.getComputedStyle(el);
+  for (
+    let up = el.parentElement;
+    up && up !== root && style.position !== "fixed";
+    up = up.parentElement
+  ) {
+    style = view.getComputedStyle(up);
+    if (!(up === doc.body && bodyIsViewport) && clips(style)) {
+      const r = up.getBoundingClientRect();
+      boxes.push(
+        new DOMRect(
+          r.left + up.clientLeft,
+          r.top + up.clientTop,
+          up.clientWidth,
+          up.clientHeight
+        )
+      );
+    }
+  }
+  return boxes;
+};
+
+/**
+ * The part of the top viewport where a mark on `el` may be seen: each
+ * frame's viewport and each box clipping it in its own document (an inner
+ * scroll container), mapped to the top one, intersected. Null for an element
+ * of the top document nothing clips, which the whole page shows.
  */
 export const clipOf = (el: Element): DOMRect | null => {
-  const chain = framesOf(el);
-  if (chain.length === 0) {
+  const boxes: DOMRect[] = [];
+  let dx = 0;
+  let dy = 0;
+  const moved = (box: DOMRect) =>
+    new DOMRect(box.x + dx, box.y + dy, box.width, box.height);
+  for (const frame of framesOf(el)) {
+    boxes.push(...clipsIn(frame).map(moved));
+    const box = contentBox(frame);
+    dx += box.x;
+    dy += box.y;
+    boxes.push(new DOMRect(dx, dy, box.w, box.h));
+  }
+  boxes.push(...clipsIn(el).map(moved));
+  if (boxes.length === 0) {
     return null;
   }
   let left = Number.NEGATIVE_INFINITY;
   let top = Number.NEGATIVE_INFINITY;
   let right = Number.POSITIVE_INFINITY;
   let bottom = Number.POSITIVE_INFINITY;
-  let dx = 0;
-  let dy = 0;
-  for (const frame of chain) {
-    const box = contentBox(frame);
-    const x = dx + box.x;
-    const y = dy + box.y;
-    left = Math.max(left, x);
-    top = Math.max(top, y);
-    right = Math.min(right, x + box.w);
-    bottom = Math.min(bottom, y + box.h);
-    dx = x;
-    dy = y;
+  for (const box of boxes) {
+    left = Math.max(left, box.left);
+    top = Math.max(top, box.top);
+    right = Math.min(right, box.right);
+    bottom = Math.min(bottom, box.bottom);
   }
   return new DOMRect(
     left,

@@ -135,9 +135,11 @@ const ink = startInk({
 });
 
 /*
- * A same-origin frame scrolled, resized, grew or navigated: the marks in it
- * stand where its elements are now, and the outline Comment mode drew over
- * one of them follows, once per frame.
+ * A same-origin frame scrolled, resized, grew or navigated, or a scroll
+ * container of the page's own (a transcript, a pane) scrolled: the marks in
+ * it stand where its elements are now, and the outline Comment mode drew
+ * over one of them follows, once per frame. The window's own scroll moves
+ * the marks with it: their layers are the page's.
  */
 let framesFrame = 0;
 function framesChanged() {
@@ -153,6 +155,15 @@ function framesChanged() {
   });
 }
 watchFrames(framesChanged);
+addEventListener(
+  "scroll",
+  (event) => {
+    if (event.target !== document) {
+      framesChanged();
+    }
+  },
+  { capture: true, passive: true }
+);
 // A frame inside, whose own overlay stood down, says when its history moved it in place.
 mark.frameChanged = framesChanged;
 
@@ -834,10 +845,10 @@ function locate(anchor: PageAnchor) {
     top: document,
     frame: frameIn,
     bySource: (within, file, line) =>
-      pageElements(within).find((el) => {
+      pageElements(within).filter((el) => {
         const own = ownSource(el);
         return own?.file === file && own.line === line;
-      }) ?? null,
+      }),
     bySelector: (within, selector) => {
       try {
         return within.querySelector(selector);

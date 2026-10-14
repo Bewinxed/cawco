@@ -10,7 +10,9 @@
  *
  * A pin on an element inside a same-origin frame (frames.ts) is drawn here
  * too, in the top document, at the element's box mapped through its frames;
- * while its frame has scrolled the point out of view, its disc is not drawn.
+ * so is one inside a scroll container of the page's own (a transcript),
+ * drawn again as it scrolls. While a frame or a container has scrolled the
+ * point out of view, its disc is not drawn.
  *
  * Every pin is placed again from its anchor whenever the page changes (core
  * `findAnchor`: source file:line, then selector, then text). A page's pin
@@ -31,7 +33,7 @@ import {
 import type { InkGroup } from "@cawco/core/ink";
 import type { Map as YMap } from "yjs";
 import { artifact } from "./artifact";
-import { clipOf, framesOf, rectOf } from "./frames";
+import { clipOf, rectOf } from "./frames";
 import { newId } from "./id";
 import { fitToPage } from "./ink";
 import type { InkChrome } from "./radial";
@@ -113,7 +115,7 @@ const pageBox = (el: Element): Box => {
   return { x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height };
 };
 
-/** Whether the page's point `at` lies where `el`'s frames show it; always, for the top document's own. */
+/** Whether the page's point `at` lies where `el`'s frames and scroll containers show it; always, where nothing clips it. */
 const showsAt = (el: Element | null, at: [number, number]): boolean => {
   const clip = el ? clipOf(el) : null;
   if (!clip) {
@@ -472,8 +474,8 @@ export function startPins(deps: PinsDeps): Pins {
         const behavior = matchMedia("(prefers-reduced-motion: reduce)").matches
           ? "auto"
           : "smooth";
-        if (at && !inView && el && framesOf(el).length > 0) {
-          // Inside a frame: the frame scrolls to it, and every frame and page round it.
+        if (at && !inView && el && clipOf(el)) {
+          // Inside a frame or a scroll container: each scrolls to it, and every one and the page round it.
           el.scrollIntoView({ block: "center", inline: "nearest", behavior });
         } else if (at && !inView) {
           scrollTo({ top: Math.max(0, at[1] - innerHeight / 3), behavior });
