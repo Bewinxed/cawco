@@ -171,7 +171,7 @@ enum CanvasProbe {
 
         // The rail stands clear of the top grab's band (44pt, then space2) and space3 in from the sides.
         let rail = await room.web?.probeRail()
-        railCheck(rail, over: "over the field", top: CanvasMeasure.grabHeight + Space.space2)
+        railCheck(rail, over: "over the field", top: CanvasMeasure.grabHeight + Space.space2, side: room.probeShoulder)
 
         // The grab: 40% of the column, then the column less the field, each on one spring.
         for (label, height, speed) in [("40% of the column", 0.0, -900.0), ("the column less the field", 5000.0, 900.0)] {
@@ -200,7 +200,7 @@ enum CanvasProbe {
         check("Dock stands the canvas's own view on the panel's page, its chip in the composer",
               docked && gap <= 1 && binding.canvas?.docked == true,
               "docked \(room.docked), the view against the panel's page \(f(gap, 2))pt off, chip \(composer.canvasChip != nil), note \(composer.probeCanvasNote ?? "none")")
-        railCheck(await room.web?.probeRail(), over: "docked", top: Space.space2)
+        railCheck(await room.web?.probeRail(), over: "docked", top: Space.space2, side: 0)
         room.web?.onUndock()
         let back = await until(15) { room.up && !room.moving && binding.canvas?.docked == false }
         await wait(1.0)
@@ -256,20 +256,24 @@ enum CanvasProbe {
         binding.onSend = send
     }
 
-    /// The rail's room in the page: standing at the top, `top` above it
-    /// (the hello's inset and `space2`) and `space3` either side; standing at
-    /// the foot (a narrow page under a coarse pointer, canvas.css) the top's
-    /// inset is not its to keep, and the sides are checked alone.
-    private static func railCheck(_ rail: (top: Double, bottom: Double, left: Double, right: Double)?, over place: String, top: Double) {
+    /// The rail's room in the page, its groups' boxes read through it: at
+    /// the top, `top` above it (the inset's top and `space2`) and `side` and
+    /// `space3` either side (the inset's side, the shape's shoulders), every
+    /// group inside the page's box; at the foot (a page under 640pt under a
+    /// coarse pointer, canvas.css), `space3` above the foot, the sides the same.
+    private static func railCheck(_ rail: (top: Double, bottom: Double, left: Double, right: Double, said: String)?, over place: String,
+                                  top: Double, side: Double) {
         guard let rail else { return check("\(place) the rail stands clear of the canvas's edges", false, "no rail in the page") }
         let atTop = rail.top < rail.bottom
-        let sides = abs(rail.left - Space.space3) <= 1 && abs(rail.right - Space.space3) <= 1
-        let detail = "rail at the \(atTop ? "top" : "foot"): top \(f(rail.top)), bottom \(f(rail.bottom)), left \(f(rail.left)), right \(f(rail.right))"
+        let room = side + Space.space3
+        let sides = abs(rail.left - room) <= 1 && abs(rail.right - room) <= 1
+        let detail = "rail at the \(atTop ? "top" : "foot"): top \(f(rail.top)), bottom \(f(rail.bottom)), left \(f(rail.left)), right \(f(rail.right)); shoulder \(f(side)); \(rail.said)"
         if atTop {
-            check("\(place) the rail stands \(f(top, 0))pt below the canvas's top and \(f(Space.space3, 0))pt in from its sides",
+            check("\(place) the rail stands \(f(top))pt below the canvas's top and \(f(room))pt in from its sides, inside the page",
                   abs(rail.top - top) <= 1 && sides, detail)
         } else {
-            check("\(place) the rail stands at the foot \(f(Space.space3, 0))pt in from the canvas's sides", sides, detail)
+            check("\(place) the rail stands at the foot, \(f(Space.space3))pt above it and \(f(room))pt in from its sides, inside the page",
+                  abs(rail.bottom - Space.space3) <= 1 && sides, detail)
         }
     }
 

@@ -196,13 +196,14 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
     /// This load's answer was refused by status: WebKit's own word for the cancel is not the reason.
     private var answerRefused = false
     /// Where the canvas stands, told to the page (`cawco:place`): the rail's Dock reads Undock while docked.
-    /// Docked, the page also hears its hello again: the inset its rail stands clear of is the panel's, 0.
     var docked = false {
-        didSet {
-            guard docked != oldValue else { return }
-            tellPlace()
-            if connected { hello() }
-        }
+        didSet { if docked != oldValue { tellPlace() } }
+    }
+    /// How far in the shape's sides stand from the page's box at its top
+    /// corners, over the field (the room sets it as the canvas's size moves);
+    /// told to the page in its inset when it moves.
+    var side = 0.0 {
+        didSet { if abs(side - oldValue) > 0.25 { tellPlace() } }
     }
     var onDock: () -> Void = {}
     var onUndock: () -> Void = {}
@@ -433,7 +434,12 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
             heard(state, error: body["error"] as? String)
         case "cawco:drawn":
             guard let count = (body["count"] as? NSNumber)?.intValue, count >= 0 else { break }
+            let first = drawn == nil
             drawn = count
+            // The page's scene is bound, so its own listeners stand: its place and inset
+            // are told again. The hello's came while the document was still interactive,
+            // before the page's module ran, and nothing heard it but the overlay.
+            if first { tellPlace() }
         case "cawco:ready":
             connected = true
             let waiters = readyWaiters.values
@@ -463,22 +469,31 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         linkError = error
     }
 
-    /// stage.svelte.ts `hello`: which artifact it is, where its doc is, its
-    /// theme, and the inset its rail stands clear of: over the field, the
-    /// top grab's band (the grabber in the middle, the corner handles at its
-    /// ends); docked in the panel, none.
+    /// What of the page's edges the app's chrome takes (host.tsx `takeInset`):
+    /// over the field, the top grab's band (the grabber in the middle, the
+    /// corner handles at its ends) and the shape's shoulders at its top
+    /// corners; docked in the panel, none.
+    private var inset: [String: Double] {
+        docked ? ["top": 0, "side": 0] : ["top": CanvasMeasure.grabHeight, "side": side]
+    }
+
+    /// stage.svelte.ts `hello`: which artifact it is, where its doc is, its theme, and its inset.
     private func hello() {
         deliver([
             "type": "cawco:hello",
             "artifact": ["id": page.id, "kind": "canvas", "name": page.name],
             "sync": page.sync,
             "theme": theme,
-            "inset": ["top": docked ? 0 : CanvasMeasure.grabHeight],
+            "inset": inset,
         ])
     }
 
+    /// Where it stands and the inset there, again whenever either moves.
     private func tellPlace() {
-        deliver(["type": "cawco:place", "docked": docked])
+        #if DEBUG
+        CanvasDebug.log.notice("cawco:place docked=\(self.docked) inset top=\(self.inset["top"] ?? -1) side=\(self.inset["side"] ?? -1)")
+        #endif
+        deliver(["type": "cawco:place", "docked": docked, "inset": inset])
     }
 
     /// Hands the page a message from its host, as the dashboard posts to its iframe.
@@ -671,22 +686,26 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
     /// Where the rail's groups stand in the page: the room above the topmost,
     /// below the lowest, left of the leftmost and right of the rightmost,
     /// page points.
-    func probeRail() async -> (top: Double, bottom: Double, left: Double, right: Double)? {
+    func probeRail() async -> (top: Double, bottom: Double, left: Double, right: Double, said: String)? {
         let web = web
         let said = await withCheckedContinuation { (done: CheckedContinuation<String?, Never>) in
             web.evaluateJavaScript("""
             (() => {
               const boxes = [...document.querySelectorAll(".rail")].map((el) => el.getBoundingClientRect()).filter((box) => box.width > 0);
               if (boxes.length === 0) return null;
+              const css = getComputedStyle(document.documentElement);
               return JSON.stringify({ top: Math.min(...boxes.map((box) => box.top)),
                 bottom: innerHeight - Math.max(...boxes.map((box) => box.bottom)),
-                left: Math.min(...boxes.map((box) => box.left)), right: innerWidth - Math.max(...boxes.map((box) => box.right)) });
+                left: Math.min(...boxes.map((box) => box.left)), right: innerWidth - Math.max(...boxes.map((box) => box.right)),
+                inset: `${css.getPropertyValue("--canvas-inset-top").trim()} ${css.getPropertyValue("--canvas-inset-side").trim()}`,
+                width: innerWidth });
             })()
             """) { value, _ in done.resume(returning: value as? String) }
         }
-        guard let said, let read = (try? JSONSerialization.jsonObject(with: Data(said.utf8))) as? [String: Double],
-              let top = read["top"], let bottom = read["bottom"], let left = read["left"], let right = read["right"] else { return nil }
-        return (top, bottom, left, right)
+        guard let said, let read = (try? JSONSerialization.jsonObject(with: Data(said.utf8))) as? [String: Any],
+              let top = read["top"] as? Double, let bottom = read["bottom"] as? Double,
+              let left = read["left"] as? Double, let right = read["right"] as? Double else { return nil }
+        return (top, bottom, left, right, "page \(read["width"] as? Double ?? .nan)pt wide, inset \(read["inset"] as? String ?? "?")")
     }
 
     /// The probe's gate on the page's sync socket: `open`, or `cut`.
@@ -1057,6 +1076,11 @@ final class CanvasRoom: NSObject {
         sizes.lift + sizes.height + 1
     }
 
+    /// How far in from the page's box the shape's sides stand at its top corners, for a shoulders' `taper`.
+    static func shoulder(_ taper: Double) -> Double {
+        max(0, taper - 1)
+    }
+
     /// Both sides standing `spread` past the pill's (grown.ts `wide`).
     private static func wide(_ spread: Double) -> Wide {
         Wide(left: spread, right: spread)
@@ -1085,6 +1109,9 @@ final class CanvasRoom: NSObject {
         leftCorner.frame = CGRect(x: left, y: top, width: size, height: size)
         rightCorner.frame = CGRect(x: right, y: top, width: size, height: size)
         CATransaction.commit()
+        // The page's rail stands inside the shoulders: at the top corners the
+        // shape's sides stand the taper in from its own, the page's box a point inside those.
+        web?.side = Self.shoulder(taper)
         grab.accessibilityValue = "\(Int((sizes.height / max(1, sizes.max) * 100).rounded())) percent of the room"
         let width = Int((sizes.width + 2 * sizes.spread).rounded())
         for corner in [leftCorner, rightCorner] { corner.accessibilityValue = "\(width) points wide, \(Int(sizes.height.rounded())) tall" }
@@ -1631,6 +1658,11 @@ final class CanvasRoom: NSObject {
     /// The canvas's box over the field in the window, and how far each side stands past the pill and may.
     var probeBox: CGRect { stage.convert(stage.bounds, to: nil) }
     var probeSpread: Double? { sizes?.spread }
+    /// How far in from the page's box the shape's sides stand at its top corners now, from its sizes.
+    var probeShoulder: Double {
+        guard let sizes else { return .nan }
+        return Self.shoulder(Recall.taper(width: sizes.width, extra: extra(sizes), spread: 1, rows: 1))
+    }
     var probeReach: Double? { sizes?.reach }
 
     var probeSpringRunning: Bool { spring.running }

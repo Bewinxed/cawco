@@ -1781,7 +1781,8 @@ const rectangleCheck = async (
           Math.abs(a.y + a.h - b.y - b.h)
         )
       : null;
-  await frame.locator(".excalidraw").first().press("Control+z");
+  // Excalidraw's undo is ⌘Z on a Mac and Ctrl+Z elsewhere (its CTRL_OR_CMD).
+  await frame.locator(".excalidraw").first().press("ControlOrMeta+z");
   await settle(on.page, 600);
   const undone = await sceneOf(frame);
   const doc = await docIds(frame);
