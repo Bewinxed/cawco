@@ -562,13 +562,22 @@
   /** Whether the bar shows them: on a session page. */
   const hosting = $derived(onSession && barLeaves.length > 0);
   /**
+   * The route's own failure, the one its +error page shows. `page.error`
+   * also carries an error one part of the page held in its boundary
+   * (SvelteKit 3 sets it from every boundary's catch), and that one changes
+   * nothing outside its part (region-held.ts).
+   */
+  const routeError = $derived(
+    page.error && !page.error.region ? page.error : null
+  );
+  /**
    * Whether the bar shows a page's own strip (bar-strip): a project's
    * views, where the crumb would only repeat the name its head says. On a
    * wide screen, the line the session's tabs are hosted by; the page's
    * data says so, so the server draws the bar without the crumb.
    */
   const stripHosted = $derived(
-    !(narrow || page.error) &&
+    !(narrow || routeError) &&
       (page.data as { barStrip?: boolean }).barStrip === true
   );
   /**
@@ -795,7 +804,7 @@
    */
   const crumb = $derived.by(() => {
     // A path nothing answers is not a section: the bar says what happened.
-    if (page.error) {
+    if (routeError) {
       return page.status === 404 ? "Not found" : "Error";
     }
     // The URL shown: a shallow move between conversations (workspace

@@ -80,6 +80,7 @@
     ToolNotFoundError,
   } from "@openuidev/lang-core";
   import { untrack } from "svelte";
+  import RegionHeld from "../../RegionHeld.svelte";
 
   let {
     response,
@@ -424,6 +425,8 @@
     <svelte:boundary
       onerror={(error, reset) => renderFailed(node.typeName, error, reset)}
     >
+      <!-- Its error is the component's, never the route's (region-held.ts). -->
+      <RegionHeld />
       <Comp props={node.props} {renderNode} statementId={node.statementId} />
       {#snippet failed()}
         <!-- A component that throws draws nothing; its error is reported. -->

@@ -1,4 +1,5 @@
 import type { ClientInit, HandleClientError } from "@sveltejs/kit/hooks";
+import { claimRegionDrop } from "#lib/cawco/region-held.js";
 import { version } from "$app/env";
 
 const WINDOW_MS = 60_000;
@@ -91,9 +92,12 @@ export const init: ClientInit = () => {
  * Every error SvelteKit catches: a load's, and (SvelteKit 3) every one a
  * `<svelte:boundary>` holds (RegionBoundary), which it hands here before the
  * boundary sees it (kit client.js, `transformError`). Logged whole, as
- * SvelteKit does not in a build, and sent to the hub.
+ * SvelteKit does not in a build, and sent to the hub. A boundary's is
+ * answered `region`, so `page.error` never reads as the route failing
+ * (region-held.ts).
  */
 export const handleError: HandleClientError = ({ error, event }) => {
   console.error("[cawco]", error);
   report(error, event.url.pathname);
+  return claimRegionDrop() ? { region: true } : undefined;
 };

@@ -15,11 +15,17 @@
  *    throws inside the composer's menu: the composer stands as its failure
  *    line and the error is reported to `/api/dashboard-errors`; the
  *    transcript, the sidebar and the tabs still stand, and a click on the
- *    other tab opens it.
+ *    other tab opens it. Nothing outside the composer reads the error as
+ *    the route's (region-held.ts): the bar is as it was before the fault,
+ *    its tab strip on the desk (tabs hosted in the bar), and on the tablet
+ *    (tabs in the group, the bar's crumb shown) its crumb naming the
+ *    session, never "Error".
+ * 3. The route's own error still reads as one: an unknown path's bar says
+ *    "Not found".
  */
 import type { Page, WebSocketRoute } from "playwright-core";
 import { MACHINE } from "../../../scratch-fleet";
-import { open, type Spec, settle } from "../../kit";
+import { open, type Spec, settle, type View } from "../../kit";
 
 const FIELD = 'textarea[aria-controls="composer-menu"]';
 const TWIN = "probe-twin";
@@ -109,6 +115,17 @@ const menuRows = () =>
       "",
   }));
 
+/** The bar as the engine has it: its crumb's words, and the tabs it hosts. */
+const barOf = () => ({
+  crumb:
+    document
+      .querySelector("header.top span.crumb")
+      ?.textContent?.replace(/\s+/g, " ")
+      .trim() ?? null,
+  tabs: document.querySelectorAll("header.top .slot-tabs [data-session-tab]")
+    .length,
+});
+
 /** Whether the page went to SvelteKit's error page: its words, and no composer field. */
 const fiveHundred = (field: string) =>
   document.body.innerText.includes("Internal Error") &&
@@ -151,8 +168,8 @@ const spec: Spec = {
       ctx: {},
     };
 
-    const openSession = async (fault: string | null) => {
-      const page = await kit.page("desk");
+    const openSession = async (view: View, fault: string | null) => {
+      const page = await kit.page(view);
       page.setDefaultTimeout(60_000);
       await page.context().addCookies([
         {
@@ -179,7 +196,7 @@ const spec: Spec = {
 
     // 1. Two commands by one name.
     {
-      const { page, seen } = await openSession(null);
+      const { page, seen } = await openSession("desk", null);
       await page.click(FIELD);
       await page.keyboard.type("/");
       // The menu, or the part that stopped drawing it: a failure is read
@@ -232,9 +249,12 @@ const spec: Spec = {
       await page.close();
     }
 
-    // 2. A render error inside the composer's menu.
-    {
-      const { page, seen } = await openSession("composer-menu");
+    // 2. A render error inside the composer's menu, where the bar hosts the
+    // tabs (desk) and where it shows its crumb (tablet).
+    for (const view of ["desk", "tablet"] as View[]) {
+      // biome-ignore lint/performance/noAwaitInLoops: one view at a time
+      const { page, seen } = await openSession(view, "composer-menu");
+      const barBefore = await page.evaluate(barOf);
       await page.click(FIELD);
       await page.keyboard.type("/");
       await page.waitForSelector('[data-region-failed="composer"]', {
@@ -267,8 +287,9 @@ const spec: Spec = {
         }),
         { first, second }
       );
+      const barAfter = await page.evaluate(barOf);
       kit.check(
-        "the composer stands as its failure line, and only the composer",
+        `the composer stands as its failure line, and only the composer (${view})`,
         JSON.stringify(after.failed) === JSON.stringify(["composer"]) &&
           after.field === 0 &&
           after.line.includes("The composer stopped after an error") &&
@@ -276,12 +297,23 @@ const spec: Spec = {
         JSON.stringify(after)
       );
       kit.check(
-        "the transcript, the sidebar and both tabs still stand, no 500",
+        `the transcript, the sidebar and both tabs still stand, no 500 (${view})`,
         after.transcript && after.sidebar > 0 && after.tabs && !after.error,
         JSON.stringify(after)
       );
       kit.check(
-        "the error is reported to /api/dashboard-errors once, as thrown, and logged whole, not swallowed",
+        view === "desk"
+          ? "the bar is as before the fault: its tab strip still shows both tabs, no crumb (desk)"
+          : "the bar is as before the fault: its crumb still names the session, never Error (tablet)",
+        JSON.stringify(barAfter) === JSON.stringify(barBefore) &&
+          (view === "desk"
+            ? barAfter.tabs === 2 && barAfter.crumb === null
+            : Boolean(barAfter.crumb) &&
+              !["Error", "Not found"].includes(barAfter.crumb ?? "")),
+        JSON.stringify({ before: barBefore, after: barAfter })
+      );
+      kit.check(
+        `the error is reported to /api/dashboard-errors once, as thrown, and logged whole, not swallowed (${view})`,
         seen.reports.length === 1 &&
           seen.reports[0].includes("cawco-debug-fault") &&
           seen.console.some((line) => line.includes("cawco-debug-fault")) &&
@@ -293,7 +325,25 @@ const spec: Spec = {
         .waitForURL(`**/session/${second}`, { timeout: 15_000 })
         .then(() => true)
         .catch(() => false);
-      kit.check("a click on the other tab opens it", moved, page.url());
+      kit.check(
+        `a click on the other tab opens it (${view})`,
+        moved,
+        page.url()
+      );
+      await page.close();
+    }
+
+    // 3. The route's own error still reads as one: a path nothing answers.
+    {
+      const page = await kit.page("tablet");
+      await open(page, `${base}/no-such-page`, "header.top span.crumb");
+      await settle(page, 600);
+      const bar = await page.evaluate(barOf);
+      kit.check(
+        "a route's own error still names itself in the bar (tablet, unknown path)",
+        bar.crumb === "Not found",
+        JSON.stringify(bar)
+      );
       await page.close();
     }
   },

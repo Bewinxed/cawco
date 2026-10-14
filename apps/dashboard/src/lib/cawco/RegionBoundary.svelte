@@ -5,7 +5,8 @@
    * thrown while it renders or runs its effects stops at this boundary, and
    * the part stands as one line saying so, with Try again to build it afresh.
    * Everything outside it keeps working; before this, a duplicate key in
-   * the `/` menu replaced the whole dashboard with a 500.
+   * the `/` menu replaced the whole dashboard with a 500. Nothing outside it
+   * reads the error as the route's: RegionHeld marks it held (region-held.ts).
    *
    * The error is never swallowed: SvelteKit 3 hands every error a boundary
    * holds to the client `handleError` first (kit client.js, `transformError`),
@@ -23,6 +24,7 @@
     AlertDescription,
   } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import RegionHeld from "./RegionHeld.svelte";
 
   let {
     region,
@@ -42,6 +44,7 @@
 </script>
 
 <svelte:boundary {onerror}>
+  <RegionHeld />
   {@render children()}
   {#snippet failed(
     _error,
