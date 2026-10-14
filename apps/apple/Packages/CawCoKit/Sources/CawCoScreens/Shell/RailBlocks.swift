@@ -173,7 +173,7 @@ final class SessionRailRow: RailRow, HoverSessionRow {
         age.text = nil
         age.setContentCompressionResistancePriority(.required, for: .horizontal)
         age.setContentHuggingPriority(.required, for: .horizontal)
-        mark.showsNestingChevron = false
+        mark.chevronWhileOpen = false
         mark.onToggle = { [weak self] in
             guard let self else { return }
             onToggle(self.id)
