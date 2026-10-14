@@ -262,7 +262,7 @@ const refuseGone = (reason: string): never => {
   // On stdout, as a line: the agent names a boundary that did not start by
   // what it heard (`ready` in boundary.ts).
   console.log(
-    `cawco: ${reason}, so the workspace's sandbox does not start and its boundary closes`
+    `cawco: ${reason}, so the workspace's boundary closes and no sandbox starts there`
   );
   process.exit(GONE_STATUS);
 };
@@ -762,17 +762,72 @@ for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
   });
 }
 
+let finishing: Promise<never> | undefined;
+
+/**
+ * This boundary's one way out, taken once whoever asks first: the sandbox
+ * killed with everything in it, its files gone, srt's proxies, bridges and
+ * mount points taken down, then the process exits with the sandbox's status,
+ * or with {@link GONE_STATUS} when the folder it holds is gone.
+ */
+const finish = (end: { status: number } | { gone: string }): Promise<never> => {
+  finishing ??= (async () => {
+    stopping = true;
+    current?.proc.kill("SIGKILL");
+    rmSync(placeFile, { force: true });
+    rmSync(guardedFile, { force: true });
+    await SandboxManager.reset();
+    if ("gone" in end) {
+      refuseGone(end.gone);
+    }
+    return process.exit("status" in end ? end.status : GONE_STATUS);
+  })();
+  return finishing;
+};
+
+/**
+ * Watches the folder this boundary holds, for its whole life: the moment it
+ * is gone ({@link goneReason}), the boundary closes ({@link finish}). The
+ * clone itself and its `.git` are watched, not the sandbox's binds, so this
+ * neither waits for the guard to see a bind go nor for the stopped sandbox's
+ * exit to be read: a clone deleted under a running sandbox, or renamed away,
+ * closes its boundary as the deletion lands (an inotify event, then srt's
+ * bounded teardown: its bridges are killed within 1.5s).
+ */
+const watchClone = (): void => {
+  const look = (): void => {
+    const gone = goneReason();
+    if (gone) {
+      finish({ gone }).catch((error: unknown) => {
+        console.error(
+          `cawco: the boundary could not close after ${gone}: ${error instanceof Error ? error.message : String(error)}`
+        );
+        process.exit(GONE_STATUS);
+      });
+    }
+  };
+  const lead = process.env.CAWCO_LEAD_PLACE === "1";
+  for (const dir of lead ? [clone] : [clone, join(clone, ".git")]) {
+    try {
+      // Every change in the folder or its `.git` is looked at: a look is
+      // three stats, and the folder going is one of them.
+      watch(dir, look).on("error", look);
+    } catch {
+      // Not there to watch: the look says why.
+      look();
+    }
+  }
+};
+watchClone();
+
 for (;;) {
   // Before every sandbox, the first and each one started again: a clone
   // deleted under a running sandbox drops its protected binds, and the
   // sandbox stopped for that never starts in its path again.
   const gone = goneReason();
   if (gone) {
-    rmSync(placeFile, { force: true });
-    rmSync(guardedFile, { force: true });
     // biome-ignore lint/performance/noAwaitInLoops: the boundary's last step
-    await SandboxManager.reset();
-    refuseGone(gone);
+    await finish({ gone });
   }
   const sandbox = await startSandbox();
   current = "proc" in sandbox ? sandbox : undefined;
@@ -783,10 +838,7 @@ for (;;) {
   const lost = current?.detached;
   SandboxManager.cleanupAfterCommand();
   if (stopping || !lost) {
-    rmSync(placeFile, { force: true });
-    rmSync(guardedFile, { force: true });
-    await SandboxManager.reset();
-    process.exit(status);
+    await finish({ status });
   }
   console.error(
     `cawco: ${lost} was changed on the host, which drops its protection inside the sandbox, so the sandbox was stopped with everything in it and starts again`

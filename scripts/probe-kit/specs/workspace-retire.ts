@@ -416,13 +416,15 @@ const huskPhase = async (
     // biome-ignore lint/performance/noAwaitInLoops: three clones, each under its running sandbox
     await rm(workspace.path, { recursive: true, force: true });
   }
-  // Each clone's protected binds went with it: the guard stops its sandbox,
-  // and the host finds no clone to start one in again.
+  // Each host watches its clone and its `.git` (boundary-host.ts
+  // `watchClone`): it closes as the deletion lands, after srt's teardown,
+  // whose slowest step is a bridge's SIGKILL at 1.5s. 15s is that bound
+  // with room for a loaded machine, and no other event is waited for.
   const left = await until(
     "the three boundaries closed",
     boundaries,
     (procs) => procs.length === 0,
-    60_000
+    15_000
   ).catch(boundaries);
   check(
     "(f) each clone deleted under its running sandbox: its boundary closes, and nothing is at any of the three paths",
