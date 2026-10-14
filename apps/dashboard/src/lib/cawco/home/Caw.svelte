@@ -526,8 +526,7 @@
   function fadeOut(layer: Layer) {
     layer.leaving = true;
     layer.rive?.pause();
-    layer.fade?.commitStyles();
-    layer.fade?.cancel();
+    endFade(layer.fade);
     const end = reducedMotion
       ? { opacity: 0 }
       : { opacity: 0, transform: `scale(${numberOf("--leave-scale")})` };
@@ -547,6 +546,24 @@
       .catch(() => {
         // Cancelled: the canvas left the page before its fade ended.
       });
+  }
+
+  /**
+   * Ends a fade that is giving way to his fade out. Where his canvas is
+   * drawn, its present values are written into the canvas's style first, so
+   * the fade out starts from where he is. `commitStyles()` throws
+   * InvalidStateError when "the animation's target element … is not being
+   * rendered" (MDN, Animation.commitStyles): a canvas off the page or in a
+   * subtree out of the layout, as a transcript's rows are while it renders
+   * again. There he is drawn nowhere, so there is nowhere to start from: the
+   * fade ends and the fade out runs from the canvas's own style to its end.
+   */
+  function endFade(fade: Animation | undefined) {
+    const target = (fade?.effect as KeyframeEffect | null | undefined)?.target;
+    if (target?.isConnected && target.checkVisibility()) {
+      fade?.commitStyles();
+    }
+    fade?.cancel();
   }
 
   function write(
