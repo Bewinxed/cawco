@@ -625,22 +625,24 @@ export const createCaw = ({
    */
   const yourWakes = new Map<string, string>();
   /**
-   * Each lead's turn under way, as far as his words go: `heard`, the threads
-   * whose wake of your words it read; `words`, what he said in plain text in
-   * it (main loop only); `replied`, the threads he answered with
-   * thread_reply. A turn that read your words and ends without answering
-   * their thread leaves what it said there, as his reply
-   * ({@link answerUnreplied}): you read only the thread, so nothing he says
-   * to you stays in his session alone.
+   * Each lead's turn under way, as far as his words go: `words`, what he
+   * said in plain text in it (main loop only); `heard`, by thread, where in
+   * `words` he stood when the turn read your newest words in it; `replied`,
+   * the threads he has answered with thread_reply since. A turn that read
+   * your words and ends without answering them leaves what it said after
+   * reading them in their thread, as his reply ({@link answerUnreplied}):
+   * you read only the thread, so nothing he says to you stays in his
+   * session alone.
    */
   const speech = new Map<
     string,
-    { heard: Set<string>; replied: Set<string>; words: string[] }
+    { heard: Map<string, number>; replied: Set<string>; words: string[] }
   >();
 
   /**
    * His turn read a send: one that starts the turn (`started` false) starts
-   * what it says over; one your words woke from `yours` owes that thread.
+   * what it says over; your words in a thread (`yours`), read even mid-turn,
+   * are owed an answer from here on, whatever answered that thread before.
    */
   const heardIn = (
     instanceId: string,
@@ -648,30 +650,31 @@ export const createCaw = ({
     yours: string | undefined
   ): void => {
     const now = (started && speech.get(instanceId)) || {
-      heard: new Set<string>(),
+      heard: new Map<string, number>(),
       replied: new Set<string>(),
       words: [],
     };
     if (yours) {
-      now.heard.add(yours);
+      now.heard.set(yours, now.words.length);
+      now.replied.delete(yours);
     }
     speech.set(instanceId, now);
   };
 
   /**
    * The turn under way ended: each thread whose your-words wake it read and
-   * that it did not answer with thread_reply gets what he said in it, as his
-   * message. A turn that said nothing in plain text leaves nothing.
+   * that it did not answer with thread_reply after reading it gets what he
+   * said since, as his message. Nothing said, nothing left.
    */
   const answerUnreplied = (instanceId: string): void => {
     const turn = speech.get(instanceId);
     speech.delete(instanceId);
-    const body = turn?.words.join("\n\n").trim();
-    if (!(turn && body)) {
+    if (!turn) {
       return;
     }
-    for (const threadId of turn.heard) {
-      if (turn.replied.has(threadId) || !db.thread(threadId)) {
+    for (const [threadId, from] of turn.heard) {
+      const body = turn.words.slice(from).join("\n\n").trim();
+      if (!body || turn.replied.has(threadId) || !db.thread(threadId)) {
         continue;
       }
       const added = db.addThreadMessage({ threadId, author: "caw", body });

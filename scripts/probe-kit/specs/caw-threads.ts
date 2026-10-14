@@ -37,7 +37,7 @@ import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, open, ROOT, type Spec } from "../kit";
+import { type Kit, type KitFleet, open, ROOT, type Spec } from "../kit";
 
 const CAW = "You are Caw";
 const REPLY = "mcp__cawco__thread_reply";
@@ -55,8 +55,8 @@ const SIM = {
   device: "iPhone 16 Pro",
 };
 const TRAILING_SLASH = /\/$/;
-const PLAIN = /PROBE-PLAIN-([A-Z]+)/;
-const SLOW_REPLY = /PROBE-REPLY-([A-Z]+)/;
+const PLAIN = /PROBE-PLAIN-([A-Z]+)/g;
+const SLOW_REPLY = /PROBE-REPLY-([A-Z]+)/g;
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const tool = (name: string, input: object, everyMs = 5): Reply => ({
@@ -95,7 +95,8 @@ const respond = (request: Seen): Reply => {
   }
   const event = request.last;
   const thread = THREAD_ID.exec(event)?.[1] ?? "";
-  const replying = SLOW_REPLY.exec(event)?.[1];
+  // The wake names its thread by its title first: your words come last.
+  const replying = [...event.matchAll(SLOW_REPLY)].at(-1)?.[1];
   if (replying) {
     if (made.has(`reply ${replying}`)) {
       return text("Sent.");
@@ -111,9 +112,18 @@ const respond = (request: Seen): Reply => {
     }
     return reply;
   }
-  const plain = PLAIN.exec(event)?.[1];
-  if (plain) {
-    return { everyMs: 800, words: ["Plain ", "answer ", plain] };
+  // Prompts queued behind a turn may be read as one: each is answered.
+  const plain = [...new Set([...event.matchAll(PLAIN)].map((m) => m[1]))];
+  if (plain.length > 0) {
+    return {
+      everyMs: 800,
+      words: plain.flatMap((tag, i) => [
+        i ? ". " : "",
+        "Plain ",
+        "answer ",
+        tag ?? "",
+      ]),
+    };
   }
   if (event.includes("PROBE-ASK")) {
     if (made.has("ask")) {
@@ -207,8 +217,63 @@ function appPath(): string {
   );
 }
 
+/** What a failed run leaves in its out folder: the mock's last asks, every thread's rows, the hub's log. */
+const evidence = async (kit: Kit, fleet: KitFleet): Promise<void> => {
+  await mkdir(kit.out, { recursive: true });
+  await writeFile(
+    join(kit.out, "seen.json"),
+    JSON.stringify(
+      fleet.seen.slice(-12).map((s) => ({
+        afterTool: s.afterTool,
+        last: s.last.slice(-400),
+        tools: s.toolNames.filter((n) => n.includes("cawco") || n === ASK),
+      })),
+      null,
+      2
+    )
+  );
+  await writeFile(
+    join(kit.out, "rows.json"),
+    JSON.stringify(
+      fleet.query(
+        "SELECT thread_id, author, body, note_title, answer, created_at FROM thread_messages ORDER BY created_at"
+      ),
+      null,
+      2
+    )
+  );
+  await writeFile(
+    join(kit.out, "sends.json"),
+    JSON.stringify(
+      {
+        sends: fleet.query(
+          "SELECT uuid, instance_id, state, reason, owed IS NOT NULL AS owed, accepted_at, substr(body, 1, 200) AS body FROM sent_messages ORDER BY accepted_at"
+        ),
+        turns: fleet.query("SELECT * FROM lead_turns"),
+        leads: fleet.query(
+          "SELECT id, status, turn_open_at, turn_ended_at FROM instances WHERE role = 'lead'"
+        ),
+      },
+      null,
+      2
+    )
+  );
+  await writeFile(join(kit.out, "sessiond.log"), await fleet.logs("sessiond"));
+  await writeFile(join(kit.out, "hub.log"), await fleet.logs("hub"));
+  await writeFile(join(kit.out, "agent.log"), await fleet.logs("agent"));
+};
+
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
+  try {
+    await steps(kit, fleet);
+  } catch (error) {
+    await evidence(kit, fleet).catch(() => undefined);
+    throw error;
+  }
+};
+
+const steps = async (kit: Kit, fleet: KitFleet) => {
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
@@ -263,6 +328,14 @@ const run = async (kit: Kit) => {
       Boolean,
       120_000
     );
+  /** His message that says `words`, among whatever else it says. */
+  const saidAmong = (words: string) =>
+    until(
+      `caw “…${words}…” in the thread`,
+      () => rows().find((r) => r.author === "caw" && r.body.includes(words)),
+      Boolean,
+      120_000
+    );
   const statusOf = async () =>
     (
       await fleet.api<{ id: string; status: string }[]>(
@@ -273,20 +346,31 @@ const run = async (kit: Kit) => {
   const statuses = async (during: Promise<unknown>): Promise<Set<string>> => {
     const seen = new Set<string>();
     let over = false;
-    during.finally(() => {
+    const ended = () => {
       over = true;
-    });
+    };
+    during.then(ended, ended);
     while (!over) {
       // biome-ignore lint/performance/noAwaitInLoops: one read at a time, in order
       const [now] = await Promise.all([statusOf(), Bun.sleep(150)]);
       seen.add(now ?? "none");
     }
+    // Its failure is the spec's.
+    await during;
     return seen;
   };
   const pending = () => fleet.api<Ask[]>("/api/pending");
   const dismissed = () =>
     rows().filter((r) => r.answer?.includes('"dismissed"')).length;
+  /**
+   * His turn over: the mock reads only a turn's opening words, so the next
+   * words go once the last turn has ended (words read mid-turn are the
+   * hub's to place, and are, but the mock cannot see them).
+   */
+  const idle = () =>
+    until("the thread ready", statusOf, (read) => read === "ready", 120_000);
   await said("caw", "PROBE-REPLY-HELLO done");
+  await idle();
   kit.check("Caw started and answered the first thread", true);
 
   // ── a. web: the thread's own composer ───────────────────────────────
@@ -312,6 +396,7 @@ const run = async (kit: Kit) => {
   );
 
   // ── a. app path: the socket send to his session ─────────────────────
+  await idle();
   const appUuid = await fleet.send(lead, "PROBE-REPLY-APP from the app");
   const appYou = await said("you", "PROBE-REPLY-APP from the app");
   const appSeen = await statuses(said("caw", "PROBE-REPLY-APP done"));
@@ -329,8 +414,10 @@ const run = async (kit: Kit) => {
   );
 
   // ── b. a turn that ends without thread_reply ────────────────────────
+  await idle();
   await fleet.send(lead, "PROBE-PLAIN-B from the app");
   const plainApp = await said("caw", "Plain answer B");
+  await idle();
   await fleet.api(`/api/projects/${project.id}/threads/${threadId}/messages`, {
     body: "PROBE-PLAIN-W from the web",
   });
@@ -341,6 +428,7 @@ const run = async (kit: Kit) => {
   );
 
   // ── c. his question, then your words beside it ──────────────────────
+  await idle();
   await fleet.api(`/api/projects/${project.id}/threads/${threadId}/messages`, {
     body: "PROBE-ASK which voice should we use",
   });
@@ -481,7 +569,7 @@ const run = async (kit: Kit) => {
     Boolean,
     60_000
   );
-  const cw = await said("caw", "Plain answer CW");
+  const cw = await saidAmong("Plain answer CW");
   kit.check(
     "c: answered, he reads what you wrote beside it, and his answer lands",
     Boolean(answeredRow && cw) && dismissed() === 0
@@ -489,7 +577,7 @@ const run = async (kit: Kit) => {
   if (existsSync(app)) {
     kit.check(
       "c app: what you wrote on the phone is read and answered in the thread",
-      Boolean(await said("caw", "Plain answer CI"))
+      Boolean(await saidAmong("Plain answer CI"))
     );
   }
 
