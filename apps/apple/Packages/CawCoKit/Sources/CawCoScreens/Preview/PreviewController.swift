@@ -962,17 +962,19 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         #endif
     }
 
-    /// A press outside the open card, anywhere in the window, closes it: the
-    /// house's outside-press rule (press-outside.ts, a `pointerdown` in the
-    /// capture phase), heard as the touch begins. Touches on the card are
-    /// its own, those in a layer the preview presented (the pins' sheet, the
-    /// picture's lightbox) are that layer's, and the page says its own
+    /// A tap outside the open card, anywhere in the window, closes it: the
+    /// house's outside-press rule (press-outside.ts), as iOS's own popovers
+    /// close on a tap outside them. Touches on the card are its own, those
+    /// in a layer the preview presented (the pins' sheet, the picture's
+    /// lightbox) are that layer's, and the page says its own
     /// (`cawco:press`), where a tap on a pin's disc opens that pin instead.
-    /// It only watches: it never recognizes, so the press reaches what it
-    /// lands on whole. A tap recognizer here competed with the head's
-    /// buttons for the same tap (a control's action and a single-tap
-    /// recognizer over it each take it, UIKit's rule picks one), so Done
-    /// could close the card and not end the mode.
+    /// It only watches, and closes once the tap has lifted and what it
+    /// landed on has taken it. Closing the card ends its editing and sends
+    /// the keyboard away, which moves what the keyboard had moved; a close
+    /// made while the finger was still down (as the touch began, or as a
+    /// tap recognizer's, ahead of the button's own touch end) left Done's
+    /// own action unrun (the Mac's probe, both ways: "dismissed by=outside"
+    /// and no "comment off" within 15s after it).
     private lazy var outsidePress: PressWatcher = {
         let watcher = PressWatcher(target: nil, action: nil)
         watcher.cancelsTouchesInView = false
@@ -1536,20 +1538,27 @@ extension PreviewController: UIGestureRecognizerDelegate {
     }
 }
 
-/// A press heard as it begins, and nothing more: it calls `pressed` for the
-/// first touch its delegate lets it hear, then fails at once, so it never
-/// recognizes, never delays or cancels a touch, and never stands in the way
-/// of a control's own action (UIKit gives a single tap over a button to the
-/// button or to a tap recognizer, not to both).
+/// A press heard as it lifts, and nothing more: it calls `pressed` when a
+/// touch its delegate let it hear ends, then fails, so it never recognizes,
+/// never delays or cancels a touch, and never stands in the way of a
+/// control's own action (UIKit gives a single tap over a button to the
+/// button or to a tap recognizer, not to both). A touch cancelled (taken by
+/// a scroll, the system) presses nothing. Recognizers hear a touch end
+/// before its view does: `pressed` runs its close on the next main turn.
 private final class PressWatcher: UIGestureRecognizer {
     var pressed: () -> Void = {}
 
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
-        super.touchesBegan(touches, with: event)
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesEnded(touches, with: event)
         if state == .possible {
             pressed()
             state = .failed
         }
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+        super.touchesCancelled(touches, with: event)
+        state = .failed
     }
 }
 
