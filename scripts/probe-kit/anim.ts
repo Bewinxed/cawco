@@ -39,6 +39,13 @@
  * a transition is running on that property the engine cancels it and starts
  * another (CSS Transitions), so the clock loses a run it had caught.
  *
+ * The page may replace a transition the clock caught on its own (a pointer's
+ * release restarting a hover colour's transition mid-catch): a CSS
+ * transition on the same element and property as one caught before it
+ * replaces that one (CSS Transitions, "cancel the running transition"), so
+ * the clock keeps the newer alone. The protocol's `animationCanceled` cannot
+ * tell: Blink sends it for every run the clock pauses as well.
+ *
  * chromedevtools.github.io/devtools-protocol/tot/Animation
  */
 import type { CDPSession, Page } from "playwright-core";
@@ -102,6 +109,28 @@ const runOf = (one: Described): Run => {
       (s?.endDelay ?? 0),
   };
 };
+
+/**
+ * Keeps a caught run on the clock; a CSS transition on an element and
+ * property one was caught on before takes that one's place (it replaced it).
+ */
+function keep(
+  kept: Run[],
+  transitions: Map<string, Run>,
+  one: Described,
+  run: Run
+): void {
+  const node = one.source?.backendNodeId;
+  if (run.type === "CSSTransition" && node !== undefined) {
+    const key = `${node}|${run.name}`;
+    const was = transitions.get(key);
+    if (was) {
+      kept.splice(kept.indexOf(was), 1);
+    }
+    transitions.set(key, run);
+  }
+  kept.push(run);
+}
 
 /** Where a held run's target lies: the page's own document, and inside the catch's `within`. */
 interface Place {
@@ -179,6 +208,8 @@ export class Clock {
     const from = this.started.length;
     let read = from;
     const kept: Run[] = [];
+    /** Each caught transition by its element and property: a newer one there replaced it. */
+    const transitions = new Map<string, Run>();
     const deadline = Date.now() + ms;
     try {
       await action();
@@ -193,7 +224,7 @@ export class Clock {
           // page drops it at once, and it never stands on the clock.
           // biome-ignore lint/performance/noAwaitInLoops: each run is placed in turn
           if ((await this.held.get(one.id))?.inside && run.end > 0) {
-            kept.push(run);
+            keep(kept, transitions, one, run);
           }
         }
         after += kept.length > 0 ? 1 : 0;
