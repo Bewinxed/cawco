@@ -21090,6 +21090,13 @@
           },
           "loops": {
             "type": "object"
+          },
+          "planned": {
+            "description": "How many steps the run has in total: a graph-origin run's step nodes,\nstart and end excluded. Null for a code-origin run, whose steps are only\nknown as each one starts.",
+            "type": [
+              "null",
+              "number"
+            ]
           }
         },
         "required": [
@@ -21103,6 +21110,7 @@
           "machineId",
           "parentRunId",
           "parentStepId",
+          "planned",
           "program",
           "rerunOfRunId",
           "result",
@@ -21264,11 +21272,19 @@
               },
               "loops": {
                 "type": "object"
+              },
+              "planned": {
+                "description": "How many steps the run has in total: a graph-origin run's step nodes,\nstart and end excluded. Null for a code-origin run, whose steps are only\nknown as each one starts.",
+                "type": [
+                  "null",
+                  "number"
+                ]
               }
             },
             "required": [
               "edges",
-              "loops"
+              "loops",
+              "planned"
             ]
           }
         ]
@@ -42525,6 +42541,13 @@
               "string"
             ]
           },
+          "planned": {
+            "description": "How many steps the run has in total: a graph-origin run's step nodes,\nstart and end excluded. Null for a code-origin run, whose steps are only\nknown as each one starts.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
           "program": {
             "type": "string"
           },
@@ -42591,6 +42614,7 @@
           "machineId",
           "parentRunId",
           "parentStepId",
+          "planned",
           "program",
           "rerunOfRunId",
           "result",

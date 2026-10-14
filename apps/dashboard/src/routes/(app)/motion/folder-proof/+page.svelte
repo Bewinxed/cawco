@@ -104,6 +104,7 @@
     machineId: "bench",
     parentRunId: null,
     parentStepId: null,
+    planned: null,
     program: "",
     rerunOfRunId: null,
     result: null,

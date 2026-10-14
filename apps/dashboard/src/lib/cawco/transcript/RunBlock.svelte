@@ -14,7 +14,6 @@
   import type { WorkflowStep } from "@cawco/core";
   import type { Snippet } from "svelte";
   import { formatDuration } from "#lib/utils/time.js";
-  import { cawco } from "../client.svelte";
   import { tickingClock } from "../motion/clock.svelte.js";
   import { morph } from "../motion/morph.svelte";
   import RunSteps from "../RunSteps.svelte";
@@ -112,9 +111,9 @@
   {#if failure}
     <p class="failure rail-hang">{failure}</p>
   {/if}
-  <!-- In a chat, steps are read for a run the board lists; the run's own tab
-       has read them already. -->
-  {#if runId && (here || cawco.instanceIndex.byId.has(runTabId(runId)))}
+  <!-- The steps come from the run's detail, read once if it isn't yet
+       (RunSteps), whether or not the run's row is still on the board. -->
+  {#if runId}
     <RunSteps glyph=".mark" {more} {runId} />
   {/if}
 </div>

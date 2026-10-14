@@ -102,7 +102,8 @@ export interface WorkflowRuntimeDeps {
   ) => Promise<string>;
 }
 
-export type PublicRun = WorkflowRunRow & Pick<WorkflowRun, "edges" | "loops">;
+export type PublicRun = WorkflowRunRow &
+  Pick<WorkflowRun, "edges" | "loops" | "planned">;
 
 /** What the call that opened a step named it, read off the spec it recorded. */
 function stepTitleOf(row: WorkflowStepRow): string | null {
@@ -292,7 +293,12 @@ export function publicRun(
       run.graph.edges.map((edge) => [edge.id, "skipped" as const])
     );
   }
-  return { ...run, edges, loops };
+  const planned = run.graph
+    ? run.graph.nodes.filter(
+        (node) => node.kind !== "start" && node.kind !== "end"
+      ).length
+    : null;
+  return { ...run, edges, loops, planned };
 }
 
 /**
@@ -898,7 +904,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     serial(run.id, () => endRunSessions(run.id)).catch((error) => {
       notify(
         runOf(run.id),
-        `${workflowNoticeMarker(nameOf(run), "stop held")}The run could not finish stopping: ${reason(error)}.`
+        `${workflowNoticeMarker(nameOf(run), "stop held")}run ${run.id} · The run could not finish stopping: ${reason(error)}.`
       );
     });
   };
@@ -918,7 +924,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
           } catch (error) {
             notify(
               run,
-              `${workflowNoticeMarker(nameOf(run), "stop held")}Session ${instanceId} could not be ended because ${reason(error)}. The run launches nothing more and is not fully cancelled until its sessions are confirmed ended.`
+              `${workflowNoticeMarker(nameOf(run), "stop held")}run ${run.id} · Session ${instanceId} could not be ended because ${reason(error)}. The run launches nothing more and is not fully cancelled until its sessions are confirmed ended.`
             );
             return instanceId;
           }
@@ -974,7 +980,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     deps.halt(run.machineId, instanceId).catch((error) => {
       notify(
         run,
-        `${workflowNoticeMarker(nameOf(run), "cleanup held")}Session ${instanceId} could not be ended because ${reason(error)}. Its stop is recorded and will be confirmed after its machine is ready.`
+        `${workflowNoticeMarker(nameOf(run), "cleanup held")}run ${run.id} · Session ${instanceId} could not be ended because ${reason(error)}. Its stop is recorded and will be confirmed after its machine is ready.`
       );
     });
   };
@@ -1180,7 +1186,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       case "now":
         return Date.now();
       case "notify": {
-        const text = `${workflowNoticeMarker(nameOf(run), "note")}${String(args.text)}`;
+        const text = `${workflowNoticeMarker(nameOf(run), "note")}run ${run.id} · ${String(args.text)}`;
         if (run.supervisorInstanceId) {
           notify(run, text);
         } else {

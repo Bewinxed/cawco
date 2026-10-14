@@ -149,6 +149,12 @@ export interface WorkflowRun {
   machineId: string;
   parentRunId: string | null;
   parentStepId: string | null;
+  /**
+   * How many steps the run has in total: a graph-origin run's step nodes,
+   * start and end excluded. Null for a code-origin run, whose steps are only
+   * known as each one starts.
+   */
+  planned: number | null;
   program: string;
   rerunOfRunId: string | null;
   result: unknown;
