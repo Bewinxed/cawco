@@ -32354,7 +32354,7 @@
             "$ref": "#/components/schemas/AuthState"
           },
           "authReason": {
-            "description": "Why sign-in is unavailable or could not be checked, without credential data.",
+            "description": "Why a session of this harness cannot start here, without credential\ndata: pi's sign-in unavailable or unchecked, or OpenCode's server\nrefusing to start (and not tried again until its inputs change). The\nhome says it as this machine's word.",
             "type": "string"
           },
           "capabilities": {

@@ -1477,25 +1477,35 @@ const attach = (
       )
     );
 
-    // A spawn also checks sign-in. Publish a changed default-provider result on
-    // the next heartbeat while preserving the other harnesses' reports.
-    const changedPiAuth = (): HarnessReport[] | undefined => {
-      const old = reportedHarnesses.find((report) => report.harness === "pi");
-      if (
-        !(pi && old) ||
-        (old.auth === pi.auth && old.authReason === pi.authReason)
-      ) {
+    // A spawn also checks pi's sign-in, and any OpenCode call can find its
+    // server refusing to start or starting again: a changed word on either
+    // goes out on the next heartbeat, the other harnesses' reports kept.
+    const authed = [pi, harness("opencode")].filter(
+      (adapter): adapter is Harness => adapter !== undefined
+    );
+    const changedAuth = (): HarnessReport[] | undefined => {
+      const moved = authed.filter((adapter) => {
+        const old = reportedHarnesses.find(
+          (report) => report.harness === adapter.kind
+        );
+        return (
+          old !== undefined &&
+          (old.auth !== adapter.auth || old.authReason !== adapter.authReason)
+        );
+      });
+      if (moved.length === 0) {
         return undefined;
       }
       reportedHarnesses = reportedHarnesses.map((report) => {
-        if (report.harness !== "pi") {
+        const adapter = moved.find((one) => one.kind === report.harness);
+        if (!adapter) {
           return report;
         }
         const { authReason: _oldReason, ...rest } = report;
         return {
           ...rest,
-          auth: pi.auth,
-          ...(pi.authReason ? { authReason: pi.authReason } : {}),
+          auth: adapter.auth,
+          ...(adapter.authReason ? { authReason: adapter.authReason } : {}),
         };
       });
       return reportedHarnesses;
@@ -2033,7 +2043,7 @@ const attach = (
               ...supervisor.custodyInstanceIds,
               ...undecided.keys(),
             ]),
-            ...(changedPiAuth() ? { harnesses: reportedHarnesses } : {}),
+            ...(changedAuth() ? { harnesses: reportedHarnesses } : {}),
             ...(latestBinaryUpdate()
               ? { binaryUpdate: latestBinaryUpdate() }
               : {}),

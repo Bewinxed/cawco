@@ -29,6 +29,7 @@ import {
   readFile,
   realpath,
   rm,
+  stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
@@ -141,6 +142,7 @@ import {
   readV1Activity,
   type ServerIdentity,
   type ServerLaunch,
+  type ServerStart,
 } from "./opencode-server";
 import {
   OpencodeSession,
@@ -238,6 +240,31 @@ const serverLaunch = (
     [CONFIG_FLAG]: `${diskHash ?? "none"}/${createHash("sha256").update(JSON.stringify(config)).digest("hex").slice(0, 16)}`,
   },
 });
+
+/**
+ * What a server's start depends on, as it stands now: its launch (binary
+ * path, config content and the disk config's hash, environment, an
+ * account's credential), and the stamps a launch does not carry: the binary
+ * at that path (an upgrade in place), the config file (a touch counts), and
+ * the database OpenCode 2.0 keeps its own sign-in in, in that server's data
+ * home. A start refused on these is asked again only once one of them
+ * changes (OpencodeServerOwner `ServerStart`).
+ */
+const startInputs = async (launch: ServerLaunch): Promise<string> => {
+  const stamp = async (path: string): Promise<string> => {
+    const found = await stat(path).catch(() => undefined);
+    return found ? `${found.size}:${found.mtimeMs}` : "none";
+  };
+  const dataHome = launch.spec.env?.XDG_DATA_HOME;
+  const data = dataHome ? join(dataHome, "opencode") : opencodeDataDir();
+  return JSON.stringify([
+    launchOf(launch),
+    launch.spec.command,
+    await stamp(launch.spec.command),
+    await stamp(OPENCODE_CONFIG),
+    await stamp(join(data, "opencode.db")),
+  ]);
+};
 
 /**
  * How long an account's OpenCode server runs on once no session is on it.
@@ -1850,9 +1877,11 @@ export class OpencodeHarness implements Harness {
       await this.#applyGate.promise;
     }
     // The account's server stopped for being idle, or went down, since the
-    // session last ran: it starts again, and the session goes to it.
+    // session last ran: it starts again, and the session goes to it. A
+    // message sent is an explicit attempt, as a session's start is: a start
+    // refused earlier is tried again for it (ServerStart).
     if (session.account !== undefined) {
-      await this.#ensureAccount(session.account);
+      await this.#ensureAccount(session.account, true);
     }
     await this.#migrate(session);
     if (this.#sessions.get(session.instanceId) !== session) {
@@ -2321,14 +2350,31 @@ export class OpencodeHarness implements Harness {
             console.warn(`[opencode] model catalog unavailable: ${error}`);
           })
       : undefined;
+    const reason = this.authReason;
     return {
       harness: "opencode",
       installed,
       ...(version ? { version } : {}),
       auth: installed ? "authenticated" : "unauthenticated",
+      ...(reason ? { authReason: reason } : {}),
       capabilities: OPENCODE_CAPABILITIES,
       ...(models ? { models } : {}),
     };
+  }
+
+  /**
+   * Why an OpenCode session cannot start here, while that stands: the start
+   * of the machine's server, or an account's, that failed, said as its owner
+   * recorded it (ServerStart). The machine's report carries it to the home's
+   * word on this machine: {@link detect}, and the daemon's beat whenever it
+   * moves, so it goes once a start succeeds.
+   */
+  get authReason(): string | undefined {
+    return (
+      this.#slots()
+        .map((slot) => slot.owner.refusal)
+        .find((refusal) => refusal !== null) ?? undefined
+    );
   }
 
   /** The current keeper's connection for this harness, dialled lazily: where a server starts. */
@@ -2430,9 +2476,19 @@ export class OpencodeHarness implements Harness {
     return this.#cutover;
   }
 
-  #ensure(): Promise<OpencodeClient> {
+  /**
+   * The machine's server: the one running, or one started now. A start it
+   * refused is answered from the owner's record, unless a session is being
+   * started or sent a message (`attempt`), which always tries (ServerStart).
+   */
+  #ensure(attempt = false): Promise<OpencodeClient> {
     if (this.#client) {
       return Promise.resolve(this.#client);
+    }
+    if (attempt && this.#ready && this.#serverOwner.refusal) {
+      // A read answering the standing refusal is in flight: a session's
+      // start still tries, once that read has answered.
+      return this.#ready.catch(() => this.#ensure(true));
     }
     if (!this.#ready) {
       // A spawn after a dispose is a revival: the adapter is a module
@@ -2449,7 +2505,11 @@ export class OpencodeHarness implements Harness {
         );
         // Not a child of this process: the server goes under the keeper, so
         // an agent restart takes no session with it.
-        const identity = await this.#serverOwner.ensure(launch);
+        const start: ServerStart = {
+          inputs: await startInputs(launch),
+          attempt,
+        };
+        const identity = await this.#serverOwner.ensure(launch, start);
         const client = this.#adopt(this.#machine, identity);
         await client.server.info({
           signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
@@ -2526,17 +2586,28 @@ export class OpencodeHarness implements Harness {
    * launch is replaced before any session runs in it; one on another binary
    * is the watcher's to replace at rest.
    */
-  #ensureAccount(account: string): Promise<OpencodeClient> {
+  #ensureAccount(account: string, attempt = false): Promise<OpencodeClient> {
     const slot = this.#accountSlot(account);
     if (slot.client) {
       return Promise.resolve(slot.client);
     }
+    if (
+      attempt &&
+      slot.ready &&
+      (slot.owner.refusal || this.#serverOwner.refusal)
+    ) {
+      // As in #ensure: a session's start tries once the read in flight answers.
+      return slot.ready.catch(() => this.#ensureAccount(account, true));
+    }
     slot.ready ??= (async () => {
       slot.starting = true;
-      await this.#ensure();
+      await this.#ensure(attempt);
       const { revision, launch } = await this.#accountRevision(account);
       await prepareAccountServer(account);
-      const identity = await slot.owner.ensure(launch);
+      const identity = await slot.owner.ensure(launch, {
+        inputs: await startInputs(launch),
+        attempt,
+      });
       if (identity.launch === launchOf(launch)) {
         const adopted = this.#adopt(slot, identity);
         await adopted.server.info({
@@ -3618,6 +3689,18 @@ export class OpencodeHarness implements Harness {
     spec: SpawnPayload,
     ctx: HarnessContext
   ): Promise<OpencodeSession> {
+    // A session started is an explicit attempt: a server start refused
+    // earlier is tried again for it, once, before anything reads the
+    // refusal (ServerStart). Every other read answers with the refusal.
+    const account = spec.accountDir?.accountId;
+    if (
+      this.#serverOwner.refusal ||
+      (account !== undefined && this.#accounts.get(account)?.owner.refusal)
+    ) {
+      await (account === undefined
+        ? this.#ensure(true)
+        : this.#ensureAccount(account, true));
+    }
     if (spec.resume && !spec.resume.fork) {
       const recovered = await this.reattach(spec, ctx);
       if (recovered) {

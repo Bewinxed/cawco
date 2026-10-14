@@ -1229,7 +1229,12 @@ export interface HarnessReport {
    */
   accounts?: import("./accounts").AccountReport[];
   auth: AuthState;
-  /** Why sign-in is unavailable or could not be checked, without credential data. */
+  /**
+   * Why a session of this harness cannot start here, without credential
+   * data: pi's sign-in unavailable or unchecked, or OpenCode's server
+   * refusing to start (and not tried again until its inputs change). The
+   * home says it as this machine's word.
+   */
   authReason?: string;
   capabilities: HarnessCapabilities;
   harness: HarnessKind;

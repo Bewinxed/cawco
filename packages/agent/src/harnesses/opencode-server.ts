@@ -193,6 +193,41 @@ export const launchOf = (launch: ServerLaunch): string =>
       .sort(([a], [b]) => a.localeCompare(b))
   );
 
+/**
+ * What a start is asked on: `inputs`, everything its outcome depends on as
+ * it stands now (the harness's `startInputs`: its launch, the binary at its
+ * path, the config file and the sign-in it reads), and whether it is asked
+ * for a session (`attempt`: one being started, or sent a message), which
+ * always tries.
+ */
+export interface ServerStart {
+  attempt?: boolean;
+  inputs: string;
+}
+
+/** The log tag a start's error leads with. */
+const LOG_TAG = /^\[opencode\]\s*/;
+/** The process each try was given; the reason is the same without it. */
+const TRY_PROC = / from opencode-server-[\w-]+/;
+
+/**
+ * A failed start, said once for every caller that meets it, in the person's
+ * words (WORDS.md's error formula: what happened, why, how to fix it, what
+ * happens next).
+ */
+const startRefused = (error: unknown, account: string | undefined): Error => {
+  const detail = (error instanceof Error ? error.message : String(error))
+    .replace(LOG_TAG, "")
+    .replace(TRY_PROC, "");
+  const whose =
+    account === undefined
+      ? "OpenCode's server"
+      : `Account ${account}'s OpenCode server`;
+  return new Error(
+    `${whose} did not start: ${detail}. Fix OpenCode, its config or its sign-in, or start an OpenCode session or send one a message, and it is tried again.`
+  );
+};
+
 interface ServerRecord {
   active: ServerIdentity | null;
   retired: ServerIdentity[];
@@ -413,6 +448,17 @@ export class OpencodeServerOwner {
   #writes = Promise.resolve();
   readonly #retiring = new Map<string, Promise<void>>();
   readonly #retryAt = new Map<string, number>();
+  /**
+   * The last start of this server that failed, and what it was started
+   * from (`ServerStart.inputs`). A start refused on those inputs answers
+   * with this failure at once and starts nothing: it is asked again only
+   * once one of them changes, or when a session is started or sent a
+   * message (`attempt`). Never on a timer: a platform that refuses a
+   * capability does not start it (an OpenCode whose server never announced
+   * itself cost every catalog read and fleet sync a new process and 30s).
+   * A server found running, or one started, clears it.
+   */
+  #refused: { error: Error; inputs: string } | null = null;
 
   constructor(
     sessiond: () => Promise<SessiondClient>,
@@ -440,6 +486,11 @@ export class OpencodeServerOwner {
 
   get active(): ServerIdentity | null {
     return this.#record?.active ?? null;
+  }
+
+  /** Why this server would not start, while that stands; null when it has not refused. */
+  get refusal(): string | null {
+    return this.#refused?.error.message ?? null;
   }
 
   get generations(): ServerIdentity[] {
@@ -674,7 +725,7 @@ export class OpencodeServerOwner {
     return (this.#record?.retired ?? []).filter(isV1);
   }
 
-  ensure(launch: ServerLaunch): Promise<ServerIdentity> {
+  ensure(launch: ServerLaunch, start: ServerStart): Promise<ServerIdentity> {
     if (this.#transition) {
       return this.#transition;
     }
@@ -689,6 +740,7 @@ export class OpencodeServerOwner {
         !isV1(record.active) &&
         (await this.#matches(record.active))
       ) {
+        this.#refused = null;
         if (manages) {
           this.maintain();
         }
@@ -706,8 +758,21 @@ export class OpencodeServerOwner {
       // one more behind (26 on the Mac on 8 Oct). It is retired instead, the
       // same way a replaced generation is, once it is idle.
       const stale = record.active;
+      if (!start.attempt && this.#refused?.inputs === start.inputs) {
+        throw this.#refused.error;
+      }
       const signal = AbortSignal.timeout(SERVER_CUTOVER_TIMEOUT_MS);
-      const identity = await this.#launch(launch, signal);
+      let identity: ServerIdentity;
+      try {
+        identity = await this.#launch(launch, signal);
+      } catch (error) {
+        this.#refused = {
+          error: startRefused(error, this.account),
+          inputs: start.inputs,
+        };
+        throw this.#refused.error;
+      }
+      this.#refused = null;
       const current = await this.#load();
       this.#record = {
         active: identity,
@@ -764,6 +829,7 @@ export class OpencodeServerOwner {
         }
         this.#record = { active: candidate, retired };
         await this.#save();
+        this.#refused = null;
         activate(candidate);
         console.info(
           `[opencode] candidate→active ${old?.procId ?? "none"}/${old?.pid ?? "none"} → ${candidate.procId}/${candidate.pid}`

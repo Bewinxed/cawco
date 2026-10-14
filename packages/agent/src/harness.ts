@@ -249,7 +249,11 @@ export interface Harness {
   accountsChanged?(): Promise<void>;
   /** What `register` reports as this harness's auth, cached from {@link detect}. */
   auth: AuthState;
-  /** Why {@link auth} is what it is, when the harness can say, cached beside it. */
+  /**
+   * Why a session of this harness cannot start here, when the harness can
+   * say, cached beside {@link auth}: pi's sign-in, OpenCode's server refusing
+   * to start ({@link HarnessReport.authReason}).
+   */
   readonly authReason?: string;
   /** Authoritative server activity, when the runtime owns turns outside this daemon. */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches the other adapter methods

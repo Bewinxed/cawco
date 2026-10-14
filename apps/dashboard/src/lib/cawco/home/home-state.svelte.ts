@@ -658,7 +658,8 @@ function exceptionOf(machine: (typeof cawco.machines)[number]): string | null {
   if (machine.status !== "online") {
     return "unreachable";
   }
-  const signIn = signInWarning(machine, "pi");
+  const signIn =
+    signInWarning(machine, "pi") ?? signInWarning(machine, "opencode");
   if (signIn) {
     return signIn;
   }

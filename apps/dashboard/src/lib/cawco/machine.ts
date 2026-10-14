@@ -26,15 +26,16 @@ export function machineOs(os: string) {
 /**
  * Why a machine cannot start a session, in the words the person looking at the
  * rail needs — which is the remedy, on which machine, and for the macOS case why
- * its existing login does not reach its agent. Undefined when there is nothing
- * to say.
+ * its existing login does not reach its agent. pi's and OpenCode's are their
+ * reports' own words (`authReason`): pi's sign-in, OpenCode's server refusing
+ * to start. Undefined when there is nothing to say.
  */
 export function signInWarning(
   machine: AgentRow,
-  harness: "claude" | "pi" = "claude"
+  harness: "claude" | "pi" | "opencode" = "claude"
 ): string | undefined {
-  if (harness === "pi") {
-    return machine.harnesses?.find((report) => report.harness === "pi")
+  if (harness !== "claude") {
+    return machine.harnesses?.find((report) => report.harness === harness)
       ?.authReason;
   }
   switch (machine.auth) {
