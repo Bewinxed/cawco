@@ -545,6 +545,12 @@ final class PinCard: UIView, UITextViewDelegate {
         layoutIfNeeded()
         room.contentOffset.y = max(0, room.contentSize.height - room.bounds.height)
         roomAtEnd = true
+        #if DEBUG
+        // Where the room stands once it has reached its end: the card's
+        // geometry line is said before this deferred scroll, so it reads the
+        // room where it stood a moment before.
+        PreviewProbe.say("preview card-room pin=\(number) room=\(Int(room.contentSize.height))/\(Int(room.bounds.height))@\(Int(room.contentOffset.y))")
+        #endif
     }
 
     /// Where the person reads the room: at its end, a new entry keeps it there.

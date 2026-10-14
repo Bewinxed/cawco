@@ -359,7 +359,16 @@ const writingNow = () =>
   false;
 /** The card's thread room as its newest `preview card-geometry` line has it: how much it holds, in how much height. */
 const roomLast = () => {
-  const m = seen.findLast((line) => CARD_GEOMETRY.test(line))?.match(CARD_ROOM);
+  // The newest word on the room: the card's geometry line, or the app's
+  // `preview card-room` line once the room has reached its end (said after
+  // the geometry line, which precedes that deferred scroll).
+  const m = seen
+    .findLast(
+      (line) =>
+        (CARD_GEOMETRY.test(line) || line.startsWith("preview card-room ")) &&
+        CARD_ROOM.test(line)
+    )
+    ?.match(CARD_ROOM);
   return m
     ? { content: Number(m[1]), height: Number(m[2]), offset: Number(m[3]) }
     : undefined;
