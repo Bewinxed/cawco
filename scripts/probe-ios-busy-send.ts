@@ -30,7 +30,8 @@
  * simulator it took. `--keep` keeps the fleet's sandbox. Prints every check
  * and `BUSY_SEND_PROBE_OK` when all held; exits 0 only then.
  */
-import { basename, join, resolve } from "node:path";
+import { resolve } from "node:path";
+import { simulatorApp, staleApp } from "./lib/apple-app";
 import { type MacSim, macSim } from "./lib/mac-sim";
 import { type Reply, type Seen, scratchFleet, until } from "./scratch-fleet";
 
@@ -93,17 +94,15 @@ if (build) {
 const top = (
   await Bun.$`git -C ${root} rev-parse --show-toplevel`.text()
 ).trim();
-const folder =
-  top === join(process.env.HOME ?? "", "cockpit") ? "main" : basename(top);
-const appleRoot = join(
-  process.env.XDG_CACHE_HOME ?? join(process.env.HOME ?? "", "Library/Caches"),
-  "cawco-apple"
-);
-const app = join(
-  appleRoot,
-  folder,
-  "DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app"
-);
+// The app build-both.sh built from this tree, or why there is none to run (lib/apple-app.ts).
+const app = simulatorApp(top);
+{
+  const stale = staleApp(top, app);
+  if (stale) {
+    console.log(`FAIL app: ${stale}`);
+    process.exit(1);
+  }
+}
 
 // ── 2. The scratch fleet ─────────────────────────────────────────────────
 /** Every turn of a conversation holding `HOLD` streams for about two minutes: the session stays busy. */

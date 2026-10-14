@@ -57,10 +57,10 @@
  * Xcode (no `xcrun`) (a) to (c) are a NOTE, not run.
  */
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the proposals, the web's answers and the app's are read in order, step by step.
-import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
+import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
@@ -97,7 +97,6 @@ const CAW_LINE = /caw|memory|thread|lead/i;
  * further, as a probe line may carry `] ` of its own (a thread's `asks [...]`).
  */
 const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
-const TRAILING_SLASH = /\/$/;
 
 /** knowledge/web.md as Caw writes it, then as he proposes it. */
 const WEB = {
@@ -245,20 +244,8 @@ async function sh(script: string): Promise<string> {
   return said;
 }
 
-function appPath(): string {
-  if (process.env.PROBE_IOS_APP) {
-    return process.env.PROBE_IOS_APP;
-  }
-  const home = process.env.HOME ?? "";
-  const top = ROOT.replace(TRAILING_SLASH, "");
-  const name = top === join(home, "cockpit") ? "main" : top.split("/").at(-1);
-  return join(
-    process.env.XDG_CACHE_HOME ?? join(home, "Library", "Caches"),
-    "cawco-apple",
-    name ?? "main",
-    "DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app"
-  );
-}
+/** The checkout's simulator app, only when it was built from this tree (scripts/lib/apple-app.ts). */
+const appPath = () => freshApp(ROOT);
 
 interface Node {
   frame?: { x: number; y: number; width: number; height: number };
@@ -745,8 +732,8 @@ async function run(kit: Kit): Promise<void> {
     await cawrier.stop(true);
     return;
   }
-  const app = appPath();
-  if (!kit.check("the app is built", existsSync(app), app)) {
+  const { path: app, problem } = appPath();
+  if (!kit.check("the app is built from this tree", !problem, problem ?? app)) {
     await cawrier.stop(true);
     return;
   }

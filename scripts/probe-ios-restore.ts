@@ -30,6 +30,7 @@
 import { access, mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
+import { simulatorApp } from "./lib/apple-app";
 import { type MacSim, macSim } from "./lib/mac-sim";
 import { type Reply, type Seen, scratchFleet, until } from "./scratch-fleet";
 
@@ -47,7 +48,6 @@ const DEVICES =
     ? ["phone", "pad"]
     : [option("--device") as string];
 const root = resolve(import.meta.dir, "..");
-const home = process.env.HOME ?? "";
 const AXE = "/opt/homebrew/bin/axe";
 const out =
   process.env.CAWCO_WORKSPACE && process.env.TMPDIR
@@ -103,8 +103,8 @@ if (!app) {
   const top = (
     await Bun.$`git -C ${root} rev-parse --show-toplevel`.text()
   ).trim();
-  const name = top === join(home, "cockpit") ? "main" : top.split("/").at(-1);
-  app = `${join(process.env.XDG_CACHE_HOME ?? join(home, "Library", "Caches"), "cawco-apple")}/${name}/DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app`;
+  // Just built: the app build-both.sh made from this tree (lib/apple-app.ts).
+  app = simulatorApp(top);
 }
 
 // ── 2. The scratch fleet, its session seeded ─────────────────────────────

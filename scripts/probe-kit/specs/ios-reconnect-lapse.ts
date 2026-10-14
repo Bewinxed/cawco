@@ -22,10 +22,10 @@
  *
  * The app is this checkout's simulator build (`PROBE_IOS_APP` names another).
  */
-import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
+import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { type Reply, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
@@ -44,7 +44,6 @@ const WINDOW_MS = 60_000;
 const SLACK_MS = 20_000;
 const TITLE = "Reconnect probe";
 const LOG_HEAD = /^.*\] /;
-const TRAILING_SLASH = /\/$/;
 /** The app's line as it schedules the lapse: `… lapses in <n> seconds`. */
 const LAPSES_IN = /reconnecting window lapses in ([\d.]+) seconds/;
 
@@ -67,24 +66,12 @@ async function sh(script: string): Promise<string> {
   return text;
 }
 
-function appPath(): string {
-  if (process.env.PROBE_IOS_APP) {
-    return process.env.PROBE_IOS_APP;
-  }
-  const home = process.env.HOME ?? "";
-  const top = ROOT.replace(TRAILING_SLASH, "");
-  const name = top === join(home, "cockpit") ? "main" : top.split("/").at(-1);
-  return join(
-    process.env.XDG_CACHE_HOME ?? join(home, "Library", "Caches"),
-    "cawco-apple",
-    name ?? "main",
-    "DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app"
-  );
-}
+/** The checkout's simulator app, only when it was built from this tree (scripts/lib/apple-app.ts). */
+const appPath = () => freshApp(ROOT);
 
 async function run(kit: Kit): Promise<void> {
-  const app = appPath();
-  if (!kit.check("the app is built", existsSync(app), app)) {
+  const { path: app, problem } = appPath();
+  if (!kit.check("the app is built from this tree", !problem, problem ?? app)) {
     return;
   }
   const fleet = await kit.fleet(respond);

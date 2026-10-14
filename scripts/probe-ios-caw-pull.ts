@@ -42,6 +42,7 @@
  */
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { simulatorApp, staleApp } from "./lib/apple-app";
 import { type MacSim, macSim } from "./lib/mac-sim";
 import { ACCOUNT, MACHINE, scratchFleet, until } from "./scratch-fleet";
 
@@ -49,16 +50,18 @@ const keep = process.argv.includes("--keep");
 const root = resolve(import.meta.dir, "..");
 const out = join(process.env.TMPDIR ?? "/tmp", "ios-caw-pull");
 await mkdir(out, { recursive: true });
-const app = join(
-  process.env.XDG_CACHE_HOME ??
-    join(process.env.HOME ?? "", "Library", "Caches"),
-  "cawco-apple",
-  (await Bun.$`git -C ${root} rev-parse --show-toplevel`.text())
-    .trim()
-    .split("/")
-    .at(-1) ?? "",
-  "DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app"
-);
+const checkout = (
+  await Bun.$`git -C ${root} rev-parse --show-toplevel`.text()
+).trim();
+// The app build-both.sh built from this tree, or why there is none to run (lib/apple-app.ts).
+const app = simulatorApp(checkout);
+{
+  const stale = staleApp(checkout, app);
+  if (stale) {
+    console.log(`FAIL app: ${stale}`);
+    process.exit(1);
+  }
+}
 
 let failures = 0;
 const check = (step: string, ok: boolean, detail: string) => {

@@ -54,7 +54,8 @@
  * Prints `PASS <step>` / `FAIL <step>` per check, then `TAP_REACHED_PAGE`
  * only if every check passed (exit 0), else the first failing check.
  */
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { simulatorApp, staleApp } from "./lib/apple-app";
 import { type MacSim, macSim } from "./lib/mac-sim";
 import { scratchFleet, until } from "./scratch-fleet";
 
@@ -132,14 +133,15 @@ if (build) {
 const top = (
   await Bun.$`git -C ${root} rev-parse --show-toplevel`.text()
 ).trim();
-const folder =
-  top === join(process.env.HOME ?? "", "cockpit") ? "main" : basename(top);
-const app = join(
-  process.env.XDG_CACHE_HOME ?? join(process.env.HOME ?? "", "Library/Caches"),
-  "cawco-apple",
-  folder,
-  "DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app"
-);
+// The app build-both.sh built from this tree, or why there is none to run (lib/apple-app.ts).
+const app = simulatorApp(top);
+{
+  const stale = staleApp(top, app);
+  if (stale) {
+    console.log(`FAIL app: ${stale}`);
+    process.exit(1);
+  }
+}
 
 // ── 2. The page ──────────────────────────────────────────────────────────
 // Tabs as the owner's page has them: links to `?view=…`, a new document

@@ -33,10 +33,10 @@
  * checkout's simulator build (`PROBE_IOS_APP` names another).
  */
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: each device's steps are read in order.
-import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
+import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
@@ -68,7 +68,6 @@ const INSTALL_REFUSED = /fault\('.*nothing was installed.*' \+ Try again\)/;
 const GHOST = "parity-ghost";
 /** The compact log's head, up to the `[subsystem:category] ` tag: the probe's own lines carry `[id]` tags. */
 const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
-const TRAILING_SLASH = /\/$/;
 
 interface Pushed {
   payload: {
@@ -142,24 +141,12 @@ async function sh(script: string): Promise<string> {
   return said;
 }
 
-function appPath(): string {
-  if (process.env.PROBE_IOS_APP) {
-    return process.env.PROBE_IOS_APP;
-  }
-  const home = process.env.HOME ?? "";
-  const top = ROOT.replace(TRAILING_SLASH, "");
-  const name = top === join(home, "cockpit") ? "main" : top.split("/").at(-1);
-  return join(
-    process.env.XDG_CACHE_HOME ?? join(home, "Library", "Caches"),
-    "cawco-apple",
-    name ?? "main",
-    "DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app"
-  );
-}
+/** The checkout's simulator app, only when it was built from this tree (scripts/lib/apple-app.ts). */
+const appPath = () => freshApp(ROOT);
 
 async function run(kit: Kit): Promise<void> {
-  const app = appPath();
-  if (!kit.check("the app is built", existsSync(app), app)) {
+  const { path: app, problem } = appPath();
+  if (!kit.check("the app is built from this tree", !problem, problem ?? app)) {
     return;
   }
   const pushed: Pushed[] = [];

@@ -27,7 +27,8 @@
  * only what it started; the simulator it created is deleted.
  */
 import { mkdir, writeFile } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { simulatorApp, staleApp } from "./lib/apple-app";
 import { type MacSim, macSim } from "./lib/mac-sim";
 import {
   MACHINE,
@@ -56,24 +57,18 @@ const out = join(
   `ios-ask-here-${ipad ? "ipad" : "iphone"}`
 );
 await mkdir(out, { recursive: true });
-const cache =
-  process.env.XDG_CACHE_HOME ??
-  join(process.env.HOME ?? "", "Library", "Caches");
 const top = (
   await Bun.$`git -C ${root} rev-parse --show-toplevel`.text()
 ).trim();
-const build =
-  top === join(process.env.HOME ?? "", "cockpit") ? "main" : basename(top);
-const app = join(
-  cache,
-  "cawco-apple",
-  build,
-  "DerivedData",
-  "Build",
-  "Products",
-  "Debug-iphonesimulator",
-  "CawCo.app"
-);
+// The app build-both.sh built from this tree, or why there is none to run (lib/apple-app.ts).
+const app = simulatorApp(top);
+{
+  const stale = staleApp(top, app);
+  if (stale) {
+    console.log(`FAIL app: ${stale}`);
+    process.exit(1);
+  }
+}
 
 let failed = 0;
 const failures: string[] = [];

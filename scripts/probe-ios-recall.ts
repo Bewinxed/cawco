@@ -27,7 +27,8 @@
  * every check passed on both devices.
  */
 import { mkdir, readdir, rm } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { simulatorApp, staleApp } from "./lib/apple-app";
 import { type MacSim, macSim } from "./lib/mac-sim";
 import { scratchFleet, until } from "./scratch-fleet";
 
@@ -82,17 +83,15 @@ if (build) {
 const top = (
   await Bun.$`git -C ${root} rev-parse --show-toplevel`.text()
 ).trim();
-const folder =
-  top === join(process.env.HOME ?? "", "cockpit") ? "main" : basename(top);
-const appleRoot = join(
-  process.env.XDG_CACHE_HOME ?? join(process.env.HOME ?? "", "Library/Caches"),
-  "cawco-apple"
-);
-const app = join(
-  appleRoot,
-  folder,
-  "DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app"
-);
+// The app build-both.sh built from this tree, or why there is none to run (lib/apple-app.ts).
+const app = simulatorApp(top);
+{
+  const stale = staleApp(top, app);
+  if (stale) {
+    console.log(`FAIL app: ${stale}`);
+    process.exit(1);
+  }
+}
 
 // ── 2. The scratch fleet ─────────────────────────────────────────────────
 const fleet = await scratchFleet({

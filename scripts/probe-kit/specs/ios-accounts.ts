@@ -39,9 +39,11 @@
  * with keys a CawCo workspace never holds, so the probe builds its own,
  * signed ad hoc and without the entitlements a profile grants (push, the
  * shared keychain group), into its own DerivedData, from the tree
- * build-both.sh last synced:
+ * build-both.sh last synced (the spec runs it only when that sync's stamp
+ * is this tree's and it was built after it, scripts/lib/apple-app.ts
+ * `macProbeApp`):
  *
- *   cd "$XDG_CACHE_HOME/cawco-apple/<checkout>/apps/apple" &&
+ *   cd ~/.cawco/workspace-cache/xdg/cawco-apple/<checkout>/apps/apple &&
  *   bash <repo>/apps/apple/scripts/mac-slot.sh build -- xcodebuild \
  *     -project CawCo.xcodeproj -scheme CawCo \
  *     -destination "platform=macOS,variant=Mac Catalyst" \
@@ -56,10 +58,10 @@
  *     ../../DerivedData-macprobe/Build/Products/Debug-maccatalyst/CawCo.app
  */
 
-import { existsSync } from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
+import { freshApp, macProbeApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
@@ -72,7 +74,6 @@ const PLATFORMS = {
   mac: {},
 } as const;
 type Platform = keyof typeof PLATFORMS;
-const TRAILING_SLASH = /\/$/;
 /** "hub accounts 2 → 3": the count before the setup's sign-in and after. */
 const COUNTS = /hub accounts (\d+) → (\d+)/;
 /** The Delegates tab with Fill first chosen: its figure plays, the others stand still. */
@@ -105,39 +106,25 @@ async function sh(script: string): Promise<string> {
   return text;
 }
 
-/** This checkout's build folder on the Mac (build-both.sh `APPLE_ROOT/<build>`). */
-function buildRoot(): string {
-  const home = process.env.HOME ?? "";
-  const top = ROOT.replace(TRAILING_SLASH, "");
-  const name = top === join(home, "cockpit") ? "main" : top.split("/").at(-1);
-  return join(
-    process.env.XDG_CACHE_HOME ?? join(home, "Library", "Caches"),
-    "cawco-apple",
-    name ?? "main"
-  );
-}
-
 /**
- * The app to run: build-both.sh's simulator build; on the Mac the probe's
- * own Catalyst build (MAC_PROBE_BUILD above), signed ad hoc, since the
- * signed Catalyst build needs keys a workspace never holds.
+ * The app to run, only when built from this tree: build-both.sh's
+ * simulator build; on the Mac the probe's own Catalyst build
+ * (MAC_PROBE_BUILD above), signed ad hoc, since the signed Catalyst build
+ * needs keys a workspace never holds.
  */
-function appPath(platform: Platform): string {
-  return platform === "mac"
-    ? join(
-        buildRoot(),
-        "DerivedData-macprobe/Build/Products/Debug-maccatalyst/CawCo.app/Contents/MacOS/CawCo"
-      )
-    : join(
-        buildRoot(),
-        "DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app"
-      );
-}
+const appPath = (platform: Platform) =>
+  platform === "mac" ? macProbeApp(ROOT) : freshApp(ROOT);
 
 async function probe(kit: Kit, platform: Platform): Promise<void> {
   const label = (what: string) => `${platform}: ${what}`;
-  const app = appPath(platform);
-  if (!kit.check(label("the app is built"), existsSync(app), app)) {
+  const { path: app, problem } = appPath(platform);
+  if (
+    !kit.check(
+      label("the app is built from this tree"),
+      !problem,
+      problem ?? app
+    )
+  ) {
     return;
   }
 

@@ -26,10 +26,10 @@
  *
  * The app is this checkout's simulator build (`PROBE_IOS_APP` names another).
  */
-import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
+import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
@@ -54,7 +54,6 @@ const SLOW = "SLOW";
 const TITLE = "Seen probe";
 /** A log line's stamp, process and category, up to what it says. */
 const LOG_HEAD = /^.*\] /;
-const TRAILING_SLASH = /\/$/;
 /** The app's socket: `… after the heartbeat, read <s> seconds after asking`. */
 const READ_AFTER = /after the heartbeat, read ([\d.]+) seconds after asking/;
 /** HubConnection `heartbeatDeadline`: how long it sleeps before reading what it heard. */
@@ -94,20 +93,8 @@ interface Node {
   role?: string;
 }
 
-function appPath(): string {
-  if (process.env.PROBE_IOS_APP) {
-    return process.env.PROBE_IOS_APP;
-  }
-  const home = process.env.HOME ?? "";
-  const top = ROOT.replace(TRAILING_SLASH, "");
-  const name = top === join(home, "cockpit") ? "main" : top.split("/").at(-1);
-  return join(
-    process.env.XDG_CACHE_HOME ?? join(home, "Library", "Caches"),
-    "cawco-apple",
-    name ?? "main",
-    "DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app"
-  );
-}
+/** The checkout's simulator app, only when it was built from this tree (scripts/lib/apple-app.ts). */
+const appPath = () => freshApp(ROOT);
 
 const respond = (request: Seen): Reply =>
   request.tools && request.last.startsWith(SLOW)
@@ -147,8 +134,8 @@ function heartbeatReads(
 }
 
 async function run(kit: Kit): Promise<void> {
-  const app = appPath();
-  if (!kit.check("the app is built", existsSync(app), app)) {
+  const { path: app, problem } = appPath();
+  if (!kit.check("the app is built from this tree", !problem, problem ?? app)) {
     return;
   }
   const fleet = await kit.fleet(respond);

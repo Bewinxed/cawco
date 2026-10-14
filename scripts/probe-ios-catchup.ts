@@ -49,6 +49,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
+import { simulatorApp } from "./lib/apple-app";
 import { type MacSim, macSim } from "./lib/mac-sim";
 import { type Reply, type Seen, scratchFleet, until } from "./scratch-fleet";
 
@@ -67,7 +68,6 @@ const keep = args.includes("--keep");
 const ROWS = Number(option("--rows") ?? 820);
 const LABEL = option("--label") ?? "run";
 const root = resolve(import.meta.dir, "..");
-const home = process.env.HOME ?? "";
 const AXE = "/opt/homebrew/bin/axe";
 const PILL = "Catching up…";
 /** The dock's line while a read again could not catch the rows up (DockNote): all of it when the read failed. */
@@ -130,8 +130,8 @@ if (!app) {
   const top = (
     await Bun.$`git -C ${root} rev-parse --show-toplevel`.text()
   ).trim();
-  const name = top === join(home, "cockpit") ? "main" : top.split("/").at(-1);
-  app = `${join(process.env.XDG_CACHE_HOME ?? join(home, "Library", "Caches"), "cawco-apple")}/${name}/DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app`;
+  // Just built: the app build-both.sh made from this tree (lib/apple-app.ts).
+  app = simulatorApp(top);
 }
 
 // ── Live: one session on a running hub, its pill counted ─────────────────

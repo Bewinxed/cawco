@@ -555,12 +555,8 @@ async function compile(run: Run, dir: string): Promise<string | undefined> {
     await Bun.$`git -C ${dir} rev-parse --show-toplevel`.text()
   ).trim();
   const name = top === join(home, "cockpit") ? "main" : basename(top);
-  const base = onMac
-    ? join(
-        process.env.XDG_CACHE_HOME ?? join(home, "Library", "Caches"),
-        "cawco-apple"
-      )
-    : "$HOME/build/cawco-apple";
+  // On this Mac, build-both.sh's one build root (lib/apple-app.ts); over SSH, the Mac's ~/build.
+  const base = onMac ? APPLE_BUILDS : "$HOME/build/cawco-apple";
   return `${base}/${name}/DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app`;
 }
 
@@ -580,6 +576,8 @@ else:
     devices.pop(udid, None)
 subprocess.run(["defaults", "import", "com.apple.iphonesimulator", "-"], input=plistlib.dumps(prefs), check=True)
 PY`);
+
+import { APPLE_BUILDS } from "./lib/apple-app";
 
 /** A simulator of the probe's own, and what drives it. */
 interface Sim {

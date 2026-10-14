@@ -26,9 +26,13 @@
 # Only processes this script starts are stopped: the Mac-side build runs in
 # its own process group, which ends (TERM, then KILL) when the SSH link drops.
 # Run on the Mac itself, the Mac side runs here through the same steps and
-# the same link, with no SSH, under $XDG_CACHE_HOME/cawco-apple: inside a
-# CawCo workspace that is the workspaces' own cache, where its boundary lets
-# it write builds; in the owner's shell, ~/Library/Caches.
+# the same link, with no SSH, under one root for every caller,
+# ~/.cawco/workspace-cache/xdg/cawco-apple: a CawCo workspace's own cache,
+# where its boundary lets it write builds, and the same folder from the
+# owner's shell, so the app a probe finds is the one this script last built
+# (scripts/lib/apple-app.ts). Each simulator build leaves CawCo.app.tree
+# beside the app, the stamp of apps/apple it was built from
+# (scripts/tree-stamp.sh); a probe refuses an app whose stamp is not its tree's.
 # The SSH hop is for a person's shell on Linux only. A CawCo workspace holds
 # no key and reaches no other machine: there the check names the Mac and the
 # hub runs this script in a workspace on it.
@@ -40,7 +44,7 @@ if [[ -n ${CAWCO_MAC_SLOT:-} ]]; then
 fi
 if [[ $(uname -s) == Darwin ]]; then
   MAC=(bash --norc -c)
-  APPLE_ROOT=${XDG_CACHE_HOME:-$HOME/Library/Caches}/cawco-apple
+  APPLE_ROOT=$HOME/.cawco/workspace-cache/xdg/cawco-apple
 elif [[ -n ${CAWCO_WORKSPACE:-} ]]; then
   echo "build-both.sh builds on the Mac, and this CawCo workspace reaches no other machine. Name the Mac on the check instead, e.g. { machine: \"Omars-MacBook-Pro\", command: \"bash apps/apple/scripts/build-both.sh ios\", expect: \"LAUNCHED iOS 18.5\" }, or delegate the work to the Mac." >&2
   exit 2
@@ -59,6 +63,8 @@ REMOTE=build/cawco-apple/$BUILD/apps/apple
 # run from apps/apple) builds the same tree.
 cd "$ROOT"
 [[ -f apps/apple/project.yml ]] || { echo "no apps/apple/project.yml under $ROOT" >&2; exit 2; }
+# The apps/apple this build is made from, stamped beside each simulator app.
+TREE=$(bash apps/apple/scripts/tree-stamp.sh)
 PLATFORM=${1:-both}
 COMPILE_ONLY=${2:-}
 [[ -z $COMPILE_ONLY || $COMPILE_ONLY == --compile-only ]] || { echo "usage: build-both.sh [ios|macos|both] [--compile-only]" >&2; exit 2; }
@@ -227,7 +233,7 @@ mkdir -p "$LOGS"
 SETTLE=8
 # This build holds the Mac build slot: mac-slot.sh may take a simulator slot
 # inside it.
-export CAWCO_MAC_SLOT=build DD LOGS SETTLE
+export CAWCO_MAC_SLOT=build DD LOGS SETTLE TREE
 trap 'exit 130' INT
 trap 'exit 143' TERM HUP
 XCODEGEN=$(command -v xcodegen || echo /opt/homebrew/bin/xcodegen)
@@ -240,6 +246,10 @@ build() { # <destination> <label> [signed]
   # (No empty-array expansion here: the Mac's bash 3.2 calls it unbound under `set -u`.)
   local runner=env
   [[ ${3:-} != signed ]] || runner=scripts/signed.sh
+  # A simulator app is stamped with the apps/apple it is built from
+  # (tree-stamp.sh), and only once it is: the stamp goes as the build starts.
+  local stamp="$DD/Build/Products/Debug-iphonesimulator/CawCo.app.tree"
+  case $1 in *"iOS Simulator"*) rm -f "$stamp" ;; *) stamp= ;; esac
   "$runner" xcodebuild -project CawCo.xcodeproj -scheme CawCo -destination "$1" \
     -derivedDataPath "$DD" -skipPackagePluginValidation build \
     >"$LOGS/build-$2.log" 2>&1 || {
@@ -251,6 +261,7 @@ build() { # <destination> <label> [signed]
     echo "FAILED $2 (full log: mac:$LOGS/build-$2.log)"
     exit 1
   }
+  [[ -z $stamp ]] || printf '%s\n' "$TREE" >"$stamp"
   echo "BUILT $2"
 }
 
@@ -342,8 +353,8 @@ if [[ $PLATFORM != ios ]]; then macos; fi
 if [[ $PLATFORM != macos ]]; then ios 'iOS 18.5'; fi
 EOF
 
-printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q APPLE_ROOT=%q BUILD_SCRIPT=%q bash --norc -c %q --' \
-  "$PLATFORM" "$COMPILE_ONLY" "$APPLE_ROOT" "$BUILD_SCRIPT" "$PREPARE"
+printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q APPLE_ROOT=%q TREE=%q BUILD_SCRIPT=%q bash --norc -c %q --' \
+  "$PLATFORM" "$COMPILE_ONLY" "$APPLE_ROOT" "$TREE" "$BUILD_SCRIPT" "$PREPARE"
 for argument in "$BUILD" "${LIVE[@]}"; do printf -v COMMAND '%s %q' "$COMMAND" "$argument"; done
 # The ssh link's stdin and stdout are two FIFOs held on fds 3 (to the Mac)
 # and 4 (from it): the Mac's /bin/bash 3.2 has no coproc and no {var}>&

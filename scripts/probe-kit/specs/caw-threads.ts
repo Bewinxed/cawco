@@ -37,10 +37,10 @@
  * On a host without Xcode (no `xcrun`) the app's steps in c are a NOTE, not
  * run, and his question is answered as the web answers it.
  */
-import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
+import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, ROOT, type Spec } from "../kit";
@@ -60,7 +60,6 @@ const SIM = {
   runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
   device: "iPhone 16 Pro",
 };
-const TRAILING_SLASH = /\/$/;
 const PLAIN = /PROBE-PLAIN-([A-Z]+)/g;
 const WAKE_BODY = /\):\n\n([\s\S]*?)\n\nAnswer with thread_reply/g;
 const SLOW_REPLY = /PROBE-REPLY-([A-Z]+)/g;
@@ -222,20 +221,8 @@ async function sh(script: string): Promise<string> {
   return out;
 }
 
-function appPath(): string {
-  if (process.env.PROBE_IOS_APP) {
-    return process.env.PROBE_IOS_APP;
-  }
-  const home = process.env.HOME ?? "";
-  const top = ROOT.replace(TRAILING_SLASH, "");
-  const name = top === join(home, "cockpit") ? "main" : top.split("/").at(-1);
-  return join(
-    process.env.XDG_CACHE_HOME ?? join(home, "Library", "Caches"),
-    "cawco-apple",
-    name ?? "main",
-    "DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app"
-  );
-}
+/** The checkout's simulator app, only when it was built from this tree (scripts/lib/apple-app.ts). */
+const appPath = () => freshApp(ROOT);
 
 /**
  * What every run leaves in its out folder, however it ends: the mock's last
@@ -526,7 +513,6 @@ const steps = async (kit: Kit, fleet: KitFleet) => {
     `parked ${webStill}; on the page ${shownBefore}→${shownAfter}; status ${webStatus}; dismissed ${dismissed()}`
   );
 
-  const app = appPath();
   // The app's steps drive the simulator from this host (`xcrun`, axe): a host
   // without Xcode answers his question as the web does and reads the rest.
   const xcode = Bun.which("xcrun") !== null;
@@ -535,7 +521,13 @@ const steps = async (kit: Kit, fleet: KitFleet) => {
       "c app, the app's steps, not run: this host has no Xcode (run on the Mac)"
     );
   }
-  if (xcode && kit.check("the app is built", existsSync(app), app)) {
+  const { path: app, problem } = xcode
+    ? appPath()
+    : { path: "", problem: "no Xcode" };
+  if (
+    xcode &&
+    kit.check("the app is built from this tree", !problem, problem ?? app)
+  ) {
     let sim: MacSim | undefined;
     try {
       sim = await macSim(SIM);
@@ -653,7 +645,7 @@ const steps = async (kit: Kit, fleet: KitFleet) => {
     "c: answered, he reads what you wrote beside it, and his answer lands",
     Boolean(answeredRow && cw) && dismissed() === 0
   );
-  if (xcode && existsSync(app)) {
+  if (xcode && !problem) {
     kit.check(
       "c app: what you wrote on the phone is read and answered in the thread",
       Boolean(await saidAmong("Plain answer CI"))

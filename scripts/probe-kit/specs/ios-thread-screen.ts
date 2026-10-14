@@ -20,10 +20,10 @@
  * `PROBE_DEVICE=iPhone` (or `iPad`) runs one device.
  */
 
-import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
+import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, ROOT, type Spec } from "../kit";
@@ -36,7 +36,6 @@ const AXE = "/opt/homebrew/bin/axe";
  * further, as a probe line may carry `] ` of its own (`asks [...]`).
  */
 const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
-const TRAILING_SLASH = /\/$/;
 const DEVICES = [
   {
     tag: "iPhone",
@@ -108,20 +107,8 @@ async function sh(script: string): Promise<string> {
   return out;
 }
 
-function appPath(): string {
-  if (process.env.PROBE_IOS_APP) {
-    return process.env.PROBE_IOS_APP;
-  }
-  const home = process.env.HOME ?? "";
-  const top = ROOT.replace(TRAILING_SLASH, "");
-  const name = top === join(home, "cockpit") ? "main" : top.split("/").at(-1);
-  return join(
-    process.env.XDG_CACHE_HOME ?? join(home, "Library", "Caches"),
-    "cawco-apple",
-    name ?? "main",
-    "DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app"
-  );
-}
+/** The checkout's simulator app, only when it was built from this tree (scripts/lib/apple-app.ts). */
+const appPath = () => freshApp(ROOT);
 
 /** The thread written into the hub's store: what each author says, oldest first. */
 const SEEDED = [
@@ -161,8 +148,8 @@ const SEEDED = [
 ];
 
 const run = async (kit: Kit) => {
-  const app = appPath();
-  if (!kit.check("the app is built", existsSync(app), app)) {
+  const { path: app, problem } = appPath();
+  if (!kit.check("the app is built from this tree", !problem, problem ?? app)) {
     return;
   }
   const fleet = await kit.fleet(respond);

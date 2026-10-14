@@ -81,6 +81,7 @@
 import { mkdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import type { DbShape, WorkItemRow } from "../packages/hub/src/db";
+import { APPLE_BUILDS } from "./lib/apple-app";
 import { type MacSim, macSim } from "./lib/mac-sim";
 import { MACHINE, scratchFleet, until } from "./scratch-fleet";
 
@@ -618,12 +619,8 @@ try {
     await Bun.$`git -C ${root} rev-parse --show-toplevel`.text()
   ).trim();
   const name = top === join(home, "cockpit") ? "main" : basename(top);
-  const base = onMac
-    ? join(
-        process.env.XDG_CACHE_HOME ?? join(home, "Library", "Caches"),
-        "cawco-apple"
-      )
-    : "$HOME/build/cawco-apple";
+  // On this Mac, build-both.sh's one build root (lib/apple-app.ts); over SSH, the Mac's ~/build.
+  const base = onMac ? APPLE_BUILDS : "$HOME/build/cawco-apple";
   const app = `${base}/${name}/DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app`;
 
   // ── 2. The fleet ───────────────────────────────────────────────────────

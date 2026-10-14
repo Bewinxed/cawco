@@ -54,6 +54,7 @@
 import { mkdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import type { Subprocess } from "bun";
+import { APPLE_BUILDS } from "./lib/apple-app";
 import { type MacSim, macSim } from "./lib/mac-sim";
 import { type Reply, type Seen, scratchFleet, until } from "./scratch-fleet";
 
@@ -121,13 +122,8 @@ const buildOf = async (dir: string) => {
   ).trim();
   return top === join(home, "cockpit") ? "main" : basename(top);
 };
-/** build-both.sh's APPLE_ROOT: on the Mac itself its cache (this environment's, as the script reads it), over SSH the Mac's ~/build. */
-const APPLE_ROOT = local
-  ? join(
-      process.env.XDG_CACHE_HOME ?? join(home, "Library", "Caches"),
-      "cawco-apple"
-    )
-  : "$HOME/build/cawco-apple";
+/** build-both.sh's APPLE_ROOT: on the Mac itself its one build root (lib/apple-app.ts), over SSH the Mac's ~/build. */
+const APPLE_ROOT = local ? APPLE_BUILDS : "$HOME/build/cawco-apple";
 /** Where build-both.sh leaves the simulator app. */
 const appOf = (build: string) =>
   `${APPLE_ROOT}/${build}/DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app`;
