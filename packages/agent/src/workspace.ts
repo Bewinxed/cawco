@@ -8,11 +8,9 @@ import { constants } from "node:fs";
 import {
   chmod,
   copyFile,
-  lstat,
   mkdir,
   open,
   readdir,
-  readFile,
   rename,
   rm,
   stat,
@@ -59,6 +57,7 @@ import {
   ensureBoundary,
   shellQuote,
 } from "./boundary";
+import { carryFolder, carryReadme, carrySteps, ownFilesOnly } from "./carry";
 import { prepareClone } from "./clone";
 import { expandHome } from "./fs";
 import { useHubCredentialHelper } from "./git-credential";
@@ -664,43 +663,11 @@ const cacheOfClone = async (clone: string): Promise<string[]> => {
   return [...owned, ...ofClone.flat(), ...packages];
 };
 
-/** A carry's folder: every entry in it a folder or a regular file of one link, else it is not the carry's own. */
-const ownFilesOnly = async (dir: string): Promise<void> => {
-  const info = await lstat(dir);
-  if (!info.isDirectory()) {
-    throw new Error(`${dir} is not a folder of the carry's own`);
-  }
-  for (const entry of await readdir(dir)) {
-    const path = join(dir, entry);
-    // biome-ignore lint/performance/noAwaitInLoops: a carry holds a handful of files
-    const one = await lstat(path);
-    if (one.isDirectory()) {
-      await ownFilesOnly(path);
-    } else if (!one.isFile() || one.nlink !== 1) {
-      throw new Error(`${path} is not a file of the carry's own`);
-    }
-  }
-};
-
-/** A file the carry's git wrote, trimmed; empty when it wrote none. */
-const carried = (dir: string, name: string): Promise<string> =>
-  readFile(join(dir, name), "utf8").then(
-    (text) => text.trim(),
-    () => ""
-  );
-
 /**
- * Writes what a workspace holds that is nowhere else into a folder in its
- * scratch dir, git running inside its boundary, and answers that folder's
- * name there. In it, each only when there is something to put there:
- * - `commits.bundle`: every commit on HEAD or a local branch that no
- *   remote-tracking ref has, with those refs (`git fetch`);
- * - `commits/`: HEAD's among them as a patch series (`git am`);
- * - `uncommitted.patch`: every changed, deleted and untracked file against
- *   HEAD (`git apply`), read through a copy of the index so the clone's own
- *   is untouched; `skip`, its items' handed-over outputs, left out;
- * - `stashes/<n>.patch`: each stash entry with its untracked files;
- * - `head` and `branch`: the commit and branch the clone was on.
+ * Writes what a workspace holds that is nowhere else into a carry folder
+ * (carry.ts) in its scratch dir, git running inside its boundary, and
+ * answers that folder's name there; `skip`, its items' handed-over
+ * outputs, left out of the uncommitted diff.
  */
 const writeCarryInside = async (
   workspace: WorkspaceRef,
@@ -708,38 +675,10 @@ const writeCarryInside = async (
   skip: readonly string[]
 ): Promise<string> => {
   const name = `.cawco-carry-${crypto.randomUUID()}`;
-  const excluded = skip
-    .map((path) => shellQuote(`:(exclude,literal)${path}`))
-    .join(" ");
-  const steps = [
-    "set -e",
-    `d="$TMPDIR"/${name}`,
-    'mkdir "$d"',
-    'git rev-parse HEAD > "$d"/head',
-    'git symbolic-ref -q --short HEAD > "$d"/branch || true',
-  ];
-  if (held.ahead > 0) {
-    steps.push(
-      'git bundle create --quiet "$d"/commits.bundle HEAD --branches --not --remotes',
-      'git format-patch --quiet --binary -o "$d"/commits HEAD --not --remotes'
-    );
-  }
-  if (held.dirty > 0) {
-    steps.push(
-      'cp "$(git rev-parse --git-path index)" "$d"/index',
-      `GIT_INDEX_FILE="$d"/index git add -A -- . ${excluded}`,
-      'GIT_INDEX_FILE="$d"/index git diff --cached --binary HEAD > "$d"/uncommitted.patch',
-      'rm "$d"/index'
-    );
-  }
-  if (held.stashes > 0) {
-    steps.push(
-      'mkdir "$d"/stashes',
-      'n=0; while git rev-parse -q --verify "stash@{$n}" > /dev/null; do git stash show --include-untracked -p --binary "stash@{$n}" > "$d"/stashes/$n.patch; n=$((n + 1)); done'
-    );
-  }
   try {
-    await insideGit(workspace)(steps.join("\n"));
+    await insideGit(workspace)(
+      carrySteps(`"$TMPDIR"/${name}`, held, skip, "clone")
+    );
   } catch (error) {
     throw new Error(
       `Workspace ${workspace.id} was not archived: its carry could not be written, so nothing was deleted. ${error instanceof Error ? error.message : String(error)}`,
@@ -749,58 +688,32 @@ const writeCarryInside = async (
   return name;
 };
 
-/** How a carry's README names what it holds and how each part is taken back. */
-const carryReadme = async (
-  workspace: WorkspaceRef,
-  words: string,
-  folder: string
-): Promise<string> => {
-  const [head, branch] = await Promise.all([
-    carried(folder, "head"),
-    carried(folder, "branch"),
-  ]);
-  const has = (name: string): Promise<boolean> =>
-    stat(join(folder, name)).then(
-      () => true,
-      () => false
-    );
-  const [bundle, commits, uncommitted, stashes] = await Promise.all(
-    ["commits.bundle", "commits", "uncommitted.patch", "stashes"].map(has)
-  );
-  return [
-    `# Workspace ${workspace.id}, saved before it was archived`,
-    "",
-    `Its clone ${workspace.path} held ${words} when a person archived it anyway, on ${new Date().toISOString()}, on ${branch || "no branch"} at ${head || "an unread commit"}. This folder is that work; the clone is gone.`,
-    "",
-    bundle &&
-      `- \`commits.bundle\`: every commit on HEAD or a local branch that no remote had. In a clone of the repository: \`git fetch ${folder}/commits.bundle 'refs/heads/*:refs/heads/carry/*'\`.`,
-    commits &&
-      `- \`commits/\`: the commits on HEAD among them, as patches: \`git am ${folder}/commits/*.patch\`.`,
-    uncommitted &&
-      `- \`uncommitted.patch\`: every changed, deleted and untracked file against ${head || "HEAD"}: \`git apply ${folder}/uncommitted.patch\` at that commit.`,
-    stashes &&
-      "- `stashes/<n>.patch`: stash entry n, untracked files included: `git apply`.",
-    "",
-  ]
-    .filter((line): line is string => line !== false)
-    .join("\n");
-};
-
 /**
  * {@link CONTROL_WORKSPACE_ARCHIVE}: the boundary killed with everything in
  * it, then the clone deleted with what it owns in the workspaces' cache
  * ({@link cacheOfClone}); `closeBoundary` takes its state and scratch dirs.
  * First, its boundary still up, what it holds that is nowhere else is read
- * again ({@link WorkspaceUnlanded}): with `keep` anything there refuses the
- * archive and nothing goes; with `carry` it is written to a carry in
- * `~/.cawco/carries`, which must be whole before anything is deleted.
+ * again ({@link WorkspaceUnlanded}): anything there refuses the archive and
+ * nothing goes.
  */
-export const archiveWorkspace = async (
-  ref: unknown
+export const archiveWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
+  closeClone(ref as WorkspaceArchive, false);
+
+/**
+ * {@link CONTROL_WORKSPACE_DISCARD}: as {@link archiveWorkspace}, but what
+ * the clone holds that is nowhere else is written to a carry in
+ * `~/.cawco/carries` (carry.ts), which must be whole before anything is
+ * deleted.
+ */
+export const discardWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
+  closeClone({ ...(ref as WorkspaceArchive), unlanded: "keep" }, true);
+
+const closeClone = async (
+  request: WorkspaceArchive,
+  carryHeld: boolean
 ): Promise<WorkspaceArchived> => {
-  const request = ref as WorkspaceArchive;
-  // Read unless it names a clone with nothing of anyone's own; kept unless
-  // a person chose to carry it: a request naming neither is a `keep`.
+  // Read unless it names a clone with nothing of anyone's own: a request
+  // naming no mode is a `keep`.
   const unread: WorkspaceUnlanded[] = ["check", "unmade"];
   const read = !unread.includes(request.unlanded);
   const path = request.path ?? (await createdPath(request.id));
@@ -818,7 +731,7 @@ export const archiveWorkspace = async (
     ? await holding(workspace, skip)
     : { ahead: 0, dirty: 0, stashes: 0 };
   const words = holdingWords({ ...held, bytes: 0 });
-  if (!holdsNothing({ ...held, bytes: 0 }) && request.unlanded !== "carry") {
+  if (!(holdsNothing({ ...held, bytes: 0 }) || carryHeld)) {
     throw new Error(
       `Workspace ${request.id} was not archived: its clone ${path} holds ${words}, and nothing was deleted.`
     );
@@ -835,10 +748,7 @@ export const archiveWorkspace = async (
   if (inScratch) {
     // Out of the scratch dir before the boundary takes it with it; checked
     // once no process of the workspace is left to write into it.
-    carry = join(
-      workspaceCarriesDir(),
-      `${request.id}-${new Date().toISOString().replaceAll(":", "")}`
-    );
+    carry = carryFolder(request.id);
     await mkdir(workspaceCarriesDir(), { recursive: true, mode: 0o700 });
     await rename(inScratch, carry);
   }
@@ -855,7 +765,13 @@ export const archiveWorkspace = async (
     }
     await writeFile(
       join(carry, "README.md"),
-      await carryReadme(workspace, words, carry)
+      await carryReadme({
+        title: `Workspace ${request.id}, saved before it was archived`,
+        checkout: "clone",
+        path,
+        words,
+        folder: carry,
+      })
     );
     console.info(
       `[workspace] ${request.id}: ${words} in ${path} saved to the carry ${carry}`

@@ -11,7 +11,8 @@
  *   shared workspace cache, the
  *   objects dir its clone borrows), the toolchains on PATH and the tool
  *   trees their commands link into (`homeToolchains`), the user's git
- *   config, Playwright's browsers, the cawco binary, on macOS the selected
+ *   config, Playwright's browsers, the impeccable skill's installed engines,
+ *   the cawco binary, on macOS the selected
  *   Xcode bundle (`darwinDeveloperBundle`), and the user layer of
  *   Claude Code (CLAUDE.md, memories, skills, plugins, agents, commands,
  *   rules, output styles, workflows, themes, plans), also by its names in
@@ -39,6 +40,7 @@ import {
   credentialStores,
   darwinDeveloperBundle,
   darwinUserDirs,
+  hostImpeccableEngines,
   hostPlaywrightBrowsers,
   projectClaudeDir,
   USER_LAYER_DIRS,
@@ -717,6 +719,7 @@ export const workspacePolicy = async (
       join(home, ".gitconfig"),
       userGitConfigDir(),
       hostPlaywrightBrowsers(),
+      hostImpeccableEngines(),
       ...(await darwinDeveloperBundle()),
       binaryRoot(),
       ...[...USER_LAYER_DIRS, ...USER_LAYER_FILES].map((name) =>

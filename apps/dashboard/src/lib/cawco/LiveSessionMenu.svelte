@@ -16,7 +16,13 @@
    * The row is the trigger itself: `children` is handed the trigger's props
    * and spreads them on its own root element, so a table row stays a `<tr>`.
    */
-  import { type HarnessKind, holdsNothing, machineLabel } from "@cawco/core";
+  import {
+    CONTROL_SPIN_OFF_HELD,
+    type HarnessKind,
+    holdsNothing,
+    machineLabel,
+    type SpinOffHeld,
+  } from "@cawco/core";
   import type { Snippet } from "svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
@@ -43,6 +49,7 @@
     forkSession,
     type InstanceRow,
     keepSession,
+    machineControl,
     removeSession,
     workspaceHeld,
   } from "./client.svelte";
@@ -237,14 +244,28 @@
 
   /**
    * A spin-off may or may not have a worktree of its own (`scratch.worktree`
-   * at its spawn), and the row doesn't say which: the words name what the
-   * spawn made, whichever it was.
+   * at its spawn): its machine reads what that worktree holds that is
+   * nowhere else, and the question names it and that a discard keeps it as
+   * a carry. A read that fails, or no worktree, asks in words naming what
+   * the spawn made, whichever it was; the machine saves a carry either way.
    */
   async function askDiscard() {
+    const held = await machineControl<SpinOffHeld | null>(
+      instance.machineId,
+      CONTROL_SPIN_OFF_HELD,
+      [instance.id]
+    ).catch(() => null);
+    const where = machine ? machineLabel(machine.hostname) : "its machine";
     await asker.ask({
       at: instance.id,
       title: "Discard this spin-off?",
-      body: "The session stops, and whatever the spawn created for it — its worktree, its transcript — goes with it, for good.",
+      body:
+        held && (held.ahead > 0 || held.dirty > 0)
+          ? [
+              `Its worktree ${held.path} holds work that is nowhere else: ${held.holds}.`,
+              `The session stops and the worktree and transcript go. That work is saved first, as a carry on ${where} (in ~/.cawco/carries).`,
+            ]
+          : "The session stops, and whatever the spawn created for it — its worktree, its transcript — goes with it, for good.",
       confirmLabel: "Discard spin-off",
       destructive: true,
       pendingLabel: "Discarding…",

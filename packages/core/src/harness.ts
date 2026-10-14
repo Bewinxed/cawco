@@ -1451,6 +1451,25 @@ export const CONTROL_RENAME_SESSION = "renameSession";
 export const CONTROL_TAG_SESSION = "tagSession";
 export const CONTROL_DELETE_SESSION = "deleteSession";
 
+/**
+ * What a spin-off's worktree would take with it if it were discarded, read
+ * on its machine now: the commits on its HEAD that no branch or remote of
+ * its repository has, and its `git status` entries (untracked files
+ * included). A discard saves them to a carry in `~/.cawco/carries` before
+ * the worktree goes. Args `[instanceId]`; answers {@link SpinOffHeld}, or
+ * null for a spin-off with no worktree of its own. Machine-scoped.
+ */
+export const CONTROL_SPIN_OFF_HELD = "spinOffHeld";
+
+/** What {@link CONTROL_SPIN_OFF_HELD} answers. */
+export interface SpinOffHeld {
+  ahead: number;
+  dirty: number;
+  /** In words: "2 commits on no remote, 3 changed files". */
+  holds: string;
+  path: string;
+}
+
 /** Full-text search across all transcripts on a machine (daemon-scoped). */
 export const CONTROL_SEARCH_TRANSCRIPTS = "searchTranscripts";
 
@@ -1664,23 +1683,33 @@ export const CONTROL_WORKSPACE_BOUNDARY = "workspaceBoundary";
 export const CONTROL_WORKSPACE_ARCHIVE = "workspaceArchive";
 
 /**
- * What an archive does with work in the clone that is nowhere else
- * ({@link CONTROL_WORKSPACE_LANDED}, read again by the machine right before
- * it deletes anything):
+ * {@link CONTROL_WORKSPACE_ARCHIVE} for a workspace whose unlanded work a
+ * person chose to let go: the machine first writes that work to a carry
+ * (`~/.cawco/carries/<id>-<time>`: a bundle and patch series of the
+ * commits, the uncommitted diff, each stash as a patch; agent carry.ts),
+ * which must be whole before anything is deleted. A control of its own, so
+ * an agent that cannot write a carry refuses it as a method it does not
+ * know, and deletes nothing. Args `[WorkspaceArchive]` (`unlanded` not
+ * read); answers {@link WorkspaceArchived}. Only the hub sends it.
+ */
+export const CONTROL_WORKSPACE_DISCARD = "workspaceDiscard";
+
+/**
+ * What {@link CONTROL_WORKSPACE_ARCHIVE} does with work in the clone that
+ * is nowhere else ({@link CONTROL_WORKSPACE_LANDED}, read again by the
+ * machine right before it deletes anything):
  * - `keep`: any refuses the archive, in words naming it, and nothing is
  *   removed. What every archive is unless one of the others is named.
- * - `carry`: a person chose to discard it. The machine first writes it to a
- *   carry (`~/.cawco/carries/<id>-<time>`: a bundle and patch series of the
- *   commits, the uncommitted diff, each stash as a patch), then deletes.
  * - `check`: a check workspace, detached at its source workspace's commit;
  *   the commits it has are its source's, which keeps them, and what its
  *   checks wrote is theirs. Not read.
  * - `unmade`: a create that never finished, whose clone nobody worked in.
  *   Not read; `path` may be absent, and the machine's create record names it.
+ * Letting it go is {@link CONTROL_WORKSPACE_DISCARD}.
  */
-export type WorkspaceUnlanded = "keep" | "carry" | "check" | "unmade";
+export type WorkspaceUnlanded = "keep" | "check" | "unmade";
 
-/** What {@link CONTROL_WORKSPACE_ARCHIVE} is asked. `skip` as {@link CONTROL_WORKSPACE_LANDED}'s. */
+/** What {@link CONTROL_WORKSPACE_ARCHIVE} and {@link CONTROL_WORKSPACE_DISCARD} are asked. `skip` as {@link CONTROL_WORKSPACE_LANDED}'s. */
 export interface WorkspaceArchive {
   id: string;
   path?: string;
@@ -1688,7 +1717,7 @@ export interface WorkspaceArchive {
   unlanded: WorkspaceUnlanded;
 }
 
-/** What {@link CONTROL_WORKSPACE_ARCHIVE} answers: the carry's folder on the machine, when one was written. */
+/** What {@link CONTROL_WORKSPACE_ARCHIVE} and {@link CONTROL_WORKSPACE_DISCARD} answer: the carry's folder on the machine, when one was written. */
 export interface WorkspaceArchived {
   carry: string | null;
 }

@@ -24,7 +24,7 @@
  *     its clone's size.
  * (e) Every archive reads the clone first (hub work-items.ts `archive`,
  *     agent `archiveWorkspace`). K given a changed and an untracked file: a
- *     dashboard's raw `workspaceArchive` control, even one asking to carry,
+ *     dashboard's raw `workspaceDiscard` control (an archive with a carry),
  *     is refused at the hub's relay; POST /api/workspaces/K/archive answers
  *     409 naming "1 commit on no remote, 2 changed files" and the clone's
  *     size, and the clone, its files and its row stand. With `discard: true`
@@ -50,7 +50,7 @@ import { type Kit, ROOT, type Spec } from "../kit";
 const TAG = /PROBE-RETIRE-([LKM])/;
 /** A size in words (core `sizeWords`), alone and as the 409 places it before the clone's path. */
 const SIZE = /^\d+(\.\d)? (GB|MB|KB)$/;
-const SIZE_AT = / \d+(\.\d)? (GB|MB|KB) at /;
+const SIZE_AT = /\(\d+(\.\d)? (GB|MB|KB) at /;
 const FINISH = "mcp__cawco__finish_item";
 /** Past the rule's two idle hours (workspace-retire.ts `RETIRE_IDLE_MS`). */
 const BACKDATE_MS = 3 * 3_600_000;
@@ -231,8 +231,8 @@ const archivePhase = async (
     requestId: crypto.randomUUID(),
     payload: {
       requestId: crypto.randomUUID(),
-      method: "workspaceArchive",
-      args: [{ id: k.id, path: k.path, unlanded: "carry" }],
+      method: "workspaceDiscard",
+      args: [{ id: k.id, path: k.path, unlanded: "keep" }],
     },
   });
 

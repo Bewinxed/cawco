@@ -65,6 +65,7 @@ import {
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
+  CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_LANDED,
   CONTROL_WORKSPACE_MIGRATE,
   DEPS_INSTALLING,
@@ -2211,17 +2212,24 @@ export const createWorkItems = ({
    * A workspace's clone and boundary gone on its machine, its places with
    * them, and its row archived. Its machine reads again what it holds that
    * is nowhere else and does with it what `unlanded` says
-   * ({@link WorkspaceUnlanded}); `skip`, its items' handed-over outputs.
+   * ({@link WorkspaceUnlanded}), or with `discard` saves it to a carry
+   * first ({@link CONTROL_WORKSPACE_DISCARD}, which an agent that cannot
+   * write one refuses); `skip`, its items' handed-over outputs.
    */
   const closeWorkspace = async (
     workspace: WorkspaceRow,
-    unlanded: WorkspaceUnlanded,
+    unlanded: WorkspaceUnlanded | "discard",
     skip: string[] = []
   ): Promise<ArchivedWorkspace> => {
-    const request: WorkspaceArchive = { ...refOf(workspace), unlanded, skip };
+    const discard = unlanded === "discard";
+    const request: WorkspaceArchive = {
+      ...refOf(workspace),
+      unlanded: discard ? "keep" : unlanded,
+      skip,
+    };
     const { carry } = (await call(
       workspace.machineId,
-      CONTROL_WORKSPACE_ARCHIVE,
+      discard ? CONTROL_WORKSPACE_DISCARD : CONTROL_WORKSPACE_ARCHIVE,
       [request]
     )) as WorkspaceArchived;
     db.removeWorkspacePlaces(workspace.machineId, workspace.path);
@@ -4580,7 +4588,7 @@ export const createWorkItems = ({
           .checkWorkspacesOf(workspace.id)
           .map((check) => closeWorkspace(check, "check"))
       );
-      return closeWorkspace(workspace, discard ? "carry" : "keep", skip);
+      return closeWorkspace(workspace, discard ? "discard" : "keep", skip);
     },
 
     /**

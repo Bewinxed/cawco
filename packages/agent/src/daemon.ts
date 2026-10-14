@@ -51,6 +51,7 @@ import {
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
+  CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_LANDED,
   CONTROL_WORKSPACE_MIGRATE,
   UPDATE_CAWCO,
@@ -178,6 +179,7 @@ import {
 import {
   archiveWorkspace,
   createWorkspace,
+  discardWorkspace,
   workspaceAt,
   workspaceBoundary,
   workspaceBundle,
@@ -2406,6 +2408,11 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_ARCHIVE,
       archiveWorkspace
+    );
+    // An archive whose unlanded work a person let go: a carry first.
+    supervisor.registerDaemonFunction(
+      CONTROL_WORKSPACE_DISCARD,
+      discardWorkspace
     );
     // What a spent workspace holds that is nowhere else, before the hub retires it.
     supervisor.registerDaemonFunction(

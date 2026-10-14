@@ -37,6 +37,7 @@ import type {
   SessionAddress,
   SessionPulse,
   SpawnPayload,
+  SpinOffHeld,
   StopPayload,
 } from "@cawco/core";
 import {
@@ -52,15 +53,18 @@ import {
   CONTROL_RUN_COMMAND,
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SLEEP,
+  CONTROL_SPIN_OFF_HELD,
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_AT,
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
+  CONTROL_WORKSPACE_DISCARD,
   CONTROL_WORKSPACE_LANDED,
   type DeliveryMark,
   FLEET_STATUS,
   FLEET_SYNC,
   GENERATE_IMAGE,
+  holdingWords,
   INSTALL_SESSION_CREDENTIAL,
   LIMIT_REACHED,
   type LimitHolder,
@@ -102,6 +106,7 @@ import { isDamagedRecord } from "@cawco/core/state-file";
 import { Effect } from "effect";
 import { withFiles } from "./attachments";
 import { type Boundary, boundaryFor, hookArmed, shellQuote } from "./boundary";
+import { carryWorktree, worktreeHeld } from "./carry";
 import { carryRefusal, carrySessions } from "./claude-sessions";
 import { fetchDefaultBranch, hostGit } from "./clone";
 import { reportDamaged } from "./damaged-records";
@@ -1092,6 +1097,7 @@ export class SessionSupervisor {
       key = `workspace:${String(control.args?.[1])}`;
     } else if (
       control?.method === CONTROL_WORKSPACE_ARCHIVE ||
+      control?.method === CONTROL_WORKSPACE_DISCARD ||
       control?.method === CONTROL_WORKSPACE_LANDED ||
       control?.method === CONTROL_WORKSPACE_BUNDLE ||
       control?.method === CONTROL_WORKSPACE_AT
@@ -4324,10 +4330,38 @@ export class SessionSupervisor {
     }
   }
 
-  async #removeWorktree(instanceId: string): Promise<void> {
-    const worktree =
+  /** A spin-off's worktree, as this agent holds it or its record names it. */
+  async #worktreeOf(instanceId: string): Promise<Worktree | undefined> {
+    return (
       this.#worktrees.get(instanceId) ??
-      (await readJson<Worktree>(this.#worktreeRecord(instanceId)));
+      (await readJson<Worktree>(this.#worktreeRecord(instanceId))) ??
+      undefined
+    );
+  }
+
+  /** {@link CONTROL_SPIN_OFF_HELD}: what discarding the spin-off would take with its worktree. */
+  async #spinOffHeld(instanceId: string): Promise<SpinOffHeld | null> {
+    const worktree = await this.#worktreeOf(instanceId);
+    if (!(worktree && (await isDirectory(worktree.path)))) {
+      return null;
+    }
+    const held = await worktreeHeld(worktree.path);
+    return {
+      ahead: held.ahead,
+      dirty: held.dirty,
+      holds: holdingWords({ ...held, bytes: 0 }),
+      path: worktree.path,
+    };
+  }
+
+  /**
+   * A discarded spin-off's worktree removed, after what it holds that is
+   * nowhere else (commits past every branch and remote, uncommitted and
+   * untracked files) is saved to a carry (carry.ts). A carry that cannot be
+   * written refuses the removal, and the worktree stays.
+   */
+  async #removeWorktree(instanceId: string): Promise<void> {
+    const worktree = await this.#worktreeOf(instanceId);
     if (!worktree) {
       return;
     }
@@ -4337,6 +4371,7 @@ export class SessionSupervisor {
       return;
     }
 
+    await carryWorktree(instanceId, worktree.path);
     const removed = await hostGit(worktree.root, [
       "worktree",
       "remove",
@@ -4723,6 +4758,9 @@ export class SessionSupervisor {
       }
       if (method === CONTROL_CARRY_SESSIONS) {
         return await this.carrySessions(args[0] as CarrySessionRequest[]);
+      }
+      if (method === CONTROL_SPIN_OFF_HELD) {
+        return await this.#spinOffHeld(String(args[0]));
       }
       if (method === "listRepos") {
         return await listRepos();

@@ -724,6 +724,19 @@ export const darwinUserDirs = async (): Promise<string[]> =>
       )
     : [];
 
+/**
+ * Where the impeccable skill's engine is installed on the host, one folder
+ * per version (`<version>/impeccable`), where its launcher looks for the
+ * version its skill pins (`${IMPECCABLE_HOME:-~/.impeccable}/bin/<version>`).
+ * A workspace runs it from there, read-only: the launcher's own download
+ * cannot be trusted to work inside one (on 2026-10-14 the curl first on the
+ * Linux host's PATH, zerobrew's, verified no certificate: its OpenSSL's CA
+ * dir does not exist), so each host has it installed, and a skill that pins a version
+ * the host lacks is refused in the launcher's words naming that step.
+ */
+export const hostImpeccableEngines = (): string =>
+  join(homedir(), ".impeccable", "bin");
+
 /** Where Playwright's browsers are on the host: a workspace runs them from there, read-only. */
 export const hostPlaywrightBrowsers = (): string =>
   process.platform === "darwin"
@@ -793,10 +806,6 @@ export const workspaceCacheEnv = (): Record<string, string> => {
     npm_config_devdir: join(cache, "node-gyp"),
     XDG_CACHE_HOME: join(cache, "xdg"),
     UV_CACHE_DIR: join(cache, "uv"),
-    // The impeccable skill's launcher fetches its engine into
-    // `${IMPECCABLE_HOME:-~/.impeccable}/bin/<version>`: home is read-only
-    // here, so its cache is the workspaces' own, filled once per machine.
-    IMPECCABLE_HOME: join(cache, "impeccable"),
     PLAYWRIGHT_BROWSERS_PATH: hostPlaywrightBrowsers(),
   };
 };
