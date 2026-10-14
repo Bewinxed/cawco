@@ -87,6 +87,8 @@ const respond = (request: Seen): Reply => {
 interface Node {
   frame?: { x: number; y: number; width: number; height: number };
   id?: string;
+  label?: string;
+  role?: string;
 }
 
 async function sh(script: string): Promise<string> {
@@ -270,6 +272,8 @@ async function onDevice(
       const walk = (node: Record<string, unknown>) => {
         out.push({
           id: node.AXUniqueId as string | undefined,
+          label: node.AXLabel as string | undefined,
+          role: (node.role ?? node.type) as string | undefined,
           frame: node.frame as Node["frame"],
         });
         for (const kid of (node.children as
@@ -292,7 +296,15 @@ async function onDevice(
         async () => (await tree()).find((n) => n.id === id),
         Boolean,
         60_000
-      );
+      ).catch(async (error: unknown) => {
+        // What stood on screen instead, for the run's evidence.
+        await writeFile(
+          join(kit.out, `${tag}-missing-${id}.json`),
+          JSON.stringify(await tree(), null, 1)
+        );
+        await capture(`missing-${id}`);
+        throw error;
+      });
       const f = node?.frame;
       if (!f) {
         throw new Error(`nothing to tap for ${id}`);
@@ -316,41 +328,7 @@ async function onDevice(
         60_000
       );
 
-    // 1. The seeded thread, in the hub's order.
-    await launch(`-open-session thread:${ctx.threadId}`);
-    const want = SEEDED.map(
-      (m) => `${m.author}:${m.body.slice(0, 40).replaceAll("\n", " ")}`
-    );
-    const line = await until(
-      `${tag}: the thread listed`,
-      () => heard.findLast((l) => l.includes(`probe thread ${ctx.threadId} `)),
-      (l) => !!l && want.every((m) => l.includes(m)),
-      90_000
-    ).catch(() =>
-      heard.findLast((l) => l.includes(`probe thread ${ctx.threadId} `))
-    );
-    let at = 0;
-    const ordered = want.every((m) => {
-      const found = line?.indexOf(m, at) ?? -1;
-      at = found + m.length;
-      return found >= 0;
-    });
-    await Bun.sleep(2500);
-    await capture("thread");
-    // What stands on screen: the composer's field when the thread is up.
-    const nodes = await tree();
-    await writeFile(
-      join(kit.out, `${tag}-thread-tree.json`),
-      JSON.stringify(nodes, null, 1)
-    );
-    const field = nodes.some((n) => n.id === "steer-message");
-    kit.check(
-      `1 ${tag}: the thread opens with its messages in the hub's order`,
-      ordered,
-      `${line} | composer on screen ${field}`
-    );
-
-    // 2. A session's question, answered with Other.
+    // 2. A session's question, answered with Other: the taps, in the first launch.
     await fleet.send(ctx.session, `PROBE-ASK-${TAG} which voice?`);
     await launch(`-open-session ${ctx.session}`);
     const own = `PROBE-OWN-${TAG}`;
@@ -373,6 +351,35 @@ async function onDevice(
       `2 ${tag}: Other takes your own words as the question's answer, and the session reads them as the tool's result`,
       Boolean(read),
       read ? "read" : heard.filter((l) => l.includes("other")).join(" | ")
+    );
+
+    // 1. The seeded thread, in the hub's order, read off the screen's own
+    // line: on an iPad a relaunch leaves iPadOS's DockFolderViewService
+    // frontmost to accessibility, so every tap is made in the first launch.
+    await launch(`-open-session thread:${ctx.threadId}`);
+    const want = SEEDED.map(
+      (m) => `${m.author}:${m.body.slice(0, 40).replaceAll("\n", " ")}`
+    );
+    const line = await until(
+      `${tag}: the thread listed`,
+      () => heard.findLast((l) => l.includes(`probe thread ${ctx.threadId} `)),
+      (l) => !!l && want.every((m) => l.includes(m)),
+      90_000
+    ).catch(() =>
+      heard.findLast((l) => l.includes(`probe thread ${ctx.threadId} `))
+    );
+    let at = 0;
+    const ordered = want.every((m) => {
+      const found = line?.indexOf(m, at) ?? -1;
+      at = found + m.length;
+      return found >= 0;
+    });
+    await Bun.sleep(2500);
+    await capture("thread");
+    kit.check(
+      `1 ${tag}: the thread opens with its messages in the hub's order`,
+      ordered,
+      line
     );
   } finally {
     stream?.kill();
