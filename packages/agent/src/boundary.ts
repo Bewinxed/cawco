@@ -2741,8 +2741,11 @@ fi`
  * What every command runs with besides its caller's environment: the
  * workspaces' own cache (`workspaceCacheEnv`), its own XDG config, data and
  * state homes (`workspaceXdgEnv`), the host's CA store (`hostCaEnv`: TLS
- * verifies against it whatever binary is first on PATH), its scratch dir as `TMPDIR`
- * (by its short name on macOS, `workspaceTmpDir`),
+ * verifies against it whatever binary is first on PATH), node's own clients
+ * on the boundary's proxy as every other tool is (`NODE_USE_ENV_PROXY`:
+ * node's `fetch` and `http`/`https` read `HTTPS_PROXY` and `NO_PROXY` only
+ * with it, and a workspace reaches the network through that proxy alone),
+ * its scratch dir as `TMPDIR` (by its short name on macOS, `workspaceTmpDir`),
  * the empty git template, gh's empty config dir ({@link ghConfigOf}), git's
  * system config naming gh's helper ({@link gitSystemConfigOf}), the tool and
  * git doors (hub-git.ts `gitDoorEnv`), and `CAWCO_WORKSPACE`, by which a
@@ -2755,6 +2758,10 @@ const commandEnv = (id: string, clone: string): string[] => [
     ...workspaceCacheEnv(),
     ...workspaceXdgEnv(id),
     ...hostCaEnv(),
+    // https://nodejs.org/learn/http/enterprise-network-configuration: "This
+    // works with node:http and node:https (v22.21.0 or v24.5.0+) methods as
+    // well as fetch() (v22.21.0 or v24.0.0+)".
+    NODE_USE_ENV_PROXY: "1",
     TMPDIR: workspaceTmpDir(id),
     GIT_TEMPLATE_DIR: gitTemplateOf(id),
     GH_CONFIG_DIR: ghConfigOf(id),
