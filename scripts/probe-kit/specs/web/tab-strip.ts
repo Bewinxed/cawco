@@ -904,6 +904,7 @@ interface KitFleetLike {
   base: string;
   query: <T>(sql: string, ...params: (string | number)[]) => T[];
   repo: string;
+  send: (instanceId: string, text: string) => Promise<string>;
 }
 
 /** What a scrolling track shows past each edge, and the fade it draws there. */
@@ -1314,6 +1315,73 @@ async function seamInk(
   }
 }
 
+/**
+ * A working session stays working through a reload (owner's invariant: a
+ * session's activity as drawn never contradicts what the hub knows).
+ * Foxtrot is sent a slow turn and the page is reloaded the moment its tab
+ * says working, early in the turn, where the daemon's pulse already says so
+ * and the transcript's frames do not yet; Alpha (in front) and Echo have
+ * been working for a while. From the new document's first moment every
+ * 250ms for 10s each one's tab status (`data-tone`) is read: once drawn,
+ * every sample is `working`. Traced before the fix: `wqqqwwww…`, the first
+ * read of the transcript dropping it.
+ */
+async function reloadHolds(
+  kit: Kit,
+  base: string,
+  ids: string[],
+  fleet: KitFleetLike
+) {
+  const fresh = ids[5] as string;
+  const three = [ids[0], fresh, ids[4]] as string[];
+  const working = three;
+  const page = await strip(kit, base, three, three[0] as string);
+  await fleet.send(fresh, SLOW);
+  await page.waitForFunction(
+    ([tab, id]) =>
+      document.querySelector(
+        `${tab}:has([data-session-tab="${id}"])[data-tone="working"]`
+      ),
+    [TAB, fresh] as const,
+    { polling: 50 }
+  );
+  await page.context().addInitScript(
+    ([tab, watched]) => {
+      const w = window as unknown as { __toneTrace?: string[] };
+      w.__toneTrace = [];
+      const sample = () => {
+        w.__toneTrace?.push(
+          (watched as readonly string[])
+            .map(
+              (id) =>
+                document
+                  .querySelector(`${tab}:has([data-session-tab="${id}"])`)
+                  ?.getAttribute("data-tone")
+                  ?.slice(0, 1) ?? "-"
+            )
+            .join("")
+        );
+      };
+      sample();
+      const timer = setInterval(sample, 250);
+      setTimeout(() => clearInterval(timer), 10_000);
+    },
+    [TAB, working] as const
+  );
+  await page.reload({ waitUntil: "commit" });
+  await page.waitForTimeout(10_500);
+  const trace = await page.evaluate(
+    () => (window as unknown as { __toneTrace?: string[] }).__toneTrace ?? []
+  );
+  const drawn = trace.filter((s) => !s.includes("-"));
+  kit.check(
+    "reload: Alpha, Foxtrot (its turn just begun) and Echo read working at every 250ms sample from the reloaded page's first paint for 10s",
+    drawn.length >= 30 && drawn.every((s) => s === "www"),
+    `${drawn.length} drawn of ${trace.length}: ${trace.join(" ")}`
+  );
+  await page.close();
+}
+
 const spec: Spec = {
   name: "tab-strip",
   async run(kit) {
@@ -1346,6 +1414,7 @@ const spec: Spec = {
     if (kit.approve) {
       return;
     }
+    await reloadHolds(kit, base, ids, fleet);
     await closeAndOpen(kit, base, ids);
     await middleClick(kit, base, ids);
     await opener(kit, base, ids);

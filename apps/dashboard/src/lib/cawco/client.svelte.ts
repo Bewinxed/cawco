@@ -1615,6 +1615,16 @@ function adoptTranscriptPage(
   if (tail) {
     applyTail(target, { ...tail, streams: undefined });
   }
+  // Whether a turn is under way, and its tool, are the daemon's now-state
+  // (`applyPulse`), once the hub has sent one. The page is a read made out
+  // of band, and its tail says `busy` as the frames show it, which trails
+  // the pulse at a turn's start: written over it, a working session read
+  // quiet until its next pulse (`wqw` on a reload). The tail stands only
+  // where no pulse has come: the server's render, before the socket's first.
+  const pulse = state.pulses[target.instanceId];
+  if (pulse) {
+    applyPulse(target, pulse);
+  }
   if (page.facts) {
     applyFacts(target, page.facts, false);
   }
