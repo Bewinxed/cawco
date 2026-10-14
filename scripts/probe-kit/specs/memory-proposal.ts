@@ -34,19 +34,20 @@
  *     session, the tab moves to his thread, the card is in its composer;
  *     Approve commits as the person, the thread says so and the card leaves.
  * The built app on an iPhone simulator of its own (a mac-slot.sh slot,
- * deleted at the end), which draws a proposal Caw made in a thread as the
- * card alone until it has a thread screen (HubConnection.swift `askAlone`):
+ * deleted at the end), which draws a proposal Caw made in a thread on that
+ * thread's composer (ThreadViewController), as the web does:
  * (a) Launched as a tap on the AGENTS.md proposal's push launches it
- *     (`-push-route session:<p-…>`): the route lands (not "isn't on the
- *     hub"), the card says Approve on, Deny on, nothing under them,
- *     answering on machine "hub", and the pane is the card alone: its
- *     transcript hidden (`probe alone`), no "isn't reachable" on screen.
+ *     (`-push-route push:<its cawco data>`, routed by PushNote.route as a
+ *     tap is): the route lands on his thread (`thread:<id>`); the card
+ *     stands on the thread's composer and says Approve on, Deny on, nothing
+ *     under them, answering on machine "hub"; never the card alone; no
+ *     "isn't reachable" on screen; the tab titled by the thread.
  * (b) Its Approve: the proposal leaves /api/pending, AGENTS.md's newest
- *     commit is the person's ("you"), titled by the proposal's why, and the
- *     pane leaves.
+ *     commit is the person's ("you"), titled by the proposal's why, and its
+ *     card leaves the thread.
  * (c) Launched as a tap on the cited knowledge proposal's push, its Deny:
  *     the proposal leaves, the knowledge file is never written, the note it
- *     cited is archived "rejected", and the pane leaves.
+ *     cited is archived "rejected", and its card leaves the thread.
  *
  *   bash apps/apple/scripts/build-both.sh ios
  *   bun scripts/probe-kit/run.ts memory-proposal
@@ -91,7 +92,11 @@ const STAMP_DAY = /^(\d{8})/;
 const OUTCOME = /outcome: (.*)/;
 /** The hub's log lines about Caw and memory, for a failed wait on Caw to show. */
 const CAW_LINE = /caw|memory|thread|lead/i;
-const LOG_HEAD = /^.*\] /;
+/**
+ * A log line's head, up to and with its `[dev.cawco.app:<category>] `: never
+ * further, as a probe line may carry `] ` of its own (a thread's `asks [...]`).
+ */
+const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 const TRAILING_SLASH = /\/$/;
 
 /** knowledge/web.md as Caw writes it, then as he proposes it. */
@@ -758,7 +763,7 @@ async function run(kit: Kit): Promise<void> {
       [
         "bash",
         "-c",
-        `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "Push" OR category == "Restore" OR category == "Permission")'`,
+        `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "Push" OR category == "Restore" OR category == "Permission" OR category == "Thread")'`,
       ],
       { stdout: "pipe", stderr: "ignore" }
     );
@@ -823,14 +828,20 @@ async function run(kit: Kit): Promise<void> {
       );
     };
 
-    /** Opens the proposal as a tap on its push that launches the app does; the card's line once it says it. */
+    /**
+     * Opens the proposal as a tap on its push that launches the app does
+     * (its own `cawco` data, routed by PushNote.route): his thread, the card
+     * on its composer; the card's line once it says it.
+     */
     const openFromPush = async (ask: Ask, label: string) => {
       const from = heard.length;
+      const data = JSON.stringify(pushFor(ask)?.payload.cawco ?? {});
+      const target = `thread:${ask.payload.threadId ?? ""}`;
       await until(
         `${label}: the app launched`,
         () =>
           sh(
-            `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${fleet.base} -push-route session:${ask.instanceId} >/dev/null`
+            `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${fleet.base} -push-route 'push:${data}' >/dev/null`
           ).then(() => true),
         Boolean,
         60_000
@@ -843,8 +854,8 @@ async function run(kit: Kit): Promise<void> {
             .slice(from)
             .find(
               (l) =>
-                l.includes(`route session("${ask.instanceId}") landed`) ||
-                l.includes(`route session ${ask.instanceId} is not on the hub`)
+                l.includes(`route session("${target}") landed`) ||
+                l.includes(`route session ${target} is not on the hub`)
             ),
         Boolean,
         90_000
@@ -866,34 +877,36 @@ async function run(kit: Kit): Promise<void> {
           .slice(from)
           .findLast((l) => l.includes(`probe card ${ask.requestId} `))
       );
-      // SessionViewController `syncAskAlone`: the pane is the card alone.
+      // SessionViewController `syncAskAlone`: never, for one made in a thread.
       const alone = heard
         .slice(from)
-        .find((l) =>
-          l.includes(
-            `probe alone ${ask.instanceId}: asking true transcript hidden`
-          )
+        .find((l) => l.includes(`probe alone ${ask.instanceId}: asking true`));
+      // ThreadViewController `probe`: his thread, the card among its asks.
+      const inThread = heard
+        .slice(from)
+        .findLast(
+          (l) =>
+            l.includes(`probe thread ${ask.payload.threadId} `) &&
+            l.includes(ask.requestId)
         );
       const shown = await tree();
       await writeFile(
         join(kit.out, `${label}-tree.json`),
         JSON.stringify(shown, null, 2)
       );
-      return { landed, card: shownCard, shown, alone, from };
+      return { landed, card: shownCard, shown, alone, inThread, from };
     };
-    /** The pane's word that its ask settled and it leaves, and the screen after. */
+    /** The thread's word that the card has left its asks, and the screen after. */
     const leaves = async (ask: Ask, from: number) => {
       const line = await until(
-        "the pane leaves",
+        "the card leaves the thread",
         () =>
           heard
             .slice(from)
-            .find((l) =>
-              l.includes(
-                `probe alone ${ask.instanceId}: asking false transcript hidden leaving`
-              )
+            .findLast((l) =>
+              l.includes(`probe thread ${ask.payload.threadId} `)
             ),
-        Boolean,
+        (l) => !!l && !l.includes(ask.requestId),
         20_000
       ).catch(() => undefined);
       const after = await until(
@@ -913,9 +926,9 @@ async function run(kit: Kit): Promise<void> {
     // ── (a) a tap on the AGENTS.md proposal's push ─────────────────────────
     const a = await openFromPush(agents, "a");
     kit.check(
-      "a: the push's route lands on the proposal",
-      a.landed?.includes("landed") === true,
-      a.landed ?? "no route line"
+      "a: the push's route lands on the thread the proposal was made in",
+      !!agents.payload.threadId && a.landed?.includes("landed") === true,
+      a.landed ?? `no route line (thread ${agents.payload.threadId})`
     );
     kit.check(
       'a: its card has Approve and Deny enabled, answering on machine "hub", nothing under them',
@@ -925,18 +938,26 @@ async function run(kit: Kit): Promise<void> {
       a.card ?? "no probe card line"
     );
     kit.check(
-      "a: the pane is the card alone: its transcript hidden, nothing says the session is missing",
-      a.alone !== undefined && !a.shown.some((n) => n.label?.includes(MISSING)),
-      `${a.alone ?? "no probe alone line"}; on screen: ${a.shown.filter((n) => n.label?.includes(MISSING)).length} missing-session labels`
+      "a: the card stands on its thread's composer, never as its card alone, and nothing says a session is missing",
+      a.inThread !== undefined &&
+        a.alone === undefined &&
+        !a.shown.some((n) => n.label?.includes(MISSING)),
+      `${a.inThread ?? "no thread line with the card"}; ${a.alone ?? "no card alone"}; on screen: ${a.shown.filter((n) => n.label?.includes(MISSING)).length} missing-session labels`
     );
+    const threadTitle = (
+      await fleet.api<{ id: string; title: string }[]>(
+        `/api/projects/${projectId}/threads`
+      )
+    ).find((t) => t.id === agents.payload.threadId)?.title;
     kit.check(
-      "a: its tab is titled by who asked, not its id",
-      a.shown.some((n) => n.label?.includes("Caw")) &&
+      "a: its tab is the thread's, titled by the thread, not the proposal's id",
+      !!threadTitle &&
+        a.shown.some((n) => n.label?.includes(threadTitle)) &&
         !a.shown.some((n) => n.label === agents.instanceId.slice(0, 8)),
-      a.shown
+      `${threadTitle}: ${a.shown
         .filter((n) => n.label && (n.frame?.y ?? 999) < 160)
         .map((n) => n.label)
-        .join(" | ")
+        .join(" | ")}`
     );
 
     // ── (b) its Approve ────────────────────────────────────────────────────
@@ -961,9 +982,9 @@ async function run(kit: Kit): Promise<void> {
     );
     const bLeft = await leaves(agents, a.from);
     kit.check(
-      "b: after Approve the pane leaves",
+      "b: after Approve its card leaves the thread",
       bLeft.line !== undefined && bLeft.gone,
-      `${bLeft.line ?? "no leaving line"}; card ${bLeft.gone ? "gone" : "still on screen"}`
+      `${bLeft.line ?? "no thread line without it"}; card ${bLeft.gone ? "gone" : "still on screen"}`
     );
 
     // ── (c) the cited proposal's Deny ──────────────────────────────────────
@@ -1005,9 +1026,9 @@ async function run(kit: Kit): Promise<void> {
     );
     const cLeft = await leaves(cited, c.from);
     kit.check(
-      "c: after Deny the pane leaves",
+      "c: after Deny its card leaves the thread",
       cLeft.line !== undefined && cLeft.gone,
-      `${cLeft.line ?? "no leaving line"}; card ${cLeft.gone ? "gone" : "still on screen"}`
+      `${cLeft.line ?? "no thread line without it"}; card ${cLeft.gone ? "gone" : "still on screen"}`
     );
   } finally {
     await writeFile(join(kit.out, "app-log.txt"), heard.join("\n"));

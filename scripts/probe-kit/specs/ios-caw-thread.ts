@@ -31,6 +31,7 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
+import type { Page } from "playwright-core";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, ROOT, type Spec } from "../kit";
@@ -39,11 +40,9 @@ const CAW = "You are Caw";
 const REPLY = "mcp__cawco__thread_reply";
 const PROPOSE = "mcp__cawco__memory_propose";
 const ASK = "AskUserQuestion";
-const THREAD_ID = /thread ([0-9a-f-]{36})/;
-const WAKE_BODY = /\):\n\n([\s\S]*?)\n\nAnswer with thread_reply/g;
-const SLOW_REPLY = /PROBE-REPLY-([A-Z]+)/g;
-const ASKING = /PROBE-ASK-([A-Z]+)/;
-const PROPOSING = /PROBE-PROPOSE-([A-Z]+)/;
+/** Your words' markers: `PROBE-REPLY-X`, `PROBE-ASK-X`, `PROBE-PROPOSE-X`; never Caw's "PROBE-REPLY-X done". */
+const MARKER = /PROBE-(REPLY|ASK|PROPOSE)-([A-Z]+)(?! done)/g;
+const THREAD_IDS = /thread ([0-9a-f-]{36})/g;
 const AXE = "/opt/homebrew/bin/axe";
 /**
  * A log line's head, up to and with its `[dev.cawco.app:<category>] `: never
@@ -97,11 +96,15 @@ const respond = (request: Seen): Reply => {
   if (!request.all.includes(CAW)) {
     return text("ok");
   }
-  const wake = request.last;
-  const thread = THREAD_ID.exec(wake)?.[1] ?? "";
-  const event =
-    [...wake.matchAll(WAKE_BODY)].map((m) => m[1]).join("\n") || wake;
-  const replying = [...event.matchAll(SLOW_REPLY)].at(-1)?.[1];
+  // The newest of your words decides, read across every user message of the
+  // turn: a deferred tool's first call is a ToolSearch round, after which the
+  // newest user message is no longer the wake, and a wake may quote the
+  // thread's earlier words. Caw's own "… done" is never yours.
+  const newest = [...request.all.matchAll(MARKER)].at(-1);
+  const thread = [...request.all.matchAll(THREAD_IDS)].at(-1)?.[1] ?? "";
+  const replying = newest?.[1] === "REPLY" ? newest[2] : undefined;
+  const asking = newest?.[1] === "ASK" ? newest[2] : undefined;
+  const proposing = newest?.[1] === "PROPOSE" ? newest[2] : undefined;
   if (replying) {
     if (made.has(`reply ${replying}`)) {
       return text("Sent.");
@@ -117,7 +120,6 @@ const respond = (request: Seen): Reply => {
     }
     return reply;
   }
-  const asking = ASKING.exec(event)?.[1];
   if (asking) {
     if (made.has(`ask ${asking}`)) {
       return text("Noted your pick.");
@@ -137,7 +139,6 @@ const respond = (request: Seen): Reply => {
       ],
     });
   }
-  const proposing = PROPOSING.exec(event)?.[1];
   if (proposing) {
     if (made.has(`propose ${proposing}`)) {
       return text("Asked.");
@@ -289,13 +290,24 @@ const run = async (kit: Kit) => {
   kit.check("Caw started and answered the first thread", Boolean(lead));
 
   const base = await fleet.dashboard();
-  const page = await kit.page("desk");
-  await open(
-    page,
-    `${base}/session/thread:${threadId}`,
-    'textarea[aria-label="Message the project"]',
-    90_000
-  );
+  /**
+   * The web's thread, opened for as long as one check reads it: a page left
+   * open through a long run is a renderer that may be lost to the machine's load.
+   */
+  const web = async <T>(read: (page: Page) => Promise<T>): Promise<T> => {
+    const page = await kit.page("desk");
+    try {
+      await open(
+        page,
+        `${base}/session/thread:${threadId}`,
+        'textarea[aria-label="Message the project"]',
+        90_000
+      );
+      return await read(page);
+    } finally {
+      await page.close();
+    }
+  };
 
   const only = process.env.PROBE_DEVICE;
   for (const device of DEVICES.filter((d) => !only || d.tag === only)) {
@@ -309,7 +321,7 @@ const run = async (kit: Kit) => {
       said,
       idle,
       pending,
-      page,
+      web,
     });
   }
 };
@@ -318,12 +330,12 @@ interface Ctx {
   app: string;
   idle: () => Promise<unknown>;
   lead: string;
-  page: Awaited<ReturnType<Kit["page"]>>;
   pending: () => Promise<Ask[]>;
   projectId: string;
   rows: () => Row[];
   said: (author: string, words: string) => Promise<Row | undefined>;
   threadId: string;
+  web: <T>(read: (page: Page) => Promise<T>) => Promise<T>;
 }
 
 async function onDevice(
@@ -472,14 +484,16 @@ async function onDevice(
     await sh(`${AXE} type '${words}' --udid ${udid}`);
     await tap("send-steer");
     const row = await ctx.said("you", words);
-    const onWeb = await ctx.page
-      .getByText(words)
-      .first()
-      .waitFor({ timeout: 30_000 })
-      .then(
-        () => true,
-        () => false
-      );
+    const onWeb = await ctx.web((page) =>
+      page
+        .getByText(words)
+        .first()
+        .waitFor({ timeout: 30_000 })
+        .then(
+          () => true,
+          () => false
+        )
+    );
     kit.check(
       `2 ${tag}: a message sent from the app lands in the hub's thread and the web thread shows it`,
       Boolean(row) && onWeb,

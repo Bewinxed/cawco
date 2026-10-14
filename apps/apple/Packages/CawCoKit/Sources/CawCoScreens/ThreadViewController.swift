@@ -418,10 +418,24 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
                 return made
             }()
             card.update(sent: hub.needs.answerSent(for: ask), connected: hub.state == .connected)
+            #if DEBUG
+            // The session pane's card line, for the same simulator passes (memory-proposal).
+            let said = "\(ask.requestId) on \(ask.machineId): \(card.probeState)"
+            if probeCards[ask.requestId] != said {
+                probeCards[ask.requestId] = said
+                Self.cards.notice("probe card \(said, privacy: .public)")
+            }
+            #endif
             ordered.append(card)
         }
         composerBinding.prompts = ordered
     }
+
+    #if DEBUG
+    /// What each card last said to a simulator pass's log.
+    private var probeCards: [String: String] = [:]
+    private static let cards = Logger(subsystem: "dev.cawco.app", category: "Restore")
+    #endif
 
     private func answer(_ ask: ParkedAsk, _ choice: PromptCardView.Choice, _ picks: [String: [String]]) {
         guard hub.state == .connected else {
