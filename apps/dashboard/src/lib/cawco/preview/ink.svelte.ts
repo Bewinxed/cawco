@@ -9,6 +9,7 @@
  */
 import { SvelteMap } from "svelte/reactivity";
 import { exportCanvas } from "../artifact-api";
+import { LOST_REFUSES_MS } from "../canvas/stage.svelte";
 import type { SendExtras } from "../client.svelte";
 
 export interface InkWaiting {
@@ -124,7 +125,10 @@ export async function inkExtras(
   if (!picture) {
     return { extras: { attachments, images: [] }, sent };
   }
-  const png = answer.canvas ? (await exportCanvas(artifactId)).png : answer.png;
+  // A canvas's picture is the hub's, asked within the canvas send's own wait.
+  const png = answer.canvas
+    ? (await exportCanvas(artifactId, LOST_REFUSES_MS)).png
+    : answer.png;
   if (!png) {
     throw new Error("the picture of the ink wasn't drawn");
   }

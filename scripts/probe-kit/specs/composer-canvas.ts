@@ -60,6 +60,10 @@
  *    shoulders over the field), apart; over a phone's field at the foot,
  *    docked at the top, the view's under the tools' where they don't fit
  *    side by side.
+ * 17. The hub's export held (a route that never answers) as a drawn canvas
+ *    is sent: Send says "…the hub didn't answer for it within N s. Nothing
+ *    was sent; send again." over the field 4 to 7 s after Enter, keeps the
+ *    words and the canvas, and the box is Send again, not pending.
  *
  * (9: `canvas` and `artifacts` are their own specs, run beside this one.)
  */
@@ -505,6 +509,7 @@ const probe = async (kit: Kit) => {
   await reducedCheck(on, clock);
   await removeCheck(on, clock, pen);
   await syncCheck(on);
+  await heldExportCheck(on);
   await phoneCheck(on, "phone");
   await phoneCheck(on, "tablet");
   await phoneCheck(on, "tablet", 768);
@@ -1522,6 +1527,96 @@ const syncCheck = async (on: On) => {
       cutSend.said === NOT_REACHED,
     `hub held ${held} before the cut, ${hubAfter} after; the page's doc ${second}; the page said ${lost.join(", ")}; ${JSON.stringify(cutSend)}`
   );
+  await page.close();
+};
+
+/** What Send says when the hub's export doesn't answer within `s` seconds (artifact-api.ts `exportCanvas`). */
+const unanswered = (s: number) =>
+  `The canvas couldn't be read for sending: the hub didn't answer for it within ${s} s. Nothing was sent; send again.`;
+
+/**
+ * 17. The hub's export held (never answered) while a drawn canvas is sent:
+ * Send says why over the field at the 5 s wait's end, keeps the words and
+ * the canvas, and the box is Send again, not pending.
+ */
+const heldExportCheck = async (on: On) => {
+  const { kit, base, session } = on;
+  const page = await kit.page("desk");
+  await open(page, `${base}/session/${session}`, FIELD);
+  await settle(page);
+  const pen = penOf(await page.context().newCDPSession(page));
+  await page.focus(FIELD);
+  await page.keyboard.press("Control+Shift+KeyD");
+  await page.waitForSelector(STAGE, { timeout: 20_000 });
+  const frame = await (
+    await page.locator(FRAME).elementHandle()
+  )?.contentFrame();
+  if (!frame) {
+    kit.check("17: a canvas opens to send with the export held", false);
+    await page.close();
+    return;
+  }
+  await frame.waitForSelector(".canvas-host .excalidraw", { timeout: 60_000 });
+  await settle(page, 800);
+  await frame.click('.rail-box[aria-label^="Pen"]');
+  const at = (await box(page, FRAME)) as Box;
+  await pen(
+    [at.left + at.width * 0.3, at.top + at.height * 0.4],
+    [at.left + at.width * 0.45, at.top + at.height * 0.6]
+  );
+  await settle(page, 1000);
+  // Every export from here on is held: the request stands, never answered.
+  let held = 0;
+  await page.route("**/api/artifacts/*/export", () => {
+    held += 1;
+  });
+  const words = "The canvas with its export held";
+  const rows = await page.locator(".turn.you").count();
+  await page.fill(FIELD, words);
+  await page.focus(FIELD);
+  const pressed = performance.now();
+  await page.keyboard.press("Enter");
+  const said = await until(
+    "Send's answer",
+    () =>
+      page.evaluate(
+        () => document.querySelector(".send-error")?.textContent?.trim() ?? ""
+      ),
+    Boolean,
+    20_000
+  ).catch(() => "");
+  const after = Math.round(performance.now() - pressed);
+  await settle(page, 400);
+  const after2 = await page.evaluate(
+    ([field, stage]) => {
+      const button = document.querySelector<HTMLButtonElement>(
+        "form.cin button.stop"
+      );
+      return {
+        field: (document.querySelector(field) as HTMLTextAreaElement | null)
+          ?.value,
+        canvas: !!document.querySelector(stage),
+        label: button?.getAttribute("aria-label"),
+        busy: button?.getAttribute("aria-busy") ?? null,
+      };
+    },
+    [FIELD, STAGE] as const
+  );
+  const sent = (await page.locator(".turn.you").count()) - rows;
+  kit.check(
+    "17: the hub's export held, Send says why over the field within the 5 s wait, keeps the words and the canvas, and the box is Send again",
+    held > 0 &&
+      [4, 5].some((s) => said === unanswered(s)) &&
+      after >= 4000 &&
+      after <= 7000 &&
+      sent === 0 &&
+      after2.field === words &&
+      after2.canvas &&
+      after2.label === "Send message" &&
+      after2.busy === null,
+    `held ${held} export request(s); said after ${after} ms: "${said}"; sent ${sent}; ${JSON.stringify(after2)}`
+  );
+  await page.unroute("**/api/artifacts/*/export");
   await page.close();
 };
 

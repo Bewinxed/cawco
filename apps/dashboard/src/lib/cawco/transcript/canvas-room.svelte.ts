@@ -87,6 +87,8 @@ const STILL_MS = 100;
 const KEY_STEP = 25;
 /** How often a send reads the hub's export again while it waits for the page's count, ms (the app's). */
 const EXPORT_AGAIN_MS = 250;
+/** The least an export is given past the send's wait, ms (the app's `readForSend`). */
+const EXPORT_AT_LEAST_MS = 1000;
 
 /** The page's doc never synced, or its link has stood lost. */
 const NOT_CONNECTED =
@@ -1298,7 +1300,9 @@ export class CanvasRoom {
    * its doc synced, its picture drawn, and the hub's export counting what
    * the page's doc counts, waited for up to {@link LOST_REFUSES_MS}. A page
    * that never synced, or whose link has stood lost, is refused; a count
-   * the hub hasn't caught up with after the wait is refused too.
+   * the hub hasn't caught up with after the wait is refused too. Each export
+   * is asked within what is left of the wait (a second at least), so a hub
+   * that doesn't answer is said, never waited on with the box spinning.
    */
   async #reached(
     stage: Stage,
@@ -1316,7 +1320,10 @@ export class CanvasRoom {
     await stage.picture();
     for (;;) {
       // biome-ignore lint/performance/noAwaitInLoops: the hub's export read again until it counts what the page does
-      const out = await exportCanvas(canvas.id);
+      const out = await exportCanvas(
+        canvas.id,
+        Math.max(EXPORT_AT_LEAST_MS, deadline - performance.now())
+      );
       const drawn = out.file.elements.filter((el) => !el.isDeleted).length;
       if (stage.link === "synced" && drawn === stage.drawn) {
         return { out, count: drawn };

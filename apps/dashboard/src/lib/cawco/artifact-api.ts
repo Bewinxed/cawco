@@ -82,10 +82,31 @@ export interface CanvasExport {
   png: string | null;
 }
 
-export async function exportCanvas(id: string): Promise<CanvasExport> {
-  return (
-    await ok(await fetch(`/api/artifacts/${encodeURIComponent(id)}/export`))
-  ).json();
+/**
+ * A canvas's export. `withinMs` bounds the wait for the hub's answer, body
+ * and all: past it the read is called off and says so, as the app's does
+ * (ComposerView `readForSend`).
+ */
+export async function exportCanvas(
+  id: string,
+  withinMs?: number
+): Promise<CanvasExport> {
+  const url = `/api/artifacts/${encodeURIComponent(id)}/export`;
+  if (withinMs === undefined) {
+    return (await ok(await fetch(url))).json();
+  }
+  try {
+    const signal = AbortSignal.timeout(withinMs);
+    return await (await ok(await fetch(url, { signal }))).json();
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      throw new Error(
+        `the hub didn't answer for it within ${Math.ceil(withinMs / 1000)} s`,
+        { cause: error }
+      );
+    }
+    throw error;
+  }
 }
 
 /** The draft canvas went out with a send: the session holds it now. */
