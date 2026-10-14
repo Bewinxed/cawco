@@ -12,9 +12,9 @@
    * a card that changes column travels there from where it was drawn.
    */
   import { land, waiting } from "#lib/cawco/motion/share.svelte.js";
-  import { isRetry } from "#lib/cawco/project/caw-lead.svelte.js";
   import {
     flagsOf,
+    isRetry,
     type StageKind,
     type TaskSummary,
   } from "#lib/cawco/project-tasks.js";

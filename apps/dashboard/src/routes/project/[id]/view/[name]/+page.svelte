@@ -7,9 +7,9 @@
    * the app, the app's own task sheet.
    */
   import type { ProjectView } from "@cawco/core";
-  import { viewsOf } from "#lib/cawco/client.svelte.js";
   import { stageLabel } from "#lib/cawco/project-tasks.js";
   import ViewOpenUi from "#lib/cawco/views/ViewOpenUi.svelte";
+  import { viewsOf } from "#lib/cawco/views-api.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconAlert } from "#lib/icons.js";

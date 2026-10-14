@@ -18,6 +18,12 @@
  *    still renders after a reload.
  * e. The app's route renders that one view and nothing around it (on a
  *    phone, its month calendar as the month's list).
+ * f. That route (what the iOS app's web view loads) opens only what the
+ *    view needs, built and on the dev server: every request and WebSocket
+ *    is on its allow-list (VIEW_ROUTE: the document, its build's files, the
+ *    project's views and its view tools), and its JS is within its budget.
+ * g. On the dev server, where each source file is its own URL, it fetches
+ *    no module of the app's shell, fleet store or transcript (APP_MODULE).
  *
  *   bun scripts/probe-kit/run.ts views
  */
@@ -25,7 +31,32 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, open, type Spec } from "../kit";
+import { type Kit, open, type Spec, settle } from "../kit";
+import { APP_MODULE, literal, strayTraffic, watchTraffic } from "../traffic";
+
+/**
+ * The JS the view's route transferred with the fleet store (main at
+ * 8df762e5), and what it may now (measured 283 KB without it).
+ */
+const VIEW_BEFORE_KB = 336;
+const VIEW_BUDGET_KB = 300;
+
+/**
+ * What the view's own route may ask for, beside its build's files and the
+ * dev server's own (traffic.ts): its document, the project's views, and the
+ * view tools its Queries call. No socket at all.
+ */
+const viewRoute = (projectId: string, name: string) => {
+  const p = literal(projectId);
+  return {
+    requests: [
+      new RegExp(`^GET /project/${p}/view/${literal(name)}$`),
+      new RegExp(`^GET /api/projects/${p}/views$`),
+      new RegExp(`^POST /api/projects/${p}/view-tools/[a-z_]+$`),
+    ],
+    sockets: [],
+  };
+};
 
 const CAW = "You are Caw";
 const VIEW_REQUEST = "Event view-request";
@@ -320,12 +351,14 @@ const run = async (kit: Kit) => {
 
   // ── e. the app's route: that one view, chromeless ──────────────────────
   const phone = await kit.page("phone");
+  const built = watchTraffic(phone);
   await open(
     phone,
     `${base}/project/${project.id}/view/probe-week`,
     "[data-view-alone] .view-frame"
   );
   const alone = await viewWords(phone, "[data-view-alone]", ["All tasks"]);
+  await settle(phone);
   const frame = await phone.evaluate(() => {
     const main = document.querySelector("[data-view-alone]");
     const box = main?.getBoundingClientRect();
@@ -351,6 +384,42 @@ const run = async (kit: Kit) => {
       frame.width === frame.viewport &&
       frame.monthList === TITLES.length,
     JSON.stringify(frame)
+  );
+
+  // ── f, g. the route loads only what the view needs ─────────────────────
+  const rules = viewRoute(project.id, "probe-week");
+  const onlyItsOwn = (seen: typeof built, served: string, onDev: boolean) => {
+    const off = strayTraffic(seen, { base: served, dev: onDev, ...rules });
+    kit.check(
+      `f: the view's route (${onDev ? "dev server" : "built"}) opens only its own requests and sockets`,
+      off.strays.length === 0,
+      `${off.strays.slice(0, 12).join(", ") || "none off the list"}; ${seen.requests.length} requests; sockets: ${off.sockets.join(", ") || "none"}`
+    );
+  };
+  onlyItsOwn(built, base, false);
+  const js = await built.bytes();
+  kit.check(
+    `f: the view's route transfers at most ${VIEW_BUDGET_KB} KB of JS (${VIEW_BEFORE_KB} KB with the fleet store)`,
+    js.kb <= VIEW_BUDGET_KB,
+    `${js.kb} KB in ${js.files} files`
+  );
+  const dev = await fleet.devDashboard();
+  const devPhone = await kit.page("phone");
+  const devSeen = watchTraffic(devPhone);
+  await open(
+    devPhone,
+    `${dev}/project/${project.id}/view/probe-week`,
+    "[data-view-alone] .view-frame",
+    120_000
+  );
+  await viewWords(devPhone, "[data-view-alone]", ["All tasks"]);
+  await settle(devPhone);
+  onlyItsOwn(devSeen, dev, true);
+  const strays = devSeen.scripts.filter((path) => APP_MODULE.test(path));
+  kit.check(
+    "g: the view's route fetches none of the app's shell, fleet store or transcript modules",
+    strays.length === 0,
+    `${strays.slice(0, 8).join(", ") || "none"} of ${devSeen.scripts.length} modules`
   );
 };
 

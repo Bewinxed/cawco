@@ -29,6 +29,13 @@
 import type { Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
+import {
+  APP_MODULE,
+  literal,
+  strayTraffic,
+  type Traffic,
+  watchTraffic,
+} from "../traffic";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
@@ -64,54 +71,33 @@ const MAIN_KB = { page: 1289, canvas: 2728 } as const;
  */
 const BUDGET_KB = { page: 620, canvas: 2060 } as const;
 /**
- * A source file only the app around a page uses: the Shell and what it
- * mounts, the session surface and its panes, the fleet store
- * (client.svelte.ts) and the app's upkeep, and anything under transcript/
- * or workspace/.
- */
-const APP_MODULE =
-  /\/lib\/cawco\/(?:Shell|Sidebar|SessionSurface|SessionPane|ThreadPane|NeedsCaw|MachinesButton|GlassCard|CawPanel|client)\.svelte|\/lib\/cawco\/(?:transcript|workspace|updates|tab-icon)\/|\/lib\/cawco\/motion\/rest\./;
-
-/**
  * What a tab may ask for, by path on the dashboard's origin (`$sid` is the
- * artifact's session, `$id` the artifact):
- * - the document, and its build's files (`/_app/`: JS, CSS, fonts, icon);
+ * artifact's session, `$id` the artifact), beside its build's files and the
+ * dev server's own (traffic.ts):
+ * - the document;
  * - the artifact's own hub routes: find it, show it, say it is shown, and
  *   the session's artifacts the menu lists;
  * - its session's socket (the hub's ARTIFACT_SESSION_PATH);
  * - the preview's own (`/preview/$sid/`): its page, its overlay, its doc's
  *   sync socket, its send; and any request a preview frame makes itself.
- * On the dev server, Vite's own module URLs and its HMR socket too.
  */
-const BUILD_FILE = /^GET \/_app\//;
-const VITE_MODULE =
-  /^GET \/(?:@vite\/|@fs\/|@id\/|node_modules\/|src\/|\.svelte-kit\/)/;
-const VITE_HMR = /^\/\?token=/;
-const NOT_AN_ID = /[^0-9a-f-]/g;
-/** A socket's origin as the page's: `ws:`/`wss:` for `http:`/`https:`. */
-const WS_SCHEME = /^ws/;
 const allowed = (
   sid: string,
-  id: string,
-  dev: boolean
+  id: string
 ): { requests: RegExp[]; sockets: RegExp[] } => {
-  const s = sid.replace(NOT_AN_ID, "");
-  const a = id.replace(NOT_AN_ID, "");
+  const s = literal(sid);
+  const a = literal(id);
   return {
     requests: [
       new RegExp(`^GET /artifact/${a}$`),
-      BUILD_FILE,
       new RegExp(`^GET /api/artifacts/${a}$`),
       new RegExp(`^POST /api/instances/${s}/artifacts/${a}/(?:show|shown)$`),
       new RegExp(`^GET /api/instances/${s}/artifacts$`),
       new RegExp(`^(?:GET|POST) /preview/${s}/`),
-      ...(dev ? [VITE_MODULE] : []),
     ],
     sockets: [
       new RegExp(`^/ws/artifact-session/${s}$`),
       new RegExp(`^/preview/${s}/`),
-      // Vite's HMR socket, on the dev server alone.
-      ...(dev ? [VITE_HMR] : []),
     ],
   };
 };
@@ -164,51 +150,13 @@ const respond = (request: Seen): Reply => {
 /** A tab's errors, the JS it fetched, and every request and socket it opened, kept from its first request. */
 const watch = (page: Page) => {
   const errors: string[] = [];
-  const scripts: Promise<number>[] = [];
-  /** Each request, as `METHOD /path`, and whether a preview frame made it. */
-  const requests: { line: string; origin: string; framed: boolean }[] = [];
-  /** Each WebSocket, as `/path?query`, and its origin. */
-  const sockets: { line: string; origin: string }[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") {
       errors.push(message.text());
     }
   });
   page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
-  page.on("request", (request) => {
-    const url = new URL(request.url());
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      return;
-    }
-    requests.push({
-      line: `${request.method()} ${url.pathname}`,
-      origin: url.origin,
-      framed: request.frame() !== page.mainFrame(),
-    });
-  });
-  page.on("websocket", (socket) => {
-    const url = new URL(socket.url());
-    sockets.push({ line: `${url.pathname}${url.search}`, origin: url.origin });
-  });
-  page.on("requestfinished", (request) => {
-    if (request.resourceType() === "script") {
-      scripts.push(
-        request.sizes().then((s) => s.responseBodySize + s.responseHeadersSize)
-      );
-    }
-  });
-  return {
-    errors,
-    requests,
-    sockets,
-    bytes: async () => {
-      const sizes = await Promise.all(scripts);
-      return {
-        files: sizes.length,
-        kb: Math.round(sizes.reduce((a, b) => a + b, 0) / 1024),
-      };
-    },
-  };
+  return { ...watchTraffic(page), errors };
 };
 
 /**
@@ -218,30 +166,14 @@ const watch = (page: Page) => {
  */
 const onlyItsOwn = (
   kit: Kit,
-  seen: ReturnType<typeof watch>,
+  seen: Traffic,
   where: { base: string; dev: boolean; id: string; kind: string; sid: string }
 ): void => {
-  const { origin } = new URL(where.base);
-  const allow = allowed(where.sid, where.id, where.dev);
-  const strayRequests = seen.requests
-    .filter(
-      (one) =>
-        !one.framed &&
-        (one.origin !== origin ||
-          !allow.requests.some((rule) => rule.test(one.line)))
-    )
-    .map((one) =>
-      one.origin === origin ? one.line : `${one.origin}${one.line}`
-    );
-  const straySockets = seen.sockets
-    .filter(
-      (one) =>
-        one.origin.replace(WS_SCHEME, "http") !== origin ||
-        !allow.sockets.some((rule) => rule.test(one.line))
-    )
-    .map((one) => `WS ${one.line}`);
-  const strays = [...new Set([...strayRequests, ...straySockets])];
-  const socketList = [...new Set(seen.sockets.map((one) => one.line))];
+  const { strays, sockets: socketList } = strayTraffic(seen, {
+    base: where.base,
+    dev: where.dev,
+    ...allowed(where.sid, where.id),
+  });
   kit.check(
     `8: the ${where.kind} tab (${where.dev ? "dev server" : "built"}) opens only its own requests and sockets`,
     strays.length === 0,
@@ -535,20 +467,14 @@ const run = async (kit: Kit) => {
   ] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one tab at a time, each its own list
     const devTab = await kit.page("desk");
-    const devSeen = watch(devTab);
-    const fetched: string[] = [];
-    devTab.on("request", (request) => {
-      if (request.resourceType() === "script") {
-        fetched.push(new URL(request.url()).pathname);
-      }
-    });
+    const devSeen = watchTraffic(devTab);
     await open(devTab, `${dev}/artifact/${id}`, ready, 120_000);
     await settle(devTab);
-    const strays = fetched.filter((path) => APP_MODULE.test(path));
+    const strays = devSeen.scripts.filter((path) => APP_MODULE.test(path));
     kit.check(
       `7: the ${kind} tab fetches none of the app's shell, session, fleet store or transcript modules`,
       strays.length === 0,
-      `${strays.slice(0, 8).join(", ") || "none"} of ${fetched.length} modules`
+      `${strays.slice(0, 8).join(", ") || "none"} of ${devSeen.scripts.length} modules`
     );
     onlyItsOwn(kit, devSeen, { base: dev, dev: true, id, kind, sid: session });
   }

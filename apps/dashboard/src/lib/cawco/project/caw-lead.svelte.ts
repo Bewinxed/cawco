@@ -40,7 +40,7 @@ import {
 } from "../client.svelte";
 import type { CawStatus } from "../home/Caw.svelte";
 import { dur } from "../motion/curves.svelte";
-import type { TaskSummary } from "../project-tasks";
+import { isRetry, type TaskSummary } from "../project-tasks";
 import { resetLabel } from "../usage";
 
 /** What each harness Caw runs on is called. */
@@ -68,16 +68,6 @@ function breathMs(): number {
   const value = Number.parseFloat(token);
   return (token.endsWith("ms") ? value : value * 1000) * 4;
 }
-
-/** An attempt runs at a task whose attempt before it failed or was stopped. */
-export const isRetry = (task: TaskSummary): boolean => {
-  const [newest, before] = task.attempts;
-  return (
-    task.liveAttempt &&
-    (newest?.state === "starting" || newest?.state === "running") &&
-    (before?.state === "failed" || before?.state === "cancelled")
-  );
-};
 
 /** What the head's line says when Caw has something: words, or his ask as a link. */
 export type CawWords =

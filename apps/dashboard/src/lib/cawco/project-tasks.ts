@@ -178,6 +178,16 @@ export interface TaskSummary extends TaskFlags, TaskTimes {
   type: string | null;
 }
 
+/** An attempt runs at a task whose attempt before it failed or was stopped. */
+export const isRetry = (task: TaskSummary): boolean => {
+  const [newest, before] = task.attempts;
+  return (
+    task.liveAttempt &&
+    (newest?.state === "starting" || newest?.state === "running") &&
+    (before?.state === "failed" || before?.state === "cancelled")
+  );
+};
+
 /** When a task was made and last changed, ms epoch, from its file's commits (the hub's `TaskTimes`). */
 export interface TaskTimes {
   createdAt: number;

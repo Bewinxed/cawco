@@ -22,13 +22,9 @@
   import { barStrip } from "#lib/cawco/bar-strip.svelte.js";
   import {
     cawco,
-    discardView,
-    keepView,
     requestView,
     startThread,
     threadsOf,
-    viewsOf,
-    viewTool,
   } from "#lib/cawco/client.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
   import type { HubRead } from "#lib/cawco/hub-read.js";
@@ -74,6 +70,12 @@
   import ViewCanvas from "#lib/cawco/views/ViewCanvas.svelte";
   import ViewOpenUi from "#lib/cawco/views/ViewOpenUi.svelte";
   import ViewPipeline from "#lib/cawco/views/ViewPipeline.svelte";
+  import {
+    discardView,
+    keepView,
+    viewsOf,
+    viewTool,
+  } from "#lib/cawco/views-api.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";

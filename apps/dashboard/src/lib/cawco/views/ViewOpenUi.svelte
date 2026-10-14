@@ -10,7 +10,7 @@
    */
   import { type ProjectView, VIEW_TOOLS } from "@cawco/core";
   import type { OpenUIError } from "@openuidev/lang-core";
-  import { viewTool } from "#lib/cawco/client.svelte.js";
+  import { viewTool } from "#lib/cawco/views-api.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { setViewContext } from "./openui/context";
