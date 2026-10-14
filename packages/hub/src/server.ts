@@ -100,6 +100,8 @@ import {
   type AccountReport,
   type AccountSigninResult,
   AGENT_BUSY,
+  ARTIFACT_SESSION_PATH,
+  type ArtifactSessionFrame,
   ASK_USER_QUESTION,
   ATTACHMENTS_HOME,
   accountMoveSentence,
@@ -239,6 +241,7 @@ import {
   SERVER_STOPPED_MID_TURN,
   SESSION_DIR_READ,
   STREAM_SO_FAR,
+  type StreamHeartbeat,
   SUMMARISER_OUTPUT_RESERVE_TOKENS,
   SUMMARY_CAP_TOKENS,
   sameIdentity,
@@ -285,6 +288,7 @@ import { actionRoutes, createActions } from "./actions";
 import { createAdminAsks } from "./admin-asks";
 import { adminTools, isAdminWrite } from "./admin-tools";
 import { appleDiagnosticsRoutes } from "./apple-diagnostics";
+import { createArtifactSessions } from "./artifact-session";
 import { createArtifactDocs } from "./artifacts/docs";
 import { importLegacyCanvases } from "./artifacts/legacy";
 import { artifactRoutes } from "./artifacts/routes";
@@ -7734,6 +7738,7 @@ export const createServer = (
   ) => {
     const frame = previewFrame(instanceId, state, target);
     streams.sequence(instanceId, frame);
+    artifactSessions.refresh(instanceId);
     // A project's decision page is read in that project's threads, which
     // follow no session's stream (its Caw's setup page): the board carries
     // every open preview, so every dashboard hears it there too.
@@ -11401,6 +11406,43 @@ export const createServer = (
     },
   });
 
+  /**
+   * Artifacts' own tabs, each following the one session that made its
+   * artifact (artifact-session.ts): its panel, its row's name and place,
+   * whether it works, the machines. Read as the board reads them, for one row.
+   */
+  const artifactSessions = createArtifactSessions(
+    (instanceId): ArtifactSessionFrame => {
+      const target = previewTargets.get(instanceId);
+      const [row] = db.listedBoardInstancesByIds([instanceId]);
+      return {
+        type: "artifact.session",
+        preview: target ? previewFrame(instanceId, "open", target) : null,
+        session: row
+          ? {
+              id: row.id,
+              title: row.title ?? null,
+              cwd: row.cwd,
+              machineId: row.machineId,
+              projectId: row.projectId ?? null,
+            }
+          : null,
+        machines: db.listAgents().map((agent) => ({
+          machineId: agent.machineId,
+          hostname: agent.hostname,
+          os: agent.os,
+          online: registry.agent(agent.machineId) !== undefined,
+        })),
+        // As a dashboard reads a session it follows no stream of: its pulse,
+        // a project move it waits on, a delegate it parents still running.
+        working:
+          pulses.get(instanceId)?.activity === "working" ||
+          row?.status === "moving" ||
+          (db.runningDelegateCounts().get(instanceId) ?? 0) > 0,
+      };
+    }
+  );
+
   /** Everything an `instances` frame carries besides the rows themselves. */
   const boardExtras = () => ({
     agents: withPresence(db.listAgents()),
@@ -11509,6 +11551,9 @@ export const createServer = (
 
   const publishInstanceDelta = (machineId: string): void => {
     const rows = boardRows();
+    // A row, a machine or a preview may have moved: an artifact's tab hears
+    // what moved of its own session, before the board's own early return.
+    artifactSessions.refresh();
     const moved = boardMoved;
     boardMoved = new Set();
     const upserts: typeof rows = [];
@@ -22352,6 +22397,7 @@ export const createServer = (
                 const { pulse } = message.payload as { pulse?: SessionPulse };
                 if (pulse) {
                   pulses.set(message.instanceId, pulse);
+                  artifactSessions.refresh(message.instanceId);
                   workItems.turnState(message.instanceId, pulse.busy);
                   caw.pulse(message.instanceId, pulse.busy);
                   // A summariser is the hub's own worker: nothing watches it.
@@ -23006,6 +23052,45 @@ export const createServer = (
           caw.machineGone(machineId);
           db.reconcileInstances(machineId, []);
           publishInstances(machineId);
+        },
+      })
+      // An artifact's own tab follows its session here, and nothing else of
+      // the fleet (artifact-session.ts): never the dashboard's socket.
+      .ws(`${ARTIFACT_SESSION_PATH}:instance`, {
+        perMessageDeflate: true,
+        maxPayloadLength: WIRE_MESSAGE_LIMIT_BYTES,
+        drain(ws) {
+          drainLine(ws);
+        },
+        open(ws) {
+          openLine(ws, true);
+          artifactSessions.open(ws, ws.params.instance);
+        },
+        message: guardedDashboardMessage((ws, message) => {
+          // Answered at once: a tab that hears nothing within its deadline
+          // calls the socket dead and opens another.
+          if (
+            typeof message === "object" &&
+            message !== null &&
+            (message as { type?: unknown }).type === "heartbeat"
+          ) {
+            sendFrame(ws, { type: "heartbeat" } satisfies StreamHeartbeat);
+            return;
+          }
+          // A page's place picker browsing a machine's folders; the reply
+          // comes back to this socket as it does to a dashboard's.
+          if (isEnvelope(message) && message.verb === "fs") {
+            forward(message, ws);
+            return;
+          }
+          const fault =
+            "an artifact's session socket takes heartbeat and fs alone";
+          console.warn(`[hub] ${fault}`, message);
+          sendFrame(ws, refusalFrame(message, fault));
+        }),
+        close(ws) {
+          closeLine(ws);
+          artifactSessions.close(ws);
         },
       })
       .ws("/ws/dashboard", {

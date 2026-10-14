@@ -16,7 +16,6 @@ import type {
   AccountSigninResult,
   AgentRow,
   ApprovedActionView,
-  ArtifactSummary,
   AvailableCommand,
   BuildInfo,
   CawHarness,
@@ -64,7 +63,6 @@ import type {
   SessionPulse,
   SessionStreamFrame,
   SessionTooling,
-  ShownFailure,
   SlashCommand,
   SpawnPayload,
   StopPayload,
@@ -120,6 +118,8 @@ import type { SubagentState } from "#lib/utils/flow-types.js";
 import { browser } from "$app/env";
 import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
+import { deletePreview } from "./artifact-api";
+import { currentClientId } from "./client-id";
 import {
   failureReason,
   type HubFailure,
@@ -3333,19 +3333,6 @@ function wirePayload<K extends CommandKind>(
 }
 
 /**
- * One id per browser tab: minted once, kept only in memory (never in
- * `localStorage`, which a duplicated tab would inherit and so blur two
- * senders into one), and attached to every command as {@link submitCommand}'s
- * provenance. Without this an incident like "a send landed on the wrong
- * session" is unprovable — every socket writes with the same voice.
- */
-let tabClientId: string | undefined;
-function currentClientId(): string {
-  tabClientId ??= newId();
-  return tabClientId;
-}
-
-/**
  * Submits an operator action as an acknowledged transaction and returns the id
  * its stages are readable under ({@link commandRecord},
  * {@link latestCommandFor}). The envelope goes to the hub and the hub's acks
@@ -5126,124 +5113,8 @@ export function revealPreview(instanceId: string): void {
     (state.previewRequests[instanceId] ?? 0) + 1;
 }
 
-const artifactsPath = (instanceId: string, id?: string) =>
-  `/api/instances/${encodeURIComponent(instanceId)}/artifacts${id ? `/${encodeURIComponent(id)}` : ""}`;
-
-/** A session's artifacts, newest first (Projects spec §5.10): the panel's list. */
-export async function listArtifacts(
-  instanceId: string
-): Promise<ArtifactSummary[]> {
-  const response = await fetch(artifactsPath(instanceId));
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-  return response.json();
-}
-
-/** Brings one of a session's artifacts to the front of its panel; the panel follows its frame. */
-export async function showArtifact(
-  instanceId: string,
-  id: string
-): Promise<void> {
-  const response = await fetch(`${artifactsPath(instanceId, id)}/show`, {
-    method: "POST",
-  });
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-}
-
-/**
- * This tab's word to the hub that its pane has artifact `id` on screen at the
- * open frame's `revision`, or why it could not load it: the agent's
- * artifact_create and artifact_show answer from it.
- */
-export async function artifactShown(
-  instanceId: string,
-  id: string,
-  word: { revision: string } & (
-    | { ok: true }
-    | { ok: false; error: ShownFailure }
-  )
-): Promise<void> {
-  const response = await fetch(`${artifactsPath(instanceId, id)}/shown`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ client: currentClientId(), ...word }),
-  });
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-}
-
-/**
- * A new canvas for the composer (a pen's swipe, Draw, ⌘⇧D, the panel's +):
- * empty, a draft until its first send, not shown in the panel by being made.
- */
-export async function createDraftCanvas(
-  instanceId: string
-): Promise<{ id: string; name: string }> {
-  const response = await fetch(artifactsPath(instanceId), {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ kind: "canvas", name: "canvas", draft: true }),
-  });
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-  const made = (await response.json()) as { id: string; name: string };
-  return { id: made.id, name: made.name };
-}
-
-/** A canvas as a send carries it: its `.excalidraw` file, its outline, its picture (base64 PNG, null until drawn). */
-export interface CanvasExport {
-  file: { elements: { isDeleted?: boolean }[] } & Record<string, unknown>;
-  outline: string;
-  png: string | null;
-}
-
-export async function exportCanvas(id: string): Promise<CanvasExport> {
-  const response = await fetch(
-    `/api/artifacts/${encodeURIComponent(id)}/export`
-  );
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-  return response.json();
-}
-
-/** The draft canvas went out with a send: the session holds it now. */
-export async function canvasSent(
-  instanceId: string,
-  id: string
-): Promise<void> {
-  const response = await fetch(`${artifactsPath(instanceId, id)}/sent`, {
-    method: "POST",
-  });
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-}
-
-/** An artifact by id with the session that made it, and whether its panel shows it now: what its own tab opens on. */
-export async function findArtifact(
-  id: string
-): Promise<ArtifactSummary & { instanceId: string; shown: boolean }> {
-  const response = await fetch(`/api/artifacts/${encodeURIComponent(id)}`);
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-  return response.json();
-}
-
 export async function closePreview(instanceId: string): Promise<void> {
-  const response = await fetch(
-    `/api/instances/${encodeURIComponent(instanceId)}/preview`,
-    { method: "DELETE" }
-  );
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
+  await deletePreview(instanceId);
   const previous = state.previews[instanceId];
   if (previous) {
     state.previews[instanceId] = { ...previous, state: "closed" };

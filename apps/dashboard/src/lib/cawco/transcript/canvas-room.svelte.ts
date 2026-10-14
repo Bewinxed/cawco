@@ -31,6 +31,12 @@
  */
 import { tick } from "svelte";
 import {
+  canvasSent,
+  createDraftCanvas,
+  exportCanvas,
+  showArtifact,
+} from "../artifact-api";
+import {
   type Box,
   type Edge,
   type GrabValue,
@@ -41,14 +47,7 @@ import {
   stages,
   watch,
 } from "../canvas/stage.svelte";
-import {
-  canvasSent,
-  closePreview,
-  createDraftCanvas,
-  exportCanvas,
-  type SendExtras,
-  showArtifact,
-} from "../client.svelte";
+import { closePreview, type SendExtras } from "../client.svelte";
 import { CURVE, dur, motionOk } from "../motion/curves.svelte";
 import { integrate, spring } from "../motion/spring";
 import { inks } from "../preview/ink.svelte";

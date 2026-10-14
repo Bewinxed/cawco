@@ -37,8 +37,8 @@
     IconFileMarkdown,
     IconFileTable,
   } from "#lib/icons.js";
-  import { extensionOf } from "./extension";
-  import { lightbox } from "./lightbox-state.svelte";
+  import { extensionOf } from "../lightbox/extension";
+  import { lightbox } from "../lightbox/lightbox-state.svelte";
 
   type Props =
     | { name: string; content: string }

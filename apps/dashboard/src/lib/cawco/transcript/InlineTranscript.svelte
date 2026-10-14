@@ -15,11 +15,11 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import CollapsibleLazy from "#lib/components/ui/collapsible/collapsible-lazy.svelte";
   import { cawco, readOlderPage, readTranscript } from "../client.svelte";
+  import MessageBody from "../MessageBody.svelte";
   import AccountMoveDivider from "./AccountMoveDivider.svelte";
   import Behind from "./Behind.svelte";
   import CompactionDivider from "./CompactionDivider.svelte";
   import Delegate from "./Delegate.svelte";
-  import MessageBody from "./MessageBody.svelte";
   import MessageRow from "./MessageRow.svelte";
   import RunBlock from "./RunBlock.svelte";
   import { foldMessages, newestCompaction, wellRuns } from "./rows";

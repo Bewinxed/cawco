@@ -10,6 +10,7 @@
     IconSuccess,
     IconTerminal,
   } from "#lib/icons.js";
+  import MessageBody from "../MessageBody.svelte";
   /**
    * The quiet ledger's non-turn lines: a command's output in a recessed well, a
    * system note folded on the rail, and a failure or refusal as a named card
@@ -17,7 +18,6 @@
    * nor a tool call lands here.
    */
   import type { Message } from "../types";
-  import MessageBody from "./MessageBody.svelte";
   import type { HarnessNote } from "./rows";
   import { CAW_EVENT } from "./voice";
 

@@ -12,6 +12,7 @@
   } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
   import { conversationHref, resolveInstanceId } from "../links";
+  import MessageBody from "../MessageBody.svelte";
   /**
    * What cawco put into this session on someone else's behalf: a rule that
    * fired, a delegate's report or ask, another session's hand-off, a
@@ -22,7 +23,6 @@
    */
   import type { Message } from "../types";
   import { disclosure } from "./disclosure.svelte";
-  import MessageBody from "./MessageBody.svelte";
 
   /** Emphasis, code ticks, heading and quote marks: noise in a one-line glimpse. */
   const MARKUP = /[*_`#>]/g;

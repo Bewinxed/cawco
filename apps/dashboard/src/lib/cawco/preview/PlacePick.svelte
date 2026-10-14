@@ -10,8 +10,8 @@
   import { Input } from "#lib/components/ui/input/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Select from "#lib/components/ui/select/index.js";
-  import { cawco } from "../client.svelte";
   import { appear } from "../motion/curves.svelte";
+  import { paneFleet } from "./pane-fleet";
 
   let {
     onpick,
@@ -24,13 +24,17 @@
   /** Trailing slashes on a typed folder, past the one that could be root. */
   const TRAILING_SLASHES = /(?!^)\/+$/;
 
-  let machineId = $state(cawco.onlineMachines[0]?.machineId ?? "");
+  const fleet = paneFleet();
+  const onlineMachines = $derived(fleet.machines.filter((row) => row.online));
+  let machineId = $state(
+    fleet.machines.find((row) => row.online)?.machineId ?? ""
+  );
   let path = $state("");
   let saving = $state(false);
   let problem = $state<string | null>(null);
 
   const machine = $derived(
-    cawco.onlineMachines.find((row) => row.machineId === machineId) ?? null
+    onlineMachines.find((row) => row.machineId === machineId) ?? null
   );
   const folder = $derived(path.trim().replace(TRAILING_SLASHES, ""));
 
@@ -85,7 +89,7 @@
         {machine ? `${machine.hostname} · ${machine.os}` : "No machines online"}
       </Select.Trigger>
       <Select.Content>
-        {#each cawco.onlineMachines as row (row.machineId)}
+        {#each onlineMachines as row (row.machineId)}
           <Select.Item label="{row.hostname} · {row.os}" value={row.machineId}>
             {row.hostname}
             · {row.os}
@@ -114,6 +118,7 @@
   </div>
   {#if machine}
     <DirectoryPicker
+      folders={fleet.folders}
       machineId={machine.machineId}
       onSelect={(picked) => {
         path = picked;

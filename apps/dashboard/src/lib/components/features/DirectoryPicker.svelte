@@ -1,6 +1,16 @@
+<script lang="ts" module>
+  import type { FsEntry } from "@cawco/core";
+
+  /** Where the picker reads a machine's folders: the fleet's socket, or an artifact tab's own. */
+  export interface FolderReader {
+    /** A folder's entries, over the `fs` verb. */
+    list: (machineId: string, path: string) => Promise<FsEntry[]>;
+    /** Where the machine was working last: the folder the picker opens on. */
+    recent: (machineId: string) => string | null;
+  }
+</script>
+
 <script lang="ts">
-  import type { FsEntry, NeutralSessionInfo } from "@cawco/core";
-  import { cawco, machineFs } from "#lib/cawco/client.svelte.js";
   import {
     dur,
     easeDrawer,
@@ -17,8 +27,13 @@
     machineId,
     value,
     onSelect,
-  }: { machineId: string; value: string; onSelect: (path: string) => void } =
-    $props();
+    folders,
+  }: {
+    machineId: string;
+    value: string;
+    onSelect: (path: string) => void;
+    folders: FolderReader;
+  } = $props();
 
   let open = $state(false);
   let path = $state("/");
@@ -76,16 +91,7 @@
     if (value.startsWith("/")) {
       return trim(value);
     }
-    const recent = cawco
-      .catalogOf(machineId)
-      .reduce<NeutralSessionInfo | null>(
-        (best, info) =>
-          info.cwd && (!best || info.lastModified > best.lastModified)
-            ? info
-            : best,
-        null
-      );
-    return trim(recent?.cwd ?? "/");
+    return trim(folders.recent(machineId) ?? "/");
   }
 
   /** Typed cwds arrive with trailing slashes; `parent` and `join` assume none. */
@@ -102,7 +108,7 @@
     }
     loading = true;
     try {
-      const listed = await machineFs<FsEntry[]>(machineId, "list", next);
+      const listed = await folders.list(machineId, next);
       cache.set(next, listed);
       // A faster click already moved on; that listing wins.
       if (path !== next) {

@@ -86,10 +86,10 @@
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { IconTick } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
+  import MessageBody from "../MessageBody.svelte";
   import { branch, nestFrom } from "../motion/branch.svelte";
   import { reflow } from "../motion/rows.svelte";
   import SideSurface from "../side/SideSurface.svelte";
-  import MessageBody from "../transcript/MessageBody.svelte";
 
   let {
     instanceId,

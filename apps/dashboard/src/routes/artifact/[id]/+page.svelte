@@ -4,22 +4,28 @@
      there. The session's panel shows this artifact while the tab is open on
      it: the hub serves a session one artifact at a time. -->
 <script lang="ts">
+  import { MediaQuery } from "svelte/reactivity";
+  import { findArtifact, showArtifact } from "#lib/cawco/artifact-api.js";
   import CanvasStages from "#lib/cawco/canvas/CanvasStages.svelte";
-  import {
-    cawco,
-    findArtifact,
-    showArtifact,
-  } from "#lib/cawco/client.svelte.js";
   import Overlays from "#lib/cawco/Overlays.svelte";
+  import { ArtifactSession } from "#lib/cawco/preview/artifact-session.svelte.js";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
+  import { setPaneFleet } from "#lib/cawco/preview/pane-fleet.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import { Toaster } from "#lib/components/ui/sonner/index.js";
   import { IconAlert } from "#lib/icons.js";
   import { page } from "$app/state";
 
   const id = $derived(page.params.id ?? "");
   let found = $state<{ instanceId: string; name: string } | null>(null);
   let problem = $state<string | null>(null);
+  /**
+   * The one session the artifact's tab follows (artifact-session.svelte.ts),
+   * the pane's store: the pane reads it, never the fleet's.
+   */
+  const session = new ArtifactSession();
+  setPaneFleet(session);
 
   $effect(() => {
     const wanted = id;
@@ -32,6 +38,7 @@
           await showArtifact(artifact.instanceId, wanted);
         }
         if (live) {
+          session.follow(artifact.instanceId);
           found = { instanceId: artifact.instanceId, name: artifact.name };
         }
       })
@@ -42,19 +49,24 @@
       });
     return () => {
       live = false;
+      session.end();
     };
   });
 
   const open = $derived(
-    !!found && cawco.previews[found.instanceId]?.state === "open"
+    !!found && session.preview(found.instanceId)?.state === "open"
   );
+
+  /** A phone's toasts drop from the top, as the app's do; a desk keeps the corner. */
+  const narrowToasts = new MediaQuery("(max-width: 640px)");
 </script>
 
 <svelte:head><title>{found?.name ?? "Artifact"} · CawCo</title></svelte:head>
 
 <!-- Outside the app's group: nothing of the app around it, only what the pane
-     stands in (Overlays: the tooltip provider and the lightbox) and the stage
-     a canvas stands on over the pane's slot. -->
+     stands in (Overlays: the tooltip provider and the lightbox), the stage
+     a canvas stands on over the pane's slot, and the toasts the artifact
+     menu says a refusal in. -->
 <Overlays>
   <div class="artifact-tab">
     {#if problem}
@@ -79,6 +91,11 @@
   </div>
 </Overlays>
 <CanvasStages />
+<Toaster
+  data-safe-bottom
+  expand
+  position={narrowToasts.current ? "top-center" : "bottom-right"}
+/>
 
 <style>
   /* The panel's card at the tab's full width and height, on the page's

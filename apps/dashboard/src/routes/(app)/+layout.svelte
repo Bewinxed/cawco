@@ -1,23 +1,77 @@
 <script lang="ts">
   /**
    * The app around a page: the Shell (rail, top bar, tab strips, the session
-   * surface) and the stages canvases stand on. Every route but the bare ones
-   * (an artifact in its own tab, a custom view) is in this group.
+   * surface), the stages canvases stand on, the app's one socket and its
+   * upkeep, and the toasts. Every route but the bare ones (an artifact in its
+   * own tab, a custom view) is in this group, so a bare route opens none of it.
    */
-  import type { Snippet } from "svelte";
+  import { onMount, type Snippet } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import CanvasStages from "#lib/cawco/canvas/CanvasStages.svelte";
+  import { ensureConnected } from "#lib/cawco/client.svelte.js";
   import { GROUPS } from "#lib/cawco/config/sections.js";
   import { PREFETCHES as CAW_PREFETCHES } from "#lib/cawco/home/Caw.svelte";
+  import { restWhenHidden } from "#lib/cawco/motion/rest.js";
   import { leaving, plan, route } from "#lib/cawco/motion/route.svelte.js";
   import { departAll } from "#lib/cawco/motion/share.svelte.js";
+  import { fleetPane } from "#lib/cawco/preview/fleet-pane.svelte.js";
+  import { setPaneFleet } from "#lib/cawco/preview/pane-fleet.js";
   import Shell from "#lib/cawco/Shell.svelte";
+  import { tabIcon } from "#lib/cawco/tab-icon/tab-icon.svelte.js";
+  import { tallestComposer } from "#lib/cawco/transcript/composer-presence.svelte.js";
+  import { startUpdateWatch } from "#lib/cawco/updates/update-notice.svelte.js";
+  import { workspace } from "#lib/cawco/workspace/workspace.svelte.js";
+  import { Toaster } from "#lib/components/ui/sonner/index.js";
   import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
+  import { enableLongPressMenus } from "#lib/utils/longpress.js";
   import { onNavigate } from "$app/navigation";
   import type { LayoutServerData } from "./$types";
 
   let { children, data }: { children: Snippet; data: LayoutServerData } =
     $props();
+
+  // Every artifact pane under the app (the session panel beside a
+  // conversation) reads the fleet store (preview/pane-fleet.ts).
+  setPaneFleet(fleetPane);
+
+  /**
+   * Where toasts appear. A phone's bottom edge belongs to the composer, so
+   * there they drop from the top, under the top bar; the sonner kit carries
+   * the narrow placement. A desk keeps the corner.
+   */
+  const narrowToasts = new MediaQuery("(max-width: 640px)");
+
+  /**
+   * On a desk the corner is shared with the composer's Send, so the toasts
+   * stand on top of the tallest composer showing: its bottom inset, its
+   * measured height, and a step of air. The fleet board keeps its panes
+   * mounted under it, so it counts as no composer, like a page with none.
+   */
+  const composerLift = $derived(
+    workspace.activeSessionId === null ? 0 : tallestComposer()
+  );
+  const toastOffset = $derived(
+    composerLift > 0
+      ? {
+          bottom: `calc(var(--space-4) + var(--safe-bottom) + ${composerLift}px + var(--space-3))`,
+        }
+      : undefined
+  );
+
+  // One socket for the whole app; routes only read the state it fills in.
+  onMount(ensureConnected);
+  // The update notice's upkeep: an idle old tab reloads, "running on N
+  // machines" leaves by itself. The notice itself is a row of Caw's panel.
+  onMount(startUpdateWatch);
+  // iOS has no right-click; a held press is its context menu.
+  onMount(enableLongPressMenus);
+  // A hidden tab runs no loop on its page; its icon, still seen, keeps Caw's
+  // plea while something needs the operator.
+  onMount(restWhenHidden);
+  // The tab's icon is app.html's link; across the app it follows the fleet.
+  $effect(() =>
+    tabIcon(document.querySelector('link[rel="icon"]') as HTMLLinkElement)
+  );
 
   /** Configure's sections in the rail's order, top to bottom. */
   const SECTION_ORDER = GROUPS.flatMap(({ sections }) =>
@@ -63,5 +117,11 @@
   {/each}
 </svelte:head>
 
+<Toaster
+  data-safe-bottom
+  expand
+  offset={toastOffset}
+  position={narrowToasts.current ? "top-center" : "bottom-right"}
+/>
 <Shell railWidth={data.railWidth}> {@render children()} </Shell>
 <CanvasStages />

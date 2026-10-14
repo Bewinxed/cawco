@@ -17,8 +17,14 @@
  * 6. The JS each tab transferred (built dashboard) is within its budget,
  *    against main's reading with the app around it.
  * 7. On the dev server, where each source file is its own URL, neither tab
- *    fetches a module of the app's shell, session surface or transcript
- *    beyond what the pane and the hub client use (APP_MODULE).
+ *    fetches a module of the app's shell, session surface, fleet store or
+ *    transcript (APP_MODULE): none under transcript/ at all.
+ * 8. Every request and WebSocket each tab opens, built and dev, is on the
+ *    allow-list (ALLOWED): the document and its build's files, the
+ *    artifact's own hub routes, its session's socket, and the preview's own
+ *    requests and doc socket. The owner: "an artifact shouldn't load
+ *    anything that is not needed for the preview/artifact, no unnecessary
+ *    connections etc". So no fleet socket and no fleet REST read.
  */
 import type { Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
@@ -51,20 +57,64 @@ const APP_PARTS = [
 const TOLERANCE = 2;
 /** The JS each tab transferred on main (94508c8d's parent), with the app around it. */
 const MAIN_KB = { page: 1289, canvas: 2728 } as const;
-/** What each tab may transfer now, outside the app's group (measured 649 and 2088 KB). */
-const BUDGET_KB = { page: 700, canvas: 2150 } as const;
+/**
+ * What each tab may transfer now: outside the app's group, on its own
+ * session socket, with no fleet store (measured 576 and 2015 KB; 649 and
+ * 2088 KB with the fleet store).
+ */
+const BUDGET_KB = { page: 620, canvas: 2060 } as const;
 /**
  * A source file only the app around a page uses: the Shell and what it
- * mounts, the session surface and its panes, and the transcript's own
- * modules. Of transcript/, the tab keeps only:
- * - the pane's: Lightbox (a pin's picture), its lightbox-state and the
- *   extension helper, and MessageBody (a pin's thread);
- * - the hub client store's message model, which client.svelte.ts (the one
- *   socket every route reads) imports: rows, present, local, compaction-mark;
- * - composer-presence, which the root layout's toasts stand above.
+ * mounts, the session surface and its panes, the fleet store
+ * (client.svelte.ts) and the app's upkeep, and anything under transcript/
+ * or workspace/.
  */
 const APP_MODULE =
-  /\/lib\/cawco\/(?:Shell|Sidebar|SessionSurface|SessionPane|ThreadPane|NeedsCaw|MachinesButton|GlassCard|CawPanel)\.svelte|\/lib\/cawco\/workspace\/Pane[A-Za-z]*\.svelte|\/lib\/cawco\/transcript\/(?!(?:Lightbox\.svelte|lightbox-state\.svelte\.ts|extension\.ts|MessageBody\.svelte|rows\.ts|present\.ts|local\.ts|compaction-mark\.ts|composer-presence\.svelte\.ts)(?:$|\?))[^/?]+/;
+  /\/lib\/cawco\/(?:Shell|Sidebar|SessionSurface|SessionPane|ThreadPane|NeedsCaw|MachinesButton|GlassCard|CawPanel|client)\.svelte|\/lib\/cawco\/(?:transcript|workspace|updates|tab-icon)\/|\/lib\/cawco\/motion\/rest\./;
+
+/**
+ * What a tab may ask for, by path on the dashboard's origin (`$sid` is the
+ * artifact's session, `$id` the artifact):
+ * - the document, and its build's files (`/_app/`: JS, CSS, fonts, icon);
+ * - the artifact's own hub routes: find it, show it, say it is shown, and
+ *   the session's artifacts the menu lists;
+ * - its session's socket (the hub's ARTIFACT_SESSION_PATH);
+ * - the preview's own (`/preview/$sid/`): its page, its overlay, its doc's
+ *   sync socket, its send; and any request a preview frame makes itself.
+ * On the dev server, Vite's own module URLs and its HMR socket too.
+ */
+const BUILD_FILE = /^GET \/_app\//;
+const VITE_MODULE =
+  /^GET \/(?:@vite\/|@fs\/|@id\/|node_modules\/|src\/|\.svelte-kit\/)/;
+const VITE_HMR = /^\/\?token=/;
+const NOT_AN_ID = /[^0-9a-f-]/g;
+/** A socket's origin as the page's: `ws:`/`wss:` for `http:`/`https:`. */
+const WS_SCHEME = /^ws/;
+const allowed = (
+  sid: string,
+  id: string,
+  dev: boolean
+): { requests: RegExp[]; sockets: RegExp[] } => {
+  const s = sid.replace(NOT_AN_ID, "");
+  const a = id.replace(NOT_AN_ID, "");
+  return {
+    requests: [
+      new RegExp(`^GET /artifact/${a}$`),
+      BUILD_FILE,
+      new RegExp(`^GET /api/artifacts/${a}$`),
+      new RegExp(`^POST /api/instances/${s}/artifacts/${a}/(?:show|shown)$`),
+      new RegExp(`^GET /api/instances/${s}/artifacts$`),
+      new RegExp(`^(?:GET|POST) /preview/${s}/`),
+      ...(dev ? [VITE_MODULE] : []),
+    ],
+    sockets: [
+      new RegExp(`^/ws/artifact-session/${s}$`),
+      new RegExp(`^/preview/${s}/`),
+      // Vite's HMR socket, on the dev server alone.
+      ...(dev ? [VITE_HMR] : []),
+    ],
+  };
+};
 
 const PAGE = `<!doctype html>
 <html lang="en">
@@ -111,16 +161,35 @@ const respond = (request: Seen): Reply => {
     : text(`${ask.name} is not offered`);
 };
 
-/** A tab's errors and the JS it fetched, kept from its first request. */
+/** A tab's errors, the JS it fetched, and every request and socket it opened, kept from its first request. */
 const watch = (page: Page) => {
   const errors: string[] = [];
   const scripts: Promise<number>[] = [];
+  /** Each request, as `METHOD /path`, and whether a preview frame made it. */
+  const requests: { line: string; origin: string; framed: boolean }[] = [];
+  /** Each WebSocket, as `/path?query`, and its origin. */
+  const sockets: { line: string; origin: string }[] = [];
   page.on("console", (message) => {
     if (message.type() === "error") {
       errors.push(message.text());
     }
   });
   page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return;
+    }
+    requests.push({
+      line: `${request.method()} ${url.pathname}`,
+      origin: url.origin,
+      framed: request.frame() !== page.mainFrame(),
+    });
+  });
+  page.on("websocket", (socket) => {
+    const url = new URL(socket.url());
+    sockets.push({ line: `${url.pathname}${url.search}`, origin: url.origin });
+  });
   page.on("requestfinished", (request) => {
     if (request.resourceType() === "script") {
       scripts.push(
@@ -130,6 +199,8 @@ const watch = (page: Page) => {
   });
   return {
     errors,
+    requests,
+    sockets,
     bytes: async () => {
       const sizes = await Promise.all(scripts);
       return {
@@ -138,6 +209,44 @@ const watch = (page: Page) => {
       };
     },
   };
+};
+
+/**
+ * Check 8 on one tab: every request its own document made, and every socket
+ * it opened, on the allow-list and the dashboard's origin. A preview frame's
+ * own requests are the preview's, whatever they are.
+ */
+const onlyItsOwn = (
+  kit: Kit,
+  seen: ReturnType<typeof watch>,
+  where: { base: string; dev: boolean; id: string; kind: string; sid: string }
+): void => {
+  const { origin } = new URL(where.base);
+  const allow = allowed(where.sid, where.id, where.dev);
+  const strayRequests = seen.requests
+    .filter(
+      (one) =>
+        !one.framed &&
+        (one.origin !== origin ||
+          !allow.requests.some((rule) => rule.test(one.line)))
+    )
+    .map((one) =>
+      one.origin === origin ? one.line : `${one.origin}${one.line}`
+    );
+  const straySockets = seen.sockets
+    .filter(
+      (one) =>
+        one.origin.replace(WS_SCHEME, "http") !== origin ||
+        !allow.sockets.some((rule) => rule.test(one.line))
+    )
+    .map((one) => `WS ${one.line}`);
+  const strays = [...new Set([...strayRequests, ...straySockets])];
+  const socketList = [...new Set(seen.sockets.map((one) => one.line))];
+  kit.check(
+    `8: the ${where.kind} tab (${where.dev ? "dev server" : "built"}) opens only its own requests and sockets`,
+    strays.length === 0,
+    `${strays.slice(0, 12).join(", ") || "none off the list"}; ${seen.requests.length} requests; sockets: ${socketList.join(", ")}`
+  );
 };
 
 /** What of the app around the artifact is in the tab. */
@@ -359,6 +468,13 @@ const run = async (kit: Kit) => {
     seen.errors.length === 0,
     seen.errors.join(" | ") || "none"
   );
+  onlyItsOwn(kit, seen, {
+    base,
+    dev: false,
+    id: pageId,
+    kind: "page",
+    sid: session,
+  });
 
   // ── The canvas's tab ──────────────────────────────────────────────────
   const canvas = await kit.page("desk");
@@ -391,6 +507,13 @@ const run = async (kit: Kit) => {
     heard.errors.length === 0,
     heard.errors.join(" | ") || "none"
   );
+  onlyItsOwn(kit, heard, {
+    base,
+    dev: false,
+    id: canvasId,
+    kind: "canvas",
+    sid: session,
+  });
 
   // 6. The JS each tab transferred, against main's reading with the app around it.
   kit.check(
@@ -412,6 +535,7 @@ const run = async (kit: Kit) => {
   ] as const) {
     // biome-ignore lint/performance/noAwaitInLoops: one tab at a time, each its own list
     const devTab = await kit.page("desk");
+    const devSeen = watch(devTab);
     const fetched: string[] = [];
     devTab.on("request", (request) => {
       if (request.resourceType() === "script") {
@@ -421,14 +545,12 @@ const run = async (kit: Kit) => {
     await open(devTab, `${dev}/artifact/${id}`, ready, 120_000);
     await settle(devTab);
     const strays = fetched.filter((path) => APP_MODULE.test(path));
-    const transcript = fetched
-      .filter((path) => path.includes("/lib/cawco/transcript/"))
-      .map((path) => path.split("/").pop());
     kit.check(
-      `7: the ${kind} tab fetches none of the app's shell, session or transcript modules`,
+      `7: the ${kind} tab fetches none of the app's shell, session, fleet store or transcript modules`,
       strays.length === 0,
-      `${strays.slice(0, 8).join(", ") || "none"} of ${fetched.length} modules; the pane's own from transcript/: ${transcript.join(", ") || "none"}`
+      `${strays.slice(0, 8).join(", ") || "none"} of ${fetched.length} modules`
     );
+    onlyItsOwn(kit, devSeen, { base: dev, dev: true, id, kind, sid: session });
   }
 };
 

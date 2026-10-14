@@ -4,6 +4,7 @@
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { loadDelegateTypes, message } from "#lib/cawco/delegate-types.js";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { fleetFolders } from "#lib/cawco/preview/fleet-pane.svelte.js";
   import { checkoutOf } from "#lib/cawco/projects.js";
   import { runHref } from "#lib/cawco/workflow-runs.js";
   import { launchWorkflow } from "#lib/cawco/workflows.js";
@@ -226,6 +227,7 @@
           >
           {#if online}
             <DirectoryPicker
+              folders={fleetFolders}
               {machineId}
               onSelect={(path) => {
                 workspace = path;

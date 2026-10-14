@@ -20,6 +20,7 @@
     watchDelegate,
   } from "../client.svelte";
   import { conversationHref, delegateHandle } from "../links";
+  import MessageBody from "../MessageBody.svelte";
   import { markHue, sessionSprite } from "../mark";
   import { modelLabel } from "../models.svelte";
   import { tickingClock } from "../motion/clock.svelte.js";
@@ -32,7 +33,6 @@
   } from "../types";
   import { disclosure } from "./disclosure.svelte";
   import InlineTranscript from "./InlineTranscript.svelte";
-  import MessageBody from "./MessageBody.svelte";
   import {
     askDetail,
     askDetailOf,

@@ -54,6 +54,42 @@ export interface PreviewFrame {
   state: "open" | "closed";
 }
 
+/**
+ * The socket an artifact's own tab (the dashboard's `/artifact/<id>`) follows
+ * the session that made it on, `<path><instanceId>`: nothing else of the
+ * fleet reaches that tab. It also carries the tab's `fs` envelopes (a page's
+ * place picker browsing a machine's folders), answered on it as on the
+ * dashboard's socket.
+ */
+export const ARTIFACT_SESSION_PATH = "/ws/artifact-session/";
+
+/**
+ * Everything that tab reads of its session, whole, on open and again on
+ * every change of it.
+ */
+export interface ArtifactSessionFrame {
+  /** Every machine of the fleet: the session's own is named in the pane's states, and a page's place picker offers the online ones. */
+  machines: {
+    hostname: string;
+    machineId: string;
+    online: boolean;
+    os: string;
+  }[];
+  /** The session's panel, open; null while it shows nothing. */
+  preview: PreviewFrame | null;
+  /** The session's row; null once the hub lists it no more. */
+  session: {
+    cwd: string;
+    id: string;
+    machineId: string;
+    projectId: string | null;
+    title: string | null;
+  } | null;
+  type: "artifact.session";
+  /** The session is in a turn, its delegates' included: a pin its last send carried shows it live. */
+  working: boolean;
+}
+
 export interface MessageFrame {
   harness: HarnessKind;
   instanceId: string;

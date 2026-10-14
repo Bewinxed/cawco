@@ -25,9 +25,9 @@
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconCpu, IconHandoff, IconReport, IconRules } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
+  import MessageBody from "../MessageBody.svelte";
   import { CURVE, dur, easeOut, motionOk } from "../motion/curves.svelte";
   import type { Message } from "../types";
-  import MessageBody from "./MessageBody.svelte";
 
   let {
     instanceId,

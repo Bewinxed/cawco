@@ -31,10 +31,10 @@
   import IconTransfer from "~icons/solar/transfer-horizontal-bold-duotone";
   import { hueVar } from "../accounts/model.svelte";
   import Caw from "../home/Caw.svelte";
+  import MessageBody from "../MessageBody.svelte";
   import { dur, morphMs } from "../motion/curves.svelte";
   import { unfold } from "../motion/fold.svelte";
   import { COMPACTING_MARK } from "./compaction-mark";
-  import MessageBody from "./MessageBody.svelte";
   import type { Row } from "./rows";
 
   let { row }: { row: Extract<Row, { kind: "account" }> } = $props();

@@ -9,11 +9,8 @@
   } from "@cawco/core/tool-presentation";
   import { getContext, untrack } from "svelte";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
-  import {
-    cawco,
-    revealPreview,
-    showArtifact,
-  } from "#lib/cawco/client.svelte.js";
+  import { showArtifact } from "#lib/cawco/artifact-api.js";
+  import { cawco, revealPreview } from "#lib/cawco/client.svelte.js";
   import { fleetMcpServers } from "#lib/cawco/fleet-mcp.svelte.js";
   import { mcpServerHost } from "#lib/cawco/mcp.js";
   import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";

@@ -13,7 +13,7 @@
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconClose, IconReopen, IconSuccess } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
-  import MessageBody from "../transcript/MessageBody.svelte";
+  import MessageBody from "../MessageBody.svelte";
   import PinDisc from "./PinDisc.svelte";
   import { pinName } from "./pin-name";
 

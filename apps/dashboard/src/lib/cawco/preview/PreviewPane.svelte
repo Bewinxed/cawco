@@ -24,25 +24,23 @@
   import { theme } from "#lib/theme.svelte.js";
   import { goto } from "$app/navigation";
   import {
+    artifactShown,
+    createDraftCanvas,
+    exportCanvas,
+    showArtifact,
+  } from "../artifact-api";
+  import {
     handBack,
     holdStage,
     letGo,
     type Stage,
   } from "../canvas/stage.svelte";
-  import {
-    artifactShown,
-    cawco,
-    closePreview,
-    createDraftCanvas,
-    exportCanvas,
-    showArtifact,
-  } from "../client.svelte";
-  import { conversationHref, resolveSessionTitle } from "../links";
+  import { lightbox } from "../lightbox/lightbox-state.svelte";
+  import { resolveSessionTitle } from "../links";
   import { appear, dur } from "../motion/curves.svelte";
   import { closeInto } from "../motion/share.svelte";
   import { watchInput } from "../reload.svelte";
   import SideSurface from "../side/SideSurface.svelte";
-  import { lightbox } from "../transcript/lightbox-state.svelte";
   import ArtifactMenu from "./ArtifactMenu.svelte";
   import {
     type ArtifactDoc,
@@ -55,6 +53,7 @@
   import PinCard from "./PinCard.svelte";
   import PinList from "./PinList.svelte";
   import PlacePick from "./PlacePick.svelte";
+  import { paneFleet } from "./pane-fleet";
   import { pinName } from "./pin-name";
   import { isSetupPage } from "./setup-page";
   import { previewPlace } from "./source";
@@ -117,7 +116,9 @@
     again: "reload" | "close" | "send" | null;
   } | null>(null);
   let well = $state<HTMLDivElement>();
-  const preview = $derived(cawco.previews[instanceId]);
+  /** The session's panel, row and machines, from whichever store this tree set (pane-fleet.ts). */
+  const fleet = paneFleet();
+  const preview = $derived(fleet.preview(instanceId));
   const source = $derived(preview?.source);
   /** Each show gives the document and its assets a fresh URL namespace. */
   const previewBase = $derived(preview?.path ?? "");
@@ -229,9 +230,9 @@
       return null;
     }
   }
-  const owner = $derived(cawco.instanceIndex.byId.get(instanceId));
+  const owner = $derived(fleet.session(instanceId));
   const ownerMachine = $derived.by(() => {
-    const machine = cawco.machines.find(
+    const machine = fleet.machines.find(
       (one) => one.machineId === owner?.machineId
     );
     return machine ? machineLabel(machine.hostname) : "its machine";
@@ -539,7 +540,7 @@
   /** Pins the agent is working on: the last send carried them and its turn runs. */
   const live = $derived.by(() => {
     const sentAt = view?.sentAt;
-    if (!sentAt || cawco.activityOf(instanceId) !== "working") {
+    if (!(sentAt && fleet.working(instanceId))) {
       return new Set<string>();
     }
     return new Set(
@@ -719,7 +720,9 @@
         const parsed = new URL(at);
         displayPath = `${parsed.pathname}${parsed.search}${parsed.hash}`;
         keepAt(parsed);
-        preview.title = previewTitle(message.title) ?? "";
+        if (preview) {
+          preview.title = previewTitle(message.title) ?? "";
+        }
         if (message.type === "cawco:ready") {
           connected = true;
           comment(commenting, placing);
@@ -735,7 +738,7 @@
       }
       case "cawco:capture": {
         const png = previewPng(message.png);
-        if (png) {
+        if (png && preview) {
           preview.thumbnail = png;
         }
         failure = frameError(previewError(message.error));
@@ -878,7 +881,7 @@
   }
   /** Close in the artifact's own tab: back to the session that made it. */
   async function backToSession() {
-    await goto(conversationHref(instanceId, cawco.instanceIndex));
+    await goto(fleet.sessionHref(instanceId));
   }
   /*
    * A canvas stands on its stage (canvas/stage.svelte.ts), one iframe for it
@@ -957,7 +960,7 @@
   async function close() {
     closing = true;
     try {
-      await closePreview(instanceId);
+      await fleet.closePreview(instanceId);
     } catch (error) {
       failure = {
         message: error instanceof Error ? error.message : String(error),
@@ -1185,7 +1188,7 @@
                    (Button `link`, as Caw's panel offers its settings). -->
               <Button
                 class="px-0"
-                href={conversationHref(owner.id, cawco.instanceIndex)}
+                href={fleet.sessionHref(owner.id)}
                 label={`Open ${ownerName}`}
                 size="sm"
                 variant="link"

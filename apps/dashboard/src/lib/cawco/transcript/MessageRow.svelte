@@ -33,6 +33,7 @@
     userTurnActions,
   } from "../client.svelte";
   import { conversationHref } from "../links";
+  import MessageBody from "../MessageBody.svelte";
   import { newSession } from "../spawn/new-session.svelte";
   /** Dispatches one stand-alone transcript message to its renderer by type. */
   import type { Message } from "../types";
@@ -40,7 +41,6 @@
   import DocThumb from "./DocThumb.svelte";
   import { disclosure } from "./disclosure.svelte";
   import { askLift, landing, liftsInto, replacing } from "./lift.svelte";
-  import MessageBody from "./MessageBody.svelte";
   import Peer from "./Peer.svelte";
   import Shot from "./Shot.svelte";
   import SystemLine from "./SystemLine.svelte";

@@ -12,8 +12,8 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { cawco } from "../client.svelte";
+  import { lightbox } from "../lightbox/lightbox-state.svelte";
   import { land, waiting } from "../motion/share.svelte";
-  import { lightbox } from "../transcript/lightbox-state.svelte";
   import { visible as visibleArea } from "../visible-viewport.svelte";
 
   let {

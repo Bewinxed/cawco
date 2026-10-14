@@ -5,6 +5,7 @@
   import { IconChevronRight } from "#lib/icons.js";
   import type { SubagentState } from "#lib/utils/flow-types.js";
   import { formatDuration } from "#lib/utils/time.js";
+  import MessageBody from "../MessageBody.svelte";
   import { markHue, sessionSprite } from "../mark";
   import { modelLabel } from "../models.svelte";
   import { tickingClock } from "../motion/clock.svelte.js";
@@ -19,7 +20,6 @@
   import type { Message } from "../types";
   import CompactionDivider from "./CompactionDivider.svelte";
   import { disclosure } from "./disclosure.svelte";
-  import MessageBody from "./MessageBody.svelte";
   import MessageRow from "./MessageRow.svelte";
   import { subagentView } from "./present";
   import { branchRows, wellRuns } from "./rows";

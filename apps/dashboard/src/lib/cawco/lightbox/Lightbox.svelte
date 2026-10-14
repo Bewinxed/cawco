@@ -32,6 +32,7 @@
     IconClose,
     IconZoomIn,
   } from "#lib/icons.js";
+  import MessageBody from "../MessageBody.svelte";
   import { dur, ease, motionOk } from "../motion/curves.svelte";
   import { closeInto, land } from "../motion/share.svelte";
   import { extensionOf } from "./extension";
@@ -40,7 +41,6 @@
     type LightboxView,
     lightbox,
   } from "./lightbox-state.svelte";
-  import MessageBody from "./MessageBody.svelte";
 
   onDestroy(lightbox.close);
 

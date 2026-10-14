@@ -38,13 +38,13 @@
   import IconChevron from "~icons/solar/alt-arrow-right-bold-duotone";
   import Caw from "../home/Caw.svelte";
   import CawMark from "../home/CawMark.svelte";
+  import MessageBody from "../MessageBody.svelte";
   import { dur, morphMs } from "../motion/curves.svelte";
   import { unfold } from "../motion/fold.svelte";
   import { morph } from "../motion/morph.svelte";
   import { compactionFailure } from "./compaction-failure";
   import { COMPACTING_MARK, COMPACTION_MARK } from "./compaction-mark";
   import { disclosureAt } from "./disclosure.svelte";
-  import MessageBody from "./MessageBody.svelte";
   import type { Row } from "./rows";
 
   let {

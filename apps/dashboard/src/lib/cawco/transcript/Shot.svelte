@@ -91,7 +91,10 @@
 </script>
 
 <script lang="ts">
-  import { type LightboxShot, lightbox } from "./lightbox-state.svelte";
+  import {
+    type LightboxShot,
+    lightbox,
+  } from "../lightbox/lightbox-state.svelte";
 
   let {
     src,

@@ -1,9 +1,15 @@
 import type { ClientInit, HandleClientError } from "@sveltejs/kit/hooks";
-import { workspace } from "#lib/cawco/workspace/workspace.svelte.js";
 import { version } from "$app/env";
 
 const WINDOW_MS = 60_000;
 const FIRST_FRAME = /^\s*at\s|@/;
+/**
+ * The conversation on screen, as the URL names it: the workspace writes the
+ * focused pane's session there (`/session/<id>`). Read off the URL rather
+ * than the workspace store, so this hook, which runs on every route, loads
+ * no store: an artifact's own tab loads nothing of the app.
+ */
+const SESSION_PATH = /^\/session\/([^/]+)/;
 const seen = new Map<string, number>();
 let windowStart = 0;
 let windowCount = 0;
@@ -49,7 +55,8 @@ function report(
       message,
       stack,
       path: path.slice(0, 1000),
-      sessionId: workspace.activeSessionId?.slice(0, 256) ?? null,
+      sessionId:
+        SESSION_PATH.exec(location.pathname)?.[1]?.slice(0, 256) ?? null,
       version: version.slice(0, 128),
       userAgent: navigator.userAgent.slice(0, 512),
     });

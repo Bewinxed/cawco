@@ -8,7 +8,7 @@
   import type { Snippet } from "svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
-  import Lightbox from "./transcript/Lightbox.svelte";
+  import Lightbox from "./lightbox/Lightbox.svelte";
 
   let { children }: { children: Snippet } = $props();
 </script>

@@ -20,8 +20,8 @@
    */
   import { untrack } from "svelte";
   import { dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import MessageBody from "../MessageBody.svelte";
   import { useLedger } from "./arrivals.svelte";
-  import MessageBody from "./MessageBody.svelte";
   import type { Row } from "./rows";
   import Thinking from "./Thinking.svelte";
   import { useVoice } from "./voice";

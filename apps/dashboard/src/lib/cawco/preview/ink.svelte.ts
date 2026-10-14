@@ -8,8 +8,8 @@
  * (`cawco:ink-sent`). Nothing goes until the person sends.
  */
 import { SvelteMap } from "svelte/reactivity";
+import { exportCanvas } from "../artifact-api";
 import type { SendExtras } from "../client.svelte";
-import { exportCanvas } from "../client.svelte";
 
 export interface InkWaiting {
   artifactId: string;

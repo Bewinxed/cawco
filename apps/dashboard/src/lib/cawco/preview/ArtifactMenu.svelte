@@ -16,7 +16,7 @@
     IconWindow,
   } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
-  import { listArtifacts, showArtifact } from "../client.svelte";
+  import { listArtifacts, showArtifact } from "../artifact-api";
   import { toast } from "../toasts.js";
 
   let {
