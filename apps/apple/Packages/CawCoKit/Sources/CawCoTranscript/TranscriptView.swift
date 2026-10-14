@@ -677,9 +677,14 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         // Read here so the screen hears of them: an older page on its way, one
         // that could not be read, and whether any is left (the strip before
-        // the first row, and when the next page is asked for), and a read
-        // again that could not catch the rows up (the dock's `behind`).
-        _ = (transcript.loadingOlder, transcript.olderFault, transcript.cursor, transcript.behind, transcript.catchingUp)
+        // the first row, and when the next page is asked for), a read again
+        // that could not catch the rows up (the dock's `behind`), and the
+        // state that stands in the pane's place (`commit`): a read out, why a
+        // read with nothing held failed, a session the hub has no record of.
+        // A read that fails changes only these, so each must be heard: else
+        // the pane keeps "Loading transcript…" over a machine reconnecting or offline.
+        _ = (transcript.loadingOlder, transcript.olderFault, transcript.cursor, transcript.behind, transcript.catchingUp,
+             transcript.loading, transcript.fault, transcript.missing)
         let tail = transcript.tail
         let next = tail?.streaming ?? ""
         if next != received {

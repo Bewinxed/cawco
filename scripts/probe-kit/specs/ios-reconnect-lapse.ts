@@ -8,11 +8,11 @@
  * mock model) and the built app on an iPhone simulator of its own (a
  * mac-slot.sh slot, deleted at the end), in order:
  *
- * 1. Back inside the window: the agent stops, the app opens the session
+ * 1. Back inside the window: the agent stops and the hub restarts, the app opens the session
  *    fresh, and the pane says "This machine is reconnecting"; the agent
  *    starts again before the window ends, and the transcript is read and
  *    drawn (`page adopted`), the pane's fault gone.
- * 2. Never back: the agent stops, the app opens the session fresh, and the
+ * 2. Never back: the agent stops and the hub restarts, the app opens the session fresh, and the
  *    pane says "This machine is reconnecting" with the app's log naming the
  *    window; when it lapses the app reads again (`because reconnectLapsed`)
  *    and the pane says "This machine is offline", with nothing else asked of it.
@@ -152,9 +152,12 @@ async function run(kit: Kit): Promise<void> {
     const labels = async (): Promise<string[]> => {
       const out: string[] = [];
       const walk = (node: Record<string, unknown>) => {
-        const label = node.AXLabel ?? node.label;
-        if (typeof label === "string") {
-          out.push(label);
+        // The pane's title is a text view (WrapLabel, a ProseView): its words
+        // are its accessibility value, a label's are its label.
+        for (const said of [node.AXLabel ?? node.label, node.AXValue]) {
+          if (typeof said === "string" && said) {
+            out.push(said);
+          }
         }
         for (const kid of (node.children as
           | Record<string, unknown>[]
@@ -170,15 +173,28 @@ async function run(kit: Kit): Promise<void> {
       }
       return out;
     };
-    const says = (title: string, ms: number) =>
-      until(
+    /** When the pane said `title` (its labels hold it), or undefined; what it showed instead is kept. */
+    const says = async (title: string, ms: number, name: string) => {
+      let last: string[] = [];
+      const at = await until(
         `the pane says "${title}"`,
-        labels,
-        (shown) => shown.includes(title),
+        async () => {
+          last = await labels();
+          return last;
+        },
+        (shown) => shown.some((label) => label.includes(title)),
         ms
       )
         .then(() => Date.now())
         .catch(() => undefined);
+      if (at === undefined) {
+        await writeFile(
+          join(kit.out, `${name}-labels.json`),
+          JSON.stringify(last, null, 2)
+        );
+      }
+      return at;
+    };
     const logged = (from: number, text: string) =>
       heard.slice(from).find((h) => h.line.includes(text));
     /** The app opened fresh on the session: nothing held, so a fault takes the pane. */
@@ -193,11 +209,29 @@ async function run(kit: Kit): Promise<void> {
         60_000
       );
 
+    /**
+     * The machine goes away: its agent stops, and the hub restarts, so it
+     * holds no page in memory and a read asks the machine (`storedEntries`),
+     * which is away: a 503 naming it, reconnecting for what is left of the
+     * window since the hub last heard from it (its database keeps that).
+     * The agent registers afresh first, so that word is written just before
+     * it goes, as a machine that drops is heard from moments before.
+     */
+    const machineAway = async () => {
+      await fleet.stop("agent");
+      fleet.launch("agent");
+      await fleet.agentUp();
+      await fleet.stop("agent");
+      await fleet.stop("hub");
+      fleet.launch("hub");
+      await fleet.hubUp();
+    };
+
     // ── 1. Back inside the window ────────────────────────────────────────
-    await fleet.stop("agent");
+    await machineAway();
     const backFrom = heard.length;
     await openFresh();
-    const backWaiting = await says(RECONNECTING, 30_000);
+    const backWaiting = await says(RECONNECTING, 30_000, "back-reconnecting");
     const window = LAPSES_IN.exec(
       logged(backFrom, "reconnecting window lapses in")?.line ?? ""
     )?.[1];
@@ -223,18 +257,28 @@ async function run(kit: Kit): Promise<void> {
     kit.check(
       "back inside the window: the transcript is read and drawn, the fault gone",
       adopted !== undefined &&
-        !shownBack.includes(RECONNECTING) &&
-        !shownBack.includes(OFFLINE) &&
+        !shownBack.some((label) => label.includes(RECONNECTING)) &&
+        !shownBack.some((label) => label.includes(OFFLINE)) &&
         !logged(backFrom, "because reconnectLapsed"),
       `${adopted ? "page adopted" : "no page adopted"}; reads: ${backCause}`
     );
 
     // ── 2. Never back ────────────────────────────────────────────────────
-    await fleet.stop("agent");
+    await machineAway();
     const goneFrom = heard.length;
     await openFresh();
-    const waiting = await says(RECONNECTING, 30_000);
-    const scheduled = logged(goneFrom, "reconnecting window lapses in");
+    const waiting = await says(RECONNECTING, 30_000, "gone-reconnecting");
+    const offline = await says(OFFLINE, WINDOW_MS + SLACK_MS, "gone-offline");
+    const lapsed = logged(goneFrom, "because reconnectLapsed");
+    // The window this app process set last before its read again: the one that lapsed.
+    const scheduled = heard
+      .slice(goneFrom)
+      .filter(
+        (h) =>
+          h.line.includes("reconnecting window lapses in") &&
+          h.at <= (lapsed?.at ?? Number.POSITIVE_INFINITY)
+      )
+      .at(-1);
     const lapse = Number(
       LAPSES_IN.exec(scheduled?.line ?? "")?.[1] ?? Number.NaN
     );
@@ -243,8 +287,6 @@ async function run(kit: Kit): Promise<void> {
       waiting !== undefined && lapse > 0 && lapse <= WINDOW_MS / 1000,
       `${waiting ? "reconnecting shown" : "no reconnecting title"}; ${scheduled?.line ?? "no window logged"}`
     );
-    const offline = await says(OFFLINE, WINDOW_MS + SLACK_MS);
-    const lapsed = logged(goneFrom, "because reconnectLapsed");
     kit.check(
       "never back: when the window lapses it reads again by itself and says offline",
       offline !== undefined &&
@@ -258,7 +300,11 @@ async function run(kit: Kit): Promise<void> {
     await pause(15_000);
     const after = heard
       .slice(goneFrom)
-      .filter((h) => h.line.includes(" because ") && h.at > (offline ?? 0));
+      .filter(
+        (h) =>
+          h.line.includes(" because ") &&
+          h.at > (lapsed?.at ?? Number.POSITIVE_INFINITY)
+      );
     kit.check(
       "never back: once offline, no read is made until the machine is back",
       after.length === 0,
