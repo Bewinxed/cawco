@@ -52,8 +52,8 @@
  *   bun scripts/probe-kit/run.ts memory-proposal
  *
  * The app is this checkout's simulator build (`PROBE_IOS_APP` names another).
- * The fleet's checks run before the app is looked for, so a host without the
- * Mac still reads them; (a) to (c) need the Mac.
+ * The fleet's checks run before the app is looked for; on a host without
+ * Xcode (no `xcrun`) (a) to (c) are a NOTE, not run.
  */
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the proposals, the web's answers and the app's are read in order, step by step.
 import { existsSync } from "node:fs";
@@ -491,7 +491,8 @@ async function run(kit: Kit): Promise<void> {
   };
   /**
    * Opens a proposal's own id and clicks Approve on its card: where the tab
-   * moved, whether the card was drawn there, and whether it left after.
+   * moved, whether the card was drawn there, and whether it left after
+   * (the next ask's card may stand in its place).
    */
   const approveOnWeb = async (ask: Ask, to: string, label: string) => {
     try {
@@ -525,9 +526,15 @@ async function run(kit: Kit): Promise<void> {
         (left) => !left.some((x) => x.requestId === ask.requestId),
         60_000
       ).catch(() => undefined);
+      // Its card, not any: the composer grows into the conversation's next
+      // ask once this one is answered (Caw's thread holds three).
       const gone = await until(
         `${label}: the card leaves`,
-        () => page.locator(approve).count(),
+        () =>
+          page
+            .locator(card)
+            .getByText(ask.payload.input.path ?? "")
+            .count(),
         (count) => count === 0,
         20_000
       ).then(
@@ -724,6 +731,15 @@ async function run(kit: Kit): Promise<void> {
   );
 
   // ── The app ────────────────────────────────────────────────────────────
+  // Its steps drive the simulator from this host (`xcrun`, axe): a host
+  // without Xcode reads the fleet's checks alone.
+  if (!Bun.which("xcrun")) {
+    kit.note(
+      "(a) to (c), the app's, not run: this host has no Xcode (run on the Mac)"
+    );
+    await cawrier.stop(true);
+    return;
+  }
   const app = appPath();
   if (!kit.check("the app is built", existsSync(app), app)) {
     await cawrier.stop(true);
