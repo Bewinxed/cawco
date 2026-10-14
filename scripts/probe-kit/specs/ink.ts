@@ -1077,6 +1077,18 @@ const reducedChecks = async (on: On) => {
     Boolean,
     60_000
   );
+  // The preview is an origin of its own in a renderer of its own (the
+  // dashboard sends Origin-Agent-Cluster), which the desk page's emulation
+  // never reaches: the person's setting is said to it through its own
+  // DevTools session, as the OS's reaches every renderer.
+  const still = await on.page.context().newCDPSession(frame as Frame);
+  await still.send("Emulation.setEmulatedMedia", {
+    features: [{ name: "prefers-reduced-motion", value: "reduce" }],
+  });
+  const asked = await (frame as Frame).evaluate(() => ({
+    reduce: matchMedia("(prefers-reduced-motion: reduce)").matches,
+    noPreference: matchMedia("(prefers-reduced-motion: no-preference)").matches,
+  }));
   await settle(on.page, 400);
   await strokeOver(on, frame as Frame, "#para");
   await on.page.waitForTimeout(60);
@@ -1096,13 +1108,17 @@ const reducedChecks = async (on: On) => {
     runs.every((one) => one.props.join() === "opacity");
   on.kit.check(
     "7: with reduced motion the icon arrives by opacity alone, and the menu appears with no motion",
-    arriving.length > 0 &&
+    asked.reduce &&
+      !asked.noPreference &&
+      arriving.length > 0 &&
       ok(arriving) &&
       !!opening.menu &&
       opening.runs.filter((one) => one.id === "ink-menu").length === 0 &&
       ok(opening.runs),
-    `arriving ${JSON.stringify(arriving)}; opening ${JSON.stringify(opening.runs)}`
+    `the page's renderer ${JSON.stringify(asked)}; arriving ${JSON.stringify(arriving)}; opening ${JSON.stringify(opening.runs)}`
   );
+  await still.send("Emulation.setEmulatedMedia", { features: [] });
+  await still.detach();
   await on.page.emulateMedia({ reducedMotion: "no-preference" });
 };
 

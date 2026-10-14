@@ -36,6 +36,7 @@ import { artifact } from "./artifact";
 import { clipOf, rectOf } from "./frames";
 import { newId } from "./id";
 import { fitToPage } from "./ink";
+import { motionOk } from "./motion";
 import type { InkChrome } from "./radial";
 
 const SVG = "http://www.w3.org/2000/svg";
@@ -471,9 +472,7 @@ export function startPins(deps: PinsDeps): Pins {
           at[1] - scrollY <= innerHeight - PIN_R &&
           at[0] - scrollX >= 0 &&
           at[0] - scrollX <= innerWidth;
-        const behavior = matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "auto"
-          : "smooth";
+        const behavior = motionOk() ? "smooth" : "auto";
         if (at && !inView && el && clipOf(el)) {
           // Inside a frame or a scroll container: each scrolls to it, and every one and the page round it.
           el.scrollIntoView({ block: "center", inline: "nearest", behavior });

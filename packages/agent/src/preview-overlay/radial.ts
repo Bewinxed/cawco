@@ -20,6 +20,7 @@ import { solarGlyphs } from "./glyphs" with { type: "macro" };
  * them is a stroke): they answer a finger, a mouse and the keyboard.
  */
 import type { GlyphName } from "./glyphs";
+import { motionOk } from "./motion";
 import { hostTokens } from "./tokens" with { type: "macro" };
 
 const GLYPHS = solarGlyphs();
@@ -126,8 +127,6 @@ const CHROME = `
   }
 `;
 
-const reduced = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
-
 export interface InkChrome {
   /** The icon leaves (the next stroke starts). */
   hideIcon: () => void;
@@ -189,12 +188,12 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
       return;
     }
     const run = going.animate(
-      reduced()
-        ? [{ opacity: 1 }, { opacity: 0 }]
-        : [
+      motionOk()
+        ? [
             { opacity: 1, translate: "-50% -50%", scale: "1" },
             { opacity: 0, translate: "-50% calc(-50% + 8px)", scale: "0.96" },
-          ],
+          ]
+        : [{ opacity: 1 }, { opacity: 0 }],
       { duration: ms("--dur-exit"), easing: easeOut(), fill: "forwards" }
     );
     run.id = "ink-icon";
@@ -214,9 +213,7 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
     if (refocus) {
       icon?.focus();
     }
-    if (reduced()) {
-      going.remove();
-    } else {
+    if (motionOk()) {
       const run = going.animate(
         [
           { opacity: 1, scale: "1" },
@@ -229,6 +226,8 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
         () => going.remove(),
         () => going.remove()
       );
+    } else {
+      going.remove();
     }
     if (icon) {
       // Back to the icon's own clock: it leaves two breaths after the menu does.
@@ -377,7 +376,7 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
     shadow.append(built);
     keepInView(built);
     icon.setAttribute("aria-expanded", "true");
-    if (!reduced()) {
+    if (motionOk()) {
       const run = built.animate(
         [
           { opacity: 0, scale: "0.5" },
@@ -475,12 +474,12 @@ export function inkChrome(shadow: ShadowRoot): InkChrome {
     icon = made;
     shadow.append(made);
     const run = made.animate(
-      reduced()
-        ? [{ opacity: 0 }, { opacity: 1 }]
-        : [
+      motionOk()
+        ? [
             { opacity: 0, translate: "-50% calc(-50% + 8px)", scale: "0.96" },
             { opacity: 1, translate: "-50% -50%", scale: "1" },
-          ],
+          ]
+        : [{ opacity: 0 }, { opacity: 1 }],
       { duration: ms("--dur-panel"), easing: easeOut() }
     );
     run.id = "ink-icon";
