@@ -25,7 +25,7 @@
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one hand, one step at a time.
 import type { CDPSession, Page } from "playwright-core";
-import { ACCOUNT, until } from "../../../scratch-fleet";
+import { ACCOUNT, MACHINE, until } from "../../../scratch-fleet";
 import { type Box, overlap } from "../../geom";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../../kit";
 import { B, furnishAccount } from "../account-move";
@@ -407,7 +407,16 @@ const spec: Spec = {
         )[0],
       (row) => row?.state === "signed-in"
     );
-    const id = await fleet.spawn("claude", TITLE);
+    // In a project, so the sidebar lists its row.
+    const project = await fleet.api<{ id: string }>("/api/projects", {
+      name: "Menus",
+      machineId: MACHINE,
+      cwd: fleet.repo,
+      caw: false,
+    });
+    const id = await fleet.spawn("claude", TITLE, fleet.repo, {
+      projectId: project.id,
+    });
     await until(
       "the session placed on an account",
       () => accountOf(fleet, id) ?? "",
