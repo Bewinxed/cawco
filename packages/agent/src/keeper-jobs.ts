@@ -70,6 +70,34 @@ const launchAgentsDir = (): string =>
 const LAUNCHD_PID = /^\s*pid = (\d+)$/m;
 const LAUNCHD_LAST_EXIT = /^\s*last exit code = (-?\d+)/m;
 const LAUNCHD_LAST_SIGNAL = /^\s*last terminating signal = (.+)$/m;
+
+/**
+ * What launchd says of the job `label` in this user's GUI domain: its process
+ * while one runs, and once none does, how the last one ended (none when it
+ * never ran). Undefined when launchd has no such job loaded.
+ */
+export async function launchdState(
+  label: string
+): Promise<{ ended?: string; pid?: number } | undefined> {
+  const ran = await run([
+    "launchctl",
+    "print",
+    `gui/${process.getuid?.() ?? 0}/${label}`,
+  ]);
+  if (ran.code !== 0) {
+    return;
+  }
+  const pid = LAUNCHD_PID.exec(ran.stdout)?.[1];
+  if (pid) {
+    return { pid: Number(pid) };
+  }
+  const code = LAUNCHD_LAST_EXIT.exec(ran.stdout)?.[1];
+  const signal = LAUNCHD_LAST_SIGNAL.exec(ran.stdout)?.[1];
+  if (signal !== undefined) {
+    return { ended: `it was ended by ${signal.trim()}` };
+  }
+  return code === undefined ? {} : { ended: `it exited with code ${code}` };
+}
 /** A keeper's unit and its launchd label, and the service name each carries (core keepers.ts `keeperService`). */
 const KEEPER_UNIT = /^cawco-(sessiond(?:-.+)?)\.service$/;
 const KEEPER_PLIST = /^dev\.cawco\.(sessiond(?:-.+)?)\.plist$/;
@@ -197,40 +225,23 @@ const launchdJob = (service: string): KeeperJob => {
   const domain = `gui/${process.getuid?.() ?? 0}`;
   const target = `${domain}/${label}`;
   const plist = join(launchAgentsDir(), `${label}.plist`);
-  /** The job's state as launchd prints it: undefined when launchd has no such job loaded. */
-  const printed = async (): Promise<string | undefined> => {
-    const ran = await run(["launchctl", "print", target]);
-    return ran.code === 0 ? ran.stdout : undefined;
-  };
-  const pid = async (): Promise<number | undefined> => {
-    const found = LAUNCHD_PID.exec((await printed()) ?? "")?.[1];
-    return found ? Number(found) : undefined;
-  };
+  const pid = async (): Promise<number | undefined> =>
+    (await launchdState(label))?.pid;
   return {
     name: `launchd (${target})`,
     file: plist,
     service,
     pid,
-    async exited() {
-      // Loaded, with no process, and an exit code since it last ran: it ended
-      // by itself (KeepAlive starts it again only after launchd's throttle).
-      const shown = await printed();
-      if (shown === undefined || LAUNCHD_PID.test(shown)) {
-        return;
-      }
-      const code = LAUNCHD_LAST_EXIT.exec(shown)?.[1];
-      const signal = LAUNCHD_LAST_SIGNAL.exec(shown)?.[1];
-      if (signal !== undefined) {
-        return `it was ended by ${signal.trim()}`;
-      }
-      return code === undefined ? undefined : `it exited with code ${code}`;
-    },
+    // Loaded, with no process, and an exit code since it last ran: it ended
+    // by itself (KeepAlive starts it again only after launchd's throttle).
+    exited: async () => (await launchdState(label))?.ended,
     async start() {
-      if ((await printed()) === undefined) {
+      const state = await launchdState(label);
+      if (state === undefined) {
         await must(["launchctl", "bootstrap", domain, plist]);
         return;
       }
-      if ((await pid()) === undefined) {
+      if (state.pid === undefined) {
         await must(["launchctl", "kickstart", target]);
       }
     },
