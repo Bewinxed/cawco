@@ -8,7 +8,7 @@
    */
   import type { CawHarness, CawInitiated, CawRunning } from "@cawco/core";
   import { untrack } from "svelte";
-  import { askCawOff } from "#lib/cawco/caw-off.svelte.js";
+  import CawOffTray, { type CawOffAsk } from "#lib/cawco/CawOffTray.svelte";
   import {
     cawco,
     onProjectStop,
@@ -40,18 +40,25 @@
    * Turning him off (The Stay In Context Rule): nothing he started runs,
    * and it just flips. Only his own turn an event started is in flight: one
    * line here asks whether it finishes or stops, a light choice about one
-   * thing. Sessions he started still run: the tray (CawOffDialog) names each
-   * one first, as a forget does. What runs is read again as you flip, so
-   * the choice is about what is true now.
+   * thing. Sessions he started still run: the tray (CawOffTray) unfolds
+   * under the switch and names each one first, as a forget does. What runs
+   * is read again as you flip, so the choice is about what is true now.
    */
   let turnLine = $state<CawRunning | null>(null);
   /** The turn's stop was asked: the line waits for the hub's word that it stopped. */
   let cutting = $state(false);
+  /** What he started still runs: the tray asks about it, under the switch. */
+  let offAsk = $state<CawOffAsk | null>(null);
 
   async function flip(next: boolean): Promise<void> {
     if (turnLine) {
       // The switch again while the line asks: nothing changes.
       turnLine = null;
+      return;
+    }
+    if (offAsk) {
+      // The switch again while the tray asks: nothing changes.
+      offAsk = null;
       return;
     }
     if (next) {
@@ -65,14 +72,14 @@
     } else if (running.every((one) => one.kind === "turn")) {
       turnLine = running[0] ?? null;
     } else {
-      askCawOff({
+      offAsk = {
         projectId,
         projectName,
         running,
         settled: (view) => {
           lead.view = view;
         },
-      });
+      };
     }
   }
 
@@ -135,7 +142,7 @@
     <p class="capped">{lead.capLine}</p>
   {/if}
   <!-- biome-ignore lint/a11y/noLabelWithoutControl: the Switch component renders a native button the label names; Biome can't see through the component boundary -->
-  <label class="row switch" data-share="caw-off:{projectId}">
+  <label class="row switch">
     <!-- The hub's answer is the switch's state: a flip asks it, and a
          refusal leaves the switch where the hub says Caw is. -->
     <Switch
@@ -167,6 +174,17 @@
         variant="outline"
       />
     </div>
+  {/if}
+  {#if offAsk}
+    {@const asked = offAsk}
+    <CawOffTray
+      ask={asked}
+      onclose={() => {
+        if (offAsk === asked) {
+          offAsk = null;
+        }
+      }}
+    />
   {/if}
   {#if lead.refused}
     <p class="refused" role="alert">{lead.refused}</p>

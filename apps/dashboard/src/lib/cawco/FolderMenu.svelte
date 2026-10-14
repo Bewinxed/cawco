@@ -21,9 +21,8 @@
   import { goto } from "$app/navigation";
   import { cawOf, type ProjectRow } from "./client.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
-  import { forgetProject } from "./forget.svelte";
+  import { forgetAtRail, forgetHost, forgetProject } from "./forget.svelte";
   import { HUES } from "./identity";
-  import { depart } from "./motion/share.svelte";
   import { rail } from "./rail.svelte";
   import { newThreadTabId } from "./thread-tabs";
 
@@ -82,9 +81,6 @@
       live = false;
     };
   });
-
-  /** The menu's Forget row: where the forget flies out of. */
-  let forgetItem = $state<HTMLElement | null>(null);
 </script>
 
 <ContextMenu.Root bind:open>
@@ -92,7 +88,15 @@
     {@render children()}
   </ContextMenu.Trigger>
 
-  <ContextMenu.Content>
+  <!-- A forget asked here keeps the focus its tray took, under the row:
+       the menu doesn't hand it back to the row as it closes. -->
+  <ContextMenu.Content
+    onCloseAutoFocus={(event) => {
+      if (project && forgetHost.at === forgetAtRail(project.id)) {
+        event.preventDefault();
+      }
+    }}
+  >
     <ContextMenu.Item onSelect={onnew}>
       <IconSessionAdd />
       New session here
@@ -188,17 +192,10 @@
 
     {#if project}
       <ContextMenu.Separator />
-      <!-- The forget flies out of this row (forget.svelte.ts). -->
+      <!-- The forget unfolds under this row (forget.svelte.ts). -->
       <ContextMenu.Item
-        data-share="forget:{project.id}"
-        onSelect={() => {
-          if (forgetItem) {
-            depart(forgetItem);
-          }
-          forgetProject(project);
-        }}
+        onSelect={() => forgetProject(project, forgetAtRail(project.id))}
         variant="destructive"
-        bind:ref={forgetItem}
       >
         <IconTrash />
         Forget project…

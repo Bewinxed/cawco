@@ -1,7 +1,7 @@
 <script lang="ts">
   import { hookSentence } from "@cawco/core";
   import AskHere from "#lib/cawco/AskHere.svelte";
-  import type { AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
+  import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import RolloutChip from "#lib/cawco/config/RolloutChip.svelte";
   import RowFaults from "#lib/cawco/config/RowFaults.svelte";
@@ -10,7 +10,6 @@
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore } from "#lib/cawco/config/store.svelte.js";
-  import { Asker } from "#lib/cawco/confirm.svelte.js";
   import {
     draftOf,
     type FleetHook,

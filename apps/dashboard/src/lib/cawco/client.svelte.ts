@@ -6648,11 +6648,16 @@ export async function relaunchSession(
   permissionMode: PermissionMode
 ): Promise<void> {
   const target = session(instanceId);
-  const sessionKey = resumeKeyFor(instanceId);
-  if (!sessionKey) {
-    throw new Error(
-      `no session key on record for ${instanceId}; cannot resume`
-    );
+  // The one rule for starting a session again (core `relaunchOf`): on its
+  // conversation when it has one, fresh under its id when its harness never
+  // began one (a session switched before its first message), and not at all
+  // when its conversation is gone.
+  const plan = relaunchOf({
+    sessionId: resumeKeyFor(instanceId),
+    lastError: instanceIndex.byId.get(instanceId)?.lastError ?? null,
+  });
+  if (plan.kind === "refused") {
+    throw new Error(plan.reason);
   }
 
   const requestId = newId();
@@ -6660,7 +6665,13 @@ export async function relaunchSession(
     instanceId,
     cwd: target.cwd,
     harness: target.harness,
-    resume: { sessionKey },
+    ...(plan.kind === "resume"
+      ? { resume: { sessionKey: plan.sessionKey } }
+      : {}),
+    // The process is replaced, on its own conversation: without this, a
+    // resume for a session its machine runs is a recovery of that process,
+    // which its machine keeps, and the new mode never reached it.
+    relaunch: true,
     // A relaunch is a spawn like any other, so it has to say what it is: a spin-off
     // that stayed silent about it would come back as mainline work, untagged.
     scratch: target.scratch ? {} : undefined,

@@ -1,6 +1,7 @@
 /**
- * The machines holding one fleet row (a skill, a plugin, an MCP server):
- * what removing it everywhere reaches, as the question's `items`. The hub
+ * The machines holding one fleet row (a skill, a plugin, an MCP server, a
+ * linked marketplace): what removing it everywhere reaches, as the
+ * question's `items`. The hub
  * keeps which machine has what (each machine's fleet report), not which
  * session uses it, so the machines are the reach it can name.
  */
@@ -18,7 +19,7 @@ function holding(machine: Machine, state: string): string {
 
 export function holders(
   machines: Machine[],
-  kind: "mcp" | "plugins" | "skills",
+  kind: "marketplaces" | "mcp" | "plugins" | "skills",
   key: string
 ): AskItem[] {
   return machines.flatMap((machine) => {

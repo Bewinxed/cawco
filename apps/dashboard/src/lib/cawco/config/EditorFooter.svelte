@@ -1,6 +1,5 @@
 <script lang="ts" module>
-  import type { AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
-  import { Asker } from "#lib/cawco/confirm.svelte.js";
+  import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
 
   /**

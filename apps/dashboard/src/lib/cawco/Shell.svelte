@@ -39,11 +39,8 @@
   import AddMachineDialog from "./AddMachineDialog.svelte";
   import { barGlass, type GlassCard as GlassFace } from "./bar-glass.svelte";
   import { barStrip } from "./bar-strip.svelte";
-  import CawOffDialog from "./CawOffDialog.svelte";
-  import ConfirmDialog from "./ConfirmDialog.svelte";
   import { cawco, hubSocketUrl, reconnectNow } from "./client.svelte";
   import { continuing } from "./continue.svelte";
-  import ForgetProjectDialog from "./ForgetProjectDialog.svelte";
   import GlassCard from "./GlassCard.svelte";
   import { deviceRatio } from "./home/device-ratio.svelte";
   import { sessionName } from "./home/home-state.svelte";
@@ -1139,12 +1136,6 @@
 
   <!-- The glass's one card: Caw's panel, the machines or Jump (bar-glass). -->
   <GlassCard />
-  <!-- One dialog for every destructive confirm in the app (see confirm.svelte.ts). -->
-  <ConfirmDialog />
-  <!-- One Forget project dialog for every opener (forget.svelte.ts). -->
-  <ForgetProjectDialog />
-  <!-- One Caw-off tray for what he started, out of his lead switch (caw-off.svelte.ts). -->
-  <CawOffDialog />
   <!-- One Connect a machine dialog for every entry that adds one (join/join.svelte.ts). -->
   <AddMachineDialog />
   <!-- One New Session dialog for every opener (the rail's rows, the phone's

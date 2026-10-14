@@ -10,7 +10,8 @@
    * Stay In Context Rule): Fork and Keep stay pending in the menu and say a
    * refusal there; Stop and Archive say what is on its way and what did not
    * go on the row itself (session-acts); Rename edits the row's title where
-   * it stands (`onrename`); a delete's question flies out of its item.
+   * it stands (`onrename`); a delete asks under the row, through the row's
+   * own `asker` (AskHere, The Open Page Rule), and the page stays live.
    *
    * The row is the trigger itself: `children` is handed the trigger's props
    * and spreads them on its own root element, so a table row stays a `<tr>`.
@@ -33,6 +34,7 @@
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import AccountSubmenu from "./accounts/AccountSubmenu.svelte";
+  import type { Asker, AskHereRequest } from "./ask-here.svelte";
   import {
     cawco,
     deleteTranscript,
@@ -42,7 +44,6 @@
     keepSession,
     removeSession,
   } from "./client.svelte";
-  import { confirm } from "./confirm.svelte";
   import { continueInNewSession } from "./continue.svelte";
   import {
     archive,
@@ -62,6 +63,8 @@
   } from "./workspace/open-beside.svelte";
 
   interface Props {
+    /** The row's questions: its `<AskHere at={instance.id}>` draws them under it. */
+    asker: Asker<AskHereRequest>;
     /** The row, spreading the trigger's props on its root element. */
     children: Snippet<[Record<string, unknown>]>;
     instance: InstanceRow;
@@ -71,7 +74,7 @@
     onrename: () => void;
   }
 
-  let { instance, onarchive, onrename, children }: Props = $props();
+  let { asker, instance, onarchive, onrename, children }: Props = $props();
 
   const href = $derived(conversationHref(instance.id, cawco.instanceIndex));
   const scratch = $derived(instance.kind === "scratch");
@@ -91,12 +94,11 @@
       null
   );
 
-  /** The question flies out of the item that asked it. */
-  const asking = $derived(`confirm:${instance.id}`);
-
   /**
    * Rename was chosen: the title's field opens once the menu has let go of
    * focus (its close would hand focus back to the row and blur the field).
+   * A question asked under the row keeps the focus it took, as the field
+   * does.
    */
   let renameAsked = false;
   function closeFocus(event: Event): void {
@@ -104,6 +106,10 @@
       renameAsked = false;
       event.preventDefault();
       onrename();
+      return;
+    }
+    if (asker.pending?.at === instance.id) {
+      event.preventDefault();
       return;
     }
     focusAfterMenu(event);
@@ -153,12 +159,12 @@
 
   async function askDeleteTranscript() {
     const sessionId = instance.sessionId as string;
-    await confirm({
+    await asker.ask({
+      at: instance.id,
       title: "Delete this transcript?",
       body: `“${sessionName(instance.id, {}, instance.cwd).label}” is removed from ${instance.cwd || "this machine"}, for good. Nothing else on the machine is touched.`,
       confirmLabel: "Delete transcript",
       destructive: true,
-      from: asking,
       pendingLabel: "Deleting…",
       run: () =>
         deleteTranscript(
@@ -171,24 +177,29 @@
   }
 
   async function askRemove() {
-    await confirm({
+    await asker.ask({
+      at: instance.id,
       title: "Remove this session?",
       body: "It never started, so there is no transcript to lose.",
       confirmLabel: "Remove session",
       destructive: true,
-      from: asking,
       pendingLabel: "Removing…",
       run: () => removeSession(instance.id),
     });
   }
 
+  /**
+   * A spin-off may or may not have a worktree of its own (`scratch.worktree`
+   * at its spawn), and the row doesn't say which: the words name what the
+   * spawn made, whichever it was.
+   */
   async function askDiscard() {
-    await confirm({
+    await asker.ask({
+      at: instance.id,
       title: "Discard this spin-off?",
       body: "The session stops, and whatever the spawn created for it — its worktree, its transcript — goes with it, for good.",
       confirmLabel: "Discard spin-off",
       destructive: true,
-      from: asking,
       pendingLabel: "Discarding…",
       run: () => discardSession(instance.id, instance.machineId),
     });
@@ -273,11 +284,7 @@
 
     {#if asleepWithTranscript}
       <ContextMenu.Separator />
-      <ContextMenu.Item
-        data-share={asking}
-        onSelect={askDeleteTranscript}
-        variant="destructive"
-      >
+      <ContextMenu.Item onSelect={askDeleteTranscript} variant="destructive">
         <IconTrash />
         Delete transcript
       </ContextMenu.Item>
@@ -285,11 +292,7 @@
 
     {#if neverStarted}
       <ContextMenu.Separator />
-      <ContextMenu.Item
-        data-share={asking}
-        onSelect={askRemove}
-        variant="destructive"
-      >
+      <ContextMenu.Item onSelect={askRemove} variant="destructive">
         <IconTrash />
         Remove session
       </ContextMenu.Item>
@@ -303,11 +306,7 @@
         pendingLabel="Keeping…"
         run={() => keepSession(instance.id)}
       />
-      <ContextMenu.Item
-        data-share={asking}
-        onSelect={askDiscard}
-        variant="destructive"
-      >
+      <ContextMenu.Item onSelect={askDiscard} variant="destructive">
         <IconTrash />
         Discard
       </ContextMenu.Item>

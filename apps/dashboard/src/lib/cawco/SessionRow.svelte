@@ -68,7 +68,9 @@
   import { IconArchive, IconMaximize } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
   import { page } from "$app/state";
+  import AskHere from "./AskHere.svelte";
   import { shownAccount } from "./accounts/switch.svelte";
+  import { Asker, type AskHereRequest } from "./ask-here.svelte";
   import type { InstanceRow } from "./client.svelte";
   import { openPeek, peekable, peekTipOff } from "./home/peek.svelte";
   import { swipeToArchive } from "./home/swipe-archive";
@@ -174,6 +176,14 @@
 
   /** What was asked of this session and is on its way, or did not go (session-acts). */
   const act = $derived(sessionId ? sessionAct(sessionId) : undefined);
+
+  /**
+   * What its menu asks before a delete, said under this row, the one it was
+   * asked from (AskHere): another list drawing the same session doesn't ask
+   * it too. A row that leaves the list takes its question with it.
+   */
+  const asks = new Asker<AskHereRequest>();
+  $effect(() => () => asks.dismiss());
 
   /**
    * Renaming edits the name where it stands: the title becomes a field in
@@ -425,7 +435,7 @@
        the row. -->
   {@render body({})}
 {:else if instance}
-  <LiveSessionMenu {instance} {onarchive} onrename={editTitle}>
+  <LiveSessionMenu asker={asks} {instance} {onarchive} onrename={editTitle}>
     {#snippet children(
       trigger
     )}
@@ -433,10 +443,17 @@
     {/snippet}
   </LiveSessionMenu>
 {:else if info}
-  <StoredSessionMenu {info} {machineId} onrename={editTitle}>
+  <StoredSessionMenu asker={asks} {info} {machineId} onrename={editTitle}>
     {@render body({})}
   </StoredSessionMenu>
 {/if}
+<!-- A delete's question, under the row it was asked from. -->
+<AskHere
+  asker={asks}
+  at={sessionId}
+  class="session-ask"
+  data-compact={compact || undefined}
+/>
 <!-- What did not go, under the row that asked: a rename's reason here, any
      other action's on every row of this session (session-acts). -->
 <RowFault
@@ -739,17 +756,23 @@
       block-size: 12px;
     }
   }
-  /* A row's fault and note start where its title does: past the row's own
-     padding, its mark and the gap after it. */
+  /* A row's fault, note and question start where its title does: past the
+     row's own padding, its mark and the gap after it. */
   :global(.session-fault),
+  :global(.session-ask),
   .session-note {
     --fault-indent: calc(var(--space-3) + 18px + var(--space-2));
     --fault-end: var(--space-3);
   }
   :global(.session-fault[data-compact]),
+  :global(.session-ask[data-compact]),
   .session-note[data-compact] {
     --fault-indent: calc(var(--row-compact-gap) * 2 + var(--mark-size, 18px));
     --fault-end: var(--row-compact-pad-end);
+  }
+  :global(.session-ask) {
+    --ask-indent: var(--fault-indent);
+    --ask-end: var(--fault-end);
   }
   .session-note {
     margin: 0;

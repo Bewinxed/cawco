@@ -26,7 +26,6 @@
     startThread,
     threadsOf,
   } from "#lib/cawco/client.svelte.js";
-  import Caw from "#lib/cawco/home/Caw.svelte";
   import type { HubRead } from "#lib/cawco/hub-read.js";
   import {
     crossIn,
@@ -37,6 +36,7 @@
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
   import { depart } from "#lib/cawco/motion/share.svelte.js";
   import CawField from "#lib/cawco/project/CawField.svelte";
+  import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import CawStarters from "#lib/cawco/project/CawStarters.svelte";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
@@ -886,8 +886,16 @@
       <div class="state caw-empty">
         <EmptyState line={cawLine} title="Nothing on the board yet">
           {#snippet mark()}
+            <!-- He stands here instead of sitting in the head, and is the
+                 same seat at 80: a press opens his panel, the switch in it,
+                 so turning him off is in reach on an empty board too. -->
             <div class="caw-80" data-share="caw:{projectId}" out:sitDown|global>
-              <Caw size={80} status="ready" />
+              <CawSeat
+                {lead}
+                {projectId}
+                projectName={project?.name ?? ""}
+                size={80}
+              />
             </div>
           {/snippet}
           {#snippet action()}

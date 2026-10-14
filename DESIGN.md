@@ -495,8 +495,8 @@ All motion stands on three curves and a short duration scale (values in the side
 The weight of the decision sets the shape, so flows differ:
 - Renaming edits the name where it stands.
 - Moving a session to another account says on that session's own row that it moves when its turn ends.
-- Forgetting a project with sessions running (`ForgetProjectDialog.svelte`) is a heavy decision, so the tray grows to name each running session, arms when stopping them would cut a turn short, shows each stop as its machine confirms it, and forgets the project only after that.
-- Turning Caw off weighs what he started. With nothing running, the switch just flips. With only his own turn in flight, one line under the switch asks whether it finishes or stops. With sessions he started still running, it is the forget's decision again, so it is the forget's tray (`StopTray.svelte`, `CawOffDialog.svelte`) with one more way out, "Let them finish".
+- Forgetting a project with sessions running (`ForgetProjectTray.svelte`) is a heavy decision, so the tray unfolds under what asked (the project head's `⋯`, or the folder's row in the rail), grows to name each running session, arms when stopping them would cut a turn short, shows each stop as its machine confirms it, and forgets the project only after that.
+- Turning Caw off weighs what he started. With nothing running, the switch just flips. With only his own turn in flight, one line under the switch asks whether it finishes or stops. With sessions he started still running, it is the forget's decision again, so it is the forget's tray (`StopTray.svelte`, `CawOffTray.svelte`) under the switch, with one more way out, "Let them finish".
 
 The tray is one worked answer to the four questions, not a template. Carry its reasoning to every flow, and its parts only to a flow that asks the same questions.
 
@@ -778,8 +778,11 @@ Tactile and quiet: a hairline-edged raised block that dips under the hand.
 ### Tooltip
 Solid ink, never coral: `ink-solid` fill and arrow, `on-ink` text, meta role, 8px radius, 6×10px padding, with a 10px rotated square arrow. It fades in and settles from 0.96 over 140ms on ease-out, and leaves the same way.
 
+### Asking in the page
+The one way to ask before doing (`AskHere.svelte`, `ask-here.svelte.ts`). The question unfolds in the page's flow under the control that asked it, indented to where that row's title starts: a raised tile (hairline, `radius-md`, raised shadow, 12px padding) holding the title in the label role, the consequence in meta, then Cancel (ghost) and the verb (destructive, or the grant's shield). It takes the focus on Cancel and holds nothing else. The verb runs the work and stays pending until it ends; a refusal stays under the question in the refuser's words, the verb the way to try again, and only work that went closes it. Escape or Cancel puts it away. An action that reaches several things names them inside the question (a run's live steps, a machine's sessions, the machines holding a skill), read live while it stands. The running-sessions tray (`StopTray.svelte`) is the same tile grown to list what it stops.
+
 ### Dialog, sheet and drawer
-These recipes are for the rare moments The Open Page Rule allows a hold. Anything else opens in the page.
+These recipes are for the rare moments The Open Page Rule allows a hold. Anything else opens in the page. No confirmation is a dialog now (they ask in the page, above); a new one that holds says why acting elsewhere would make its question wrong.
 - **Dialog:** a recess tray (18px radius, 6px padding, overlay shadow) holding a raised body (12px radius, 18px padding) for concentric corners, over the blurred scrim. It enters over 280ms on ease-out rising 6px, exits over 160ms, and tweens to a new height over 180ms when its body changes. The close button is a 30px ghost icon button 12px from the corner.
 - **Sheet:** a raised side or edge panel with the drawer shadow. It slides its whole size in over 280ms on the drawer curve and leaves over 160ms; with reduced motion it fades over 120ms.
 - **Drag to dismiss:** a sheet follows the finger 1:1 along its axis and rubber-bands past rest (35% of travel, at most 25% of its size). Released past 30% of its size, or flicked faster than 0.3px/ms toward its edge, it leaves on the settle spring at the finger's speed while its scrim fades with the share still on screen. Otherwise the spring puts it back. A mouse never drags; it has the close button and Escape.

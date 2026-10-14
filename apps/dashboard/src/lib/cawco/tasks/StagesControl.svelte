@@ -26,8 +26,7 @@
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { IconToolTodo } from "#lib/icons.js";
   import AskHere from "../AskHere.svelte";
-  import type { AskHereRequest, AskItem } from "../ask-here.svelte";
-  import { Asker } from "../confirm.svelte";
+  import { Asker, type AskHereRequest, type AskItem } from "../ask-here.svelte";
 
   let {
     projectId,

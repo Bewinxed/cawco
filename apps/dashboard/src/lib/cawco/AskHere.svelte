@@ -10,10 +10,10 @@
    * away; once the work is sent, it can't be called back, so Cancel waits.
    */
   import { Button } from "#lib/components/ui/button/index.js";
+  import { IconShield } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
   import AskItems from "./AskItems.svelte";
-  import type { AskHereRequest } from "./ask-here.svelte";
-  import type { Asker } from "./confirm.svelte";
+  import type { Asker, AskHereRequest } from "./ask-here.svelte";
   import { unfold } from "./motion/fold.svelte";
   import RowFault from "./RowFault.svelte";
 
@@ -21,11 +21,14 @@
     asker,
     at,
     class: className,
+    ...rest
   }: {
     asker: Asker<AskHereRequest>;
     /** The control this place answers for: the question asked `at` it shows here. */
     at: string;
     class?: string;
+    /** Data attributes for the host's styling (`data-compact`). */
+    [key: `data-${string}`]: unknown;
   } = $props();
 
   const id = $props.id();
@@ -36,6 +39,12 @@
     typeof asked?.body === "string" ? [asked.body] : (asked?.body ?? [])
   );
   const items = $derived(asked?.items?.() ?? []);
+  const variant = $derived.by(() => {
+    if (asked?.grant) {
+      return "grant";
+    }
+    return asked?.destructive ? "destructive" : "default";
+  });
   let running = $state(false);
   /** Why the last run was refused (the question stays), or null. */
   let failure = $state<string | null>(null);
@@ -86,6 +95,7 @@
 
 {#if asked}
   <section
+    {...rest}
     aria-labelledby="{id}-title"
     class={cn("ask-here", className)}
     data-ask={at}
@@ -112,12 +122,13 @@
         />
         <Button
           failed={failure !== null}
+          icon={asked.grant ? IconShield : undefined}
           label={asked.confirmLabel}
           onclick={accept}
           pending={running}
           pendingLabel={asked.pendingLabel}
           size="sm"
-          variant={asked.destructive ? "destructive" : "default"}
+          {variant}
         />
       </div>
     </div>

@@ -17,10 +17,11 @@
   import { MediaQuery } from "svelte/reactivity";
   import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
   import { cawco, spawnSession } from "#lib/cawco/client.svelte.js";
-  import { forgetProject } from "#lib/cawco/forget.svelte.js";
+  import ForgetProjectTray from "#lib/cawco/ForgetProjectTray.svelte";
+  import { forgetHost, forgetProject } from "#lib/cawco/forget.svelte.js";
   import { conversationHref } from "#lib/cawco/links.js";
   import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
-  import { depart, handOver } from "#lib/cawco/motion/share.svelte.js";
+  import { handOver } from "#lib/cawco/motion/share.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import { unpickedMode } from "#lib/cawco/permission-modes.js";
   import { checkoutOf } from "#lib/cawco/projects.js";
@@ -64,6 +65,8 @@
   let spawnOpen = $state(false);
   let spawnPrompt = $state("");
   let more = $state<HTMLElement | null>(null);
+  /** The place a forget asked from this head's `⋯` stands (forget.svelte.ts). */
+  const forgetAt = $derived(`head:${project.id}`);
 
   const message = (error: unknown) =>
     error instanceof Error ? error.message : String(error);
@@ -322,7 +325,6 @@
           <Button
             {...props}
             aria-label="More for {project.name}"
-            data-share="forget:{project.id}"
             size="icon"
             variant="ghost"
             bind:ref={more}
@@ -331,7 +333,17 @@
           </Button>
         {/snippet}
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end" class="w-52">
+      <!-- A forget asked here keeps the focus its tray took: the menu
+           doesn't hand it back to `⋯` as it closes. -->
+      <DropdownMenu.Content
+        align="end"
+        class="w-52"
+        onCloseAutoFocus={(event) => {
+          if (forgetHost.at === forgetAt) {
+            event.preventDefault();
+          }
+        }}
+      >
         {#if narrow.current}
           <DropdownMenu.Item onSelect={onnewtask}>New task</DropdownMenu.Item>
           {#if onask}
@@ -364,15 +376,9 @@
         <!-- The one destructive row, as every menu draws one: the house's
              destructive item, set apart at the end. -->
         <DropdownMenu.Separator />
-        <!-- The forget flies out of the ⋯ it was asked from (forget.svelte.ts):
-             taken again now, so a slow pick through the menu still flies. -->
+        <!-- The forget unfolds under this head (forget.svelte.ts). -->
         <DropdownMenu.Item
-          onSelect={() => {
-            if (more) {
-              depart(more);
-            }
-            forgetProject(project);
-          }}
+          onSelect={() => forgetProject(project, forgetAt)}
           variant="destructive"
           >Forget project…</DropdownMenu.Item
         >
@@ -380,8 +386,16 @@
     </DropdownMenu.Root>
   </div>
 </header>
+<!-- A forget asked from `⋯`, under the head, from where its title starts. -->
+<ForgetProjectTray at={forgetAt} class="head-forget max-w-lg" />
 
 <style>
+  /* The head's own leading padding, so the tray starts where its words do;
+     as wide as the dialog it replaces (`max-w-lg`, set where it is drawn). */
+  :global(.head-forget) {
+    --ask-indent: var(--space-7);
+    --fault-indent: var(--space-7);
+  }
   .project-head {
     display: flex;
     flex-wrap: wrap;

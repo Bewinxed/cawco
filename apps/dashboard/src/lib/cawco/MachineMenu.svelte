@@ -1,6 +1,5 @@
 <script lang="ts" module>
-  import type { AskHereRequest } from "./ask-here.svelte";
-  import { Asker } from "./confirm.svelte";
+  import { Asker, type AskHereRequest, type AskItem } from "./ask-here.svelte";
 
   /** One question about the machines at a time, under the row it is about. */
   const machineAsks = new Asker<AskHereRequest>();
@@ -24,7 +23,6 @@
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import AskHere from "./AskHere.svelte";
-  import type { AskItem } from "./ask-here.svelte";
   import {
     cawco,
     loadCatalog,

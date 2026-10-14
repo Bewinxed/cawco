@@ -7,8 +7,8 @@
    *
    * As LiveSessionMenu: Fork stays pending in the menu and says a refusal
    * there, Rename edits the row's title where it stands (`onrename`), and
-   * Delete transcript asks through the one confirm, out of its item, which
-   * keeps the machine's refusal under its question.
+   * Delete transcript asks under the row (its `asker`), which keeps the
+   * machine's refusal under its question.
    */
   import type { Snippet } from "svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -22,8 +22,8 @@
     IconTrash,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
+  import type { Asker, AskHereRequest } from "./ask-here.svelte";
   import { cawco, deleteTranscript, forkSession } from "./client.svelte";
-  import { confirm } from "./confirm.svelte";
   import { continueInNewSession } from "./continue.svelte";
   import { conversationHref, instanceForSession, sessionTitle } from "./links";
   import {
@@ -33,11 +33,14 @@
   } from "./workspace/open-beside.svelte";
 
   let {
+    asker,
     machineId,
     info,
     onrename,
     children,
   }: {
+    /** The row's questions: its `<AskHere at={info.sessionId}>` draws them under it. */
+    asker: Asker<AskHereRequest>;
     machineId: string;
     info: NeutralSessionInfo;
     /** The row's title becomes a field where it stands. */
@@ -60,10 +63,11 @@
     })
   );
   const title = $derived(sessionTitle(info, row));
-  /** The question flies out of the item that asked it. */
-  const asking = $derived(`confirm:${info.sessionId}`);
 
-  /** Rename opens the field once the menu has let go of focus (LiveSessionMenu). */
+  /**
+   * Rename opens the field once the menu has let go of focus, and a question
+   * asked under the row keeps the focus it took (LiveSessionMenu).
+   */
   let renameAsked = false;
   function closeFocus(event: Event): void {
     if (renameAsked) {
@@ -72,16 +76,20 @@
       onrename();
       return;
     }
+    if (asker.pending?.at === info.sessionId) {
+      event.preventDefault();
+      return;
+    }
     focusAfterMenu(event);
   }
 
   async function askDelete() {
-    await confirm({
+    await asker.ask({
+      at: info.sessionId,
       title: "Delete this transcript?",
       body: `“${title}” is removed from ${info.cwd || "this machine"}, for good. Nothing else on the machine is touched.`,
       confirmLabel: "Delete transcript",
       destructive: true,
-      from: asking,
       pendingLabel: "Deleting…",
       run: () =>
         deleteTranscript(
@@ -178,11 +186,7 @@
 
     <ContextMenu.Separator />
 
-    <ContextMenu.Item
-      data-share={asking}
-      onSelect={askDelete}
-      variant="destructive"
-    >
+    <ContextMenu.Item onSelect={askDelete} variant="destructive">
       <IconTrash />
       Delete transcript
     </ContextMenu.Item>

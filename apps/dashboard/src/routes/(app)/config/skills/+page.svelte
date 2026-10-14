@@ -6,7 +6,7 @@
     machineLabel,
   } from "@cawco/core";
   import AskHere from "#lib/cawco/AskHere.svelte";
-  import type { AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
+  import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import FetchSkillPopover from "#lib/cawco/config/FetchSkillPopover.svelte";
   import { holders } from "#lib/cawco/config/holders.js";
@@ -22,7 +22,6 @@
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
-  import { Asker, confirm } from "#lib/cawco/confirm.svelte.js";
   import {
     formatBytes,
     marketplaceCatalog,
@@ -307,10 +306,13 @@
     if (!fleet) {
       return;
     }
-    await confirm({
+    await asks.ask({
+      at: `marketplace:${name}`,
       title: `Unlink ${name}?`,
-      body: "The fleet stops tracking this marketplace. Plugins already installed from it stay installed.",
+      body: "The fleet and every machine tracking it stop tracking this marketplace. Plugins already installed from it stay installed.",
       confirmLabel: "Unlink",
+      destructive: true,
+      items: () => holders(machines, "marketplaces", name),
       pendingLabel: "Unlinking…",
       run: async () => {
         busy[name] = true;
@@ -566,6 +568,7 @@
               </Button>
             {/snippet}
             {#snippet below()}
+              <AskHere asker={asks} at="marketplace:{row.name}" />
               <RowFaults
                 key={row.name}
                 kind="marketplaces"

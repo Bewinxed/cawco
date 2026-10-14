@@ -53,7 +53,9 @@
   } from "./client.svelte";
   import { LAST_KEY as CONFIG_LAST_KEY, SECTIONS } from "./config/sections";
   import FolderMenu from "./FolderMenu.svelte";
+  import ForgetProjectTray from "./ForgetProjectTray.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
+  import { forgetAtRail } from "./forget.svelte";
   import Home from "./home/Home.svelte";
   import HomeRecent from "./home/HomeRecent.svelte";
   import { home } from "./home/home-state.svelte";
@@ -1100,6 +1102,11 @@
                     {/snippet}
                   </Sidebar.MenuButton>
                 </FolderMenu>
+                <!-- A forget asked from this row's menu, under it. -->
+                <ForgetProjectTray
+                  at={forgetAtRail(project.id)}
+                  class="rail-forget"
+                />
 
                 <!-- Its sessions hang under it the way a session's delegates
                      hang under theirs: on a rail that leaves the project's
@@ -1247,6 +1254,14 @@
 <!-- end flex column wrapper -->
 
 <style>
+  /* A forget's tray and its fault under a folder row, set in by the rail's
+     row padding so they sit inside the rail's column. */
+  :global(.rail-forget) {
+    --ask-indent: var(--space-1);
+    --ask-end: var(--space-1);
+    --fault-indent: var(--space-2);
+    --fault-end: var(--space-2);
+  }
   .brand-wordmark {
     display: inline-flex;
     align-items: center;

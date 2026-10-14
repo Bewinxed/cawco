@@ -320,6 +320,13 @@ const custodyProbe = async <T>(
   }
 };
 
+/**
+ * How long one harness's session catalog may take within a machine's
+ * listing: under the dashboard's 15s wait for the whole answer
+ * (`CONTROL_TIMEOUT_MS`), so the harnesses that answered still reach it.
+ */
+const HARNESS_LISTING_MS = 10_000;
+
 const isDirectory = async (path: string): Promise<boolean> => {
   const info = await stat(path).catch(() => null);
   return info?.isDirectory() ?? false;
@@ -791,6 +798,14 @@ export class SessionSupervisor {
   readonly #spinOffs = new Map<string, SpinOff>();
   /** One chain per instance, so envelopes about it are handled in arrival order. */
   readonly #queues = new Map<string, Promise<void>>();
+  /**
+   * Fleet syncs asked of this machine, counted as they arrive; each one's
+   * place in that count, by its request. Every sync carries the fleet's
+   * whole desired state, so one that a newer sync has overtaken while it
+   * waited its turn has nothing left to converge (#control).
+   */
+  #fleetSyncsAsked = 0;
+  readonly #fleetSyncTicket = new Map<string, number>();
   /** The sessions with a turn in flight — from the `send` that starts one until the turn ends. */
   readonly #busy = new Set<string>();
   /** Attached sessions whose CLI runs a boundary hook that fails open, until the relaunch that replaces it ({@link BOUNDARY_RELAUNCH}). */
@@ -1003,6 +1018,10 @@ export class SessionSupervisor {
         }
       }
       return Promise.resolve();
+    }
+    if (control?.method === FLEET_SYNC && control.requestId) {
+      this.#fleetSyncsAsked += 1;
+      this.#fleetSyncTicket.set(control.requestId, this.#fleetSyncsAsked);
     }
     const imageRequest =
       control?.method === GENERATE_IMAGE ? control.requestId : undefined;
@@ -4135,6 +4154,26 @@ export class SessionSupervisor {
     method,
     args = [],
   }: ControlPayload): Promise<void> {
+    if (method === FLEET_SYNC && requestId) {
+      const ticket = this.#fleetSyncTicket.get(requestId);
+      this.#fleetSyncTicket.delete(requestId);
+      // Overtaken while it waited behind the sync before it: the newer one,
+      // queued behind this, converges the fleet as it is now and reports it.
+      // Converging this one too would only delay that (one OpenCode server
+      // that won't start costs every sync 30s, and the syncs queued in a
+      // minute of edits held the machine's report for minutes). It answers
+      // at once; the hub keeps no report from it (`isFleetReport`).
+      if (ticket !== undefined && ticket < this.#fleetSyncsAsked) {
+        this.sink({
+          kind: "control_result",
+          instanceId,
+          requestId,
+          ok: true,
+          result: { superseded: true },
+        });
+        return;
+      }
+    }
     try {
       const result = await this.#call(instanceId, kind, method, args);
       this.sink({
@@ -4160,18 +4199,30 @@ export class SessionSupervisor {
     }
   }
 
-  /** The stored sessions of every harness, merged and newest-first. */
+  /**
+   * The stored sessions of every harness, merged and newest-first. Every
+   * harness is asked at once, and each has {@link HARNESS_LISTING_MS} to
+   * answer: one whose server is slow to answer or to fail (OpenCode waits
+   * 30s for its server's first line) is left out of this answer, as one that
+   * fails is, rather than holding every other harness's sessions past the
+   * reader's own wait (the dashboard's 15s), which lost the whole catalog.
+   */
   async #listSessions(args: unknown[]): Promise<NeutralSessionInfo[]> {
     const options = (args[0] ?? {}) as { limit?: number; dir?: string };
-    const all: NeutralSessionInfo[] = [];
-    for (const adapter of harnesses()) {
-      try {
-        // biome-ignore lint/performance/noAwaitInLoops: each harness's sessions are appended to the shared `all` array in a stable order
-        all.push(...(await adapter.listSessions(options.dir)));
-      } catch (error) {
-        warn(`listSessions on ${adapter.kind} failed: ${error}`);
-      }
-    }
+    const listed = await Promise.all(
+      harnesses().map(async (adapter) => {
+        try {
+          return await custodyProbe(
+            adapter.listSessions(options.dir),
+            AbortSignal.timeout(HARNESS_LISTING_MS)
+          );
+        } catch (error) {
+          warn(`listSessions on ${adapter.kind} failed: ${error}`);
+          return [];
+        }
+      })
+    );
+    const all = listed.flat();
     all.sort((a, b) => (b.lastModified ?? 0) - (a.lastModified ?? 0));
     return options.limit ? all.slice(0, options.limit) : all;
   }
@@ -4257,47 +4308,38 @@ export class SessionSupervisor {
     // CLI failure to a binary, and a field this rebuild does not name is a field
     // the hub never hears about.
     let toolchain: FleetSyncReport["toolchain"];
-    for (const adapter of harnesses()) {
-      const apply =
-        which === "syncFleet" ? adapter.syncFleet : adapter.fleetStatus;
-      if (!apply) {
-        continue;
-      }
-      try {
-        const report =
-          which === "syncFleet"
-            ? // biome-ignore lint/performance/noAwaitInLoops: each harness's report is merged into the shared accumulators before the next runs
-              // biome-ignore lint/style/noNonNullAssertion: `apply` was checked truthy above, and it is exactly `adapter.syncFleet` on this branch
-              await adapter.syncFleet!(
-                (adapter.capabilities.mcpStatus
-                  ? config
-                  : incoming) as FleetConfig
-              )
-            : // biome-ignore lint/style/noNonNullAssertion: `apply` was checked truthy above, and it is exactly `adapter.fleetStatus` on this branch
-              await adapter.fleetStatus!();
-        mcpByHarness[adapter.kind] = report.mcp;
-        Object.assign(marketplaces, report.marketplaces);
-        Object.assign(plugins, report.plugins);
-        // A skill lives in more than one harness's directory, so its row is
-        // the worst of them: one harness's copy edited or missing is not
-        // undone by another's that is fine.
-        for (const [name, item] of Object.entries(report.skills ?? {})) {
-          skills[name] = skills[name]
-            ? worstFleetState([skills[name], item])
-            : item;
-        }
-        Object.assign(memoryDocs, report.memoryDocs ?? {});
-        Object.assign(hooks, report.hooks ?? {});
-        if (report.memory) {
-          ({ memory } = report);
-        }
-        if (report.memoryHook) {
-          ({ memoryHook } = report);
-        }
-        if (report.toolchain) {
-          toolchain = { ...toolchain, ...report.toolchain };
-        }
-      } catch (error) {
+    // Every harness converges at once, each onto its own files (Claude Code's,
+    // OpenCode's, pi's directories), and the reports merge in harness order
+    // after: one whose server is slow to start or to fail (OpenCode waits 30s
+    // for its server's first line) no longer holds the others' convergence
+    // and the machine's whole report behind it.
+    const settled = await Promise.all(
+      harnesses()
+        .filter((adapter) =>
+          which === "syncFleet" ? adapter.syncFleet : adapter.fleetStatus
+        )
+        .map(async (adapter) => {
+          try {
+            const report =
+              which === "syncFleet"
+                ? // biome-ignore lint/style/noNonNullAssertion: filtered to adapters that have it above
+                  await adapter.syncFleet!(
+                    (adapter.capabilities.mcpStatus
+                      ? config
+                      : incoming) as FleetConfig
+                  )
+                : // biome-ignore lint/style/noNonNullAssertion: filtered to adapters that have it above
+                  await adapter.fleetStatus!();
+            return { adapter, report } as const;
+          } catch (error) {
+            return { adapter, error } as const;
+          }
+        })
+    );
+    for (const outcome of settled) {
+      const { adapter } = outcome;
+      if ("error" in outcome) {
+        const { error } = outcome;
         warn(`${which} on ${adapter.kind} failed: ${error}`);
         mcpFailures.set(adapter.kind, String(error));
         mcpByHarness[adapter.kind] = Object.fromEntries(
@@ -4306,6 +4348,30 @@ export class SessionSupervisor {
             { state: "failed", detail: `${adapter.kind}: ${String(error)}` },
           ])
         );
+        continue;
+      }
+      const { report } = outcome;
+      mcpByHarness[adapter.kind] = report.mcp;
+      Object.assign(marketplaces, report.marketplaces);
+      Object.assign(plugins, report.plugins);
+      // A skill lives in more than one harness's directory, so its row is
+      // the worst of them: one harness's copy edited or missing is not
+      // undone by another's that is fine.
+      for (const [name, item] of Object.entries(report.skills ?? {})) {
+        skills[name] = skills[name]
+          ? worstFleetState([skills[name], item])
+          : item;
+      }
+      Object.assign(memoryDocs, report.memoryDocs ?? {});
+      Object.assign(hooks, report.hooks ?? {});
+      if (report.memory) {
+        ({ memory } = report);
+      }
+      if (report.memoryHook) {
+        ({ memoryHook } = report);
+      }
+      if (report.toolchain) {
+        toolchain = { ...toolchain, ...report.toolchain };
       }
     }
     const names = new Set([

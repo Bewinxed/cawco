@@ -14,8 +14,8 @@
  * Throughout, nothing reaches the page's unhandled-rejection reporter.
  * Desk, light: these are states, not looks.
  */
-import { cp, mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { cp, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type { Page, Route, WebSocketRoute } from "playwright-core";
 import {
   CLAUDE_JSON_NAME,
@@ -46,6 +46,7 @@ const FINISHED_TAB = /Finished/;
 const PICK_STAGES = /Pick stages/;
 const SOCIAL = /Social posts/;
 const FORGET = /Forget project/;
+const FORGOTTEN = /Forgotten/;
 const REMOVE_EVERYWHERE = /Remove everywhere/;
 const MACHINES_BUTTON = /^\d+ machines?/;
 const REMOVE_MACHINE = /Remove machine/;
@@ -338,6 +339,1079 @@ async function askSays(page: Page, at: string, text: string) {
 const askConfirm = (page: Page, at: string) =>
   page.locator(`[data-ask="${at}"] .actions button`).last();
 
+/**
+ * A session's question, read with where it stands: directly under the row
+ * drawing `link` (a live row's `data-hover-session`, a stored one's
+ * `data-share`), the row it was asked from, and only there.
+ */
+const sessionAskState = ([at, link]: [string, string]) => {
+  const asks = document.querySelectorAll(`[data-ask="${CSS.escape(at)}"]`);
+  const [ask] = asks;
+  const row = ask?.previousElementSibling;
+  return {
+    open: Boolean(ask),
+    title: ask?.querySelector("p.title")?.textContent?.trim() ?? null,
+    fault:
+      ask
+        ?.querySelector(".row-fault")
+        ?.textContent?.replace(/\s+/g, " ")
+        .trim() ?? null,
+    busy: Boolean(ask?.querySelector('[aria-busy="true"]')),
+    focused: Boolean(ask?.contains(document.activeElement)),
+    held:
+      Boolean(
+        document.querySelector(
+          '[role="alertdialog"], [role="dialog"][aria-modal="true"]'
+        )
+      ) || getComputedStyle(document.body).pointerEvents === "none",
+    rejections: (window as unknown as { __rejections: string[] }).__rejections
+      .length,
+    count: asks.length,
+    underRow: Boolean(
+      row && (row.matches(link) || row.querySelector(link) !== null)
+    ),
+    rowPresent: Boolean(document.querySelector(link)),
+  };
+};
+
+/** Where a session's question is asked, and how its answer is held at the hub's door. */
+interface RowQuestion {
+  /** The question's `at`: the row's session (its instance id, or a stored transcript's). */
+  at: string;
+  /** Holds what the confirm sends. */
+  hold: () => void;
+  /** The menu item that asks it. */
+  item: RegExp;
+  /** Lets what the confirm sends through from now on. */
+  letThrough: () => void;
+  /** The row the question belongs under: a selector inside it. */
+  link: string;
+  /** Right-clicks the row, its menu open. */
+  menu: () => Promise<void>;
+  refusal: string;
+  /** Refuses what is held, with `refusal`. */
+  refuse: () => Promise<unknown>;
+  /** The question's title. */
+  title: string;
+  /** Waits until what the confirm sent is held. */
+  waitHeld: () => Promise<unknown>;
+  /** The flow's name in its checks. */
+  what: string;
+}
+
+/**
+ * One session-row question through its states, read from the DOM: asked
+ * under the row it was asked from (and only there), in hand, nothing
+ * holding the page; Cancel puts it away, the row untouched; pending while
+ * the hub holds the answer; refused with the reason under it; confirmed,
+ * the question and the row gone together.
+ */
+async function rowQuestion(kit: Kit, page: Page, q: RowQuestion) {
+  const read = () =>
+    page.evaluate(sessionAskState, [q.at, q.link] as [string, string]);
+  const ask = page.locator(`[data-ask="${q.at}"]`);
+  await q.menu();
+  await menuItem(page, q.item);
+  await ask.waitFor();
+  await page.waitForTimeout(400);
+  const asked = await read();
+  note(kit, `${q.what}, the question`, asked);
+  kit.check(
+    `${q.what}: the question stands under the row it was asked from, and only there, Cancel in hand; nothing holds the page`,
+    asked.title === q.title &&
+      asked.count === 1 &&
+      asked.underRow &&
+      asked.focused &&
+      !asked.held,
+    JSON.stringify(asked)
+  );
+  await ask.getByRole("button", { name: CANCEL }).click();
+  await ask.waitFor({ state: "detached" });
+  const cancelled = await read();
+  kit.check(
+    `${q.what}: Cancel puts the question away; the row stays as it was`,
+    !cancelled.open && cancelled.rowPresent,
+    JSON.stringify(cancelled)
+  );
+  await q.menu();
+  await menuItem(page, q.item);
+  await ask.waitFor();
+  q.hold();
+  await askConfirm(page, q.at).click();
+  await q.waitHeld();
+  const pending = await read();
+  note(kit, `${q.what}, before the hub answers`, pending);
+  kit.check(
+    `${q.what}: before the hub answers, the question stays under the row, its confirm busy, the row in its place`,
+    pending.open && pending.busy && pending.underRow && pending.rowPresent,
+    JSON.stringify(pending)
+  );
+  await q.refuse();
+  await ask.getByText(q.refusal).waitFor({ timeout: 30_000 });
+  const refused = await read();
+  note(kit, `${q.what}, refused`, refused);
+  kit.check(
+    `${q.what}: refused, the question stays with the reason under it, the row in its place, no unhandled rejection`,
+    refused.open &&
+      (refused.fault ?? "").includes(q.refusal) &&
+      !refused.busy &&
+      refused.rowPresent &&
+      refused.rejections === 0,
+    JSON.stringify(refused)
+  );
+  q.letThrough();
+  await askConfirm(page, q.at).click();
+  const gone = await page
+    .waitForFunction(
+      ([at, link]) =>
+        !(
+          document.querySelector(link) ||
+          document.querySelector(`[data-ask="${CSS.escape(at)}"]`)
+        ),
+      [q.at, q.link] as const,
+      { timeout: 60_000 }
+    )
+    .then(
+      () => true,
+      () => false
+    );
+  const done = await read();
+  note(kit, `${q.what}, confirmed`, done);
+  kit.check(
+    `${q.what}: confirmed, the question and the row leave together; no unhandled rejection`,
+    gone && !done.open && !done.rowPresent && done.rejections === 0,
+    JSON.stringify(done)
+  );
+}
+
+type Socket = ReturnType<typeof wire>;
+
+/** Holds the frames `match` picks at the page's socket, for a row question. */
+const atSocket = (
+  socket: Socket,
+  match: (frame: Record<string, unknown>) => boolean,
+  refusal: string
+) => ({
+  hold: () => socket.hold(match),
+  waitHeld: () =>
+    until(
+      "the answer held",
+      () => socket.held.length,
+      (n) => n === 1
+    ),
+  refuse: () => {
+    socket.refuseHeld(errorFrame(refusal));
+    return Promise.resolve();
+  },
+  letThrough: () => socket.passAll(),
+  refusal,
+});
+
+/** The machine's delete of a transcript, held at the socket. */
+const deletesTranscript = (frame: Record<string, unknown>) =>
+  frame.verb === "control" &&
+  (frame.payload as { method?: string } | undefined)?.method ===
+    "deleteSession";
+
+/** Delete transcript from a live session's row (LiveSessionMenu). */
+const deleteOnRow = (
+  socket: Socket,
+  page: Page,
+  id: string,
+  what: string
+): RowQuestion => ({
+  what,
+  at: id,
+  link: `[data-hover-session="${id}"]`,
+  item: DELETE_ITEM,
+  title: "Delete this transcript?",
+  menu: () => rightClickRow(page, id),
+  ...atSocket(socket, deletesTranscript, DELETE_REFUSAL),
+});
+
+const DISCARD_ITEM = /^Discard$/;
+const REMOVE_ITEM = /^Remove session$/;
+const DISCARD_REFUSAL = "The worktree is in use: probe refusal.";
+const REMOVE_REFUSAL = "The session could not be removed: probe refusal.";
+const GRANT_REFUSAL = "The session would not restart: probe refusal.";
+const FULL_SEND = /Full Send/;
+const SESSION_DETAILS = /^Session details$/;
+/** A hub log line about a machine's fleet sync. */
+const FLEET_LOG = /fleet|sync/i;
+/** An agent log line about listing a machine's sessions. */
+const LISTING_LOG = /listSessions|list sessions|catalog/i;
+
+/** Until `id`'s turn has ended on the hub. */
+const turnEnds = (fleet: KitFleet, id: string) =>
+  until(
+    "the turn ended",
+    () => fleet.instance(id),
+    (row) => row?.turn_open_at === null,
+    120_000
+  );
+
+/**
+ * Where Claude keeps a conversation's transcript, in the fleet's sandbox: a
+ * config dir's `projects/<project>/<id>.jsonl`, the one place the machine's
+ * catalog lists (claude.ts `listSessions`), not another store's copy.
+ */
+async function transcriptFile(fleet: KitFleet, sessionId: string) {
+  const inProjects = new RegExp(`(^|/)projects/[^/]+/${sessionId}\\.jsonl$`);
+  for (const root of [fleet.home, fleet.sandbox]) {
+    // biome-ignore lint/performance/noAwaitInLoops: two roots, the first that has it wins
+    const found = (await readdir(root, { recursive: true })).find((path) =>
+      inProjects.test(path)
+    );
+    if (found) {
+      return join(root, found);
+    }
+  }
+  throw new Error(`no transcript for ${sessionId} under the fleet's sandbox`);
+}
+
+/**
+ * A tab's menu, asked for the moment a session's page has landed, `times`
+ * over: it opens every time. A miss notes what came and went around the
+ * press (menus, the tab's own nodes), what had the focus, and what stood
+ * under the pointer.
+ */
+async function tabMenuOnLanding(
+  kit: Kit,
+  page: Page,
+  base: string,
+  id: string,
+  times: number
+) {
+  const tab = `[data-session-tab="${id}"]`;
+  const misses: unknown[] = [];
+  for (let at = 0; at < times; at += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: each landing is its own, one after another
+    await open(page, `${base}/session/${id}`, tab);
+    await page.evaluate((selector) => {
+      const seen: string[] = [];
+      const start = performance.now();
+      const stamp = () => `${Math.round(performance.now() - start)}ms`;
+      const mark = (nodes: NodeList, how: string) => {
+        for (const node of nodes) {
+          if (!(node instanceof Element)) {
+            continue;
+          }
+          if (node.querySelector('[role="menu"]')) {
+            seen.push(`${stamp()} menu ${how}`);
+          }
+          if (node.matches(selector) || node.querySelector(selector)) {
+            seen.push(`${stamp()} tab ${how}`);
+          }
+        }
+      };
+      new MutationObserver((records) => {
+        for (const record of records) {
+          mark(record.addedNodes, "added");
+          mark(record.removedNodes, "removed");
+        }
+      }).observe(document.body, { childList: true, subtree: true });
+      addEventListener(
+        "focusin",
+        (event) => {
+          const target = event.target as Element | null;
+          seen.push(
+            `${stamp()} focus ${target?.tagName ?? "?"}.${String(target?.className ?? "").slice(0, 40)}`
+          );
+        },
+        true
+      );
+      (window as unknown as { __menuSeen: string[] }).__menuSeen = seen;
+    }, tab);
+    await page.locator(tab).first().click({ button: "right" });
+    const opened = await page
+      .locator('[role="menu"]')
+      .first()
+      .waitFor({ timeout: 5000 })
+      .then(
+        () => true,
+        () => false
+      );
+    if (!opened) {
+      misses.push({
+        at,
+        seen: await page.evaluate(
+          () => (window as unknown as { __menuSeen: string[] }).__menuSeen
+        ),
+        active: await page.evaluate(
+          () =>
+            `${document.activeElement?.tagName}.${String(document.activeElement?.className ?? "").slice(0, 40)}`
+        ),
+      });
+    }
+    await page.keyboard.press("Escape");
+  }
+  note(kit, "a tab's menu right after landing, misses", misses);
+  kit.check(
+    `A tab's menu opens on the first right-click right after its page lands, ${times} times out of ${times}`,
+    misses.length === 0,
+    JSON.stringify(misses)
+  );
+}
+
+/**
+ * A session's details card, opened pinned from its tab's own menu (Session
+ * details, PaneTabs): a click opens it only on the tab already active, and
+ * a key only where the focus is, neither settled on a page just landed on.
+ */
+async function openDetails(kit: Kit, page: Page, tab: string) {
+  // What happens around the press, for a reading if no menu stands after
+  // it: each menu that came or went, the element under the tab's centre,
+  // and the tab's own nodes replaced.
+  await page.evaluate((selector) => {
+    const seen: string[] = [];
+    const start = performance.now();
+    const at = () => `${Math.round(performance.now() - start)}ms`;
+    const mark = (nodes: NodeList, how: string) => {
+      for (const node of nodes) {
+        if (!(node instanceof Element)) {
+          continue;
+        }
+        if (node.querySelector('[role="menu"]')) {
+          seen.push(`${at()} menu ${how}`);
+        }
+        if (node.matches(selector) || node.querySelector(selector)) {
+          seen.push(`${at()} tab ${how}`);
+        }
+      }
+    };
+    new MutationObserver((records) => {
+      for (const record of records) {
+        mark(record.addedNodes, "added");
+        mark(record.removedNodes, "removed");
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+    const tabNode = document.querySelector(selector);
+    const box = tabNode?.getBoundingClientRect();
+    const top = box
+      ? document.elementFromPoint(
+          box.left + box.width / 2,
+          box.top + box.height / 2
+        )
+      : null;
+    seen.push(
+      `under the tab's centre: ${top?.tagName ?? "nothing"}.${top?.className ?? ""} (inside the tab: ${Boolean(top && tabNode?.contains(top))})`
+    );
+    (window as unknown as { __menuSeen: string[] }).__menuSeen = seen;
+  }, tab);
+  await page.locator(tab).first().click({ button: "right" });
+  await page
+    .getByRole("menuitem", { name: SESSION_DETAILS })
+    .click({ timeout: 15_000 })
+    .catch(async (error: unknown) => {
+      note(
+        kit,
+        "the tab's menu, without Session details",
+        await page.evaluate(() => ({
+          menus: [...document.querySelectorAll('[role="menu"]')].map((menu) =>
+            [...menu.querySelectorAll('[role="menuitem"]')].map((item) =>
+              item.textContent?.replace(/\s+/g, " ").trim()
+            )
+          ),
+          seen: (window as unknown as { __menuSeen: string[] }).__menuSeen,
+          active: document.activeElement?.tagName,
+          path: location.pathname,
+        }))
+      );
+      throw error;
+    });
+  await page
+    .locator(".session-details")
+    .waitFor({ timeout: 30_000 })
+    .catch(async (error: unknown) => {
+      note(
+        kit,
+        "session details, not opened",
+        await page.evaluate((selector) => {
+          const tabs = [...document.querySelectorAll(selector)];
+          return {
+            tabs: tabs.map((one) => ({
+              selected: one.getAttribute("aria-selected"),
+              text: one.textContent?.replace(/\s+/g, " ").trim(),
+              box: one.getBoundingClientRect().width,
+            })),
+            cards: document.querySelectorAll(".session-details").length,
+            path: location.pathname,
+          };
+        }, tab)
+      );
+      throw error;
+    });
+}
+
+/** The home, its Finished list showing `id`'s row. */
+async function homeShowing(page: Page, base: string, id: string) {
+  await open(page, base, "[data-needs-caw]");
+  await finishedTab(page);
+  await page.waitForSelector(`[data-hover-session="${id}"]`, {
+    timeout: 60_000,
+  });
+}
+
+/**
+ * The session menus' other questions, each under its own row: Discard a
+ * spin-off, Remove a session that never started, Delete a transcript only
+ * its machine keeps (Recent's row); and Full Send, asked under the
+ * permission rows in a session's details.
+ */
+async function sessionQuestions(
+  kit: Kit,
+  fleet: KitFleet,
+  page: Page,
+  base: string,
+  socket: Socket
+) {
+  // ── Discard a spin-off ───────────────────────────────────────────────
+  const spin = await fleet.spawn("claude", "Probe spin-off", fleet.workdir, {
+    scratch: {},
+  });
+  await fleet.send(spin, "hello");
+  await turnEnds(fleet, spin);
+  await homeShowing(page, base, spin);
+  await rowQuestion(kit, page, {
+    what: "Discard spin-off",
+    at: spin,
+    link: `[data-hover-session="${spin}"]`,
+    item: DISCARD_ITEM,
+    title: "Discard this spin-off?",
+    menu: () => rightClickRow(page, spin),
+    ...atSocket(
+      socket,
+      (frame) =>
+        frame.verb === "stop" &&
+        (frame.payload as { discard?: boolean } | undefined)?.discard === true,
+      DISCARD_REFUSAL
+    ),
+  });
+
+  // ── A session that never started ────────────────────────────────────
+  // A start its machine fails before the harness names a conversation: its
+  // folder is a file (a missing folder the machine would make).
+  const notAFolder = join(fleet.sandbox, "not-a-folder");
+  await writeFile(notAFolder, "probe");
+  const never = crypto.randomUUID();
+  await fleet.post({
+    verb: "spawn",
+    machineId: MACHINE,
+    instanceId: never,
+    requestId: crypto.randomUUID(),
+    payload: {
+      instanceId: never,
+      cwd: notAFolder,
+      harness: "claude",
+      model: MODEL.claude,
+      title: "Probe never started",
+      permissionMode: "bypassPermissions",
+    },
+  });
+  await until(
+    "the start failed",
+    () => fleet.instance(never)?.status,
+    (status) =>
+      status !== undefined && !["starting", "running"].includes(status),
+    90_000
+  );
+  note(kit, "the never-started session on the hub", {
+    ...fleet.instance(never),
+    sessionId: fleet.query<{ session_id: string | null }>(
+      "SELECT session_id FROM instances WHERE id = ?",
+      never
+    )[0]?.session_id,
+  });
+  await homeShowing(page, base, never);
+  const removals = await gate(page, `**/api/instances/${never}`, "DELETE");
+  await rowQuestion(kit, page, {
+    what: "Remove a never-started session",
+    at: never,
+    link: `[data-hover-session="${never}"]`,
+    item: REMOVE_ITEM,
+    title: "Remove this session?",
+    menu: () => rightClickRow(page, never),
+    hold: () => undefined,
+    waitHeld: removals.waitHeld,
+    refuse: () => removals.refuse(409, REMOVE_REFUSAL),
+    letThrough: removals.open,
+    refusal: REMOVE_REFUSAL,
+  });
+
+  // ── A transcript only its machine keeps ─────────────────────────────
+  // One no hub session started, as the CLI leaves them: a real session's
+  // transcript, beside it under a conversation id of its own.
+  const source = await fleet.spawn("claude", "Probe transcript source");
+  await fleet.send(source, "hello");
+  await turnEnds(fleet, source);
+  const sourceId = await until(
+    "the source's conversation named on the hub",
+    () =>
+      fleet.query<{ session_id: string | null }>(
+        "SELECT session_id FROM instances WHERE id = ?",
+        source
+      )[0]?.session_id ?? "",
+    (named) => named.length > 0,
+    60_000
+  );
+  const original = await transcriptFile(fleet, sourceId);
+  const sessionId = crypto.randomUUID();
+  const copy = join(dirname(original), `${sessionId}.jsonl`);
+  await writeFile(
+    copy,
+    (await readFile(original, "utf8")).replaceAll(sourceId, sessionId)
+  );
+  note(kit, "the transcript only its machine keeps", copy);
+  /** The page's own word on a catalog read that failed (loadCatalog). */
+  const catalogSaid: string[] = [];
+  page.on("console", (message) => {
+    if (message.text().includes("listSessions")) {
+      catalogSaid.push(message.text());
+    }
+  });
+  await open(page, base, "[data-needs-caw]");
+  const recent = page.locator("section.recent button.disclosure").first();
+  if ((await recent.getAttribute("aria-expanded")) !== "true") {
+    await recent.click();
+  }
+  const storedLink = `a[data-share="session:${sessionId}"]`;
+  const listed = await page
+    .waitForSelector(storedLink, { state: "attached", timeout: 60_000 })
+    .then(
+      () => true,
+      () => false
+    );
+  if (!listed) {
+    // What Recent does list, for the reading: its rows' names and links.
+    note(
+      kit,
+      "Recent, without the stored transcript",
+      await page.evaluate(() =>
+        [...document.querySelectorAll("section.recent")].map((section) => ({
+          open: section
+            .querySelector("button.disclosure")
+            ?.getAttribute("aria-expanded"),
+          rows: [...section.querySelectorAll("a[data-share^='session:']")].map(
+            (row) =>
+              `${row.getAttribute("data-share")} ${row.textContent?.replace(/\s+/g, " ").trim()}`
+          ),
+        }))
+      )
+    );
+    note(kit, "the page on its catalog read", catalogSaid);
+    note(
+      kit,
+      "the agent on listing sessions",
+      (await fleet.logs("agent"))
+        .split("\n")
+        .filter((line) => LISTING_LOG.test(line))
+        .slice(-20)
+    );
+    throw new Error(`Recent never listed the stored transcript ${sessionId}`);
+  }
+  await rowQuestion(kit, page, {
+    what: "Delete a stored transcript",
+    at: sessionId,
+    link: storedLink,
+    item: DELETE_ITEM,
+    title: "Delete this transcript?",
+    menu: async () => {
+      const row = page.locator(storedLink).first();
+      await row.scrollIntoViewIfNeeded();
+      await row.click({ button: "right" });
+      await page.waitForSelector('[role="menu"]', { timeout: 10_000 });
+    },
+    ...atSocket(socket, deletesTranscript, DELETE_REFUSAL),
+  });
+
+  // ── Full Send, under the permission rows ────────────────────────────
+  // A session with a conversation: a restart resumes it by its key.
+  const granted = await fleet.spawn("claude", "Probe grant", fleet.workdir, {
+    permissionMode: "default",
+  });
+  await fleet.send(granted, "hello");
+  await turnEnds(fleet, granted);
+  const tab = `[data-session-tab="${granted}"]`;
+  await open(page, `${base}/session/${granted}`, tab);
+  await openDetails(kit, page, tab);
+  const chip = page.locator(
+    '.session-details button[aria-label^="Permission mode:"]'
+  );
+  const ask = page.locator('[data-ask="fullSend"]');
+  const pickFullSend = async () => {
+    await chip.click();
+    await page.click('[data-perm="fullSend"]');
+    await ask.waitFor();
+  };
+  const details = () =>
+    page.evaluate(() => {
+      const card = document.querySelector(".session-details");
+      return {
+        chip:
+          card
+            ?.querySelector('button[aria-label^="Permission mode:"]')
+            ?.getAttribute("aria-label") ?? null,
+        pending: card?.querySelector(".feedback")?.textContent?.trim() ?? null,
+        failure: card?.querySelector(".failure")?.textContent?.trim() ?? null,
+        rejections: (window as unknown as { __rejections: string[] })
+          .__rejections.length,
+      };
+    });
+  await chip.waitFor({ timeout: 30_000 });
+  await pickFullSend();
+  await page.waitForTimeout(400);
+  const grantAsked = {
+    ...(await page.evaluate(askState, "fullSend")),
+    under: await page.evaluate(
+      () =>
+        document.querySelector('[data-ask="fullSend"]')?.previousElementSibling
+          ?.role === "radiogroup"
+    ),
+    confirm: (await askConfirm(page, "fullSend").textContent())?.trim(),
+    shield: (await askConfirm(page, "fullSend").locator("svg").count()) > 0,
+  };
+  note(kit, "full send, the question", grantAsked);
+  kit.check(
+    "Full Send: the question stands under the permission rows, its confirm the grant's (shield); nothing holds the page",
+    grantAsked.open &&
+      grantAsked.under &&
+      grantAsked.title === "Switch to Full Send?" &&
+      grantAsked.shield &&
+      !grantAsked.held,
+    JSON.stringify(grantAsked)
+  );
+  await ask.getByRole("button", { name: CANCEL }).click();
+  await ask.waitFor({ state: "detached" });
+  const grantCancelled = await details();
+  kit.check(
+    "Full Send: Cancel puts the question away; the mode is as it was",
+    !FULL_SEND.test(grantCancelled.chip ?? ""),
+    JSON.stringify(grantCancelled)
+  );
+  await page.keyboard.press("Escape");
+  socket.hold(
+    (frame) => frame.verb === "spawn" && frame.instanceId === granted
+  );
+  await chip.waitFor();
+  await pickFullSend();
+  await askConfirm(page, "fullSend").click();
+  await until(
+    "the restart held",
+    () => socket.held.length,
+    (n) => n === 1,
+    30_000
+  ).catch(async (error: unknown) => {
+    note(kit, "full send, no restart sent", {
+      ...(await details()),
+      sent: socket.sent.slice(-10),
+    });
+    throw error;
+  });
+  // The question folds away (its exit transition) once said yes.
+  const askGone = await ask
+    .waitFor({ state: "detached", timeout: 10_000 })
+    .then(
+      () => true,
+      () => false
+    );
+  const grantPending = { ...(await details()), askGone };
+  note(kit, "full send, before the machine answers", grantPending);
+  kit.check(
+    "Full Send: once said yes, the question goes and the session's own line says the change is on its way",
+    askGone && grantPending.pending === "Applying change…",
+    JSON.stringify(grantPending)
+  );
+  socket.refuseHeld(errorFrame(GRANT_REFUSAL));
+  await page
+    .locator(".session-details .failure", { hasText: GRANT_REFUSAL })
+    .waitFor({ timeout: 30_000 });
+  const grantRefused = await details();
+  note(kit, "full send, refused", grantRefused);
+  kit.check(
+    "Full Send: refused, the session's line says why, in the machine's words; no unhandled rejection",
+    (grantRefused.failure ?? "").includes(GRANT_REFUSAL) &&
+      grantRefused.rejections === 0,
+    JSON.stringify(grantRefused)
+  );
+  socket.passAll();
+
+  /**
+   * Full Send said yes to, through to the machine: the hub holds the mode
+   * and the session runs on it, in a process started again for it (Full
+   * Send is a mode its harness only takes at launch), not merely recorded.
+   */
+  const restarted = async (id: string, what: string) => {
+    const pidBefore = await fleet.sessionPid(id);
+    await pickFullSend();
+    await askConfirm(page, "fullSend").click();
+    await until(
+      `${what}: the session in Full Send on the hub`,
+      () =>
+        fleet.query<{ permission_mode: string | null }>(
+          "SELECT permission_mode FROM instances WHERE id = ?",
+          id
+        )[0]?.permission_mode,
+      (mode) => mode === "fullSend",
+      120_000
+    );
+    const pidAfter = await until(
+      `${what}: its process started again`,
+      () => fleet.sessionPid(id),
+      (pid) => pid !== pidBefore,
+      120_000
+    ).catch(() => undefined);
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector(
+            '.session-details button[aria-label^="Permission mode:"]'
+          )
+          ?.getAttribute("aria-label")
+          ?.includes("Full Send"),
+      null,
+      { timeout: 30_000 }
+    );
+    const done = { ...(await details()), pidBefore, pidAfter };
+    note(kit, `${what}, confirmed`, done);
+    kit.check(
+      `${what}: confirmed, the session runs on Full Send in a process started again for it, its chip says so, no failure line; no unhandled rejection`,
+      FULL_SEND.test(done.chip ?? "") &&
+        done.failure === null &&
+        pidAfter !== undefined &&
+        pidAfter !== pidBefore &&
+        done.rejections === 0,
+      JSON.stringify(done)
+    );
+  };
+  await restarted(granted, "Full Send");
+  await page.keyboard.press("Escape");
+
+  // ── Full Send before the session's first message ────────────────────
+  // Its harness has begun no conversation: it starts again fresh under its
+  // id, on Full Send (core `relaunchOf`).
+  const fresh = await fleet.spawn(
+    "claude",
+    "Probe fresh grant",
+    fleet.workdir,
+    { permissionMode: "default" }
+  );
+  const freshTab = `[data-session-tab="${fresh}"]`;
+  await open(page, `${base}/session/${fresh}`, freshTab);
+  await openDetails(kit, page, freshTab);
+  await chip.waitFor({ timeout: 30_000 });
+  await restarted(fresh, "Full Send before the first message");
+  await page.keyboard.press("Escape");
+
+  // ── A tab's menu, the moment its page lands ─────────────────────────
+  await tabMenuOnLanding(kit, page, base, granted, 6);
+}
+
+const MARKET = "probe-market";
+const UNLINK = /^Unlink$/;
+const UNLINK_REFUSAL = "The marketplace is in use: probe refusal.";
+
+/** Unlink a marketplace: asked under its row, naming the machines tracking it. */
+async function unlinkMarketplace(
+  kit: Kit,
+  fleet: KitFleet,
+  page: Page,
+  base: string
+) {
+  const source = join(fleet.sandbox, MARKET);
+  await mkdir(join(source, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    join(source, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({ name: MARKET, owner: { name: "Probe" }, plugins: [] })
+  );
+  await fleet.api("/api/fleet/marketplaces", { source });
+  await until(
+    "the machine tracking the marketplace",
+    () =>
+      fetch(`${fleet.base}/api/agents`)
+        .then((r) => r.json())
+        .then(
+          (rows: { fleet?: { marketplaces?: Record<string, unknown> } }[]) =>
+            rows.some((row) => row.fleet?.marketplaces?.[MARKET])
+        ),
+    Boolean,
+    60_000
+  );
+  const unlinks = await gate(
+    page,
+    `**/api/fleet/marketplaces/${MARKET}`,
+    "DELETE"
+  );
+  const more = `button[aria-label="More for ${MARKET}"]`;
+  const at = `marketplace:${MARKET}`;
+  await open(page, `${base}/config/skills`, more);
+  await page.click(more);
+  await page.getByRole("menuitem", { name: UNLINK }).click();
+  await page.locator(`[data-ask="${at}"]`).waitFor();
+  const asked = await page.evaluate(askState, at);
+  note(kit, "unlink, the question", asked);
+  kit.check(
+    "Unlink marketplace: the question stands under its row, naming the machine tracking it; nothing holds the page",
+    asked.title === `Unlink ${MARKET}?` &&
+      asked.items.length === 1 &&
+      HOLDING.test(asked.items[0] ?? "") &&
+      !asked.held,
+    JSON.stringify(asked)
+  );
+  await askConfirm(page, at).click();
+  await unlinks.waitHeld();
+  const pending = await page.evaluate(askState, at);
+  await unlinks.refuse(409, UNLINK_REFUSAL);
+  const refused = await askSays(page, at, UNLINK_REFUSAL);
+  note(kit, "unlink, pending then refused", { pending, refused });
+  kit.check(
+    "Unlink marketplace: pending, the question waits busy; refused, the reason under it, the machine still named; no unhandled rejection",
+    pending.busy &&
+      refused.open &&
+      (refused.fault ?? "").includes(UNLINK_REFUSAL) &&
+      refused.items.length === 1 &&
+      refused.rejections === 0,
+    JSON.stringify({ pending, refused })
+  );
+  unlinks.open();
+  await askConfirm(page, at).click();
+  await page.waitForFunction(
+    (selector) => !document.querySelector(selector),
+    more,
+    { timeout: 30_000 }
+  );
+  const linked = await fetch(`${fleet.base}/api/fleet`).then(
+    (r) =>
+      r.json() as Promise<{ config?: { marketplaces?: { name: string }[] } }>
+  );
+  kit.check(
+    "Unlink marketplace: confirmed, the question and the row leave together and the fleet no longer tracks it",
+    (await page.locator(`[data-ask="${at}"]`).count()) === 0 &&
+      !(linked.config?.marketplaces ?? []).some((one) => one.name === MARKET) &&
+      (await rejectionsOf(page)).length === 0,
+    JSON.stringify(linked.config?.marketplaces ?? null)
+  );
+}
+
+const CAW_OFF_REFUSAL = "Caw could not be turned off: probe refusal.";
+const CAW_IS_OFF = /Caw is off/;
+
+/**
+ * Turning Caw off with a session he started running: the tray unfolds in
+ * his panel under the switch, names the session, and stops it on the hub's
+ * word; refused, the row says why with Try again.
+ */
+async function cawOff(kit: Kit, fleet: KitFleet, page: Page, base: string) {
+  const project = await fleet.api<{ id: string; name: string }>(
+    "/api/projects",
+    { name: "Probe caw", machineId: MACHINE, cwd: fleet.repo, caw: true }
+  );
+  // His lead session, started as he is: by a message in his thread. Then a
+  // delegate of his: what he started, still running.
+  await fleet.api(`/api/projects/${project.id}/threads`, {
+    body: "Probe: hello, Caw.",
+  });
+  const lead = await until(
+    "Caw's lead session started and running",
+    async () => {
+      const rows = await fetch(`${fleet.base}/api/projects`).then(
+        (r) =>
+          r.json() as Promise<{ id: string; leadInstanceId: string | null }[]>
+      );
+      const id =
+        rows.find((row) => row.id === project.id)?.leadInstanceId ?? "";
+      return fleet.instance(id)?.status === "running" ? id : "";
+    },
+    (id) => id.length > 0,
+    120_000
+  );
+  const delegate = await fleet.spawn("claude", "Probe delegate", fleet.repo, {
+    projectId: project.id,
+    parent: { instanceId: lead },
+  });
+  const cawView = async () => {
+    const response = await fetch(
+      `${fleet.base}/api/projects/${project.id}/caw`
+    );
+    return (await response.json()) as {
+      on: boolean;
+      running?: { id: string }[];
+    };
+  };
+  try {
+    await until(
+      "Caw listing his delegate as running",
+      async () => {
+        const caw = await cawView();
+        return caw.on && (caw.running ?? []).some((one) => one.id === delegate);
+      },
+      Boolean,
+      60_000
+    );
+  } catch (error) {
+    note(kit, "Caw's view, without his delegate", {
+      lead,
+      delegate: fleet.instance(delegate),
+      view: await cawView(),
+    });
+    throw error;
+  }
+  const offs = await gate(page, `**/api/projects/${project.id}/caw`, "PATCH");
+  // The board is empty: he stands over it, and is his own seat there, the
+  // one place his switch is on this page (no seat in the head).
+  await open(page, `${base}/project/${project.id}`, ".caw-80 .caw-seat");
+  // The head's seat, there while his view was read, folds out as he stands.
+  await page
+    .locator(".project-head .caw-seat")
+    .waitFor({ state: "detached", timeout: 10_000 })
+    .catch(() => undefined);
+  const standingSeat = {
+    inHead: await page.locator(".project-head .caw-seat").count(),
+    standing: await page.locator(".caw-80 .caw-seat").count(),
+  };
+  note(kit, "caw off, his seat on the empty board", standingSeat);
+  kit.check(
+    "Caw off: on an empty board he stands over it as his own seat, the head without one",
+    standingSeat.standing === 1 && standingSeat.inHead === 0,
+    JSON.stringify(standingSeat)
+  );
+  await page.locator(".caw-80 .caw-seat").click();
+  // His view read: the switch says he is on, and takes a press.
+  await page
+    .waitForFunction(
+      () => {
+        const toggle = document.querySelector<HTMLButtonElement>(
+          ".caw-panel [role='switch']"
+        );
+        return (
+          toggle?.getAttribute("aria-checked") === "true" && !toggle.disabled
+        );
+      },
+      null,
+      { timeout: 30_000 }
+    )
+    .catch(async (error: unknown) => {
+      note(
+        kit,
+        "Caw's panel, his switch not on",
+        await page.evaluate(() => {
+          const toggle = document.querySelector<HTMLButtonElement>(
+            ".caw-panel [role='switch']"
+          );
+          return {
+            seats: document.querySelectorAll(".caw-seat").length,
+            panels: document.querySelectorAll(".caw-panel").length,
+            checked: toggle?.getAttribute("aria-checked"),
+            disabled: toggle?.disabled,
+            sentence: document
+              .querySelector(".caw-panel .sentence")
+              ?.textContent?.trim(),
+            refused: document
+              .querySelector(".caw-panel .refused")
+              ?.textContent?.trim(),
+            path: location.pathname,
+          };
+        })
+      );
+      throw error;
+    });
+  await page.locator(".caw-panel [role='switch']").click();
+  await page.locator(`[data-row="${delegate}"]`).waitFor({ timeout: 30_000 });
+  await page.waitForTimeout(400);
+  const asked = await page.evaluate(trayState, project.id);
+  note(kit, "caw off, the tray", asked);
+  kit.check(
+    "Caw off: the tray unfolds in his panel under the switch, naming what he started; nothing holds the page",
+    asked.open && asked.inPanel && asked.rows.includes(delegate) && !asked.held,
+    JSON.stringify(asked)
+  );
+  await page.click("[data-stop-confirm]");
+  await page.waitForTimeout(500);
+  await page.click("[data-stop-confirm]");
+  await offs.waitHeld();
+  const pending = await page.evaluate(trayState, project.id);
+  note(kit, "caw off, before the hub answers", pending);
+  kit.check(
+    "Caw off: before the hub answers, the tray stays, its confirm busy, the delegate's row stopping",
+    pending.open && pending.busy === "true" && pending.rows.includes(delegate),
+    JSON.stringify(pending)
+  );
+  await offs.refuse(409, CAW_OFF_REFUSAL);
+  await page
+    .locator(`[data-row="${delegate}"] .row-fault`, {
+      hasText: CAW_OFF_REFUSAL,
+    })
+    .waitFor({ timeout: 30_000 });
+  const refused = await page.evaluate(trayState, project.id);
+  note(kit, "caw off, refused", refused);
+  kit.check(
+    "Caw off: refused, the delegate's row says why with Try again, the tray where it was; no unhandled rejection",
+    refused.open &&
+      refused.faults.some((fault) => (fault ?? "").includes(CAW_OFF_REFUSAL)) &&
+      refused.rejections === 0,
+    JSON.stringify(refused)
+  );
+  offs.open();
+  await page
+    .locator(`[data-row="${delegate}"] .row-fault`)
+    .getByRole("button", { name: TRY_AGAIN })
+    .click();
+  await page
+    .locator(`[data-stop-tray="${project.id}"]`)
+    .getByText(CAW_IS_OFF)
+    .first()
+    .waitFor({ timeout: 60_000 });
+  const view = await fetch(`${fleet.base}/api/projects/${project.id}/caw`).then(
+    (r) => r.json() as Promise<{ on: boolean }>
+  );
+  const done = await page.evaluate(trayState, project.id);
+  note(kit, "caw off, confirmed", { done, view });
+  kit.check(
+    "Caw off: confirmed, he is off on the hub, his delegate stopped, and the tray says so where it was asked",
+    !view.on &&
+      fleet.instance(delegate)?.status === "stopped" &&
+      done.rejections === 0,
+    JSON.stringify({ done, on: view.on, delegate: fleet.instance(delegate) })
+  );
+  await page.keyboard.press("Escape");
+}
+
+/** What a running-sessions tray says now (StopTray, `data-stop-tray`). */
+const trayState = (projectId: string) => {
+  const tray = document.querySelector(
+    `[data-stop-tray="${CSS.escape(projectId)}"]`
+  );
+  return {
+    open: Boolean(tray),
+    title: tray?.querySelector("p.title")?.textContent?.trim() ?? null,
+    line: tray?.querySelector("p.line")?.textContent?.trim() ?? null,
+    rows: [...(tray?.querySelectorAll("[data-row]") ?? [])].map((row) =>
+      row.getAttribute("data-row")
+    ),
+    confirm:
+      tray
+        ?.querySelector("[data-stop-confirm]")
+        ?.textContent?.replace(/\s+/g, " ")
+        .trim() ?? null,
+    busy:
+      tray?.querySelector("[data-stop-confirm]")?.getAttribute("aria-busy") ??
+      null,
+    faults: [...(tray?.querySelectorAll(".row-fault") ?? [])].map((fault) =>
+      fault.textContent?.replace(/\s+/g, " ").trim()
+    ),
+    after: tray?.previousElementSibling?.className ?? null,
+    inPanel: Boolean(tray?.closest(".caw-panel")),
+    held:
+      Boolean(
+        document.querySelector(
+          '[role="alertdialog"], [role="dialog"][aria-modal="true"]'
+        )
+      ) || getComputedStyle(document.body).pointerEvents === "none",
+    path: location.pathname,
+    rejections: (window as unknown as { __rejections: string[] }).__rejections
+      .length,
+  };
+};
+
 /** Drag a task to another stage; Pick stages; Forget the project (its tray). */
 async function projectFlows(
   kit: Kit,
@@ -525,10 +1599,30 @@ async function projectFlows(
   await page.getByRole("button", { name: `More for ${project.name}` }).click();
   await page.getByRole("menuitem", { name: FORGET }).click();
   await page.waitForSelector(`[data-row="${session}"]`);
+  await page.waitForTimeout(400);
+  const trayAsked = await page.evaluate(trayState, project.id);
+  note(kit, "forget tray, asked", trayAsked);
+  kit.check(
+    "Forget tray: it unfolds under the project's head, where `⋯` asked it, naming the running session; nothing holds the page",
+    trayAsked.open &&
+      (trayAsked.after ?? "").includes("project-head") &&
+      trayAsked.rows.includes(session) &&
+      !trayAsked.held,
+    JSON.stringify(trayAsked)
+  );
   await page.click("[data-stop-confirm]");
   await page.waitForTimeout(500);
   await page.click("[data-stop-confirm]");
   await stops.waitHeld();
+  const trayPending = await page.evaluate(trayState, project.id);
+  note(kit, "forget tray, before the hub answers", trayPending);
+  kit.check(
+    "Forget tray: before the hub answers, the tray stays where it was asked, its confirm busy",
+    trayPending.open &&
+      trayPending.busy === "true" &&
+      trayPending.rows.includes(session),
+    JSON.stringify(trayPending)
+  );
   await stops.refuse(500, STOP_TRAY_REFUSAL);
   await page.waitForSelector(`[data-row="${session}"] .row-fault`);
   const trayRefused = await page.evaluate((id) => {
@@ -567,7 +1661,41 @@ async function projectFlows(
     fleet.instance(session)?.status === "stopped",
     String(fleet.instance(session)?.status)
   );
-  await page.keyboard.press("Escape");
+  // The last stop lands, the ring is whole, and the forget runs: "Forgotten"
+  // is said in the tray where it was asked, then the page leaves.
+  await page
+    .locator(`[data-stop-tray="${project.id}"] [data-stop-confirm]`, {
+      hasText: FORGOTTEN,
+    })
+    .waitFor({ timeout: 60_000 });
+  const trayEnded = await page.evaluate(trayState, project.id);
+  note(kit, "forget tray, forgotten", trayEnded);
+  kit.check(
+    "Forget tray: the end is said in the tray where it was asked (Forgotten), the page still the project's",
+    trayEnded.open && trayEnded.path === `/project/${project.id}`,
+    JSON.stringify(trayEnded)
+  );
+  await until(
+    "the project forgotten",
+    () =>
+      fetch(`${fleet.base}/api/projects`)
+        .then((r) => r.json() as Promise<{ id: string }[]>)
+        .then((rows) => rows.some((row) => row.id === project.id)),
+    (listed) => !listed,
+    60_000
+  );
+  await page.waitForFunction(
+    (id) => location.pathname !== `/project/${id}`,
+    project.id,
+    { timeout: 30_000 }
+  );
+  const trayDone = await page.evaluate(trayState, project.id);
+  note(kit, "forget tray, confirmed", trayDone);
+  kit.check(
+    "Forget tray: confirmed, the hub has forgotten the project and the page has left it; no unhandled rejection",
+    trayDone.path !== `/project/${project.id}` && trayDone.rejections === 0,
+    JSON.stringify(trayDone)
+  );
 }
 
 /** Writes a hook on the hub, as a probe's starting state; refused is a failure. */
@@ -712,17 +1840,35 @@ async function configureFlows(
     'button[aria-label="More for probe-mcp"]'
   );
   // The machine reports it before the question can name it.
-  await until(
-    "the machine holding probe-mcp",
-    () =>
-      fetch(`${fleet.base}/api/agents`)
-        .then((r) => r.json())
-        .then((rows: { fleet?: { mcp?: Record<string, unknown> } }[]) =>
-          rows.some((row) => row.fleet?.mcp?.["probe-mcp"])
-        ),
-    Boolean,
-    60_000
-  );
+  try {
+    await until(
+      "the machine holding probe-mcp",
+      () =>
+        fetch(`${fleet.base}/api/agents`)
+          .then((r) => r.json())
+          .then((rows: { fleet?: { mcp?: Record<string, unknown> } }[]) =>
+            rows.some((row) => row.fleet?.mcp?.["probe-mcp"])
+          ),
+      Boolean,
+      60_000
+    );
+  } catch (error) {
+    // What the machine was doing instead of syncing the fleet.
+    note(
+      kit,
+      "the agent, its fleet not synced",
+      (await fleet.logs("agent")).split("\n").slice(-40)
+    );
+    note(
+      kit,
+      "the hub, its fleet not synced",
+      (await fleet.logs("hub"))
+        .split("\n")
+        .filter((line) => FLEET_LOG.test(line))
+        .slice(-20)
+    );
+    throw error;
+  }
   await page.click('button[aria-label="More for probe-mcp"]');
   await page.getByRole("menuitem", { name: REMOVE_EVERYWHERE }).click();
   await page.locator('[data-ask="probe-mcp"]').waitFor();
@@ -2117,76 +3263,8 @@ const spec: Spec = {
       JSON.stringify(renameDone)
     );
 
-    // ── Delete transcript ───────────────────────────────────────────────
-    socket.hold(
-      (frame) =>
-        frame.verb === "control" &&
-        (frame.payload as { method?: string } | undefined)?.method ===
-          "deleteSession"
-    );
-    await rightClickRow(page, kept);
-    await menuItem(page, DELETE_ITEM);
-    const dialog = page.getByRole("alertdialog");
-    await dialog.waitFor();
-    await dialog.getByRole("button", { name: DELETE_ITEM }).click();
-    await until(
-      "the delete held",
-      () => socket.held.length,
-      (n) => n === 1
-    );
-    const deleteBefore = {
-      ...(await read(kept)),
-      dialog: await dialog.isVisible(),
-      // Its label morphs to "Deleting…"; the busy state is the engine's word.
-      busy: await dialog
-        .getByRole("button", { name: DELETE_ITEM })
-        .or(dialog.locator('[aria-busy="true"]'))
-        .first()
-        .getAttribute("aria-busy"),
-    };
-    note(kit, "delete, before the machine answers", deleteBefore);
-    kit.check(
-      "Delete: before the machine answers, the question stays open, Deleting…, the row in its place",
-      deleteBefore.dialog &&
-        deleteBefore.busy === "true" &&
-        deleteBefore.present,
-      JSON.stringify(deleteBefore)
-    );
-    socket.refuseHeld(errorFrame(DELETE_REFUSAL));
-    await dialog.getByText(DELETE_REFUSAL).waitFor();
-    const deleteRefused = {
-      ...(await read(kept)),
-      dialog: await dialog.isVisible(),
-    };
-    note(kit, "delete, refused", deleteRefused);
-    kit.check(
-      "Delete: refused, the question stays with the machine's reason under it, the row in its place, no unhandled rejection",
-      deleteRefused.dialog &&
-        deleteRefused.present &&
-        deleteRefused.rejections === 0,
-      JSON.stringify(deleteRefused)
-    );
-    socket.passAll();
-    await dialog.getByRole("button", { name: DELETE_ITEM }).click();
-    await dialog.waitFor({ state: "hidden", timeout: 60_000 });
-    // The row leaves when the hub drops it on the machine's word.
-    const gone = await page
-      .waitForFunction(
-        (id) => !document.querySelector(`[data-hover-session="${id}"]`),
-        kept,
-        { timeout: 30_000 }
-      )
-      .then(
-        () => true,
-        () => false
-      );
-    const deleteDone = await read(kept);
-    note(kit, "delete, confirmed", deleteDone);
-    kit.check(
-      "Delete: confirmed by the machine, the question closes and the row leaves; no unhandled rejection",
-      gone && !deleteDone.present && deleteDone.rejections === 0,
-      JSON.stringify(deleteDone)
-    );
+    // ── Delete transcript, under the row ────────────────────────────────
+    await rowQuestion(kit, page, deleteOnRow(socket, page, kept, "Delete"));
 
     // ── Archive ─────────────────────────────────────────────────────────
     const seenHeld: Route[] = [];
@@ -2329,10 +3407,13 @@ const spec: Spec = {
     );
     await page.keyboard.press("Escape");
 
+    await sessionQuestions(kit, fleet, page, base, socket);
     await accountMove(kit, fleet, page, base);
     await workflowCancel(kit, fleet, page, base);
     await projectFlows(kit, fleet, page, base);
+    await cawOff(kit, fleet, page, base);
     await configureFlows(kit, fleet, page, base);
+    await unlinkMarketplace(kit, fleet, page, base);
     await editorDelete(kit, fleet, page, base);
     await adoptFromMachine(kit, fleet, page, base);
     await mcpSignIn(kit, fleet, page, base);

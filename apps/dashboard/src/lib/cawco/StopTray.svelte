@@ -43,10 +43,15 @@
   /**
    * The running-sessions tray: one tray that changes shape as a stop goes,
    * never a second dialog (Family, benji.org/family-values: trays that
-   * "expand, contract, and adapt"). It flies out of whatever asked for it
-   * (`share`, the key its opener departs under).
+   * "expand, contract, and adapt"). It stands in the page under whatever
+   * asked for it, unfolding there (DESIGN.md, The Open Page Rule): no scrim,
+   * nothing held, the page live around it. Pressing something else while it
+   * stands breaks nothing: each stop is the hub's to confirm, and the end
+   * the hub refuses while anything still runs is said here. Cancel or
+   * Escape puts it away.
    *
-   * With nothing running it is the plain question: the caller's end, gone.
+   * With nothing running it is the plain question: the caller's end, its
+   * ended word held in place, then gone.
    *
    * With sessions running it lists them as the rail nests them (each lead
    * with its delegates), and asks twice on one button: "Stop 3 and …", then
@@ -57,7 +62,8 @@
    * button's icon slot, where a ring fills a share per landing while the row
    * folds shut behind it (delegates before their lead). The last landing
    * makes the ring whole, the caller's end runs (`end`, "Forgetting…"), and
-   * the ring becomes the check ("Forgotten"). A failure keeps the state: the
+   * the ring becomes the check ("Forgotten"), held where it was asked before
+   * the caller goes on (`ended`). A failure keeps the state: the
    * row says why, and Try again stops what is left (`reread` reads what
    * still runs when no row failed but the end was refused).
    *
@@ -76,11 +82,10 @@
    */
   import type { Snippet } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { cn } from "#lib/utils.js";
   import Failed from "~icons/solar/close-circle-bold-duotone";
   import Away from "~icons/solar/cloud-cross-bold-duotone";
   import Attention from "~icons/solar/hand-shake-bold-duotone";
@@ -99,16 +104,16 @@
     popScale,
   } from "./motion/curves.svelte";
   import { echoBeat } from "./motion/echo.svelte";
-  import { fold } from "./motion/fold.svelte";
+  import { fold, unfold } from "./motion/fold.svelte";
   import { departBox, land } from "./motion/share.svelte";
   import RowFault from "./RowFault.svelte";
   import TreeMark from "./TreeMark.svelte";
   import { toast } from "./toasts";
 
   let {
+    class: className,
     projectId,
     sessions,
-    share,
     words,
     stop: request,
     end,
@@ -119,11 +124,11 @@
     head,
     onclose,
   }: {
+    /** The host's indent for the tray (`--ask-indent`, `--ask-end`). */
+    class?: string;
     projectId: string;
     /** What runs, as the hub listed it as the tray opened; null while it is read. */
     sessions: RunningSession[] | null;
-    /** The key the opener departed under: the tray flies out of it. */
-    share: string;
     words: StopWords;
     /**
      * Asks the hub to stop `ids`; each one's end arrives as `project.stop`.
@@ -145,6 +150,9 @@
     /** The tray has left: the caller lets it go. */
     onclose: () => void;
   } = $props();
+
+  /** This tray's own: its rows' tiles fly under it into the button, and its title is named by it. */
+  const uid = $props.id();
 
   /** One listed session and how far its stop has got. */
   interface Row {
@@ -277,13 +285,41 @@
     shown = true;
   });
 
+  // Its place left the page (a page navigated away, a row dropped): nothing
+  // of this tray keeps running.
+  $effect(() => () => quiet());
+
+  /**
+   * In view and in hand as it unfolds: the menu that asked hands focus back
+   * to its trigger as it closes, so the focus moves here a frame later.
+   * Escape inside it puts it away and goes no further (a popover it stands
+   * in stays open).
+   */
+  function unfoldHere(node: HTMLElement) {
+    const frame = requestAnimationFrame(() => {
+      node.scrollIntoView({ block: "nearest" });
+      node.querySelector<HTMLElement>("[data-stop-cancel]")?.focus();
+    });
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        leave();
+      }
+    };
+    node.addEventListener("keydown", onEscape);
+    return () => {
+      cancelAnimationFrame(frame);
+      node.removeEventListener("keydown", onEscape);
+    };
+  }
+
   /** Closes the tray; a sweep left part-way says what it left. */
   function leave(): void {
     if (phase === "stopping" || phase === "fail") {
       toast(words.partway(stopped, total));
     }
     quiet();
-    // The tray leaves as it is (--dur-exit), then the caller lets it go.
+    // The tray folds away as it is (--dur-exit), then the caller lets it go.
     shown = false;
     setTimeout(onclose, dur("--dur-exit"));
   }
@@ -482,7 +518,7 @@
     const tile = node?.querySelector<HTMLElement>(":scope > .rin .tile");
     const moving = motionOk.current && node && tile;
     if (moving) {
-      departBox(`${share}-stop:${row.s.id}`, tile, false);
+      departBox(`${uid}-stop:${row.s.id}`, tile, false);
       arrivals.push({ id: row.s.id, fill: fillOf(row.s) });
       fold(node, false, {
         ms: dur("--dur-panel"),
@@ -566,19 +602,21 @@
     if (morphing > 0) {
       await new Promise<void>((resolve) => setTimeout(resolve, morphing));
     }
+    // The ended word ("Forgotten") is said where the question was asked and
+    // held there before the caller goes on (a forgotten project's page
+    // leaves for home), so the end is seen in place, not inferred from the
+    // page changing under the reader. A tray put away meanwhile still lets
+    // the caller go on: the end has happened.
     if (mine === generation) {
       phase = "done";
+      await new Promise<void>((resolve) =>
+        setTimeout(resolve, dur("--dur-hold"))
+      );
     }
     await ended?.();
-    if (mine !== generation) {
-      return;
-    }
-    if (rows.length === 0) {
-      // The plain question closes as the end lands.
+    if (mine === generation) {
       leave();
-      return;
     }
-    after(dur("--dur-hold"), leave);
   }
 
   /* ── What each part says ─────────────────────────────────────────── */
@@ -804,79 +842,98 @@
       class="landed"
       style:--fill={arrival.fill}
       out:intoRing
-      {@attach land(() => `${share}-stop:${arrival.id}`, { uniform: true })}
+      {@attach land(() => `${uid}-stop:${arrival.id}`, { uniform: true })}
       ><Sprite aria-hidden="true" /></span
     >
   {/each}
 {/snippet}
 
-<AlertDialog.Root
-  bind:open={
-    () => shown,
-    (value) => {
-    if (!value) {
-      leave();
-    }
-  }
-  }
->
-  <!-- Opens out of what asked for it. -->
-  <AlertDialog.Content {@attach land(() => share, { uniform: true })}>
-    <div class="head">
-      <!-- The caller's place in the tray's head: empty, it takes no room. -->
-      <div aria-hidden="true" class="caw-slot">{@render head?.()}</div>
-      <AlertDialog.Header class="place-items-start text-left">
-        <AlertDialog.Title>{words.title}</AlertDialog.Title>
-        <!-- As wide as the head, whatever its words: sized to them, it
-             followed the morph's own box and narrowed mid-morph. -->
-        <!-- Its words say each state ("Stopped 3 sessions."), so they are
-             announced as they change. -->
-        <AlertDialog.Description aria-live="polite" class="w-full">
-          <MorphText text={description} wrap />
-        </AlertDialog.Description>
-        <!-- The end, or the other way out, refused: the hub's words, where
-             the question is; the confirm (Try again) or the other button
-             goes on from here. -->
-        <RowFault class="w-full" reason={refusal} />
-      </AlertDialog.Header>
-    </div>
-    {#if rows.some((row) => !row.gone)}
-      <ul aria-label="Running sessions" class="sessions" {@attach echoBeat()}>
-        {@render branch(null)}
-      </ul>
-    {/if}
-    <AlertDialog.Footer>
-      <AlertDialog.Cancel>
-        {#snippet child({
-          props,
-        })}
-          <Button {...props} label={cancelLabel} variant="outline" />
-        {/snippet}
-      </AlertDialog.Cancel>
-      {#if other && (phase === "list" || phase === "armed")}
-        <Button
-          data-stop-other
-          label={other.label}
-          onclick={takeOther}
-          pending={otherPending}
-          variant="outline"
-        />
+{#if shown}
+  <!-- Unfolds under what asked for it, in the page's flow. -->
+  <section
+    aria-labelledby="{uid}-title"
+    class={cn("stop-tray", className)}
+    data-stop-tray={projectId}
+    transition:unfold
+    {@attach unfoldHere}
+  >
+    <div class="tile">
+      <div class="head">
+        <!-- The caller's place in the tray's head: empty, it takes no room. -->
+        <div aria-hidden="true" class="caw-slot">{@render head?.()}</div>
+        <div class="words">
+          <p class="title" id="{uid}-title">{words.title}</p>
+          <!-- As wide as the head, whatever its words: sized to them, it
+               followed the morph's own box and narrowed mid-morph. Its
+               words say each state ("Stopped 3 sessions."), so they are
+               announced as they change. -->
+          <p aria-live="polite" class="line">
+            <MorphText text={description} wrap />
+          </p>
+          <!-- The end, or the other way out, refused: the hub's words, where
+               the question is; the confirm (Try again) or the other button
+               goes on from here. -->
+          <RowFault reason={refusal} />
+        </div>
+      </div>
+      {#if rows.some((row) => !row.gone)}
+        <ul aria-label="Running sessions" class="sessions" {@attach echoBeat()}>
+          {@render branch(null)}
+        </ul>
       {/if}
-      <Button
-        arrivals={landed}
-        data-stop-confirm
-        failed={phase === "fail"}
-        label={confirmLabel}
-        onclick={press}
-        {pending}
-        {pendingLabel}
-        {progress}
-      />
-    </AlertDialog.Footer>
-  </AlertDialog.Content>
-</AlertDialog.Root>
+      <div class="actions">
+        <Button
+          data-stop-cancel
+          label={cancelLabel}
+          onclick={leave}
+          size="sm"
+          variant="ghost"
+        />
+        {#if other && (phase === "list" || phase === "armed")}
+          <Button
+            data-stop-other
+            label={other.label}
+            onclick={takeOther}
+            pending={otherPending}
+            size="sm"
+            variant="outline"
+          />
+        {/if}
+        <Button
+          arrivals={landed}
+          data-stop-confirm
+          failed={phase === "fail"}
+          label={confirmLabel}
+          onclick={press}
+          {pending}
+          {pendingLabel}
+          {progress}
+          size="sm"
+        />
+      </div>
+    </div>
+  </section>
+{/if}
 
 <style>
+  /* Under its control, in the page's flow, as a question asked there
+     (AskHere) stands: a raised tile, indented as its host says. Its own
+     width decides its rows' shape, so the rail and a phone read alike. */
+  .stop-tray {
+    container: stop-tray / inline-size;
+    min-inline-size: 0;
+    padding-block: var(--space-1);
+    padding-inline: var(--ask-indent, 0) var(--ask-end, 0);
+  }
+  .tile {
+    display: grid;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-raised);
+  }
   /* The caller's slot leads the head, as tall as the title and its line;
      empty, it is not drawn at all. */
   .head {
@@ -892,9 +949,28 @@
   .caw-slot:empty {
     display: none;
   }
-  .head > :global([data-slot="alert-dialog-header"]) {
+  .words {
+    display: grid;
     flex: 1 1 auto;
+    gap: var(--space-1);
     min-inline-size: 0;
+  }
+  .title {
+    margin: 0;
+    font: var(--type-label);
+    color: var(--ink-strong);
+    text-wrap: balance;
+  }
+  .line {
+    margin: 0;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--space-2);
   }
 
   /* The rows: the rail's compact session row, nested as the rail nests
@@ -997,8 +1073,8 @@
     --fault-indent: calc(var(--row-compact-gap) * 2 + var(--mark-size, 18px));
     --fault-end: var(--row-compact-pad-end);
   }
-  /* A phone: the word alone says the status. */
-  @media (max-width: 639px) {
+  /* A narrow tray (a phone, the rail): the word alone says the status. */
+  @container stop-tray (width < 420px) {
     .glyph {
       display: none;
     }

@@ -1,13 +1,12 @@
 <script lang="ts">
   import { type RuleRow, ruleSentence } from "@cawco/core";
   import AskHere from "#lib/cawco/AskHere.svelte";
-  import type { AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
+  import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore, withStats } from "#lib/cawco/config/store.svelte.js";
-  import { Asker } from "#lib/cawco/confirm.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import {
     createRule,

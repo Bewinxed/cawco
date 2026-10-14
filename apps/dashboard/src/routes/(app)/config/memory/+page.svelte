@@ -1,6 +1,6 @@
 <script lang="ts">
   import AskHere from "#lib/cawco/AskHere.svelte";
-  import type { AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
+  import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { drafts } from "#lib/cawco/config/drafts.svelte.js";
   import {
@@ -17,7 +17,6 @@
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
-  import { Asker } from "#lib/cawco/confirm.svelte.js";
   import FleetFault from "#lib/cawco/FleetFault.svelte";
   import {
     type FleetMemoryDocRow,

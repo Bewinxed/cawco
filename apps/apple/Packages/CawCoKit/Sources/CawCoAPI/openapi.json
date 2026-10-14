@@ -24979,7 +24979,7 @@
             ]
           },
           "relaunch": {
-            "description": "The process the session runs in is replaced, though the spawn resumes\nits own conversation: it moves to another account. Without it, a resume\nfor a session the machine carries is a recovery of that process, and\nthe process is kept.",
+            "description": "The process the session runs in is replaced, though the spawn resumes\nits own conversation: it moves to another account, or starts again on a\npermission mode its harness only takes at launch. Without it, a resume\nfor a session the machine carries is a recovery of that process, and\nthe process is kept.",
             "const": true,
             "type": "boolean"
           },

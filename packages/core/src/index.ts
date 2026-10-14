@@ -279,7 +279,8 @@ export interface SpawnPayload {
   reattachOnly?: boolean | "busy" | "inspect";
   /**
    * The process the session runs in is replaced, though the spawn resumes
-   * its own conversation: it moves to another account. Without it, a resume
+   * its own conversation: it moves to another account, or starts again on a
+   * permission mode its harness only takes at launch. Without it, a resume
    * for a session the machine carries is a recovery of that process, and
    * the process is kept.
    */

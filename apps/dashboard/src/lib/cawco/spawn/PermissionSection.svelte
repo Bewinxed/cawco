@@ -3,13 +3,16 @@
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   /**
    * Permission-mode rows (§1.8, §2.11): sliding fill + mounted check. Every
-   * pick of Full Send is confirmed first, in the app's one confirmation
-   * dialog, which says what it allows beyond Bypass and what still stops;
-   * only its own button applies it. The rows stay open under it, so a
-   * Cancel lands back on the row it was asked from.
+   * pick of Full Send is asked first, under the rows (AskHere, The Open Page
+   * Rule), saying what it allows beyond Bypass and what still stops; only
+   * its own button applies it. The rows stay live beside it: another pick
+   * there puts the question away. A Full Send restarting a running session
+   * says its restart, and a refusal, in that session's feedback line, as
+   * any pick does.
    */
   import Check from "~icons/solar/check-circle-bold-duotone";
-  import { confirm } from "../confirm.svelte";
+  import AskHere from "../AskHere.svelte";
+  import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import { fullSendCopy } from "../permission-modes";
   import { permissionLook } from "./permission-look";
 
@@ -34,8 +37,10 @@
   const rows = $derived(
     modes.map((mode) => ({ ...mode, ...permissionLook(mode.value, harness) }))
   );
+  const asks = new Asker<AskHereRequest>();
   function pick(mode: PermissionMode) {
     if (mode !== "fullSend" || value === "fullSend") {
+      asks.dismiss();
       onchange(mode);
       return;
     }
@@ -44,15 +49,20 @@
     if (!copy) {
       return;
     }
-    // biome-ignore lint/complexity/noVoid: the dialog answers itself; a Cancel changes nothing
-    void confirm({
+    // biome-ignore lint/complexity/noVoid: the question answers itself; a Cancel changes nothing
+    void asks.ask({
+      at: "fullSend",
       title: "Switch to Full Send?",
       body: restarts ? [...copy.confirm, copy.restarts] : copy.confirm,
       confirmLabel: "Switch to Full Send",
       pendingLabel: "Switching…",
       grant: true,
-      run: async () => {
-        await onchange("fullSend");
+      // The yes is what this asks for: the change then says how it goes
+      // where every pick's does (a running session's feedback line under
+      // its chips), and the picker closes on it.
+      run: () => {
+        onchange("fullSend");
+        return Promise.resolve();
       },
     });
   }
@@ -115,6 +125,9 @@
     </button>
   {/each}
 </div>
+<!-- Full Send's question, under the rows: they place their fill by index,
+     so it stands after them, not between. -->
+<AskHere asker={asks} at="fullSend" />
 
 <style>
   .perms {

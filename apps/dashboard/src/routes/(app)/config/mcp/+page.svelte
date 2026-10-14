@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { FleetMcpServer } from "@cawco/core";
   import AskHere from "#lib/cawco/AskHere.svelte";
-  import type { AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
+  import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { holders } from "#lib/cawco/config/holders.js";
   import McpSignIn from "#lib/cawco/config/McpSignIn.svelte";
@@ -12,7 +12,6 @@
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
-  import { Asker } from "#lib/cawco/confirm.svelte.js";
   import {
     describeMcp,
     isRemoteMcp,
