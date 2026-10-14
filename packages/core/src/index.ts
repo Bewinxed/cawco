@@ -68,6 +68,8 @@ export * from "./ring";
 // for and a reply to send back. The matcher lives here so the hub and the
 // editor's test box decide identically.
 export * from "./rules";
+// What reads as a credential in text: a memory note's words, a file a place's first commit would take.
+export * from "./secret-text";
 // The Ledger Protocol: canonical session streams + acknowledged commands.
 export * from "./stream";
 // A project's threads with its Caw: rows, messages and their frames.

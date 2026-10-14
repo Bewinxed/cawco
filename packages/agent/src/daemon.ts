@@ -40,6 +40,7 @@ import {
   CONTROL_MOVE_PREPARE,
   CONTROL_MOVE_REMOTE_CREDENTIAL,
   CONTROL_MOVE_SNAPSHOT,
+  CONTROL_PLACE_REPO,
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
@@ -103,6 +104,7 @@ import {
   setHubCredential,
   setMoveProgress,
 } from "./move";
+import { placeRepo } from "./place-repo";
 import { servingPreviews } from "./preview";
 import { parseProcId, SESSION_PROC_KINDS } from "./proc-id";
 import {
@@ -2354,6 +2356,12 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
         fenced()
           ? Promise.reject(new Error(AGENT_RESTARTING))
           : createWorkspace(cwd, id, projectId, account)
+    );
+    // A place's first commit writes its folder: none starts behind a raised fence.
+    supervisor.registerDaemonFunction(CONTROL_PLACE_REPO, (path, dryRun) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : placeRepo(path, dryRun)
     );
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_BOUNDARY,

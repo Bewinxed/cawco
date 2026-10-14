@@ -510,6 +510,17 @@ export interface WorkItemStart {
 }
 
 export interface WorkItemDeps {
+  /**
+   * Before a workspace of `projectId` is cut from `cwd` on `machineId`: the
+   * project's place that holds `cwd` made a git repository when it is a
+   * plain folder (place-repo.ts `beforeCut`). Throws, in the machine's
+   * words, when it cannot be one.
+   */
+  readonly beforeCut: (
+    projectId: string,
+    machineId: string,
+    cwd: string
+  ) => Promise<void>;
   /** Runs a machine-scoped daemon function; throws the machine's own words. */
   readonly call: (
     machineId: string,
@@ -1259,6 +1270,7 @@ const unpushed = (
 const TRAY_HOLD_MS = 6000;
 
 export const createWorkItems = ({
+  beforeCut,
   call,
   command,
   db,
@@ -2122,8 +2134,11 @@ export const createWorkItems = ({
   };
 
   /**
-   * A new workspace: its machine cuts the clone and starts its boundary, then
-   * the hub files it. `checksFor` makes it the check workspace of that one;
+   * A new workspace: the project's place made a git repository first when it
+   * is a plain folder ({@link WorkItemDeps.beforeCut}), then its machine cuts
+   * the clone and starts its boundary, and the hub files it. A place that
+   * cannot be made one refuses the workspace in the machine's words, before
+   * anything is cut. `checksFor` makes it the check workspace of that one;
    * `account` is the Claude account its first session launches on
    * ({@link ItemPlacement}), whose user layer the boundary reads from its
    * first start.
@@ -2135,6 +2150,9 @@ export const createWorkItems = ({
     projectId: string | null,
     { account, checksFor }: { account?: string; checksFor?: string } = {}
   ): Promise<WorkspaceRow> => {
+    if (projectId) {
+      await beforeCut(projectId, machineId, cwd);
+    }
     const id = crypto.randomUUID();
     db.beginWorkspaceCreate(id, machineId);
     opening.add(id);

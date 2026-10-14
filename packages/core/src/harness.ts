@@ -1456,6 +1456,54 @@ export type GitChanges =
  */
 export const CONTROL_WORKSPACE_CREATE = "workspaceCreate";
 
+/**
+ * Makes a project's place a git repository on its machine when it is not one
+ * yet, so a workspace can be cut from it: `git init -b main`, a `.gitignore`
+ * naming everything left out, and one local commit as CawCo of every file
+ * that is safe to keep in history (agent place-repo.ts says what is not).
+ * Nothing is pushed and no remote is added. A place already in a git
+ * repository is left as it is. Args `[path, dryRun?]`: a dry run reads the
+ * place and answers what a commit would take, writing nothing in it.
+ * Answers {@link PlaceRepo}. Refused, with the reason, when the place is no
+ * folder, when what it would commit passes {@link PLACE_REPO_LIMIT_BYTES},
+ * or when git fails. Machine-scoped.
+ */
+export const CONTROL_PLACE_REPO = "placeRepo";
+
+/** The most a place's first commit may weigh; a place past it stays a folder. */
+export const PLACE_REPO_LIMIT_BYTES = 500 * 1024 * 1024;
+
+/** The largest file a place's first commit takes; a bigger one is left out. */
+export const PLACE_REPO_FILE_LIMIT_BYTES = 10 * 1024 * 1024;
+
+/** One path a place's first commit leaves out, from the place's root, and why. */
+export interface PlaceLeftOut {
+  /** From the place's root; a folder ends with `/`. */
+  path: string;
+  why: string;
+}
+
+/** What {@link CONTROL_PLACE_REPO} found or did. */
+export type PlaceRepo =
+  /** Already in a git repository, whose root is `root`: nothing was done. */
+  | { state: "checkout"; root: string }
+  /**
+   * `made`: the repository was made and its first commit is `commit`;
+   * `plan`: a dry run, and this is what that commit would take.
+   */
+  | {
+      state: "made" | "plan";
+      root: string;
+      /** The first commit's id; null for a dry run. */
+      commit: string | null;
+      /** Files the commit takes, its `.gitignore` among them. */
+      files: number;
+      bytes: number;
+      /** Every path it takes, from the place's root. */
+      staged: string[];
+      leftOut: PlaceLeftOut[];
+    };
+
 /** Total git budget for cutting a workspace, including its remote fetch and checkout. */
 export const WORKSPACE_GIT_TIMEOUT_MS = 300_000;
 /** How long a new boundary may take to announce readiness. */

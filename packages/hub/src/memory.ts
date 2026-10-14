@@ -48,6 +48,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { devNull, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  CREDENTIAL_PATTERNS,
   type Envelope,
   frontMatterBlock,
   type InstanceRow,
@@ -508,24 +509,11 @@ const parseNote = (path: string, content: string): Note | undefined => {
 
 // --- the rules ----------------------------------------------------------------------
 
-/** What reads as a credential anywhere in a note's words. */
-const SECRETS = [
-  /\b(?:sk|pk|rk)[-_][A-Za-z0-9_-]{16,}/g,
-  /\bgh[pousr]_[A-Za-z0-9]{20,}/g,
-  /\bgithub_pat_[A-Za-z0-9_]{20,}/g,
-  /\bxox[abprs]-[A-Za-z0-9-]{10,}/g,
-  /\bAKIA[0-9A-Z]{16}\b/g,
-  /\beyJ[\w-]{8,}\.[\w-]{8,}\.[\w-]{8,}/g,
-  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g,
-  /\b(?:password|passwd|secret|token|api[-_]?key)\s*[:=]\s*\S{6,}/gi,
-  /\bbearer\s+[A-Za-z0-9._~+/-]{16,}=*/gi,
-];
-
-/** The note's words with every credential hidden, and whether any was. */
+/** The note's words with every credential (core secret-text.ts) hidden, and whether any was. */
 const hideSecrets = (text: string): { found: boolean; text: string } => {
   let found = false;
   let hidden = text;
-  for (const pattern of SECRETS) {
+  for (const pattern of CREDENTIAL_PATTERNS) {
     hidden = hidden.replace(pattern, () => {
       found = true;
       return "(hidden)";

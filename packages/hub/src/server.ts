@@ -140,6 +140,7 @@ import {
   CONTROL_MOVE_HOME_CREDENTIAL,
   CONTROL_MOVE_HOME_LOGIN,
   CONTROL_PI_DEFAULT_MODEL,
+  CONTROL_PLACE_REPO,
   CONTROL_PROBE_ACCOUNT,
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_READ_HOME_LOGIN,
@@ -423,6 +424,7 @@ import {
   onWorkflowAnswer,
   workflowRunOf,
 } from "./pending";
+import { createPlaceRepos } from "./place-repo";
 import {
   noAccountRefusal,
   type PlacementInput,
@@ -8118,6 +8120,13 @@ export const createServer = (
     if (!project.remote) {
       await learnRemote(project.id, machineId, path);
     }
+    // A plain folder is made a git repository now, off the request: a
+    // machine away, or a place that cannot be one, is tried again, and
+    // refused in its words, when a workspace is first cut from it.
+    detach(
+      placeRepos.ensure({ projectId: project.id, machineId, path }),
+      "place-repo"
+    );
     return {
       ...projectOut(db.project(project.id) ?? project),
       place,
@@ -14022,6 +14031,22 @@ export const createServer = (
   };
 
   /**
+   * A project made from a checkout with no remote: a plain folder is made a
+   * git repository now (place-repo.ts), off the request, as a place added
+   * later is. A machine away, or a place that cannot be one, is tried again,
+   * and refused in its words, when a workspace is first cut from it.
+   */
+  const madeFromFolder = (
+    projectId: string,
+    checkout: { machineId: string; path: string } | undefined,
+    remote: string | null
+  ): void => {
+    if (checkout && !remote) {
+      detach(placeRepos.ensure({ projectId, ...checkout }), "place-repo");
+    }
+  };
+
+  /**
    * One repository is one project: a folder whose remote a project already
    * has joins it as a checkout place (`placeAdded`), and the answer is that
    * project, not a second one. Else a new project, its places its folder on
@@ -14084,6 +14109,7 @@ export const createServer = (
       template: asked.template ?? null,
     });
     projectsChanged();
+    madeFromFolder(created.id, checkout || undefined, remote);
     // The place it was made from: its checkout, else its folder on the hub.
     const place =
       checkoutOf(created) ??
@@ -14139,7 +14165,46 @@ export const createServer = (
     publish: (payload) =>
       registry.broadcast({ verb: "frames", machineId: "hub", payload }),
   });
+  /** A machine-scoped daemon function, answered or thrown in the machine's own words. */
+  const callMachine = async (
+    machineId: string,
+    method: string,
+    args: unknown[]
+  ): Promise<unknown> => {
+    const timeout =
+      method === CONTROL_WORKSPACE_CREATE ||
+      method === CONTROL_WORKSPACE_ARCHIVE ||
+      method === CONTROL_WORKSPACE_BUNDLE ||
+      method === CONTROL_WORKSPACE_AT ||
+      method === CONTROL_PLACE_REPO
+        ? WORKSPACE_CREATE_TIMEOUT_MS
+        : WORKSPACE_TIMEOUT_MS;
+    const answer = await callAgent(machineId, method, args, timeout);
+    if (answer === "offline") {
+      throw new Error(`machine ${machineId} is not connected`);
+    }
+    if (answer === "timeout") {
+      throw new Error(
+        `machine ${machineId} did not answer ${method} within ${timeout / 1000}s`
+      );
+    }
+    if (!answer.ok) {
+      throw new Error(answer.error ?? `${method} failed on ${machineId}`);
+    }
+    return answer.result;
+  };
+  // A plain folder made a git repository when it is first needed as one.
+  // Its note reaches Caw, made further down; nothing needs it before the hub is up.
+  const placeRepos = createPlaceRepos({
+    call: callMachine,
+    db,
+    notice: (projectId, threadId, note) => {
+      lead?.notice(projectId, threadId, note);
+    },
+  });
   const workItems = createWorkItems({
+    beforeCut: (projectId, machineId, cwd) =>
+      placeRepos.beforeCut(projectId, machineId, cwd),
     db,
     lifetime,
     // Whose turn a project's Caw is in, for what he starts in it. Caw is
@@ -14221,28 +14286,7 @@ export const createServer = (
       write: (projectId, taskId, changes, reason) =>
         tasks.todos(projectId, taskId, changes, hubActor(reason)),
     },
-    call: async (machineId, method, args) => {
-      const timeout =
-        method === CONTROL_WORKSPACE_CREATE ||
-        method === CONTROL_WORKSPACE_ARCHIVE ||
-        method === CONTROL_WORKSPACE_BUNDLE ||
-        method === CONTROL_WORKSPACE_AT
-          ? WORKSPACE_CREATE_TIMEOUT_MS
-          : WORKSPACE_TIMEOUT_MS;
-      const answer = await callAgent(machineId, method, args, timeout);
-      if (answer === "offline") {
-        throw new Error(`machine ${machineId} is not connected`);
-      }
-      if (answer === "timeout") {
-        throw new Error(
-          `machine ${machineId} did not answer ${method} within ${timeout / 1000}s`
-        );
-      }
-      if (!answer.ok) {
-        throw new Error(answer.error ?? `${method} failed on ${machineId}`);
-      }
-      return answer.result;
-    },
+    call: callMachine,
   });
   // A hub crash after intent persistence cannot leave its work item reading live.
   for (const row of db.sessionOwnership()) {
