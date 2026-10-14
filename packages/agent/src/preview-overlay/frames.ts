@@ -170,9 +170,9 @@ export const deepElementAt = (
 
 /**
  * Calls `changed` whenever a same-origin frame's document scrolls, resizes,
- * grows, or a frame loads (a navigation, or a frame added later), at any
- * depth: the marks standing in it are placed again. The top document's own
- * scroll and size are the overlay's.
+ * grows, goes back or forward, or a frame loads (a navigation, or a frame
+ * added later), at any depth: the marks standing in it are placed again. The
+ * top document's own scroll and size are the overlay's.
  */
 export function watchFrames(changed: () => void): void {
   const docs = new WeakSet<Document>();
@@ -215,6 +215,9 @@ export function watchFrames(changed: () => void): void {
         passive: true,
       });
       view.addEventListener("resize", changed);
+      // Its history moving it in place; its pushes are told through its mark (boot.ts).
+      view.addEventListener("popstate", changed);
+      view.addEventListener("hashchange", changed);
       grown.observe(doc.documentElement);
     }
     // A frame added after load (a route that mounts one) is watched as it comes.

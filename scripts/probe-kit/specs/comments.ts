@@ -852,6 +852,95 @@ const innerFrameOf = async (outer: Frame): Promise<Frame> =>
     30_000
   )) as Frame;
 
+/**
+ * The inner frame's own overlay, read through the DevTools protocol. Neither
+ * test page runs a script of its own, so every listener on the outer page's
+ * window is its overlay's: their script ids name the outer overlay. The inner
+ * frame answers whether the script loaded there (its window carries the
+ * boot mark), how many `cawco-overlay` elements and overlay globals it holds,
+ * and how many listeners on its window and its document's tree come from any
+ * script but the outer overlay's (the outer's watch of the inner window is
+ * the outer's own).
+ */
+const innerOverlay = async (on: On) => {
+  const cdp = await on.page.context().newCDPSession(on.page);
+  try {
+    const { frameTree } = await cdp.send("Page.getFrameTree");
+    type Tree = typeof frameTree;
+    const find = (
+      node: Tree,
+      parent: string | null
+    ): { inner: string; outer: string | null } | null =>
+      node.frame.url.includes("/inner/")
+        ? { inner: node.frame.id, outer: parent }
+        : ((node.childFrames ?? [])
+            .map((child) => find(child, node.frame.id))
+            .find(Boolean) ?? null);
+    const frames = find(frameTree, null);
+    const contexts: { frameId?: string; id: number; isDefault?: boolean }[] =
+      [];
+    cdp.on("Runtime.executionContextCreated", ({ context }) =>
+      contexts.push({
+        id: context.id,
+        frameId: context.auxData?.frameId,
+        isDefault: (context.auxData as { isDefault?: boolean } | undefined)
+          ?.isDefault,
+      })
+    );
+    await cdp.send("Runtime.enable");
+    const contextOf = (frameId: string | null | undefined) =>
+      contexts.find((one) => one.frameId === frameId && one.isDefault)?.id;
+    const inner = contextOf(frames?.inner);
+    const outer = contextOf(frames?.outer);
+    if (!(inner && outer)) {
+      return null;
+    }
+    const listenersOf = async (contextId: number, expression: string) => {
+      const { result } = await cdp.send("Runtime.evaluate", {
+        expression,
+        contextId,
+      });
+      return (
+        await cdp.send("DOMDebugger.getEventListeners", {
+          objectId: result.objectId as string,
+          depth: -1,
+          pierce: true,
+        })
+      ).listeners;
+    };
+    const outerScripts = new Set(
+      (await listenersOf(outer, "window")).map((one) => one.scriptId)
+    );
+    const innerListeners = [
+      ...(await listenersOf(inner, "window")),
+      ...(await listenersOf(inner, "document")),
+    ];
+    const state = await cdp.send("Runtime.evaluate", {
+      expression: `({
+        marked: typeof window.__cawcoOverlay === "object",
+        elements: document.querySelectorAll("cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins]").length,
+        globals: ["cawco", "cawcoArtifact"].filter((name) => name in window).length,
+      })`,
+      contextId: inner,
+      returnByValue: true,
+    });
+    return {
+      ...(state.result.value as {
+        elements: number;
+        globals: number;
+        marked: boolean;
+      }),
+      outerScripts: outerScripts.size,
+      watched: innerListeners.map((one) => one.type).join(","),
+      foreign: innerListeners
+        .filter((one) => !outerScripts.has(one.scriptId))
+        .map((one) => one.type),
+    };
+  } finally {
+    await cdp.detach();
+  }
+};
+
 /** The inner button's box in the outer page's viewport: the frame's content box plus the button's own. */
 const innerButtonBox = (outer: Frame) =>
   outer.evaluate(() => {
@@ -909,6 +998,19 @@ const frameChecks = async (on: On) => {
     )) as Frame;
     await innerFrameOf(outer);
     await settle(on.page, 600);
+    const standing = await innerOverlay(on);
+    const outerHost = await outer.locator("cawco-overlay").count();
+    on.kit.check(
+      "b: the preview runs one overlay: the inner frame loaded the script (its mark) but holds no cawco-overlay element, layer or global, and every listener on its window and document is the outer overlay's; the outer page holds its own",
+      !!standing &&
+        standing.marked &&
+        standing.elements === 0 &&
+        standing.globals === 0 &&
+        standing.outerScripts > 0 &&
+        standing.foreign.length === 0 &&
+        outerHost === 1,
+      `inner ${JSON.stringify(standing)}; outer overlay elements ${outerHost}`
+    );
     const comment = on.page.locator(
       ".preview-pane button[aria-keyshortcuts='C']"
     );
