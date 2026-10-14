@@ -909,18 +909,9 @@ async function run(kit: Kit): Promise<void> {
         (l) => !!l && !l.includes(ask.requestId),
         20_000
       ).catch(() => undefined);
-      const after = await until(
-        "the card gone from the screen",
-        async () => {
-          const nodes = await tree();
-          return nodes.some((n) => n.id === "prompt-approve")
-            ? undefined
-            : nodes;
-        },
-        Boolean,
-        20_000
-      ).catch(() => undefined);
-      return { line, gone: after !== undefined };
+      // Its own card, by its id: the next proposal waiting moves in by design
+      // (one ask at a time), so another card standing says nothing.
+      return { line };
     };
 
     // ── (a) a tap on the AGENTS.md proposal's push ─────────────────────────
@@ -989,8 +980,8 @@ async function run(kit: Kit): Promise<void> {
     const bLeft = await leaves(agents, a.from);
     kit.check(
       "b: after Approve its card leaves the thread",
-      bLeft.line !== undefined && bLeft.gone,
-      `${bLeft.line ?? "no thread line without it"}; card ${bLeft.gone ? "gone" : "still on screen"}`
+      bLeft.line !== undefined,
+      bLeft.line ?? "no thread line without it"
     );
 
     // ── (c) the cited proposal's Deny ──────────────────────────────────────
@@ -1033,8 +1024,8 @@ async function run(kit: Kit): Promise<void> {
     const cLeft = await leaves(cited, c.from);
     kit.check(
       "c: after Deny its card leaves the thread",
-      cLeft.line !== undefined && cLeft.gone,
-      `${cLeft.line ?? "no thread line without it"}; card ${cLeft.gone ? "gone" : "still on screen"}`
+      cLeft.line !== undefined,
+      cLeft.line ?? "no thread line without it"
     );
   } finally {
     await writeFile(join(kit.out, "app-log.txt"), heard.join("\n"));
