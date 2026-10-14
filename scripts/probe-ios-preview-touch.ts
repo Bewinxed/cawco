@@ -572,17 +572,17 @@ xcrun simctl install ${udid} "${app}"`);
       y: Math.round(point.y),
     });
   };
-  /** One finger from `from` to `to` over half a second, the runner's `POST /swipeV2`. */
-  const drag = (from: Point, to: Point) => {
+  /** One finger from `from` to `to` over `seconds`, the runner's `POST /swipeV2`. */
+  const drag = (from: Point, to: Point, seconds: number) => {
     console.log(
-      `  drag from ${from.x},${from.y} to ${to.x},${to.y} (the grabber, from the newest header)`
+      `  drag from ${from.x},${from.y} to ${to.x},${to.y} over ${seconds}s (the grabber, from the newest header)`
     );
     return runner("swipeV2", {
       startX: Math.round(from.x),
       startY: Math.round(from.y),
       endX: Math.round(to.x),
       endY: Math.round(to.y),
-      duration: 0.5,
+      duration: seconds,
     });
   };
   /** A tap on what the page named, at its centre, which must lie in the web view's frame of the same post. */
@@ -1027,21 +1027,47 @@ xcrun simctl install ${udid} "${app}"`);
   );
 
   // ── 11. The grabber moves the drawer; the page still takes taps ───────
-  for (const [height, by] of [
-    ["full", -260],
-    ["middle", 260],
-  ] as const) {
+  // The drawer projects a release on (UIScrollView's normal deceleration,
+  // 0.499 s of the finger's speed) and closes the preview when that lands
+  // under 70% of its middle height (SessionViewController `dragDrawer`): a
+  // half-second 260 pt drag down from the full height reads as a swipe away.
+  // So each drag takes DRAG_SECONDS, and the drag back down ends where the
+  // grabber stood at the middle height, a settle and not a flick.
+  const DRAG_SECONDS = 2;
+  /** How far the drawer may rest from where the drag ended, pt. */
+  const REST_SLACK = 40;
+  const middleAt = headLast()?.grabber;
+  for (const height of ["full", "middle"] as const) {
     // Where the grabber stands now: the newest header so far (the app logs
     // one whenever a layout moves it), since nothing new need be logged
     // between the last tap and this drag.
     const from = headLast()?.grabber;
-    if (!from) {
+    if (!(from && middleAt)) {
       throw new Error("no grabber on the drawer");
     }
+    const end =
+      height === "full"
+        ? { x: from.x, y: from.y - 260 }
+        : { x: from.x, y: middleAt.y };
+    const dragMark = seen.length;
     // biome-ignore lint/performance/noAwaitInLoops: one drag, then its tap, in order
-    await drag(from, { x: from.x, y: from.y + by });
+    await drag(from, end, DRAG_SECONDS);
     await pause(1500);
     const to = headLast()?.grabber;
+    // The drawer is still up, resting near where the drag ended, before the page is tapped.
+    const closed = seen.slice(dragMark).includes("preview close");
+    const resting =
+      !closed && to !== undefined && Math.abs(to.y - end.y) <= REST_SLACK;
+    check(
+      `after the drag to the ${height} height the drawer is still up, its grabber within ${REST_SLACK}pt of where the drag ended`,
+      resting,
+      closed
+        ? `the drawer went away: the app logged "preview close" after the drag from ${from.x},${from.y} to ${end.x},${end.y} over ${DRAG_SECONDS}s`
+        : `grabber y ${to?.y ?? "?"}, the drag ended at y ${end.y}`
+    );
+    if (!resting) {
+      continue;
+    }
     // The page's first post once the drawer rests: the app has it report on
     // its own clock (every 0.7 s), so its points are where it stands now.
     page = await pageNow(`the page at ${height} height`);

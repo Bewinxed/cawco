@@ -1090,6 +1090,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     func close(refused: @escaping () -> Void = {}) {
         guard !closing else { return }
         closing = true
+        #if DEBUG
+        PreviewProbe.say("preview close")
+        #endif
         // A preview the hub keeps open comes back with the page taking taps.
         comment(false)
         closeCard()
