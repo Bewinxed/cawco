@@ -1034,11 +1034,19 @@ xcrun simctl install ${udid} "${app}"`);
   if (head.sendWords === "Send 1" && head.send) {
     await tap(head.send, `${head.sendWords} (from the newest header)`);
   }
+  // The send's own outcome, not the head's words as it goes (`preview send words=Sending…`).
   const sent = await lineAfter(
     "the send",
     mark,
-    (l) => l.startsWith("preview send "),
+    (l) =>
+      l.startsWith("preview send ok") || l.startsWith("preview send failed"),
     30_000
+  );
+  // Send stands outside the open card: its tap closes the card (the outside-press rule), as on the web.
+  const closedBySend = await lineAfter(
+    "the card closed by the tap on Send",
+    mark,
+    (l) => l.startsWith("preview card dismissed by=outside ")
   );
   /** The artifact's responses note (core ARTIFACT_RESPONSES), never a row of the person's. */
   const isResponses = (block: {
@@ -1068,49 +1076,39 @@ xcrun simctl install ${udid} "${app}"`);
   );
   const [sentPin] = await pinsOnHub();
   check(
-    '"Send 1" tells the session it has responses to read: one responses note, no row of the person\'s carrying the pin',
+    '"Send 1" tells the session it has responses to read: one responses note, no row of the person\'s carrying the pin; the tap on Send, outside the card, closes it',
     head.sendWords === "Send 1" &&
       sent?.startsWith("preview send ok") === true &&
+      closedBySend !== undefined &&
       message !== undefined &&
       asWords.length === 0 &&
       !!sentPin?.sentAt,
-    `header read "${head.sendWords}"; ${sent ?? "no send line"}; note ${message ? JSON.stringify(message.metadata) : "not in the transcript"}; person's rows with the reply: ${asWords.length}; pin sentAt ${sentPin?.sentAt ?? "none"}`
+    `header read "${head.sendWords}"; ${sent ?? "no send outcome line"}; ${closedBySend ?? "the card not closed by the tap"}; note ${message ? JSON.stringify(message.metadata) : "not in the transcript"}; person's rows with the reply: ${asWords.length}; pin sentAt ${sentPin?.sentAt ?? "none"}`
   );
   // The send stamped the frame's sentAt on the pin; the session counts as
-  // working (-preview-working): its card and its row wear the live dot.
+  // working (-preview-working): its row wears the live dot, and its card,
+  // opened again from that row, does too.
+  sheet = await openSheet("the Pins sheet after the send");
+  await pause(800);
+  mark = seen.length;
+  const liveRow = sheet.list?.rows["1"];
+  if (liveRow) {
+    await tap(liveRow, "pin 1's row in the sheet after the send");
+  }
   const liveCard = await cardAfter(
     "the card with the live dot",
     mark,
     (c) => c.number === 1 && c.live,
     15_000
   );
-  // The sheet opens over the card, which stays up: its live row is read
-  // from the sheet's list line, and the sheet goes again by its scrim.
-  sheet = await openSheet("the Pins sheet after the send");
   check(
     "with the frame's sentAt set and the session working, the pin's row and card show the live dot",
     liveCard !== undefined && sheet.list?.live.includes("1") === true,
     `card ${liveCard ? "live" : "not live"}; the sheet's live rows ${JSON.stringify(sheet.list?.live ?? null)}`
   );
-  await pause(800);
-  mark = seen.length;
-  if (sheet.list?.scrim) {
-    await tap(
-      sheet.list.scrim,
-      "the scrim over the Pins sheet, which puts it away (from the sheet's list line)"
-    );
-  }
+  // The card as it stands once the sheet has gone and it has laid out: its newest line.
   await pause(1200);
-  // The card as it stands once the sheet is gone: its line after the
-  // dismissal (the app logs it when a layout moves it, and with each page
-  // post), else the newest, when it never moved.
-  card =
-    (await cardAfter(
-      "pin 1's card after the sheet",
-      mark,
-      (c) => c.number === 1,
-      5000
-    )) ?? cardLast();
+  card = cardLast();
   if (card?.number !== 1 || !card.resolve) {
     throw new Error(
       `no card for pin 1 up after the sheet went (newest card line: ${seen.findLast((l) => cardOf(l) !== undefined) ?? "none"})`
