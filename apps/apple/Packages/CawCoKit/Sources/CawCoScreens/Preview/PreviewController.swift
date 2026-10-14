@@ -514,9 +514,18 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             coverLine.isHidden = true
         }
         fade.startAnimation()
-        // PreviewPane.svelte `announce`: the overlay answers with `cawco:ready`
-        // and joins the artifact's doc on the listener's own origin, where
-        // the page's cookie reaches it.
+        guard let frame = hub.previews.byInstance[instanceId], frame.state == .open else { return }
+        loaded(frame.revision)
+    }
+
+    /// PreviewPane.svelte `announce`, at the page's own `load` (the host
+    /// script's `cawco:loaded`), as the pane announces at its iframe's: WebKit's
+    /// didFinish can come while the document is still interactive, before a
+    /// module script (a canvas's host) listens, and a module that never hears
+    /// the hello never learns its host's origin, so nothing it posts goes. The
+    /// overlay answers with `cawco:ready` and joins the artifact's doc on the
+    /// listener's own origin.
+    private func hello() {
         guard let frame = hub.previews.byInstance[instanceId], frame.state == .open else { return }
         let artifact = frame.artifact
         connected = false
@@ -525,11 +534,13 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             "artifact": ["id": artifact.id, "kind": artifact.kind.rawValue, "name": artifact.name],
             "sync": "/__cawco/artifact/\(artifact.id)",
             "theme": theme,
+            // What of the page's edges the panel's chrome takes: none. A canvas's rail
+            // stands unseen until its host says this (canvas.css `data-canvas-inset`).
+            "inset": ["top": 0, "side": 0],
         ])
         #if DEBUG
         PreviewProbe.say("preview hello theme=\(theme)")
         #endif
-        loaded(frame.revision)
     }
 
     func webView(_: WKWebView, didFail _: WKNavigation!, withError error: any Error) {
@@ -549,6 +560,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         guard let text = message.body as? String, let data = text.data(using: .utf8),
               let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
         switch body["type"] as? String {
+        case "cawco:loaded":
+            hello()
         case "cawco:ready", "cawco:navigated":
             if let at = (body["url"] as? String).flatMap(URL.init(string:)), at.host() == origin?.host(), at.port == origin?.port {
                 pathLabel.text = at.path() + (at.query().map { "?\($0)" } ?? "")
@@ -1409,6 +1422,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         return remove.call(this, type, listener, options);
       };
       window.parent = host;
+      // The page's load, its module scripts run: when the app says hello (the pane's iframe `load`).
+      add.call(window, "load", () => window.webkit.messageHandlers.cawco.postMessage(JSON.stringify({ type: "cawco:loaded" })));
       window.__cawcoDeliver = (data) => {
         const event = { data, origin: location.origin, source: host };
         for (const listener of listeners) {

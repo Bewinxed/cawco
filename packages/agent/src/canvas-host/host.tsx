@@ -139,39 +139,9 @@ const holdStore = {
 export const toHost = (what: "dock" | "done" | "pictured") =>
   postToHost({ type: `cawco:${what}` });
 
-/**
- * What of the canvas's edges the host's chrome takes, px (`inset` in its
- * `cawco:hello` and `cawco:place`): `top`, the composer's grab band; `side`,
- * how far in its shape's sides stand; none in the panel. The rail stands
- * inside them (canvas.css `--canvas-inset-top`, `--canvas-inset-side`); a
- * host that says no side has none.
- */
-const takeInset = (said: unknown) => {
-  const inset = said as { side?: unknown; top?: unknown } | undefined;
-  if (!inset) {
-    return;
-  }
-  const px = (value: unknown) =>
-    typeof value === "number" && Number.isFinite(value) && value >= 0
-      ? `${value}px`
-      : null;
-  const top = px(inset.top);
-  if (top !== null) {
-    document.documentElement.style.setProperty("--canvas-inset-top", top);
-    document.documentElement.style.setProperty(
-      "--canvas-inset-side",
-      px(inset.side) ?? "0px"
-    );
-  }
-};
-window.addEventListener("message", (event) => {
-  if (
-    heardFromHost(event) &&
-    (event.data?.type === "cawco:hello" || event.data?.type === "cawco:place")
-  ) {
-    takeInset(event.data.inset);
-  }
-});
+// What of the canvas's edges the host's chrome takes (`inset`) the overlay
+// takes for the page (preview-overlay page.ts `takeInset`): it hears the
+// host's hello, which can come before this module runs.
 
 /**
  * Where the host stands the canvas (`cawco:place`): docked in the artifact

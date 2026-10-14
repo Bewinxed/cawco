@@ -172,6 +172,23 @@ enum CanvasProbe {
         // The rail stands clear of the top grab's band (44pt, then space2) and space3 in from the sides.
         let rail = await railOf(room)
         railCheck(rail, over: "over the field", top: CanvasMeasure.grabHeight + Space.space2, side: room.probeShoulder)
+        // Its first visible frame stands where it settled: unseen until the host's inset reached the page.
+        // The watch reads the page's own frames: a page that just came on screen may not have drawn one yet.
+        var first = await room.web?.probeRailFirst()
+        for _ in 0 ..< 25 where first == nil {
+            await wait(0.2)
+            first = await room.web?.probeRailFirst()
+        }
+        let settled = await room.web?.probeToolsBox()
+        if let first, let settled {
+            check("over the field the rail's first visible frame stands where it settles, the 44pt inset already taken",
+                  abs(first.left - settled.left) <= 0.5 && abs(first.top - settled.top) <= 0.5 && abs(first.width - settled.width) <= 0.5
+                      && abs(first.inset - CanvasMeasure.grabHeight) <= 0.5,
+                  "first visible at left \(f(first.left)), top \(f(first.top)), \(f(first.width)) wide, inset \(f(first.inset)), after \(first.hiddenFrames) frame(s) laid out unseen; settled at left \(f(settled.left)), top \(f(settled.top)), \(f(settled.width)) wide")
+        } else {
+            check("over the field the rail's first visible frame stands where it settles, the 44pt inset already taken", false,
+                  "first visible \(first.map { "\($0)" } ?? "never seen"), settled \(settled.map { "\($0)" } ?? "none"); the page: \(await room.web?.probeRailFirstRaw() ?? "no page")")
+        }
 
         // The grab: 40% of the column, then the column less the field, each on one spring.
         for (label, height, speed) in [("40% of the column", 0.0, -900.0), ("the column less the field", 5000.0, 900.0)] {

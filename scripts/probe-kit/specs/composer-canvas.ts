@@ -64,6 +64,9 @@
  *    is sent: Send says "…the hub didn't answer for it within N s. Nothing
  *    was sent; send again." over the field 4 to 7 s after Enter, keeps the
  *    words and the canvas, and the box is Send again, not pending.
+ * 18. A canvas opened over the composer: the tools' group, read each frame
+ *    from the page's start, is first drawn visible where it settles, its
+ *    44px inset already taken (it stands unseen until the host says it).
  *
  * (9: `canvas` and `artifacts` are their own specs, run beside this one.)
  */
@@ -164,6 +167,17 @@ declare global {
   interface Window {
     /** The dashboard's window: what the canvas pages it holds said of their link (`cawco:sync`, `cawco:drawn`). */
     kitLinks?: string[];
+    /** A canvas page's window: the tools' group on the first frame it was drawn visible, and the frames it stood laid out unseen before. */
+    kitRailFirst?: {
+      first: {
+        left: number;
+        top: number;
+        width: number;
+        height: number;
+        inset: string;
+      } | null;
+      hiddenFrames: number;
+    };
     /** The dashboard's window: every refusal run a canvas page in it started. */
     kitRefusalRuns?: string[];
     /** A canvas page's window: when its host mounted and its refusal line showed, the line's opacity read at 300 and 1300 ms, and its errors. */
@@ -174,6 +188,49 @@ declare global {
       shown: number | null;
     };
   }
+}
+
+/**
+ * 18. The rail's first visible frame: from the canvas document's start,
+ * each animation frame (before it paints) reads the tools' group; the first
+ * frame it is visible keeps its box, and the frames it stood laid out but
+ * unseen are counted.
+ */
+function watchRail(): void {
+  if (window.top === window) {
+    return;
+  }
+  const seen: NonNullable<Window["kitRailFirst"]> = {
+    first: null,
+    hiddenFrames: 0,
+  };
+  window.kitRailFirst = seen;
+  window.addEventListener("DOMContentLoaded", () => {
+    if (!location.pathname.includes("/__cawco/canvas/")) {
+      return;
+    }
+    const frame = () => {
+      const tools = document.querySelector(".rail-tools");
+      const at = tools?.getBoundingClientRect();
+      if (tools && at && at.width > 0) {
+        if (getComputedStyle(tools).visibility === "visible") {
+          seen.first = {
+            left: at.left,
+            top: at.top,
+            width: at.width,
+            height: at.height,
+            inset: getComputedStyle(document.documentElement)
+              .getPropertyValue("--canvas-inset-top")
+              .trim(),
+          };
+          return;
+        }
+        seen.hiddenFrames += 1;
+      }
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
+  });
 }
 
 /*
@@ -190,26 +247,33 @@ declare global {
  * (b) Every refusal run a canvas page starts (canvas.css `canvas-refusal-in`,
  * the unlinked line's fade and the image refusal's), heard as it starts and
  * kept in the dashboard's window: a run that starts and ends between two
- * reads of `getAnimations()` is still heard.
+ * reads of `getAnimations()` is still heard. The canvas's frame is an origin
+ * of its own (the session's preview origin), so it posts each run to the
+ * dashboard's window, which keeps it; it never reaches into that window.
  */
 function heardRefusals(): void {
   if (window.top === window) {
+    window.addEventListener("message", (event) => {
+      const run = (event.data as { kitRefusalRun?: unknown } | null)
+        ?.kitRefusalRun;
+      if (typeof run === "string") {
+        window.kitRefusalRuns = [...(window.kitRefusalRuns ?? []), run];
+      }
+    });
     return;
   }
   window.addEventListener(
     "animationstart",
     (event) => {
       const { animationName: name } = event as AnimationEvent;
-      const { top } = window;
       if (
-        top &&
         location.pathname.includes("/__cawco/canvas/") &&
         name.startsWith("canvas-refusal")
       ) {
-        top.kitRefusalRuns = [
-          ...(top.kitRefusalRuns ?? []),
-          `${name} at ${Math.round(performance.now())} ms`,
-        ];
+        window.top?.postMessage(
+          { kitRefusalRun: `${name} at ${Math.round(performance.now())} ms` },
+          "*"
+        );
       }
     },
     true
@@ -510,6 +574,7 @@ const probe = async (kit: Kit) => {
   await removeCheck(on, clock, pen);
   await syncCheck(on);
   await heldExportCheck(on);
+  await firstRailCheck(on);
   await phoneCheck(on, "phone");
   await phoneCheck(on, "tablet");
   await phoneCheck(on, "tablet", 768);
@@ -602,7 +667,14 @@ const swapNow = (page: Page) =>
 const swapCheck = async (on: On, clock: Clock) => {
   const { kit, page } = on;
   const control = await ms(page, "--dur-control");
-  const press = async (motion: "reduce" | "no-preference") => {
+  // First the presses as a person makes them, the clock untouched, on the
+  // button as the page made it: it holds a glyph once the hub has the
+  // message and the swaps have played out. They come before the held
+  // presses below: a press held on the clock and its runs forced to finish
+  // is no person's, and can leave the button's key block holding no glyph
+  // that a later press brings back.
+  for (const motion of ["reduce", "no-preference"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one press at a time, each read once it has played out
     await page.emulateMedia({ reducedMotion: motion });
     await until(
       "the button back on Send",
@@ -610,6 +682,65 @@ const swapCheck = async (on: On, clock: Clock) => {
       (label) => label === "Send message",
       60_000
     );
+    await page.focus(FIELD);
+    await page.keyboard.type("Plain");
+    await page.click(SEND);
+    await settle(page, 1500);
+    const held = await page.evaluate((sel) => {
+      const send = document.querySelector(sel);
+      return {
+        carriers: send?.querySelectorAll(".swap").length ?? 0,
+        label: send?.getAttribute("aria-label"),
+        html: send?.innerHTML.slice(0, 160) ?? "no button",
+      };
+    }, SEND);
+    kit.check(
+      `11 (${motion}): a press as a person makes it leaves the button holding its glyph`,
+      held.carriers >= 1,
+      JSON.stringify(held)
+    );
+  }
+  const press = async (motion: "reduce" | "no-preference") => {
+    await until(
+      "the button back on Send",
+      () => page.locator(SEND).getAttribute("aria-label"),
+      (label) => label === "Send message",
+      60_000
+    );
+    // The last press's swaps played out: no carrier is still leaving. One
+    // still leaving would be caught by this press's clock with the outro its
+    // own press built (under the other motion), its CSS way in restarted by
+    // the media switch below.
+    const button = () =>
+      page.evaluate((sel) => {
+        const send = document.querySelector(sel);
+        const carriers = [...(send?.querySelectorAll(".swap") ?? [])];
+        return {
+          carriers: carriers.length,
+          leaving: carriers.filter((el) =>
+            el
+              .getAnimations()
+              .some(
+                (run) =>
+                  run.playState !== "finished" &&
+                  !(run as Animation & { animationName?: string }).animationName
+              )
+          ).length,
+          html: send?.innerHTML.slice(0, 400) ?? "no button",
+        };
+      }, SEND);
+    const ready = await until(
+      "the last press's swaps played out",
+      button,
+      (seen) => seen.leaving === 0,
+      10_000
+    ).catch(button);
+    kit.check(
+      `11 (${motion}): before the held press no glyph is still leaving`,
+      ready.leaving === 0,
+      JSON.stringify(ready)
+    );
+    await page.emulateMedia({ reducedMotion: motion });
     await page.focus(FIELD);
     await page.keyboard.type("Swap");
     const kept = await clock.catchRuns(() => page.click(SEND), SWAP, 5000);
@@ -1626,6 +1757,54 @@ const heldExportCheck = async (on: On) => {
     `held ${held} export request(s); said after ${after} ms: "${said}"; sent ${sent}; ${JSON.stringify(after2)}`
   );
   await page.unroute("**/api/artifacts/*/export");
+  await page.close();
+};
+
+/**
+ * 18. A canvas opened over the composer: its rail's first visible frame is
+ * where it stands once settled (the host's inset already taken), never at 0
+ * and then down.
+ */
+const firstRailCheck = async (on: On) => {
+  const { kit, base, session } = on;
+  const page = await kit.page("desk", { init: [watchRail] });
+  await open(page, `${base}/session/${session}`, FIELD);
+  await settle(page);
+  await page.focus(FIELD);
+  await page.keyboard.press("Control+Shift+KeyD");
+  await page.waitForSelector(STAGE, { timeout: 20_000 });
+  const frame = await (
+    await page.locator(FRAME).elementHandle()
+  )?.contentFrame();
+  if (!frame) {
+    kit.check("18: a canvas opens to watch its rail's first frame", false);
+    await page.close();
+    return;
+  }
+  const seen = await until(
+    "the rail's first visible frame",
+    () => frame.evaluate(() => window.kitRailFirst ?? null),
+    (read) => read?.first !== null && read?.first !== undefined,
+    60_000
+  ).catch(() => frame.evaluate(() => window.kitRailFirst ?? null));
+  await settle(page, 1000);
+  const settled = await frame.evaluate(() => {
+    const at = document.querySelector(".rail-tools")?.getBoundingClientRect();
+    return at
+      ? { left: at.left, top: at.top, width: at.width, height: at.height }
+      : null;
+  });
+  const first = seen?.first;
+  kit.check(
+    "18: over the composer the rail's first visible frame stands where it settles, the host's 44px inset already taken",
+    !!(first && settled) &&
+      near(first.left, settled.left, 0.5) &&
+      near(first.top, settled.top, 0.5) &&
+      near(first.width, settled.width, 0.5) &&
+      near(first.height, settled.height, 0.5) &&
+      first.inset === "44px",
+    `first visible ${JSON.stringify(first)} after ${seen?.hiddenFrames ?? "?"} frame(s) laid out unseen; settled ${JSON.stringify(settled)}`
+  );
   await page.close();
 };
 

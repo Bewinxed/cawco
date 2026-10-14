@@ -91,6 +91,14 @@ body {
   right: calc(var(--canvas-inset-side) + var(--space-3));
 }
 
+/* Unseen until the host has said its inset (`data-canvas-inset`, set by the
+   overlay as it hears it): laid out all along, so its first paint is where
+   it stands, never at 0 and then down. A host that never says one leaves it
+   unseen: that host's bug, shown, not covered. */
+:root:not([data-canvas-inset]) .rail {
+  visibility: hidden;
+}
+
 /* A group's height in one row: its box, its inset each side, its edge.
    The tools' group as drawn, rows and all, is `--rail-tools-h` (rail.tsx
    measures it); until it is measured, one row. */

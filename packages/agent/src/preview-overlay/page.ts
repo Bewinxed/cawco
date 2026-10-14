@@ -338,6 +338,35 @@ function takeTheme(said: unknown) {
   }
 }
 
+/**
+ * What of the page's edges the host's chrome takes, px (`inset` in its
+ * `cawco:hello` and `cawco:place`): `top`, the composer's grab band; `side`,
+ * how far in its shape's sides stand; none in the panel. A canvas's rail
+ * stands inside them (canvas.css `--canvas-inset-top`, `--canvas-inset-side`),
+ * and stays unseen until a host has said them (`data-canvas-inset`), so its
+ * first paint is where it stands. Taken here, in the overlay, which hears the
+ * host from its first hello: a hello the app says while the document is still
+ * interactive comes before the canvas's own module listens.
+ */
+function takeInset(said: unknown) {
+  const inset = said as { side?: unknown; top?: unknown } | undefined;
+  if (!inset) {
+    return;
+  }
+  const px = (value: unknown) =>
+    typeof value === "number" && Number.isFinite(value) && value >= 0
+      ? `${value}px`
+      : null;
+  const top = px(inset.top);
+  if (top === null) {
+    return;
+  }
+  const root = document.documentElement;
+  root.style.setProperty("--canvas-inset-top", top);
+  root.style.setProperty("--canvas-inset-side", px(inset.side) ?? "0px");
+  root.dataset.canvasInset = "";
+}
+
 /** The page as the doc has it, before the first paint the page reaches; a morph's new root takes the theme again. */
 function filled() {
   themed();
@@ -1132,7 +1161,9 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
         failed("artifact", NO_ARTIFACT);
       }
       takeTheme(message.theme);
+      takeInset(message.inset);
     },
+    "cawco:place": (message) => takeInset(message.inset),
     "cawco:theme": (message) => takeTheme(message.theme),
     // A host that holds no doc of its own (the app) writes the person's reply,
     // resolve and delete through this page's, by the one write core keeps.

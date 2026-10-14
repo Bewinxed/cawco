@@ -222,6 +222,7 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         configuration.userContentController.addUserScript(WKUserScript(source: Self.host, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         #if DEBUG
         configuration.userContentController.addUserScript(WKUserScript(source: Self.errors, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        configuration.userContentController.addUserScript(WKUserScript(source: Self.railFirst, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         if let start = CanvasDebug.gateStart {
             configuration.userContentController.addUserScript(WKUserScript(source: Self.gate(start: start), injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
@@ -348,14 +349,16 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         fail("the hub answered \(status) for its page")
     }
 
+    /// WebKit's word that the document loaded. It can come while the page is
+    /// still interactive, its module script (the canvas's host) not yet run:
+    /// a hello then reaches only the overlay, and the host's own copy of the
+    /// host's origin (host-origin.ts) never learns it, so nothing it posts
+    /// (`cawco:drawn`, `cawco:pictured`, the rail's Dock and Done) goes. The
+    /// hello waits for the page's own `load` (`cawco:loaded`), as the
+    /// dashboard's waits for its iframe's.
     func webView(_: WKWebView, didFinish _: WKNavigation!) {
         #if DEBUG
-        CanvasDebug.log.notice("canvas page didFinish \(self.web.url?.absoluteString ?? "?", privacy: .public); hello for \(self.page.id, privacy: .public)")
-        #endif
-        connected = false
-        hello()
-        tellPlace()
-        #if DEBUG
+        CanvasDebug.log.notice("canvas page didFinish \(self.web.url?.absoluteString ?? "?", privacy: .public)")
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(3))
             self?.web.evaluateJavaScript(Self.status) { value, error in
@@ -418,6 +421,14 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         }
         #endif
         switch type {
+        case "cawco:loaded":
+            // The page's own load: every script of it hears the hello now (CanvasStages.svelte `loaded`).
+            #if DEBUG
+            CanvasDebug.log.notice("canvas page loaded; hello for \(self.page.id, privacy: .public)")
+            #endif
+            connected = false
+            hello()
+            tellPlace()
         case "cawco:sync":
             guard let state = (body["state"] as? String).flatMap(CanvasLink.init(rawValue:)) else { break }
             heard(state, error: body["error"] as? String)
@@ -698,6 +709,69 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         return (top, bottom, left, right, "page \(read["width"] as? Double ?? .nan)pt wide, inset \(read["inset"] as? String ?? "?")")
     }
 
+    /// The rail's first visible frame: from the document's start, each
+    /// animation frame (before it paints) reads the tools' group; the first
+    /// frame it is visible keeps its box and the inset the page held, and the
+    /// frames it stood laid out but unseen are counted (`window.__cawcoRailFirst`).
+    private static let railFirst = """
+    (() => {
+      const seen = { first: null, hiddenFrames: 0 };
+      window.__cawcoRailFirst = seen;
+      const frame = () => {
+        const tools = document.querySelector(".rail-tools");
+        const at = tools && tools.getBoundingClientRect();
+        if (tools && at.width > 0) {
+          if (getComputedStyle(tools).visibility === "visible") {
+            seen.first = { left: at.left, top: at.top, width: at.width,
+              inset: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--canvas-inset-top")) || 0 };
+            return;
+          }
+          seen.hiddenFrames += 1;
+        }
+        requestAnimationFrame(frame);
+      };
+      requestAnimationFrame(frame);
+    })();
+    """
+
+    /// The tools' group on the first frame the page drew it visible, the inset it held then, and the frames it stood unseen before.
+    func probeRailFirst() async -> (left: Double, top: Double, width: Double, inset: Double, hiddenFrames: Int)? {
+        let web = web
+        let said = await withCheckedContinuation { (done: CheckedContinuation<String?, Never>) in
+            web.evaluateJavaScript("JSON.stringify(window.__cawcoRailFirst ?? null)") { value, _ in done.resume(returning: value as? String) }
+        }
+        guard let said, let read = (try? JSONSerialization.jsonObject(with: Data(said.utf8))) as? [String: Any],
+              let first = read["first"] as? [String: Double], let left = first["left"], let top = first["top"],
+              let width = first["width"], let inset = first["inset"] else { return nil }
+        return (left, top, width, inset, (read["hiddenFrames"] as? Int) ?? -1)
+    }
+
+    /// What the first-frame watch holds, as the page says it, and the rail's state now.
+    func probeRailFirstRaw() async -> String {
+        let web = web
+        return await withCheckedContinuation { (done: CheckedContinuation<String, Never>) in
+            web.evaluateJavaScript("""
+            JSON.stringify({ watch: window.__cawcoRailFirst ?? "none", marked: document.documentElement.hasAttribute("data-canvas-inset"),
+              visibility: (() => { const t = document.querySelector(".rail-tools"); return t ? getComputedStyle(t).visibility : "no tools"; })(),
+              hidden: document.hidden, state: document.visibilityState })
+            """) { value, error in done.resume(returning: (value as? String) ?? error?.localizedDescription ?? "nothing") }
+        }
+    }
+
+    /// The tools' group as it stands now, in the page's points.
+    func probeToolsBox() async -> (left: Double, top: Double, width: Double)? {
+        let web = web
+        let said = await withCheckedContinuation { (done: CheckedContinuation<String?, Never>) in
+            web.evaluateJavaScript("""
+            (() => { const at = document.querySelector(".rail-tools")?.getBoundingClientRect();
+              return at ? JSON.stringify({ left: at.left, top: at.top, width: at.width }) : null; })()
+            """) { value, _ in done.resume(returning: value as? String) }
+        }
+        guard let said, let read = (try? JSONSerialization.jsonObject(with: Data(said.utf8))) as? [String: Double],
+              let left = read["left"], let top = read["top"], let width = read["width"] else { return nil }
+        return (left, top, width)
+    }
+
     /// The probe's gate on the page's sync socket: `open`, or `cut`.
     func probeSync(_ mode: String) {
         deliver(["type": "cawco:probe-sync", "mode": mode])
@@ -742,6 +816,8 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         return remove.call(this, type, listener, options);
       };
       window.parent = host;
+      // The page's load, its module scripts run: when the app says hello (the dashboard's iframe `load`).
+      add.call(window, "load", () => host.postMessage({ type: "cawco:loaded" }));
       window.__cawcoDeliver = (data) => {
         const event = { data, origin: location.origin, source: host };
         for (const listener of listeners) {
