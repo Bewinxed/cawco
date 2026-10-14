@@ -357,9 +357,10 @@ function Host() {
     []
   );
   const cleared = useCallback(() => setRefusal(null), []);
-  useEffect(() => guardImages(refuse), [refuse]);
   const theme = useSyncExternalStore(schemeStore.subscribe, schemeStore.now);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
+  // Pasted and dropped files, once Excalidraw has handed out its API.
+  useEffect(() => (api ? guardImages(api, refuse) : undefined), [api, refuse]);
   const first = useMemo(() => firstLook(holdStore.now()), []);
   const [empty, setEmpty] = useState(first.empty);
   const [tool, setTool] = useState("selection");

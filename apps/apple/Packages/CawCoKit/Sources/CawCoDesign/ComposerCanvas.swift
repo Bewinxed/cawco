@@ -626,8 +626,10 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
 
     /// A PNG pasted on the page, as a paste from the pasteboard arrives: a
     /// `paste` with the file in its clipboard data, where the pen last was.
-    /// Answers the image elements the page's doc holds after it, and how
-    /// many of them have their file in the doc's files.
+    /// Answers the image elements the page's doc holds after it, how many of
+    /// them have their file in the doc's files, and in how many of the doc's
+    /// states from the paste on an image element stood without its file
+    /// (`bare`): the file is in the doc before its element, never after.
     private static let paste = """
     const ink = document.createElement("canvas");
     ink.width = 64;
@@ -638,9 +640,15 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
     const blob = await new Promise((done) => ink.toBlob(done, "image/png"));
     const data = new DataTransfer();
     data.items.add(new File([blob], "probe.png", { type: "image/png" }));
-    // Excalidraw takes a paste only while the focus is in its container and
-    // the pointer it last saw is over its canvas (App.pasteFromClipboard), as
-    // they are once the person has drawn on it.
+    // Every state of the doc from here on: an image element standing without its file is counted.
+    const doc = window.cawcoArtifact.doc;
+    const files = doc.getMap("files");
+    const imagesNow = () => doc.getArray("elements").toArray().map((entry) => entry.get("el"))
+      .filter((el) => el && !el.isDeleted && el.type === "image");
+    let bare = 0;
+    const look = () => { if (imagesNow().some((el) => !(el.fileId && files.has(el.fileId)))) bare += 1; };
+    doc.on("update", look);
+    // As a person pastes: the focus in the canvas, the pointer over it, as they are once the person has drawn on it.
     document.querySelector(".excalidraw-container, .excalidraw")?.focus();
     const surface = document.querySelector("canvas.excalidraw__canvas.interactive");
     const middle = surface?.getBoundingClientRect();
@@ -654,26 +662,23 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
     if (carried === 0) Object.defineProperty(paste, "clipboardData", { value: data });
     const active = document.activeElement;
     (active ?? document.body).dispatchEvent(paste);
-    const doc = window.cawcoArtifact.doc;
     const read = () => {
-      const images = doc.getArray("elements").toArray().map((entry) => entry.get("el"))
-        .filter((el) => el && !el.isDeleted && el.type === "image");
-      const files = doc.getMap("files");
-      return { images: images.length, filed: images.filter((el) => el.fileId && files.has(el.fileId)).length,
+      const images = imagesNow();
+      return { images: images.length, filed: images.filter((el) => el.fileId && files.has(el.fileId)).length, bare,
         focus: active ? `${active.tagName}.${active.className}`.slice(0, 80) : "none", carried, pointed };
     };
-    // Excalidraw writes the image's element first and its file once it has read and sized it.
-    for (let i = 0; i < 150; i += 1) {
-      const now = read();
-      if (now.filed > 0) return JSON.stringify(now);
+    // The image read and placed (its file first, then its element): it lands once the page has decoded it.
+    for (let i = 0; i < 50 && imagesNow().length === 0; i += 1) {
       await new Promise((done) => setTimeout(done, 100));
     }
+    await new Promise((done) => setTimeout(done, 300));
+    doc.off("update", look);
     return JSON.stringify(read());
     """
 
     /// A PNG pasted on the page; the doc's image elements and how many have
     /// their file, where the focus was, and whether WebKit kept the event's data.
-    func probePaste() async throws -> (images: Int, filed: Int, said: String) {
+    func probePaste() async throws -> (images: Int, filed: Int, bare: Int, said: String) {
         let web = web
         let said = try await withCheckedThrowingContinuation { (done: CheckedContinuation<String, any Error>) in
             web.__callAsyncJavaScript(Self.paste, arguments: [:], inFrame: nil, in: .page) { value, error in
@@ -681,7 +686,8 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
             }
         }
         let read = (try? JSONSerialization.jsonObject(with: Data(said.utf8))) as? [String: Any]
-        return ((read?["images"] as? NSNumber)?.intValue ?? 0, (read?["filed"] as? NSNumber)?.intValue ?? 0, said)
+        return ((read?["images"] as? NSNumber)?.intValue ?? 0, (read?["filed"] as? NSNumber)?.intValue ?? 0,
+                (read?["bare"] as? NSNumber)?.intValue ?? -1, said)
     }
 
     /// Where the rail's groups stand in the page: the room above the topmost,
