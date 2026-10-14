@@ -93,6 +93,7 @@
     userTurnActions,
   } from "../client.svelte";
   import { cleanDetail } from "../command-detail";
+  import { debugFault } from "../debug-fault";
   import { felt } from "../feel.svelte";
   import { mcpSignInIntent, signInToMcp } from "../fleet";
   import CawFace from "../home/CawFace.svelte";
@@ -1018,6 +1019,7 @@
     if (entries.length === 0) {
       return [];
     }
+    debugFault("composer-menu");
     if (token?.sigil !== "/") {
       return [{ key: "mentions", heading: "Mentions", entries }];
     }

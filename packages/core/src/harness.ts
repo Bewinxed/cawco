@@ -381,6 +381,14 @@ export interface ModelInfo {
 export interface SlashCommand {
   aliases?: string[];
   argumentHint: string;
+  /**
+   * Claude Code's own command, as its SDK marks it (`SlashCommand.builtin`,
+   * claude-agent-sdk 0.3.296): "Rows can share a name: when a marked row
+   * carries it, /name runs that one, and an unmarked row is the one /name
+   * runs only when no marked row shares its name." Absent on every other
+   * harness.
+   */
+  builtin?: boolean;
   description: string;
   /** What the harness says this is, when it knows. Absent → derived from the name and the session's skill list. */
   kind?: "builtin" | "custom" | "skill" | "mcp";

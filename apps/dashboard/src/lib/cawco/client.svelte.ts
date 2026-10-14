@@ -6608,9 +6608,24 @@ export async function loadModels(
 export const isCustodyRefusal = (error: unknown): boolean =>
   error instanceof Error && error.message.includes("(custody)");
 
-/** A `SlashCommand[]` answer as the lookup the menu reads its prose from. */
-const detailsOf = (commands: SlashCommand[]): Map<string, SlashCommand> =>
-  new Map(commands.map((command) => [command.name, command]));
+/**
+ * A `SlashCommand[]` answer as the lookup the menu reads its prose from: one
+ * row per name, the one typing `/name` runs. A session lists a name more than
+ * once when it holds two commands by it (a skill in two places, a skill that
+ * shares a built-in's name). Claude Code marks its own rows, and "when a
+ * marked row carries it, /name runs that one" (SDK `SlashCommand.builtin`);
+ * between unmarked rows it says nothing more, so the first listed stands.
+ */
+const detailsOf = (commands: SlashCommand[]): Map<string, SlashCommand> => {
+  const byName = new Map<string, SlashCommand>();
+  for (const command of commands) {
+    const held = byName.get(command.name);
+    if (!held || (command.builtin && !held.builtin)) {
+      byName.set(command.name, command);
+    }
+  }
+  return byName;
+};
 
 /**
  * The menu asks the session what it has every time the reader opens it,
@@ -7110,18 +7125,22 @@ function sourceOf(name: string): string | undefined {
 }
 
 /**
- * One session's `/` menu: every name it listed, wearing whatever
- * `supportedCommands` has since said about it. The init frame leads because it
- * arrives on every turn and is free — the descriptions are one lazy call behind
- * it, and are all there is before the first init.
+ * One session's `/` menu: every name it listed, once, wearing whatever
+ * `supportedCommands` has since said about it ({@link detailsOf} keeps the
+ * row `/name` runs). The init frame leads because it arrives on every turn and
+ * is free — the descriptions are one lazy call behind it, and are all there is
+ * before the first init. A name listed twice inserts the same `/name` and runs
+ * one command, so it is one row: the menu keys its rows by it.
  */
 function availableCommands({
   names,
   skills,
   detailed,
 }: CommandState): AvailableCommand[] {
-  const listed = names.length > 0 ? names : [...(detailed?.keys() ?? [])];
-  return listed
+  const listed = new Set(
+    names.length > 0 ? names : [...(detailed?.keys() ?? [])]
+  );
+  return [...listed]
     .map((name) => {
       const known = detailed?.get(name);
       return {

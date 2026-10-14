@@ -12,6 +12,7 @@
   import { onMount, untrack } from "svelte";
   import WorkflowRunView from "#lib/components/features/workflows/WorkflowRunView.svelte";
   import type { ServerTail } from "../client.svelte";
+  import RegionBoundary from "../RegionBoundary.svelte";
   import SessionPane from "../SessionPane.svelte";
   import ThreadPane from "../ThreadPane.svelte";
   import { isThreadTab } from "../thread-tabs";
@@ -92,29 +93,31 @@
     {@const isActive = leaf?.active === id}
     {@const runId = runIdOf(id)}
     <div class="hosted" use:dock={id}>
-      {#if runId}
-        <!-- A workflow run's tab: the run, as its own view. -->
-        <WorkflowRunView {runId} />
-      {:else if isThreadTab(id)}
-        <!-- A thread with a project's Caw (ThreadPane). -->
-        <ThreadPane
-          active={isActive}
-          focused={isActive && leaf?.id === workspace.focusedLeafId}
-          viewId={id}
-          visible={shownPanes.get(id) ?? false}
-        />
-      {:else}
-        <SessionPane
-          active={isActive}
-          browsing={ctx?.machine ?? null}
-          browsingCwd={ctx?.cwd ?? ""}
-          browsingHarness={ctx?.harness ?? "claude"}
-          focused={isActive && leaf?.id === workspace.focusedLeafId}
-          serverTail={id === entryId ? entryTail : null}
-          viewId={id}
-          visible={shownPanes.get(id) ?? false}
-        />
-      {/if}
+      <RegionBoundary region="conversation">
+        {#if runId}
+          <!-- A workflow run's tab: the run, as its own view. -->
+          <WorkflowRunView {runId} />
+        {:else if isThreadTab(id)}
+          <!-- A thread with a project's Caw (ThreadPane). -->
+          <ThreadPane
+            active={isActive}
+            focused={isActive && leaf?.id === workspace.focusedLeafId}
+            viewId={id}
+            visible={shownPanes.get(id) ?? false}
+          />
+        {:else}
+          <SessionPane
+            active={isActive}
+            browsing={ctx?.machine ?? null}
+            browsingCwd={ctx?.cwd ?? ""}
+            browsingHarness={ctx?.harness ?? "claude"}
+            focused={isActive && leaf?.id === workspace.focusedLeafId}
+            serverTail={id === entryId ? entryTail : null}
+            viewId={id}
+            visible={shownPanes.get(id) ?? false}
+          />
+        {/if}
+      </RegionBoundary>
     </div>
   {/each}
 </div>

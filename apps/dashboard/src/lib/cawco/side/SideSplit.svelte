@@ -48,6 +48,7 @@
   import { waiting as departing, land } from "../motion/share.svelte";
   import PlanPane, { planShows } from "../plan/PlanPane.svelte";
   import PreviewPane from "../preview/PreviewPane.svelte";
+  import RegionBoundary from "../RegionBoundary.svelte";
   import { setSideExpand } from "./expand";
   import SideSheet from "./SideSheet.svelte";
 
@@ -518,7 +519,9 @@
             ms: dur("--dur-panel"),
           })}
         >
-          {@render surface()}
+          <RegionBoundary region="side panel">
+            {@render surface()}
+          </RegionBoundary>
         </div>
       {/if}
     </Resizable.Pane>
@@ -530,12 +533,14 @@
       onkeyescape={(event) => previewPane?.parentEscape(event)}
       open={previewOpen}
     >
-      <PreviewPane
-        instanceId={previewId}
-        linkSession={previewId !== viewId}
-        sheet
-        bind:this={previewPane}
-      />
+      <RegionBoundary region="preview">
+        <PreviewPane
+          instanceId={previewId}
+          linkSession={previewId !== viewId}
+          sheet
+          bind:this={previewPane}
+        />
+      </RegionBoundary>
     </SideSheet>
   {/if}
   {#if phone && visible && active && planOf && hasPlan}
@@ -546,13 +551,15 @@
       open={planAsked}
     >
       <Drawer.Content class="plan-sheet">
-        <PlanPane
-          instanceId={planOf}
-          onclose={() => {
-            planAsked = false;
-          }}
-          sheet
-        />
+        <RegionBoundary region="plan">
+          <PlanPane
+            instanceId={planOf}
+            onclose={() => {
+              planAsked = false;
+            }}
+            sheet
+          />
+        </RegionBoundary>
       </Drawer.Content>
     </Drawer.Root>
   {/if}

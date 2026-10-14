@@ -87,6 +87,13 @@ export const init: ClientInit = () => {
   );
 };
 
+/**
+ * Every error SvelteKit catches: a load's, and (SvelteKit 3) every one a
+ * `<svelte:boundary>` holds (RegionBoundary), which it hands here before the
+ * boundary sees it (kit client.js, `transformError`). Logged whole, as
+ * SvelteKit does not in a build, and sent to the hub.
+ */
 export const handleError: HandleClientError = ({ error, event }) => {
+  console.error("[cawco]", error);
   report(error, event.url.pathname);
 };

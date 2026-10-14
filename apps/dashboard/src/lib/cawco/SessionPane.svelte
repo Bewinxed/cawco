@@ -53,6 +53,7 @@
   import { moveOf } from "./move.svelte";
   import { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
+  import RegionBoundary from "./RegionBoundary.svelte";
   import SideSplit from "./side/SideSplit.svelte";
   import { clip, type SuggestCandidate, suggestions } from "./suggest.svelte";
   import { inLists, threadIdOf, threadTabId } from "./thread-tabs";
@@ -665,37 +666,48 @@
     HARNESS_LABEL[session?.harness ?? ""] ?? session?.harness ?? "Agent"
   );
 
+  const onePerHandle = (rows: Mention[]): Mention[] => {
+    const handles = new Set<string>();
+    return rows.filter(
+      (row) => !handles.has(row.handle) && Boolean(handles.add(row.handle))
+    );
+  };
+
   /**
    * What `@` can name: the other conversations, as lists show them (a
    * project's lead is never one: his threads are, by title under his face),
-   * and the machines.
+   * and the machines. One row per handle, the first: the handle is what is
+   * inserted and what reaches the agent, and the menu keys its rows by it —
+   * two machines can carry one hostname (a machine registered again).
    */
-  const mentions = $derived<Mention[]>([
-    // Threads first: what a person most often points a session at.
-    ...cawco.threadRows.map((row) => ({
-      handle: `thread#${(threadIdOf(row.id) ?? row.id).slice(0, 8)}`,
-      label: row.title?.trim() || "Thread",
-      detail:
-        cawco.projects.find((project) => project.id === row.projectId)?.name ??
-        "",
-      thread: row.id,
-    })),
-    // Then sessions by the name every list gives them (an attempt by its
-    // task's title), never their id; the handle is what reaches the agent.
-    ...inLists(cawco.instances)
-      .filter((row) => row.id !== viewId)
-      .slice(0, 40)
-      .map((row) => ({
-        handle: delegateHandle(row),
-        label: instanceTitle(row),
-        detail: projectOfRow(row),
+  const mentions = $derived<Mention[]>(
+    onePerHandle([
+      // Threads first: what a person most often points a session at.
+      ...cawco.threadRows.map((row) => ({
+        handle: `thread#${(threadIdOf(row.id) ?? row.id).slice(0, 8)}`,
+        label: row.title?.trim() || "Thread",
+        detail:
+          cawco.projects.find((project) => project.id === row.projectId)
+            ?.name ?? "",
+        thread: row.id,
       })),
-    ...cawco.machines.map((machine) => ({
-      handle: machine.hostname || machine.machineId,
-      label: machine.hostname || machine.machineId,
-      detail: machine.status,
-    })),
-  ]);
+      // Then sessions by the name every list gives them (an attempt by its
+      // task's title), never their id; the handle is what reaches the agent.
+      ...inLists(cawco.instances)
+        .filter((row) => row.id !== viewId)
+        .slice(0, 40)
+        .map((row) => ({
+          handle: delegateHandle(row),
+          label: instanceTitle(row),
+          detail: projectOfRow(row),
+        })),
+      ...cawco.machines.map((machine) => ({
+        handle: machine.hostname || machine.machineId,
+        label: machine.hostname || machine.machineId,
+        detail: machine.status,
+      })),
+    ])
+  );
 
   const commands = $derived(cawco.commandsOf(viewId));
 
@@ -1137,15 +1149,17 @@
             </div>
           {:else if mounted}
             <div class="state">
-              <Transcript
-                {agentName}
-                {focused}
-                onshown={(drawn) => {
-                  shown = drawn;
-                }}
-                {session}
-                {visible}
-              />
+              <RegionBoundary region="transcript">
+                <Transcript
+                  {agentName}
+                  {focused}
+                  onshown={(drawn) => {
+                    shown = drawn;
+                  }}
+                  {session}
+                  {visible}
+                />
+              </RegionBoundary>
             </div>
             <HeadFade />
           {/if}

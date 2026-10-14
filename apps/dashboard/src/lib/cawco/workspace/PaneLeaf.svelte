@@ -29,6 +29,7 @@
   import { browser } from "$app/env";
   import { page } from "$app/state";
   import type { ServerTail } from "../client.svelte";
+  import RegionBoundary from "../RegionBoundary.svelte";
   import SessionPane from "../SessionPane.svelte";
   import { isThreadTab } from "../thread-tabs";
   import Composer from "../transcript/Composer.svelte";
@@ -350,7 +351,9 @@
   <span aria-hidden="true" class="rail"></span>
 
   {#if !hosted}
-    <PaneTabs {leaf} travel={swipe.travel} />
+    <RegionBoundary region="tabs">
+      <PaneTabs {leaf} travel={swipe.travel} />
+    </RegionBoundary>
   {/if}
 
   <!-- Where a dropped conversation would go, shown as the shape it would
@@ -443,33 +446,35 @@
       style:width="{lent.transcriptShare * 100}%"
       class:away={lent.transcriptShare === 0}
     >
-      <Composer
-        agentName={lent.agentName}
-        ask={lent.ask}
-        busy={lent.busy}
-        commands={lent.commands}
-        delegatesOf={lent.delegatesOf}
-        draft={lent.draft}
-        held={swipe.moving}
-        {landing}
-        mentions={lent.mentions}
-        onfoot={lent.onfoot}
-        oninterruptsend={lent.oninterruptsend}
-        onmenu={lent.onmenu}
-        onstop={lent.onstop}
-        onsubmit={lent.onsubmit}
-        paneVisible={lent.paneVisible}
-        perch={lent.perch}
-        placeholder={lent.placeholder}
-        planRing={lent.planRing}
-        prompts={lent.prompts}
-        recallOf={lent.recallOf}
-        sendAgain={lent.sendAgain}
-        sendError={lent.sendError}
-        sending={lent.sending}
-        suggest={lent.suggest}
-        {switchDir}
-      />
+      <RegionBoundary kept="Your draft is kept." region="composer">
+        <Composer
+          agentName={lent.agentName}
+          ask={lent.ask}
+          busy={lent.busy}
+          commands={lent.commands}
+          delegatesOf={lent.delegatesOf}
+          draft={lent.draft}
+          held={swipe.moving}
+          {landing}
+          mentions={lent.mentions}
+          onfoot={lent.onfoot}
+          oninterruptsend={lent.oninterruptsend}
+          onmenu={lent.onmenu}
+          onstop={lent.onstop}
+          onsubmit={lent.onsubmit}
+          paneVisible={lent.paneVisible}
+          perch={lent.perch}
+          placeholder={lent.placeholder}
+          planRing={lent.planRing}
+          prompts={lent.prompts}
+          recallOf={lent.recallOf}
+          sendAgain={lent.sendAgain}
+          sendError={lent.sendError}
+          sending={lent.sending}
+          suggest={lent.suggest}
+          {switchDir}
+        />
+      </RegionBoundary>
     </div>
   {/if}
 </section>

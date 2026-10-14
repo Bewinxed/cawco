@@ -49,6 +49,7 @@
   import { hangShadow } from "./motion/hung-shadow";
   import NeedsCaw from "./NeedsCaw.svelte";
   import Overlays from "./Overlays.svelte";
+  import RegionBoundary from "./RegionBoundary.svelte";
   import SessionSurface from "./SessionSurface.svelte";
   import Sidebar from "./Sidebar.svelte";
   import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
@@ -914,7 +915,9 @@
   >
     <aside class="rail hidden min-[900px]:flex">
       {#if railed}
-        <Sidebar {narrow} scroller={keepScroll} />
+        <RegionBoundary region="sidebar">
+          <Sidebar {narrow} scroller={keepScroll} />
+        </RegionBoundary>
       {/if}
       <div
         aria-label="Resize sidebar"
@@ -956,7 +959,9 @@
           <Sheet.Title>Navigation</Sheet.Title>
         </Sheet.Header>
         {#if !railed}
-          <Sidebar {narrow} onsearch={() => fromSheet("jump")} sheet />
+          <RegionBoundary region="sidebar">
+            <Sidebar {narrow} onsearch={() => fromSheet("jump")} sheet />
+          </RegionBoundary>
         {/if}
       </Sheet.Content>
     </Sheet.Root>
@@ -996,7 +1001,9 @@
                   class:seam={i > 0}
                 >
                   <span aria-hidden="true" class="col-rail"></span>
-                  <PaneTabs hosted {leaf} />
+                  <RegionBoundary region="tabs">
+                    <PaneTabs hosted {leaf} />
+                  </RegionBoundary>
                 </div>
               {/each}
             </div>
@@ -1152,13 +1159,19 @@
            pane so its rail holds still. -->
         <div class="swap">
           {#key pageKey}
-            <div class="page" in:pageIn out:pageOut>{@render children()}</div>
+            <div class="page" in:pageIn out:pageOut>
+              <RegionBoundary region="page"
+                >{@render children()}</RegionBoundary
+              >
+            </div>
           {/key}
           <!-- After the keyed page, so it is drawn over the empty one a
              `/session` route renders. -->
           {#if surfaceMounted}
             <div class="page" in:pageIn {@attach park(() => onSession)}>
-              <SessionSurface shown={onSession} />
+              <RegionBoundary region="workspace">
+                <SessionSurface shown={onSession} />
+              </RegionBoundary>
             </div>
           {/if}
         </div>
