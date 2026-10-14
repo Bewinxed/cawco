@@ -20,6 +20,8 @@
  *   dependencies, never shared on the wire.
  */
 
+import { CLAUDE_PROVIDER } from "./accounts";
+
 /** The harnesses cawco can spawn sessions on. Adding one is a new adapter. */
 export type HarnessKind = "claude" | "opencode" | "pi";
 
@@ -1254,19 +1256,50 @@ export interface SignInFault {
   words: string;
 }
 
+/** How the OpenCode on a machine can sign in to a provider again, as its integration's methods say ({@link opencodeSignInFaultWords}). */
+export interface OpencodeRenewal {
+  /** The credential that does not work is an OAuth (subscription) sign-in, not a key. */
+  heldOAuth: boolean;
+  /** The integration's id, which `opencode auth login` and `logout` take (`anthropic`). */
+  integration: string;
+  /** The integration offers an OAuth method: OpenCode can sign in to it again. Without one it takes only a key (Anthropic's on 2.0.28). */
+  offersOAuth: boolean;
+}
+
 /**
- * What the home says of a machine's own OpenCode sign-in that does not work:
- * the provider by name, why (its refusal in the provider's words, or what
- * the machine's check found), and the fix, signing in again on that machine.
- * One source for every surface (the web's machine row and the Apple app's
- * read it from the report).
+ * What the home says of a machine's own OpenCode sign-in that does not work,
+ * by WORDS.md's error formula: what (the provider's sign-in on the machine),
+ * why (its refusal in the provider's words, or what the machine's check
+ * found), and the fix that works on the OpenCode installed there, from its
+ * integration's methods: sign in again where it offers OAuth; where it takes
+ * only a key, paste one, and for a subscription sign-in it cannot renew,
+ * that or remove the dead sign-in. One source for every surface (the web's
+ * machine row and the Apple app's read it from the report).
  */
 export const opencodeSignInFaultWords = (
   machine: string,
   providerName: string,
-  why: string
-): string =>
-  `OpenCode's own ${providerName} sign-in on ${machine} does not work: ${why}. Run \`opencode auth login\` on ${machine} and pick ${providerName}.`;
+  why: string,
+  renewal: OpencodeRenewal
+): string => {
+  const login = `\`opencode auth login ${renewal.integration}\``;
+  const head = `OpenCode's own ${providerName} sign-in on ${machine} does not work: ${why}.`;
+  const aKey = `${VOWEL_START.test(providerName) ? "an" : "a"} ${providerName} API key`;
+  if (renewal.offersOAuth) {
+    return `${head} Run ${login} on ${machine} to sign in to ${providerName} again.`;
+  }
+  if (!renewal.heldOAuth) {
+    return `${head} Run ${login} on ${machine} and paste ${aKey} that works.`;
+  }
+  const subscriptions =
+    renewal.integration === CLAUDE_PROVIDER
+      ? " (Claude subscriptions run in Claude Code)"
+      : "";
+  return `${head} OpenCode there takes only an API key for ${providerName}, so this subscription sign-in cannot be renewed. Run ${login} on ${machine} and paste ${aKey}, or run \`opencode auth logout ${renewal.integration}\` there to remove the dead sign-in${subscriptions}.`;
+};
+
+/** A name read with a vowel sound first, by its first letter ("an Anthropic API key"). */
+const VOWEL_START = /^[aeiou]/i;
 
 /** What a machine knows about one harness: is it installed, can it work, what can it do. */
 export interface HarnessReport {

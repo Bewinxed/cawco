@@ -968,6 +968,37 @@ export const opencodeOwnChanges = (): Record<string, number> => {
 };
 
 /**
+ * What kind each of OpenCode's own active sign-ins on this machine is
+ * (`oauth`, `key`, …), by its integration, read-only: the type alone, never
+ * its value. Empty for a database 2.0 has not made yet.
+ */
+export const opencodeOwnSignInTypes = (): Record<string, string> => {
+  if (!existsSync(machineOpencodeDb())) {
+    return {};
+  }
+  try {
+    const db = new Database(machineOpencodeDb(), { readonly: true });
+    try {
+      return Object.fromEntries(
+        (
+          db
+            .query(
+              "SELECT integration_id, json_extract(value, '$.type') AS type FROM credential WHERE active = 1"
+            )
+            .all() as { integration_id: string | null; type: string | null }[]
+        ).flatMap((row) =>
+          row.integration_id && row.type ? [[row.integration_id, row.type]] : []
+        )
+      );
+    } finally {
+      db.close();
+    }
+  } catch {
+    return {};
+  }
+};
+
+/**
  * The providers OpenCode's own sign-ins on this machine are for (each active
  * credential's integration), read-only, never their values: the providers the
  * machine's server sends requests to with them. None for a database 2.0 has

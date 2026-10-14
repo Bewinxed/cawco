@@ -104,6 +104,7 @@ import {
   opencodeCredentialOf,
   opencodeOwnChanges,
   opencodeOwnIntegrations,
+  opencodeOwnSignInTypes,
   opencodeProviderOf,
   readHeld,
   setOpencodeAccountsHost,
@@ -1116,6 +1117,22 @@ const keyCheckRequest = (
 
 const TRAILING_SLASH = /\/+$/;
 
+/** OpenCode's own list of its integrations (`GET /api/integration`), as far as CawCo reads it. */
+const integrationsOf = (listed: {
+  data: unknown;
+}): { id: string; methods?: { id?: string; type: string }[] }[] =>
+  listed.data as { id: string; methods?: { id?: string; type: string }[] }[];
+
+/** The integrations OpenCode offers an OAuth method for: those it can sign in to again, rather than take only a key. */
+const oauthIntegrationsOf = (listed: { data: unknown }): Set<string> =>
+  new Set(
+    integrationsOf(listed).flatMap((integration) =>
+      (integration.methods ?? []).some((method) => method.type === "oauth")
+        ? [integration.id]
+        : []
+    )
+  );
+
 /** What a check of one of the machine's own sign-ins found: it cannot work (and why), it works, or it cannot tell. */
 type SignInVerdict =
   | { state: "fault"; why: string }
@@ -1143,7 +1160,7 @@ const oauthVerdict = (
   if (!refreshable) {
     return {
       state: "fault",
-      why: `its token expired ${expired}, and OpenCode cannot refresh this sign-in`,
+      why: `its token expired ${expired}`,
     };
   }
   return value.refresh
@@ -2572,29 +2589,58 @@ export class OpencodeHarness implements Harness {
    * clears the provider's fault. Kept across a restart, said once.
    */
   #signInOutcome(provider: string, refusal: string | undefined): void {
-    const faults = this.#faultsHeld();
-    if (refusal === undefined) {
-      if (!faults.delete(provider)) {
-        return;
-      }
-      console.info(
-        `[opencode] the machine's own ${provider} sign-in answered again`
+    if (refusal !== undefined) {
+      this.#recordFault(provider, refusal).catch((error: unknown) =>
+        console.warn(
+          `[opencode] the machine's own ${provider} sign-in's fault was not recorded: ${errorText(error)}`
+        )
       );
-    } else {
-      if (!opencodeOwnIntegrations().includes(provider)) {
-        return;
-      }
-      const words = opencodeSignInFaultWords(
-        machineLabel(hostname()),
-        opencodeModels.providerName(provider),
-        refusal
-      );
-      if (faults.get(provider)?.words === words) {
-        return;
-      }
-      faults.set(provider, { provider, words, at: Date.now() });
-      console.warn(`[opencode] ${words}`);
+      return;
     }
+    if (!this.#faultsHeld().delete(provider)) {
+      return;
+    }
+    console.info(
+      `[opencode] the machine's own ${provider} sign-in answered again`
+    );
+    this.#saveFaults();
+  }
+
+  /** The integrations whose OpenCode offers an OAuth method, as its own list last said (`GET /api/integration`). */
+  #oauthIntegrations: Set<string> | undefined;
+
+  /**
+   * `provider`'s sign-in recorded as not working, `why`, in core's words
+   * with the fix the OpenCode here offers ({@link opencodeSignInFaultWords}):
+   * from its integration's methods, and whether the sign-in is an OAuth one.
+   */
+  async #recordFault(provider: string, why: string): Promise<void> {
+    const kind = opencodeOwnSignInTypes()[provider];
+    if (!kind) {
+      return;
+    }
+    this.#oauthIntegrations ??= oauthIntegrationsOf(
+      await (await this.#ensure()).integration.list(
+        {},
+        { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+      )
+    );
+    const words = opencodeSignInFaultWords(
+      machineLabel(hostname()),
+      opencodeModels.providerName(provider),
+      why,
+      {
+        integration: provider,
+        offersOAuth: this.#oauthIntegrations.has(provider),
+        heldOAuth: kind === "oauth",
+      }
+    );
+    const faults = this.#faultsHeld();
+    if (faults.get(provider)?.words === words) {
+      return;
+    }
+    faults.set(provider, { provider, words, at: Date.now() });
+    console.warn(`[opencode] ${words}`);
     this.#saveFaults();
   }
 
@@ -2655,12 +2701,7 @@ export class OpencodeHarness implements Harness {
       client.model.list({}, options),
     ]);
     const refreshable = new Set(
-      (
-        integrations.data as {
-          id: string;
-          methods?: { type: string; id?: string }[];
-        }[]
-      ).flatMap((integration) =>
+      integrationsOf(integrations).flatMap((integration) =>
         (integration.methods ?? []).flatMap((method) =>
           method.type === "oauth" && method.id
             ? [`${integration.id}/${method.id}`]
@@ -2668,6 +2709,7 @@ export class OpencodeHarness implements Harness {
         )
       )
     );
+    this.#oauthIntegrations = oauthIntegrationsOf(integrations);
     const changed = opencodeOwnChanges();
     const faults = this.#faultsHeld();
     let moved = false;

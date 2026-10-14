@@ -24,6 +24,15 @@
  * 3. The mock refuses with 401: a session's turn on
  *    `anthropic/claude-haiku-4-5` fails, and the report and the row say it.
  * 4. The mock answers: the next turn answers, and they carry it no more.
+ * 5. A key Anthropic refuses: found by one request to its list of models,
+ *    before any turn; told to paste a key that works.
+ * 6. A key it takes: no fault.
+ * 7. An expired xAI sign-in with no refresh token (xAI's integration offers
+ *    OAuth): told to sign in again, not to paste a key.
+ *
+ * The fix in each sentence is the one the installed OpenCode offers, read
+ * from its integration's methods: Anthropic's takes only a key on 2.0.28, so
+ * a dead subscription sign-in is told to paste a key or log out.
  *
  *   bun scripts/probe-kit/run.ts web opencode-sign-in-fault
  */
@@ -46,7 +55,7 @@ const SERVER_LINE = /listening on (http:\/\/\S+)/;
 const PASSWORD_LINE = /server password (\S+)/;
 const DAY_MS = 24 * 60 * 60_000;
 /** The sentence's fix, as every fault ends. */
-const FIX = "Run `opencode auth login` on";
+const FIX = "opencode auth login";
 
 /** The proxy settings a CawCo workspace's processes reach public hosts through, passed on when this runs in one. */
 const PROXY_ENV = [
@@ -65,8 +74,11 @@ interface Report {
   signInFaults?: { provider: string; words: string }[];
 }
 
-/** The machine's OpenCode `anthropic` sign-in fault's words, as the hub holds its report; empty when none. */
-const faultOf = async (fleet: KitFleet): Promise<string> =>
+/** The machine's OpenCode sign-in fault's words for `provider`, as the hub holds its report; empty when none. */
+const faultOf = async (
+  fleet: KitFleet,
+  provider = "anthropic"
+): Promise<string> =>
   (
     await fleet.api<{ machineId: string; harnesses?: Report[] }[]>(
       "/api/agents"
@@ -74,7 +86,15 @@ const faultOf = async (fleet: KitFleet): Promise<string> =>
   )
     .find((row) => row.machineId === MACHINE)
     ?.harnesses?.find((one) => one.harness === "opencode")
-    ?.signInFaults?.find((one) => one.provider === "anthropic")?.words ?? "";
+    ?.signInFaults?.find((one) => one.provider === provider)?.words ?? "";
+
+/** The fix for a subscription sign-in OpenCode 2.0.28 cannot renew: Anthropic's integration takes only a key. */
+const KEY_ONLY_RENEWAL =
+  "OpenCode there takes only an API key for Anthropic, so this subscription sign-in cannot be renewed. Run `opencode auth login anthropic` on";
+const KEY_OR_LOGOUT =
+  "and paste an Anthropic API key, or run `opencode auth logout anthropic` there to remove the dead sign-in (Claude subscriptions run in Claude Code).";
+/** The fix for a key Anthropic refuses. */
+const KEY_THAT_WORKS = "and paste an Anthropic API key that works.";
 
 /** `work` with a standalone OpenCode server on the machine's data dir, ended after. */
 async function standalone(
@@ -262,9 +282,8 @@ const spec: Spec = {
       "1. before any turn, an expired sign-in OpenCode cannot refresh is on the report and the row, with its fix",
       turns === 0 &&
         checked.includes("does not work: its token expired") &&
-        checked.includes("OpenCode cannot refresh this sign-in") &&
-        checked.includes(FIX) &&
-        checked.endsWith("and pick Anthropic.") &&
+        checked.includes(KEY_ONLY_RENEWAL) &&
+        checked.endsWith(KEY_OR_LOGOUT) &&
         expiredRow.includes(checked),
       `turns: ${turns}; report: ${checked}; row: ${expiredRow}`
     );
@@ -312,7 +331,8 @@ const spec: Spec = {
     kit.check(
       "3. a turn the provider refuses is on the report and the row, with its fix",
       refused.includes(`401 ${REFUSAL}`) &&
-        refused.endsWith("and pick Anthropic.") &&
+        refused.includes(KEY_ONLY_RENEWAL) &&
+        refused.endsWith(KEY_OR_LOGOUT) &&
         refusedRow.includes(refused),
       `report: ${refused}; row: ${refusedRow}`
     );
@@ -364,7 +384,8 @@ const spec: Spec = {
     kit.check(
       "5. a key its provider refuses is on the report and the row, found by one request to its list of models, before any turn",
       badKey.includes("does not work: 401 invalid x-api-key") &&
-        badKey.endsWith("and pick Anthropic.") &&
+        badKey.includes("Run `opencode auth login anthropic` on") &&
+        badKey.endsWith(KEY_THAT_WORKS) &&
         badKeyRow.includes(badKey) &&
         turns === turnsBefore &&
         modelsAsked.filter((key) => key === "sk-ant-api03-not-taken").length ===
@@ -397,6 +418,41 @@ const spec: Spec = {
         !goodKeyRow.includes(FIX) &&
         modelsAsked.includes(validKey),
       `report: ${goodKey || "(none)"}; row: ${goodKeyRow}; model list asked with: ${modelsAsked.join(", ")}`
+    );
+
+    // 7. A provider OpenCode can sign in to again (xAI's integration offers
+    // an OAuth method): its dead sign-in is told to sign in again.
+    await standalone(fleet, async (client) => {
+      await client.credential.create({
+        id: "cred_probe_xai",
+        integrationID: "xai",
+        label: "the machine's own xAI sign-in",
+        value: {
+          type: "oauth",
+          methodID: "device",
+          access: "xai-expired",
+          refresh: "",
+          expires: Date.now() - DAY_MS,
+        },
+        activate: true,
+      } as never);
+    });
+    const xai = await until(
+      "the check's xAI fault on the report",
+      () => faultOf(fleet, "xai"),
+      Boolean,
+      60_000
+    ).catch(() => "");
+    const xaiRow = await rowUntil(page, (text) => text.includes(xai));
+    kit.check(
+      "7. a sign-in OpenCode can renew (its integration offers OAuth) is told to sign in again, not to paste a key",
+      xai.includes("its token expired") &&
+        xai.includes("and it holds no refresh token") &&
+        xai.includes("Run `opencode auth login xai` on") &&
+        xai.endsWith("to sign in to xAI again.") &&
+        !xai.includes("API key") &&
+        xaiRow.includes(xai),
+      `report: ${xai}; row: ${xaiRow}`
     );
     await door.stop(true);
   },
