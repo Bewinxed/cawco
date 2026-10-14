@@ -528,11 +528,17 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
     /// One pen stroke through Excalidraw's own pointer path: the rail's Pen,
     /// then a pen's down, moves and up on the canvas. Answers how many
     /// elements the page's doc holds after it, drawn and not deleted.
+    /// A pointer made by script is none the engine tracks, so Excalidraw's
+    /// `setPointerCapture` on its press would throw NotFoundError (Pointer
+    /// Events: no active pointer with that id) and the stroke draw nothing;
+    /// the stroke stands in for capture on its own target while it runs.
     private static let stroke = """
     document.querySelector('[data-action="tool:freedraw"]')?.click();
     await new Promise((done) => setTimeout(done, 300));
     const target = document.querySelector("canvas.excalidraw__canvas.interactive");
     if (!target) throw new Error("no interactive canvas to draw on");
+    target.setPointerCapture = () => {};
+    target.releasePointerCapture = () => {};
     const box = target.getBoundingClientRect();
     const x = box.left + box.width * 0.3, y = box.top + box.height * 0.4;
     const pen = (type, dx, dy, buttons) => new PointerEvent(type, {
@@ -545,6 +551,8 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
       target.dispatchEvent(pen("pointermove", i * 8, Math.sin(i / 4) * 30, 1));
     }
     target.dispatchEvent(pen("pointerup", 192, Math.sin(6) * 30, 0));
+    delete target.setPointerCapture;
+    delete target.releasePointerCapture;
     await new Promise((done) => setTimeout(done, 600));
     return window.cawcoArtifact.doc.getArray("elements").toArray()
       .filter((entry) => entry.get("el")?.isDeleted !== true).length;

@@ -6,8 +6,9 @@
    * flat) that resizes its height, and once it stands still a grab on each
    * side edge (the grabber upright) that resizes its width, in a layer of
    * their own over it. The page's words come here: ready, the picture
-   * drawn, and the rail's Dock, Undock, Done and Remove, which go to
-   * whoever holds the slot it stands in.
+   * drawn, its doc's link to the hub and its count, kept on its stage, and
+   * the rail's Dock, Undock, Done and Remove, which go to whoever holds the
+   * slot it stands in.
    */
   import { Portal } from "bits-ui";
   import { untrack } from "svelte";
@@ -47,6 +48,13 @@
         break;
       case "cawco:pictured":
         stage.pictured?.();
+        break;
+      // Whether the page's doc reached the hub, and how much it holds: what a send waits on.
+      case "cawco:sync":
+        stage.heardLink(event.data.state, event.data.error);
+        break;
+      case "cawco:drawn":
+        stage.heardDrawn(event.data.count);
         break;
       case "cawco:ink":
         // The person's unsent ink on the canvas, which the composer's Send carries.

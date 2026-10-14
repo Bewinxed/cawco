@@ -37,6 +37,16 @@
  * 13. The rail's Remove: a drawn canvas folds as Done's does (on
  *    --dur-grow-exit), no chip is left, the message carries no canvas, and
  *    the session still lists the artifact.
+ * 14. What the canvas shows is what Send sends. The canvas page's sync
+ *    socket goes through the iOS probe's gate (ComposerCanvas.swift `gate`,
+ *    injected into the canvas's frame here): (a) refused from the start, the
+ *    refusal line is not drawn at 300 ms and stands at 1.3 s, mounted no
+ *    sooner than --dur-wait-grace after the page's host, a pen stroke adds
+ *    0 elements, and Send says the canvas isn't connected; opened, the page
+ *    holds no error and a stroke adds an element; (c) cut after a stroke,
+ *    Send says the drawing hasn't reached the hub. (b) On a good link (1
+ *    to 13) no canvas page ever starts a refusal run, and Send carries the
+ *    files (7).
  *
  * (9: `canvas` and `artifacts` are their own specs, run beside this one.)
  */
@@ -126,6 +136,191 @@ const penOf = (cdp: CDPSession) => {
   };
 };
 
+declare global {
+  interface Window {
+    /** The dashboard's window: what the canvas pages it holds said of their link (`cawco:sync`, `cawco:drawn`). */
+    kitLinks?: string[];
+    /** The dashboard's window: every refusal run a canvas page in it started. */
+    kitRefusalRuns?: string[];
+    /** A canvas page's window: when its host mounted and its refusal line showed, the line's opacity read at 300 and 1300 ms, and its errors. */
+    kitUnlinked?: {
+      errors: string[];
+      mounted: number | null;
+      samples: Record<string, number | null>;
+      shown: number | null;
+    };
+  }
+}
+
+/*
+ * The scripts below run in the canvas's frame. The stage's iframe is
+ * attached before its address is set, so they run once, in its first
+ * about:blank document, and the canvas's page then takes that window over
+ * (the initial about:blank Window is reused for a same-origin navigation):
+ * what they set on the window, and the window's listeners, carry over;
+ * what they bind to that first document does not, and the address is read
+ * when each event comes, never as they run.
+ */
+
+/**
+ * (b) Every refusal run a canvas page starts (canvas.css `canvas-refusal-in`,
+ * the unlinked line's fade and the image refusal's), heard as it starts and
+ * kept in the dashboard's window: a run that starts and ends between two
+ * reads of `getAnimations()` is still heard.
+ */
+function heardRefusals(): void {
+  if (window.top === window) {
+    return;
+  }
+  window.addEventListener(
+    "animationstart",
+    (event) => {
+      const { animationName: name } = event as AnimationEvent;
+      const { top } = window;
+      if (
+        top &&
+        location.pathname.includes("/__cawco/canvas/") &&
+        name.startsWith("canvas-refusal")
+      ) {
+        top.kitRefusalRuns = [
+          ...(top.kitRefusalRuns ?? []),
+          `${name} at ${Math.round(performance.now())} ms`,
+        ];
+      }
+    },
+    true
+  );
+}
+
+/**
+ * The iOS probe's gate on the canvas page's sync socket (ComposerCanvas.swift
+ * `gate`), in the canvas's frame: refused from the start, a socket asks for
+ * a path beside its own that the listener upgrades nothing on, so the
+ * handshake fails as a refused upgrade does; `cawco:probe-sync` with `open`
+ * closes the refused ones and lets the next one through, with `cut` closes
+ * every open one and refuses again.
+ */
+function syncGate(): void {
+  if (window.top === window) {
+    return;
+  }
+  const Native = window.WebSocket;
+  let mode = "refuse";
+  const sockets = new Set<WebSocket>();
+  // biome-ignore lint/performance/useTopLevelRegex: an init script is serialized alone into the page; it reaches nothing outside itself.
+  const ARTIFACT = /\/__cawco\/artifact\/[0-9a-f-]{36}$/;
+  function Gate(url: string | URL, protocols?: string | string[]) {
+    const at = new URL(String(url), location.href);
+    if (!ARTIFACT.test(at.pathname)) {
+      return new Native(url, protocols);
+    }
+    if (mode !== "open") {
+      at.pathname += "/probe-refused";
+    }
+    const socket = new Native(at.toString(), protocols);
+    sockets.add(socket);
+    socket.addEventListener("close", () => sockets.delete(socket));
+    return socket;
+  }
+  Gate.prototype = Native.prototype;
+  Object.assign(Gate, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 });
+  window.WebSocket = Gate as unknown as typeof WebSocket;
+  window.addEventListener("message", (event) => {
+    if (event.data?.type !== "cawco:probe-sync") {
+      return;
+    }
+    if (event.data.mode === "open") {
+      mode = "open";
+      // Through the dashboard's proxy a refused upgrade may stand
+      // connecting rather than fail: it closes, so the next goes through.
+      for (const socket of sockets) {
+        if (socket.url.includes("/probe-refused")) {
+          socket.close();
+        }
+      }
+      return;
+    }
+    mode = "refuse";
+    for (const socket of sockets) {
+      socket.close();
+    }
+  });
+}
+
+/**
+ * In a canvas page: when its host mounted, when its refusal line was first
+ * drawn after that, the line's opacity 300 and 1300 ms after the mount (null
+ * while it isn't drawn), and every error the page raised.
+ */
+function watchUnlinked(): void {
+  if (window.top === window) {
+    return;
+  }
+  const seen: NonNullable<Window["kitUnlinked"]> = {
+    errors: [],
+    mounted: null,
+    samples: {},
+    shown: null,
+  };
+  window.kitUnlinked = seen;
+  window.addEventListener("error", (event) =>
+    seen.errors.push(String(event.error?.stack ?? event.message))
+  );
+  window.addEventListener("unhandledrejection", (event) =>
+    seen.errors.push(String(event.reason?.stack ?? event.reason))
+  );
+  const opacity = () => {
+    const line = document.querySelector(".canvas-unlinked-line");
+    return line ? Number(getComputedStyle(line).opacity) : null;
+  };
+  const look = () => {
+    const now = performance.now();
+    if (seen.mounted === null && document.querySelector(".canvas-host")) {
+      seen.mounted = now;
+      for (const at of [300, 1300]) {
+        setTimeout(() => {
+          seen.samples[at] = opacity();
+        }, at);
+      }
+    }
+    if (
+      seen.mounted !== null &&
+      seen.shown === null &&
+      document.querySelector(".canvas-unlinked")
+    ) {
+      seen.shown = now - seen.mounted;
+    }
+  };
+  // The canvas's own document, once it has one: its parse ends before React
+  // first commits the host (a later task), so the mount is seen as it lands.
+  window.addEventListener("DOMContentLoaded", () => {
+    if (!location.pathname.includes("/__cawco/canvas/")) {
+      return;
+    }
+    look();
+    new MutationObserver(look).observe(document, {
+      childList: true,
+      subtree: true,
+    });
+  });
+}
+
+/** In the dashboard's window: what each canvas page says of its link and its count. */
+function heardLinks(): void {
+  if (window.top !== window) {
+    return;
+  }
+  window.kitLinks = [];
+  window.addEventListener("message", (event) => {
+    const type = event.data?.type;
+    if (type === "cawco:sync") {
+      window.kitLinks?.push(`sync ${event.data.state}`);
+    } else if (type === "cawco:drawn") {
+      window.kitLinks?.push(`drawn ${event.data.count}`);
+    }
+  });
+}
+
 const setUp = async (kit: Kit): Promise<On> => {
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
@@ -138,7 +333,7 @@ const setUp = async (kit: Kit): Promise<On> => {
   await fleet.accountSignedIn();
   const session = await fleet.spawn("claude", "Canvas", fleet.repo);
   const base = await fleet.dashboard();
-  const page = await kit.page("desk");
+  const page = await kit.page("desk", { init: [heardRefusals] });
   const said: string[] = [];
   page.on("pageerror", (error) => said.push(`pageerror: ${error.message}`));
   page.on("console", (message) => {
@@ -246,8 +441,10 @@ const probe = async (kit: Kit) => {
   if (id) {
     await sendCheck(on, id);
   }
+  await goodLinkCheck(on);
   await reducedCheck(on, clock);
   await removeCheck(on, clock, pen);
+  await syncCheck(on);
   await phoneCheck(on);
   kit.check(
     "the page said no error",
@@ -906,6 +1103,227 @@ const removeCheck = async (
       listed.some((one) => one.id === id),
     `--dur-grow-exit ${exit}; ${JSON.stringify(runs)}; ${JSON.stringify(after)}; listed ${listed.some((one) => one.id === id)}`
   );
+};
+
+/** (b) A good link: from the first open through Send, no canvas page started a refusal run. */
+const goodLinkCheck = async (on: On) => {
+  const runs = await on.page.evaluate(() => window.kitRefusalRuns ?? []);
+  on.kit.check(
+    "14 (b): on a good link no canvas page started a refusal run from its open through Send",
+    runs.length === 0,
+    runs.join(", ") || "none"
+  );
+};
+
+/** The sentences a Send of the canvas refuses with (canvas-room.svelte.ts). */
+const NOT_CONNECTED =
+  "The canvas isn't connected to the hub, so nothing was sent.";
+const NOT_REACHED =
+  "Your drawing hasn't reached the hub yet, so nothing was sent. Wait a moment, then send again.";
+
+/**
+ * 14 (a) and (c): the canvas page's sync socket through the gate, on a page
+ * of its own. Refused from the start; opened; cut after a stroke.
+ */
+const syncCheck = async (on: On) => {
+  const { kit, fleet, base, session } = on;
+  const page = await kit.page("desk", {
+    init: [heardRefusals, syncGate, watchUnlinked, heardLinks],
+  });
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await open(page, `${base}/session/${session}`, FIELD);
+  await settle(page);
+  const pen = penOf(await page.context().newCDPSession(page));
+  await page.focus(FIELD);
+  await page.keyboard.press("Control+Shift+KeyD");
+  await page.waitForSelector(STAGE, { timeout: 20_000 });
+  const id = await page.getAttribute(STAGE, "data-artifact");
+  const frame = await (
+    await page.locator(FRAME).elementHandle()
+  )?.contentFrame();
+  if (!(id && frame)) {
+    kit.check("14: a canvas opens on the gated page", false);
+    return;
+  }
+  await frame.waitForSelector(".canvas-host .excalidraw", { timeout: 60_000 });
+  await settle(page, 300);
+  /** Elements the page's doc holds, drawn and not deleted. */
+  const counted = () =>
+    frame.evaluate(
+      () =>
+        (
+          window as unknown as {
+            cawcoArtifact: {
+              doc: {
+                getArray: (name: string) => {
+                  toArray: () => { get: (key: string) => unknown }[];
+                };
+              };
+            };
+          }
+        ).cawcoArtifact.doc
+          .getArray("elements")
+          .toArray()
+          .filter(
+            (entry) =>
+              (entry.get("el") as { isDeleted?: boolean } | undefined)
+                ?.isDeleted !== true
+          ).length
+    );
+  /** The page's last word on its link. */
+  const lastLink = (said: string[]) =>
+    said.filter((one) => one.startsWith("sync ")).at(-1);
+  const stroke = async (fx: number) => {
+    await frame.click('.rail-box[aria-label^="Pen"]');
+    const at = (await box(page, FRAME)) as Box;
+    await pen(
+      [at.left + at.width * fx, at.top + at.height * 0.4],
+      [at.left + at.width * (fx + 0.15), at.top + at.height * 0.6]
+    );
+    await settle(page, 400);
+    return counted();
+  };
+  const unlinked = async () => {
+    await until(
+      "the page's 1300 ms read",
+      () => frame.evaluate(() => window.kitUnlinked?.samples[1300]),
+      (read) => read !== undefined,
+      10_000
+    ).catch(() => undefined);
+    return frame.evaluate(() => window.kitUnlinked);
+  };
+  /** Send with the canvas standing: the line it says under the field, or the row it became. */
+  const send = async (words: string) => {
+    const rows = await page.locator(".turn.you").count();
+    await page.fill(FIELD, words);
+    await page.focus(FIELD);
+    await page.keyboard.press("Enter");
+    // The last refusal leaves first (Send clears it; it folds away): the answer is this Send's.
+    await until(
+      "the last refusal gone",
+      () => page.locator(".send-error").count(),
+      (count) => count === 0,
+      5000
+    ).catch(() => undefined);
+    const said = await until(
+      "Send's answer",
+      () =>
+        page.evaluate(
+          () => document.querySelector(".send-error")?.textContent?.trim() ?? ""
+        ),
+      Boolean,
+      20_000
+    ).catch(() => "");
+    return { said, sent: (await page.locator(".turn.you").count()) - rows };
+  };
+  const linked = () => page.evaluate(() => window.kitLinks ?? []);
+
+  // (a) Refused from the start.
+  const seen = await unlinked();
+  const where = await frame.evaluate(() => location.href);
+  const line = await frame.evaluate(
+    () => document.querySelector(".canvas-unlinked-line")?.textContent ?? ""
+  );
+  const refusedStroke = await stroke(0.2);
+  const grace = await ms(page, "--dur-wait-grace");
+  // The recorder (b) reads on the good link hears this line's fade here.
+  const heard = await page.evaluate(() => window.kitRefusalRuns ?? []);
+  kit.check(
+    "14 (a): refused from the start, the refusal line isn't drawn 300 ms after the page's host mounts and stands at 1.3 s, drawn no sooner than --dur-wait-grace",
+    !!seen &&
+      (seen.samples[300] ?? 0) === 0 &&
+      (seen.samples[1300] ?? 0) > 0 &&
+      seen.shown !== null &&
+      seen.shown >= grace - 1 &&
+      heard.some((run) => run.startsWith("canvas-refusal-in")) &&
+      line.startsWith(
+        "The canvas isn't connected to the hub, so what you draw wouldn't reach the agent."
+      ),
+    `--dur-wait-grace ${grace} ms; ${JSON.stringify(seen)}; heard ${heard.join(", ")}; "${line}"; ${where}`
+  );
+  kit.check(
+    "14 (a): refused, a pen stroke adds 0 elements to the page's doc",
+    refusedStroke === 0,
+    `${refusedStroke}; the page said ${(await linked()).join(", ")}`
+  );
+  const refusedSend = await send("The refused canvas");
+  kit.check(
+    "14 (a): refused, Send sends nothing and says the canvas isn't connected",
+    refusedSend.sent === 0 && refusedSend.said === NOT_CONNECTED,
+    JSON.stringify(refusedSend)
+  );
+
+  // Opened: the page syncs, has raised no error, and the pen draws.
+  await frame.evaluate(() =>
+    window.postMessage(
+      { type: "cawco:probe-sync", mode: "open" },
+      location.origin
+    )
+  );
+  const up = await until(
+    "the page's doc synced",
+    linked,
+    (said) => lastLink(said) === "sync synced",
+    20_000
+  ).catch(linked);
+  await until(
+    "the refusal line gone",
+    () => frame.evaluate(() => !document.querySelector(".canvas-unlinked")),
+    Boolean,
+    5000
+  ).catch(() => undefined);
+  const drawn = await stroke(0.2);
+  const pageErrors =
+    (await frame.evaluate(() => window.kitUnlinked?.errors)) ?? [];
+  kit.check(
+    "14: refused then synced, the page raised no error and a pen stroke adds an element",
+    lastLink(up) === "sync synced" &&
+      drawn === 1 &&
+      pageErrors.length === 0 &&
+      errors.length === 0,
+    `the page said ${up.join(", ")}; the doc holds ${drawn}; page errors ${JSON.stringify([...pageErrors, ...errors])}`
+  );
+
+  // (c) Cut after that stroke, once the hub holds it.
+  const hubDrawn = () =>
+    fleet
+      .api<{ file: { elements: { isDeleted?: boolean }[] } }>(
+        `/api/artifacts/${id}/export`
+      )
+      .then((out) => out.file.elements.filter((el) => !el.isDeleted).length);
+  const held = await until(
+    "the hub holds the stroke",
+    hubDrawn,
+    (n) => n === drawn,
+    10_000
+  ).catch(hubDrawn);
+  await frame.evaluate(() =>
+    window.postMessage(
+      { type: "cawco:probe-sync", mode: "cut" },
+      location.origin
+    )
+  );
+  const lost = await until(
+    "the link lost",
+    linked,
+    (said) => lastLink(said) === "sync lost",
+    5000
+  ).catch(linked);
+  const second = await stroke(0.5);
+  const cutSend = await send("The cut canvas");
+  const hubAfter = await hubDrawn();
+  kit.check(
+    "14 (c): cut after a stroke, Send sends nothing and says the drawing hasn't reached the hub",
+    held === drawn &&
+      lastLink(lost) === "sync lost" &&
+      second === drawn + 1 &&
+      hubAfter === drawn &&
+      cutSend.sent === 0 &&
+      cutSend.said === NOT_REACHED,
+    `hub held ${held} before the cut, ${hubAfter} after; the page's doc ${second}; the page said ${lost.join(", ")}; ${JSON.stringify(cutSend)}`
+  );
+  await page.close();
 };
 
 /** 3. ⌘⇧D folds the standing canvas, and again opens it. */

@@ -23,7 +23,10 @@
  * - **Dock** flies the same iframe into the artifact panel (280ms on the
  *   drawer curve) while the shape gives the field's room back over the
  *   composer's clock (`--dur-control`, ease-out); Undock flies it back.
- * - **Send** carries its `.excalidraw` file, its outline and its picture.
+ * - **Send** carries its `.excalidraw` file, its outline and its picture,
+ *   once the hub holds what the page shows: it waits up to 5 s for the
+ *   page's doc to sync and the hub's export to count what the page counts,
+ *   and otherwise sends nothing and says why.
  *
  * Every motion is a Web Animation, so each turns back from where it is
  * drawn and the probe scrubs it. With reduced motion each fades
@@ -31,6 +34,7 @@
  */
 import { tick } from "svelte";
 import {
+  type CanvasExport,
   canvasSent,
   createDraftCanvas,
   exportCanvas,
@@ -42,6 +46,7 @@ import {
   type GrabValue,
   type handBack,
   holdStage,
+  LOST_REFUSES_MS,
   letGo,
   type Stage,
   stages,
@@ -77,6 +82,18 @@ const PROJECT = 0.998 / (1 - 0.998) / 1000;
 const STILL_MS = 100;
 /** A keyboard step of the grab, px. */
 const KEY_STEP = 25;
+/** How often a send reads the hub's export again while it waits for the page's count, ms (the app's). */
+const EXPORT_AGAIN_MS = 250;
+
+/** The page's doc never synced, or its link has stood lost. */
+const NOT_CONNECTED =
+  "The canvas isn't connected to the hub, so nothing was sent.";
+/** The hub's export doesn't count what the page's doc counts after the wait. */
+const NOT_REACHED =
+  "Your drawing hasn't reached the hub yet, so nothing was sent. Wait a moment, then send again.";
+
+/** Why a send carried no canvas, in the sentence said under the field. */
+class SendRefusal extends Error {}
 
 export interface RoomParts {
   /** The chip, while the canvas is folded. */
@@ -1202,9 +1219,10 @@ export class CanvasRoom {
   // --- send -------------------------------------------------------------------
 
   /**
-   * What the send carries for the canvas: its `.excalidraw` file and its
-   * outline as text attachments, its picture as an image, drawn now. Null
-   * when nothing can go: the reason stands under the chip or the pill.
+   * What the send carries for the canvas, once the hub holds what the page
+   * shows (`#reached`): its `.excalidraw` file and its outline as text
+   * attachments, its picture as an image, drawn now. Null when nothing can
+   * go: the reason stands under the chip or the pill.
    */
   async extras(): Promise<Required<
     Pick<SendExtras, "attachments" | "images">
@@ -1219,18 +1237,17 @@ export class CanvasRoom {
       const stage =
         this.#stage?.id === canvas.id ? this.#stage : this.#hold(canvas);
       await stage.ready();
-      await stage.picture();
-      const out = await exportCanvas(canvas.id);
-      const drawn = out.file.elements.filter((el) => !el.isDeleted).length;
-      if (drawn === 0) {
-        this.error =
-          "Nothing is drawn on the canvas, so nothing was sent. Draw on it, or remove it from the message, then send again.";
-        return null;
+      const { out, count } = await this.#reached(stage, canvas);
+      // The hub holds what the page shows: the page's own count says whether anything is drawn.
+      if (count === 0) {
+        throw new SendRefusal(
+          "Nothing is drawn on the canvas, so nothing was sent. Draw on it, or remove it from the message, then send again."
+        );
       }
       if (!out.png) {
-        this.error =
-          "The canvas's picture isn't drawn yet, so nothing was sent. Send again in a moment.";
-        return null;
+        throw new SendRefusal(
+          "The canvas's picture isn't drawn yet, so nothing was sent. Send again in a moment."
+        );
       }
       return {
         attachments: [
@@ -1244,10 +1261,48 @@ export class CanvasRoom {
         images: [{ mediaType: "image/png", data: out.png }],
       };
     } catch (error) {
-      this.error = `The canvas couldn't be read for sending: ${errorOf(error)}. Nothing was sent; send again.`;
+      this.error =
+        error instanceof SendRefusal
+          ? error.message
+          : `The canvas couldn't be read for sending: ${errorOf(error)}. Nothing was sent; send again.`;
       return null;
     } finally {
       this.working = false;
+    }
+  }
+
+  /**
+   * The canvas as the hub holds it, once the hub holds what the page shows:
+   * its doc synced, its picture drawn, and the hub's export counting what
+   * the page's doc counts, waited for up to {@link LOST_REFUSES_MS}. A page
+   * that never synced, or whose link has stood lost, is refused; a count
+   * the hub hasn't caught up with after the wait is refused too.
+   */
+  async #reached(
+    stage: Stage,
+    canvas: DraftCanvas
+  ): Promise<{ out: CanvasExport; count: number }> {
+    const deadline = performance.now() + LOST_REFUSES_MS;
+    // Lost long enough that the pen stopped drawing: nothing here reaches the hub.
+    if (stage.refused && stage.hasSynced) {
+      throw new SendRefusal(NOT_CONNECTED);
+    }
+    await stage.synced(deadline - performance.now());
+    if (!stage.hasSynced) {
+      throw new SendRefusal(NOT_CONNECTED);
+    }
+    await stage.picture();
+    for (;;) {
+      // biome-ignore lint/performance/noAwaitInLoops: the hub's export read again until it counts what the page does
+      const out = await exportCanvas(canvas.id);
+      const drawn = out.file.elements.filter((el) => !el.isDeleted).length;
+      if (stage.link === "synced" && drawn === stage.drawn) {
+        return { out, count: drawn };
+      }
+      if (performance.now() >= deadline) {
+        throw new SendRefusal(NOT_REACHED);
+      }
+      await new Promise((done) => setTimeout(done, EXPORT_AGAIN_MS));
     }
   }
 

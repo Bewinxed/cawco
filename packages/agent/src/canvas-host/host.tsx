@@ -34,6 +34,7 @@ import tokensCss from "../../../hub/skills/decision-page/kit/tokens.css" with {
 import type { ArtifactGlobal, ArtifactHold } from "../preview-overlay/artifact";
 import { Icon } from "./icons";
 import { guardImages } from "./images";
+import { tokenMs } from "./motion";
 import { Rail } from "./rail";
 import { bindScene, type CanvasInk, fitScene, tokenHex } from "./scene";
 
@@ -315,6 +316,36 @@ function Unlinked({ why }: { why: string }) {
 const unlinkedBecause = (hold: ArtifactHold | null): string =>
   hold?.link.error ?? `It is still connecting to ${location.host}`;
 
+/**
+ * Whether the refusal line shows over the grid. The pen is off whenever the
+ * canvas is refused; the line waits. Before the doc first syncs it shows
+ * once the refusal has stood `--dur-wait-grace` (DESIGN.md, The Real Wait
+ * Rule: no feedback is needed under 1 s), counted from the host mounting
+ * or its doc being replaced, so a good link that syncs in tens of ms shows
+ * nothing. A
+ * lost link is refused once it has stood its 5 s (artifact.ts), and the
+ * line shows then.
+ */
+function useUnlinkedShown(hold: ArtifactHold | null): boolean {
+  const refused = hold?.refused ?? true;
+  const hasSynced = hold?.hasSynced ?? false;
+  const generation = hold?.generation ?? -1;
+  /** The doc whose first connect has stood the grace unsynced. */
+  const [graced, setGraced] = useState<number | null>(null);
+  const waiting = refused && !hasSynced;
+  useEffect(() => {
+    if (!waiting) {
+      return;
+    }
+    const timer = setTimeout(
+      () => setGraced(generation),
+      tokenMs("--dur-wait-grace")
+    );
+    return () => clearTimeout(timer);
+  }, [waiting, generation]);
+  return refused && (hasSynced || graced === generation);
+}
+
 function Host() {
   const hold = useSyncExternalStore(holdStore.subscribe, holdStore.now);
   const [refusal, setRefusal] = useState<Said | null>(null);
@@ -458,6 +489,7 @@ function Host() {
     [api]
   );
   const unlinked = hold?.refused ?? true;
+  const unlinkedShown = useUnlinkedShown(hold);
   return (
     <div className="canvas-host" ref={surface}>
       <Excalidraw
@@ -484,7 +516,7 @@ function Host() {
           tool={tool}
         />
       ) : null}
-      {unlinked ? <Unlinked why={unlinkedBecause(hold)} /> : null}
+      {unlinkedShown ? <Unlinked why={unlinkedBecause(hold)} /> : null}
       {!unlinked && empty ? <Empty onDraw={draw} /> : null}
       {refusal ? <Refusal gone={cleared} refusal={refusal} /> : null}
     </div>

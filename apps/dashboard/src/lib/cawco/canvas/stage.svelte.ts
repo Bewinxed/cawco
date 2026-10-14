@@ -36,6 +36,15 @@ export interface SlotActions {
 const TAIL = 500;
 /** How long the page has to draw the picture a send carries, ms. */
 const PICTURE_WAIT = 5000;
+/**
+ * How long a lost link stands before what is drawn on the page is refused,
+ * ms: the page's own (preview-overlay artifact.ts `LOST_REFUSES_MS`).
+ */
+export const LOST_REFUSES_MS = 5000;
+
+/** The page's doc's link to the hub, as its `cawco:sync` says (artifact.ts `Link`). */
+export type Link = "connecting" | "synced" | "lost";
+const LINKS = new Set<string>(["connecting", "synced", "lost"]);
 
 export interface Box {
   height: number;
@@ -69,8 +78,18 @@ export class Stage {
   /** The fixed layer, and the iframe in it (CanvasStages). */
   el = $state<HTMLElement>();
   frame = $state<HTMLIFrameElement>();
-  /** The page has said it is ready (`cawco:ready`). */
+  /** The page has said it is ready (`cawco:ready`). Whether its doc reached the hub is `link`'s to say. */
   connected = $state(false);
+  /** The page's doc's link to the hub, as the page last said (`cawco:sync`). */
+  link: Link = "connecting";
+  /** Why the link was lost, the page's own clause. */
+  linkError: string | null = null;
+  /** The page's doc has synced with the hub since its hello. */
+  hasSynced = $state(false);
+  /** Since when the link has stood lost, `performance.now()`. */
+  #lostSince: number | null = null;
+  /** Elements the page's doc holds, drawn and not deleted (`cawco:drawn`); null until it said. */
+  drawn: number | null = null;
   /** A box it stands on instead of its slot's, while a flight lands there. */
   pinned: Box | null = null;
   /** The holders, by token. */
@@ -144,6 +163,52 @@ export class Stage {
     );
   }
 
+  /**
+   * What is drawn on the page wouldn't reach the hub (artifact.ts
+   * `refused`): before its doc first synced, and once a lost link has stood
+   * {@link LOST_REFUSES_MS}.
+   */
+  get refused(): boolean {
+    return (
+      !this.hasSynced ||
+      (this.#lostSince !== null &&
+        performance.now() - this.#lostSince >= LOST_REFUSES_MS)
+    );
+  }
+
+  /** The page's word on its link (`cawco:sync`): a lost one keeps the time it was first lost. */
+  heardLink(state: unknown, error: unknown): void {
+    if (typeof state !== "string" || !LINKS.has(state)) {
+      return;
+    }
+    const link = state as Link;
+    if (link === "synced") {
+      this.hasSynced = true;
+    }
+    this.#lostSince =
+      link === "lost" ? (this.#lostSince ?? performance.now()) : null;
+    this.link = link;
+    this.linkError = typeof error === "string" ? error : null;
+    this.changed();
+  }
+
+  /** The page's count of what its doc holds (`cawco:drawn`). */
+  heardDrawn(count: unknown): void {
+    if (typeof count === "number" && Number.isInteger(count) && count >= 0) {
+      this.drawn = count;
+      this.changed();
+    }
+  }
+
+  /** Resolves true once the link is synced; false if it isn't within `ms`. */
+  synced(ms: number): Promise<boolean> {
+    return this.#when(
+      () => (this.link === "synced" ? true : undefined),
+      Math.max(0, ms),
+      "not synced"
+    ).catch(() => false);
+  }
+
   constructor(instanceId: string, id: string, name: string) {
     this.instanceId = instanceId;
     this.id = id;
@@ -165,6 +230,12 @@ export class Stage {
   /** Tells the page which artifact it is, where its doc is, the dashboard's theme, and where it stands. */
   hello(): void {
     this.connected = false;
+    // The page tells its link again once it hears this (overlay.ts); its
+    // count it tells as its scene binds, which may precede the hello.
+    this.link = "connecting";
+    this.linkError = null;
+    this.hasSynced = false;
+    this.#lostSince = null;
     this.post({
       type: "cawco:hello",
       artifact: { id: this.id, kind: "canvas", name: this.name },

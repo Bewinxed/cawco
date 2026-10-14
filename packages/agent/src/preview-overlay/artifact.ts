@@ -129,6 +129,8 @@ export interface ArtifactHold {
   doc: Doc;
   /** Which doc this is: it moves when the overlay replaces its doc (another artifact's, or one the hub refused). */
   generation: number;
+  /** The doc has synced with the hub since it was joined. */
+  hasSynced: boolean;
   /** The doc's link to the hub now. */
   link: Link;
   ref: ArtifactRef | null;
@@ -183,6 +185,7 @@ let lostTimer: ReturnType<typeof setTimeout> | undefined;
 const hold = (): ArtifactHold => ({
   doc,
   generation,
+  hasSynced: everSynced,
   link,
   refused: !everSynced || lostLong,
   ref: joined,

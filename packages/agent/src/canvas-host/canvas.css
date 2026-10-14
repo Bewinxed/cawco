@@ -386,7 +386,9 @@ body {
 
 /* ---- The canvas that can't reach the hub: one line in the error formula,
    centred over the grid, standing while it can't. The pen draws nothing
-   under it (view mode); the rail still takes Done and Dock. */
+   under it (view mode); the rail still takes Done and Dock. Before the doc
+   first syncs the line waits out --dur-wait-grace (host.tsx), then fades in
+   over --dur-fade, by opacity alone, as the image refusal does. */
 .canvas-unlinked {
   position: absolute;
   z-index: 3;
@@ -403,6 +405,7 @@ body {
   color: var(--status-fail-ink);
   font: var(--type-body);
   text-align: center;
+  animation: canvas-refusal-in var(--dur-fade) var(--ease-out);
 }
 
 /* ---- The empty canvas: the empty recipe, centred. Only its action takes
