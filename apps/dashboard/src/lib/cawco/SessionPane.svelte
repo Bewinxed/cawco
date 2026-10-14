@@ -132,8 +132,6 @@
     planShows(plan) && plan ? planProgress(plan) : null
   );
 
-  /** Why this pane has nothing to show, when it has nothing to show. */
-  let failure = $state<ReadFault | null>(null);
   /** The hub answered 404: no row, no stored file, no machine that knows the id. */
   let missing = $state(false);
   /**
@@ -211,19 +209,14 @@
   ): Promise<void> {
     const outcome = await readTranscript(id, cause, fresh);
     // Each outcome replaces what the last read said, and only an outcome
-    // does: a read in flight leaves the pane showing what it showed.
+    // does: a read in flight leaves the pane showing what it showed. Why a
+    // read failed is the session's `readFault`, which every read of this view
+    // writes, the ones the store makes by itself too (`readFailed`).
     readAnswered = true;
     if (!outcome.ok) {
       // 404 is an answer, not a fault: nothing the hub or any machine holds
       // goes by this id. Retrying would ask the same question.
-      if (outcome.status === 404) {
-        missing = true;
-        failure = null;
-      } else {
-        const { ok: _ok, status: _status, ...fault } = outcome;
-        failure = fault;
-        missing = false;
-      }
+      missing = outcome.status === 404;
       return;
     }
     // Skipped means another read already holds this view; its outcome is the
@@ -231,7 +224,6 @@
     if (outcome.skipped) {
       return;
     }
-    failure = null;
     missing = false;
     // A clean read of nothing is known to be empty, running or stored, and
     // says so (DESIGN.md, the Claim of Nothing): a session that has not
@@ -296,7 +288,6 @@
     if (held?.initialized && held.messages.length > 0) {
       // The transcript is in hand, which answers any earlier failed read.
       untrack(() => {
-        failure = null;
         missing = false;
         empty = false;
       });
@@ -450,15 +441,16 @@
   );
 
   /**
-   * What stopped the transcript arriving, from whichever side saw it. The
-   * pane's own read reports through `failure`; a read the store started for
-   * itself — a socket backfill, a peek — reports through the session's
-   * `readFault`. Either one is a card with a button, never a skeleton.
+   * What stopped the transcript arriving: the newest read's word, whoever
+   * made it (this pane, a socket backfill, a peek, a read again once its
+   * machine's reconnecting window ends), as the session's `readFault`; the
+   * server's until this pane's read answers. A card with a button, never a
+   * skeleton.
    */
   const fault = $derived(
     session?.messages.length || askAlone
       ? null
-      : (failure ?? session?.readFault ?? servedFault)
+      : (session?.readFault ?? servedFault)
   );
 
   /**
@@ -561,7 +553,6 @@
   /** Try again: forget what was said about the last read, then read. */
   function retry(): void {
     clearReadFault(viewId);
-    failure = null;
     missing = false;
     reread("retry");
   }

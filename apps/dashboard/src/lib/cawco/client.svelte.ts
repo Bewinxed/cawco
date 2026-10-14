@@ -435,8 +435,9 @@ export type ReadFault =
       /**
        * The hub heard from the machine moments ago: its agent is on its way
        * back (the hub restarted, or the machine's connection dropped), and
-       * the read comes once it is. A wait, not a fault: said in place, never
-       * as a toast.
+       * the read comes once it is, or once the hub stops reading it so,
+       * when a machine still away is offline. A wait, not a fault: said in
+       * place, never as a toast.
        */
       reconnecting?: true;
     }
@@ -5758,8 +5759,12 @@ export type TranscriptOutcome =
    * the emptiness is not this read's answer.
    */
   | { ok: true; skipped?: boolean }
-  /** `status` is the hub's HTTP answer where there was one: 404 is "no such session", not a fault. */
-  | ({ ok: false; status?: number } & ReadFault);
+  /**
+   * `status` is the hub's HTTP answer where there was one: 404 is "no such
+   * session", not a fault. `readAgainMs`: its machine reconnecting, how long
+   * until the hub stops reading it so (`machineAway`).
+   */
+  | ({ ok: false; readAgainMs?: number; status?: number } & ReadFault);
 
 /** Puts a session back to "nothing has been said about the read" — Try again's first move. */
 export function clearReadFault(instanceId: string): void {
@@ -5832,10 +5837,11 @@ function thrownReason(error: unknown): string {
 /** Why a page read ended with nothing, said the way the pane says it. */
 async function pageFault(response: Response): Promise<TranscriptOutcome> {
   const failure = await hubFailure(response);
-  const { away, reconnecting } = machineAway(response);
+  const { away, reconnecting, readAgainMs } = machineAway(response);
   return {
     ok: false,
     status: response.status,
+    ...(readAgainMs === null ? {} : { readAgainMs }),
     ...readFaultOf(failure, away, reconnecting),
   };
 }
@@ -5858,6 +5864,8 @@ export type ReadCause =
   | "follow"
   /** The machine the last read found offline is online again. */
   | "machineOnline"
+  /** The hub's reconnecting window for the last read's machine ended with it still away. */
+  | "reconnectLapsed"
   /** The last read failed while the hub answered: read again on {@link READ_AGAIN_MS}. */
   | "backoff";
 
@@ -6074,9 +6082,16 @@ async function readBackToHeld(
  * that found the machine offline waits for it ({@link readBehind}), unless
  * the hub already lists that machine online: then the machine list has
  * nothing more to say, and its every change would read again at once, so it
- * is read again on the backoff too.
+ * is read again on the backoff too. One that found it reconnecting waits for
+ * it as well, but only as long as the hub reads it so (`readAgainMs`, its
+ * `Retry-After`): then it is read again ({@link readOnceLapsed}), and a
+ * machine still away is said to be offline.
  */
-function readFailed(target: SessionState, fault: ReadFault): void {
+function readFailed(
+  target: SessionState,
+  fault: ReadFault,
+  readAgainMs?: number
+): void {
   if (target.blocks.length > 0) {
     target.behind = fault;
     // A machine on its way back is a wait the line over the rows says; the
@@ -6095,7 +6110,43 @@ function readFailed(target: SessionState, fault: ReadFault): void {
     );
   if (fault.reason === "failed" || listedOnline) {
     readAgainLater(target.instanceId);
+  } else if (
+    fault.reason === "offline" &&
+    fault.reconnecting &&
+    readAgainMs !== undefined
+  ) {
+    readOnceLapsed(target.instanceId, readAgainMs);
   }
+}
+
+/** The read each view waits for while its machine reconnects: once the hub's window for it ends. */
+const lapsedReads = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * Reads the view again in `ms`, when the hub stops reading its machine as
+ * reconnecting, unless a read has landed meanwhile (the machine back,
+ * {@link readBehind}) or the view says something else by then.
+ */
+function readOnceLapsed(viewId: string, ms: number): void {
+  clearTimeout(lapsedReads.get(viewId));
+  lapsedReads.set(
+    viewId,
+    setTimeout(() => {
+      lapsedReads.delete(viewId);
+      const held = state.sessions[viewId];
+      const fault = held?.behind ?? held?.readFault;
+      if (
+        held &&
+        !held.loading &&
+        fault?.reason === "offline" &&
+        fault.reconnecting &&
+        subscriptionIds().includes(viewId)
+      ) {
+        // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page, or says the machine is offline
+        void readTranscript(viewId, "reconnectLapsed");
+      }
+    }, ms)
+  );
 }
 
 /** The failed reads in a row, by view, and the read again each waits for. */
@@ -6130,6 +6181,8 @@ function readAgainLater(viewId: string): void {
 function readLanded(viewId: string): void {
   clearTimeout(failedReads.get(viewId)?.timer);
   failedReads.delete(viewId);
+  clearTimeout(lapsedReads.get(viewId));
+  lapsedReads.delete(viewId);
   toasted.delete(viewId);
 }
 
@@ -6225,7 +6278,13 @@ async function readNewestPage(
     }
     if (answer.fault) {
       if (!answer.fault.ok) {
-        readFailed(target, answer.fault);
+        const {
+          ok: _ok,
+          status: _status,
+          readAgainMs,
+          ...fault
+        } = answer.fault;
+        readFailed(target, fault, readAgainMs);
       }
       return answer.fault;
     }

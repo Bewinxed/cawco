@@ -18,13 +18,18 @@
  *  - each read again: the rows in view and the first row's place hold
  *    within 2px, and no older page is read again;
  *  - the read failed: the pane says "Not caught up" beside a Try again that
- *    reads again, exactly one toast says why in the stack's first line (the
- *    console's `[cawco] toast:`), the reads again keep to the backoff, and
- *    the line goes once one lands;
- *  - the agent away: "Not caught up: <machine> is offline. The rest comes in
- *    once it's back." on one line on the desk, at most two at 390 with the
- *    name whole, the card's well saying the same over its rows; both lines go
- *    once the agent is back and the reads land.
+ *    reads again, exactly one toast says why in the stack's first line, its
+ *    thrown error's label ("Error:") taken off (hub-read.ts `failureReason`,
+ *    c4ebe8af; the console's `[cawco] toast:`), the reads again keep to the
+ *    backoff, and the line goes once one lands;
+ *  - the agent away: while the hub still reads it as reconnecting (heard
+ *    from within its `RECONNECTING_MS`, c6d6b417), the pane says "<machine>
+ *    is reconnecting. The rest comes in once it's back." with no toast; once
+ *    the hub stops, the pane reads again by itself (the 503's `Retry-After`)
+ *    and says "Not caught up: <machine> is offline. The rest comes in once
+ *    it's back." on one line on the desk, at most two at 390 with the name
+ *    whole, the card's well saying the same over its rows; both lines go once
+ *    the agent is back and the reads land.
  */
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the scenario runs in order, one step after the last.
 import type { Page } from "playwright-core";
@@ -35,9 +40,13 @@ import { open, type Spec } from "../../kit";
 const ROWS = 820;
 const BEHIND = "Not caught up";
 const OFFLINE_NEXT = "is offline. The rest comes in once it's back.";
+const RECONNECTING_NEXT = "is reconnecting. The rest comes in once it's back.";
+/** How long the hub reads a machine it heard from as reconnecting (hub server.ts `RECONNECTING_MS`). */
+const RECONNECTING_MS = 60_000;
 /** A failed history read whose body is a long stack, as a machine's error can be: the reader is told its first line. */
 const FAILED = `Error: the transcript could not be read\n${"    at readHistory (/opt/cawco/agent.js:1:1)\n".repeat(400)}`;
-const FAILED_REASON = "Error: the transcript could not be read";
+/** That first line as a person reads it: the thrown error's label off, a capital to start (hub-read.ts `failureReason`). */
+const FAILED_REASON = "The transcript could not be read";
 /** The page's own word on its reads and its toasts (client.svelte.ts `readNewestPage`, `toastBehind`). */
 const CAWCO_LOG = /^\[cawco\] (read|toast:) /;
 /** A session of its own, drawn as a delegate's card is (rows.ts `isDelegateMsg`, `start`). */
@@ -56,9 +65,9 @@ interface Place {
   rows: string[];
   strip: Strip | null;
 }
-/** The rows in view, top to bottom, the first one's place, and the pane's line. */
+/** The rows in view, top to bottom, the first one's place, and the pane's line (its dock's, whatever it says). */
 const place = (page: Page): Promise<Place> =>
-  page.evaluate((behind) => {
+  page.evaluate(() => {
     const scroller = document.querySelector<HTMLElement>(
       '[aria-label="Session transcript"]'
     );
@@ -82,9 +91,10 @@ const place = (page: Page): Promise<Place> =>
       }
     }
     const rows = [...tops.entries()].sort((a, b) => a[1] - b[1]);
-    const line = [
-      ...scroller.querySelectorAll<HTMLElement>(".behind[role=status]"),
-    ].find((node) => node.textContent?.trim().startsWith(behind));
+    // The pane's own line floats in its dock (Transcript.svelte `<Behind floating>`).
+    const line = scroller.querySelector<HTMLElement>(
+      ".behind.floating[role=status]"
+    );
     const words = line?.querySelector("p");
     let strip: Strip | null = null;
     if (line && words) {
@@ -108,21 +118,20 @@ const place = (page: Page): Promise<Place> =>
       height: scroller.scrollHeight,
       strip,
     };
-  }, BEHIND);
+  });
 
-/** The delegate's well on its parent's page: whether its rows are drawn, and its line. */
+/** The delegate's well on its parent's page: whether its rows are drawn, and its line (InlineTranscript's `<Behind>`, whatever it says). */
 const well = (page: Page) =>
-  page.evaluate((behind) => {
+  page.evaluate(() => {
     const inner = [...document.querySelectorAll<HTMLElement>(".inner")].find(
       (node) => node.textContent?.includes("Done.")
     );
     const line = inner
-      ? [...inner.querySelectorAll<HTMLElement>("[role=status]")]
-          .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
-          .find((text) => text.startsWith(behind))
-      : undefined;
+      ?.querySelector<HTMLElement>(".behind[role=status]")
+      ?.textContent?.replace(/\s+/g, " ")
+      .trim();
     return { drawn: inner !== undefined, strip: line ?? null };
-  }, BEHIND);
+  });
 
 const spec: Spec = {
   name: "web-catchup",
@@ -484,6 +493,7 @@ const spec: Spec = {
           (toasts[0] ?? "").includes(
             `${FAILED_REASON}. Try again reads it now`
           ) &&
+          !(toasts[0] ?? "").includes("Error:") &&
           !(toasts[0] ?? "").includes("    at "),
         toasts.join(" | ") || "no toast"
       );
@@ -509,12 +519,46 @@ const spec: Spec = {
       const logsFrom = logs.length;
       await restart(true);
       await until(
-        "offline: the read found the machine offline",
+        "offline: the read found the machine away",
         () => Promise.resolve(newestSince(from).some((r) => r.status === 503)),
         Boolean,
         60_000
       ).catch(() => false);
       await page.waitForTimeout(3000);
+      // The hub heard from the machine moments ago: it is on its way back.
+      const coming = await place(page);
+      held(
+        "offline: the rows stay and the place holds while the machine reconnects",
+        before,
+        coming
+      );
+      const toastedSoFar = logs
+        .slice(logsFrom)
+        .filter((l) => l.startsWith("[cawco] toast: "));
+      kit.check(
+        "offline: while the hub reads the machine as reconnecting, the pane says so, with no toast",
+        coming.strip?.text.endsWith(RECONNECTING_NEXT) === true &&
+          !coming.strip.retry &&
+          toastedSoFar.length === 0,
+        `${coming.strip ? `"${coming.strip.text}"` : "no line in the pane"}; ${toastedSoFar.length} toast(s)`
+      );
+      // Once the hub stops reading it so, the pane reads again by itself.
+      const reads503 = newestSince(from).filter((r) => r.status === 503).length;
+      const lapsed = await until(
+        "offline: the pane says the machine is offline",
+        () => place(page),
+        (now) => now.strip?.text.startsWith(BEHIND) === true,
+        RECONNECTING_MS + 30_000
+      ).catch(() => undefined);
+      const readsAfter = newestSince(from).filter(
+        (r) => r.status === 503
+      ).length;
+      kit.check(
+        "offline: once the hub stops reading the machine as reconnecting, the pane reads again by itself and says it is offline",
+        lapsed !== undefined && readsAfter > reads503,
+        `${readsAfter - reads503} read(s) again; ${lapsed?.strip ? `"${lapsed.strip.text}"` : "no offline line"}`
+      );
+      await page.waitForTimeout(1000);
       const away = await place(page);
       held(
         "offline: the rows stay and the place holds while the machine is offline",
@@ -547,8 +591,13 @@ const spec: Spec = {
       await page.waitForTimeout(3000);
       before = await place(page);
       await parentPage.bringToFront();
-      await parentPage.waitForTimeout(1500);
-      const wellAway = await well(parentPage);
+      // The well's own read again lands on its own clock, within moments of the pane's.
+      const wellAway = await until(
+        "offline: the well says the machine is offline",
+        () => well(parentPage),
+        (now) => now.strip?.endsWith(OFFLINE_NEXT) === true,
+        15_000
+      ).catch(() => well(parentPage));
       kit.check(
         "offline: the delegate's well says it is not caught up over its rows",
         wellAway.drawn && wellAway.strip?.endsWith(OFFLINE_NEXT) === true,

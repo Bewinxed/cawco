@@ -98,6 +98,11 @@ async function proxyToHub(
         ...(response.headers.has("Cache-Control") && {
           "Cache-Control": response.headers.get("Cache-Control") as string,
         }),
+        // A refused read's when-to-ask-again (a machine reconnecting: when
+        // the hub stops reading it so) is the reader's to act on.
+        ...(response.headers.has("Retry-After") && {
+          "Retry-After": response.headers.get("Retry-After") as string,
+        }),
         ...Object.fromEntries(
           (response.status === PARTIAL_CONTENT
             ? RANGE_HEADERS

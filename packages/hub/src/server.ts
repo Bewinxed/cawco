@@ -13483,15 +13483,17 @@ export const createServer = (
    * within seconds of losing it, and never waits more than 30 s between tries
    * (agent daemon.ts `reconnect`), so a hub that just restarted reads every
    * machine it was serving this way until each registers. Silent longer, it
-   * is offline.
+   * is offline. The ms left before it is (0: offline now), which a refused
+   * read says as its `Retry-After`, so a reader asks again once the hub's
+   * word on the machine changes rather than holding "reconnecting" for good.
    */
-  const machineReconnecting = (machineId: string): boolean => {
+  const reconnectingFor = (machineId: string): number => {
     const heard = db
       .listAgents()
       .find((agent) => agent.machineId === machineId)?.lastSeenAt;
-    return (
-      heard instanceof Date && Date.now() - heard.getTime() <= RECONNECTING_MS
-    );
+    return heard instanceof Date
+      ? Math.max(0, RECONNECTING_MS - (Date.now() - heard.getTime()))
+      : 0;
   };
 
   /** The stored entries under `where`, as its machine answers, or why it could not. */
@@ -17947,17 +17949,24 @@ export const createServer = (
           }
           switch (page.fault) {
             // Named with the machine, so a reader can say which one is away
-            // and hear it come back, and whether it is on its way back.
-            case "offline":
+            // and hear it come back, and whether it is on its way back: then
+            // `Retry-After` is when this hub stops reading it so (whole
+            // seconds, rounded up, so a read then finds it offline).
+            case "offline": {
+              const left = page.machineId ? reconnectingFor(page.machineId) : 0;
               return new Response(page.message, {
                 status: 503,
                 headers: {
                   "X-Cawco-Machine": page.machineId ?? "",
-                  ...(page.machineId && machineReconnecting(page.machineId)
-                    ? { "X-Cawco-Machine-State": "reconnecting" }
+                  ...(left > 0
+                    ? {
+                        "X-Cawco-Machine-State": "reconnecting",
+                        "Retry-After": String(Math.ceil(left / 1000)),
+                      }
                     : {}),
                 },
               });
+            }
             case "missing":
               return status(404, page.message);
             case "timeout":

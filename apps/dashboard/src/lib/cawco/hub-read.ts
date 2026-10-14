@@ -16,19 +16,28 @@ export type HubRead<T> = { ok: true; value: T } | ({ ok: false } & HubFailure);
 /**
  * The machine a transcript read's 503 names as not connected, and whether
  * the hub says it is on its way back (`X-Cawco-Machine-State: reconnecting`:
- * heard from moments ago). Any other answer names none.
+ * heard from moments ago). Any other answer names none. `readAgainMs`: on
+ * its way back, how long until the hub stops reading it so (its
+ * `Retry-After`), when a read finds it back or offline; null otherwise.
  */
 export function machineAway(response: Response): {
   away: string | null;
+  readAgainMs: number | null;
   reconnecting: boolean;
 } {
   const away =
     response.status === 503 ? response.headers.get("x-cawco-machine") : null;
+  const reconnecting =
+    away !== null &&
+    response.headers.get("x-cawco-machine-state") === "reconnecting";
+  const seconds = Number(response.headers.get("retry-after"));
   return {
     away,
-    reconnecting:
-      away !== null &&
-      response.headers.get("x-cawco-machine-state") === "reconnecting",
+    reconnecting,
+    readAgainMs:
+      reconnecting && Number.isFinite(seconds) && seconds > 0
+        ? seconds * 1000
+        : null,
   };
 }
 

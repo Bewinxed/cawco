@@ -20,8 +20,10 @@
  *    at least five rows over the line (three on the phone) (geometry);
  *  - each row over the line, bottom up: its lean (`rotate`), narrowing
  *    (`scale`), blur and opacity move one way, and the top row's are the
- *    fifth row's of before (the third's on the phone): 30°, 0.89, 1.5px,
- *    0.94 (18°, 0.934, 0.9px, 0.955) (engine);
+ *    fifth row's of before (the third's on the phone): 30°, 0.89, 0.1px,
+ *    0.94 (18°, 0.934, 0.06px, 0.955) (engine). The blur is DESIGN.md's
+ *    "Recall wheel" 0.1px (0.06px compact): down from 1.5px (0.9px) so every
+ *    row holds 4.5:1 as drawn (995697ce);
  *  - two seconds of rolling (↑ held at the key's repeat) with no long task
  *    and no frame over 20ms (frames.ts).
  */
@@ -38,8 +40,8 @@ const FIELD = "textarea[role='combobox']";
 const WHEEL = ".ghosts[role='listbox']";
 /** Where the depth ends: the fifth row's of before, the third's on the phone. */
 const END = {
-  desk: { rotate: 30, scale: 0.89, blur: 1.5, opacity: 0.94, rows: 5 },
-  phone: { rotate: 18, scale: 0.934, blur: 0.9, opacity: 0.955, rows: 3 },
+  desk: { rotate: 30, scale: 0.89, blur: 0.1, opacity: 0.94, rows: 5 },
+  phone: { rotate: 18, scale: 0.934, blur: 0.06, opacity: 0.955, rows: 3 },
 } as const;
 const REACH = { desk: 0.4, phone: 0.5 } as const;
 

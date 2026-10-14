@@ -3,8 +3,9 @@
   reader holds (client.svelte.ts `SessionState.behind`), and goes when the
   read lands. Its machine is reconnecting (the hub heard from it moments
   ago: a hub that just restarted, a dropped connection), a wait said with no
-  toast; or it is offline; either way the rest comes in once the hub says it
-  is back (`readBehind`). Or the read failed: "Not caught up" beside
+  toast, until the hub stops reading it so (`readOnceLapsed`); or it is
+  offline; either way the rest comes in once the hub says it is back
+  (`readBehind`). Or the read failed: "Not caught up" beside
   Try again, which reads it now, as the backoff does by itself
   (`readAgainLater`). Why it failed is the toast's to say, once per fault
   (`toastBehind`): the line never carries the hub's words.
