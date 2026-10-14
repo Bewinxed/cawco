@@ -1,5 +1,5 @@
 import type { Server, WebSocketHandler } from "bun";
-import { PREVIEW_DOWN_META, type PreviewDown } from "./index";
+import { PREVIEW_DOWN_META, PREVIEW_WHY_META, type PreviewDown } from "./index";
 import { embeddedFile, standalone } from "./runtime";
 
 /** Where every previewed page loads the overlay from, on its own origin. */
@@ -58,23 +58,52 @@ export async function overlayResponse(): Promise<Response> {
   });
 }
 
-/** What a proxy's own page says of each hop that did not answer; a preview of a workspace no boundary runs is refused in its words too. */
+/**
+ * What a proxy's own page says of each hop that did not answer (WORDS.md
+ * error formula: what happened, why, the way back); a preview of a workspace
+ * no boundary runs is refused in its words too. The dashboard's own servers
+ * (serve.js, vite.config.ts) say `hub` in the same words.
+ */
 export const DOWN_WORDS: Record<PreviewDown, string> = {
   server: "The page's server stopped answering. Start it again, then reload.",
   machine:
     "The machine serving this preview isn't answering. Check that it is connected, then reload.",
-  workspace: "That workspace isn't running, so its server can't be reached.",
+  workspace:
+    "That workspace isn't running, so its server can't be reached. Once a session there is back, reload.",
+  reach:
+    "The way to this preview's server didn't open. Reload to try again; if it fails again, open its session.",
+  closed:
+    "This preview is closed: its session shows something else now, or has ended. Open its session to show it again.",
+  hub: "The hub isn't answering, so the preview can't load. Reload once the hub is back.",
 };
+
+const HTML_ESCAPES: Record<string, string> = {
+  "&": "&amp;",
+  '"': "&quot;",
+  "<": "&lt;",
+  ">": "&gt;",
+};
+const escapeHtml = (text: string): string =>
+  text.replaceAll(/[&"<>]/g, (char) => HTML_ESCAPES[char] ?? char);
 
 /**
  * What a proxy answers when the hop behind it does not: a page that says
  * so to a person who opened it in a tab of its own, and names the hop in
  * its `<meta name="cawco-preview-down">` for the pane, which draws its own
- * state from that ({@link PreviewDown}).
+ * state from that ({@link PreviewDown}); `why`, the machine's own words for
+ * it, goes in `<meta name="cawco-preview-why">` and under the sentence.
  */
-export function downResponse(down: PreviewDown, status = 502): Response {
+export function downResponse(
+  down: PreviewDown,
+  status = 502,
+  why?: string
+): Response {
+  const said = why
+    ? `<meta name="${PREVIEW_WHY_META}" content="${escapeHtml(why)}">`
+    : "";
+  const detail = why ? `<p>${escapeHtml(why)}</p>` : "";
   return new Response(
-    `<!doctype html><html><head><meta charset="utf-8"><meta name="${PREVIEW_DOWN_META}" content="${down}"><title>Preview unavailable</title></head><body><p>${DOWN_WORDS[down]}</p></body></html>`,
+    `<!doctype html><html><head><meta charset="utf-8"><meta name="${PREVIEW_DOWN_META}" content="${down}">${said}<title>Preview unavailable</title></head><body><p>${DOWN_WORDS[down]}</p>${detail}</body></html>`,
     {
       status,
       headers: {
@@ -84,6 +113,49 @@ export function downResponse(down: PreviewDown, status = 502): Response {
     }
   );
 }
+
+/** How long one hop's line for one preview and cause stands for every repeat of it. Our call: a dev server's client retries each second. */
+const FAILURE_LINE_MS = 60_000;
+const failureLines = new Map<string, { at: number; repeats: number }>();
+
+/**
+ * One line in the journal for a preview request that failed, at the hop
+ * that failed (`hub listener`, `agent listener`, `bridge`): which preview,
+ * and its cause. A preview whose server is down is asked again every second
+ * by its page's own client, so the same hop, preview and cause log once per
+ * {@link FAILURE_LINE_MS}, the next line counting the repeats in between.
+ */
+export function previewFailed(
+  hop: string,
+  instanceId: string | null | undefined,
+  cause: string
+): void {
+  const key = `${hop}\u0000${instanceId}\u0000${cause}`;
+  const now = Date.now();
+  const last = failureLines.get(key);
+  if (last && now - last.at < FAILURE_LINE_MS) {
+    last.repeats += 1;
+    return;
+  }
+  const repeats = last?.repeats
+    ? ` (${last.repeats} more since the last line)`
+    : "";
+  failureLines.set(key, { at: now, repeats: 0 });
+  console.warn(
+    `[preview] ${hop}: ${instanceId ? `preview of ${instanceId}` : "a request naming no session"} failed: ${cause}${repeats}`
+  );
+}
+
+/** A thrown value's cause, as one line: its code when it has one, and its message. */
+export const causeOf = (error: unknown): string => {
+  if (!(error instanceof Error)) {
+    return String(error);
+  }
+  const { code } = error as { code?: unknown };
+  return typeof code === "string" && !error.message.includes(code)
+    ? `${error.message} (${code})`
+    : error.message;
+};
 
 /** A page's identity for the choices bridge: sha256 of the HTML as it was served, before injection. */
 export const pageHash = (html: string): string =>
@@ -157,6 +229,9 @@ export function proxyHeaders(input: Headers): Headers {
 export interface PreviewSocket {
   closed: boolean;
   headers: Headers;
+  /** The hop relaying it and the preview's session, for its failure's line. */
+  hop: string;
+  instanceId: string;
   pending: (string | Uint8Array<ArrayBuffer>)[];
   protocol: string;
   upstream?: WebSocket;
@@ -167,7 +242,8 @@ export function upgradePreview(
   request: Request,
   server: Server<PreviewSocket>,
   url: string,
-  headers: Headers
+  headers: Headers,
+  at: { hop: string; instanceId: string }
 ): boolean {
   const protocol =
     request.headers.get("sec-websocket-protocol")?.split(",")[0]?.trim() ?? "";
@@ -182,7 +258,7 @@ export function upgradePreview(
   }
   return server.upgrade(request, {
     headers: protocol ? { "sec-websocket-protocol": protocol } : undefined,
-    data: { url, protocol, headers, pending: [], closed: false },
+    data: { url, protocol, headers, pending: [], closed: false, ...at },
   });
 }
 
@@ -226,7 +302,14 @@ export const previewWebSocket: WebSocketHandler<PreviewSocket> = {
     // reconnects on a `restart` code must not be told 1000 instead.
     upstream.onclose = (event) =>
       socket.close(sendable(event.code), event.reason);
-    upstream.onerror = () => socket.close(1011, "Preview connection failed");
+    upstream.onerror = () => {
+      previewFailed(
+        data.hop,
+        data.instanceId,
+        `its WebSocket to ${data.url} didn't open`
+      );
+      socket.close(1011, "Preview connection failed");
+    };
   },
   message(socket, message) {
     const { upstream, pending } = socket.data;

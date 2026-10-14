@@ -1228,10 +1228,23 @@ export interface ArtifactPromotion {
  * on the session's machine is not answering its port. `machine`: the
  * machine's preview listener is not answering the hub, or the machine is
  * away. `workspace`: the port is a workspace's, and no boundary of that
- * workspace runs, so nothing in its network can answer.
+ * workspace runs, so nothing in its network can answer. `reach`: the
+ * machine could not open the way to the server (its listener did not start,
+ * or the bridge into the workspace's network did not open); the page names
+ * why in {@link PREVIEW_WHY_META}. `closed`: the session shows no preview
+ * now (it was closed, or the session ended). `hub`: the dashboard could not
+ * reach the hub's preview listener.
  */
-export type PreviewDown = "server" | "machine" | "workspace";
+export type PreviewDown =
+  | "server"
+  | "machine"
+  | "workspace"
+  | "reach"
+  | "closed"
+  | "hub";
 export const PREVIEW_DOWN_META = "cawco-preview-down";
+/** The machine's own words for a `reach` failure, on the proxy's page beside {@link PREVIEW_DOWN_META}. */
+export const PREVIEW_WHY_META = "cawco-preview-why";
 
 /**
  * Why a view could not put an artifact on screen, as it tells the hub
@@ -1243,6 +1256,9 @@ export const SHOWN_FAILURES = [
   "server",
   "machine",
   "workspace",
+  "reach",
+  "closed",
+  "hub",
   "page",
 ] as const;
 export type ShownFailure = (typeof SHOWN_FAILURES)[number];

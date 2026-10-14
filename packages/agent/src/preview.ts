@@ -2,11 +2,13 @@ import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { PreviewSource } from "@cawco/core";
 import {
+  causeOf,
   downResponse,
   injectOverlay,
   OVERLAY_PATH,
   overlayResponse,
   type PreviewSocket,
+  previewFailed,
   previewWebSocket,
   proxyHeaders,
   upgradePreview,
@@ -160,9 +162,16 @@ export async function startPreview(options: {
           upstream = await upstreamOf(instanceId, source);
         } catch (error) {
           if (error instanceof WorkspaceDown) {
+            previewFailed(
+              "agent listener",
+              instanceId,
+              `workspace ${source.workspace} has no boundary running`
+            );
             return downResponse("workspace", 503);
           }
-          throw error;
+          // The bridge into the workspace's network did not open.
+          previewFailed("bridge", instanceId, causeOf(error));
+          return downResponse("reach", 502, causeOf(error));
         }
         const at = `${url.pathname}${url.search}`;
         if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
@@ -170,7 +179,10 @@ export async function startPreview(options: {
             upstream === "host"
               ? `ws://127.0.0.1:${source.port}${at}`
               : `ws+unix://${upstream.unix}:${at}`;
-          return upgradePreview(request, server, ws, headers)
+          return upgradePreview(request, server, ws, headers, {
+            hop: "agent listener",
+            instanceId,
+          })
             ? undefined
             : new Response("WebSocket upgrade failed", { status: 400 });
         }
@@ -193,10 +205,20 @@ export async function startPreview(options: {
             source.workspace !== undefined &&
             (await workspaceGone(source.workspace))
           ) {
+            previewFailed(
+              "agent listener",
+              instanceId,
+              `workspace ${source.workspace} closed under it`
+            );
             await closeBridge(instanceId);
             return downResponse("workspace", 503);
           }
-          throw error;
+          previewFailed(
+            "agent listener",
+            instanceId,
+            `port ${source.port}${source.workspace ? ` in workspace ${source.workspace}` : ""} didn't answer: ${causeOf(error)}`
+          );
+          return downResponse("server");
         }
       } else {
         const filePath = resolve(
@@ -275,8 +297,9 @@ export async function startPreview(options: {
         headers,
       });
     },
-    // The dev server behind this listener did not answer.
-    error() {
+    // Anything else that threw while serving the preview.
+    error(error) {
+      previewFailed("agent listener", instanceId, causeOf(error));
       return downResponse("server");
     },
   });

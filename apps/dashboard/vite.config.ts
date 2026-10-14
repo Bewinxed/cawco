@@ -114,6 +114,10 @@ const INLINE_FACES =
  * process-level throw. Attaching an error listener to every upgrade socket keeps
  * that reset from taking the server (and every dashboard socket) down with it.
  */
+/** The page a preview gets when the hub's listener does not answer, as serve.js answers it. */
+const HUB_DOWN_PAGE =
+  '<!doctype html><html><head><meta charset="utf-8"><meta name="cawco-preview-down" content="hub"><title>Preview unavailable</title></head><body><p>The hub isn\'t answering, so the preview can\'t load. Reload once the hub is back.</p></body></html>';
+
 const hubProxy = (): Plugin => ({
   name: "cawco:hub-proxy",
   configurePreviewServer(server) {
@@ -181,13 +185,18 @@ function previewProxy(server: ViteDevServer | PreviewServer) {
     });
     proxyReq.on("error", (error: NodeJS.ErrnoException) => {
       server.config.logger.warn(
-        `[cawco] preview proxy error for ${info.id}: ${error.code ?? error.message}`,
+        `[preview] dashboard: preview of ${info.id} failed: the hub's preview listener at ${HUB_URL.hostname}:${pvPort} didn't answer (${error.code ?? error.message})`,
         { timestamp: true }
       );
-      if (!res.headersSent) {
-        res.writeHead(502, { "cache-control": "no-store" });
+      if (res.headersSent) {
+        res.end();
+        return;
       }
-      res.end();
+      res.writeHead(502, {
+        "cache-control": "no-store",
+        "content-type": "text/html; charset=utf-8",
+      });
+      res.end(HUB_DOWN_PAGE);
     });
     req.pipe(proxyReq);
   });
@@ -234,7 +243,7 @@ function previewProxy(server: ViteDevServer | PreviewServer) {
       });
       proxyReq.on("error", (error: NodeJS.ErrnoException) => {
         server.config.logger.warn(
-          `[cawco] preview ws proxy error for ${info.id}: ${error.code ?? error.message}`,
+          `[preview] dashboard: preview of ${info.id} failed: its WebSocket to the hub's preview listener didn't open (${error.code ?? error.message})`,
           { timestamp: true }
         );
         socket.destroy();

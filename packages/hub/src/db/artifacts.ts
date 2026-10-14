@@ -1,6 +1,6 @@
 import { and, asc, count, desc, eq, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { artifacts, artifactUpdates } from "./schema";
+import { artifacts, artifactUpdates, shownPreviews } from "./schema";
 
 export type ArtifactRow = typeof artifacts.$inferSelect;
 
@@ -56,6 +56,12 @@ export interface ArtifactsDb {
   readonly ofInstance: (instanceId: string) => ArtifactRow[];
   /** Removes an artifact and its log. */
   readonly remove: (id: string) => void;
+  /** Keeps `artifactId` as what session `instanceId`'s panel shows, in place of any other. */
+  readonly show: (instanceId: string, artifactId: string) => void;
+  /** Every session's shown artifact, with its row: what the hub serves after a restart. */
+  readonly shown: () => { artifact: ArtifactRow; instanceId: string }[];
+  /** Session `instanceId`'s panel shows nothing. */
+  readonly unshow: (instanceId: string) => void;
   readonly update: (
     id: string,
     patch: ArtifactPatch
@@ -146,6 +152,26 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
       .all(),
   remove: (id) => {
     db.delete(artifacts).where(eq(artifacts.id, id)).run();
+  },
+  show: (instanceId, artifactId) => {
+    db.insert(shownPreviews)
+      .values({ instanceId, artifactId })
+      .onConflictDoUpdate({
+        target: shownPreviews.instanceId,
+        set: { artifactId },
+      })
+      .run();
+  },
+  shown: () =>
+    db
+      .select({ instanceId: shownPreviews.instanceId, artifact: artifacts })
+      .from(shownPreviews)
+      .innerJoin(artifacts, eq(artifacts.id, shownPreviews.artifactId))
+      .all(),
+  unshow: (instanceId) => {
+    db.delete(shownPreviews)
+      .where(eq(shownPreviews.instanceId, instanceId))
+      .run();
   },
   update: (id, patch) =>
     db

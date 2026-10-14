@@ -2463,6 +2463,20 @@ export const artifacts = sqliteTable(
 );
 
 /**
+ * The artifact each session's panel shows: the operator's intent, kept so a
+ * hub restart still serves it (preview.ts `previewTargets` is rebuilt from
+ * these). One per session; gone when the panel is closed or the session ends.
+ */
+export const shownPreviews = sqliteTable("shown_previews", {
+  instanceId: text("instance_id")
+    .primaryKey()
+    .references(() => instances.id, { onDelete: "cascade" }),
+  artifactId: text("artifact_id")
+    .notNull()
+    .references(() => artifacts.id, { onDelete: "cascade" }),
+});
+
+/**
  * An artifact's Yjs document as its update log: every update appended in
  * order; every {@link ARTIFACT_COMPACT_EVERY} updates the log is replaced by
  * one snapshot (`Y.encodeStateAsUpdate`).

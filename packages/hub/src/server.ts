@@ -54,6 +54,7 @@ import type {
   PermissionMode,
   PermissionRequestFrame,
   PermissionResult,
+  PreviewDown,
   PreviewSource,
   RegisterAckPayload,
   Rule,
@@ -270,6 +271,7 @@ import {
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
+import { DOWN_WORDS } from "@cawco/core/preview-proxy";
 import { protocolRange } from "@cawco/core/runtime";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import { Elysia, t, ValidationError } from "elysia";
@@ -447,6 +449,7 @@ import {
   resolveMarketplacePlugins,
 } from "./plugins";
 import {
+  type PreviewReach,
   type PreviewTarget,
   previewFrame,
   previewSourceKey,
@@ -7934,6 +7937,7 @@ export const createServer = (
       return closed;
     }
     previewTargets.delete(instanceId);
+    db.artifacts.unshow(instanceId);
     publishPreview(instanceId, "closed", target);
     if ("page" in target.source) {
       return closed;
@@ -7956,32 +7960,27 @@ export const createServer = (
     return closed;
   };
 
+  /** What starting a machine's listener for a preview answered: where it listens, or the hop that failed and why. */
+  type ListenerStart =
+    | { ok: true; upstream: NonNullable<PreviewTarget["upstream"]> }
+    | {
+        ok: false;
+        code: 409 | 500 | 503 | 504;
+        down: PreviewDown;
+        error: string;
+      };
+
   /**
-   * Starts the daemon's listener for an instance's preview and makes it the
-   * target. The operator's open and a returning machine's restart both come
-   * through here.
+   * Starts the daemon's listener for an instance's preview of `source`. A
+   * start the instance's counter moved past while it awaited the daemon (a
+   * close, a newer start, the machine leaving) is told to go, and answers 409.
    */
-  const openPreview = async (
+  const startListener = async (
     instanceId: string,
     machineId: string,
     source: PreviewSource,
-    artifact: PreviewTarget["artifact"]
-  ): Promise<
-    | { ok: true; frame: ReturnType<typeof previewFrame> }
-    | { ok: false; code: 409 | 500 | 503 | 504; error: string }
-  > => {
-    const generation = nextPreviewGeneration(instanceId);
-    if ("page" in source) {
-      // A page is served from the hub's own folder (preview.ts).
-      const target = {
-        artifact,
-        machineId,
-        source,
-        revision: crypto.randomUUID(),
-      };
-      previewTargets.set(instanceId, target);
-      return { ok: true, frame: publishPreview(instanceId, "open", target) };
-    }
+    generation: number
+  ): Promise<ListenerStart> => {
     const stopLate = () =>
       detach(
         callAgent(machineId, PREVIEW_STOP, [{ instanceId }], BUSY_TIMEOUT_MS),
@@ -7994,19 +7993,34 @@ export const createServer = (
       BUSY_TIMEOUT_MS
     );
     if (answer === "offline") {
-      return { ok: false, code: 503, error: "Machine is not connected" };
+      return {
+        ok: false,
+        code: 503,
+        down: "machine",
+        error: "Machine is not connected",
+      };
     }
     if (answer === "timeout") {
       // The daemon may still finish the start after this gave up; the
       // listener it would open has no target here, so it is told to go.
       stopLate();
-      return { ok: false, code: 504, error: "Machine did not answer" };
+      return {
+        ok: false,
+        code: 504,
+        down: "machine",
+        error: "Machine did not answer",
+      };
     }
     if (!answer.ok) {
+      const error = answer.error ?? "Preview failed";
       return {
         ok: false,
         code: 500,
-        error: answer.error ?? "Preview failed",
+        // The daemon refuses a workspace no boundary runs in these words
+        // (preview-bridge.ts `WorkspaceDown`); anything else kept the way to
+        // the server from opening.
+        down: error === DOWN_WORDS.workspace ? "workspace" : "reach",
+        error,
       };
     }
     if (previewGeneration.get(instanceId) !== generation) {
@@ -8014,22 +8028,120 @@ export const createServer = (
       return {
         ok: false,
         code: 409,
+        down: "closed",
         error: "Preview was closed while starting.",
       };
     }
     const address = registry.address(machineId);
     if (!address) {
-      return { ok: false, code: 503, error: "Machine is not connected" };
+      return {
+        ok: false,
+        code: 503,
+        down: "machine",
+        error: "Machine is not connected",
+      };
     }
-    const target = {
+    return {
+      ok: true,
+      upstream: { address, port: (answer.result as { port: number }).port },
+    };
+  };
+
+  /**
+   * Makes an artifact what an instance's panel shows: its machine's listener
+   * started (a page is the hub's own, preview.ts), the intent kept in the
+   * database so a hub restart serves it still, and the "open" published.
+   */
+  const openPreview = async (
+    instanceId: string,
+    machineId: string,
+    source: PreviewSource,
+    artifact: PreviewTarget["artifact"]
+  ): Promise<
+    | { ok: true; frame: ReturnType<typeof previewFrame> }
+    | { ok: false; code: 409 | 500 | 503 | 504; error: string }
+  > => {
+    const generation = nextPreviewGeneration(instanceId);
+    const target: PreviewTarget = {
       artifact,
       machineId,
       source,
       revision: crypto.randomUUID(),
-      upstream: { address, port: (answer.result as { port: number }).port },
     };
+    if (!("page" in source)) {
+      const started = await startListener(
+        instanceId,
+        machineId,
+        source,
+        generation
+      );
+      if (!started.ok) {
+        return { ok: false, code: started.code, error: started.error };
+      }
+      target.upstream = started.upstream;
+    }
     previewTargets.set(instanceId, target);
+    db.artifacts.show(instanceId, artifact.id);
     return { ok: true, frame: publishPreview(instanceId, "open", target) };
+  };
+
+  /** Each preview's listener while it starts on a request or a register: one start, however many ask. */
+  const reaching = new Map<string, Promise<PreviewReach>>();
+
+  /**
+   * Where a shown preview is served now: its machine's listener, started
+   * here when it has none (the daemon restarted, or the last start failed:
+   * its workspace was not running, its bridge did not open). The target is
+   * the operator's intent and stays whatever this answers; only a close ends
+   * it.
+   */
+  const reachPreview = (instanceId: string): Promise<PreviewReach> => {
+    const inFlight = reaching.get(instanceId);
+    if (inFlight !== undefined) {
+      return inFlight;
+    }
+    const target = previewTargets.get(instanceId);
+    if (!target) {
+      return Promise.resolve({
+        ok: false,
+        down: "closed",
+        error: "its session shows no preview",
+      });
+    }
+    if (target.upstream) {
+      return Promise.resolve({ ok: true, upstream: target.upstream });
+    }
+    if (!registry.agent(target.machineId)) {
+      return Promise.resolve({
+        ok: false,
+        down: "machine",
+        error: `machine ${target.machineId} is not connected`,
+      });
+    }
+    const generation = previewGeneration.get(instanceId) ?? 0;
+    const reach = (async (): Promise<PreviewReach> => {
+      const started = await startListener(
+        instanceId,
+        target.machineId,
+        target.source,
+        generation
+      );
+      if (!started.ok) {
+        return started;
+      }
+      const now = previewTargets.get(instanceId);
+      if (!now || previewGeneration.get(instanceId) !== generation) {
+        return {
+          ok: false,
+          down: "closed",
+          error: "Preview was closed while starting.",
+        };
+      }
+      previewTargets.set(instanceId, { ...now, upstream: started.upstream });
+      return started;
+    })().finally(() => reaching.delete(instanceId));
+    reaching.set(instanceId, reach);
+    return reach;
   };
 
   /**
@@ -8396,28 +8508,43 @@ export const createServer = (
   });
 
   /**
-   * Machines whose previews this hub process has an account of. The first
-   * register from one after the hub starts is the only time a listener it
-   * reports without a target is the hub's own lost memory; after that, such a
-   * listener is one the operator closed while the machine was away.
+   * What every panel showed when this hub last ran, kept in the database
+   * (openPreview): served again from here on, each preview's listener
+   * pointed at or started by its machine's next register.
    */
-  const previewMachines = new Set<string>();
+  const restoreShownPreviews = (): void => {
+    for (const { instanceId, artifact } of db.artifacts.shown()) {
+      previewTargets.set(instanceId, {
+        artifact: {
+          id: artifact.id,
+          kind: artifact.kind,
+          name: artifact.name,
+        },
+        machineId: artifact.machineId ?? "",
+        source: artifact.source,
+        revision: crypto.randomUUID(),
+      });
+    }
+  };
+  restoreShownPreviews();
 
   /**
    * A register squares the machine's preview listeners with this hub's
-   * targets. A target whose listener the daemon still serves is pointed at it
-   * again. One it does not serve — the daemon restarted — is started again on
-   * the same source, and the "open" that follows reloads every dashboard's
-   * pane onto the new listener; if that start fails the preview is closed. A
-   * listener with no target is kept after a hub restart and stopped otherwise.
+   * targets. A target whose listener the daemon still serves, on the same
+   * source, is pointed at it again. One it does not serve (the daemon
+   * restarted) is started again on the same source, and the "open" that
+   * follows reloads every dashboard's pane onto the new listener. A start
+   * that fails says why in one line and leaves the target as it is: the
+   * operator's intent, its next request asks again (reachPreview), and the
+   * pane draws the hop that failed. A listener no target names is stopped;
+   * one whose session shows another source is left to the start, which
+   * replaces it.
    */
   const reconcilePreviews = (
     machineId: string,
     address: string,
     serving: ServingPreview[]
   ): void => {
-    const known = previewMachines.has(machineId);
-    previewMachines.add(machineId);
     const listeners = new Map(
       serving.map((listener) => [listener.instanceId, listener])
     );
@@ -8426,67 +8553,47 @@ export const createServer = (
         continue;
       }
       const listener = listeners.get(instanceId);
-      if (listener) {
+      if (
+        listener &&
+        previewSourceKey(listener.source) === previewSourceKey(target.source)
+      ) {
         previewTargets.set(instanceId, {
           ...target,
           upstream: { address, port: listener.port },
         });
         continue;
       }
-      openPreview(instanceId, machineId, target.source, target.artifact)
-        .then((started) => {
-          // Not connected: the next register tries again. Superseded: a close
-          // or a newer start already decided.
-          if (
-            started.ok ||
-            started.code === 409 ||
-            !registry.agent(machineId)
-          ) {
+      reachPreview(instanceId)
+        .then((reached) => {
+          if (!reached.ok) {
+            // Closed meanwhile: nothing is owed. Gone again: its next
+            // register tries again.
+            if (reached.down !== "closed" && registry.agent(machineId)) {
+              console.warn(
+                `[hub] preview for ${instanceId} did not restart (${reached.down}): ${reached.error}`
+              );
+            }
             return;
           }
-          console.warn(
-            `[hub] preview for ${instanceId} did not restart: ${started.error}`
-          );
-          previewTargets.delete(instanceId);
-          publishPreview(instanceId, "closed", target);
+          const now = previewTargets.get(instanceId);
+          if (now) {
+            const moved = { ...now, revision: crypto.randomUUID() };
+            previewTargets.set(instanceId, moved);
+            publishPreview(instanceId, "open", moved);
+          }
         })
         .catch(console.error);
     }
     for (const listener of serving) {
-      if (previewTargets.has(listener.instanceId)) {
+      if (previewTargets.get(listener.instanceId)?.machineId === machineId) {
         continue;
       }
-      // After a hub restart a listener is the panel's again only as the
-      // session's preview artifact that shows the same server or folder.
-      const shown = known
-        ? undefined
-        : db.artifacts
-            .ofInstance(listener.instanceId)
-            .find(
-              (artifact) =>
-                artifact.kind === "preview" &&
-                artifact.machineId === machineId &&
-                previewSourceKey(artifact.source) ===
-                  previewSourceKey(listener.source)
-            );
-      if (!shown) {
-        callAgent(
-          machineId,
-          PREVIEW_STOP,
-          [{ instanceId: listener.instanceId }],
-          BUSY_TIMEOUT_MS
-        ).catch(console.error);
-        continue;
-      }
-      const target = {
-        artifact: { id: shown.id, kind: shown.kind, name: shown.name },
+      callAgent(
         machineId,
-        source: shown.source,
-        revision: crypto.randomUUID(),
-        upstream: { address, port: listener.port },
-      };
-      previewTargets.set(listener.instanceId, target);
-      publishPreview(listener.instanceId, "open", target);
+        PREVIEW_STOP,
+        [{ instanceId: listener.instanceId }],
+        BUSY_TIMEOUT_MS
+      ).catch(console.error);
     }
   };
 
@@ -17027,6 +17134,7 @@ export const createServer = (
   const artifactListener = {
     ownerOf: (artifactId: string) => db.artifacts.get(artifactId)?.instanceId,
     kindOf: (artifactId: string) => db.artifacts.get(artifactId)?.kind,
+    reach: reachPreview,
     picture: artifactPicture(ARTIFACTS_ROOT, artifactDocs),
     send: artifactSend(artifacts.send),
     socket: artifactSocket(artifactDocs),

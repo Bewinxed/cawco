@@ -1,12 +1,19 @@
 import { realpath, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
-import type { ArtifactKind, PreviewFrame, PreviewSource } from "@cawco/core";
+import type {
+  ArtifactKind,
+  PreviewDown,
+  PreviewFrame,
+  PreviewSource,
+} from "@cawco/core";
 import {
+  causeOf,
   downResponse,
   injectOverlay,
   OVERLAY_PATH,
   overlayResponse,
   type PreviewSocket,
+  previewFailed,
   previewWebSocket,
   proxyHeaders,
   upgradePreview,
@@ -29,9 +36,12 @@ import { FolderRefusal, folderPath } from "./project-folder";
  * `x-cawco-preview` header, so there is no per-browser limitation — every
  * tab can show a different preview simultaneously.
  *
- * A target is the operator's intent, and it outlives the listener: while its
- * machine is away `upstream` is absent, and the register that brings the
- * machine back starts the listener again and fills it in.
+ * A target is the operator's intent, kept in the database (`shown_previews`)
+ * so it outlives the hub too, and it outlives the listener: while no
+ * listener serves it (its machine away or restarted, or its start failed)
+ * `upstream` is absent, and the machine's register or the preview's next
+ * request starts the listener again and fills it in. Only a close, or the
+ * session ending, ends it.
  */
 export interface PreviewTarget {
   /** The artifact the panel shows (Projects spec §5.10). */
@@ -43,6 +53,11 @@ export interface PreviewTarget {
 }
 
 export const previewTargets = new Map<string, PreviewTarget>();
+
+/** Where a shown preview is served now, or the hop that failed and why (server.ts `reachPreview`). */
+export type PreviewReach =
+  | { ok: true; upstream: NonNullable<PreviewTarget["upstream"]> }
+  | { ok: false; down: PreviewDown; error: string };
 
 /** One string per thing a preview shows: a page by name, a port in a workspace or on the host, a folder. */
 export const previewSourceKey = (source: PreviewSource): string => {
@@ -200,26 +215,73 @@ const canvasById = (
     ? serveCanvas(artifactId, rest, artifacts.state)
     : new Response("This session has no such canvas.", { status: 404 });
 
+const HOP = "hub listener";
+
 /**
- * What the hub serves itself: the shown page or canvas; with none shown,
- * only the overlay, which a composer's canvas loads.
+ * A request for a session that shows nothing: the overlay, which a
+ * composer's canvas loads; anything else is a closed preview's page.
  */
-const hubServed = (
-  target: PreviewTarget | undefined,
-  pathname: string,
-  state: (artifactId: string) => string
+const noneShown = (
+  instanceId: string | null | undefined,
+  pathname: string
 ): Promise<Response> | Response => {
-  if (target) {
-    return HUB_SERVES[target.artifact.kind](
-      target.artifact.id,
-      pathname,
-      state
-    );
+  if (pathname === OVERLAY_PATH) {
+    return overlayResponse();
   }
-  return pathname === OVERLAY_PATH
-    ? overlayResponse()
-    : new Response("No preview selected.", { status: 404 });
+  previewFailed(
+    HOP,
+    instanceId,
+    instanceId ? "its session shows no preview" : "the request names no session"
+  );
+  return downResponse("closed", 404);
 };
+
+/** A preview's request on to its machine's listener, and the answer back; a listener that does not answer is said in one line. */
+async function relay(
+  request: Request,
+  server: Bun.Server<ListenerSocket>,
+  instanceId: string,
+  at: NonNullable<PreviewTarget["upstream"]>
+): Promise<Response | undefined> {
+  const url = new URL(request.url);
+  const address = at.address.includes(":") ? `[${at.address}]` : at.address;
+  const upstream = `${address}:${at.port}${url.pathname}${url.search}`;
+  const headers = proxyHeaders(request.headers);
+  if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+    return upgradePreview(request, server, `ws://${upstream}`, headers, {
+      hop: HOP,
+      instanceId,
+    })
+      ? undefined
+      : new Response("WebSocket upgrade failed", { status: 400 });
+  }
+  let response: Response;
+  try {
+    response = await fetch(`http://${upstream}`, {
+      method: request.method,
+      headers,
+      body: request.body,
+      redirect: "manual",
+    });
+  } catch (error) {
+    previewFailed(
+      HOP,
+      instanceId,
+      `its machine's listener at ${address}:${at.port} didn't answer: ${causeOf(error)}`
+    );
+    return downResponse("machine");
+  }
+  const downstream = proxyHeaders(response.headers);
+  // Same as the daemon hop: the body is already decoded here.
+  if (downstream.has("content-encoding")) {
+    downstream.delete("content-encoding");
+    downstream.delete("content-length");
+  }
+  return new Response(response.body, {
+    status: response.status,
+    headers: downstream,
+  });
+}
 
 export function startPreviewListener(
   hostname: string,
@@ -229,6 +291,8 @@ export function startPreviewListener(
     /** The session that owns an artifact; undefined when there is none. */
     ownerOf: (artifactId: string) => string | undefined;
     picture: ReturnType<typeof artifactPicture>;
+    /** Where a shown preview of a machine's is served now, its listener started when it has none. */
+    reach: (instanceId: string) => Promise<PreviewReach>;
     send: ReturnType<typeof artifactSend>;
     socket: ReturnType<typeof artifactSocket>;
     /** A page artifact's doc as one base64 Yjs update, embedded in its overlay tag. */
@@ -265,43 +329,32 @@ export function startPreviewListener(
         return canvasById(canvas, instanceId, artifacts);
       }
       const target = instanceId ? previewTargets.get(instanceId) : undefined;
-      if (!target || "page" in target.source) {
-        return hubServed(target, pathname, artifacts.state);
+      if (!(instanceId && target)) {
+        return noneShown(instanceId, pathname);
       }
-      // Its machine is away: the register that brings it back serves it again.
-      if (!target.upstream) {
-        return downResponse("machine", 503);
+      if ("page" in target.source) {
+        return HUB_SERVES[target.artifact.kind](
+          target.artifact.id,
+          pathname,
+          artifacts.state
+        );
       }
-      const url = new URL(request.url);
-      const address = target.upstream.address.includes(":")
-        ? `[${target.upstream.address}]`
-        : target.upstream.address;
-      const upstream = `${address}:${target.upstream.port}${url.pathname}${url.search}`;
-      const headers = proxyHeaders(request.headers);
-      if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
-        return upgradePreview(request, server, `ws://${upstream}`, headers)
-          ? undefined
-          : new Response("WebSocket upgrade failed", { status: 400 });
+      // No listener serves it now (its machine restarted, or the last start
+      // failed): started here, or the hop that failed says why.
+      const reached = await artifacts.reach(instanceId);
+      if (!reached.ok) {
+        previewFailed(HOP, instanceId, `${reached.down}: ${reached.error}`);
+        return downResponse(
+          reached.down,
+          reached.down === "closed" ? 404 : 503,
+          reached.down === "reach" ? reached.error : undefined
+        );
       }
-      const response = await fetch(`http://${upstream}`, {
-        method: request.method,
-        headers,
-        body: request.body,
-        redirect: "manual",
-      });
-      const downstream = proxyHeaders(response.headers);
-      // Same as the daemon hop: the body is already decoded here.
-      if (downstream.has("content-encoding")) {
-        downstream.delete("content-encoding");
-        downstream.delete("content-length");
-      }
-      return new Response(response.body, {
-        status: response.status,
-        headers: downstream,
-      });
+      return relay(request, server, instanceId, reached.upstream);
     },
-    // The machine's preview listener did not answer.
-    error() {
+    // Anything else that threw while relaying the preview.
+    error(error) {
+      previewFailed(HOP, null, causeOf(error));
       return downResponse("machine");
     },
   });

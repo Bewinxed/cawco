@@ -2,6 +2,7 @@
   import {
     machineLabel,
     PREVIEW_DOWN_META,
+    PREVIEW_WHY_META,
     type PreviewDown,
     type ShownFailure,
   } from "@cawco/core";
@@ -220,14 +221,27 @@
    * the page again.
    */
   let down = $state<PreviewDown | null>(null);
-  function downOf(frame: HTMLIFrameElement): PreviewDown | null {
+  /** The machine's own words for a `reach` failure, from the proxy's page. */
+  let downWhy = $state<string | null>(null);
+  const DOWN_KINDS: readonly PreviewDown[] = [
+    "server",
+    "machine",
+    "workspace",
+    "reach",
+    "closed",
+    "hub",
+  ];
+  function downOf(frame: HTMLIFrameElement): {
+    down: PreviewDown;
+    why: string | null;
+  } | null {
     try {
-      const said = frame.contentDocument
-        ?.querySelector(`meta[name="${PREVIEW_DOWN_META}"]`)
-        ?.getAttribute("content");
-      return said === "server" || said === "machine" || said === "workspace"
-        ? said
-        : null;
+      const meta = (name: string) =>
+        frame.contentDocument
+          ?.querySelector(`meta[name="${name}"]`)
+          ?.getAttribute("content") ?? null;
+      const said = DOWN_KINDS.find((kind) => kind === meta(PREVIEW_DOWN_META));
+      return said ? { down: said, why: meta(PREVIEW_WHY_META) } : null;
     } catch {
       // A frame of another origin is a page, not the proxy's.
       return null;
@@ -251,14 +265,23 @@
   );
   const downPort = $derived(source && "port" in source ? source.port : null);
   const downTitle = $derived.by(() => {
-    if (down === "server") {
-      return "The page's server stopped answering";
+    switch (down) {
+      case "server":
+        return "The page's server stopped answering";
+      case "workspace":
+        return "That workspace isn't running";
+      case "reach":
+        return `${ownerMachine} couldn't reach the page's server`;
+      case "closed":
+        return "This preview is closed";
+      case "hub":
+        return "The hub isn't answering";
+      default:
+        return `${ownerMachine} isn't answering`;
     }
-    if (down === "workspace") {
-      return "That workspace isn't running";
-    }
-    return `${ownerMachine} isn't answering`;
   });
+  /** Open its session, beside Try again, wherever this pane is not that session's own. */
+  const offerSession = $derived(!!owner && (linkSession || ownTab));
 
   $effect(() => {
     if (frameKey) {
@@ -1151,7 +1174,9 @@
             // A frame of another origin: its input is not ours to hear.
           }
           if (key === frameKey) {
-            down = downOf(event.currentTarget as HTMLIFrameElement);
+            const said = downOf(event.currentTarget as HTMLIFrameElement);
+            down = said?.down ?? null;
+            downWhy = said?.why ?? null;
             if (down) {
               retrying = false;
             }
@@ -1191,11 +1216,23 @@
             {downPort
               ? `Nothing is running on port ${downPort} on ${ownerMachine}, so the page can't load.`
               : `The page's server on ${ownerMachine} isn't running, so the page can't load.`}
-            {#if linkSession && owner}
+            {#if offerSession}
               Start it again from its session, then try again.
             {:else}
               Start it again, then try again.
             {/if}
+          {:else if down === "reach"}
+            The way to the page's server on {ownerMachine} didn't open{downWhy
+              ? `: ${downWhy}`
+              : "."}
+            Try again; if it fails again, start the server again from its
+            session.
+          {:else if down === "closed"}
+            Its session shows something else now, or has ended, so there is no
+            page here. Open its session to show it again.
+          {:else if down === "hub"}
+            The dashboard can't reach the hub's preview listener, so the page
+            can't load. Once the hub is back, try again.
           {:else}
             The preview comes from {ownerMachine}, which isn't connected to the
             hub right now. Once it's back, try again.
@@ -1212,7 +1249,7 @@
               size="sm"
               variant="outline"
             />
-            {#if down === "server" && linkSession && owner}
+            {#if offerSession && owner}
               <!-- The session that serves the page, as the kit draws a link
                    (Button `link`, as Caw's panel offers its settings). -->
               <Button

@@ -819,6 +819,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return `${subject} did not answer: the workspace isn't running.`;
       case "machine":
         return `${subject} did not answer: ${machine} isn't connected to the hub.`;
+      case "reach":
+        return `${subject} did not answer: ${machine} couldn't open the way to it.`;
+      case "closed":
+        return `${subject} did not show: the panel was closed or showed something else first.`;
+      case "hub":
+        return `${subject} did not show: the dashboard couldn't reach the hub's preview listener.`;
       default:
         return `${subject} answered, but not with a page the panel can show.`;
     }

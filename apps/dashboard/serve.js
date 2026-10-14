@@ -197,15 +197,28 @@ function proxyPreviewHttp(req, res, info) {
   });
   proxyReq.on("error", (error) => {
     console.warn(
-      `[cawco] preview proxy error for ${info.id}: ${error.code ?? error.message}`
+      `[preview] dashboard: preview of ${info.id} failed: the hub's preview listener at ${target.hostname}:${previewPort} didn't answer (${error.code ?? error.message})`
     );
-    if (!res.headersSent) {
-      res.writeHead(502, { "cache-control": "no-store" });
+    if (res.headersSent) {
+      res.end();
+      return;
     }
-    res.end();
+    res.writeHead(502, {
+      "cache-control": "no-store",
+      "content-type": "text/html; charset=utf-8",
+    });
+    res.end(HUB_DOWN_PAGE);
   });
   req.pipe(proxyReq);
 }
+
+/**
+ * What this server answers when the hub's preview listener does not: the
+ * proxy's own page, as core `preview-proxy` `downResponse("hub")` writes it,
+ * in `DOWN_WORDS.hub`'s words, its meta naming the hop for the pane.
+ */
+const HUB_DOWN_PAGE =
+  '<!doctype html><html><head><meta charset="utf-8"><meta name="cawco-preview-down" content="hub"><title>Preview unavailable</title></head><body><p>The hub isn\'t answering, so the preview can\'t load. Reload once the hub is back.</p></body></html>';
 
 /**
  * A deploy swaps a new `build/` in under this running process, and the old
@@ -469,7 +482,7 @@ server.on("upgrade", (req, socket, head) => {
     });
     upstream.on("error", (error) => {
       console.warn(
-        `[cawco] preview ws proxy error for ${info.id}: ${error.code ?? error.message}`
+        `[preview] dashboard: preview of ${info.id} failed: its WebSocket to the hub's preview listener didn't open (${error.code ?? error.message})`
       );
       socket.destroy();
     });
