@@ -376,6 +376,11 @@ export class BinaryUpdater {
     this.#flags.commanded = true;
     this.#flags.version = command.version;
     // A pass already in flight began before the command: let it end, then run one that sees it.
+    if (this.#running) {
+      console.info(
+        `[update] Install now (command ${id}) arrived during an update pass, which takes it; one more pass follows`
+      );
+    }
     await this.#running;
     await this.tick();
     const to = this.#state.availableVersion;
@@ -1103,6 +1108,9 @@ export class BinaryUpdater {
       });
       await this.#tellHub();
       const job = await launch();
+      console.info(
+        `[update] the update helper for ${this.#state.availableVersion} is started: ${job.name}${this.#flags.commanded ? ", on Install now" : ""}`
+      );
       // The command is the helper's now; it stands again only if the helper never takes over.
       this.#launched = {
         at: Date.now(),
