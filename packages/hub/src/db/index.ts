@@ -807,8 +807,6 @@ export interface DbShape {
   readonly launchDirOf: (
     id: string
   ) => { cwd: string } | { unknown: true } | undefined;
-  /** The sends to a project's Caw sessions (role `lead`) accepted after `after`, oldest first. */
-  readonly leadSends: (projectId: string, after: Date) => SentMessageRow[];
   /** Adds what a Caw turn the thread woke cost to the thread's spend. */
   /** Caw's shell and edit calls (lead-gate.ts): kept, read back and changed as each one's outcome is known. */
   readonly leadCalls: {
@@ -825,6 +823,8 @@ export interface DbShape {
     /** A project's calls from `since` on, oldest first. */
     readonly since: (projectId: string, since: Date) => LeadCallRow[];
   };
+  /** The sends to a project's Caw sessions (role `lead`) accepted after `after`, oldest first. */
+  readonly leadSends: (projectId: string, after: Date) => SentMessageRow[];
   /** The turn each project's Caw is in now, as stored (caw.ts reads them back on start). */
   readonly leadTurns: () => (typeof leadTurns.$inferSelect)[];
   /** The limit lines kept on the session's row, oldest first. */
