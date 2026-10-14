@@ -5,7 +5,8 @@
  * hung on 2026-10-14 with several leaves' scratch fleets and the stage-2
  * proof running together.
  *
- * N is `CAWCO_HEAVY_RUNS` (default 2: one fleet beside one build). Each
+ * N is `CAWCO_HEAVY_RUNS`, else what this machine's cores and memory carry
+ * ({@link machineRuns}). Each
  * slot is a file in `heavy-runs/` under the workspaces' shared cache
  * (paths.ts `workspaceCacheDir`), the one tree every workspace's boundary
  * and the host's own shells all read and write; a boundary hides the
@@ -14,6 +15,13 @@
  * it when the run's process ends, a SIGKILL included, and a slot left by a
  * dead process is never stale. The holder writes who it is into the file
  * (pid, where, since, command) for a waiting run to name.
+ *
+ * N can differ between runs (an env set or not, another machine sharing
+ * nothing but its own cache), so a run chooses its slot under the `gate`
+ * file's lock: it counts every held `slot-<i>` file there, those at i ≥ N
+ * from a larger N included, and takes a free slot below N only while fewer
+ * than N are held. A smaller N therefore waits out the extra holders; a
+ * larger one simply opens more files.
  *
  * A run with no free slot prints one `CAWCO-QUEUE wait heavy: …` line
  * naming every holder (a work item's check stands its clock while it
@@ -35,10 +43,11 @@ import {
   closeSync,
   ftruncateSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   writeSync,
 } from "node:fs";
-import { hostname } from "node:os";
+import { availableParallelism, hostname, totalmem } from "node:os";
 import { join } from "node:path";
 import { QUEUE_MARKER } from "../../packages/core/src/harness";
 import { workspaceCacheDir } from "../../packages/core/src/paths";
@@ -46,14 +55,36 @@ import { openLockFile, parentPid, tryLock, unlock } from "./flock";
 
 const RUNS_ENV = "CAWCO_HEAVY_RUNS";
 const HELD_ENV = "CAWCO_HEAVY_RUN_HELD";
-const DEFAULT_RUNS = 2;
+/**
+ * What one heavy run costs, from `bun scripts/probe-kit/run.ts
+ * composer-canvas` (a scratch fleet, the dashboard build, Chromium) on
+ * obelisk, 2026-10-14, its whole process tree sampled every 0.5 s: peak RSS
+ * 4.2 GiB (p50 2.6, p90 2.9), peak 6.8 cores over 0.5 s, 0.77 cores over
+ * its 105 s. A slot is 8 GiB, twice the peak RSS (memory is what hangs a
+ * host), and 6 cores, the build's peak, about 8x the run's average.
+ * obelisk (48 cores, 188 GiB) runs 8; a 10-core 32 GB Mac runs 1.
+ */
+const SLOT_CORES = 6;
+const SLOT_MEMORY = 8 * 1024 ** 3;
 /** How often a waiting run tries the slots, and a `hold` looks for its shell. */
 const POLL_MS = 200;
+const SLOT_FILE = /^slot-(\d+)$/;
 
-const slotCount = (): number => {
+/** The heavy runs this machine's cores and memory carry at once, at least 1. */
+export const machineRuns = (): number =>
+  Math.max(
+    1,
+    Math.min(
+      Math.floor(availableParallelism() / SLOT_CORES),
+      Math.floor(totalmem() / SLOT_MEMORY)
+    )
+  );
+
+/** N: `CAWCO_HEAVY_RUNS` when set, else {@link machineRuns}. */
+export const slotCount = (): number => {
   const raw = process.env[RUNS_ENV];
   if (raw === undefined || raw === "") {
-    return DEFAULT_RUNS;
+    return machineRuns();
   }
   const count = Number(raw);
   if (!Number.isInteger(count) || count < 1) {
@@ -91,16 +122,54 @@ const where = (): string => {
   return workspace ? `workspace ${workspace.slice(0, 8)}` : hostname();
 };
 
-/** Tries every slot once; the held one's descriptor, or none. */
-const tryTake = (paths: string[], holder: Holder): number | undefined => {
-  for (const path of paths) {
-    const fd = openLockFile(path, true);
-    if (tryLock(fd)) {
-      ftruncateSync(fd, 0);
-      writeSync(fd, JSON.stringify(holder), 0);
-      return fd;
+/**
+ * One look at the slots under the gate: the taken slot's descriptor, or the
+ * paths of the held ones (none when another run holds the gate this tick).
+ */
+const tryTake = (
+  dir: string,
+  count: number,
+  holder: Holder
+): { fd: number } | { held: string[] } => {
+  const gate = openLockFile(join(dir, "gate"), true);
+  if (!tryLock(gate)) {
+    closeSync(gate);
+    return { held: [] };
+  }
+  try {
+    const indices = new Set(Array.from({ length: count }, (_, i) => i));
+    for (const name of readdirSync(dir)) {
+      const index = SLOT_FILE.exec(name)?.[1];
+      if (index !== undefined) {
+        indices.add(Number(index));
+      }
     }
-    closeSync(fd);
+    const held: string[] = [];
+    let free: number | undefined;
+    for (const index of [...indices].sort((a, b) => a - b)) {
+      const path = join(dir, `slot-${index}`);
+      const fd = openLockFile(path, true);
+      if (!tryLock(fd)) {
+        held.push(path);
+        closeSync(fd);
+      } else if (free === undefined && index < count) {
+        free = fd;
+      } else {
+        unlock(fd);
+      }
+    }
+    if (free === undefined) {
+      return { held };
+    }
+    if (held.length >= count) {
+      unlock(free);
+      return { held };
+    }
+    ftruncateSync(free, 0);
+    writeSync(free, JSON.stringify(holder), 0);
+    return { fd: free };
+  } finally {
+    unlock(gate);
   }
 };
 
@@ -115,20 +184,19 @@ const take = async (
   const count = slotCount();
   const dir = slotsDir();
   mkdirSync(dir, { recursive: true });
-  const paths = Array.from({ length: count }, (_, i) => join(dir, `slot-${i}`));
   let waited = false;
   for (;;) {
-    const fd = tryTake(paths, holder);
-    if (fd !== undefined) {
+    const look = tryTake(dir, count, holder);
+    if ("fd" in look) {
       if (waited) {
         process.stderr.write(`${QUEUE_MARKER} held heavy\n`);
       }
-      return fd;
+      return look.fd;
     }
-    if (!waited) {
+    if (!waited && look.held.length > 0) {
       waited = true;
       process.stderr.write(
-        `${QUEUE_MARKER} wait heavy: all ${count} heavy-run slots (${RUNS_ENV}) are held, by ${paths.map(describe).join("; ")}\n`
+        `${QUEUE_MARKER} wait heavy: all ${count} heavy-run slots (${RUNS_ENV}, else this machine's cores and memory) are held, by ${look.held.map(describe).join("; ")}\n`
       );
     }
     // biome-ignore lint/performance/noAwaitInLoops: one look at the slots per tick, until one frees
@@ -192,9 +260,15 @@ export async function heavySlot(): Promise<HeavySlot> {
 
 if (import.meta.main) {
   const [verb, pid, ...command] = process.argv.slice(2);
+  if (verb === "count") {
+    process.stdout.write(
+      `${slotCount()} heavy runs at once (${RUNS_ENV}=${process.env[RUNS_ENV] || "unset"}; this machine: ${availableParallelism()} cores / ${SLOT_CORES}, ${Math.floor(totalmem() / 1024 ** 3)} GiB / ${SLOT_MEMORY / 1024 ** 3} → ${machineRuns()})\n`
+    );
+    process.exit(0);
+  }
   if (verb !== "hold" || !pid || command.length === 0) {
     process.stderr.write(
-      "usage: bun scripts/lib/heavy-run.ts hold <shell pid> <command…>  (heavy-run.sh runs it)\n"
+      "usage: bun scripts/lib/heavy-run.ts count | hold <shell pid> <command…>  (heavy-run.sh runs hold)\n"
     );
     process.exit(2);
   }

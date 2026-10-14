@@ -4,6 +4,7 @@
 # life, waiting for one when all are held. The slot is held by a bun process
 # on fd 9's other end, a child of this shell, which lets it go within 0.2 s
 # of this shell ending, however it ends. Bash 3.2 (the Mac's) runs it.
+# How many slots there are is heavy-run.ts's alone (`heavy-run.ts count`).
 heavy_run() {
   if [[ -n ${CAWCO_HEAVY_RUN_HELD:-} ]]; then return 0; fi
   local line=
