@@ -85,9 +85,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var comments: ArtifactComments = .empty
     private var reading = false
     private var readAgain = false
-    private var polling: Task<Void, Never>?
-    /// How often the pins are read while the pane is on screen. Our call, until the hub pushes them.
-    private static let pollEvery = Duration.seconds(3)
     private let card = PinCard()
     private var cardPlace: [NSLayoutConstraint] = []
     private var cardDrawerPlace: [NSLayoutConstraint] = []
@@ -158,7 +155,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             part.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             part.setContentHuggingPriority(.defaultLow, for: .horizontal)
         }
-        sendButton = KitButton.make("Send 0", glyph: Glyph.send, variant: .ghost, height: .sm) { [weak self] in self?.send() }
+        sendButton = KitButton.make("Send", glyph: Glyph.send, variant: .ghost, height: .sm) { [weak self] in self?.send() }
         pinsButton = KitButton.make("Pins", glyph: .pin, variant: .ghost, height: .sm) { [weak self] in self?.openList() }
         pinsBadge.isUserInteractionEnabled = false
         pinsBadge.isAccessibilityElement = false
@@ -346,7 +343,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        startPolling()
+        // What changed while it was away; from here the page says (`cawco:doc`).
+        refresh()
         sayShown()
         #if DEBUG
         startHeartbeat()
@@ -355,8 +353,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
-        polling?.cancel()
-        polling = nil
         #if DEBUG
         heartbeat?.invalidate()
         heartbeat = nil
@@ -559,6 +555,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             }
             if let title = Self.text(body["title"], 300), !title.isEmpty { titleLabel.text = title }
             if body["type"] as? String == "cawco:ready" { ready() }
+        case "cawco:doc":
+            // A pick, a note, a pin, the agent's patch or a Send's stamp: Send N reads again now.
+            refresh()
         case "cawco:pin-open":
             guard let id = Self.pinId(body["id"]) else { return }
             if id == placing || (placing != nil && body["made"] as? Bool != true) {
@@ -733,19 +732,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     // MARK: The pins
 
-    /// Reads the pins while the pane is on screen, every `pollEvery`.
-    private func startPolling() {
-        guard polling == nil else { return }
-        polling = Task { [weak self] in
-            while !Task.isCancelled {
-                self?.refresh()
-                try? await Task.sleep(for: Self.pollEvery)
-            }
-        }
-    }
-
-    /// The artifact's pins and unsent picks as the hub has them now; one
-    /// read at a time, and one more after it when asked meanwhile.
+    /// The artifact's pins and unsent picks as the hub has them now, read
+    /// when the page says its doc changed (`cawco:doc`), when the pane
+    /// appears and after the app's own acts; one read at a time, and one
+    /// more after it when asked meanwhile, so a read under way when the doc
+    /// changed is never the last.
     private func refresh() {
         guard let artifact = artifactId else { return }
         guard !reading else {
@@ -755,11 +746,18 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         reading = true
         Task { [weak self] in
             guard let self else { return }
+            #if DEBUG
+            let began = ContinuousClock.now
+            defer { PreviewProbe.say("preview refresh took=\((ContinuousClock.now - began).components.seconds)s") }
+            #endif
             do {
                 let read = try await hub.comments(on: artifact, in: instanceId)
                 if artifact == artifactId { adopt(read) }
                 if failureOf == "pins" { clearFailure() }
             } catch {
+                #if DEBUG
+                PreviewProbe.say("preview refresh failed: \(error.localizedDescription)")
+                #endif
                 if artifact == artifactId {
                     failed("Couldn't read the pins: \(error.localizedDescription)", of: "pins")
                 }
@@ -792,7 +790,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         if held, let openPin, !read.pins.contains(where: { $0.id == openPin }) { closeCard() }
         paintCard()
         #if DEBUG
-        PreviewProbe.say("preview pins n=\(read.pins.count) open=\(read.open) owed=\(read.owed) " + read.pins.map {
+        PreviewProbe.say("preview pins n=\(read.pins.count) open=\(read.open) owed=\(read.owed) picks=\(read.unsentPicks) sent=\(read.sentAt ?? "-") " + read.pins.map {
             "\($0.label)=\($0.moved ? "moved" : $0.resolved ? "resolved" : "open"):\($0.thread.count)\($0.unsent ? ":unsent" : "")"
         }.joined(separator: " "))
         if PreviewProbe.sendAtLaunch, !sentAtLaunch, read.owed > 0, connected {
@@ -849,7 +847,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         guard isViewLoaded else { return }
         let owed = comments.owed
         sendButton.configuration?.showsActivityIndicator = sending
-        KitButton.setTitle(sending ? "Sending…" : "Send \(owed)", of: sendButton, variant: .ghost, height: .sm)
+        // Nothing owed is plain "Send" (PreviewPane.svelte `.send-label`): no count of nothing.
+        let words = owed == 0 ? "Send" : "Send \(owed)"
+        KitButton.setTitle(sending ? "Sending…" : words, of: sendButton, variant: .ghost, height: .sm)
+        #if DEBUG
+        PreviewProbe.say("preview send words=\(sending ? "Sending…" : words)")
+        #endif
         sendButton.isEnabled = connected && owed > 0 && !sending
         sendButton.accessibilityHint = owed == 0 ? "Nothing new to send" : "Sends \(owed) to the session"
     }

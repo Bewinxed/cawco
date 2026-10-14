@@ -18,6 +18,7 @@
  *    Return, sends the session nothing.
  * 2. The page's Send: exactly one pending send to the session, of the system
  *    origin `artifact`, its words the responses notice; no person's send.
+ *    The panel's head then reads "Send", no count.
  * 3. A third note edit and a second Send while that one waits: still one
  *    pending event, from the first one's `since`; the first is `replaced`.
  * 4. The transcript draws it as one line: "Responses on <page>", "waiting for
@@ -27,6 +28,7 @@
  *    the id and `since` it names: the answer holds the pick and the final
  *    note as typed, its inner line break kept and no Return at its end.
  * 6. The line then says "read".
+ * 7. A pick after that makes the panel's head read "Send 1".
  *
  *   bun scripts/probe-kit/run.ts artifact-responses
  */
@@ -324,6 +326,21 @@ const run = async (kit: Kit) => {
       !firstSend.some((one) => one.origin === "human"),
     JSON.stringify(firstSend)
   );
+  // The panel's head counts only what the session has not been sent: none now.
+  const sendLabel = page.locator(".preview-pane .send .send-label");
+  const labelReads = (want: string) =>
+    until(
+      `the head reading "${want}"`,
+      () => sendLabel.innerText(),
+      (words) => words.trim() === want,
+      10_000
+    ).catch(() => sendLabel.innerText());
+  const afterSend = await labelReads("Send");
+  kit.check(
+    "2b: once the Send is taken the panel's head reads Send, no count",
+    afterSend.trim() === "Send",
+    afterSend
+  );
 
   // 3. A third edit and a second Send while it waits.
   await typeNote(FINAL_NOTE);
@@ -442,6 +459,15 @@ const run = async (kit: Kit) => {
     readWord
   );
   await page.screenshot({ path: join(kit.out, "artifact-responses-read.png") });
+
+  // 7. A pick after the Send is counted again.
+  await frame.locator('[data-option="original"]').click();
+  const afterPick = await labelReads("Send 1");
+  kit.check(
+    "7: a later pick makes the panel's head read Send 1",
+    afterPick.trim() === "Send 1",
+    afterPick
+  );
 };
 
 const spec: Spec = { name: "artifact-responses", run };

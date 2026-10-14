@@ -804,6 +804,12 @@ async function standUp(
   const sessiondSocket = join(sandbox, "sessiond.sock");
   await mkdir(join(home, ".config", "cawco"), { recursive: true });
   await mkdir(join(sandbox, "hub"), { recursive: true });
+  // Claude Code's own temp root (its Bash tool's cwd file, a background
+  // command's output): `CLAUDE_CODE_TMPDIR`, else the host's /tmp, which a
+  // workspace boundary refuses ("EPERM: operation not permitted, mkdir
+  // '/private/tmp/claude-501/…'"). In the sandbox, every Bash call runs.
+  const claudeTmp = join(sandbox, "claude-tmp");
+  await mkdir(claudeTmp, { recursive: true });
   const runtime = await dirs.short(shortRoot);
   const bridge = socketPathProblem(
     join(runtime, "cawco", "previews", `${crypto.randomUUID()}.sock`),
@@ -1048,6 +1054,7 @@ async function standUp(
     CAWCO_MACHINE_ID: MACHINE,
     CAWCO_SESSIOND_ENDPOINT: sessiondSocket,
     ANTHROPIC_BASE_URL: mockBase,
+    CLAUDE_CODE_TMPDIR: claudeTmp,
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
     DISABLE_AUTOUPDATER: "1",
     OPENCODE_DISABLE_MODELS_FETCH: "1",

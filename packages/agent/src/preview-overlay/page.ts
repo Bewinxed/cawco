@@ -171,6 +171,25 @@ function tellLink(link: Link) {
   });
 }
 
+/** How long a burst of doc changes (typing a note) is gathered into one word to the host. Our call. */
+const DOC_TOLD_MS = 100;
+let docTelling: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * The doc changed — a pick, a note, a pin, the agent's patch, a Send's
+ * stamp — so a host that counts from the hub's reads (the app's Send N)
+ * reads again at once (`cawco:doc`): one word per burst.
+ */
+function tellDoc() {
+  if (docTelling) {
+    return;
+  }
+  docTelling = setTimeout(() => {
+    docTelling = null;
+    post("cawco:doc");
+  }, DOC_TOLD_MS);
+}
+
 function ready() {
   post("cawco:ready", {
     url: location.href,
@@ -272,9 +291,16 @@ artifact.watch({
       fillFields(artifact.state(), keys);
     }
     told();
+    tellDoc();
   },
-  meta: () => republished(),
-  ink: () => ink.changed(),
+  meta: () => {
+    republished();
+    tellDoc();
+  },
+  ink: () => {
+    ink.changed();
+    tellDoc();
+  },
   link: (link) => tellLink(link),
   synced: () => {
     reflect();
@@ -283,6 +309,7 @@ artifact.watch({
     }
     told();
     republished();
+    tellDoc();
   },
   refused: (reason) => failed("state", reason),
 });

@@ -1115,7 +1115,7 @@
       type="button"
     >
       <PendingContent icon={IconSend} pending={sending} />
-      <span class="send-label">Send {owed}</span>
+      <span class="send-label">{owed === 0 ? "Send" : `Send ${owed}`}</span>
     </button>
   {/if}
   {#if !(ownTab || linkSession)}

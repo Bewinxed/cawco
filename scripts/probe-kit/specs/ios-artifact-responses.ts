@@ -11,12 +11,17 @@
  * hub's own send (the panel's path), the second with the page's words. Then:
  *
  * 1. The hub holds exactly one pending send to the session, of the system
- *    origin `artifact`; the first is `replaced`.
+ *    origin `artifact`; the first is `replaced`. The preview head (its
+ *    painted words, `preview send words=`) read "Send 1" before, and reads
+ *    "Send", no count, within PAINT_MS of the Send being taken: the page
+ *    tells the app its doc changed (`cawco:doc`), no poll.
  * 2. The app, opened on the session (`-open-session`), draws that send as
  *    `ui.system_note/artifact_responses` (its DEBUG `probe drawn` line), in
  *    its queue (`probe sends`: `queue:pending`), and nothing as `user`.
  * 3. Once the turn ends and the agent reads it, the same row is among the
  *    blocks, read, still the note.
+ * 4. A pick after that makes the head read "Send 1" again, within PAINT_MS
+ *    of the hub taking it.
  *
  *   bash apps/apple/scripts/build-both.sh ios --compile-only
  *   bun scripts/probe-kit/run.ts ios-artifact-responses
@@ -45,6 +50,13 @@ const BUSY_S = 90;
 /** The responses notice (core injected.ts `artifactResponsesNotice`). */
 const NOTICE = /^\[CawCo\] The page "coconut-song" has new responses since \d+/;
 const LOG_HEAD = /^.*\] /;
+/**
+ * How soon the head shows a change: the page's word (`cawco:doc`, 100 ms)
+ * and one read. A poll every 3 s could not keep to it.
+ */
+const PAINT_MS = 1500;
+/** The head's Send words as painted (PreviewController `paintSend`'s probe line). */
+const SEND_WORDS = /^preview send words=(.+)$/;
 const TRAILING_SLASH = /\/$/;
 const PAGE = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Song</title></head>
@@ -229,6 +241,29 @@ async function run(kit: Kit): Promise<void> {
   let sim: MacSim | undefined;
   let stream: Subprocess | undefined;
   const heard: string[] = [];
+  /** When each of `heard` arrived, ms. */
+  const heardAt: number[] = [];
+  /** How long after `from` the head was first painted `words`, ms; undefined when it was not. */
+  const paintedAfter = (words: string, from: number): number | undefined => {
+    const i = heard.findIndex(
+      (line, at) =>
+        heardAt[at] >= from && line === `preview send words=${words}`
+    );
+    return i === -1 ? undefined : heardAt[i] - from;
+  };
+  /** The app's reads and its Send words since `from`, each at its time after it: what a failure shows. */
+  const timeline = (from: number) =>
+    heard
+      .map((line, i) => ({ line, at: heardAt[i] - from }))
+      .filter(
+        ({ line, at }) =>
+          at >= 0 &&
+          (line.startsWith("preview refresh") ||
+            line.startsWith("preview pins") ||
+            line.startsWith("preview send words"))
+      )
+      .map(({ line, at }) => `+${at}ms ${line.slice(0, 90)}`)
+      .join(" | ");
   try {
     sim = await macSim(SIM);
     const { udid } = sim;
@@ -239,7 +274,7 @@ async function run(kit: Kit): Promise<void> {
       [
         "bash",
         "-c",
-        `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND category == "Transcript"'`,
+        `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "Transcript" OR category == "Probe")'`,
       ],
       { stdout: "pipe", stderr: "ignore" }
     );
@@ -260,6 +295,7 @@ async function run(kit: Kit): Promise<void> {
         for (const line of split) {
           if (line.includes("dev.cawco.app")) {
             heard.push(line.replace(LOG_HEAD, ""));
+            heardAt.push(Date.now());
           }
         }
       }
@@ -269,7 +305,7 @@ async function run(kit: Kit): Promise<void> {
       "the app launched",
       () =>
         sh(
-          `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${fleet.base} -open-session ${session} >/dev/null`
+          `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${fleet.base} -open-session ${session} -preview-probe >/dev/null`
         ).then(() => true),
       Boolean,
       60_000
@@ -280,6 +316,15 @@ async function run(kit: Kit): Promise<void> {
       Boolean,
       90_000
     );
+    /** The preview head's Send words as the app last laid them out (PreviewController `headLine`). */
+    const headWords = () =>
+      heard.map((line) => SEND_WORDS.exec(line)?.[1]).findLast(Boolean);
+    /** The head's words once they read `want`, or what they read after `ms`. */
+    const headReads = (want: string, ms: number) =>
+      until(`the head reading "${want}"`, headWords, (w) => w === want, ms)
+        .then(() => want)
+        .catch(headWords);
+    const before = await headReads("Send 1", 30_000);
 
     // The session busy, the app open on it: two Sends, the second with the
     // page's words, so it is something new the hub takes.
@@ -292,6 +337,7 @@ async function run(kit: Kit): Promise<void> {
     );
     const busyAt = Date.now();
     await sendPage();
+    const takenAt = Date.now();
     await sendPage("Picked the cover.");
     const held = await until(
       "the second event standing in for the first",
@@ -306,6 +352,22 @@ async function run(kit: Kit): Promise<void> {
       JSON.stringify(held.map((row) => ({ uuid: row.uuid, state: row.state })))
     );
     const id8 = (pending[0]?.uuid ?? "").slice(0, 8);
+
+    // The head counts only what the session has not been sent: none now.
+    const after = await headReads("Send", 10_000);
+    const hubRead = await fleet.api<{
+      sentAt: string | null;
+      state: Record<string, { at: string }>;
+    }>(`/api/instances/${session}/artifacts/${id}`);
+    const sendIn = paintedAfter("Send", takenAt);
+    kit.check(
+      `1b: the head read Send 1 with one pick unsent, and reads Send, no count, within ${PAINT_MS} ms of the Send being taken`,
+      before === "Send 1" &&
+        after === "Send" &&
+        sendIn !== undefined &&
+        sendIn < PAINT_MS,
+      `before ${before}; after ${after} at +${sendIn}ms; hub: pick at ${hubRead.state.song?.at}, sentAt ${hubRead.sentAt}; the app since the Sends: ${timeline(busyAt)}`
+    );
 
     // 2. While the turn runs: the queued event, drawn as the note.
     const drawnLine = (want: (kind: string) => boolean) =>
@@ -361,6 +423,21 @@ async function run(kit: Kit): Promise<void> {
         !!last &&
         drawnAs(last, id8) === "ui.system_note/artifact_responses",
       `place ${read}; drawn ${last}`
+    );
+
+    // A pick after the Send is counted again.
+    await pick("The cover, after all\n");
+    const later = await headReads("Send 1", 15_000);
+    // From when the hub took the patch: its own stamp on the entry, this machine's clock.
+    const picked = await fleet.api<{ state: Record<string, { at: string }> }>(
+      `/api/instances/${session}/artifacts/${id}`
+    );
+    const pickedAt = Date.parse(picked.state.song?.at ?? "");
+    const pickIn = paintedAfter("Send 1", pickedAt);
+    kit.check(
+      `4: a later pick makes the head read Send 1 within ${PAINT_MS} ms`,
+      later === "Send 1" && pickIn !== undefined && pickIn < PAINT_MS,
+      `${later} at +${pickIn}ms; the app since the pick: ${timeline(pickedAt)}`
     );
   } finally {
     stream?.kill();

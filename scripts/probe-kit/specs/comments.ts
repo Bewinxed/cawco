@@ -16,7 +16,7 @@
  * 3. A reply typed in the card is in pin 1's thread, by the person; "Send 2"
  *    tells the session it has responses to read (pins with comment_read),
  *    both pins' pictures with it, drawn as one quiet line and no row of the
- *    person's, after which N is 0 and every pin and entry has `sentAt`; a
+ *    person's, after which the head reads "Send" and every pin and entry has `sentAt`; a
  *    second reply makes N 1.
  * 4. comment_read answers both pins, what pin 1 stands on and its reply, and
  *    pin 2's ink box; comment_reply on pin 1 is in its card
@@ -524,13 +524,13 @@ const sendChecks = async (on: On, frame: Frame, one: string) => {
   const after = await sendLabel(on);
   const disabled = await on.page.locator(".preview-pane .send").isDisabled();
   on.kit.check(
-    "3: Send 2 tells the session it has responses to read, pins with comment_read, with both pins' pictures; one quiet line, no row of the person's; then N is 0 and every pin and entry has sentAt",
+    "3: Send 2 tells the session it has responses to read, pins with comment_read, with both pins' pictures; one quiet line, no row of the person's; then the head reads Send, no count, and every pin and entry has sentAt",
     label?.trim() === "Send 2" &&
       !!message?.last.includes("and its pins with comment_read") &&
       pictures === 2 &&
       lines === 1 &&
       ownRows === rows &&
-      after?.trim() === "Send 0" &&
+      after?.trim() === "Send" &&
       disabled &&
       Object.values(stamped.pins).every((pin) => !!pin.sentAt),
     `label ${label} → ${after} (disabled ${disabled}); pictures ${pictures}; lines ${lines}; person's rows ${rows} → ${ownRows}; heard ${message?.last.slice(0, 300)}`
