@@ -121,6 +121,8 @@ export const rewriteLeftFiles = async (ref: WorkspaceRef): Promise<boolean> => {
     if (empty.kind === "file") {
       // biome-ignore lint/performance/noAwaitInLoops: a few files, each written in turn
       await chmod(path, 0o644);
+      // In place, never renamed over: this inode is the mount point a
+      // sandbox left, and a rename would put another file where it is.
       await writeFile(path, empty.text, { flag: "r+" });
     } else {
       dirs = true;

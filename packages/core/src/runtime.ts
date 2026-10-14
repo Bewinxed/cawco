@@ -1,15 +1,9 @@
 /** Server-only runtime layout. Never import through the browser-facing core barrel. */
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { binaryAssets } from "./binary-assets";
+import { writeStateFileSync } from "./state-file";
 
 declare const __CAWCO_VERSION__: string | undefined;
 declare const __CAWCO_COMMIT__: string | undefined;
@@ -65,9 +59,7 @@ export function materializeTree(prefix: string): string {
       continue;
     }
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-    const temp = `${path}.${process.pid}.tmp`;
-    writeFileSync(temp, readFileSync(source), { mode: 0o600 });
-    renameSync(temp, path);
+    writeStateFileSync(path, readFileSync(source), { mode: 0o600 });
   }
   return root;
 }

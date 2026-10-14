@@ -60,6 +60,7 @@ import {
 import { machineId } from "@cawco/core/machine-id";
 import { verifyManifest } from "@cawco/core/release-manifest";
 import { runtimeVersion } from "@cawco/core/runtime";
+import { writeStateFile } from "@cawco/core/state-file";
 import { leaveRetiringKeepers } from "./boundary";
 import {
   HELPER_START_MS,
@@ -998,7 +999,7 @@ export class BinaryUpdater {
     const work = `${directory}.partial-${crypto.randomUUID()}`;
     const archive = `${work}.tar.gz`;
     try {
-      await Bun.write(archive, bytes);
+      await writeStateFile(archive, bytes);
       // On macOS the signed CawCo Agent.app, exactly as the release signed it.
       await Bun.$`mkdir -p ${work} && tar -xzf ${archive} -C ${work} ${ARCHIVE_ENTRY}`.quiet();
       const binary = join(work, EXECUTABLE_IN_VERSION);

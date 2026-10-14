@@ -412,6 +412,40 @@ export interface SendPayload {
 }
 
 /**
+ * One record of a machine's that is on disk and does not parse (NULs a
+ * crash left, a cut-off write): the file, why, and what it belongs to. What
+ * it belongs to does not run until the person removes it; everything else
+ * runs on.
+ */
+export interface DamagedRecordReport {
+  file: string;
+  /** The session it is a record of (its wake-ups), when it is one session's. */
+  instanceId?: string;
+  reason: string;
+  /** The workspace it is a record of (`create.json`, `accounts.json`, `boundary.json`), when it is one workspace's. */
+  workspaceId?: string;
+}
+
+/**
+ * What the hub lays over a session row whose record, or whose workspace's
+ * record, is damaged on its machine ({@link DamagedRecordReport}): the file,
+ * why, and the way out that removes it (`archive`: archive workspace
+ * `workspaceId`; `end`: end the session).
+ */
+export interface DamagedRow {
+  file: string;
+  reason: string;
+  remedy: "archive" | "end";
+  workspaceId?: string;
+}
+
+/** What a {@link DamagedRow} says to the person: what happened, and the way out (WORDS.md's error formula). */
+export const damagedWords = (damaged: DamagedRow): string =>
+  damaged.remedy === "archive"
+    ? `This workspace's record is damaged: ${damaged.file} (${damaged.reason}). Archive workspace ${damaged.workspaceId ?? ""} to remove it. Every other workspace runs as before.`
+    : `This session's record is damaged: ${damaged.file} (${damaged.reason}). Its wake-ups are not known until its next turn ends, which writes the record whole again. Stop the session to remove it.`;
+
+/**
  * `heartbeat`: the daemon's 15s pulse. `instances` is the supervisor's live
  * instance-id list (`SessionSupervisor.instanceIds`), sent on every beat so the
  * hub can reconcile session truth continuously rather than only at `register` —
@@ -426,6 +460,13 @@ export interface HeartbeatPayload {
   /** Fresh sessiond custody after an owner-named stop or register recovery. */
   custody?: SessionCustody;
   custodyComplete?: true;
+  /**
+   * Every record of the machine's that is on disk and cannot be read
+   * ({@link DamagedRecordReport}), found by the agent's sweep as it starts or
+   * by a reader since. The whole list on every 15s beat, empty when there is
+   * none, so the hub replaces what it held; absent from the other beats.
+   */
+  damagedRecords?: DamagedRecordReport[];
   /**
    * What each harness adapter on the machine can do, and whether it is
    * installed and authenticated. Rides one beat per connection, sent the
@@ -871,6 +912,12 @@ export interface InstanceRow {
   canDelegate?: boolean | null;
   /** The directory the session was launched in; see `launchDir`. */
   cwd: string;
+  /**
+   * Its record, or its workspace's, is damaged on its machine
+   * ({@link DamagedRow}): laid over by the hub from the machine's last beat,
+   * never stored. `lastError` says the same in words.
+   */
+  damaged?: DamagedRow;
   /** The delegate type its spawn named; null: none. */
   delegateType?: string | null;
   /** The project whose catalog that type came from; null: the fleet's. */

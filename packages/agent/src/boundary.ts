@@ -71,7 +71,6 @@ import {
   rm,
   stat,
   symlink,
-  writeFile,
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -116,6 +115,12 @@ import {
 import type { ProcSpec } from "@cawco/core/sessiond";
 import { PROTECTED_NAMES, PROTECTED_UNDER } from "@cawco/core/workspace-judge";
 import {
+  DamagedRecord,
+  isDamagedRecord,
+  readRecord,
+  writeStateFile,
+} from "@cawco/core/state-file";
+import {
   isLeadPlace,
   workspaceDenies,
   workspacePolicy,
@@ -123,6 +128,7 @@ import {
 import { rgPath } from "@vscode/ripgrep-universal";
 import { seatbeltProfile, srtSettings } from "./boundary-policy";
 import { cloneInPlace } from "./clone";
+import { reportDamaged } from "./damaged-records";
 import {
   closeGitDoor,
   gitDoorEnv,
@@ -814,16 +820,12 @@ ${standalone ? "export BUN_BE_BUN=1\n" : ""}exec ${[runtime, client, String(port
   ]);
 };
 
-/** Writes `path` whole or not at all: a reader never sees it half written. */
-const writeWhole = async (
+/** Writes `path` whole or not at all, at exactly `mode`: a reader never sees it half written. */
+const writeWhole = (
   path: string,
   content: string,
   mode: number
-): Promise<void> => {
-  const temporary = `${path}.${process.pid}.tmp`;
-  await writeFile(temporary, content, { mode });
-  await rename(temporary, path);
-};
+): Promise<void> => writeStateFile(path, content, { mode });
 
 /**
  * Starts the workspace's judge in this build's form and writes its hook for
@@ -944,7 +946,7 @@ const rearmOne = async (id: string): Promise<boolean> => {
     // may not reach this boundary (Nightly C wrote its srt executor over
     // every anchor from before srt), so a command waits at the gate and
     // runs through the new boundary rather than being refused.
-    await writeFile(gateOf(id), String(process.pid));
+    await writeStateFile(gateOf(id), String(process.pid));
     try {
       await ensureNow(ref);
       return true;
@@ -1288,14 +1290,13 @@ export const addAccount = async (
   account: string
 ): Promise<void> => {
   const file = workspaceAccountsFile(id);
-  const listed = await readFile(file, "utf8").then(
-    (text): string[] => JSON.parse(text),
-    (error: NodeJS.ErrnoException): string[] => {
-      if (error.code === "ENOENT") {
-        return [];
+  const listed = await reported(
+    readRecord<unknown>(file).then((record = []) => {
+      if (!Array.isArray(record)) {
+        throw new DamagedRecord(file, "it is not a list");
       }
-      throw error;
-    }
+      return record as string[];
+    })
   );
   if (listed.includes(account)) {
     return;
@@ -1375,13 +1376,36 @@ export const checkBoundaryHost = (): void => {
   }
 };
 
-const readHeld = async (id: string): Promise<Held | undefined> => {
-  const text = await readFile(
-    join(stateDir(id), "boundary.json"),
-    "utf8"
-  ).catch(() => undefined);
-  return text ? (JSON.parse(text) as Held) : undefined;
+/**
+ * `read`'s answer; a {@link DamagedRecord} it finds is reported
+ * ({@link reportDamaged}) and thrown on: what reads the record stops there,
+ * and every other workspace goes on.
+ */
+const reported = async <T>(read: Promise<T>): Promise<T> => {
+  try {
+    return await read;
+  } catch (error) {
+    if (isDamagedRecord(error)) {
+      await reportDamaged(error);
+    }
+    throw error;
+  }
 };
+
+/**
+ * The record of workspace `id`'s running boundary; undefined when there is
+ * none or it cannot be read, and a {@link DamagedRecord}, reported, when it
+ * is there and does not parse.
+ */
+const readHeld = (id: string): Promise<Held | undefined> =>
+  reported(
+    readRecord<Held>(join(stateDir(id), "boundary.json")).catch(
+      (error: unknown): Promise<Held | undefined> =>
+        isDamagedRecord(error)
+          ? Promise.reject(error)
+          : Promise.resolve(undefined)
+    )
+  );
 
 /** Whether a keeper, the current one or a retiring one, holds a live process under `procId`. */
 const holding = async (procId: string): Promise<boolean> =>
@@ -2214,9 +2238,9 @@ const readRetiring = async (id: string): Promise<Retiring[]> => {
     names
       .filter((name) => RETIRING_FILE.test(name))
       .map((name) =>
-        readFile(join(stateDir(id), name), "utf8")
-          .then((text) => JSON.parse(text) as Retiring)
-          .catch(() => undefined)
+        reported(readRecord<Retiring>(join(stateDir(id), name))).catch(
+          () => undefined
+        )
       )
   );
   return records.filter((record): record is Retiring => Boolean(record));
@@ -2237,7 +2261,7 @@ const handOver = async (
   old: Held
 ): Promise<Boundary> => {
   const gate = gateOf(ref.id);
-  await writeFile(gate, String(process.pid));
+  await writeStateFile(gate, String(process.pid));
   try {
     const record = retiringFileOf(ref.id, old);
     const retiring: Retiring = {
@@ -2399,7 +2423,7 @@ const restartIfIdle = async (
   held: Held
 ): Promise<Boundary> => {
   const gate = gateOf(ref.id);
-  await writeFile(gate, String(process.pid));
+  await writeStateFile(gate, String(process.pid));
   try {
     const seen = await snapshot();
     if (

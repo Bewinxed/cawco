@@ -105,6 +105,7 @@ import {
   sessionConfigDir,
 } from "@cawco/core/paths";
 import { sessionEnvironment } from "@cawco/core/session-env";
+import { isDamagedRecord } from "@cawco/core/state-file";
 import {
   accountEnv,
   accountReports,
@@ -130,6 +131,7 @@ import {
   sweepMcpConfigs,
 } from "../claude-mcp-config";
 import { carrySessions, readTaskList, transcriptIn } from "../claude-sessions";
+import { reportDamaged } from "../damaged-records";
 import { delegationMcp, MCP_SERVER_NAME } from "../delegation";
 import { sessionFleetDenials } from "../denied-tools";
 import {
@@ -986,6 +988,40 @@ const restingSince = async (
 ): Promise<number | undefined> => {
   const transcript = sessionId ? await claudeSessionFile(sessionId, cwd) : null;
   return transcript ? await writtenAt(transcript) : undefined;
+};
+
+/**
+ * An attached session's wake-ups: the ring's, else its kept record's, else
+ * none known since its conversation last moved ({@link restingSince}). A
+ * damaged record is not none: it is reported, and its wake-ups are not
+ * known until its next turn ends (which writes the record whole again);
+ * nothing reads them from elsewhere meanwhile.
+ */
+const adoptKeptWakeups = async (
+  session: ClaudeSession,
+  ring: Wakeups | undefined,
+  sessionId: string | null,
+  cwd: string
+): Promise<void> => {
+  if (ring) {
+    session.adoptWakeups(ring);
+    return;
+  }
+  let kept: Wakeups | undefined;
+  try {
+    kept = await keptWakeups(session.instanceId);
+  } catch (error) {
+    if (!isDamagedRecord(error)) {
+      throw error;
+    }
+    await reportDamaged(error);
+    session.adoptWakeups(undefined);
+    return;
+  }
+  session.adoptWakeups(
+    kept,
+    kept === undefined ? await restingSince(sessionId, cwd) : undefined
+  );
 };
 
 /**
@@ -3301,11 +3337,7 @@ export class ClaudeHarness implements Harness {
     if (turnRunning) {
       session.adoptTurn();
     }
-    const known = wakeups ?? (await keptWakeups(instanceId));
-    session.adoptWakeups(
-      known,
-      known === undefined ? await restingSince(sessionId, ctx.cwd) : undefined
-    );
+    await adoptKeptWakeups(session, wakeups, sessionId, ctx.cwd);
     return session;
   }
 

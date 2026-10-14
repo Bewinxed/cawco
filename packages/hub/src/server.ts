@@ -350,6 +350,7 @@ import {
   summariserPrompt,
   transcriptModel,
 } from "./continuation";
+import { damagedRecordsOf, peekDamagedRecords } from "./damaged-rows";
 import { dashboardErrorsRoutes } from "./dashboard-errors";
 import type {
   AgentAuth,
@@ -2804,6 +2805,11 @@ export const createServer = (
 
   /** Each connected machine's binary update state, as its daemon last said. */
   const binaryUpdateStates = new Map<string, BinaryUpdateState>();
+
+  /** Each machine's damaged records, laid over the rows they belong to. */
+  const damagedRecords = damagedRecordsOf((workspaceId) =>
+    db.workItemsIn(workspaceId)
+  );
 
   /**
    * Each connected machine's agent's hub ↔ agent contract, as its last
@@ -11635,7 +11641,9 @@ export const createServer = (
         listed.push(row);
       }
     }
-    return withKeepAlive(withDelegates(withSessionPresence(listed)));
+    return withKeepAlive(
+      withDelegates(damagedRecords.overlay(withSessionPresence(listed)))
+    );
   };
 
   /**
@@ -11794,6 +11802,7 @@ export const createServer = (
     JSON.stringify([
       row.status,
       "held" in row ? row.held : null,
+      "damaged" in row ? row.damaged : null,
       row.runningDelegates,
       row.keepAlive,
     ]);
@@ -21828,6 +21837,13 @@ export const createServer = (
               if (beaten) {
                 binaryUpdateStates.set(message.machineId, beaten);
               }
+              // The machine's damaged records: the rows they belong to say so
+              // from the next publish, and stop saying it once the machine's
+              // list drops them (the workspace archived, the session ended).
+              const damaged = peekDamagedRecords(message.payload);
+              const damageMoved =
+                damaged !== undefined &&
+                damagedRecords.heard(message.machineId, damaged);
               if (moved) {
                 flushOwedStarts(message.machineId);
               }
@@ -21907,6 +21923,7 @@ export const createServer = (
                 dated > 0 ||
                 reported ||
                 moved ||
+                damageMoved ||
                 beat.promoted.length > 0 ||
                 beat.settled.length > 0
               ) {

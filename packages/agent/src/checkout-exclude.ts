@@ -2,10 +2,11 @@
  * Files cawco writes into a checkout that are not the project's: kept out of
  * git's status through the checkout's own `info/exclude`.
  */
-import { appendFile, mkdir, realpath, writeFile } from "node:fs/promises";
+import { realpath } from "node:fs/promises";
 import { dirname, isAbsolute, relative as relativePath } from "node:path";
 import { projectClaudeDir } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
+import { writeStateFile } from "@cawco/core/state-file";
 import { resolveBin, toolEnv } from "./tools";
 
 /** One git query in `cwd`, its trimmed stdout; undefined when git fails (not a checkout, no git). */
@@ -145,8 +146,7 @@ export const excludeStandIns = async (
   if (after === before) {
     return;
   }
-  await mkdir(dirname(exclude), { recursive: true });
-  await writeFile(exclude, after);
+  await writeStateFile(exclude, after);
 };
 
 /**
@@ -187,9 +187,8 @@ export const excludeFromCheckout = async (path: string): Promise<void> => {
     return;
   }
   try {
-    await mkdir(dirname(exclude), { recursive: true });
     const lead = current === "" || current.endsWith("\n") ? "" : "\n";
-    await appendFile(exclude, `${lead}${line}\n`);
+    await writeStateFile(exclude, `${current}${lead}${line}\n`);
   } catch {
     // The hook is registered either way; only the status noise remains.
   }

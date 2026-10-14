@@ -50,6 +50,7 @@ import {
   workspaceScratchDir,
   xdgDataHome,
 } from "./paths";
+import { DamagedRecord, readRecord } from "./state-file";
 import {
   type Policy,
   PROTECTED_NAMES,
@@ -664,17 +665,10 @@ const ACCOUNT_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
  * account's credential, `.claude.json`, transcripts and the rest stay denied.
  */
 const accountLayers = async (id: string): Promise<string[]> => {
-  const text = await readFile(workspaceAccountsFile(id), "utf8").catch(
-    (error: NodeJS.ErrnoException) => {
-      if (error.code === "ENOENT") {
-        return "[]";
-      }
-      throw error;
-    }
-  );
-  const listed = JSON.parse(text) as unknown;
+  const file = workspaceAccountsFile(id);
+  const listed = (await readRecord<unknown>(file)) ?? [];
   if (!Array.isArray(listed)) {
-    throw new Error(`${workspaceAccountsFile(id)} is not a list`);
+    throw new DamagedRecord(file, "it is not a list");
   }
   return listed
     .filter(

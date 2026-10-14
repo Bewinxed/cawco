@@ -53,6 +53,7 @@ import {
   projectClaudeDir,
   userLayerPath,
 } from "@cawco/core/paths";
+import { writeStateFile } from "@cawco/core/state-file";
 import { accountClaudeJsons, linkUserLayer } from "./accounts";
 import { excludeFromCheckout } from "./checkout-exclude";
 import {
@@ -253,22 +254,18 @@ const readJson = async <T>(path: string): Promise<T | undefined> => {
 };
 
 /**
- * Written whole and moved into place, whatever the content is. A crash between
- * the write and the rename leaves only the temp file behind — never a
- * half-written `path` that something else reads mid-write. A hook's script is
- * spawned with its execute bit, so a half-written one is worse than a
- * half-written JSON blob: it is a shell prefix somebody's session is about to run.
+ * Written whole and moved into place, whatever the content is
+ * ({@link writeStateFile}): never a half-written `path` that something else
+ * reads mid-write. A hook's script is spawned with its execute bit, so a
+ * half-written one is worse than a half-written JSON blob: it is a shell
+ * prefix somebody's session is about to run. `reason` asks first.
  */
 export const writeAtomic = async (
   path: string,
   content: string | Buffer,
   reason?: string
 ): Promise<void> => {
-  const write = async () => {
-    const temp = `${path}.cawco-${process.pid}`;
-    await Bun.write(temp, content);
-    await rename(temp, path);
-  };
+  const write = () => writeStateFile(path, content);
   if (reason) {
     await promptWrite(reason, write);
   } else {
@@ -1103,7 +1100,7 @@ export const writeSkillFile = async (
   file: SkillFile
 ): Promise<void> => {
   const path = join(dir, file.path);
-  await Bun.write(path, Buffer.from(file.contentBase64, "base64"));
+  await writeStateFile(path, Buffer.from(file.contentBase64, "base64"));
   if (file.executable) {
     await chmod(path, 0o755);
   }
@@ -1207,7 +1204,7 @@ const writeVendoredMarketplace = async (
     }
   }
 
-  await Bun.write(
+  await writeStateFile(
     join(into, ".claude-plugin", "marketplace.json"),
     `${JSON.stringify(
       {

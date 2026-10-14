@@ -10,6 +10,7 @@ import { extname, join, resolve } from "node:path";
 import type { FsEntry, FsMedia, FsPayload } from "@cawco/core";
 import { MEDIA_LIMIT_BYTES } from "@cawco/core";
 import { claudeHome } from "@cawco/core/paths";
+import { writeStateFile } from "@cawco/core/state-file";
 import { promptWrite, promptWriteReason } from "./prompt-writes";
 
 /**
@@ -147,7 +148,10 @@ const write = async (
     return { bytes: next.byteLength };
   }
   const reason = promptWriteReason(path);
-  const mutate = async () => ({ bytes: await Bun.write(path, next) });
+  const mutate = async () => {
+    await writeStateFile(path, next);
+    return { bytes: next.byteLength };
+  };
   return reason ? await promptWrite(reason, mutate) : await mutate();
 };
 

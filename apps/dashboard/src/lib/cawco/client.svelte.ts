@@ -5685,6 +5685,26 @@ export async function deleteTranscript(
  * refuses any other kind and says why; that answer is thrown as it is, for
  * the confirm dialog to show under its question.
  */
+/**
+ * Archives a workspace through the hub (`POST /api/workspaces/:id/archive`):
+ * its machine kills the boundary with everything in it and deletes the
+ * clone and its records, a damaged one among them. The hub's refusal (a live
+ * item there) is the error.
+ */
+export async function archiveWorkspace(workspaceId: string): Promise<void> {
+  const response = await fetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/archive`,
+    { method: "POST" }
+  );
+  if (!response.ok) {
+    throw new Error(
+      (await response.text()) ||
+        `The hub answered ${response.status}, so the workspace was not archived. Try again.`
+    );
+  }
+  await refresh();
+}
+
 export async function removeSession(instanceId: string): Promise<void> {
   const response = await fetch(
     `/api/instances/${encodeURIComponent(instanceId)}`,

@@ -9,8 +9,8 @@
  * has that id, not only when the address it was given matches the one it
  * joined by. `/health` says it.
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { readTextRecordSync, writeStateFileSync } from "@cawco/core/state-file";
 import { DB_PATH } from "./config";
 
 const HUB_ID_PATH = resolve(dirname(DB_PATH), "hub-id");
@@ -22,18 +22,15 @@ export const hubId = (): string => {
   if (id) {
     return id;
   }
-  try {
-    const kept = readFileSync(HUB_ID_PATH, "utf8").trim();
-    if (kept) {
-      id = kept;
-      return id;
-    }
-  } catch {
-    // None yet: this is the hub's first run in this database's folder.
+  // None yet is the hub's first run in this database's folder. A damaged one
+  // is said with its file: this hub's id is not guessed.
+  const kept = readTextRecordSync(HUB_ID_PATH)?.trim();
+  if (kept) {
+    id = kept;
+    return id;
   }
   const minted = crypto.randomUUID();
-  mkdirSync(dirname(HUB_ID_PATH), { recursive: true });
-  writeFileSync(HUB_ID_PATH, `${minted}\n`, { mode: 0o600 });
+  writeStateFileSync(HUB_ID_PATH, `${minted}\n`, { mode: 0o600 });
   id = minted;
   return id;
 };

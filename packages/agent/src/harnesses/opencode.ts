@@ -31,7 +31,6 @@ import {
   rm,
   stat,
   symlink,
-  writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
 import type {
@@ -67,6 +66,7 @@ import {
   xdgDataHome,
 } from "@cawco/core/paths";
 import type { ProcSpec } from "@cawco/core/sessiond";
+import { writeStateFile } from "@cawco/core/state-file";
 import type {
   CredentialCreateInput,
   SessionInfo,
@@ -702,7 +702,10 @@ const disablePlanAgentFor = async (
     );
     return;
   }
-  await Bun.write(join(workspaceStateDir(workspace.id), PLAN_AGENT_OFF), "");
+  await writeStateFile(
+    join(workspaceStateDir(workspace.id), PLAN_AGENT_OFF),
+    ""
+  );
 };
 
 /** A line CawCo's `excludeFromCheckout` added for an `opencode.jsonc` it wrote into a clone, at its root or in a directory inside it. */
@@ -770,7 +773,7 @@ const removeCawcoSessionConfigsIn = async (
     }
   }
   if (gone.length > 0) {
-    await writeFile(
+    await writeStateFile(
       exclude,
       lines.filter((line) => !gone.includes(line)).join("\n")
     );

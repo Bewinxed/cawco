@@ -1104,6 +1104,44 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/DamagedRowRemedy`.
+    public enum DamagedRowRemedy: OpenEnum {
+        case archive
+        case end
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "archive": self = .archive
+            case "end": self = .end
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .archive: "archive"
+            case .end: "end"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.archive, .end]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/DelegateBudgetPer`.
     public enum DelegateBudgetPer: OpenEnum {
         case attempt

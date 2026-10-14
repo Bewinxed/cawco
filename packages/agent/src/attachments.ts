@@ -4,9 +4,8 @@
  * store, written under `~/.cawco/attachments/<session>/`, and named by its
  * path in one line of the turn. Every harness reads it with its own tools.
  */
-import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import {
   attachedFileLine,
   attachedFileName,
@@ -15,6 +14,7 @@ import {
   type SentMessage,
   type TextAttachment,
 } from "@cawco/core";
+import { writeStateFile } from "@cawco/core/state-file";
 import { delegationHubUrl } from "./delegation";
 
 const attachmentsDir = (): string => join(homedir(), ".cawco", "attachments");
@@ -48,8 +48,7 @@ async function deliverFile(
     throw fetchFailed(file, `HTTP ${response.status}`);
   }
   const bytes = new Uint8Array(await response.arrayBuffer());
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(path, bytes);
+  await writeStateFile(path, bytes);
   return attachedFileLine(path, {
     size: bytes.byteLength,
     mediaType: file.mediaType,

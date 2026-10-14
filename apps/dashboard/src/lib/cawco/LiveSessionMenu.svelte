@@ -16,7 +16,7 @@
    * The row is the trigger itself: `children` is handed the trigger's props
    * and spreads them on its own root element, so a table row stays a `<tr>`.
    */
-  import type { HarnessKind } from "@cawco/core";
+  import { type HarnessKind, machineLabel } from "@cawco/core";
   import type { Snippet } from "svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
@@ -36,6 +36,7 @@
   import AccountSubmenu from "./accounts/AccountSubmenu.svelte";
   import type { Asker, AskHereRequest } from "./ask-here.svelte";
   import {
+    archiveWorkspace,
     cawco,
     deleteTranscript,
     discardSession,
@@ -176,6 +177,26 @@
     });
   }
 
+  /** The workspace whose damaged record keeps this session from running. */
+  const damagedWorkspace = $derived(
+    instance.damaged?.remedy === "archive"
+      ? instance.damaged.workspaceId
+      : undefined
+  );
+
+  async function askArchiveWorkspace() {
+    const workspaceId = damagedWorkspace as string;
+    await asker.ask({
+      at: instance.id,
+      title: "Archive this workspace?",
+      body: `Its record ${instance.damaged?.file ?? ""} is damaged, so it cannot run. Archiving deletes its clone, its boundary and its records on ${machine ? machineLabel(machine.hostname) : "its machine"}, for good. Every other workspace runs as before.`,
+      confirmLabel: "Archive workspace",
+      destructive: true,
+      pendingLabel: "Archiving…",
+      run: () => archiveWorkspace(workspaceId),
+    });
+  }
+
   async function askRemove() {
     await asker.ask({
       at: instance.id,
@@ -287,6 +308,14 @@
       <ContextMenu.Item onSelect={askDeleteTranscript} variant="destructive">
         <IconTrash />
         Delete transcript
+      </ContextMenu.Item>
+    {/if}
+
+    {#if damagedWorkspace}
+      <ContextMenu.Separator />
+      <ContextMenu.Item onSelect={askArchiveWorkspace} variant="destructive">
+        <IconArchive />
+        Archive workspace
       </ContextMenu.Item>
     {/if}
 

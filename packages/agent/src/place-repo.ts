@@ -38,7 +38,6 @@ import {
   realpath,
   rm,
   stat,
-  writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -53,6 +52,7 @@ import {
 import { isSecretFileName } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { writeStateFile } from "@cawco/core/state-file";
 import { expandHome } from "./fs";
 import { PACKAGE_TREES } from "./workspace";
 
@@ -397,7 +397,7 @@ const planOf = async (root: string, git: Git): Promise<Plan> => {
     const gitDir = join(scratch, "probe.git");
     await git(scratch, "init", "-q", "--bare", gitDir);
     const exclude = join(scratch, "exclude");
-    await writeFile(exclude, ignoreBlock(leftOut));
+    await writeStateFile(exclude, ignoreBlock(leftOut));
     const listed = new Set(
       nulList(
         await git(
@@ -480,10 +480,10 @@ const commitPlan = async (
     await git(root, "init", "-q", "-b", "main");
     let { leftOut, staged } = plan;
     const writeIgnore = () =>
-      writeFile(ignorePath, gitignoreText(own, leftOut));
+      writeStateFile(ignorePath, gitignoreText(own, leftOut));
     await writeIgnore();
     const pathspecs = join(scratch, "pathspecs");
-    await writeFile(pathspecs, [...staged, ".gitignore"].join("\0"));
+    await writeStateFile(pathspecs, [...staged, ".gitignore"].join("\0"));
     await git(
       root,
       "add",
@@ -498,7 +498,7 @@ const commitPlan = async (
       index.filter((path) => path !== ".gitignore")
     );
     if (hits.length > 0) {
-      await writeFile(pathspecs, hits.map((each) => each.path).join("\0"));
+      await writeStateFile(pathspecs, hits.map((each) => each.path).join("\0"));
       await git(
         root,
         "rm",
@@ -536,7 +536,7 @@ const commitPlan = async (
     await rm(join(root, ".git"), { recursive: true, force: true });
     await (own === undefined
       ? rm(ignorePath, { force: true })
-      : writeFile(ignorePath, own));
+      : writeStateFile(ignorePath, own));
     throw error;
   } finally {
     await rm(scratch, { recursive: true, force: true });

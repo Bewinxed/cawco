@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { chmod, mkdir } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { dirname, join } from "node:path";
 import type { AgentRow } from "@cawco/core";
@@ -16,6 +16,7 @@ import { processStart } from "@cawco/core/process-identity";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
+import { writeStateFile } from "@cawco/core/state-file";
 
 /**
  * The machine's keeper endpoint, as this machine derives it
@@ -1110,13 +1111,10 @@ const hasBootstrap = (): Promise<boolean> => launchctlHas("bootstrap");
 
 /**
  * A service definition someone else can rewrite is a service someone else can
- * run as you, so it is written owner-only — and set on the way out, because a
- * file that already existed keeps the mode it had.
+ * run as you, so it is written owner-only, whole.
  */
-const writeUnit = async (path: string, contents: string): Promise<void> => {
-  await Bun.write(path, contents);
-  await chmod(path, 0o600);
-};
+const writeUnit = (path: string, contents: string): Promise<void> =>
+  writeStateFile(path, contents, { mode: 0o600 });
 
 /**
  * Puts whatever the plist now says in front of launchd, replacing whatever it
@@ -2133,8 +2131,7 @@ export const writeSessiondLedger = async (
   entries: readonly LedgerEntry[],
   path = sessiondLedgerPath()
 ): Promise<void> => {
-  await Bun.write(path, `${JSON.stringify(entries)}\n`);
-  await chmod(path, 0o600);
+  await writeStateFile(path, `${JSON.stringify(entries)}\n`, { mode: 0o600 });
 };
 
 /**

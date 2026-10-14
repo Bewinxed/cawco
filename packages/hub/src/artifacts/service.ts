@@ -8,7 +8,7 @@
  * after {@link QUIET_MS} of quiet, at once while its turn runs, and at once
  * when the person sends.
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   type AgentRow,
@@ -40,6 +40,7 @@ import {
 } from "@cawco/core/comments";
 import type { InkGroup } from "@cawco/core/ink";
 import { pageHash } from "@cawco/core/preview-proxy";
+import { writeStateFileSync } from "@cawco/core/state-file";
 import { applyPatch, type Operation } from "rfc6902";
 import { Doc, encodeStateAsUpdate } from "yjs";
 import { PREVIEW_PORT } from "../config";
@@ -552,9 +553,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   const writePage = (id: string, html: string) => {
-    const dir = join(deps.root, id);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "index.html"), html);
+    writeStateFileSync(join(deps.root, id, "index.html"), html);
   };
 
   /** The person's changes the session has not heard, as one message; nothing when none are owed. */
@@ -898,8 +897,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     if (!composited || row.kind === "canvas") {
       return;
     }
-    mkdirSync(join(deps.root, row.id), { recursive: true });
-    writeFileSync(
+    writeStateFileSync(
       picturePath(deps.root, row.id),
       Buffer.from(composited.png, "base64")
     );

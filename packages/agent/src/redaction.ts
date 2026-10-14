@@ -14,7 +14,7 @@
  * still redacted. The harness's own transcript on this machine is left as the
  * harness wrote it.
  */
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Envelope } from "@cawco/core";
 import {
@@ -24,6 +24,7 @@ import {
   textPieces,
 } from "@cawco/core/json-stream";
 import { sessionIdentityDir } from "@cawco/core/paths";
+import { writeStateFileSync } from "@cawco/core/state-file";
 import { WIRE_PART_CHARS } from "@cawco/core/wire";
 import { delegationHubUrl } from "./delegation";
 import { gauge } from "./memory";
@@ -70,8 +71,7 @@ export const rememberCredential = (
   values.add(credential);
   const file = storeFile();
   mkdirSync(sessionIdentityDir(), { recursive: true, mode: 0o700 });
-  writeFileSync(`${file}.tmp`, JSON.stringify([...values]), { mode: 0o600 });
-  renameSync(`${file}.tmp`, file);
+  writeStateFileSync(file, JSON.stringify([...values]), { mode: 0o600 });
 };
 
 /** `text` with every credential this agent has held replaced. */

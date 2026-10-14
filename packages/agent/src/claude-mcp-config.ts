@@ -17,17 +17,13 @@
  * any left by children that are gone ({@link sweepMcpConfigs}).
  */
 import { randomUUID } from "node:crypto";
-import {
-  chmodSync,
-  mkdirSync,
-  readdirSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { chmodSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { sessionIdentityDir } from "@cawco/core/paths";
+import {
+  stateTemporaryTarget,
+  writeStateFileSync,
+} from "@cawco/core/state-file";
 
 const MCP_CONFIG_FLAG = "--mcp-config";
 const INLINE_FLAG = `${MCP_CONFIG_FLAG}=`;
@@ -95,9 +91,7 @@ export const mcpConfigOffArgv = (
     mkdirSync(dir, { recursive: true, mode: 0o700 });
     chmodSync(dir, 0o700);
     file = join(dir, `${instanceId}.${randomUUID()}.json`);
-    const staged = `${file}.tmp`;
-    writeFileSync(staged, config.json, { mode: 0o600, flag: "wx" });
-    renameSync(staged, file);
+    writeStateFileSync(file, config.json, { mode: 0o600, exclusive: true });
     rewritten[config.at] = config.joined ? `${INLINE_FLAG}${file}` : file;
   }
   if (credential && rewritten.some((arg) => arg.includes(credential))) {
@@ -138,10 +132,8 @@ const removeWrittenBefore = (
     throw error;
   }
   for (const name of names) {
-    // A staged file (`….json.tmp`) is its launch's, as the file it becomes.
-    const instanceId = instanceOf(
-      name.endsWith(".tmp") ? name.slice(0, -".tmp".length) : name
-    );
+    // A staged file is its launch's, as the file it becomes.
+    const instanceId = instanceOf(stateTemporaryTarget(name) ?? name);
     if (!(instanceId && stale(instanceId))) {
       continue;
     }

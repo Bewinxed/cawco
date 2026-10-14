@@ -1,6 +1,11 @@
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { cawcoDataDir } from "@cawco/core/paths";
+import { sessionWakeupsDir } from "@cawco/core/paths";
+import {
+  DamagedRecord,
+  readRecord,
+  writeStateFile,
+} from "@cawco/core/state-file";
 
 /**
  * The wake-ups a Claude session has scheduled for itself, as its last turn
@@ -19,44 +24,37 @@ export interface Wakeups {
   once: number;
 }
 
-/**
- * Each live Claude session's scheduled wake-ups as its last turn ended, kept
- * on disk for as long as its process runs: an agent that attaches to the
- * process after a restart reads them here when the keeper's ring no longer
- * holds that turn's end, so a session at rest is still known to be at rest,
- * and sleeps or moves like any other.
- */
-const dir = (): string => join(cawcoDataDir(), "session-wakeups");
-
-const fileOf = (instanceId: string): string => join(dir(), instanceId);
+const fileOf = (instanceId: string): string =>
+  join(sessionWakeupsDir(), instanceId);
 
 /** Keeps `wakeups` for `instanceId`'s process. */
 export const keepWakeups = async (
   instanceId: string,
   wakeups: Wakeups
 ): Promise<void> => {
-  await mkdir(dir(), { recursive: true });
-  await writeFile(fileOf(instanceId), JSON.stringify(wakeups));
+  await mkdir(sessionWakeupsDir(), { recursive: true });
+  await writeStateFile(fileOf(instanceId), JSON.stringify(wakeups));
 };
 
 const isCount = (value: unknown): value is number =>
   Number.isInteger(value) && (value as number) >= 0;
 
-/** The wake-ups kept for `instanceId`'s process; undefined when none were. */
+/**
+ * The wake-ups kept for `instanceId`'s process; undefined when none were. A
+ * record that is there and is not two counts is a {@link DamagedRecord}.
+ */
 export const keptWakeups = async (
   instanceId: string
 ): Promise<Wakeups | undefined> => {
-  try {
-    const kept = JSON.parse(await readFile(fileOf(instanceId), "utf8")) as {
-      all?: unknown;
-      once?: unknown;
-    };
-    return isCount(kept.all) && isCount(kept.once)
-      ? { all: kept.all, once: kept.once }
-      : undefined;
-  } catch {
-    return undefined;
+  const file = fileOf(instanceId);
+  const kept = await readRecord<{ all?: unknown; once?: unknown }>(file);
+  if (kept === undefined) {
+    return;
   }
+  if (!(isCount(kept.all) && isCount(kept.once))) {
+    throw new DamagedRecord(file, "it is not two counts");
+  }
+  return { all: kept.all, once: kept.once };
 };
 
 /** Its process ended: what was kept for it goes (a new one schedules its own). */

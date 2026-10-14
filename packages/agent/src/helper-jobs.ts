@@ -9,6 +9,7 @@
 import { readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { binaryRoot, helperIsLive } from "@cawco/core/binary-installation";
+import { writeStateFile } from "@cawco/core/state-file";
 import { launchdState } from "./keeper-jobs";
 
 /** How long a launched helper has to take its lock; one that holds none after it has gone. */
@@ -78,7 +79,7 @@ export async function launchHelper(
   const plist = join(binaryRoot(), `${label}.plist`);
   const text = (value: string) =>
     `<string>${value.replaceAll("&", "&amp;").replaceAll("<", "&lt;")}</string>`;
-  await Bun.write(
+  await writeStateFile(
     plist,
     `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

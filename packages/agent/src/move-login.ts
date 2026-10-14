@@ -1,4 +1,4 @@
-import { chmod, lstat, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, readFile, rm } from "node:fs/promises";
 import { platform } from "node:os";
 import { join } from "node:path";
 import {
@@ -14,6 +14,7 @@ import {
   claudeHome,
   claudeHomeJson,
 } from "@cawco/core/paths";
+import { writeStateFile } from "@cawco/core/state-file";
 import {
   accountEnv,
   authStatusIn,
@@ -198,10 +199,9 @@ const credentialsFile: Store = {
     (await readText(join(accountConfigDir(account), CREDENTIALS))) !==
     undefined,
   write: async (account, secret) => {
-    const path = join(accountConfigDir(account), CREDENTIALS);
-    await writeFile(path, secret, { mode: 0o600 });
-    // An empty file already there keeps its mode through the write.
-    await chmod(path, 0o600);
+    await writeStateFile(join(accountConfigDir(account), CREDENTIALS), secret, {
+      mode: 0o600,
+    });
   },
   remove: (account) =>
     rm(join(accountConfigDir(account), CREDENTIALS), { force: true }),

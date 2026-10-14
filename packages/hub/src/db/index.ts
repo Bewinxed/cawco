@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync } from "node:fs";
 import { dirname } from "node:path";
 import type {
   AgentRow,
@@ -52,6 +52,7 @@ import {
 import { hashFiles } from "@cawco/core/file-hash";
 import { ownIdentity } from "@cawco/core/process-identity";
 import { materializeTree, standalone } from "@cawco/core/runtime";
+import { writeStateFileSync } from "@cawco/core/state-file";
 import {
   and,
   asc,
@@ -2276,7 +2277,7 @@ const make = async (path: string): Promise<DbShape> => {
   // A marker for the update helper: while it names a live process the hub is
   // migrating, and the helper's wait for a healthy start does not run down.
   const migrating = `${path}.migrating`;
-  writeFileSync(
+  writeStateFileSync(
     migrating,
     JSON.stringify({ ...(await ownIdentity()), startedAt: Date.now() })
   );

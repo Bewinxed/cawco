@@ -8,14 +8,9 @@
  * open tab, `ready:…` and `installing:…` for a build that waits or installs
  * (apps/dashboard/src/lib/cawco/updates/model.ts names them).
  */
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { readRecordSync, writeStateFileSync } from "@cawco/core/state-file";
 import { Elysia, t } from "elysia";
 
 /**
@@ -31,15 +26,11 @@ export function createNoticesSeen(options: {
   dbPath: string;
 }) {
   const path = join(dirname(options.dbPath), "notices-seen.json");
-  let seen: string[] = existsSync(path)
-    ? (JSON.parse(readFileSync(path, "utf8")) as string[])
-    : [];
+  let seen: string[] = readRecordSync<string[]>(path) ?? [];
 
   const save = () => {
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-    const temporary = `${path}.${process.pid}.tmp`;
-    writeFileSync(temporary, `${JSON.stringify(seen)}\n`, { mode: 0o600 });
-    renameSync(temporary, path);
+    writeStateFileSync(path, `${JSON.stringify(seen)}\n`, { mode: 0o600 });
   };
 
   return {

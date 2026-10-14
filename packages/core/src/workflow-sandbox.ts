@@ -3,10 +3,11 @@
  * allowed import resolves, refusing any other import, typechecking it, and
  * evaluating its `inputs` export inside the sandbox worker.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import ts from "typescript";
 import { materializeTree, standalone } from "./runtime";
+import { writeStateFileSync } from "./state-file";
 import type { Problem, WorkflowGraph, WorkflowInput } from "./workflow";
 import { compileWorkflow, inputsFromZodShape } from "./workflow-compile";
 import type { WorkerOut, WorkerStart } from "./workflow-worker";
@@ -59,7 +60,7 @@ const hashOf = (program: string) =>
 /** Writes the program where it can be imported; answers with its module path. */
 export function writeProgram(program: string): string {
   const path = join(programDir(), `${hashOf(program)}.ts`);
-  writeFileSync(path, program);
+  writeStateFileSync(path, program);
   return path;
 }
 

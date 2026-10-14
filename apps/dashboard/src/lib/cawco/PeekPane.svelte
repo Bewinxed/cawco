@@ -11,7 +11,12 @@
 </script>
 
 <script lang="ts">
-  import { getToolGlance, machineLabel, questionsOf } from "@cawco/core";
+  import {
+    damagedWords,
+    getToolGlance,
+    machineLabel,
+    questionsOf,
+  } from "@cawco/core";
   /**
    * The middle step of the board's loop: glance at the fleet, peek at one
    * session, dive into it. A peek answers "what is this one actually doing"
@@ -416,6 +421,14 @@
       class="border-t border-border/50 bg-error/10 px-4 py-3 text-meta text-error"
     >
       {row?.lastError || "Failed without saying why."}
+    </p>
+  {:else if row?.damaged}
+    <!-- A damaged record that does not stop the session (its wake-ups), or
+         one whose process still runs: said where its failure would be. -->
+    <p
+      class="border-t border-border/50 bg-error/10 px-4 py-3 text-meta text-error"
+    >
+      {damagedWords(row.damaged)}
     </p>
   {:else if stale}
     <p

@@ -5,16 +5,7 @@
  * sessions can be continued, and deletes it all on archive.
  */
 import { constants } from "node:fs";
-import {
-  chmod,
-  copyFile,
-  mkdir,
-  open,
-  readFile,
-  rm,
-  stat,
-  writeFile,
-} from "node:fs/promises";
+import { chmod, copyFile, mkdir, open, rm, stat } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type {
   CommandResult,
@@ -35,6 +26,11 @@ import {
   safeGitArgv,
 } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
+import {
+  isDamagedRecord,
+  readRecord,
+  writeStateFile,
+} from "@cawco/core/state-file";
 import {
   addAccount,
   closeBoundary,
@@ -255,7 +251,7 @@ export const createWorkspace = async (
   try {
     await mkdir(state, { recursive: true });
     // Written before the clone: archive-by-id survives a lost reply or an agent restart.
-    await writeFile(join(state, "create.json"), JSON.stringify({ path }));
+    await writeStateFile(join(state, "create.json"), JSON.stringify({ path }));
     const base = await prepareClone(repoRoot, path, authed, known);
     // A hub branch's large files come down with the checkout, from the
     // hub's LFS, whatever filters this machine's own config names.
@@ -449,8 +445,8 @@ export const workspaceAt = async (
   try {
     await git(`git fetch --quiet origin ${shellQuote(String(base))}`);
     if (bundle) {
-      await writeFile(path, Buffer.from(bundle, "base64"), {
-        flag: "wx",
+      await writeStateFile(path, Buffer.from(bundle, "base64"), {
+        exclusive: true,
         mode: 0o600,
       });
       await git(`git fetch --quiet "$TMPDIR"/${name} HEAD`);
@@ -470,23 +466,33 @@ export const workspaceAt = async (
 export const workspaceBoundary = async (ref: unknown): Promise<number> =>
   (await ensureBoundary(ref as WorkspaceRef)).pid;
 
+/**
+ * The clone's path as `create.json` names it, for an archive the hub sends
+ * with no path (a create it never filed). A damaged one names none: the
+ * workspace's state and scratch dirs still go with it, and the log says the
+ * clone at an unread path is left.
+ */
+const createdPath = async (id: string): Promise<string | undefined> => {
+  try {
+    return (
+      await readRecord<{ path?: string }>(
+        join(workspacesDir(), id, "create.json")
+      )
+    )?.path;
+  } catch (error) {
+    if (!isDamagedRecord(error)) {
+      throw error;
+    }
+    console.warn(
+      `[workspace] ${id}: archived with no path, and ${error.message}: its state and scratch dirs go, and its clone, whose path that record held, is left where it is`
+    );
+  }
+};
+
 /** {@link CONTROL_WORKSPACE_ARCHIVE}: the boundary killed with everything in it, then the clone deleted. */
 export const archiveWorkspace = async (ref: unknown): Promise<void> => {
   const request = ref as { id: string; path?: string };
-  const saved = request.path
-    ? undefined
-    : await readFile(
-        join(workspacesDir(), request.id, "create.json"),
-        "utf8"
-      ).catch((error: NodeJS.ErrnoException) => {
-        if (error.code === "ENOENT") {
-          return;
-        }
-        throw error;
-      });
-  const path =
-    request.path ??
-    (saved ? (JSON.parse(saved) as { path: string }).path : undefined);
+  const path = request.path ?? (await createdPath(request.id));
   if (!path) {
     await Promise.all(
       [join(workspacesDir(), request.id), workspaceScratchDir(request.id)].map(

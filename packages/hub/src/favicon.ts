@@ -18,10 +18,11 @@
  */
 import { createHash } from "node:crypto";
 import { lookup as dnsLookup, type LookupAddress } from "node:dns";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { get as httpsGet } from "node:https";
 import type { LookupFunction } from "node:net";
 import { dirname, join } from "node:path";
+import { writeStateFile } from "@cawco/core/state-file";
 import { faviconReachable } from "@cawco/core/tool-presentation";
 import { Elysia, t } from "elysia";
 import { DB_PATH } from "./config";
@@ -382,12 +383,11 @@ const cached = async (host: string): Promise<Icon | null | undefined> => {
 
 const remember = async (host: string, icon: Icon | undefined) => {
   const { meta, image } = paths(host);
-  await mkdir(DIR, { recursive: true });
   if (icon) {
-    await writeFile(image, icon.bytes);
+    await writeStateFile(image, icon.bytes);
   }
   const stored: Meta = { at: Date.now(), type: icon?.type ?? null };
-  await writeFile(meta, JSON.stringify(stored));
+  await writeStateFile(meta, JSON.stringify(stored));
 };
 
 /** Reads in flight, by host: a board of chips for one site is one fetch. */

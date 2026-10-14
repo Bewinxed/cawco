@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import { Elysia, t } from "elysia";
 import { DB_PATH } from "./config";
 import { hidden } from "./hidden";
@@ -108,8 +109,12 @@ async function readAll(): Promise<Stored[]> {
       .filter((name) => name.endsWith(".json"))
       .map(async (name) => {
         try {
-          return JSON.parse(await readFile(join(DIR, name), "utf8")) as Stored;
-        } catch {
+          return (await readRecord<Stored>(join(DIR, name))) ?? null;
+        } catch (error) {
+          // One damaged diagnostic is said and left out; the rest are listed.
+          console.warn(
+            `[diagnostics] ${error instanceof Error ? error.message : String(error)}: left out`
+          );
           return null;
         }
       })
@@ -186,7 +191,7 @@ export const appleDiagnosticsRoutes = () =>
             if (await file.exists()) {
               return false;
             }
-            await writeFile(
+            await writeStateFile(
               join(DIR, `${record.id}.json`),
               JSON.stringify(record)
             );

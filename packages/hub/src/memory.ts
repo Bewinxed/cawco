@@ -53,7 +53,7 @@
  *   the next look asks again. Off: the task's `context:` files (the lead's
  *   pick), else the brand kit and the newest notes. Files and grep; no index.
  */
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { devNull, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -66,6 +66,7 @@ import {
   type NeutralOrigin,
   type PermissionResult,
 } from "@cawco/core";
+import { writeStateFile } from "@cawco/core/state-file";
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
 import { tool } from "./admin-tools";
@@ -762,9 +763,9 @@ const mergeThree = async (
       join(dir, name)
     );
     await Promise.all([
-      writeFile(ours, now),
-      writeFile(theirs, proposed),
-      writeFile(from, base),
+      writeStateFile(ours, now),
+      writeStateFile(theirs, proposed),
+      writeStateFile(from, base),
     ]);
     const child = Bun.spawn(["git", "merge-file", "-p", ours, from, theirs], {
       env: {

@@ -12,6 +12,7 @@ import type { SkillFile } from "@cawco/core";
 import { projectClaudeRelative } from "@cawco/core/claude-dirs";
 import { hashFiles } from "@cawco/core/file-hash";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
+import { writeStateFile } from "@cawco/core/state-file";
 import { $ } from "bun";
 
 /** What a `source` string names, once its scheme has been read off it. */
@@ -181,7 +182,7 @@ export const unpack = async (
   name: string
 ): Promise<string> => {
   const archive = join(work, "archive");
-  await Bun.write(archive, response);
+  await writeStateFile(archive, new Uint8Array(await response.arrayBuffer()));
   return await extract(archive, work, name);
 };
 

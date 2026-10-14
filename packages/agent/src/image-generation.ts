@@ -1,17 +1,10 @@
 import { randomUUID } from "node:crypto";
-import {
-  link,
-  lstat,
-  mkdir,
-  open,
-  readFile,
-  stat,
-  unlink,
-} from "node:fs/promises";
+import { lstat, mkdir, readFile, stat } from "node:fs/promises";
 import { arch, platform, release } from "node:os";
-import { dirname, extname, join, resolve } from "node:path";
+import { dirname, extname, resolve } from "node:path";
 import { type GeneratedImage, IMAGE_GENERATION_TIMEOUT_MS } from "@cawco/core";
 import { credentialAccountIds } from "@cawco/core/paths";
+import { writeStateFile } from "@cawco/core/state-file";
 import { chatgptBaseUrl, chatgptClaims } from "@cawco/core/usage/chatgpt";
 import { z } from "zod";
 import { freshen, readHeld } from "./provider-accounts";
@@ -58,22 +51,9 @@ async function requireNewOutput(output: string): Promise<void> {
   );
 }
 
-async function publishImage(output: string, bytes: Buffer): Promise<void> {
-  const temporary = join(dirname(output), `.cawco-image-${randomUUID()}.tmp`);
-  const file = await open(temporary, "wx", 0o600);
-  try {
-    try {
-      await file.writeFile(bytes);
-      await file.sync();
-    } finally {
-      await file.close();
-    }
-    // Publish complete bytes atomically, without replacing a concurrent writer.
-    await link(temporary, output);
-  } finally {
-    await unlink(temporary);
-  }
-}
+/** Complete bytes published atomically, without replacing a concurrent writer. */
+const publishImage = (output: string, bytes: Buffer): Promise<void> =>
+  writeStateFile(output, bytes, { exclusive: true, mode: 0o600 });
 
 function validateSize(size: string): void {
   if (size === "auto") {

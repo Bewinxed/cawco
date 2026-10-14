@@ -1,6 +1,6 @@
-import { chmod } from "node:fs/promises";
 import { join } from "node:path";
 import { cawcoConfigDir } from "@cawco/core/paths";
+import { writeStateFile } from "@cawco/core/state-file";
 
 /** Machine configuration shared by the CLI and daemon. */
 export interface CliConfig {
@@ -54,8 +54,7 @@ export const readConfig = async (
 
 /**
  * Merges over what is already there: remembering a hub must not drop the
- * transcript cache budget. The mode is set after the write
- * because it has to be re-applied to a file that already existed.
+ * transcript cache budget. Written whole, at its owner-only mode.
  */
 export const writeConfig = async (
   patch: Partial<CliConfig>,
@@ -77,6 +76,7 @@ export const writeConfig = async (
   ) {
     config.hubId = undefined;
   }
-  await Bun.write(path, `${JSON.stringify(config, null, 2)}\n`);
-  await chmod(path, CONFIG_MODE);
+  await writeStateFile(path, `${JSON.stringify(config, null, 2)}\n`, {
+    mode: CONFIG_MODE,
+  });
 };

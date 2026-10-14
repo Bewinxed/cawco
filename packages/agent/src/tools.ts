@@ -15,6 +15,7 @@ import type {
 } from "@cawco/core";
 import { TOOL_CATALOG, toolSpec } from "@cawco/core";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { writeStateFile } from "@cawco/core/state-file";
 import { expandHome } from "./fs";
 
 /** Where {@link NATIVE_ROUTINES} put what they install. */
@@ -268,7 +269,10 @@ const NATIVE_ROUTINES: Record<string, (spec: ToolSpec) => Promise<void>> = {
     }
 
     const tarball = join(tmpdir(), `${name}.tar.xz`);
-    await Bun.write(tarball, downloaded);
+    await writeStateFile(
+      tarball,
+      new Uint8Array(await downloaded.arrayBuffer())
+    );
     await Bun.$`mkdir -p ${NODE_DIR} ${LOCAL_BIN}`.quiet();
     // The tarball carries its own top-level directory; stripping it is what
     // makes a second install land on top of the first rather than beside it.

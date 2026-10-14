@@ -13,9 +13,10 @@
  * hides (a tmpfs over its parent on Linux, a read deny on macOS): the OpenCode
  * server outside the boundary reads it, no delegate's shell can.
  */
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { sessionIdentityDir } from "@cawco/core/paths";
+import { writeStateFile } from "@cawco/core/state-file";
 import { delegationHubUrl } from "../delegation";
 
 export interface HeldCredential {
@@ -63,9 +64,7 @@ export const storeOpencodeCredential = (
     kept[sessionId] = held;
     const file = opencodeCredentialFile();
     await mkdir(sessionIdentityDir(), { recursive: true, mode: 0o700 });
-    const staged = `${file}.${process.pid}.tmp`;
-    await writeFile(staged, JSON.stringify(kept), { mode: 0o600 });
-    await rename(staged, file);
+    await writeStateFile(file, JSON.stringify(kept), { mode: 0o600 });
   });
   writing = next.catch(() => undefined);
   return next;

@@ -15,7 +15,7 @@
  * them is not applied: the socket is closed with {@link REFUSED} and the
  * reason, and the client joins again from the hub's doc.
  */
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
   type ArtifactChoices,
@@ -29,6 +29,7 @@ import {
   type SendBody,
 } from "@cawco/core/comments";
 import { inkProblem } from "@cawco/core/ink";
+import { writeStateFile } from "@cawco/core/state-file";
 import type { ServerWebSocket } from "bun";
 import { createDecoder, readVarUint, readVarUint8Array } from "lib0/decoding";
 import {
@@ -311,8 +312,7 @@ export const artifactPicture =
       if (!PNG_SIGNATURE.every((byte, i) => body[i] === byte)) {
         return new Response("A picture is a PNG.", { status: 415 });
       }
-      await mkdir(join(root, artifactId), { recursive: true });
-      await writeFile(path, body);
+      await writeStateFile(path, body);
     }
     docs.transact(artifactId, "hub", (doc) =>
       doc

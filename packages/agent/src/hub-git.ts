@@ -31,7 +31,7 @@
  * helper asks the agent's credential socket ({@link serveHubCredential}).
  */
 import { spawn } from "node:child_process";
-import { chmod, mkdir, rm, writeFile } from "node:fs/promises";
+import { chmod, rm } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
 import { CAWCO_ENV, type WorkspaceRef } from "@cawco/core";
@@ -45,6 +45,7 @@ import {
   SAFE_GIT_ENV,
   safeGitArgv,
 } from "@cawco/core/safe-git";
+import { writeStateFile } from "@cawco/core/state-file";
 import { hubGitEnv, hubGitLogin, isHubRemote, withoutCredential } from "./move";
 import { prepareDoor, socketPlace } from "./tool-door";
 
@@ -383,9 +384,13 @@ export const openGitDoor = async (ref: WorkspaceRef): Promise<void> => {
   if (doors.has(ref.id)) {
     return;
   }
-  const bin = gitHelperDirOf(ref.id);
-  await mkdir(bin, { recursive: true });
-  await writeFile(join(bin, "git-remote-cawco"), HELPER, { mode: 0o755 });
+  await writeStateFile(
+    join(gitHelperDirOf(ref.id), "git-remote-cawco"),
+    HELPER,
+    {
+      mode: 0o755,
+    }
+  );
   const path = gitDoorOf(ref.id);
   await prepareDoor(path);
   const server = createServer({ allowHalfOpen: true }, (socket) =>

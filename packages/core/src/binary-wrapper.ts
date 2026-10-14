@@ -1,6 +1,6 @@
-import { chmod, rename } from "node:fs/promises";
 import { join } from "node:path";
 import { AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
+import { writeStateFile } from "./state-file";
 
 /**
  * The script the hub, dashboard, agent and session keeper units start through.
@@ -107,9 +107,5 @@ exec "$ROOT/current/$EXE" "$@"
  * reading the old script keeps reading the file it opened.
  */
 export async function writeWrapper(root: string): Promise<void> {
-  const path = join(root, "run");
-  const temporary = `${path}.${process.pid}.tmp`;
-  await Bun.write(temporary, BINARY_WRAPPER);
-  await chmod(temporary, 0o700);
-  await rename(temporary, path);
+  await writeStateFile(join(root, "run"), BINARY_WRAPPER, { mode: 0o700 });
 }

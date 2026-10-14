@@ -1,13 +1,5 @@
 /** Server-only install identity and durable update state of a binary install. */
-import {
-  mkdir,
-  readdir,
-  readFile,
-  readlink,
-  rename,
-  rm,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, readdir, readlink, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { AGENT_BUNDLE, AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
@@ -16,6 +8,7 @@ import { versionsInUse } from "./live-processes";
 import { markerIsLive } from "./process-identity";
 import type { ReleaseManifest } from "./release-manifest";
 import { runtimeVersion } from "./runtime";
+import { readRecord, writeStateFile } from "./state-file";
 
 export interface BinaryInstallation {
   /** Where this machine's dashboard answers, when it runs one. */
@@ -78,30 +71,17 @@ export async function writeJsonAtomic(
   value: unknown
 ): Promise<void> {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  const temporary = `${path}.${process.pid}.tmp`;
-  await writeFile(temporary, `${JSON.stringify(value)}\n`, { mode: 0o600 });
-  await rename(temporary, path);
-}
-
-async function readJson<T>(path: string): Promise<T | undefined> {
-  try {
-    return JSON.parse(await readFile(path, "utf8")) as T;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return undefined;
-    }
-    throw error;
-  }
+  await writeStateFile(path, `${JSON.stringify(value)}\n`, { mode: 0o600 });
 }
 
 export const readInstallation = (): Promise<BinaryInstallation | undefined> =>
-  readJson<BinaryInstallation>(installationPath());
+  readRecord<BinaryInstallation>(installationPath());
 export const readUpdateState = (): Promise<BinaryUpdateState | undefined> =>
-  readJson<BinaryUpdateState>(updateStatePath());
+  readRecord<BinaryUpdateState>(updateStatePath());
 
 /** The signed manifest of the build this process is running, as the installer or the updater staged it. */
 export async function readRunningManifest(): Promise<ReleaseManifest> {
-  const manifest = await readJson<ReleaseManifest>(
+  const manifest = await readRecord<ReleaseManifest>(
     join(versionDirectory(runtimeVersion), "release.json")
   );
   if (!manifest) {
@@ -147,7 +127,7 @@ export interface TrialMarker {
 }
 export const trialPath = (): string => join(binaryRoot(), "trial.json");
 export const readTrial = (): Promise<TrialMarker | undefined> =>
-  readJson<TrialMarker>(trialPath());
+  readRecord<TrialMarker>(trialPath());
 /**
  * The services an update restarts, and its rollback restarts again: every one
  * that runs from `current`, one at a time in this order. The agent first: it
@@ -195,7 +175,7 @@ const linkedVersion = async (path: string): Promise<string | undefined> => {
  * while the process it names is still the one that wrote it.
  */
 export async function liveHelper(): Promise<{ version?: string } | undefined> {
-  const lock = await readJson<
+  const lock = await readRecord<
     { version?: string } & Parameters<typeof markerIsLive>[0]
   >(lockFilePath());
   return lock !== undefined && (await markerIsLive(lock)) ? lock : undefined;

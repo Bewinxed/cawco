@@ -32,6 +32,7 @@
     "./comments": "./src/comments.ts",
     "./canvas-host": "./src/canvas-host.ts",
     "./paths": "./src/paths.ts",
+    "./state-file": "./src/state-file.ts",
     "./workspace-policy": "./src/workspace-policy.ts",
     "./workspace-judge": "./src/workspace-judge.ts",
     "./claude-dirs": "./src/claude-dirs.ts",

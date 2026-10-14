@@ -25,10 +25,8 @@
  * never written to any config) and without the machine's global or system git
  * config, so an operator's signing key, hooks or aliases never reach it.
  */
-import { randomUUID } from "node:crypto";
 import type { Stats } from "node:fs";
 import {
-  link,
   lstat,
   mkdir,
   readdir,
@@ -38,11 +36,11 @@ import {
   rmdir,
   stat,
   unlink,
-  writeFile,
 } from "node:fs/promises";
 import { devNull } from "node:os";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
+import { writeStateFile } from "@cawco/core/state-file";
 import { Elysia, status, t } from "elysia";
 import { DB_PATH } from "./config";
 
@@ -470,7 +468,9 @@ const prepare = async (projectId: string, root: string): Promise<void> => {
   if (started.code !== 0) {
     const agents = join(root, "AGENTS.md");
     if (!(await exists(agents))) {
-      await writeFile(agents, AGENTS_STUB);
+      await writeStateFile(agents, AGENTS_STUB, {
+        scratchDir: join(root, ".git"),
+      });
     }
     await git(root, ["add", "--", "AGENTS.md"]);
     await git(root, [
@@ -750,28 +750,39 @@ const claimed = async (
 };
 
 /**
- * Puts `scratch` at `abs` only while nothing is there (a hard link fails
- * on an existing path; a rename would replace it), then refuses, taking it
- * back out, if another claim landed in its folder meanwhile. `scratch` is
- * gone either way.
+ * Writes `bytes` at `abs` whole, made beside the history in `.git` (on the
+ * same disk, where a stray temporary file is never committed), so the rename
+ * or link is the write.
+ */
+const placeWhole = (
+  root: string,
+  abs: string,
+  bytes: Uint8Array,
+  exclusive = false
+): Promise<void> =>
+  writeStateFile(abs, bytes, { exclusive, scratchDir: join(root, ".git") });
+
+/**
+ * Puts `bytes` at `abs` only while nothing is there (a hard link fails on an
+ * existing path; a rename would replace it), then refuses, taking it back
+ * out, if another claim landed in its folder meanwhile.
  */
 const placeOnly = async (
-  scratch: string,
+  root: string,
+  bytes: Uint8Array,
   abs: string,
   rel: string,
   exclusive: Exclusive
 ): Promise<void> => {
-  const placed = await link(scratch, abs)
-    .then(
-      () => true,
-      (error: unknown) => {
-        if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-          return false;
-        }
-        throw error;
+  const placed = await placeWhole(root, abs, bytes, true).then(
+    () => true,
+    (error: unknown) => {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+        return false;
       }
-    )
-    .finally(() => unlink(scratch).catch(noop));
+      throw error;
+    }
+  );
   if (!placed) {
     throw new FolderTaken(rel, rel);
   }
@@ -833,18 +844,10 @@ export const writeFolderFile = async (
     if (exclusive) {
       await claimed(abs, rel, exclusive);
     }
-    // Beside the history, on the same disk: the rename (or link) is the write.
-    const scratch = join(root, ".git", `cawco-write-${randomUUID()}`);
-    await writeFile(scratch, bytes);
-    try {
-      if (exclusive) {
-        await placeOnly(scratch, abs, rel, exclusive);
-      } else {
-        await rename(scratch, abs);
-      }
-    } catch (error) {
-      await unlink(scratch).catch(noop);
-      throw error;
+    if (exclusive) {
+      await placeOnly(root, bytes, abs, rel, exclusive);
+    } else {
+      await placeWhole(root, abs, bytes);
     }
     try {
       return await commit(
@@ -856,7 +859,7 @@ export const writeFolderFile = async (
       );
     } catch (error) {
       if (previous) {
-        await writeFile(abs, previous).catch(noop);
+        await placeWhole(root, abs, previous).catch(noop);
       } else {
         await unlink(abs).catch(noop);
         await pruneEmpty(root, dirname(abs));
@@ -940,20 +943,12 @@ const putFile = async (
     }
     throw error;
   });
-  // Beside the history, on the same disk: the rename (or link) is the write.
-  const scratch = join(root, ".git", `cawco-write-${randomUUID()}`);
-  await writeFile(scratch, bytes);
   if (exclusive) {
-    await placeOnly(scratch, abs, rel, exclusive);
+    await placeOnly(root, bytes, abs, rel, exclusive);
     before.set(abs, undefined);
     return;
   }
-  try {
-    await rename(scratch, abs);
-  } catch (error) {
-    await unlink(scratch).catch(noop);
-    throw error;
-  }
+  await placeWhole(root, abs, bytes);
 };
 
 /** Puts back what {@link putFile} replaced, and unstages the paths. */
@@ -965,7 +960,7 @@ const putBackAll = async (
   for (const [abs, previous] of before) {
     if (previous) {
       // biome-ignore lint/performance/noAwaitInLoops: putting files back, one at a time
-      await writeFile(abs, previous).catch(noop);
+      await placeWhole(root, abs, previous).catch(noop);
     } else {
       await unlink(abs).catch(noop);
       await pruneEmpty(root, dirname(abs));
@@ -1145,7 +1140,7 @@ export const deleteFolderFile = async (
       return done;
     } catch (error) {
       if (previous) {
-        await writeFile(abs, previous).catch(noop);
+        await placeWhole(root, abs, previous).catch(noop);
       }
       await run(root, ["reset", "-q", "--", rel]).catch(noop);
       throw putBack(error, rel);

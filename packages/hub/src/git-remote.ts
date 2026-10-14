@@ -18,9 +18,10 @@
  */
 
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, rename, rm, stat } from "node:fs/promises";
+import { mkdir, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { detach } from "@cawco/core/detach";
+import { placeStreamedFile } from "@cawco/core/state-file";
 import { Elysia } from "elysia";
 import { hidden } from "./hidden";
 
@@ -484,8 +485,7 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
       if (hash.digest("hex") !== oid) {
         return lfsError(422, "The upload's sha256 is not its oid.");
       }
-      await mkdir(dirname(target), { recursive: true });
-      await rename(temporary, target);
+      await placeStreamedFile(temporary, target);
       return new Response(null, { status: 200 });
     } finally {
       await rm(temporary, { force: true });

@@ -46,6 +46,7 @@ import {
 } from "@cawco/core";
 import { cawcoDataDir, isSecretFileName } from "@cawco/core/paths";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { writeStateFile } from "@cawco/core/state-file";
 import type { Subprocess } from "bun";
 import { useHubCredentialHelper } from "./git-credential";
 
@@ -1457,7 +1458,7 @@ const cloneStep = (request: MoveCloneRequest): Promise<MoveLfsResult> =>
         useHubCredentialHelper(scratch);
       }
       const lfs = await lfsOf(scratch, snapshot.commit);
-      await Bun.write(join(scratch, ".git", MARKER), `${jobId}\n`);
+      await writeStateFile(join(scratch, ".git", MARKER), `${jobId}\n`);
       if (info) {
         await rm(path, { recursive: true, force: true });
       }

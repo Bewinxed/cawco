@@ -11,11 +11,12 @@
  * a retiring keeper's is not; on macOS a job loads at login from its plist,
  * so a retiring keeper's plist is removed while its job runs on.
  */
-import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { type KeeperName, keeperService } from "@cawco/core/keepers";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { writeStateFile } from "@cawco/core/state-file";
 
 interface Ran {
   code: number;
@@ -204,8 +205,7 @@ const systemdJob = (service: string): KeeperJob => {
         // SIGKILL to every process of the unit, and no restart of a unit
         // stopped by a signal: its drain never runs.
         const dropins = `${file}.d`;
-        await mkdir(dropins, { recursive: true });
-        await writeFile(
+        await writeStateFile(
           join(dropins, "retired.conf"),
           "[Service]\nKillSignal=SIGKILL\nRestart=no\n"
         );

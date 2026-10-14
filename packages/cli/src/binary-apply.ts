@@ -30,7 +30,6 @@ import { existsSync, rmSync } from "node:fs";
 import {
   appendFile,
   copyFile,
-  open,
   readdir,
   readFile,
   rename,
@@ -77,6 +76,11 @@ import {
   verifyManifest,
 } from "@cawco/core/release-manifest";
 import { runtimeVersion } from "@cawco/core/runtime";
+import {
+  isDamagedRecord,
+  readRecord,
+  writeStateFile,
+} from "@cawco/core/state-file";
 import { binaryLayout } from "./binary-install";
 import {
   hubDbPath,
@@ -121,25 +125,31 @@ async function takeLock(version: string): Promise<boolean> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       // biome-ignore lint/performance/noAwaitInLoops: at most one retry, after clearing a stale lock
-      const handle = await open(lockPath(), "wx", 0o600);
-      await handle.writeFile(
-        JSON.stringify({
-          ...(await ownIdentity()),
-          startedAt: Date.now(),
-          version,
-        })
+      const identity = await ownIdentity();
+      await writeStateFile(
+        lockPath(),
+        JSON.stringify({ ...identity, startedAt: Date.now(), version }),
+        { exclusive: true, mode: 0o600 }
       );
-      await handle.close();
       return true;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") {
         throw error;
       }
-      const held = JSON.parse(
-        await readFile(lockPath(), "utf8").catch(() => "{}")
-      ) as Parameters<typeof markerIsLive>[0];
+      const held = await readRecord<Parameters<typeof markerIsLive>[0]>(
+        lockPath()
+      ).catch(async (damage: unknown) => {
+        if (!isDamagedRecord(damage)) {
+          throw damage;
+        }
+        // Every lock is written whole: a damaged one is from before a crash,
+        // and names no process that could still hold it.
+        await say(
+          `${damage.message}: no process holds it, so it is taken over`
+        );
+      });
       // Live only if that very process is still running: a killed helper's pid may be reused.
-      if (await markerIsLive(held)) {
+      if (held && (await markerIsLive(held))) {
         return false;
       }
       await rm(lockPath(), { force: true });
@@ -199,10 +209,16 @@ async function migrationRunning(db: string | undefined): Promise<boolean> {
   if (!db) {
     return false;
   }
-  const marker = JSON.parse(
-    await readFile(`${db}.migrating`, "utf8").catch(() => "{}")
-  );
-  return await markerIsLive(marker);
+  // Every marker is written whole: a damaged one is from before a crash, and
+  // names no migration still running.
+  const marker = await readRecord<Parameters<typeof markerIsLive>[0]>(
+    `${db}.migrating`
+  ).catch((error: unknown) => {
+    if (!isDamagedRecord(error)) {
+      throw error;
+    }
+  });
+  return marker ? await markerIsLive(marker) : false;
 }
 
 async function readStaged(version: string): Promise<ReleaseManifest> {

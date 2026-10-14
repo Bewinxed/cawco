@@ -1,5 +1,5 @@
 import { existsSync, watch } from "node:fs";
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { arch, hostname, platform } from "node:os";
 import { dirname, join } from "node:path";
 import type {
@@ -62,6 +62,7 @@ import {
 import { machineEndpoint } from "@cawco/core/keepers";
 import { machineId } from "@cawco/core/machine-id";
 import { userLayerPath } from "@cawco/core/paths";
+import { writeStateFile } from "@cawco/core/state-file";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { announcingParts, clientLine } from "@cawco/core/wire";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
@@ -165,6 +166,7 @@ const takeSessionLimits = (
   );
 };
 
+import { damagedRecords, sweepRecords } from "./damaged-records";
 import { probeTools } from "./tools";
 import { UsageScanner } from "./usage/scanner";
 import {
@@ -978,7 +980,7 @@ const reconnectAfterHubRestart = async (
   }
   // No record is a hub this machine has not seen since this was kept: it
   // reconnects too; with no live session that is nothing.
-  await writeFile(file, epoch);
+  await writeStateFile(file, epoch);
   await Promise.all(
     harnesses().map((adapter) =>
       adapter
@@ -2041,6 +2043,7 @@ const attach = (
           // that changes without anybody reconnecting.
           const beat = {
             at: Date.now(),
+            damagedRecords: await damagedRecords(),
             sessionAddresses: supervisor.sessionAddresses,
             instances: supervisor.instanceIds,
             custody: await readCustody(supervisor.stopSequence, [
@@ -2164,6 +2167,15 @@ const attach = (
  */
 export const startDaemon = (auth?: AuthState, rediscover = false) =>
   Effect.gen(function* () {
+    // Every record read once, before anything reads one: what a crash left
+    // damaged is in the log and on the first beat now, not at the next spawn.
+    yield* Effect.promise(() =>
+      sweepRecords().catch((error: unknown) =>
+        console.warn(
+          `[records] the start-up sweep could not finish: ${error instanceof Error ? error.message : String(error)}`
+        )
+      )
+    );
     // First: CLIs already running read their workspace's hook on every shell
     // call, and one an earlier build wrote runs what this build no longer has.
     // Begun, not awaited: registration and custody go on meanwhile, and each

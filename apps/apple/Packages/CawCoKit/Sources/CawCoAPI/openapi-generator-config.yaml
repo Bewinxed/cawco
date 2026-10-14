@@ -35,6 +35,7 @@ typeOverrides:
     ConnectionTransport: OpenEnums.ConnectionTransport
     ContinuationJobStage: OpenEnums.ContinuationJobStage
     ContinueStep: OpenEnums.ContinueStep
+    DamagedRowRemedy: OpenEnums.DamagedRowRemedy
     DelegateBudgetPer: OpenEnums.DelegateBudgetPer
     DelegateEventBaseRequestKind: OpenEnums.DelegateEventBaseRequestKind
     DelegateEventBaseStatus: OpenEnums.DelegateEventBaseStatus

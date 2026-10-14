@@ -1,9 +1,10 @@
 /** Signed release discovery and immutable archive verification. */
 import { createHash } from "node:crypto";
-import { mkdir, rename, stat } from "node:fs/promises";
+import { mkdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { BinaryUpdatePolicy } from "./binary-updates";
 import { type ReleaseManifest, verifyManifest } from "./release-manifest";
+import { writeStateFile } from "./state-file";
 
 export interface SignedRelease {
   manifest: ReleaseManifest;
@@ -252,9 +253,8 @@ export async function fetchArchive(
       "The downloaded archive does not match the signed manifest"
     );
   }
-  // Unique per request: concurrent fetches of one archive never share a file.
-  const temporary = `${path}.${crypto.randomUUID()}.tmp`;
-  await Bun.write(temporary, bytes);
-  await rename(temporary, path);
+  // Its temporary file is unique per request: concurrent fetches of one
+  // archive never share one.
+  await writeStateFile(path, bytes);
   return path;
 }

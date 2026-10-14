@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { createHash, randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { chmod, mkdir, readdir, rename, writeFile } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import {
@@ -16,6 +16,7 @@ import {
   sessiondEndpoint,
   sessiondHomePath,
 } from "@cawco/core/sessiond";
+import { writeStateFile } from "@cawco/core/state-file";
 import { launchGateForm } from "../gate-form";
 import { OPENCODE_SERVER_PROC_ID } from "../proc-id";
 import type { SessiondClient } from "../sessiond-client";
@@ -322,10 +323,7 @@ export const backupV1Database = (dataHome: string): string | undefined => {
 /** A record holds each generation's password: written whole, owner-only. */
 const writeRecord = async (path: string, record: unknown): Promise<void> => {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  const staged = `${path}.${process.pid}.tmp`;
-  await writeFile(staged, JSON.stringify(record, null, 2), { mode: 0o600 });
-  await chmod(staged, 0o600);
-  await rename(staged, path);
+  await writeStateFile(path, JSON.stringify(record, null, 2), { mode: 0o600 });
 };
 
 /**

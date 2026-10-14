@@ -23,7 +23,7 @@
  * permission ruleset by `PATCH`, which replaces it, settled #9).
  */
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -68,6 +68,7 @@ import {
   VERIFY_SESSION_CREDENTIAL,
 } from "@cawco/core";
 import { userLayerPath } from "@cawco/core/paths";
+import { readRecordSync, writeStateFileSync } from "@cawco/core/state-file";
 import type {
   FormInfo,
   ModelInfo as OpencodeModel,
@@ -375,9 +376,7 @@ const OPEN_TURNS_PATH = join(OPENCODE_DIR, "cawco-open-turns.json");
 let openTurns: Set<string> | undefined;
 
 const loadOpenTurns = (): Set<string> => {
-  openTurns ??= existsSync(OPEN_TURNS_PATH)
-    ? new Set(JSON.parse(readFileSync(OPEN_TURNS_PATH, "utf8")) as string[])
-    : new Set<string>();
+  openTurns ??= new Set(readRecordSync<string[]>(OPEN_TURNS_PATH) ?? []);
   return openTurns;
 };
 
@@ -394,9 +393,7 @@ const markTurn = (sessionId: string, open: boolean): void => {
     next.delete(sessionId);
   }
   // Commit before publishing the result: no deferred write can be lost at restart.
-  const pending = `${OPEN_TURNS_PATH}.${process.pid}.tmp`;
-  writeFileSync(pending, JSON.stringify([...next]));
-  renameSync(pending, OPEN_TURNS_PATH);
+  writeStateFileSync(OPEN_TURNS_PATH, JSON.stringify([...next]));
   openTurns = next;
 };
 

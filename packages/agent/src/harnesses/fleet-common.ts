@@ -10,13 +10,14 @@
  * only what the sidecar names is ever taken away.
  */
 
-import { rename, rm, stat } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import type {
   FleetItemState,
   FleetMemory,
   FleetSkillPayload,
 } from "@cawco/core";
+import { writeStateFile } from "@cawco/core/state-file";
 import {
   heldSkills,
   memoryPlan,
@@ -45,14 +46,8 @@ export const readJson = async <T>(path: string): Promise<T | undefined> => {
 };
 
 /** Written whole and moved into place — a half-written config is a broken machine. */
-export const writeJson = async (
-  path: string,
-  value: unknown
-): Promise<void> => {
-  const temp = `${path}.cawco-${process.pid}`;
-  await Bun.write(temp, JSON.stringify(value, null, 2));
-  await rename(temp, path);
-};
+export const writeJson = (path: string, value: unknown): Promise<void> =>
+  writeStateFile(path, JSON.stringify(value, null, 2));
 
 /** What this harness's fleet directory was last synced to, by skill hash. */
 export interface FleetSidecar {
@@ -256,7 +251,7 @@ export const syncMemory = async (
   }
 
   try {
-    await Bun.write(path, desired.content);
+    await writeStateFile(path, desired.content);
     report.memory = { state: "applied" };
     return desired.hash;
   } catch (error) {
@@ -274,7 +269,7 @@ export const writeAgent = async (
   name: string,
   content: string
 ): Promise<void> => {
-  await Bun.write(join(dir, `${name}.md`), content);
+  await writeStateFile(join(dir, `${name}.md`), content);
 };
 
 export const dirExistsFor = dirExists;

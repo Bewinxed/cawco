@@ -6,13 +6,7 @@
  * verifies what it is given against the embedded release key.
  */
 import { Database } from "bun:sqlite";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
   assetBase,
@@ -33,6 +27,7 @@ import type {
   BinaryUpdateState,
   ChannelRelease,
 } from "@cawco/core/binary-updates";
+import { readRecordSync, writeStateFileSync } from "@cawco/core/state-file";
 import { Elysia, t } from "elysia";
 import { hidden } from "./hidden";
 import { fenceHub, hubRestartReadiness } from "./restart-holds";
@@ -89,17 +84,17 @@ async function runningRelease(): Promise<LocatedRelease> {
 export function createBinaryUpdates(options: Options) {
   const root = join(dirname(options.dbPath), "binary-releases");
   const policyPath = join(root, "policy.json");
-  let policy: BinaryUpdatePolicy = existsSync(policyPath)
-    ? (JSON.parse(readFileSync(policyPath, "utf8")) as BinaryUpdatePolicy)
-    : { channel: "stable", autoUpdate: false };
+  let policy: BinaryUpdatePolicy = readRecordSync<BinaryUpdatePolicy>(
+    policyPath
+  ) ?? { channel: "stable", autoUpdate: false };
   let current: { at: number; release: LocatedRelease } | undefined;
   let checking: Promise<LocatedRelease> | undefined;
 
   const savePolicy = () => {
     mkdirSync(root, { recursive: true, mode: 0o700 });
-    const temporary = `${policyPath}.${process.pid}.tmp`;
-    writeFileSync(temporary, `${JSON.stringify(policy)}\n`, { mode: 0o600 });
-    renameSync(temporary, policyPath);
+    writeStateFileSync(policyPath, `${JSON.stringify(policy)}\n`, {
+      mode: 0o600,
+    });
   };
   const discover = (): Promise<LocatedRelease> => {
     checking ??= (async () => {

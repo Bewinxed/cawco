@@ -21394,6 +21394,10 @@
                     "string"
                   ]
                 },
+                "damaged": {
+                  "$ref": "#/components/schemas/DamagedRow",
+                  "description": "What the hub lays over a session row whose record, or whose workspace's\nrecord, is damaged on its machine ({@link DamagedRecordReport}): the file,\nwhy, and the way out that removes it (`archive`: archive workspace\n`workspaceId`; `end`: end the session)."
+                },
                 "runningDelegates": {
                   "type": "number"
                 }
@@ -33446,6 +33450,29 @@
           "scope"
         ]
       },
+      "DamagedRow": {
+        "description": "What the hub lays over a session row whose record, or whose workspace's\nrecord, is damaged on its machine ({@link DamagedRecordReport}): the file,\nwhy, and the way out that removes it (`archive`: archive workspace\n`workspaceId`; `end`: end the session).",
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "remedy": {
+            "$ref": "#/components/schemas/DamagedRowRemedy"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "reason",
+          "remedy"
+        ]
+      },
       "SessionTooling": {
         "description": "What a session's `init` says about its MCP servers and tools.",
         "type": "object",
@@ -40326,6 +40353,10 @@
             "description": "The directory the session was launched in; see `launchDir`.",
             "type": "string"
           },
+          "damaged": {
+            "$ref": "#/components/schemas/DamagedRow",
+            "description": "Its record, or its workspace's, is damaged on its machine\n({@link DamagedRow}): laid over by the hub from the machine's last beat,\nnever stored. `lastError` says the same in words."
+          },
           "delegateType": {
             "description": "The delegate type its spawn named; null: none.",
             "type": [
@@ -42245,6 +42276,13 @@
           "started",
           "starting",
           "summarising"
+        ]
+      },
+      "DamagedRowRemedy": {
+        "type": "string",
+        "enum": [
+          "archive",
+          "end"
         ]
       },
       "DelegateBudgetPer": {

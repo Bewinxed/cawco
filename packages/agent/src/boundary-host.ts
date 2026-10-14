@@ -45,7 +45,6 @@ import {
   readdirSync,
   readFileSync,
   readlinkSync,
-  renameSync,
   rmSync,
   type Stats,
   watch,
@@ -62,6 +61,7 @@ import {
 import { projectClaudeRelative } from "@cawco/core/claude-dirs";
 import { mountedAnywhere, mountPointsOf } from "@cawco/core/mount-table";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
+import { writeStateFileSync } from "@cawco/core/state-file";
 import type { Subprocess } from "bun";
 
 const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
@@ -289,6 +289,8 @@ const makeStandIn = (
   }
   if (left && empty.kind === "file") {
     chmodSync(path, 0o644);
+    // In place, never renamed over: this inode is the mount point a sandbox
+    // left, and a rename would put another file where the mount is.
     writeFileSync(path, empty.text, { flag: "r+" });
     return;
   }
@@ -306,11 +308,10 @@ const makeStandIn = (
       chmodSync(path, 0o555);
     }
   } else {
-    writeFileSync(path, empty.text, { flag: "wx" });
     // Writable whatever the umask: an empty file with no write bits is what
     // srt takes for a mount point an earlier sandbox left (leftMountPoint),
     // and would cover with /dev/null and remove.
-    chmodSync(path, 0o644);
+    writeStateFileSync(path, empty.text, { exclusive: true, mode: 0o644 });
   }
 };
 
@@ -566,15 +567,11 @@ const startSandbox = async (): Promise<Sandbox | undefined> => {
           return now && `${now.dev}:${now.ino}` === inode ? [] : [path];
         });
         const sandbox: Sandbox = { proc, inner, guarded };
-        writeFileSync(
+        writeStateFileSync(
           guardedFile,
           guarded.map((path) => `${mountinfoSpelling(path)}\n`).join("")
         );
-        writeFileSync(
-          `${placeFile}.new`,
-          `${outer} ${inner} ${idle.join(" ")}\n`
-        );
-        renameSync(`${placeFile}.new`, placeFile);
+        writeStateFileSync(placeFile, `${outer} ${inner} ${idle.join(" ")}\n`);
         resolve(sandbox);
         console.log(line);
       }

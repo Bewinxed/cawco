@@ -18,7 +18,7 @@
 import { Database } from "bun:sqlite";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { chmod, mkdir, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   type AccountBorrowFrame,
@@ -40,6 +40,7 @@ import {
   opencodeDataDir,
   sessionIdentityDir,
 } from "@cawco/core/paths";
+import { writeStateFile } from "@cawco/core/state-file";
 import { chatgptClaims, readChatgptUsage } from "@cawco/core/usage/chatgpt";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import type {
@@ -102,14 +103,11 @@ const writeHeld = async (
 ): Promise<void> => {
   const path = accountCredentialPath(accountId);
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  const staged = `${path}.${process.pid}.tmp`;
-  await writeFile(
-    staged,
+  await writeStateFile(
+    path,
     JSON.stringify(held ? { [held.provider]: held.credential } : {}, null, 2),
     { mode: 0o600 }
   );
-  await chmod(staged, 0o600);
-  await rename(staged, path);
   credentialChanged(accountId);
 };
 
@@ -971,10 +969,7 @@ const readJson = (path: string): Json => {
 
 const writeJson = async (path: string, value: Json): Promise<void> => {
   await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-  const staged = `${path}.cawco-${process.pid}.tmp`;
-  await writeFile(staged, JSON.stringify(value, null, 2), { mode: 0o600 });
-  await chmod(staged, 0o600);
-  await rename(staged, path);
+  await writeStateFile(path, JSON.stringify(value, null, 2), { mode: 0o600 });
 };
 
 /** pi's entry as pi-ai's credential, or undefined for one CawCo does not hold. */

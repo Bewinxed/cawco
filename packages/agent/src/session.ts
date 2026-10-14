@@ -97,11 +97,13 @@ import {
   SESSIOND_PROCESS_LIMIT,
   type SessiondLimit,
 } from "@cawco/core/sessiond";
+import { isDamagedRecord } from "@cawco/core/state-file";
 import { Effect } from "effect";
 import { withFiles } from "./attachments";
 import { type Boundary, boundaryFor, hookArmed, shellQuote } from "./boundary";
 import { carryRefusal, carrySessions } from "./claude-sessions";
 import { fetchDefaultBranch, hostGit } from "./clone";
+import { reportDamaged } from "./damaged-records";
 import { harnessMcpUrl } from "./delegation";
 import { expandHome, runFs } from "./fs";
 import type { Harness, HarnessContext, HarnessSession } from "./harness";
@@ -3585,6 +3587,11 @@ export class SessionSupervisor {
         `[session] ${instanceId}: after its refusal: ${error instanceof Error ? error.message : String(error)}`
       );
       return;
+    }
+    // A record it needed is damaged: the machine's list says so on its next
+    // beat, with the file, beside this session's own failure.
+    if (isDamagedRecord(error)) {
+      reportDamaged(error).catch(() => undefined);
     }
     // An Error with no message still names its kind: String() gives "TypeError".
     const said = (error instanceof Error && error.message) || String(error);

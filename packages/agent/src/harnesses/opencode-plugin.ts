@@ -43,12 +43,13 @@
  */
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { CAWCO_ENV } from "@cawco/core";
 import { WORKSPACE_POLICY_NAME, workspacesDir } from "@cawco/core/paths";
 import { SESSION_CAWCO_ENV } from "@cawco/core/session-env";
+import { writeStateFile } from "@cawco/core/state-file";
 import { JUDGE_SCRIPT } from "../boundary";
 import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import { readJson, writeJson } from "./fleet-common";
@@ -131,29 +132,46 @@ const workflowTools = ${JSON.stringify(WORKFLOW_TOOLS)};
 const toolOutput = join(process.env.XDG_DATA_HOME || join(homedir(), ".local", "share"), "opencode", "tool-output");
 const realOf = (path) => { try { return realpathSync(path); } catch { return path; } };
 const said = (error) => (error instanceof Error ? error.message : String(error));
+// Where every workspace's clone is cut (the agent's createWorkspace).
+const worktrees = realOf(join(homedir(), ".worktrees"));
 
 // The workspace whose clone holds \`directory\`, by the records the agent keeps
 // for it outside the clone: \`create.json\`, written before the clone is cut and
 // removed only with it, and the running boundary's \`boundary.json\`, the first
 // that names a path. The clone itself or any directory inside it, both at
 // their real paths, whole path segments only; of clones inside one another,
-// the deepest (the agent's workspaceHolding, workspace-records.ts).
+// the deepest (the agent's workspaceHolding, workspace-records.ts). A
+// workspace whose records are damaged, so that none names its clone, still
+// holds a directory inside a clone cut for it (\`~/.worktrees/<repo>-<id8>\`):
+// that is refused, never run outside its boundary.
 const workspaceOf = (directory) => {
   let ids = [];
   try { ids = readdirSync(cawcoWorkspaces); } catch { return undefined; }
   const at = realOf(directory);
   let found;
+  const damaged = [];
   for (const id of ids) {
     let path;
+    let damage;
     for (const name of ["create.json", "boundary.json"]) {
-      try { path = JSON.parse(readFileSync(cawcoWorkspaces + "/" + id + "/" + name, "utf8")).path; } catch {}
+      const file = cawcoWorkspaces + "/" + id + "/" + name;
+      let text;
+      try { text = readFileSync(file, "utf8"); } catch { continue; }
+      try { path = JSON.parse(text).path; } catch (error) { damage ??= file + " is damaged (" + said(error) + ")"; }
       if (typeof path === "string") break;
     }
-    if (typeof path !== "string") continue;
+    if (typeof path !== "string") {
+      if (damage) damaged.push({ id, damage });
+      continue;
+    }
     const root = realOf(path);
     if ((at === root || at.startsWith(root + "/")) && !(found && found.root.length >= root.length)) found = { id, root };
   }
-  return found;
+  if (found) return found;
+  const top = (at.startsWith(worktrees + "/") ? at.slice(worktrees.length + 1) : "").split("/")[0];
+  const hit = damaged.find(({ id }) => top && top.endsWith("-" + id.slice(0, 8)));
+  if (hit) throw new Error("cawco: workspace " + hit.id + "'s record is damaged: " + hit.damage + ". Archive the workspace to remove it.");
+  return undefined;
 };
 
 // The workspace's boundary as it stands at the call. None means the command
@@ -512,9 +530,9 @@ export const writePlugin = async (source: string): Promise<string> => {
     pluginsDir(),
     `cawco-context-${createHash("sha256").update(source).digest("hex").slice(0, 16)}`
   );
+  // `index.js` last, each whole: one there means the plugin is whole.
   if (!existsSync(join(target, "index.js"))) {
-    await mkdir(target, { recursive: true });
-    await writeFile(
+    await writeStateFile(
       join(target, "package.json"),
       JSON.stringify({
         name: "cawco-context",
@@ -523,7 +541,7 @@ export const writePlugin = async (source: string): Promise<string> => {
         main: "./index.js",
       })
     );
-    await writeFile(join(target, "index.js"), source);
+    await writeStateFile(join(target, "index.js"), source);
   }
   return target;
 };

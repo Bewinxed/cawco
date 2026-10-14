@@ -18,13 +18,7 @@
  * again, is removed.
  */
 
-import {
-  mkdir,
-  readdir,
-  readFile,
-  readlink,
-  writeFile,
-} from "node:fs/promises";
+import { mkdir, readdir, readFile, readlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { BinaryUpdateState } from "@cawco/core/binary-updates";
@@ -40,6 +34,7 @@ import {
   processTable as readProcessTable,
 } from "@cawco/core/process-identity";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { writeStateFile } from "@cawco/core/state-file";
 import { type KeeperJob, keeperJob } from "./keeper-jobs";
 import { dialKeeper } from "./sessiond-client";
 
@@ -172,7 +167,7 @@ const settled = async (
     (error: unknown) =>
       `could not be read: ${error instanceof Error ? error.message : String(error)}\n`
   );
-  await writeFile(file, text);
+  await writeStateFile(file, text);
 };
 
 const shown = (ran: Run): string =>

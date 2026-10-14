@@ -22,9 +22,9 @@
  * Both read {@link resolvedFleetDenials} — the single source — so they cannot
  * drift from each other.
  */
-import { rename } from "node:fs/promises";
 import { cawcoTodosDenied, opencodeToolsFor } from "@cawco/core";
 import { userLayerPath } from "@cawco/core/paths";
+import { writeStateFile } from "@cawco/core/state-file";
 
 /** Every `claude` this user starts reads it, daemon-spawned or not. */
 const SETTINGS = userLayerPath("settings.json");
@@ -193,9 +193,7 @@ export const convergeDeniedTools = async (
 
     // Written whole and moved into place: a half-written settings file is a
     // machine whose next `claude` starts with none of the user's settings.
-    const temp = `${SETTINGS}.cawco-${process.pid}`;
-    await Bun.write(temp, JSON.stringify(next, null, 2));
-    await rename(temp, SETTINGS);
+    await writeStateFile(SETTINGS, JSON.stringify(next, null, 2));
     return { state: "applied" };
   } catch (error) {
     return {

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   type AccountIdentity,
@@ -12,6 +12,11 @@ import {
   markerIsLive,
   processStart,
 } from "@cawco/core/process-identity";
+import {
+  isDamagedRecord,
+  readRecordSync,
+  writeStateFile,
+} from "@cawco/core/state-file";
 import type { Subprocess } from "bun";
 import {
   accountEnv,
@@ -105,9 +110,7 @@ const markerFile = (account: string): string =>
   join(accountsRoot(), account, "login.pid");
 
 const readMarker = (account: string): LoginMarker | undefined =>
-  existsSync(markerFile(account))
-    ? (JSON.parse(readFileSync(markerFile(account), "utf8")) as LoginMarker)
-    : undefined;
+  readRecordSync<LoginMarker>(markerFile(account));
 
 const markLogin = async (account: string, pid: number): Promise<void> => {
   const [procStart, boot] = await Promise.all([processStart(pid), bootId()]);
@@ -116,12 +119,22 @@ const markLogin = async (account: string, pid: number): Promise<void> => {
     ...(procStart ? { procStart } : {}),
     ...(boot ? { bootId: boot } : {}),
   };
-  writeFileSync(markerFile(account), JSON.stringify(marker));
+  await writeStateFile(markerFile(account), JSON.stringify(marker));
 };
 
 /** Drops the marker while it still names `pid`: a newer login's stays. */
 const unmarkLogin = (account: string, pid: number): void => {
-  if (readMarker(account)?.pid === pid) {
+  let marked: number | undefined;
+  try {
+    marked = readMarker(account)?.pid;
+  } catch (error) {
+    if (!isDamagedRecord(error)) {
+      throw error;
+    }
+    console.warn(`[login] ${error.message}: left for the next start to drop`);
+    return;
+  }
+  if (marked === pid) {
     rmSync(markerFile(account), { force: true });
   }
 };
@@ -133,7 +146,20 @@ const unmarkLogin = (account: string, pid: number): void => {
  */
 export const endOrphanedSignIns = async (): Promise<void> => {
   for (const account of accountIds()) {
-    const marker = readMarker(account);
+    let marker: LoginMarker | undefined;
+    try {
+      marker = readMarker(account);
+    } catch (error) {
+      if (!isDamagedRecord(error)) {
+        throw error;
+      }
+      // It names no process to end: said, and dropped as every marker is.
+      console.warn(
+        `[login] ${error.message}: the sign-in it marked is not ended, and the marker is removed`
+      );
+      rmSync(markerFile(account), { force: true });
+      continue;
+    }
     if (!marker) {
       continue;
     }

@@ -343,6 +343,14 @@ export const cawcoConfigDir = (): string => join(xdgConfigHome(), "cawco");
 /** CawCo's data dir: the binary install, its runtime trees, the transcript index; on Linux the hub's database too. */
 export const cawcoDataDir = (): string => join(xdgDataHome(), "cawco");
 
+/**
+ * Each live Claude session's scheduled wake-ups as its last turn ended, one
+ * file per session named by its instance id, kept for as long as its
+ * process runs (agent `wakeups.ts`).
+ */
+export const sessionWakeupsDir = (): string =>
+  join(cawcoDataDir(), "session-wakeups");
+
 /** Where an installed hub keeps its database (`cawco.db`) and the backups beside it. */
 export const hubDataDir = (): string =>
   process.platform === "darwin"
