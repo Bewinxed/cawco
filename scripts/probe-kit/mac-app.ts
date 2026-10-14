@@ -80,9 +80,25 @@ export function readLines(
   return seen;
 }
 
-/** A line's words past its compact head, or undefined when it is not a log line. */
+/**
+ * A byte `log stream` writes as its octal code: every backslash a message
+ * held comes out as `\134` (so `"R&D \"Labs\""` in JSON reads
+ * `"R&D \134"Labs\134""`), and a backslash is never written bare.
+ */
+const ESCAPED = /\\([0-7]{3})/g;
+
+/**
+ * A line's words past its compact head, as the app said them (the stream's
+ * own escapes undone), or undefined when it is not a log line.
+ */
 export function words(line: string): string | undefined {
-  return HEAD.test(line) ? line.replace(HEAD, "") : undefined;
+  return HEAD.test(line)
+    ? line
+        .replace(HEAD, "")
+        .replace(ESCAPED, (_, code: string) =>
+          String.fromCharCode(Number.parseInt(code, 8))
+        )
+    : undefined;
 }
 
 /**

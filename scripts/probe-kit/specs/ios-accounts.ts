@@ -58,7 +58,7 @@
  *     ../../DerivedData-macprobe/Build/Products/Debug-maccatalyst/CawCo.app
  */
 
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { accountsWords as words } from "../../../packages/core/src/words/accounts";
@@ -99,6 +99,8 @@ const COUNTS = /hub accounts (\d+) → (\d+)/;
 const OVERLAPS = /overlaps (\d+)/g;
 /** A clock's wash with no words in it, as a figure's probe state counts them. */
 const EMPTY_PILLS = /empty pills (\d+)/g;
+/** One part of a long message: `step [part 2/5]: |…|` (AccountsProbe `say`). */
+const PART = /^(.*?) \[part (\d+)\/(\d+)\]: \|(.*)\|$/;
 /** "clipped list: none": what a stage's window cuts, as the probe reads it. */
 const CLIPPED = /clipped ([\w-]+): (.*)$/;
 const FIGURES = [
@@ -167,11 +169,65 @@ async function pickerRows(base: string): Promise<string[]> {
   ];
 }
 
+/** Names a long list could trip on, as the live catalogue has them. */
+const ODD_NAMES = [
+  "302.AI",
+  "abliteration.ai",
+  "AI-ROUTER",
+  "AI21 Labs",
+  "Fireworks",
+  "Fireworks AI",
+  "Zhipu 智谱",
+  "Ñandú",
+  'R&D "Labs"',
+  "o1 / mini",
+];
+/** As many providers as a machine with OpenCode's whole catalogue serves (229 on models.dev, 2026-10-14), and more. */
+const CATALOGUE = 240;
+
+/**
+ * The scratch machine's pi given a catalogue as long as a real machine's:
+ * a key provider for each name, the odd ones among them, added to the pi
+ * providers the fleet furnished (its `models.json`, which pi reads again at
+ * each beat). The picker's whole list is then hundreds of rows, as on a
+ * machine that runs OpenCode, which the scratch fleet does not list.
+ */
+async function seedCatalogue(home: string): Promise<void> {
+  const file = join(home, ".pi", "agent", "models.json");
+  const config = JSON.parse(await readFile(file, "utf8")) as {
+    providers: Record<string, unknown>;
+  };
+  for (let index = 0; index < CATALOGUE; index += 1) {
+    config.providers[`probe-${String(index).padStart(3, "0")}`] = {
+      name:
+        index < ODD_NAMES.length
+          ? ODD_NAMES[index]
+          : `Provider ${CATALOGUE - index}`,
+      baseUrl: "http://127.0.0.1:9/v1",
+      api: "openai-completions",
+      apiKey: "probe-key",
+      models: [
+        {
+          id: "m",
+          name: "M",
+          reasoning: false,
+          input: ["text"],
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow: 1000,
+          maxTokens: 100,
+        },
+      ],
+    };
+  }
+  await writeFile(file, JSON.stringify(config));
+}
+
 /**
  * A scratch fleet as every run starts from (the app's on each platform, the
  * web's at each width): its Claude account signed in on the scratch machine,
- * and two more Claude accounts signed in nowhere, so routing still has two
- * to choose between after the signed-in one is removed.
+ * two more Claude accounts signed in nowhere, so routing still has two to
+ * choose between after the signed-in one is removed, and a catalogue as
+ * long as a real machine's.
  */
 async function seededFleet(kit: Kit) {
   const fleet = await kit.fleet(() => ({ words: ["Done."], everyMs: 20 }));
@@ -180,6 +236,7 @@ async function seededFleet(kit: Kit) {
   fleet.launch("hub");
   await fleet.hubUp();
   fleet.fileAccount();
+  await seedCatalogue(fleet.home);
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
@@ -519,6 +576,13 @@ async function web(kit: Kit, view: "desk" | "phone"): Promise<void> {
     await page.goto(`${base}/config/accounts/new`);
     await button(words.claude).waitFor();
     await capture("setup-provider");
+    // The web's picker, its group heads and rows' names in the page's order.
+    checkPicker(
+      kit,
+      label,
+      await page.locator("h3.ghead, .choices .plabel").allTextContents(),
+      await pickerRows(fleet.base)
+    );
     await button(words.claude).click();
     await button(words.setup.signIn).first().click();
     await linkOrRefusal("the setup's row", ".row-problem");
@@ -569,6 +633,81 @@ async function web(kit: Kit, view: "desk" | "phone"): Promise<void> {
     captured.join(", ")
   );
   console.log(`  web ${view} captures: ${out}`);
+}
+
+/**
+ * A run's log with each long message whole again: the probe says one over
+ * unified logging's cap (just under 1 KB, cut with "<…>") in parts, as
+ * `step [part i/n]: |…|` (AccountsProbe `say`), consecutive, since it says
+ * them one after another on the main actor.
+ */
+function whole(lines: string[]): string[] {
+  const out: string[] = [];
+  let open: { head: string; of: number; parts: string[] } | undefined;
+  for (const line of lines) {
+    const part = PART.exec(line);
+    if (!part) {
+      out.push(line);
+      continue;
+    }
+    const [, head = "", at = "", of = "", text = ""] = part;
+    if (at === "1") {
+      open = { head, of: Number(of), parts: [] };
+    }
+    if (!open || open.head !== head) {
+      continue;
+    }
+    open.parts.push(text);
+    if (open.parts.length === open.of) {
+      out.push(`${open.head}: ${open.parts.join("")}`);
+      open = undefined;
+    }
+  }
+  return out;
+}
+
+/** The picker's rows as the app said them (`setup picker`, a JSON array), or none. */
+function pickerSaid(said: string): string[] {
+  try {
+    const rows: unknown = JSON.parse(said);
+    return Array.isArray(rows) ? rows.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * The picker offers what the hub's /api/accounts/providers answers, in its
+ * groups and order, row for row; the detail names where they first part
+ * (the row, and each side's entry there) and each side's length.
+ */
+function checkPicker(
+  kit: Kit,
+  label: (what: string) => string,
+  drawn: string[],
+  hub: string[]
+): void {
+  const apart = firstApart(drawn, hub);
+  kit.check(
+    label("Add account offers every provider the hub serves, in its order"),
+    hub.length > 2 && apart === -1,
+    `drawn ${drawn.length} rows, hub ${hub.length}; ${
+      apart === -1
+        ? "row for row the same"
+        : `first apart at ${apart}: drawn ${JSON.stringify(drawn[apart] ?? "(none)")}, hub ${JSON.stringify(hub[apart] ?? "(none)")}`
+    }`
+  );
+}
+
+/** Where two lists first part, or -1 when they hold the same rows in the same order. */
+function firstApart(app: string[], hub: string[]): number {
+  const length = Math.max(app.length, hub.length);
+  for (let at = 0; at < length; at += 1) {
+    if (app[at] !== hub[at]) {
+      return at;
+    }
+  }
+  return -1;
 }
 
 /** A run's log, read by step: what it said there, or undefined / "(not logged)". */
@@ -629,13 +768,7 @@ function judgeParity(
     show("list row") === "count 3 badge 2",
     show("list row")
   );
-  // The picker offers what the hub's /api/accounts/providers answers, in its groups and order.
-  const picker = show("setup");
-  kit.check(
-    label("Add account offers every provider the hub serves, in its order"),
-    providers.length > 2 && picker.includes(providers.join(" / ")),
-    `${providers.join(" / ")} || ${picker}`
-  );
+  checkPicker(kit, label, pickerSaid(show("setup picker")), providers);
   kit.check(
     label("the editor's header holds the nickname in a field you type in"),
     show("editor").includes("field 'Second'"),
@@ -675,10 +808,11 @@ function judgeParity(
 function judge(
   kit: Kit,
   label: (what: string) => string,
-  lines: string[],
+  logged: string[],
   captures: string[],
   providers: string[]
 ): void {
+  const lines = whole(logged);
   const { said, show } = reader(lines);
   judgeParity(kit, label, lines, providers);
 

@@ -133,8 +133,42 @@ enum AccountsProbe {
         log.notice("capture \(stage, privacy: .public): \(status.map { "sent, \($0)" } ?? "not sent", privacy: .public)")
     }
 
+    /// One step's words, as one log message. Unified logging cuts a message's
+    /// dynamic content just under 1 KB and ends it in "<…>" (`log stream` and
+    /// `log show` alike), so longer words go in parts, each under that, as
+    /// `step [part i/n]: |…|` (the bars keep a part's edge spaces), which
+    /// the spec joins back together (ios-accounts `whole`).
     private static func say(_ step: String, _ text: String) {
-        log.notice("\(step, privacy: .public): \(text, privacy: .public)")
+        let parts = parts(of: text)
+        guard parts.count > 1 else {
+            log.notice("\(step, privacy: .public): \(text, privacy: .public)")
+            return
+        }
+        for (index, part) in parts.enumerated() {
+            log.notice("\(step, privacy: .public) [part \(index + 1)/\(parts.count)]: |\(part, privacy: .public)|")
+        }
+    }
+
+    /// The most of a part's words, in UTF-8 bytes: well under the log's cap with the step beside them.
+    private static let partBytes = 800
+
+    /// `text` cut between characters into runs of at most `partBytes`.
+    private static func parts(of text: String) -> [String] {
+        var out: [String] = []
+        var part = ""
+        var bytes = 0
+        for character in text {
+            let width = character.utf8.count
+            if bytes + width > partBytes, !part.isEmpty {
+                out.append(part)
+                part = ""
+                bytes = 0
+            }
+            part.append(character)
+            bytes += width
+        }
+        out.append(part)
+        return out
     }
 
     private static func run(_ shell: ShellController) async {
@@ -292,6 +326,9 @@ enum AccountsProbe {
         await wait(1)
         if let setup = onScreen(AccountSetupController.self, shell) {
             say("setup", "\(setup.probeStep): \(setup.probeContent.joined(separator: " / ")) | \(setup.probeFoot)")
+            // As JSON: a provider's name may hold any character, " / " too.
+            let picker = (try? JSONEncoder().encode(setup.probePicker)).flatMap { String(data: $0, encoding: .utf8) }
+            say("setup picker", picker ?? "[]")
             say("setup steps", setup.probeSteps)
             await capture("setup-provider", shell)
             setup.probeChoose("anthropic:subscription")

@@ -863,6 +863,15 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
     }
 
     var probeContent: [String] { AccountsProbe.texts(in: content) }
+    /// The picker as drawn: each group's name, then its rows' names, in order
+    /// (AccountSetup.svelte `pickGroups`). A row's name alone: a row no
+    /// machine can use says why under it, and that is not its name.
+    var probePicker: [String] {
+        (searchRows?.arrangedSubviews ?? []).compactMap { part in
+            (part as? ProviderChoiceRow)?.accessibilityLabel ?? AccountsProbe.texts(in: part).first
+        }
+    }
+
     /// The steps as drawn and as VoiceOver reads them: each one's name and state,
     /// the layout (a list or a row of marks), and where Cancel stands.
     var probeSteps: String {
