@@ -65,6 +65,7 @@ import {
   type LimitHolder,
   limitSentence,
   MESSAGES_READ,
+  MESSAGES_STORED,
   MOVE_STEPS,
   machineLabel,
   PREVIEW_START,
@@ -758,9 +759,13 @@ export class SessionSupervisor {
   /**
    * Each session's sends handed to its process and not yet read, whole, by
    * uuid: what goes back to the hub when that process goes away
-   * ({@link #handBack}).
+   * ({@link #handBack}). `storedAs` is the id the harness said it keeps the
+   * send under ({@link MESSAGES_STORED}), which its read may name instead.
    */
-  readonly #handed = new Map<string, Map<string, SendPayload>>();
+  readonly #handed = new Map<
+    string,
+    Map<string, { payload: SendPayload; storedAs?: string }>
+  >();
   /**
    * What the hub is told of a process going away and the sends it handed
    * back, in order, while no connection takes it: said on the next one.
@@ -3419,17 +3424,46 @@ export class SessionSupervisor {
   /** A send handed to its harness, whole as the hub sent it, until the harness reads it. */
   #noteHanded(payload: SendPayload): void {
     const handed = this.#handed.get(payload.instanceId) ?? new Map();
-    handed.set(payload.message.uuid, payload);
+    handed.set(payload.message.uuid, { payload });
     this.#handed.set(payload.instanceId, handed);
   }
 
-  /** The sends a harness says it read are no longer any hand-back's ({@link #handBack}). */
+  /**
+   * The sends a harness says it read are no longer any hand-back's
+   * ({@link #handBack}). A read names each send by its uuid, or by the id the
+   * harness said it stores it under (opencode's message id, said in
+   * {@link MESSAGES_STORED} as the send is admitted), as the hub's own read
+   * of the same frame does.
+   */
   #noteRead(instanceId: string, message: NeutralMessage): void {
-    if (message.type !== "system" || message.subtype !== MESSAGES_READ) {
+    if (
+      message.type !== "system" ||
+      (message.subtype !== MESSAGES_STORED && message.subtype !== MESSAGES_READ)
+    ) {
       return;
     }
-    for (const uuid of message.read ?? []) {
-      this.#handed.get(instanceId)?.delete(uuid);
+    const handed = this.#handed.get(instanceId);
+    if (!handed) {
+      return;
+    }
+    for (const [uuid, storedAs] of Object.entries(message.storedAs ?? {})) {
+      const send = handed.get(uuid);
+      if (send) {
+        send.storedAs = storedAs;
+      }
+    }
+    if (message.subtype !== MESSAGES_READ) {
+      return;
+    }
+    for (const id of message.read ?? []) {
+      if (handed.delete(id)) {
+        continue;
+      }
+      for (const [uuid, send] of handed) {
+        if (send.storedAs === id) {
+          handed.delete(uuid);
+        }
+      }
     }
   }
 
@@ -3478,7 +3512,7 @@ export class SessionSupervisor {
    * whole, once that process is gone ({@link #holdSend}).
    */
   #handBack(instanceId: string): void {
-    for (const payload of this.#handed.get(instanceId)?.values() ?? []) {
+    for (const { payload } of this.#handed.get(instanceId)?.values() ?? []) {
       this.#holdSend(payload);
     }
     this.#handed.delete(instanceId);
@@ -3594,7 +3628,7 @@ export class SessionSupervisor {
       !this.#sessions.has(instanceId) ||
       this.#keeperRefused.has(instanceId)
     ) {
-      const handed = this.#handed.get(instanceId)?.get(uuid);
+      const handed = this.#handed.get(instanceId)?.get(uuid)?.payload;
       this.#handed.get(instanceId)?.delete(uuid);
       console.info(
         `[session] ${instanceId}: send ${uuid} let go by a process that is gone, not failed: ${said}`
