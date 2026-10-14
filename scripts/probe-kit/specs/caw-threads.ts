@@ -10,8 +10,8 @@
  *    his thread_reply lands in the thread.
  * a. App path: words sent to Caw's session (the socket `send` the app's
  *    composer and a push's Reply use) land in the thread under the send's
- *    uuid, wake him with the thread's words, the thread reads working, and
- *    his reply lands.
+ *    uuid, wake him with the thread's words as yours (origin `human`), the
+ *    thread reads working, and his reply lands.
  * b. A turn your words woke that ends without thread_reply: what he said in
  *    plain text is his message in the thread, from the web and the app path.
  * c. His question parked in the thread, then your words beside it: the card
@@ -34,6 +34,8 @@
  *   bun scripts/probe-kit/run.ts caw-threads
  *
  * The app is this checkout's simulator build (`PROBE_IOS_APP` names another).
+ * On a host without Xcode (no `xcrun`) the app's steps in c are a NOTE, not
+ * run, and his question is answered as the web answers it.
  */
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -428,18 +430,33 @@ const steps = async (kit: Kit, fleet: KitFleet) => {
   await idle();
   const appUuid = await fleet.send(lead, "PROBE-REPLY-APP from the app");
   const appYou = await said("you", "PROBE-REPLY-APP from the app");
-  const appSeen = await statuses(said("caw", "PROBE-REPLY-APP done"));
+  const appReply = said("caw", "PROBE-REPLY-APP done");
+  const appSeen = await statuses(appReply);
   const [wake] = fleet.query<{ body: string }>(
     "SELECT body FROM sent_messages WHERE uuid = ?",
     appUuid
   );
+  // The wake carrying your words goes as yours (caw.ts `message`: `by ===
+  // "you"` is `{ kind: "human" }`): it wakes a stopped Caw and is moved or
+  // held at his account's limit like any person's turn.
+  const appParts = {
+    "row under the send's uuid": appYou?.id === appUuid,
+    "wake carries the thread's words": !!wake?.body.includes(
+      "You wrote in the thread"
+    ),
+    "wake is yours (human)": !!wake?.body.includes('"kind":"human"'),
+    "thread read working": appSeen.has("working"),
+    "his reply landed": Boolean(await appReply),
+  };
   kit.check(
     "a app path: your words land in the thread under the send's uuid, wake him with the thread's words, it reads working, his reply lands",
-    appYou?.id === appUuid &&
-      !!wake?.body.includes("You wrote in the thread") &&
-      !!wake?.body.includes('"kind":"system"') &&
-      appSeen.has("working"),
-    `row ${appYou?.id}; wake ${wake?.body.slice(0, 120)}; statuses ${[...appSeen].join(",")}`
+    Object.values(appParts).every(Boolean),
+    `failed: ${
+      Object.entries(appParts)
+        .filter(([, ok]) => !ok)
+        .map(([what]) => what)
+        .join("; ") || "none"
+    }; row ${appYou?.id}; wake ${wake?.body.slice(0, 400)}; statuses ${[...appSeen].join(",")}`
   );
 
   // ── b. a turn that ends without thread_reply ────────────────────────
@@ -503,7 +520,15 @@ const steps = async (kit: Kit, fleet: KitFleet) => {
   );
 
   const app = appPath();
-  if (kit.check("the app is built", existsSync(app), app)) {
+  // The app's steps drive the simulator from this host (`xcrun`, axe): a host
+  // without Xcode answers his question as the web does and reads the rest.
+  const xcode = Bun.which("xcrun") !== null;
+  if (!xcode) {
+    kit.note(
+      "c app, the app's steps, not run: this host has no Xcode (run on the Mac)"
+    );
+  }
+  if (xcode && kit.check("the app is built", existsSync(app), app)) {
     let sim: MacSim | undefined;
     try {
       sim = await macSim(SIM);
@@ -621,7 +646,7 @@ const steps = async (kit: Kit, fleet: KitFleet) => {
     "c: answered, he reads what you wrote beside it, and his answer lands",
     Boolean(answeredRow && cw) && dismissed() === 0
   );
-  if (existsSync(app)) {
+  if (xcode && existsSync(app)) {
     kit.check(
       "c app: what you wrote on the phone is read and answered in the thread",
       Boolean(await saidAmong("Plain answer CI"))
