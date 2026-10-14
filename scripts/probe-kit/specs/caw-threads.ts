@@ -81,6 +81,8 @@ const call = (
 };
 /** The one-shot calls made, by key. */
 const made = new Set<string>();
+/** The `PROBE-PLAIN-X` asks answered, by X. */
+const answeredPlain = new Set<string>();
 
 /**
  * Caw's side, by the newest event: `PROBE-REPLY-X` answers with a slow
@@ -117,9 +119,16 @@ const respond = (request: Seen): Reply => {
     }
     return reply;
   }
-  // Prompts queued behind a turn may be read as one: each is answered.
-  const plain = [...new Set([...event.matchAll(PLAIN)].map((m) => m[1]))];
+  // Every plain ask not yet answered, wherever the turn read it: words sent
+  // beside his question are read mid-turn, after its answer, where `last`
+  // is the tool's result.
+  const plain = [
+    ...new Set([...request.all.matchAll(PLAIN)].map((m) => m[1] ?? "")),
+  ].filter((tag) => tag && !answeredPlain.has(tag));
   if (plain.length > 0) {
+    for (const tag of plain) {
+      answeredPlain.add(tag);
+    }
     return {
       everyMs: 800,
       words: plain.flatMap((tag, i) => [
