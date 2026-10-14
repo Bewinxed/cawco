@@ -29,6 +29,14 @@
  * 11. Send/Stop's glyph swap: with prefers-reduced-motion: reduce, pressing
  *    Send runs opacity-only keyframes over --dur-control, scrubbed 0 → ½ → 1;
  *    without, the incoming glyph's keys are opacity, transform and filter.
+ * 12. Its side edges' grabs drag the width: the right edge dragged 120 px
+ *    widens it by 120 with the left edge still; past the pill it settles on
+ *    one spring animation at the pill's width, past the column at the
+ *    column less --space-3; the field keeps its width; the width survives
+ *    Done and reopen; with reduced motion it lands at once.
+ * 13. The rail's Remove: a drawn canvas folds as Done's does (on
+ *    --dur-grow-exit), no chip is left, the message carries no canvas, and
+ *    the session still lists the artifact.
  *
  * (9: `canvas` and `artifacts` are their own specs, run beside this one.)
  */
@@ -226,6 +234,7 @@ const probe = async (kit: Kit) => {
   await openCheck(on, clock, pen);
   await strokes(on, pen);
   await resizeCheck(on, clock);
+  await widthCheck(on, clock);
   await keyCheck(on);
   await dockCheck(on, clock);
   const id = await chipCheck(on);
@@ -233,6 +242,7 @@ const probe = async (kit: Kit) => {
     await sendCheck(on, id);
   }
   await reducedCheck(on, clock);
+  await removeCheck(on, clock, pen);
   await phoneCheck(on);
   kit.check(
     "the page said no error",
@@ -665,6 +675,231 @@ const resizeCheck = async (on: On, clock: Clock) => {
     "4: dragged past the top and let go, it settles at the column less the field",
     near(ceiling, room.max, 1),
     `${ceiling}, ceiling ${room.max}`
+  );
+};
+
+const EDGE_LEFT = ".canvas-edges .grab-left";
+const EDGE_RIGHT = ".canvas-edges .grab-right";
+
+/** The column's sides the width holds to (less --space-3 each side) and the pill's box. */
+const sides = (page: Page) =>
+  page.evaluate(
+    ([sel, pill]) => {
+      const dock = document
+        .querySelector(sel as string)
+        ?.getBoundingClientRect();
+      const field = document
+        .querySelector(pill as string)
+        ?.getBoundingClientRect();
+      const shell = document
+        .querySelector(`${sel} .shell`)
+        ?.getBoundingClientRect();
+      const space = Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue("--space-3")
+      );
+      return dock && field && shell
+        ? {
+            left: dock.left + space,
+            right: dock.right - space,
+            pill: { left: shell.left, right: shell.right, width: shell.width },
+            field: field.width,
+          }
+        : null;
+    },
+    [DOCK, PILL]
+  );
+
+/** The canvas's own box: its slot, a pixel inside the shape each side. */
+const canvasBox = async (page: Page) => {
+  const at = await box(page, SLOT);
+  return at
+    ? { left: at.left - 1, right: at.right + 1, width: at.width + 2 }
+    : null;
+};
+
+/** A grab's centre, once the side grabs show (the canvas standing still). */
+const gripAt = async (page: Page, selector: string) => {
+  await page.waitForSelector(selector, { timeout: 5000 });
+  const at = (await box(page, selector)) as Box;
+  return { x: at.left + at.width / 2, y: at.top + at.height / 2 };
+};
+
+/**
+ * 12. The side edges' grabs: a drag moves its edge 1:1 and leaves the other
+ * edge still; let go past a bound it settles there on one spring animation
+ * (the slot's edge, linear between the spring's keyframes); the field below
+ * keeps its width; Done and reopen keep the width; reduced motion lands it
+ * at once.
+ */
+const widthCheck = async (on: On, clock: Clock) => {
+  const { kit, page } = on;
+  const room = await sides(page);
+  const before = await canvasBox(page);
+  if (!(room && before)) {
+    kit.check("12: the canvas stands with its side grabs", false);
+    return;
+  }
+  // Right edge out by 120, slowly: 1:1, the left edge still.
+  let grip = await gripAt(page, EDGE_RIGHT);
+  await page.mouse.move(grip.x, grip.y);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + 120, grip.y, { steps: 8 });
+  const wider = await canvasBox(page);
+  // On past the pill's own width, and let go: the floor, on one spring.
+  await page.mouse.move(grip.x - 400, grip.y, { steps: 12 });
+  await page.waitForTimeout(120);
+  await clock.catchRuns(() => page.mouse.up(), SLOT, 3000);
+  const runs = (await runsOn(page)).filter((one) => one.id === "canvas-settle");
+  await clock.seek(1);
+  const floored = await canvasBox(page);
+  await clock.release();
+  await settle(page);
+  kit.check(
+    "12: dragging the right edge 120 px widens the canvas by 120, its left edge still",
+    !!wider &&
+      near(wider.width, before.width + 120, 2) &&
+      near(wider.left, before.left, 0.5),
+    `before ${JSON.stringify(before)}; after ${JSON.stringify(wider)}`
+  );
+  kit.check(
+    "12: dragged inside the pill and let go, it settles at the pill's width on one spring animation of the slot's right edge",
+    !!floored &&
+      near(floored.width, room.pill.width, 1) &&
+      near(floored.left, before.left, 0.5) &&
+      runs.length === 1 &&
+      runs[0].easing === "linear" &&
+      runs[0].props.join() === "right" &&
+      runs[0].frames >= 10,
+    `settled ${JSON.stringify(floored)}, pill ${room.pill.width}; ${JSON.stringify(runs)}`
+  );
+  // Past the column: the column less --space-3; the field keeps its width.
+  grip = await gripAt(page, EDGE_RIGHT);
+  const edge = (page.viewportSize()?.width ?? 1440) - 1;
+  await page.mouse.move(grip.x, grip.y);
+  await page.mouse.down();
+  await page.mouse.move(Math.min(edge, room.right + 60), grip.y, {
+    steps: 12,
+  });
+  await page.waitForTimeout(120);
+  await page.mouse.up();
+  await settle(page);
+  const widest = await canvasBox(page);
+  const field = (await box(page, PILL))?.width ?? 0;
+  kit.check(
+    "12: dragged past the column and let go, its right edge settles at the column less --space-3; the left stays and the field keeps its width",
+    !!widest &&
+      near(widest.right, room.right, 1) &&
+      near(widest.left, before.left, 0.5) &&
+      near(field, room.field, 0.5),
+    `${JSON.stringify(widest)}; column right ${room.right}; field ${field} (was ${room.field})`
+  );
+  // Done and reopen keep it.
+  await page.focus(FIELD);
+  await page.keyboard.press("Control+Shift+KeyD");
+  await settle(page, 300);
+  await page.focus(FIELD);
+  await page.keyboard.press("Control+Shift+KeyD");
+  await settle(page, 300);
+  const reopened = await canvasBox(page);
+  kit.check(
+    "12: the width chosen survives Done and reopen",
+    !!(reopened && widest) &&
+      near(reopened.left, widest.left, 1) &&
+      near(reopened.right, widest.right, 1),
+    `${JSON.stringify(reopened)} (was ${JSON.stringify(widest)})`
+  );
+  // Reduced motion: the left edge's drag lands where it is let go, no settle run.
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  grip = await gripAt(page, EDGE_LEFT);
+  const from = (await canvasBox(page)) as NonNullable<
+    Awaited<ReturnType<typeof canvasBox>>
+  >;
+  await page.mouse.move(grip.x, grip.y);
+  await page.mouse.down();
+  await page.mouse.move(grip.x - 80, grip.y, { steps: 6 });
+  await page.waitForTimeout(150);
+  await page.mouse.up();
+  const landed = await page.evaluate(
+    ([slot]) => {
+      const at = document
+        .querySelector(slot as string)
+        ?.getBoundingClientRect();
+      return {
+        left: (at?.left ?? 0) - 1,
+        right: (at?.right ?? 0) + 1,
+        settling: document
+          .getAnimations()
+          .filter((run) => run.id === "canvas-settle").length,
+      };
+    },
+    [SLOT]
+  );
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await settle(page);
+  kit.check(
+    "12: with reduced motion the left edge's drag lands at once where it is let go (no settle animation), the right edge still",
+    near(landed.left, from.left - 80, 2) &&
+      near(landed.right, from.right, 0.5) &&
+      landed.settling === 0,
+    `${JSON.stringify(landed)}; from ${JSON.stringify(from)}`
+  );
+};
+
+/** 13. The rail's Remove folds a drawn canvas as Done does, leaves no chip and no canvas in the message; the session keeps the artifact. */
+const removeCheck = async (
+  on: On,
+  clock: Clock,
+  pen: ReturnType<typeof penOf>
+) => {
+  const { kit, page, fleet, session } = on;
+  const exit = await ms(page, "--dur-grow-exit");
+  // The reduced-motion check left its canvas folded to its chip: open it and draw.
+  await page.click(`${CHIP} .canvas-open`);
+  await settle(page, 300);
+  const id = await page.getAttribute(STAGE, "data-artifact");
+  const frame = await (
+    await page.locator(FRAME).elementHandle()
+  )?.contentFrame();
+  if (!(id && frame)) {
+    kit.check("13: a canvas stands to remove", false);
+    return;
+  }
+  await frame.waitForSelector(".canvas-host .excalidraw", { timeout: 60_000 });
+  await frame.click('.rail-box[aria-label^="Pen"]');
+  const at = (await box(page, FRAME)) as Box;
+  await pen(
+    [at.left + at.width * 0.3, at.top + at.height * 0.5],
+    [at.left + at.width * 0.6, at.top + at.height * 0.6]
+  );
+  await settle(page, 300);
+  await clock.catchRuns(
+    () => frame.click('.rail-box[aria-label="Remove"]'),
+    MOTION,
+    8000
+  );
+  const runs = (await runsOn(page)).filter((one) => one.id === "canvas-fold");
+  await clock.release();
+  await settle(page, 300);
+  const after = await page.evaluate(
+    ([stage, chip]) => ({
+      stage: !!document.querySelector(stage as string),
+      chip: !!document.querySelector(chip as string),
+      atts: document.querySelectorAll(".composer .atts [data-artifact]").length,
+    }),
+    [STAGE, CHIP]
+  );
+  const listed = await fleet.api<{ id: string }[]>(
+    `/api/instances/${session}/artifacts`
+  );
+  kit.check(
+    "13: Remove folds the drawn canvas as Done does (its runs on --dur-grow-exit), leaves no canvas or Ink chip in the message, and the session still lists the artifact",
+    runs.length > 0 &&
+      runs.every((one) => one.duration === exit) &&
+      !after.stage &&
+      !after.chip &&
+      after.atts === 0 &&
+      listed.some((one) => one.id === id),
+    `--dur-grow-exit ${exit}; ${JSON.stringify(runs)}; ${JSON.stringify(after)}; listed ${listed.some((one) => one.id === id)}`
   );
 };
 

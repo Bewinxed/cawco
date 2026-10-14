@@ -32,6 +32,14 @@
  * rise straight (`taper: false`), since nothing in it leans back, and its
  * top is solid to the edge (`fade: false`), since its first line is the
  * ask's title, not an oldest row going out of sight.
+ *
+ * The composer's canvas may stand wider than the pill (`wide`): its top
+ * reaches past the pill's edges by `wide.left` and `wide.right`: each side
+ * steps out from the pill's edge over the pill's upper side, so the canvas
+ * stands whole on the pill's top and its shoulders meet the pill's edges,
+ * the step growing with the shoulders. The outline is drawn past the
+ * shell's box (its SVG overflows), so nothing else moves. The wheel never
+ * widens, so `inset` reads the pill's width.
  */
 import { easeDrawer, motionOk } from "../motion/curves.svelte";
 
@@ -91,6 +99,8 @@ export class GrownShape {
   open = 0;
   /** How far above the pill it reaches, grown. */
   ext: number;
+  /** How far its grown top reaches past the pill's left and right edges, px. */
+  wide = { left: 0, right: 0 };
   readonly #size: ShapeSize;
   readonly #halo: HTMLDivElement;
   readonly #svg: SVGSVGElement;
@@ -249,6 +259,43 @@ export class GrownShape {
   }
 
   /**
+   * How far in from its reach each side of the grown outline stands `y` px
+   * below its top: the shoulder's curve, which runs from the pill's top to
+   * the top corner (`outline` at 1), found by halving.
+   */
+  taperAt(y: number): number {
+    const { r } = this.#size;
+    const k = this.taper();
+    const s = Math.max(r, this.ext);
+    const d = s - r;
+    if (y >= s) {
+      return 0;
+    }
+    // y(t) falls from s at t = 0 to r at t = 1; x(t) moves in by k·(3t² - 2t³).
+    const yAt = (at: number) => {
+      const u = 1 - at;
+      return (
+        u * u * u * s +
+        3 * u * u * at * (s - d * 0.55) +
+        3 * u * at * at * (r + d * 0.35) +
+        at * at * at * r
+      );
+    };
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 24; i += 1) {
+      const mid = (lo + hi) / 2;
+      if (yAt(mid) > y) {
+        lo = mid;
+      } else {
+        hi = mid;
+      }
+    }
+    const t = (lo + hi) / 2;
+    return k * (3 * t * t - 2 * t * t * t);
+  }
+
+  /**
    * The grown outline's right side, top down, as (y from its top, inset)
    * pairs: the top corner's quarter, the shoulder's curve, then straight
    * down the pill. The sides are mirror images grown.
@@ -306,21 +353,29 @@ export class GrownShape {
     const tL = 0;
     const pw = easeDrawer(clamp01((p - 0.25) / 0.75));
     const k = this.taper() * pw;
-    const L = k;
-    const R = w - k;
-    // Each side runs straight up to the pill's top, then sweeps in to its
-    // rounded top corner.
+    // How far each side stands out past the pill (the canvas wider than it),
+    // and the band of the pill's upper side its step out takes.
+    const eR = this.wide.right * pw;
+    const eL = this.wide.left * pw;
+    const L = -eL + k;
+    const R = w + eR - k;
+    // Each side runs straight up the pill, steps out to its reach at the
+    // pill's top, then sweeps in to its rounded top corner.
     const sR = Math.max(tR + r, up);
     const sL = Math.max(tL + r, up);
+    const bR = Math.min(Math.abs(eR), Math.max(0, height - r - sR));
+    const bL = Math.min(Math.abs(eL), Math.max(0, height - r - sL));
     const P = map;
-    let d = `M ${P(r, height)} L ${P(w - r, height)} A ${r} ${r} 0 0 0 ${P(w, height - r)} L ${P(w, sR)}`;
-    d += ` C ${P(w, sR - (sR - tR - r) * 0.55)} ${P(R, tR + r + (sR - tR - r) * 0.35)} ${P(R, tR + r)}`;
+    let d = `M ${P(r, height)} L ${P(w - r, height)} A ${r} ${r} 0 0 0 ${P(w, height - r)} L ${P(w, sR + bR)}`;
+    d += ` C ${P(w, sR + bR * 0.45)} ${P(w + eR, sR + bR * 0.55)} ${P(w + eR, sR)}`;
+    d += ` C ${P(w + eR, sR - (sR - tR - r) * 0.55)} ${P(R, tR + r + (sR - tR - r) * 0.35)} ${P(R, tR + r)}`;
     d += ` Q ${P(R, tR)} ${P(R - r, tR)}`;
     // The top eases from one side's height to the other's.
     const span = R - L - 2 * r;
     d += ` C ${P(R - r - span * 0.4, tR)} ${P(L + r + span * 0.4, tL)} ${P(L + r, tL)}`;
     d += ` Q ${P(L, tL)} ${P(L, tL + r)}`;
-    d += ` C ${P(L, tL + r + (sL - tL - r) * 0.35)} ${P(0, sL - (sL - tL - r) * 0.55)} ${P(0, sL)}`;
+    d += ` C ${P(L, tL + r + (sL - tL - r) * 0.35)} ${P(-eL, sL - (sL - tL - r) * 0.55)} ${P(-eL, sL)}`;
+    d += ` C ${P(-eL, sL + bL * 0.55)} ${P(0, sL + bL * 0.45)} ${P(0, sL + bL)}`;
     d += ` L ${P(0, height - r)} A ${r} ${r} 0 0 0 ${P(r, height)} Z`;
     return { d, height, up };
   }
@@ -399,10 +454,14 @@ export class GrownShape {
     this.#draw(this.#drop, this.#dropSvg, this.#dropPath, d, height);
     // The shadow's own region: the outline and as far past it as it reaches.
     const reach = this.#dropReach;
+    const { left, right } = this.wide;
     for (const [name, value] of [
-      ["x", -reach],
+      ["x", -reach - Math.max(0, left)],
       ["y", -reach],
-      ["width", this.#size.w + 2 * reach],
+      [
+        "width",
+        this.#size.w + Math.max(0, left) + Math.max(0, right) + 2 * reach,
+      ],
       ["height", height + 2 * reach],
     ] as const) {
       this.#dropFilter.setAttribute(name, String(value));
@@ -576,11 +635,12 @@ export function boxCut(
   const top = P(x1, y0 + q);
   const left = P(x0, y0 + q);
   let d = `M ${P(x0 + q, y1)} L ${P(x1 - q, y1)} A ${q} ${q} 0 0 0 ${P(x1, y1 - q)} L ${top}`;
-  d += ` C ${top} ${top} ${top}`;
+  // The outline's step out and its shoulder, each a curve of no length here.
+  d += ` C ${top} ${top} ${top} C ${top} ${top} ${top}`;
   d += ` Q ${P(x1, y0)} ${P(x1 - q, y0)}`;
   d += ` C ${P(x1 - q, y0)} ${P(x0 + q, y0)} ${P(x0 + q, y0)}`;
   d += ` Q ${P(x0, y0)} ${left}`;
-  d += ` C ${left} ${left} ${left}`;
+  d += ` C ${left} ${left} ${left} C ${left} ${left} ${left}`;
   d += ` L ${P(x0, y1 - q)} A ${q} ${q} 0 0 0 ${P(x0 + q, y1)} Z`;
   return `path("${d}")`;
 }

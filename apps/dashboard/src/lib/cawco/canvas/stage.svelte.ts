@@ -28,6 +28,7 @@ export type Slot = "composer" | "panel";
 export interface SlotActions {
   dock?: () => void;
   done?: () => void;
+  remove?: () => void;
   undock?: () => void;
 }
 
@@ -41,6 +42,15 @@ export interface Box {
   left: number;
   top: number;
   width: number;
+}
+
+/** An edge of the composer's canvas that resizes it. */
+export type Edge = "top" | "left" | "right";
+
+export interface GrabValue {
+  max: number;
+  min: number;
+  now: number;
 }
 
 const boxOf = (el: Element): Box => {
@@ -67,13 +77,25 @@ export class Stage {
   readonly holders = new Set<symbol>();
   /** The page's answer to an asked picture. */
   pictured: (() => void) | null = null;
-  /** The resize grab's handlers, the composer's while it stands there. */
+  /** The resize grabs' handlers, by edge: the composer's while it stands there. */
   grab: {
-    down: (event: PointerEvent) => void;
-    key: (event: KeyboardEvent) => void;
+    down: (edge: Edge, event: PointerEvent) => void;
+    key: (edge: Edge, event: KeyboardEvent) => void;
   } | null = null;
-  /** The grab's state for a screen reader: the height and its bounds, px. */
-  grabValue = $state<{ min: number; max: number; now: number } | null>(null);
+  /**
+   * Each grab's state for a screen reader, px: the top's the height and its
+   * bounds, a side's the width and the bounds that side's drag holds it to.
+   */
+  grabValue = $state<Record<Edge, GrabValue> | null>(null);
+  /**
+   * The side edges' grabs, a layer placed on the stage's box but not cut to
+   * its shape: each grab's hit zone straddles the edge (CanvasStages).
+   */
+  edges = $state<HTMLElement>();
+  /** The side grabs show: the canvas stands still over the composer. */
+  edgesShown = $state(false);
+  /** How far inside its box the shape's sides stand at the side grabs' height, px. */
+  edgeInset = $state(0);
 
   readonly #waiting = new Set<() => void>();
 
@@ -193,23 +215,31 @@ export class Stage {
     }
     const box = this.target();
     const hidden = box === null;
-    if (el.hidden !== hidden) {
-      el.hidden = hidden;
+    for (const layer of [el, this.edges]) {
+      if (layer && layer.hidden !== hidden) {
+        layer.hidden = hidden;
+      }
     }
     if (!box) {
       return;
     }
-    const s = el.style;
-    const set = (prop: "left" | "top" | "width" | "height", v: number) => {
-      const px = `${v}px`;
-      if (s[prop] !== px) {
-        s[prop] = px;
-      }
+    const write = (layer: HTMLElement) => {
+      const s = layer.style;
+      const set = (prop: "left" | "top" | "width" | "height", v: number) => {
+        const px = `${v}px`;
+        if (s[prop] !== px) {
+          s[prop] = px;
+        }
+      };
+      set("left", box.left);
+      set("top", box.top);
+      set("width", box.width);
+      set("height", box.height);
     };
-    set("left", box.left);
-    set("top", box.top);
-    set("width", box.width);
-    set("height", box.height);
+    write(el);
+    if (this.edges) {
+      write(this.edges);
+    }
     el.classList.toggle(
       "over-sheet",
       this.at === "panel" && !!this.slots.panel?.closest(".preview-sheet")

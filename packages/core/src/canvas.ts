@@ -66,9 +66,20 @@ export const CANVAS_LIMITS = {
   files: 200,
   /** Bytes of one image file's data URL. Our call. */
   fileBytes: 8 * 1024 * 1024,
+  /** Bytes of one image a screen adds: Excalidraw's own ceiling (its `MAX_ALLOWED_FILE_BYTES`). */
+  imageBytes: 4 * 1024 * 1024,
   /** Bytes of one picture. Our call. */
   pictureBytes: 32 * 1024 * 1024,
 } as const;
+
+/** The images a screen adds to a canvas (pasted, dropped or picked), by MIME type, with the name a refusal lists. */
+export const CANVAS_IMAGE_TYPES: Readonly<Record<string, string>> = {
+  "image/png": "PNG",
+  "image/jpeg": "JPEG",
+  "image/webp": "WebP",
+  "image/svg+xml": "SVG",
+  "image/gif": "GIF",
+};
 
 /** The skeleton element types an agent may write (Excalidraw's `convertToExcalidrawElements`). */
 export const SKELETON_TYPES = [
@@ -154,6 +165,8 @@ const arrowLine = (
  *   place is then its own;
  * - `ink <id>: N points, x,y w×h, over <ids>`, a freedraw with the ids
  *   whose boxes it crosses (`over nothing` when none);
+ * - `image <id> at x,y w×h`, an image the person pasted, dropped or picked
+ *   (its file in the doc's `files`);
  * - then `group <id>: <ids>` for every group.
  */
 export const canvasOutline = (elements: readonly CanvasElement[]): string => {
@@ -187,6 +200,9 @@ export const canvasOutline = (elements: readonly CanvasElement[]): string => {
         )
         .map((other) => other.id);
       return `ink ${element.id}: ${element.points?.length ?? 0} points, ${boxText(box)}, over ${over.length > 0 ? over.join(", ") : "nothing"}`;
+    }
+    if (element.type === "image") {
+      return `image ${element.id} at ${boxText(box)}`;
     }
     const text =
       element.type === "text" ? (element.text ?? "") : labelOf(element);

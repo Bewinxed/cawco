@@ -18,6 +18,7 @@ import type {
   ExcalidrawImperativeAPI,
 } from "@excalidraw/excalidraw/types";
 import {
+  type AnimationEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -32,6 +33,7 @@ import tokensCss from "../../../hub/skills/decision-page/kit/tokens.css" with {
 };
 import type { ArtifactGlobal, ArtifactHold } from "../preview-overlay/artifact";
 import { Icon } from "./icons";
+import { guardImages } from "./images";
 import { Rail } from "./rail";
 import { bindScene, type CanvasInk, fitScene, tokenHex } from "./scene";
 
@@ -44,7 +46,7 @@ declare global {
 /** Excalidraw's grid step, which ours draws in `code-bg`. */
 const GRID = 20;
 
-/** Every canvas action of Excalidraw's own off: the rail is ours. */
+/** Every canvas action of Excalidraw's own off: the rail is ours. Images are on: pasted, dropped or picked (images.ts). */
 const UI_OPTIONS = {
   canvasActions: {
     changeViewBackgroundColor: false,
@@ -55,7 +57,7 @@ const UI_OPTIONS = {
     saveToActiveFile: false,
     toggleTheme: false,
   },
-  tools: { image: false },
+  tools: { image: true },
 } as const;
 
 // The kit's tokens as written: Bun's CSS bundler lowers `light-dark()` into
@@ -129,7 +131,7 @@ const holdStore = {
   now: () => current,
 };
 
-/** A word to the dashboard that hosts the canvas. */
+/** A word to the dashboard that hosts the canvas (the rail's Dock, Undock, Done and Remove post their own). */
 export const toHost = (what: "dock" | "done" | "pictured") =>
   window.parent.postMessage({ type: `cawco:${what}` }, location.origin);
 
@@ -262,8 +264,46 @@ function Empty({ onDraw }: { onDraw: () => void }) {
   );
 }
 
+/**
+ * A file the canvas wouldn't take, said over its grid in the error formula:
+ * it fades in, stands for `--dur-hold`, and fades out (canvas.css); a new
+ * refusal replaces it.
+ */
+function Refusal({ refusal, gone }: { refusal: Said; gone: () => void }) {
+  const ended = useCallback(
+    (event: AnimationEvent<HTMLParagraphElement>) => {
+      if (event.animationName === "canvas-refusal-out") {
+        gone();
+      }
+    },
+    [gone]
+  );
+  return (
+    <p
+      className="canvas-refusal"
+      key={refusal.at}
+      onAnimationEnd={ended}
+      role="alert"
+    >
+      {refusal.text}
+    </p>
+  );
+}
+
+interface Said {
+  at: number;
+  text: string;
+}
+
 function Host() {
   const hold = useSyncExternalStore(holdStore.subscribe, holdStore.now);
+  const [refusal, setRefusal] = useState<Said | null>(null);
+  const refuse = useCallback(
+    (text: string) => setRefusal({ text, at: performance.now() }),
+    []
+  );
+  const cleared = useCallback(() => setRefusal(null), []);
+  useEffect(() => guardImages(refuse), [refuse]);
   const theme = useSyncExternalStore(schemeStore.subscribe, schemeStore.now);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const first = useMemo(() => firstLook(holdStore.now()), []);
@@ -416,12 +456,14 @@ function Host() {
           api={api}
           docked={docked}
           onPick={endSwap}
+          onRefuse={refuse}
           reduced={lessMotion.now}
           swappedFrom={tool === "eraser" ? swappedFrom : null}
           tool={tool}
         />
       ) : null}
       {empty ? <Empty onDraw={draw} /> : null}
+      {refusal ? <Refusal gone={cleared} refusal={refusal} /> : null}
     </div>
   );
 }

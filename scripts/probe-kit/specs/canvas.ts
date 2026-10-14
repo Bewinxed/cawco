@@ -37,6 +37,13 @@
  *     into the pen's box and back, as Send and Stop swap; the swap's two
  *     opacities run on one clock of `--dur-fade`, the same with reduced
  *     motion, as the agent's elements still fade up there.
+ * 26. Images: a 32×32 PNG pasted on the canvas (a `paste` event with the
+ *     file on its clipboardData) is an image element on both screens joined
+ *     to it, its file in each one's doc `files`; the outline reads
+ *     `image <id> at x,y 32×32`; the export's canvas.excalidraw holds the
+ *     file and its PNG draws the image (the empty canvas exports none); a
+ *     5 MB PNG and a .txt are refused over the grid with their sentences,
+ *     and nothing is added.
  *
  * The scratch hub builds the canvas page with `CAWCO_PROBE_HOOKS=1` (core
  * canvas-host.ts), which exposes the binding as `window.cawcoCanvasProbe`.
@@ -230,6 +237,7 @@ const runSpec = async (kit: Kit) => {
   await themeChecks(on, made.id);
   await shapeChecks(on);
   await emptyChecks(on);
+  await imageChecks(on);
 
   // 9. Every canvas page load so far (the flow canvas, its reloads, the blank one).
   const twice = on.logged.filter((line) =>
@@ -353,6 +361,253 @@ const emptyChecks = async (on: OnCanvas) => {
   );
 };
 
+/** The two refusals, as WORDS.md's error formula has them (images.ts). */
+const TOO_BIG =
+  "That image is 5 MB, and a canvas image can be 4 MB at most, so it wasn't added. Shrink it, then paste it again.";
+const NOT_IMAGE =
+  "A .txt file isn't an image the canvas takes (PNG, JPEG, WebP, SVG or GIF), so it wasn't added.";
+
+/** A canvas's frame in a page's panel, by its artifact id, once its host page has drawn. */
+const frameOf = async (page: Page, id: string): Promise<Frame> => {
+  const sel = `.canvas-stage.docked[data-artifact="${id}"] iframe`;
+  await until(
+    "the canvas in the panel",
+    () => page.frameLocator(sel).locator(".canvas-host .excalidraw").count(),
+    (count) => count === 1,
+    60_000
+  );
+  const frame = await (await page.locator(sel).elementHandle())?.contentFrame();
+  if (!frame) {
+    throw new Error("the panel's frame has no document");
+  }
+  return frame;
+};
+
+/** The page's image elements and whether each one's file is in its doc's `files`. */
+const imagesOn = (frame: Frame) =>
+  frame.evaluate(() => {
+    const probe = (
+      window as unknown as {
+        cawcoCanvasProbe: {
+          elements: () => ProbeElement[];
+          live: { getMap: (name: string) => { has: (key: string) => boolean } };
+        };
+      }
+    ).cawcoCanvasProbe;
+    const files = probe.live.getMap("files");
+    return probe
+      .elements()
+      .filter((el) => el.type === "image")
+      .map((el) => ({
+        id: el.id,
+        fileId: el.fileId ?? "",
+        width: Math.round(el.width),
+        height: Math.round(el.height),
+        filed: !!el.fileId && files.has(el.fileId),
+      }));
+  });
+
+/** A `paste` on the canvas's document carrying one file, made in the page: a 32×32 red PNG, or `bytes` of zeros as `name`. */
+const pasteFile = (
+  frame: Frame,
+  file:
+    | { kind: "red" }
+    | { kind: "blank"; name: string; type: string; bytes: number }
+) =>
+  frame.evaluate(async (what) => {
+    let made: File;
+    if (what.kind === "red") {
+      const art = document.createElement("canvas");
+      art.width = 32;
+      art.height = 32;
+      const paint = art.getContext("2d") as CanvasRenderingContext2D;
+      paint.fillStyle = "#ff0000";
+      paint.fillRect(0, 0, 32, 32);
+      const blob = await new Promise<Blob>((done) =>
+        art.toBlob((b) => done(b as Blob), "image/png")
+      );
+      made = new File([blob], "red.png", { type: "image/png" });
+    } else {
+      made = new File([new Uint8Array(what.bytes)], what.name, {
+        type: what.type,
+      });
+    }
+    const data = new DataTransfer();
+    data.items.add(made);
+    document.dispatchEvent(
+      new ClipboardEvent("paste", {
+        clipboardData: data,
+        bubbles: true,
+        cancelable: true,
+      })
+    );
+  }, file);
+
+/** The refusal standing over the grid, once it shows. */
+const refusalOn = (frame: Frame) =>
+  until(
+    "the refusal over the grid",
+    () =>
+      frame.evaluate(
+        () => document.querySelector(".canvas-refusal")?.textContent ?? null
+      ),
+    Boolean,
+    3000
+  ).catch(() => null);
+
+/**
+ * Check 26: images. A pasted 32×32 PNG reaches both screens joined to the
+ * canvas with its file, reads in the outline, and is in the export's file
+ * and drawn in its PNG; a 5 MB PNG and a .txt are refused with their
+ * sentences and add nothing.
+ */
+const imageChecks = async (on: OnCanvas) => {
+  const { kit, page, fleet, session } = on;
+  const made = await on.call(CREATE, { kind: "canvas", name: "images" });
+  const id = made.match(ANSWERED_ID)?.[1];
+  if (!id) {
+    kit.check("26: the image canvas is made", false, made.slice(0, 300));
+    return;
+  }
+  const frame = await frameOf(page, id);
+  // A second screen joined to the same canvas: its own browser, its panel showing it.
+  const other = await kit.page("desk");
+  other.on("pageerror", (error) =>
+    on.said.push(`pageerror (second screen): ${error.message}`)
+  );
+  await open(
+    other,
+    `${await fleet.dashboard()}/session/${session}`,
+    "textarea"
+  );
+  await fleet.api(`/api/instances/${session}/artifacts/${id}/show`, {});
+  const otherFrame = await frameOf(other, id);
+  const empty = await fleet.api<{ png: string | null }>(
+    `/api/artifacts/${id}/export`
+  );
+
+  // A press on the canvas with Select (clear of the empty state's Draw), as
+  // a person's paste follows one: Excalidraw takes a paste only while it
+  // has the focus, and places it at the pointer.
+  const well = (await page
+    .locator(`.canvas-stage.docked[data-artifact="${id}"] iframe`)
+    .boundingBox()) as { x: number; y: number; width: number; height: number };
+  await frame.click('.rail-box[aria-label^="Select"]');
+  await page.mouse.click(
+    well.x + well.width * 0.3,
+    well.y + well.height * 0.75
+  );
+  await pasteFile(frame, { kind: "red" });
+  const here = await until(
+    "the pasted image with its file",
+    () => imagesOn(frame),
+    (images) => images.length === 1 && images[0].filed,
+    10_000
+  ).catch(() => imagesOn(frame));
+  const there = await until(
+    "the image on the second screen",
+    () => imagesOn(otherFrame),
+    (images) => images.length === 1 && images[0].filed,
+    10_000
+  ).catch(() => imagesOn(otherFrame));
+  const [image] = here;
+  kit.check(
+    "26: a pasted 32×32 PNG is an image element on both screens joined to the canvas, its file in each one's doc files",
+    here.length === 1 &&
+      image.width === 32 &&
+      image.height === 32 &&
+      image.filed &&
+      there.length === 1 &&
+      there[0].id === image.id &&
+      there[0].filed,
+    `here ${JSON.stringify(here)}; there ${JSON.stringify(there)}`
+  );
+  const outline = (await reader(on, id)()).outline ?? "";
+  kit.check(
+    "26: the outline reads the image as `image <id> at x,y 32×32`",
+    !!image &&
+      new RegExp(`^image ${image.id} at -?\\d+,-?\\d+ 32×32$`, "m").test(
+        outline
+      ),
+    outline
+  );
+
+  // The export: its file in canvas.excalidraw, and its PNG draws the red square.
+  const exported = await until(
+    "the picture with the image",
+    () =>
+      fleet.api<{
+        file: { files: Record<string, { dataURL?: string }> };
+        png: string | null;
+      }>(`/api/artifacts/${id}/export`),
+    (answer) => !!answer.png,
+    10_000
+  ).catch(() =>
+    fleet.api<{
+      file: { files: Record<string, { dataURL?: string }> };
+      png: string | null;
+    }>(`/api/artifacts/${id}/export`)
+  );
+  const red = exported.png
+    ? await page.evaluate(async (png) => {
+        const picture = new Image();
+        picture.src = `data:image/png;base64,${png}`;
+        await picture.decode();
+        const art = document.createElement("canvas");
+        art.width = picture.naturalWidth;
+        art.height = picture.naturalHeight;
+        const paint = art.getContext("2d") as CanvasRenderingContext2D;
+        paint.drawImage(picture, 0, 0);
+        const { data } = paint.getImageData(0, 0, art.width, art.height);
+        let count = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          if (data[i] > 200 && data[i + 1] < 60 && data[i + 2] < 60) {
+            count += 1;
+          }
+        }
+        return count;
+      }, exported.png)
+    : 0;
+  const filed = !!image && !!exported.file.files[image.fileId]?.dataURL;
+  kit.check(
+    "26: canvas.excalidraw holds the image's file, and the export's PNG draws it where the empty canvas had none",
+    empty.png === null && !!exported.png && red >= 32 * 32 && filed,
+    `empty png ${empty.png === null ? "none" : "some"}; png ${exported.png ? `${exported.png.length} chars` : "none"}; red pixels ${red}; file ${filed}`
+  );
+
+  // The refusals.
+  await pasteFile(frame, {
+    kind: "blank",
+    name: "big.png",
+    type: "image/png",
+    bytes: 5 * 1024 * 1024,
+  });
+  const big = await refusalOn(frame);
+  await pasteFile(frame, {
+    kind: "blank",
+    name: "notes.txt",
+    type: "text/plain",
+    bytes: 5,
+  });
+  const text = await until(
+    "the .txt refusal",
+    () =>
+      frame.evaluate(
+        () => document.querySelector(".canvas-refusal")?.textContent ?? null
+      ),
+    (said) => said === NOT_IMAGE,
+    3000
+  ).catch(() => refusalOn(frame));
+  await settle(page, 500);
+  const still = await imagesOn(frame);
+  kit.check(
+    "26: a 5 MB PNG and a .txt are refused over the grid with their sentences, and nothing is added",
+    big === TOO_BIG && text === NOT_IMAGE && still.length === 1,
+    `5 MB: ${big}; .txt: ${text}; images ${still.length}`
+  );
+  await other.close();
+};
+
 /**
  * Check 10: one doc, one Yjs. The binding's `live` is the overlay's doc
  * itself and its `scene` a doc of the overlay's Yjs; the agent's one
@@ -426,6 +681,7 @@ const oneDocCheck = async (on: OnCanvas, id: string) => {
 interface ProbeElement {
   boundElements?: { id: string; type: string }[] | null;
   customData?: { shape?: string } | null;
+  fileId?: string | null;
   frameId?: string | null;
   height: number;
   id: string;

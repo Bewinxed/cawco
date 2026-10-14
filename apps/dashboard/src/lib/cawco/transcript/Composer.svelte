@@ -3359,10 +3359,13 @@
     position: relative;
   }
   /* The canvas's box: on the composer's top, a pixel inside the grown
-     shape's edge; the room writes its height. Its stage stands over it. */
+     shape's edge; the room writes its height, and its left and right when
+     it stands wider than the pill (the grown shape's own physical sides).
+     Its stage stands over it. */
   .composer > .canvas-slot {
     position: absolute;
-    inset-inline: 1px;
+    left: 1px;
+    right: 1px;
     bottom: 100%;
     pointer-events: none;
   }

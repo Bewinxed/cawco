@@ -4,13 +4,15 @@
  * The canvas's tool rail (DESIGN.md, Artifact panel, canvas and ink): two
  * floating groups in the panel material over Excalidraw, whose own chrome
  * is hidden. Tools at the top-left (select, hand, pen, shapes as a menu,
- * arrow, text, eraser), view at the top-right (zoom as a menu, Dock, Done).
- * A tool is Excalidraw's own (`setActiveTool`); the chosen one is the one
- * Excalidraw reports (`appState.activeTool`), save while the pencil's
- * double-tap has swapped the eraser into the box of the tool the pen was
- * on: that box stays chosen and shows the eraser. Dock (Undock while the host
- * says the canvas is docked) and Done are the host's: they post
- * `cawco:dock`, `cawco:undock` and `cawco:done` to it.
+ * arrow, text, Image, eraser), view at the top-right (zoom as a menu, Dock,
+ * Done, and Remove while the canvas stands in the composer). A tool is
+ * Excalidraw's own (`setActiveTool`); the chosen one is the one Excalidraw
+ * reports (`appState.activeTool`), save while the pencil's double-tap has
+ * swapped the eraser into the box of the tool the pen was on: that box
+ * stays chosen and shows the eraser. Image is no tool: it opens a picker
+ * whose file is checked as a pasted one is (images.ts). Dock (Undock while
+ * the host says the canvas is docked), Done and Remove are the host's: they
+ * post `cawco:dock`, `cawco:undock`, `cawco:done` and `cawco:remove` to it.
  *
  * Every control names what it does in `data-action`; the rail has one
  * press handler that reads it.
@@ -21,6 +23,7 @@ import type {
   NormalizedZoomValue,
 } from "@excalidraw/excalidraw/types";
 import {
+  type ChangeEvent,
   createContext,
   type KeyboardEvent,
   type MouseEvent,
@@ -33,6 +36,7 @@ import {
   useState,
 } from "react";
 import { type Glyph, Icon } from "./icons";
+import { IMAGE_ACCEPT, placeImage, refusalOf } from "./images";
 
 /** Excalidraw's tools the rail offers. */
 export type Tool =
@@ -61,8 +65,13 @@ const BEFORE_SHAPES: { tool: Tool; label: string; glyph: Glyph }[] = [
 const AFTER_SHAPES: { tool: Tool; label: string; glyph: Glyph }[] = [
   { tool: "arrow", label: "Arrow (A)", glyph: "arrow" },
   { tool: "text", label: "Text (T)", glyph: "text" },
+];
+/** The last tool, after the Image box. */
+const LAST: { tool: Tool; label: string; glyph: Glyph }[] = [
   { tool: "eraser", label: "Eraser (E)", glyph: "eraser" },
 ];
+/** Excalidraw's key for its image tool, which opens the rail's picker instead. */
+const IMAGE_KEY = "9";
 
 /** Excalidraw's zoom bounds. */
 const ZOOM_MIN = 0.1;
@@ -117,10 +126,7 @@ const actionAt = (event: MouseEvent) =>
 const Press = createContext<(event: MouseEvent) => void>(() => undefined);
 
 /** What a swapped box reads while it shows the eraser. */
-const ERASER = AFTER_SHAPES.find((one) => one.tool === "eraser") as {
-  label: string;
-  glyph: Glyph;
-};
+const [ERASER] = LAST;
 
 interface Layer {
   glyph: Glyph;
@@ -383,23 +389,75 @@ export function Rail({
   api,
   docked,
   onPick,
+  onRefuse,
   reduced,
   swappedFrom,
   tool,
 }: {
   api: ExcalidrawImperativeAPI;
-  /** The host stands the canvas in its artifact panel: Dock reads Undock. */
+  /** The host stands the canvas in its artifact panel: Dock reads Undock, and Remove is not offered. */
   docked: boolean;
   /** A tool picked here: the pencil's swap, if one stands, ends. */
   onPick: () => void;
+  /** A picked file the canvas won't take, said over its grid. */
+  onRefuse: (why: string) => void;
   reduced: () => boolean;
   /** The tool whose box shows the eraser in its place (the pencil's double-tap); null when none does. */
   swappedFrom: string | null;
   tool: string;
 }) {
+  /** The Image box's file picker (images.ts): its own, so a picked file is checked as a pasted one is. */
+  const picker = useRef<HTMLInputElement>(null);
+  const picked = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const input = event.currentTarget;
+      const file = input.files?.[0];
+      input.value = "";
+      if (!file) {
+        return;
+      }
+      const why = refusalOf(file);
+      if (why) {
+        onRefuse(why);
+        return;
+      }
+      placeImage(api, file).catch((error: unknown) =>
+        onRefuse(
+          `That image couldn't be read (${error instanceof Error ? error.message : String(error)}), so it wasn't added. Pick another file.`
+        )
+      );
+    },
+    [api, onRefuse]
+  );
+  // Excalidraw's own key for its image tool opens this picker instead: one way in, checked.
+  useEffect(() => {
+    const keyed = (event: globalThis.KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        event.key !== IMAGE_KEY ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey ||
+        target?.closest("input, textarea, [contenteditable]")
+      ) {
+        return;
+      }
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      onPick();
+      picker.current?.click();
+    };
+    window.addEventListener("keydown", keyed, true);
+    return () => window.removeEventListener("keydown", keyed, true);
+  }, [onPick]);
   const pressed = useCallback(
     (event: MouseEvent) => {
       const action = actionAt(event);
+      if (action === "image:pick") {
+        onPick();
+        picker.current?.click();
+        return;
+      }
       if (action?.startsWith("tool:")) {
         onPick();
       }
@@ -446,6 +504,17 @@ export function Rail({
           ))}
         </MenuBox>
         {AFTER_SHAPES.map(box)}
+        <Box action="image:pick" glyph="gallery" label="Image (9)" />
+        {LAST.map(box)}
+        <input
+          accept={IMAGE_ACCEPT}
+          className="rail-picker"
+          hidden
+          onChange={picked}
+          ref={picker}
+          tabIndex={-1}
+          type="file"
+        />
       </div>
       <div aria-label="View" className="rail rail-view" role="toolbar">
         <MenuBox glyph="zoomIn" label="Zoom">
@@ -460,6 +529,10 @@ export function Rail({
           label={docked ? "Undock" : "Dock"}
         />
         <Box action="host:done" glyph="done" label="Done" />
+        {/* Remove takes the canvas out of the message, which only the composer's holds. */}
+        {docked ? null : (
+          <Box action="host:remove" glyph="remove" label="Remove" />
+        )}
       </div>
     </Press.Provider>
   );

@@ -11,9 +11,15 @@
  * - **Resize.** Its top edge's grab drags its height between 40% of the
  *   column and the column less the field, and settles on the house spring
  *   (motion/spring.ts) at the finger's speed; a press mid-settle takes it
- *   from where it stands.
+ *   from where it stands. Its left and right edges' grabs drag that edge
+ *   alone, the other staying, its width from the pill's to the column's
+ *   less `--space-3` each side, settling the same way; the grown shape's
+ *   shoulders step out from the pill's edges to it (grown.ts `wide`). The
+ *   height and the width chosen are kept across Done and reopen.
  * - **Done** folds it over `--dur-grow-exit` into its chip, its picture the
- *   chip's thumbnail.
+ *   chip's thumbnail. The rail's **Remove** folds it back into the pill on
+ *   the same clock, leaves no chip, and takes it out of the message as the
+ *   chip's remove does; the panel still lists it.
  * - **Dock** flies the same iframe into the artifact panel (280ms on the
  *   drawer curve) while the shape gives the field's room back over the
  *   composer's clock (`--dur-control`, ease-out); Undock flies it back.
@@ -26,6 +32,8 @@
 import { tick } from "svelte";
 import {
   type Box,
+  type Edge,
+  type GrabValue,
   type handBack,
   holdStage,
   letGo,
@@ -43,6 +51,7 @@ import {
 } from "../client.svelte";
 import { CURVE, dur, motionOk } from "../motion/curves.svelte";
 import { integrate, spring } from "../motion/spring";
+import { inks } from "../preview/ink.svelte";
 import type { ComposerDraft, DraftCanvas } from "./composer-draft.svelte";
 import { boxCut, type ClipBox, GrownShape, measureShape } from "./grown";
 
@@ -60,6 +69,13 @@ const FLOOR = 0.4;
  * from WWDC 2018 "Designing Fluid Interfaces".
  */
 const PROJECT = 0.998 / (1 - 0.998) / 1000;
+/**
+ * How long the pointer may stand still before it lets go and still carry
+ * its last speed, ms: past it the release carries nothing and the edge
+ * stays where it was let go. Our call: six frames at 60Hz, past any gap
+ * between a moving finger's events.
+ */
+const STILL_MS = 100;
 /** A keyboard step of the grab, px. */
 const KEY_STEP = 25;
 
@@ -80,6 +96,12 @@ export interface RoomParts {
   slot: () => HTMLElement | undefined;
 }
 
+/** How far the canvas stands past the pill's left and right edges, px. */
+interface Wide {
+  left: number;
+  right: number;
+}
+
 /** What the room's motion reads once before it writes: every box in px. */
 interface Sizes {
   /** The shape's box and the stage's, in the shell's terms (grown.ts ClipBox). */
@@ -88,9 +110,15 @@ interface Sizes {
   lift: number;
   max: number;
   min: number;
+  /** How far each side may reach past the pill: to the column's edge less `--space-3`. */
+  reach: Wide;
   size: ReturnType<typeof measureShape>["size"];
   stage: ClipBox;
+  wide: Wide;
 }
+
+/** A drag's coordinate grows the edge's value (+1) or shrinks it (-1): up is taller, outward is wider. */
+const SIGN: Record<Edge, number> = { top: -1, left: -1, right: 1 };
 
 const errorOf = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
@@ -137,15 +165,20 @@ export class CanvasRoom {
   #sizes: Sizes | null = null;
   /** The height the reader chose by the grab, kept while it fits. */
   #chosen: number | null = null;
+  /** How far past the pill each side was dragged, kept while it fits. */
+  #chosenWide: Wide = { left: 0, right: 0 };
   /** The motion running now, which the next one replaces from where it is drawn. */
   #runs: Animation[] = [];
-  #settle: { run: Animation; frame: number } | null = null;
+  #settle: { run: Animation; frame: number; edge: Edge } | null = null;
   #drag: {
+    edge: Edge;
     id: number;
-    y: number;
+    /** The pointer's coordinate along the drag (y for the top, x for a side) at the press. */
+    at: number;
     from: number;
-    lastY: number;
+    last: number;
     lastAt: number;
+    /** The value's speed, px/s. */
     v: number;
   } | null = null;
 
@@ -172,12 +205,20 @@ export class CanvasRoom {
     stage.actions.composer = {
       dock: () => this.dock(),
       done: () => this.fold(),
+      remove: () => this.discard(),
     };
     stage.grab = {
-      down: (event) => this.#grabDown(event),
-      key: (event) => this.#grabKey(event),
+      down: (edge, event) => this.#grabDown(edge, event),
+      key: (edge, event) => this.#grabKey(edge, event),
     };
     return stage;
+  }
+
+  /** The side grabs show while the canvas stands still over the field, and go as it moves. */
+  #edges(shown: boolean): void {
+    if (this.#stage) {
+      this.#stage.edgesShown = shown;
+    }
   }
 
   #letGoStage(): void {
@@ -191,6 +232,7 @@ export class CanvasRoom {
     stage.actions.composer = undefined;
     stage.grab = null;
     stage.grabValue = null;
+    stage.edgesShown = false;
     stage.slots.composer = undefined;
     if (stage.el) {
       stage.el.style.clipPath = "";
@@ -213,35 +255,44 @@ export class CanvasRoom {
     }
     return atRest(() => {
       const { size } = measureShape(shell, pill, field);
-      const shellTop = shell.getBoundingClientRect().top;
+      const at = shell.getBoundingClientRect();
       const columnTop = column.getBoundingClientRect().top;
       const room = dock.getBoundingClientRect();
       const gap = Number.parseFloat(
         getComputedStyle(shell).getPropertyValue("--space-3")
       );
-      const lift = shellTop - columnTop;
+      const lift = at.top - columnTop;
       const max = Math.max(0, columnTop - room.top - gap);
       const min = Math.min(max, FLOOR * room.height);
       const height = Math.min(max, Math.max(min, this.#chosen ?? max));
-      return this.#boxes(size, lift, min, max, height);
+      const reach = {
+        left: Math.max(0, at.left - room.left - gap),
+        right: Math.max(0, room.right - gap - at.right),
+      };
+      const wide = {
+        left: Math.min(reach.left, this.#chosenWide.left),
+        right: Math.min(reach.right, this.#chosenWide.right),
+      };
+      return this.#boxes({ size, lift, min, max, reach, wide }, height);
     });
   }
 
-  #boxes(
-    size: Sizes["size"],
-    lift: number,
-    min: number,
-    max: number,
-    height: number
-  ): Sizes {
+  #boxes(at: Omit<Sizes, "halo" | "stage">, height: number): Sizes {
     this.height = height;
+    const { size, lift, min, max, reach, wide } = at;
     return {
       size,
       lift,
       min,
       max,
+      reach,
+      wide,
       halo: { left: 0, bottom: 0, height: size.base + lift + height },
-      stage: { left: 1, bottom: size.base + lift, height: height - 1 },
+      stage: {
+        left: 1 - wide.left,
+        bottom: size.base + lift,
+        height: height - 1,
+      },
     };
   }
 
@@ -250,27 +301,56 @@ export class CanvasRoom {
     return sizes ? sizes.lift + sizes.stage.height + 1 : 0;
   }
 
-  /** The canvas at `height`: the slot, the shape and the stage's cut, written. */
-  #standAt(height: number): void {
+  /** The slot written to the canvas's box: its height and how far each side stands past the pill. */
+  #slotTo(slot: HTMLElement, sizes: Sizes): void {
+    slot.style.height = `${sizes.stage.height}px`;
+    slot.style.left = `${1 - sizes.wide.left}px`;
+    slot.style.right = `${1 - sizes.wide.right}px`;
+  }
+
+  /** Each grab's value and bounds, for a screen reader: the height, and the width each side holds. */
+  #grabValues(sizes: Sizes): Record<Edge, GrabValue> {
+    const { w } = sizes.size;
+    const { wide, reach } = sizes;
+    const now = w + wide.left + wide.right;
+    return {
+      top: { min: sizes.min, max: sizes.max, now: this.height },
+      left: { min: w + wide.right, max: w + wide.right + reach.left, now },
+      right: { min: w + wide.left, max: w + wide.left + reach.right, now },
+    };
+  }
+
+  /**
+   * The canvas at `height` and `wide`: the shape, the stage's cut and its
+   * grabs written (the slot is written by whoever moves it).
+   */
+  #standAt(height: number, wide = this.#sizes?.wide): void {
     const sizes = this.#sizes;
     const shape = this.#shape;
-    if (!(sizes && shape)) {
+    if (!(sizes && shape && wide)) {
       return;
     }
-    this.#sizes = this.#boxes(
-      sizes.size,
-      sizes.lift,
-      sizes.min,
-      sizes.max,
-      height
-    );
+    this.#sizes = this.#boxes({ ...sizes, wide }, height);
     shape.ext = this.#ext();
+    shape.wide = { ...wide };
     shape.paint();
     this.#restCut();
-    if (this.#stage) {
-      this.#stage.grabValue = { min: sizes.min, max: sizes.max, now: height };
-      this.#stage.place();
+    this.#tellStage();
+  }
+
+  /** The stage's grabs: their values, and how far in the shape's sides stand at the side grabs' height. */
+  #tellStage(): void {
+    const stage = this.#stage;
+    const sizes = this.#sizes;
+    if (!(stage && sizes)) {
+      return;
     }
+    stage.grabValue = this.#grabValues(sizes);
+    stage.edgeInset = Math.max(
+      0,
+      (this.#shape?.taperAt(1 + sizes.stage.height / 2) ?? 0) - 1
+    );
+    stage.place();
   }
 
   /** The stage cut to the grown shape, standing. */
@@ -288,6 +368,7 @@ export class CanvasRoom {
       taperRows: 1,
       fade: false,
     });
+    shape.wide = { ...sizes.wide };
     this.#shape = shape;
     return shape;
   }
@@ -394,6 +475,7 @@ export class CanvasRoom {
     }
     this.#stop();
     const stage = this.#hold(canvas);
+    this.#edges(false);
     this.up = true;
     await tick();
     const sizes = this.#measure();
@@ -402,7 +484,7 @@ export class CanvasRoom {
       return;
     }
     this.#sizes = sizes;
-    slot.style.height = `${sizes.stage.height}px`;
+    this.#slotTo(slot, sizes);
     stage.slots.composer = slot;
     const shape = this.#newShape(sizes);
     shape.open = 1;
@@ -410,11 +492,7 @@ export class CanvasRoom {
     const slotBox = atRest(() => boxOf(slot));
     stage.pinned = slotBox;
     stage.standAt("composer");
-    stage.grabValue = {
-      min: sizes.min,
-      max: sizes.max,
-      now: sizes.stage.height + 1,
-    };
+    this.#tellStage();
     const { halo } = shape.layers;
     const ms = dur("--dur-grow");
     const rest = shape.cutAt(1, sizes.stage);
@@ -471,48 +549,82 @@ export class CanvasRoom {
       stage.place();
       this.#runs = [];
       shape.morphTo(1, shape.ext, 0);
+      this.#edges(true);
     }
   }
 
   /** Done: the canvas folds into its chip over `--dur-grow-exit`; its picture becomes the chip's. */
   async fold(): Promise<void> {
+    await this.#fold(true);
+  }
+
+  /**
+   * The rail's Remove: the canvas folds back into the pill as Done folds it,
+   * leaving no chip, and leaves the message as the chip's remove takes it
+   * (`remove`); the panel still lists it.
+   */
+  async discard(): Promise<void> {
+    if (await this.#fold(false)) {
+      this.remove();
+    }
+  }
+
+  /**
+   * The canvas folds over `--dur-grow-exit`: into its chip's box (`intoChip`),
+   * or back into the pill along the grown shape's own fold. Whether it
+   * landed folded.
+   */
+  async #fold(intoChip: boolean): Promise<boolean> {
     const { canvas } = this.draft;
     const stage = this.#stage;
     const shape = this.#shape;
     const sizes = this.#sizes;
     if (!(canvas && stage?.el && shape && sizes && this.up)) {
-      return;
+      return false;
     }
     this.#stop();
+    this.#edges(false);
     shape.unsettle();
     const from = boxOf(stage.el);
     stage.pinned = from;
-    this.chipHidden = true;
-    canvas.folded = true;
-    await tick();
-    const chip = this.#parts.chip();
-    const to = chip ? atRest(() => boxOf(chip)) : null;
+    let to: Box | null = null;
+    if (intoChip) {
+      this.chipHidden = true;
+      canvas.folded = true;
+      await tick();
+      const chip = this.#parts.chip();
+      to = chip ? atRest(() => boxOf(chip)) : null;
+    }
     const { halo } = shape.layers;
     const ms = dur("--dur-grow-exit");
     let runs: Animation[];
-    if (motionOk.current && to) {
-      const into = boxCut(
-        {
-          left: to.left - from.left,
-          top: to.top - from.top,
-          width: to.width,
-          height: to.height,
-        },
-        Number.parseFloat(
-          getComputedStyle(halo).getPropertyValue("--radius-sm")
-        )
-      );
+    if (motionOk.current && (to || !intoChip)) {
+      const into = to
+        ? boxCut(
+            {
+              left: to.left - from.left,
+              top: to.top - from.top,
+              width: to.width,
+              height: to.height,
+            },
+            Number.parseFloat(
+              getComputedStyle(halo).getPropertyValue("--radius-sm")
+            )
+          )
+        : null;
       runs = [
         this.#paintAlong(shape, ms, "linear", 1, 0),
-        stage.el.animate(
-          [{ clipPath: shape.cutAt(1, sizes.stage) }, { clipPath: into }],
-          { duration: ms, easing: CURVE.drawer, fill: "forwards" }
-        ),
+        into
+          ? stage.el.animate(
+              [{ clipPath: shape.cutAt(1, sizes.stage) }, { clipPath: into }],
+              { duration: ms, easing: CURVE.drawer, fill: "forwards" }
+            )
+          : stage.el.animate(
+              Array.from({ length: STEPS + 1 }, (_, i) => ({
+                clipPath: shape.cutAt(1 - i / STEPS, sizes.stage),
+              })),
+              { duration: ms, easing: "linear", fill: "forwards" }
+            ),
       ];
     } else {
       const fade = {
@@ -534,7 +646,7 @@ export class CanvasRoom {
       () => false
     );
     if (!(landed && this.draft.canvas === canvas)) {
-      return;
+      return false;
     }
     this.#runs = [];
     for (const run of runs) {
@@ -544,7 +656,10 @@ export class CanvasRoom {
     stage.pinned = null;
     stage.standAt(null);
     this.chipHidden = false;
-    await this.#thumb(canvas, stage);
+    if (intoChip) {
+      await this.#thumb(canvas, stage);
+    }
+    return true;
   }
 
   /** The chip's thumbnail: the picture drawn now, as the hub exports it. */
@@ -574,6 +689,7 @@ export class CanvasRoom {
     if (stage) {
       stage.slots.composer = undefined;
       stage.grabValue = null;
+      stage.edgesShown = false;
       if (stage.el) {
         stage.el.style.clipPath = "";
       }
@@ -591,12 +707,21 @@ export class CanvasRoom {
     this.#stage?.standAt(null);
   }
 
-  /** The chip's remove: the canvas leaves the message; the panel still lists it. */
+  /**
+   * The chip's remove and the rail's Remove: the canvas leaves the message,
+   * and so does the ink drawn on it (its Ink chip, which the next Send would
+   * carry); the panel still lists it.
+   */
   remove(): void {
+    const id = this.draft.canvas?.id;
+    const session = this.#parts.session();
     this.#putAway();
     this.#letGoStage();
     this.draft.canvas = null;
     this.error = "";
+    if (id && session && inks.get(session)?.artifactId === id) {
+      inks.delete(session);
+    }
   }
 
   /**
@@ -613,11 +738,12 @@ export class CanvasRoom {
     }
   }
 
-  /** The window or the column changed size: the canvas keeps its height where it fits. */
+  /** The window or the column changed size: the canvas keeps its height and width where they fit. */
   refit(): void {
     if (!(this.up && this.#shape && this.#runs.length === 0 && !this.#drag)) {
       return;
     }
+    this.#stopSettle(false);
     const sizes = this.#measure();
     const slot = this.#parts.slot();
     if (!(sizes && slot)) {
@@ -625,7 +751,7 @@ export class CanvasRoom {
     }
     this.#sizes = sizes;
     this.#newShape(sizes).morphTo(1, this.#ext(sizes), 0);
-    slot.style.height = `${sizes.stage.height}px`;
+    this.#slotTo(slot, sizes);
     this.#standAt(sizes.stage.height + 1);
   }
 
@@ -653,6 +779,7 @@ export class CanvasRoom {
       return;
     }
     this.#stop();
+    this.#edges(false);
     shape.unsettle();
     const from = boxOf(stage.el);
     stage.pinned = from;
@@ -701,6 +828,7 @@ export class CanvasRoom {
           stage.slots.composer = this.#parts.slot();
           stage.standAt("composer");
           this.refit();
+          this.#edges(true);
         }
       }
       this.error = `The canvas couldn't dock: ${errorOf(error)}. It stays over the field.`;
@@ -791,7 +919,7 @@ export class CanvasRoom {
       return;
     }
     this.#sizes = sizes;
-    slot.style.height = `${sizes.stage.height}px`;
+    this.#slotTo(slot, sizes);
     stage.slots.composer = slot;
     const shape = this.#newShape(sizes);
     shape.open = 1;
@@ -807,11 +935,7 @@ export class CanvasRoom {
     room.id = "canvas-room";
     stage.pinned = to;
     stage.standAt("composer");
-    stage.grabValue = {
-      min: sizes.min,
-      max: sizes.max,
-      now: sizes.stage.height + 1,
-    };
+    this.#tellStage();
     const flight = this.#fly(stage.el, from, to);
     this.#runs = [room, flight];
     const landed = await Promise.all([room.finished, flight.finished]).then(
@@ -824,12 +948,13 @@ export class CanvasRoom {
       this.#restCut();
       stage.place();
       shape.morphTo(1, shape.ext, 0);
+      this.#edges(true);
     }
   }
 
   // --- resize -----------------------------------------------------------------
 
-  #grabDown(event: PointerEvent): void {
+  #grabDown(edge: Edge, event: PointerEvent): void {
     const sizes = this.#sizes;
     const slot = this.#parts.slot();
     if (!(sizes && slot && this.up) || this.#runs.length > 0) {
@@ -838,13 +963,15 @@ export class CanvasRoom {
     event.preventDefault();
     (event.currentTarget as Element).setPointerCapture(event.pointerId);
     // A settle caught mid-way is taken from where it stands.
-    const now = this.#stopSettle(true) ?? sizes.stage.height + 1;
+    this.#stopSettle(true);
     this.#shape?.unsettle();
+    const at = edge === "top" ? event.clientY : event.clientX;
     this.#drag = {
+      edge,
       id: event.pointerId,
-      y: event.clientY,
-      from: now,
-      lastY: event.clientY,
+      at,
+      from: this.#valueOf(edge),
+      last: at,
       lastAt: event.timeStamp,
       v: 0,
     };
@@ -861,16 +988,39 @@ export class CanvasRoom {
     target.addEventListener("pointercancel", up);
   }
 
-  /** The height under the finger: 1:1 inside its bounds, rubber-banded past them. */
-  #follow(height: number): number {
+  /** What an edge's drag moves: the height for the top, how far that side stands past the pill for a side. */
+  #valueOf(edge: Edge): number {
     const sizes = this.#sizes as Sizes;
-    const past =
-      height > sizes.max ? height - sizes.max : Math.min(0, height - sizes.min);
-    if (past === 0) {
-      return height;
+    return edge === "top" ? this.height : sizes.wide[edge];
+  }
+
+  /** An edge's bounds, and the size the rubber band's furthest reach is a share of. */
+  #bounds(edge: Edge): {
+    min: number;
+    max: number;
+    scale: (bound: number) => number;
+  } {
+    const sizes = this.#sizes as Sizes;
+    if (edge === "top") {
+      return { min: sizes.min, max: sizes.max, scale: (bound) => bound };
     }
-    const bound = past > 0 ? sizes.max : sizes.min;
-    const reach = Math.min(Math.abs(past) * RUBBER, bound * RUBBER_MAX);
+    const other = sizes.wide[edge === "left" ? "right" : "left"];
+    return {
+      min: 0,
+      max: sizes.reach[edge],
+      scale: (bound) => sizes.size.w + other + bound,
+    };
+  }
+
+  /** The value under the finger: 1:1 inside its bounds, rubber-banded past them. */
+  #follow(edge: Edge, value: number): number {
+    const { min, max, scale } = this.#bounds(edge);
+    const past = value > max ? value - max : Math.min(0, value - min);
+    if (past === 0) {
+      return value;
+    }
+    const bound = past > 0 ? max : min;
+    const reach = Math.min(Math.abs(past) * RUBBER, scale(bound) * RUBBER_MAX);
     return bound + Math.sign(past) * reach;
   }
 
@@ -879,23 +1029,47 @@ export class CanvasRoom {
     if (!drag || event.pointerId !== drag.id) {
       return;
     }
+    const at = drag.edge === "top" ? event.clientY : event.clientX;
+    const sign = SIGN[drag.edge];
     const dt = event.timeStamp - drag.lastAt;
     if (dt > 0) {
-      // Up is taller: the height's speed, px/s.
-      drag.v = ((drag.lastY - event.clientY) / dt) * 1000;
+      // The value's speed, px/s: up is taller, outward is wider.
+      drag.v = ((sign * (at - drag.last)) / dt) * 1000;
     }
-    drag.lastY = event.clientY;
+    drag.last = at;
     drag.lastAt = event.timeStamp;
-    this.#write(this.#follow(drag.from + drag.y - event.clientY));
+    this.#write(
+      drag.edge,
+      this.#follow(drag.edge, drag.from + sign * (at - drag.at))
+    );
   }
 
-  /** Writes the canvas at `height` this frame: the slot, the shape, the cut. */
-  #write(height: number): void {
+  /** Writes the canvas with `edge` at `value` this frame: the slot, the shape, the cut. */
+  #write(edge: Edge, value: number): void {
     const slot = this.#parts.slot();
-    if (slot) {
-      slot.style.height = `${height - 1}px`;
+    const sizes = this.#sizes;
+    if (!(slot && sizes)) {
+      return;
     }
-    this.#standAt(height);
+    if (edge === "top") {
+      slot.style.height = `${value - 1}px`;
+      this.#standAt(value);
+      return;
+    }
+    slot.style[edge] = `${1 - value}px`;
+    this.#standAt(this.height, { ...sizes.wide, [edge]: value });
+  }
+
+  /** Where the slot stands now for `edge`, the settle's motion included. */
+  #readSlot(edge: Edge, slot: HTMLElement): number {
+    const at = slot.getBoundingClientRect();
+    if (edge === "top") {
+      return at.height + 1;
+    }
+    const pill = (this.#parts.shell() as HTMLElement).getBoundingClientRect();
+    return edge === "left"
+      ? pill.left - at.left + 1
+      : at.right - pill.right + 1;
   }
 
   #grabUp(event: PointerEvent): void {
@@ -905,43 +1079,63 @@ export class CanvasRoom {
     if (!(drag && sizes) || event.pointerId !== drag.id) {
       return;
     }
-    const now = this.height;
-    const target = Math.min(
-      sizes.max,
-      Math.max(sizes.min, now + drag.v * PROJECT * 1000)
-    );
-    this.#chosen = target;
-    this.#settleTo(now, target, drag.v);
+    const { edge } = drag;
+    const now = this.#valueOf(edge);
+    const { min, max } = this.#bounds(edge);
+    const v = event.timeStamp - drag.lastAt > STILL_MS ? 0 : drag.v;
+    const target = Math.min(max, Math.max(min, now + v * PROJECT * 1000));
+    this.#choose(edge, target);
+    this.#settleTo(edge, now, target, v);
   }
 
-  /** The house spring from `now` to `target`, at the finger's speed: one animation on the slot's height. */
-  #settleTo(now: number, target: number, v: number): void {
+  /** The reader's choice for `edge`, kept across Done and reopen. */
+  #choose(edge: Edge, value: number): void {
+    if (edge === "top") {
+      this.#chosen = value;
+    } else {
+      this.#chosenWide = { ...this.#chosenWide, [edge]: value };
+    }
+  }
+
+  /** The house spring from `now` to `target`, at the finger's speed: one animation on the slot's edge. */
+  #settleTo(edge: Edge, now: number, target: number, v: number): void {
     const slot = this.#parts.slot();
     if (!slot) {
       return;
     }
     if (!motionOk.current) {
-      this.#write(target);
+      this.#write(edge, target);
       this.#shape?.morphTo(1, this.#ext(), 0);
       return;
     }
     const path = integrate(now - target, v);
     const [run] = spring(path, [
-      { el: slot, frame: (x) => ({ height: `${target + x - 1}px` }) },
+      {
+        el: slot,
+        frame: (x) =>
+          edge === "top"
+            ? { height: `${target + x - 1}px` }
+            : { [edge]: `${1 - (target + x)}px` },
+      },
     ]);
     run.id = "canvas-settle";
     const follow = () => {
-      this.#standAt(slot.getBoundingClientRect().height + 1);
+      const at = this.#readSlot(edge, slot);
+      if (edge === "top") {
+        this.#standAt(at);
+      } else if (this.#sizes) {
+        this.#standAt(this.height, { ...this.#sizes.wide, [edge]: at });
+      }
       if (this.#settle?.run === run) {
         this.#settle.frame = requestAnimationFrame(follow);
       }
     };
-    this.#settle = { run, frame: requestAnimationFrame(follow) };
+    this.#settle = { run, frame: requestAnimationFrame(follow), edge };
     run.finished.then(
       () => {
         if (this.#settle?.run === run) {
           this.#stopSettle(false);
-          this.#write(target);
+          this.#write(edge, target);
           this.#shape?.morphTo(1, this.#ext(), 0);
         }
       },
@@ -949,44 +1143,60 @@ export class CanvasRoom {
     );
   }
 
-  /** Stops a settle; with `keep`, where it stands is written and returned. */
-  #stopSettle(keep: boolean): number | null {
+  /** Stops a settle; with `keep`, where it stands is written. */
+  #stopSettle(keep: boolean): void {
     const settle = this.#settle;
     if (!settle) {
-      return null;
+      return;
     }
     this.#settle = null;
     cancelAnimationFrame(settle.frame);
     const slot = this.#parts.slot();
-    const at = slot ? slot.getBoundingClientRect().height + 1 : null;
+    const at = slot ? this.#readSlot(settle.edge, slot) : null;
     settle.run.cancel();
     if (keep && at !== null) {
-      this.#write(at);
+      this.#write(settle.edge, at);
     }
-    return at;
   }
 
-  #grabKey(event: KeyboardEvent): void {
+  #grabKey(edge: Edge, event: KeyboardEvent): void {
     const sizes = this.#sizes;
     if (!(sizes && this.up)) {
       return;
     }
-    const steps: Record<string, number> = {
-      ArrowUp: KEY_STEP,
-      ArrowDown: -KEY_STEP,
-      PageUp: sizes.max,
-      PageDown: -sizes.max,
-      Home: sizes.max,
-      End: -sizes.max,
+    const { min, max } = this.#bounds(edge);
+    // Up is taller; toward its own side, a side's edge stands wider.
+    const steps: Record<Edge, Record<string, number>> = {
+      top: {
+        ArrowUp: KEY_STEP,
+        ArrowDown: -KEY_STEP,
+        PageUp: max,
+        PageDown: -max,
+        Home: max,
+        End: -max,
+      },
+      left: {
+        ArrowLeft: KEY_STEP,
+        ArrowRight: -KEY_STEP,
+        Home: -max,
+        End: max,
+      },
+      right: {
+        ArrowRight: KEY_STEP,
+        ArrowLeft: -KEY_STEP,
+        Home: -max,
+        End: max,
+      },
     };
-    const by = steps[event.key];
+    const by = steps[edge][event.key];
     if (by === undefined) {
       return;
     }
     event.preventDefault();
-    const height = Math.min(sizes.max, Math.max(sizes.min, this.height + by));
-    this.#chosen = height;
-    this.#write(height);
+    this.#stopSettle(false);
+    const value = Math.min(max, Math.max(min, this.#valueOf(edge) + by));
+    this.#choose(edge, value);
+    this.#write(edge, value);
     this.#shape?.morphTo(1, this.#ext(), 0);
   }
 
