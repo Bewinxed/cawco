@@ -37473,6 +37473,10 @@
           },
           "stashes": {
             "type": "number"
+          },
+          "strays": {
+            "description": "Set when the clone's folder is there and its `.git` is no repository\ngit can read: its entries that are not CawCo's deny stand-ins (agent\nstand-ins.ts `straysIn`). None is a husk, a deleted clone a sandbox\nrefilled with stand-ins, which holds nothing; any keeps the folder.",
+            "type": "number"
           }
         },
         "required": [

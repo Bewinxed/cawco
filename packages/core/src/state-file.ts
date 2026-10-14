@@ -44,6 +44,12 @@ export interface StateWriteOptions {
    * `EEXIST` on an existing path, where a rename would replace it).
    */
   exclusive?: boolean;
+  /**
+   * The file's folder is taken as it is, never made: a write into a folder
+   * that is gone fails (`ENOENT`). For a file written into a workspace's
+   * clone, which nothing but its create makes (a deleted clone stays gone).
+   */
+  inPlace?: true;
   /** The file's exact mode, umask or not; absent, a new file's default (0o666 under the umask). */
   mode?: number;
   /**
@@ -118,7 +124,9 @@ export const writeStateFile = async (
   data: string | Uint8Array,
   options: StateWriteOptions = {}
 ): Promise<void> => {
-  await mkdir(dirname(path), { recursive: true });
+  if (!options.inPlace) {
+    await mkdir(dirname(path), { recursive: true });
+  }
   const temporary = temporaryFor(path, options.scratchDir);
   const handle = await open(temporary, "wx", options.mode ?? DEFAULT_MODE);
   try {
@@ -170,7 +178,9 @@ export const writeStateFileSync = (
   data: string | Uint8Array,
   options: StateWriteOptions = {}
 ): void => {
-  mkdirSync(dirname(path), { recursive: true });
+  if (!options.inPlace) {
+    mkdirSync(dirname(path), { recursive: true });
+  }
   const temporary = temporaryFor(path, options.scratchDir);
   const fd = openSync(temporary, "wx", options.mode ?? DEFAULT_MODE);
   try {

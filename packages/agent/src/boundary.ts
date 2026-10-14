@@ -77,6 +77,7 @@ import { basename, dirname, join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
 import { WORKSPACE_BOUNDARY_START_TIMEOUT_MS } from "@cawco/core";
 import { binaryRoot, readUpdateState } from "@cawco/core/binary-installation";
+import { isGitDir } from "@cawco/core/git-dir";
 import {
   currentEndpoint,
   currentKeeper,
@@ -1463,16 +1464,42 @@ const ensureNow = (ref: WorkspaceRef): Promise<Boundary> => {
 };
 
 /**
+ * Refuses a boundary for a workspace whose folder is not there to hold
+ * (`why`), and closes each of its boundaries still running, on every keeper,
+ * with everything in them: nothing runs in a path that is gone, and a
+ * handover of one ({@link handOverStale}) or a restart ({@link
+ * restartStubbed}) is never tried again. Its records stay for its archive.
+ */
+const refuseGone = async (ref: WorkspaceRef, why: string): Promise<never> => {
+  forgetStale(ref.id);
+  forgetStubbed(ref.id);
+  forgetRetiring(ref.id);
+  const alive = (await keepers.held()).filter(
+    (proc) => proc.alive && isBoundaryOf(proc.procId, ref.id)
+  );
+  await Promise.all(
+    alive.map((proc) => proc.client.signal(proc.procId, "SIGKILL"))
+  );
+  if (alive.length > 0) {
+    console.info(
+      `[workspace] ${ref.id}: ${why}, so its boundary ${alive.map((proc) => proc.pid).join(", ")} is closed`
+    );
+  }
+  throw refusal(ref.id, why);
+};
+
+/**
  * The folder a boundary holds, ready for it: a delegate's clone (refused
  * when it is none), or a project lead's place, whatever folder his project
  * is in, a plain one too, which stays as the person keeps it: never made
- * into a clone.
+ * into a clone. One that is not there is refused, and its boundaries closed
+ * ({@link refuseGone}).
  */
 const placeReady = async (ref: WorkspaceRef): Promise<void> => {
   if (isLeadPlace(ref.id)) {
     const place = await stat(ref.path).catch(() => undefined);
     if (!place?.isDirectory()) {
-      throw refusal(ref.id, `${ref.path} is not a folder`);
+      await refuseGone(ref, `${ref.path} is not a folder`);
     }
     // What earlier builds stood in there goes, once nothing holds it: at
     // each ensure (each of the lead's wakes), so once the boundary that bound
@@ -1486,13 +1513,24 @@ const placeReady = async (ref: WorkspaceRef): Promise<void> => {
   }
   const git = await stat(join(ref.path, ".git")).catch(() => undefined);
   if (!git) {
-    throw refusal(ref.id, `${ref.path} is not a git checkout`);
+    await refuseGone(ref, `${ref.path} is not a git checkout`);
+    return;
   }
   // A workspace from before clones — a spawn racing the agent's start-up
   // pass over them — becomes one first: a worktree's commits would land in
   // the repository it was cut from, which the boundary keeps read-only.
   if (!git.isDirectory()) {
     await cloneInPlace(ref.path);
+    return;
+  }
+  // A `.git` that is no repository (a deleted clone a sandbox refilled with
+  // stand-ins, `stand-ins.ts`) has no boundary: one would stand in there
+  // again. Retirement takes it away (workspace.ts `holding`).
+  if (!(await isGitDir(join(ref.path, ".git")))) {
+    await refuseGone(
+      ref,
+      `${ref.path} is not a git clone any more: its .git is no repository`
+    );
   }
 };
 

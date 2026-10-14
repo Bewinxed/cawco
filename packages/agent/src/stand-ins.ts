@@ -21,6 +21,13 @@
  *   those ({@link listStandIns}).
  *
  * A path git tracks is the project's own and is never touched.
+ *
+ * Stand-ins are made only inside a clone that is there, a repository (the
+ * host's `goneReason`, boundary.ts `placeReady`). A folder at a clone's path
+ * whose `.git` is no repository and that holds nothing but stand-ins as made
+ * and mount points a sandbox left is a husk: a clone deleted under a running
+ * sandbox and refilled by an earlier build. Its workspace's retirement takes
+ * it away whole; anything else in such a folder keeps it ({@link straysIn}).
  */
 import type { Stats } from "node:fs";
 import {
@@ -35,9 +42,14 @@ import {
 } from "node:fs/promises";
 import { join, relative } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
+import { isGitDir } from "@cawco/core/git-dir";
 import { mountedAnywhere } from "@cawco/core/mount-table";
 import { projectClaudeDir } from "@cawco/core/paths";
-import { type CloneDeny, cloneDenies } from "@cawco/core/workspace-policy";
+import {
+  type CloneDeny,
+  cloneDenies,
+  isLeadPlace,
+} from "@cawco/core/workspace-policy";
 import { excludedStandIns, excludeStandIns, gitIn } from "./checkout-exclude";
 
 /**
@@ -247,6 +259,57 @@ export const listStandIns = async (
 };
 
 /**
+ * Whether the folder at `path` is there with a `.git` that is neither a
+ * repository by git's test (`isGitDir`) nor an older workspace's worktree
+ * file (made a clone as its boundary starts): no git clone any more.
+ */
+export const noRepositoryAt = async (path: string): Promise<boolean> => {
+  if (!(await statOf(path))?.isDirectory()) {
+    return false;
+  }
+  const dotGit = join(path, ".git");
+  return !((await statOf(dotGit))?.isFile() || (await isGitDir(dotGit)));
+};
+
+/**
+ * The entries in a folder with no repository ({@link noRepositoryAt}) that
+ * are not CawCo's, counted down its tree: every one but a deny path's
+ * stand-in as made ({@link asMade}), a mount point a sandbox left there, and
+ * a dir above deny paths (`.git`, `.claude`) holding only those. A husk has
+ * none: nothing of anyone's is lost when it goes.
+ */
+export const straysIn = async (path: string): Promise<number> => {
+  const denies = cloneDenies(await realpath(path));
+  const count = async (dir: string): Promise<number> => {
+    let strays = 0;
+    for (const name of await readdir(dir)) {
+      const entry = join(dir, name);
+      // biome-ignore lint/performance/noAwaitInLoops: one entry at a time, a husk holds a handful
+      const found = await statOf(entry);
+      const deny = denies.find((one) => one.path === entry);
+      if (!found) {
+        continue;
+      }
+      if (deny) {
+        const ours =
+          leftMountPoint(found) ||
+          (await asMade({ path: entry, empty: deny.empty, found }));
+        strays += ours ? 0 : 1;
+      } else if (
+        found.isDirectory() &&
+        denies.some((one) => one.path.startsWith(`${entry}/`))
+      ) {
+        strays += await count(entry);
+      } else {
+        strays += 1;
+      }
+    }
+    return strays;
+  };
+  return await count(await realpath(path));
+};
+
+/**
  * Takes away each stand-in in the clone that is still exactly as it was made,
  * and each mount point a sandbox left, then the project's Claude Code dir if
  * that leaves it empty; the exclude lines of those gone go with them. Run
@@ -255,7 +318,14 @@ export const listStandIns = async (
  * tool has written since, listed.
  */
 export const removeStandIns = async (ref: WorkspaceRef): Promise<void> => {
-  if (!(await statOf(ref.path))) {
+  // Gone, or a delegate's clone that is no git clone any more: a husk goes
+  // whole with its workspace's archive (workspace.ts `closeClone`), and any
+  // other such folder is kept. A lead's place is a plain folder as often as
+  // a repository, and its earlier stand-ins go as ever.
+  if (
+    !(await statOf(ref.path)) ||
+    (!isLeadPlace(ref.id) && (await noRepositoryAt(ref.path)))
+  ) {
     return;
   }
   for (const one of await presentIn(ref.path)) {

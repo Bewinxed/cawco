@@ -68,6 +68,7 @@ import {
   LFS_FILTERS,
   withoutCredential,
 } from "./move";
+import { noRepositoryAt, straysIn } from "./stand-ins";
 import { runWorkflowCommand } from "./workflow-command";
 import { workspaceHolding } from "./workspace-records";
 
@@ -535,6 +536,17 @@ const holding = async (
   if (gone) {
     return { ahead: 0, dirty: 0, stashes: 0 };
   }
+  // No git clone any more, so no boundary to read it in (boundary.ts
+  // `placeReady`): what is there besides CawCo's stand-ins is counted. A
+  // husk has nothing besides, holds nothing, and goes.
+  if (await noRepositoryAt(workspace.path)) {
+    return {
+      ahead: 0,
+      dirty: 0,
+      stashes: 0,
+      strays: await straysIn(workspace.path),
+    };
+  }
   const git = insideGit(workspace);
   const excluded = skip
     .map((path) => shellQuote(`:(exclude,literal)${path}`))
@@ -727,7 +739,7 @@ const closeClone = async (
   }
   const workspace: WorkspaceRef = { id: request.id, path };
   const skip = request.skip ?? [];
-  const held = read
+  const held: Omit<WorkspaceHolding, "bytes"> = read
     ? await holding(workspace, skip)
     : { ahead: 0, dirty: 0, stashes: 0 };
   const words = holdingWords({ ...held, bytes: 0 });
@@ -781,8 +793,14 @@ const closeClone = async (
   await Promise.all(
     cached.map((dir) => rm(dir, { recursive: true, force: true }))
   );
+  // `strays` is read only in a folder that is no git clone; none there is a
+  // husk (stand-ins.ts).
+  const clone =
+    held.strays === 0
+      ? `husk ${path} (a deleted clone refilled with stand-ins)`
+      : `clone ${path}`;
   console.info(
-    `[workspace] ${request.id}: archived; its clone ${path}, state, scratch dir and ${cached.length} cache folders of its own are gone`
+    `[workspace] ${request.id}: archived; its ${clone}, state, scratch dir and ${cached.length} cache folders of its own are gone`
   );
   return { carry };
 };

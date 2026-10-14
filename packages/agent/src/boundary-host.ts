@@ -64,6 +64,7 @@ import {
   nestedBoundaryReason,
 } from "@cawco/core/boundary-nesting";
 import { projectClaudeRelative } from "@cawco/core/claude-dirs";
+import { isGitDirSync } from "@cawco/core/git-dir";
 import { mountedAnywhere, mountPointsOf } from "@cawco/core/mount-table";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { writeStateFileSync } from "@cawco/core/state-file";
@@ -227,13 +228,6 @@ const denies = JSON.parse(readFileSync(deniesFile, "utf8")) as Deny[];
 const placeFile = join(process.cwd(), "sandbox");
 /** `<state>/guarded`: the running sandbox's protected binds, which the executor checks before every command. */
 const guardedFile = join(process.cwd(), "guarded");
-// srt resolves its own mandatory names against this working directory and
-// makes a mount point for each that is absent. A project lead's place is a
-// person's own folder, never written into, so there srt starts in the place's
-// scratch dir (`CAWCO_SANDBOX_CWD`); a clone's are stood in for (standIn).
-process.chdir(process.env.CAWCO_SANDBOX_CWD || clone);
-await SandboxManager.initialize(settings, ask);
-
 const lstatOf = (path: string): Stats | undefined => {
   try {
     return lstatSync(path);
@@ -242,6 +236,47 @@ const lstatOf = (path: string): Stats | undefined => {
     return undefined;
   }
 };
+
+/**
+ * Why the folder this boundary holds is no longer there to hold, when it is
+ * not: a delegate's clone whose `.git` is no repository (`isGitDirSync`), or
+ * a project lead's place that is no folder. Nothing is ever made at a clone's
+ * path but by its create: a clone deleted under a running sandbox stays
+ * gone, rather than refilled with stand-ins (`standIn`) into a husk.
+ */
+const goneReason = (): string | undefined => {
+  if (process.env.CAWCO_LEAD_PLACE === "1") {
+    return lstatOf(clone)?.isDirectory()
+      ? undefined
+      : `${clone} is not a folder`;
+  }
+  return isGitDirSync(join(clone, ".git"))
+    ? undefined
+    : `${clone} is not a git clone any more`;
+};
+
+/** Ends this boundary without a sandbox: the folder it holds is gone ({@link goneReason}). */
+const GONE_STATUS = 66;
+
+const refuseGone = (reason: string): never => {
+  // On stdout, as a line: the agent names a boundary that did not start by
+  // what it heard (`ready` in boundary.ts).
+  console.log(
+    `cawco: ${reason}, so the workspace's sandbox does not start and its boundary closes`
+  );
+  process.exit(GONE_STATUS);
+};
+
+const goneAtStart = goneReason();
+if (goneAtStart) {
+  refuseGone(goneAtStart);
+}
+// srt resolves its own mandatory names against this working directory and
+// makes a mount point for each that is absent. A project lead's place is a
+// person's own folder, never written into, so there srt starts in the place's
+// scratch dir (`CAWCO_SANDBOX_CWD`); a clone's are stood in for (standIn).
+process.chdir(process.env.CAWCO_SANDBOX_CWD || clone);
+await SandboxManager.initialize(settings, ask);
 
 /**
  * A mount point an earlier sandbox left on the host, by srt's own test
@@ -316,7 +351,13 @@ const makeStandIn = (
     // Writable whatever the umask: an empty file with no write bits is what
     // srt takes for a mount point an earlier sandbox left (leftMountPoint),
     // and would cover with /dev/null and remove.
-    writeStateFileSync(path, empty.text, { exclusive: true, mode: 0o644 });
+    // In place: its folder is the clone's own, made above or there already,
+    // and a clone deleted since is never made again by this write.
+    writeStateFileSync(path, empty.text, {
+      exclusive: true,
+      inPlace: true,
+      mode: 0o644,
+    });
   }
 };
 
@@ -722,7 +763,17 @@ for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
 }
 
 for (;;) {
-  // biome-ignore lint/performance/noAwaitInLoops: one sandbox at a time, the next only after the last is gone
+  // Before every sandbox, the first and each one started again: a clone
+  // deleted under a running sandbox drops its protected binds, and the
+  // sandbox stopped for that never starts in its path again.
+  const gone = goneReason();
+  if (gone) {
+    rmSync(placeFile, { force: true });
+    rmSync(guardedFile, { force: true });
+    // biome-ignore lint/performance/noAwaitInLoops: the boundary's last step
+    await SandboxManager.reset();
+    refuseGone(gone);
+  }
   const sandbox = await startSandbox();
   current = "proc" in sandbox ? sandbox : undefined;
   if (current) {

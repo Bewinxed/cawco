@@ -1781,11 +1781,21 @@ export interface WorkspaceHolding {
   bytes: number;
   dirty: number;
   stashes: number;
+  /**
+   * Set when the clone's folder is there and its `.git` is no repository
+   * git can read: its entries that are not CawCo's deny stand-ins (agent
+   * stand-ins.ts `straysIn`). None is a husk, a deleted clone a sandbox
+   * refilled with stand-ins, which holds nothing; any keeps the folder.
+   */
+  strays?: number;
 }
 
 /** Whether a workspace holds nothing that is nowhere else. */
 export const holdsNothing = (holding: WorkspaceHolding): boolean =>
-  holding.ahead === 0 && holding.dirty === 0 && holding.stashes === 0;
+  holding.ahead === 0 &&
+  holding.dirty === 0 &&
+  holding.stashes === 0 &&
+  !holding.strays;
 
 const counted = (count: number, one: string, many: string): string =>
   `${count} ${count === 1 ? one : many}`;
@@ -1798,6 +1808,8 @@ export const holdingWords = (holding: WorkspaceHolding): string =>
     holding.dirty > 0 &&
       counted(holding.dirty, "changed file", "changed files"),
     holding.stashes > 0 && counted(holding.stashes, "stash", "stashes"),
+    holding.strays &&
+      `${counted(holding.strays, "entry", "entries")} of its own in a folder that is no git clone`,
   ]
     .filter(Boolean)
     .join(", ") || "nothing unlanded";
