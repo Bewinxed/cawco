@@ -4,6 +4,7 @@
    * one chip each, its path, which opens the file in a sheet as it reads in
    * the project's folder on the hub (markdown drawn, anything else as text).
    */
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import Markdown from "#lib/components/ui/markdown/markdown.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -37,7 +38,7 @@
       }
     } catch (error) {
       if (open === path) {
-        problem = error instanceof Error ? error.message : String(error);
+        problem = failureWords(error);
       }
     }
   }

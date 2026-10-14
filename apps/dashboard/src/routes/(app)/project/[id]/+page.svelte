@@ -26,7 +26,10 @@
     startThread,
     threadsOf,
   } from "#lib/cawco/client.svelte.js";
-  import type { HubRead } from "#lib/cawco/hub-read.js";
+  import {
+    type HubRead,
+    failureWords as message,
+  } from "#lib/cawco/hub-read.js";
   import {
     crossIn,
     crossOut,
@@ -117,8 +120,6 @@
   /** A refused read, as a sentence with its status for support. */
   const refusal = (read: HubRead<unknown>): string | null =>
     read.ok ? null : `${read.detail} (${read.status}).`;
-  const message = (error: unknown) =>
-    error instanceof Error ? error.message : String(error);
 
   // --- the tasks: what the hub answered, from the load and each re-read ------
 

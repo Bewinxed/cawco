@@ -55,6 +55,7 @@ import {
   watch,
 } from "../canvas/stage.svelte";
 import { closePreview, type SendExtras } from "../client.svelte";
+import { failureClause as errorOf } from "../hub-read";
 import { CURVE, dur, motionOk } from "../motion/curves.svelte";
 import { integrate, type Sample, spring } from "../motion/spring";
 import { inks } from "../preview/ink.svelte";
@@ -146,9 +147,6 @@ const SPREADS: Record<Handle, number> = {
   "top-left": -1,
   "top-right": 1,
 };
-
-const errorOf = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
 
 /** The page drawn with every finite animation under `root` at its end, for one read. */
 function atRest<T>(read: () => T): T {

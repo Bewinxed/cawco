@@ -79,7 +79,7 @@
   import { cawco, isFailed, isStale, spawnSession } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
   import CawFace from "../home/CawFace.svelte";
-  import type { HubRead } from "../hub-read";
+  import { failureWords, type HubRead } from "../hub-read";
   import { conversationHref } from "../links";
   import { integrate, type Sample, sampleAt } from "../motion/spring";
   import { sessionName } from "../session-name";
@@ -713,7 +713,7 @@
         ...(projectId ? { projectId } : {}),
       });
     } catch (error) {
-      refused = error instanceof Error ? error.message : String(error);
+      refused = failureWords(error);
       newTip = true;
       return;
     } finally {

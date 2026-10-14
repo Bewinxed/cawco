@@ -16,6 +16,7 @@
     setProjectBudget,
     setProjectCap,
   } from "#lib/cawco/client.svelte.js";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import StatTile from "#lib/cawco/StatTile.svelte";
   import { usd } from "#lib/cawco/usage.js";
@@ -55,7 +56,7 @@
         refused = null;
       }
     } catch (error) {
-      refused = error instanceof Error ? error.message : String(error);
+      refused = failureWords(error);
     }
   }
   $effect(() => {
@@ -114,7 +115,7 @@
       budgetOpen = false;
       await read(projectId);
     } catch (error) {
-      budgetRefused = error instanceof Error ? error.message : String(error);
+      budgetRefused = failureWords(error);
     } finally {
       saving = false;
     }
@@ -188,7 +189,7 @@
       capOpen = false;
       await read(projectId);
     } catch (error) {
-      capRefused = error instanceof Error ? error.message : String(error);
+      capRefused = failureWords(error);
     } finally {
       capSaving = false;
     }

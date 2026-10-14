@@ -30,6 +30,7 @@ import {
   type ProjectSpend,
   questionsOf,
 } from "@cawco/core";
+import { failureWords } from "#lib/cawco/hub-read.js";
 import { browser } from "$app/env";
 import {
   type BlockedRequest,
@@ -150,7 +151,7 @@ export class CawLead {
         this.refused = null;
       }
     } catch (error) {
-      this.refused = error instanceof Error ? error.message : String(error);
+      this.refused = failureWords(error);
     } finally {
       clearTimeout(grace);
       this.waited = false;
@@ -192,7 +193,7 @@ export class CawLead {
       this.view = await configureCaw(this.#projectId(), change);
       this.refused = null;
     } catch (error) {
-      this.refused = error instanceof Error ? error.message : String(error);
+      this.refused = failureWords(error);
     } finally {
       this.moving = false;
     }

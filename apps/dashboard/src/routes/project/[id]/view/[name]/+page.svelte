@@ -7,6 +7,7 @@
    * the app, the app's own task sheet.
    */
   import type { ProjectView } from "@cawco/core";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { stageLabel } from "#lib/cawco/project-tasks.js";
   import ViewOpenUi from "#lib/cawco/views/ViewOpenUi.svelte";
   import { viewsOf } from "#lib/cawco/views-api.js";
@@ -44,7 +45,7 @@
       })
       .catch((error: unknown) => {
         if (live) {
-          problem = error instanceof Error ? error.message : String(error);
+          problem = failureWords(error);
         }
       });
     return () => {

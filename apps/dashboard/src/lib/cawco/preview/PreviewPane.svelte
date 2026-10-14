@@ -8,6 +8,7 @@
   } from "@cawco/core";
   import { pinUnsent, type SendPicture } from "@cawco/core/comments";
   import { type Snippet, untrack } from "svelte";
+  import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
@@ -470,7 +471,7 @@
         failure = null;
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = failureWords(error);
       if (openPin) {
         cardError = message;
       } else {
@@ -1000,7 +1001,7 @@
       await showArtifact(instanceId, made.id);
     } catch (error) {
       failure = {
-        message: `The canvas couldn't be made: ${error instanceof Error ? error.message : String(error)}. Try + again.`,
+        message: `The canvas couldn't be made: ${failureClause(error)}. Try + again.`,
         again: null,
       };
     } finally {
@@ -1015,7 +1016,7 @@
       await fleet.closePreview(instanceId);
     } catch (error) {
       failure = {
-        message: error instanceof Error ? error.message : String(error),
+        message: failureWords(error),
         again: "close",
       };
     } finally {

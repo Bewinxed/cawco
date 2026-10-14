@@ -7,6 +7,7 @@
    * landing do (§5.2), so nothing here moves a stage.
    */
   import { tick } from "svelte";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import type { Todo } from "#lib/cawco/project-tasks.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
@@ -43,7 +44,7 @@
   );
 
   const say = (error: unknown) => {
-    problem = error instanceof Error ? error.message : String(error);
+    problem = failureWords(error);
   };
 
   async function toggle(todo: Todo, next: boolean) {

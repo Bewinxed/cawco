@@ -1,5 +1,6 @@
 <script lang="ts" module>
   import type { RunningSession } from "./client.svelte";
+  import { failureWords } from "./hub-read";
 
   /** Where a tray stands. */
   export type StopPhase =
@@ -357,7 +358,7 @@
       await other.run();
       leave();
     } catch (error) {
-      refusal = error instanceof Error ? error.message : String(error);
+      refusal = failureWords(error);
     } finally {
       otherPending = false;
     }
@@ -392,7 +393,7 @@
         }
       },
       (error: unknown) => {
-        const reason = error instanceof Error ? error.message : String(error);
+        const reason = failureWords(error);
         for (const id of ids) {
           heard(id, "failed", reason);
         }
@@ -419,7 +420,7 @@
       again = await reread();
     } catch (error) {
       if (mine === generation) {
-        refusal = error instanceof Error ? error.message : String(error);
+        refusal = failureWords(error);
       }
       return;
     }
@@ -591,7 +592,7 @@
       if (mine !== generation) {
         return;
       }
-      refusal = error instanceof Error ? error.message : String(error);
+      refusal = failureWords(error);
       phase = rows.length > 0 ? "fail" : "none";
       return;
     }

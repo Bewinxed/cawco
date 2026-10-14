@@ -144,10 +144,6 @@ export const draftOf = (rule: Rule): RuleDraft => ({
   scope: { ...rule.scope },
 });
 
-/** Whatever the caller threw, as a sentence. Every panel in this app has one. */
-export const message = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
 /** "3 minutes ago", and "never" for a rule that has not caught anything yet. */
 export function since(at: number | null): string {
   if (at === null) {

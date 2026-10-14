@@ -31,6 +31,12 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { browser } from "$app/env";
   import { barGlass } from "./bar-glass.svelte";
+  import { failureWords, unreachable } from "./hub-read";
+
+  /** A thread send that got no answer, in the error formula: what, why, what is kept, the way back. */
+  const THREAD_SEND_UNREACHED =
+    "Message not sent: the dashboard couldn't reach the hub. Your words are back in the field. Send again once the hub answers.";
+
   import {
     type BlockedRequest,
     blankSession,
@@ -125,7 +131,7 @@
           readProblem = null;
         },
         (error: unknown) => {
-          readProblem = error instanceof Error ? error.message : String(error);
+          readProblem = failureWords(error);
         }
       );
     });
@@ -388,10 +394,13 @@
   const draft = new ComposerDraft();
   let sending = $state(false);
   let sendError = $state("");
+  /** The failed send never reached the hub: its line offers Send again. */
+  let sendAgain = $state(false);
 
   async function onsubmit(text: string, extras: SendExtras, id: string) {
     sending = true;
     sendError = "";
+    sendAgain = false;
     try {
       // The words left the field as `sent:<id>`, and go to the hub as that
       // message: its row lands them however soon its frame draws it.
@@ -403,7 +412,8 @@
       }
     } catch (error) {
       draft.restore(text, extras);
-      sendError = error instanceof Error ? error.message : String(error);
+      sendAgain = unreachable(error);
+      sendError = sendAgain ? THREAD_SEND_UNREACHED : failureWords(error);
     } finally {
       sending = false;
     }
@@ -432,6 +442,9 @@
     },
     get sendError() {
       return sendError;
+    },
+    get sendAgain() {
+      return sendAgain;
     },
     get paneVisible() {
       return visible;

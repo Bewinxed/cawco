@@ -2,6 +2,7 @@
   import { untrack } from "svelte";
   import { flip } from "svelte/animate";
   import { fade } from "svelte/transition";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import {
     dur,
     easeDrawer,
@@ -119,7 +120,7 @@
       }
     } catch (error) {
       if (!signal.aborted && text.trim() === draft) {
-        failure = error instanceof Error ? error.message : String(error);
+        failure = failureWords(error);
       }
     } finally {
       if (!signal.aborted) {

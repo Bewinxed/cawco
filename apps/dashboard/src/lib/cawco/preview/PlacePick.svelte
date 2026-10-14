@@ -5,6 +5,7 @@
    * preview's well: the machine select and the folder browser New Session
    * uses. "Use this place" answers the page; Cancel or Escape answers null.
    */
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import DirectoryPicker from "#lib/components/features/DirectoryPicker.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -53,7 +54,7 @@
     try {
       await onpick({ machineId: machine.machineId, path: folder });
     } catch (error) {
-      problem = error instanceof Error ? error.message : String(error);
+      problem = failureWords(error);
     } finally {
       saving = false;
     }

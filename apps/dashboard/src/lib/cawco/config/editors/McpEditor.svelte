@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { FleetMcpConfig, FleetMcpServer } from "@cawco/core";
   import { untrack } from "svelte";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import {
     appear,
     crossIn,
@@ -194,7 +195,7 @@
         made = saved.name;
       }
     } catch (error) {
-      failed = error instanceof Error ? error.message : String(error);
+      failed = failureWords(error);
     } finally {
       busy = false;
     }

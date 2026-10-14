@@ -7,6 +7,7 @@
     FleetSkillMeta,
   } from "@cawco/core";
   import { machineLabel } from "@cawco/core";
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -40,9 +41,6 @@
   let busy = $state<Record<string, boolean>>({});
   /** Why an adopt was refused, by row: said under that row. */
   let adoptFailed = $state<Record<string, string>>({});
-
-  const message = (error: unknown) =>
-    error instanceof Error ? error.message : String(error);
   const keyOf = (machineId: string, scope: string, name: string) =>
     `${machineId}:${scope}:${name}`;
 

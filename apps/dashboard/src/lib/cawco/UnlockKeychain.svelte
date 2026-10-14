@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { AuthState } from "@cawco/core";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   /**
@@ -110,7 +111,7 @@
       if (mine === attempt) {
         phase = {
           kind: "error",
-          message: error instanceof Error ? error.message : String(error),
+          message: failureWords(error),
         };
       }
     }

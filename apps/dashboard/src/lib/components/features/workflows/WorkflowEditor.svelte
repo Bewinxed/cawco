@@ -10,7 +10,8 @@
   import { MediaQuery } from "svelte/reactivity";
   import { TextMorph } from "torph/svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
-  import { loadDelegateTypes, message } from "#lib/cawco/delegate-types.js";
+  import { loadDelegateTypes } from "#lib/cawco/delegate-types.js";
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { newId } from "#lib/cawco/id.js";
   import { crossIn, dur, morphMs } from "#lib/cawco/motion/curves.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";

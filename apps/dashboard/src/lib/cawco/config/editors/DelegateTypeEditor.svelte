@@ -14,10 +14,10 @@
     DELEGATE_HARNESSES,
     type DelegateType,
     delegateTypeProblem,
-    message,
     removeDelegateType,
     saveDelegateType,
   } from "../../delegate-types";
+  import { failureWords as message } from "../../hub-read";
   import ModelCombobox from "../../ModelCombobox.svelte";
   import Choice from "../Choice.svelte";
   import { keepDraft, sameFields } from "../drafts.svelte";

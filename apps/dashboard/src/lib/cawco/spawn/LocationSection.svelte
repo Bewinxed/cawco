@@ -5,6 +5,7 @@
    * No branch API exists, so the design's branch panel is not rendered.
    */
   import type { FsEntry } from "@cawco/core";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { CURVE, dur } from "#lib/cawco/motion/curves.svelte.js";
   import { folds } from "#lib/cawco/motion/fold.svelte.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
@@ -102,7 +103,7 @@
       if (id !== request) {
         return;
       }
-      listError = cause instanceof Error ? cause.message : String(cause);
+      listError = failureWords(cause);
     } finally {
       if (id === request) {
         listing = false;

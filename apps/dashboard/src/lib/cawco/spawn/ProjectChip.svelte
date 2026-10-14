@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import PendingContent, {
     whileIdle,
   } from "#lib/components/ui/button/pending-content.svelte";
@@ -62,7 +63,7 @@
       await oncreate({ name: draft.name.trim(), path: draft.path.trim() });
       draft = null;
     } catch (cause) {
-      createError = cause instanceof Error ? cause.message : String(cause);
+      createError = failureWords(cause);
     } finally {
       creating = false;
     }

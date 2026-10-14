@@ -7,11 +7,11 @@
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore, withStats } from "#lib/cawco/config/store.svelte.js";
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import {
     createRule,
     draftOf,
-    message,
     RULE_TEMPLATES,
     removeRule,
     saveRule,

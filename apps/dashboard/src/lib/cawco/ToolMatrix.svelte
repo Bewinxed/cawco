@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ToolPolicy, ToolSpec } from "@cawco/core";
   import { machineLabel } from "@cawco/core";
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -53,8 +54,6 @@
     machines.filter(
       (machine) => machine.tools?.[spec.id]?.state === "installed"
     ).length;
-  const message = (err: unknown) =>
-    err instanceof Error ? err.message : String(err);
 
   async function install(machine: Machine, spec: ToolSpec) {
     const key = cellKey(machine.machineId, spec.id);

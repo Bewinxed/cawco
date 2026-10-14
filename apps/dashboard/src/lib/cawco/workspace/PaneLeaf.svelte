@@ -464,6 +464,7 @@
         planRing={lent.planRing}
         prompts={lent.prompts}
         recallOf={lent.recallOf}
+        sendAgain={lent.sendAgain}
         sendError={lent.sendError}
         sending={lent.sending}
         suggest={lent.suggest}

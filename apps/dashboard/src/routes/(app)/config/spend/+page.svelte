@@ -10,6 +10,7 @@
   import Field from "#lib/cawco/config/Field.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
+  import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
   import {
     NativeSelect,
     NativeSelectOption,
@@ -47,7 +48,7 @@
         ({ onCap } = read);
       },
       (error: unknown) => {
-        problem = `Could not read the spend settings — ${error instanceof Error ? error.message : String(error)}.`;
+        problem = `Could not read the spend settings — ${failureClause(error)}.`;
       }
     );
   });
@@ -60,7 +61,7 @@
       ({ onCap } = await setSpendSettings(next));
     } catch (error) {
       onCap = was;
-      refused = error instanceof Error ? error.message : String(error);
+      refused = failureWords(error);
     }
   }
 

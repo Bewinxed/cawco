@@ -19,6 +19,7 @@
   import { Dialog as DialogPrimitive } from "bits-ui";
   import { tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import {
     Alert,
     AlertDescription,
@@ -352,8 +353,7 @@
         .catch((cause: unknown) => {
           if (!stale) {
             placement = null;
-            placementRefusal =
-              cause instanceof Error ? cause.message : String(cause);
+            placementRefusal = failureWords(cause);
           }
         });
     }, PLACEMENT_SETTLE_MS);
@@ -623,7 +623,7 @@
           if (!controller.signal.aborted) {
             moveRead = {
               for: key,
-              error: cause instanceof Error ? cause.message : String(cause),
+              error: failureWords(cause),
             };
           }
         }
@@ -1044,7 +1044,7 @@
       }
     } catch (cause) {
       if (request === submission) {
-        error = cause instanceof Error ? cause.message : String(cause);
+        error = failureWords(cause);
       }
     }
   }
@@ -1137,7 +1137,7 @@
       busy = false;
       close();
     } catch (cause) {
-      error = cause instanceof Error ? cause.message : String(cause);
+      error = failureWords(cause);
     }
   }
   function toggleMachine(id: string) {
@@ -1418,7 +1418,7 @@
       if (!current()) {
         return;
       }
-      error = cause instanceof Error ? cause.message : String(cause);
+      error = failureWords(cause);
       busy = false;
     }
   }

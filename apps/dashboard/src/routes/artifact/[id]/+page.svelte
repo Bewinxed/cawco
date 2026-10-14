@@ -7,6 +7,7 @@
   import { MediaQuery } from "svelte/reactivity";
   import { findArtifact, showArtifact } from "#lib/cawco/artifact-api.js";
   import CanvasStages from "#lib/cawco/canvas/CanvasStages.svelte";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import Overlays from "#lib/cawco/Overlays.svelte";
   import { ArtifactSession } from "#lib/cawco/preview/artifact-session.svelte.js";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
@@ -44,7 +45,7 @@
       })
       .catch((error: unknown) => {
         if (live) {
-          problem = error instanceof Error ? error.message : String(error);
+          problem = failureWords(error);
         }
       });
     return () => {

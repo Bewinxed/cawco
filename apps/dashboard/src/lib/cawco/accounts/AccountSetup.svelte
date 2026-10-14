@@ -35,6 +35,7 @@
     putRouting,
   } from "#lib/cawco/client.svelte.js";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import {
     appear,
     dur,
@@ -278,7 +279,7 @@
       try {
         await deleteAccount(createdId);
       } catch (error) {
-        refused = error instanceof Error ? error.message : String(error);
+        refused = failureWords(error);
         busy = false;
         return;
       }
@@ -338,7 +339,7 @@
         await saveOrder();
       }
     } catch (error) {
-      refused = error instanceof Error ? error.message : String(error);
+      refused = failureWords(error);
       busy = false;
       return;
     }
@@ -377,7 +378,7 @@
       try {
         await deleteAccount(createdId);
       } catch (error) {
-        refused = error instanceof Error ? error.message : String(error);
+        refused = failureWords(error);
         busy = false;
         return;
       }

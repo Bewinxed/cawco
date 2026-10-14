@@ -16,6 +16,7 @@
     parseDiffFromFile,
   } from "@pierre/diffs";
   import { fade } from "svelte/transition";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import {
     crossIn,
     crossOut,
@@ -94,7 +95,7 @@
       });
       sizes.observe(box);
     } catch (caught) {
-      failure = caught instanceof Error ? caught.message : String(caught);
+      failure = failureWords(caught);
     }
     return () => {
       sizes.disconnect();

@@ -280,6 +280,33 @@ const warn = (message: string): void => {
 export const CUSTODY_BOUND_MS = 90_000;
 
 /**
+ * The bounds of a carry's steps ({@link SessionSupervisor.carrySessions}):
+ * reading what the keepers hold, ending a process between turns (Claude
+ * Code's stdin EOF and the SDK's ~2 s grace, sessiond-client.ts
+ * `sessiondBridge`), and moving its entries within one disk. Together under
+ * the hub's 120 s for the whole carry (hub `CARRY_TIMEOUT_MS`), so the hub
+ * always hears the machine's own reason, never "not answering". Ours.
+ */
+const CARRY_KEEPERS_MS = 15_000;
+const CARRY_STOP_MS = 30_000;
+const CARRY_COPY_MS = 45_000;
+
+/** A carry step that did not end within its bound. */
+class CarryLate extends Error {}
+
+/** `work`, or a {@link CarryLate} saying `step` did not end within `ms`. */
+const within = <T>(step: string, ms: number, work: Promise<T>): Promise<T> => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new CarryLate(`${step} did not end within ${ms / 1000} s`)),
+      ms
+    );
+  });
+  return Promise.race([work, late]).finally(() => clearTimeout(timer));
+};
+
+/**
  * Why a carry without `stop` leaves a session's data where it is, in words
  * a line can quote; nothing when nothing of it runs here.
  */
@@ -301,6 +328,20 @@ const liveBecause = (of: {
   return of.held
     ? "sessiond still holds its process from before the agent restarted"
     : undefined;
+};
+
+/** A carry's outcome as its end line says it. */
+const carryWords = (outcome: CarrySessionOutcome | undefined): string => {
+  switch (outcome?.state) {
+    case "carried":
+      return `carried, ${outcome.entries} entr${outcome.entries === 1 ? "y" : "ies"} moved`;
+    case "live":
+      return `left running: ${outcome.why}`;
+    case "failed":
+      return `not carried: ${outcome.error}`;
+    default:
+      return "not carried: no outcome was reached";
+  }
 };
 
 /** Read-only custody probes can be abandoned; an adoption keeps its claim until it settles. */
@@ -1040,6 +1081,11 @@ export class SessionSupervisor {
       // A move's steps queue per job: two jobs never wait on each other, and
       // a hub asking again for a step in flight waits on that one run.
       key = `move:${(control.args?.[0] as { jobId?: string } | undefined)?.jobId}`;
+    } else if (control?.method === CONTROL_CARRY_SESSIONS) {
+      // Each carry in a lane of its own: one session's carry never waits on
+      // another's. A second carry of a conversation one is still carrying is
+      // refused with that reason ({@link SessionSupervisor.carrySessions}).
+      key = `carry:${control.requestId}`;
     } else if (control?.method === CONTROL_WORKSPACE_CREATE) {
       // A late create must finish before its discard; different workspace ids do not queue together.
       key = `workspace:${String(control.args?.[1])}`;
@@ -1671,73 +1717,145 @@ export class SessionSupervisor {
    * its process ends first, the way a relaunch ends it, and the hub starts it
    * again on the account it moved to. A process sessiond still holds that no
    * session here has taken back is live too.
+   *
+   * Every step is bounded ({@link CARRY_KEEPERS_MS}, {@link CARRY_STOP_MS},
+   * {@link CARRY_COPY_MS}) and logged with its time, so the hub hears the
+   * machine's own reason within its wait. A session whose process its keeper
+   * reports exited is not live: what this daemon still holds of it is let go
+   * and its conversation carried, never a stop asked of a process that is
+   * gone. A conversation another carry is moving now is refused, not waited
+   * for.
    */
   async carrySessions(
     requests: CarrySessionRequest[]
   ): Promise<Record<string, CarrySessionOutcome>> {
+    const began = Date.now();
     const outcomes: Record<string, CarrySessionOutcome> = {};
+    const mine = requests.filter((request) => {
+      if (this.#carrying.has(request.sessionId)) {
+        outcomes[request.instanceId] = {
+          state: "failed",
+          error: "another move is copying its conversation right now",
+        };
+        return false;
+      }
+      this.#carrying.add(request.sessionId);
+      return true;
+    });
+    if (mine.length > 0) {
+      console.info(
+        `[carry] started: ${mine.map((one) => `${one.instanceId} → ${one.accountId ?? "the machine's own login"}${one.stop ? " (its process ended between turns)" : ""}`).join("; ")}`
+      );
+    }
+    try {
+      await this.#carry(mine, outcomes, began);
+    } finally {
+      for (const request of mine) {
+        this.#carrying.delete(request.sessionId);
+      }
+    }
+    for (const request of requests) {
+      const outcome = outcomes[request.instanceId];
+      console.info(
+        `[carry] ${request.instanceId}: ${carryWords(outcome)}, ${Date.now() - began} ms after it started`
+      );
+    }
+    return outcomes;
+  }
+
+  /** The conversations a carry is moving now, by session id ({@link carrySessions}). */
+  readonly #carrying = new Set<string>();
+
+  /**
+   * What the keepers hold of Claude's sessions, by instance id: `alive`, and
+   * `exited` (listed by a keeper, none of them alive). Undefined when they
+   * did not answer within {@link CARRY_KEEPERS_MS}.
+   */
+  async #carryHeld(): Promise<
+    { alive: Set<string>; exited: Set<string> } | undefined
+  > {
     const adapter = this.#adapter("claude") as Harness &
       Partial<SessiondAdoption>;
-    const held = new Set(
-      ((await adapter.custodyCandidates?.())?.procs ?? []).flatMap((proc) => {
-        const identity = parseProcId(proc.procId);
-        return proc.alive && identity.kind === "claude"
-          ? [identity.instanceId]
-          : [];
-      })
+    const at = Date.now();
+    let listing: { procs: { alive: boolean; procId: string }[] };
+    try {
+      listing = await within(
+        "reading what its keepers hold",
+        CARRY_KEEPERS_MS,
+        adapter.custodyCandidates?.() ?? Promise.resolve({ procs: [] })
+      );
+    } catch (error) {
+      if (!(error instanceof CarryLate)) {
+        throw error;
+      }
+      console.warn(`[carry] ${error.message}`);
+      return undefined;
+    }
+    const alive = new Set<string>();
+    const listed = new Set<string>();
+    for (const proc of listing.procs) {
+      const identity = parseProcId(proc.procId);
+      if (identity.kind !== "claude") {
+        continue;
+      }
+      listed.add(identity.instanceId);
+      if (proc.alive) {
+        alive.add(identity.instanceId);
+      }
+    }
+    const exited = new Set([...listed].filter((id) => !alive.has(id)));
+    console.info(
+      `[carry] its keepers hold ${alive.size} live Claude process(es), ${exited.size} exited, read in ${Date.now() - at} ms`
     );
+    return { alive, exited };
+  }
+
+  /** {@link carrySessions}' steps for `requests`, each outcome into `outcomes`. */
+  async #carry(
+    requests: CarrySessionRequest[],
+    outcomes: Record<string, CarrySessionOutcome>,
+    began: number
+  ): Promise<void> {
+    if (requests.length === 0) {
+      return;
+    }
+    const held = await this.#carryHeld();
     const go: CarrySessionRequest[] = [];
     for (const request of requests) {
-      const { instanceId } = request;
-      // Refused before anything is done to it: a carry that cannot happen
-      // never ends a session's process.
       // biome-ignore lint/performance/noAwaitInLoops: one session at a time, each checked before its process is touched
-      const refused = await carryRefusal(request);
-      if (refused) {
-        outcomes[instanceId] = { state: "failed", error: refused };
-        continue;
-      }
-      const running = this.#sessions.get(instanceId);
-      if (running && request.stop) {
-        const awake = await this.#awake(
-          instanceId,
-          running,
-          undefined,
-          true,
-          true
-        );
-        if (awake) {
-          outcomes[instanceId] = { state: "live", why: awake.why };
-          continue;
-        }
-        if (this.#queues.has(instanceId)) {
-          outcomes[instanceId] = {
-            state: "live",
-            why: "something sent to it is still on its way",
-          };
-          continue;
-        }
-        this.#sessions.delete(instanceId);
-        this.#forgetPulse(instanceId);
-        // Ended by this daemon for a move: its end is no failure.
-        this.#ending.add(running);
-        await running.stop();
+      const left = await this.#carryReady(request, held);
+      if (left) {
+        outcomes[request.instanceId] = left;
+      } else {
         go.push(request);
-        continue;
       }
-      const live = liveBecause({
-        running: !!running,
-        adopting: this.#adopting.has(instanceId),
-        queued: this.#queues.has(instanceId),
-        held: held.has(instanceId),
-      });
-      if (live) {
-        outcomes[instanceId] = { state: "live", why: live };
-        continue;
-      }
-      go.push(request);
     }
-    const carried = await carrySessions(go);
+    if (go.length === 0) {
+      return;
+    }
+    const copyAt = Date.now();
+    let carried: Awaited<ReturnType<typeof carrySessions>>;
+    try {
+      carried = await within(
+        "moving its conversation's files",
+        CARRY_COPY_MS,
+        carrySessions(go)
+      );
+    } catch (error) {
+      if (!(error instanceof CarryLate)) {
+        throw error;
+      }
+      for (const request of go) {
+        outcomes[request.instanceId] = {
+          state: "failed",
+          error: `${error.message}; what moved stays in the new dir, and its next start moves the rest`,
+        };
+      }
+      return;
+    }
+    console.info(
+      `[carry] files of ${go.length} session(s) moved in ${Date.now() - copyAt} ms (${Date.now() - began} ms in)`
+    );
     for (const request of go) {
       const result = carried.get(request.sessionId);
       outcomes[request.instanceId] =
@@ -1745,7 +1863,120 @@ export class SessionSupervisor {
           ? { state: "failed", error: result.error }
           : { state: "carried", entries: result?.entries ?? 0 };
     }
-    return outcomes;
+  }
+
+  /**
+   * Whether `request`'s conversation may be moved now: undefined when
+   * nothing of its process runs (ended now for a `stop` between turns, or
+   * reported exited by its keeper and let go), else why it stays where it is.
+   */
+  async #carryReady(
+    request: CarrySessionRequest,
+    held: { alive: Set<string>; exited: Set<string> } | undefined
+  ): Promise<CarrySessionOutcome | undefined> {
+    const { instanceId } = request;
+    // Refused before anything is done to it: a carry that cannot happen
+    // never ends a session's process.
+    const refused = await carryRefusal(request);
+    if (refused) {
+      return { state: "failed", error: refused };
+    }
+    const running = this.#sessions.get(instanceId);
+    if (running && held?.exited.has(instanceId)) {
+      // Its process is gone and nothing told this daemon: nothing of it can
+      // answer a stop, and nothing writes its conversation.
+      this.#sessions.delete(instanceId);
+      this.#busy.delete(instanceId);
+      this.#forgetPulse(instanceId);
+      this.#ending.add(running);
+      running
+        .dispose()
+        .catch((error: unknown) =>
+          warn(`letting go of ${instanceId}'s exited process failed: ${error}`)
+        );
+      console.info(
+        `[carry] ${instanceId}: its keeper reports its process exited, so it is let go and carried without a stop`
+      );
+      return;
+    }
+    if (running && request.stop) {
+      return await this.#stopForCarry(instanceId, running, held);
+    }
+    if (!held) {
+      return {
+        state: "failed",
+        error: `its keepers didn't say within ${CARRY_KEEPERS_MS / 1000} s whether its process still runs, so its conversation was not copied`,
+      };
+    }
+    const live = liveBecause({
+      running: !!running,
+      adopting: this.#adopting.has(instanceId),
+      queued: this.#queues.has(instanceId),
+      held: held.alive.has(instanceId),
+    });
+    return live ? { state: "live", why: live } : undefined;
+  }
+
+  /**
+   * Ends `running`'s process for a carry when it is between turns, within
+   * {@link CARRY_STOP_MS}. Undefined once it has ended (its conversation may
+   * be moved); else why it was left: `live` with what keeps it running, or
+   * `failed` when the stop did not end in time and its keeper does not report
+   * the process gone.
+   */
+  async #stopForCarry(
+    instanceId: string,
+    running: HarnessSession,
+    held: { alive: Set<string> } | undefined
+  ): Promise<CarrySessionOutcome | undefined> {
+    const awake = await this.#awake(instanceId, running, undefined, true, true);
+    if (awake) {
+      return { state: "live", why: awake.why };
+    }
+    if (this.#queues.has(instanceId)) {
+      return { state: "live", why: "something sent to it is still on its way" };
+    }
+    if (held && !held.alive.has(instanceId)) {
+      // No keeper lists it: what this daemon holds is not a process under
+      // sessiond, and a stop would end nothing it can see.
+      console.warn(
+        `[carry] ${instanceId}: no keeper lists its process, yet this daemon holds it running; it is stopped as any other`
+      );
+    }
+    this.#sessions.delete(instanceId);
+    this.#forgetPulse(instanceId);
+    // Ended by this daemon for a move: its end is no failure.
+    this.#ending.add(running);
+    const at = Date.now();
+    try {
+      await within(
+        "ending its Claude Code process",
+        CARRY_STOP_MS,
+        running.stop()
+      );
+      console.info(
+        `[carry] ${instanceId}: its process ended between turns in ${Date.now() - at} ms`
+      );
+      return;
+    } catch (error) {
+      if (!(error instanceof CarryLate)) {
+        throw error;
+      }
+      console.warn(`[carry] ${instanceId}: ${error.message}`);
+    }
+    // The stop did not finish: the conversation moves only once its keeper
+    // reports no live process writing it.
+    const after = await this.#carryHeld();
+    if (after && !after.alive.has(instanceId)) {
+      console.info(
+        `[carry] ${instanceId}: its keeper reports its process gone, so its conversation is carried`
+      );
+      return;
+    }
+    return {
+      state: "failed",
+      error: `its Claude Code process didn't end within ${CARRY_STOP_MS / 1000} s of being told to between turns${after ? "" : ", and its keepers didn't say whether it still runs"}, so its conversation was not copied`,
+    };
   }
 
   /** Every carried session at rest for {@link IDLE_SLEEP_MS} is put to sleep. */

@@ -1,4 +1,8 @@
 import { CAWCO_ENV, readEnv } from "@cawco/core";
+import {
+  HUB_UNREACHABLE,
+  HUB_UNREACHABLE_HEADER,
+} from "#lib/cawco/hub-read.js";
 import type { RequestHandler } from "./$types";
 
 const WS_SCHEME = /^ws(s?):\/\//;
@@ -124,16 +128,16 @@ async function proxyToHub(
     });
   } catch (error) {
     console.error(`[Proxy] Error forwarding to ${targetUrl}:`, error);
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: "Failed to connect to hub server",
-      }),
-      {
-        status: 502,
-        headers: { "Content-Type": "application/json" },
-      }
-    );
+    // The dashboard's own word, marked as such: the hub never answered, and
+    // the page says so in its one wording (hub-read.ts `HUB_UNREACHABLE`).
+    // Plain text, which every reader of a refusal takes as its sentence.
+    return new Response(HUB_UNREACHABLE, {
+      status: 502,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        [HUB_UNREACHABLE_HEADER]: "1",
+      },
+    });
   }
 }
 

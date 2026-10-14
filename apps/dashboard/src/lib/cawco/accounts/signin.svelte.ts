@@ -9,6 +9,7 @@
  * browser blocks.
  */
 import { beginSignin, completeSignin } from "../client.svelte";
+import { failureWords } from "../hub-read";
 
 export type SigninPhase =
   | "idle"
@@ -64,7 +65,7 @@ export class SigninFlow {
     } catch (error) {
       tab?.close();
       this.phase = this.url ? "ready" : "idle";
-      this.problem = error instanceof Error ? error.message : String(error);
+      this.problem = failureWords(error);
     }
   }
 
@@ -90,7 +91,7 @@ export class SigninFlow {
       this.phase = result.state;
     } catch (error) {
       this.phase = "ready";
-      this.problem = error instanceof Error ? error.message : String(error);
+      this.problem = failureWords(error);
     }
   }
 }

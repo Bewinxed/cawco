@@ -6,6 +6,7 @@
     userLayerLabel,
   } from "@cawco/core";
   import { untrack } from "svelte";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconDocument } from "#lib/icons.js";
@@ -92,7 +93,7 @@ You are a <role>, working in one repository at a time.
         made = saved.name;
       }
     } catch (error) {
-      refused = error instanceof Error ? error.message : String(error);
+      refused = failureWords(error);
     } finally {
       saving = false;
     }

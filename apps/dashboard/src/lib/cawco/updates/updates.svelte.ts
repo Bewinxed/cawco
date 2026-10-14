@@ -10,6 +10,7 @@ import type {
   BinaryUpdatePolicy,
 } from "@cawco/core/binary-updates";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
+import { failureClause } from "#lib/cawco/hub-read.js";
 import { newId } from "../id";
 import { toast } from "../toasts";
 import { installable, type UpdateMachine } from "./model";
@@ -41,7 +42,7 @@ class Updates {
       this.policy = (await response.json()) as BinaryUpdatePolicy;
       this.problem = null;
     } catch (error) {
-      this.problem = `Could not read the update settings — ${error instanceof Error ? error.message : String(error)}.`;
+      this.problem = `Could not read the update settings — ${failureClause(error)}.`;
     }
   }
 

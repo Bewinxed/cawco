@@ -1,13 +1,8 @@
 <script lang="ts">
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
-  import {
-    loadRuleActivity,
-    message,
-    type RuleActivity,
-    since,
-    times,
-  } from "./rules";
+  import { failureWords as message } from "./hub-read";
+  import { loadRuleActivity, type RuleActivity, since, times } from "./rules";
 
   /**
    * What the rule has caught, per session. A session reads the reply but never

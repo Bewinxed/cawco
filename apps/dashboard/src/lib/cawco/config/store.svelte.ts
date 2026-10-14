@@ -7,6 +7,7 @@ import type {
   ToolSpec,
 } from "@cawco/core";
 import { getContext, setContext } from "svelte";
+import { failureWords } from "#lib/cawco/hub-read.js";
 import type { DelegateTypesPayload } from "../delegate-types";
 import type {
   FleetMemoryDocRow,
@@ -44,7 +45,7 @@ export class Slot<T> {
       this.value = await this.#read();
       this.error = null;
     } catch (caught) {
-      const said = caught instanceof Error ? caught.message : String(caught);
+      const said = failureWords(caught);
       this.error = `Could not read ${this.#what} — ${said}.`;
     } finally {
       this.loading = false;

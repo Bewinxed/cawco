@@ -14,6 +14,7 @@
   import { patchAccount, putRouting } from "#lib/cawco/client.svelte.js";
   import { savedShown } from "#lib/cawco/config/EditorFooter.svelte";
   import EditorFrame from "#lib/cawco/config/EditorFrame.svelte";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import {
     appear,
     dur,
@@ -93,7 +94,7 @@
         }
       }
     } catch (error) {
-      refused = error instanceof Error ? error.message : String(error);
+      refused = failureWords(error);
       saving = false;
       return;
     }

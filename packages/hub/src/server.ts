@@ -6632,6 +6632,18 @@ export const createServer = (
     if (agent && owed && !(kept || away || limited)) {
       releaseOwed({ instanceId });
     }
+    // Kept at its account's limit: the move it owes, or one another account
+    // has room for, is tried now, and the send goes on the account it lands
+    // on ({@link AtLimit.lookNow}).
+    if (agent && limited) {
+      detach(
+        atLimit.lookNow(
+          instanceId,
+          "a message to it is held at its account's limit"
+        ),
+        "at-limit look"
+      );
+    }
     if (accepted) {
       if (from) {
         workItems.delivered(from, instanceId);
@@ -6876,8 +6888,15 @@ export const createServer = (
   const failOwedAway = (machineId: string): void => {
     for (const send of db.owedSends({ machineId })) {
       const [row] = db.getInstancesByIds([send.instanceId]);
-      // A send kept for a session at rest never waited on its machine.
-      if (db.owesSpawn(send.instanceId) || (row && keptAsleep(row))) {
+      // A send kept for a session at rest never waited on its machine, nor
+      // did one kept at its account's limit: it goes once the limit is over
+      // or the session has moved, its machine back by then.
+      const origin = (send.body as SentMessage | null)?.origin;
+      if (
+        db.owesSpawn(send.instanceId) ||
+        (row && keptAsleep(row)) ||
+        (origin && heldAtLimit(send.instanceId, origin))
+      ) {
         continue;
       }
       if (db.takeOwedSend(send.uuid) !== undefined) {
@@ -13236,7 +13255,8 @@ export const createServer = (
    * not running resumes on it when it next starts. One mid-turn goes on
    * reading its old account until the turn ends, so its row names that one
    * until then ({@link relaunchAtTurnEnd}); so does one whose machine is
-   * away, whose next launch carries it. A hold at its old account's limit
+   * away, carried as that machine connects again ({@link takeUpMovesOn}).
+   * A hold at its old account's limit
    * ends: the person chose. A carry that cannot happen is refused, the row
    * left as it was. Every answer is a sentence: what happened, why, what
    * happens next.
@@ -13275,7 +13295,7 @@ export const createServer = (
     };
     if (!registry.agent(row.machineId)) {
       return owe(
-        `${title} can't move from ${fromName} to ${toName} yet: ${machineName(row.machineId)} isn't connected, and its conversation is copied on that machine. It moves when it next starts on ${machineName(row.machineId)}.`
+        `${title} can't move from ${fromName} to ${toName} yet: ${machineName(row.machineId)} isn't connected, and its conversation is copied on that machine. It moves as soon as ${machineName(row.machineId)} is connected again.`
       );
     }
     if (running && !(await sessionIdle(row))) {
@@ -13434,6 +13454,51 @@ export const createServer = (
         releaseOwed({ instanceId: stored.id });
       }
     );
+  };
+
+  /**
+   * `machineId` is connected again: each move owed to a session on it is
+   * taken up now, never left for a start that a session held at its old
+   * account's limit would not make. One held at its limit is looked at by
+   * the at-limit controller ({@link AtLimit.lookNow}), which carries out a
+   * person's move; any other owed move is carried as at a turn's end
+   * ({@link takeUpOwedMove}), and owed again by one inside a turn. Each says
+   * why in the log.
+   */
+  const takeUpMovesOn = (machineId: string): void => {
+    const owedHere = [...relaunchAtTurnEnd].filter(
+      ([id, owed]) =>
+        owed.to !== undefined &&
+        db.getInstancesByIds([id])[0]?.machineId === machineId
+    );
+    const heldHere = db.atLimit
+      .holds()
+      .filter(
+        (held) =>
+          db.getInstancesByIds([held.instanceId])[0]?.machineId === machineId
+      );
+    for (const held of heldHere) {
+      detach(
+        atLimit.lookNow(
+          held.instanceId,
+          `${machineName(machineId)} is connected again`
+        ),
+        "at-limit look"
+      );
+    }
+    for (const [id, owed] of owedHere) {
+      if (heldHere.some((held) => held.instanceId === id)) {
+        continue;
+      }
+      const [row] = db.getInstancesByIds([id]);
+      console.info(
+        `[accounts] ${row ? sessionName(row) : id} owed a move to ${accountWords(owed.to)} while ${machineName(machineId)} was away; it is connected again, so the move is carried out now.`
+      );
+      const going = takeUpOwedMove(id);
+      if (going !== undefined) {
+        detach(going, "owed move");
+      }
+    }
   };
 
   /**
@@ -14886,7 +14951,11 @@ export const createServer = (
       running: (projectId) => projectStops.running(projectId),
       stop: (projectId, ids) => projectStops.stop(projectId, ids),
     },
-    send: (envelope) => deliverSend(envelope)?.state === "pending",
+    // Caw's own wakes are their thread's already: straight to his session,
+    // never taken into a thread again (a wake carrying your words is yours,
+    // `human`, which {@link toCawThread} takes from every other sender).
+    send: (envelope) =>
+      deliverToSession(byIdNow(envelope), false).state === "pending",
     end: (instanceId) =>
       endSession(instanceId, "stop", { kind: "session", name: "Caw" }),
     task: (projectId, id) => tasks.get(projectId, id),
@@ -21697,6 +21766,8 @@ export const createServer = (
               // after the spawn it waits on.
               awaitingMachine.delete(message.machineId);
               releaseOwed({ machineId: message.machineId });
+              // Moves that waited for it go now, ahead of any start.
+              takeUpMovesOn(message.machineId);
               // Behind what it was owed, which is its next turn when it has
               // any: a process a hub restored and then died before it handed
               // the cut turn back is up now, and hears of it here.

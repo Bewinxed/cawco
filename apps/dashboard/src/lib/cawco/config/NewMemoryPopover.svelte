@@ -5,6 +5,7 @@
    * seen is how a document comes into being.
    */
   import { memoryDocProblem, userLayerLabel } from "@cawco/core";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -69,7 +70,7 @@
       expanded = false;
       await goto(fileHref(result.doc.path));
     } catch (error) {
-      failed = error instanceof Error ? error.message : String(error);
+      failed = failureWords(error);
     } finally {
       busy = false;
     }

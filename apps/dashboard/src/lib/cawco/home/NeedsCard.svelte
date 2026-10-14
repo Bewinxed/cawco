@@ -28,6 +28,7 @@
    * so; Remove puts either away once you have read it.
    */
   import { questionsOf } from "@cawco/core";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
@@ -173,7 +174,7 @@
     try {
       await decideAction(item.action, decision);
     } catch (error) {
-      refusal = error instanceof Error ? error.message : String(error);
+      refusal = failureWords(error);
     } finally {
       deciding = false;
     }

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { CURVE, dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { folds } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
@@ -223,7 +224,7 @@
       await editAndResend(message.instanceId, message.id, editContent.trim());
       editing = false;
     } catch (error) {
-      editError = error instanceof Error ? error.message : String(error);
+      editError = failureWords(error);
     } finally {
       editPending = false;
     }
@@ -240,7 +241,7 @@
       const forked = await forkFrom(message.instanceId, message.id);
       await goto(conversationHref(forked, cawco.instanceIndex));
     } catch (error) {
-      editError = error instanceof Error ? error.message : String(error);
+      editError = failureWords(error);
     } finally {
       forkPending = false;
     }

@@ -7,6 +7,7 @@
  * page's popover both draw this (DevicePanel).
  */
 import type { ProviderSigninChallenge } from "@cawco/core";
+import { failureWords } from "#lib/cawco/hub-read.js";
 import { awaitDeviceSignin, beginDeviceSignin } from "../client.svelte";
 
 export type DevicePhase =
@@ -78,7 +79,7 @@ export class DeviceFlow {
         this.#clock(false);
         this.code = null;
         this.phase = "idle";
-        this.problem = error instanceof Error ? error.message : String(error);
+        this.problem = failureWords(error);
       }
     }
   }

@@ -12,6 +12,7 @@
   import { showArtifact } from "#lib/cawco/artifact-api.js";
   import { cawco, revealPreview } from "#lib/cawco/client.svelte.js";
   import { fleetMcpServers } from "#lib/cawco/fleet-mcp.svelte.js";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { mcpServerHost } from "#lib/cawco/mcp.js";
   import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import {
@@ -193,10 +194,7 @@
       await showArtifact(m.instanceId, artifact.id);
       revealPreview(m.instanceId);
     } catch (error) {
-      openFailed.set(
-        key,
-        error instanceof Error ? error.message : String(error)
-      );
+      openFailed.set(key, failureWords(error));
     } finally {
       opening.delete(key);
     }

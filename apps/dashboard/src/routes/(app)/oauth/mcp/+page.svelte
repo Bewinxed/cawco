@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { completeMcpSignIn } from "#lib/cawco/fleet.js";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   /**
    * Where a provider's sign-in comes back to, in the tab the sign-in opened
    * (fleet.ts `signInToMcp`). cawco.dev/oauth/callback brings the person
@@ -42,7 +43,7 @@
       signedIn = name;
       window.close();
     } catch (error) {
-      failure = error instanceof Error ? error.message : String(error);
+      failure = failureWords(error);
     }
   });
 </script>

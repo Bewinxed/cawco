@@ -90,7 +90,3 @@ export const blankDelegateType = (): DelegateType => ({
   harness: "claude",
   model: "",
 });
-
-/** Whatever the caller threw, as a sentence. Every panel in this app has one. */
-export const message = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);

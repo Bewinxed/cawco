@@ -10,6 +10,7 @@
 import type { HarnessKind, InstanceRow, ModelInfo } from "@cawco/core";
 import { isEffortLevel } from "@cawco/core";
 import { untrack } from "svelte";
+import { failureWords } from "#lib/cawco/hub-read.js";
 import { cawco, isCustodyRefusal, loadModels } from "./client.svelte";
 import { type HarnessModel, modelsForHarness } from "./model-catalog";
 import { readJson, writeJson } from "./storage";
@@ -363,7 +364,7 @@ export function ensureModels(harness?: string): void {
     }
     // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — ensureModels itself is synchronous, and the catch below already reports a refusal via store.error
     void ask(harness).catch((error: unknown) => {
-      store.error = error instanceof Error ? error.message : String(error);
+      store.error = failureWords(error);
     });
   });
 }
@@ -374,7 +375,7 @@ export async function refreshModels(harness?: string): Promise<void> {
   try {
     await ask(harness);
   } catch (error) {
-    store.error = error instanceof Error ? error.message : String(error);
+    store.error = failureWords(error);
     throw error;
   }
 }

@@ -9,6 +9,7 @@
    * try again, and only work that went closes it. Cancel and Escape put it
    * away; once the work is sent, it can't be called back, so Cancel waits.
    */
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconShield } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
@@ -62,7 +63,7 @@
     try {
       await asker.accept();
     } catch (caught) {
-      failure = caught instanceof Error ? caught.message : String(caught);
+      failure = failureWords(caught);
     } finally {
       running = false;
     }

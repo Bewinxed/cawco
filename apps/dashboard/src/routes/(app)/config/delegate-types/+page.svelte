@@ -8,10 +8,10 @@
   import { configStore } from "#lib/cawco/config/store.svelte.js";
   import {
     type DelegateType,
-    message,
     removeDelegateType,
   } from "#lib/cawco/delegate-types.js";
   import HarnessLogo from "#lib/cawco/HarnessLogo.svelte";
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { IconPlus, IconTrash } from "#lib/icons.js";

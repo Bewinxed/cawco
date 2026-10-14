@@ -5,6 +5,7 @@
    * back through the hub, which commits it; a refusal stays under the field
    * with the draft kept.
    */
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Markdown } from "#lib/components/ui/markdown/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
@@ -36,7 +37,7 @@
       await onsave(draft);
       draft = null;
     } catch (error) {
-      problem = error instanceof Error ? error.message : String(error);
+      problem = failureWords(error);
     } finally {
       saving = false;
     }

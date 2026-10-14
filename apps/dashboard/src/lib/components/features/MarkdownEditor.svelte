@@ -12,6 +12,7 @@
    * inside `onMount`: this editor never runs on the server.
    */
   import { onMount } from "svelte";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { crossIn } from "#lib/cawco/motion/curves.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -96,7 +97,7 @@
       await still(host);
       onready?.();
     } catch (caught) {
-      failed = caught instanceof Error ? caught.message : String(caught);
+      failed = failureWords(caught);
       onready?.();
     }
   };

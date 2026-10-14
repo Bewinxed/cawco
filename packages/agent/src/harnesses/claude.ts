@@ -3093,6 +3093,13 @@ export class ClaudeHarness implements Harness {
     const options = spec.options as
       | { env?: Record<string, string | undefined> }
       | undefined;
+    // What this process has scheduled is known from its start: nothing until
+    // a turn of it ends and says otherwise. Kept, so an agent that attaches
+    // to it later knows too, though no turn of it has ended since (one its
+    // account's limit refused ends with no `Stop`, which alone says them),
+    // and does not hold a move for a turn's end that a session held at its
+    // limit never reaches.
+    await keepWakeups(ctx.instanceId, { all: 0, once: 0 });
     return new ClaudeSession(
       ctx.instanceId,
       ctx,

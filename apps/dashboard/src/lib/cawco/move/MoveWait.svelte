@@ -22,6 +22,7 @@
     moveSize as sizeWords,
   } from "@cawco/core";
   import { type Component, untrack } from "svelte";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import {
     Alert,
     AlertDescription,
@@ -379,7 +380,7 @@
     } catch (cause) {
       refused = {
         by: "cancel",
-        reason: cause instanceof Error ? cause.message : String(cause),
+        reason: failureWords(cause),
       };
     } finally {
       stopping = false;
@@ -395,7 +396,7 @@
     } catch (cause) {
       refused = {
         by: "retry",
-        reason: cause instanceof Error ? cause.message : String(cause),
+        reason: failureWords(cause),
       };
     } finally {
       retrying = false;

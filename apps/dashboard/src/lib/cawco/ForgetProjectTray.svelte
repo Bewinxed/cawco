@@ -22,6 +22,7 @@
    * nothing, since the hub refuses the delete while anything of the project
    * still runs, and the tray says so.
    */
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { route } from "#lib/cawco/motion/route.svelte.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { cn } from "#lib/utils.js";
@@ -70,7 +71,7 @@
       },
       (error: unknown) => {
         if (mine === latest) {
-          unread = error instanceof Error ? error.message : String(error);
+          unread = failureWords(error);
         }
       }
     );

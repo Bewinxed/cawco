@@ -4,6 +4,7 @@ import type {
   WorkflowLogEntry,
   WorkflowRun,
 } from "@cawco/core";
+import { failureWords } from "#lib/cawco/hub-read.js";
 import {
   loadWorkflowLog,
   loadWorkflowRun,
@@ -93,8 +94,7 @@ export async function refreshWorkflows() {
     }
     workflowState.error = "";
   } catch (error) {
-    workflowState.error =
-      error instanceof Error ? error.message : String(error);
+    workflowState.error = failureWords(error);
   } finally {
     workflowState.loaded = true;
   }

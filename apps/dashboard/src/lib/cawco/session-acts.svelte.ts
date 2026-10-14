@@ -21,6 +21,7 @@ import {
   renameInstance,
   stopSession,
 } from "./client.svelte";
+import { failureWords as messageOf } from "./hub-read";
 import { instanceForSession } from "./links";
 
 export interface RowFaultState {
@@ -73,9 +74,6 @@ export function pendingOn(id: string, pending: string | undefined): void {
 export function noteOn(id: string, note: SessionAct["note"]): void {
   put(id, { note });
 }
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
 
 /**
  * Runs `work` for the session `id`, saying `pending` on its rows until it

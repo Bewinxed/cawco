@@ -10,6 +10,7 @@
    * sync on its way (--dur-control) while its tint turns over --dur-panel.
    */
   import { TextMorph } from "torph/svelte";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import PendingContent, {
     whileIdle,
   } from "#lib/components/ui/button/pending-content.svelte";
@@ -106,8 +107,7 @@
     try {
       await syncFleet(machine.machineId);
     } catch (error) {
-      refused[machine.machineId] =
-        error instanceof Error ? error.message : String(error);
+      refused[machine.machineId] = failureWords(error);
     } finally {
       delete asked[machine.machineId];
     }

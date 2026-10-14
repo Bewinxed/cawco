@@ -19,6 +19,7 @@
     saveMcpServer,
     syncFleet,
   } from "#lib/cawco/fleet.js";
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import MachineInventory from "#lib/cawco/MachineInventory.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
@@ -45,9 +46,6 @@
   let busy = $state<Record<string, boolean>>({});
   let syncing = $state(false);
   let syncFailed = $state(false);
-
-  const message = (caught: unknown) =>
-    caught instanceof Error ? caught.message : String(caught);
 
   function landed(row: FleetMcpServer) {
     const fleet = store.fleet.value;

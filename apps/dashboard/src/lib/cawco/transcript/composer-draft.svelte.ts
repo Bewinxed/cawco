@@ -10,6 +10,7 @@
  * across a reload through `draft-store.ts`.
  */
 import { SvelteSet } from "svelte/reactivity";
+import { failureWords } from "#lib/cawco/hub-read.js";
 import type { SendExtras } from "../client.svelte";
 import { newId } from "../id";
 import type { DraftContent } from "./draft-store";
@@ -307,7 +308,7 @@ export class ComposerDraft {
       )
       .catch((error: unknown) =>
         patch({
-          error: error instanceof Error ? error.message : String(error),
+          error: failureWords(error),
         })
       );
   }

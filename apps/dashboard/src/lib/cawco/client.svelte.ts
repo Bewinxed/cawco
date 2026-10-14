@@ -123,6 +123,7 @@ import {
   type HubFailure,
   hubFailure,
   machineAway,
+  failureWords as messageOf,
 } from "./hub-read";
 import { newId } from "./id";
 import {
@@ -3475,9 +3476,6 @@ const SETTLES_AT: Record<CommandKind, SettleStage> = {
   "set-effort": "applied",
 };
 
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
 /* ---- the outbox: what makes a refused send recoverable ----------------- */
 
 /** One unsent message, whole — the payload a retry needs and the echo cannot hold. */
@@ -6526,8 +6524,7 @@ export async function refreshContext(
   } catch (cause) {
     // A session that cannot answer keeps the last reading; the reason is kept
     // beside it so the details can say why rather than "not reported".
-    target.contextError =
-      cause instanceof Error ? cause.message : String(cause);
+    target.contextError = messageOf(cause);
   } finally {
     target.contextPending = false;
   }

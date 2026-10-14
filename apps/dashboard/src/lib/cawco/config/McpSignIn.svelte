@@ -8,6 +8,7 @@
    * said under the button, which tries again.
    */
   import type { FleetMcpServer } from "@cawco/core";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconKey } from "#lib/icons.js";
   import { signInToMcp } from "../fleet.js";
@@ -36,7 +37,7 @@
     try {
       tab = await signInToMcp(server.name);
     } catch (error) {
-      problem = error instanceof Error ? error.message : String(error);
+      problem = failureWords(error);
       waiting = false;
       return;
     }

@@ -31,13 +31,13 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { cawco } from "../../client.svelte";
+  import { failureWords as message } from "../../hub-read";
   import RuleActivity from "../../RuleActivity.svelte";
   import RuleTester from "../../RuleTester.svelte";
   import {
     blankRule,
     createRule,
     draftOf,
-    message,
     removeRule,
     saveRule,
   } from "../../rules";

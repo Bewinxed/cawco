@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { newId } from "#lib/cawco/id.js";
   /**
    * One line to Caw: the kit Textarea in a field shell, one line that grows,
@@ -82,7 +83,7 @@
       await onsend(words, id);
       text = "";
     } catch (error) {
-      refused = error instanceof Error ? error.message : String(error);
+      refused = failureWords(error);
     } finally {
       sending = false;
     }

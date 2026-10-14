@@ -1153,6 +1153,25 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         db.atLimit.hold(instanceId) !== undefined
       );
     },
+    /**
+     * `instanceId`'s hold looked at now rather than at the next recheck
+     * ({@link RECHECK_MS}): its machine is back, or a message to it is held
+     * at its limit. The move a person asked is carried out, or the move or
+     * continuation this controller decides goes, as at any look; `why` is
+     * logged with it. Nothing for a session held by nothing, or being acted on.
+     */
+    async lookNow(instanceId: string, why: string): Promise<void> {
+      const held = db.atLimit.hold(instanceId);
+      if (!held || acting.has(instanceId)) {
+        return;
+      }
+      const row = rowOf(instanceId);
+      console.info(
+        `[at-limit] ${row ? ports.named(row) : instanceId} is looked at again now, not at the next recheck: ${why}.`
+      );
+      await lookAt(held, Date.now());
+      plan();
+    },
     /** Whether a refused turn of `instanceId` is this controller's to answer. */
     manages(instanceId: string): boolean {
       const row = rowOf(instanceId);

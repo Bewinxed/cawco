@@ -59,6 +59,7 @@ import {
   CURATOR_DENIED_TOOLS,
   type Envelope,
   type InstanceRow,
+  type NeutralOrigin,
   type PermissionRequestFrame,
   type PermissionResult,
   type ProjectSpend,
@@ -362,6 +363,9 @@ const ENDED: Record<string, string> = {
 
 /** Statuses a lead session cannot be woken from: its row is gone for good. */
 const GONE: ReadonlySet<string> = new Set(["discarded"]);
+
+/** A sentence's closing stop, dropped so a reason sits inside a sentence of ours. */
+const FINAL_STOP = /\.$/;
 
 /** A refusal a route answers with its status. */
 export class CawRefusal extends Error {
@@ -955,19 +959,30 @@ export const createCaw = ({
   };
 
   /**
-   * One message to Caw's session. A routine's wake says so in its origin
-   * (`routine:<id>`): the turn it starts is that run's (memory.ts). A
-   * person's send it carries ({@link PersonSend}) gives it its uuid and what
-   * it carried. Answers the send's uuid when the hub took it, for
+   * One message to Caw's session. One that carries your words is yours
+   * (`human`), as a session's composer sends it: it wakes him stopped, and
+   * at his account's limit it is moved or continued as any person's turn is.
+   * Any other is CawCo's word (`system`): a routine's says so in its origin
+   * (`routine:<id>`), the turn it starts that run's (memory.ts). A person's
+   * send it carries ({@link PersonSend}) gives it its uuid and what it
+   * carried. Answers the send's uuid when the hub took it, for
    * {@link follow}.
    */
   const message = (
     target: InstanceRow,
     content: string,
+    by: Origin,
     routine?: string,
     person?: PersonSend
   ): string | undefined => {
     const uuid = person?.uuid ?? crypto.randomUUID();
+    const origin: NeutralOrigin =
+      by === "you"
+        ? { kind: "human" }
+        : {
+            kind: "system",
+            name: routine ? `${ROUTINE_ORIGIN}${routine}` : "caw",
+          };
     const taken = send({
       verb: "send",
       machineId: target.machineId,
@@ -980,10 +995,7 @@ export const createCaw = ({
           uuid,
           message: { role: "user", content },
           parent_tool_use_id: null,
-          origin: {
-            kind: "system",
-            name: routine ? `${ROUTINE_ORIGIN}${routine}` : "caw",
-          },
+          origin,
         },
       },
     });
@@ -998,6 +1010,7 @@ export const createCaw = ({
   const startLead = async (
     project: ReturnType<typeof projectOf>,
     event: string,
+    by: Origin,
     routine?: string,
     person?: PersonSend
   ): Promise<{ lead: InstanceRow; sent: string | undefined }> => {
@@ -1028,6 +1041,7 @@ export const createCaw = ({
     const sent = message(
       lead,
       `${briefOf(project.name)}\n\n${event}`,
+      by,
       routine,
       person
     );
@@ -1066,7 +1080,7 @@ export const createCaw = ({
     if (pending !== undefined) {
       return { row: await pending, started: false };
     }
-    const start = startLead(project, event, routine, person).finally(() =>
+    const start = startLead(project, event, by, routine, person).finally(() =>
       starting.delete(projectId)
     );
     const shared = start.then((made) => made.lead);
@@ -1175,7 +1189,7 @@ export const createCaw = ({
     }
     const sent = lead.started
       ? lead.sent
-      : message(lead.row, text, event.routine, event.send);
+      : message(lead.row, text, event.by, event.routine, event.send);
     if (!sent) {
       // His session refused it: nothing woke him, and the thread is not his.
       giveBack();
@@ -1219,6 +1233,42 @@ export const createCaw = ({
       yourWakes.set(sent, threadId);
     }
     follow(leadId, projectId, by, sent, { threadId });
+  };
+
+  /**
+   * Your words wake Caw after the answer that keeps them: a thread's send is
+   * stored and answered at once, and the wake (his session started, moved
+   * or busy, his account at its limit) runs behind it. A wake that does not
+   * go out is said in the thread, in the error formula: what happened, why,
+   * that your words are kept, and how to wake him with them.
+   */
+  const wakeForYou = (
+    projectId: string,
+    threadId: string,
+    event: CawEvent
+  ): void => {
+    const notWoken = (why: string) => {
+      // A project deleted meanwhile has no thread to say it in.
+      if (!db.project(projectId)) {
+        return;
+      }
+      noteIn(projectId, threadId, {
+        title: "Caw · not woken",
+        body: `Caw hasn't read your message: ${why.replace(FINAL_STOP, "")}. Your message is kept in this thread. Write again to wake him with it.`,
+      });
+    };
+    wake(projectId, event)
+      .then((woke) => {
+        if (!woke) {
+          notWoken("his session didn't take it");
+        }
+      })
+      .catch((error: unknown) => {
+        console.warn(
+          `[caw] ${projectId}: your words in thread ${threadId} did not wake Caw: ${error instanceof Error ? error.message : String(error)}`
+        );
+        notWoken(error instanceof Error ? error.message : String(error));
+      });
   };
 
   /** Logs a wake that failed: an event is never lost silently. */
@@ -1846,9 +1896,10 @@ export const createCaw = ({
     },
 
     /**
-     * Starts a thread with your first message, and wakes Caw with it; "Make a
-     * note: …" goes to AGENTS.md instead. `person`: the send to his session it
-     * came as ({@link personSent}).
+     * Starts a thread with your first message, answered once it is kept, and
+     * wakes Caw with it behind that answer ({@link wakeForYou}); "Make a
+     * note: …" goes to AGENTS.md instead. `person`: the send to his session
+     * it came as ({@link personSent}).
      */
     async start(
       projectId: string,
@@ -1867,7 +1918,7 @@ export const createCaw = ({
       }
       listening(projectId);
       const opened = open(projectId, body, id);
-      await wake(projectId, {
+      wakeForYou(projectId, opened.row.id, {
         by: "you",
         text: yourWords(opened.row, body, true),
         threadId: opened.row.id,
@@ -1877,8 +1928,10 @@ export const createCaw = ({
     },
 
     /**
-     * Adds your message to a thread, and wakes Caw with it ("Make a note: …"
-     * goes to AGENTS.md instead, waking nobody). `id` is the
+     * Adds your message to a thread, answered once it is kept, and wakes Caw
+     * with it behind that answer ({@link wakeForYou}): the answer never waits
+     * on his session, his account or his turn ("Make a note: …" goes to
+     * AGENTS.md instead, waking nobody). `id` is the
      * message's when the dashboard chose it, as a session's composer does:
      * the row your words fly into is then the one they went out as, however
      * soon the hub's frame draws it. `person`: the send to his session it
@@ -1914,7 +1967,7 @@ export const createCaw = ({
         ...(id ? { id } : {}),
       });
       const out = said(added.thread, added.message, false);
-      await wake(projectId, {
+      wakeForYou(projectId, threadId, {
         by: "you",
         text: yourWords(added.thread, body, false),
         threadId,
@@ -1994,12 +2047,12 @@ export const createCaw = ({
       noteIn(thread.projectId, threadId, note);
     },
 
-    /** "Ask Caw for a view": a new thread with your words, and Caw woken by `view-request`. */
-    async requestView(projectId: string, raw: string): Promise<ThreadSaid> {
+    /** "Ask Caw for a view": a new thread with your words, answered once kept, and Caw woken by `view-request` behind it. */
+    requestView(projectId: string, raw: string): ThreadSaid {
       const body = bodyOf(raw);
       listening(projectId);
       const opened = open(projectId, body);
-      await wake(projectId, {
+      wakeForYou(projectId, opened.row.id, {
         by: "you",
         text: viewRequest(opened.row, body),
         threadId: opened.row.id,

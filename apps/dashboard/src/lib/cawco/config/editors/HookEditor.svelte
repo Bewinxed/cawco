@@ -48,11 +48,11 @@
     type HookVersion,
     hooksOf,
     loadHookVersions,
-    message,
     removeHook,
     restoreHookVersion,
     saveHook,
   } from "../../hooks";
+  import { failureWords as message } from "../../hub-read";
   import { newId } from "../../id";
   import AddMachineLink from "../../join/AddMachineLink.svelte";
   import { machineOs } from "../../machine";

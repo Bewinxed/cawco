@@ -7,6 +7,7 @@
    * the last word: a session is never offered again.
    */
   import type { ProjectOfferSummary } from "@cawco/core";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconClose, IconFolder } from "#lib/icons.js";
   import { goto } from "$app/navigation";
@@ -56,7 +57,7 @@
         await goto(threadHref(accepted.setupThread.id));
       }
     } catch (error) {
-      refused = error instanceof Error ? error.message : String(error);
+      refused = failureWords(error);
     } finally {
       pending = null;
     }

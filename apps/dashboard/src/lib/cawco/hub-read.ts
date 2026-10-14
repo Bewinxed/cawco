@@ -118,6 +118,66 @@ export function failureReason({ detail, status }: HubFailure): string {
     : `The hub answered ${status}`;
 }
 
+/**
+ * The browsers' words for a request that got no answer at all: `fetch`
+ * rejects with a TypeError saying one of them (Chromium "Failed to fetch",
+ * Firefox "NetworkError when attempting to fetch resource.", Safari "Load
+ * failed" or "The network connection was lost.").
+ */
+const NO_ANSWER =
+  /^(?:Failed to fetch|NetworkError when attempting to fetch resource\.?|Load failed|The network connection was lost\.?)$/;
+
+/**
+ * The header the dashboard's `/api` proxy sets on its own 502 when the hub
+ * did not answer it (`routes/api/[...path]`): the request reached the
+ * dashboard and stopped there, never the hub's refusal.
+ */
+export const HUB_UNREACHABLE_HEADER = "x-cawco-hub-unreachable";
+
+/** A request the dashboard could not get to the hub, or got no answer for. */
+export class HubUnreachable extends Error {}
+
+/** Whether `response` is the dashboard's own word that the hub did not answer it. */
+export function unreachedAnswer(response: Response): boolean {
+  return (
+    response.status === 502 &&
+    response.headers.get(HUB_UNREACHABLE_HEADER) === "1"
+  );
+}
+
+/** Whether `error` is a request that never reached the hub, or never heard back from it. */
+export function unreachable(error: unknown): boolean {
+  return (
+    error instanceof HubUnreachable ||
+    (error instanceof TypeError && NO_ANSWER.test(error.message))
+  );
+}
+
+/**
+ * A request that got no answer, as a person reads it (WORDS.md, "Error
+ * formula"): what happened, why, and the way back. The browser's own words
+ * ("Failed to fetch") are never the what-happened.
+ */
+export const HUB_UNREACHABLE =
+  "The dashboard couldn't reach the hub: the request got no answer. Check that the hub's machine is up and this device is online, then try again.";
+
+/**
+ * Why something failed, in the one wording every surface shows: a request
+ * that never reached the hub says so ({@link HUB_UNREACHABLE}); anything else
+ * is the thrower's own words, the hub's refusals already in the formula.
+ */
+export function failureWords(error: unknown): string {
+  if (unreachable(error)) {
+    return HUB_UNREACHABLE;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** {@link failureWords} without its closing stop, for a sentence of the caller's that carries it. */
+export function failureClause(error: unknown): string {
+  return failureWords(error).replace(FINAL_STOP, "");
+}
+
 /** Reads `path` through the given fetch and parses its JSON, or says why not. */
 export async function readHub<T>(
   fetch: typeof globalThis.fetch,

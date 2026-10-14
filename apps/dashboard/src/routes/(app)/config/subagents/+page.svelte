@@ -19,6 +19,7 @@
     removeAgent,
     saveAgent,
   } from "#lib/cawco/fleet.js";
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
@@ -59,9 +60,6 @@
   let unpushable = $state<Record<string, string>>({});
   let found = $state<Record<string, DiscoveredAgent[]>>({});
   let reading = $state<Record<string, boolean>>({});
-
-  const message = (caught: unknown) =>
-    caught instanceof Error ? caught.message : String(caught);
 
   /** Every online machine is asked once, when it appears. Nothing is stored. */
   $effect(() => {

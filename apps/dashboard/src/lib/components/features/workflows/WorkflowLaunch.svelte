@@ -2,7 +2,8 @@
   import type { DelegateType, WorkflowListing } from "@cawco/core";
   import { onMount } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
-  import { loadDelegateTypes, message } from "#lib/cawco/delegate-types.js";
+  import { loadDelegateTypes } from "#lib/cawco/delegate-types.js";
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { fleetFolders } from "#lib/cawco/preview/fleet-pane.svelte.js";
   import { checkoutOf } from "#lib/cawco/projects.js";

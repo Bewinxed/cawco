@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { failureWords } from "#lib/cawco/hub-read.js";
   /**
    * The project has no stages.md, so the code stages stand in. This picks a
    * set of stages for it from the hub's templates (code, launch, SEO, brand,
@@ -67,7 +68,7 @@
           templates = read;
         },
         (error: unknown) => {
-          problem = error instanceof Error ? error.message : String(error);
+          problem = failureWords(error);
         }
       );
     }
@@ -130,7 +131,7 @@
     try {
       await write(name);
     } catch (error) {
-      problem = error instanceof Error ? error.message : String(error);
+      problem = failureWords(error);
     } finally {
       applying = null;
     }

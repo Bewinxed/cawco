@@ -16,6 +16,7 @@
    * Its disclosures fold (240ms open, 160ms shut, motion/fold) and what its
    * remedy came to is said under the button, in place.
    */
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
     IconChevronRight,
@@ -83,9 +84,6 @@
   let disclosureOpen = $state(false);
   let expanded = $state(false);
   const whole = $derived(!compact || expanded);
-
-  const message = (error: unknown) =>
-    error instanceof Error ? error.message : String(error);
 
   /**
    * An always-mounted part held open or shut by `open`: the first state lands

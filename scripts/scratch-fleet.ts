@@ -114,9 +114,43 @@ export interface Seen {
  */
 export interface Reply {
   everyMs: number;
+  /**
+   * The request is refused at its account's usage limit, as Anthropic
+   * refuses a subscription past it (429, `rate_limit_error`, the unified
+   * limit headers rejected), until `resetsAt` (epoch ms).
+   */
+  refuse?: { resetsAt: number };
   tool?: { input: object; name: string };
   words: string[];
 }
+
+/** Anthropic's refusal of a request past its account's usage limit, until `resetsAt`. */
+const limitRefusal = (resetsAt: number): Response => {
+  const reset = String(Math.ceil(resetsAt / 1000));
+  return Response.json(
+    {
+      type: "error",
+      error: {
+        type: "rate_limit_error",
+        message:
+          "This request would exceed your account's rate limit. Please try again later.",
+      },
+    },
+    {
+      status: 429,
+      headers: {
+        "anthropic-ratelimit-unified-status": "rejected",
+        "anthropic-ratelimit-unified-reset": reset,
+        "anthropic-ratelimit-unified-representative-claim": "five_hour",
+        "anthropic-ratelimit-unified-5h-status": "rejected",
+        "anthropic-ratelimit-unified-5h-reset": reset,
+        "anthropic-ratelimit-unified-5h-utilization": "1.0",
+        "x-should-retry": "false",
+        "request-id": `req_${crypto.randomUUID()}`,
+      },
+    }
+  );
+};
 
 export const delay = (ms: number) => Bun.sleep(ms);
 
@@ -823,6 +857,9 @@ async function standUp(
       seen.push(one);
       const reply = options.respond(one);
       const chat = path.endsWith("/chat/completions");
+      if (reply.refuse && !chat) {
+        return limitRefusal(reply.refuse.resetsAt);
+      }
       if (body.stream === false && !chat) {
         return Response.json({
           id: `msg_${crypto.randomUUID()}`,

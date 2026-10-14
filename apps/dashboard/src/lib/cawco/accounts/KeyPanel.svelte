@@ -9,6 +9,7 @@
   import { untrack } from "svelte";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { sendAccountKey } from "#lib/cawco/client.svelte.js";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Checkbox } from "#lib/components/ui/checkbox/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
@@ -96,7 +97,7 @@
         onsent?.();
       }
     } catch (error) {
-      problem = error instanceof Error ? error.message : String(error);
+      problem = failureWords(error);
     } finally {
       sending = false;
     }

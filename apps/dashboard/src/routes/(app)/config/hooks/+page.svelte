@@ -14,10 +14,10 @@
     draftOf,
     type FleetHook,
     HOOK_TEMPLATES,
-    message,
     removeHook,
     saveHook,
   } from "#lib/cawco/hooks.js";
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { newId } from "#lib/cawco/id.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";

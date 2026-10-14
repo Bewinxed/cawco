@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { rowHref } from "#lib/cawco/links.js";
   /**
    * A task, whole, in the side sheet: its title, stage, description,
@@ -107,9 +108,6 @@
         each.id !== shown?.parent
     )
   );
-
-  const message = (error: unknown) =>
-    error instanceof Error ? error.message : String(error);
 
   let readFor = "";
   $effect(() => {

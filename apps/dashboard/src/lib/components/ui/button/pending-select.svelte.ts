@@ -1,3 +1,5 @@
+import { failureWords } from "#lib/cawco/hub-read.js";
+
 /**
  * What a menu item that runs something does with its select: the menu stays
  * open and the item pending while the work runs (a second select is
@@ -34,7 +36,7 @@ export class PendingSelect {
     try {
       await this.#run();
     } catch (error) {
-      this.reason = error instanceof Error ? error.message : String(error);
+      this.reason = failureWords(error);
       return;
     } finally {
       this.pending = false;

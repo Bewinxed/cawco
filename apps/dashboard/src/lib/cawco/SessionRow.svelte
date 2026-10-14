@@ -63,6 +63,7 @@
    */
   import type { NeutralSessionInfo } from "@cawco/core";
   import type { Attachment } from "svelte/attachments";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconArchive, IconMaximize } from "#lib/icons.js";
@@ -228,7 +229,7 @@
       await renameSession(renameTarget, next);
     } catch (error) {
       renaming = null;
-      renameFault = error instanceof Error ? error.message : String(error);
+      renameFault = failureWords(error);
     }
   }
 

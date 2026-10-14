@@ -20,6 +20,7 @@
   import EditorSection from "#lib/cawco/config/EditorSection.svelte";
   import SwitchField from "#lib/cawco/config/SwitchField.svelte";
   import TitleInput from "#lib/cawco/config/TitleInput.svelte";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { IconPalette, IconServer, IconUsage } from "#lib/icons.js";
@@ -92,7 +93,7 @@
       });
       kept.drop();
     } catch (error) {
-      refused = error instanceof Error ? error.message : String(error);
+      refused = failureWords(error);
     } finally {
       saving = false;
     }

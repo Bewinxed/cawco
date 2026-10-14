@@ -17,7 +17,7 @@
     type AskItem,
   } from "#lib/cawco/ask-here.svelte.js";
   import { cawco } from "#lib/cawco/client.svelte.js";
-  import { message } from "#lib/cawco/delegate-types.js";
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";

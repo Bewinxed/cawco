@@ -5,6 +5,7 @@
     memoryHistory,
     memoryVersion,
   } from "#lib/cawco/fleet.js";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   /**
    * What an `admin_memory_read` or `admin_memory_write` call read or wrote, as the document it is. The
    * sentence above already names the action and the path, so none of the raw
@@ -140,7 +141,7 @@
         if (live) {
           before = {
             kind: "missing",
-            why: caught instanceof Error ? caught.message : String(caught),
+            why: failureWords(caught),
           };
         }
       });

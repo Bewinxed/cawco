@@ -1,6 +1,7 @@
 <script lang="ts">
   import { machineLabel } from "@cawco/core";
   import { untrack } from "svelte";
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
@@ -109,9 +110,6 @@
   let deleting = $state(false);
   let deleteFailed = $state(false);
   let conflict = $state<FleetMemoryRow | null>(null);
-
-  const message = (caught: unknown) =>
-    caught instanceof Error ? caught.message : String(caught);
 
   /** Puts a row the hub answered with where the section reads it. */
   function stored(row: FleetMemoryRow) {

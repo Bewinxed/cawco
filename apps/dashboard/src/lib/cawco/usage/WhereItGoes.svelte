@@ -22,6 +22,7 @@
    */
   import type { UsageSummary, UsageSummaryRow } from "@cawco/core";
   import { flushSync } from "svelte";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
     TabItem,
@@ -131,7 +132,7 @@
       );
     } catch (cause) {
       if (latest === want) {
-        failed = cause instanceof Error ? cause.message : String(cause);
+        failed = failureWords(cause);
       }
     }
   }

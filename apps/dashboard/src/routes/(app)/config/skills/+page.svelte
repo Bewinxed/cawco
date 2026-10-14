@@ -36,6 +36,7 @@
     skillHistory,
   } from "#lib/cawco/fleet.js";
   import { hubFaults } from "#lib/cawco/fleet-faults.js";
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import MachineInventory from "#lib/cawco/MachineInventory.svelte";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
@@ -84,9 +85,6 @@
   let refetchFailed = $state(false);
   /** Why a marketplace install was refused, by plugin id: said under its listing. */
   let installFailed = $state<Record<string, string>>({});
-
-  const message = (err: unknown) =>
-    err instanceof Error ? err.message : String(err);
   const installed = (id: string): boolean =>
     plugins.some((row) => row.id === id);
   const resolved = () => {

@@ -16,6 +16,7 @@
    * list's own motion carries it.
    */
   import type { Snippet } from "svelte";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconRefresh } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
@@ -63,7 +64,7 @@
     } catch (error) {
       thrown = {
         over: reason ?? null,
-        text: error instanceof Error ? error.message : String(error),
+        text: failureWords(error),
       };
     } finally {
       trying = false;

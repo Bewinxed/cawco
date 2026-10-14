@@ -1,5 +1,6 @@
 <script lang="ts" module>
   import type { FsEntry } from "@cawco/core";
+  import { failureWords } from "#lib/cawco/hub-read.js";
 
   /** Where the picker reads a machine's folders: the fleet's socket, or an artifact tab's own. */
   export interface FolderReader {
@@ -120,7 +121,7 @@
         return;
       }
       entries = [];
-      errorMessage = err instanceof Error ? err.message : String(err);
+      errorMessage = failureWords(err);
     } finally {
       loading = false;
     }

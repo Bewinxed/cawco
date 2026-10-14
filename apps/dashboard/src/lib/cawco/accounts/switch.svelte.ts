@@ -8,6 +8,7 @@
  */
 import { type Account, type AccountProvider, providerOf } from "@cawco/core";
 import { SvelteMap } from "svelte/reactivity";
+import { failureWords } from "#lib/cawco/hub-read.js";
 import { cawco, type InstanceRow, moveInstanceAccount } from "../client.svelte";
 import { faultOn, pendingOn } from "../session-acts.svelte";
 import { accountsOf, nameOf, signinState } from "./model.svelte";
@@ -83,7 +84,7 @@ export async function moveTo(
     moving.delete(instance.id);
     pendingOn(instance.id, undefined);
     faultOn(instance.id, {
-      reason: error instanceof Error ? error.message : String(error),
+      reason: failureWords(error),
       again: () => moveTo(instance, accountId),
     });
   }

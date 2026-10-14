@@ -15,6 +15,7 @@
   import { SvelteMap } from "svelte/reactivity";
   import { cawco, signOutOn } from "#lib/cawco/client.svelte.js";
   import RowMenu from "#lib/cawco/config/RowMenu.svelte";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import NsPopover from "#lib/cawco/spawn/NsPopover.svelte";
@@ -98,10 +99,7 @@
     try {
       await signOutOn(account.id, machineId);
     } catch (error) {
-      refusals.set(
-        machineId,
-        error instanceof Error ? error.message : String(error)
-      );
+      refusals.set(machineId, failureWords(error));
     }
   }
 

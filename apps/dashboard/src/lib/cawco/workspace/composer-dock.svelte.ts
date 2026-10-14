@@ -50,6 +50,8 @@ export interface ComposerBinding {
   prompts?: Snippet;
   /** The conversation whose sent messages the composer recalls. */
   readonly recallOf: string;
+  /** The failed send never reached the hub and its words are back in the field: Send again stands on its line. */
+  readonly sendAgain?: boolean;
   /** Why the last send failed; empty when it did not. */
   readonly sendError: string;
   readonly sending: boolean;

@@ -6,6 +6,7 @@
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SwitchField from "#lib/cawco/config/SwitchField.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
+  import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
   import { dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import {
@@ -50,7 +51,7 @@
 
       openrouter = (await response.json()) as OpenRouterState;
     } catch (error) {
-      openrouterError = `Could not read the OpenRouter connection — ${error instanceof Error ? error.message : String(error)}.`;
+      openrouterError = `Could not read the OpenRouter connection — ${failureClause(error)}.`;
     }
     await readJev();
   }
@@ -76,7 +77,7 @@
       }
       takeJev((await response.json()) as JevState);
     } catch (error) {
-      jevError = `Could not read Jev's settings — ${error instanceof Error ? error.message : String(error)}.`;
+      jevError = `Could not read Jev's settings — ${failureClause(error)}.`;
     }
   }
 
@@ -199,7 +200,7 @@
       await saveSuggestSetting(on);
       jev.suggestWhileTyping = on;
     } catch (error) {
-      jevError = error instanceof Error ? error.message : String(error);
+      jevError = failureWords(error);
     }
     savingSuggest = false;
   }
@@ -217,7 +218,7 @@
       }
       watch = (await response.json()) as FleetWatchSettings;
     } catch (error) {
-      watchError = `Could not read fleet watch — ${error instanceof Error ? error.message : String(error)}.`;
+      watchError = `Could not read fleet watch — ${failureClause(error)}.`;
     }
   }
 

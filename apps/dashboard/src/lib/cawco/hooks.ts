@@ -156,7 +156,3 @@ export const draftOf = (hook: FleetHook): HookDraft => ({
   projectId: hook.projectId,
   cwd: hook.cwd,
 });
-
-/** Whatever the caller threw, as a sentence. Every panel in this app has one. */
-export const message = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);

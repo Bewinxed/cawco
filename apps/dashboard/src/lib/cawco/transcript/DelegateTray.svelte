@@ -17,6 +17,7 @@
   import { untrack } from "svelte";
   import { SvelteMap } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
@@ -928,7 +929,7 @@
     } catch (error) {
       dismissFault = {
         id: item.id,
-        reason: error instanceof Error ? error.message : String(error),
+        reason: failureWords(error),
       };
     } finally {
       dismissing = null;

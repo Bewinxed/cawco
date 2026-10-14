@@ -3,6 +3,7 @@
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SwitchField from "#lib/cawco/config/SwitchField.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
+  import { failureClause } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
@@ -49,7 +50,7 @@
       ({ devices } = (await response.json()) as { devices: Device[] });
       loaded = true;
     } catch (error) {
-      readError = `Could not read the push settings — ${error instanceof Error ? error.message : String(error)}.`;
+      readError = `Could not read the push settings — ${failureClause(error)}.`;
     }
   }
 

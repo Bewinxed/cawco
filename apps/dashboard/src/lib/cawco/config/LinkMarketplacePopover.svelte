@@ -7,6 +7,7 @@
    */
   import type { FleetMarketplace } from "@cawco/core";
   import { tick } from "svelte";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { closeInto } from "#lib/cawco/motion/share.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -74,7 +75,7 @@
         if (wanted === at) {
           read = {
             source: at,
-            problem: error instanceof Error ? error.message : String(error),
+            problem: failureWords(error),
           };
         }
       }
@@ -109,7 +110,7 @@
       expanded = false;
       reset();
     } catch (error) {
-      failed = error instanceof Error ? error.message : String(error);
+      failed = failureWords(error);
     } finally {
       busy = false;
     }

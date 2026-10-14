@@ -9,6 +9,7 @@
  * Not to be confused with `tasks.svelte.ts`, which reads a session's own plan
  * off its machine (WORDS.md: plan).
  */
+import { HUB_UNREACHABLE, HubUnreachable, unreachedAnswer } from "./hub-read";
 
 /** The fixed kinds a stage belongs to (WORDS.md: kind). */
 export type StageKind =
@@ -276,6 +277,9 @@ async function said(response: Response): Promise<string> {
 /** The hub's sentence, thrown as it is: it already says what to do. */
 export async function send<T>(url: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(url, init);
+  if (unreachedAnswer(response)) {
+    throw new HubUnreachable(HUB_UNREACHABLE);
+  }
   if (!response.ok) {
     throw new Error(await said(response));
   }

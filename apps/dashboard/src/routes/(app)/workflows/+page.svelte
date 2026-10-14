@@ -2,7 +2,7 @@
   import type { WorkflowListing } from "@cawco/core";
   import { onMount } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
-  import { message } from "#lib/cawco/delegate-types.js";
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import {
     refreshWorkflows,

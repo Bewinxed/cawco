@@ -1,5 +1,6 @@
 <script lang="ts" module>
   import type { PermissionResult } from "@cawco/core";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import type { PendingPermission } from "../client.svelte";
 
   /**
@@ -139,6 +140,7 @@
     busy = false,
     sending = false,
     sendError = "",
+    sendAgain = false,
     held = false,
     paneVisible = true,
     commands = [],
@@ -181,6 +183,11 @@
      * the field until the next one is sent; empty when nothing failed.
      */
     sendError?: string;
+    /**
+     * The failed send never reached the hub, and its words are back in the
+     * field: the error line offers Send again, which sends them as Enter does.
+     */
+    sendAgain?: boolean;
     /**
      * A swipe is carrying the conversations under this composer. The action
      * button waits until one has landed, so nothing is sent to a chat that
@@ -1172,7 +1179,7 @@
       signingIn = name;
       signInToMcp(name).catch((error) => {
         signingIn = null;
-        sendBlock = error instanceof Error ? error.message : String(error);
+        sendBlock = failureWords(error);
       });
       return;
     }
@@ -2376,9 +2383,7 @@
       // The words stay in the field, still the queued message's: Enter
       // tries again, Esc keeps it as it was.
       if (draft.lifted === lift) {
-        sendBlock = notEdited(
-          error instanceof Error ? error.message : String(error)
-        );
+        sendBlock = notEdited(failureWords(error));
       }
     }
   }
@@ -3027,7 +3032,18 @@
 
     <!-- A send that failed says so right over the field it left. -->
     {#if sendNotice}
-      <p class="send-error" role="alert" transition:unfold>{sendNotice}</p>
+      <div class="send-error" role="alert" transition:unfold>
+        <p>{sendNotice}</p>
+        {#if sendAgain && sendError === sendNotice}
+          <Button
+            disabled={pending}
+            onclick={() => submit()}
+            size="sm"
+            variant="ghost"
+            >Send again</Button
+          >
+        {/if}
+      </div>
     {:else if signInNote}
       <p class="send-note" role="status" transition:unfold>{signInNote}</p>
     {/if}
@@ -3962,6 +3978,17 @@
     color: var(--status-fail-ink);
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
+  }
+  /* The way back stands on the line that says what failed, after its words. */
+  .send-error {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: var(--space-2);
+
+    & p {
+      min-inline-size: 0;
+    }
   }
   .send-note {
     color: var(--ink-muted);

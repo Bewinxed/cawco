@@ -19,6 +19,7 @@
   import { cawco, spawnSession } from "#lib/cawco/client.svelte.js";
   import ForgetProjectTray from "#lib/cawco/ForgetProjectTray.svelte";
   import { forgetHost, forgetProject } from "#lib/cawco/forget.svelte.js";
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { conversationHref } from "#lib/cawco/links.js";
   import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { handOver } from "#lib/cawco/motion/share.svelte.js";
@@ -67,9 +68,6 @@
   let more = $state<HTMLElement | null>(null);
   /** The place a forget asked from this head's `⋯` stands (forget.svelte.ts). */
   const forgetAt = $derived(`head:${project.id}`);
-
-  const message = (error: unknown) =>
-    error instanceof Error ? error.message : String(error);
 
   /**
    * Its places on machines: the line counts these (its folder on the hub is
