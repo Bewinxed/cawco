@@ -26,6 +26,11 @@
  *     with the way to the setting.
  * 14. Host mode set through Settings › Previews with `p-{session}.localhost`:
  *     the panel loads the page from `p-<session>.localhost`, routed by Host.
+ * 15. A page on a third origin that frames the preview's port gets nothing:
+ *     the preview names the dashboards in `frame-ancestors`, not it.
+ * 16. With that header taken off in the browser, the third origin's frame
+ *     loads the page, and a hello it forges is ignored: the overlay answers
+ *     no `cawco:ready`.
  *
  * It survives (port mode again), between loads:
  *
@@ -297,6 +302,93 @@ const run = async (kit: Kit) => {
       `hub: ${hubLine ?? "no line"}; mode ${still.mode}; dashboard ${dash.status}`
     );
   }
+
+  // 15–16. A third origin may not frame the preview, nor hello its overlay.
+  const third = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () =>
+      new Response(
+        `<!doctype html><html><head><title>Third</title></head><body><iframe src="${firstOrigin}/" title="Framed" width="600" height="400"></iframe><script>window.__heard=[];addEventListener("message",function(e){window.__heard.push(e.data&&e.data.type)});</script></body></html>`,
+        { headers: { "content-type": "text/html" } }
+      ),
+  });
+  const thirdOrigin = `http://127.0.0.1:${third.port}`;
+  const policy =
+    (await fetch(`${firstOrigin}/`)).headers.get("content-security-policy") ??
+    "";
+  const framedTitle = async (outside: Page): Promise<string> => {
+    const handle = await outside
+      .locator("iframe[title=Framed]")
+      .elementHandle();
+    const frame = await handle?.contentFrame();
+    return (
+      (await frame?.title().catch(() => "")) || `nothing (${frame?.url()})`
+    );
+  };
+  const framer = await kit.page("desk");
+  await framer.goto(thirdOrigin, { waitUntil: "domcontentloaded" });
+  await framer.waitForTimeout(2000);
+  const framerTitle = await framedTitle(framer);
+  kit.check(
+    "15: a page on a third origin framing the preview gets nothing: frame-ancestors names the dashboard, not it",
+    policy.includes("frame-ancestors") &&
+      policy.includes(new URL(base).origin) &&
+      !policy.includes(thirdOrigin) &&
+      framerTitle !== TITLE,
+    `policy ${JSON.stringify(policy)}; the framed page: ${framerTitle}`
+  );
+  await framer.context().close();
+
+  // The header taken off in this browser alone: the overlay is all that stands.
+  const forged = await kit.page("desk");
+  await forged.context().route(`${firstOrigin}/**`, async (route) => {
+    const response = await route.fetch();
+    const headers = Object.fromEntries(
+      Object.entries(response.headers()).filter(
+        ([name]) => name !== "content-security-policy"
+      )
+    );
+    await route.fulfill({ response, headers });
+  });
+  await forged.goto(thirdOrigin, { waitUntil: "domcontentloaded" });
+  const loadedTitle = await until(
+    "the preview loaded in the third origin's frame",
+    async () => {
+      const title = await framedTitle(forged);
+      return title === TITLE ? title : null;
+    },
+    Boolean,
+    30_000
+  ).catch(() => framedTitle(forged));
+  await forged.evaluate(
+    ([artifact]) => {
+      const frame = document.querySelector<HTMLIFrameElement>(
+        "iframe[title=Framed]"
+      );
+      frame?.contentWindow?.postMessage(
+        {
+          type: "cawco:hello",
+          theme: "light",
+          artifact: { id: artifact, kind: "preview", name: "forged" },
+          sync: `/__cawco/artifact/${artifact}`,
+        },
+        "*"
+      );
+    },
+    [madeFirst]
+  );
+  await forged.waitForTimeout(3000);
+  const heard = await forged.evaluate(
+    () => (window as unknown as { __heard: string[] }).__heard
+  );
+  kit.check(
+    "16: with frame-ancestors taken off, the third origin's frame loads the page, and its forged hello is ignored (no cawco:ready)",
+    loadedTitle === TITLE && !heard.includes("cawco:ready"),
+    `framed page ${loadedTitle}; the third origin heard ${JSON.stringify(heard)}`
+  );
+  await forged.context().close();
+  third.stop(true);
 
   // 11. Two sessions at once, each with its own page and socket.
   const other = await fleet.spawn("claude", "Other", fleet.repo);

@@ -24,11 +24,7 @@ import {
   canvasHostFile,
   canvasHostPage,
 } from "@cawco/core/canvas-host";
-import {
-  injectOverlay,
-  OVERLAY_PATH,
-  overlayResponse,
-} from "@cawco/core/preview-proxy";
+import { injectOverlay } from "@cawco/core/preview-proxy";
 import { Map as YMap } from "yjs";
 import { type ArtifactDocs, elementsOf } from "./docs";
 import { ArtifactRefusal } from "./service";
@@ -43,9 +39,6 @@ export async function serveCanvas(
   pathname: string,
   state: (artifactId: string) => string
 ): Promise<Response> {
-  if (pathname === OVERLAY_PATH) {
-    return overlayResponse();
-  }
   if (pathname === "/") {
     return new Response(
       injectOverlay(await canvasHostPage(), {

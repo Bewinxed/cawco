@@ -47,6 +47,9 @@
       });
   });
 
+  /** The range's first port: where host mode's names have to reach. */
+  const firstPort = $derived(settings?.ports.split("–")[0] ?? "");
+
   const changed = $derived(
     !!settings &&
       (mode !== settings.mode ||
@@ -94,7 +97,7 @@
     <Field
       hint={mode === "port"
         ? `Each session's previews take a port of ${settings?.ports ?? "the hub's range"} on the host you reach the dashboard by. Nothing to set up; the ports have to be reachable from your browser.`
-        : `Each session's previews get a host name of their own. Point those names at the hub's first preview port (${settings?.ports.split("–")[0] ?? ""}), through DNS or your proxy.`}
+        : `Each session's previews get a host name of their own. Point those names at the hub's first preview port (${firstPort}), through DNS or your proxy.`}
       id="preview-mode"
       label="Reach previews by"
       problem={mode === "port" ? refused : undefined}
@@ -132,6 +135,41 @@
           bind:value={pattern}
         />
       </Field>
+      <!-- What the names need before Save, where the operator sets them. -->
+      <div class="steps">
+        <p class="steps-head">Before you save</p>
+        <p class="note">
+          Every name the pattern makes has to reach the hub's port {firstPort}.
+          Behind Cloudflare, with the dashboard on a tunnel already:
+        </p>
+        <ol class="note">
+          <li>
+            In DNS, add a proxied CNAME record named <code>*</code> whose target
+            is your tunnel, <code>&lt;tunnel-id&gt;.cfargotunnel.com</code>.
+            Records you already have keep their own targets.
+          </li>
+          <li>
+            In Networking › Tunnels › your tunnel › Routes, add a published
+            application: hostname <code>*.example.com</code>, service
+            <code>http://localhost:{firstPort}</code>
+            on the hub's machine.
+          </li>
+          <li>
+            In Zero Trust › Access, add <code>*.example.com</code> to the
+            application that guards the dashboard, so one sign-in covers both.
+          </li>
+          <li>
+            Set the pattern to <code>p-{"{session}"}.example.com</code> and
+            save. Keep {"{session}"} in the first label: Cloudflare's free
+            certificate covers one level of subdomain, not
+            <code>*.previews.example.com</code>.
+          </li>
+        </ol>
+        <p class="note">
+          Without Cloudflare: point a wildcard DNS name at the hub, or at a
+          proxy that sends those names to port {firstPort}, then save.
+        </p>
+      </div>
     {/if}
     <div>
       <Button
@@ -156,5 +194,26 @@
     max-width: 72ch;
     font: var(--type-meta);
     color: var(--ink-muted);
+  }
+  /* The setup a host pattern needs, under its field. */
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .steps-head {
+    font: var(--type-label);
+    color: var(--ink-strong);
+  }
+  ol.note {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding-inline-start: var(--space-5);
+    list-style: decimal;
+  }
+  code {
+    font-family: var(--font-mono);
+    color: var(--ink-strong);
   }
 </style>

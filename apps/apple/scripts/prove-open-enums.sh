@@ -74,7 +74,7 @@ start_hub() {
   env -i PATH="$PATH" HOME="$SCRATCH/home" USER="${USER:-probe}" \
     XDG_CONFIG_HOME="$SCRATCH/home/.config" XDG_DATA_HOME="$SCRATCH/home/.local/share" \
     XDG_CACHE_HOME="$SCRATCH/home/.cache" XDG_STATE_HOME="$SCRATCH/home/.local/state" \
-    CAWCO_DB_PATH="$DB" CAWCO_HUB_PORT="$HUB_PORT" CAWCO_PREVIEW_PORT="$PREVIEW_PORT" \
+    CAWCO_DB_PATH="$DB" CAWCO_HUB_PORT="$HUB_PORT" CAWCO_PREVIEW_PORTS="$PREVIEW_PORT-$PREVIEW_PORT" \
     CAWCO_MCP_PORT="$MCP_PORT" HOST=127.0.0.1 CAWCO_NO_MDNS=1 \
     bun packages/hub/src/index.ts >>"$SCRATCH/hub.log" 2>&1 &
   HUB_PID=$!

@@ -43,6 +43,21 @@ export function crossSiteRefusal(
 /** Where a navigation's document may run a plugin's: never let through. */
 const FRAMED = new Set(["object", "embed"]);
 
+/**
+ * What a relay that passed the gate tells the hub instead of `Origin`: the
+ * page's origin, which it read and found its own. The hub learns from it
+ * where its dashboard is reached (the origins that may frame a preview, the
+ * dashboard address a sign-in comes back to). A page can't set it: a
+ * browser puts no header of a page's on a WebSocket, and a fetch carrying
+ * one from another origin is preflighted, which nothing here answers.
+ */
+export const PAGE_ORIGIN_HEADER = "x-cawco-page-origin";
+
+/** The origin of the page behind a request: its relay's word, else the browser's own `Origin` when it reached the hub directly. */
+export const pageOrigin = (
+  headers: Record<string, string | undefined>
+): string | undefined => headers[PAGE_ORIGIN_HEADER] ?? headers.origin;
+
 /** The headers a relay that passed the gate removes before it goes on: the hop behind it is not the page's origin. */
 export const BROWSER_HEADERS = [
   "origin",

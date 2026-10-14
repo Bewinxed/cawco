@@ -5,8 +5,6 @@ import {
   causeOf,
   downResponse,
   injectOverlay,
-  OVERLAY_PATH,
-  overlayResponse,
   type PreviewSocket,
   previewFailed,
   previewWebSocket,
@@ -127,10 +125,9 @@ export async function startPreview(options: {
     websocket: previewWebSocket,
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the two source modes converge here so header rewriting and HTML injection have one path.
     async fetch(request, server) {
+      // `/__cawco/*` (the overlay among it) is the hub listener's own and
+      // never reaches here.
       const url = new URL(request.url);
-      if (url.pathname === OVERLAY_PATH) {
-        return overlayResponse();
-      }
       let response: Response;
       if ("port" in source) {
         const headers = proxyHeaders(request.headers);

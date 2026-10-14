@@ -198,16 +198,18 @@ async function run(kit: Kit): Promise<void> {
         },
       ],
     });
-  /** The page's Send, through the hub's preview listener, as the panel's goes. */
+  /** The page's Send, on its session's own preview origin, as the page's goes. */
   const sendPage = async (words?: string) => {
+    const { port } = (await (
+      await fetch(`${fleet.base}/api/instances/${session}/preview-address`, {
+        method: "POST",
+      })
+    ).json()) as { port: number };
     const response = await fetch(
-      `http://127.0.0.1:${fleet.env.CAWCO_PREVIEW_PORT}/__cawco/artifact/${id}/send`,
+      `http://127.0.0.1:${port}/__cawco/artifact/${id}/send`,
       {
         method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-cawco-preview": session,
-        },
+        headers: { "content-type": "application/json" },
         body: JSON.stringify(words ? { text: words } : {}),
       }
     );

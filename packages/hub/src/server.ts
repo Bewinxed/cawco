@@ -278,7 +278,7 @@ import {
   type BinaryUpdateState,
 } from "@cawco/core/binary-updates";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
-import { crossSiteRefusal } from "@cawco/core/browser-gate";
+import { crossSiteRefusal, pageOrigin } from "@cawco/core/browser-gate";
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
@@ -467,6 +467,7 @@ import {
 } from "./plugins";
 import {
   createPreviewListeners,
+  noteParent,
   type PreviewListenerDeps,
   type PreviewReach,
   PreviewRefusal,
@@ -23992,6 +23993,8 @@ export const createServer = (
         },
         open(ws) {
           openLine(ws, true);
+          // An artifact's own tab frames its preview from this origin.
+          noteParent(pageOrigin(ws.headers));
           artifactSessions.open(ws, ws.params.instance);
         },
         message: guardedDashboardMessage((ws, message) => {
@@ -24038,18 +24041,21 @@ export const createServer = (
           // `Origin` on every socket it opens, and the clients that are not
           // pages (the Apple app, scripts) send none and read this wire.
           const named = Number(ws.query.protocol);
+          const page = pageOrigin(ws.headers);
           const older = Number.isFinite(named)
             ? named < WIRE_PROTOCOL
-            : Boolean(ws.headers.origin);
+            : Boolean(page);
           if (older) {
             console.warn(
-              `[hub] dashboard page at ${ws.headers.origin ?? ws.remoteAddress} is on wire ${Number.isFinite(named) ? named : "4 or older"}, this hub on ${WIRE_PROTOCOL}: it is sent the snapshot only, until it reloads`
+              `[hub] dashboard page at ${page ?? ws.remoteAddress} is on wire ${Number.isFinite(named) ? named : "4 or older"}, this hub on ${WIRE_PROTOCOL}: it is sent the snapshot only, until it reloads`
             );
           }
           registry.addDashboard(ws, older);
           // The one moment the hub learns a URL that reaches its own dashboard:
           // this browser just used one. See `dashboardUrl` in telegram.ts.
-          registry.noteDashboardOrigin(ws.headers.origin);
+          registry.noteDashboardOrigin(page);
+          // Its previews may be framed from it, and from no other origin.
+          noteParent(page);
           // The board, before it is asked for: the FIRST message every
           // dashboard receives, unconditionally, so the rail fills before the
           // REST snapshot lands.

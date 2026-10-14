@@ -2,6 +2,7 @@ import { realpath, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import {
   type ArtifactKind,
+  CAWCO_ENV,
   DASHBOARD_COOKIE,
   PREVIEW_PING_PATH,
   type PreviewAddress,
@@ -9,6 +10,7 @@ import {
   type PreviewFrame,
   type PreviewSettings,
   type PreviewSource,
+  readEnv,
 } from "@cawco/core";
 import {
   causeOf,
@@ -59,6 +61,54 @@ export interface PreviewTarget {
 }
 
 export const previewTargets = new Map<string, PreviewTarget>();
+
+/**
+ * The dashboard origins this hub is reached from: each one a dashboard or an
+ * artifact's tab opened its socket from (server.ts, from the origin the
+ * dashboard's relay gated), and the operator's dashboard address. Only these
+ * may frame a preview (`frame-ancestors`), and only these may hello its
+ * overlay (`overlayResponse`): a page of another site that frames a preview
+ * port it can reach is refused by the browser and ignored by the overlay.
+ */
+const parents = new Set<string>();
+
+/** A dashboard opened its socket from `origin`, an origin its relay let through. */
+export const noteParent = (origin: string | undefined): void => {
+  if (!origin) {
+    return;
+  }
+  try {
+    const url = new URL(origin);
+    if (url.protocol === "http:" || url.protocol === "https:") {
+      parents.add(url.origin);
+    }
+  } catch {
+    // Not an origin: nothing to add.
+  }
+};
+
+// The operator's own dashboard address, before any dashboard has connected.
+noteParent(readEnv(CAWCO_ENV.dashboardUrl));
+
+/** Every origin that may frame a preview now. */
+export const previewParents = (): string[] => [...parents];
+
+/**
+ * `answer` as the browser may frame it: from the dashboards alone. A
+ * response a hop made with headers it holds fixed goes on as a copy.
+ */
+const framedBy = (answer: Response): Response => {
+  const named = previewParents();
+  const policy = `frame-ancestors ${named.length > 0 ? named.join(" ") : "'none'"}`;
+  try {
+    answer.headers.set("content-security-policy", policy);
+    return answer;
+  } catch {
+    const copy = new Response(answer.body, answer);
+    copy.headers.set("content-security-policy", policy);
+    return copy;
+  }
+};
 
 /** Where a shown preview is served now, or the hop that failed and why (server.ts `reachPreview`). */
 export type PreviewReach =
@@ -315,7 +365,7 @@ async function serveSession(
     return ping();
   }
   if (pathname === OVERLAY_PATH) {
-    return overlayResponse();
+    return overlayResponse(previewParents());
   }
   const synced = pathname.match(ARTIFACT_PATH);
   if (synced) {
@@ -461,7 +511,7 @@ export function createPreviewListeners(
       port,
       websocket,
       error,
-      fetch(request, server) {
+      async fetch(request, server) {
         const instanceId = route(request);
         if (!instanceId) {
           previewFailed(
@@ -469,9 +519,10 @@ export function createPreviewListeners(
             null,
             `no session's preview at ${request.headers.get("host")}`
           );
-          return downResponse("closed", 404);
+          return framedBy(downResponse("closed", 404));
         }
-        return serveSession(request, server, instanceId, deps);
+        const answer = await serveSession(request, server, instanceId, deps);
+        return answer && framedBy(answer);
       },
     });
 

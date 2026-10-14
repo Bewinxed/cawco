@@ -48,9 +48,20 @@ export function loadOverlay(): Promise<string> {
   return overlay;
 }
 
-/** The overlay as a response to {@link OVERLAY_PATH}. */
-export async function overlayResponse(): Promise<Response> {
-  return new Response(await loadOverlay(), {
+/** The window global the overlay reads its host's allowed origins from (host-origin.ts). */
+export const PARENTS_GLOBAL = "__cawcoParents";
+
+/**
+ * The overlay as a response to {@link OVERLAY_PATH}, the origins a host may
+ * frame it from (`parents`, the dashboards the hub is reached from) frozen
+ * on the window before it runs: its hello is heard from those alone, so a
+ * page of another site that frames the preview can't take its picks.
+ */
+export async function overlayResponse(
+  parents: readonly string[]
+): Promise<Response> {
+  const named = `Object.defineProperty(window,${JSON.stringify(PARENTS_GLOBAL)},{value:Object.freeze(${JSON.stringify(parents).replaceAll("<", "\\u003c")})});`;
+  return new Response(`${named}\n${await loadOverlay()}`, {
     headers: {
       "content-type": "text/javascript",
       "cache-control": "no-store",

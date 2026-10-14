@@ -2,7 +2,11 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import type http from "node:http";
 import { join } from "node:path";
-import { BROWSER_HEADERS, crossSiteRefusal } from "@cawco/core/browser-gate";
+import {
+  BROWSER_HEADERS,
+  crossSiteRefusal,
+  PAGE_ORIGIN_HEADER,
+} from "@cawco/core/browser-gate";
 import adapter from "@sveltejs/adapter-node";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
@@ -123,6 +127,12 @@ const gateHubSocket = (proxy: {
     }
     for (const name of BROWSER_HEADERS) {
       proxyReq.removeHeader(name);
+    }
+    // The page's origin, which the gate read and found its own: where the
+    // hub's dashboard is reached, and its previews may be framed from.
+    proxyReq.removeHeader(PAGE_ORIGIN_HEADER);
+    if (req.headers.origin) {
+      proxyReq.setHeader(PAGE_ORIGIN_HEADER, req.headers.origin);
     }
   });
 };

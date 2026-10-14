@@ -132,6 +132,9 @@ function crossSiteRefusal(req) {
   return null;
 }
 
+/** What the relay tells the hub the page's origin was, once the gate passed it (core `PAGE_ORIGIN_HEADER`). */
+const PAGE_ORIGIN_HEADER = "x-cawco-page-origin";
+
 /** What a relay that passed the gate leaves out: the hub behind it is not the page's origin (core `BROWSER_HEADERS`). */
 const BROWSER_HEADERS = new Set([
   "origin",
@@ -393,12 +396,21 @@ server.on("upgrade", (req, socket, head) => {
       // header (the websocket key above all) is the browser's and is
       // forwarded untouched, because the hub's 101 is computed from it.
       const name = req.rawHeaders[i].toLowerCase();
-      if (name === "host" || BROWSER_HEADERS.has(name)) {
+      if (
+        name === "host" ||
+        name === PAGE_ORIGIN_HEADER ||
+        BROWSER_HEADERS.has(name)
+      ) {
         continue;
       }
       lines.push(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}`);
     }
     lines.push(`Host: ${target.host}`);
+    // The page's origin, which the gate read and found its own: where the
+    // hub's dashboard is reached, and its previews may be framed from.
+    if (req.headers.origin) {
+      lines.push(`${PAGE_ORIGIN_HEADER}: ${req.headers.origin}`);
+    }
     upstream.write(`${lines.join("\r\n")}\r\n\r\n`);
     if (head?.length) {
       upstream.write(head);
