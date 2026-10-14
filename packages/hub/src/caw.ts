@@ -328,6 +328,7 @@ export interface CawDeps {
     | "cawSpentSince"
     | "ingress"
     | "leadTurns"
+    | "listProjects"
     | "newestThread"
     | "project"
     | "projectSpend"
@@ -395,6 +396,13 @@ export interface CawDeps {
    * each wake carries, or nothing (jev-tasks.ts `triageFor`).
    */
   readonly triage: (projectId: string) => Promise<string | undefined>;
+  /**
+   * A session's turn ended (routines.ts `leadTurnEnded`): the lead runs whose
+   * wake it read and that it gave no result fail, `why` when it is not the
+   * plain end of a turn. `gone`, the project whose lead it was, when the
+   * session itself is over.
+   */
+  readonly turnEnded: (instanceId: string, why?: string, gone?: string) => void;
   /** Writes Caw's draft views, and answers the view tools he tries (views.ts). */
   readonly views: Pick<Views, "draft" | "query">;
 }
@@ -417,6 +425,7 @@ export const createCaw = ({
   stops,
   task,
   triage,
+  turnEnded,
   views,
 }: CawDeps) => {
   /**
@@ -891,6 +900,11 @@ export const createCaw = ({
   const retire = (project: ReturnType<typeof projectOf>): void => {
     if (project.leadInstanceId) {
       unfollow(project.leadInstanceId);
+      turnEnded(
+        project.leadInstanceId,
+        "Caw's session was replaced before he said how the run went",
+        project.id
+      );
       end(project.leadInstanceId);
     }
     db.setProjectCaw(project.id, { leadInstanceId: null });
@@ -1602,11 +1616,26 @@ export const createCaw = ({
       }
     },
 
-    /** A machine went away: the turns its leads were in are over, so no thread of theirs reads `working`. */
+    /**
+     * A machine went away: the turns its leads were in are over, so no
+     * thread of theirs reads `working`, and the routine runs they had fail.
+     */
     machineGone(machineId: string): void {
       for (const instanceId of [...turns.keys()]) {
         if (row(instanceId)?.machineId === machineId) {
           unfollow(instanceId);
+        }
+      }
+      for (const project of db.listProjects()) {
+        const lead = project.leadInstanceId
+          ? row(project.leadInstanceId)
+          : undefined;
+        if (lead?.machineId === machineId) {
+          turnEnded(
+            lead.id,
+            "Caw's machine went away before he said how the run went",
+            project.id
+          );
         }
       }
       // A turn cut as Caw was turned off, on a machine gone before the cut
@@ -1759,9 +1788,19 @@ export const createCaw = ({
       said(added.thread, added.message);
     },
 
-    /** A session's pulse: a lead's turn that a thread woke ends at its first idle after busy. */
+    /**
+     * A session's pulse: a lead's turn that a thread woke ends at its first
+     * idle after busy, and any idle ends the routine runs whose wake its turn
+     * read (routines.ts).
+     */
     pulse(instanceId: string, busy: boolean): void {
       if (!busy) {
+        turnEnded(
+          instanceId,
+          cut.has(instanceId)
+            ? "Caw was turned off before he said how the run went"
+            : undefined
+        );
         cutConfirmed(instanceId);
       }
       const turn = turns.get(instanceId);
@@ -1831,9 +1870,14 @@ export const createCaw = ({
       }
     },
 
-    /** A session's process ended: a lead's turn ends with it. */
+    /** A session's process ended: a lead's turn ends with it, and the routine runs it had. */
     sessionEnded(instanceId: string): void {
       unfollow(instanceId);
+      turnEnded(
+        instanceId,
+        "Caw's session ended before he said how the run went",
+        leadOf(row(instanceId))?.id
+      );
       cutConfirmed(instanceId);
     },
 

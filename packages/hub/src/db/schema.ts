@@ -2681,17 +2681,12 @@ export type RoutineRunState =
   | "skipped";
 
 /**
- * How a run ended: `silent` (its delegate said `NO_REPLY`), `delivered`
- * (its words became a notice), `failed` (`AUTOMATION_FAILED`, or the item
- * failed), `sent` (a lead routine's message reached Caw), `cancelled`
- * (someone stopped it).
+ * How a run ended, by its delegate's `finish_item` summary or Caw's
+ * `routine_result`: `silent` (`NO_REPLY`), `delivered` (its words became a
+ * notice), `failed` (`AUTOMATION_FAILED`, an item that failed, or Caw's turn
+ * ending without a result), `cancelled` (someone stopped it).
  */
-export type RoutineOutcome =
-  | "silent"
-  | "delivered"
-  | "failed"
-  | "sent"
-  | "cancelled";
+export type RoutineOutcome = "silent" | "delivered" | "failed" | "cancelled";
 
 /**
  * One run of a routine at one slot: a scheduled slot's time (ISO), `test:<created
@@ -2710,6 +2705,11 @@ export const routineRuns = sqliteTable(
     attempt: integer("attempt").notNull().default(1),
     state: text("state").$type<RoutineRunState>().notNull(),
     workItemId: text("work_item_id"),
+    /**
+     * A lead run's Caw session, once its harness read the run's wake: the
+     * turn that took it ends the run, with Caw's `routine_result` or failed.
+     */
+    leadInstanceId: text("lead_instance_id"),
     outcome: text("outcome").$type<RoutineOutcome>(),
     /** What its delegate said, when it said more than the contract's words. */
     output: text("output"),

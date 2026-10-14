@@ -153,6 +153,7 @@ export const measureRoles = (): RoleSize[] => {
         spawn: () => Promise.resolve(),
         task: () => Promise.reject(new Error("measuring")),
         triage: () => Promise.resolve(undefined),
+        turnEnded: () => undefined,
         views: {} as never,
       }).tools(actor),
     routineTools: (actor) =>

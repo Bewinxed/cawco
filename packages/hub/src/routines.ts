@@ -30,7 +30,10 @@
  *   anything else is delivered, as a note in the routine's own thread of
  *   its project (a push for a routine in no project).
  * - **Lead runs** note the slot in the routine's thread and wake Caw there
- *   (caw.ts `wake`), as any event does.
+ *   (caw.ts `wake`), as any event does, and run on. Caw answers with
+ *   `routine_result` under the same output contract, settled the same way.
+ *   The turn that read the wake (server.ts `takeRead`) ending without that
+ *   answer fails the run.
  * - **Event runs**: an inbound event a route sends here (ingress.ts) runs the
  *   routine once, slot `event:<event id>`, the event carried after the
  *   routine's prompt as untrusted data. An event is a delivery, never
@@ -51,6 +54,7 @@ import type {
   DelegateType,
   InstanceRow,
   LandsMode,
+  NeutralOrigin,
   SessionRole,
 } from "@cawco/core";
 import { LANDS_MODES } from "@cawco/core";
@@ -68,6 +72,7 @@ import { eventData } from "./ingress";
 import type { JevAccess } from "./jev";
 import { jevType, offLine } from "./jev-placement";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
+import { ROUTINE_ORIGIN } from "./memory";
 import type { Push } from "./push";
 import { BUDGET, LANDS } from "./tasks";
 import {
@@ -357,8 +362,18 @@ const runView = (run: RoutineRunRow): RoutineRunView => ({
   endedAt: ms(run.endedAt),
 });
 
+/** The output contract's three answers, as every run is told them. */
+const ANSWERS = `say exactly ${NO_REPLY} when there is nothing worth telling the owner, exactly ${AUTOMATION_FAILED} when the work could not be done (the hub retries once, then asks the owner), and anything else is shown to the owner as the result.`;
+
 /** What a delegate run is told about its output, after the routine's prompt. */
-const CONTRACT = `## Your answer\n\nWhen you are done, call finish_item. Its summary is this run's output, read by the hub: say exactly ${NO_REPLY} when there is nothing worth telling the owner, exactly ${AUTOMATION_FAILED} when the work could not be done (the hub retries once, then asks the owner), and anything else is shown to the owner as the result.`;
+const CONTRACT = `## Your answer\n\nWhen you are done, call finish_item. Its summary is this run's output, read by the hub: ${ANSWERS}`;
+
+/** What Caw is told about a lead run's output, after the routine's prompt. */
+const leadContract = (runId: string): string =>
+  `## Your answer\n\nWhen you are done, call routine_result with run "${runId}". Its result is this run's output, read by the hub: ${ANSWERS} Call it before your turn ends: a turn that ends without it fails the run.`;
+
+/** A lead run's end when Caw's turn that took its wake ends with no `routine_result`. */
+const NO_RESULT = "Caw ended its turn without saying how the run went";
 
 export const createRoutines = ({
   anyOnline,
@@ -405,6 +420,12 @@ export const createRoutines = ({
       : undefined;
   };
   const store = db.routines;
+  /**
+   * Sessions whose turn read a lead run's wake that has no result yet: the
+   * idle pulses worth a look ({@link leadTurnEnded}), read back from the
+   * runs as the hub starts.
+   */
+  const armed = new Set<string>();
   /** The scheduler's one timer. */
   let timer: HubTimer | undefined;
   let started = false;
@@ -735,7 +756,11 @@ export const createRoutines = ({
     );
   };
 
-  /** A lead run: the slot noted in the routine's thread, and Caw woken there. */
+  /**
+   * A lead run: the slot noted in the routine's thread, and Caw woken there.
+   * It runs until Caw's `routine_result` for it, or until the turn that took
+   * its wake ends without one ({@link leadTurnEnded}).
+   */
   const fireLead = async (
     routine: RoutineRow,
     run: RoutineRunRow
@@ -754,18 +779,17 @@ export const createRoutines = ({
       by: "event",
       routine: routine.id,
       threadId,
-      text: `Routine “${routine.name}” (routine ${routine.id}), its ${label} run. Its prompt:\n\n${routine.prompt}${inputOf(run)}\n\nHandle it now. Tell the person in thread ${threadId} with thread_reply only when there is something they should hear.`,
+      text: `Routine “${routine.name}” (routine ${routine.id}), its ${label} run${run.attempt > 1 ? ` (attempt ${run.attempt}: the last one failed)` : ""}. Its prompt:\n\n${routine.prompt}${inputOf(run)}\n\nHandle it now.\n\n${leadContract(run.id)}`,
     });
-    store.setRun(
-      run.id,
-      woke
-        ? { state: "ended", outcome: "sent", endedAt: new Date() }
-        : {
-            state: "skipped",
-            reason: projectGate(routine) ?? CAW_OFF,
-            endedAt: new Date(),
-          }
-    );
+    if (woke) {
+      store.setRun(run.id, { state: "running" });
+      return;
+    }
+    store.setRun(run.id, {
+      state: "skipped",
+      reason: projectGate(routine) ?? CAW_OFF,
+      endedAt: new Date(),
+    });
     drain(routine.id);
   };
 
@@ -942,6 +966,33 @@ export const createRoutines = ({
       );
   };
 
+  /**
+   * A run's answer under the output contract, a delegate's `finish_item`
+   * summary or Caw's `routine_result`: exactly {@link NO_REPLY} is silent,
+   * exactly {@link AUTOMATION_FAILED} failed, anything else delivered.
+   */
+  const resultOf = (
+    words: string,
+    who: string
+  ): {
+    outcome: RoutineOutcome;
+    output: string | null;
+    reason: string | null;
+  } => {
+    const said = words.trim();
+    if (said === NO_REPLY) {
+      return { outcome: "silent", output: null, reason: null };
+    }
+    if (said === AUTOMATION_FAILED) {
+      return {
+        outcome: "failed",
+        output: null,
+        reason: `${who} answered ${AUTOMATION_FAILED}`,
+      };
+    }
+    return { outcome: "delivered", output: said, reason: null };
+  };
+
   /** What a run's ended work item says, under the output contract. */
   const outcomeOf = (
     item: WorkItemRow
@@ -961,18 +1012,112 @@ export const createRoutines = ({
         reason: why?.trim() || "its work item failed",
       };
     }
-    const said = (item.summary ?? "").trim();
-    if (said === NO_REPLY) {
-      return { outcome: "silent", output: null, reason: null };
+    return resultOf(item.summary ?? "", "its delegate");
+  };
+
+  /**
+   * A lead run's wake, read by Caw's harness (server.ts `takeRead`, the send's
+   * origin `routine:<id>`): the run is that session's turn's, and the end of
+   * the turn ends it. A routine has one run going at a time, so the routine
+   * names it.
+   */
+  const leadRead = (
+    instanceId: string,
+    origin: NeutralOrigin | undefined
+  ): void => {
+    const routineId =
+      origin?.kind === "system" && origin.name?.startsWith(ROUTINE_ORIGIN)
+        ? origin.name.slice(ROUTINE_ORIGIN.length)
+        : undefined;
+    const run = routineId
+      ? store
+          .liveRuns()
+          .find(
+            (each) =>
+              each.routineId === routineId &&
+              each.state === "running" &&
+              each.workItemId === null &&
+              each.leadInstanceId === null
+          )
+      : undefined;
+    if (run) {
+      store.setRun(run.id, { leadInstanceId: instanceId });
+      armed.add(instanceId);
     }
-    if (said === AUTOMATION_FAILED) {
-      return {
-        outcome: "failed",
-        output: null,
-        reason: `its delegate answered ${AUTOMATION_FAILED}`,
-      };
+  };
+
+  /**
+   * Caw's turn in `instanceId` ended (caw.ts: its idle pulse, his session
+   * ending, his machine going, his turn cut as he was turned off): every
+   * lead run whose wake that turn read and that has no `routine_result`
+   * fails, `why`, each through {@link settle} (retried once, then you).
+   * `gone`, the project whose lead session it was when the session itself
+   * is over: its runs whose wake was not read yet fail too, as no session
+   * will read it.
+   */
+  const leadTurnEnded = (
+    instanceId: string,
+    why: string = NO_RESULT,
+    gone?: string
+  ): void => {
+    if (!(armed.delete(instanceId) || gone)) {
+      return;
     }
-    return { outcome: "delivered", output: said, reason: null };
+    const unread = (run: RoutineRunRow): boolean =>
+      gone !== undefined &&
+      run.leadInstanceId === null &&
+      run.workItemId === null &&
+      store.get(run.routineId)?.projectId === gone &&
+      store.get(run.routineId)?.target === "lead";
+    for (const run of store.liveRuns()) {
+      if (
+        run.state === "running" &&
+        (run.leadInstanceId === instanceId || unread(run))
+      ) {
+        settle(
+          run.id,
+          { outcome: "failed", output: null, reason: why, usd: null },
+          instanceId
+        );
+      }
+    }
+  };
+
+  /**
+   * Caw's answer for a lead run (`routine_result`): settled as a delegate's
+   * summary is. Refused for a run that is not his project's, not a lead
+   * run, or not going.
+   */
+  const leadResult = (
+    actor: InstanceRow,
+    runId: string,
+    result: string
+  ): RoutineRunView => {
+    const run = store.run(runId);
+    const routine = run ? store.get(run.routineId) : undefined;
+    if (!(run && routine) || routine.projectId !== (actor.projectId ?? null)) {
+      return refuse(
+        404,
+        `Run ${runId} is not a run of this project's routines.`
+      );
+    }
+    if (routine.target !== "lead") {
+      return refuse(
+        409,
+        `Run ${runId} is a delegate run: its delegate answers with finish_item.`
+      );
+    }
+    if (run.state === "ended" || run.state === "skipped") {
+      return refuse(
+        409,
+        `Run ${runId} has already ended ${run.outcome ?? run.state}.`
+      );
+    }
+    if (run.state !== "running") {
+      return refuse(409, `Run ${runId} has not reached you yet.`);
+    }
+    settle(run.id, { ...resultOf(result, "Caw"), usd: null }, actor.id);
+    return runView(store.run(run.id) ?? run);
   };
 
   /** A routine's run's work item ended: the run settles. */
@@ -1098,26 +1243,41 @@ export const createRoutines = ({
   };
 
   /**
-   * Hub start: runs a stopped hub left live are settled from their work
-   * items (one left starting cannot say whether its work began, so it ends
-   * failed without a retry), then one look, which is the catch-up; then
-   * event runs a stopped hub left waiting start, in order, where nothing runs.
+   * A run a stopped hub left live: a lead run Caw has stays, for his
+   * session's next idle or its end to settle; a delegate run settles from its
+   * work item; one left starting cannot say whether its work began, so it
+   * ends failed without a retry.
+   */
+  const resume = (run: RoutineRunRow): void => {
+    if (run.state === "running" && run.workItemId === null) {
+      if (run.leadInstanceId) {
+        armed.add(run.leadInstanceId);
+      }
+      return;
+    }
+    const item = run.workItemId ? db.workItem(run.workItemId) : undefined;
+    if (run.state === "starting" || !item) {
+      store.setRun(run.id, {
+        state: "ended",
+        outcome: "failed",
+        reason: "the hub stopped while it was starting",
+        endedAt: new Date(),
+      });
+      return;
+    }
+    if (!["starting", "running"].includes(item.state)) {
+      itemEnded(item);
+    }
+  };
+
+  /**
+   * Hub start: runs a stopped hub left live are resumed ({@link resume}),
+   * then one look, which is the catch-up; then event runs a stopped hub left
+   * waiting start, in order, where nothing runs.
    */
   const start = (): void => {
     for (const run of store.liveRuns()) {
-      const item = run.workItemId ? db.workItem(run.workItemId) : undefined;
-      if (run.state === "starting" || !item) {
-        store.setRun(run.id, {
-          state: "ended",
-          outcome: "failed",
-          reason: "the hub stopped while it was starting",
-          endedAt: new Date(),
-        });
-        continue;
-      }
-      if (!["starting", "running"].includes(item.state)) {
-        itemEnded(item);
-      }
+      resume(run);
     }
     started = true;
     tick();
@@ -1433,6 +1593,19 @@ export const createRoutines = ({
         { id: routineRef() },
         ({ id }) => Promise.resolve(ok(runNow(id, me())))
       ),
+      tool(
+        "routine_result",
+        `Say how a routine's run that woke you went, before your turn ends (a turn that ends without it fails the run): exactly ${NO_REPLY} is silent, exactly ${AUTOMATION_FAILED} retries once then asks the owner, anything else is noted in the routine's thread as the result. One call per run.`,
+        {
+          run: z
+            .string()
+            .trim()
+            .min(1)
+            .describe("The run's id, from the message that woke you."),
+          result: z.string().describe("The run's output."),
+        },
+        ({ run, result }) => Promise.resolve(ok(leadResult(me(), run, result)))
+      ),
     ];
   };
 
@@ -1442,6 +1615,8 @@ export const createRoutines = ({
     get,
     inboxPassed,
     itemEnded,
+    leadRead,
+    leadTurnEnded,
     list,
     remove,
     runForEvent,
@@ -1462,6 +1637,7 @@ export const ROUTINE_TOOLS: ReadonlySet<string> = new Set([
   "routine_update",
   "routine_delete",
   "routine_run_now",
+  "routine_result",
 ]);
 
 /** A refusal as the route's answer. */

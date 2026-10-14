@@ -80,6 +80,9 @@ export const CAW_TOOLS = [
   "folder_write",
 ] as const;
 
+/** How a routine's run that woke Caw went (routines.ts), the lead's alone. */
+const LEAD_OWN = ["routine_result"] as const;
+
 /** Fleet watch's triage decision (fleet-watch.ts), the overseer's alone. */
 export const TRIAGE_TOOLS = ["triage_decide"] as const;
 
@@ -175,6 +178,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     // Decision pages: Caw builds them from his folder's decisions/<name>/page.html.
     ...ARTIFACT_TOOLS,
     ...ROUTINE,
+    ...LEAD_OWN,
     ...INGRESS,
     ...ACTION,
     ...RELAY,
@@ -210,6 +214,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
  */
 const NOT_THE_WORKERS: ReadonlySet<string> = new Set([
   ...CAW_TOOLS,
+  ...LEAD_OWN,
   ...CURATOR_OWN,
   "memory_propose",
   ...TRIAGE_TOOLS,

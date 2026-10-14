@@ -4567,8 +4567,10 @@ export const createServer = (
       if (!isKeepAlive(row.body)) {
         db.updateKeepAlive(instanceId, { keepAliveTurn: null });
       }
-      // A routine's wake of a lead: the turn it joins is that run's (memory.ts).
+      // A routine's wake of a lead: the turn it joins is that run's (memory.ts),
+      // and its end ends the run (routines.ts).
       memoryWatch.read(instanceId, row.body?.origin);
+      routines.leadRead(instanceId, row.body?.origin);
       readSend(row, true);
     }
     const latest = Math.max(
@@ -14461,6 +14463,9 @@ export const createServer = (
       endSession(instanceId, "stop", { kind: "session", name: "Caw" }),
     task: (projectId, id) => tasks.get(projectId, id),
     triage: (projectId) => jevTasks.triageFor(projectId),
+    // The routines are made further down; a turn ends only once the hub is up.
+    turnEnded: (instanceId, why, gone) =>
+      routines.leadTurnEnded(instanceId, why, gone),
     views,
   });
   lead = caw;

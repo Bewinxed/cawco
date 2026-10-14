@@ -42505,7 +42505,6 @@
           "cancelled",
           "delivered",
           "failed",
-          "sent",
           "silent"
         ]
       },
