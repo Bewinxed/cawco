@@ -1100,7 +1100,9 @@ public final class HubConnection {
             if let hubBuild { fleet.hubBuild = hubBuild }
             fleet.continuations = board.continuations
             fleet.moves = board.moves
-            fleet.adopt(noticesSeen: board.noticesSeen)
+            // A damaged notices record on the hub: notices stay off, and the
+            // empty list beside it is not a record of anything.
+            if board.noticesDamaged == nil { fleet.adopt(noticesSeen: board.noticesSeen) }
             adopt(machines: board.agents)
             fleet.adopt(rows: board.instances)
             previews.reconcile(board.previews)

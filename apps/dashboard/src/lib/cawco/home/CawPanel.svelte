@@ -19,6 +19,7 @@
    * where its acts land is its `feed` (caw-feed): NeedsCaw's live fleet, or
    * the dev bench's fixture (/motion/caw-notices).
    */
+  import { damagedHubRecordWords } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconNeedsYou, IconNotices } from "#lib/icons.js";
   import RebalanceNotices from "../accounts/RebalanceNotices.svelte";
@@ -84,10 +85,27 @@
    */
   let reloading = $state(false);
   const updateShown = $derived(updated !== null || reloading);
-  /** The notices standing: the update, and each moved login and rebalance. */
+  /** The hub's notices record is damaged: one row says so, with Reset. */
+  const damaged = $derived(feed.noticesDamaged);
+  /** The notices standing: the update, each moved login and rebalance, or the damaged record. */
   const noticeCount = $derived(
-    (updateShown ? 1 : 0) + moved.length + rebalanced.length
+    (updateShown ? 1 : 0) + moved.length + rebalanced.length + (damaged ? 1 : 0)
   );
+
+  let resetting = $state(false);
+  let resetProblem = $state<string | null>(null);
+  /** Reset: the row goes once the hub's board says the record is whole again. */
+  async function reset(): Promise<void> {
+    resetting = true;
+    resetProblem = null;
+    try {
+      await feed.resetNotices();
+    } catch (error) {
+      resetProblem = error instanceof Error ? error.message : String(error);
+    } finally {
+      resetting = false;
+    }
+  }
   /** Every notice but a goodbye has an id to acknowledge. */
   const clearable = $derived(
     updated !== null || moved.length > 0 || rebalanced.length > 0
@@ -168,6 +186,25 @@
         {/if}
       </div>
       <ul class="rows notices">
+        {#if damaged}
+          <li class="damaged" data-flip>
+            <p class="words" role="alert">
+              {damagedHubRecordWords("notices", damaged)}
+            </p>
+            <Button
+              failed={resetProblem !== null}
+              label="Reset"
+              onclick={reset}
+              pending={resetting}
+              pendingLabel="Resetting…"
+              size="xs"
+              variant="secondary"
+            />
+            {#if resetProblem}
+              <p class="problem">{resetProblem}</p>
+            {/if}
+          </li>
+        {/if}
         {#if updateShown}
           <li data-flip>
             <UpdateCard
@@ -336,6 +373,27 @@
   /* Notices part with a hairline, as rows of one list do. */
   .notices > li + li {
     border-block-start: 1px solid var(--border-hairline);
+  }
+  /* The damaged record: its words on the rows' text column, Reset at the
+     panel's one trailing edge, the hub's refusal under them. */
+  .damaged {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: start;
+    gap: var(--space-1) var(--space-2);
+    padding: var(--space-2) var(--space-3) var(--space-2)
+      calc(var(--space-3) + 28px + var(--space-3));
+  }
+  .damaged .words {
+    margin: 0;
+    font: var(--type-meta);
+    color: var(--status-fail-ink);
+  }
+  .damaged .problem {
+    grid-column: 1 / -1;
+    margin: 0;
+    font: var(--type-meta);
+    color: var(--ink-muted);
   }
   .empty {
     display: grid;

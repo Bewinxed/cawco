@@ -315,6 +315,8 @@
       return moved;
     },
     rebalanced: [],
+    noticesDamaged: null,
+    resetNotices: () => Promise.resolve(),
     acknowledge(ids) {
       moved = moved.filter((one) => !ids.includes(one.id));
     },

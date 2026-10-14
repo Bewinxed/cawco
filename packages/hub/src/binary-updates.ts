@@ -8,6 +8,7 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { type DamagedHubRecord, damagedHubRecordWords } from "@cawco/core";
 import {
   assetBase,
   discoverRelease,
@@ -27,7 +28,12 @@ import type {
   BinaryUpdateState,
   ChannelRelease,
 } from "@cawco/core/binary-updates";
-import { readRecordSync, writeStateFileSync } from "@cawco/core/state-file";
+import {
+  DamagedRecord,
+  isDamagedRecord,
+  readRecordSync,
+  writeStateFileSync,
+} from "@cawco/core/state-file";
 import { Elysia, t } from "elysia";
 import { hidden } from "./hidden";
 import { fenceHub, hubRestartReadiness } from "./restart-holds";
@@ -81,26 +87,81 @@ async function runningRelease(): Promise<LocatedRelease> {
   };
 }
 
+/** The policy a hub with no record yet starts with, and the one Reset writes. */
+const FIRST_POLICY: BinaryUpdatePolicy = {
+  channel: "stable",
+  autoUpdate: false,
+};
+
+const isPolicy = (value: unknown): value is BinaryUpdatePolicy => {
+  const { channel, autoUpdate } = (value ?? {}) as Record<string, unknown>;
+  return (
+    (channel === "stable" || channel === "nightly") &&
+    typeof autoUpdate === "boolean"
+  );
+};
+
+/**
+ * The policy at `path`: the first one on a hub with none yet, or what is
+ * wrong with it. A damaged record does not stop the hub: updates are off,
+ * every route that needs the policy says why (409), and nothing reads the
+ * damaged file as the first policy. Reset writes a fresh one.
+ */
+const loadPolicy = (
+  path: string
+): { policy: BinaryUpdatePolicy } | { damaged: DamagedHubRecord } => {
+  try {
+    const kept = readRecordSync<unknown>(path);
+    if (kept === undefined) {
+      return { policy: FIRST_POLICY };
+    }
+    if (!isPolicy(kept)) {
+      throw new DamagedRecord(path, "it is not an update policy");
+    }
+    return { policy: { channel: kept.channel, autoUpdate: kept.autoUpdate } };
+  } catch (error) {
+    if (!isDamagedRecord(error)) {
+      throw error;
+    }
+    const damaged = { file: error.file, reason: error.reason };
+    console.warn(
+      `[updates] ${damagedHubRecordWords("update policy", damaged)}`
+    );
+    return { damaged };
+  }
+};
+
 export function createBinaryUpdates(options: Options) {
   const root = join(dirname(options.dbPath), "binary-releases");
   const policyPath = join(root, "policy.json");
-  let policy: BinaryUpdatePolicy = readRecordSync<BinaryUpdatePolicy>(
-    policyPath
-  ) ?? { channel: "stable", autoUpdate: false };
+  let held = loadPolicy(policyPath);
   let current: { at: number; release: LocatedRelease } | undefined;
   let checking: Promise<LocatedRelease> | undefined;
 
-  const savePolicy = () => {
+  /** What a route that needs the policy answers while its record is damaged. */
+  const refused = (): string =>
+    "damaged" in held
+      ? damagedHubRecordWords("update policy", held.damaged)
+      : "The update policy reads whole.";
+  /** The policy; only routes that refused a damaged record first reach this. */
+  const policyNow = (): BinaryUpdatePolicy => {
+    if ("damaged" in held) {
+      throw new Error(refused());
+    }
+    return held.policy;
+  };
+  const savePolicy = (policy: BinaryUpdatePolicy) => {
     mkdirSync(root, { recursive: true, mode: 0o700 });
     writeStateFileSync(policyPath, `${JSON.stringify(policy)}\n`, {
       mode: 0o600,
     });
+    held = { policy };
   };
   const discover = (): Promise<LocatedRelease> => {
     checking ??= (async () => {
       const installation = await readInstallation();
       const release = await discoverRelease(
-        policy.channel,
+        policyNow().channel,
         installation?.releaseHost
       );
       current = { at: Date.now(), release };
@@ -167,8 +228,22 @@ export function createBinaryUpdates(options: Options) {
       ? current.release
       : await discover();
 
+  /** A new policy, written whole, and every online machine told. */
+  const adopt = async (policy: BinaryUpdatePolicy) => {
+    current = undefined;
+    savePolicy(policy);
+    await Promise.all(
+      options.online().map((id) => options.configure(id, policy))
+    );
+    return policy;
+  };
+
+  // A damaged policy record: every route that needs the policy answers 409
+  // with its words (`refused`), and Reset is the way out.
   const routes = new Elysia()
-    .get("/api/binary-updates/settings", () => policy)
+    .get("/api/binary-updates/settings", ({ status }) =>
+      "damaged" in held ? status(409, refused()) : held.policy
+    )
     .put(
       "/api/binary-updates/settings",
       {
@@ -177,20 +252,29 @@ export function createBinaryUpdates(options: Options) {
           autoUpdate: t.Boolean(),
         }),
       },
-      async ({ body }) => {
-        policy = body;
-        current = undefined;
-        savePolicy();
-        await Promise.all(
-          options.online().map((id) => options.configure(id, policy))
-        );
-        return policy;
-      }
+      ({ body, status }) =>
+        "damaged" in held ? status(409, refused()) : adopt(body)
     )
+    // Reset: the one way out of a damaged policy record. A fresh record (the
+    // policy a new hub starts with) written whole, every online machine told,
+    // and updates on again. Refused while the record reads whole.
+    .post("/api/binary-updates/settings/reset", ({ status }) => {
+      if (!("damaged" in held)) {
+        return status(
+          409,
+          "The update policy record reads whole, so there is nothing to reset."
+        );
+      }
+      console.info(`[updates] ${held.damaged.file} reset: updates are on`);
+      return adopt(FIRST_POLICY);
+    })
     .get("/api/binary-updates/machines", () => ({
       machines: Object.fromEntries(options.states()),
     }))
-    .post("/api/binary-updates/check", async () => {
+    .post("/api/binary-updates/check", async ({ status }) => {
+      if ("damaged" in held) {
+        return status(409, refused());
+      }
       const found = await discover();
       return {
         version: found.manifest.version,
@@ -243,7 +327,10 @@ export function createBinaryUpdates(options: Options) {
     })
     // What the hub's own machine considers: the channel's newest, and the
     // database's schema, so it never installs a build older than its data.
-    .get("/api/binary-updates/latest", async () => {
+    .get("/api/binary-updates/latest", async ({ status }) => {
+      if ("damaged" in held) {
+        return status(409, refused());
+      }
       const found = await newest();
       return {
         manifest: found.manifest,
@@ -274,5 +361,5 @@ export function createBinaryUpdates(options: Options) {
         return status(404, "This build is not one the hub offers");
       }
     );
-  return { routes, policy: () => policy };
+  return { routes };
 }

@@ -143,6 +143,12 @@ export interface InstancesFrame {
   kind: "instances";
   /** Every project move the hub is carrying; each change after this arrives on the `moves` frame. */
   moves: MoveJob[];
+  /**
+   * The hub's notices record, when it found it damaged at start: notices
+   * are off and `noticesSeen` is not a record of anything until it is reset
+   * (hub notices.ts). Null when the record reads whole.
+   */
+  noticesDamaged?: import("./index").DamagedHubRecord | null;
   /** The notice ids a person acknowledged, on any tab or device (hub notices.ts). */
   noticesSeen: string[];
   previews?: PreviewFrame[];
@@ -157,6 +163,8 @@ export interface InstancesDeltaFrame {
   handoffs?: Record<string, { from: string; at: number }>;
   /** Hub-originated: only changed rows and metadata; pulses travel separately. */
   kind: "instances_delta";
+  /** Present when it moved: the damaged notices record, or null once it is reset. */
+  noticesDamaged?: import("./index").DamagedHubRecord | null;
   noticesSeen?: string[];
   previews?: PreviewFrame[];
   removed: string[];

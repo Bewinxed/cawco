@@ -446,6 +446,26 @@ export const damagedWords = (damaged: DamagedRow): string =>
     : `This session's record is damaged: ${damaged.file} (${damaged.reason}). Its wake-ups are not known until its next turn ends, which writes the record whole again. Stop the session to remove it.`;
 
 /**
+ * A record of the hub's own that it read at start and found damaged: the
+ * feature it belongs to is off until the person resets it (hub
+ * `notices.ts`, `binary-updates.ts`). Nothing reads it as empty meanwhile.
+ */
+export interface DamagedHubRecord {
+  file: string;
+  reason: string;
+}
+
+/** The hub features whose one record can be damaged and reset, by what the person calls them. */
+export type HubRecordFeature = "notices" | "update policy";
+
+/** What a damaged hub record says to the person, and its way out (WORDS.md's error formula). */
+export const damagedHubRecordWords = (
+  feature: HubRecordFeature,
+  damaged: DamagedHubRecord
+): string =>
+  `This hub's ${feature} record is damaged: ${damaged.file} (${damaged.reason}). ${feature === "notices" ? "Notices are off" : "Updates are off"} until you reset it; Reset writes a fresh record.`;
+
+/**
  * `heartbeat`: the daemon's 15s pulse. `instances` is the supervisor's live
  * instance-id list (`SessionSupervisor.instanceIds`), sent on every beat so the
  * hub can reconcile session truth continuously rather than only at `register` —

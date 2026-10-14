@@ -11779,6 +11779,8 @@ export const createServer = (
     // Carried on every publish too: a notice acknowledged on one device
     // leaves every other one live, and is never shown after a reload.
     noticesSeen: noticesSeen.ids(),
+    // A damaged record says so, and notices are off until it is reset.
+    noticesDamaged: noticesSeen.damaged(),
     // `hubBuild` lets a client tell a hub that is
     // behind from a machine that is. `protocol` is the wire this hub speaks:
     // a page built for an older one reloads itself on its first frame.
@@ -11838,9 +11840,15 @@ export const createServer = (
     publishedExtras.agents.map((row) => [row.machineId, JSON.stringify(row)])
   );
   const publishedMetadata = new Map(
-    (["previews", "handoffs", "continuations", "noticesSeen"] as const).map(
-      (key) => [key, JSON.stringify(publishedExtras[key])]
-    )
+    (
+      [
+        "previews",
+        "handoffs",
+        "continuations",
+        "noticesSeen",
+        "noticesDamaged",
+      ] as const
+    ).map((key) => [key, JSON.stringify(publishedExtras[key])])
   );
 
   const pendingInstancePublishes = new Set<string>();
@@ -11954,6 +11962,7 @@ export const createServer = (
       "handoffs",
       "continuations",
       "noticesSeen",
+      "noticesDamaged",
     ] as const) {
       const serialised = JSON.stringify(extras[key]);
       if (publishedMetadata.get(key) !== serialised) {

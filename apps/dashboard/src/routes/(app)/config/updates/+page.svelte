@@ -134,9 +134,41 @@
     // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
     void updates.loadChannels();
   });
+
+  /** Reset of a damaged policy record: pending until the hub answers, failed with its words. */
+  let resetting = $state(false);
+  let resetFailed = $state(false);
+  async function resetPolicy() {
+    resetting = true;
+    resetFailed = false;
+    try {
+      await updates.resetPolicy();
+    } catch (error) {
+      resetFailed = true;
+      updates.problem = error instanceof Error ? error.message : String(error);
+    } finally {
+      resetting = false;
+    }
+  }
 </script>
 
+{#snippet resetAction(
+  _down: string | null
+)}
+  {#if updates.damaged}
+    <Button
+      failed={resetFailed}
+      label="Reset"
+      onclick={resetPolicy}
+      pending={resetting}
+      pendingLabel="Resetting…"
+      size="sm"
+    />
+  {/if}
+{/snippet}
+
 <SectionFrame
+  actions={resetAction}
   problem={ready ? null : updates.problem}
   purpose={section.purpose}
   {ready}

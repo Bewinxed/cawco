@@ -2756,6 +2756,10 @@ function handleFrame(frame: FramePayload): void {
     if (frame.noticesSeen) {
       notices.adopt(frame.noticesSeen);
     }
+    // The hub's notices record damaged (notices off), or whole again once reset.
+    if (frame.noticesDamaged !== undefined) {
+      notices.adoptDamaged(frame.noticesDamaged);
+    }
     if (frame.kind === "instances") {
       adoptInstances(frame.instances);
       state.liveRead = true;

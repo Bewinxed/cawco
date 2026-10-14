@@ -5,13 +5,22 @@
  * (`noticesSeen`), so a notice acknowledged anywhere leaves this tab live and
  * is never shown after a reload. Nothing here is kept in the tab.
  */
+import type { DamagedHubRecord } from "@cawco/core";
 import { SvelteSet } from "svelte/reactivity";
 
 class Notices {
   /** Notice ids acknowledged anywhere, plus this tab's own on their way to the hub. */
   seen = new SvelteSet<string>();
-  /** The hub's record has arrived: until then no notice can know it was seen. */
+  /**
+   * The hub's record has arrived whole: until then no notice can know it
+   * was seen, so none is shown.
+   */
   known = $state(false);
+  /**
+   * The hub found its record damaged as it started (`noticesDamaged`):
+   * notices are off, and Caw's panel says so with Reset, until it is reset.
+   */
+  damaged = $state<DamagedHubRecord | null>(null);
 
   /**
    * Takes the hub's record. The hub only ever adds to it, so what this tab
@@ -21,7 +30,27 @@ class Notices {
     for (const id of ids) {
       this.seen.add(id);
     }
-    this.known = true;
+    this.known = this.damaged === null;
+  }
+
+  /** The hub's word on its record: damaged (notices off), or whole again once reset. */
+  adoptDamaged(damaged: DamagedHubRecord | null): void {
+    this.damaged = damaged;
+    this.known = damaged === null;
+  }
+
+  /**
+   * Reset: the hub writes a fresh record and notices come back on; the board
+   * frame that follows says so. The hub's refusal is the error.
+   */
+  async reset(): Promise<void> {
+    const response = await fetch("/api/notices/reset", { method: "POST" });
+    if (!response.ok) {
+      throw new Error(
+        (await response.text()) ||
+          `The hub answered ${response.status}, so the notices record was not reset. Try again.`
+      );
+    }
   }
 
   /**

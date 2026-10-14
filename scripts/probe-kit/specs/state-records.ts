@@ -4,29 +4,41 @@
  * and sessiond; Claude Code against the mock model), boundaries included:
  * run it where a workspace boundary can start (not inside another one).
  *
- * Two delegates cut workspaces A and B. Then everything stops as a crash
- * stops it (sessiond and its sessions killed, the agent killed), and A's
- * `create.json` and `accounts.json` and one session's wake-ups record are
- * zeroed (NUL bytes of their own length, as obelisk's reset left them on
- * 2026-10-14). The machine starts again:
+ * Two delegates cut workspaces A and B; a third session, Quiet, is stopped;
+ * a notice is acknowledged, so the hub keeps its notices record. Then
+ * everything stops as a crash stops it (sessiond and its sessions killed,
+ * the agent and the hub killed), and A's `create.json` and `accounts.json`,
+ * Quiet's wake-ups record and the hub's `notices-seen.json` are zeroed (NUL
+ * bytes of their own length, as obelisk's reset left them on 2026-10-14).
+ * The machine starts again:
  *
- * (a) The agent's start-up sweep names each damaged file in its log.
+ * (a) The agent's start-up sweep names each damaged file of its own.
  * (b) A's session row says it is damaged, naming a file of A's, with
- *     archive as the way out; the session whose wake-ups were zeroed says
- *     so with that file, the way out being to stop it.
+ *     archive as the way out; Quiet's row names its zeroed wake-ups, the
+ *     way out being to stop it.
  * (c) Other sessions still spawn: a plain session, and a new delegate in a
  *     new workspace C (both read every workspace's records on the way).
  * (d) B's records and clone are as they were, and its row says nothing.
  * (e) Archiving A (its session stopped first, so its item is not live)
  *     removes its state dir and clone, and its row stops saying it.
+ * (f) The hub started with its notices record damaged: the board says so
+ *     with the file, an acknowledgement is refused with the same words,
+ *     Reset writes a fresh record (a list again) and the board's word
+ *     clears, and acknowledging works again.
+ * (g) Wake-ups: a live session's record outlives an agent restart that
+ *     reattaches to it; Quiet's stale record is gone once a fresh process
+ *     is started for it, and its row stops saying it.
  *
  *   bun scripts/probe-kit/run.ts state-records
  */
 import { existsSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { DamagedRow } from "../../../packages/core/src/index";
-import { MACHINE, type Reply, until } from "../../scratch-fleet";
+import type {
+  DamagedHubRecord,
+  DamagedRow,
+} from "../../../packages/core/src/index";
+import { MACHINE, MODEL, type Reply, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
@@ -38,12 +50,41 @@ interface Row {
   status: string;
 }
 
+interface Board {
+  kind: string;
+  noticesDamaged?: DamagedHubRecord | null;
+  noticesSeen: string[];
+}
+
 /** Zeroes `file` as a crash leaves it: NUL bytes, as many as it held. */
 const zero = async (file: string): Promise<number> => {
   const size = Math.max((await stat(file)).size, 1);
   await writeFile(file, Buffer.alloc(size));
   return size;
 };
+
+/** The board a dashboard is handed as its socket opens. */
+const board = (base: string): Promise<Board> =>
+  new Promise((done, fail) => {
+    const socket = new WebSocket(`${base.replace("http", "ws")}/ws/dashboard`);
+    const timer = setTimeout(() => {
+      socket.close();
+      fail(new Error("no board within 20s"));
+    }, 20_000);
+    socket.onmessage = (event) => {
+      try {
+        const frame = JSON.parse(String(event.data)) as Board;
+        if (frame.kind === "instances") {
+          clearTimeout(timer);
+          socket.close();
+          done(frame);
+        }
+      } catch {
+        // A frame in parts: not the board's first.
+      }
+    };
+    socket.onerror = () => fail(new Error("the dashboard socket failed"));
+  });
 
 const delegate = async (
   fleet: KitFleet,
@@ -72,6 +113,76 @@ const delegate = async (
   return started;
 };
 
+/** A POST whose refusal is an answer too: its status and text. */
+const posted = async (
+  base: string,
+  path: string,
+  body?: unknown
+): Promise<{ status: number; text: string }> => {
+  const response = await fetch(`${base}${path}`, {
+    method: "POST",
+    ...(body === undefined
+      ? {}
+      : {
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+  });
+  return { status: response.status, text: await response.text() };
+};
+
+/** (f) The hub's notices record, damaged at its start: said, refused, Reset, whole again. */
+const noticesPhase = async (
+  kit: Kit,
+  base: string,
+  noticesFile: string
+): Promise<void> => {
+  const { check } = kit;
+  const damagedBoard = await board(base);
+  check(
+    "(f) the board says the notices record is damaged, naming its file",
+    damagedBoard.noticesDamaged?.file === noticesFile,
+    JSON.stringify(damagedBoard.noticesDamaged)
+  );
+  const refusedAck = await posted(base, "/api/notices/seen", {
+    ids: ["probe:while-damaged"],
+  });
+  check(
+    "(f) an acknowledgement is refused, saying the record is damaged",
+    refusedAck.status === 409 &&
+      refusedAck.text.startsWith(
+        `This hub's notices record is damaged: ${noticesFile}`
+      ),
+    `${refusedAck.status} ${refusedAck.text}`
+  );
+  const reset = await posted(base, "/api/notices/reset");
+  check(
+    "(f) Reset answers with a fresh record",
+    reset.status === 200 && reset.text === JSON.stringify({ seen: [] }),
+    `${reset.status} ${reset.text}`
+  );
+  const written = await readFile(noticesFile, "utf8");
+  check(
+    "(f) the record on disk is a whole list again",
+    JSON.stringify(JSON.parse(written)) === "[]",
+    JSON.stringify(written)
+  );
+  const healedBoard = await board(base);
+  check(
+    "(f) the board's word on the damage clears",
+    healedBoard.noticesDamaged === null,
+    JSON.stringify(healedBoard.noticesDamaged)
+  );
+  const ack = await posted(base, "/api/notices/seen", {
+    ids: ["probe:after-reset"],
+  });
+  check(
+    "(f) acknowledging works again",
+    ack.status === 200 && ack.text.includes("probe:after-reset"),
+    `${ack.status} ${ack.text}`
+  );
+};
+
 const spec: Spec = {
   name: "state-records",
   run: async (kit: Kit) => {
@@ -86,6 +197,10 @@ const spec: Spec = {
       "cawco",
       "session-wakeups"
     );
+    const noticesFile = join(fleet.sandbox, "hub", "notices-seen.json");
+    const rows = () => fleet.api<Row[]>("/api/instances");
+    const rowOf = async (id: string) =>
+      (await rows()).find((row) => row.id === id);
 
     fleet.launch("sessiond");
     await fleet.sessiondUp();
@@ -116,6 +231,15 @@ const spec: Spec = {
     });
     const a = await delegate(fleet, parent, src, "A");
     const b = await delegate(fleet, parent, src, "B");
+    const quiet = await fleet.spawn("claude", "Quiet", src);
+    await fleet.stopSession(quiet);
+    await until(
+      "Quiet stopped",
+      () => fleet.instance(quiet),
+      (row) => row?.status === "stopped",
+      60_000
+    );
+    await fleet.api("/api/notices/seen", { ids: ["probe:before-the-crash"] });
     const pathOf = (id: string) =>
       fleet.query<{ path: string }>(
         "SELECT path FROM workspaces WHERE id = ?",
@@ -127,22 +251,33 @@ const spec: Spec = {
 
     // ── the crash ─────────────────────────────────────────────────────────
     await fleet.stop("agent", "SIGKILL");
+    await fleet.stop("hub", "SIGKILL");
     await fleet.killSessiond();
     const aCreate = join(aState, "create.json");
     const aAccounts = join(aState, "accounts.json");
-    const wakeups = join(wakeupsDir, parent);
+    const wakeups = join(wakeupsDir, quiet);
     await mkdir(wakeupsDir, { recursive: true });
-    if (!existsSync(wakeups)) {
-      await writeFile(wakeups, JSON.stringify({ all: 0, once: 0 }));
-    }
-    const zeroed = await Promise.all([aCreate, aAccounts, wakeups].map(zero));
+    await writeFile(wakeups, JSON.stringify({ all: 3, once: 0 }));
+    const zeroed = await Promise.all(
+      [aCreate, aAccounts, wakeups, noticesFile].map(zero)
+    );
     kit.note(
-      `zeroed ${aCreate} (${zeroed[0]} B), ${aAccounts} (${zeroed[1]} B), ${wakeups} (${zeroed[2]} B)`
+      `zeroed ${[aCreate, aAccounts, wakeups, noticesFile].map((file, i) => `${file} (${zeroed[i]} B)`).join(", ")}`
     );
 
     // ── the machine starts again ──────────────────────────────────────────
     fleet.launch("sessiond");
     await fleet.sessiondUp();
+    fleet.launch("hub");
+    const hubStarted = await fleet
+      .hubUp()
+      .then(() => "up")
+      .catch((error: unknown) => String(error));
+    check(
+      "(f) the hub starts with its notices record damaged",
+      hubStarted === "up",
+      hubStarted
+    );
     fleet.launch("agent");
     await fleet.agentUp();
 
@@ -165,9 +300,6 @@ const spec: Spec = {
     }
 
     // (b)
-    const rows = () => fleet.api<Row[]>("/api/instances");
-    const rowOf = async (id: string) =>
-      (await rows()).find((row) => row.id === id);
     const aRow = await until(
       "A's row marked damaged",
       () => rowOf(a.instanceId),
@@ -191,18 +323,19 @@ const spec: Spec = {
         ),
       `${aRow?.status}: ${aRow?.lastError}`
     );
-    const parentRow = await until(
-      "the parent's row marked damaged",
-      () => rowOf(parent),
+    const quietRow = await until(
+      "Quiet's row marked damaged",
+      () => rowOf(quiet),
       (row) => Boolean(row?.damaged),
       60_000
     ).catch(() => undefined);
     check(
-      "(b) the zeroed wake-ups name their session's row, stopping it the way out",
-      parentRow?.damaged?.file === wakeups &&
-        parentRow.damaged.remedy === "end",
-      JSON.stringify(parentRow?.damaged)
+      "(b) Quiet's zeroed wake-ups name its row, stopping it the way out",
+      quietRow?.damaged?.file === wakeups && quietRow.damaged.remedy === "end",
+      JSON.stringify(quietRow?.damaged)
     );
+
+    await noticesPhase(kit, fleet.base, noticesFile);
 
     // (c)
     const plain = await fleet
@@ -238,8 +371,84 @@ const spec: Spec = {
       JSON.stringify((await rowOf(b.instanceId))?.damaged)
     );
 
+    // (g) a live session's record outlives an agent restart that reattaches
+    const liveRecord = join(wakeupsDir, plain);
+    const kept = JSON.stringify({ all: 2, once: 1 });
+    await writeFile(liveRecord, kept);
+    await fleet.stop("agent", "SIGKILL");
+    // Read through the board: with its machine gone the row is `unknown`,
+    // and `running` again only once the new agent has attached to it.
+    await until(
+      "the plain session's machine gone",
+      () => rowOf(plain),
+      (row) => row?.status !== "running",
+      60_000
+    ).catch(() => undefined);
+    fleet.launch("agent");
+    await fleet.agentUp();
+    await until(
+      "the plain session reattached",
+      () => rowOf(plain),
+      (row) => row?.status === "running",
+      120_000
+    ).catch(() => undefined);
+    const afterAttach = await readFile(liveRecord, "utf8").catch(
+      () => "(gone)"
+    );
+    check(
+      "(g) an attach to a live process keeps its wake-ups record",
+      afterAttach === kept,
+      afterAttach
+    );
+
+    // (g) a fresh process for Quiet: its stale (damaged) record goes first
+    const sessionKey = fleet.query<{ session_id: string | null }>(
+      "SELECT session_id FROM instances WHERE id = ?",
+      quiet
+    )[0]?.session_id;
+    await fleet.post({
+      verb: "spawn",
+      machineId: MACHINE,
+      instanceId: quiet,
+      requestId: crypto.randomUUID(),
+      payload: {
+        instanceId: quiet,
+        cwd: src,
+        harness: "claude",
+        model: MODEL.claude,
+        permissionMode: "bypassPermissions",
+        ...(sessionKey ? { resume: { sessionKey } } : {}),
+      },
+    });
+    const revived = await until(
+      "Quiet running again",
+      () => fleet.instance(quiet),
+      (row) => row?.status === "running",
+      180_000
+    ).catch(() => undefined);
+    const afterSpawn = await readFile(wakeups).catch(() => undefined);
+    check(
+      "(g) a fresh process for Quiet: its stale record is gone (or written whole by the new process)",
+      revived !== undefined &&
+        (afterSpawn === undefined ||
+          (!afterSpawn.includes(0) &&
+            afterSpawn.toString() !== JSON.stringify({ all: 3, once: 0 }))),
+      `${revived?.status} ${afterSpawn ? JSON.stringify(afterSpawn.toString()) : "(gone)"}`
+    );
+    const quietCleared = await until(
+      "Quiet's row no longer damaged",
+      () => rowOf(quiet),
+      (row) => !row?.damaged,
+      60_000
+    ).catch(() => undefined);
+    check(
+      "(g) Quiet's row stops saying it",
+      quietCleared !== undefined && !quietCleared.damaged,
+      JSON.stringify(quietCleared?.damaged)
+    );
+
     // (e)
-    fleet.stopSession(a.instanceId);
+    await fleet.stopSession(a.instanceId);
     const aPath = pathOf(a.workspaceId);
     // Asked again until its stop has cancelled the item (a live item refuses it).
     const archiveA = async (): Promise<{ state: string }> => {

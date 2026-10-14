@@ -3,7 +3,7 @@
  * (`liveFeed`, NeedsCaw's) or a fixture (/motion/caw-notices). The panel
  * reads nothing else, so a preview drives the real panel with no hub.
  */
-import type { RebalanceNotice } from "@cawco/core";
+import type { DamagedHubRecord, RebalanceNotice } from "@cawco/core";
 import type { MovedLogin } from "../accounts/model.svelte";
 import { notices } from "../notices.svelte";
 import type { Notice } from "../updates/model";
@@ -22,7 +22,11 @@ export interface CawFeed {
   readonly live: boolean;
   readonly moved: MovedLogin[];
   readonly needs: NeedsItem[];
+  /** The hub's notices record is damaged: notices are off until Reset. */
+  readonly noticesDamaged: DamagedHubRecord | null;
   readonly rebalanced: RebalanceNotice[];
+  /** Reset: the hub writes a fresh notices record, and notices come back on. */
+  resetNotices: () => Promise<void>;
   readonly updated: Notice | null;
 }
 
@@ -45,6 +49,10 @@ export const liveFeed: CawFeed = {
   get rebalanced() {
     return cawNotices.rebalanced;
   },
+  get noticesDamaged() {
+    return notices.damaged;
+  },
+  resetNotices: () => notices.reset(),
   acknowledge(ids) {
     // biome-ignore lint/complexity/noVoid: the hub's record comes back on the next board frame
     void notices.acknowledge(ids);

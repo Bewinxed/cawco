@@ -3044,6 +3044,11 @@ export class ClaudeHarness implements Harness {
       procIdFor("claude", ctx.instanceId),
       client
     );
+    // A fresh process schedules its own wake-ups: what an earlier one kept
+    // (a crash ended it, so its stop never took the record away) goes now,
+    // before this one can keep any, so no later attach reads its counts.
+    // An attach to a process still running keeps the record (`adopt`).
+    await forgetWakeups(ctx.instanceId);
     const account = await launchAccountOf(spec);
     // No account: the machine's own login, moving into one now.
     const place = { accountId: account ?? null };

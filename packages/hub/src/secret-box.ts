@@ -10,17 +10,9 @@
  * Values kept before sealing are sealed in place at start (db/seal-at-rest.ts).
  */
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import {
-  chmodSync,
-  closeSync,
-  existsSync,
-  openSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  writeSync,
-} from "node:fs";
+import { existsSync, readFileSync, renameSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { writeStateFileSync } from "@cawco/core/state-file";
 import { DB_PATH } from "./config";
 
 const KEY_BYTES = 32;
@@ -43,13 +35,12 @@ export interface SecretBox {
  */
 const loadKey = (path: string): Buffer => {
   try {
-    const fd = openSync(path, "wx", 0o600);
-    try {
-      writeSync(fd, randomBytes(KEY_BYTES));
-    } finally {
-      closeSync(fd);
-    }
-    chmodSync(path, 0o600);
+    // Whole or not at all: a key cut short by a crash would refuse every
+    // start after it (the size check below), and seal nothing meanwhile.
+    writeStateFileSync(path, randomBytes(KEY_BYTES), {
+      exclusive: true,
+      mode: 0o600,
+    });
     console.info(`[secret-box] made the hub's secret key at ${path}`);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") {

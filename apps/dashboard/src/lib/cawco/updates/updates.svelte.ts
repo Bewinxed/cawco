@@ -22,6 +22,11 @@ class Updates {
   channels = $state<BinaryUpdateChannels | null>(null);
   /** The settings request failed and there is no policy to show. */
   problem = $state<string | null>(null);
+  /**
+   * The hub's update policy record is damaged (it answered 409 with its
+   * words, in `problem`): updates are off, and Reset is the way out.
+   */
+  damaged = $state(false);
   /** Machines whose install this tab commanded. */
   commanded = new SvelteSet<string>();
   /**
@@ -36,14 +41,42 @@ class Updates {
   async loadPolicy(): Promise<void> {
     try {
       const response = await fetch("/api/binary-updates/settings");
+      // Its record damaged: the hub's own words, and Reset offered.
+      if (response.status === 409) {
+        this.policy = null;
+        this.damaged = true;
+        this.problem = await response.text();
+        return;
+      }
       if (!response.ok) {
         throw new Error(`the hub answered ${response.status}`);
       }
       this.policy = (await response.json()) as BinaryUpdatePolicy;
+      this.damaged = false;
       this.problem = null;
     } catch (error) {
       this.problem = `Could not read the update settings — ${failureClause(error)}.`;
     }
+  }
+
+  /**
+   * Reset: the hub writes a fresh policy record (the one a new hub starts
+   * with) and updates come back on. The hub's refusal is the error.
+   */
+  async resetPolicy(): Promise<void> {
+    const response = await fetch("/api/binary-updates/settings/reset", {
+      method: "POST",
+    });
+    if (!response.ok) {
+      throw new Error(
+        (await response.text()) ||
+          `The hub answered ${response.status}, so the update policy was not reset. Try again.`
+      );
+    }
+    this.policy = (await response.json()) as BinaryUpdatePolicy;
+    this.damaged = false;
+    this.problem = null;
+    await this.loadChannels();
   }
 
   async savePolicy(next: BinaryUpdatePolicy): Promise<boolean> {
