@@ -239,8 +239,9 @@ public struct WorkflowGraph: Decodable, Sendable, Equatable {
     public static let empty = WorkflowGraph(nodes: [], edges: [], settings: nil)
 }
 
-/// A workflow: its name and description, how it is authored, its program,
-/// the inputs a program declared, and a drawn workflow's graph.
+/// A workflow: its name and description, how it is authored, the inputs a
+/// program declared, and a drawn workflow's graph. Its program is only on
+/// its own read (`WorkflowDetail`); the list leaves it out.
 public struct WorkflowRow: Decodable, Sendable, Equatable, Identifiable {
     /// A graph the editor compiles, or a program written by hand; fixed at creation.
     /// Open (`OpenEnum`): an origin a newer hub adds reads as `unrecognized`, neither tab set.
@@ -283,7 +284,6 @@ public struct WorkflowRow: Decodable, Sendable, Equatable, Identifiable {
     public let name: String
     public let description: String
     public let origin: Origin
-    public let program: String
     public let inputs: [WorkflowField]
     public let graph: WorkflowGraph?
 
@@ -306,16 +306,20 @@ public struct WorkflowProblem: Decodable, Sendable, Equatable {
     public let line: Double?
 }
 
-/// A workflow as its own page reads it: the workflow, and the hub's problems with it as saved.
+/// A workflow as its own page reads it: the workflow, its program (the list
+/// leaves it out), and the hub's problems with it as saved.
 public struct WorkflowDetail: Decodable, Sendable, Equatable {
     public let workflow: WorkflowRow
+    public let program: String
     public let problems: [WorkflowProblem]
 
-    private enum CodingKeys: String, CodingKey { case problems }
+    private enum CodingKeys: String, CodingKey { case program, problems }
 
     public init(from decoder: any Decoder) throws {
         workflow = try WorkflowRow(from: decoder)
-        problems = try decoder.container(keyedBy: CodingKeys.self).decodeIfPresent([WorkflowProblem].self, forKey: .problems) ?? []
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        program = try container.decode(String.self, forKey: .program)
+        problems = try container.decodeIfPresent([WorkflowProblem].self, forKey: .problems) ?? []
     }
 }
 
@@ -364,11 +368,11 @@ public final class WorkflowsStore {
             for workflow in rows {
                 names[workflow.id] = workflow.name
             }
-            let batches = try await withThrowingTaskGroup(of: [Components.Schemas.PublicRun].self) { group in
+            let batches = try await withThrowingTaskGroup(of: [Components.Schemas.WorkflowRunSummary].self) { group in
                 for workflow in rows {
                     group.addTask { try await client.getApiWorkflowsByIdRuns(path: .init(id: workflow.id)).ok.body.json.runs }
                 }
-                var all: [Components.Schemas.PublicRun] = []
+                var all: [Components.Schemas.WorkflowRunSummary] = []
                 for try await runs in group {
                     all += runs
                 }
@@ -376,7 +380,7 @@ public final class WorkflowsStore {
             }
             var runs: [String: BoardRun] = [:]
             for run in batches {
-                runs[run.value1.id] = BoardRun(run)
+                runs[run.id] = BoardRun(run)
             }
             return { [names, runs] store in
                 store.workflows = rows

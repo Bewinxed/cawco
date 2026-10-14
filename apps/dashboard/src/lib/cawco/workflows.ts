@@ -5,8 +5,10 @@ import type {
   WorkflowAsk,
   WorkflowAttempt,
   WorkflowGraph,
+  WorkflowListing,
   WorkflowLogEntry,
   WorkflowRun,
+  WorkflowRunSummary,
   WorkflowStep,
 } from "@cawco/core";
 
@@ -80,7 +82,7 @@ const id = encodeURIComponent;
 /** A workflow is authored either as a graph or as a program, never both. */
 export type WorkflowSource = { graph: WorkflowGraph } | { program: string };
 export const loadWorkflows = () =>
-  request<{ workflows: Workflow[] }>("workflows");
+  request<{ workflows: WorkflowListing[] }>("workflows");
 export const loadWorkflow = (key: string) =>
   request<WorkflowDetail>(`workflows/${id(key)}`);
 export const createWorkflow = (body: { name: string } & WorkflowSource) =>
@@ -92,7 +94,7 @@ export const saveWorkflow = (
 export const deleteWorkflow = (key: string) =>
   request<{ ok: boolean }>(`workflows/${id(key)}`, "DELETE");
 export const loadWorkflowRuns = (key: string) =>
-  request<{ runs: WorkflowRun[] }>(`workflows/${id(key)}/runs`);
+  request<{ runs: WorkflowRunSummary[] }>(`workflows/${id(key)}/runs`);
 export const launchWorkflow = (key: string, body: WorkflowLaunch) =>
   request<{ runId: string }>(`workflows/${id(key)}/runs`, "POST", body);
 export const loadWorkflowLog = (key: string) =>

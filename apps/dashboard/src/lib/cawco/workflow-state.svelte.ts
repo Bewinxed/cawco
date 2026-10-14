@@ -1,6 +1,6 @@
 import type {
-  Workflow,
   WorkflowFrame,
+  WorkflowListing,
   WorkflowLogEntry,
   WorkflowRun,
 } from "@cawco/core";
@@ -13,7 +13,7 @@ import {
 } from "./workflows";
 
 export const workflowState = $state({
-  workflows: [] as Workflow[],
+  workflows: [] as WorkflowListing[],
   runs: {} as Record<string, WorkflowRun>,
   details: {} as Record<string, WorkflowRunDetail>,
   /** Each run's log: the code-origin graph, checkpoints, Jev answers, log lines. */

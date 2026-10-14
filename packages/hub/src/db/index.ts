@@ -908,9 +908,26 @@ export interface DbShape {
   readonly listWorkflowLog: (runId: string) => WorkflowLogRow[];
   /** Every supervisor notice still waiting to be sent, oldest first. */
   readonly listWorkflowNotices: () => WorkflowNoticeRow[];
-  readonly listWorkflowRuns: (workflowId?: string) => WorkflowRunRow[];
+  /** One workflow's runs, newest first, as its run list carries them: no JSON column, no log. */
+  readonly listWorkflowRunSummaries: (
+    workflowId: string
+  ) => Pick<
+    WorkflowRunRow,
+    | "endedAt"
+    | "failure"
+    | "id"
+    | "machineId"
+    | "parentRunId"
+    | "seenAt"
+    | "startedAt"
+    | "status"
+    | "supervisorInstanceId"
+    | "workflowId"
+    | "workspace"
+  >[];
   readonly listWorkflowSteps: (runId: string) => WorkflowStepRow[];
-  readonly listWorkflows: () => WorkflowRow[];
+  /** Every workflow but its program, newest edit first: the list. */
+  readonly listWorkflows: () => Omit<WorkflowRow, "program">[];
   /** The listed sessions running or starting on one machine. */
   readonly liveInstancesOn: (machineId: string) => PublicInstanceRow[];
   /** Where each live top-level mainline session works, and no more of it. */
@@ -2218,6 +2235,9 @@ const make = async (path: string): Promise<DbShape> => {
   } = getTableColumns(instances);
   const boardColumns = publicColumns;
   const { tooling: _ownTooling, ...ownedColumns } = getTableColumns(instances);
+  /** A workflow's columns but its program: what the list carries. */
+  const { program: _program, ...workflowListColumns } =
+    getTableColumns(workflows);
   /** Dollars the project's booked Caw turns cost since `since` (ms epoch). */
   const cawSince = (projectId: string, since: number): number =>
     db
@@ -3338,7 +3358,11 @@ const make = async (path: string): Promise<DbShape> => {
         return row;
       }),
     listWorkflows: () =>
-      db.select().from(workflows).orderBy(desc(workflows.updatedAt)).all(),
+      db
+        .select(workflowListColumns)
+        .from(workflows)
+        .orderBy(desc(workflows.updatedAt))
+        .all(),
     getWorkflow: (id) =>
       db
         .select()
@@ -3392,11 +3416,23 @@ const make = async (path: string): Promise<DbShape> => {
         tx.delete(workflowRuns).where(eq(workflowRuns.workflowId, id)).run();
         tx.delete(workflows).where(eq(workflows.id, id)).run();
       }),
-    listWorkflowRuns: (workflowId) =>
+    listWorkflowRunSummaries: (workflowId) =>
       db
-        .select()
+        .select({
+          endedAt: workflowRuns.endedAt,
+          failure: workflowRuns.failure,
+          id: workflowRuns.id,
+          machineId: workflowRuns.machineId,
+          parentRunId: workflowRuns.parentRunId,
+          seenAt: workflowRuns.seenAt,
+          startedAt: workflowRuns.startedAt,
+          status: workflowRuns.status,
+          supervisorInstanceId: workflowRuns.supervisorInstanceId,
+          workflowId: workflowRuns.workflowId,
+          workspace: workflowRuns.workspace,
+        })
         .from(workflowRuns)
-        .where(workflowId ? eq(workflowRuns.workflowId, workflowId) : undefined)
+        .where(eq(workflowRuns.workflowId, workflowId))
         .orderBy(desc(workflowRuns.startedAt))
         .all(),
     workflowRunHeads: (workflowId) =>

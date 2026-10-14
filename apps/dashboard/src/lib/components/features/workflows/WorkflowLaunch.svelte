@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { DelegateType, Workflow } from "@cawco/core";
+  import type { DelegateType, WorkflowListing } from "@cawco/core";
   import { onMount } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { loadDelegateTypes, message } from "#lib/cawco/delegate-types.js";
@@ -24,7 +24,7 @@
     /** The button that opened the dialog: it grows from there and goes back into it. */
     from?: HTMLElement;
     onclose: () => void;
-    workflow: Workflow;
+    workflow: WorkflowListing;
   } = $props();
   let shown = $state(true);
   let content = $state<HTMLElement | null>(null);

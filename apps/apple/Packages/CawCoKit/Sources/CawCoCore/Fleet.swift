@@ -51,7 +51,7 @@ public enum Activity: String, Sendable {
 }
 
 /// A workflow run as the board lists it (workflow-runs.ts): read off the
-/// runs list's `PublicRun` or a `workflow` frame's `WorkflowRun`.
+/// runs list's `WorkflowRunSummary` or a `workflow` frame's `WorkflowRun`.
 public struct BoardRun: Sendable {
     public let id: String
     public let workflowId: String
@@ -89,19 +89,20 @@ public struct BoardRun: Sendable {
         seenAt = epochMs(run.seenAt?.value1, run.seenAt?.value2)
     }
 
-    init(_ run: Components.Schemas.PublicRun) {
-        let base = run.value1
-        id = base.id
-        workflowId = base.workflowId
-        status = base.status
-        machineId = base.machineId
-        workspace = base.workspace
-        startedAt = base.startedAt.timeIntervalSince1970 * 1000
-        endedAt = base.endedAt.map { $0.timeIntervalSince1970 * 1000 }
-        failure = base.failure
-        parentRunId = base.parentRunId
-        supervisorInstanceId = base.supervisorInstanceId
-        seenAt = base.seenAt.map { $0.timeIntervalSince1970 * 1000 } ?? 0
+    /// A workflow's run list carries these fields only (core `WorkflowRunSummary`), schema for schema the run's own.
+    init(_ run: Components.Schemas.WorkflowRunSummary) {
+        id = run.id
+        workflowId = run.workflowId
+        status = run.status
+        machineId = run.machineId
+        workspace = run.workspace
+        startedAt = epochMs(run.startedAt.value1, run.startedAt.value2)
+        let ended = epochMs(run.endedAt?.value1, run.endedAt?.value2)
+        endedAt = ended > 0 ? ended : nil
+        failure = run.failure
+        parentRunId = run.parentRunId
+        supervisorInstanceId = run.supervisorInstanceId
+        seenAt = epochMs(run.seenAt?.value1, run.seenAt?.value2)
     }
 
     /// Where its status stands among a session's: still going is running, a

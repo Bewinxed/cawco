@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Workflow } from "@cawco/core";
+  import type { WorkflowListing } from "@cawco/core";
   import { onMount } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { message } from "#lib/cawco/delegate-types.js";
@@ -27,7 +27,7 @@
   let busy = $state(false);
   let errorMessage = $state("");
   /** The workflow being launched, and the Run button its dialog grows from. */
-  let launch = $state<{ workflow: Workflow; from: HTMLElement }>();
+  let launch = $state<{ workflow: WorkflowListing; from: HTMLElement }>();
   /** Until the first read is in, rows standing where the list will be. */
   const loading = $derived(!workflowState.loaded);
   const live = $derived(cawco.hub === "connected");

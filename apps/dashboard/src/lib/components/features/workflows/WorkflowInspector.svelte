@@ -3,11 +3,11 @@
     DelegateType,
     JevNodeQuestion,
     Problem,
-    Workflow,
     WorkflowCheckRule,
     WorkflowEdge,
     WorkflowGraph,
     WorkflowInput,
+    WorkflowListing,
     WorkflowNode,
   } from "@cawco/core";
   import { EFFORT_LEVELS, workflowPorts } from "@cawco/core";
@@ -39,7 +39,7 @@
     node?: WorkflowNode;
     edge?: WorkflowEdge;
     types: DelegateType[];
-    workflows: Workflow[];
+    workflows: WorkflowListing[];
     workflowId: string;
     description: string;
     problems: Problem[];

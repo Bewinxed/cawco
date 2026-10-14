@@ -113,6 +113,30 @@ export interface Workflow {
   slug: string;
   updatedAt: Date | string;
 }
+/**
+ * A workflow as the list carries it: everything but its program, which only
+ * the workflow's own read serves. The graph stays: the editor resolves a
+ * called workflow's Start inputs from it, and the app's launch form reads it.
+ */
+export type WorkflowListing = Omit<Workflow, "program">;
+/**
+ * A run as a workflow's run list carries it: what the clients' lists read,
+ * none of its graph, inputs, result, state or log. The rest is the run's own read.
+ */
+export type WorkflowRunSummary = Pick<
+  WorkflowRun,
+  | "endedAt"
+  | "failure"
+  | "id"
+  | "machineId"
+  | "parentRunId"
+  | "seenAt"
+  | "startedAt"
+  | "status"
+  | "supervisorInstanceId"
+  | "workflowId"
+  | "workspace"
+>;
 export interface WorkflowRun {
   edges: Record<string, Record<string, "fired" | "skipped">>;
   endedAt: Date | string | null;

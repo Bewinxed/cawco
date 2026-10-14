@@ -274,13 +274,13 @@ final class WorkflowEditorController: ObservedViewController {
             drawn = ""
         }
 
-        let print = "\(chosen)|\(narrow)|\(workflow.program.hashValue)|\(workflow.graph?.nodes.count ?? 0)|\(problems.count)|\(readAt.timeIntervalSince1970)"
+        let print = "\(chosen)|\(narrow)|\(detail.program.hashValue)|\(workflow.graph?.nodes.count ?? 0)|\(problems.count)|\(readAt.timeIntervalSince1970)"
         if print != drawn {
             let from = drawn.split(separator: "|").first.map(String.init) ?? chosen
             drawn = print
             panes.show(pane(workflow, problems: problems, names: names), direction: PaneSlideView.towards(order, from: from, to: chosen))
         }
-        program?.set(workflow, problems: problems)
+        program?.set(detail, problems: problems)
         runs?.set(allRuns, sessions: hub.fleet.rows)
     }
 
@@ -606,10 +606,10 @@ final class WorkflowProgramView: UIView {
         text.replacing(/^Line \d+:\s*/, with: "")
     }
 
-    func set(_ workflow: WorkflowRow, problems: [WorkflowProblem]) {
-        let code = workflow.origin == .code
+    func set(_ detail: WorkflowDetail, problems: [WorkflowProblem]) {
+        let code = detail.workflow.origin == .code
         note.text = code ? "The program is the workflow. It saves as you type." : "Compiled from this graph on save. Edit the graph to change it."
-        self.code.set(workflow.program, flagged: Set(problems.compactMap { $0.line.map { Int($0) } }))
+        self.code.set(detail.program, flagged: Set(problems.compactMap { $0.line.map { Int($0) } }))
         problemsBox.isHidden = !code
         let print = problems.map { "\($0.line ?? 0)|\($0.message)" }.joined(separator: "\n")
         guard code, print != shown || head.current == nil else { return }

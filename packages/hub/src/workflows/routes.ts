@@ -1,4 +1,9 @@
-import type { Problem, WorkflowGraph } from "@cawco/core";
+import type {
+  Problem,
+  WorkflowGraph,
+  WorkflowListing,
+  WorkflowRunSummary,
+} from "@cawco/core";
 import { compileWorkflow, validateWorkflow } from "@cawco/core";
 import {
   programInputs,
@@ -9,7 +14,7 @@ import { Elysia, ElysiaStatus, status, t } from "elysia";
 import type { DbShape } from "../db";
 import { hidden } from "../hidden";
 import { WorkItemRefusal } from "../work-items";
-import { type createWorkflowRuntime, publicRun } from "./runtime";
+import type { createWorkflowRuntime } from "./runtime";
 
 const NOT_SLUG = /[^a-z0-9]+/g;
 const SLUG_EDGES = /^-|-$/g;
@@ -147,7 +152,9 @@ export function workflowRoutes(
     return row;
   };
   return new Elysia()
-    .get("/api/workflows", () => ({ workflows: db.listWorkflows() }))
+    .get("/api/workflows", (): { workflows: WorkflowListing[] } => ({
+      workflows: db.listWorkflows(),
+    }))
     .post("/api/workflows", { body: t.Any() }, ({ body }) =>
       attempt(async () => {
         const saved = await save(body as Parameters<typeof save>[0]);
@@ -225,11 +232,14 @@ export function workflowRoutes(
         return { ok: true };
       })
     )
-    .get("/api/workflows/:id/runs", ({ params }) => ({
-      runs: db
-        .listWorkflowRuns(db.getWorkflow(params.id)?.id ?? params.id)
-        .map((run) => publicRun(run, db.listWorkflowLog(run.id))),
-    }))
+    .get(
+      "/api/workflows/:id/runs",
+      ({ params }): { runs: WorkflowRunSummary[] } => ({
+        runs: db.listWorkflowRunSummaries(
+          db.getWorkflow(params.id)?.id ?? params.id
+        ),
+      })
+    )
     .post("/api/workflows/:id/runs", { body: t.Any() }, ({ params, body }) =>
       attempt(() => {
         const input = body as Parameters<typeof runtime.launch>[1] & {

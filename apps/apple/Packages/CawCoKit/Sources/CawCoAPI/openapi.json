@@ -20157,55 +20157,7 @@
           "workflows": {
             "type": "array",
             "items": {
-              "type": "object",
-              "properties": {
-                "description": {
-                  "type": "string"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "id": {
-                  "type": "string"
-                },
-                "createdAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "origin": {
-                  "$ref": "#/components/schemas/WorkflowOrigin"
-                },
-                "updatedAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "slug": {
-                  "type": "string"
-                },
-                "graph": {
-                  "$ref": "#/components/schemas/WorkflowGraph"
-                },
-                "program": {
-                  "type": "string"
-                },
-                "inputs": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/WorkflowInput"
-                  }
-                }
-              },
-              "required": [
-                "createdAt",
-                "description",
-                "id",
-                "inputs",
-                "name",
-                "origin",
-                "program",
-                "slug",
-                "updatedAt"
-              ]
+              "$ref": "#/components/schemas/WorkflowListing"
             }
           }
         },
@@ -20432,7 +20384,7 @@
           "runs": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/PublicRun"
+              "$ref": "#/components/schemas/WorkflowRunSummary"
             }
           }
         },
@@ -30811,6 +30763,70 @@
           "version"
         ]
       },
+      "WorkflowListing": {
+        "description": "A workflow as the list carries it: everything but its program, which only\nthe workflow's own read serves. The graph stays: the editor resolves a\ncalled workflow's Start inputs from it, and the app's launch form reads it.",
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "origin": {
+            "$ref": "#/components/schemas/WorkflowOrigin"
+          },
+          "updatedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "slug": {
+            "type": "string"
+          },
+          "graph": {
+            "description": "The editor's model. Null for a program written by hand or by an agent.",
+            "$ref": "#/components/schemas/WorkflowGraph"
+          },
+          "inputs": {
+            "description": "The program's `inputs` export, as the launch dialog and stubs need it.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkflowInput"
+            }
+          }
+        },
+        "required": [
+          "createdAt",
+          "description",
+          "id",
+          "inputs",
+          "name",
+          "origin",
+          "slug",
+          "updatedAt"
+        ]
+      },
       "WorkflowOrigin": {
         "type": "string",
         "enum": [
@@ -31593,119 +31609,95 @@
           "message"
         ]
       },
-      "PublicRun": {
-        "allOf": [
-          {
-            "type": "object",
-            "properties": {
-              "status": {
-                "$ref": "#/components/schemas/WorkflowRunStatus"
-              },
-              "machineId": {
-                "type": "string"
-              },
-              "id": {
-                "type": "string"
-              },
-              "workspace": {
-                "type": "string"
-              },
-              "state": {
-                "type": "object"
-              },
-              "result": {},
-              "endedAt": {
+      "WorkflowRunSummary": {
+        "description": "A run as a workflow's run list carries it: what the clients' lists read,\nnone of its graph, inputs, result, state or log. The rest is the run's own read.",
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/WorkflowRunStatus"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "workspace": {
+            "type": "string"
+          },
+          "endedAt": {
+            "anyOf": [
+              {
                 "type": "string",
                 "format": "date-time"
               },
-              "seenAt": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "startedAt": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "parentRunId": {
+              {
                 "type": [
                   "null",
                   "string"
                 ]
-              },
-              "parentStepId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "graph": {
-                "$ref": "#/components/schemas/WorkflowGraph"
-              },
-              "program": {
-                "type": "string"
-              },
-              "inputs": {
-                "type": "object"
-              },
-              "workflowId": {
-                "type": "string"
-              },
-              "supervisorInstanceId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "failure": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "rerunOfRunId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "launchedBy": {
-                "type": "string"
               }
-            },
-            "required": [
-              "failure",
-              "id",
-              "inputs",
-              "launchedBy",
-              "machineId",
-              "parentRunId",
-              "parentStepId",
-              "program",
-              "rerunOfRunId",
-              "result",
-              "startedAt",
-              "state",
-              "status",
-              "supervisorInstanceId",
-              "workflowId",
-              "workspace"
             ]
           },
-          {
-            "type": "object",
-            "properties": {
-              "edges": {
-                "type": "object"
+          "seenAt": {
+            "description": "When the owner last looked at it or archived it, on any device.",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
               },
-              "loops": {
-                "type": "object"
+              {
+                "type": [
+                  "null",
+                  "string"
+                ]
               }
-            },
-            "required": [
-              "edges",
-              "loops"
+            ]
+          },
+          "startedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "parentRunId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "workflowId": {
+            "type": "string"
+          },
+          "supervisorInstanceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "failure": {
+            "type": [
+              "null",
+              "string"
             ]
           }
+        },
+        "required": [
+          "endedAt",
+          "failure",
+          "id",
+          "machineId",
+          "parentRunId",
+          "startedAt",
+          "status",
+          "supervisorInstanceId",
+          "workflowId",
+          "workspace"
         ]
       },
       "WorkflowRunStatus": {

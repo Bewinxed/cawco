@@ -1,4 +1,4 @@
-import type { InstanceRow, Workflow, WorkflowRun } from "@cawco/core";
+import type { InstanceRow, WorkflowListing, WorkflowRun } from "@cawco/core";
 import { type HubRead, readHub } from "#lib/cawco/hub-read.js";
 import { runIdOf } from "#lib/cawco/workflow-runs.js";
 import type { LayoutServerLoad } from "./$types";
@@ -242,7 +242,7 @@ export const load: LayoutServerLoad = async ({
   });
   if (runs.length > 0) {
     const [workflows, ...reads] = await Promise.all([
-      readHub<{ workflows: Workflow[] }>(fetch, "/api/workflows"),
+      readHub<{ workflows: WorkflowListing[] }>(fetch, "/api/workflows"),
       ...runs.map(({ runId }) =>
         readHub<WorkflowRun>(
           fetch,
