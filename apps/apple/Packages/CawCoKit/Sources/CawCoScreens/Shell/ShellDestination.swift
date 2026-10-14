@@ -96,6 +96,8 @@ public struct ShellContext {
     /// Opens a task's sheet over its project's page: a card's tap, a row's
     /// and a push's, the one way in, so each opens the same sheet.
     let openTask: (_ projectId: String, _ taskId: String) -> Void
+    /// Goes to Configure, at the section of this slug.
+    let openConfigure: (String) -> Void
     /// Asks to forget a project (the confirm, then the hub).
     let forgetProject: (_ project: ProjectRow, _ from: UIView?) -> Void
     /// Starts a session, at a place when one is given (the New Session flow).

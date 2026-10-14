@@ -666,16 +666,21 @@ public final class HubConnection {
     /// Claude's forecast (forecast.svelte.ts `readForecast`, which the web
     /// reads on the same signal); a failed read keeps what was there.
     func readAccounts() {
+        Task { [weak self] in await self?.reloadAccounts() }
+    }
+
+    /// `readAccounts`, awaited: a write to the accounts routes reads them again
+    /// before it returns (client.svelte.ts `accountsWrite`), since only a
+    /// sign-in makes the hub say they moved.
+    public func reloadAccounts() async {
         guard let client else { return }
-        Task { [weak self] in
-            async let view = try? client.getApiAccounts().ok.body.json
-            async let providers = try? client.getApiAccountsProviders().ok.body.json
-            async let forecast = try? client.getApiAccountsForecast(query: .init(provider: "anthropic")).ok.body.json
-            let (read, known, ahead) = await (view, providers, forecast)
-            if let read { self?.fleet.accounts = read }
-            if let known { self?.fleet.accountProviders = known }
-            if let ahead { self?.fleet.forecast = ahead }
-        }
+        async let view = try? client.getApiAccounts().ok.body.json
+        async let providers = try? client.getApiAccountsProviders().ok.body.json
+        async let forecast = try? client.getApiAccountsForecast(query: .init(provider: "anthropic")).ok.body.json
+        let (read, known, ahead) = await (view, providers, forecast)
+        if let read { fleet.accounts = read }
+        if let known { fleet.accountProviders = known }
+        if let ahead { fleet.forecast = ahead }
     }
 
     /// The person acknowledged notices (notices.svelte.ts `acknowledge`): gone
@@ -1015,8 +1020,8 @@ public final class HubConnection {
     }
 
     /// Where the web dashboard is reached, as the hub says (`/health`
-    /// `dashboard`, the address its Telegram links open): for what this app
-    /// has no screen of its own for yet.
+    /// `dashboard`, the address its Telegram links open): where a project's
+    /// custom views load from.
     public func dashboardAddress() async throws -> URL {
         guard let address else { throw URLError(.notConnectedToInternet) }
         let (data, _) = try await URLSession.shared.data(from: address.appending(path: "health"))

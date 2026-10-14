@@ -975,7 +975,7 @@ private final class NoticeGroup: UIView {
             }
         }
         // A pass whose first account's provider is not known wears no tile, as on the web.
-        let lead: UIView = member.tile.map { AccountTileView($0, side: NoticeRow.lead) } ?? UIView()
+        let lead: UIView = member.tile.map { AccountTileView(provider: $0.provider, hue: $0.hue, side: NoticeRow.lead) } ?? UIView()
         return NoticeRow(lead: lead, column: column, nested: true, dismissLabel: "Dismiss \(member.title)", reading: reading,
                          dismiss: { acknowledge([member.id]) })
     }
@@ -1036,52 +1036,3 @@ private final class NoticeGroup: UIView {
     }
 }
 
-/// An account's tile (AccountTile.svelte): its provider's mark in one ink,
-/// the account's colour, on that colour at a low alpha, at the small radius.
-private final class AccountTileView: UIView {
-    init(_ tile: Notice.Tile, side: Double) {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        let hue = Self.hue(tile.hue)
-        backgroundColor = hue.withAlphaComponent(0.18)
-        layer.cornerRadius = Radius.radiusSm
-        layer.cornerCurve = .continuous
-        isAccessibilityElement = false
-        NSLayoutConstraint.activate([
-            widthAnchor.constraint(equalToConstant: side),
-            heightAnchor.constraint(equalToConstant: side),
-        ])
-        guard let logo = BrandLogo.provider(tile.provider) else { return }
-        // `mono`: the mark in the account's ink, whatever its own colours.
-        let mark = UIImageView(image: logo.image.withRenderingMode(.alwaysTemplate))
-        mark.tintColor = hue
-        mark.contentMode = .scaleAspectFit
-        mark.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(mark)
-        let glyph = side >= 32 ? 18.0 : 16.0
-        NSLayoutConstraint.activate([
-            mark.centerXAnchor.constraint(equalTo: centerXAnchor),
-            mark.centerYAnchor.constraint(equalTo: centerYAnchor),
-            mark.widthAnchor.constraint(equalToConstant: glyph),
-            mark.heightAnchor.constraint(equalToConstant: glyph),
-        ])
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("AccountTileView is built in code")
-    }
-
-    /// The `account-<hue>` token (core AccountHue).
-    private static func hue(_ name: String) -> UIColor {
-        switch name {
-        case "amber": Palette.accountAmber
-        case "green": Palette.accountGreen
-        case "cyan": Palette.accountCyan
-        case "blue": Palette.accountBlue
-        case "rose": Palette.accountRose
-        case "violet": Palette.accountViolet
-        default: Palette.accountOrange
-        }
-    }
-}

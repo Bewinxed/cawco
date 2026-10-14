@@ -108,8 +108,31 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
         arrange()
     }
 
+    /// A section asked for before Configure was on screen.
+    private var pending: String?
+
+    /// Opens a section asked for from elsewhere (a machine's menu, Usage's
+    /// sign-in): beside the rail, or pushed over the list in place of
+    /// whatever section stood there; once on screen if it isn't yet.
+    func reveal(_ slug: String) {
+        ConfigSections.last = slug
+        guard isViewLoaded, view.window != nil else {
+            pending = slug
+            return
+        }
+        pending = nil
+        if compact, let nav = navigationController, nav.topViewController !== self {
+            nav.popToViewController(self, animated: false)
+        }
+        open(slug)
+    }
+
     override func viewIsAppearing(_ animated: Bool) {
         super.viewIsAppearing(animated)
+        if let pending {
+            self.pending = nil
+            DispatchQueue.main.async { [weak self] in self?.reveal(pending) }
+        }
         Task { await hub.configuration.load() }
         // Back from a pushed section, the row it came from lets go of its press.
         if compact, let selected = collection.indexPathsForSelectedItems {

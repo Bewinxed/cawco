@@ -903,7 +903,15 @@ final class TaskCheckbox: UIControl {
         fatalError("TaskCheckbox is built in code")
     }
 
-    private var checked = false
+    /// Whether it is ticked; a change fades the tick over `--dur-toggle`.
+    var checked = false {
+        didSet {
+            guard checked != oldValue else { return }
+            accessibilityValue = checked ? "Checked" : "Not checked"
+            paint()
+            Motion.easeOut.animator(UIAccessibility.isReduceMotionEnabled ? 0 : Motion.durToggle) { self.tick.alpha = self.checked ? 1 : 0 }.startAnimation()
+        }
+    }
 
     private func paint() {
         box.backgroundColor = checked ? Palette.actionSolid : .clear

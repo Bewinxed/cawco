@@ -34,13 +34,17 @@ class ConfigEditorController: ObservedViewController {
     let deleteLabel: String?
     var canSave = true { didSet { drawFooter() } }
     private(set) var saving = false
-    private(set) var deleting = false
-    /// The save or delete that just ended failed: its button shows no check.
+    /// The delete Delete asked about is running: Save waits.
+    private var deleting: Bool { question.running }
+    /// The save that just ended failed: its button shows no check.
     private(set) var failed = false
 
     private let scroll = UIScrollView()
     private let card = UIView()
     private let footer = UIStackView()
+    /// The commit row and, over it, the question Delete asked.
+    private let commit = UIStackView()
+    private let question = AskHere()
     private var saveButton: UIButton!
     private var cancelButton: UIButton!
     private var deleteButton: UIButton?
@@ -63,10 +67,23 @@ class ConfigEditorController: ObservedViewController {
 
     // MARK: What an editor does
 
+    /// What Delete asks over the commit row before it runs (EditorFooter.svelte's
+    /// `EditorQuestion`, asked in AskHere): what it reaches, and its confirm.
+    struct Question {
+        let title: String
+        let body: String
+        let confirm: String
+        let pending: String
+    }
+
     /// Saves the fields; true when the hub took them.
     func save() async -> Bool { true }
-    /// Deletes the row; true when the hub took it.
-    func delete() async -> Bool { true }
+    /// The question Delete asks, read when it is pressed; nil while there is
+    /// nothing to delete yet.
+    func deleteQuestion() -> Question? { nil }
+    /// Deletes the row; a refusal is thrown in the hub's words, and stays
+    /// under the question where it was asked.
+    func delete() async throws {}
     /// Cancel: the fields are dropped and the list comes back.
     func cancel() { navigationController?.popViewController(animated: true) }
 
@@ -113,8 +130,15 @@ class ConfigEditorController: ObservedViewController {
         card.addSubview(body)
 
         buildFooter()
-        footer.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(footer)
+        question.accessibilityIdentifier = "editor.question"
+        // Its confirm pending, then gone or refused: the commit row follows it.
+        question.onResize = { [weak self] in self?.drawFooter() }
+        commit.axis = .vertical
+        commit.spacing = Space.space3
+        commit.addArrangedSubview(question)
+        commit.addArrangedSubview(footer)
+        commit.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(commit)
 
         let safe = view.safeAreaLayoutGuide
         let wide = card.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -Space.space5 * 2)
@@ -123,7 +147,7 @@ class ConfigEditorController: ObservedViewController {
             scroll.topAnchor.constraint(equalTo: safe.topAnchor),
             scroll.leadingAnchor.constraint(equalTo: safe.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: safe.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: footer.topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: commit.topAnchor),
             card.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: Space.space2),
             scroll.contentLayoutGuide.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: Space.space5),
             card.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: Space.space5),
@@ -137,12 +161,16 @@ class ConfigEditorController: ObservedViewController {
             body.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -Space.space7),
             body.bottomAnchor.constraint(lessThanOrEqualTo: card.bottomAnchor, constant: -Space.space6),
             // The commit row: `10px 21px 12px` on the recess, over the keyboard when one is up.
-            footer.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 21),
-            footer.trailingAnchor.constraint(lessThanOrEqualTo: safe.trailingAnchor, constant: -21),
-            footer.widthAnchor.constraint(lessThanOrEqualToConstant: 980),
-            footer.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -12),
-            footer.bottomAnchor.constraint(lessThanOrEqualTo: safe.bottomAnchor, constant: -12),
+            commit.topAnchor.constraint(greaterThanOrEqualTo: safe.topAnchor),
+            commit.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 21),
+            commit.trailingAnchor.constraint(lessThanOrEqualTo: safe.trailingAnchor, constant: -21),
+            commit.widthAnchor.constraint(lessThanOrEqualToConstant: 980),
+            commit.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -12),
+            commit.bottomAnchor.constraint(lessThanOrEqualTo: safe.bottomAnchor, constant: -12),
         ])
+        let span = commit.widthAnchor.constraint(equalTo: safe.widthAnchor, constant: -42)
+        span.priority = .defaultHigh
+        span.isActive = true
         registerForTraitChanges([UITraitHorizontalSizeClass.self]) { (editor: ConfigEditorController, _: UITraitCollection) in
             editor.drawFooter()
         }
@@ -179,7 +207,6 @@ class ConfigEditorController: ObservedViewController {
         cancelButton.isEnabled = !saving
         deleteButton?.isHidden = compact
         deleteButton?.isEnabled = down == nil && !saving && !deleting
-        deleteButton?.configuration?.showsActivityIndicator = deleting
         if compact, let deleteLabel {
             let item = UIBarButtonItem(image: Glyph.more.image.resized(to: 18), menu: UIMenu(children: [
                 UIAction(title: deleteLabel, image: Glyph.trash.image.resized(to: 16),
@@ -191,6 +218,19 @@ class ConfigEditorController: ObservedViewController {
             navigationItem.rightBarButtonItem = nil
         }
     }
+
+    #if DEBUG
+    /// The probe's presses, through what the buttons run.
+    func probeRunSave() { runSave() }
+    func probeRunDelete() { runDelete() }
+    func probeConfirm() { question.probeConfirm() }
+    /// The commit row as it draws now, and the question over it.
+    var probeFooter: String {
+        let save = saveButton.configuration?.attributedTitle.map { String($0.characters) } ?? ""
+        let asked = question.asked == nil ? "" : " question: \(question.probeState) \(question.probeWords)"
+        return "[\(save)\(saveButton.isEnabled ? "" : " (disabled)")]" + asked
+    }
+    #endif
 
     private func runSave() {
         guard !saving else { return }
@@ -212,18 +252,15 @@ class ConfigEditorController: ObservedViewController {
         }
     }
 
+    /// Delete asks first, over the commit row where it was pressed (AskHere,
+    /// the Open Page Rule): what it reaches, Cancel, and the destructive
+    /// confirm, pending until the hub answers; a refusal stays under it in
+    /// the hub's words, the confirm the way to try again.
     private func runDelete() {
-        guard !deleting else { return }
-        deleting = true
-        failed = false
+        guard !deleting, let ask = deleteQuestion() else { return }
+        question.ask(AskHere.Request(title: ask.title, body: [ask.body], confirmLabel: ask.confirm, pendingLabel: ask.pending,
+                                     destructive: true) { [weak self] in try await self?.delete() })
         drawFooter()
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            let ok = await delete()
-            deleting = false
-            failed = !ok
-            drawFooter()
-        }
     }
 }
 

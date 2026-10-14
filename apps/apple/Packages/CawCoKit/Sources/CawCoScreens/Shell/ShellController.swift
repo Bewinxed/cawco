@@ -95,6 +95,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     var context: ShellContext {
         ShellContext(hub: hub, home: home, openSession: { [weak self] id in self?.openSession(id) }, go: { [weak self] place in self?.go(place) },
                      openTask: { [weak self] projectId, taskId in self?.openTask(projectId: projectId, taskId: taskId, attempt: nil) },
+                     openConfigure: { [weak self] slug in self?.openConfigure(slug) },
                      forgetProject: { [weak self] project, source in self?.forgetProject(project, from: source) },
                      startSession: { [weak self] machineId, cwd, projectId in self?.startSession(machineId: machineId, cwd: cwd, projectId: projectId) },
                      sessionMenus: sessionMenus)
@@ -143,7 +144,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         for home in [railHome, board] {
             home.onOpen = { [weak self] id in self?.openSession(id) }
             home.onUsagePage = { [weak self] in self?.go(.usage) }
-            home.onUsageSignIn = { [weak self] in self?.go(.configure) }
+            home.onUsageSignIn = { [weak self] in self?.openConfigure("accounts") }
         }
         // The page's dock: Start session where the phone's thumb reaches.
         board.onStart = { [weak self] in self?.startSession(machineId: nil, cwd: nil, projectId: nil) }
@@ -565,6 +566,10 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             parityProbed = true
             ParityProbe.start(shell: self, home: home)
         }
+        if AccountsProbe.on, !accountsProbed {
+            accountsProbed = true
+            AccountsProbe.start(shell: self)
+        }
         #endif
     }
 
@@ -573,6 +578,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private var actsProbed = false
     private var askProbed = false
     private var parityProbed = false
+    private var accountsProbed = false
 
     /// The split's rail, the panes' screens, and whether the width is a phone's.
     var probeRail: SidebarViewController { rail }
@@ -1158,6 +1164,16 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         move(to: next, opening: false)
     }
 
+    /// Configure, at one of its sections (`/config/<slug>`): where a machine's
+    /// "Sign in an account…" and Usage's sign-in go.
+    func openConfigure(_ slug: String) {
+        dialogPresenter.dismiss(animated: true)
+        move(to: .configure, opening: false)
+        for page in [page(for: .configure), page(for: .configure, compact: true)] {
+            (page as? ConfigureController)?.reveal(slug)
+        }
+    }
+
     /// The place a compact width's conversations were opened from, while it
     /// is the page under them: Back goes there, as the web's does.
     private var compactUnder: ShellDestination?
@@ -1578,7 +1594,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             self?.go(.usage)
         }
         limits.onOpenSession = { [weak self] id in self?.openSession(id) }
-        limits.onSignIn = { [weak self] in self?.go(.configure) }
+        limits.onSignIn = { [weak self] in self?.openConfigure("accounts") }
         // The house bottom sheet, as the home's usage bar presents it.
         limits.loadViewIfNeeded()
         let sheet = HouseSheetController(limits, title: "Usage limits", scroller: limits.scroll)

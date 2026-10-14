@@ -3,7 +3,6 @@ import CawCoCore
 import CawCoDesign
 import Observation
 import OSLog
-import SafariServices
 import UIKit
 
 // The machines, one tap away beside Jump (MachinesButton.svelte): the
@@ -191,26 +190,12 @@ protocol MachinesHost: AnyObject {
     func addMachine()
     /// Native only: point this window at another hub.
     func changeHub()
-    /// What a web page opened from a machine's menu presents over (`openWeb`).
+    /// What the machine dialogs present over.
     var dialogPresenter: UIViewController { get }
     /// A session's mark, as every row draws it.
     func markStatus(_ row: InstanceRow) -> MarkStatus
-}
-
-extension MachinesHost {
-    /// A web dashboard page for what the app has no screen of its own for:
-    /// over the app on a touch screen, closing back to where it was asked;
-    /// in the browser on a Mac, beside this window.
-    func openWeb(_ url: URL) {
-        let presenter = dialogPresenter
-        guard presenter.traitCollection.userInterfaceIdiom != .mac else {
-            UIApplication.shared.open(url)
-            return
-        }
-        let page = SFSafariViewController(url: url)
-        page.preferredControlTintColor = Palette.linkInk
-        presenter.present(page, animated: true)
-    }
+    /// Goes to Configure, at the section of this slug.
+    func openConfigure(_ slug: String)
 }
 
 /// The machines card (MachinesButton.svelte): the machines' list
@@ -610,8 +595,7 @@ final class MachineFaultLine: UIStackView {
 /// A machine's menu (MachineMenu.svelte): what you can do to the box, not
 /// to a session. Reload sessions (it runs in the menu, and says there why
 /// it failed), New session here, Sign in an account… (a machine nobody is
-/// signed in on: accounts are signed in in Configure → Accounts, which this
-/// app has no screen for yet, so the web's opens), Unlock keychain… (a Mac
+/// signed in on: it opens Configure → Accounts), Unlock keychain… (a Mac
 /// whose credentials sit behind a locked keychain; it opens under the row),
 /// Install update now (while a build waits; everything after the press, a
 /// failure included, is said on the machine's row), the two copies (the
@@ -625,9 +609,6 @@ final class MachineMenu: NSObject, UIContextMenuInteractionDelegate {
     private var reloading = false
     /// Why the last reload failed, said under its item until it is asked again.
     private var reloadFailed: String?
-    private var openingAccounts = false
-    /// Why the dashboard's Accounts could not be opened, under its item.
-    private var accountsFailed: String?
     private var copied: String?
     /// Asks under this machine's row, in the list the menu stands in.
     var ask: (AskHere.Request) -> Void = { _ in }
@@ -678,11 +659,8 @@ final class MachineMenu: NSObject, UIContextMenuInteractionDelegate {
             },
         ]
         if machine.auth == .unauthenticated {
-            let signIn = UIAction(title: openingAccounts ? "Opening Accounts…" : "Sign in an account…", image: Glyph.key.image,
-                                  attributes: openingAccounts ? [.keepsMenuPresented, .disabled] : .keepsMenuPresented) { [weak self] _ in
-                self?.openAccounts()
-            }
-            signIn.subtitle = openingAccounts ? nil : accountsFailed ?? "Nobody is signed in on \(machine.name). Opens Configure → Accounts on the web."
+            let signIn = UIAction(title: "Sign in an account…", image: Glyph.key.image) { [weak self] _ in self?.openAccounts() }
+            signIn.subtitle = "Nobody is signed in on \(machine.name)."
             first.append(signIn)
         }
         if MachineHealth.isMac(machine), machine.auth == .unreadableCredentials {
@@ -766,30 +744,9 @@ final class MachineMenu: NSObject, UIContextMenuInteractionDelegate {
     }
     #endif
 
-    /// Signing an account in is Configure → Accounts' work (MachineMenu.svelte);
-    /// with no Accounts screen here yet, the web dashboard's opens over the
-    /// app, at the address the hub gives for it, and closes back to this menu's machine.
+    /// Signing an account in is Configure → Accounts' work (MachineMenu.svelte): it opens there.
     private func openAccounts() {
-        guard let hub = host?.hub, !openingAccounts else { return }
-        openingAccounts = true
-        accountsFailed = nil
-        refreshMenu()
-        Task { @MainActor [weak self] in
-            do {
-                let accounts = try await hub.dashboardAddress().appending(path: "config/accounts")
-                guard let self else { return }
-                openingAccounts = false
-                interaction?.dismissMenu()
-                #if DEBUG
-                if ActsProbe.on { ActsProbe.log.notice("machine menu opens \(accounts.absoluteString, privacy: .public)") }
-                #endif
-                host?.openWeb(accounts)
-            } catch {
-                self?.openingAccounts = false
-                self?.accountsFailed = "Couldn't open Accounts: \(error.localizedDescription)"
-                self?.refreshMenu()
-            }
-        }
+        host?.openConfigure("accounts")
     }
 
     #if DEBUG
