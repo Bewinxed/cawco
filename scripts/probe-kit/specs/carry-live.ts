@@ -243,10 +243,7 @@ const run = async (kit: Kit) => {
     [
       ...(await fleet.logs("hub")).split("\n"),
       ...(await fleet.logs("agent")).split("\n"),
-    ].filter(
-      (line) =>
-        line.includes(id) || MOVE_LINE.test(line)
-    );
+    ].filter((line) => line.includes(id) || MOVE_LINE.test(line));
 
   // 1. Large and waiting on a background command, then large and at rest.
   if (runs("1")) {
