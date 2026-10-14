@@ -434,7 +434,14 @@
   <!-- Outside the stack the swipe moves, over the transcript's share of the
        group: a side preview beside the transcript keeps the rest. -->
   {#if bound && lent}
-    <div class="dock" style:width="{lent.transcriptShare * 100}%">
+    <!-- A side surface expanded over the whole conversation (SideSplit)
+         leaves the transcript no share: its composer is put away with it. -->
+    <div
+      class="dock"
+      inert={lent.transcriptShare === 0}
+      style:width="{lent.transcriptShare * 100}%"
+      class:away={lent.transcriptShare === 0}
+    >
       <Composer
         agentName={lent.agentName}
         ask={lent.ask}
@@ -527,6 +534,9 @@
     inset: 0 auto 0 0;
     z-index: 1;
     pointer-events: none;
+  }
+  .dock.away {
+    visibility: hidden;
   }
 
   .stack {

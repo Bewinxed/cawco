@@ -16,6 +16,16 @@
    * content; with nothing left the split collapses. Its width is the
    * conversation's own, kept across visits.
    *
+   * On a desk the surface can take the whole split, in place, so a page is
+   * drawn at the full width: the handle dragged past the conversation's
+   * narrowest collapses it to nothing, and the head's Expand (expand.ts)
+   * moves the handle there. Both are one state, expanded. Back to
+   * conversation, Esc once the pane's own Esc has nothing left to close, or
+   * the handle dragged back out gives the split back: at the last width
+   * beside it, or from the conversation's narrowest under the pointer.
+   * Expanded is the conversation's own too, kept beside its width; closing
+   * the surface ends it.
+   *
    * Motion is the preview's, as it was: opening or closing in front of the
    * reader grows one side into the other (`sliding`); a preview opening out
    * of its tool row clips open from the row (`preview:<id>`); a split sized
@@ -38,6 +48,7 @@
   import { waiting as departing, land } from "../motion/share.svelte";
   import PlanPane, { planShows } from "../plan/PlanPane.svelte";
   import PreviewPane from "../preview/PreviewPane.svelte";
+  import { setSideExpand } from "./expand";
   import SideSheet from "./SideSheet.svelte";
 
   let {
@@ -82,8 +93,17 @@
   /** The conversation's own width for the surface, in percent: read untracked. */
   let savedWidth = 45;
   let resizing = $state(false);
-  /** The surface's widest share: the transcript keeps 30% of the split. */
-  const SIDE_MAX = 70;
+  /** The kept width when the handle was taken: a drag that ends expanded gives it back. */
+  let dragFrom = 45;
+  /**
+   * The conversation's narrowest share beside the surface. Dragged past it,
+   * the conversation collapses to nothing: the surface is expanded.
+   */
+  const CONVERSATION_MIN = 30;
+  /** The surface's widest share beside the conversation. */
+  const SIDE_MAX = 100 - CONVERSATION_MIN;
+  /** The surface's share at the far edge: the whole split. */
+  const WHOLE = 99.99;
   /**
    * The divider's width (the kit handle's `w-px`): the panes share what is
    * left of the split beside it, so their percentages are of that.
@@ -145,9 +165,94 @@
    */
   const desktopOpen = $derived(open && !phone);
   /**
+   * The surface has the whole split, by Expand or by the handle dragged to
+   * the far edge: one state, kept per conversation beside its width. Read
+   * as the split is made, so its first layout is the kept one.
+   */
+  let expandAsked = $state(
+    typeof localStorage !== "undefined" &&
+      localStorage.getItem(
+        `cawco.preview.expanded.${untrack(() => viewId)}`
+      ) === "1"
+  );
+  /** The surface has the whole split: asked, and on a desk with it open. */
+  const expanded = $derived(expandAsked && desktopOpen && fits);
+  /** The last width beside the conversation, kept for the next visit and for going back. */
+  function keepWidth(size: number): void {
+    savedWidth = size;
+    localStorage.setItem(`cawco.preview.width.${viewId}`, String(size));
+  }
+  function setExpanded(next: boolean): void {
+    expandAsked = next;
+    const key = `cawco.preview.expanded.${viewId}`;
+    if (next) {
+      localStorage.setItem(key, "1");
+    } else {
+      localStorage.removeItem(key);
+    }
+  }
+  setSideExpand({
+    get available() {
+      return desktopOpen && fits;
+    },
+    get expanded() {
+      return expanded;
+    },
+    toggle: () => setExpanded(!expanded),
+    collapse: () => {
+      if (!expanded) {
+        return false;
+      }
+      setExpanded(false);
+      return true;
+    },
+  });
+  // Closing the surface ends the expansion: what opens next opens beside the
+  // conversation. Only a close counts; a page still reading its previews
+  // after a reload has not closed anything.
+  let openWas = untrack(() => open);
+  $effect(() => {
+    const now = open;
+    if (openWas && !now && untrack(() => expandAsked)) {
+      setExpanded(false);
+    }
+    openWas = now;
+  });
+  /**
+   * Esc puts the expansion away, after the preview's own Esc: an open pin
+   * card closes first, then Comment mode (PreviewPane `parentEscape`, which
+   * marks the key as used). Heard from this conversation's own split, or
+   * with nothing focused; a key in another group's pane is that one's.
+   */
+  function escapeExpanded(event: KeyboardEvent): void {
+    if (!(event.key === "Escape" && expanded && visible && active)) {
+      return;
+    }
+    const { target } = event;
+    if (
+      !(
+        target instanceof Node &&
+        (root?.contains(target) || target === document.body)
+      )
+    ) {
+      return;
+    }
+    previewPane?.parentEscape(event);
+    if (
+      event.defaultPrevented ||
+      (target instanceof Element && target.closest("dialog[open]"))
+    ) {
+      return;
+    }
+    event.preventDefault();
+    setExpanded(false);
+  }
+  /**
    * The surface's share while it is open: the conversation's own width, held
-   * to the 320px floor and the 70% ceiling. Closed, or in a split too narrow
-   * to hold the floor at all, it is 0: the pane collapses.
+   * to the 320px floor and the conversation's narrowest, or all of it while
+   * expanded.
+   * Closed, or in a split too narrow to hold the floor at all, it is 0: the
+   * pane collapses.
    *
    * It is also the pane's `defaultSize`, which is what paneforge (1.0.2)
    * rebuilds the group's layout from whenever a pane's constraints change
@@ -156,18 +261,24 @@
    * snapped shut on it. Its own Reactive Size example keeps `defaultSize`
    * with a pixel floor for this reason (paneforge.com/docs/examples/reactive-size).
    * `savedWidth` is read untracked, so a drag never rebuilds the layout.
+   * Expanding or going back changes it, so the rebuild lands on the whole
+   * split, or on the width kept; one the handle reached is where it stands.
    */
-  const sideSize = $derived(
-    desktopOpen && fits && sideMin !== null
-      ? Math.min(
-          SIDE_MAX,
-          Math.max(
-            untrack(() => savedWidth),
-            sideMin
-          )
-        )
-      : 0
-  );
+  const sideSize = $derived.by(() => {
+    if (!(desktopOpen && fits && sideMin !== null)) {
+      return 0;
+    }
+    if (expanded) {
+      return 100;
+    }
+    return Math.min(
+      SIDE_MAX,
+      Math.max(
+        untrack(() => savedWidth),
+        sideMin
+      )
+    );
+  });
   /** The split is sliding: the reader is watching it open or close. */
   let sliding = $state(false);
   let mounted = $state(false);
@@ -191,12 +302,18 @@
   $effect(() => {
     const id = viewId;
     const stored = Number(localStorage.getItem(`cawco.preview.width.${id}`));
-    savedWidth = stored > 0 ? Math.min(70, stored) : 45;
+    savedWidth = stored > 0 ? Math.min(SIDE_MAX, stored) : 45;
+    expandAsked = localStorage.getItem(`cawco.preview.expanded.${id}`) === "1";
   });
   $effect(() => {
     const opening = desktopOpen && fits;
+    // Expanding or going back is a change of size in front of the reader: it
+    // slides as opening does.
+    const full = expanded;
     const pane = sidePane;
-    if (!pane) {
+    // The handle reaching the edge or leaving it is the drag's own size:
+    // nothing slides under the pointer.
+    if (!pane || untrack(() => resizing)) {
       return;
     }
     if (opening) {
@@ -206,24 +323,34 @@
     const seen = untrack(() => visible && !fromRow) && motionOk.current;
     sliding = seen;
     let settle = 0;
+    let gone = false;
     // The size is this conversation's own, held to the floor (`sideSize`):
     // paneforge refuses a resize under a pane's `minSize` outright rather
     // than clamping it, so the size asked for is one it takes.
     const frame = requestAnimationFrame(() => {
       if (opening) {
-        pane.resize(untrack(() => sideSize));
+        pane.resize(full ? 100 : untrack(() => sideSize));
       } else {
         pane.collapse();
       }
       settle = requestAnimationFrame(() => {
         fromRow = false;
+        // The slide ends when the panes land, on their own clock: a timer
+        // beside it took the transition away from under a run held still.
+        if (seen) {
+          const runs = (root?.getAnimations({ subtree: true }) ?? []).filter(
+            (run) =>
+              run instanceof CSSTransition &&
+              run.transitionProperty === "flex-grow"
+          );
+          Promise.allSettled(runs.map((run) => run.finished)).then(() => {
+            if (!gone) {
+              sliding = false;
+            }
+          });
+        }
       });
     });
-    const slid = seen
-      ? setTimeout(() => {
-          sliding = false;
-        }, 300)
-      : undefined;
     const timer = opening
       ? undefined
       : setTimeout(
@@ -233,9 +360,9 @@
           motionOk.current ? dur("--dur-panel") : 1
         );
     return () => {
+      gone = true;
       cancelAnimationFrame(frame);
       cancelAnimationFrame(settle);
-      clearTimeout(slid);
       clearTimeout(timer);
     };
   });
@@ -296,26 +423,45 @@
   {/if}
 {/snippet}
 
+<svelte:window onkeydown={escapeExpanded} />
+
 <div
   class="side-split"
   bind:this={root}
+  class:expanded={expanded}
   class:open={desktopOpen}
   class:resizing={resizing}
   class:sliding={sliding}
   bind:clientWidth={width}
 >
   <Resizable.PaneGroup class="side-group" direction="horizontal">
+    <!-- Dragged past its narrowest, the conversation collapses to nothing
+         (expanded); dragged back out of the edge it stands at its
+         narrowest, then follows the pointer. Collapsed, it is put away:
+         nothing in it takes a press or the keyboard. -->
     <Resizable.Pane
       class="transcript-pane"
+      collapsedSize={0}
+      collapsible
       defaultSize={100 - sideSize}
-      minSize={100 - SIDE_MAX}
+      inert={expanded}
+      minSize={CONVERSATION_MIN}
     >
       {@render children()}
     </Resizable.Pane>
+    <!-- Expanded, the handle stays on the far edge: it is how the
+         conversation is dragged back out. -->
     <Resizable.Handle
       class={desktopOpen ? "side-divider" : "side-divider hidden"}
       onDraggingChange={(dragging) => {
         resizing = dragging;
+        if (dragging) {
+          dragFrom = savedWidth;
+        } else if (expandAsked) {
+          // A drag that ends at the edge was never a width: going back
+          // gives the one it started from.
+          keepWidth(dragFrom);
+        }
       }}
     />
     <Resizable.Pane
@@ -323,19 +469,28 @@
       collapsedSize={0}
       collapsible
       defaultSize={sideSize}
-      maxSize={SIDE_MAX}
-      minSize={Math.min(SIDE_MAX, sideMin ?? 30)}
+      maxSize={100}
+      minSize={Math.min(SIDE_MAX, sideMin ?? CONVERSATION_MIN)}
       onResize={(size) => {
         share = size;
+        if (!(size > 0 && desktopOpen && fits)) {
+          return;
+        }
+        // At the far edge the surface is expanded, however it got there.
+        if (size >= WHOLE) {
+          if (!expandAsked) {
+            setExpanded(true);
+          }
+          return;
+        }
+        // Off the edge it is not: dragged back out, or Back to conversation.
+        if (expandAsked) {
+          setExpanded(false);
+        }
         // The reader's width is kept; the floor holding it up in a narrow
         // split is not, so a wider one opens at the width they chose.
-        if (
-          size > 0 &&
-          desktopOpen &&
-          (resizing || size > (sideMin ?? 0) + 0.01)
-        ) {
-          savedWidth = size;
-          localStorage.setItem(`cawco.preview.width.${viewId}`, String(size));
+        if (resizing || size > (sideMin ?? 0) + 0.01) {
+          keepWidth(size);
         }
       }}
       bind:this={sidePane}
@@ -435,6 +590,19 @@
     transform: translateX(0);
     transition-timing-function: var(--ease-out);
   }
+  /* Expanded, the card meets the split's edges (SideSurface), so the page
+     is drawn at the full width; its inset goes on the slide's clock. */
+  .expanded .side-surface {
+    padding: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .sliding .side-surface.shown {
+      transition:
+        opacity var(--dur-panel) var(--ease-out),
+        transform var(--dur-panel) var(--ease-out),
+        padding var(--dur-panel) var(--ease-drawer);
+    }
+  }
   .side-split :global(.side-divider) {
     z-index: 2;
     background: var(--border-hairline);
@@ -442,6 +610,15 @@
   }
   .side-split :global(.side-divider.hidden) {
     display: none;
+  }
+  /* Expanded, the handle stands on the session area's edge, where the
+     sidebar's own grip (Shell.svelte `.grip`, 6px over the edge) takes the
+     pointer: its hit area stands just inside the surface instead, past the
+     grip, so the conversation can be dragged back out. */
+  .expanded :global(.side-divider::after) {
+    left: var(--space-1);
+    width: 6px;
+    transform: none;
   }
   .resizing :global(iframe) {
     pointer-events: none;

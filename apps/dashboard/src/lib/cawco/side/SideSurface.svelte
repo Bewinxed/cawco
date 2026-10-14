@@ -5,19 +5,25 @@
    * - the header leads with the Plan | Preview switch while both are there,
    *   then what is on show (`title`, `subtitle`): the words the switch does
    *   not already say, so "Preview" or "Plan" is never said twice; then the
-   *   pane's own controls (`actions`) and Close, every one in the same
-   *   button recipe and press;
+   *   pane's own controls (`actions`), Expand on a desk (expand.ts) and
+   *   Close, every one in the same button recipe and press;
    * - the well is the content's ground, the recess inside a hairline, its
    *   left edge the header's: a page's (the preview's). Text that reads on
    *   the card itself (the plan's) stands on the card, with no well
    *   (`recessed={false}`).
    * A pane passes its own content and controls; the frame is this one.
+   *
+   * Expanded over the whole split, the card meets its edges: no inset,
+   * corner or shadow, and the well's sides go, so a page is drawn at the
+   * split's full width. The head keeps its place, so the control just
+   * pressed is still under the pointer to press back.
    */
   import type { Snippet } from "svelte";
   import PendingContent, {
     whileIdle,
   } from "#lib/components/ui/button/pending-content.svelte";
-  import { IconClose } from "#lib/icons.js";
+  import { IconClose, IconMaximize, IconMinimize } from "#lib/icons.js";
+  import { sideExpand } from "./expand";
 
   let {
     label,
@@ -60,9 +66,18 @@
     /** The well's content. */
     children: Snippet;
   } = $props();
+  /** The split's Expand, on a desk; none in a sheet or the artifact's own tab. */
+  const expand = sideExpand();
+  const expanded = $derived(!!expand?.expanded);
 </script>
 
-<section aria-label={label} class="side-card {className}" bind:this={section}>
+<section
+  aria-label={label}
+  class="side-card {className}"
+  bind:this={section}
+  class:expanded={expanded}
+  class:recessed={recessed}
+>
   <header class="side-head">
     {#if switcher}
       {@render switcher()}
@@ -78,6 +93,22 @@
       {/if}
     </div>
     {@render actions?.()}
+    {#if expand?.available}
+      <button
+        aria-keyshortcuts={expanded ? "Escape" : undefined}
+        aria-label={expanded ? "Back to conversation" : "Expand"}
+        class="touch-hit"
+        onclick={() => expand.toggle()}
+        title={expanded ? "Back to conversation (Esc)" : "Expand"}
+        type="button"
+      >
+        {#if expanded}
+          <IconMinimize />
+        {:else}
+          <IconMaximize />
+        {/if}
+      </button>
+    {/if}
     <button
       aria-busy={closing || undefined}
       aria-disabled={closing || undefined}
@@ -220,5 +251,37 @@
     border: 1px solid var(--border-well);
     border-radius: var(--radius-sm);
     background: var(--surface-well);
+  }
+  /* Expanded: the card meets the split's edges and the well its sides, so
+     a page is drawn at the full width. The head's inset is the card's and
+     the split's, as before, so its controls hold still while it goes. */
+  .side-card.expanded {
+    padding: var(--space-3) 0 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .side-card.expanded.recessed .side-head {
+    padding-inline: calc(var(--space-3) + var(--space-2));
+  }
+  /* Text on the card itself (the plan's) keeps its inset off the edges. */
+  .side-card.expanded:not(.recessed) {
+    padding-inline: calc(var(--space-3) + var(--space-2));
+  }
+  .side-card.expanded .side-well {
+    border-width: 1px 0 0;
+    border-radius: 0;
+  }
+  /* The card's edges go on the split's slide (SideSplit); under a drag they
+     go as the panes do, at once. */
+  @media (prefers-reduced-motion: no-preference) {
+    :global(.sliding) .side-card,
+    :global(.sliding) .side-head,
+    :global(.sliding) .side-well {
+      transition:
+        padding var(--dur-panel) var(--ease-drawer),
+        border-radius var(--dur-panel) var(--ease-drawer),
+        border-width var(--dur-panel) var(--ease-drawer),
+        box-shadow var(--dur-panel) var(--ease-drawer);
+    }
   }
 </style>

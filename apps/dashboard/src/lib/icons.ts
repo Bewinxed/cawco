@@ -116,6 +116,7 @@ export { default as IconMaximize } from "~icons/solar/maximize-bold-duotone";
 export { default as IconMore } from "~icons/solar/menu-dots-bold-duotone";
 export { default as IconMic } from "~icons/solar/microphone-bold-duotone";
 export { default as IconZoomIn } from "~icons/solar/minimalistic-magnifer-zoom-in-bold-duotone";
+export { default as IconMinimize } from "~icons/solar/minimize-bold-duotone";
 export { default as IconMonitor } from "~icons/solar/monitor-bold-duotone";
 export { default as IconMoon } from "~icons/solar/moon-bold-duotone";
 export { default as IconMoonSleep } from "~icons/solar/moon-sleep-bold-duotone";

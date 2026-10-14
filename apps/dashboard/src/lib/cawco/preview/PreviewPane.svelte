@@ -40,6 +40,7 @@
   import { appear, dur } from "../motion/curves.svelte";
   import { closeInto } from "../motion/share.svelte";
   import { watchInput } from "../reload.svelte";
+  import { sideExpand } from "../side/expand";
   import SideSurface from "../side/SideSurface.svelte";
   import ArtifactMenu from "./ArtifactMenu.svelte";
   import {
@@ -97,6 +98,8 @@
     /** The Plan | Preview switch, when the conversation has a plan beside it (SideSplit). */
     switcher?: Snippet;
   } = $props();
+  /** The split's expansion, beside a conversation on a desk (SideSplit). */
+  const expand = sideExpand();
   let iframe = $state<HTMLIFrameElement>();
   /** Comment mode: a tap on the page pins a comment to what it lands on (key C). */
   let commenting = $state(false);
@@ -655,6 +658,10 @@
         closeCard();
       } else if (commenting) {
         comment(false);
+      } else {
+        // Heard from the page (`cawco:key`): with nothing of the pane's to
+        // close, Esc gives the split back. The window's Esc is SideSplit's.
+        expand?.collapse();
       }
     }
   }
