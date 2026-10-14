@@ -261,6 +261,12 @@ const sourceOf = (event: CawEvent, inboxed: number): "owner" | "outside" =>
 interface PersonSend {
   carried: Pick<SendPayload, "attachments" | "images">;
   uuid: string;
+  /**
+   * Told the wake that carries the send once it is under way, with when it
+   * settles (sent, or noted in the thread as not woken): the send's own
+   * record is that wake's, so nothing records it before then.
+   */
+  waking: (settled: Promise<void>) => void;
 }
 
 /** A send's words: its text, or the text blocks of its content. */
@@ -1258,7 +1264,7 @@ export const createCaw = ({
         body: `Caw hasn't read your message: ${why.replace(FINAL_STOP, "")}. Your message is kept in this thread. Write again to wake him with it.`,
       });
     };
-    wake(projectId, event)
+    const settled = wake(projectId, event)
       .then((woke) => {
         if (!woke) {
           notWoken("his session didn't take it");
@@ -1272,6 +1278,7 @@ export const createCaw = ({
         sayNestedBoundaryFix(why);
         notWoken(why);
       });
+    event.send?.waking(settled);
   };
 
   /** Logs a wake that failed: an event is never lost silently. */
@@ -1998,6 +2005,7 @@ export const createCaw = ({
       if (db.threadMessage(sent.uuid)) {
         return Promise.resolve();
       }
+      let woken: Promise<void> | undefined;
       const person: PersonSend = {
         uuid: sent.uuid,
         carried: {
@@ -2006,12 +2014,22 @@ export const createCaw = ({
             ? { attachments: payload.attachments }
             : {}),
         },
+        waking: (settled) => {
+          woken = settled;
+        },
       };
       const words = wordsOf(sent.message.content);
       const threadId = threadOfLead(payload.instanceId, project.id);
-      return threadId
+      const kept = threadId
         ? api.say(project.id, threadId, words, sent.uuid, person)
         : api.start(project.id, words, sent.uuid, person);
+      // Answered once the wake carrying it has settled: that wake records the
+      // send under its uuid as it goes out, and answering before it (the
+      // thread's answer comes at once, the wake runs behind it) let the
+      // send's own record ({@link server.ts toCawThread}) be written first,
+      // which the wake then took for the same send again and never sent. A
+      // send taken with no wake ("Make a note") is answered once it is kept.
+      return kept.then(() => woken);
     },
 
     /**
