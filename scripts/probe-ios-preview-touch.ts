@@ -204,6 +204,9 @@ const LIST_LINE =
 const RESULT_LINE =
   /^preview (reply|resolve)-result (?:pin=(\d+) (ok|refused: .*)|none)$/;
 const POINT = /^(-?\d+),(-?\d+)$/;
+/** PreviewController's `preview card-geometry card=x,y,w,h …` line: the open card's frame in the window. */
+const CARD_GEOMETRY =
+  /^preview card-geometry card=(-?\d+),(-?\d+),(\d+),(\d+) /;
 /** The app's lines a failure keeps on their own: the card's, the mode's, the pins'. */
 const CARD_STORY = /^preview (card|comment|pins |read |escape|list )/;
 /** "x,y" as a point; "none" (hidden, or not in a window) as none. */
@@ -348,6 +351,24 @@ const cardOf = (line: string): Card | undefined => {
 /** The newest card line after `from` that `match` takes, waited for. */
 /** The newest card line so far, where nothing moved the card. */
 const cardLast = () => seen.map(cardOf).findLast((card) => card !== undefined);
+/** Whether the newest card line says its field has the keyboard. */
+const writingNow = () =>
+  seen.findLast((line) => CARD_LINE.test(line))?.includes(" writing=true ") ??
+  false;
+/** The open card's frame in the window's points, from its newest `preview card-geometry` line. */
+const cardFrameLast = (): Frame | undefined => {
+  const m = seen
+    .findLast((line) => CARD_GEOMETRY.test(line))
+    ?.match(CARD_GEOMETRY);
+  return m
+    ? {
+        x: Number(m[1]),
+        y: Number(m[2]),
+        width: Number(m[3]),
+        height: Number(m[4]),
+      }
+    : undefined;
+};
 const cardAfter = async (
   what: string,
   from: number,
@@ -801,11 +822,19 @@ xcrun simctl install ${udid} "${app}"`);
   mark = seen.length;
   await tapPage("button", page);
   card = await cardAfter("pin 1's card again", mark, (c) => c.number === 1);
-  if (card?.field) {
-    await tap(
-      card.field,
-      `pin ${card.number}'s card field (from its newest line)`
-    );
+  // A new pin's card takes the keyboard as it opens, which raises the
+  // drawer: the field's first point is then under the keyboard (a tap there
+  // typed a key, "G", into the words). Only a card not writing is tapped,
+  // at its newest point.
+  await pause(1200);
+  if (!writingNow()) {
+    card = cardLast() ?? card;
+    if (card?.field) {
+      await tap(
+        card.field,
+        `pin ${card.number}'s card field (from its newest line)`
+      );
+    }
   }
   await pause(800);
   await type(REPLY);
@@ -820,15 +849,21 @@ xcrun simctl install ${udid} "${app}"`);
     "the card with words dismissed",
     mark
   );
+  const endedKept = await lineAfter(
+    "Comment off with the card's dismissal",
+    mark,
+    (l) => l === "preview comment off"
+  );
   await pause(1500);
   const keptPins = await pinsOnHub();
   check(
-    "a tap outside a new pin's card with words in it closes it, and the pin and its words stay",
+    "a tap outside a new pin's card with words in it closes it, Done still ends the mode, and the pin and its words stay",
     dismissedKept ===
       `preview card dismissed by=outside draft=${REPLY.length} withdrawn=false` &&
+      endedKept !== undefined &&
       keptPins.length === 1 &&
       keptPins[0].number === 1,
-    `Comment ${onAgain ? "on" : "not on"} again; ${card ? `pin ${card.number}'s card opened` : "no card for pin 1"}; ${dismissedKept ?? "no dismissed line"}; ${keptPins.length} pin(s) on the hub`
+    `Comment ${onAgain ? "on" : "not on"} again; ${card ? `pin ${card.number}'s card opened` : "no card for pin 1"}; ${dismissedKept ?? "no dismissed line"}; Done ${endedKept ? "ended" : "did not end"} the mode; ${keptPins.length} pin(s) on the hub; words on the hub ${JSON.stringify(keptPins[0]?.thread ?? [])}`
   );
 
   // ── 7. The Pins sheet lists it; its row opens the card ────────────────
@@ -884,15 +919,52 @@ xcrun simctl install ${udid} "${app}"`);
 
   // A tap on the page, outside the card (Comment off: it reaches the page),
   // closes the card; the page says it (`cawco:press`).
+  // The card stands at the well's foot over part of the page: the point
+  // tapped is one of the page's that the card leaves clear.
   page = await pageNow("the page under pin 1's card");
+  const over = cardFrameLast();
+  const clear = (
+    ["button", "button-end", `tab-${page.selected}`] as const
+  ).find((name) => {
+    const at = page?.at[name];
+    return (
+      !!at &&
+      !(
+        over &&
+        at.x >= over.x &&
+        at.x <= over.x + over.width &&
+        at.y >= over.y &&
+        at.y <= over.y + over.height
+      )
+    );
+  });
   mark = seen.length;
-  await tapPage("button", page);
+  if (clear) {
+    await tapPage(clear, page);
+  }
+  const countBefore = page.count;
   const byPage = await dismissedAfter("the card dismissed by the page", mark);
+  // The same tap is the page's own: a tab loads its view again, a button counts.
+  const pageDid = clear?.startsWith("tab-")
+    ? await lineAfter(
+        "the tab's document",
+        mark,
+        (l) => l === "preview document"
+      )
+    : await until(
+        "the page's counter up",
+        () => pageAfter(mark),
+        (p) => (p?.count ?? 0) > countBefore,
+        8000
+      )
+        .then(() => "counted")
+        .catch(() => undefined);
   check(
-    "a tap on the page outside the card closes it, and its words stay",
+    "a tap on the page outside the card closes it, the page still takes the tap, and the words stay",
     byPage ===
-      `preview card dismissed by=page draft=${REPLY.length} withdrawn=false`,
-    byPage ?? "no dismissed line"
+      `preview card dismissed by=page draft=${REPLY.length} withdrawn=false` &&
+      pageDid !== undefined,
+    `${clear ? `tapped the page's ${clear}` : "no point of the page clear of the card"} (card at ${over ? frameText(over) : "unlogged"}); ${byPage ?? "no dismissed line"}; the page ${pageDid ? "took it" : "did not take it"}`
   );
   await pause(1200);
   sheet = await openSheet("the Pins sheet again");
@@ -1090,7 +1162,13 @@ xcrun simctl install ${udid} "${app}"`);
       mark,
       (l) => l === "preview comment on"
     );
-    head = await headNow("the header with Comment on for Done");
+    // Where Done stands once it reads Done: its words change its width, and so where it stands.
+    head = await until(
+      "the header reading Done",
+      () => headNow("the header with Comment on for Done"),
+      (h) => h.words === "Done",
+      15_000
+    ).catch(() => headLast() as Head);
   }
   mark = seen.length;
   await tap(head.comment, `Comment ("${head.words}", from the newest header)`);
