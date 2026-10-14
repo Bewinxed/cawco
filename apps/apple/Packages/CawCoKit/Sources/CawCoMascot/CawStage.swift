@@ -33,9 +33,7 @@ enum CawStage {
     /// inside the window's bounds, nothing from it up hidden or clear, and no sheet presented over
     /// the controller it stands in covering it.
     static func seen(_ view: UIView) -> Bool {
-        guard let window = view.window, !window.isHidden,
-              let scene = window.windowScene, scene.activationState != .background, scene.activationState != .unattached
-        else {
+        guard let window = view.window, !window.isHidden, let scene = window.windowScene, !isAway(scene) else {
             return false
         }
         // One walk up to the window: hidden, clear, and the views he stands in.
@@ -61,6 +59,46 @@ enum CawStage {
             return true
         }
         return !covered(box, line: line, in: window, from: first)
+    }
+
+    /// Whether each scene is in the background or not attached, by scene,
+    /// kept from the scene's own notifications rather than asked: asked for
+    /// every Caw on every turn of the main thread, `activationState` (a
+    /// question to the scene's lifecycle monitor) was a twentieth of the main
+    /// thread while a transcript scrolled (probe-kit spec `ios-scroll-up`).
+    private static var away: [ObjectIdentifier: Bool] = [:]
+    private static var listening = false
+
+    private static func isAway(_ scene: UIWindowScene) -> Bool {
+        listen()
+        let key = ObjectIdentifier(scene)
+        if let known = away[key] { return known }
+        let state = scene.activationState
+        let now = state == .background || state == .unattached
+        away[key] = now
+        return now
+    }
+
+    /// Each scene's state as its notifications tell it: away once in the
+    /// background or disconnected, back as it comes to the foreground, read
+    /// again as it connects.
+    private static func listen() {
+        guard !listening else { return }
+        listening = true
+        let center = NotificationCenter.default
+        let marks: [(Notification.Name, Bool?)] = [
+            (UIScene.didEnterBackgroundNotification, true),
+            (UIScene.didDisconnectNotification, true),
+            (UIScene.willEnterForegroundNotification, false),
+            (UIScene.willConnectNotification, nil),
+        ]
+        for (name, isAway) in marks {
+            center.addObserver(forName: name, object: nil, queue: .main) { note in
+                guard let scene = note.object as? UIScene else { return }
+                let key = ObjectIdentifier(scene)
+                MainActor.assumeIsolated { away[key] = isAway }
+            }
+        }
     }
 
     /// A controller presented over the one `line` (his view and those it stands in) belongs to,

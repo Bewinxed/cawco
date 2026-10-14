@@ -149,6 +149,9 @@ extension Pace {
         var blankFrames = 0, blankRows = 0, checked = 0
         /// What the blank check itself took of the main thread (`afterCommit`).
         var checking = 0.0
+        /// Exact heights checked against their views, how many drifted, and by how much at most.
+        var heightsChecked = 0, drifts = 0
+        var maxDrift = 0.0
         /// What turns took while the list scrolled, by part (`Part`).
         var spent = Parts()
     }
@@ -267,13 +270,16 @@ extension Pace {
         if spare { fromSpare += 1 } else { madeNew += 1 }
     }
 
-    /// Rows that measured a height other than the one they measured before, for the same item at the same width.
-    private static var drifts = 0
-
-    static func drifted(_ kind: String, id: String, was: Double, now: Double, fresh: Bool) {
-        drifts += 1
-        guard drifts <= 40 else { return }
-        log.notice("probe height drift \(kind, privacy: .public) \(id, privacy: .public): \(was, format: .fixed(precision: 2)) then \(now, format: .fixed(precision: 2)) (\(fresh ? "a view new to the item" : "its own view", privacy: .public))")
+    /// A row stood at its exact height was measured as its view lays out
+    /// (RowStore `verify`): a difference over half a point is a drift.
+    static func heightChecked(_ kind: String, id: String, exact: Double, real: Double) {
+        tally.heightsChecked += 1
+        let drift = abs(real - exact)
+        tally.maxDrift = max(tally.maxDrift, drift)
+        guard drift > 0.5 else { return }
+        tally.drifts += 1
+        guard tally.drifts <= 40 else { return }
+        log.notice("probe height drift \(kind, privacy: .public) \(id, privacy: .public): worked out \(exact, format: .fixed(precision: 2)), laid out \(real, format: .fixed(precision: 2))")
     }
 
     /// One row built ahead: its view's type, whether it was a new view, and the time at each step's end.
@@ -293,7 +299,7 @@ extension Pace {
             let ms = w.steps.map { String(format: "%.0f", $0 * 1000) }.joined(separator: "/")
             return "\(kind) \(w.rows) rows (\(w.fresh) new) \(ms) ms"
         }.joined(separator: "; ")
-        log.notice("probe warmed kinds (set up/laid out/measured/laid out again): \(said, privacy: .public); row views from spares \(fromSpare), made new \(madeNew); heights that drifted \(drifts)")
+        log.notice("probe warmed kinds (set up/laid out/measured/laid out again): \(said, privacy: .public); row views from spares \(fromSpare), made new \(madeNew)")
     }
 
     /// The end of one turn of the main thread, after Core Animation's commit.
@@ -331,7 +337,7 @@ extension Pace {
             let t = tally
             let s = t.spent
             func ms(_ part: Part) -> String { String(format: "%.1f", s.time[part.rawValue] * 1000) }
-            log.notice("probe pace scroll=\(t.scroll * 1000, format: .fixed(precision: 1)) hitch=\(t.hitch * 1000, format: .fixed(precision: 1)) hitches=\(t.hitches) mainHitch=\(t.mainHitch * 1000, format: .fixed(precision: 1)) mainHitches=\(t.mainHitches) ticks=\(t.ticks) streamWall=\(t.streamWall * 1000, format: .fixed(precision: 1)) streamCPU=\(t.streamCPU * 1000, format: .fixed(precision: 1)) streamAwake=\(t.streamAwake * 1000, format: .fixed(precision: 1)) blankFrames=\(t.blankFrames) blankRows=\(t.blankRows) checked=\(t.checked) checking=\(t.checking * 1000, format: .fixed(precision: 1)) build=\(ms(.build), privacy: .public) builds=\(s.count[Part.build.rawValue]) measure=\(ms(.measure), privacy: .public) measures=\(s.count[Part.measure.rawValue]) warm=\(ms(.warm), privacy: .public) frameBuild=\(ms(.frameBuild), privacy: .public) frameMeasure=\(ms(.frameMeasure), privacy: .public) layout=\(ms(.layout), privacy: .public) layouts=\(s.count[Part.layout.rawValue]) text=\(ms(.text), privacy: .public) texts=\(s.count[Part.text.rawValue])")
+            log.notice("probe pace scroll=\(t.scroll * 1000, format: .fixed(precision: 1)) hitch=\(t.hitch * 1000, format: .fixed(precision: 1)) hitches=\(t.hitches) mainHitch=\(t.mainHitch * 1000, format: .fixed(precision: 1)) mainHitches=\(t.mainHitches) ticks=\(t.ticks) streamWall=\(t.streamWall * 1000, format: .fixed(precision: 1)) streamCPU=\(t.streamCPU * 1000, format: .fixed(precision: 1)) streamAwake=\(t.streamAwake * 1000, format: .fixed(precision: 1)) blankFrames=\(t.blankFrames) blankRows=\(t.blankRows) checked=\(t.checked) checking=\(t.checking * 1000, format: .fixed(precision: 1)) heightsChecked=\(t.heightsChecked) drifts=\(t.drifts) maxDrift=\(t.maxDrift, format: .fixed(precision: 2)) build=\(ms(.build), privacy: .public) builds=\(s.count[Part.build.rawValue]) measure=\(ms(.measure), privacy: .public) measures=\(s.count[Part.measure.rawValue]) warm=\(ms(.warm), privacy: .public) frameBuild=\(ms(.frameBuild), privacy: .public) frameMeasure=\(ms(.frameMeasure), privacy: .public) layout=\(ms(.layout), privacy: .public) layouts=\(s.count[Part.layout.rawValue]) text=\(ms(.text), privacy: .public) texts=\(s.count[Part.text.rawValue])")
         }
         // The probe's own work is not the thread's: counted from here.
         lastCPU = threadCPU()

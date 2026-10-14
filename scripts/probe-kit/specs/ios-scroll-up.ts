@@ -21,12 +21,17 @@
  *      blank (a stretch no cell covers, a cell with no row, a text in sight
  *      0pt tall, past its words, or with its lines in sight not laid out or
  *      outside its viewport), checked once a display frame. Must be 0.
- *    - Hitch ratio: ms the transcript's display-link frames came late, per
- *      second the list was scrolling. Under 5 ms/s on every pass. Its detail
- *      splits the late frames after a main-thread turn over a frame (the
- *      app's) from those with the main thread free (the render side, or the
- *      Mac's load, which each pass notes), and a note says where the main
- *      thread's scrolling time went (rows built, measured, laid out).
+ *    - Main-thread hitch ratio: ms the transcript's display-link frames came
+ *      late after a main-thread turn over a frame, per second the list was
+ *      scrolling. Under 5 ms/s on every pass. Its detail gives every late
+ *      frame too (the rest came with the main thread free: the render side,
+ *      or the Mac's load) and the Mac's load as the pass began: a pass under
+ *      a load average of 20 is a gate pass, and the detail says which are.
+ *      A note says where the main thread's scrolling time went.
+ *    - Every row stood at an exact height (RowLayout, worked out before any
+ *      view, PieceHeight) is its view's: each is measured as its view lays
+ *      out while the list rests (RowStore `verify`); none may differ by more
+ *      than half a point, and the largest difference is said.
  * 2. A turn streams a long reply into the foot: the main thread's own CPU
  *    time over the wall time the tail was busy. Under 50% (mostly idle).
  *    And every commit of its rows takes under 8 ms (the app says one of
@@ -36,9 +41,12 @@
  *   bun scripts/probe-kit/run.ts ios-scroll-up
  *
  * With `PROBE_SAMPLE=1` the app also samples its main thread's stack every
- * millisecond (MainSampler.swift) and the run notes where it was busy while
- * the list scrolled and while the turn streamed: where no Instruments
- * template that samples is at hand, the profile that says why.
+ * millisecond (MainSampler.swift), writes the busy stacks to its caches as
+ * folded stacks, and the run copies them out (`probe-sample-scrolling.folded`,
+ * `probe-sample-streaming.folded` in its folder) and notes the functions
+ * found most often: where no Instruments template that samples is at hand,
+ * the profile that says why. The sampling slows the main thread a little:
+ * a gate run is made without it.
  *
  * The app is this checkout's simulator build. The simulator runs on the
  * Mac's CPU and GPU, not a phone's: its hitches and CPU are this build's on
@@ -137,6 +145,9 @@ const KEYS = [
   "ticks",
   "checked",
   "checking",
+  "heightsChecked",
+  "drifts",
+  "maxDrift",
   "build",
   "builds",
   "measure",
@@ -271,15 +282,18 @@ async function flingLine(
 
 /** The Mac's load over the last minute, against its cores: the simulator draws on the same CPU. */
 const LOADAVG = /\{\s*([\d.]+)/;
-async function hostLoad(): Promise<string> {
+async function hostLoad(): Promise<{ average: number; said: string }> {
   const [avg, cores] = (await sh("sysctl -n vm.loadavg hw.ncpu")).split("\n");
-  return `host load ${LOADAVG.exec(avg ?? "")?.[1] ?? "?"} on ${cores ?? "?"} cores`;
+  const average = Number(LOADAVG.exec(avg ?? "")?.[1] ?? Number.NaN);
+  return { average, said: `host load ${average} on ${cores ?? "?"} cores` };
 }
 
 interface Pass {
   flings: number;
   /** The host's load as the pass began. */
   load: string;
+  /** The host's one-minute load average as the pass began. */
+  loadAverage: number;
   ms: number;
   /** The rows the list held when it rested at the top; undefined if it never did. */
   rows: number | undefined;
@@ -294,7 +308,7 @@ async function flingToTop(
 ): Promise<Pass> {
   const start = heard.length;
   const before = await tally(heard, 0);
-  const load = await hostLoad();
+  const host = await hostLoad();
   const began = Date.now();
   let flings = 0;
   let rows: number | undefined;
@@ -323,7 +337,14 @@ async function flingToTop(
   // The totals once the last coast is over.
   await Bun.sleep(1500);
   const totals = minus(await tally(heard, start), before);
-  return { flings, load, ms, rows, totals };
+  return {
+    flings,
+    load: host.said,
+    loadAverage: host.average,
+    ms,
+    rows,
+    totals,
+  };
 }
 
 /** Seeds the session: one turn of `CALLS` replies. Returns its id and what the hub holds. */
@@ -424,6 +445,58 @@ async function seed(
   return { fleet, held, session };
 }
 
+/**
+ * The sampler's folded stacks (MainSampler.swift), read back out of the
+ * app's caches into the run's folder, and the functions most often on the
+ * stack of each phase noted, with their share of its busy samples.
+ */
+async function readProfiles(kit: Kit, udid: string): Promise<void> {
+  // The sampler writes every ten seconds: the last of the stream is in.
+  await Bun.sleep(11_000);
+  const data = (
+    await sh(`xcrun simctl get_app_container ${udid} dev.cawco.app data`)
+  ).trim();
+  for (const phase of ["scrolling", "streaming"]) {
+    const file = Bun.file(
+      join(data, "Library/Caches", `probe-sample-${phase}.folded`)
+    );
+    // biome-ignore lint/performance/noAwaitInLoops: two files, read one after the other
+    if (!(await file.exists())) {
+      kit.note(`no ${phase} profile was written`);
+      continue;
+    }
+    const text = await file.text();
+    await writeFile(join(kit.out, `probe-sample-${phase}.folded`), text);
+    const on = new Map<string, number>();
+    let busy = 0;
+    for (const line of text.split("\n")) {
+      const at = line.lastIndexOf(" ");
+      const hits = Number(line.slice(at + 1));
+      if (at < 0 || !Number.isFinite(hits)) {
+        continue;
+      }
+      busy += hits;
+      for (const name of new Set(line.slice(0, at).split(";"))) {
+        on.set(name, (on.get(name) ?? 0) + hits);
+      }
+    }
+    const top = [...on.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 20)
+      .map(
+        ([name, hits]) =>
+          `${name.slice(0, 90)} ${((100 * hits) / busy).toFixed(0)}%`
+      )
+      .join(" | ");
+    kit.note(
+      `${phase} profile (${busy} busy samples, probe-sample-${phase}.folded): ${top}`
+    );
+  }
+}
+
+/** A pass the Mac was quiet enough for (load average under this) is a gate pass. */
+const GATE_LOAD = 20;
+
 function judge(kit: Kit, passes: Pass[]): void {
   for (const [i, p] of passes.entries()) {
     const t = p.totals;
@@ -440,10 +513,11 @@ function judge(kit: Kit, passes: Pass[]): void {
       t.blankFrames === 0 && t.checked > 0,
       `${t.blankFrames} blank frame(s) of ${t.checked} screens checked, ${t.blankRows} row(s) blank; the check took ${t.checking.toFixed(0)} ms of the main thread`
     );
+    const gate = p.loadAverage < GATE_LOAD;
     kit.check(
-      `pass ${i + 1}: hitch ratio under ${HITCH_MS_PER_S} ms/s`,
-      ratio < HITCH_MS_PER_S,
-      `${ratio.toFixed(2)} ms/s: ${t.hitch.toFixed(1)} ms late in ${t.hitches} hitch(es) over ${seconds.toFixed(1)}s scrolling (${t.ticks} frames); ${main.toFixed(2)} ms/s of it (${t.mainHitches} hitches) after a main-thread turn over a frame, the rest with the main thread free; ${p.load}`
+      `pass ${i + 1}: main-thread hitch ratio under ${HITCH_MS_PER_S} ms/s`,
+      main < HITCH_MS_PER_S,
+      `${main.toFixed(2)} ms/s (${t.mainHitches} hitches) after a main-thread turn over a frame; all late frames ${ratio.toFixed(2)} ms/s (${t.hitch.toFixed(1)} ms late in ${t.hitches} over ${seconds.toFixed(1)}s scrolling, ${t.ticks} frames), the rest with the main thread free; ${p.load}: ${gate ? "a gate pass" : `not a gate pass (load ${GATE_LOAD} or more)`}`
     );
     kit.note(
       `pass ${i + 1} main thread while scrolling: rows built in the layout pass ${t.build.toFixed(0)} ms (${t.builds}), measured there ${t.measure.toFixed(0)} ms (${t.measures}); in the transcript's frames warm ${t.warm.toFixed(0)} ms, built ${t.frameBuild.toFixed(0)} ms, measured ${t.frameMeasure.toFixed(0)} ms; the layout preparing ${t.layout.toFixed(0)} ms (${t.layouts}); whole texts laid out ${t.text.toFixed(0)} ms (${t.texts}), inside the rest`
@@ -506,6 +580,18 @@ async function run(kit: Kit): Promise<void> {
       await Bun.sleep(2000);
     }
     judge(kit, passes);
+    // Rows stood at their exact heights (RowLayout), measured as their views
+    // lay out while the list rested (RowStore `verify`): every one the same.
+    const heights = await tally(heard, 0);
+    const drifted = heard
+      .filter((h) => h.line.includes("probe height drift"))
+      .slice(0, 6)
+      .map((h) => h.line.slice(h.line.indexOf("probe height drift")));
+    kit.check(
+      "every exact row height is its view's (no drift)",
+      heights.drifts === 0 && heights.heightsChecked > 0,
+      `${heights.heightsChecked} rows checked, ${heights.drifts} drifted, the largest drift ${heights.maxDrift.toFixed(2)}pt${drifted.length > 0 ? `: ${drifted.join(" | ")}` : ""}`
+    );
     const blanks = heard.filter((h) => h.line.includes("probe blank"));
     if (blanks.length > 0) {
       kit.note(
@@ -543,19 +629,8 @@ async function run(kit: Kit): Promise<void> {
         ? "no commit of 8 ms or more"
         : `${slow.length} commit(s) of 8 ms or more, the longest ${Math.max(...slow.map((m) => Number(m[1]))).toFixed(1)} ms: ${slow[0]?.input.slice(slow[0].index) ?? ""}`
     );
-    // The sampler's last profile of each phase: its header and the lines after it.
-    for (const phase of ["scrolling", "streaming"]) {
-      const head = heard.findLastIndex((h) =>
-        h.line.includes(`probe sample ${phase}:`)
-      );
-      if (head === -1) {
-        continue;
-      }
-      for (const h of heard.slice(head)) {
-        if (h.line.includes(`probe sample ${phase}`)) {
-          kit.note(h.line.slice(h.line.indexOf("probe sample")));
-        }
-      }
+    if (SAMPLE) {
+      await readProfiles(kit, udid);
     }
   } finally {
     await writeFile(

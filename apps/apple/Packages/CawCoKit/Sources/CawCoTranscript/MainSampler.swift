@@ -11,9 +11,10 @@ import Synchronization
 /// pointers within its stack, and resumes it; nothing is allocated while the
 /// main thread is suspended (it may hold the allocator's lock). The return
 /// addresses are named afterwards (`dladdr`), and each sample where the main
-/// thread was not waiting in its run loop counts once for every function on
-/// its stack, filed under what the transcript was doing (`phase`). Every ten
-/// seconds the functions found most often are said, as `probe sample`.
+/// thread was not waiting in its run loop counts for its whole stack, filed
+/// under what the transcript was doing (`phase`). Every ten seconds the
+/// stacks are written to the app's caches as folded stacks, one line each
+/// (`outer;…;inner count`), which the pass reads back.
 nonisolated enum MainSampler {
     /// What the transcript in view is doing: 0 neither, 1 the list scrolling, 2 a turn streaming.
     static let phase = Atomic<Int>(0)
@@ -37,11 +38,12 @@ nonisolated enum MainSampler {
         let log = Logger(subsystem: "dev.cawco.app", category: "Transcript")
         let depth = 128
         let frames = UnsafeMutablePointer<UInt>.allocate(capacity: depth)
-        var inclusive = [[String: Int]](repeating: [:], count: 3)
-        var leaf = [[String: Int]](repeating: [:], count: 3)
+        // Each busy stack, outermost first and joined by `;`, with how many samples found it.
+        var folded = [[String: Int]](repeating: [:], count: 3)
         var busy = [0, 0, 0]
         var named: [UInt: String] = [:]
         var said = Date()
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         while true {
             usleep(1000)
             let at = phase.load(ordering: .relaxed)
@@ -64,23 +66,20 @@ nonisolated enum MainSampler {
             }
             guard let first = stack.first, !waits.contains(first) else { continue }
             busy[at] += 1
-            leaf[at][first, default: 0] += 1
-            for name in Set(stack) { inclusive[at][name, default: 0] += 1 }
+            folded[at][stack.reversed().joined(separator: ";"), default: 0] += 1
             guard Date().timeIntervalSince(said) >= 10 else { continue }
             said = Date()
-            // A line holds what the log keeps of one message (under 1 KB): the
-            // functions are said a dozen at a time, most found first.
-            func lines(_ counts: [String: Int], _ n: Int) -> [String] {
-                let ranked = counts.sorted { $0.value > $1.value }.prefix(n).map { name, hits in "\(String(name.prefix(70))) \(hits)" }
-                return stride(from: 0, to: ranked.count, by: 12).map { ranked[$0 ..< min($0 + 12, ranked.count)].joined(separator: " | ") }
-            }
+            // Written whole, every stack, to a file the pass reads back
+            // (`probe-sample-<phase>.folded` in the app's caches): a burst of
+            // log lines lost some of them on the way.
             for phase in [1, 2] where busy[phase] > 0 {
-                log.notice("probe sample \(names[phase], privacy: .public): \(busy[phase]) busy samples")
-                for (i, line) in lines(inclusive[phase], 72).enumerated() {
-                    log.notice("probe sample \(names[phase], privacy: .public) on the stack \(i + 1): \(line, privacy: .public)")
-                }
-                for (i, line) in lines(leaf[phase], 24).enumerated() {
-                    log.notice("probe sample \(names[phase], privacy: .public) leaves \(i + 1): \(line, privacy: .public)")
+                let text = folded[phase].map { "\($0.key) \($0.value)" }.joined(separator: "\n")
+                let file = caches.appending(path: "probe-sample-\(names[phase]).folded")
+                do {
+                    try Data(text.utf8).write(to: file, options: .atomic)
+                    log.notice("probe sample \(names[phase], privacy: .public) written: \(busy[phase]) busy samples, \(folded[phase].count) stacks")
+                } catch {
+                    log.error("probe sample \(names[phase], privacy: .public) not written: \(error.localizedDescription, privacy: .public)")
                 }
             }
         }

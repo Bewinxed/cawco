@@ -1,4 +1,5 @@
 import CoreText
+import Synchronization
 import UIKit
 
 /// A type role from the token source (`TypeScale.type*`): weight, size, line
@@ -74,10 +75,36 @@ public struct TypeRole: Sendable {
     /// on a mono run), scaled by Dynamic Type the same way.
     public func font(_ size: Double, weight: UIFont.Weight? = nil) -> UIFont {
         let mono = family.first?.hasPrefix("JetBrains Mono") == true
-        let base = UIFont(descriptor: Self.descriptor(weight: weight ?? self.weight, mono: mono,
-                                                      wordmark: family.first?.hasPrefix("Nunito") == true), size: size)
-        return scales ? UIFontMetrics(forTextStyle: textStyle).scaledFont(for: base) : base
+        let wordmark = family.first?.hasPrefix("Nunito") == true
+        let weight = weight ?? self.weight
+        let metrics = UIFontMetrics(forTextStyle: textStyle)
+        // The scaled size stands for the Dynamic Type setting in the key: a
+        // number the setting moves, worked out without making a font.
+        let key = FontKey(mono: mono, wordmark: wordmark, weight: weight.rawValue, size: size,
+                          scaled: scales ? metrics.scaledValue(for: size) : size, style: scales ? textStyle.rawValue : "")
+        if let font = Self.fonts.withLock({ $0[key] }) { return font }
+        let base = UIFont(descriptor: Self.descriptor(weight: weight, mono: mono, wordmark: wordmark), size: size)
+        let font = scales ? metrics.scaledFont(for: base) : base
+        Self.fonts.withLock { $0[key] = font }
+        return font
     }
+
+    /// A face at a size and a Dynamic Type setting (`font`).
+    private struct FontKey: Hashable {
+        let mono: Bool
+        let wordmark: Bool
+        let weight: CGFloat
+        let size: Double
+        let scaled: Double
+        let style: String
+    }
+
+    /// Every face made, by what made it: a face is made once. Making one
+    /// built a descriptor and hashed it through UIKit's own cache each time;
+    /// a streamed reply's Markdown asked for its faces every frame, a tenth
+    /// of the frame (probe-kit spec `ios-scroll-up`). Read off the main
+    /// thread too, where the transcript is prepared.
+    private static let fonts = Mutex<[FontKey: UIFont]>([:])
 
     /// The role's line height in points, at the font's scaled size.
     public var lineHeight: Double { font.pointSize * leading }

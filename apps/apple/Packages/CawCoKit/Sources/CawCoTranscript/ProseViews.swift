@@ -567,17 +567,28 @@ final class CodeWell: UIView {
         let dark = traitCollection.userInterfaceStyle == .dark
         let runs = Highlight.colors(source.text, language: source.language, dark: dark)
         let ink = runs == nil ? Palette.inkStrong : Highlight.foreground(dark: dark)
-        // The mono face at the label size on the body's leading.
-        let text = NSMutableAttributedString(string: source.text, attributes: Styled.attributes(
-            TypeScale.typeBody, color: ink, size: TypeScale.textLabel, weight: TypeScale.weightBody, leading: TypeScale.leadingBody,
-            mono: true, lineBreak: .byClipping, textKit2: true))
+        let text = Self.listing(source.text, ink: ink)
         for (range, color) in runs ?? [] where NSMaxRange(range) <= text.length {
             text.addAttribute(.foregroundColor, value: color, range: range)
         }
         label.attributedText = text
-        labelWidth.constant = ceil(text.boundingRect(with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude),
-                                                     options: [.usesLineFragmentOrigin], context: nil).width) + 1
+        labelWidth.constant = Self.width(of: text)
         label.accessibilityLabel = source.text
+    }
+
+    /// A listing's text: the mono face at the label size on the body's
+    /// leading, never wrapping. Its colours are the highlighter's, which lay
+    /// nothing out; the row's height is worked out from this (PieceHeight).
+    nonisolated static func listing(_ text: String, ink: UIColor) -> NSMutableAttributedString {
+        NSMutableAttributedString(string: text, attributes: Styled.attributes(
+            TypeScale.typeBody, color: ink, size: TypeScale.textLabel, weight: TypeScale.weightBody, leading: TypeScale.leadingBody,
+            mono: true, lineBreak: .byClipping, textKit2: true))
+    }
+
+    /// The width a listing's text stands at: its widest line, and a point.
+    nonisolated static func width(of text: NSAttributedString) -> Double {
+        ceil(text.boundingRect(with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude),
+                               options: [.usesLineFragmentOrigin], context: nil).width) + 1
     }
 }
 
@@ -756,7 +767,7 @@ final class TableBlock: UIView {
 final class QuoteBlock: UIView {
     let text = ProseView()
     /// The rule and the gap after it, which the words stand past.
-    static let inset = Space.space1 + TypeScale.textBody * TypeScale.proseSmQuoteInset
+    nonisolated static let inset = Space.space1 + TypeScale.textBody * TypeScale.proseSmQuoteInset
 
     init() {
         super.init(frame: .zero)

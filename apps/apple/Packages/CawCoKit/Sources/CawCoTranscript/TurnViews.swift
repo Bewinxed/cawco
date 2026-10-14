@@ -106,7 +106,7 @@ final class WhoView: UIView {
 /// line: one body line tall, nine meta figures wide at least, a space-3 clear
 /// of the words (Who.svelte `.grouped`).
 final class FloatNote: UILabel {
-    static func size(_ text: String) -> CGSize {
+    nonisolated static func size(_ text: String) -> CGSize {
         let font = TypeScale.typeMeta.font
         let nine = ("000000000" as NSString).size(withAttributes: [.font: font]).width
         let width = max(nine, (text as NSString).size(withAttributes: [.font: font]).width)

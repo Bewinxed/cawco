@@ -127,9 +127,15 @@ final class RowStore {
     private var spare: [ObjectIdentifier: [UIView & RowContent]] = [:]
     /// Spare views kept of each type.
     static let spares = 32
+    /// Rows past `limit` before any is let go (`trim`): letting go is done in
+    /// batches, as sorting every row held by when it was used, for each row
+    /// built, was a tenth of a fling's main thread.
+    static let slack = 48
     #if DEBUG
-    /// Each item's height as first measured here, by its id, print and width (`stand`).
-    private var measuredOnce: [String: CGFloat] = [:]
+    /// Rows stood at an exact height, to be measured once the list is at rest (`verify`).
+    private var unverified: [(id: String, print: String, kind: String, view: Weak, height: CGFloat, width: CGFloat)] = []
+    private var verified = Set<String>()
+    struct Weak { weak var view: UIView? }
     #endif
 
     init(env: RowEnv) { self.env = env }
@@ -193,11 +199,32 @@ final class RowStore {
     }
 
     /// Builds `item`'s row off the screen, as `type`, at `width`: its text set
-    /// and laid out where it will stand, its height measured. Returns whether
-    /// there was anything to do.
+    /// and laid out where it will stand, its height measured, or, with
+    /// `exact`, laid out once at that height and nothing measured. Returns
+    /// whether there was anything to do.
     @discardableResult
-    func warm(_ type: any RowContent.Type, item: Item, width: CGFloat) -> Bool {
-        Pace.time(.warm) { stand(type, item: item, width: width) }
+    func warm(_ type: any RowContent.Type, item: Item, width: CGFloat, exact: CGFloat?) -> Bool {
+        Pace.time(.warm) {
+            if let exact { stand(type, item: item, width: width, at: exact) } else { stand(type, item: item, width: width) }
+        }
+    }
+
+    /// Builds the row and lays it out once at its exact height.
+    private func stand(_ type: any RowContent.Type, item: Item, width: CGFloat, at height: CGFloat) -> Bool {
+        guard !isReady(item, width: width), entries[item.id]?.view.superview == nil else { return false }
+        func build<V: RowContent>(_ type: V.Type) -> UIView { row(type, for: item, width: width) }
+        let view = build(type)
+        // Out of every cell a row stands at its width only by a constraint (`stand` below).
+        let standing = view.widthAnchor.constraint(equalToConstant: width)
+        standing.isActive = true
+        defer { standing.isActive = false }
+        view.frame = CGRect(x: 0, y: 0, width: width, height: height)
+        view.layoutIfNeeded()
+        entries[item.id]?.height = height
+        #if DEBUG
+        verifyLater(item.id, print: item.print, kind: String(describing: type), view: view, height: height, width: width)
+        #endif
+        return true
     }
 
     private func stand(_ type: any RowContent.Type, item: Item, width: CGFloat) -> Bool {
@@ -242,16 +269,41 @@ final class RowStore {
         view.layoutIfNeeded()
         #if DEBUG
         marks.append(CACurrentMediaTime())
-        // The same item at the same width measures the same, whichever view stands it.
-        let key = "\(item.id)|\(item.print.hashValue)|\(Int(width * 2))"
-        if Pace.probing, let was = measuredOnce[key], abs(was - size.height) > 0.5 {
-            Pace.drifted(String(describing: type), id: item.id, was: was, now: size.height, fresh: fresh)
-        }
-        measuredOnce[key] = size.height
         #endif
         entries[item.id]?.height = size.height
         return true
     }
+
+    #if DEBUG
+    /// A row stood at an exact height, measured as its view lays out once the
+    /// list is at rest (`verify`): any difference is a drift (probe-kit spec
+    /// `ios-scroll-up`, which must count none).
+    func verifyLater(_ id: String, print: String, kind: String, view: UIView, height: CGFloat, width: CGFloat) {
+        guard Pace.probing, !verified.contains(id) else { return }
+        unverified.append((id, print, kind, Weak(view: view), height, width))
+    }
+
+    /// Measures rows stood at exact heights until `deadline`; whether any are left.
+    @discardableResult
+    func verify(until deadline: Double) -> Bool {
+        while !unverified.isEmpty, CACurrentMediaTime() < deadline {
+            let next = unverified.removeLast()
+            // Only a view that still stands for the row it was stood for: a
+            // row view let go of stands for another row since (`spare`).
+            guard !verified.contains(next.id), let view = next.view.view, let entry = entries[next.id],
+                  entry.view === view, entry.print == next.print else { continue }
+            verified.insert(next.id)
+            // A row out of every cell stands at its width only by a constraint (`stand`).
+            let standing = view.superview == nil ? view.widthAnchor.constraint(equalToConstant: next.width) : nil
+            standing?.isActive = true
+            let real = view.systemLayoutSizeFitting(CGSize(width: next.width, height: 0), withHorizontalFittingPriority: .required,
+                                                    verticalFittingPriority: .fittingSizeLevel).height
+            standing?.isActive = false
+            Pace.heightChecked(next.kind, id: next.id, exact: next.height, real: real)
+        }
+        return !unverified.isEmpty
+    }
+    #endif
 
     /// The row's height for `item` at `width`, when it is known.
     func height(_ id: String, print: String, width: CGFloat) -> CGFloat? {
@@ -296,6 +348,11 @@ final class RowStore {
         entries[item.id]?.height = nil
     }
 
+    /// The rows of `ids` are let go of (their items are gone), but one on the screen.
+    func drop(_ ids: Set<String>) {
+        for id in ids where entries[id]?.view.window == nil { entries[id] = nil }
+    }
+
     /// Only the rows of `ids` are kept.
     func keep(_ ids: some Collection<String>) {
         let wanted = Set(ids)
@@ -314,8 +371,10 @@ final class RowStore {
         }
     }
 
-    /// Lets go of the least recently drawn rows off the screen past `limit`.
+    /// Lets go of the least recently drawn rows off the screen past `limit`,
+    /// once `slack` more are held than it allows.
     private func trim() {
+        guard entries.count > Self.limit + Self.slack else { return }
         let off = entries.filter { $0.value.view.window == nil }
         guard off.count > Self.limit else { return }
         for (id, entry) in off.sorted(by: { $0.value.used < $1.value.used }).prefix(off.count - Self.limit) {
@@ -417,6 +476,14 @@ final class HostCell<Content: RowContent>: UICollectionViewCell, ItemCell {
         stood = false
         let width = attributes.size.width
         let margin = top?.constant ?? 0
+        // A row whose exact height the layout gave (RowLayout) stands at it: nothing is measured.
+        if fresh, ((superview as? UICollectionView)?.collectionViewLayout as? RowLayout)?.isExact(attributes.indexPath) == true {
+            #if DEBUG
+            if let shown, let row { store?.verifyLater(shown.id, print: shown.print, kind: String(describing: Content.self), view: row,
+                                                       height: attributes.size.height - margin, width: width) }
+            #endif
+            return attributes
+        }
         if fresh, let shown, let height = store?.height(shown.id, print: shown.print, width: width) {
             attributes.size.height = margin + height
             return attributes

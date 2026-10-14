@@ -12,6 +12,15 @@ nonisolated struct Item: Sendable {
     /// Everything the cell draws, as one value: a settled item whose print is
     /// unchanged is never configured again.
     var print: String
+    /// The row's exact height, its margin above it not counted, worked out
+    /// before any view of it (PieceHeight) for a row `heightWidth` wide; nil
+    /// where its view is what says it.
+    var height: Double?
+    var heightWidth: Double = 0
+    /// A tool call whose row is its one line until opened: no card in its
+    /// line's place, no pictures under it. Its line is as tall as every
+    /// other's (TranscriptView `toolLine`).
+    var oneLine = false
 
     enum Kind: Sendable {
         case piece(Piece)

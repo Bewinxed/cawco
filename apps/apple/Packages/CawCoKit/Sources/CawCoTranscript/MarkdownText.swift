@@ -73,9 +73,9 @@ nonisolated enum PartialSyntax {
         var text = lines.joined(separator: "\n")
         let start = text.range(of: "\n\n", options: .backwards)?.upperBound ?? text.startIndex
         var paragraph = String(text[start...])
-        let ticks = paragraph.ranges(of: /`+/)
+        let ticks = tickRuns(paragraph)
         if ticks.count % 2 == 1, let last = ticks.last { paragraph.removeSubrange(last) }
-        let masked = paragraph.replacing(/`[^`]*`/) { String(repeating: "x", count: $0.output.count) }
+        let masked = maskingCode(paragraph)
         let bold = masked.ranges(of: "**")
         if bold.count % 2 == 1, let last = bold.last {
             let offset = masked.distance(from: masked.startIndex, to: last.lowerBound)
@@ -83,7 +83,7 @@ nonisolated enum PartialSyntax {
             paragraph.removeSubrange(at ..< paragraph.index(at, offsetBy: 2))
         }
         let chars = Array(paragraph)
-        let outside = Array(paragraph.replacing(/`[^`]*`/) { String(repeating: "x", count: $0.output.count) })
+        let outside = Array(maskingCode(paragraph))
         if let open = outside.lastIndex(of: "[") {
             if let close = outside[(open + 1)...].firstIndex(of: "]") {
                 let rest = outside[(close + 1)...]
@@ -92,5 +92,36 @@ nonisolated enum PartialSyntax {
         }
         text.replaceSubrange(start..., with: paragraph)
         return text
+    }
+
+    /// Each run of backticks in `text`. Scanned, not matched with a regex:
+    /// a regex literal is built again each time it is reached, and this runs
+    /// every frame of a streamed reply.
+    private static func tickRuns(_ text: String) -> [Range<String.Index>] {
+        var runs: [Range<String.Index>] = []
+        var at = text.startIndex
+        while at < text.endIndex {
+            guard text[at] == "`" else { at = text.index(after: at); continue }
+            let start = at
+            while at < text.endIndex, text[at] == "`" { at = text.index(after: at) }
+            runs.append(start ..< at)
+        }
+        return runs
+    }
+
+    /// `text` with each closed code span (a backtick, anything but one, a
+    /// backtick: the leftmost first) masked by as many `x`s as it is long.
+    private static func maskingCode(_ text: String) -> String {
+        var chars = Array(text)
+        var at = 0
+        while at < chars.count {
+            if chars[at] == "`", let close = chars[(at + 1)...].firstIndex(of: "`") {
+                for i in at ... close { chars[i] = "x" }
+                at = close + 1
+            } else {
+                at += 1
+            }
+        }
+        return String(chars)
     }
 }

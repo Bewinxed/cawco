@@ -28,6 +28,14 @@ nonisolated struct Prepared: Sendable {
     let compacts: Bool
     /// The live keys its items were built under.
     let keys: [String: String]
+    /// Its settled items are the last generation's, row for row (id, print,
+    /// margin, height): a new revision of the hub's (a streamed reply's own
+    /// blocks moving) that changed none of them. The list keeps them as it
+    /// holds them and looks at its tail alone (TranscriptView `adopt`).
+    let unchanged: Bool
+    /// How many of its settled items, from the first, are the last
+    /// generation's row for row: the list looks only at the rest (`commit`).
+    let stable: Int
 }
 
 /// Prepares a transcript's rows off the main thread: reads each block once,
@@ -52,16 +60,67 @@ actor TranscriptPrep {
         var voiced = false
         var extras: [String: ThreadExtras] = [:]
         var voiceRevision = 0
+        /// The width the list's rows stand at, and its speaker line's height
+        /// (RowMetrics): with both, each assistant block's exact height is
+        /// worked out here (PieceHeight).
+        var width: Double?
+        var speaker: Double?
     }
 
     /// Each block as last read, with the hub's value it was read from.
     private var read: [String: (source: Components.Schemas.TranscriptBlock, block: Block)] = [:]
     private let cache = BlockCache()
+    private let measure = TextMeasure()
+    /// Each assistant block's height by its width and print, kept while a row is drawn from it.
+    private var heights: [String: Double?] = [:]
+    /// The settled items the last preparation made.
+    private var last: [Item] = []
+
+    /// How many of `items`, from the first, are `last`'s row for row, in what a row draws and where it stands.
+    private func stablePrefix(_ items: [Item]) -> Int {
+        let common = min(items.count, last.count)
+        var i = 0
+        while i < common {
+            let a = items[i], b = last[i]
+            guard a.id == b.id, a.top == b.top, a.height == b.height, a.heightWidth == b.heightWidth, a.oneLine == b.oneLine,
+                  a.print == b.print else { break }
+            i += 1
+        }
+        return i
+    }
 
     /// Every render is let go (a type size changed): read and drawn again.
     func reset() {
         read = [:]
+        heights = [:]
+        last = []
         cache.clear()
+    }
+
+    /// The items with their exact heights where they can be worked out
+    /// here, and each tool call marked when its row is one line until opened.
+    private func measured(_ items: [Item], width: Double?, speaker: Double?) -> [Item] {
+        var kept: [String: Double?] = [:]
+        defer { heights = kept }
+        return items.map { item in
+            var item = item
+            switch item.kind {
+            case let .piece(piece):
+                guard let width, let speaker else { return item }
+                let key = "\(width)|\(item.print)"
+                let height = heights[key] ?? kept[key] ?? PieceHeight.of(piece, width: width, speaker: speaker, measure: measure)
+                kept[key] = height
+                item.height = height
+                item.heightWidth = width
+            case let .tool(block):
+                let renderer = ToolDescriptor.describe(block.toolName, input: block.toolInput, result: block.toolResult,
+                                                       status: block.toolStatus, patch: block.string("toolDiff")).renderer
+                item.oneLine = renderer != .preview && renderer != .image
+            default:
+                break
+            }
+            return item
+        }
     }
 
     func prepare(_ input: Input) -> Prepared {
@@ -102,7 +161,11 @@ actor TranscriptPrep {
         builder.voiced = input.voiced
         builder.extras = input.extras
         builder.voiceRevision = input.voiceRevision
-        let (items, rail) = builder.items(rows)
+        let (built, rail) = builder.items(rows)
+        let items = measured(built, width: input.width, speaker: input.speaker)
+        let stable = stablePrefix(items)
+        let unchanged = stable == items.count && items.count == last.count
+        last = items
         var fleet: [Int] = []
         var compacts = false
         for (i, item) in items.enumerated() {
@@ -118,6 +181,6 @@ actor TranscriptPrep {
         cache.sweep()
         return Prepared(revision: input.revision, history: input.history, blocks: blocks, branches: branches, queued: queued,
                         rowCount: rows.count, items: items, rail: rail, fleet: fleet, voices: voices, compacts: compacts,
-                        keys: input.keys)
+                        keys: input.keys, unchanged: unchanged, stable: stable)
     }
 }
