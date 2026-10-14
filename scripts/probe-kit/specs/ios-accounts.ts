@@ -63,6 +63,7 @@ import type { Subprocess } from "bun";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
+import { type MacApp, macApp, readLines, words } from "../mac-app";
 
 const IOS_18_5 = "com.apple.CoreSimulator.SimRuntime.iOS-18-5";
 const PLATFORMS = {
@@ -71,12 +72,6 @@ const PLATFORMS = {
   mac: {},
 } as const;
 type Platform = keyof typeof PLATFORMS;
-/**
- * A log line's stamp, process and category, up to what it says: through the
- * `[dev.cawco.app:<category>]` tag, and no further (what it says has
- * brackets of its own, its buttons').
- */
-const LOG_HEAD = /^.*?\[dev\.cawco\.app:\w+\] /;
 const TRAILING_SLASH = /\/$/;
 /** "hub accounts 2 → 3": the count before the setup's sign-in and after. */
 const COUNTS = /hub accounts (\d+) → (\d+)/;
@@ -135,30 +130,6 @@ function appPath(platform: Platform): string {
         buildRoot(),
         "DerivedData/Build/Products/Debug-iphonesimulator/CawCo.app"
       );
-}
-
-/** Reads a child's stdout line by line into `into`, the app's lines only. */
-function follow(child: Subprocess<"ignore", "pipe", "ignore">, into: string[]) {
-  (async () => {
-    const decoder = new TextDecoder();
-    const reader = child.stdout.getReader();
-    let rest = "";
-    for (;;) {
-      // biome-ignore lint/performance/noAwaitInLoops: the stream is read in order
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-      rest += decoder.decode(value, { stream: true });
-      const split = rest.split("\n");
-      rest = split.pop() ?? "";
-      for (const line of split) {
-        if (line.includes("dev.cawco.app")) {
-          into.push(line.replace(LOG_HEAD, ""));
-        }
-      }
-    }
-  })().catch(() => undefined);
 }
 
 async function probe(kit: Kit, platform: Platform): Promise<void> {
@@ -227,30 +198,16 @@ async function probe(kit: Kit, platform: Platform): Promise<void> {
     `http://127.0.0.1:${shots.port}/`,
   ];
 
-  const lines: string[] = [];
+  let lines: string[] = [];
   let sim: MacSim | undefined;
   let stream: Subprocess<"ignore", "pipe", "ignore"> | undefined;
-  let mac: Subprocess | undefined;
+  let mac: MacApp | undefined;
   try {
     if (platform === "mac") {
-      mac = Bun.spawn([app, ...args], { stdout: "ignore", stderr: "ignore" });
-      // This Mac's log also carries every simulator's apps, which log under
-      // the same subsystem: only the process just started is read. Its probe
-      // waits for the hub's accounts before its first line.
-      stream = Bun.spawn(
-        [
-          "log",
-          "stream",
-          "--level",
-          "debug",
-          "--style",
-          "compact",
-          "--predicate",
-          `${PROBE_LOG} AND processIdentifier == ${mac.pid}`,
-        ],
-        { stdin: "ignore", stdout: "pipe", stderr: "ignore" }
-      );
-      follow(stream, lines);
+      // The host's log carries the simulators' apps too: the kit reads this app's own.
+      mac = await macApp(app, args, PROBE_LOG);
+      ({ lines } = mac);
+      console.log(`  mac app pid ${mac.pid}`);
     } else {
       sim = await macSim({
         runtime: IOS_18_5,
@@ -278,7 +235,14 @@ async function probe(kit: Kit, platform: Platform): Promise<void> {
         ],
         { stdin: "ignore", stdout: "pipe", stderr: "ignore" }
       );
-      follow(stream, lines);
+      // That simulator's own log: no other app's lines reach it.
+      const into = lines;
+      readLines(stream, (line) => {
+        const said = words(line);
+        if (said !== undefined) {
+          into.push(said);
+        }
+      });
       await Bun.sleep(1500);
       await until(
         label("the app launched"),
@@ -303,7 +267,7 @@ async function probe(kit: Kit, platform: Platform): Promise<void> {
       RUN_MS
     ).catch(() => undefined);
   } finally {
-    mac?.kill();
+    await mac?.stop();
     stream?.kill();
     await sim?.release();
     shots.stop(true);
