@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { failureWords as message } from "#lib/cawco/hub-read.js";
   /**
    * A task, whole, in the page beside what it was opened from (DESIGN.md,
    * The Open Page Rule): on a desk the side card of a split (Split, through
@@ -20,6 +19,7 @@
    * order. The hub checks the move again either way.
    */
   import type { Snippet } from "svelte";
+  import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";

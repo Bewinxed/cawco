@@ -124,9 +124,13 @@ export function withFirstParagraph(text: string, first: string): string {
 }
 
 /**
- * What a writer is told about a post's output, said once for the task tools
- * (where Caw names a task's outputs) and an attempt's brief (where the
- * writer reads them).
+ * What a writer is told about a post's output, in an attempt's brief (where
+ * the writer reads its outputs). The task tools, where Caw names a task's
+ * outputs, carry only the file's name ({@link POST_OUTPUT_NAME}): the role
+ * tool budgets (hub role-budgets.ts) leave the lead no room for the shape.
  */
 export const POST_OUTPUT_RULE =
   'A social post is `<task>.post.json`: {"kind":"x-post","account":"@handle","text":"…","alternates":["first paragraph"],"media":{"plan":"…","files":[]},"community":"…","thread":["reply"]}; kind, account, text required. Plan notes beside it as .md; list both.';
+
+/** A task tool's word on a post output: its file's name, so the brief carries {@link POST_OUTPUT_RULE}. */
+export const POST_OUTPUT_NAME = "a post: <task>.post.json";

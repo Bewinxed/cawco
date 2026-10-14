@@ -17,7 +17,7 @@ import {
   PLAN_STEP_PRIORITIES,
   PLAN_STEP_STATUSES,
   type PlanStep,
-  POST_OUTPUT_RULE,
+  POST_OUTPUT_NAME,
   type SessionPlan,
 } from "@cawco/core";
 import { z } from "zod";
@@ -373,9 +373,7 @@ export function taskTools(context: TaskToolContext | undefined) {
           .optional()
           .describe("The task whose work turned this one up."),
         checks: lines("Shell commands that must pass, like bun test."),
-        outputs: lines(
-          `Files it produces that are not commits, from the project folder's root. ${POST_OUTPUT_RULE}`
-        ),
+        outputs: lines(`Files it makes, not commits; ${POST_OUTPUT_NAME}.`),
         context: lines("knowledge/ files for its brief."),
         lands: landsParameter().optional(),
         runs_on: runsOnParameter().optional(),
@@ -426,7 +424,7 @@ export function taskTools(context: TaskToolContext | undefined) {
           .optional()
           .describe("A delegate type; null clears it."),
         checks: lines("Replaces the checks."),
-        outputs: lines("Replaces the outputs (a post: as task_create says)."),
+        outputs: lines("Replaces the outputs."),
         context: lines("Replaces the context."),
         lands: landsParameter()
           .nullable()
