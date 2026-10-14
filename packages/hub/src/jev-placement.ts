@@ -38,7 +38,6 @@ export const ROWS = {
   phone: "Phone requests",
   order: "Dispatch order",
   voice: "Voice check",
-  variants: "Design variants",
   // Asked in memory.ts: the curator's inbox, and an attempt's brief.
   inbox: "Memory inbox",
   context: "Brief context",
@@ -795,50 +794,3 @@ export const lintVoice = (
       : []),
   ];
 };
-
-// --- Design variants (score) ---------------------------------------------------------
-
-const VARIANT_LEVELS = [
-  "Breaks DESIGN.md: colours, type or spacing outside its tokens",
-  "Mostly holds: a few departures",
-  "Holds to DESIGN.md throughout",
-] as const;
-
-/**
- * Design variants with Jev on: each variant scored against DESIGN.md.
- * Unwired: variants on a canvas do not exist yet.
- */
-export async function jevVariants(
-  access: JevAccess,
-  projectId: string,
-  designMd: string,
-  variants: { description: string; id: string }[]
-): Promise<{ id: string; score: number }[]> {
-  const asked = variants.slice(0, 12);
-  const result = await askRow(
-    "variants",
-    projectId,
-    access,
-    {
-      design_md: head(designMd, 12_000),
-      variants: Object.fromEntries(
-        asked.map((variant) => [variant.id, head(variant.description, 3000)])
-      ),
-    },
-    Object.fromEntries(
-      asked.map((variant) => [
-        variant.id,
-        {
-          type: "score" as const,
-          instructions: `How well does \`variants["${variant.id}"]\` hold to \`design_md\`?`,
-          criteria: VARIANT_LEVELS,
-        },
-      ])
-    )
-  );
-  const answers = result.answers as Record<string, { score: number }>;
-  return asked.map((variant) => ({
-    id: variant.id,
-    score: answers[variant.id]?.score ?? 0,
-  }));
-}
