@@ -1880,26 +1880,54 @@ hub_installs_first() {
 }
 # How many helpers started applying build $2 on machine $1, as its apply.log says.
 apply_starts() { as_user "$1" sh -c 'grep -c "start $1 keeperOnly=false" /home/cawco/.local/share/cawco/binary/apply.log || true' sh "$2"; }
-# A workflow whose one step is a long command on the machine it runs on: work in flight an agent's drain waits on.
-export HOLD_WORKFLOW='{"name":"hold-the-joined-drain","program":"import { z } from \"zod\"; export const inputs = z.object({}); export default async function (w: Workflow<typeof inputs>) { await w.exec(\"sleep 150\"); return {}; }"}'
+# A workflow whose one step is a long command, `sleep $1`, on the machine it runs on: work in flight an agent's drain
+# waits on. Each is its own workflow, so each command is its own piece of work.
+hold_workflow() { printf '{"name":"hold-the-joined-drain-%s","program":"import { z } from \\"zod\\"; export const inputs = z.object({}); export default async function (w: Workflow<typeof inputs>) { await w.exec(\\"sleep %s\\"); return {}; }"}' "$1" "$1"; }
+# Saves the hold workflow for `sleep $1` and runs it on the joined machine in directory $2: prints the workflow's id,
+# then the run's.
+start_hold() {
+  local wf run
+  wf=$(hub_api /api/workflows -X POST -H 'content-type: application/json' -d "$(hold_workflow "$1")" | json 'd => d.id')
+  [[ -n $wf ]]
+  run=$(hub_api "/api/workflows/$wf/runs" -X POST -H 'content-type: application/json' -d "{\"inputs\":{},\"workspace\":{\"path\":\"$2\",\"machineId\":\"$jid\"}}" | json 'd => d.runId')
+  [[ -n $run ]]
+  echo "$wf $run"
+}
+STAGED_RACE=/home/cawco/.local/share/cawco/binary/versions/$RACE_BUILD/release.json
+STRAY_UNIT=/home/cawco/.config/systemd/user/cawco-sessiond-0.0.0-stray.service
+export STAGED_RACE STRAY_UNIT
 joiner_command_mid_drain() {
   need_hub
-  local wf run since answer
-  on_exit 'put_policy nightly false > /dev/null; as_user "$joinerc" pkill -f "sleep 150"'
+  local held first second since answer
+  on_exit 'put_policy nightly false > /dev/null; as_user "$joinerc" pkill -f "sleep 60[12]"; as_user "$joinerc" sh -c "rm -f $STRAY_UNIT && systemctl --user daemon-reload"'
   hub_installs_first "$RACE_BUILD" "$RACE_COMMIT" "$bins/cawco-11" 48
-  # Work in flight on the joined machine, started before any fence: the workflow's command, run there by its agent.
-  wf=$(hub_api /api/workflows -X POST -H 'content-type: application/json' -d "$HOLD_WORKFLOW" | json 'd => d.id')
-  [[ -n $wf ]]
-  on_exit "hub_api /api/workflows/$wf -X DELETE > /dev/null"
-  run=$(hub_api "/api/workflows/$wf/runs" -X POST -H 'content-type: application/json' -d "{\"inputs\":{},\"workspace\":{\"path\":\"/home/cawco\",\"machineId\":\"$jid\"}}" | json 'd => d.runId')
-  [[ -n $run ]]
-  # The run ends with the check, so no step of it is run again on the machine after its agent restarts.
-  on_exit "hub_api /api/workflow-runs/$run/cancel -X POST > /dev/null"
-  wait_until 60 'as_user "$joinerc" pgrep -f "sleep 150" > /dev/null'
-  since=$(as_user "$joinerc" date +%s)
-  # Auto-update on: the joined machine's own pass stages the hub's build, raises its fence, says installing, and drains
-  # for up to 45 s on that command before it starts any helper.
+  # Work in flight on the joined machine, started before any fence: a workflow's command, run there by its agent. Each
+  # run ends with the check, so no step of it is run again on the machine after its agent restarts.
+  held=$(start_hold 601 /home/cawco)
+  read -r -a first <<< "$held"
+  on_exit "hub_api /api/workflows/${first[0]} -X DELETE > /dev/null"
+  on_exit "hub_api /api/workflow-runs/${first[1]}/cancel -X POST > /dev/null"
+  wait_until 60 'as_user "$joinerc" pgrep -f "sleep 601" > /dev/null'
+  # Auto-update on: the joined machine's own pass stages the hub's build and drains on that command for 45 s. The
+  # command outlasts the drain, so the build waits, staged, for it to end.
   put_policy nightly true
+  wait_until 200 '[[ "$(phase $jid)" == ready && -n "$(field $jid waitingOn)" ]]'
+  as_user "$joinerc" test -s "$STAGED_RACE"
+  # While it waits, a prune runs: a keeper unit no keeper runs from goes after 20 s, and what nothing needs goes with
+  # it (2026-10-14's run: a retiring keeper's removal mid-drain pruned the staged build, and the helper found no
+  # release.json). The staged build is not among what goes.
+  as_user "$joinerc" sh -c 'printf "[Unit]\nDescription=CawCo sessiond 0.0.0-stray\n[Service]\nExecStart=/bin/false\n" > "$1" && systemctl --user daemon-reload' sh "$STRAY_UNIT"
+  wait_until 90 'as_user "$joinerc" test ! -e "$STRAY_UNIT"'
+  as_user "$joinerc" test -s "$STAGED_RACE"
+  # Fresh work in flight, then the first command ends: the next pass drains on the new one for 45 s, saying
+  # installing, before it starts any helper.
+  held=$(start_hold 602 /tmp)
+  read -r -a second <<< "$held"
+  on_exit "hub_api /api/workflows/${second[0]} -X DELETE > /dev/null"
+  on_exit "hub_api /api/workflow-runs/${second[1]}/cancel -X POST > /dev/null"
+  wait_until 60 'as_user "$joinerc" pgrep -f "sleep 602" > /dev/null'
+  since=$(as_user "$joinerc" date +%s)
+  as_user "$joinerc" pkill -f "sleep 601"
   wait_until 150 '[[ "$(phase $jid)" == installing ]]'
   as_user "$joinerc" test ! -e /home/cawco/.local/share/cawco/binary/apply.lock
   [[ "$(apply_starts "$joinerc" "$RACE_BUILD")" == 0 ]]
@@ -1914,8 +1942,8 @@ joiner_command_mid_drain() {
   wait_until 300 '[[ "$(build_version $jid)" == "$RACE_BUILD" && "$(phase $jid)" == installed ]]'
   [[ "$(apply_starts "$joinerc" "$RACE_BUILD")" == 1 ]]
 }
-export -f hub_installs_first apply_starts joiner_command_mid_drain
-check "Install now sent while a joined machine's own auto-update pass drains for the build applies on that command: one helper, at once, with no agent restart by hand" joiner_command_mid_drain 1200 "Install now applies the newer build|a second container joins the hub" "$RACE_BUILD"
+export -f hub_installs_first apply_starts hold_workflow start_hold joiner_command_mid_drain
+check "Install now sent while a joined machine's own auto-update pass drains for the build applies on that command: one helper, at once, with no agent restart by hand, and a prune while the build waits staged leaves it" joiner_command_mid_drain 1800 "Install now applies the newer build|a second container joins the hub" "$RACE_BUILD"
 
 # Moves the retry build's archive ($1) `aside` where the hub gets it, its own copy and the release host's, or `back`.
 retry_archive() {

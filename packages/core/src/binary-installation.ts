@@ -206,13 +206,28 @@ export const helperIsLive = async (): Promise<boolean> =>
   (await liveHelper()) !== undefined;
 
 /**
+ * The phases in which the update state's `availableVersion` is a build staged
+ * under `versions/` for an install that has not reached its helper's lock:
+ * waiting for work in flight or for its moment (`ready`), for a keeper's
+ * sessions (`waiting-sessions`), or handed to a helper that has yet to take
+ * its lock (`installing`).
+ */
+const STAGED_PHASES: ReadonlySet<BinaryUpdateState["phase"]> = new Set([
+  "ready",
+  "waiting-sessions",
+  "installing",
+]);
+
+/**
  * Deletes the directories under `versions/` nothing needs. Kept: what `current`
  * and `keeper` name, what a pending update trial would restore or has swapped
  * in (`trial.json`), the build a live helper is applying (named in
- * `apply.lock`), and every build a live process runs or names
- * ({@link versionsInUse}): a unit still on a build the links have left, a
- * retiring keeper and its children, and the hooks baked into their CLI
- * settings. The caller never supplies a keep-list.
+ * `apply.lock`), the build staged for an install no helper has taken up yet
+ * ({@link STAGED_PHASES}: a prune while it waits, a retiring keeper's removal
+ * among them, left its helper no build to apply), and every build a live
+ * process runs or names ({@link versionsInUse}): a unit still on a build the
+ * links have left, a retiring keeper and its children, and the hooks baked
+ * into their CLI settings. The caller never supplies a keep-list.
  */
 export async function prune(): Promise<void> {
   const keep = new Set<string>();
@@ -227,6 +242,10 @@ export async function prune(): Promise<void> {
   add(trial?.previous);
   add(trial?.version);
   add((await liveHelper())?.version);
+  const state = await readUpdateState();
+  if (state && STAGED_PHASES.has(state.phase)) {
+    add(state.availableVersion);
+  }
   for (const version of await versionsInUse(binaryRoot())) {
     add(version);
   }
