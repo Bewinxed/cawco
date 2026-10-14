@@ -1,0 +1,1 @@
+CREATE INDEX `workflow_runs_parent` ON `workflow_runs` (`parent_run_id`);

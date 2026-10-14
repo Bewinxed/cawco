@@ -878,6 +878,15 @@ export interface DbShape {
    */
   readonly listInstances: () => PublicInstanceRow[];
   /**
+   * Runs not yet ended (running, waiting, or holding a stop in
+   * `state.__ending`), narrowed in SQL to one parent's children or one
+   * machine's runs; whole rows, because the engine writes them back.
+   */
+  readonly listLiveWorkflowRuns: (by: {
+    machineId?: string;
+    parentRunId?: string;
+  }) => WorkflowRunRow[];
+  /**
    * Every plugin row without its files, `error` and all. What the DASHBOARD
    * reads: {@link fleetConfig} answers the machines and deliberately carries
    * neither the bookkeeping nor the failure, so a plugin the hub could not
@@ -3344,7 +3353,7 @@ const make = async (path: string): Promise<DbShape> => {
     deleteWorkflow: (id) =>
       db.transaction((tx) => {
         for (const run of tx
-          .select()
+          .select({ id: workflowRuns.id })
           .from(workflowRuns)
           .where(eq(workflowRuns.workflowId, id))
           .all()) {
@@ -3353,7 +3362,7 @@ const make = async (path: string): Promise<DbShape> => {
             .where(eq(instances.workflowRunId, run.id))
             .run();
           for (const step of tx
-            .select()
+            .select({ id: workflowSteps.id })
             .from(workflowSteps)
             .where(eq(workflowSteps.runId, run.id))
             .all()) {
@@ -3377,6 +3386,26 @@ const make = async (path: string): Promise<DbShape> => {
         .select()
         .from(workflowRuns)
         .where(workflowId ? eq(workflowRuns.workflowId, workflowId) : undefined)
+        .orderBy(desc(workflowRuns.startedAt))
+        .all(),
+    listLiveWorkflowRuns: ({ machineId, parentRunId }) =>
+      db
+        .select()
+        .from(workflowRuns)
+        .where(
+          and(
+            parentRunId === undefined
+              ? undefined
+              : eq(workflowRuns.parentRunId, parentRunId),
+            machineId === undefined
+              ? undefined
+              : eq(workflowRuns.machineId, machineId),
+            or(
+              inArray(workflowRuns.status, ["running", "waiting"]),
+              sql`json_extract(${workflowRuns.state}, '$.__ending') IS NOT NULL`
+            )
+          )
+        )
         .orderBy(desc(workflowRuns.startedAt))
         .all(),
     getWorkflowRun: (id) =>
@@ -4628,10 +4657,9 @@ const make = async (path: string): Promise<DbShape> => {
           .all()
           .map(({ name, source }) => ({ name, source })),
         plugins: db
-          .select()
+          .select({ id: plugins.id, enabled: plugins.enabled })
           .from(plugins)
-          .all()
-          .map(({ id, enabled }) => ({ id, enabled })),
+          .all(),
         // Only the rows that resolved: a skill with no files is nothing a machine
         // could converge on, and one whose row says nothing is not sent at all.
         skills: [
@@ -4660,7 +4688,12 @@ const make = async (path: string): Promise<DbShape> => {
                 : []
             ),
           ...db
-            .select()
+            .select({
+              id: workflows.id,
+              name: workflows.name,
+              slug: workflows.slug,
+              inputs: workflows.inputs,
+            })
             .from(workflows)
             .all()
             .map((workflow) => workflowSkill(workflow, workflow.inputs)),
@@ -4938,11 +4971,12 @@ const make = async (path: string): Promise<DbShape> => {
       projectId,
     }) => {
       if (
+        name.startsWith("wf-") &&
         db
-          .select()
+          .select({ id: workflows.id })
           .from(workflows)
-          .all()
-          .some((workflow) => `wf-${workflow.slug}` === name)
+          .where(eq(workflows.slug, name.slice("wf-".length)))
+          .get()
       ) {
         throw new Error(
           `Skill ${name} is owned by a workflow; edit or delete that workflow instead.`

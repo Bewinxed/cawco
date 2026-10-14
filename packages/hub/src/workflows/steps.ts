@@ -868,9 +868,7 @@ export function createSteps(ctx: StepContext) {
      * ends now, and the step's retries take it from there.
      */
     recover(machineId: string) {
-      for (const run of db
-        .listWorkflowRuns()
-        .filter((row) => active(row) && row.machineId === machineId)) {
+      for (const run of db.listLiveWorkflowRuns({ machineId }).filter(active)) {
         detach(recoverRun(run.id), "workflow recovery");
       }
     },
@@ -879,7 +877,7 @@ export function createSteps(ctx: StepContext) {
      * the attempt began. Its session is left exactly as it is.
      */
     resume() {
-      for (const run of db.listWorkflowRuns().filter(active)) {
+      for (const run of db.listLiveWorkflowRuns({}).filter(active)) {
         for (const step of db.listWorkflowSteps(run.id)) {
           const attempt = step.status === "running" ? latest(step) : undefined;
           if (

@@ -133,39 +133,43 @@ export const workflows = sqliteTable("workflows", {
     .notNull()
     .$defaultFn(() => new Date()),
 });
-export const workflowRuns = sqliteTable("workflow_runs", {
-  parentRunId: text("parent_run_id"),
-  parentStepId: text("parent_step_id"),
-  id: text("id").primaryKey(),
-  workflowId: text("workflow_id")
-    .notNull()
-    .references(() => workflows.id),
-  graph: text("graph", { mode: "json" }).$type<WorkflowGraph>(),
-  program: text("program").notNull(),
-  inputs: text("inputs", { mode: "json" })
-    .$type<Record<string, unknown>>()
-    .notNull(),
-  workspace: text("workspace").notNull(),
-  machineId: text("machine_id").notNull(),
-  supervisorInstanceId: text("supervisor_instance_id"),
-  status: text("status").$type<WorkflowRunStatus>().notNull(),
-  result: text("result", { mode: "json" }).$type<unknown>(),
-  failure: text("failure"),
-  state: text("state", { mode: "json" })
-    .$type<Record<string, unknown>>()
-    .notNull(),
-  startedAt: timestamp("started_at")
-    .notNull()
-    .$defaultFn(() => new Date()),
-  endedAt: timestamp("ended_at"),
-  rerunOfRunId: text("rerun_of_run_id"),
-  launchedBy: text("launched_by").notNull(),
-  /**
-   * When the owner last looked at the run (its tab in front) or archived it
-   * off Finished, on any device: a run that ended after this is news.
-   */
-  seenAt: timestamp("seen_at"),
-});
+export const workflowRuns = sqliteTable(
+  "workflow_runs",
+  {
+    parentRunId: text("parent_run_id"),
+    parentStepId: text("parent_step_id"),
+    id: text("id").primaryKey(),
+    workflowId: text("workflow_id")
+      .notNull()
+      .references(() => workflows.id),
+    graph: text("graph", { mode: "json" }).$type<WorkflowGraph>(),
+    program: text("program").notNull(),
+    inputs: text("inputs", { mode: "json" })
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    workspace: text("workspace").notNull(),
+    machineId: text("machine_id").notNull(),
+    supervisorInstanceId: text("supervisor_instance_id"),
+    status: text("status").$type<WorkflowRunStatus>().notNull(),
+    result: text("result", { mode: "json" }).$type<unknown>(),
+    failure: text("failure"),
+    state: text("state", { mode: "json" })
+      .$type<Record<string, unknown>>()
+      .notNull(),
+    startedAt: timestamp("started_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+    endedAt: timestamp("ended_at"),
+    rerunOfRunId: text("rerun_of_run_id"),
+    launchedBy: text("launched_by").notNull(),
+    /**
+     * When the owner last looked at the run (its tab in front) or archived it
+     * off Finished, on any device: a run that ended after this is news.
+     */
+    seenAt: timestamp("seen_at"),
+  },
+  (table) => [index("workflow_runs_parent").on(table.parentRunId)]
+);
 export const workflowSteps = sqliteTable("workflow_steps", {
   childRunId: text("child_run_id"),
   id: text("id").primaryKey(),

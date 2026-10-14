@@ -732,19 +732,55 @@ export const createIngress = ({
     return { seen, changed };
   };
 
-  /** One call of a connector poll: new and changed items ingested, what it saw kept. */
+  /**
+   * The poll as it stands now when it still lists and keys what `poll` did:
+   * undefined when it was deleted, disabled, or edited in what it calls or
+   * keys by while a call was out.
+   */
+  const unmoved = (poll: ConnectorPollRow): ConnectorPollRow | undefined => {
+    const now = store.connectorPoll(poll.id);
+    const shape = (row: ConnectorPollRow) =>
+      JSON.stringify([
+        row.args,
+        row.itemsPath,
+        row.idPath,
+        row.versionPath,
+        row.enabled,
+      ]);
+    return now && shape(now) === shape(poll) ? now : undefined;
+  };
+
+  /**
+   * One call of a connector poll: new and changed items ingested, what it saw
+   * kept. An edit made while the call was out wins: the call's answer is
+   * dropped and nothing is written, so the next call starts from the edit.
+   */
   const pollConnector = async (id: string): Promise<void> => {
-    const poll = store.connectorPoll(id);
-    if (!poll) {
+    const asked = store.connectorPoll(id);
+    if (!asked) {
       return;
     }
     const polledAt = new Date();
+    let result: Awaited<ReturnType<typeof connections.callConnection>>;
     try {
-      const result = await connections.callConnection(
-        poll.connection,
-        poll.tool,
-        poll.args
+      result = await connections.callConnection(
+        asked.connection,
+        asked.tool,
+        asked.args
       );
+    } catch (error) {
+      failed(asked, polledAt, error);
+      return;
+    }
+    // Same synchronous step from here to the write: no edit can land between.
+    const poll = unmoved(asked);
+    if (!poll) {
+      console.log(
+        `[ingress] connector poll ${id}: edited during its call, answer dropped`
+      );
+      return;
+    }
+    try {
       const { seen, changed } = diffed(poll, itemsIn(poll, result));
       const source = `conn:${poll.connection}:${poll.tool}`;
       const landed = changed.filter(({ item, key }) =>
@@ -771,14 +807,27 @@ export const createIngress = ({
         console.log(`[ingress] ${source}: ${landed} new or changed`);
       }
     } catch (error) {
-      const reason = `${poll.connection}/${poll.tool}: ${wordsOf(error)}`.slice(
-        0,
-        500
-      );
-      store.updateConnectorPoll(id, { reason, polledAt });
-      if (reason !== poll.reason) {
-        console.warn(`[ingress] connector poll ${id}: ${reason}`);
-      }
+      failed(poll, polledAt, error);
+    }
+  };
+
+  /** A call that failed keeps its reason, unless the poll moved under it. */
+  const failed = (
+    asked: ConnectorPollRow,
+    polledAt: Date,
+    error: unknown
+  ): void => {
+    const poll = unmoved(asked);
+    if (!poll) {
+      return;
+    }
+    const reason = `${poll.connection}/${poll.tool}: ${wordsOf(error)}`.slice(
+      0,
+      500
+    );
+    store.updateConnectorPoll(poll.id, { reason, polledAt });
+    if (reason !== poll.reason) {
+      console.warn(`[ingress] connector poll ${poll.id}: ${reason}`);
     }
   };
 

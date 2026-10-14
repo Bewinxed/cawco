@@ -856,18 +856,15 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         cleanupSession(run, instanceId);
       }
       for (const child of db
-        .listWorkflowRuns()
-        .filter((entry) => entry.parentRunId === run.id && active(entry))) {
+        .listLiveWorkflowRuns({ parentRunId: run.id })
+        .filter(active)) {
         finish(child, "cancelled");
       }
       return;
     }
     const children = db
-      .listWorkflowRuns()
-      .filter(
-        (entry) =>
-          entry.parentRunId === run.id && (active(entry) || endingOf(entry))
-      );
+      .listLiveWorkflowRuns({ parentRunId: run.id })
+      .filter((entry) => active(entry) || endingOf(entry));
     const pending = [
       ...new Set(
         db
@@ -1776,8 +1773,8 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
      */
     recover(machineId: string) {
       for (const run of db
-        .listWorkflowRuns()
-        .filter((row) => row.machineId === machineId && endingOf(row))) {
+        .listLiveWorkflowRuns({ machineId })
+        .filter((row) => endingOf(row))) {
         serial(run.id, () => endRunSessions(run.id)).catch((error) =>
           notify(run, `Stop remains held: ${reason(error)}`)
         );
@@ -1818,7 +1815,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         return;
       }
       steps.resume();
-      const live = db.listWorkflowRuns().filter(active);
+      const live = db.listLiveWorkflowRuns({}).filter(active);
       for (const run of live) {
         for (const step of db.listWorkflowSteps(run.id)) {
           if (step.kind === "ask" && step.status === "waiting") {
