@@ -2,7 +2,7 @@ import CawCoCore
 import CawCoDesign
 import UIKit
 
-/// Configure › Accounts (routes/config/accounts/+page.svelte): one group per
+/// Configure › Accounts (the dashboard's accounts +page.svelte): one group per
 /// provider that has an account, in the picker's order. A group's head is
 /// the provider's mark and name, and Routing once it has two accounts to
 /// route between; under it the accounts in fill-first order, each row one

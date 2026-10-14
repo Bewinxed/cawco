@@ -358,7 +358,7 @@ final class UsageSheetController: ObservedViewController {
     var onPage: (() -> Void)?
     /// A session was opened from a sessions list: the sheet goes away, as a menu does.
     var onOpenSession: ((String) -> Void)?
-    /// Where an account is signed in (`/config/accounts`): the gap's one action.
+    /// Where an account is signed in (Configure › Accounts): the gap's one action.
     var onSignIn: (() -> Void)?
 
     init(home: HomeModel) {

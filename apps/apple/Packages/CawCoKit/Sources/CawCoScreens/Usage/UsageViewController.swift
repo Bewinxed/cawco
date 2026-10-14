@@ -95,7 +95,7 @@ final class UsageViewController: ObservedViewController, UIDocumentPickerDelegat
         controls.addArrangedSubview(exportButton)
         errorSlot.axis = .vertical
 
-        // "Sign in an account": where accounts are signed in (`/config/accounts`).
+        // "Sign in an account": where accounts are signed in (Configure › Accounts).
         limits.onSignIn = { [weak self] in self?.context.openConfigure("accounts") }
         limits.presenter = self
         whereCard.onOpen = { [weak self] session in

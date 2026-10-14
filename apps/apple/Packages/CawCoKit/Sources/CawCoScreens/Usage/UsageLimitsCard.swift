@@ -9,7 +9,7 @@ import UIKit
 /// order, each its 56pt double dial, its figure, a sentence, its key and the
 /// sessions running on it; then opencode's plan the same way.
 final class UsageLimitsCard: UsageCard {
-    /// Where accounts are signed in (`/config/accounts`): the gap's one action.
+    /// Where accounts are signed in (Configure › Accounts): the gap's one action.
     var onSignIn: () -> Void = {}
     /// Where a tap's tip opens: the page.
     weak var presenter: UIViewController?
