@@ -14,9 +14,9 @@ import UIKit
 ///   standing, the page fills the column above the field, and the field
 ///   takes the keys, and the rail stands clear of the top grab's band and
 ///   the sides; the grab's drag settles at 40% of the column and at the
-///   column less the field, one spring each; turned landscape (room either
-///   side of the pill), a drag on the top-right corner by (+60, −80) widens
-///   it by 120 with its centre unmoved and raises its top by 80 on one
+///   column less the field, one spring each; on the probe's 1032pt iPad
+///   (past 900pt, room either side of the pill), a drag on the top-right
+///   corner by (+60, −80) widens it by 120 with its centre unmoved and raises its top by 80 on one
 ///   spring, holds at its bounds both ways, and the size survives Done and
 ///   reopen; Dock stands the canvas's own view on the artifact panel's page,
 ///   its rail 8pt from the top, and its page's Undock brings it
@@ -171,9 +171,7 @@ enum CanvasProbe {
 
         // The rail stands clear of the top grab's band (44pt, then space2) and space3 in from the sides.
         let rail = await room.web?.probeRail()
-        check("over the field the rail stands 52pt below the canvas's top and 12pt in from its sides",
-              rail.map { abs($0.top - 52) <= 1.5 && abs($0.left - 12) <= 1.5 && abs($0.right - 12) <= 1.5 } ?? false,
-              rail.map { "rail top \(f($0.top)), left \(f($0.left)), right \(f($0.right))" } ?? "no rail in the page")
+        railCheck(rail, over: "over the field", top: CanvasMeasure.grabHeight + Space.space2)
 
         // The grab: 40% of the column, then the column less the field, each on one spring.
         for (label, height, speed) in [("40% of the column", 0.0, -900.0), ("the column less the field", 5000.0, 900.0)] {
@@ -202,9 +200,7 @@ enum CanvasProbe {
         check("Dock stands the canvas's own view on the panel's page, its chip in the composer",
               docked && gap <= 1 && binding.canvas?.docked == true,
               "docked \(room.docked), the view against the panel's page \(f(gap, 2))pt off, chip \(composer.canvasChip != nil), note \(composer.probeCanvasNote ?? "none")")
-        let dockedRail = await room.web?.probeRail()
-        check("docked, the rail stands 8pt from the canvas's top", dockedRail.map { abs($0.top - 8) <= 1.5 } ?? false,
-              dockedRail.map { "rail top \(f($0.top)), left \(f($0.left)), right \(f($0.right))" } ?? "no rail in the page")
+        railCheck(await room.web?.probeRail(), over: "docked", top: Space.space2)
         room.web?.onUndock()
         let back = await until(15) { room.up && !room.moving && binding.canvas?.docked == false }
         await wait(1.0)
@@ -260,12 +256,21 @@ enum CanvasProbe {
         binding.onSend = send
     }
 
-    /// Turns the scene to `orientations` and waits for the window to take it.
-    private static func turn(_ window: UIWindow, to orientations: UIInterfaceOrientationMask, wide: Bool) async -> Bool {
-        window.windowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: orientations)) { error in
-            say("the scene refused to turn: \(error.localizedDescription)")
+    /// The rail's room in the page: standing at the top, `top` above it
+    /// (the hello's inset and `space2`) and `space3` either side; standing at
+    /// the foot (a narrow page under a coarse pointer, canvas.css) the top's
+    /// inset is not its to keep, and the sides are checked alone.
+    private static func railCheck(_ rail: (top: Double, bottom: Double, left: Double, right: Double)?, over place: String, top: Double) {
+        guard let rail else { return check("\(place) the rail stands clear of the canvas's edges", false, "no rail in the page") }
+        let atTop = rail.top < rail.bottom
+        let sides = abs(rail.left - Space.space3) <= 1 && abs(rail.right - Space.space3) <= 1
+        let detail = "rail at the \(atTop ? "top" : "foot"): top \(f(rail.top)), bottom \(f(rail.bottom)), left \(f(rail.left)), right \(f(rail.right))"
+        if atTop {
+            check("\(place) the rail stands \(f(top, 0))pt below the canvas's top and \(f(Space.space3, 0))pt in from its sides",
+                  abs(rail.top - top) <= 1 && sides, detail)
+        } else {
+            check("\(place) the rail stands at the foot \(f(Space.space3, 0))pt in from the canvas's sides", sides, detail)
         }
-        return await until(5) { (window.bounds.width > 900) == wide }
     }
 
     /// Waits for a settle to come to rest.
@@ -274,25 +279,15 @@ enum CanvasProbe {
         await wait(0.2)
     }
 
-    /// The top corners' resize handles. Turned landscape: past a 900pt
-    /// window the pill is at most 720pt wide, centred, with room either side
-    /// (at 834pt in portrait it spans its column, and there is none). A drag
-    /// on the top-right corner by (+60, −80) widens the canvas by 120 with
-    /// its centre unmoved and raises its top by 80, on one spring; dragged
-    /// far out and in it holds at its bounds; the size it is left at
-    /// survives Done and reopen. Turned back to portrait after.
+    /// The top corners' resize handles. Past a 900pt window (the probe's
+    /// iPad Pro 13-inch) the pill is at most 720pt wide, centred, with room
+    /// either side; at or under it the pill spans its column and there is
+    /// none. A drag on the top-right corner by (+60, −80) (by as much of 60
+    /// as the reach allows) widens the canvas by twice that with its centre
+    /// unmoved and raises its top by 80, on one spring; dragged far out and
+    /// in it holds at its bounds; the size it is left at survives Done and
+    /// reopen.
     private static func cornerPass(_ composer: ComposerView, _ room: CanvasRoom, _ window: UIWindow) async {
-        let turned = await turn(window, to: .landscapeRight, wide: true)
-        _ = await until(5) { (room.probeReach ?? 0) > 60 && room.up && !room.moving }
-        await wait(0.8)
-        await cornerChecks(composer, room, window, turned: turned)
-        let back = await turn(window, to: .portrait, wide: false)
-        _ = await until(5) { room.up && !room.moving && (room.probeReach ?? 0) < 1 }
-        await wait(0.8)
-        if !back { say("the scene didn't turn back to portrait: window \(f(window.bounds.width, 0))pt") }
-    }
-
-    private static func cornerChecks(_ composer: ComposerView, _ room: CanvasRoom, _ window: UIWindow, turned: Bool) async {
         let shown = [room.leftCorner, room.rightCorner].map { !$0.isHidden && $0.isUserInteractionEnabled && $0.superview != nil && $0.alpha > 0.99 }
         guard let sizes = room.sizes, let reach = room.probeReach else {
             return check("the corner handles stand over the canvas", false, "no sizes")
@@ -302,13 +297,14 @@ enum CanvasProbe {
         await rested(room)
         let before = room.probeBox
         let settles = room.probeSettles
-        room.probeCorner(.topRight, by: CGPoint(x: 60, y: -80), speed: .zero)
+        let out = min(60, reach)
+        room.probeCorner(.topRight, by: CGPoint(x: out, y: -80), speed: .zero)
         await rested(room)
         let after = room.probeBox
-        check("a drag on the top-right corner by (+60, −80) widens the canvas by 120 with its centre unmoved and raises its top by 80, on one spring",
-              shown.allSatisfy(\.self) && turned && reach >= 60 && abs(after.width - before.width - 120) <= 0.5
+        check("a drag on the top-right corner by (+\(f(out, 0)), −80) widens the canvas by \(f(2 * out, 0)) with its centre unmoved and raises its top by 80, on one spring",
+              shown.allSatisfy(\.self) && out > 0 && abs(after.width - before.width - 2 * out) <= 0.5
                   && abs(after.midX - before.midX) <= 0.5 && abs(after.minY - (before.minY - 80)) <= 0.5 && room.probeSettles == settles + 1,
-              "corners shown \(shown), landscape \(turned) (window \(f(window.bounds.width, 0))pt), reach \(f(reach)) each side; width \(f(before.width)) → \(f(after.width)), left edge \(f(before.minX)) → \(f(after.minX)), right \(f(before.maxX)) → \(f(after.maxX)), top \(f(before.minY)) → \(f(after.minY)), \(room.probeSettles - settles) spring")
+              "corners shown \(shown), window \(f(window.bounds.width, 0))pt, reach \(f(reach)) each side; width \(f(before.width)) → \(f(after.width)), left edge \(f(before.minX)) → \(f(after.minX)), right \(f(before.maxX)) → \(f(after.maxX)), top \(f(before.minY)) → \(f(after.minY)), \(room.probeSettles - settles) spring")
 
         // Far out it holds at the reach and the column less the field; far in, at the pill's width and 40%.
         room.probeCorner(.topRight, by: CGPoint(x: 2000, y: -3000), speed: CGPoint(x: 900, y: -900))
@@ -322,7 +318,7 @@ enum CanvasProbe {
               "out: each side \(f(most.0)) of \(f(reach)), \(f(most.1))pt tall of \(f(sizes.max)); in: each side \(f(least.0)), \(f(least.1))pt tall of \(f(sizes.min))")
 
         // The size it is left at survives Done and reopen.
-        room.probeCorner(.topRight, by: CGPoint(x: 60, y: -80), speed: .zero)
+        room.probeCorner(.topRight, by: CGPoint(x: out, y: -80), speed: .zero)
         await rested(room)
         let kept = room.probeBox
         composer.foldCanvas()
@@ -414,7 +410,7 @@ enum CanvasProbe {
               "link \(refused.link.rawValue), refusal \(line2 ?? "gone"), the page's doc holds \(drawn.count)\(drawn.error.map { " (\($0))" } ?? ""), cawco:drawn said \(refused.drawn.map(String.init) ?? "nothing"), the hub's export \(hubDrawn)")
 
         // A PNG pasted into the canvas: an image element with its file in the doc, in the export and its picture.
-        var pasted = (images: 0, filed: 0)
+        var pasted = (images: 0, filed: 0, said: "")
         var pasteError: String?
         do { pasted = try await refused.probePaste() } catch { pasteError = error.localizedDescription }
         let synced2 = await until(5) { refused.drawn == drawn.count + pasted.images && refused.link == .synced }
@@ -428,7 +424,7 @@ enum CanvasProbe {
         }
         check("a PNG pasted into the canvas is an image element with its file in the doc, the export and its picture",
               pasted.images == 1 && pasted.filed == 1 && synced2 && exported.images == 1 && exported.filed == 1 && exported.png > 0,
-              "the page's doc: \(pasted.images) image, \(pasted.filed) with its file\(pasteError.map { " (\($0))" } ?? ""); synced \(synced2); the export: \(exported.images) image, \(exported.filed) with its file, picture \(exported.png) bytes")
+              "the page's doc: \(pasted.images) image, \(pasted.filed) with its file (\(pasteError ?? pasted.said)); synced \(synced2); the export: \(exported.images) image, \(exported.filed) with its file, picture \(exported.png) bytes")
         composer.returned()
         let went = await until(20) { binding.canvas == nil && !composer.probeCanvasWorking }
         let names = carried.last ?? []

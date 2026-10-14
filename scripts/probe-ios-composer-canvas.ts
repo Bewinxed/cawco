@@ -21,7 +21,7 @@
  *  2. stands up a scratch fleet (scratch-fleet.ts: a real hub with its
  *     preview listener, agent and sessiond, Claude Code on a mock model)
  *     and spawns one session;
- *  3. on an iPad Pro 11-inch (M4), iOS 18.5, launches the app on that
+ *  3. on an iPad Pro 13-inch (M4), iOS 18.5, launches the app on that
  *     session three times (ComposerCanvasProbe.swift reads the canvas off
  *     the app and logs `canvas PASS|FAIL …` in the Probe category):
  *     - `-canvas-probe -cawcoProbePencil`: the simulator has no pencil, so
@@ -53,7 +53,8 @@ const build = !process.argv.includes("--no-build");
 const drawOnly = process.argv.includes("--draw");
 const root = resolve(import.meta.dir, "..");
 const AXE = "/opt/homebrew/bin/axe";
-const DEVICE = "iPad Pro 11-inch (M4)";
+/** 1032pt wide: past the 900pt line the pill is at most 720pt, so the canvas's corners have room to widen it. */
+const DEVICE = "iPad Pro 13-inch (M4)";
 const RUNTIME = "com.apple.CoreSimulator.SimRuntime.iOS-18-5";
 /** What `log stream --style compact` puts before a Probe line's own words. */
 const PROBE_PREFIX = /^.*\[dev\.cawco\.app:Probe\]\s*/;

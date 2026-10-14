@@ -592,14 +592,29 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
     const blob = await new Promise((done) => ink.toBlob(done, "image/png"));
     const data = new DataTransfer();
     data.items.add(new File([blob], "probe.png", { type: "image/png" }));
-    (document.activeElement ?? document.body).dispatchEvent(
-      new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    // Excalidraw takes a paste only while the focus is in its container and
+    // the pointer it last saw is over its canvas (App.pasteFromClipboard), as
+    // they are once the person has drawn on it.
+    document.querySelector(".excalidraw-container, .excalidraw")?.focus();
+    const surface = document.querySelector("canvas.excalidraw__canvas.interactive");
+    const middle = surface?.getBoundingClientRect();
+    const px = middle ? middle.left + middle.width / 2 : 0, py = middle ? middle.top + middle.height / 2 : 0;
+    surface?.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, clientX: px, clientY: py, pointerId: 7, pointerType: "pen", isPrimary: true }));
+    const under = document.elementFromPoint(px, py);
+    const pointed = under ? `${under.tagName}.${under.className}`.slice(0, 80) : "nothing";
+    const paste = new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true });
+    // WebKit may leave a script's ClipboardEvent without its data: the stand-in carries it.
+    const carried = paste.clipboardData?.files?.length ?? 0;
+    if (carried === 0) Object.defineProperty(paste, "clipboardData", { value: data });
+    const active = document.activeElement;
+    (active ?? document.body).dispatchEvent(paste);
     const doc = window.cawcoArtifact.doc;
     const read = () => {
       const images = doc.getArray("elements").toArray().map((entry) => entry.get("el"))
         .filter((el) => el && !el.isDeleted && el.type === "image");
       const files = doc.getMap("files");
-      return { images: images.length, filed: images.filter((el) => el.fileId && files.has(el.fileId)).length };
+      return { images: images.length, filed: images.filter((el) => el.fileId && files.has(el.fileId)).length,
+        focus: active ? `${active.tagName}.${active.className}`.slice(0, 80) : "none", carried, pointed };
     };
     for (let i = 0; i < 50; i += 1) {
       const now = read();
@@ -609,8 +624,9 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
     return JSON.stringify(read());
     """
 
-    /// A PNG pasted on the page; the doc's image elements and how many have their file.
-    func probePaste() async throws -> (images: Int, filed: Int) {
+    /// A PNG pasted on the page; the doc's image elements and how many have
+    /// their file, where the focus was, and whether WebKit kept the event's data.
+    func probePaste() async throws -> (images: Int, filed: Int, said: String) {
         let web = web
         let said = try await withCheckedThrowingContinuation { (done: CheckedContinuation<String, any Error>) in
             web.__callAsyncJavaScript(Self.paste, arguments: [:], inFrame: nil, in: .page) { value, error in
@@ -618,26 +634,28 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
             }
         }
         let read = (try? JSONSerialization.jsonObject(with: Data(said.utf8))) as? [String: Any]
-        return ((read?["images"] as? NSNumber)?.intValue ?? 0, (read?["filed"] as? NSNumber)?.intValue ?? 0)
+        return ((read?["images"] as? NSNumber)?.intValue ?? 0, (read?["filed"] as? NSNumber)?.intValue ?? 0, said)
     }
 
-    /// Where the rail's groups stand in the page: the topmost's top, and the
-    /// room left of the leftmost and right of the rightmost, page points.
-    func probeRail() async -> (top: Double, left: Double, right: Double)? {
+    /// Where the rail's groups stand in the page: the room above the topmost,
+    /// below the lowest, left of the leftmost and right of the rightmost,
+    /// page points.
+    func probeRail() async -> (top: Double, bottom: Double, left: Double, right: Double)? {
         let web = web
         let said = await withCheckedContinuation { (done: CheckedContinuation<String?, Never>) in
             web.evaluateJavaScript("""
             (() => {
               const boxes = [...document.querySelectorAll(".rail")].map((el) => el.getBoundingClientRect()).filter((box) => box.width > 0);
               if (boxes.length === 0) return null;
-              return JSON.stringify({ top: Math.min(...boxes.map((box) => box.top)), left: Math.min(...boxes.map((box) => box.left)),
-                right: innerWidth - Math.max(...boxes.map((box) => box.right)) });
+              return JSON.stringify({ top: Math.min(...boxes.map((box) => box.top)),
+                bottom: innerHeight - Math.max(...boxes.map((box) => box.bottom)),
+                left: Math.min(...boxes.map((box) => box.left)), right: innerWidth - Math.max(...boxes.map((box) => box.right)) });
             })()
             """) { value, _ in done.resume(returning: value as? String) }
         }
         guard let said, let read = (try? JSONSerialization.jsonObject(with: Data(said.utf8))) as? [String: Double],
-              let top = read["top"], let left = read["left"], let right = read["right"] else { return nil }
-        return (top, left, right)
+              let top = read["top"], let bottom = read["bottom"], let left = read["left"], let right = read["right"] else { return nil }
+        return (top, bottom, left, right)
     }
 
     /// The probe's gate on the page's sync socket: `open`, or `cut`.
