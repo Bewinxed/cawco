@@ -14,7 +14,7 @@
  * worth listed whole is the four thousand pixels of rail the fold is for.
  */
 import { cawco, type InstanceRow } from "./client.svelte";
-import { sessionStatus } from "./SessionMark.svelte";
+import { sessionStatus } from "./session-status";
 
 /** A project lists every session that moved in the last day. */
 export const PROJECT_WINDOW = 24 * 60 * 60 * 1000;

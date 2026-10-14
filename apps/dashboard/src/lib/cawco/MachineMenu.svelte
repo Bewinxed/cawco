@@ -30,7 +30,7 @@
     removeMachine,
   } from "./client.svelte";
   import { resolveSessionTitle } from "./links";
-  import { sessionStatus, statusWord } from "./SessionMark.svelte";
+  import { cawOf, sessionStatus, statusWord } from "./session-status";
   import UnlockKeychain from "./UnlockKeychain.svelte";
   import { updates } from "./updates/updates.svelte";
 
@@ -74,6 +74,7 @@
             kind: "session" as const,
             place: row.cwd || row.machineId,
             status,
+            caw: cawOf(row.id),
           },
           status: statusWord(row, status),
         };

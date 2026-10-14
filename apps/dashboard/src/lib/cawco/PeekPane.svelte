@@ -73,8 +73,9 @@
   import OsMark from "./OsMark.svelte";
   import { plainMarkdown, plainStreaming } from "./plain-markdown";
   import RowFault from "./RowFault.svelte";
-  import SessionMark, { sessionStatus } from "./SessionMark.svelte";
+  import SessionMark from "./SessionMark.svelte";
   import { sessionAct, stopOnRow } from "./session-acts.svelte";
+  import { cawOf, sessionStatus } from "./session-status";
   import TaskPanel from "./TaskPanel.svelte";
   import { refreshTasks, taskProgress, tasksOf } from "./tasks.svelte";
   import MessageRow from "./transcript/MessageRow.svelte";
@@ -331,6 +332,7 @@
        list of one, so a working session's mark echoes here too. -->
   <div class="flex items-center gap-2 px-4 pb-3 text-meta" {@attach echoBeat()}>
     <SessionMark
+      caw={cawOf(target.viewId)}
       id={target.viewId}
       place={row?.cwd || row?.machineId || target.viewId}
       status={sessionStatus(row)}

@@ -56,6 +56,7 @@
   import { conversationHref } from "../links";
   import OsMark from "../OsMark.svelte";
   import SessionMark from "../SessionMark.svelte";
+  import { cawOf } from "../session-status";
   import { capLine } from "../usage";
   import { choices } from "./choices.svelte";
   import { clock, type NeedsItem, span } from "./home-state.svelte";
@@ -306,6 +307,7 @@
   <span class="lead">
     {#if item.kind === "ask" || item.kind === "watch"}
       <SessionMark
+        caw={cawOf(item.instanceId)}
         id={item.instanceId}
         place={item.cwd || item.machineId}
         status="attn"

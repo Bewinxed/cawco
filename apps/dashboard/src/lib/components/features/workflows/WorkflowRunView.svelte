@@ -21,7 +21,11 @@
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
-  import { sessionStatus, statusWord } from "#lib/cawco/SessionMark.svelte";
+  import {
+    cawOf,
+    sessionStatus,
+    statusWord,
+  } from "#lib/cawco/session-status.js";
   import RunBlock from "#lib/cawco/transcript/RunBlock.svelte";
   import { runHref } from "#lib/cawco/workflow-runs.js";
   import {
@@ -156,6 +160,7 @@
             kind: "session" as const,
             place: row?.cwd || row?.machineId || id,
             status,
+            caw: cawOf(id),
           },
           status: statusWord(row, status),
         };

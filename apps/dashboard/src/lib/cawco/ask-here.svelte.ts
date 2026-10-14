@@ -19,6 +19,7 @@
  * skill). It is read live, so a session that ends while the question stands
  * shows it. A single delete names its one thing in words.
  */
+import type { ThreadStatus } from "@cawco/core";
 import type { Component } from "svelte";
 import type { SVGAttributes } from "svelte/elements";
 import type { MarkStatus } from "./TreeMark.svelte";
@@ -100,7 +101,13 @@ export interface AskItem {
   id: string;
   /** How it leads its row: a session's mark, a machine's OS mark, or a glyph. */
   lead:
-    | { kind: "session"; place: string; status?: MarkStatus }
+    | {
+        kind: "session";
+        place: string;
+        status?: MarkStatus;
+        /** A thread's Caw status, its face (session-status.ts `cawOf`). */
+        caw?: ThreadStatus | null;
+      }
     | { kind: "machine"; os: string }
     | { kind: "glyph"; icon: Component<SVGAttributes<SVGSVGElement>> };
   /** The item it hangs under, as a delegate under its lead. */

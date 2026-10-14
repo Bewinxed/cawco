@@ -33,6 +33,7 @@
       <div class="row">
         {#if item.lead.kind === "session"}
           <SessionMark
+            caw={item.lead.caw ?? null}
             count={kids.length}
             id={item.id}
             place={item.lead.place}

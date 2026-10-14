@@ -79,7 +79,7 @@
   import LiveSessionMenu from "./LiveSessionMenu.svelte";
   import { unfold } from "./motion/fold.svelte";
   import RowFault from "./RowFault.svelte";
-  import SessionMark, { sessionStatus, statusWord } from "./SessionMark.svelte";
+  import SessionMark from "./SessionMark.svelte";
   import StoredSessionMenu from "./StoredSessionMenu.svelte";
   import {
     noteOn,
@@ -87,6 +87,7 @@
     renameSession,
     sessionAct,
   } from "./session-acts.svelte";
+  import { cawOf, sessionStatus, statusWord } from "./session-status";
   import { isThreadTab } from "./thread-tabs";
   import AccountDot from "./usage/AccountDot.svelte";
   import { runIdOf } from "./workflow-runs";
@@ -263,6 +264,7 @@
   <!-- On a parent, its mark says how many rows are under it and opens
        them. -->
   <SessionMark
+    caw={cawOf(sessionId)}
     count={fold?.count ?? 0}
     id={sessionId}
     ontoggle={fold?.ontoggle}

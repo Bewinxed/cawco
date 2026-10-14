@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 /**
- * Screenshot harness for the CawCo redesign preview (port 3457).
+ * Screenshot harness for a dashboard page (the dev server's port 3000, or
+ * wherever the dashboard is served).
  *
  * Usage:
- *   node scripts/shot.mjs --url http://localhost:3457/session --out "$TMPDIR"/x.png \
+ *   node scripts/shot.mjs --url http://localhost:3000/session --out "$TMPDIR"/x.png \
  *     [--viewport 1728x1080] [--dark] [--wait 2500] [--fullpage]
  *
  * Viewports for the three targets:
