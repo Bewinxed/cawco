@@ -27,9 +27,12 @@ public struct TypeRole: Sendable {
     /// The size Dynamic Type scales it as: its own, or (a measured figure)
     /// the size of the words it stands among, so the two scale together.
     private let styleSize: Double?
+    /// Whether Dynamic Type scales it: every role does, but words drawn into
+    /// a picture whose geometry is fixed in points (`fixed`).
+    public let scales: Bool
 
     init(weight: UIFont.Weight, size: ClosedRange<Double>, leading: Double, family: [String], fluid: Fluid? = nil, tracking: Double = 0,
-         textStyleOf styleSize: Double? = nil) {
+         textStyleOf styleSize: Double? = nil, scales: Bool = true) {
         self.weight = weight
         self.size = size
         self.leading = leading
@@ -37,6 +40,16 @@ public struct TypeRole: Sendable {
         self.fluid = fluid
         self.tracking = tracking
         self.styleSize = styleSize
+        self.scales = scales
+    }
+
+    /// The role at its token size whatever the Dynamic Type setting: for the
+    /// words of a drawing laid out in points (the routing figures), which the
+    /// web draws at the token's size too. Such a drawing says nothing a person
+    /// needs that the words around it, which do scale, don't say.
+    public var fixed: TypeRole {
+        TypeRole(weight: weight, size: size, leading: leading, family: family, fluid: fluid, tracking: tracking,
+                 textStyleOf: styleSize, scales: false)
     }
 
     /// The role's size on a compact screen: a fluid role's smallest.
@@ -63,7 +76,7 @@ public struct TypeRole: Sendable {
         let mono = family.first?.hasPrefix("JetBrains Mono") == true
         let base = UIFont(descriptor: Self.descriptor(weight: weight ?? self.weight, mono: mono,
                                                       wordmark: family.first?.hasPrefix("Nunito") == true), size: size)
-        return UIFontMetrics(forTextStyle: textStyle).scaledFont(for: base)
+        return scales ? UIFontMetrics(forTextStyle: textStyle).scaledFont(for: base) : base
     }
 
     /// The role's line height in points, at the font's scaled size.

@@ -434,12 +434,16 @@ final class SignedInLine: UIStackView {
     }
 }
 
-/// An editor's part under its head (EditorSection.svelte): its glyph in its
-/// hue, its name in the label role, then what it holds.
+/// An editor's part (EditorSection.svelte `.section`): a hairline over it
+/// and 18pt under that, its head (its glyph in its hue, its name in the
+/// label role), then what it holds, 8pt apart.
 func editorSection(_ glyph: Glyph, hue: UIColor, _ name: String, _ body: [UIView]) -> UIStackView {
     let stack = UIStackView(arrangedSubviews: [nsSectionHeader(glyph, hue: hue, name)] + body)
     stack.axis = .vertical
-    stack.spacing = Space.space3
+    stack.spacing = 8
+    stack.isLayoutMarginsRelativeArrangement = true
+    stack.directionalLayoutMargins = .init(top: 18, leading: 0, bottom: 0, trailing: 0)
+    stack.addHairline()
     return stack
 }
 

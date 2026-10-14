@@ -41,6 +41,42 @@ enum AccountsProbe {
         return out
     }
 
+    /// What a person cannot read whole as drawn: a one-line label cut without
+    /// an ellipsis, a wrapping label taller than its box, and words or a
+    /// control running past the window's safe edge. A figure's words are its
+    /// own (placed by frame, ending in an ellipsis by design, their overlaps
+    /// counted by the figure's state).
+    static func clipped(in window: UIWindow) -> [String] {
+        let safe = window.bounds.inset(by: window.safeAreaInsets)
+        let truncating: Set<NSLineBreakMode> = [.byTruncatingTail, .byTruncatingMiddle, .byTruncatingHead]
+        var out: [String] = []
+        func pastEdge(_ node: UIView) -> Bool {
+            let frame = node.convert(node.bounds, to: window)
+            return frame.width > 0 && (frame.maxX > safe.maxX + 0.5 || frame.minX < safe.minX - 0.5)
+        }
+        func walk(_ node: UIView) {
+            guard !node.isHidden, node.alpha > 0.01, !(node is StrategyFigureView) else { return }
+            if let label = node as? UILabel, let text = label.text, !text.isEmpty, label.bounds.width > 0 {
+                if label.numberOfLines == 1 {
+                    if label.intrinsicContentSize.width > label.bounds.width + 1, !truncating.contains(label.lineBreakMode) {
+                        out.append("cut: \(text)")
+                    }
+                } else if label.sizeThatFits(CGSize(width: label.bounds.width, height: .greatestFiniteMagnitude)).height > label.bounds.height + 1 {
+                    out.append("cut: \(text)")
+                }
+                if pastEdge(label) { out.append("past the edge: \(text)") }
+                return
+            }
+            if node is UIButton || node is UITextField || node is UISwitch {
+                if pastEdge(node) { out.append("past the edge: \(texts(in: node).joined(separator: " "))") }
+                return
+            }
+            node.subviews.forEach(walk)
+        }
+        walk(window)
+        return out
+    }
+
     static func start(shell: ShellController) {
         Task { @MainActor [weak shell] in
             guard let shell else { return }
@@ -83,6 +119,10 @@ enum AccountsProbe {
 
     /// Sends the window as `<stage>.png` to the capture address, when one was named.
     private static func capture(_ stage: String, _ shell: ShellController) async {
+        if let window = shell.view.window {
+            let cut = clipped(in: window)
+            say("clipped \(stage)", cut.isEmpty ? "none" : cut.joined(separator: " / "))
+        }
         guard let base = captureURL, let window = shell.view.window,
               let png = UIGraphicsImageRenderer(bounds: window.bounds).image(actions: { _ in
                   window.drawHierarchy(in: window.bounds, afterScreenUpdates: true)
@@ -121,8 +161,11 @@ enum AccountsProbe {
         say("machine menu", "opened the Accounts section natively; web pages over the app: \(controllers(UIViewController.self, from: shell).filter { String(describing: type(of: $0)).contains("Safari") }.count)")
         say("list", section.probeLines.joined(separator: " / "))
         let config = ConfigSections.accounts
-        say("list row", "count \(config.count?(hub).map(String.init) ?? "-") badge \(config.badge(config, hub).map { "\($0.count)" } ?? "none")")
+        say("list row", "count \(config.count(hub).map(String.init) ?? "-") badge \(config.badge(hub).map { "\($0.count)" } ?? "none")")
+        say("configure nav", controllers(ConfigureController.self, from: shell).first { $0.isViewLoaded }?.probeNav ?? "no Configure loaded")
+        say("list gaps", section.probeGaps)
         await capture("list", shell)
+        var switches: [String] = []
 
         guard let view = FleetAccounts.view(hub) else { return }
         let claude = FleetAccounts.accounts(view, provider: FleetAccounts.claude)
@@ -136,6 +179,8 @@ enum AccountsProbe {
             await wait(1.2)
             guard let editor = onScreen(AccountEditorController.self, shell) else { return }
             say("editor", texts(in: editor.view).joined(separator: " / "))
+            say("editor remove", editor.probeDelete)
+            switches.append("never backup \(editor.probeSwitch)")
             await capture("editor", shell)
             editor.probeType(nickname: "Probe second")
             editor.probePick(hue: "violet")
@@ -157,11 +202,15 @@ enum AccountsProbe {
             await wait(1)
             say("sign in link", "\(row?.probeState ?? "no row") | opened \(SignInBrowser.lastOpened?.host() ?? "nothing")")
             await capture("signin-link", shell)
-            if SignInBrowser.lastOpened != nil {
-                (row?.current as? PastePanel)?.probeSubmit("not-a-real-code")
-                await until(60) { row?.probeState.contains("Checking") == false }
+            if SignInBrowser.lastOpened != nil, let panel = row?.current as? PastePanel {
+                panel.probeSubmit("not-a-real-code")
+                // The press's own task starts the check: wait for it to begin (or to
+                // have been answered already), then for the answer. Part of a code is
+                // refused at once; a login left waiting on it would hold a minute.
+                await until(5) { panel.probePhase == .checking || panel.probeProblem != nil }
+                await until(30) { panel.probePhase != .checking }
                 await wait(1)
-                say("sign in code refused", row?.probeState ?? "no row")
+                say("sign in code refused", "\(row?.probeState ?? "no row") | problem: \(panel.probeProblem ?? "")")
                 await capture("signin-refused", shell)
             }
             rows.probeToggle(machine.machineId)
@@ -224,6 +273,7 @@ enum AccountsProbe {
                 routing.probePicker?.probeOrder(ids.reversed())
                 routing.probeLimit?.probeSet(move: true, wait: 20)
                 say("routing dirty", "\(routing.probePicker?.probeState ?? "-") | limit figure \(routing.probeLimit?.probeFigure ?? "-") | \(routing.probeFooter)")
+                switches.append("move \(routing.probeLimit?.probeSwitch ?? "not drawn")")
                 await capture("routing-fill-first", shell)
                 routing.probeRunSave()
                 await until { routing.probeFooter.contains("Saved") || routing.probeRefusal != nil }
@@ -234,12 +284,15 @@ enum AccountsProbe {
             }
         }
 
+        say("switches", switches.joined(separator: " | "))
+
         // 7. Add account: Claude's sign-in makes the account; Cancel takes it back.
         section.probeSetup()
         await until { onScreen(AccountSetupController.self, shell) != nil }
         await wait(1)
         if let setup = onScreen(AccountSetupController.self, shell) {
             say("setup", "\(setup.probeStep): \(setup.probeContent.joined(separator: " / ")) | \(setup.probeFoot)")
+            say("setup steps", setup.probeSteps)
             await capture("setup-provider", shell)
             setup.probeChoose("anthropic:subscription")
             await until { setup.probeStep == "Sign in" }
@@ -291,6 +344,7 @@ enum AccountsProbe {
                 await until(40) { editor.view.window == nil || editor.probeFooter.contains("refused") }
                 await wait(1)
                 say("remove second answered", "\(editor.view.window == nil ? "editor closed" : editor.probeFooter) | list: \(section.probeLines.joined(separator: " / "))")
+                say("list after gaps", section.probeGaps)
                 await capture("list-after", shell)
             }
         }

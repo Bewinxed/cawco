@@ -278,6 +278,9 @@ public enum Words {
             /// A code the machine's login did not take.
             public static let refused = "That code didn't sign the machine in. Open the sign-in link again for a new code."
 
+            /// Part of the page's code: the machine's login still waits for the whole of it.
+            public static let notWhole = "That's only part of the code. Copy all of it from the sign-in page, then paste it again."
+
             /// The app's alone: a machine that answered a device code where a link was asked for.
             public static let notALink = "The machine answered a code, not a sign-in link. Update CawCo on it, then start again."
         }
@@ -650,6 +653,9 @@ public enum Words {
 
                 public static let prepareAtPct = 90
             }
+
+            /// How long the hub waits on a machine's sign-in step: Claude Code printing its link (the agent waits up to 30 s), exchanging a code (up to 60 s), a device code waited for (a minute at a time). A client asks for longer.
+            public static let signinWaitMs = 90000
 
             /// The terms that cover moving a conversation between Claude subscriptions.
             public static let termsUrl = "https://code.claude.com/docs/en/legal-and-compliance"

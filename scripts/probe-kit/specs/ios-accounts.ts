@@ -61,24 +61,46 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
+import { accountsWords as words } from "../../../packages/core/src/words/accounts";
+import {
+  CONFIG_GROUPS,
+  CONFIG_SECTIONS,
+  configureWords,
+} from "../../../packages/core/src/words/configure";
 import { freshApp, macProbeApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
-import { type MacApp, macApp, readLines, words } from "../mac-app";
+import { words as logWords, type MacApp, macApp, readLines } from "../mac-app";
 
 const IOS_18_5 = "com.apple.CoreSimulator.SimRuntime.iOS-18-5";
-const PLATFORMS = {
+/**
+ * Where the app runs. `iphone-ax5` is the iPhone at the largest
+ * accessibility text size (UIKit's own launch argument), where words that
+ * fit at the default size are the first to be cut.
+ */
+const PLATFORMS: Record<string, { device?: string; launch?: string[] }> = {
   iphone: { device: "iPhone 16 Pro" },
   ipad: { device: "iPad Pro 13-inch (M4)" },
   mac: {},
-} as const;
-type Platform = keyof typeof PLATFORMS;
+  "iphone-ax5": {
+    device: "iPhone 16 Pro",
+    launch: [
+      "-UIPreferredContentSizeCategoryName",
+      "UICTContentSizeCategoryAccessibilityXXXL",
+    ],
+  },
+};
+type Platform = "iphone" | "ipad" | "mac" | "iphone-ax5";
+const isPlatform = (one: string): one is Platform => one in PLATFORMS;
 /** "hub accounts 2 → 3": the count before the setup's sign-in and after. */
 const COUNTS = /hub accounts (\d+) → (\d+)/;
-/** The Delegates tab with Fill first chosen: its figure plays, the others stand still. */
 /** A figure's overlapping words, as its probe state counts them. */
 const OVERLAPS = /overlaps (\d+)/g;
+/** A clock's wash with no words in it, as a figure's probe state counts them. */
+const EMPTY_PILLS = /empty pills (\d+)/g;
+/** "clipped list: none": what a stage's window cuts, as the probe reads it. */
+const CLIPPED = /clipped ([\w-]+): (.*)$/;
 const FIGURES = [
   /pinned \d lanes still/,
   /fill \d lanes playing/,
@@ -115,19 +137,43 @@ async function sh(script: string): Promise<string> {
 const appPath = (platform: Platform) =>
   platform === "mac" ? macProbeApp(ROOT) : freshApp(ROOT);
 
-async function probe(kit: Kit, platform: Platform): Promise<void> {
-  const label = (what: string) => `${platform}: ${what}`;
-  const { path: app, problem } = appPath(platform);
-  if (
-    !kit.check(
-      label("the app is built from this tree"),
-      !problem,
-      problem ?? app
-    )
-  ) {
-    return;
-  }
+/**
+ * The picker's rows as the hub serves them to the web and the app alike, in
+ * its two groups (AccountSetup.svelte `pickGroups`: a sign-in, then a key,
+ * each in the hub's order), each as the picker names it (model.svelte.ts
+ * `choiceLabel`). Read once the run is over: the hub's list grows as the
+ * machine reports what its harnesses serve, after the fleet is up.
+ */
+async function pickerRows(base: string): Promise<string[]> {
+  const served = (await (
+    await fetch(`${base}/api/accounts/providers`)
+  ).json()) as {
+    kind: string;
+    name: string;
+    provider: string;
+    signin: string;
+  }[];
+  const named = (one: (typeof served)[number]) => {
+    if (one.provider !== "anthropic") {
+      return one.name;
+    }
+    return one.kind === "console" ? words.anthropicConsole : words.claude;
+  };
+  return [
+    words.setup.pickSignin,
+    ...served.filter((one) => one.signin !== "api-key").map(named),
+    words.setup.pickKeys,
+    ...served.filter((one) => one.signin === "api-key").map(named),
+  ];
+}
 
+/**
+ * A scratch fleet as every run starts from (the app's on each platform, the
+ * web's at each width): its Claude account signed in on the scratch machine,
+ * and two more Claude accounts signed in nowhere, so routing still has two
+ * to choose between after the signed-in one is removed.
+ */
+async function seededFleet(kit: Kit) {
   const fleet = await kit.fleet(() => ({ words: ["Done."], everyMs: 20 }));
   fleet.launch("sessiond");
   await fleet.sessiondUp();
@@ -137,8 +183,6 @@ async function probe(kit: Kit, platform: Platform): Promise<void> {
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
-  // Two Claude accounts signed in nowhere, so routing still has two to
-  // choose between after the signed-in one is removed.
   for (const [name, hue] of [
     ["Second", "green"],
     ["Third", "rose"],
@@ -155,7 +199,23 @@ async function probe(kit: Kit, platform: Platform): Promise<void> {
       body: JSON.stringify({ label: name }),
     });
   }
+  return fleet;
+}
 
+async function probe(kit: Kit, platform: Platform): Promise<void> {
+  const label = (what: string) => `${platform}: ${what}`;
+  const { path: app, problem } = appPath(platform);
+  if (
+    !kit.check(
+      label("the app is built from this tree"),
+      !problem,
+      problem ?? app
+    )
+  ) {
+    return;
+  }
+
+  const fleet = await seededFleet(kit);
   const out = join(ROOT, ".probe", "config-accounts", platform);
   // This run's captures only: an earlier run's never stand in for one that didn't arrive.
   await rm(out, { recursive: true, force: true });
@@ -185,6 +245,7 @@ async function probe(kit: Kit, platform: Platform): Promise<void> {
     "-accounts-probe",
     "-accounts-probe-capture",
     `http://127.0.0.1:${shots.port}/`,
+    ...(PLATFORMS[platform].launch ?? []),
   ];
 
   let lines: string[] = [];
@@ -200,7 +261,7 @@ async function probe(kit: Kit, platform: Platform): Promise<void> {
     } else {
       sim = await macSim({
         runtime: IOS_18_5,
-        device: PLATFORMS[platform].device,
+        device: PLATFORMS[platform].device ?? "iPhone 16 Pro",
       });
       const { udid } = sim;
       console.log(`  ${platform} simulator ${udid}`);
@@ -227,7 +288,7 @@ async function probe(kit: Kit, platform: Platform): Promise<void> {
       // That simulator's own log: no other app's lines reach it.
       const into = lines;
       readLines(stream, (line) => {
-        const said = words(line);
+        const said = logWords(line);
         if (said !== undefined) {
           into.push(said);
         }
@@ -263,17 +324,255 @@ async function probe(kit: Kit, platform: Platform): Promise<void> {
   }
 
   await writeFile(join(kit.out, `${platform}.log`), `${lines.join("\n")}\n`);
-  judge(kit, label, lines, captures);
+  judge(kit, label, lines, captures, await pickerRows(fleet.base));
   console.log(`  ${platform} captures: ${out}`);
 }
 
-/** What one platform's run said, checked step by step against the hub's word. */
-function judge(
-  kit: Kit,
-  label: (what: string) => string,
-  lines: string[],
-  captures: string[]
-): void {
+/** A stage of the web's walk, as the app's capture of the same stage is named. */
+type Stage =
+  | "list"
+  | "editor"
+  | "signin-link"
+  | "signin-refused"
+  | "remove-question"
+  | "routing"
+  | "routing-fill-first"
+  | "setup-provider"
+  | "setup-signin"
+  | "setup-key"
+  | "list-after";
+
+/** The hub's accounts, by the name each goes by now. */
+async function accountIds(base: string): Promise<Map<string, string>> {
+  const view = (await (await fetch(`${base}/api/accounts`)).json()) as {
+    accounts: { email: string | null; id: string; label: string | null }[];
+  };
+  return new Map(
+    view.accounts.map((one) => [one.label ?? one.email ?? one.id, one.id])
+  );
+}
+
+/**
+ * The web's Configure › Accounts walked through the stages the app's probe
+ * walks, on a fleet seeded as the app's is, at one width: each stage's page
+ * goes to `.probe/config-accounts/web-<view>/<stage>.png`, beside the app's,
+ * so a review compares like with like. Every control is found by the words
+ * core gives it (`accountsWords`), the ones the page itself reads.
+ */
+async function web(kit: Kit, view: "desk" | "phone"): Promise<void> {
+  const label = (what: string) => `web ${view}: ${what}`;
+  const fleet = await seededFleet(kit);
+  const base = await fleet.dashboard();
+  const page = await kit.page(view);
+  // A sign-in link opens a tab of its own: the walk stays on the dashboard.
+  page.context().on("page", (opened) => {
+    if (opened !== page) {
+      opened.close().catch(() => undefined);
+    }
+  });
+  const out = join(ROOT, ".probe", "config-accounts", `web-${view}`);
+  await rm(out, { recursive: true, force: true });
+  await mkdir(out, { recursive: true });
+  const captured: string[] = [];
+  const capture = async (stage: Stage) => {
+    const path = join(out, `${stage}.png`);
+    await page.screenshot({ path });
+    captured.push(path);
+  };
+  const button = (name: string) =>
+    page.getByRole("button", { name, exact: true });
+  /** A button that can be pressed: an editor's skeleton keeps its disabled Save while it fades. */
+  const enabled = (name: string) =>
+    page.getByRole("button", { name, exact: true, disabled: false });
+  const editorOf = async (name: string) => {
+    const id = (await accountIds(fleet.base)).get(name);
+    await page.goto(`${base}/config/accounts/${id}`);
+    await page.getByLabel(words.editor.nickname).waitFor();
+  };
+  /** Remove: the footer's on a wide page, the header's ⋯ under 640px (EditorFooter.svelte). */
+  const askRemove = async (name: string) => {
+    if (view === "phone") {
+      await button(configureWords.more).click();
+      await page.getByRole("menuitem", { name: words.editor.remove }).click();
+    } else {
+      await button(words.editor.remove).click();
+    }
+    await page.getByText(words.editor.removeTitle(name)).first().waitFor();
+  };
+  /** The question's own Remove (AskHere's region, named by its title), not the footer's. */
+  const confirmRemove = async (name: string) => {
+    const question = page.getByRole("region", {
+      name: words.editor.removeTitle(name),
+      exact: true,
+    });
+    await question
+      .getByRole("button", { name: words.editor.remove, exact: true })
+      .click();
+    const left = await page
+      .waitForURL(`${base}/config/accounts`, { timeout: 60_000 })
+      .then(
+        () => true,
+        () => false
+      );
+    if (!left) {
+      // The question's refusal, in the hub's words, is why it stayed.
+      const said = (await question.allInnerTexts()).join(" / ");
+      throw new Error(
+        `Remove stayed on ${page.url()}: ${said || "the question went"}`
+      );
+    }
+  };
+  /**
+   * The link the machine's login printed, or its refusal where the link
+   * would stand (`problem`, the panel's or the setup row's): either is the
+   * machine's answer, and the walk goes on past a refusal.
+   */
+  const linkOrRefusal = async (where: string, problem: string) => {
+    const link = page.getByRole("link", { name: words.signin.openLink });
+    await link.or(page.locator(problem)).first().waitFor({ timeout: 60_000 });
+    const opened = await link.first().isVisible();
+    kit.check(
+      label(`${where}: the machine's login answers its sign-in link`),
+      opened,
+      opened ? "link" : await page.locator(problem).first().innerText()
+    );
+    return opened;
+  };
+
+  try {
+    await page.goto(`${base}/config/accounts`);
+    await page.getByText("Third").first().waitFor();
+    await capture("list");
+
+    // The second account: renamed and recoloured, then its machine's sign-in.
+    await editorOf("Second");
+    await capture("editor");
+    await page.getByLabel(words.editor.nickname).fill("Probe second");
+    await page.getByRole("radio", { name: "Violet", exact: true }).click();
+    await enabled(words.editor.save).click();
+    await button(configureWords.saved).waitFor({ timeout: 30_000 });
+    // The row's trigger is named for what it does where ("Sign in X on obelisk").
+    await page
+      .getByRole("button", {
+        name: words.machines.signInOn(
+          words.machines.signIn,
+          "Probe second",
+          ""
+        ),
+      })
+      .first()
+      .click();
+    await button(words.signin.openLink).click();
+    if (await linkOrRefusal("the account's row", ".panel .error")) {
+      await capture("signin-link");
+      await page.getByLabel(words.signin.codeLabel).fill("not-a-real-code");
+      await button(words.signin.done).click();
+      // Refused at once (the machine's login would wait on a part of a code
+      // for a minute), in core's words, under the field.
+      const answered = page.locator(".panel .error, .panel .warn, .panel .got");
+      await answered.first().waitFor({ timeout: 30_000 });
+      const refusal = (await answered.first().innerText()).trim();
+      kit.check(
+        label("a code that is not one is refused under the field, in words"),
+        refusal === words.signin.notWhole &&
+          (await page.locator(".panel .error").count()) > 0,
+        refusal
+      );
+      await capture("signin-refused");
+    }
+    await page.keyboard.press("Escape");
+
+    // The signed-in account: Remove asks first.
+    await editorOf("Probe");
+    await askRemove("Probe");
+    await capture("remove-question");
+    await confirmRemove("Probe");
+
+    // Routing: Spread for your sessions, Fill first for delegates.
+    await page.goto(`${base}/config/accounts/anthropic/routing`);
+    // A card in its tab's own cards: a tab's change slides the next pane in
+    // while the last one leaves, so both stand for a moment.
+    const card = (group: string, id: string) => {
+      const strategy = words.strategies.find((one) => one.id === id);
+      return page
+        .getByRole("radiogroup", { name: group, exact: true })
+        .getByRole("radio", {
+          name: words.routingEditor.card(
+            strategy?.label ?? id,
+            strategy?.line ?? ""
+          ),
+          exact: true,
+        });
+    };
+    const { yours, delegates } = words.routingEditor;
+    await card(yours, "spread").waitFor();
+    await capture("routing");
+    await card(yours, "spread").click();
+    await page.getByRole("tab").filter({ hasText: delegates }).click();
+    await card(delegates, "fill-first").click();
+    await page.getByText(words.routingEditor.order).waitFor();
+    await capture("routing-fill-first");
+    await enabled(words.routingEditor.save).click();
+    await page.waitForURL(`${base}/config/accounts`, { timeout: 60_000 });
+
+    // Add account: Claude's sign-in makes the account; Cancel takes it back.
+    await page.goto(`${base}/config/accounts/new`);
+    await button(words.claude).waitFor();
+    await capture("setup-provider");
+    await button(words.claude).click();
+    await button(words.setup.signIn).first().click();
+    await linkOrRefusal("the setup's row", ".row-problem");
+    await capture("setup-signin");
+    await button(configureWords.cancel).click();
+    await page.waitForURL(`${base}/config/accounts`, { timeout: 60_000 });
+
+    // A key provider the scratch machine runs, its key sent.
+    await page.goto(`${base}/config/accounts/new`);
+    await page.getByText(words.setup.pickKeys).waitFor();
+    const keys = page
+      .locator("section", { hasText: words.setup.pickKeys })
+      .locator(
+        'ul[aria-labelledby="pick-keys"] .choice:not([aria-disabled="true"])'
+      );
+    if ((await keys.count()) > 0) {
+      await keys.first().click();
+      await page
+        .getByLabel(words.key.label, { exact: true })
+        .fill("sk-probe-not-a-key");
+      await button(words.key.send).click();
+      await page
+        .locator(".keys .ok, .keys .bad")
+        .first()
+        .waitFor({ timeout: 60_000 });
+      await capture("setup-key");
+      await button(configureWords.cancel).click();
+      await page.waitForURL(`${base}/config/accounts`, { timeout: 60_000 });
+    }
+
+    // The renamed account removed: the list without it.
+    await editorOf("Probe second");
+    await askRemove("Probe second");
+    await confirmRemove("Probe second");
+    await page.getByText("Third").first().waitFor();
+    await capture("list-after");
+  } catch (error) {
+    kit.check(
+      label("the walk ran to its end"),
+      false,
+      `${error instanceof Error ? error.message : String(error)} (captured: ${captured.length})`
+    );
+    return;
+  }
+  kit.check(
+    label("every stage's capture was taken"),
+    captured.length >= 10,
+    captured.join(", ")
+  );
+  console.log(`  web ${view} captures: ${out}`);
+}
+
+/** A run's log, read by step: what it said there, or undefined / "(not logged)". */
+function reader(lines: string[]) {
   const said = (step: string) =>
     lines
       .find(
@@ -283,6 +582,105 @@ function judge(
       .slice(1)
       .join(`${step}: `);
   const show = (step: string) => said(step) ?? "(not logged)";
+  return { said, show };
+}
+
+/**
+ * The app's Configure as the web's: the list's groups and sections, the
+ * badge's rule, the picker's providers, the controls the web has (the
+ * nickname field, Remove, the steps, switches), the refusal under a code
+ * that is not one, and rows that stand where the web's do.
+ */
+function judgeParity(
+  kit: Kit,
+  label: (what: string) => string,
+  lines: string[],
+  providers: string[]
+): void {
+  const { show } = reader(lines);
+  // The refusal is the flow's problem, and the panel draws it: its words stand on the row.
+  const [rowSaid, problemSaid = ""] = show("sign in code refused").split(
+    " | problem: "
+  );
+  kit.check(
+    label("a code that is not one is refused on the row, in words"),
+    problemSaid.trim() === words.signin.notWhole &&
+      rowSaid.includes(words.signin.notWhole) &&
+      !rowSaid.includes(words.signin.checking),
+    show("sign in code refused")
+  );
+  // Configure's list is the web's: every group, each with its sections in order.
+  const nav = show("configure nav");
+  const groupsDrawn = CONFIG_GROUPS.map((group) => {
+    const labels = CONFIG_SECTIONS.filter(
+      (section) => section.group === group
+    ).map((section) => section.label);
+    return nav.includes(`${group}: ${labels.join(", ")}`);
+  });
+  kit.check(
+    label("Configure lists every group with its sections, in the web's order"),
+    groupsDrawn.every(Boolean),
+    nav
+  );
+  // The rail's badge follows the web's rule from the same data: of three
+  // accounts, the two signed in nowhere.
+  kit.check(
+    label("Accounts' row counts three and flags the two signed in nowhere"),
+    show("list row") === "count 3 badge 2",
+    show("list row")
+  );
+  // The picker offers what the hub's /api/accounts/providers answers, in its groups and order.
+  const picker = show("setup");
+  kit.check(
+    label("Add account offers every provider the hub serves, in its order"),
+    providers.length > 2 && picker.includes(providers.join(" / ")),
+    `${providers.join(" / ")} || ${picker}`
+  );
+  kit.check(
+    label("the editor's header holds the nickname in a field you type in"),
+    show("editor").includes("field 'Second'"),
+    show("editor")
+  );
+  kit.check(
+    label(
+      "a group's rows stand one under another, each as tall as its words, groups space6 apart"
+    ),
+    show("list gaps") === "none" && show("list after gaps") === "none",
+    `${show("list gaps")} || ${show("list after gaps")}`
+  );
+  kit.check(
+    label("the account's editor offers Remove account"),
+    show("editor remove").includes(words.editor.remove),
+    show("editor remove")
+  );
+  kit.check(
+    label("the setup's rail names every step"),
+    [
+      words.setup.steps.provider,
+      words.setup.steps.signIn,
+      words.setup.steps.nameIt,
+    ].every((step) => show("setup steps").includes(step)),
+    show("setup steps")
+  );
+  kit.check(
+    label("on/off settings are switches, as on the web"),
+    show("switches") !== "(not logged)" &&
+      !show("switches").includes("checkbox") &&
+      show("switches").includes("sliding"),
+    show("switches")
+  );
+}
+
+/** What one platform's run said, checked step by step against the hub's word. */
+function judge(
+  kit: Kit,
+  label: (what: string) => string,
+  lines: string[],
+  captures: string[],
+  providers: string[]
+): void {
+  const { said, show } = reader(lines);
+  judgeParity(kit, label, lines, providers);
 
   kit.check(
     label("the probe ran to its end"),
@@ -332,14 +730,6 @@ function judge(
     show("sign in link")
   );
   kit.check(
-    label("a code that is not one is refused on the row, in words"),
-    said("sign in code refused") === undefined
-      ? show("sign in link").includes("panel:")
-      : show("sign in code refused").includes("panel:") &&
-          !show("sign in code refused").includes("Checking"),
-    `${show("sign in link")} || ${show("sign in code refused")}`
-  );
-  kit.check(
     label("Sign out runs on its row, then the hub's answer stands there"),
     show("sign out running").includes("Signing out…") &&
       !show("sign out answered").includes("Signing out") &&
@@ -382,6 +772,27 @@ function judge(
     label("no figure's words stand on each other"),
     overlaps.length === 5 && overlaps.every((n) => n === 0),
     show("routing dirty")
+  );
+  const pills = [...show("routing dirty").matchAll(EMPTY_PILLS)].map((m) =>
+    Number(m[1])
+  );
+  kit.check(
+    label("no clock's wash stands empty"),
+    pills.length === 5 && pills.every((n) => n === 0),
+    show("routing dirty")
+  );
+  // Every stage's window as the probe measured it: no words cut without an
+  // ellipsis, none taller than their box, nothing past the safe edge.
+  const cut = lines
+    .map((line) => CLIPPED.exec(line))
+    .filter((match): match is RegExpExecArray => match !== null);
+  kit.check(
+    label("no stage cuts a word or runs past the window's edge"),
+    cut.length >= 10 && cut.every((match) => match[2] === "none"),
+    cut
+      .filter((match) => match[2] !== "none")
+      .map((match) => `${match[1]}: ${match[2]}`)
+      .join(" || ") || `${cut.length} stages measured`
   );
   kit.check(
     label(
@@ -426,18 +837,28 @@ function judge(
   );
 }
 
+const WEB_VIEWS = { "web-desk": "desk", "web-phone": "phone" } as const;
+type WebRun = keyof typeof WEB_VIEWS;
+
 const spec: Spec = {
   name: "ios-accounts",
   async run(kit) {
-    const named = process.argv
-      .slice(3)
-      .filter((one): one is Platform => one in PLATFORMS);
+    const args = process.argv.slice(3);
+    const named = args.filter(isPlatform);
+    const webs = args.filter((one): one is WebRun => one in WEB_VIEWS);
+    const everything = named.length === 0 && webs.length === 0;
     // One platform at a time, never two runs at once: each reads its app's log.
-    for (const platform of named.length > 0
-      ? named
-      : (Object.keys(PLATFORMS) as Platform[])) {
+    for (const platform of everything
+      ? (Object.keys(PLATFORMS) as Platform[])
+      : named) {
       // biome-ignore lint/performance/noAwaitInLoops: one simulator slot and one fleet at a time
       await probe(kit, platform);
+    }
+    for (const run of everything
+      ? (Object.keys(WEB_VIEWS) as WebRun[])
+      : webs) {
+      // biome-ignore lint/performance/noAwaitInLoops: one fleet at a time
+      await web(kit, WEB_VIEWS[run]);
     }
   },
 };

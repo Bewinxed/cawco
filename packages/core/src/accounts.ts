@@ -354,6 +354,12 @@ export const ACCOUNT_RULES = {
     delegates: "fill-first" as PlacementStrategy,
   },
   atLimit: DEFAULT_AT_LIMIT,
+  /**
+   * How long the hub waits on a machine's sign-in step: Claude Code printing
+   * its link (the agent waits up to 30 s), exchanging a code (up to 60 s), a
+   * device code waited for (a minute at a time). A client asks for longer.
+   */
+  signinWaitMs: 90_000,
   /** The terms that cover moving a conversation between Claude subscriptions. */
   termsUrl: "https://code.claude.com/docs/en/legal-and-compliance",
 };

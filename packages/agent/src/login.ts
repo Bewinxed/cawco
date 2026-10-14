@@ -4,6 +4,7 @@ import {
   type AccountIdentity,
   type AccountKind,
   type AccountSigninResult,
+  accountsWords,
   sameIdentity,
 } from "@cawco/core";
 import { accountIds, accountsRoot } from "@cawco/core/paths";
@@ -293,6 +294,15 @@ const finishSignIn = async (account: string, code: string): Promise<void> => {
     throw new Error(
       "That code belongs to a login this machine didn't start or already used. Open the authorisation page again."
     );
+  }
+  // The page's code is whole as `code#state`. Claude Code answers anything
+  // short of it by asking again and waiting on, never exiting (its `auth
+  // login` line handler: "Invalid code. Please make sure the full code was
+  // copied."), so it is refused here at once, and the login waits on for
+  // the whole code.
+  const [authorization, state] = trimmed.split("#");
+  if (!(authorization && state)) {
+    throw new Error(accountsWords.signin.notWhole);
   }
   // Used or refused, the sign-in is spent either way.
   inFlight.delete(account);

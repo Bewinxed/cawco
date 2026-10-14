@@ -11,10 +11,16 @@ import UIKit
 /// limits, what a session does at its limit.
 ///
 /// The account itself is made by its first sign-in (a link, a code, a key),
-/// so its email is known and becomes its name. Cancel takes back an account
-/// no machine signed in. On a phone the steps are a row of marks with the
-/// current one named, and Back and Continue stand at the foot, over the
-/// keyboard when one is up.
+/// so its email is known and becomes its name. Cancel, at the top right of
+/// the card as the web's section actions stand, takes back an account no
+/// machine signed in.
+///
+/// As on the web (`@container setup (width < 640px)`): where the card's
+/// content is 640pt or wider, the steps are a list at its left (184pt) and
+/// Back and Continue stand under the step's box; narrower, the steps are a
+/// row of marks with the current one named (each still read out by name),
+/// and Back and Continue stand at the screen's foot, over the keyboard when
+/// one is up.
 final class AccountSetupController: ObservedViewController, UITextFieldDelegate {
     private let section: ConfigSection
     private let context: ShellContext
@@ -47,10 +53,29 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
     private var refused: String?
 
     private let scroll = UIScrollView()
+    /// The section's card on the recess (SectionFrame.svelte `.body`).
+    private let card = UIView()
+    private let titleLabel = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong, lines: 0)
+    private lazy var cancelButton = KitButton.make(Words.Configure.cancel, variant: .outline) { [weak self] in self?.cancel() }
+    /// The steps beside the work (wide) or over it (narrow): `.setup`.
+    private let setup = UIStackView()
     private let steps = UIStackView()
+    /// The step's box, the problem under it, and (wide) the foot.
+    private let work = UIStackView()
     private let box = UIView()
     private let content = UIStackView()
+    private var contentInsets: [NSLayoutConstraint] = []
     private let problem = metaLine(ink: Palette.statusFailInk)
+    /// Back and Continue (`.foot`): under the box when wide, pinned to the screen's foot when narrow.
+    private let foot = UIStackView()
+    /// The narrow foot's own ground, across the card's width (`.foot` under 640px).
+    private let footBar = UIView()
+    /// The wide foot's place in the work column.
+    private let footWrap = UIStackView()
+    private var scrollToFoot: NSLayoutConstraint!
+    private var scrollToBottom: NSLayoutConstraint!
+    /// Whether the card's content is 640pt or wider; nil until first laid out.
+    private var wide: Bool?
     private lazy var back = KitButton.make(Words.Accounts.Setup.back, variant: .outline) { [weak self] in self?.goBack() }
     private lazy var forward = KitButton.make(Words.Accounts.Setup.next, variant: .action) { [weak self] in self?.goOn() }
     /// Continue while a key is not on any machine yet: Send key is the step's primary.
@@ -69,11 +94,8 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         super.init(nibName: nil, bundle: nil)
         navigationItem.title = Words.Accounts.Setup.title
         navigationItem.largeTitleDisplayMode = .never
-        // Leaving is Cancel's: it takes back an account no machine signed in.
+        // Leaving is Cancel's (in the card): it takes back an account no machine signed in.
         navigationItem.hidesBackButton = true
-        let cancel = UIBarButtonItem(title: Words.Configure.cancel, primaryAction: UIAction { [weak self] _ in self?.cancel() })
-        cancel.accessibilityIdentifier = "setup.cancel"
-        navigationItem.leftBarButtonItem = cancel
     }
 
     @available(*, unavailable)
@@ -154,8 +176,24 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         scroll.keyboardDismissMode = .interactive
         view.addSubview(scroll)
 
-        steps.spacing = Space.space1
-        steps.alignment = .center
+        // `.body`: the raised card on the recess, `space6` by `space7` inside.
+        card.backgroundColor = Palette.surfaceRaised
+        card.layer.cornerRadius = Radius.radiusLg
+        card.layer.cornerCurve = .continuous
+        card.translatesAutoresizingMaskIntoConstraints = false
+        scroll.addSubview(card)
+
+        // `.head`: the title and the section's actions (Cancel) at its right.
+        titleLabel.text = Words.Accounts.Setup.title
+        titleLabel.tracking = -0.01
+        titleLabel.accessibilityTraits = .header
+        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        cancelButton.accessibilityIdentifier = "setup.cancel"
+        cancelButton.setContentHuggingPriority(.required, for: .horizontal)
+        let head = UIStackView(arrangedSubviews: [titleLabel, UIView(), cancelButton])
+        head.alignment = .top
+        head.spacing = 12
+
         steps.accessibilityLabel = Words.Accounts.Setup.stepsLabel
         box.backgroundColor = Palette.surfaceWell
         box.layer.cornerRadius = Radius.radiusLg
@@ -166,54 +204,140 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         content.spacing = Space.space4
         content.translatesAutoresizingMaskIntoConstraints = false
         box.addSubview(content)
+        contentInsets = [
+            content.topAnchor.constraint(equalTo: box.topAnchor),
+            box.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            content.leadingAnchor.constraint(equalTo: box.leadingAnchor),
+            box.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+        ]
         problem.isHidden = true
-        let column = UIStackView(arrangedSubviews: [steps, box, problem])
-        column.axis = .vertical
-        column.spacing = Space.space4
-        column.translatesAutoresizingMaskIntoConstraints = false
-        scroll.addSubview(column)
+        work.axis = .vertical
+        work.addArrangedSubview(box)
+        work.addArrangedSubview(problem)
+        work.setCustomSpacing(Space.space3, after: box)
 
         back.accessibilityIdentifier = "setup.back"
         forward.accessibilityIdentifier = "setup.next"
         nextQuiet.accessibilityIdentifier = "setup.next"
         forward.widthAnchor.constraint(greaterThanOrEqualToConstant: 96).isActive = true
-        let foot = UIStackView(arrangedSubviews: [UIView(), back, nextQuiet, forward])
+        foot.addArrangedSubview(UIView())
+        foot.addArrangedSubview(back)
+        foot.addArrangedSubview(nextQuiet)
+        foot.addArrangedSubview(forward)
         foot.spacing = Space.space3
         foot.alignment = .center
-        foot.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(foot)
+
+        let body = UIStackView(arrangedSubviews: [head, setup])
+        body.axis = .vertical
+        body.spacing = Space.space6
+        body.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(body)
+
+        // Under 640pt the foot stands on its own ground at the screen's foot,
+        // across the card's width, over the keyboard when one is up.
+        footBar.backgroundColor = Palette.surfaceRaised
+        footBar.translatesAutoresizingMaskIntoConstraints = false
+        footBar.isHidden = true
+        view.addSubview(footBar)
 
         let safe = view.safeAreaLayoutGuide
-        let inset = Space.space5
-        let wide = column.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -inset * 2)
-        wide.priority = .defaultHigh
-        NSLayoutConstraint.activate([
+        let fits = card.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -Space.space5 * 2)
+        fits.priority = .defaultHigh
+        scrollToFoot = scroll.bottomAnchor.constraint(equalTo: footBar.topAnchor)
+        scrollToBottom = scroll.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
+        NSLayoutConstraint.activate(contentInsets + [
             scroll.topAnchor.constraint(equalTo: safe.topAnchor),
             scroll.leadingAnchor.constraint(equalTo: safe.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: safe.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: foot.topAnchor, constant: -Space.space3),
-            column.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: Space.space2),
-            scroll.contentLayoutGuide.bottomAnchor.constraint(equalTo: column.bottomAnchor, constant: Space.space5),
-            column.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: inset),
+            scrollToBottom,
+            // `.ground`: the pages' gutter, `space2` above and below and `space5` at the side.
+            card.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: Space.space2),
+            scroll.contentLayoutGuide.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: Space.space2),
+            card.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: Space.space5),
             scroll.contentLayoutGuide.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor),
-            column.widthAnchor.constraint(lessThanOrEqualToConstant: 720),
-            column.widthAnchor.constraint(lessThanOrEqualTo: scroll.frameLayoutGuide.widthAnchor, constant: -inset * 2),
-            wide,
-            content.topAnchor.constraint(equalTo: box.topAnchor, constant: Space.space4),
-            content.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -Space.space4),
-            content.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: Space.space4),
-            content.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -Space.space4),
-            foot.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: 21),
-            foot.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -21),
-            foot.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -12),
-            foot.bottomAnchor.constraint(lessThanOrEqualTo: safe.bottomAnchor, constant: -12),
+            // `.body`: 980pt at most, at the pane's leading edge.
+            card.widthAnchor.constraint(lessThanOrEqualToConstant: 980),
+            card.widthAnchor.constraint(lessThanOrEqualTo: scroll.frameLayoutGuide.widthAnchor, constant: -Space.space5 * 2),
+            fits,
+            body.topAnchor.constraint(equalTo: card.topAnchor, constant: Space.space6),
+            body.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: Space.space7),
+            body.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -Space.space7),
+            card.bottomAnchor.constraint(equalTo: body.bottomAnchor, constant: Space.space6),
+            footBar.leadingAnchor.constraint(equalTo: card.leadingAnchor),
+            footBar.trailingAnchor.constraint(equalTo: card.trailingAnchor),
+            footBar.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
         ])
+        // Hidden and empty on a wide page: no height of its own then.
+        let empty = footBar.heightAnchor.constraint(equalToConstant: 0)
+        empty.priority = .defaultLow
+        empty.isActive = true
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (setup: AccountSetupController, _: UITraitCollection) in setup.paintBox() }
+        registerForTraitChanges([UITraitHorizontalSizeClass.self]) { (setup: AccountSetupController, _: UITraitCollection) in setup.drawTitle() }
         paintBox()
+        drawTitle()
     }
 
     private func paintBox() {
         box.layer.borderColor = Palette.borderWell.resolvedColor(with: traitCollection).cgColor
+    }
+
+    /// A compact width's navigation bar says the title; a wide card says it itself (SectionFrame).
+    private func drawTitle() {
+        titleLabel.isHidden = traitCollection.horizontalSizeClass == .compact
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        // The web's container query: the setup's own width, 640 or more.
+        let now = card.bounds.width - Space.space7 * 2 >= 640
+        guard now != wide, card.bounds.width > 0 else { return }
+        wide = now
+        arrangeSetup()
+    }
+
+    /// The steps and the work, and where the foot stands, for the setup's width.
+    private func arrangeSetup() {
+        let wide = wide ?? false
+        setup.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        foot.removeFromSuperview()
+        setup.axis = wide ? .horizontal : .vertical
+        setup.alignment = wide ? .top : .fill
+        setup.spacing = wide ? Space.space7 : Space.space4
+        steps.axis = wide ? .vertical : .horizontal
+        steps.spacing = wide ? 2 : Space.space1
+        steps.alignment = wide ? .fill : .center
+        setup.addArrangedSubview(steps)
+        setup.addArrangedSubview(work)
+        footWrap.removeFromSuperview()
+        if wide {
+            steps.widthAnchor.constraint(equalToConstant: 184).isActive = true
+            // `.problem` stands `space3` under the box, `.foot` `space5` under whatever is last.
+            work.setCustomSpacing(Space.space3, after: box)
+            work.setCustomSpacing(Space.space3, after: problem)
+            footWrap.isLayoutMarginsRelativeArrangement = true
+            footWrap.directionalLayoutMargins = .init(top: Space.space5 - Space.space3, leading: 0, bottom: 0, trailing: 0)
+            footWrap.addArrangedSubview(foot)
+            work.addArrangedSubview(footWrap)
+        } else {
+            steps.constraints.filter { $0.firstAttribute == .width }.forEach { $0.isActive = false }
+            foot.translatesAutoresizingMaskIntoConstraints = false
+            footBar.addSubview(foot)
+            NSLayoutConstraint.activate([
+                foot.topAnchor.constraint(equalTo: footBar.topAnchor, constant: Space.space3),
+                foot.leadingAnchor.constraint(equalTo: footBar.leadingAnchor, constant: Space.space7),
+                foot.trailingAnchor.constraint(equalTo: footBar.trailingAnchor, constant: -Space.space7),
+                footBar.bottomAnchor.constraint(equalTo: foot.bottomAnchor, constant: Space.space2),
+            ])
+        }
+        footBar.isHidden = wide
+        scrollToFoot.isActive = !wide
+        scrollToBottom.isActive = wide
+        // `.in`: `space6` inside the box, `space4` on a narrow page.
+        let inset = wide ? Space.space6 : Space.space4
+        for constraint in contentInsets { constraint.constant = inset }
+        drawSteps()
+        // The machine rows take the width's arrangement on the next draw.
+        requestRefresh()
     }
 
     override func viewIsAppearing(_ animated: Bool) {
@@ -246,10 +370,13 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         drawFoot(view)
     }
 
-    /// The steps as a row of marks: a check for each done, the current one named.
+    /// The steps (`.steps`): a check for each done, a dot for the rest, the
+    /// current one on the selected wash. Wide, a list naming each; narrow, a
+    /// row of marks naming only the current one, every one read out by name
+    /// (the web's visually hidden names).
     private func drawSteps() {
         steps.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        let compact = traitCollection.horizontalSizeClass == .compact
+        let compact = !(wide ?? false)
         for (place, name) in stepList.map(\.name).enumerated() {
             let mark: UIView
             if place < step {
@@ -269,11 +396,13 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
                 ])
                 mark = holder
             }
+            // `.step`: 34pt, `space3` between mark and name, `space3` in from its sides (`space2` narrow).
             let item = UIStackView(arrangedSubviews: [mark])
-            item.spacing = Space.space2
+            item.spacing = Space.space3
             item.alignment = .center
             item.isLayoutMarginsRelativeArrangement = true
-            item.directionalLayoutMargins = .init(top: 0, leading: Space.space2, bottom: 0, trailing: Space.space2)
+            let side = compact ? Space.space2 : Space.space3
+            item.directionalLayoutMargins = .init(top: 0, leading: side, bottom: 0, trailing: side)
             item.heightAnchor.constraint(equalToConstant: 34).isActive = true
             item.layer.cornerRadius = Radius.radiusSm
             if place == step || !compact {
@@ -286,6 +415,7 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
             item.accessibilityLabel = name
             item.accessibilityValue = place < step ? Words.Accounts.Setup.stepPassed : place == step ? Words.Accounts.Setup.stepCurrent : nil
             item.accessibilityIdentifier = place == step ? "setup.step.current" : nil
+            if !compact { item.addArrangedSubview(UIView()) }
             steps.addArrangedSubview(item)
         }
         steps.addArrangedSubview(UIView())
@@ -531,7 +661,7 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
                 } else {
                     let flow = paste[id] ?? PasteSignin(hub: hub, machineId: id, account: own)
                     paste[id] = flow
-                    row = SetupMachineRow(name: machine.name, paste: flow, panel: PastePanel(flow: flow, machine: machine.name, expected: nil))
+                    row = SetupMachineRow(name: machine.name, paste: flow)
                 }
                 row.addHairline()
                 signinRows[id] = row
@@ -540,6 +670,7 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         }
         for machine in machines {
             let id = machine.machineId
+            signinRows[id]?.arrange(wide: wide ?? false)
             signinRows[id]?.draw(online: FleetAccounts.online(machine), state: stateOn(id, view), done: doneOn(id, view))
         }
     }
@@ -625,7 +756,7 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
             button.isEnabled = canGo && !busy
         }
         back.isEnabled = step > 0 && !busy && !(step == 1 && count > 0)
-        navigationItem.leftBarButtonItem?.isEnabled = !busy
+        cancelButton.isEnabled = !busy
         problem.text = refused
         fold(problem, open: refused != nil)
     }
@@ -732,6 +863,16 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
     }
 
     var probeContent: [String] { AccountsProbe.texts(in: content) }
+    /// The steps as drawn and as VoiceOver reads them: each one's name and state,
+    /// the layout (a list or a row of marks), and where Cancel stands.
+    var probeSteps: String {
+        let read = steps.arrangedSubviews.compactMap { item in
+            item.accessibilityLabel.map { [$0, item.accessibilityValue].compactMap(\.self).joined(separator: " — ") }
+        }
+        let drawn = AccountsProbe.texts(in: steps)
+        return "\(wide == true ? "list" : "row of marks"): \(read.joined(separator: " / ")) | drawn: \(drawn.joined(separator: " / "))"
+            + " | cancel \(cancelButton.window == nil ? "not drawn" : "in the card")"
+    }
     #endif
 }
 
@@ -786,72 +927,207 @@ final class ProviderChoiceRow: UIControl {
     }
 }
 
-/// One machine of the setup's Sign in step: its name and where it stands, and
-/// its one control. Claude's row: Sign in opens Claude Code's link and opens
-/// the row onto the link, the paste field and Done. A device-code row holds
-/// its panel from the start. Continue is how a machine is skipped.
+/// Claude's row once asked (AccountSetup.svelte `.mrow.paste .controls`):
+/// the link, the field the code it shows is pasted into, and Done, on one
+/// line where there is room and the field and Done under the link where
+/// there isn't (the web's wrap: the field is 140pt at least).
+final class SetupPasteControls: UIStackView, UITextFieldDelegate {
+    private let flow: PasteSignin
+    private lazy var link = KitButton.make(Words.Accounts.Signin.openLink, glyph: .external, variant: .outline, height: .sm) { [weak self] in
+        self?.openLink()
+    }
+    private let field = KitField(placeholder: Words.Accounts.Setup.pasteCode)
+    private lazy var doneButton = KitButton.make(Words.Accounts.Signin.done, variant: .action, height: .sm) { [weak self] in self?.submit() }
+    private let linkLine = UIStackView()
+    private let codeLine = UIStackView()
+    /// One line where its parts fit (link, a 140pt field, Done); else two.
+    private var oneLine: Bool?
+
+    init(flow: PasteSignin, machine: String) {
+        self.flow = flow
+        super.init(frame: .zero)
+        spacing = Space.space2
+        field.accessibilityLabel = Words.Accounts.Setup.codeFor(machine: machine)
+        field.accessibilityIdentifier = "setup.code.\(flow.machineId)"
+        field.delegate = self
+        field.returnKeyType = .done
+        field.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            flow.code = field.text ?? ""
+            draw()
+        }, for: .editingChanged)
+        field.widthAnchor.constraint(greaterThanOrEqualToConstant: 140).isActive = true
+        link.accessibilityIdentifier = "setup.link.\(flow.machineId)"
+        doneButton.accessibilityIdentifier = "setup.done.\(flow.machineId)"
+        linkLine.addArrangedSubview(link)
+        linkLine.addArrangedSubview(UIView())
+        codeLine.spacing = Space.space2
+        codeLine.alignment = .center
+        codeLine.addArrangedSubview(field)
+        codeLine.addArrangedSubview(doneButton)
+        addArrangedSubview(linkLine)
+        addArrangedSubview(codeLine)
+        arrange(oneLine: true)
+    }
+
+    @available(*, unavailable)
+    required init(coder _: NSCoder) {
+        fatalError("SetupPasteControls is built in code")
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let room = link.intrinsicContentSize.width + 140 + doneButton.intrinsicContentSize.width + Space.space2 * 2
+        let fits = bounds.width >= room
+        if fits != oneLine { arrange(oneLine: fits) }
+    }
+
+    private func arrange(oneLine fits: Bool) {
+        oneLine = fits
+        axis = fits ? .horizontal : .vertical
+        alignment = fits ? .center : .fill
+        // On one line the link takes only its own width; on two it stands at the left of its own.
+        linkLine.arrangedSubviews.last?.isHidden = fits
+    }
+
+    /// Reads the flow (an observed read: its owner draws again when it moves).
+    func draw() {
+        let phase = flow.phase
+        let words = Words.Accounts.Signin.self
+        KitButton.setTitle(phase == .opening ? words.opening : words.openLink, of: link, variant: .outline, height: .sm)
+        link.configuration?.showsActivityIndicator = phase == .opening
+        // The link is a link once the machine has answered one; until then, pending.
+        link.isEnabled = flow.url != nil
+        field.isEnabled = flow.url != nil
+        if !field.isFirstResponder, field.text != flow.code { field.text = flow.code }
+        field.accessibilityValue = flow.problem == nil ? nil : Words.Accounts.Editor.invalid
+        KitButton.setTitle(phase == .checking ? words.checking : words.done, of: doneButton, variant: .action, height: .sm)
+        doneButton.configuration?.showsActivityIndicator = phase == .checking
+        doneButton.isEnabled = flow.url != nil && !flow.code.trimmingCharacters(in: .whitespaces).isEmpty && phase != .checking
+    }
+
+    private func openLink() {
+        guard let url = flow.url else { return }
+        SignInBrowser.open(url, from: self)
+    }
+
+    private func submit() {
+        field.resignFirstResponder()
+        Task { await flow.done() }
+    }
+
+    func textFieldShouldReturn(_: UITextField) -> Bool {
+        submit()
+        return false
+    }
+
+    #if DEBUG
+    func probeSubmit(_ code: String) {
+        field.text = code
+        field.sendActions(for: .editingChanged)
+        submit()
+    }
+    #endif
+}
+
+/// One machine of the setup's Sign in step (AccountSetup.svelte `.mrow`):
+/// its name and where it stands, and its one control. Claude's row: Sign
+/// in opens Claude Code's link and opens the row onto the link, the paste
+/// field and Done; a refusal or a sign-in as someone else stands under them.
+/// A device-code row holds its panel from the start: beside the name on a
+/// wide page (`name controls st`), under it on a narrow one. Continue is how
+/// a machine is skipped.
 final class SetupMachineRow: UIStackView {
     private let state = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let stateGlyph = GlyphView(.passed, size: 14, tint: Palette.statusDoneGlyph)
+    private let nameLabel = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
     private var signIn: UIButton?
     private let flow: PasteSignin?
-    private let panel: UIView
+    private let controls: UIView
+    private let status = UIStackView()
+    private let top = UIStackView()
+    /// The row's refusal (`.row-problem`) and its sign-in as someone else (`.row-warn`).
+    private let problem = metaLine(ink: Palette.statusFailInk)
+    private let warn = metaLine(ink: Palette.statusAttnInk)
     private let name: String
+    private var wide: Bool?
 
-    init(name: String, paste flow: PasteSignin, panel: PastePanel) {
+    init(name: String, paste flow: PasteSignin) {
         self.flow = flow
-        self.panel = panel
+        controls = SetupPasteControls(flow: flow, machine: name)
         self.name = name
         super.init(frame: .zero)
-        signIn = KitButton.make(Words.Accounts.Setup.signIn, variant: .outline, height: .sm) { [weak self, weak panel] in
-            guard let self, let panel else { return }
-            Task { @MainActor in
-                guard await flow.open(), let url = flow.url else { return }
-                SignInBrowser.open(url, from: panel)
-                _ = self
+        signIn = KitButton.make(Words.Accounts.Setup.signIn, variant: .outline, height: .sm) { [weak self] in
+            guard let self else { return }
+            Task { @MainActor [weak self] in
+                guard await flow.open(), let url = flow.url, let self else { return }
+                SignInBrowser.open(url, from: self)
             }
         }
         signIn?.accessibilityLabel = Words.Accounts.Setup.signInOn(machine: name)
         signIn?.accessibilityIdentifier = "setup.signin.\(name)"
         build(name)
-        panel.isHidden = true
+        controls.isHidden = true
     }
 
     init(name: String, device panel: DevicePanel) {
         flow = nil
-        self.panel = panel
+        controls = panel
         self.name = name
         super.init(frame: .zero)
         build(name)
     }
 
-    private var devicePanel: DevicePanel? { panel as? DevicePanel }
-    private var pastePanel: PastePanel? { panel as? PastePanel }
+    private var devicePanel: DevicePanel? { controls as? DevicePanel }
+    private var pasteControls: SetupPasteControls? { controls as? SetupPasteControls }
 
     private func build(_ text: String) {
         axis = .vertical
         spacing = Space.space2
         isLayoutMarginsRelativeArrangement = true
         directionalLayoutMargins = .init(top: Space.space3, leading: 0, bottom: Space.space3, trailing: 0)
-        let label = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
-        label.text = text
-        label.lineBreakMode = .byTruncatingTail
-        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let status = UIStackView(arrangedSubviews: [stateGlyph, state] + [signIn].compactMap(\.self))
+        nameLabel.text = text
+        nameLabel.lineBreakMode = .byTruncatingTail
+        nameLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        for part in [stateGlyph, state] + [signIn].compactMap(\.self) { status.addArrangedSubview(part) }
         status.spacing = Space.space2
         status.alignment = .center
-        let top = UIStackView(arrangedSubviews: [label, UIView(), status])
+        status.setContentHuggingPriority(.required, for: .horizontal)
         top.alignment = .center
         top.spacing = Space.space3
         top.heightAnchor.constraint(greaterThanOrEqualToConstant: Size.cBtnHSm).isActive = true
-        addArrangedSubview(top)
-        addArrangedSubview(panel)
+        problem.isHidden = true
+        warn.isHidden = true
+        arrange(wide: false)
         accessibilityIdentifier = "setup.machine.\(text)"
     }
 
     @available(*, unavailable)
     required init(coder _: NSCoder) {
         fatalError("SetupMachineRow is built in code")
+    }
+
+    /// A device row's `name controls st` on one line when the setup is wide; every row's name and state over its controls otherwise.
+    func arrange(wide now: Bool) {
+        let oneLine = now && devicePanel != nil
+        guard oneLine != wide else { return }
+        wide = oneLine
+        arrangedSubviews.forEach { $0.removeFromSuperview() }
+        top.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        top.alignment = oneLine ? .top : .center
+        if oneLine {
+            // `.mrow`'s columns: the name at 150pt, the panel taking the rest, the state at the end.
+            nameLabel.widthAnchor.constraint(equalToConstant: 150).isActive = true
+            for part in [nameLabel, controls, status] { top.addArrangedSubview(part) }
+            addArrangedSubview(top)
+        } else {
+            nameLabel.constraints.filter { $0.firstAttribute == .width }.forEach { $0.isActive = false }
+            for part in [nameLabel, UIView(), status] { top.addArrangedSubview(part) }
+            addArrangedSubview(top)
+            addArrangedSubview(controls)
+        }
+        addArrangedSubview(problem)
+        addArrangedSubview(warn)
     }
 
     func draw(online: Bool, state signin: String, done: Bool) {
@@ -867,9 +1143,13 @@ final class SetupMachineRow: UIStackView {
         stateGlyph.tintColor = done ? Palette.statusDoneGlyph : Palette.statusAttnInk
         stateGlyph.isHidden = !(done && flow != nil) && !(mismatch && !done)
         signIn?.isHidden = done || mismatch || !online || asked
-        if let pastePanel {
-            fold(pastePanel, open: asked && !done)
-            pastePanel.draw(online: online)
+        if let flow, let pasteControls {
+            fold(pasteControls, open: asked && !done)
+            pasteControls.draw()
+            problem.text = flow.problem
+            fold(problem, open: flow.problem != nil)
+            warn.text = flow.phase == .mismatch ? Words.Accounts.Setup.mismatch(machine: name, who: flow.email) : nil
+            fold(warn, open: flow.problem == nil && flow.phase == .mismatch)
         }
         devicePanel?.draw(online: online)
     }

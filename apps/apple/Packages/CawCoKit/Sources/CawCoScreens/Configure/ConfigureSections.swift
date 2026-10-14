@@ -42,7 +42,7 @@ struct ConfigSection {
     /// the rules, hooks, delegate types and tools, and the accounts).
     func count(_ hub: HubConnection) -> Int? {
         guard counted else { return nil }
-        let config = hub.configuration
+        let config: FleetConfig = hub.configuration
         let fleet = config.snapshot
         switch slug {
         case "rules": return config.rulesCount

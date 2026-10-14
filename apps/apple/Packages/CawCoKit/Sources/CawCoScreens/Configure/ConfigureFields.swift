@@ -15,6 +15,8 @@ final class SwitchField: UIStackView {
         alignment = .top
         spacing = 10
         toggle.onTintColor = Palette.inkStrong
+        // A switch, as the web's (switch.svelte): the Mac idiom draws one as a checkbox unless asked.
+        toggle.preferredStyle = .sliding
         toggle.accessibilityLabel = text
         toggle.setContentHuggingPriority(.required, for: .horizontal)
         toggle.addAction(UIAction { [weak self] _ in

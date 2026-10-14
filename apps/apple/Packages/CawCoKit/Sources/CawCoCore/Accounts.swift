@@ -355,6 +355,10 @@ public extension HubConnection {
         guard let address else { throw URLError(.notConnectedToInternet) }
         var request = URLRequest(url: address.appending(path: path))
         request.httpMethod = method
+        // A write can wait on a machine as long as the hub does (a code
+        // exchanged, a device code waited for a minute at a time), and then on
+        // the hub's answer: never URLSession's 60 s, which a minute's wait races.
+        request.timeoutInterval = Double(Words.Accounts.Rules.signinWaitMs) / 1000 + Self.answerSeconds
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -368,6 +372,9 @@ public extension HubConnection {
         await reloadAccounts()
         return data
     }
+
+    /// What the hub's answer is given past its own wait on a machine.
+    private static let answerSeconds: TimeInterval = 15
 
     private static func part(_ id: String) -> String {
         id.addingPercentEncoding(withAllowedCharacters: .alphanumerics.union(CharacterSet(charactersIn: "-._~"))) ?? id

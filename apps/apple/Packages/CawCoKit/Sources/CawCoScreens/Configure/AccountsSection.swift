@@ -8,7 +8,8 @@ import UIKit
 /// route between; under it the accounts in fill-first order, each row one
 /// press to the account. Add account opens the stepped setup.
 final class AccountsSectionController: ConfigSectionController {
-    private lazy var add = KitButton.make(Words.Accounts.add, glyph: .plus, variant: .outline, height: .sm) { [weak self] in self?.openSetup() }
+    /// The section's action, as the web's header draws it: the filled default button with its plus.
+    private lazy var add = KitButton.make(Words.Accounts.add, glyph: .plus, variant: .action) { [weak self] in self?.openSetup() }
     private let groups = UIStackView()
     private var empty: UIView?
     /// What the groups draw now, so a read that changed nothing redraws nothing.
@@ -54,7 +55,7 @@ final class AccountsSectionController: ConfigSectionController {
     private func draw(_ list: [FleetAccounts.Group], view: FleetAccounts.View) {
         groups.arrangedSubviews.forEach { $0.removeFromSuperview() }
         guard !list.isEmpty else {
-            let action = KitButton.make(Words.Accounts.add, glyph: .plus, variant: .outline, height: .sm) { [weak self] in self?.openSetup() }
+            let action = KitButton.make(Words.Accounts.add, glyph: .plus, variant: .action, height: .sm) { [weak self] in self?.openSetup() }
             groups.addArrangedSubview(KitEmptyState(icon: section.glyph, title: Words.Accounts.addFirst, line: "", action: action))
             return
         }
@@ -122,6 +123,35 @@ final class AccountsSectionController: ConfigSectionController {
     func probeSetup() { openSetup() }
     /// Every group's head and row as drawn now.
     var probeLines: [String] { AccountsProbe.texts(in: groups) }
+    /// Where the groups' parts stand: a group's head, then its rows one under
+    /// another with no room between them (the hairline is the only rule),
+    /// the groups `space6` apart. Each place that isn't so, or "none".
+    var probeGaps: String {
+        var out: [String] = []
+        let shown = groups.arrangedSubviews.filter { !$0.isHidden }
+        for (index, box) in shown.enumerated() {
+            if index > 0 {
+                let between = box.frame.minY - shown[index - 1].frame.maxY
+                if abs(between - Space.space6) > 0.5 { out.append("groups \(index - 1)–\(index) \(Int(between))pt apart") }
+            }
+            guard let rows = (box as? UIStackView)?.arrangedSubviews.last as? UIStackView else { continue }
+            let drawn = rows.arrangedSubviews.filter { !$0.isHidden }
+            for (at, row) in drawn.enumerated() where at > 0 {
+                let between = row.frame.minY - drawn[at - 1].frame.maxY
+                if abs(between) > 0.5 { out.append("group \(index) rows \(at - 1)–\(at) \(Int(between))pt apart") }
+            }
+            // A row as tall as its words at this text size, and no taller.
+            for row in drawn {
+                let needs = row.systemLayoutSizeFitting(CGSize(width: row.bounds.width, height: 0),
+                                                        withHorizontalFittingPriority: .required,
+                                                        verticalFittingPriority: .fittingSizeLevel).height
+                if row.frame.height > needs + 0.5 {
+                    out.append("group \(index) row \(Int(row.frame.minY)) is \(Int(row.frame.height))pt tall, its words \(Int(needs))pt")
+                }
+            }
+        }
+        return out.isEmpty ? "none" : out.joined(separator: " / ")
+    }
     #endif
 }
 
@@ -163,7 +193,13 @@ final class AccountRow: UIControl {
         column.translatesAutoresizingMaskIntoConstraints = false
         addSubview(column)
         addHairline()
+        // As tall as its words and their margins, never under 56: with the
+        // margins only bounds, a list taller than its rows (a short list on a
+        // tall pane) stretched a row to take the rest.
+        let hugs = column.topAnchor.constraint(equalTo: topAnchor, constant: Space.space3)
+        hugs.priority = .defaultHigh
         NSLayoutConstraint.activate([
+            hugs,
             dot.widthAnchor.constraint(equalToConstant: 10),
             dot.heightAnchor.constraint(equalToConstant: 10),
             heightAnchor.constraint(greaterThanOrEqualToConstant: 56),
@@ -419,6 +455,8 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
 
     func probeSave() async -> Bool { await save() }
     var probeRefusal: String? { refused }
+    /// How the Limits switch draws: `sliding` or `checkbox`.
+    var probeSwitch: String { neverBackup.toggle.style == .checkbox ? "checkbox" : "sliding" }
     #endif
 }
 

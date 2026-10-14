@@ -111,6 +111,9 @@ final class PastePanel: UIStackView, UITextFieldDelegate {
 
     #if DEBUG
     func probeOpenLink() { openLink() }
+    /// The flow as it stands: its phase, its problem, its code.
+    var probePhase: PasteSignin.Phase { flow.phase }
+    var probeProblem: String? { flow.problem }
     func probeSubmit(_ code: String) {
         field.text = code
         field.sendActions(for: .editingChanged)

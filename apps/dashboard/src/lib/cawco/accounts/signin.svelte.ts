@@ -83,7 +83,10 @@ export class SigninFlow {
       const result = await completeSignin(id, this.#machineId, code);
       this.email = result.probe?.identity?.email ?? null;
       this.code = "";
-      if (result.state === "signed-out") {
+      // Signed in, or signed in as someone else, is the machine's answer;
+      // any other (signed out, or a code still waited on) the code didn't
+      // take, and the field says so, as the app's does.
+      if (result.state !== "signed-in" && result.state !== "mismatch") {
         this.phase = "ready";
         this.problem = accountsWords.signin.refused;
         return;

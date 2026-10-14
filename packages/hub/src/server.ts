@@ -90,6 +90,7 @@ import {
   ACCOUNT_KINDS,
   ACCOUNT_MOVE,
   ACCOUNT_READ,
+  ACCOUNT_RULES,
   type Account,
   type AccountBorrowFrame,
   type AccountIdentity,
@@ -958,12 +959,8 @@ const NO_PROCESS_STATUSES: ReadonlySet<string> = new Set([
   "error",
 ]);
 
-/**
- * An account sign-in step on a machine: Claude Code printing its link (the
- * agent waits up to 30 s), or exchanging the code (up to 60 s) and reading
- * its status back.
- */
-const SIGNIN_TIMEOUT_MS = 90_000;
+/** An account sign-in step on a machine (core `ACCOUNT_RULES.signinWaitMs`). */
+const SIGNIN_TIMEOUT_MS = ACCOUNT_RULES.signinWaitMs;
 const accountHue = t.Union(ACCOUNT_HUES.map((hue) => t.Literal(hue)));
 /** An account provider's id: Claude's `anthropic`, or a provider pi or OpenCode speaks. */
 const accountProvider = t.String({

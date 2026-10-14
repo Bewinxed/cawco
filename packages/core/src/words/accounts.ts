@@ -140,6 +140,9 @@ export const accountsWords = {
     /** A code the machine's login did not take. */
     refused:
       "That code didn't sign the machine in. Open the sign-in link again for a new code.",
+    /** Part of the page's code: the machine's login still waits for the whole of it. */
+    notWhole:
+      "That's only part of the code. Copy all of it from the sign-in page, then paste it again.",
     /** The app's alone: a machine that answered a device code where a link was asked for. */
     notALink:
       "The machine answered a code, not a sign-in link. Update CawCo on it, then start again.",

@@ -660,6 +660,8 @@ final class AtLimitView: UIStackView, UITextFieldDelegate {
         let moveLabel = KitLabel(TypeScale.typeBody, ink: Palette.inkRow, lines: 0)
         moveLabel.text = Words.Accounts.AtLimit.move
         move.onTintColor = Palette.inkStrong
+        // A switch, as the web's (AtLimitBlock.svelte `Switch`): the Mac idiom draws one as a checkbox unless asked.
+        move.preferredStyle = .sliding
         move.isOn = value.move
         move.accessibilityLabel = moveLabel.text
         move.accessibilityIdentifier = "routing.move"
@@ -764,6 +766,8 @@ final class AtLimitView: UIStackView, UITextFieldDelegate {
 
     #if DEBUG
     var probeFigure: String { figure.probeState }
+    /// How the move switch draws: `sliding` or `checkbox`.
+    var probeSwitch: String { move.style == .checkbox ? "checkbox" : "sliding" }
     func probeSet(move on: Bool, wait minutes: Int) {
         move.setOn(on, animated: false)
         move.sendActions(for: .valueChanged)

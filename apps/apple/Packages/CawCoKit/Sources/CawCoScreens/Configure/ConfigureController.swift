@@ -23,6 +23,8 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
     /// Where the chosen section stands on a regular width.
     private let pane = UIView()
     private var screens: [String: UIViewController] = [:]
+    /// On a regular width, each section's stack beside the rail (`stack(_:)`).
+    private var stacks: [String: UINavigationController] = [:]
     /// The section beside the rail.
     private var shown: String?
     /// What each row draws now: its count and its badge.
@@ -125,6 +127,8 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
             nav.popToViewController(self, animated: false)
         }
         open(slug)
+        // Asked for from elsewhere, it is the section itself, not an editor left open in it.
+        if !compact { stacks[slug]?.popToRootViewController(animated: false) }
     }
 
     override func viewIsAppearing(_ animated: Bool) {
@@ -150,8 +154,12 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
         for part in [collection!, panel, pane] { part.removeFromSuperview() }
         let safe = view.safeAreaLayoutGuide
         if compact {
-            if let shown, let screen = screens[shown] { unhost(screen) }
+            if let shown, let stack = stacks[shown] { unhost(stack) }
             shown = nil
+            // The sections go back to being pushed over the list: each stack
+            // lets its section (and whatever was open in it) go.
+            for stack in stacks.values { stack.setViewControllers([], animated: false) }
+            stacks = [:]
             view.addSubview(collection)
             NSLayoutConstraint.activate([
                 collection.topAnchor.constraint(equalTo: safe.topAnchor),
@@ -160,6 +168,10 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
                 collection.trailingAnchor.constraint(equalTo: safe.trailingAnchor),
             ])
         } else {
+            // A section pushed over the list on a compact width comes back beside the rail.
+            if let nav = navigationController, nav.topViewController !== self, nav.viewControllers.contains(self) {
+                nav.popToViewController(self, animated: false)
+            }
             view.addSubview(panel)
             view.addSubview(pane)
             panel.addSubview(collection)
@@ -285,13 +297,33 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
         return made
     }
 
+    /// A section's own stack beside the rail: what it opens (an editor, the
+    /// routing, the setup) is pushed there, so the rail stands beside it as
+    /// it does beside the web's editors. Its bar is hidden as the shell's is:
+    /// each page carries its title and its way back (Cancel) in its card.
+    private func stack(_ section: ConfigSection) -> UINavigationController? {
+        if let kept = stacks[section.slug] { return kept }
+        guard let root = screen(section) else { return nil }
+        let made = UINavigationController(rootViewController: root)
+        made.setNavigationBarHidden(true, animated: false)
+        made.view.backgroundColor = Palette.surfaceRecess
+        stacks[section.slug] = made
+        return made
+    }
+
     /// The section beside the rail. A change of section rises or drops 4%
-    /// over 140ms on the drawer curve while the rail holds still (DESIGN.md Pages).
+    /// over 140ms on the drawer curve while the rail holds still (DESIGN.md
+    /// Pages). The section already there, pressed again, comes back to its
+    /// list from whatever it had open, as the rail's link does on the web.
     private func show(_ slug: String, animated: Bool) {
-        guard slug != shown, let section = ConfigSections.section(slug), let next = screen(section) else { return }
+        guard slug != shown else {
+            stacks[slug]?.popToRootViewController(animated: animated)
+            return
+        }
+        guard let section = ConfigSections.section(slug), let next = stack(section) else { return }
         let order = ConfigSections.all.map(\.slug)
         let down = (order.firstIndex(of: slug) ?? 0) > (shown.flatMap(order.firstIndex) ?? 0)
-        let leaving = shown.flatMap { screens[$0] }
+        let leaving = shown.flatMap { stacks[$0] }
         shown = slug
         addChild(next)
         next.view.translatesAutoresizingMaskIntoConstraints = false
@@ -332,6 +364,19 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
         }
         move.startAnimation()
     }
+
+    #if DEBUG
+    /// The list as drawn: each group's header and its rows' names, in order;
+    /// then the rows that open a screen in the app.
+    var probeNav: String {
+        guard let source else { return "not drawn" }
+        let snapshot = source.snapshot()
+        let drawn = snapshot.sectionIdentifiers.map { group in
+            "\(group): " + snapshot.itemIdentifiers(inSection: group).compactMap { ConfigSections.section($0)?.label }.joined(separator: ", ")
+        }
+        return drawn.joined(separator: " | ") + " || opens: " + ConfigSections.opening.map(\.label).joined(separator: ", ")
+    }
+    #endif
 
     private func unhost(_ screen: UIViewController) {
         guard screen.parent === self else { return }

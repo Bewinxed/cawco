@@ -17,7 +17,9 @@ extension HubConnection {
 ///
 /// Save shows its work where it was pressed: it spins while the save runs,
 /// and says "Saved" for `durHold` once it ends well. On a compact width
-/// Delete moves from the commit row to the navigation bar's ⋯ menu.
+/// Delete moves from the commit row to the header's ⋯ menu, beside the
+/// name, as the web's does under 640px (the shell draws no system bar on
+/// the Mac, so a bar item would not be seen there).
 class ConfigEditorController: ObservedViewController {
     let section: ConfigSection
     let context: ShellContext
@@ -48,6 +50,8 @@ class ConfigEditorController: ObservedViewController {
     private var saveButton: UIButton!
     private var cancelButton: UIButton!
     private var deleteButton: UIButton?
+    /// The header's ⋯, Delete's place on a compact width.
+    private let headMenu = KitGhostButton(.more, label: Words.Configure.more)
     private var saved = false
 
     init(section: ConfigSection, context: ShellContext, title: String, saveLabel: String, deleteLabel: String? = nil) {
@@ -121,6 +125,13 @@ class ConfigEditorController: ObservedViewController {
         let head = UIStackView(arrangedSubviews: [markSlot, lead])
         head.spacing = 8
         head.alignment = .top
+        // `.narrow-menu`: under 640px Delete leaves the commit row for the header's ⋯.
+        if deleteLabel != nil {
+            headMenu.showsMenuAsPrimaryAction = true
+            headMenu.accessibilityIdentifier = "editor.more"
+            headMenu.setContentHuggingPriority(.required, for: .horizontal)
+            head.addArrangedSubview(headMenu)
+        }
         parts.axis = .vertical
         parts.spacing = Space.space5
         let body = UIStackView(arrangedSubviews: [head, parts])
@@ -207,15 +218,12 @@ class ConfigEditorController: ObservedViewController {
         cancelButton.isEnabled = !saving
         deleteButton?.isHidden = compact
         deleteButton?.isEnabled = down == nil && !saving && !deleting
-        if compact, let deleteLabel {
-            let item = UIBarButtonItem(image: Glyph.more.image.resized(to: 18), menu: UIMenu(children: [
+        headMenu.isHidden = !compact || deleteLabel == nil
+        if let deleteLabel {
+            headMenu.menu = UIMenu(children: [
                 UIAction(title: deleteLabel, image: Glyph.trash.image.resized(to: 16),
                          attributes: down != nil || deleting || saving ? [.destructive, .disabled] : .destructive) { [weak self] _ in self?.runDelete() },
-            ]))
-            item.accessibilityLabel = Words.Configure.more
-            navigationItem.rightBarButtonItem = item
-        } else {
-            navigationItem.rightBarButtonItem = nil
+            ])
         }
     }
 
@@ -229,6 +237,18 @@ class ConfigEditorController: ObservedViewController {
         let save = saveButton.configuration?.attributedTitle.map { String($0.characters) } ?? ""
         let asked = question.asked == nil ? "" : " question: \(question.probeState) \(question.probeWords)"
         return "[\(save)\(saveButton.isEnabled ? "" : " (disabled)")]" + asked
+    }
+
+    /// Where Delete stands as drawn: the header's ⋯ menu and its items, or the commit row's button.
+    var probeDelete: String {
+        if !headMenu.isHidden, headMenu.window != nil {
+            let items = headMenu.menu?.children.compactMap { ($0 as? UIAction)?.title } ?? []
+            return "header menu: " + items.joined(separator: ", ")
+        }
+        if let deleteButton, !deleteButton.isHidden, deleteButton.window != nil {
+            return "commit row: [\(deleteButton.configuration?.attributedTitle.map { String($0.characters) } ?? "")]"
+        }
+        return "none"
     }
     #endif
 
