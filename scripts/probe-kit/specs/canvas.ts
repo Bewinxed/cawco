@@ -583,6 +583,86 @@ const imageChecks = async (on: OnCanvas) => {
     bytes: 5 * 1024 * 1024,
   });
   const big = await refusalOn(frame);
+  // No timer takes it away: 3 s on it stands whole, nothing running on it.
+  await page.waitForTimeout(3000);
+  const standing = await frame.evaluate(() => {
+    const band = document.querySelector(".canvas-refusal");
+    return band
+      ? {
+          opacity: Number(getComputedStyle(band).opacity),
+          running: band
+            .getAnimations()
+            .filter((run) => run.playState === "running").length,
+        }
+      : null;
+  });
+  // A press on the grid takes it away: one fade on opacity over --dur-exit,
+  // held still as it is read.
+  await page.mouse.move(well.x + well.width * 0.6, well.y + well.height * 0.85);
+  await page.mouse.down();
+  const leaving = await frame.evaluate(() => {
+    const band = document.querySelector(".canvas-refusal");
+    const runs = band?.getAnimations() ?? [];
+    for (const run of runs) {
+      run.pause();
+    }
+    const exit = getComputedStyle(document.documentElement)
+      .getPropertyValue("--dur-exit")
+      .trim();
+    const read = runs.map((run) => {
+      const effect = run.effect as KeyframeEffect;
+      return {
+        name: (run as Animation & { animationName?: string }).animationName,
+        duration: Number(effect.getTiming().duration),
+        props: [
+          ...new Set(
+            effect
+              .getKeyframes()
+              .flatMap((keyframe) =>
+                Object.keys(keyframe).filter(
+                  (key) =>
+                    ![
+                      "offset",
+                      "easing",
+                      "composite",
+                      "computedOffset",
+                    ].includes(key)
+                )
+              )
+          ),
+        ],
+      };
+    });
+    for (const run of runs) {
+      run.play();
+    }
+    return {
+      exit: exit.endsWith("ms")
+        ? Number.parseFloat(exit)
+        : Number.parseFloat(exit) * 1000,
+      runs: read,
+    };
+  });
+  await page.mouse.up();
+  const gone = await until(
+    "the refusal gone",
+    () =>
+      frame.evaluate(() => document.querySelector(".canvas-refusal") === null),
+    Boolean,
+    3000
+  ).catch(() => false);
+  kit.check(
+    "26: the refusal stands with no timer (3 s on: opacity 1, nothing running), and a press on the grid fades it out on one --dur-exit run of opacity",
+    !!standing &&
+      standing.opacity === 1 &&
+      standing.running === 0 &&
+      leaving.runs.length === 1 &&
+      leaving.runs[0].name === "canvas-refusal-out" &&
+      leaving.runs[0].duration === leaving.exit &&
+      leaving.runs[0].props.join() === "opacity" &&
+      gone,
+    `3 s on ${JSON.stringify(standing)}; pressed ${JSON.stringify(leaving)}; gone ${gone}`
+  );
   await pasteFile(frame, {
     kind: "blank",
     name: "notes.txt",

@@ -8,7 +8,7 @@
  * places it). The file goes into the doc's `files`, which y-excalidraw
  * syncs as the binding's assets (scene.ts), so every screen and the hub
  * hold it. Any other file is refused before Excalidraw sees it, with the
- * sentence the canvas shows over its grid.
+ * sentence the canvas shows over its grid until the person next acts on it.
  */
 import { CANVAS_IMAGE_TYPES, CANVAS_LIMITS } from "@cawco/core/canvas";
 import {
@@ -56,15 +56,30 @@ export const refusalOf = (file: File): string | null => {
   return null;
 };
 
+/** The refusal over the grid, as the host page draws it (host.tsx `Refusal`). */
+const REFUSAL = ".canvas-refusal";
+
+/**
+ * The refusal standing over the grid goes when the person next acts on the
+ * canvas: it is marked leaving and fades out (canvas.css), and the host
+ * drops it once that fade ends. No timer takes it away.
+ */
+const dismiss = () => {
+  const standing = document.querySelector(`${REFUSAL}:not([data-leaving])`);
+  standing?.setAttribute("data-leaving", "");
+};
+
 /**
  * A pasted or dropped file the canvas won't take is stopped before
  * Excalidraw's own listeners (the window's capture phase runs first) and
  * said through `refuse`; one it takes goes on to Excalidraw, which places it
  * at the pointer. Excalidraw takes the first file only, so that is the one
- * checked.
+ * checked. A press, a key, a paste or a drop first takes away the refusal
+ * standing from before.
  */
 export const guardImages = (refuse: (why: string) => void): (() => void) => {
   const check = (event: Event, files: FileList | undefined) => {
+    dismiss();
     const file = files?.[0];
     const why = file ? refusalOf(file) : null;
     if (why) {
@@ -76,11 +91,19 @@ export const guardImages = (refuse: (why: string) => void): (() => void) => {
   const pasted = (event: ClipboardEvent) =>
     check(event, event.clipboardData?.files);
   const dropped = (event: DragEvent) => check(event, event.dataTransfer?.files);
-  window.addEventListener("paste", pasted, true);
-  window.addEventListener("drop", dropped, true);
+  const listeners: [string, (event: never) => void][] = [
+    ["paste", pasted],
+    ["drop", dropped],
+    ["pointerdown", dismiss],
+    ["keydown", dismiss],
+  ];
+  for (const [type, listener] of listeners) {
+    window.addEventListener(type, listener as EventListener, true);
+  }
   return () => {
-    window.removeEventListener("paste", pasted, true);
-    window.removeEventListener("drop", dropped, true);
+    for (const [type, listener] of listeners) {
+      window.removeEventListener(type, listener as EventListener, true);
+    }
   };
 };
 

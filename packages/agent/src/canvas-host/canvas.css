@@ -330,9 +330,11 @@ body {
 
 /* ---- A file the canvas wouldn't take (images.ts): one line in the error
    formula over the grid, under the rail (over it on a phone, whose rail
-   stands at the foot), in the panel material's raised card. It fades in,
-   stands for --dur-hold and fades out, by opacity alone, so reduced motion
-   keeps it as it is. It takes no press. */
+   stands at the foot), in the panel material's raised card. It fades in
+   over --dur-fade and stands until the person next acts on the canvas (a
+   press, a key, a paste or a drop: images.ts marks it `data-leaving`), then
+   fades out over --dur-exit, by opacity alone, so reduced motion keeps it
+   as it is. No timer takes it away. It takes no press. */
 .canvas-refusal {
   --refusal-top: calc(var(--space-3) + var(--rail-h) + var(--space-2));
   position: absolute;
@@ -351,10 +353,11 @@ body {
   font: var(--type-body);
   pointer-events: none;
   translate: -50% 0;
-  animation:
-    canvas-refusal-in var(--dur-fade) var(--ease-out),
-    canvas-refusal-out var(--dur-fade) var(--ease-out)
-    calc(var(--dur-fade) + var(--dur-hold)) forwards;
+  animation: canvas-refusal-in var(--dur-fade) var(--ease-out);
+
+  &[data-leaving] {
+    animation: canvas-refusal-out var(--dur-exit) var(--ease-out) forwards;
+  }
 }
 
 @media (max-width: 559px) {

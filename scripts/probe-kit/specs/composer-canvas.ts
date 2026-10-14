@@ -54,8 +54,13 @@ const SLOT = ".composer > .canvas-slot";
 const CHIP = ".canvas-chip";
 /** The composer's own dock (the pane draws a `.dock` of its own around it). */
 const DOCK = ".dock[data-keeps-draft]";
-/** What the canvas's motion runs on: its stage and the composer's dock. */
-const MOTION = `.canvas-stage, ${DOCK}`;
+/**
+ * What the canvas's motion runs on, and only that: its stage and the grown
+ * shape's outline in the composer's dock. The dock's own Svelte transitions
+ * (unnamed runs that may end before the page reads them) are not the
+ * canvas's clock, so a catch never holds them.
+ */
+const MOTION = `.canvas-stage, ${DOCK} .grown-halo`;
 const DRAWER = "cubic-bezier(0.32, 0.72, 0, 1)";
 const EASE_OUT = "cubic-bezier(0.23, 1, 0.32, 1)";
 
