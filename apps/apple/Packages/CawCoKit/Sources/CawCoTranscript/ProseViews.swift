@@ -505,22 +505,29 @@ final class CodeWell: UIView {
     private let scroll = UIScrollView()
     /// The listing, selectable as the web's is, at its own width: it never wraps.
     private let label = ProseView()
-    private var labelWidth: NSLayoutConstraint!
+    private var labelWidth = 0.0
     private var source: (language: String?, text: String)?
-    private var labelTop: NSLayoutConstraint!
-    private var labelBottom: NSLayoutConstraint!
+    /// The padding above and below the listing: none where a chunk carries on.
+    private var padTop = Size.txCodePadBlock
+    private var padBottom = Size.txCodePadBlock
 
     /// A chunk of one long fence: open where the next or last chunk carries on,
     /// so the chunks read as the one well they are.
     func join(above: Bool, below: Bool) {
-        labelTop.constant = above ? 0 : Size.txCodePadBlock
-        labelBottom.constant = below ? 0 : -Size.txCodePadBlock
+        padTop = above ? 0 : Size.txCodePadBlock
+        padBottom = below ? 0 : Size.txCodePadBlock
         var corners: CACornerMask = []
         if !above { corners.formUnion([.layerMinXMinYCorner, .layerMaxXMinYCorner]) }
         if !below { corners.formUnion([.layerMinXMaxYCorner, .layerMaxXMaxYCorner]) }
         layer.maskedCorners = corners
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
     }
 
+    /// Laid out by frame (`layoutSubviews`): its listing inside the padding,
+    /// at the listing's own width, scrolling sideways. Its height, the
+    /// listing's and the padding, does not depend on its width: it is its
+    /// intrinsic size, for the stacks it stands in.
     init() {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -528,27 +535,13 @@ final class CodeWell: UIView {
         layer.cornerRadius = Radius.radiusSm
         layer.cornerCurve = .continuous
         clipsToBounds = true
-        scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.translatesAutoresizingMaskIntoConstraints = true
         scroll.showsHorizontalScrollIndicator = false
         scroll.alwaysBounceHorizontal = false
+        label.translatesAutoresizingMaskIntoConstraints = true
         label.textContainer.lineBreakMode = .byClipping
-        labelWidth = label.widthAnchor.constraint(equalToConstant: 0)
-        labelWidth.isActive = true
         addSubview(scroll)
         scroll.addSubview(label)
-        let pad = UIEdgeInsets(top: Size.txCodePadBlock, left: Size.txCodePadInline, bottom: Size.txCodePadBlock, right: Size.txCodePadInline)
-        labelTop = label.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: pad.top)
-        labelBottom = label.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -pad.bottom)
-        NSLayoutConstraint.activate([
-            scroll.leadingAnchor.constraint(equalTo: leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: trailingAnchor),
-            scroll.topAnchor.constraint(equalTo: topAnchor),
-            scroll.bottomAnchor.constraint(equalTo: bottomAnchor),
-            label.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: pad.left),
-            label.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor, constant: -pad.right),
-            labelTop, labelBottom,
-            scroll.frameLayoutGuide.heightAnchor.constraint(equalTo: scroll.contentLayoutGuide.heightAnchor),
-        ])
         label.isAccessibilityElement = true
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (well: CodeWell, _: UITraitCollection) in well.paint() }
     }
@@ -572,8 +565,25 @@ final class CodeWell: UIView {
             text.addAttribute(.foregroundColor, value: color, range: range)
         }
         label.attributedText = text
-        labelWidth.constant = Self.width(of: text)
+        labelWidth = Self.width(of: text)
+        label.fitWidth = labelWidth
         label.accessibilityLabel = source.text
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
+    }
+
+    /// The listing's height at its width.
+    private var labelHeight: Double { label.intrinsicContentSize.height }
+
+    override var intrinsicContentSize: CGSize {
+        CGSize(width: UIView.noIntrinsicMetric, height: padTop + labelHeight + padBottom)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        scroll.frame = bounds
+        label.frame = CGRect(x: Size.txCodePadInline, y: padTop, width: labelWidth, height: labelHeight)
+        scroll.contentSize = CGSize(width: Size.txCodePadInline + labelWidth + Size.txCodePadInline, height: bounds.height)
     }
 
     /// A listing's text: the mono face at the label size on the body's
@@ -769,24 +779,39 @@ final class QuoteBlock: UIView {
     /// The rule and the gap after it, which the words stand past.
     nonisolated static let inset = Space.space1 + TypeScale.textBody * TypeScale.proseSmQuoteInset
 
+    private let bar = UIView()
+
+    /// Laid out by frame (`layoutSubviews`): the rule down its start, the
+    /// words past it. Its height is the words' at its width: its intrinsic
+    /// size, for the stacks it stands in, asked again when the width it is
+    /// laid out at changes the words' height.
     init() {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        let bar = UIView()
         bar.backgroundColor = Palette.border
-        bar.translatesAutoresizingMaskIntoConstraints = false
+        bar.translatesAutoresizingMaskIntoConstraints = true
         addSubview(bar)
-        pin(text, insets: UIEdgeInsets(top: 0, left: Self.inset, bottom: 0, right: 0))
-        NSLayoutConstraint.activate([
-            bar.leadingAnchor.constraint(equalTo: leadingAnchor),
-            bar.topAnchor.constraint(equalTo: topAnchor),
-            bar.bottomAnchor.constraint(equalTo: bottomAnchor),
-            bar.widthAnchor.constraint(equalToConstant: Space.space1),
-        ])
+        text.translatesAutoresizingMaskIntoConstraints = true
+        addSubview(text)
     }
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("built in code") }
+
+    override var intrinsicContentSize: CGSize {
+        CGSize(width: UIView.noIntrinsicMetric, height: text.intrinsicContentSize.height)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let width = max(0, bounds.width - Self.inset)
+        if bounds.width > 0, text.fitWidth.map({ abs($0 - width) > 0.5 }) ?? true {
+            text.fitWidth = width
+            if abs(text.intrinsicContentSize.height - bounds.height) > 0.5 { invalidateIntrinsicContentSize() }
+        }
+        bar.frame = CGRect(x: 0, y: 0, width: Space.space1, height: bounds.height)
+        text.frame = CGRect(x: Self.inset, y: 0, width: width, height: text.intrinsicContentSize.height)
+    }
 }
 
 /// One block's view, for whichever kind it is.

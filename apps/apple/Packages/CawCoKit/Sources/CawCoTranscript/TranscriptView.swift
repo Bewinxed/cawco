@@ -330,8 +330,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         if let speaker = Self.speaker, speaker.category == category { return speaker.height }
         let who = WhoView()
         who.configure(.init(name: "Agent", clock: "00:00", note: nil, you: false))
-        let height = Double(who.systemLayoutSizeFitting(CGSize(width: 320, height: 0), withHorizontalFittingPriority: .required,
-                                                        verticalFittingPriority: .fittingSizeLevel).height)
+        // Laid out by frame, it says its height itself (PieceView stands it at that).
+        let height = Double(who.intrinsicContentSize.height)
         Self.speaker = (category, height)
         return height
     }
@@ -1056,7 +1056,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             if !tailText.isEmpty || sources.isEmpty {
                 sources.append(.init(text: tailText, joinsAbove: splitter.tailContinues))
             }
-            out += builder.pieces(id: liveKey, sources: sources, grouped: grouped, date: nil, streaming: true)
+            out += measuredTail(builder.pieces(id: liveKey, sources: sources, grouped: grouped, date: nil, streaming: true))
             rail = false
         }
         if let (name, glance) = tool {
@@ -1095,6 +1095,31 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             settledCount += 1
         }
         return out
+    }
+
+    /// Lays the live reply's blocks out here, as they were prepared for the
+    /// settled ones (PieceHeight): a streamed block then stands at its exact
+    /// height and is never measured, as it was once each frame it grew, and
+    /// once more the frame it came (a turn's start: 12–18 ms).
+    private let tailMeasure = TextMeasure()
+    /// The live blocks' heights by width and print, kept while the reply streams.
+    private var tailHeights: [String: Double?] = [:]
+
+    private func measuredTail(_ pieces: [Item]) -> [Item] {
+        guard let width = rowWidth else { return pieces }
+        let speaker = speakerHeight
+        var kept: [String: Double?] = [:]
+        defer { tailHeights = kept }
+        return pieces.map { item in
+            guard case let .piece(piece) = item.kind else { return item }
+            var item = item
+            let key = "\(width)|\(item.print)"
+            let height = tailHeights[key] ?? kept[key] ?? PieceHeight.of(piece, width: Double(width), speaker: speaker, measure: tailMeasure)
+            kept[key] = height
+            item.height = height
+            item.heightWidth = Double(width)
+            return item
+        }
     }
 
     /// The strip before the first row (`build`): never a row the reader's place is kept by.
@@ -1560,27 +1585,30 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             }
         }
         #endif
-        let next = RowIndex(settled: section.settled, tail: section.tail)
+        // Counted from the row the list counted from before (RowIndex `origin`).
+        let next = RowIndex(settled: section.settled, tail: section.tail, anchor: before.originId, skip: Self.olderId)
         // The sections this update changes, where it leaves the others as
         // they are: the tail's, and the settled sections from the first row
         // that changed (a streamed block, an answer landing at the foot). Only
         // those take the update and are laid out again; the whole snapshot's
         // apply diffed and updated every row the list held. Not when a
-        // section joins or goes, nor when a row off the screen changed (only
+        // section joins or goes (an older page read in front, which lands in
+        // sections of its own), nor when a row off the screen changed (only
         // the whole update reconfigures it); its rows on screen are drawn
         // anew where they stand.
-        if next.settledSections == before.settledSections, before.sectionIdentifiers.count == collection.numberOfSections {
+        if next.sectionIdentifiers == before.sectionIdentifiers, before.sectionIdentifiers.count == collection.numberOfSections {
             let common = min(before.settled.count, next.settled.count)
             let first = (0 ..< common).first { before.settled[$0] != next.settled[$0] } ?? common
-            let settledScope = before.settled == next.settled ? [] : Array(first / RowIndex.chunk ..< next.settledSections)
+            let from = next.settled.isEmpty ? 0 : next.settledPath(min(first, next.settled.count - 1)).section
+            let settledScope = before.settled == next.settled ? [] : Array(from ..< next.settledSections)
             changed = redrawInPlace(changed)
             if changed.isEmpty { scope = [next.tailIndex] + settledScope }
         }
         var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
         if scope == nil {
             snapshot.appendSections(next.sectionIdentifiers)
-            for chunk in 0 ..< next.settledSections {
-                snapshot.appendItems(Array(next.settled(inSection: chunk)), toSection: chunk)
+            for index in 0 ..< next.settledSections {
+                snapshot.appendItems(Array(next.settled(inSection: index)), toSection: next.identifier(ofSection: index))
             }
             snapshot.appendItems(next.tail, toSection: RowIndex.tailSection)
             snapshot.reconfigureItems(changed)
@@ -1672,7 +1700,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
                 for (i, index) in scope.enumerated() {
                     var part = NSDiffableDataSourceSectionSnapshot<String>()
                     part.append(index == next.tailIndex ? next.tail : Array(next.settled(inSection: index)))
-                    dataSource.apply(part, to: index == next.tailIndex ? RowIndex.tailSection : index, animatingDifferences: false,
+                    dataSource.apply(part, to: next.identifier(ofSection: index), animatingDifferences: false,
                                      completion: i == scope.count - 1 ? settle : nil)
                 }
                 layout.changing = nil
@@ -1701,22 +1729,33 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     }
 
     /// Draws each of `ids` anew in the cell that stands it on screen, where it
-    /// sizes itself; the list takes no update for them. Returns the ones no
-    /// cell on screen stands, which only an update reconfigures.
+    /// sizes itself, or, at an exact height (a streamed block's, PieceHeight),
+    /// takes its new height from the layout with its section worked out
+    /// again: measuring the live row each frame of a reply was most of a
+    /// streamed block's commit. The list takes no update for them. Returns the
+    /// ones no cell on screen stands, which only an update reconfigures.
     private func redrawInPlace(_ ids: [String]) -> [String] {
         var unseen: [String] = []
+        var resized = Set<Int>()
         for id in ids {
             if let index = rows.path(of: id), let item = items[id],
                let cell = collection.cellForItem(at: index) as? ItemCell {
                 // A row whose body is moving is sized by the body's steps, not the list's own resizing.
                 if moving.contains(where: { Self.cell(of: $0) === cell }) {
-                    quietly { cell.redraw(item) }
+                    quietly { cell.redraw(item, measured: true) }
                 } else {
-                    cell.redraw(item)
+                    let exact = rowWidth.flatMap { exactHeight(item, width: $0) } != nil
+                    cell.redraw(item, measured: !exact)
+                    if exact { resized.insert(index.section) }
                 }
             } else {
                 unseen.append(id)
             }
+        }
+        if !resized.isEmpty {
+            let context = RowInvalidation()
+            context.sections = resized
+            layout.invalidateLayout(with: context)
         }
         return unseen
     }
@@ -1870,7 +1909,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             return
         }
         let change: @MainActor () -> Void = {
-            cell.redraw(item)
+            cell.redraw(item, measured: true)
             cell.contentView.layoutIfNeeded()
             cell.invalidateIntrinsicContentSize()
             self.collection.layoutIfNeeded()
@@ -1887,7 +1926,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         guard replacements.removeValue(forKey: id) != nil else { return }
         if let index = rows.path(of: id), let item = items[id],
            let cell = collection.cellForItem(at: index) as? HostCell<UserTurnView> {
-            cell.redraw(item)
+            cell.redraw(item, measured: true)
         } else {
             store.stale(id)
         }

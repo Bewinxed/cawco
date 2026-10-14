@@ -7,48 +7,32 @@ import UIKit
 /// and the clock, which a touch screen always shows. A note ("queued", "not
 /// sent") stands where the clock would, before it.
 final class WhoView: UIView {
+    private let markBox = UIView()
     private let mark = GradientView()
     private let glyph = GlyphView(.ghost, size: Size.iconSm, tint: Palette.onBrand)
     private let role = LineLabel(hug: .required, resist: .defaultLow)
     private let note = LineLabel(hug: .required, resist: .required)
     private let clock = LineLabel(hug: .required, resist: .required)
-    private var markSide: NSLayoutConstraint!
-    private var markLead: NSLayoutConstraint!
     private var you = false
 
+    /// Its parts are laid out by frame (`layoutSubviews`), as the row line it
+    /// was (`railLine`: the mark's cell, the role, room, the note, the clock,
+    /// a gap between each but none after the room) laid them out: a row that
+    /// came on the screen moved every constraint of its speaker line into the
+    /// window's layout engine (probe-kit spec `ios-scroll-up`). Its height,
+    /// one line, is its intrinsic size, for the stacks it stands in.
     init() {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        mark.translatesAutoresizingMaskIntoConstraints = false
         mark.layer.cornerCurve = .continuous
-        mark.addSubview(glyph)
-        let spacer = UIView()
-        spacer.setContentHuggingPriority(.init(1), for: .horizontal)
-        let markBox = UIView()
-        markBox.translatesAutoresizingMaskIntoConstraints = false
+        for view in [markBox, role, note, clock] as [UIView] {
+            view.translatesAutoresizingMaskIntoConstraints = true
+            addSubview(view)
+        }
+        mark.translatesAutoresizingMaskIntoConstraints = true
         markBox.addSubview(mark)
-        markSide = mark.widthAnchor.constraint(equalToConstant: Size.rowMarkBox)
-        markLead = mark.leadingAnchor.constraint(equalTo: markBox.leadingAnchor)
-        let line = railLine([markBox, role, spacer, note, clock])
-        line.setCustomSpacing(0, after: spacer)
-        addSubview(line)
-        // One line box of the label on the turn's leading (Who.svelte's h2
-        // inherits --leading-body: 18.85pt at the label size); the mark centred on it.
-        let height = TypeScale.textLabel * TypeScale.leadingBody
-        NSLayoutConstraint.activate([
-            markBox.widthAnchor.constraint(equalToConstant: Size.rowMarkBox),
-            markBox.heightAnchor.constraint(equalToConstant: Size.rowMarkBox),
-            markLead, markSide,
-            mark.heightAnchor.constraint(equalTo: mark.widthAnchor),
-            mark.centerYAnchor.constraint(equalTo: markBox.centerYAnchor),
-            glyph.centerXAnchor.constraint(equalTo: mark.centerXAnchor),
-            glyph.centerYAnchor.constraint(equalTo: mark.centerYAnchor),
-            line.leadingAnchor.constraint(equalTo: leadingAnchor),
-            line.trailingAnchor.constraint(equalTo: trailingAnchor),
-            line.topAnchor.constraint(equalTo: topAnchor),
-            line.bottomAnchor.constraint(equalTo: bottomAnchor),
-            line.heightAnchor.constraint(greaterThanOrEqualToConstant: height),
-        ])
+        glyph.translatesAutoresizingMaskIntoConstraints = true
+        mark.addSubview(glyph)
         isAccessibilityElement = true
         accessibilityTraits = .header
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (who: WhoView, _: UITraitCollection) in who.paint() }
@@ -60,32 +44,63 @@ final class WhoView: UIView {
     /// A voice's face in the mark's place (Who.svelte `voice.face`): Caw, still.
     private var face: UIView?
 
+    /// One line box of the label on the turn's leading (Who.svelte's h2
+    /// inherits --leading-body: 18.85pt at the label size), at least; the mark centred on it.
+    private static var leastHeight: Double { TypeScale.textLabel * TypeScale.leadingBody }
+
+    /// A label's size on its line: its text's, whole pixels up in width.
+    private func fitted(_ label: UILabel) -> CGSize {
+        let natural = label.intrinsicContentSize
+        let scale = max(traitCollection.displayScale, 1)
+        return CGSize(width: (max(0, natural.width) * scale).rounded(.up) / scale, height: max(0, natural.height))
+    }
+
+    override var intrinsicContentSize: CGSize {
+        let labels = [role, note, clock].filter { !$0.isHidden }.map { fitted($0).height }
+        return CGSize(width: UIView.noIntrinsicMetric, height: ([Self.leastHeight, Size.rowMarkBox] + labels).max() ?? Self.leastHeight)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let width = bounds.width, height = bounds.height, gap = Columns.gap
+        let box = Size.rowMarkBox
+        markBox.frame = CGRect(x: 0, y: (height - box) / 2, width: box, height: box)
+        // The reader's mark: 17pt in the action material, centred in the 18pt cell.
+        let side = you ? Size.rowMark : box
+        mark.frame = CGRect(x: you ? Size.wellX : 0, y: (box - side) / 2, width: side, height: side)
+        let glyphSide = you ? Size.rowMarkGlyph : Size.iconSm
+        glyph.frame = CGRect(x: (side - glyphSide) / 2, y: (side - glyphSide) / 2, width: glyphSide, height: glyphSide)
+        face?.frame = markBox.bounds
+        // From the end: the clock, a gap, the note; the room before them takes no gap.
+        var end = width
+        for label in [clock, note] where !label.isHidden {
+            if end < width { end -= gap }
+            let size = fitted(label)
+            end -= size.width
+            label.frame = CGRect(x: end, y: (height - size.height) / 2, width: size.width, height: size.height)
+        }
+        // The role a gap after the mark, giving way first when the line is short.
+        let start = box + gap
+        let size = fitted(role)
+        role.frame = CGRect(x: start, y: (height - size.height) / 2, width: max(0, min(size.width, end - gap - start)), height: size.height)
+    }
+
     func configure(_ header: Item.Header) {
         you = header.you
         let voiced = header.face && !header.you
         mark.isHidden = voiced
-        if voiced, face == nil, let box = mark.superview {
+        if voiced, face == nil {
             let made = CawMark(status: .ready, side: Size.rowMarkBox)
-            made.translatesAutoresizingMaskIntoConstraints = false
-            box.addSubview(made)
-            NSLayoutConstraint.activate([
-                made.centerXAnchor.constraint(equalTo: box.centerXAnchor),
-                made.centerYAnchor.constraint(equalTo: box.centerYAnchor),
-                made.widthAnchor.constraint(equalToConstant: Size.rowMarkBox),
-                made.heightAnchor.constraint(equalToConstant: Size.rowMarkBox),
-            ])
+            made.translatesAutoresizingMaskIntoConstraints = true
+            markBox.addSubview(made)
             face = made
         }
         face?.isHidden = !voiced
-        // The reader's mark: 17pt in the action material, centred in the 18pt cell.
-        markSide.constant = you ? Size.rowMark : Size.rowMarkBox
-        markLead.constant = you ? Size.wellX : 0
         mark.layer.cornerRadius = you ? Radius.rowMarkR : Radius.radiusXs
         glyph.glyph = you ? .user : .ghost
         glyph.tintColor = you ? Palette.onAction : Palette.onBrand
-        let side = you ? Size.rowMarkGlyph : Size.iconSm
-        glyph.constraints.forEach { glyph.removeConstraint($0) }
-        NSLayoutConstraint.activate([glyph.widthAnchor.constraint(equalToConstant: side), glyph.heightAnchor.constraint(equalToConstant: side)])
+        setNeedsLayout()
+        invalidateIntrinsicContentSize()
         role.attributedText = Styled.string(header.name, TypeScale.typeLabel, color: Palette.inkStrong, leading: TypeScale.leadingBody)
         note.attributedText = header.note.map { Styled.string($0, TypeScale.typeMeta, color: Palette.inkMuted, leading: TypeScale.leadingBody) }
         note.isHidden = header.note == nil
@@ -131,42 +146,40 @@ final class FloatNote: UILabel {
 /// One block of an assistant turn: under its speaker line when it opens the
 /// turn, its clock floated into the first line when grouped. The live tail's
 /// block shows each chunk's words fading in.
-final class PieceView: UIView, Recycled, FitsWidth {
+final class PieceView: UIView, Recycled, FitsWidth, FrameRow {
     private let env: RowEnv
-    private let stack = UIStackView()
     private let who = WhoView()
     private let float = FloatNote()
     private var blocks: [UIView] = []
+    /// The room above each block: none above the first, the blocks' own gap above the rest.
+    private var gaps: [Double] = []
     /// The width the row stands at in the list, which its blocks span
     /// (ProseView `fitWidth`); nil where the piece is drawn inside another row.
     var fitWidth: CGFloat? {
         didSet {
             guard fitWidth != oldValue else { return }
-            for view in blocks {
-                (view as? ProseView)?.fitWidth = fitWidth
-                (view as? TableBlock)?.fitWidth = fitWidth
-                (view as? QuoteBlock)?.text.fitWidth = fitWidth.map { $0 - QuoteBlock.inset }
-            }
+            invalidateIntrinsicContentSize()
+            setNeedsLayout()
         }
     }
 
+    /// The width layout gave it, where nobody said one beforehand: its height is that width's.
+    private var laidWidth: CGFloat?
+
+    /// Laid out by frame (`layoutSubviews`), as the column it was (its
+    /// speaker line, a space-2 under it, its blocks the blocks' gap apart, the
+    /// clock floated into the first line's end), with no constraints in it
+    /// (FrameRow): its cell stands it by frame. Where a piece stands in
+    /// another row's stack (a branch's transcript), its height at its width
+    /// is its intrinsic size.
     init(env: RowEnv) {
         self.env = env
         super.init(frame: .zero)
-        stack.axis = .vertical
-        stack.addArrangedSubview(who)
-        stack.setCustomSpacing(Space.space2, after: who)
-        pin(stack)
-        addSubview(float)
-        NSLayoutConstraint.activate([
-            float.trailingAnchor.constraint(equalTo: trailingAnchor),
-            float.heightAnchor.constraint(equalToConstant: TypeScale.textBody * TypeScale.leadingBody),
-        ])
-        floatTop = float.topAnchor.constraint(equalTo: topAnchor)
-        floatTop.isActive = true
+        for view in [who, float] as [UIView] {
+            view.translatesAutoresizingMaskIntoConstraints = true
+            addSubview(view)
+        }
     }
-
-    private var floatTop: NSLayoutConstraint!
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("built in code") }
@@ -182,33 +195,91 @@ final class PieceView: UIView, Recycled, FitsWidth {
         if blocks.map(Self.kind(of:)) != kinds {
             blocks.forEach { $0.removeFromSuperview() }
             blocks = piece.blocks.map(blockView)
-            for view in blocks { stack.addArrangedSubview(view) }
+            for view in blocks {
+                // Placed by frame: a rule's own height constraint goes, its frame says it.
+                if Self.kind(of: view) == 4 { NSLayoutConstraint.deactivate(view.constraints) }
+                view.translatesAutoresizingMaskIntoConstraints = true
+                addSubview(view)
+            }
+            bringSubviewToFront(float)
         }
+        gaps = piece.blocks.indices.map { i in i == 0 ? 0 : MarkdownRender.gap(after: piece.blocks[i - 1], before: piece.blocks[i]) }
         for (i, block) in piece.blocks.enumerated() {
             let view = blocks[i]
             switch block.kind {
             case let .text(text):
-                (view as? ProseView)?.fitWidth = fitWidth
                 (view as? ProseView)?.show(text, fading: piece.streaming && env.watched)
             case let .code(language, text):
                 (view as? CodeWell)?.configure(language: language, text: text)
                 (view as? CodeWell)?.join(above: piece.joinsAbove && i == 0, below: piece.joinsBelow && i == piece.blocks.count - 1)
             case let .table(head, rows):
-                (view as? TableBlock)?.fitWidth = fitWidth
                 (view as? TableBlock)?.configure(head: head, rows: rows)
             case let .quote(text):
-                (view as? QuoteBlock)?.text.fitWidth = fitWidth.map { $0 - QuoteBlock.inset }
                 (view as? QuoteBlock)?.text.attributedText = text
             case .rule: break
             }
-            if i > 0 { stack.setCustomSpacing(MarkdownRender.gap(after: piece.blocks[i - 1], before: block), after: blocks[i - 1]) }
         }
-        let first = blocks.first as? ProseView
-        first?.floatSize = piece.float.map(FloatNote.size) ?? .zero
-        if piece.float != nil, let first {
-            floatTop.isActive = false
-            floatTop = float.topAnchor.constraint(equalTo: first.topAnchor)
-            floatTop.isActive = true
+        (blocks.first as? ProseView)?.floatSize = piece.float.map(FloatNote.size) ?? .zero
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
+    }
+
+    /// A block's height `width` wide, as its view measures it.
+    private func height(of view: UIView, width: CGFloat) -> CGFloat {
+        switch view {
+        case let text as ProseView:
+            text.fitWidth = width
+            return text.intrinsicContentSize.height
+        case let quote as QuoteBlock:
+            quote.text.fitWidth = max(0, width - QuoteBlock.inset)
+            return quote.intrinsicContentSize.height
+        case let well as CodeWell:
+            return well.intrinsicContentSize.height
+        case let table as TableBlock:
+            table.fitWidth = width
+            return table.systemLayoutSizeFitting(CGSize(width: width, height: 0), withHorizontalFittingPriority: .required,
+                                                 verticalFittingPriority: .fittingSizeLevel).height
+        default:
+            // A rule.
+            return 1
+        }
+    }
+
+    func height(for width: CGFloat) -> CGFloat {
+        guard width > 0 else { return 0 }
+        var height = who.isHidden ? 0 : who.intrinsicContentSize.height + Space.space2
+        for (i, view) in blocks.enumerated() { height += gaps[i] + self.height(of: view, width: width) }
+        return height
+    }
+
+    override var intrinsicContentSize: CGSize {
+        CGSize(width: UIView.noIntrinsicMetric, height: height(for: fitWidth ?? laidWidth ?? 0))
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let width = bounds.width
+        if fitWidth == nil, laidWidth.map({ abs($0 - width) > 0.5 }) ?? true {
+            laidWidth = width
+            invalidateIntrinsicContentSize()
+        }
+        var y: CGFloat = 0
+        if !who.isHidden {
+            let line = who.intrinsicContentSize.height
+            who.frame = CGRect(x: 0, y: 0, width: width, height: line)
+            y = line + Space.space2
+        }
+        for (i, view) in blocks.enumerated() {
+            y += gaps[i]
+            let height = height(of: view, width: width)
+            view.frame = CGRect(x: 0, y: y, width: width, height: height)
+            y += height
+        }
+        // A grouped turn's clock, one body line tall at the first line's end.
+        if !float.isHidden {
+            let size = float.intrinsicContentSize
+            let top = (blocks.first as? ProseView)?.frame.minY ?? 0
+            float.frame = CGRect(x: width - size.width, y: top, width: size.width, height: TypeScale.textBody * TypeScale.leadingBody)
         }
     }
 

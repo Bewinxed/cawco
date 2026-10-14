@@ -7,20 +7,34 @@ import UIKit
 /// an index path, or back, asks this; none works the sections out itself.
 ///
 /// The settled rows are cut into sections so that an update touches only the
-/// sections it changes: a streamed block lands in the last one.
+/// sections it changes. The cuts are counted from one row, the `origin` (the
+/// first the list held, kept for as long as it holds it), not from the first
+/// row: a streamed block lands in the newest section, and an older page read
+/// in front lands in sections of its own before the origin's, every section
+/// the list held standing as it was. Counted from the first row, a page read
+/// in front moved every row into another section (30 ms to apply).
 struct RowIndex {
     /// Settled rows a section holds.
     static let chunk = 128
-    /// The tail section's identifier in the list's snapshot (the settled
-    /// sections are identified by their place, 0 on).
-    static let tailSection = -1
+    /// The tail section's identifier in the list's snapshot (a settled
+    /// section's is its number counted from the origin's, 0, and below it).
+    static let tailSection = Int.min
 
     let settled: [String]
     let tail: [String]
+    /// The origin row: its id and its settled index.
+    let originId: String?
+    private let origin: Int
+    /// The numbers of the first and last settled sections.
+    private let first: Int
+    private let last: Int
     /// Each row's place: its settled index, or `settled.count` plus its tail index.
     private let places: [String: Int]
 
-    init(settled: [String] = [], tail: [String] = []) {
+    /// `anchor`: the origin the list counted from (RowIndex `originId`),
+    /// kept while the rows hold it; else the first row other than `skip` (the
+    /// strip before the first row, which comes and goes).
+    init(settled: [String] = [], tail: [String] = [], anchor: String? = nil, skip: String? = nil) {
         self.settled = settled
         self.tail = tail
         var places: [String: Int] = [:]
@@ -28,23 +42,44 @@ struct RowIndex {
         for (i, id) in settled.enumerated() { places[id] = i }
         for (i, id) in tail.enumerated() { places[id] = settled.count + i }
         self.places = places
+        let held = anchor.flatMap { places[$0] }.flatMap { $0 < settled.count ? $0 : nil }
+        let origin = held ?? settled.firstIndex { $0 != skip } ?? 0
+        self.origin = origin
+        originId = settled.indices.contains(origin) ? settled[origin] : nil
+        first = Self.number(0, origin)
+        last = Self.number(max(0, settled.count - 1), origin)
+    }
+
+    /// The section a settled row at `row` stands in, counted from the origin's (0).
+    private static func number(_ row: Int, _ origin: Int) -> Int {
+        let along = row - origin
+        return along >= 0 ? along / chunk : -((-along + chunk - 1) / chunk)
     }
 
     /// Sections the settled rows take.
-    var settledSections: Int { (settled.count + Self.chunk - 1) / Self.chunk }
+    var settledSections: Int { settled.isEmpty ? 0 : last - first + 1 }
     /// The tail section's index: after every settled one.
     var tailIndex: Int { settledSections }
     /// The snapshot's section identifiers, in order.
-    var sectionIdentifiers: [Int] { Array(0 ..< settledSections) + [Self.tailSection] }
+    var sectionIdentifiers: [Int] { (settled.isEmpty ? [] : Array(first ... last)) + [Self.tailSection] }
+    /// The snapshot's identifier of the section at `index`.
+    func identifier(ofSection index: Int) -> Int { index == tailIndex ? Self.tailSection : first + index }
 
-    /// The settled rows of section `section`.
-    func settled(inSection section: Int) -> ArraySlice<String> {
-        let start = section * Self.chunk
-        return settled[start ..< min(settled.count, start + Self.chunk)]
+    /// The settled rows the section at `index` holds, as settled indices.
+    private func span(_ index: Int) -> Range<Int> {
+        let number = first + index
+        let start = max(0, origin + number * Self.chunk)
+        return start ..< min(settled.count, origin + (number + 1) * Self.chunk)
     }
 
+    /// The settled rows of section `section`.
+    func settled(inSection section: Int) -> ArraySlice<String> { settled[span(section)] }
+
     /// The index path of the settled row at `row`.
-    func settledPath(_ row: Int) -> IndexPath { IndexPath(item: row % Self.chunk, section: row / Self.chunk) }
+    func settledPath(_ row: Int) -> IndexPath {
+        let index = Self.number(row, origin) - first
+        return IndexPath(item: row - span(index).lowerBound, section: index)
+    }
 
     /// The index path of the row `id`, when the list holds it.
     func path(of id: String) -> IndexPath? {
@@ -61,9 +96,10 @@ struct RowIndex {
 
     /// The settled index of the row at `path`; nil for the tail's rows.
     func settledRow(at path: IndexPath) -> Int? {
-        guard path.section < settledSections else { return nil }
-        let row = path.section * Self.chunk + path.item
-        return row < settled.count ? row : nil
+        guard path.section >= 0, path.section < settledSections else { return nil }
+        let span = span(path.section)
+        let row = span.lowerBound + path.item
+        return span.contains(row) ? row : nil
     }
 
     /// Whether the list holds the row `id`.

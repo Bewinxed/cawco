@@ -236,16 +236,17 @@ async function tally(heard: Heard[], since: number): Promise<Tally> {
   return tallyOf(found?.line ?? "");
 }
 
-/** Where to fling: the middle of the screen, over the transcript's box. */
-async function flingLine(
-  udid: string
-): Promise<{ from: number; to: number; x: number }> {
-  interface Node {
-    frame?: { height: number; width: number; x: number; y: number };
-    id?: string;
-    label?: string;
-  }
-  const nodes: Node[] = [];
+/** An element of the app's screen as VoiceOver reads it (axe `describe-ui`). */
+interface UiNode {
+  frame?: { height: number; width: number; x: number; y: number };
+  id?: string;
+  label?: string;
+  value?: string;
+}
+
+/** The app's screen, element by element, in reading order. */
+async function uiNodes(udid: string): Promise<UiNode[]> {
+  const nodes: UiNode[] = [];
   const walk = (at: unknown) => {
     if (Array.isArray(at)) {
       for (const one of at) {
@@ -260,11 +261,20 @@ async function flingLine(
     nodes.push({
       id: (o.AXUniqueId ?? o.identifier) as string | undefined,
       label: (o.AXLabel ?? o.label) as string | undefined,
-      frame: o.frame as Node["frame"],
+      value: (o.AXValue ?? o.value) as string | undefined,
+      frame: o.frame as UiNode["frame"],
     });
     walk(o.children);
   };
   walk(JSON.parse(await sh(`${AXE} describe-ui --udid ${udid}`)));
+  return nodes;
+}
+
+/** Where to fling: the middle of the screen, over the transcript's box. */
+async function flingLine(
+  udid: string
+): Promise<{ from: number; to: number; x: number }> {
+  const nodes = await uiNodes(udid);
   const list = nodes.find((n) => n.label === "Session transcript")?.frame;
   const composer = nodes.find((n) => n.id === "steer-message")?.frame;
   const screen = nodes[0]?.frame ?? { x: 0, y: 0, width: 402, height: 874 };
@@ -277,6 +287,83 @@ async function flingLine(
     x: Math.round(screen.width / 2),
     from: Math.round(top + 0.15 * height),
     to: Math.round(top + 0.9 * height),
+  };
+}
+
+/**
+ * A shut call opens under its line and folds shut again (ToolLineView: its
+ * body's column stands in the row only while it shows something). The call
+ * nearest the transcript's middle that reads Collapsed is tapped, and the
+ * room between its line and the element under it read: grown by the body
+ * opened, the same as before once it is shut again.
+ */
+async function disclose(
+  udid: string,
+  line: { from: number; to: number }
+): Promise<{ ok: boolean; said: string }> {
+  const middle = (line.from + line.to) / 2;
+  const bottom = (f: NonNullable<UiNode["frame"]>) => f.y + f.height;
+  /**
+   * The call `label` and the room under its line, to the element `next`
+   * (the one under it while it was shut: an opened body's own come between).
+   */
+  const read = async (label?: string, next?: string) => {
+    const nodes = (await uiNodes(udid)).filter(
+      (n) => n.frame && n.frame.height > 0 && n.label
+    );
+    const call = label
+      ? nodes.find((n) => n.label === label)
+      : nodes
+          .filter(
+            (n) =>
+              n.value === "Collapsed" &&
+              (n.frame?.y ?? 0) > line.from &&
+              bottom(n.frame ?? { x: 0, y: 0, width: 0, height: 0 }) < line.to
+          )
+          .sort(
+            (a, b) =>
+              Math.abs((a.frame?.y ?? 0) - middle) -
+              Math.abs((b.frame?.y ?? 0) - middle)
+          )[0];
+    if (!call?.frame) {
+      return;
+    }
+    const foot = bottom(call.frame);
+    const under = next
+      ? nodes.find((n) => n.label === next)
+      : nodes
+          .filter((n) => n !== call && (n.frame?.y ?? 0) >= foot - 1)
+          .sort((a, b) => (a.frame?.y ?? 0) - (b.frame?.y ?? 0))[0];
+    return {
+      call,
+      under: under?.label,
+      room: under?.frame ? under.frame.y - foot : Number.NaN,
+    };
+  };
+  const tap = (f: NonNullable<UiNode["frame"]>) =>
+    sh(
+      `${AXE} tap -x ${Math.round(f.x + f.width / 2)} -y ${Math.round(f.y + f.height / 2)} --udid ${udid}`
+    );
+  const shut = await read();
+  if (!(shut?.call.frame && shut.under)) {
+    return { ok: false, said: "no shut call with a body in view" };
+  }
+  await tap(shut.call.frame);
+  await Bun.sleep(1200);
+  const open = await read(shut.call.label, shut.under);
+  if (open?.call.frame) {
+    await tap(open.call.frame);
+  }
+  await Bun.sleep(1200);
+  const again = await read(shut.call.label, shut.under);
+  const ok =
+    open?.call.value === "Expanded" &&
+    open.room >= shut.room + 20 &&
+    again?.call.value === "Collapsed" &&
+    Math.abs(again.room - shut.room) <= 1;
+  return {
+    ok,
+    said: `"${shut.call.label?.slice(0, 60)}": shut ${shut.room.toFixed(0)}pt under its line, opened ${open?.call.value ?? "?"} ${open?.room.toFixed(0) ?? "?"}pt, shut again ${again?.call.value ?? "?"} ${again?.room.toFixed(0) ?? "?"}pt`,
   };
 }
 
@@ -602,7 +689,15 @@ async function run(kit: Kit): Promise<void> {
       );
     }
 
-    // ── 2. A turn streams into the foot ──────────────────────────────────
+    // ── 2. A shut call opens and folds shut ──────────────────────────────
+    const told = await disclose(udid, line);
+    kit.check(
+      "a shut call opens under its line and folds shut again",
+      told.ok,
+      told.said
+    );
+
+    // ── 3. A turn streams into the foot ──────────────────────────────────
     const streamFrom = heard.length;
     const before = await tally(heard, 0);
     await fleet.send(session, `${marks.stream}: stream a long reply.`);

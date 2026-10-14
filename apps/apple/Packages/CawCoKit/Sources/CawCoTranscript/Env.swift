@@ -84,6 +84,16 @@ protocol Recycled: RowContent {
     func recycle()
 }
 
+/// A row laid out by frame, with no constraints inside it (PieceView): its
+/// cell stands it by frame and asks its height of it. Moving a row of
+/// constraints into a cell moved every one of them into the window's layout
+/// engine, and solving them was most of what a row took to come on screen.
+@MainActor
+protocol FrameRow: RowContent {
+    /// The row's height `width` wide.
+    func height(for width: CGFloat) -> CGFloat
+}
+
 /// A row that stands at a width its list knows before layout does
 /// (ProseView `fitWidth`), so its text is laid out once, at that width.
 @MainActor
@@ -185,7 +195,8 @@ final class RowStore {
             #endif
         } else {
             view = V(env: env)
-            view.translatesAutoresizingMaskIntoConstraints = false
+            // A frame row stands by its frame; any other, by the constraints its cell pins it with.
+            if !(view is any FrameRow) { view.translatesAutoresizingMaskIntoConstraints = false }
             #if DEBUG
             Pace.madeRow(spare: false)
             #endif
@@ -214,10 +225,10 @@ final class RowStore {
         guard !isReady(item, width: width), entries[item.id]?.view.superview == nil else { return false }
         func build<V: RowContent>(_ type: V.Type) -> UIView { row(type, for: item, width: width) }
         let view = build(type)
-        // Out of every cell a row stands at its width only by a constraint (`stand` below).
-        let standing = view.widthAnchor.constraint(equalToConstant: width)
-        standing.isActive = true
-        defer { standing.isActive = false }
+        // Out of every cell a row of constraints stands at its width only by one (`stand` below).
+        let standing = view is any FrameRow ? nil : view.widthAnchor.constraint(equalToConstant: width)
+        standing?.isActive = true
+        defer { standing?.isActive = false }
         view.frame = CGRect(x: 0, y: 0, width: width, height: height)
         view.layoutIfNeeded()
         entries[item.id]?.height = height
@@ -243,6 +254,21 @@ final class RowStore {
         #if DEBUG
         marks.append(CACurrentMediaTime())
         #endif
+        if let row = view as? any FrameRow {
+            // Its height asked of it, then laid out once there.
+            let height = row.height(for: width)
+            #if DEBUG
+            marks.append(CACurrentMediaTime())
+            marks.append(CACurrentMediaTime())
+            #endif
+            view.frame = CGRect(x: 0, y: 0, width: width, height: height)
+            view.layoutIfNeeded()
+            #if DEBUG
+            marks.append(CACurrentMediaTime())
+            #endif
+            entries[item.id]?.height = height
+            return true
+        }
         // A row with no superview takes no width from its frame: layout gave
         // it the width its content asked for. A grouped turn's clock alone
         // made one 39pt wide, and its list, its tab stop past the line's end
@@ -293,12 +319,17 @@ final class RowStore {
             guard !verified.contains(next.id), let view = next.view.view, let entry = entries[next.id],
                   entry.view === view, entry.print == next.print else { continue }
             verified.insert(next.id)
-            // A row out of every cell stands at its width only by a constraint (`stand`).
-            let standing = view.superview == nil ? view.widthAnchor.constraint(equalToConstant: next.width) : nil
-            standing?.isActive = true
-            let real = view.systemLayoutSizeFitting(CGSize(width: next.width, height: 0), withHorizontalFittingPriority: .required,
+            let real: CGFloat
+            if let row = view as? any FrameRow {
+                real = row.height(for: next.width)
+            } else {
+                // A row out of every cell stands at its width only by a constraint (`stand`).
+                let standing = view.superview == nil ? view.widthAnchor.constraint(equalToConstant: next.width) : nil
+                standing?.isActive = true
+                real = view.systemLayoutSizeFitting(CGSize(width: next.width, height: 0), withHorizontalFittingPriority: .required,
                                                     verticalFittingPriority: .fittingSizeLevel).height
-            standing?.isActive = false
+                standing?.isActive = false
+            }
             Pace.heightChecked(next.kind, id: next.id, exact: next.height, real: real)
         }
         return !unverified.isEmpty
@@ -399,6 +430,9 @@ final class RowStore {
 /// A collection cell standing one item's row (RowStore), its top margin above it.
 final class HostCell<Content: RowContent>: UICollectionViewCell, ItemCell {
     private(set) var row: Content?
+    /// The room above the row (Item `top`).
+    private var margin: CGFloat = 0
+    /// What pins a row of constraints under its margin; none for a frame row (FrameRow).
     private var top: NSLayoutConstraint?
     private weak var store: RowStore?
     /// The item this cell stands: its id and its print.
@@ -418,19 +452,40 @@ final class HostCell<Content: RowContent>: UICollectionViewCell, ItemCell {
             view.removeFromSuperview()
             row = view
             contentView.addSubview(view)
-            let top = view.topAnchor.constraint(equalTo: contentView.topAnchor)
-            let bottom = view.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
-            bottom.priority = .init(999)
-            NSLayoutConstraint.activate([
-                view.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-                view.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-                top, bottom,
-            ])
-            self.top = top
+            top = nil
+            if !(view is any FrameRow) {
+                let top = view.topAnchor.constraint(equalTo: contentView.topAnchor)
+                let bottom = view.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
+                bottom.priority = .init(999)
+                NSLayoutConstraint.activate([
+                    view.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+                    view.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+                    top, bottom,
+                ])
+                self.top = top
+            }
         }
-        top?.constant = item.top
+        place(item.top)
         shown = (item.id, item.print)
         stood = true
+    }
+
+    /// The row stands `margin` under the cell's top.
+    private func place(_ margin: CGFloat) {
+        self.margin = margin
+        top?.constant = margin
+        if let row = row as? any FrameRow { stand(row) }
+    }
+
+    /// A frame row takes the cell's width, under its margin, to the cell's foot.
+    private func stand(_ row: any FrameRow) {
+        let frame = CGRect(x: 0, y: margin, width: contentView.bounds.width, height: max(0, contentView.bounds.height - margin))
+        if row.frame != frame { row.frame = frame }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if let row = row as? any FrameRow, row.superview === contentView { stand(row) }
     }
 
     func lost(_ view: UIView) {
@@ -440,13 +495,15 @@ final class HostCell<Content: RowContent>: UICollectionViewCell, ItemCell {
         shown = nil
     }
 
-    func redraw(_ item: Item) {
-        top?.constant = item.top
+    func redraw(_ item: Item, measured: Bool) {
+        place(item.top)
         row?.configure(item)
         store?.redrew(item)
         shown = (item.id, item.print)
-        stood = false
-        invalidateIntrinsicContentSize()
+        // A row at an exact height takes its new one from the layout (its
+        // section worked out again, TranscriptView `redrawInPlace`): nothing is measured.
+        stood = !measured
+        if measured { invalidateIntrinsicContentSize() }
     }
 
     func forget() {
@@ -475,7 +532,6 @@ final class HostCell<Content: RowContent>: UICollectionViewCell, ItemCell {
         let fresh = stood
         stood = false
         let width = attributes.size.width
-        let margin = top?.constant ?? 0
         // A row whose exact height the layout gave (RowLayout) stands at it: nothing is measured.
         if fresh, ((superview as? UICollectionView)?.collectionViewLayout as? RowLayout)?.isExact(attributes.indexPath) == true {
             #if DEBUG
@@ -487,6 +543,15 @@ final class HostCell<Content: RowContent>: UICollectionViewCell, ItemCell {
         if fresh, let shown, let height = store?.height(shown.id, print: shown.print, width: width) {
             attributes.size.height = margin + height
             return attributes
+        }
+        if let row = row as? any FrameRow {
+            // A frame row says its height at a width: nothing is solved.
+            return Pace.time(.measure) {
+                let height = row.height(for: width)
+                if let shown { store?.measured(shown.id, height: height, width: width) }
+                attributes.size.height = margin + height
+                return attributes
+            }
         }
         return Pace.time(.measure) {
             if abs(bounds.width - width) > 0.5 { bounds.size.width = width }
@@ -522,8 +587,9 @@ extension UIView {
 /// A cell drawing one item, whatever its row kind.
 @MainActor
 protocol ItemCell: UICollectionViewCell {
-    /// Draws `item` where the cell stands; the cell sizes itself to it.
-    func redraw(_ item: Item)
+    /// Draws `item` where the cell stands; `measured`: the cell sizes itself
+    /// to it, else it stands at the exact height the layout gives it.
+    func redraw(_ item: Item, measured: Bool)
     /// Its row changed without a new item: its kept height no longer stands.
     func forget()
     /// Its row changed size where it stands (a body moving): measured now at

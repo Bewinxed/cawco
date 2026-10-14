@@ -8,8 +8,11 @@ class RailRow: UIView, FitsWidth {
     let env: RowEnv
     let rail = UIView()
     let body = UIStackView()
-    private var lead: NSLayoutConstraint!
-    private var railLead: NSLayoutConstraint!
+    private var lead: NSLayoutConstraint?
+    private var railLead: NSLayoutConstraint?
+    /// Laid out by frame (ToolLineView, a FrameRow): the rail placed here in
+    /// `layoutSubviews`, the body the row's own to place, or to leave out.
+    class var framed: Bool { false }
     /// The rail's ink: the flat --rail, or a failure's --status-fail-ink.
     var railColor: UIColor = RailInk.rail { didSet { rail.backgroundColor = railColor } }
 
@@ -26,15 +29,16 @@ class RailRow: UIView, FitsWidth {
     required init(env: RowEnv) {
         self.env = env
         super.init(frame: .zero)
-        rail.translatesAutoresizingMaskIntoConstraints = false
         rail.backgroundColor = railColor
         addSubview(rail)
         body.axis = .vertical
         body.alignment = .fill
+        guard !Self.framed else { return }
+        rail.translatesAutoresizingMaskIntoConstraints = false
         body.translatesAutoresizingMaskIntoConstraints = false
         addSubview(body)
-        lead = body.leadingAnchor.constraint(equalTo: leadingAnchor, constant: env.columns.glyph)
-        railLead = rail.leadingAnchor.constraint(equalTo: leadingAnchor, constant: env.columns.rail)
+        let lead = body.leadingAnchor.constraint(equalTo: leadingAnchor, constant: env.columns.glyph)
+        let railLead = rail.leadingAnchor.constraint(equalTo: leadingAnchor, constant: env.columns.rail)
         NSLayoutConstraint.activate([
             railLead, rail.widthAnchor.constraint(equalToConstant: 2),
             rail.topAnchor.constraint(equalTo: topAnchor),
@@ -43,6 +47,8 @@ class RailRow: UIView, FitsWidth {
             body.topAnchor.constraint(equalTo: topAnchor),
             body.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
+        self.lead = lead
+        self.railLead = railLead
     }
 
     @available(*, unavailable)
@@ -50,8 +56,14 @@ class RailRow: UIView, FitsWidth {
 
     /// The columns at the width the row is drawn at.
     func place() {
-        lead.constant = env.columns.glyph
-        railLead.constant = env.columns.rail
+        lead?.constant = env.columns.glyph
+        railLead?.constant = env.columns.rail
+        if Self.framed { setNeedsLayout() }
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if Self.framed { rail.frame = CGRect(x: env.columns.rail, y: 0, width: 2, height: bounds.height) }
     }
 
     /// A view hung at the text column (`.rail-hang`), or `offset` from the glyph column.
@@ -66,8 +78,16 @@ class RailRow: UIView, FitsWidth {
 /// One call of a run (ToolGroup.svelte): its glyph in the rail cell, the
 /// verb, the mono argument, a chip, what it measured out, and — when it has
 /// a body — a chevron, the body opening under the line.
-final class ToolLineView: RailRow, Recycled, Disclosing {
+///
+/// Laid out by frame (FrameRow): the line under the rail, and, only while
+/// there is one to show (a preview card, the body open or moving, pictures),
+/// the body's column under it. A shut call, most of a transcript, holds no
+/// constraint at all, so standing it in a cell asks nothing of the layout engine.
+final class ToolLineView: RailRow, Recycled, Disclosing, FrameRow {
+    override class var framed: Bool { true }
     var disclosed: Bool { reveal.isOpen }
+    /// The width layout gave it, where nobody said one beforehand (a branch's stack).
+    private var laidWidth: CGFloat?
 
     private let cell = UIView()
     private let glyph = GlyphView(.toolGeneric, size: Size.iconMd, tint: Palette.inkMuted)
@@ -96,25 +116,22 @@ final class ToolLineView: RailRow, Recycled, Disclosing {
     required init(env: RowEnv) {
         reveal = Reveal(opened)
         super.init(env: env)
-        favicon.translatesAutoresizingMaskIntoConstraints = false
         favicon.layer.cornerRadius = Radius.radiusXs
         favicon.clipsToBounds = true
-        cell.addSubview(glyph)
-        cell.addSubview(favicon)
+        // The glyph cell is a fixed box: its glyph and favicon centred in it once.
+        let box = Size.txWGlyph
+        for (view, side) in [(glyph as UIView, glyph.intrinsicContentSize.width), (favicon, box - 2)] {
+            view.translatesAutoresizingMaskIntoConstraints = true
+            view.frame = CGRect(x: (box - side) / 2, y: (box - side) / 2, width: side, height: side)
+            cell.addSubview(view)
+        }
         chip.backgroundColor = Palette.surfaceRecess
-        NSLayoutConstraint.activate([
-            glyph.centerXAnchor.constraint(equalTo: cell.centerXAnchor),
-            glyph.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-            favicon.centerXAnchor.constraint(equalTo: cell.centerXAnchor),
-            favicon.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
-            favicon.widthAnchor.constraint(equalToConstant: Size.txWGlyph - 2),
-            favicon.heightAnchor.constraint(equalToConstant: Size.txWGlyph - 2),
-            line.heightAnchor.constraint(greaterThanOrEqualToConstant: Columns.line),
-        ])
+        line.translatesAutoresizingMaskIntoConstraints = true
+        addSubview(line)
         opened.axis = .vertical
         shots.axis = .vertical
         shots.spacing = Space.space2
-        body.addArrangedSubview(line)
+        body.translatesAutoresizingMaskIntoConstraints = true
         body.addArrangedSubview(preview)
         body.addArrangedSubview(reveal)
         body.addArrangedSubview(shots)
@@ -147,8 +164,52 @@ final class ToolLineView: RailRow, Recycled, Disclosing {
     func toggled(open: Bool) -> (() -> Void, () -> Void) {
         chevron.set(open: open, animated: true)
         line.accessibilityValue = open ? "Expanded" : "Collapsed"
+        // The body's column stands under the line, at its width, before it moves.
+        attach(true)
+        layoutIfNeeded()
         if open { fillBody(force: false) }
         return reveal.toggle(open: open)
+    }
+
+    /// Whether the body's column stands in the row: only while it shows something.
+    private func attach(_ wanted: Bool) {
+        guard wanted != (body.superview === self) else { return }
+        if wanted { addSubview(body) } else { body.removeFromSuperview() }
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
+    }
+
+    /// The line's height: a rail line at least.
+    private var lineHeight: CGFloat { line.isHidden ? 0 : max(Columns.line, line.intrinsicContentSize.height) }
+
+    /// The body's column's height `width` wide (from the glyph column on), as its constraints lay it out.
+    private func bodyHeight(_ width: CGFloat) -> CGFloat {
+        guard body.superview === self else { return 0 }
+        return body.systemLayoutSizeFitting(CGSize(width: width, height: 0), withHorizontalFittingPriority: .required,
+                                            verticalFittingPriority: .fittingSizeLevel).height
+    }
+
+    func height(for width: CGFloat) -> CGFloat {
+        guard width > 0 else { return 0 }
+        return lineHeight + bodyHeight(width - env.columns.glyph)
+    }
+
+    override var intrinsicContentSize: CGSize {
+        CGSize(width: UIView.noIntrinsicMetric, height: height(for: fitWidth ?? laidWidth ?? 0))
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let width = bounds.width
+        if fitWidth == nil, laidWidth.map({ abs($0 - width) > 0.5 }) ?? true {
+            laidWidth = width
+            invalidateIntrinsicContentSize()
+        }
+        let x = env.columns.glyph
+        let inner = max(0, width - x)
+        let top = lineHeight
+        if !line.isHidden { line.frame = CGRect(x: x, y: 0, width: inner, height: top) }
+        if body.superview === self { body.frame = CGRect(x: x, y: top, width: inner, height: bodyHeight(inner)) }
     }
 
     override func widthChanged() {
@@ -253,6 +314,9 @@ final class ToolLineView: RailRow, Recycled, Disclosing {
         if open { fillBody(force: true) } else { bodyPrint = "" ; opened.arrangedSubviews.forEach { $0.removeFromSuperview() } }
         reveal.set(open: open)
         configureShots(block, renderer: d.renderer)
+        attach(preview || open || !shots.isHidden || reveal.travel != nil)
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
     }
 
     /// Forgets the call it stood for, so the next is drawn as new: no status
