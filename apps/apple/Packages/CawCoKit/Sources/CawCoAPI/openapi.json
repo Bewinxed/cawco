@@ -29504,8 +29504,412 @@
             "description": "What happened, opened like a fold; absent when the title says it all.",
             "type": "string"
           },
+          "event": {
+            "description": "What happened, as typed data; null only on a note stored before events were typed.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "routine"
+                    ]
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "phase": {
+                    "description": "`started`: a lead run woke Caw; `delivered`: a run's output;\n`failed`: its second failure, which needs you.",
+                    "enum": [
+                      "delivered",
+                      "failed",
+                      "started"
+                    ],
+                    "type": "string"
+                  },
+                  "routineId": {
+                    "type": "string"
+                  },
+                  "runId": {
+                    "type": "string"
+                  },
+                  "schedule": {
+                    "$ref": "#/components/schemas/RoutineSchedule"
+                  },
+                  "slot": {
+                    "description": "The run's slot (a time, `test:…`, `now:…`, `event:…`, `inbox:…`).",
+                    "type": "string"
+                  },
+                  "slotLabel": {
+                    "description": "The slot in words: \"09:00\" in the routine's zone, \"test\", \"by-hand\", \"event\", \"inbox\".",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name",
+                  "phase",
+                  "routineId",
+                  "runId",
+                  "schedule",
+                  "slot",
+                  "slotLabel"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "instanceId": {
+                    "description": "The session the attempt ran in.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "attempt"
+                    ]
+                  },
+                  "phase": {
+                    "description": "`ended`: the attempt ended (`state`); `judge`: its acceptance criteria wait for Caw.",
+                    "enum": [
+                      "ended",
+                      "judge"
+                    ],
+                    "type": "string"
+                  },
+                  "state": {
+                    "$ref": "#/components/schemas/ItemEnd",
+                    "description": "Its outcome, once ended; null while its criteria wait."
+                  },
+                  "taskId": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "description": "The task's title as the hub had it.",
+                    "type": "string"
+                  },
+                  "try": {
+                    "description": "Which try at the task this was, 1 for the first.",
+                    "type": "number"
+                  },
+                  "workItemId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "instanceId",
+                  "kind",
+                  "phase",
+                  "taskId",
+                  "title",
+                  "try",
+                  "workItemId"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "instanceId": {
+                    "description": "The delegate's session.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "delegate"
+                    ]
+                  },
+                  "state": {
+                    "$ref": "#/components/schemas/ItemEnd"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "workItemId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "instanceId",
+                  "kind",
+                  "state",
+                  "title",
+                  "workItemId"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "task"
+                    ]
+                  },
+                  "stage": {
+                    "description": "The stage of kind `you` it now waits in.",
+                    "type": "string"
+                  },
+                  "taskId": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "stage",
+                  "taskId",
+                  "title"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "command": {
+                    "description": "The command or file of one of Caw's gated calls; absent for a wake.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "caw"
+                    ]
+                  },
+                  "what": {
+                    "enum": [
+                      "could-not-start",
+                      "denied",
+                      "edited",
+                      "guard",
+                      "not-woken",
+                      "ran",
+                      "refused"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "what"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "view"
+                    ]
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "agents"
+                    ]
+                  },
+                  "sha": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "sha"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "instanceId": {
+                    "description": "The session fleet watch nudged about.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "fleet"
+                    ]
+                  },
+                  "name": {
+                    "description": "The session's name as fleet watch had it.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "instanceId",
+                  "kind",
+                  "name"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "phone"
+                    ]
+                  },
+                  "task": {
+                    "description": "The task the sentence is about, and its title; null for none.",
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "title"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "project"
+                    ]
+                  },
+                  "from": {
+                    "description": "The offer or session the project was made from, in words; absent when it had none.",
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "what": {
+                    "enum": [
+                      "made",
+                      "settings-approved",
+                      "settings-changed",
+                      "settings-declined"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name",
+                  "what"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "file"
+                    ]
+                  },
+                  "path": {
+                    "description": "The project memory file (`AGENTS.md`, `knowledge/<topic>.md`).",
+                    "type": "string"
+                  },
+                  "sha": {
+                    "description": "Its commit; null for a change you declined.",
+                    "type": [
+                      "null",
+                      "string"
+                    ]
+                  },
+                  "what": {
+                    "description": "Caw wrote it, or you answered his proposal for it.",
+                    "enum": [
+                      "approved",
+                      "declined",
+                      "wrote"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "path",
+                  "sha",
+                  "what"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "commit": {
+                    "type": [
+                      "null",
+                      "string"
+                    ]
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "repo"
+                    ]
+                  },
+                  "machineId": {
+                    "type": "string"
+                  },
+                  "root": {
+                    "description": "The folder made a repository.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "commit",
+                  "kind",
+                  "machineId",
+                  "root"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "hub"
+                    ]
+                  },
+                  "what": {
+                    "type": "string",
+                    "enum": [
+                      "thread-repaired"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "what"
+                ]
+              }
+            ]
+          },
           "noteTitle": {
-            "description": "One line: source and what, like \"Routine · 3 new GitHub issues\". The\ntime is not in it: a reader draws `createdAt` in their own time zone.",
+            "description": "One line: source and what, like \"Routine · Triage issues · 09:00\". The\ntime is not in it: a reader draws `createdAt` in their own time zone.",
             "type": "string"
           },
           "createdAt": {
@@ -29524,6 +29928,45 @@
           "id",
           "noteTitle",
           "threadId"
+        ]
+      },
+      "RoutineSchedule": {
+        "description": "A routine's schedule as the person reads it: its cron in words, in its zone, and its next run.",
+        "type": "object",
+        "properties": {
+          "cron": {
+            "description": "The cron expression, as written.",
+            "type": "string"
+          },
+          "nextAt": {
+            "description": "When the next scheduled run is due, ms epoch; null for a routine that is off.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "timeZone": {
+            "type": "string"
+          },
+          "words": {
+            "description": "\"At 03:00, every day (Europe/London)\".",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cron",
+          "nextAt",
+          "timeZone",
+          "words"
+        ]
+      },
+      "ItemEnd": {
+        "description": "How an attempt or a delegate's work item ended.",
+        "type": "string",
+        "enum": [
+          "cancelled",
+          "done",
+          "failed"
         ]
       },
       "ThreadRead": {
@@ -29650,6 +30093,10 @@
               "$ref": "#/components/schemas/RoutineRunView"
             }
           },
+          "schedule": {
+            "$ref": "#/components/schemas/RoutineSchedule",
+            "description": "Its schedule in words, and its next run."
+          },
           "target": {
             "$ref": "#/components/schemas/RoutineTarget"
           },
@@ -29681,6 +30128,7 @@
           "projectId",
           "prompt",
           "runs",
+          "schedule",
           "target",
           "threadId",
           "timeZone"

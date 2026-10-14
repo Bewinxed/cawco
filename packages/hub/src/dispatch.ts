@@ -160,7 +160,8 @@ export interface DispatchDeps {
      */
     readonly judgeByLead: (
       projectId: string,
-      taskId: string,
+      task: { id: string; title: string },
+      item: WorkItemRow,
       text: string
     ) => void;
     /** Jev's route while Jev is on (jev.ts `jevAccess`). */
@@ -1562,7 +1563,8 @@ export const createDispatcher = ({
       );
       placement.judgeByLead(
         projectId,
-        task.id,
+        task,
+        item,
         `Judge ${task.id} “${task.title}”: its attempt ${short(item.id)} passed its checks and its work is in, and its acceptance criteria wait for your judgment (Jev is off; you did not do this work). Move the task to its done stage when the report shows every criterion met; else move it back to its todo stage with a task_comment naming what is missing.\n\nCriteria:\n${criteria.map((each) => `- ${each}`).join("\n")}\n\nThe attempt's report:\n\n${tailOf(report, 4000)}`
       );
       return "lead";

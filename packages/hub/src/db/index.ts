@@ -446,6 +446,7 @@ export interface DbShape {
           ThreadMessageRow,
           | "id"
           | "noteTitle"
+          | "event"
           | "tasks"
           | "files"
           | "question"
@@ -561,7 +562,7 @@ export interface DbShape {
     /** The project's Setup thread (caw.ts `setup`). */
     setup?: boolean;
     first: Pick<ThreadMessageRow, "author" | "body"> &
-      Partial<Pick<ThreadMessageRow, "id" | "noteTitle">>;
+      Partial<Pick<ThreadMessageRow, "id" | "noteTitle" | "event">>;
   }) => { thread: ThreadRow; message: ThreadMessageRow };
   /** Files a work item as the hub accepted it. */
   readonly createWorkItem: (item: typeof workItems.$inferInsert) => WorkItemRow;

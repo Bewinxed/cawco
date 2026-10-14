@@ -30,6 +30,7 @@ import {
   type ProjectSettingChange,
   projectSettingWords,
   publishedWords,
+  type ThreadNote,
 } from "@cawco/core";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
@@ -92,10 +93,7 @@ export interface ProjectSettingsDeps {
   /** The project's default landing, through the dispatch settings' own path. */
   readonly lands: (projectId: string, lands: ProjectLands) => Promise<unknown>;
   /** Notes what happened in the thread Caw's turn answers (caw.ts `askThread`, `notice`). */
-  readonly note: (
-    actor: InstanceRow,
-    note: { body?: string; title: string }
-  ) => void;
+  readonly note: (actor: InstanceRow, note: ThreadNote) => void;
   /** A place published to a new GitHub repository (repo-publish.ts). */
   readonly publish: Pick<RepoPublish, "publish" | "read">;
 }
@@ -291,6 +289,7 @@ export const createProjectSettings = ({
     note(actor, {
       title: "You approved a project setting",
       body: noteBody(said, changes, reason),
+      event: { kind: "project", what: "settings-approved", name: fresh.name },
     });
     return said;
   };
@@ -314,6 +313,11 @@ export const createProjectSettings = ({
         note(actor, {
           title: "Caw changed this project's settings",
           body: noteBody(said, changes, reason),
+          event: {
+            kind: "project",
+            what: "settings-changed",
+            name: project.name,
+          },
         });
         return ok(`Applied: ${said.join("; ")}. It is noted in the thread.`);
       }
@@ -323,6 +327,11 @@ export const createProjectSettings = ({
         note(actor, {
           title: "You declined a project setting",
           body: noteBody(changes.map(projectSettingWords), changes, reason),
+          event: {
+            kind: "project",
+            what: "settings-declined",
+            name: project.name,
+          },
         });
         throw declined;
       }

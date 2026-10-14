@@ -65,6 +65,7 @@ import {
   type NeutralMessage,
   type NeutralOrigin,
   type PermissionResult,
+  type ThreadNote,
 } from "@cawco/core";
 import { writeStateFile } from "@cawco/core/state-file";
 import { Elysia, status, t } from "elysia";
@@ -158,6 +159,26 @@ export class MemoryRefusal extends Error {
 const refuse = (code: 400 | 403 | 404 | 409, message: string): never => {
   throw new MemoryRefusal(code, message);
 };
+
+/** Your answer to a proposal for `path`, as its note in Caw's thread: `sha` is your commit, null when you declined. */
+const answeredNote = (
+  path: string,
+  sha: string | null,
+  result: PermissionResult
+): ThreadNote =>
+  sha === null
+    ? {
+        title: `You declined the change to ${path}`,
+        body:
+          (result.behavior === "deny" && result.message.trim()) ||
+          "Nothing changed.",
+        event: { kind: "file", what: "declined", path, sha },
+      }
+    : {
+        title: `You approved the change to ${path}`,
+        body: `Committed as your commit ${sha.slice(0, 9)}.`,
+        event: { kind: "file", what: "approved", path, sha },
+      };
 
 /**
  * Why no agent may write `rel` in a project's folder, or nothing: AGENTS.md
@@ -865,7 +886,7 @@ export interface MemoryDeps {
   readonly notice: (
     projectId: string,
     threadId: string | null,
-    note: { body?: string; title: string }
+    note: ThreadNote
   ) => void;
   /** Parks an ask for the person: the pending ledger, every dashboard, push. */
   readonly park: (envelope: Envelope) => void;
@@ -1372,6 +1393,7 @@ export const createMemory = ({
       notice(projectId, threadId ?? null, {
         title: `Caw wrote ${path}`,
         body: `Committed as Caw ${sha.slice(0, 9)}.\n\nWhy: ${why}`,
+        event: { kind: "file", what: "wrote", path, sha },
       });
       return { path, sha, notes, committed: true };
     }
@@ -1776,15 +1798,11 @@ export const createMemory = ({
         }
         // Caw's thread hears it, where he asked.
         if (proposal.threadId) {
-          notice(projectId, proposal.threadId, {
-            title: approved
-              ? `You approved the change to ${proposal.path}`
-              : `You declined the change to ${proposal.path}`,
-            body: approved
-              ? `Committed as your commit ${sha.slice(0, 9)}.`
-              : (result.behavior === "deny" && result.message.trim()) ||
-                "Nothing changed.",
-          });
+          notice(
+            projectId,
+            proposal.threadId,
+            answeredNote(proposal.path, approved ? sha : null, result)
+          );
         }
       }
       open.delete(requestId);

@@ -43,6 +43,7 @@ import type {
   SkillFile,
   StrategyChoice,
   ThreadAnswer,
+  ThreadEvent,
   ThreadMessage,
   ThreadQuestion,
   ToolStatus,
@@ -2700,6 +2701,8 @@ export const threadMessages = sqliteTable(
     body: text("body").notNull(),
     /** An event's one line. */
     noteTitle: text("note_title"),
+    /** What an event is, as typed data (`ThreadEvent`); null on notes stored before it was kept. */
+    event: text("event", { mode: "json" }).$type<ThreadEvent>(),
     /** The tasks Caw's message is about (`tsk-12`). */
     tasks: text("tasks", { mode: "json" }).$type<string[]>(),
     /** The project folder's files Caw's message says he wrote (`stages.md`). */

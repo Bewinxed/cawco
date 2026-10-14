@@ -74,6 +74,7 @@ import type {
   SessionTooling,
   SkillFile,
   SpawnPayload,
+  ThreadNote,
   ThreadSummary,
   ToolState,
   ToolStatus,
@@ -332,6 +333,7 @@ import {
 import { createBinaryUpdates } from "./binary-updates";
 import { bodyLimitRefusal } from "./body-limits";
 import {
+  attemptTry,
   type Caw,
   cawRoutes,
   createCaw,
@@ -14725,7 +14727,7 @@ export const createServer = (
     template?: StagesTemplate;
     /** What the Setup thread opens with: your prompt, or a note of where the project came from. */
     setup?: {
-      note?: { body?: string; title: string };
+      note?: ThreadNote;
       prompt?: string;
       promptId?: string;
     };
@@ -15323,19 +15325,29 @@ export const createServer = (
     placement: {
       access: () => jevAccess(db),
       typesFor: (projectId) => projectTypes.typesFor(projectId),
-      judgeByLead: (projectId, taskId, text) => {
+      judgeByLead: (projectId, task, item, text) => {
         caw
           .wake(projectId, {
             by: "event",
             text,
-            threadId: db.threadOfTask(projectId, taskId)?.id,
+            threadId: db.threadOfTask(projectId, task.id)?.id,
             note: {
-              title: `Attempt · ${taskId}'s acceptance criteria wait for Caw`,
+              title: `Attempt · ${task.title}'s acceptance criteria wait for Caw`,
+              event: {
+                kind: "attempt",
+                phase: "judge",
+                taskId: task.id,
+                title: task.title,
+                workItemId: item.id,
+                instanceId: item.instanceId,
+                state: null,
+                try: attemptTry(db.projectAttempts(projectId), item),
+              },
             },
           })
           .catch((error: unknown) =>
             console.warn(
-              `[dispatch] ${taskId}'s acceptance criteria did not reach Caw: ${error instanceof Error ? error.message : String(error)}`
+              `[dispatch] ${task.id}'s acceptance criteria did not reach Caw: ${error instanceof Error ? error.message : String(error)}`
             )
           );
       },

@@ -59,10 +59,13 @@ import type {
   LandsMode,
   NeutralMessage,
   NeutralOrigin,
+  RoutineSchedule,
   SessionRole,
+  ThreadEvent,
 } from "@cawco/core";
 import { LANDS_MODES } from "@cawco/core";
 import { standalone } from "@cawco/core/runtime";
+import cronstrue from "cronstrue";
 import { Cron, DateTime, Option, Result } from "effect";
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
@@ -181,6 +184,8 @@ export interface RoutineView {
   projectId: string | null;
   prompt: string;
   runs: RoutineRunView[];
+  /** Its schedule in words, and its next run. */
+  schedule: RoutineSchedule;
   target: RoutineTarget;
   threadId: string | null;
   timeZone: string;
@@ -342,6 +347,20 @@ export const slotLabel = (slot: string, timeZone: string): string => {
     hour12: false,
   }).format(new Date(slot));
 };
+
+/**
+ * A routine's schedule as the person reads it: its cron in words
+ * (cronstrue, on a 24-hour clock), in its zone, and its next run while it
+ * is on.
+ */
+export const scheduleOf = (
+  routine: Pick<RoutineRow, "cron" | "enabled" | "nextSlot" | "timeZone">
+): RoutineSchedule => ({
+  cron: routine.cron,
+  timeZone: routine.timeZone,
+  words: `${cronstrue.toString(routine.cron, { use24HourTimeFormat: true, verbose: true })} (${routine.timeZone})`,
+  nextAt: routine.enabled ? routine.nextSlot.getTime() : null,
+});
 
 /** The start of today in `timeZone`, ms. */
 const dayStart = (timeZone: string, now: number): number =>
@@ -506,6 +525,7 @@ export const createRoutines = ({
     expiresAt: ms(row.expiresAt),
     lastSlot: ms(row.lastSlot),
     nextSlot: row.nextSlot.getTime(),
+    schedule: scheduleOf(row),
     threadId: row.threadId,
     createdAt: row.createdAt.getTime(),
     runs: store.runs(row.id, RUNS_SHOWN).map(runView),
@@ -694,22 +714,40 @@ export const createRoutines = ({
       : "\n\n(The event that started this run is no longer kept.)";
   };
 
-  /** The routine's thread note's title. */
-  const noteTitle = (routine: RoutineRow, what?: string): string =>
-    `Routine · ${routine.name}${what ? ` ${what}` : ""}`;
+  /** A run's note's line, by what it says of the run. */
+  const NOTE_WHAT: Record<
+    Extract<ThreadEvent, { kind: "routine" }>["phase"],
+    (label: string) => string
+  > = {
+    started: (label) => ` · ${label}`,
+    delivered: () => "",
+    failed: () => " failed twice · needs you",
+  };
 
-  /** Notes in the routine's own thread, keeping the thread it went to. */
+  /** Notes a run in the routine's own thread, keeping the thread it went to. */
   const note = (
     routine: RoutineRow,
-    title: string,
+    run: RoutineRunRow,
+    phase: keyof typeof NOTE_WHAT,
     body?: string
   ): string | undefined => {
     if (!routine.projectId) {
       return undefined;
     }
+    const label = slotLabel(run.slot, routine.timeZone);
     const threadId = caw.notice(routine.projectId, routine.threadId, {
-      title,
+      title: `Routine · ${routine.name}${NOTE_WHAT[phase](label)}`,
       ...(body ? { body } : {}),
+      event: {
+        kind: "routine",
+        phase,
+        routineId: routine.id,
+        name: routine.name,
+        runId: run.id,
+        slot: run.slot,
+        slotLabel: label,
+        schedule: scheduleOf(routine),
+      },
     });
     if (threadId !== routine.threadId) {
       store.update(routine.id, { threadId });
@@ -825,7 +863,7 @@ export const createRoutines = ({
       await lifetime.sleep(PLACE_POLL_MS);
     }
     const label = slotLabel(run.slot, routine.timeZone);
-    const threadId = note(routine, noteTitle(routine, `· ${label}`));
+    const threadId = note(routine, run, "started");
     const woke = await caw.wake(projectId, {
       by: "event",
       routine: routine.id,
@@ -975,7 +1013,7 @@ export const createRoutines = ({
     if (end.outcome === "delivered") {
       const words = (end.output ?? "").slice(0, NOTE_MAX);
       if (routine.projectId) {
-        note(routine, noteTitle(routine), words);
+        note(routine, run, "delivered", words);
       } else {
         push.routine({
           failed: false,
@@ -996,11 +1034,7 @@ export const createRoutines = ({
       fireExtra(routine, run.slot, 2);
       return false;
     }
-    note(
-      routine,
-      noteTitle(routine, "failed twice · needs you"),
-      end.reason ?? undefined
-    );
+    note(routine, run, "failed", end.reason ?? undefined);
     push.routine({
       failed: true,
       instanceId,

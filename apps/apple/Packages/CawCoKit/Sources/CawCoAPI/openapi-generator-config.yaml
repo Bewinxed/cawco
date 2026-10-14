@@ -63,6 +63,7 @@ typeOverrides:
     InstanceRowLaunchDir: OpenEnums.InstanceRowLaunchDir
     InstanceRowTitleSource: OpenEnums.InstanceRowTitleSource
     InstanceStatus: OpenEnums.InstanceStatus
+    ItemEnd: OpenEnums.ItemEnd
     KeepAliveState: OpenEnums.KeepAliveState
     KeepAliveTtl: OpenEnums.KeepAliveTtl
     LandsMode: OpenEnums.LandsMode

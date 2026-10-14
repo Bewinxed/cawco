@@ -59,6 +59,7 @@ import {
   CURATOR_DENIED_TOOLS,
   type Envelope,
   type InstanceRow,
+  type ItemEnd,
   type NeutralOrigin,
   type PermissionRequestFrame,
   type PermissionResult,
@@ -68,8 +69,10 @@ import {
   type SendPayload,
   type SpawnPayload,
   type ThreadAnswer,
+  type ThreadEvent,
   type ThreadMessage,
   type ThreadMessageFrame,
+  type ThreadNote,
   type ThreadRead,
   type ThreadSaid,
   type ThreadStatus,
@@ -236,7 +239,7 @@ export const leadPlaceRef = (
  */
 export interface CawEvent {
   by: Origin;
-  note?: { body?: string; title: string };
+  note?: ThreadNote;
   /** The routine whose run this wake is (routines.ts): its turn is that run's, and a note in it is tainted (memory.ts). */
   routine?: string;
   /**
@@ -289,6 +292,7 @@ const messageOf = (row: ThreadMessageRow): ThreadMessage => {
         ...base,
         author: "event",
         noteTitle: row.noteTitle ?? "",
+        event: row.event,
         ...(row.body ? { body: row.body } : {}),
       };
     case "caw":
@@ -361,11 +365,38 @@ const titleFrom = (body: string): string => {
     : line;
 };
 
+/** A note as a thread message's row: its line, its fold, and what it is. */
+const eventRow = (note: ThreadNote) => ({
+  author: "event" as const,
+  body: note.body?.trim() ?? "",
+  noteTitle: note.title,
+  event: note.event,
+});
+
 /** An attempt's end, in the word an event note reads. */
-const ENDED: Record<string, string> = {
+const ENDED: Record<ItemEnd, string> = {
   done: "landed",
   failed: "failed",
   cancelled: "was cancelled",
+};
+
+/** Which try at its task an attempt is, among the project's attempts: 1 for the first. */
+export const attemptTry = (
+  attempts: readonly WorkItemRow[],
+  item: WorkItemRow
+): number =>
+  attempts.filter(
+    (each) =>
+      each.taskId === item.taskId &&
+      each.createdAt.getTime() <= item.createdAt.getTime()
+  ).length;
+
+/** An ended item's state as its end; an item still live has none to note. */
+const endOf = (item: WorkItemRow): ItemEnd => {
+  if (item.state in ENDED) {
+    return item.state as ItemEnd;
+  }
+  throw new Error(`work item ${item.id} is ${item.state}, not ended`);
 };
 
 /** Statuses a lead session cannot be woken from: its row is gone for good. */
@@ -422,6 +453,7 @@ export interface CawDeps {
     | "listProjects"
     | "newestThread"
     | "project"
+    | "projectAttempts"
     | "projectSpend"
     | "projectThreads"
     | "putLeadTurn"
@@ -889,18 +921,14 @@ export const createCaw = ({
   const noteIn = (
     projectId: string,
     threadId: string | undefined,
-    note: { body?: string; title: string },
+    note: ThreadNote,
     withRow = true
   ): string => {
     projectOf(projectId);
     const thread =
       (threadId ? db.thread(threadId) : undefined) ??
       db.newestThread(projectId);
-    const event = {
-      author: "event" as const,
-      body: note.body?.trim() ?? "",
-      noteTitle: note.title,
-    };
+    const event = eventRow(note);
     if (thread) {
       const added = db.addThreadMessage({ threadId: thread.id, ...event });
       said(added.thread, added.message, withRow);
@@ -1262,6 +1290,7 @@ export const createCaw = ({
       noteIn(projectId, threadId, {
         title: "Caw · not woken",
         body: `Caw hasn't read your message: ${why.replace(FINAL_STOP, "")}. Your message is kept in this thread. Write again to wake him with it.`,
+        event: { kind: "caw", what: "not-woken" },
       });
     };
     const settled = wake(projectId, event)
@@ -1495,13 +1524,36 @@ export const createCaw = ({
       .trim()
       .slice(0, 2000);
 
+  const tryOf = (projectId: string, item: WorkItemRow): number =>
+    attemptTry(db.projectAttempts(projectId), item);
+
   /** An item's end as the note in a thread: an attempt at its task, or a delegate. */
-  const endNote = (item: WorkItemRow) => ({
-    title: item.taskId
-      ? `Attempt · ${item.taskId} ${ENDED[item.state] ?? item.state}`
-      : `Delegate · ${item.title} ${ENDED[item.state] ?? item.state}`,
-    body: reportOf(item),
-  });
+  const endNote = (projectId: string, item: WorkItemRow): ThreadNote => {
+    const state = endOf(item);
+    const event: ThreadEvent = item.taskId
+      ? {
+          kind: "attempt",
+          phase: "ended",
+          taskId: item.taskId,
+          title: item.title,
+          workItemId: item.id,
+          instanceId: item.instanceId,
+          state,
+          try: tryOf(projectId, item),
+        }
+      : {
+          kind: "delegate",
+          title: item.title,
+          workItemId: item.id,
+          instanceId: item.instanceId,
+          state,
+        };
+    return {
+      title: `${item.taskId ? "Attempt" : "Delegate"} · ${item.title} ${ENDED[state]}`,
+      body: reportOf(item),
+      event,
+    };
+  };
 
   /**
    * An attempt at a task ended: noted in the thread that named the task
@@ -1517,17 +1569,18 @@ export const createCaw = ({
   ): void => {
     const taskId = item.taskId ?? "";
     const report = reportOf(item);
+    const note = endNote(project.id, item);
     const event: CawEvent = {
       by,
       text: `The attempt at ${taskId} (“${item.title}”) ended ${item.state}.${report ? `\n\n${report}` : ""}`,
       threadId: db.threadOfTask(project.id, taskId)?.id,
-      note: endNote(item),
+      note,
     };
     if (hears && !project.leadInstanceId) {
       wakeQuietly(project.id, event);
       return;
     }
-    noteIn(project.id, attemptThread(project.id, item), endNote(item));
+    noteIn(project.id, attemptThread(project.id, item), note);
   };
 
   const view = (projectId: string): CawView => {
@@ -1619,9 +1672,10 @@ export const createCaw = ({
   };
 
   /** The thread's word on a note you made. */
-  const notedLine = (sha: string) => ({
+  const notedLine = (sha: string): ThreadNote => ({
     title: "AGENTS.md · noted",
     body: `Added to AGENTS.md as your commit ${sha.slice(0, 9)}.`,
+    event: { kind: "agents", sha },
   });
 
   /** A message id the dashboard chose is a new one: a second send of it is refused. */
@@ -1685,6 +1739,7 @@ export const createCaw = ({
       noteIn(project.id, threadId, {
         title: "Caw · could not start",
         body: error instanceof Error ? error.message : String(error),
+        event: { kind: "caw", what: "could-not-start" },
       });
     });
   };
@@ -1781,7 +1836,7 @@ export const createCaw = ({
     notice(
       projectId: string,
       threadId: string | null,
-      note: { body?: string; title: string }
+      note: ThreadNote
     ): string {
       projectOf(projectId);
       const thread = threadId ? db.thread(threadId) : undefined;
@@ -1792,11 +1847,7 @@ export const createCaw = ({
         id: crypto.randomUUID(),
         projectId,
         title: titleFrom(note.title),
-        first: {
-          author: "event",
-          body: note.body?.trim() ?? "",
-          noteTitle: note.title,
-        },
+        first: eventRow(note),
       });
       said(made.thread, made.message);
       return made.thread.id;
@@ -2049,7 +2100,7 @@ export const createCaw = ({
     restore(
       threadId: string,
       lines: { at: Date; author: "you" | "caw"; body: string }[],
-      note: { body: string; title: string }
+      note: ThreadNote
     ): void {
       const thread = db.thread(threadId);
       if (!thread) {
@@ -2091,7 +2142,7 @@ export const createCaw = ({
       projectId: string,
       ask: {
         /** The note a project without a prompt opens with (an offer's). */
-        note?: { body?: string; title: string };
+        note?: ThreadNote;
         prompt?: string;
         promptId?: string;
         template: StagesTemplate | null;
@@ -2111,11 +2162,12 @@ export const createCaw = ({
               body: prompt,
               ...(ask.promptId ? { id: ask.promptId } : {}),
             }
-          : {
-              author: "event",
-              body: ask.note?.body?.trim() ?? "",
-              noteTitle: ask.note?.title ?? `Project · ${project.name} made`,
-            },
+          : eventRow(
+              ask.note ?? {
+                title: `Project · ${project.name} made`,
+                event: { kind: "project", what: "made", name: project.name },
+              }
+            ),
       });
       said(made.thread, made.message, false);
       wakeForSetup(
@@ -2222,8 +2274,13 @@ export const createCaw = ({
               text: `${waiting.id} “${waiting.title}” now waits for the person in ${waiting.stage}.`,
               threadId: db.threadOfTask(projectId, waiting.id)?.id,
               note: {
-                title: `Task · ${waiting.id} waits for you in ${waiting.stage}`,
-                body: waiting.title,
+                title: `Task · ${waiting.title} waits for you in ${waiting.stage}`,
+                event: {
+                  kind: "task",
+                  taskId: waiting.id,
+                  title: waiting.title,
+                  stage: waiting.stage,
+                },
               },
             });
           }
@@ -2253,7 +2310,7 @@ export const createCaw = ({
       if (item.taskId && (hears || item.origin === "kept")) {
         attemptEnded(project, item, hears, by);
       } else if (!hears && item.origin === "kept") {
-        noteIn(project.id, undefined, endNote(item));
+        noteIn(project.id, undefined, endNote(project.id, item));
       }
     },
 
@@ -2305,7 +2362,7 @@ export const createCaw = ({
      * else the project's newest (lead-gate.ts): nothing for a session that
      * is no project's lead.
      */
-    noteCall(instanceId: string, note: { body?: string; title: string }): void {
+    noteCall(instanceId: string, note: ThreadNote): void {
       const project = leadOf(row(instanceId));
       if (!project) {
         return;
@@ -2605,7 +2662,10 @@ export const createCaw = ({
             noteIn(
               projectId,
               actor ? turns.get(actor.id)?.threadId : undefined,
-              { title: `View · Caw drafted “${drafted.name}”` }
+              {
+                title: `View · Caw drafted “${drafted.name}”`,
+                event: { kind: "view", name: drafted.name },
+              }
             );
             return ok({
               ok: true,

@@ -43,6 +43,7 @@ import {
   type NeutralOrigin,
   type PermissionRequestFrame,
   type PermissionResult,
+  type ThreadNote,
   unboundedCommand,
 } from "@cawco/core";
 import type { DbShape, LeadCallRow } from "./db";
@@ -778,10 +779,7 @@ const fresh = (): Wake => ({
 export interface LeadGateDeps {
   readonly db: Pick<DbShape, "leadCalls">;
   /** A note in the thread the lead's turn answers (caw.ts `noteCall`). */
-  readonly note: (
-    instanceId: string,
-    note: { body?: string; title: string }
-  ) => void;
+  readonly note: (instanceId: string, note: ThreadNote) => void;
   /** Whether the lead's place is a shared checkout: one another session or a live workspace uses, or the project's folder on the hub. */
   readonly shared: (lead: InstanceRow) => boolean;
   /** The thread the lead's turn answers now (caw.ts `askThread`). */
@@ -882,20 +880,26 @@ const ranBody = (row: LeadCallRow, shell: boolean): string => {
 };
 
 /** A call's note in its thread, by its outcome; none while it waits on your card. */
-const noteFor = (
-  row: LeadCallRow
-): { body?: string; title: string } | undefined => {
+const noteFor = (row: LeadCallRow): ThreadNote | undefined => {
   const what = shortly(row.command);
   const shell = LEAD_SHELL_TOOLS.has(row.tool);
   switch (row.outcome) {
     case "refused":
-      return { title: `Caw · refused \`${what}\``, body: row.why ?? "" };
+      return {
+        title: `Caw · refused \`${what}\``,
+        body: row.why ?? "",
+        event: { kind: "caw", what: "refused", command: what },
+      };
     case "denied":
-      return { title: `Caw · you denied \`${what}\`` };
+      return {
+        title: `Caw · you denied \`${what}\``,
+        event: { kind: "caw", what: "denied", command: what },
+      };
     case "ran":
       return {
         title: shell ? `Caw · ran \`${what}\`` : `Caw · edited ${what}`,
         body: ranBody(row, shell),
+        event: { kind: "caw", what: shell ? "ran" : "edited", command: what },
       };
     default:
       return;
@@ -1053,6 +1057,7 @@ export const createLeadGate = ({
       note(row.instanceId, {
         title: `Caw · his place's guard on \`${shortly(row.command)}\``,
         body: [said.body, ...guarded].filter(Boolean).join("\n"),
+        event: { kind: "caw", what: "guard", command: shortly(row.command) },
       });
       return;
     }

@@ -1,0 +1,1 @@
+ALTER TABLE `thread_messages` ADD `event` text;

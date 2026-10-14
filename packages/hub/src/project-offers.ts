@@ -26,6 +26,7 @@ import type {
   PlanStep,
   ProjectOfferReason,
   ProjectOfferSummary,
+  ThreadNote,
   ThreadSummary,
 } from "@cawco/core";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
@@ -88,10 +89,7 @@ export interface ProjectOffersDeps {
     timeoutMs?: number
   ) => Promise<CommandResult>;
   /** Opens a new project's Setup thread with a note and wakes its Caw to set it up (caw.ts `setup`). */
-  setup: (
-    projectId: string,
-    note: { body?: string; title: string }
-  ) => ThreadSummary;
+  setup: (projectId: string, note: ThreadNote) => ThreadSummary;
   tasks: Tasks;
 }
 
@@ -402,10 +400,12 @@ export const createProjectOffers = (deps: ProjectOffersDeps) => {
         actor
       );
       // A new project is set up with Caw once its plan is on the board.
+      const from = row.title || sessionLabel(row).name;
       const setupThread = joined
         ? undefined
         : deps.setup(project.id, {
-            title: `Project · made from ${row.title || sessionLabel(row).name}`,
+            title: `Project · made from ${from}`,
+            event: { kind: "project", what: "made", name: project.name, from },
             body: filed.length
               ? `Its plan is on the board as ${plural(filed.length, "proposed task", "proposed tasks")}: ${filed.map((task) => task.id).join(", ")}.`
               : "",

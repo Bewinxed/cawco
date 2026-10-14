@@ -25,6 +25,7 @@ import {
   machineLabel,
   type PlaceLeftOut,
   type PlaceRepo,
+  type ThreadNote,
 } from "@cawco/core";
 import type { DbShape, PlaceRow } from "./db";
 
@@ -44,7 +45,7 @@ export interface PlaceRepoDeps {
   readonly notice: (
     projectId: string,
     threadId: string | null,
-    note: { body: string; title: string }
+    note: ThreadNote
   ) => void;
 }
 
@@ -104,6 +105,12 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
     const leaf = made.root.split("/").filter(Boolean).at(-1) ?? made.root;
     notice(place.projectId, db.newestThread(place.projectId)?.id ?? null, {
       title: `Made ${leaf} a git repository`,
+      event: {
+        kind: "repo",
+        root: made.root,
+        machineId: place.machineId,
+        commit: made.commit ?? null,
+      },
       body: `${made.root} on ${machineName(place.machineId)} was a plain folder, so CawCo made it a git repository to cut workspaces from: one commit, ${made.commit?.slice(0, 9)}, of ${made.files} ${made.files === 1 ? "file" : "files"} (${(made.bytes / MB).toFixed(1)} MB). It goes to no outside remote; the project's workspaces reach it through the hub's own, as for any repository without one.\n\n${leftOutLines(made.leftOut)}`,
     });
   };

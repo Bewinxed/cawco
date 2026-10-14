@@ -703,7 +703,11 @@ export const createFleetWatch = (deps: FleetWatchDeps) => {
       .wakeCaw(lead.projectId, {
         by: "event",
         text: content,
-        note: { title: `Fleet watch · ${name}`, body: words },
+        note: {
+          title: `Fleet watch · ${name}`,
+          body: words,
+          event: { kind: "fleet", instanceId: row.id, name },
+        },
       })
       .then((woken) => {
         if (!woken) {

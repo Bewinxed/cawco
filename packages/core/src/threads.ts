@@ -127,13 +127,144 @@ export interface CawThreadMessage extends ThreadMessageBase {
   tasks?: string[];
 }
 
+/** A routine's schedule as the person reads it: its cron in words, in its zone, and its next run. */
+export interface RoutineSchedule {
+  /** The cron expression, as written. */
+  cron: string;
+  /** When the next scheduled run is due, ms epoch; null for a routine that is off. */
+  nextAt: number | null;
+  timeZone: string;
+  /** "At 03:00, every day (Europe/London)". */
+  words: string;
+}
+
+/** How an attempt or a delegate's work item ended. */
+export type ItemEnd = "done" | "failed" | "cancelled";
+
+/**
+ * What a thread's event is, as typed data: the ids the dashboard looks
+ * things up by, and the words the hub had when it wrote it (a task's title,
+ * a routine's name). A task or session is never named by its id in words.
+ */
+export type ThreadEvent =
+  | {
+      kind: "routine";
+      name: string;
+      /**
+       * `started`: a lead run woke Caw; `delivered`: a run's output;
+       * `failed`: its second failure, which needs you.
+       */
+      phase: "started" | "delivered" | "failed";
+      routineId: string;
+      runId: string;
+      schedule: RoutineSchedule;
+      /** The run's slot (a time, `test:…`, `now:…`, `event:…`, `inbox:…`). */
+      slot: string;
+      /** The slot in words: "09:00" in the routine's zone, "test", "by-hand", "event", "inbox". */
+      slotLabel: string;
+    }
+  | {
+      /** The session the attempt ran in. */
+      instanceId: string;
+      kind: "attempt";
+      /** `ended`: the attempt ended (`state`); `judge`: its acceptance criteria wait for Caw. */
+      phase: "ended" | "judge";
+      /** Its outcome, once ended; null while its criteria wait. */
+      state: ItemEnd | null;
+      taskId: string;
+      /** The task's title as the hub had it. */
+      title: string;
+      /** Which try at the task this was, 1 for the first. */
+      try: number;
+      workItemId: string;
+    }
+  | {
+      /** The delegate's session. */
+      instanceId: string;
+      kind: "delegate";
+      state: ItemEnd;
+      title: string;
+      workItemId: string;
+    }
+  | {
+      kind: "task";
+      /** The stage of kind `you` it now waits in. */
+      stage: string;
+      taskId: string;
+      title: string;
+    }
+  | {
+      /** The command or file of one of Caw's gated calls; absent for a wake. */
+      command?: string;
+      kind: "caw";
+      what:
+        | "not-woken"
+        | "could-not-start"
+        | "ran"
+        | "edited"
+        | "refused"
+        | "denied"
+        | "guard";
+    }
+  | { kind: "view"; name: string }
+  | { kind: "agents"; sha: string }
+  | {
+      /** The session fleet watch nudged about. */
+      instanceId: string;
+      kind: "fleet";
+      /** The session's name as fleet watch had it. */
+      name: string;
+    }
+  | {
+      kind: "phone";
+      /** The task the sentence is about, and its title; null for none. */
+      task: { id: string; title: string } | null;
+    }
+  | {
+      kind: "project";
+      /** The offer or session the project was made from, in words; absent when it had none. */
+      from?: string;
+      name: string;
+      what:
+        | "made"
+        | "settings-changed"
+        | "settings-approved"
+        | "settings-declined";
+    }
+  | {
+      kind: "file";
+      /** The project memory file (`AGENTS.md`, `knowledge/<topic>.md`). */
+      path: string;
+      /** Its commit; null for a change you declined. */
+      sha: string | null;
+      /** Caw wrote it, or you answered his proposal for it. */
+      what: "wrote" | "approved" | "declined";
+    }
+  | {
+      commit: string | null;
+      kind: "repo";
+      machineId: string;
+      /** The folder made a repository. */
+      root: string;
+    }
+  | { kind: "hub"; what: "thread-repaired" };
+
+/** A note in a thread as its writers give it: one line, its fold, and what it is. */
+export interface ThreadNote {
+  body?: string;
+  event: ThreadEvent;
+  title: string;
+}
+
 /** Something that happened and woke Caw: a routine, an attempt landing, a task waiting for you. */
 export interface EventThreadMessage extends ThreadMessageBase {
   author: "event";
   /** What happened, opened like a fold; absent when the title says it all. */
   body?: string;
+  /** What happened, as typed data; null only on a note stored before events were typed. */
+  event: ThreadEvent | null;
   /**
-   * One line: source and what, like "Routine · 3 new GitHub issues". The
+   * One line: source and what, like "Routine · Triage issues · 09:00". The
    * time is not in it: a reader draws `createdAt` in their own time zone.
    */
   noteTitle: string;

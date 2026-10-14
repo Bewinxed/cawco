@@ -499,11 +499,19 @@ export const createJevTasks = ({
     sentence: string,
     about: string | undefined
   ): Promise<void> => {
+    const task = about ? await tasks.get(projectId, about) : undefined;
     await caw.wake(projectId, {
       by: "you",
       text: `From your phone${about ? `, about ${about}` : ""}:\n\n${sentence}`,
       threadId: about ? db.threadOfTask(projectId, about)?.id : undefined,
-      note: { title: "Phone · your request", body: sentence },
+      note: {
+        title: "Phone · your request",
+        body: sentence,
+        event: {
+          kind: "phone",
+          task: task ? { id: task.id, title: task.title } : null,
+        },
+      },
     });
   };
 

@@ -185,6 +185,7 @@ export const createThreadRepair = ({
     const yours = missed.length === 1 ? "Your message" : "Your messages";
     restore(REPAIRED_THREAD, lines, {
       title: REPAIR_NOTE,
+      event: { kind: "hub", what: "thread-repaired" },
       body: `${yours} from ${clock(first.acceptedAt)} went to Caw's session from the app and never reached this thread, and neither did his answer. They are written in above, at the times they were said. What you send Caw from any device now lands here.`,
     });
     console.log(
