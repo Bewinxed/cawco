@@ -32,6 +32,10 @@ import tokensCss from "../../../hub/skills/decision-page/kit/tokens.css" with {
   type: "text",
 };
 import type { ArtifactGlobal, ArtifactHold } from "../preview-overlay/artifact";
+import {
+  heardFromHost,
+  toHost as postToHost,
+} from "../preview-overlay/host-origin";
 import { Icon } from "./icons";
 import { guardImages } from "./images";
 import { tokenMs } from "./motion";
@@ -100,8 +104,7 @@ const takeScheme = (said: unknown) => {
 document.documentElement.style.colorScheme = scheme;
 window.addEventListener("message", (event) => {
   if (
-    event.source === window.parent &&
-    event.origin === location.origin &&
+    heardFromHost(event) &&
     (event.data?.type === "cawco:hello" || event.data?.type === "cawco:theme")
   ) {
     takeScheme(event.data.theme);
@@ -134,7 +137,7 @@ const holdStore = {
 
 /** A word to the dashboard that hosts the canvas (the rail's Dock, Undock, Done and Remove post their own). */
 export const toHost = (what: "dock" | "done" | "pictured") =>
-  window.parent.postMessage({ type: `cawco:${what}` }, location.origin);
+  postToHost({ type: `cawco:${what}` });
 
 /**
  * What of the canvas's edges the host's chrome takes, px (`inset` in its
@@ -163,8 +166,7 @@ const takeInset = (said: unknown) => {
 };
 window.addEventListener("message", (event) => {
   if (
-    event.source === window.parent &&
-    event.origin === location.origin &&
+    heardFromHost(event) &&
     (event.data?.type === "cawco:hello" || event.data?.type === "cawco:place")
   ) {
     takeInset(event.data.inset);
@@ -178,11 +180,7 @@ window.addEventListener("message", (event) => {
 let placedDocked = false;
 const placeListeners = new Set<() => void>();
 window.addEventListener("message", (event) => {
-  if (
-    event.source === window.parent &&
-    event.origin === location.origin &&
-    event.data?.type === "cawco:place"
-  ) {
+  if (heardFromHost(event) && event.data?.type === "cawco:place") {
     placedDocked = event.data.docked === true;
     for (const listener of placeListeners) {
       listener();
@@ -415,11 +413,7 @@ function Host() {
     let gone = false;
     // The host asks for the picture before it sends or folds the canvas.
     const asked = async (event: MessageEvent) => {
-      if (
-        event.source !== window.parent ||
-        event.origin !== location.origin ||
-        event.data?.type !== "cawco:picture"
-      ) {
+      if (!heardFromHost(event) || event.data?.type !== "cawco:picture") {
         return;
       }
       await bound?.picture().catch(() => undefined);
@@ -465,9 +459,11 @@ function Host() {
     type Tool = Exclude<AppState["activeTool"]["type"], "custom">;
     let left: Tool = "freedraw";
     const tapped = (event: MessageEvent) => {
+      // The app's host script posts on this window; the dashboard from its own origin.
+      const fromHere =
+        event.source === window && event.origin === location.origin;
       if (
-        (event.source !== window && event.source !== window.parent) ||
-        event.origin !== location.origin ||
+        !(fromHere || heardFromHost(event)) ||
         event.data?.type !== "cawco:pencil-double-tap"
       ) {
         return;

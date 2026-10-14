@@ -477,7 +477,6 @@ const openDashboard = async () => {
       env: {
         ...process.env,
         CAWCO_DEV_HUB_URL: fleet.base,
-        CAWCO_PREVIEW_PORT: fleet.env.CAWCO_PREVIEW_PORT,
       },
       stdout: Bun.file(join(fleet.sandbox, "dashboard.log")),
       stderr: Bun.file(join(fleet.sandbox, "dashboard.err")),

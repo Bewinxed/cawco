@@ -19,6 +19,137 @@
     }
   ],
   "paths": {
+    "/api/preview-settings": {
+      "get": {
+        "operationId": "getApiPreviewSettings",
+        "responses": {
+          "200": {
+            "description": "getApiPreviewSettings 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiPreviewSettings200"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "type": "string",
+                    "enum": [
+                      "port",
+                      "host"
+                    ]
+                  },
+                  "pattern": {
+                    "maxLength": 253,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "mode"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiPreviewSettings",
+        "responses": {
+          "200": {
+            "description": "putApiPreviewSettings 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiPreviewSettings200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiPreviewSettings 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/instances/{id}/preview-address": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiInstancesByIdPreviewAddress",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdPreviewAddress 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiInstancesByIdPreviewAddress200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/instances/{id}/artifacts/{artifact}/send": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiInstancesByIdArtifactsByArtifactSend",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdArtifactsByArtifactSend 200",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/dashboard-errors": {
       "post": {
         "requestBody": {
@@ -4271,7 +4402,6 @@
                       "workspace",
                       "reach",
                       "closed",
-                      "hub",
                       "page"
                     ]
                   }
@@ -19457,6 +19587,94 @@
   },
   "components": {
     "schemas": {
+      "getApiPreviewSettings200": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "port"
+                ]
+              },
+              "ports": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "mode",
+              "ports"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "host"
+                ]
+              },
+              "pattern": {
+                "type": "string"
+              },
+              "ports": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "mode",
+              "pattern",
+              "ports"
+            ]
+          }
+        ]
+      },
+      "putApiPreviewSettings200": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "port"
+                ]
+              },
+              "ports": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "mode",
+              "ports"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "host"
+                ]
+              },
+              "pattern": {
+                "type": "string"
+              },
+              "ports": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "mode",
+              "pattern",
+              "ports"
+            ]
+          }
+        ]
+      },
       "ValidationErrorResponse": {
         "description": "Request validation problem. Diagnostic fields are development-only.",
         "type": "object",
@@ -19505,6 +19723,32 @@
           "status",
           "title",
           "type"
+        ]
+      },
+      "postApiInstancesByIdPreviewAddress200": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "port": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "port"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "host": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "host"
+            ]
+          }
         ]
       },
       "getApiDelegateTypes200": {
@@ -20292,9 +20536,6 @@
               "$ref": "#/components/schemas/Problem"
             }
           },
-          "description": {
-            "type": "string"
-          },
           "name": {
             "type": "string"
           },
@@ -20305,12 +20546,15 @@
             "type": "string",
             "format": "date-time"
           },
-          "origin": {
-            "$ref": "#/components/schemas/WorkflowOrigin"
-          },
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/WorkflowOrigin"
+          },
+          "description": {
+            "type": "string"
           },
           "slug": {
             "type": "string"
@@ -20364,9 +20608,6 @@
               "$ref": "#/components/schemas/Problem"
             }
           },
-          "description": {
-            "type": "string"
-          },
           "name": {
             "type": "string"
           },
@@ -20377,12 +20618,15 @@
             "type": "string",
             "format": "date-time"
           },
-          "origin": {
-            "$ref": "#/components/schemas/WorkflowOrigin"
-          },
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/WorkflowOrigin"
+          },
+          "description": {
+            "type": "string"
           },
           "slug": {
             "type": "string"
@@ -20422,9 +20666,6 @@
               "$ref": "#/components/schemas/Problem"
             }
           },
-          "description": {
-            "type": "string"
-          },
           "name": {
             "type": "string"
           },
@@ -20435,12 +20676,15 @@
             "type": "string",
             "format": "date-time"
           },
-          "origin": {
-            "$ref": "#/components/schemas/WorkflowOrigin"
-          },
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/WorkflowOrigin"
+          },
+          "description": {
+            "type": "string"
           },
           "slug": {
             "type": "string"
@@ -20677,11 +20921,15 @@
           "status": {
             "$ref": "#/components/schemas/WorkflowRunStatus"
           },
+          "id": {
+            "type": "string"
+          },
           "machineId": {
             "type": "string"
           },
-          "id": {
-            "type": "string"
+          "seenAt": {
+            "type": "string",
+            "format": "date-time"
           },
           "workspace": {
             "type": "string"
@@ -20691,10 +20939,6 @@
           },
           "result": {},
           "endedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "seenAt": {
             "type": "string",
             "format": "date-time"
           },
@@ -20828,11 +21072,15 @@
               "status": {
                 "$ref": "#/components/schemas/WorkflowRunStatus"
               },
+              "id": {
+                "type": "string"
+              },
               "machineId": {
                 "type": "string"
               },
-              "id": {
-                "type": "string"
+              "seenAt": {
+                "type": "string",
+                "format": "date-time"
               },
               "workspace": {
                 "type": "string"
@@ -20842,10 +21090,6 @@
               },
               "result": {},
               "endedAt": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "seenAt": {
                 "type": "string",
                 "format": "date-time"
               },
@@ -21110,16 +21354,116 @@
               "status": {
                 "$ref": "#/components/schemas/InstanceStatus"
               },
+              "lastRequestAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "modelUsageSeen": {
+                "type": "object"
+              },
+              "workflowRunId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "workflowStepId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "threadId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "id": {
+                "type": "string"
+              },
+              "machineId": {
+                "type": "string"
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "projectId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
               "sessionId": {
                 "type": [
                   "null",
                   "string"
                 ]
               },
-              "machineId": {
+              "harness": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "accountId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "forkedFrom": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "parentInstanceId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "parentToolUseId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "cwd": {
                 "type": "string"
               },
-              "harness": {
+              "launchDir": {
+                "$ref": "#/components/schemas/InstanceRowLaunchDir"
+              },
+              "title": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "titleSource": {
+                "$ref": "#/components/schemas/InstanceRowTitleSource"
+              },
+              "derivedTitle": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "seenAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "turnEndedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "kind": {
+                "$ref": "#/components/schemas/GetApiInstances200Kind"
+              },
+              "permissionMode": {
                 "type": [
                   "null",
                   "string"
@@ -21143,116 +21487,6 @@
               "role": {
                 "$ref": "#/components/schemas/DelegateTypeRole"
               },
-              "id": {
-                "type": "string"
-              },
-              "createdAt": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "kind": {
-                "$ref": "#/components/schemas/GetApiInstances200Kind"
-              },
-              "title": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "parentInstanceId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "projectId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "updatedAt": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "lastError": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "threadId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "lastRequestAt": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "modelUsageSeen": {
-                "type": "object"
-              },
-              "workflowRunId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "workflowStepId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "accountId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "forkedFrom": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "parentToolUseId": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "cwd": {
-                "type": "string"
-              },
-              "launchDir": {
-                "$ref": "#/components/schemas/InstanceRowLaunchDir"
-              },
-              "titleSource": {
-                "$ref": "#/components/schemas/InstanceRowTitleSource"
-              },
-              "derivedTitle": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "seenAt": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "turnEndedAt": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "permissionMode": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
               "delegateType": {
                 "type": [
                   "null",
@@ -21264,6 +21498,16 @@
                   "null",
                   "string"
                 ]
+              },
+              "lastError": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
               },
               "spawnedAt": {
                 "type": "string",
@@ -21347,16 +21591,116 @@
                 "status": {
                   "$ref": "#/components/schemas/InstanceStatus"
                 },
+                "lastRequestAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "modelUsageSeen": {
+                  "type": "object"
+                },
+                "workflowRunId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "workflowStepId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "threadId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                },
+                "machineId": {
+                  "type": "string"
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "projectId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
                 "sessionId": {
                   "type": [
                     "null",
                     "string"
                   ]
                 },
-                "machineId": {
+                "harness": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "accountId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "forkedFrom": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "parentInstanceId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "parentToolUseId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "cwd": {
                   "type": "string"
                 },
-                "harness": {
+                "launchDir": {
+                  "$ref": "#/components/schemas/InstanceRowLaunchDir"
+                },
+                "title": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "titleSource": {
+                  "$ref": "#/components/schemas/InstanceRowTitleSource"
+                },
+                "derivedTitle": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "seenAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "turnEndedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "kind": {
+                  "$ref": "#/components/schemas/GetApiInstances200Kind"
+                },
+                "permissionMode": {
                   "type": [
                     "null",
                     "string"
@@ -21380,116 +21724,6 @@
                 "role": {
                   "$ref": "#/components/schemas/DelegateTypeRole"
                 },
-                "id": {
-                  "type": "string"
-                },
-                "createdAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "kind": {
-                  "$ref": "#/components/schemas/GetApiInstances200Kind"
-                },
-                "title": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "parentInstanceId": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "projectId": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "updatedAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "lastError": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "threadId": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "lastRequestAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "modelUsageSeen": {
-                  "type": "object"
-                },
-                "workflowRunId": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "workflowStepId": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "accountId": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "forkedFrom": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "parentToolUseId": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "cwd": {
-                  "type": "string"
-                },
-                "launchDir": {
-                  "$ref": "#/components/schemas/InstanceRowLaunchDir"
-                },
-                "titleSource": {
-                  "$ref": "#/components/schemas/InstanceRowTitleSource"
-                },
-                "derivedTitle": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "seenAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "turnEndedAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "permissionMode": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
                 "delegateType": {
                   "type": [
                     "null",
@@ -21501,6 +21735,16 @@
                     "null",
                     "string"
                   ]
+                },
+                "lastError": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
+                "updatedAt": {
+                  "type": "string",
+                  "format": "date-time"
                 },
                 "spawnedAt": {
                   "type": "string",
@@ -22847,23 +23091,23 @@
               "items": {
                 "type": "object",
                 "properties": {
-                  "path": {
+                  "id": {
                     "type": "string"
                   },
                   "machineId": {
-                    "type": "string"
-                  },
-                  "id": {
                     "type": "string"
                   },
                   "createdAt": {
                     "type": "string",
                     "format": "date-time"
                   },
+                  "projectId": {
+                    "type": "string"
+                  },
                   "kind": {
                     "$ref": "#/components/schemas/PlaceKind"
                   },
-                  "projectId": {
+                  "path": {
                     "type": "string"
                   },
                   "isPrimary": {
@@ -22912,23 +23156,23 @@
           "place": {
             "type": "object",
             "properties": {
-              "path": {
+              "id": {
                 "type": "string"
               },
               "machineId": {
-                "type": "string"
-              },
-              "id": {
                 "type": "string"
               },
               "createdAt": {
                 "type": "string",
                 "format": "date-time"
               },
+              "projectId": {
+                "type": "string"
+              },
               "kind": {
                 "$ref": "#/components/schemas/PlaceKind"
               },
-              "projectId": {
+              "path": {
                 "type": "string"
               },
               "isPrimary": {
@@ -23039,23 +23283,23 @@
             "items": {
               "type": "object",
               "properties": {
-                "path": {
+                "id": {
                   "type": "string"
                 },
                 "machineId": {
-                  "type": "string"
-                },
-                "id": {
                   "type": "string"
                 },
                 "createdAt": {
                   "type": "string",
                   "format": "date-time"
                 },
+                "projectId": {
+                  "type": "string"
+                },
                 "kind": {
                   "$ref": "#/components/schemas/PlaceKind"
                 },
-                "projectId": {
+                "path": {
                   "type": "string"
                 },
                 "isPrimary": {
@@ -23138,23 +23382,23 @@
           "place": {
             "type": "object",
             "properties": {
-              "path": {
+              "id": {
                 "type": "string"
               },
               "machineId": {
-                "type": "string"
-              },
-              "id": {
                 "type": "string"
               },
               "createdAt": {
                 "type": "string",
                 "format": "date-time"
               },
+              "projectId": {
+                "type": "string"
+              },
               "kind": {
                 "$ref": "#/components/schemas/PlaceKind"
               },
-              "projectId": {
+              "path": {
                 "type": "string"
               },
               "isPrimary": {
@@ -23265,23 +23509,23 @@
             "items": {
               "type": "object",
               "properties": {
-                "path": {
+                "id": {
                   "type": "string"
                 },
                 "machineId": {
-                  "type": "string"
-                },
-                "id": {
                   "type": "string"
                 },
                 "createdAt": {
                   "type": "string",
                   "format": "date-time"
                 },
+                "projectId": {
+                  "type": "string"
+                },
                 "kind": {
                   "$ref": "#/components/schemas/PlaceKind"
                 },
-                "projectId": {
+                "path": {
                   "type": "string"
                 },
                 "isPrimary": {
@@ -23416,23 +23660,23 @@
             "items": {
               "type": "object",
               "properties": {
-                "path": {
+                "id": {
                   "type": "string"
                 },
                 "machineId": {
-                  "type": "string"
-                },
-                "id": {
                   "type": "string"
                 },
                 "createdAt": {
                   "type": "string",
                   "format": "date-time"
                 },
+                "projectId": {
+                  "type": "string"
+                },
                 "kind": {
                   "$ref": "#/components/schemas/PlaceKind"
                 },
-                "projectId": {
+                "path": {
                   "type": "string"
                 },
                 "isPrimary": {
@@ -23485,13 +23729,10 @@
       "postApiWorkspacesByIdArchive200": {
         "type": "object",
         "properties": {
-          "path": {
+          "id": {
             "type": "string"
           },
           "machineId": {
-            "type": "string"
-          },
-          "id": {
             "type": "string"
           },
           "branch": {
@@ -23500,6 +23741,9 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "path": {
+            "type": "string"
           },
           "repoRoot": {
             "type": "string"
@@ -24036,10 +24280,10 @@
             "id": {
               "type": "number"
             },
-            "kind": {
+            "accountId": {
               "type": "string"
             },
-            "accountId": {
+            "kind": {
               "type": "string"
             },
             "scopeLabel": {
@@ -27316,8 +27560,11 @@
             "type": "string"
           },
           "port": {
-            "description": "A draft canvas's: the hub's preview listener, on the hub's host, where a\nclient that is not a page (the Apple app) loads the canvas at\n`/__cawco/canvas/<id>/`, naming its session in a `cawco-preview` cookie.",
+            "description": "A draft canvas's: its session's preview origin (core `PreviewAddress`),\nwhere a client loads the canvas at `/__cawco/canvas/<id>/`: a port on\nthe hub's host, or a host name of its own.",
             "type": "number"
+          },
+          "host": {
+            "type": "string"
           },
           "route": {
             "description": "Its live document on the hub's preview listener.",
@@ -28030,15 +28277,17 @@
             ]
           },
           "port": {
-            "description": "The hub's preview listener, where the canvas's page stands (`Created.port`).",
+            "description": "Its session's preview origin, where the canvas's page stands (`Created.port` / `host`).",
             "type": "number"
+          },
+          "host": {
+            "type": "string"
           }
         },
         "required": [
           "file",
           "outline",
-          "png",
-          "port"
+          "png"
         ]
       },
       "CanvasElement": {
@@ -30930,9 +31179,6 @@
         "description": "A workflow as the list carries it: everything but its program, which only\nthe workflow's own read serves. The graph stays: the editor resolves a\ncalled workflow's Start inputs from it, and the app's launch form reads it.",
         "type": "object",
         "properties": {
-          "description": {
-            "type": "string"
-          },
           "name": {
             "type": "string"
           },
@@ -30950,9 +31196,6 @@
               }
             ]
           },
-          "origin": {
-            "$ref": "#/components/schemas/WorkflowOrigin"
-          },
           "updatedAt": {
             "anyOf": [
               {
@@ -30963,6 +31206,12 @@
                 "type": "string"
               }
             ]
+          },
+          "origin": {
+            "$ref": "#/components/schemas/WorkflowOrigin"
+          },
+          "description": {
+            "type": "string"
           },
           "slug": {
             "type": "string"
@@ -31779,16 +32028,14 @@
           "status": {
             "$ref": "#/components/schemas/WorkflowRunStatus"
           },
-          "machineId": {
-            "type": "string"
-          },
           "id": {
             "type": "string"
           },
-          "workspace": {
+          "machineId": {
             "type": "string"
           },
-          "endedAt": {
+          "seenAt": {
+            "description": "When the owner last looked at it or archived it, on any device.",
             "anyOf": [
               {
                 "type": "string",
@@ -31802,8 +32049,10 @@
               }
             ]
           },
-          "seenAt": {
-            "description": "When the owner last looked at it or archived it, on any device.",
+          "workspace": {
+            "type": "string"
+          },
+          "endedAt": {
             "anyOf": [
               {
                 "type": "string",
@@ -35796,10 +36045,6 @@
         "description": "A rule as it arrives from the dashboard, before the hub gives it an id.",
         "type": "object",
         "properties": {
-          "pattern": {
-            "description": "The phrase to watch for, a regular expression, or a yes/no question, as `matchKind` says.",
-            "type": "string"
-          },
           "name": {
             "description": "What the rule is called in the list, and in the reply the session reads.",
             "type": "string"
@@ -35807,6 +36052,10 @@
           "repeat": {
             "description": "Fire again on every later match. Off makes the rule fire once per session\nand then go quiet.",
             "type": "boolean"
+          },
+          "pattern": {
+            "description": "The phrase to watch for, a regular expression, or a yes/no question, as `matchKind` says.",
+            "type": "string"
           },
           "reply": {
             "description": "What the session is sent when the rule fires.",
@@ -36465,12 +36714,16 @@
             "description": "The hub `projects` row this is bound to. Required unless `user`.",
             "type": "string"
           },
-          "event": {
-            "$ref": "#/components/schemas/HookEvent"
-          },
           "cwd": {
             "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
             "type": "string"
+          },
+          "script": {
+            "description": "A command hook's script body. CawCo writes it to a file on every machine\nand points the registration at that path, so the hook travels — a machine\nthat has never seen this hook still runs it correctly. Absent means the\nhandler carries its own `command` and the reader is on their own for\ngetting that command onto each box.",
+            "type": "string"
+          },
+          "event": {
+            "$ref": "#/components/schemas/HookEvent"
           },
           "enabled": {
             "description": "A disabled hook is simply not written to any machine. Claude Code itself\nhas no way to disable one hook while keeping it, so this is cawco's\nto provide: the row stays, the registration goes.",
@@ -36485,10 +36738,6 @@
           },
           "handler": {
             "$ref": "#/components/schemas/HookHandler"
-          },
-          "script": {
-            "description": "A command hook's script body. CawCo writes it to a file on every machine\nand points the registration at that path, so the hook travels — a machine\nthat has never seen this hook still runs it correctly. Absent means the\nhandler carries its own `command` and the reader is on their own for\ngetting that command onto each box.",
-            "type": "string"
           },
           "force": {
             "description": "Set on a targeted push only: overwrite a machine copy that drifted.",
@@ -38146,13 +38395,12 @@
               "preview"
             ]
           },
-          "path": {
-            "description": "The path on the dashboard's own origin, e.g. `/preview/<id>/`.",
-            "type": "string"
-          },
           "port": {
-            "description": "The hub's preview listener, on the hub's host: a client that is not a\npage (the Apple app) loads the preview from its root, naming the session\nin a `cawco-preview` cookie where the dashboard sends `x-cawco-preview`.",
+            "description": "Where the preview is its own origin, never the dashboard's: the session's\npreview listener's port on the host the client reached the hub by (port\nmode), or its own host name (host mode, `name[:port]`, from the fleet's\npattern). Exactly one is set ({@link PreviewAddress}).",
             "type": "number"
+          },
+          "host": {
+            "type": "string"
           },
           "revision": {
             "description": "Identifies one successful open, including a rebuild of the same source.",
@@ -38214,8 +38462,6 @@
           "artifact",
           "instanceId",
           "kind",
-          "path",
-          "port",
           "revision",
           "state"
         ]

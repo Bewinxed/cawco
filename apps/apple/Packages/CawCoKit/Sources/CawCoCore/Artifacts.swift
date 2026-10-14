@@ -4,12 +4,11 @@ import OpenAPIRuntime
 
 /// A canvas the composer made (Projects spec §5.10, The pen's swipe): a
 /// draft until its first send. Its page stands at `/__cawco/canvas/<id>/` on
-/// the hub's preview listener (`origin`), which reads the session from the
-/// `cawco-preview` cookie, as a preview's page does.
+/// its session's own preview origin (`origin`), as a preview's page does.
 public struct CanvasPage: Sendable, Equatable {
     public let id: String
     public let name: String
-    /// The preview listener's root, on the hub's host.
+    /// Its session's preview origin: a port of the hub's host, or a host name of its own.
     public let origin: URL
 
     /// The canvas's own page, `/__cawco/canvas/<id>/`: one closing slash,
@@ -40,17 +39,12 @@ public struct CanvasExport: Sendable {
 }
 
 public extension HubConnection {
-    /// The listener's root for a port the hub named, on the hub's host
-    /// (`previewOrigin`'s rule).
-    private func listener(_ port: Double?) throws -> URL {
-        guard let address else { throw TaskRefusal(message: "No hub is connected.") }
-        guard let port, var parts = URLComponents(url: address, resolvingAgainstBaseURL: false) else {
+    /// The session's preview origin the hub named for a canvas (`previewOrigin`'s rule).
+    private func listener(port: Double?, host: String?) throws -> URL {
+        guard address != nil else { throw TaskRefusal(message: "No hub is connected.") }
+        guard let origin = previewOrigin(port: port, host: host) else {
             throw TaskRefusal(message: "The hub didn't say where its canvases stand. Update the hub, then try again.")
         }
-        parts.port = Int(port)
-        parts.path = "/"
-        parts.query = nil
-        guard let origin = parts.url else { throw TaskRefusal(message: "The hub's address can't carry its canvas listener.") }
         return origin
     }
 
@@ -64,7 +58,7 @@ public extension HubConnection {
         ))
         guard case let .ok(answer) = output else { throw await TaskRefusal.reading(output) }
         let made = try answer.body.json
-        return CanvasPage(id: made.id, name: made.name, origin: try listener(made.port))
+        return CanvasPage(id: made.id, name: made.name, origin: try listener(port: made.port, host: made.host))
     }
 
     /// A canvas's export (`GET /api/artifacts/:id/export`). Read raw rather
@@ -93,7 +87,7 @@ public extension HubConnection {
         let drawn = elements.count { ($0["isDeleted"] as? Bool) != true }
         let text = String(decoding: try JSONSerialization.data(withJSONObject: file), as: UTF8.self)
         let png = (body["png"] as? String).flatMap { Data(base64Encoded: $0) }
-        let page = CanvasPage(id: id, name: name, origin: try listener(body["port"] as? Double))
+        let page = CanvasPage(id: id, name: name, origin: try listener(port: body["port"] as? Double, host: body["host"] as? String))
         return CanvasExport(file: text, drawn: drawn, outline: outline, png: png, page: page)
     }
 

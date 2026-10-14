@@ -32,6 +32,7 @@ import type {
   OrderedExcalidrawElement,
 } from "@excalidraw/excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import { toHost } from "../preview-overlay/host-origin";
 import { clock, progressOf, tokenMs } from "./motion";
 
 /** How far a held pen may wander and still be held, px: the brief's number. */
@@ -183,10 +184,7 @@ export const snapToShape = (
     elements: replaced,
     captureUpdate: CaptureUpdateAction.IMMEDIATELY,
   });
-  window.parent.postMessage(
-    { type: "cawco:snap", id: shape.id },
-    location.origin
-  );
+  toHost({ type: "cawco:snap", id: shape.id });
   return true;
 };
 

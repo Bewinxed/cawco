@@ -20,10 +20,10 @@
  * lazy, so a frame that stands down never evaluates it. Where it runs, it
  * starts in the microtask after this script, before the parser goes on.
  */
-import { here, mark, parentMark, parentParsing, patchAddresses } from "./boot";
+import { here, mark, parentMark, parentParsing, watchHistory } from "./boot";
 
 here.tag = document.currentScript as HTMLScriptElement | null;
-patchAddresses();
+watchHistory();
 
 function decide() {
   const above = parentMark();

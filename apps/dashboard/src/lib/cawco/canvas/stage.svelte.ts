@@ -18,6 +18,7 @@
  * starting, a resize or scroll, a slot resizing, or a motion a holder runs
  * (`watch`), and for a short tail after each.
  */
+import { type PreviewAddress, previewOrigin } from "@cawco/core";
 import { SvelteMap } from "svelte/reactivity";
 import { theme } from "#lib/theme.svelte.js";
 import { artifactSyncPath } from "../preview/artifact-doc";
@@ -215,18 +216,46 @@ export class Stage {
     this.instanceId = instanceId;
     this.id = id;
     this.name = name;
+    this.#reach();
   }
 
-  /** The host page's address: the canvas by id, under its session's preview prefix. */
-  get base(): string {
-    return `/preview/${encodeURIComponent(this.instanceId)}/canvas/`;
+  /**
+   * Its session's preview origin, never the dashboard's: the hub names it
+   * (its listener started when it has none). Null until it has.
+   */
+  origin = $state<string | null>(null);
+  /** Why the hub named none, its own sentence. */
+  unreached = $state<string | null>(null);
+
+  async #reach(): Promise<void> {
+    const answer = await fetch(
+      `/api/instances/${encodeURIComponent(this.instanceId)}/preview-address`,
+      { method: "POST" }
+    ).catch(() => null);
+    if (!answer?.ok) {
+      this.unreached =
+        (await answer?.text().catch(() => "")) ||
+        "The hub didn't say where this canvas stands.";
+      this.changed();
+      return;
+    }
+    this.origin = previewOrigin(
+      (await answer.json()) as PreviewAddress,
+      location
+    );
+    this.changed();
   }
+
+  /** The host page's address: the canvas by id, at its session's preview origin. */
   get src(): string {
-    return `${this.base}__cawco/canvas/${this.id}/`;
+    return this.origin ? `${this.origin}/__cawco/canvas/${this.id}/` : "";
   }
 
+  /** To the page, on its own origin alone. */
   post(message: object): void {
-    this.frame?.contentWindow?.postMessage(message, location.origin);
+    if (this.origin) {
+      this.frame?.contentWindow?.postMessage(message, this.origin);
+    }
   }
 
   /** Tells the page which artifact it is, where its doc is, the dashboard's theme, and where it stands. */
@@ -241,7 +270,7 @@ export class Stage {
     this.post({
       type: "cawco:hello",
       artifact: { id: this.id, kind: "canvas", name: this.name },
-      sync: artifactSyncPath(this.base, this.id),
+      sync: artifactSyncPath(this.id),
       theme: theme.resolved,
       inset: this.#inset(),
     });

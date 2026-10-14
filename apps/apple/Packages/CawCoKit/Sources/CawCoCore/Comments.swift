@@ -74,7 +74,7 @@ public struct ArtifactComments: Sendable, Equatable {
 
 /// What a view's word to the hub says when it could not load an artifact (core `ShownFailure`).
 public enum ShownFailure: String, Sendable {
-    case server, machine, workspace, reach, closed, hub, page
+    case server, machine, workspace, reach, closed, page
 }
 
 public extension HubConnection {

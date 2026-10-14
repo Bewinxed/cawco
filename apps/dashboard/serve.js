@@ -23,14 +23,10 @@
  * for the new process instead of being refused. It never binds the port
  * itself; started any other way, `collect` throws and it exits.
  *
- * Preview routing: `/preview/<id>/…` is forwarded to the hub's preview
- * listener. Requests whose path does NOT start with `/preview/<id>/` but whose
- * `Referer` does (root-absolute fetches from inside the iframe — `/assets/x.js`,
- * `/@vite/client`, `/src/App.svelte?t=…`) belong to the preview too. A Referer
- * names the preview for one hop only: a module served at its root-absolute URL
- * sends that URL as the Referer of its own imports, and the prefix is gone. So
- * a Referer-routed GET or HEAD gets a 302 back under the prefix, and every URL
- * the iframe holds carries it; any other method is forwarded where it stands.
+ * Previews are never served here: each is an origin of its own, the hub's
+ * preview listener's, so a previewed app shares nothing of the dashboard's.
+ * The `/ws` relay passes only this dashboard's own pages through (the gate
+ * core `browser-gate.ts` keeps, written out below for node).
  */
 import {
   createReadStream,
@@ -83,7 +79,6 @@ const runningVersion = readFileSync(
 
 const target = new URL(process.env.CAWCO_HUB_URL || "http://localhost:3456");
 const targetPort = Number(target.port || 80);
-const previewPort = Number(process.env.CAWCO_PREVIEW_PORT || targetPort + 1);
 
 // RFC 7239 permits quoted values and case-insensitive parameter names. Commas
 // inside quoted extension values belong to the first element, not the next hop.
@@ -118,107 +113,33 @@ function publicOrigin(req) {
   };
 }
 
-const PREVIEW_PREFIX = /^\/preview\/([^/]+)\/[^/]+\//;
 /**
- * Extract preview instance id from a path or Referer. Returns
- * `{ id, stripped }` where `stripped` is the path with the prefix removed
- * (for path-matched requests) or the original path (for Referer-matched).
- * Returns null if no match.
+ * Why a socket to the hub is refused, or null: core `browser-gate.ts`
+ * `crossSiteRefusal`, for a WebSocket handshake (never a navigation). A page
+ * of another origin, a previewed app on its own port of this host above all,
+ * may not open the dashboard's socket with the browser's cookies.
  */
-function previewMatch(req) {
-  const match = req.url?.match(PREVIEW_PREFIX);
-  if (match) {
-    const id = decodeURIComponent(match[1]);
-    const stripped = req.url.slice(match[0].length - 1); // keep leading /
-    return { id, stripped, prefix: match[0].slice(0, -1), viaReferer: false };
+function crossSiteRefusal(req) {
+  const site = req.headers["sec-fetch-site"];
+  if (site && site !== "same-origin" && site !== "none") {
+    return `a ${site} request`;
   }
-  const { referer } = req.headers;
-  if (referer) {
-    try {
-      const refUrl = new URL(referer);
-      const refMatch = refUrl.pathname.match(PREVIEW_PREFIX);
-      if (refMatch) {
-        const id = decodeURIComponent(refMatch[1]);
-        return {
-          id,
-          stripped: req.url,
-          prefix: refMatch[0].slice(0, -1),
-          viaReferer: true,
-        };
-      }
-    } catch {
-      // malformed referer — not a preview request
-    }
+  const { origin } = req.headers;
+  const own = publicOrigin(req);
+  if (origin && origin !== `${own.protocol}://${own.host}`) {
+    return `a request from ${origin}`;
   }
   return null;
 }
 
-function proxyPreviewHttp(req, res, info) {
-  // A Referer-routed read gets a 302 back under the prefix, so the URL the
-  // browser holds for it carries the prefix and so does the Referer of
-  // whatever it loads in turn. Where it points depends on the Referer, so it
-  // is never stored: a CDN keeping it would send one preview's file to
-  // another's.
-  if (info.viaReferer && (req.method === "GET" || req.method === "HEAD")) {
-    const { prefix } = info;
-    res.writeHead(302, {
-      location: `${prefix}${req.url}`,
-      "cache-control": "no-store",
-    });
-    res.end();
-    return;
-  }
-  const options = {
-    hostname: target.hostname,
-    port: previewPort,
-    path: info.stripped,
-    method: req.method,
-    headers: {
-      ...req.headers,
-      host: `${target.hostname}:${previewPort}`,
-      "x-cawco-preview": info.id,
-    },
-  };
-  const { prefix } = info;
-  const proxyReq = http.request(options, (proxyRes) => {
-    // Includes upstream errors: no preview response or validator is reusable.
-    proxyRes.headers["cache-control"] = "no-store";
-    for (const name of ["etag", "last-modified", "expires"]) {
-      delete proxyRes.headers[name];
-    }
-    // A root-absolute Location must stay under the prefix so the browser
-    // does not leave /preview/<id>/ on a redirect.
-    const { location } = proxyRes.headers;
-    if (location?.startsWith("/") && !location.startsWith(prefix)) {
-      proxyRes.headers.location = `${prefix}${location}`;
-    }
-    res.writeHead(proxyRes.statusCode, proxyRes.headers);
-    proxyRes.pipe(res);
-  });
-  proxyReq.on("error", (error) => {
-    console.warn(
-      `[preview] dashboard: preview of ${info.id} failed: the hub's preview listener at ${target.hostname}:${previewPort} didn't answer (${error.code ?? error.message})`
-    );
-    if (res.headersSent) {
-      res.end();
-      return;
-    }
-    res.writeHead(502, {
-      "cache-control": "no-store",
-      "content-type": "text/html; charset=utf-8",
-    });
-    res.end(HUB_DOWN_PAGE);
-  });
-  req.pipe(proxyReq);
-}
-
-/**
- * What this server answers when the hub's preview listener does not: the
- * proxy's own page, as core `preview-proxy` `downResponse("hub")` writes it,
- * in `DOWN_WORDS.hub`'s words, its meta naming the hop for the pane.
- */
-const HUB_DOWN_PAGE =
-  '<!doctype html><html><head><meta charset="utf-8"><meta name="cawco-preview-down" content="hub"><title>Preview unavailable</title></head><body><p>The hub isn\'t answering, so the preview can\'t load. Reload once the hub is back.</p></body></html>';
+/** What a relay that passed the gate leaves out: the hub behind it is not the page's origin (core `BROWSER_HEADERS`). */
+const BROWSER_HEADERS = new Set([
+  "origin",
+  "sec-fetch-site",
+  "sec-fetch-mode",
+  "sec-fetch-dest",
+  "sec-fetch-user",
+]);
 
 /**
  * A deploy swaps a new `build/` in under this running process, and the old
@@ -433,11 +354,6 @@ const server = http.createServer((req, res) => {
   const origin = publicOrigin(req);
   req.headers[PROTOCOL_HEADER] = origin.protocol;
   req.headers[HOST_HEADER] = origin.host;
-  const info = previewMatch(req);
-  if (info) {
-    proxyPreviewHttp(req, res, info);
-    return;
-  }
   serveApp(req, res);
 });
 
@@ -459,49 +375,25 @@ server.on("upgrade", (req, socket, head) => {
       `[cawco] websocket socket error on ${req.url}: ${error.code ?? error.message}`
     );
   });
-  // Preview WebSocket: /preview/<id>/…
-  const info = previewMatch(req);
-  if (info) {
-    const upstream = net.connect(previewPort, target.hostname, () => {
-      const lines = [`${req.method} ${info.stripped} HTTP/1.1`];
-      for (let i = 0; i < req.rawHeaders.length; i += 2) {
-        const lower = req.rawHeaders[i].toLowerCase();
-        if (lower === "host") {
-          continue;
-        }
-        lines.push(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}`);
-      }
-      lines.push(`Host: ${target.hostname}:${previewPort}`);
-      lines.push(`X-Cawco-Preview: ${info.id}`);
-      upstream.write(`${lines.join("\r\n")}\r\n\r\n`);
-      if (head?.length) {
-        upstream.write(head);
-      }
-      upstream.pipe(socket);
-      socket.pipe(upstream);
-    });
-    upstream.on("error", (error) => {
-      console.warn(
-        `[preview] dashboard: preview of ${info.id} failed: its WebSocket to the hub's preview listener didn't open (${error.code ?? error.message})`
-      );
-      socket.destroy();
-    });
-    socket.on("close", () => upstream.destroy());
-    upstream.on("close", () => socket.destroy());
-    return;
-  }
-
   if (!req.url?.startsWith("/ws")) {
     return socket.destroy();
+  }
+  const refused = crossSiteRefusal(req);
+  if (refused) {
+    console.warn(`[cawco] refused ${refused} to open ${req.url}`);
+    socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+    return;
   }
 
   const upstream = net.connect(targetPort, target.hostname, () => {
     const lines = [`${req.method} ${req.url} HTTP/1.1`];
     for (let i = 0; i < req.rawHeaders.length; i += 2) {
-      // The hub is the one being addressed now, so it gets its own Host; every
-      // other header (the websocket key above all) is the browser's and is
+      // The hub is the one being addressed now, so it gets its own Host, and
+      // none of the page's origin, which this gate has read; every other
+      // header (the websocket key above all) is the browser's and is
       // forwarded untouched, because the hub's 101 is computed from it.
-      if (req.rawHeaders[i].toLowerCase() === "host") {
+      const name = req.rawHeaders[i].toLowerCase();
+      if (name === "host" || BROWSER_HEADERS.has(name)) {
         continue;
       }
       lines.push(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}`);

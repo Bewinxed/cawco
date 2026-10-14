@@ -21,6 +21,7 @@ import { browser } from "$app/env";
 import { goto } from "$app/navigation";
 import { cawco } from "../client.svelte";
 import { conversationHref } from "../links";
+import { keepPrefs } from "../prefs";
 import { workingSet } from "../working-set.svelte";
 import { layoutPolicy } from "./layout-policy.svelte";
 
@@ -76,10 +77,8 @@ export interface WorkspaceV1 {
 }
 
 const KEY = "cawco-workspace";
-/** The cookie the addresses (`ctx`) ride in, apart from the tree. */
+/** The pref the addresses (`ctx`) ride in, apart from the tree. */
 const CTX_KEY = "cawco-workspace-ctx";
-/** A year: the layout is a habit, not a session. Matches the working set. */
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 /**
  * The group the last split made. Not state and never stored: the grid reads
@@ -106,11 +105,11 @@ function blank(): WorkspaceV1 {
   const leaf = emptyLeaf();
   return { v: 1, root: leaf, focusedLeaf: leaf.id, ctx: {} };
 }
-
 /* ── Persistence ──────────────────────────────────────────────────────
-   localStorage is the source; the cookies are the copy the SERVER renders
-   from. Both are written on every mutation, exactly as the working set
-   does, so the first paint and the first client render agree.
+   localStorage is the source, written on every mutation; the cookies are
+   the copy the SERVER renders from, which only the server writes and reads
+   (prefs.ts, HttpOnly), sent once the layout holds still, so the first paint
+   and the first client render agree.
 
    The tree and the addresses are two cookies. A browser refuses a cookie
    over 4KB outright and keeps the one it had, and an address runs to a
@@ -118,22 +117,6 @@ function blank(): WorkspaceV1 {
    stored conversations open stopped being saved for the server, which
    then drew every reload in an older order and the client reshuffled it
    on hydration. The tree alone is ~45 bytes a tab. */
-
-const cookie = (key: string): string | null => {
-  if (typeof document === "undefined") {
-    return null;
-  }
-  const match = new RegExp(`(?:^|;\\s*)${key}=([^;]*)`).exec(document.cookie);
-  // exec() returns null when the cookie is absent.
-  if (!match) {
-    return null;
-  }
-  try {
-    return decodeURIComponent(match[1]);
-  } catch {
-    return null;
-  }
-};
 
 /** Whether a parsed value is actually a tree, and not merely JSON. */
 function validate(node: unknown): node is PaneNode {
@@ -184,24 +167,7 @@ function load(): WorkspaceV1 {
   } catch {
     // A browser that will not read storage still has the cookie.
   }
-  return parse(stored) ?? fromCookies() ?? blank();
-}
-
-/** The tree the server was sent, with its addresses put back. */
-function fromCookies(): WorkspaceV1 | null {
-  const tree = parse(cookie(KEY));
-  if (!tree) {
-    return null;
-  }
-  try {
-    tree.ctx = JSON.parse(cookie(CTX_KEY) ?? "{}") as Record<
-      string,
-      SessionContext
-    >;
-  } catch {
-    tree.ctx = {};
-  }
-  return tree;
+  return parse(stored) ?? blank();
 }
 
 const held = $state<WorkspaceV1>(load());
@@ -224,16 +190,18 @@ function save(): void {
     focusedLeaf: held.focusedLeaf,
   });
   const ctx = JSON.stringify(held.ctx ?? {});
-  const attributes = `path=/; max-age=${COOKIE_MAX_AGE}; samesite=lax`;
-  try {
-    // biome-ignore lint/suspicious/noDocumentCookie: Cookie Store API is async and unsupported in Safari; this write must stay synchronous with the try/catch fallback below
-    document.cookie = `${KEY}=${encodeURIComponent(tree)}; ${attributes}`;
-    // biome-ignore lint/suspicious/noDocumentCookie: as above
-    document.cookie = `${CTX_KEY}=${encodeURIComponent(ctx)}; ${attributes}`;
-  } catch {
-    // Cookies refused: SSR falls back to the URL's session alone.
-  }
+  // The server's copy (prefs.ts), once the layout stops moving: a drag
+  // saves on every step, and only where it settles is worth sending.
+  clearTimeout(keeping);
+  keeping = setTimeout(
+    () => keepPrefs({ [KEY]: tree, [CTX_KEY]: ctx }),
+    KEEP_AFTER_MS
+  );
 }
+
+/** How long the layout holds still before its server copy is sent. Our call: past a drag's steps, before a reload. */
+const KEEP_AFTER_MS = 300;
+let keeping: ReturnType<typeof setTimeout> | undefined;
 
 /* ── Tree walking ─────────────────────────────────────────────────────── */
 

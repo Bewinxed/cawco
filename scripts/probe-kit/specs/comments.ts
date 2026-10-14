@@ -661,7 +661,8 @@ const hostChecks = async (on: On, frame: Frame, one: string) => {
             }
           };
           addEventListener("message", listen);
-          win.postMessage(sent, location.origin);
+          // The page's own origin: a preview is never the dashboard's.
+          win.postMessage(sent, new URL((el as HTMLIFrameElement).src).origin);
           setTimeout(() => resolve(null), 5000);
         }),
       [iframe, message, type] as const

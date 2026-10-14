@@ -153,7 +153,8 @@ const watchFrames = () => {
     },
     true
   );
-  if (location.pathname.startsWith("/preview/")) {
+  // A preview frame: the dashboard is never framed, a preview always is.
+  if (window.parent !== window) {
     document.addEventListener("DOMContentLoaded", () =>
       requestAnimationFrame(() => {
         (window as unknown as { __firstFrame: object }).__firstFrame = {

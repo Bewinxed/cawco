@@ -31,7 +31,6 @@ const previews = new Map<
   { listener: Server<PreviewSocket>; source: PreviewSource }
 >();
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
-const PREVIEW_PREFIX = /^\/preview\/[^/]+\/[^/]+\//;
 
 /** Stops a preview's listener and its bridge; settles once the bridge's every connection is gone. */
 export async function stopPreview({
@@ -142,17 +141,17 @@ export async function startPreview(options: {
         if (headers.has("origin")) {
           headers.set("origin", `http://localhost:${source.port}`);
         }
+        // The page's own Referer names the preview origin: the dev server
+        // hears it as its own address, as it does the Host and Origin.
         const referer = headers.get("referer");
         if (referer) {
           try {
             const ref = new URL(referer);
-            const stripped = ref.pathname.replace(PREVIEW_PREFIX, "/");
             headers.set(
               "referer",
-              `http://localhost:${source.port}${stripped}${ref.search}`
+              `http://localhost:${source.port}${ref.pathname}${ref.search}`
             );
           } catch {
-            // malformed Referer — drop it rather than forward a dashboard URL
             headers.delete("referer");
           }
         }

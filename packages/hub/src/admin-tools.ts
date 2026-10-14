@@ -872,5 +872,47 @@ export function adminTools() {
         return ok(await api("DELETE", "/api/fleet/memory/docs", { path }));
       }
     ),
+
+    // ── previews ─────────────────────────────────────────────────────────
+    ...admin(
+      "previews",
+      "how every session's previews are reached, fleet-wide: 'port' (the default, " +
+        "no setup) gives each session a port of the hub's preview range on the hub's " +
+        "host; 'host' gives each session a host name from `pattern`, `{session}` " +
+        "standing for its id, for a fleet whose DNS or proxy sends those names to " +
+        "the range's first port. Every preview is an origin of its own either way. " +
+        "'get' answers the mode, the pattern and the range.",
+      ["get"],
+      ["set"],
+      {
+        mode: z
+          .enum(["port", "host"])
+          .optional()
+          .describe("Required for 'set'."),
+        pattern: z
+          .string()
+          .optional()
+          .describe(
+            "Host mode's names, e.g. 'p-{session}.example.com', a port after it or not. " +
+              "Required when mode is 'host'; the hub refuses one whose generated name doesn't resolve."
+          ),
+      },
+      async ({ action, mode, pattern }) => {
+        if (action === "get") {
+          return ok(await api("GET", "/api/preview-settings"));
+        }
+        if (!mode) {
+          throw new Error("mode is required to set how previews are reached");
+        }
+        return ok(
+          await api(
+            "PUT",
+            "/api/preview-settings",
+            fieldsGiven({ mode, pattern })
+          )
+        );
+      },
+      " It changes how every preview on the fleet is reached, so the person approves it first."
+    ),
   ];
 }

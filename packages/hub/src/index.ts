@@ -1,13 +1,18 @@
 import { detach } from "@cawco/core/detach";
 import { Effect, Layer } from "effect";
 import { buildInfo } from "./build";
-import { DB_PATH, HUB_PORT, HUB_VERSION, MAX_REQUEST_BYTES } from "./config";
+import {
+  BIND_HOST,
+  DB_PATH,
+  HUB_PORT,
+  HUB_VERSION,
+  MAX_REQUEST_BYTES,
+} from "./config";
 import { Db, DbLayer } from "./db";
 import { HubLifetime, HubLifetimeLayer } from "./lifetime";
 import { advertise } from "./mdns";
 import { migrateLegacyDb } from "./migrate-db";
 import { Pending, PendingLayer } from "./pending";
-import { startPreviewListener } from "./preview";
 import { Registry, RegistryLayer } from "./registry";
 import { createServer } from "./server";
 import { createTelegramBridge } from "./telegram";
@@ -24,7 +29,6 @@ const main = Effect.gen(function* () {
   // hashes the whole skill before it says anything (impeccable is 3.2MB /
   // 147 files), and the socket is silent that whole time. 120s clears the
   // resolver's own 60s fetch timeout with room for the hash.
-  const hostname = process.env.HOST ?? "0.0.0.0";
   // Before `listen`: every dashboard's first frame names this commit (see
   // `HubServices.build`), and two git calls are not worth a socket without it.
   const build = yield* Effect.promise(buildInfo);
@@ -37,13 +41,13 @@ const main = Effect.gen(function* () {
     lifetime,
   });
   server.listen({
-    hostname,
+    hostname: BIND_HOST,
     port: HUB_PORT,
     idleTimeout: 120,
     // A pack to the git remote and a large file to LFS stream through.
     maxRequestBodySize: MAX_REQUEST_BYTES,
   });
-  startPreviewListener(hostname, server.artifactListener);
+  server.previews.start();
   yield* Effect.log(`cawco hub ${HUB_VERSION} listening on :${HUB_PORT}`);
   advertise(HUB_PORT);
   // After `listen`, so the first ask the bridge can be handed is one this hub

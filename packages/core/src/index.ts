@@ -1299,16 +1299,14 @@ export interface ArtifactPromotion {
  * machine could not open the way to the server (its listener did not start,
  * or the bridge into the workspace's network did not open); the page names
  * why in {@link PREVIEW_WHY_META}. `closed`: the session shows no preview
- * now (it was closed, or the session ended). `hub`: the dashboard could not
- * reach the hub's preview listener.
+ * now (it was closed, or the session ended).
  */
 export type PreviewDown =
   | "server"
   | "machine"
   | "workspace"
   | "reach"
-  | "closed"
-  | "hub";
+  | "closed";
 export const PREVIEW_DOWN_META = "cawco-preview-down";
 /** The machine's own words for a `reach` failure, on the proxy's page beside {@link PREVIEW_DOWN_META}. */
 export const PREVIEW_WHY_META = "cawco-preview-why";
@@ -1325,7 +1323,6 @@ export const SHOWN_FAILURES = [
   "workspace",
   "reach",
   "closed",
-  "hub",
   "page",
 ] as const;
 export type ShownFailure = (typeof SHOWN_FAILURES)[number];
@@ -1399,7 +1396,13 @@ export const CAWCO_ENV = {
    */
   devHubUrl: "CAWCO_DEV_HUB_URL",
   hubPort: "CAWCO_HUB_PORT",
-  previewPort: "CAWCO_PREVIEW_PORT",
+  /**
+   * The ports the hub's preview listeners take, `first-last` (default: the
+   * hundred after the hub's own port): one per session whose preview or
+   * canvas is in use, so each preview is an origin of its own; in host mode
+   * the first one routes every preview by its Host.
+   */
+  previewPorts: "CAWCO_PREVIEW_PORTS",
   machineId: "CAWCO_MACHINE_ID",
   /** `1` stops the hub advertising itself over mDNS. */
   noMdns: "CAWCO_NO_MDNS",

@@ -2477,6 +2477,32 @@ export const shownPreviews = sqliteTable("shown_previews", {
 });
 
 /**
+ * The port each session's previews are served on in port mode (preview.ts):
+ * its own origin, kept across restarts so the previewed app keeps its
+ * storage. Taken when the session first shows a preview or a canvas, given
+ * back when the session ends.
+ */
+export const previewPorts = sqliteTable("preview_ports", {
+  instanceId: text("instance_id")
+    .primaryKey()
+    .references(() => instances.id, { onDelete: "cascade" }),
+  port: integer("port").notNull().unique(),
+});
+
+/**
+ * How previews are reached, fleet-wide (core `PreviewSettings`) — one row,
+ * keyed `'preview'`, following the {@link spendSettings} precedent. No row
+ * reads as port mode, which needs no setup.
+ */
+export const previewSettings = sqliteTable("preview_settings", {
+  /** Always `'preview'`. */
+  id: text("id").primaryKey(),
+  mode: text("mode").$type<"port" | "host">().notNull().default("port"),
+  /** Host mode's names, `{session}` standing for the session's id; null in port mode. */
+  pattern: text("pattern"),
+});
+
+/**
  * An artifact's Yjs document as its update log: every update appended in
  * order; every {@link ARTIFACT_COMPACT_EVERY} updates the log is replaced by
  * one snapshot (`Y.encodeStateAsUpdate`).

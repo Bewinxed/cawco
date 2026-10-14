@@ -2029,11 +2029,11 @@ const oneGlyphSwap = (
 const doubleTapCheck = async (on: OnCanvas, frame: Frame) => {
   const tap = () =>
     on.page.evaluate((selector) => {
-      (
-        document.querySelector(selector) as HTMLIFrameElement | null
-      )?.contentWindow?.postMessage(
+      const el = document.querySelector(selector) as HTMLIFrameElement | null;
+      // The canvas's own preview origin: never the dashboard's.
+      el?.contentWindow?.postMessage(
         { type: "cawco:pencil-double-tap" },
-        location.origin
+        new URL(el.src).origin
       );
     }, PANEL_CANVAS);
   const tokens = await frame.evaluate(() => {

@@ -272,6 +272,7 @@ import {
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
 } from "@cawco/core/binary-updates";
+import { crossSiteRefusal } from "@cawco/core/browser-gate";
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
@@ -335,6 +336,7 @@ import {
 } from "./caw";
 import {
   ARTIFACTS_ROOT,
+  BIND_HOST,
   DB_PATH,
   GIT_ROOT,
   HUB_VERSION,
@@ -455,12 +457,16 @@ import {
   resolveMarketplacePlugins,
 } from "./plugins";
 import {
+  createPreviewListeners,
+  type PreviewListenerDeps,
   type PreviewReach,
+  PreviewRefusal,
   type PreviewTarget,
   previewFrame,
   previewSourceKey,
   previewTargets,
 } from "./preview";
+import { previewRoutes } from "./preview-routes";
 import { createCaps } from "./project-caps";
 import {
   makeProjectDelegateTypes,
@@ -7982,12 +7988,33 @@ export const createServer = (
     return generation;
   };
 
+  /**
+   * A shown preview's origin for the frames that carry it: its listener
+   * started when it has none. Null only when every port of the range is
+   * taken, which the open that showed it already said.
+   */
+  const previewAddress = (instanceId: string) => {
+    try {
+      return previewListeners.address(instanceId);
+    } catch (error) {
+      if (error instanceof PreviewRefusal) {
+        return null;
+      }
+      throw error;
+    }
+  };
+
   const publishPreview = (
     instanceId: string,
     state: "open" | "closed",
     target: Pick<PreviewTarget, "artifact" | "revision" | "source">
   ) => {
-    const frame = previewFrame(instanceId, state, target);
+    const frame = previewFrame(
+      instanceId,
+      state,
+      target,
+      state === "open" ? previewAddress(instanceId) : null
+    );
     streams.sequence(instanceId, frame);
     artifactSessions.refresh(instanceId);
     // A project's decision page is read in that project's threads, which
@@ -8036,6 +8063,12 @@ export const createServer = (
       return { ok: false, code: 500, error: answer.error ?? "" };
     }
     return closed;
+  };
+
+  /** A session ended: its preview closes, and its preview origin's port is free again. */
+  const endPreviews = (instanceId: string): void => {
+    closePreview(instanceId).catch(console.error);
+    previewListeners.release(instanceId);
   };
 
   /** What starting a machine's listener for a preview answered: where it listens, or the hop that failed and why. */
@@ -8146,6 +8179,15 @@ export const createServer = (
       source,
       revision: crypto.randomUUID(),
     };
+    // Its own origin first: with every port of the range taken it is not shown.
+    try {
+      previewListeners.address(instanceId);
+    } catch (error) {
+      if (error instanceof PreviewRefusal) {
+        return { ok: false, code: 503, error: error.message };
+      }
+      throw error;
+    }
     if (!("page" in source)) {
       const started = await startListener(
         instanceId,
@@ -8655,6 +8697,19 @@ export const createServer = (
         },
       }),
     showing: (instanceId) => previewTargets.get(instanceId)?.artifact.id,
+    previewAddress: (instanceId) => {
+      let refusal: PreviewRefusal;
+      try {
+        return previewListeners.address(instanceId);
+      } catch (error) {
+        if (!(error instanceof PreviewRefusal)) {
+          throw error;
+        }
+        refusal = error;
+      }
+      // Every port is taken: the artifact's refusal, in the listeners' words.
+      throw new ArtifactRefusal(503, refusal.message, { cause: refusal });
+    },
     // Its parent's, or its project's lead's, as stop_delegate decides.
     delegatesIn: (instance, workspaceId) =>
       db
@@ -8694,6 +8749,23 @@ export const createServer = (
     }
   };
   restoreShownPreviews();
+
+  /** What a session's preview origin serves of the hub: its artifacts' documents and pages (preview.ts). */
+  const artifactListener: PreviewListenerDeps = {
+    ownerOf: (artifactId: string) => db.artifacts.get(artifactId)?.instanceId,
+    kindOf: (artifactId: string) => db.artifacts.get(artifactId)?.kind,
+    reach: reachPreview,
+    picture: artifactPicture(ARTIFACTS_ROOT, artifactDocs),
+    send: artifactSend(artifacts.send),
+    socket: artifactSocket(artifactDocs),
+    state: artifactDocs.snapshot,
+  };
+  /** Every session's preview origin (preview.ts): `previews.start()` once the hub listens (index.ts). */
+  const previewListeners = createPreviewListeners(
+    BIND_HOST,
+    artifactListener,
+    db.previews
+  );
 
   /**
    * A register squares the machine's preview listeners with this hub's
@@ -10002,7 +10074,7 @@ export const createServer = (
   ) => {
     workItems.cancelled(row);
     forgetPending(row.id, UNREAD.stopped, false, "all");
-    closePreview(row.id).catch(console.error);
+    endPreviews(row.id);
   };
   /**
    * A stop stored without asking the machine first: its reconcile sends it
@@ -11876,7 +11948,9 @@ export const createServer = (
       const [row] = db.listedBoardInstancesByIds([instanceId]);
       return {
         type: "artifact.session",
-        preview: target ? previewFrame(instanceId, "open", target) : null,
+        preview: target
+          ? previewFrame(instanceId, "open", target, previewAddress(instanceId))
+          : null,
         session: row
           ? {
               id: row.id,
@@ -11906,7 +11980,7 @@ export const createServer = (
   const boardExtras = () => ({
     agents: withPresence(db.listAgents()),
     previews: [...previewTargets].map(([id, target]) =>
-      previewFrame(id, "open", target)
+      previewFrame(id, "open", target, previewAddress(id))
     ),
     handoffs: Object.fromEntries(handoffs),
     // Carried on every publish, so a dashboard follows a continuation it
@@ -15695,7 +15769,7 @@ export const createServer = (
           kind: "session",
           name: sessionName(requester),
         });
-        closePreview(row.id).catch(console.error);
+        endPreviews(row.id);
         noteInterrupt(row.id);
         workItems.cancelled(row);
         return;
@@ -17337,22 +17411,44 @@ export const createServer = (
     publishInstances(message.machineId);
   };
 
-  /** What the preview listener (index.ts) needs to serve artifacts' documents. */
-  const artifactListener = {
-    ownerOf: (artifactId: string) => db.artifacts.get(artifactId)?.instanceId,
-    kindOf: (artifactId: string) => db.artifacts.get(artifactId)?.kind,
-    reach: reachPreview,
-    picture: artifactPicture(ARTIFACTS_ROOT, artifactDocs),
-    send: artifactSend(artifacts.send),
-    socket: artifactSocket(artifactDocs),
-    state: artifactDocs.snapshot,
-  };
-
   return Object.assign(
     new Elysia()
+      // No page of another origin calls the hub with the browser's cookies:
+      // a previewed app on its own port of this host least of all.
+      .request(({ request }) => {
+        const refused = crossSiteRefusal(
+          request.method,
+          (name) => request.headers.get(name),
+          new URL(request.url).origin
+        );
+        if (refused) {
+          console.warn(
+            `[hub] refused ${refused} to ${request.method} ${new URL(request.url).pathname}`
+          );
+          return new Response(
+            "The hub answers its own dashboard only: this request came from another page.",
+            { status: 403 }
+          );
+        }
+      })
       // Each route's body cap, met before a request is routed or its body
       // read (body-limits.ts).
       .request(async ({ request }) => await bodyLimitRefusal(request))
+      .use(
+        previewRoutes({
+          hasInstance: (id) => db.getInstancesByIds([id]).length > 0,
+          listener: artifactListener,
+          listeners: previewListeners,
+          republish: () => {
+            for (const [instanceId, target] of previewTargets) {
+              const moved = { ...target, revision: crypto.randomUUID() };
+              previewTargets.set(instanceId, moved);
+              publishPreview(instanceId, "open", moved);
+            }
+            publishInstances("");
+          },
+        })
+      )
       // Every route's large JSON answer is written as it is sent.
       .mapResponse("global", streamLargeJson)
       .use(websocket())
@@ -22362,7 +22458,7 @@ export const createServer = (
                     )
                   );
                 heldSessions.delete(message.instanceId);
-                closePreview(message.instanceId).catch(console.error);
+                endPreviews(message.instanceId);
                 // Stopped by anyone while its work was live: the work is over.
                 // Read before the row is filed away, which a discard hides.
                 if (ended) {
@@ -23924,6 +24020,6 @@ export const createServer = (
           streams.dropSocket(ws.id);
         },
       }),
-    { artifactListener }
+    { previews: previewListeners }
   );
 };

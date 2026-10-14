@@ -162,6 +162,41 @@ export const delay = (ms: number) => Bun.sleep(ms);
  * something to be gone cannot return `undefined` as its "gone"; that is
  * `untilGone`, built on this.
  */
+/** How many preview ports a scratch hub gets: one per session that shows a preview or a canvas. */
+export const PREVIEW_PORTS = 12;
+
+/**
+ * `count` consecutive ports nothing listens on, as `first-last` (the hub's
+ * `CAWCO_PREVIEW_PORTS`): a random run high in the range, each port opened
+ * and closed to see it is free, again from another start if one is not.
+ */
+export async function freePortRange(count: number): Promise<string> {
+  for (let tries = 0; tries < 50; tries += 1) {
+    const first = 20_000 + Math.floor(Math.random() * 40_000);
+    const opened: ReturnType<typeof Bun.serve>[] = [];
+    try {
+      for (let port = first; port < first + count; port += 1) {
+        opened.push(
+          Bun.serve({
+            hostname: "127.0.0.1",
+            port,
+            fetch: () => new Response(null),
+          })
+        );
+      }
+      return `${first}-${first + count - 1}`;
+    } catch {
+      // Taken: another start.
+    } finally {
+      for (const lease of opened) {
+        // biome-ignore lint/performance/noAwaitInLoops: each lease closes before the hub takes its port
+        await lease.stop(true);
+      }
+    }
+  }
+  throw new Error(`no ${count} free consecutive ports after 50 tries`);
+}
+
 export async function until<T>(
   label: string,
   read: () => T | Promise<T>,
@@ -789,7 +824,7 @@ async function standUp(
     return port;
   };
   const hubPort = await freePort();
-  const previewPort = await freePort();
+  const previewPorts = await freePortRange(PREVIEW_PORTS);
   const mcpPort = await freePort();
   const base = `http://127.0.0.1:${hubPort}`;
 
@@ -1005,7 +1040,7 @@ async function standUp(
     XDG_RUNTIME_DIR: runtime,
     CAWCO_DB_PATH: dbPath,
     CAWCO_HUB_PORT: String(hubPort),
-    CAWCO_PREVIEW_PORT: String(previewPort),
+    CAWCO_PREVIEW_PORTS: previewPorts,
     CAWCO_MCP_PORT: String(mcpPort),
     HOST: "127.0.0.1",
     CAWCO_HUB_URL: `ws://127.0.0.1:${hubPort}/ws`,

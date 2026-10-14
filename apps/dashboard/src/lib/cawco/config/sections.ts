@@ -7,6 +7,7 @@ import {
   IconCpu,
   IconDollar,
   IconDownload,
+  IconExternal,
   IconHook,
   IconPhone,
   IconRules,
@@ -41,6 +42,7 @@ export type SectionSlug =
   | "accounts"
   | "models"
   | "phone"
+  | "previews"
   | "spend"
   | "updates";
 
@@ -152,6 +154,16 @@ export const SECTIONS: ConfigSection[] = [
     purpose: "Pushes to the CawCo app when something needs you",
     icon: IconPhone,
     hue: "var(--hue-green-500)",
+  },
+  {
+    slug: "previews",
+    counted: false,
+    group: "Hub",
+    label: "Previews",
+    purpose:
+      "How a session's previews are reached, each on an origin of its own",
+    icon: IconExternal,
+    hue: "var(--hue-cyan-400)",
   },
   {
     slug: "updates",

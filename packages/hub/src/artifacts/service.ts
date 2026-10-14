@@ -23,6 +23,7 @@ import {
   type InstanceRow,
   machineLabel,
   noteText,
+  type PreviewAddress,
   type PreviewSource,
   type ShownFailure,
 } from "@cawco/core";
@@ -44,7 +45,6 @@ import { pageHash } from "@cawco/core/preview-proxy";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { applyPatch, type Operation } from "rfc6902";
 import { Doc, encodeStateAsUpdate } from "yjs";
-import { PREVIEW_PORT } from "../config";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
 import { sessionLabel } from "../labels";
 import {
@@ -206,6 +206,7 @@ export interface ArtifactRead {
 }
 
 export interface Created {
+  host?: string;
   id: string;
   kind: ArtifactKind;
   name: string;
@@ -216,9 +217,9 @@ export interface Created {
   /** A canvas's outline once drawn (core `canvasOutline`). */
   outline?: string;
   /**
-   * A draft canvas's: the hub's preview listener, on the hub's host, where a
-   * client that is not a page (the Apple app) loads the canvas at
-   * `/__cawco/canvas/<id>/`, naming its session in a `cawco-preview` cookie.
+   * A draft canvas's: its session's preview origin (core `PreviewAddress`),
+   * where a client loads the canvas at `/__cawco/canvas/<id>/`: a port on
+   * the hub's host, or a host name of its own.
    */
   port?: number;
   /** Its live document on the hub's preview listener. */
@@ -275,11 +276,12 @@ export interface CommentRead {
 /** A canvas's export: the `.excalidraw` file, its outline and its latest picture. */
 export interface CanvasExport {
   file: ReturnType<typeof excalidrawFile>;
+  host?: string;
   outline: string;
   /** Base64 PNG; null until a screen has drawn one. */
   png: string | null;
-  /** The hub's preview listener, where the canvas's page stands (`Created.port`). */
-  port: number;
+  /** Its session's preview origin, where the canvas's page stands (`Created.port` / `host`). */
+  port?: number;
 }
 
 /** What `artifact_promote` answers: the project folder's commit, and the folder it wrote. */
@@ -451,6 +453,11 @@ export interface ArtifactServiceDeps {
   ) => Promise<
     { html: string } | { refused: string; status: ArtifactRefusal["status"] }
   >;
+  /**
+   * Session `instanceId`'s preview origin (preview.ts), its listener started
+   * when it has none; throws a refusal when every port is taken.
+   */
+  previewAddress: (instanceId: string) => PreviewAddress;
   /** Where artifacts' files are kept: a page's `<root>/<id>/index.html`, a canvas's `<root>/<id>/picture.png`. */
   root: string;
   /**
@@ -763,8 +770,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return `${subject} did not answer: ${machine} couldn't open the way to it.`;
       case "closed":
         return `${subject} did not show: the panel was closed or showed something else first.`;
-      case "hub":
-        return `${subject} did not show: the dashboard couldn't reach the hub's preview listener.`;
       default:
         return `${subject} answered, but not with a page the panel can show.`;
     }
@@ -1009,7 +1014,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       route: routeOf(row.id),
       opened: false,
       why: "It stands in the composer until it is docked.",
-      port: PREVIEW_PORT,
+      ...deps.previewAddress(instance.id),
     };
   };
 
@@ -1339,7 +1344,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           `${row.name} is a ${row.kind}: only a canvas exports.`
         );
       }
-      return { ...canvasFile(id), png: pictureOf(id), port: PREVIEW_PORT };
+      return {
+        ...canvasFile(id),
+        png: pictureOf(id),
+        ...deps.previewAddress(row.instanceId),
+      };
     },
 
     /**

@@ -1,12 +1,15 @@
+import { keepPrefs, type Pref } from "../prefs";
+
 /**
  * The height each Configure page's card last settled at, by path. A cold
  * load of a Configure page shows its loading state until the fleet's
  * settings arrive; the card stands at this height meanwhile, the skeleton
- * fills it, and the rows arrive into a card that does not move. It is a
- * cookie, like the rail's width, so the server draws the first paint at
- * that size too (routes/config/+layout.server.ts).
+ * fills it, and the rows arrive into a card that does not move. Kept in
+ * localStorage, and as a pref (lib/cawco/prefs.ts), like the rail's width,
+ * so the server draws the first paint at that size too
+ * (routes/config/+layout.server.ts).
  */
-export const CARDS_COOKIE = "cawco-config-cards";
+export const CARDS_COOKIE = "cawco-config-cards" satisfies Pref;
 /** The paths remembered: the sections and the editors opened last. */
 const CARDS_LIMIT = 24;
 
@@ -35,13 +38,13 @@ export function parseCards(raw: string | undefined): Cards {
   return cards;
 }
 
-const cookieValue = () => {
-  const entry = document.cookie
-    .split("; ")
-    .find((cookie) => cookie.startsWith(`${CARDS_COOKIE}=`));
-  return entry
-    ? decodeURIComponent(entry.slice(CARDS_COOKIE.length + 1))
-    : undefined;
+const storedValue = (): string | undefined => {
+  try {
+    return localStorage.getItem(CARDS_COOKIE) ?? undefined;
+  } catch {
+    // A browser that will not read storage starts from the server's copy.
+    return undefined;
+  }
 };
 
 /**
@@ -52,7 +55,7 @@ export function rememberCard(path: string) {
   return (node: HTMLElement) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const keep = () => {
-      const cards = parseCards(cookieValue());
+      const cards = parseCards(storedValue());
       delete cards[path];
       cards[path] = Math.round(node.getBoundingClientRect().height * 100) / 100;
       const paths = Object.keys(cards);
@@ -62,8 +65,13 @@ export function rememberCard(path: string) {
       )) {
         delete cards[old];
       }
-      // biome-ignore lint/suspicious/noDocumentCookie: routes/config/+layout.server.ts reads this same cookie for the first paint, as with the rail's width
-      document.cookie = `${CARDS_COOKIE}=${encodeURIComponent(JSON.stringify(cards))};path=/;max-age=31536000;samesite=lax`;
+      const value = JSON.stringify(cards);
+      try {
+        localStorage.setItem(CARDS_COOKIE, value);
+      } catch {
+        // A browser that will not store keeps the server's copy alone.
+      }
+      keepPrefs({ [CARDS_COOKIE]: value });
     };
     const sizes = new ResizeObserver(() => {
       clearTimeout(timer);

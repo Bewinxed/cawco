@@ -1,9 +1,10 @@
 <script lang="ts">
   import {
     machineLabel,
-    PREVIEW_DOWN_META,
-    PREVIEW_WHY_META,
+    PREVIEW_PING_PATH,
     type PreviewDown,
+    type PreviewSettings,
+    previewOrigin,
     type ShownFailure,
   } from "@cawco/core";
   import { pinUnsent, type SendPicture } from "@cawco/core/comments";
@@ -125,8 +126,14 @@
   const fleet = paneFleet();
   const preview = $derived(fleet.preview(instanceId));
   const source = $derived(preview?.source);
-  /** Each show gives the document and its assets a fresh URL namespace. */
-  const previewBase = $derived(preview?.path ?? "");
+  /**
+   * The preview's own origin, never the dashboard's (core `previewOrigin`):
+   * its port on the host this tab reached the dashboard by, or its own host
+   * name. The page runs at its root as on its own server.
+   */
+  const paneOrigin = $derived(
+    preview ? (previewOrigin(preview, location) ?? "") : ""
+  );
   /**
    * Where the reader had gone inside this show, kept per session so a reload
    * of the tab (by hand, or by itself once idle: reload.svelte.ts) opens the
@@ -141,18 +148,18 @@
       } | null;
       return kept?.revision === preview?.revision &&
         typeof kept?.at === "string" &&
-        previewBase.endsWith("/") &&
+        paneOrigin &&
         kept.at.startsWith("/")
-        ? `${previewBase}${kept.at.slice(1)}`
+        ? `${paneOrigin}${kept.at}`
         : null;
     } catch {
       return null;
     }
   }
-  /** `at` is the app's own place, the preview's prefix stripped (the overlay's `url`). */
+  /** `at` is the page's own place on its origin (the overlay's `url`). */
   function keepAt(at: URL): void {
     const place = `${at.pathname}${at.search}${at.hash}`;
-    if (!(previewBase && preview)) {
+    if (!(paneOrigin && preview)) {
       return;
     }
     localStorage.setItem(
@@ -162,21 +169,71 @@
   }
   /** Where a show starts: the page the agent named (`path`), else the root. */
   const startAt = $derived.by(() => {
+    if (!paneOrigin) {
+      return "";
+    }
     const path = source && "path" in source ? source.path : undefined;
-    return path && previewBase.endsWith("/")
-      ? `${previewBase}${path.slice(1)}`
-      : previewBase;
+    return `${paneOrigin}${path ?? "/"}`;
   });
   /**
    * The frame opens at the start page, or where the reader was in this show;
    * read once per show, so their going on inside it never reloads the frame.
    */
   const url = $derived.by(() => {
-    if (!(preview?.revision && previewBase)) {
+    if (!(preview?.revision && paneOrigin)) {
       return startAt;
     }
     return untrack(keptAt) ?? startAt;
   });
+  /**
+   * Whether this tab reaches the preview's origin (its `/__cawco/ping`,
+   * which answers any page with no credentials): probed once per origin,
+   * before the frame loads. Unreached, the pane says what previews need
+   * and where to switch how they are reached: never a fallback.
+   */
+  let reached = $state<{ origin: string; ok: boolean } | null>(null);
+  let unreachedWhy = $state("");
+  $effect(() => {
+    const origin = paneOrigin;
+    if (!origin || reached?.origin === origin) {
+      return;
+    }
+    let live = true;
+    fetch(`${origin}${PREVIEW_PING_PATH}`, {
+      mode: "cors",
+      credentials: "omit",
+      cache: "no-store",
+    })
+      .then((answer) => answer.ok)
+      .catch(() => false)
+      .then(async (ok) => {
+        if (!live) {
+          return;
+        }
+        if (!ok) {
+          unreachedWhy = await previewsNeed(origin);
+        }
+        reached = { origin, ok };
+      });
+    return () => {
+      live = false;
+    };
+  });
+  const unreached = $derived(
+    !!paneOrigin && reached?.origin === paneOrigin && !reached.ok
+  );
+  /** What previews need to be reached from this tab, from the fleet's mode. */
+  async function previewsNeed(origin: string): Promise<string> {
+    const settings = await fetch("/api/preview-settings")
+      .then((answer) =>
+        answer.ok ? (answer.json() as Promise<PreviewSettings>) : null
+      )
+      .catch(() => null);
+    if (settings?.mode === "host") {
+      return `Previews need ${new URL(origin).host} to reach the hub, or switch previews to ports`;
+    }
+    return `Previews need ports ${settings?.ports ?? "of the hub's range"} reachable on ${location.hostname}, or switch previews to a hostname pattern`;
+  }
   let displayPath = $state("");
   /**
    * A page is served at the root of its own address: the head names the
@@ -230,23 +287,16 @@
     "workspace",
     "reach",
     "closed",
-    "hub",
   ];
-  function downOf(frame: HTMLIFrameElement): {
-    down: PreviewDown;
-    why: string | null;
-  } | null {
-    try {
-      const meta = (name: string) =>
-        frame.contentDocument
-          ?.querySelector(`meta[name="${name}"]`)
-          ?.getAttribute("content") ?? null;
-      const said = DOWN_KINDS.find((kind) => kind === meta(PREVIEW_DOWN_META));
-      return said ? { down: said, why: meta(PREVIEW_WHY_META) } : null;
-    } catch {
-      // A frame of another origin is a page, not the proxy's.
-      return null;
+  /** The proxy's page says which hop failed (`cawco:down`): the pane cannot read a preview origin's document. */
+  function heardDown(message: { down?: unknown; why?: unknown }) {
+    const said = DOWN_KINDS.find((kind) => kind === message.down);
+    if (!said) {
+      return;
     }
+    down = said;
+    downWhy = typeof message.why === "string" ? message.why : null;
+    retrying = false;
   }
   const owner = $derived(fleet.session(instanceId));
   const ownerMachine = $derived.by(() => {
@@ -275,8 +325,6 @@
         return `${ownerMachine} couldn't reach the page's server`;
       case "closed":
         return "This preview is closed";
-      case "hub":
-        return "The hub isn't answering";
       default:
         return `${ownerMachine} isn't answering`;
     }
@@ -289,12 +337,18 @@
       connected = false;
       loaded = false;
       captured = false;
+      // A new load says again whether it is served.
+      down = null;
+      downWhy = null;
       // A pick the old page asked for has no page left to answer.
       picking = null;
     }
   });
+  /** To the page, on its own origin alone. */
   function post(message: object) {
-    iframe?.contentWindow?.postMessage(message, location.origin);
+    if (paneOrigin) {
+      iframe?.contentWindow?.postMessage(message, paneOrigin);
+    }
   }
 
   /*
@@ -383,11 +437,11 @@
   const artifactId = $derived(artifact?.id);
   $effect(() => {
     const id = artifactId;
-    const base = previewBase;
-    if (!(id && base)) {
+    const session = instanceId;
+    if (!id) {
       return;
     }
-    const joined = joinArtifact(base, id, (next) => {
+    const joined = joinArtifact(session, id, (next) => {
       view = next;
     });
     doc = joined;
@@ -462,7 +516,7 @@
       const drawn = isCanvas
         ? { pictures: await canvasPictures(artifact.id), url: null }
         : await pagePictures();
-      await sendArtifact(previewBase, artifact.id, {
+      await sendArtifact(instanceId, artifact.id, {
         pictures: drawn.pictures,
         ...(drawn.url ? { url: drawn.url } : {}),
       });
@@ -514,14 +568,14 @@
     post({
       type: "cawco:hello",
       theme: theme.resolved,
-      ...(artifact && previewBase
+      ...(artifact
         ? {
             artifact: {
               id: artifact.id,
               kind: artifact.kind,
               name: artifact.name,
             },
-            sync: artifactSyncPath(previewBase, artifact.id),
+            sync: artifactSyncPath(artifact.id),
           }
         : {}),
     });
@@ -749,10 +803,16 @@
   }
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one validated dispatch for the overlay's wire protocol.
   function receive(event: MessageEvent) {
+    // The page's own frame, from its own origin: nothing else is heard.
     if (
+      !paneOrigin ||
       event.source !== iframe?.contentWindow ||
-      event.origin !== location.origin
+      event.origin !== paneOrigin
     ) {
+      return;
+    }
+    if (event.data?.type === "cawco:down") {
+      heardDown(event.data);
       return;
     }
     const ask = previewPickPlace(event.data);
@@ -766,10 +826,13 @@
     switch (message?.type) {
       case "cawco:ready":
       case "cawco:navigated": {
-        const at = previewUrl(message.url, location.origin);
+        const at = previewUrl(message.url, paneOrigin);
         if (!at) {
           return;
         }
+        // The page answers: whatever the proxy said of an earlier load is over.
+        down = null;
+        downWhy = null;
         const parsed = new URL(at);
         displayPath = `${parsed.pathname}${parsed.search}${parsed.hash}`;
         keepAt(parsed);
@@ -837,7 +900,7 @@
         const answer = asks.get(Number(message.ask));
         answer?.(
           previewPictures(message.pictures),
-          previewUrl(message.url, location.origin)
+          previewUrl(message.url, paneOrigin)
         );
         break;
       }
@@ -871,7 +934,13 @@
       case "cawco:ink":
         // The person's unsent ink, which the composer's Send carries.
         if (artifact && iframe?.contentWindow) {
-          heardInk(instanceId, artifact.id, iframe.contentWindow, message);
+          heardInk(
+            instanceId,
+            artifact.id,
+            iframe.contentWindow,
+            paneOrigin,
+            message
+          );
         }
         break;
       default:
@@ -1153,8 +1222,39 @@
   {#if isCanvas}
     <!-- The canvas's stage stands over this box: its one iframe. -->
     <div aria-hidden="true" class="canvas-slot" bind:this={canvasSlot}></div>
+  {:else if unreached}
+    <!-- This tab can't reach the preview's own origin: what previews need,
+         and where to switch how they are reached. -->
+    <div class="down" role="alert" transition:appear>
+      <EmptyState icon={IconAlert} title="This preview can't be reached">
+        {#snippet line()}
+          {unreachedWhy}.
+        {/snippet}
+        {#snippet action()}
+          <div class="down-actions">
+            <Button
+              icon={IconRefresh}
+              label="Try again"
+              onclick={() => {
+                reached = null;
+              }}
+              size="sm"
+              variant="outline"
+            />
+            <Button
+              class="px-0"
+              href="/config/previews"
+              label="Preview settings"
+              size="sm"
+              variant="link"
+            />
+          </div>
+        {/snippet}
+      </EmptyState>
+    </div>
   {:else}
-    {#each frames as key (key)}
+    <!-- The frame loads once its origin answered the probe; the cover stands meanwhile. -->
+    {#each reached?.origin === paneOrigin ? frames : [] as key (key)}
       {@const current = key === frameKey}
       <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
       <iframe
@@ -1175,12 +1275,6 @@
             // A frame of another origin: its input is not ours to hear.
           }
           if (key === frameKey) {
-            const said = downOf(event.currentTarget as HTMLIFrameElement);
-            down = said?.down ?? null;
-            downWhy = said?.why ?? null;
-            if (down) {
-              retrying = false;
-            }
             loadedFrame(key);
             announce();
           }
@@ -1231,9 +1325,6 @@
           {:else if down === "closed"}
             Its session shows something else now, or has ended, so there is no
             page here. Open its session to show it again.
-          {:else if down === "hub"}
-            The dashboard can't reach the hub's preview listener, so the page
-            can't load. Once the hub is back, try again.
           {:else}
             The preview comes from {ownerMachine}, which isn't connected to the
             hub right now. Once it's back, try again.

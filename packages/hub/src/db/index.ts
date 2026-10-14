@@ -88,6 +88,7 @@ import { type ArtifactsDb, artifactsDb } from "./artifacts";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
 import { type ConnectionsDb, connectionsDb } from "./connections";
 import { type IngressDb, ingressDb } from "./ingress";
+import { type PreviewsDb, previewsDb } from "./previews";
 import { type RelaysDb, relaysDb } from "./relays";
 import { type RoutinesDb, routinesDb } from "./routines";
 import {
@@ -1216,6 +1217,8 @@ export interface DbShape {
       projectId?: string;
     }
   ) => PublicInstanceRow | undefined;
+  /** Each session's preview port, and the fleet's preview mode (preview.ts). */
+  readonly previews: PreviewsDb;
   /** A project with its places, or undefined for an id the hub does not hold. */
   readonly project: (id: string) => ProjectRow | undefined;
   /**
@@ -7226,6 +7229,7 @@ const make = async (path: string): Promise<DbShape> => {
     ingress: ingressDb(db),
     relays: relaysDb(db),
     artifacts: artifactsDb(db),
+    previews: previewsDb(db),
     actions: actionsDb(db),
     usageSpend: ({ harness, todayStart, weekStart }) => {
       const since = (start: number) =>

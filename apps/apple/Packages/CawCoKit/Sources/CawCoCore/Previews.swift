@@ -114,12 +114,28 @@ public extension HubConnection {
         previews.closed(instanceId)
     }
 
-    /// Where the app loads a session's preview: the hub's preview listener on
-    /// the hub's host, which reads the session from a `cawco-preview` cookie.
+    /// Where the app loads a session's preview: its own origin, never the
+    /// dashboard's (core `previewOrigin`). Port mode: the session's preview
+    /// port on the hub's host. Host mode: the session's own host name, on
+    /// the hub's scheme. The listener knows the session by that origin.
     func previewOrigin(_ frame: PreviewFrame) -> URL? {
+        previewOrigin(port: frame.port, host: frame.host)
+    }
+
+    /// A preview origin from what the hub named: a port, or a host (`name[:port]`).
+    func previewOrigin(port: Double?, host: String?) -> URL? {
         guard let address, var parts = URLComponents(url: address, resolvingAgainstBaseURL: false) else { return nil }
-        parts.port = Int(frame.port)
         parts.path = "/"
+        parts.query = nil
+        parts.fragment = nil
+        if let host {
+            let named = host.split(separator: ":", maxSplits: 1)
+            parts.host = String(named[0])
+            parts.port = named.count > 1 ? Int(named[1]) : nil
+            return parts.url
+        }
+        guard let port else { return nil }
+        parts.port = Int(port)
         return parts.url
     }
 

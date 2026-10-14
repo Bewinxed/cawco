@@ -6,8 +6,8 @@ import WebKit
 
 /// A session's preview (preview/PreviewPane.svelte): its header (the
 /// artifact's name and path, Send N, Pins, Comment, Reload, Close) over the
-/// page, which a web view loads from the hub's preview listener, naming the
-/// session in its `cawco-preview` cookie. The page carries the agent's
+/// page, which a web view loads from the session's own preview origin (a
+/// port of the hub's, or a host name of its own). The page carries the agent's
 /// overlay, which talks to its host as an iframe talks to the dashboard: the
 /// script injected here stands in for that parent window, so the overlay
 /// runs unchanged. The page keeps its own state in its artifact's document,
@@ -205,8 +205,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             pinsBadge.trailingAnchor.constraint(equalTo: pinsButton.trailingAnchor, constant: -(Space.space3 + 1)),
         ])
 
-        // The page, in a web view of its own: its own cookie store, holding
-        // only this session's `cawco-preview`.
+        // The page, in a web view of its own: its own cookie store, never
+        // shared with another session's preview.
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         configuration.userContentController.addUserScript(WKUserScript(source: Self.host, injectionTime: .atDocumentStart, forMainFrameOnly: true))
@@ -492,15 +492,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         paintSend()
         cover.alpha = 1
         coverLine.isHidden = false
-        let cookie = HTTPCookie(properties: [
-            .name: "cawco-preview", .value: instanceId, .domain: origin.host() ?? "", .path: "/",
-        ])
-        let web = web!
-        guard let cookie else { return }
-        let start = hub.previewStart(frame) ?? origin
-        web.configuration.websiteDataStore.httpCookieStore.setCookie(cookie) {
-            web.load(URLRequest(url: start))
-        }
+        // The origin names the session: nothing else rides with the load.
+        web.load(URLRequest(url: hub.previewStart(frame) ?? origin))
     }
 
     private var theme: String { traitCollection.userInterfaceStyle == .dark ? "dark" : "light" }

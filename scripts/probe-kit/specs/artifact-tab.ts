@@ -78,8 +78,11 @@ const BUDGET_KB = { page: 620, canvas: 2060 } as const;
  * - the artifact's own hub routes: find it, show it, say it is shown, and
  *   the session's artifacts the menu lists;
  * - its session's socket (the hub's ARTIFACT_SESSION_PATH);
- * - the preview's own (`/preview/$sid/`): its page, its overlay, its doc's
- *   sync socket, its send; and any request a preview frame makes itself.
+ * - the pane's own hold on the artifact's doc (`/ws/artifact/$sid/$id`), and
+ *   a canvas's ask for its session's preview origin;
+ * - anything on the session's preview origin: the page, its overlay, its
+ *   doc's sync socket, the pane's probe of it; and any request a preview
+ *   frame makes itself.
  */
 const allowed = (
   sid: string,
@@ -93,11 +96,11 @@ const allowed = (
       new RegExp(`^GET /api/artifacts/${a}$`),
       new RegExp(`^POST /api/instances/${s}/artifacts/${a}/(?:show|shown)$`),
       new RegExp(`^GET /api/instances/${s}/artifacts$`),
-      new RegExp(`^(?:GET|POST) /preview/${s}/`),
+      new RegExp(`^POST /api/instances/${s}/preview-address$`),
     ],
     sockets: [
       new RegExp(`^/ws/artifact-session/${s}$`),
-      new RegExp(`^/preview/${s}/`),
+      new RegExp(`^/ws/artifact/${s}/${a}$`),
     ],
   };
 };
@@ -167,11 +170,19 @@ const watch = (page: Page) => {
 const onlyItsOwn = (
   kit: Kit,
   seen: Traffic,
-  where: { base: string; dev: boolean; id: string; kind: string; sid: string }
+  where: {
+    base: string;
+    dev: boolean;
+    id: string;
+    kind: string;
+    preview: string;
+    sid: string;
+  }
 ): void => {
   const { strays, sockets: socketList } = strayTraffic(seen, {
     base: where.base,
     dev: where.dev,
+    previews: [where.preview],
     ...allowed(where.sid, where.id),
   });
   kit.check(
@@ -310,6 +321,13 @@ const run = async (kit: Kit) => {
     return;
   }
   const base = await fleet.dashboard();
+  // The session's own preview origin, as the hub names it (port mode).
+  const { port: previewPort } = (await (
+    await fetch(`${fleet.base}/api/instances/${session}/preview-address`, {
+      method: "POST",
+    })
+  ).json()) as { port: number };
+  const preview = `http://127.0.0.1:${previewPort}`;
 
   // ── The page artifact's tab ───────────────────────────────────────────
   const tab = await kit.page("desk");
@@ -405,6 +423,7 @@ const run = async (kit: Kit) => {
     dev: false,
     id: pageId,
     kind: "page",
+    preview,
     sid: session,
   });
 
@@ -444,6 +463,7 @@ const run = async (kit: Kit) => {
     dev: false,
     id: canvasId,
     kind: "canvas",
+    preview,
     sid: session,
   });
 
@@ -476,7 +496,14 @@ const run = async (kit: Kit) => {
       strays.length === 0,
       `${strays.slice(0, 8).join(", ") || "none"} of ${devSeen.scripts.length} modules`
     );
-    onlyItsOwn(kit, devSeen, { base: dev, dev: true, id, kind, sid: session });
+    onlyItsOwn(kit, devSeen, {
+      base: dev,
+      dev: true,
+      id,
+      kind,
+      preview,
+      sid: session,
+    });
   }
 };
 

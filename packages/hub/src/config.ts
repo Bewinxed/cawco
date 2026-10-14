@@ -7,8 +7,38 @@ export const HUB_VERSION = standalone ? runtimeVersion : "0.1.0";
 
 export const HUB_PORT = Number(readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT);
 
-export const PREVIEW_PORT =
-  Number(readEnv(CAWCO_ENV.previewPort)) || HUB_PORT + 1;
+/** The address the hub and its preview listeners bind (`HOST`): every interface unless set. */
+export const BIND_HOST = process.env.HOST ?? "0.0.0.0";
+
+const PORT_RANGE = /^(\d+)-(\d+)$/;
+
+/**
+ * The ports preview listeners take (`CAWCO_PREVIEW_PORTS`, `first-last`):
+ * by default the hundred after the hub's own. A value that is not a range
+ * of ports stops the hub at start, in so many words.
+ */
+export const PREVIEW_PORTS = (() => {
+  const raw = readEnv(CAWCO_ENV.previewPorts);
+  if (!raw) {
+    return { first: HUB_PORT + 1, last: HUB_PORT + 100 };
+  }
+  const [, first, last] = raw.trim().match(PORT_RANGE) ?? [];
+  const range = { first: Number(first), last: Number(last) };
+  if (
+    !(first && last) ||
+    range.first < 1 ||
+    range.last > 65_535 ||
+    range.first > range.last
+  ) {
+    throw new Error(
+      `${CAWCO_ENV.previewPorts} is "${raw}": it takes a range of ports, like 3457-3556.`
+    );
+  }
+  return range;
+})();
+
+/** The range as the person reads it: `3457–3556`. */
+export const PREVIEW_PORTS_TEXT = `${PREVIEW_PORTS.first}–${PREVIEW_PORTS.last}`;
 
 /**
  * How long a spawn the hub waits on (a continuation's sessions, a

@@ -20,6 +20,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { freePortRange, PREVIEW_PORTS } from "./scratch-fleet";
 
 /** A dummy in Telegram's token shape. Never a real credential. */
 const TOKEN = "123456:PROBE-NOT-A-TOKEN";
@@ -183,7 +184,7 @@ const run = async (root: string) => {
 
   // ── The hub, booted the way its service runs it ──────────────────────────
   const port = await freePort();
-  const previewPort = await freePort();
+  const previewPorts = await freePortRange(PREVIEW_PORTS);
   const hub = Bun.spawn(
     [process.execPath, join(root, "packages/hub/src/index.ts")],
     {
@@ -191,7 +192,7 @@ const run = async (root: string) => {
       env: {
         ...env,
         CAWCO_HUB_PORT: String(port),
-        CAWCO_PREVIEW_PORT: String(previewPort),
+        CAWCO_PREVIEW_PORTS: previewPorts,
         CAWCO_TELEGRAM_TOKEN: TOKEN,
         CAWCO_TELEGRAM_API: `http://127.0.0.1:${telegram.port}`,
       },

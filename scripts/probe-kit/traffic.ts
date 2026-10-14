@@ -99,11 +99,14 @@ export const strayTraffic = (
   where: {
     base: string;
     dev: boolean;
+    /** The preview origins the tab shows: anything on one is the preview's own. */
+    previews?: string[];
     requests: RegExp[];
     sockets: RegExp[];
   }
 ): { sockets: string[]; strays: string[] } => {
   const { origin } = new URL(where.base);
+  const previews = new Set(where.previews ?? []);
   const requests = [
     BUILD_FILE,
     ...where.requests,
@@ -113,18 +116,20 @@ export const strayTraffic = (
   const strayRequests = seen.requests
     .filter(
       (one) =>
-        !one.framed &&
+        !(one.framed || previews.has(one.origin)) &&
         (one.origin !== origin || !requests.some((rule) => rule.test(one.line)))
     )
     .map((one) =>
       one.origin === origin ? one.line : `${one.origin}${one.line}`
     );
   const straySockets = seen.sockets
-    .filter(
-      (one) =>
-        one.origin.replace(WS_SCHEME, "http") !== origin ||
-        !sockets.some((rule) => rule.test(one.line))
-    )
+    .filter((one) => {
+      const at = one.origin.replace(WS_SCHEME, "http");
+      return (
+        !previews.has(at) &&
+        (at !== origin || !sockets.some((rule) => rule.test(one.line)))
+      );
+    })
     .map((one) => `WS ${one.line}`);
   return {
     strays: [...new Set([...strayRequests, ...straySockets])],

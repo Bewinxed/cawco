@@ -38,21 +38,66 @@ export interface CacheInvalidatedFrame {
 export interface PreviewFrame {
   /** The artifact the session's panel shows (Projects spec §5.10). */
   artifact: { id: string; kind: ArtifactKind; name: string };
+  host?: string;
   instanceId: string;
   kind: "preview";
-  /** The path on the dashboard's own origin, e.g. `/preview/<id>/`. */
-  path: string;
   /**
-   * The hub's preview listener, on the hub's host: a client that is not a
-   * page (the Apple app) loads the preview from its root, naming the session
-   * in a `cawco-preview` cookie where the dashboard sends `x-cawco-preview`.
+   * Where the preview is its own origin, never the dashboard's: the session's
+   * preview listener's port on the host the client reached the hub by (port
+   * mode), or its own host name (host mode, `name[:port]`, from the fleet's
+   * pattern). Exactly one is set ({@link PreviewAddress}).
    */
-  port: number;
+  port?: number;
   /** Identifies one successful open, including a rebuild of the same source. */
   revision: string;
   source?: PreviewSource;
   state: "open" | "closed";
 }
+
+/** A session's preview origin, as the hub reports it: a port on the hub's host, or a host name of its own. */
+export type PreviewAddress = { port: number } | { host: string };
+
+/**
+ * The origin a client loads a session's previews from: in port mode the
+ * host it reached the hub or dashboard by (`at`), on the preview's port; in
+ * host mode the preview's own host, on `at`'s scheme.
+ */
+export const previewOrigin = (
+  address: { host?: string; port?: number },
+  at: { hostname: string; protocol: string }
+): string | null => {
+  if (address.host) {
+    return `${at.protocol}//${address.host}`;
+  }
+  if (address.port) {
+    const host = at.hostname.includes(":") ? `[${at.hostname}]` : at.hostname;
+    return `${at.protocol}//${host}:${address.port}`;
+  }
+  return null;
+};
+
+/** The one path a preview origin answers with CORS and no credentials: the dashboard's reachability probe. */
+export const PREVIEW_PING_PATH = "/__cawco/ping";
+
+/**
+ * The dashboard's own cookies, by name: every one it sets is `cawco-…`,
+ * `__Host-`-prefixed where the scheme allows. A preview listener shares the
+ * dashboard's host in port mode, and cookies are not isolated by port (RFC
+ * 6265 §8.5), so it strips these from what the previewed app is sent and
+ * drops any the app tries to set.
+ */
+export const DASHBOARD_COOKIE = /^(?:__Host-)?cawco-/;
+
+/**
+ * How previews are reached, fleet-wide (Settings › Previews, Caw's
+ * `admin_previews_write`): `port`, one port per session from the hub's range,
+ * which needs no setup; or `host`, a host name per session from `pattern`
+ * (`{session}` stands for the session's id), for a fleet behind DNS or a
+ * proxy that routes them to the hub's first preview port.
+ */
+export type PreviewSettings =
+  | { mode: "port"; ports: string }
+  | { mode: "host"; pattern: string; ports: string };
 
 /**
  * The socket an artifact's own tab (the dashboard's `/artifact/<id>`) follows

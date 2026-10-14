@@ -14,9 +14,9 @@ import { Doc } from "yjs";
  * picks and pins the session has not heard, which Send N sends, and the
  * pins' threads, which the pane's list and card read and the person writes
  * (a reply, resolve, reopen, delete). The page in the pane joins the same doc itself
- * (the overlay), which writes its picks and places its pins. Joined through
- * the preview listener's sync endpoint (`/__cawco/artifact/<id>`) under the
- * dashboard's `/preview/<id>/` proxy, which names the session.
+ * (the overlay), on its own preview origin, which writes its picks and
+ * places its pins; the pane joins it on the dashboard's origin, through the
+ * hub's `/ws/artifact/<session>/<artifact>`.
  */
 
 /**
@@ -65,25 +65,29 @@ const viewOf = (doc: Doc): ArtifactView => {
   };
 };
 
-/** The doc's path on the dashboard's origin, under the preview's own prefix (`base`, the frame's `path`). */
-export const artifactSyncPath = (base: string, artifactId: string): string =>
-  `${base}__cawco/artifact/${artifactId}`;
+/** Where the page itself joins the doc: the path on its own preview origin, which the hello names. */
+export const artifactSyncPath = (artifactId: string): string =>
+  `/__cawco/artifact/${artifactId}`;
 
 /**
  * The person sends (the head's Send N): the session hears it has new
- * responses to read, with the pins' pictures, through the listener's send
- * beside the doc's socket, the path a page's `cawco.send` takes.
+ * responses to read, with the pins' pictures, through the hub's send on the
+ * dashboard's own origin, the one a page's `cawco.send` reaches on its
+ * preview origin.
  */
 export async function sendArtifact(
-  base: string,
+  instanceId: string,
   artifactId: string,
   body: SendBody
 ): Promise<void> {
-  const response = await fetch(`${artifactSyncPath(base, artifactId)}/send`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const response = await fetch(
+    `/api/instances/${encodeURIComponent(instanceId)}/artifacts/${encodeURIComponent(artifactId)}/send`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }
+  );
   if (!response.ok) {
     throw new Error(
       (await response.text()) || "The hub didn't take the send. Send again."
@@ -92,15 +96,16 @@ export async function sendArtifact(
 }
 
 export function joinArtifact(
-  base: string,
+  instanceId: string,
   artifactId: string,
   changed: (view: ArtifactView) => void
 ): ArtifactDoc {
   const doc = new Doc();
   doc.on("update", () => changed(viewOf(doc)));
-  const path = artifactSyncPath(base, artifactId);
+  // The hub's `/ws/artifact/<session>/<artifact>`, through the dashboard's
+  // own `/ws` relay: never the preview's origin, which is the page's.
   const provider = new WebsocketProvider(
-    `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}${path.slice(0, path.lastIndexOf("/"))}`,
+    `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/artifact/${encodeURIComponent(instanceId)}`,
     artifactId,
     doc,
     { disableBc: true, resyncInterval: RESYNC_MS }

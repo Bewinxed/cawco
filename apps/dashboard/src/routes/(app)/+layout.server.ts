@@ -1,5 +1,6 @@
 import type { InstanceRow, WorkflowListing, WorkflowRun } from "@cawco/core";
 import { type HubRead, readHub } from "#lib/cawco/hub-read.js";
+import { type Pref, prefCookie } from "#lib/cawco/prefs.js";
 import { runIdOf } from "#lib/cawco/workflow-runs.js";
 import type { LayoutServerLoad } from "./$types";
 
@@ -158,16 +159,17 @@ export const load: LayoutServerLoad = async ({
   untrack,
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: first-paint reconciliation of the workspace cookie against the URL — one pass, not split in this pass
 }) => {
-  const narrow = narrowOf(cookies.get(NARROW_KEY), request.headers);
-  const stored = Number(cookies.get(RAIL_KEY));
+  const pref = (name: Pref) => cookies.get(prefCookie(name, url));
+  const narrow = narrowOf(pref(NARROW_KEY), request.headers);
+  const stored = Number(pref(RAIL_KEY));
   const railWidth =
     Number.isFinite(stored) && stored > 0
       ? Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(stored)))
       : RAIL_DEFAULT;
 
-  let workspace = parse(cookies.get(WORKSPACE_KEY));
+  let workspace = parse(pref(WORKSPACE_KEY));
   if (workspace) {
-    workspace.ctx = parseCtx(cookies.get(WORKSPACE_CTX_KEY));
+    workspace.ctx = parseCtx(pref(WORKSPACE_CTX_KEY));
   }
 
   // Untrack URL access: a switch between conversations is a shallow pushState

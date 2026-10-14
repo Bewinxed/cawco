@@ -61,8 +61,7 @@ export async function overlayResponse(): Promise<Response> {
 /**
  * What a proxy's own page says of each hop that did not answer (WORDS.md
  * error formula: what happened, why, the way back); a preview of a workspace
- * no boundary runs is refused in its words too. The dashboard's own servers
- * (serve.js, vite.config.ts) say `hub` in the same words.
+ * no boundary runs is refused in its words too.
  */
 export const DOWN_WORDS: Record<PreviewDown, string> = {
   server: "The page's server stopped answering. Start it again, then reload.",
@@ -74,7 +73,6 @@ export const DOWN_WORDS: Record<PreviewDown, string> = {
     "The way to this preview's server didn't open. Reload to try again; if it fails again, open its session.",
   closed:
     "This preview is closed: its session shows something else now, or has ended. Open its session to show it again.",
-  hub: "The hub isn't answering, so the preview can't load. Reload once the hub is back.",
 };
 
 const HTML_ESCAPES: Record<string, string> = {
@@ -91,7 +89,10 @@ const escapeHtml = (text: string): string =>
  * so to a person who opened it in a tab of its own, and names the hop in
  * its `<meta name="cawco-preview-down">` for the pane, which draws its own
  * state from that ({@link PreviewDown}); `why`, the machine's own words for
- * it, goes in `<meta name="cawco-preview-why">` and under the sentence.
+ * it, goes in `<meta name="cawco-preview-why">` and under the sentence. The
+ * pane, on the dashboard's origin, cannot read a preview origin's document,
+ * so the page also posts both to its parent as `cawco:down`: nothing in it is
+ * the page's, so any parent may hear it.
  */
 export function downResponse(
   down: PreviewDown,
@@ -102,8 +103,15 @@ export function downResponse(
     ? `<meta name="${PREVIEW_WHY_META}" content="${escapeHtml(why)}">`
     : "";
   const detail = why ? `<p>${escapeHtml(why)}</p>` : "";
+  // `<` as its escape, so nothing in `why` can close the script.
+  const message = JSON.stringify({
+    type: "cawco:down",
+    down,
+    why: why ?? null,
+  }).replaceAll("<", "\\u003c");
+  const tell = `<script>if(window.parent!==window)window.parent.postMessage(${message},"*")</script>`;
   return new Response(
-    `<!doctype html><html><head><meta charset="utf-8"><meta name="${PREVIEW_DOWN_META}" content="${down}">${said}<title>Preview unavailable</title></head><body><p>${DOWN_WORDS[down]}</p>${detail}</body></html>`,
+    `<!doctype html><html><head><meta charset="utf-8"><meta name="${PREVIEW_DOWN_META}" content="${down}">${said}<title>Preview unavailable</title></head><body><p>${DOWN_WORDS[down]}</p>${detail}${tell}</body></html>`,
     {
       status,
       headers: {

@@ -22,6 +22,7 @@
   } from "#lib/cawco/motion/curves.svelte.js";
   import { pageIn, pageOut, route } from "#lib/cawco/motion/route.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import { keepPrefs } from "#lib/cawco/prefs.js";
   import { gridView } from "#lib/cawco/workspace/grid-view.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
@@ -135,9 +136,9 @@
   /**
    * Remember the width the reader settled on. Runs once, when they let go.
    *
-   * Separated from showing it because these two writes are not cheap where it
-   * matters: both localStorage and `document.cookie` are synchronous, and in
-   * WebKit both are a round trip to another process. Doing them per
+   * Separated from showing it because these writes are not cheap where it
+   * matters: localStorage is synchronous, in WebKit a round trip to another
+   * process, and the server's copy is a request. Doing them per
    * `pointermove` — 120 a second on an iPad — is what made dragging this
    * handle unusable on one, while staying fast enough on a desktop to hide.
    * The width is a preference; it is worth storing when it stops changing,
@@ -146,11 +147,11 @@
   function rememberRail() {
     try {
       localStorage.setItem(RAIL_KEY, String(railWidth));
-      // biome-ignore lint/suspicious/noDocumentCookie: +layout.server.ts reads this same cookie for the SSR-resolved rail width; the Cookie Store API is unavailable in every browser this app supports
-      document.cookie = `${RAIL_KEY}=${railWidth};path=/;max-age=31536000;samesite=lax`;
     } catch {
       // A browser that will not store just starts at the default next time.
     }
+    // +layout.server.ts renders the first paint at this width (prefs.ts).
+    keepPrefs({ "cawco-rail-width": String(railWidth) });
   }
 
   /** Both, for the callers that change the width one step at a time. */
@@ -528,12 +529,10 @@
   };
 
   $effect(() => {
-    // The Cookie Store API is async and unsupported in Safari; this write must
-    // land synchronously before the next SSR request reads it back. Written
-    // here, on every route, so the server's answer is the one the page last
-    // used, orientation included — `/config` decides list-or-section by it.
-    // biome-ignore lint/suspicious/noDocumentCookie: needs the synchronous write; Cookie Store API is async and Safari lacks it
-    document.cookie = `cawco-narrow=${narrow ? 1 : 0};path=/;max-age=31536000;samesite=lax`;
+    // Kept for the server's next render (prefs.ts), on every route, so its
+    // answer is the one the page last used, orientation included — `/config`
+    // decides list-or-section by it.
+    keepPrefs({ "cawco-narrow": narrow ? "1" : "0" });
   });
   /** The groups whose tabs the bar carries, once the session has shown, on any route: those along the workspace's top edge. */
   const barLeaves = $derived(surfaceMounted && !narrow ? gridView.tops : []);

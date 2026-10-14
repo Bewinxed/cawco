@@ -320,17 +320,11 @@ export class Run {
         });
         return Object.assign(fleet, {
           dashboard: () => {
-            served ??= this.build().then(() =>
-              serve("preview", fleet.base, {
-                CAWCO_PREVIEW_PORT: fleet.env.CAWCO_PREVIEW_PORT ?? "",
-              })
-            );
+            served ??= this.build().then(() => serve("preview", fleet.base));
             return served.then((s) => s.base);
           },
           devDashboard: () => {
-            servedDev ??= serve("dev", fleet.base, {
-              CAWCO_PREVIEW_PORT: fleet.env.CAWCO_PREVIEW_PORT ?? "",
-            });
+            servedDev ??= serve("dev", fleet.base);
             return servedDev.then((s) => s.base);
           },
         });

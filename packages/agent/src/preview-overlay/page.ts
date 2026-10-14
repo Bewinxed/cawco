@@ -23,7 +23,7 @@ import type { InkGroup } from "@cawco/core/ink";
 import { domToPng } from "modern-screenshot";
 import type { Map as YMap } from "yjs";
 import { artifact, type Link, NO_ARTIFACT, type State } from "./artifact";
-import { here, mark, prefix } from "./boot";
+import { here, mark } from "./boot";
 import { fillFields, trackFields } from "./fields";
 import {
   deepElementAt,
@@ -35,6 +35,7 @@ import {
   rectOf,
   watchFrames,
 } from "./frames";
+import { heardFromHost, toHost } from "./host-origin";
 import { startInk } from "./ink";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
 import { type Pins, startPins } from "./pins";
@@ -158,25 +159,8 @@ watchFrames(framesChanged);
 // A frame inside, whose own overlay stood down, says when its history moved it in place.
 mark.frameChanged = framesChanged;
 
-/** Strip the preview prefix from a URL so the pane shows the app's own path. */
-function stripPrefix(href: string): string {
-  if (!prefix) {
-    return href;
-  }
-  try {
-    const u = new URL(href);
-    if (u.pathname.startsWith(prefix)) {
-      u.pathname = `/${u.pathname.slice(prefix.length)}`;
-    }
-    return u.toString();
-  } catch {
-    return href;
-  }
-}
-
 function post(type: string, payload: object = {}) {
-  // The pane serves this page at /preview/<id>/ on its own origin.
-  window.parent.postMessage({ type, ...payload }, location.origin);
+  toHost({ type, ...payload });
 }
 
 /** The doc's link to the hub, to the host (`cawco:sync`): connecting, synced or lost, and why it was lost. */
@@ -189,7 +173,7 @@ function tellLink(link: Link) {
 
 function ready() {
   post("cawco:ready", {
-    url: stripPrefix(location.href),
+    url: location.href,
     title: document.title,
   });
 }
@@ -355,7 +339,7 @@ const kept = (node: Node): boolean =>
     node.getAttribute("src") === "/__cawco/overlay.js");
 
 /** Where the page is served: the root of its own address. */
-const pageUrl = () => new URL(prefix || "/", location.origin);
+const pageUrl = () => new URL("/", location.origin);
 
 let fetching = false;
 let fetchAgain = false;
@@ -470,10 +454,7 @@ const asking = new Map<number, (result: unknown) => void>();
 function askHost(method: string, params: object): Promise<unknown> {
   const id = nextAsk;
   nextAsk += 1;
-  window.parent.postMessage(
-    { jsonrpc: "2.0", id, method, params },
-    location.origin
-  );
+  toHost({ jsonrpc: "2.0", id, method, params });
   return new Promise((resolve) => asking.set(id, resolve));
 }
 
@@ -564,7 +545,7 @@ Object.defineProperty(window, "cawco", {
 
 function navigated() {
   post("cawco:navigated", {
-    url: stripPrefix(location.href),
+    url: location.href,
     title: document.title,
   });
 }
@@ -854,7 +835,7 @@ function describe(el: Element): PinnedElement {
     page: { x: x + scrollX, y: y + scrollY },
     styles,
     source: sourceOf(el),
-    url: stripPrefix(el.ownerDocument.location.href),
+    url: el.ownerDocument.location.href,
   };
 }
 
@@ -1170,7 +1151,7 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     "cawco:send-pictures": async (message) =>
       post("cawco:send-pictures", {
         ask: message.ask,
-        url: stripPrefix(location.href),
+        url: location.href,
         pictures: await sendPictures(),
       }),
     "cawco:capture": async () =>
@@ -1182,7 +1163,7 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
   };
 
 window.addEventListener("message", async (event) => {
-  if (event.source !== window.parent || event.origin !== location.origin) {
+  if (!heardFromHost(event)) {
     return;
   }
   const message = event.data as HostMessage | null;

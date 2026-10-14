@@ -55,6 +55,7 @@ import {
   Map as YMap,
 } from "yjs";
 import type { ArtifactHold } from "../preview-overlay/artifact";
+import { toHost } from "../preview-overlay/host-origin";
 import { clock, progressOf, tokenMs } from "./motion";
 import { HOLD_PX, seenByDoc, snapToShape, swapView } from "./snap";
 
@@ -548,10 +549,7 @@ const tellDrawn = (live: Doc): (() => void) => {
       ).length;
     if (count !== told) {
       told = count;
-      window.parent.postMessage(
-        { type: "cawco:drawn", count },
-        location.origin
-      );
+      toHost({ type: "cawco:drawn", count });
     }
   };
   elements.observeDeep(tell);

@@ -631,9 +631,11 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
         // boot migration (see packages/hub/src/index.ts) carries an existing
         // in-tree database there the first time it finds one.
         [CAWCO_ENV.dbPath]: DEFAULT_DB_PATH, // ~/.local/share/cawco or ~/Library/Application Support/cawco
-        [CAWCO_ENV.previewPort]:
-          readEnv(CAWCO_ENV.previewPort) ??
-          String(Number(readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT) + 1),
+        // Its preview listeners' ports: the operator's range, else the
+        // hundred after the hub's own (hub config.ts `PREVIEW_PORTS`).
+        ...(readEnv(CAWCO_ENV.previewPorts)
+          ? { [CAWCO_ENV.previewPorts]: readEnv(CAWCO_ENV.previewPorts) }
+          : {}),
       },
       workingDirectory: LAYOUT_ROOT,
       after: ["network-online.target"],
@@ -652,9 +654,6 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       command: layout.dashboard.command,
       environment: {
         [CAWCO_ENV.hubUrl]: readEnv(CAWCO_ENV.hubUrl) ?? hubOrigin(),
-        [CAWCO_ENV.previewPort]:
-          readEnv(CAWCO_ENV.previewPort) ??
-          String(Number(readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT) + 1),
       },
       // serve.js collects this socket by name and never binds the port itself,
       // so a deploy's restart leaves the port open the whole time.

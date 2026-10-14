@@ -160,9 +160,9 @@ final class PenSwipeRecognizer: UIPanGestureRecognizer {
 // MARK: The page
 
 /// The canvas's page in a web view of its own, configured as the preview's
-/// (PreviewController): a non-persistent store holding only this session's
-/// `cawco-preview` cookie, and the host script standing in for the
-/// dashboard's window, so the page's overlay posts to the app and hears it.
+/// (PreviewController): a non-persistent store, loaded from its session's own
+/// preview origin, and the host script standing in for the dashboard's
+/// window, so the page's overlay posts to the app and hears it.
 @MainActor
 final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, UIPencilInteractionDelegate {
     let page: CanvasPage
@@ -277,23 +277,12 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         hasSynced = false
         lostSince = nil
         drawn = nil
-        guard let cookie = HTTPCookie(properties: [
-            .name: "cawco-preview", .value: instanceId, .domain: page.origin.host() ?? "", .path: "/",
-        ]) else {
-            onFailed("The canvas's address can't carry its session.")
-            return
-        }
-        let web = web
+        // Its session's own preview origin names the session: nothing else rides with the load.
         let url = page.url
         #if DEBUG
-        CanvasDebug.log.notice("canvas page sets its cookie for \(url.absoluteString, privacy: .public), domain \(cookie.domain, privacy: .public)")
+        CanvasDebug.log.notice("canvas page loads \(url.absoluteString, privacy: .public)")
         #endif
-        web.configuration.websiteDataStore.httpCookieStore.setCookie(cookie, completionHandler: {
-            #if DEBUG
-            CanvasDebug.log.notice("canvas page loads \(url.absoluteString, privacy: .public)")
-            #endif
-            web.load(URLRequest(url: url))
-        })
+        web.load(URLRequest(url: url))
     }
 
     /// Lets go of the page: its waiters hear it, its handler goes.

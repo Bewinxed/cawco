@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import http from "node:http";
+import type http from "node:http";
 import { join } from "node:path";
+import { BROWSER_HEADERS, crossSiteRefusal } from "@cawco/core/browser-gate";
 import adapter from "@sveltejs/adapter-node";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
@@ -13,48 +14,6 @@ import {
   type PreviewServer,
   type ViteDevServer,
 } from "vite";
-
-const PREVIEW_PREFIX = /^\/preview\/([^/]+)\/[^/]+\//;
-
-/**
- * Extract a preview instance id from a path or Referer header. Returns
- * `{ id, stripped, viaReferer }` or null.
- */
-function previewMatch(req: http.IncomingMessage): {
-  id: string;
-  stripped: string;
-  prefix: string;
-  viaReferer: boolean;
-} | null {
-  const url = req.url ?? "";
-  const match = url.match(PREVIEW_PREFIX);
-  if (match) {
-    return {
-      id: decodeURIComponent(match[1]),
-      stripped: url.slice(match[0].length - 1),
-      prefix: match[0].slice(0, -1),
-      viaReferer: false,
-    };
-  }
-  const { referer } = req.headers;
-  if (referer) {
-    try {
-      const refUrl = new URL(referer);
-      const refMatch = refUrl.pathname.match(PREVIEW_PREFIX);
-      if (refMatch) {
-        return {
-          id: decodeURIComponent(refMatch[1]),
-          stripped: url,
-          prefix: refMatch[0].slice(0, -1),
-          viaReferer: true,
-        };
-      }
-    } catch {
-      // malformed referer
-    }
-  }
-  return null;
-}
 
 /**
  * The hub a vite server (`vite dev`, `vite preview`) talks to: the one named in
@@ -99,14 +58,10 @@ const INLINE_FACES =
   /\/(?:figtree-latin-wght-normal|jetbrains-mono-latin-wght-normal)\.woff2$/;
 
 /**
- * Proxies the dashboard's `/preview/` paths to the hub, on `vite dev` and on
- * `vite preview` (the built dashboard the probes drive) alike, as serve.js
- * does in production. The hub's `/ws` socket goes through `server.proxy`
- * below.
- *
- * Preview requests (`/preview/<id>/…` and Referer-routed root-absolute
- * fetches, and their WebSockets: a dev server's HMR, an artifact's document)
- * are forwarded to the hub's preview listener on `CAWCO_PREVIEW_PORT`.
+ * The vite servers' (`vite dev`, and `vite preview`, the built dashboard the
+ * probes drive) hold on the hub: a server refuses to start without its own
+ * (`devHub`), and the hub's `/ws` socket goes through `server.proxy` below.
+ * Previews are never served here: each is an origin of its own.
  *
  * Also the whole fix for a stray upgrade killing the server: `http.Server`
  * drops a socket's error handling the moment it emits `upgrade`, so an upgrade
@@ -114,144 +69,63 @@ const INLINE_FACES =
  * process-level throw. Attaching an error listener to every upgrade socket keeps
  * that reset from taking the server (and every dashboard socket) down with it.
  */
-/** The page a preview gets when the hub's listener does not answer, as serve.js answers it. */
-const HUB_DOWN_PAGE =
-  '<!doctype html><html><head><meta charset="utf-8"><meta name="cawco-preview-down" content="hub"><title>Preview unavailable</title></head><body><p>The hub isn\'t answering, so the preview can\'t load. Reload once the hub is back.</p></body></html>';
-
 const hubProxy = (): Plugin => ({
   name: "cawco:hub-proxy",
   configurePreviewServer(server) {
-    previewProxy(server);
+    holdUpgrades(server);
   },
   configureServer(server) {
-    previewProxy(server);
+    holdUpgrades(server);
   },
 });
 
-function previewProxy(server: ViteDevServer | PreviewServer) {
-  const HUB_URL = devHub();
-  const hubPort = Number(HUB_URL.port || 80);
-  const pvPort = Number(process.env.CAWCO_PREVIEW_PORT || hubPort + 1);
+function holdUpgrades(server: ViteDevServer | PreviewServer) {
+  devHub();
 
-  // HTTP middleware: intercept preview requests before Vite/SvelteKit.
-  server.middlewares.use((req, res, next) => {
-    const info = previewMatch(req);
-    if (!info) {
-      return next();
-    }
-    // A Referer-routed read gets a 302 back under the prefix, so the URL
-    // the browser holds for it carries the prefix and so does the Referer
-    // of whatever it loads in turn, and it is never stored (serve.js,
-    // Preview routing).
-    if (info.viaReferer && (req.method === "GET" || req.method === "HEAD")) {
-      const { prefix } = info;
-      res.writeHead(302, {
-        location: `${prefix}${req.url}`,
-        "cache-control": "no-store",
-      });
-      res.end();
-      return;
-    }
-    const options: http.RequestOptions = {
-      hostname: HUB_URL.hostname,
-      port: pvPort,
-      path: info.stripped,
-      method: req.method,
-      headers: {
-        ...req.headers,
-        host: `${HUB_URL.hostname}:${pvPort}`,
-        "x-cawco-preview": info.id,
-      },
-    };
-    const pvPrefix = info.prefix;
-    const proxyReq = http.request(options, (proxyRes) => {
-      // Includes upstream errors: no preview response or validator is reusable.
-      proxyRes.headers["cache-control"] = "no-store";
-      for (const name of ["etag", "last-modified", "expires"]) {
-        delete proxyRes.headers[name];
-      }
-      // A root-absolute Location must stay under the prefix so the browser
-      // does not leave /preview/<id>/ on a redirect.
-      const { location } = proxyRes.headers;
-      if (
-        typeof location === "string" &&
-        location.startsWith("/") &&
-        !location.startsWith(pvPrefix)
-      ) {
-        proxyRes.headers.location = `${pvPrefix}${location}`;
-      }
-      res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
-      proxyRes.pipe(res);
-    });
-    proxyReq.on("error", (error: NodeJS.ErrnoException) => {
-      server.config.logger.warn(
-        `[preview] dashboard: preview of ${info.id} failed: the hub's preview listener at ${HUB_URL.hostname}:${pvPort} didn't answer (${error.code ?? error.message})`,
-        { timestamp: true }
-      );
-      if (res.headersSent) {
-        res.end();
-        return;
-      }
-      res.writeHead(502, {
-        "cache-control": "no-store",
-        "content-type": "text/html; charset=utf-8",
-      });
-      res.end(HUB_DOWN_PAGE);
-    });
-    req.pipe(proxyReq);
-  });
-
-  server.httpServer?.on("upgrade", (req, socket, head) => {
+  server.httpServer?.on("upgrade", (req, socket) => {
     socket.on("error", (error: NodeJS.ErrnoException) => {
       server.config.logger.warn(
         `[cawco] websocket socket error on ${req.url}: ${error.code ?? error.message}`,
         { timestamp: true }
       );
     });
-
-    // Preview WebSocket: /preview/<id>/…
-    const info = previewMatch(req);
-    if (info) {
-      const proxyReq = http.request({
-        host: HUB_URL.hostname,
-        port: pvPort,
-        path: info.stripped,
-        method: req.method,
-        headers: {
-          ...req.headers,
-          host: `${HUB_URL.hostname}:${pvPort}`,
-          "x-cawco-preview": info.id,
-        },
-      });
-      proxyReq.on("upgrade", (proxyRes, proxySocket, proxyHead) => {
-        const lines = ["HTTP/1.1 101 Switching Protocols"];
-        for (let i = 0; i < proxyRes.rawHeaders.length; i += 2) {
-          lines.push(
-            `${proxyRes.rawHeaders[i]}: ${proxyRes.rawHeaders[i + 1]}`
-          );
-        }
-        socket.write(`${lines.join("\r\n")}\r\n\r\n`);
-        if (proxyHead?.length) {
-          socket.write(proxyHead);
-        }
-        if (head?.length) {
-          proxySocket.write(head);
-        }
-        proxySocket.pipe(socket).pipe(proxySocket);
-        proxySocket.on("error", () => socket.destroy());
-        socket.on("error", () => proxySocket.destroy());
-      });
-      proxyReq.on("error", (error: NodeJS.ErrnoException) => {
-        server.config.logger.warn(
-          `[preview] dashboard: preview of ${info.id} failed: its WebSocket to the hub's preview listener didn't open (${error.code ?? error.message})`,
-          { timestamp: true }
-        );
-        socket.destroy();
-      });
-      proxyReq.end();
-    }
   });
 }
+
+/**
+ * `server.proxy`'s `/ws` relay passes only this dashboard's own pages
+ * through (core `browser-gate.ts`, as serve.js does), and leaves out the
+ * page's origin headers it read: the hub behind it is not the page's origin.
+ */
+const gateHubSocket = (proxy: {
+  on: (
+    event: "proxyReqWs",
+    listener: (
+      proxyReq: http.ClientRequest,
+      req: http.IncomingMessage,
+      socket: { destroy: () => void }
+    ) => void
+  ) => void;
+}) => {
+  proxy.on("proxyReqWs", (proxyReq, req, socket) => {
+    const refused = crossSiteRefusal(
+      req.method ?? "GET",
+      (name) => {
+        const value = req.headers[name];
+        return Array.isArray(value) ? value[0] : value;
+      },
+      `${req.headers["x-forwarded-proto"] ?? "http"}://${req.headers.host}`
+    );
+    if (refused) {
+      console.warn(`[cawco] refused ${refused} to open ${req.url}`);
+      socket.destroy();
+      return;
+    }
+    for (const name of BROWSER_HEADERS) {
+      proxyReq.removeHeader(name);
+    }
+  });
+};
 
 /* The commit this build was made from. The build bakes it into the page and
    writes it to `_app/version.json`, which the running server answers as
@@ -395,7 +269,13 @@ export default defineConfig(({ command }) => {
       // The hub's live socket. REST /api is handled by SvelteKit's own route
       // (routes/api/[...path]).
       proxy: DEV_HUB
-        ? { "/ws": { target: new URL(DEV_HUB).origin, ws: true } }
+        ? {
+            "/ws": {
+              target: new URL(DEV_HUB).origin,
+              ws: true,
+              configure: gateHubSocket,
+            },
+          }
         : undefined,
     },
     /**

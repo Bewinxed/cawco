@@ -35,6 +35,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { toHost } from "../preview-overlay/host-origin";
 import { type Glyph, Icon } from "./icons";
 import { IMAGE_ACCEPT, placeImage, refusalOf } from "./images";
 
@@ -107,7 +108,7 @@ const perform = (
   if (kind === "tool") {
     api.setActiveTool({ type: what as Tool });
   } else if (kind === "host") {
-    window.parent.postMessage({ type: `cawco:${what}` }, location.origin);
+    toHost({ type: `cawco:${what}` });
   } else if (what === "in" || what === "out") {
     const zoom = api.getAppState().zoom.value;
     zoomTo(api, what === "in" ? zoom + ZOOM_STEP : zoom - ZOOM_STEP);

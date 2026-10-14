@@ -25,6 +25,7 @@
     "./keepers": "./src/keepers.ts",
     "./install-script": "./src/install-script.ts",
     "./preview-proxy": "./src/preview-proxy.ts",
+    "./browser-gate": "./src/browser-gate.ts",
     "./choices": "./src/choices.ts",
     "./canvas": "./src/canvas.ts",
     "./ink": "./src/ink.ts",

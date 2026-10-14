@@ -26,14 +26,12 @@
   };
 
   function receive(event: MessageEvent): void {
-    if (event.origin !== location.origin) {
-      return;
-    }
+    // A canvas's own frame, from its own preview origin: nothing else is heard.
     const stage = [...stages.values()].find(
       (one) => one.frame?.contentWindow === event.source
     );
     const type = event.data?.type;
-    if (!stage || typeof type !== "string") {
+    if (!stage || event.origin !== stage.origin || typeof type !== "string") {
       return;
     }
     const actions = stage.at ? stage.actions[stage.at] : undefined;
@@ -54,11 +52,12 @@
         break;
       case "cawco:ink":
         // The person's unsent ink on the canvas, which the composer's Send carries.
-        if (stage.frame?.contentWindow) {
+        if (stage.frame?.contentWindow && stage.origin) {
           heardInk(
             stage.instanceId,
             stage.id,
             stage.frame.contentWindow,
+            stage.origin,
             event.data
           );
         }
@@ -92,7 +91,7 @@
         watchInput(frame.contentWindow);
       }
     } catch {
-      // Same origin always; nothing to hear otherwise.
+      // Its own origin: its input is not ours to hear.
     }
     stage.hello();
   }
@@ -132,15 +131,19 @@
         stage.place();
       }}
     >
-      <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
-      <iframe
-        allow="clipboard-write"
-        onload={(event) =>
-          loaded(stage, event.currentTarget as HTMLIFrameElement)}
-        src={stage.src}
-        title="Canvas"
-        bind:this={stage.frame}
-      ></iframe>
+      {#if stage.src}
+        <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
+        <iframe
+          allow="clipboard-write"
+          onload={(event) =>
+            loaded(stage, event.currentTarget as HTMLIFrameElement)}
+          src={stage.src}
+          title="Canvas"
+          bind:this={stage.frame}
+        ></iframe>
+      {:else if stage.unreached}
+        <p class="unreached" role="alert">{stage.unreached}</p>
+      {/if}
       {#if stage.at === "composer" && stage.grab && stage.grabValue}
         {@render grip(stage, "top")}
         {@render grip(stage, "top-left")}
@@ -212,6 +215,13 @@
     height: 100%;
     border: 0;
     color-scheme: inherit;
+  }
+  /* The hub named no origin for it: its sentence, where the canvas would be. */
+  .unreached {
+    margin: 0;
+    padding: var(--space-4);
+    color: var(--data-bad);
+    font-size: var(--text-body);
   }
   .grabber {
     inline-size: 100px;
