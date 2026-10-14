@@ -402,10 +402,13 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
             hub.needs.parked.values.joined().filter { $0.threadId == id }
                 .sorted { ($0.raisedAt ?? .infinity, $0.requestId) < ($1.raisedAt ?? .infinity, $1.requestId) }
         } ?? []
-        let ids = Set(asks.map(\.requestId))
+        // One at a time (ThreadPane.svelte `firstAsk`): the first stands, "N of M", the rest counted.
+        let place = askRun.place(first: asks.first?.requestId, more: max(0, asks.count - 1))
+        let standing = asks.prefix(1)
+        let ids = Set(standing.map(\.requestId))
         for id in cards.keys where !ids.contains(id) { cards[id] = nil }
         var ordered: [UIView] = []
-        for ask in asks {
+        for ask in standing {
             let card = cards[ask.requestId] ?? {
                 let cap = (view.window?.bounds.height ?? view.bounds.height) * Size.cAskDiffShare
                 let made = PromptCardView(ask, arriving: shownOnce && composerBinding.composer != nil,
@@ -418,9 +421,10 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
                 return made
             }()
             card.update(sent: hub.needs.answerSent(for: ask), connected: hub.state == .connected)
+            if let place { card.setPlace(at: place.at, of: place.of, more: place.more) }
             #if DEBUG
             // The session pane's card line, for the same simulator passes (memory-proposal).
-            let said = "\(ask.requestId) on \(ask.machineId): \(card.probeState)"
+            let said = "\(ask.requestId) on \(ask.machineId): \(card.probeState) place \(card.probePlace)"
             if probeCards[ask.requestId] != said {
                 probeCards[ask.requestId] = said
                 Self.cards.notice("probe card \(said, privacy: .public)")
@@ -430,6 +434,9 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         }
         composerBinding.prompts = ordered
     }
+
+    /// Where the standing ask is among the ones answered here and still waiting.
+    private var askRun = AskRun()
 
     #if DEBUG
     /// What each card last said to a simulator pass's log.
@@ -591,7 +598,7 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         let notes = hub.threads.messages[threadId] ?? []
         let said = "probe thread \(threadId) status \(thread?.status.rawValue ?? "?") messages \(notes.count) ["
             + notes.map { "\($0.author):\($0.body.prefix(40).replacingOccurrences(of: "\n", with: " "))" }.joined(separator: " | ")
-            + "] asks [\(cards.keys.sorted().joined(separator: ","))] composer \(writable ? "on" : "off")"
+            + "] asks [\(cards.keys.sorted().joined(separator: ","))] place \(cards.values.first?.probePlace ?? "none") composer \(writable ? "on" : "off")"
         guard said != probed else { return }
         probed = said
         Self.log.notice("\(said, privacy: .public)")

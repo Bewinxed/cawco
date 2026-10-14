@@ -1062,12 +1062,17 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     /// comes in while the session is on screen settles in, and one the hub
     /// has settled leaves. Each is answered on the machine its envelope
     /// named, so one no session row stands behind answers too.
+    /// One ask at a time (SessionPane.svelte `firstAsk`): the first waiting
+    /// stands on the composer, "N of M" in its head, the rest counted; the
+    /// next moves in as it is answered.
     private func syncCards() {
         let parked = madeAsks
-        let ids = Set(parked.map(\.requestId))
+        let place = askRun.place(first: parked.first?.requestId, more: max(0, parked.count - 1))
+        let standing = parked.prefix(1)
+        let ids = Set(standing.map(\.requestId))
         for id in cards.keys where !ids.contains(id) { cards[id] = nil }
         var ordered: [UIView] = []
-        for ask in parked {
+        for ask in standing {
             let card = cards[ask.requestId] ?? {
                 // Each change stands at most the token's share of the screen, scrolling inside.
                 let cap = (view.window?.bounds.height ?? view.bounds.height) * Size.cAskDiffShare
@@ -1081,8 +1086,9 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
                 return made
             }()
             card.update(sent: hub.needs.answerSent(for: ask), connected: hub.state == .connected)
+            if let place { card.setPlace(at: place.at, of: place.of, more: place.more) }
             #if DEBUG
-            let said = "\(ask.requestId) on \(ask.machineId): \(card.probeState)"
+            let said = "\(ask.requestId) on \(ask.machineId): \(card.probeState) place \(card.probePlace)"
             if probeCards[ask.requestId] != said {
                 probeCards[ask.requestId] = said
                 Self.restoring.notice("probe card \(said, privacy: .public)")
@@ -1093,11 +1099,14 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         composerBinding.prompts = ordered
     }
 
+    /// Where the standing ask is among the ones answered here and still waiting.
+    private var askRun = AskRun()
+
     #if DEBUG
     /// What each card last said to a simulator pass's log.
     private var probeCards: [String: String] = [:]
 
-    /// The asks this pane draws as cards, by request id, in their order.
+    /// The asks this pane draws as its card, one at a time, by request id, in their order.
     var probeAsks: [String] { madeAsks.map(\.requestId) }
 
     /// A card's Approve (or Deny), as its button answers it.

@@ -944,6 +944,12 @@ async function run(kit: Kit): Promise<void> {
         !a.shown.some((n) => n.label?.includes(MISSING)),
       `${a.inThread ?? "no thread line with the card"}; ${a.alone ?? "no card alone"}; on screen: ${a.shown.filter((n) => n.label?.includes(MISSING)).length} missing-session labels`
     );
+    kit.check(
+      'a: with two of his proposals waiting, the thread\'s composer shows one card, the first, "1 of 2"',
+      a.card?.includes("place 1 of 2") === true &&
+        a.inThread?.includes(`asks [${agents.requestId}]`) === true,
+      `${a.card ?? "no probe card line"}; ${a.inThread ?? "no thread line"}`
+    );
     const threadTitle = (
       await fleet.api<{ id: string; title: string }[]>(
         `/api/projects/${projectId}/threads`
@@ -960,7 +966,7 @@ async function run(kit: Kit): Promise<void> {
         .join(" | ")}`
     );
 
-    // ── (b) its Approve ────────────────────────────────────────────────────
+    // ── (b) its Approve: the one card the thread's composer shows ──────────
     await tap("prompt-approve");
     await until(
       "b: the AGENTS.md proposal answered",

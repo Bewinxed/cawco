@@ -269,6 +269,28 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
 
     // MARK: Head
 
+    /// "2 of 3" in the head, past one ask waiting.
+    private let place = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+
+    /// Where this ask stands among the ones waiting (Composer.svelte
+    /// `askPlace`): `at` of `of` in its head, and on its minimized bar the
+    /// `more` behind it ("+2"). One alone says neither.
+    public func setPlace(at: Int, of: Int, more: Int) {
+        let shown = of > 1
+        place.text = shown ? "\(at) of \(of)" : nil
+        place.accessibilityLabel = shown ? "\(at) of \(of)" : nil
+        if place.isHidden == shown {
+            place.isHidden = !shown
+            onHeight()
+        }
+        bar?.setMore(more)
+    }
+
+    #if DEBUG
+    /// The head's place as a simulator pass reads it ("1 of 2"), or "alone".
+    public var probePlace: String { place.isHidden ? "alone" : place.text ?? "alone" }
+    #endif
+
     private func head(_ words: String, minimizes: Bool = false) -> UIView {
         let pill = UIStackView()
         pill.axis = .horizontal
@@ -289,7 +311,14 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
         pill.setContentHuggingPriority(.required, for: .horizontal)
         pill.setContentCompressionResistancePriority(.required, for: .horizontal)
         title.setContentHuggingPriority(.required, for: .horizontal)
-        let row = UIStackView(arrangedSubviews: [pill, title, UIView()])
+        // Where it stands among the asks waiting ("2 of 3", Prompt.svelte `.place`): shown past one.
+        place.role = TypeScale.typeMeta.with(weight: TypeScale.weightBody)
+        place.tabular = true
+        place.isHidden = true
+        place.accessibilityIdentifier = "prompt-place"
+        place.setContentHuggingPriority(.required, for: .horizontal)
+        place.setContentCompressionResistancePriority(.required, for: .horizontal)
+        let row = UIStackView(arrangedSubviews: [pill, title, UIView(), place])
         row.spacing = Space.space2
         row.alignment = .center
         row.isAccessibilityElement = true
@@ -784,6 +813,15 @@ public protocol RedrawsOnReveal: UIView {
 final class PromptBar: UIControl {
     private let surface = UIView()
     private let face: UIView
+    /// The asks waiting behind this one, "+2" (Composer.svelte `.asked-more`).
+    private let more = KitLabel(TypeScale.typeLabel, ink: Palette.statusAttnInk)
+    private var words = ""
+
+    func setMore(_ count: Int) {
+        more.text = count > 0 ? "+\(count)" : nil
+        more.isHidden = count <= 0
+        accessibilityLabel = "Show the question from the agent: \(words)\(count > 0 ? ", \(count) more waiting" : "")"
+    }
 
     /// The bar is on screen again: Caw's face is painted, not left as it
     /// paused while the bar was hidden.
@@ -793,6 +831,7 @@ final class PromptBar: UIControl {
 
     init(face: UIView, words: String) {
         self.face = face
+        self.words = words
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         surface.isUserInteractionEnabled = false
@@ -809,7 +848,11 @@ final class PromptBar: UIControl {
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let chevron = GlyphView(.chevronUp, size: 16, tint: Palette.statusAttnInk)
         chevron.setContentHuggingPriority(.required, for: .horizontal)
-        let line = UIStackView(arrangedSubviews: [face, title, chevron])
+        more.tabular = true
+        more.isHidden = true
+        more.setContentHuggingPriority(.required, for: .horizontal)
+        more.setContentCompressionResistancePriority(.required, for: .horizontal)
+        let line = UIStackView(arrangedSubviews: [face, title, more, chevron])
         line.spacing = Size.cPillGap
         line.alignment = .center
         line.isUserInteractionEnabled = false
@@ -934,6 +977,29 @@ final class OptionChip: UIControl {
 
     override var isHighlighted: Bool {
         didSet { paint() }
+    }
+}
+
+/// One ask at a time on a composer (Composer.svelte `firstAsk`, `askRun`):
+/// the first waiting stands, the rest counted. The run counts the asks
+/// answered here since the first of them came up, so the one standing reads
+/// "2 of 3"; it starts again once none waits.
+public struct AskRun {
+    private var standing: String?
+    private var run = 0
+
+    public init() {}
+
+    /// The place of `first` (a request id) with `more` waiting behind it; nil when none waits.
+    public mutating func place(first: String?, more: Int) -> (at: Int, of: Int, more: Int)? {
+        guard let first else {
+            standing = nil
+            run = 0
+            return nil
+        }
+        if let standing, standing != first { run += 1 }
+        standing = first
+        return (run + 1, run + 1 + more, more)
     }
 }
 

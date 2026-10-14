@@ -320,6 +320,7 @@ const run = async (kit: Kit) => {
       rows,
       said,
       idle,
+      status: statusOf,
       pending,
       web,
     });
@@ -334,6 +335,8 @@ interface Ctx {
   projectId: string;
   rows: () => Row[];
   said: (author: string, words: string) => Promise<Row | undefined>;
+  /** The thread's status as the hub lists it now. */
+  status: () => Promise<string | undefined>;
   threadId: string;
   web: <T>(read: (page: Page) => Promise<T>) => Promise<T>;
 }
@@ -578,9 +581,39 @@ async function onDevice(
       Boolean,
       120_000
     );
+    // His question beside it: two asks wait in the thread, and the composer
+    // shows one at a time, the rest counted (ThreadPane.svelte `firstAsk`).
+    await until(
+      `${tag}: his turn over`,
+      ctx.status,
+      (now) => now !== "working",
+      120_000
+    );
+    await fleet.api(
+      `/api/projects/${ctx.projectId}/threads/${threadId}/messages`,
+      { body: `PROBE-ASK-${TAG}TWO which voice beside it` }
+    );
+    const beside = await until(
+      `${tag}: his question parked beside the proposal`,
+      async () =>
+        (await ctx.pending()).find(
+          (a) => a.payload.toolName === ASK && a.payload.threadId === threadId
+        ),
+      Boolean,
+      120_000
+    );
     const proposed = await listed(
-      (l) => !!proposal && l.includes(proposal.requestId),
-      "his proposal on the composer"
+      (l) =>
+        !!proposal &&
+        l.includes(`asks [${proposal.requestId}]`) &&
+        l.includes("place 1 of 2"),
+      "his proposal on the composer, one of two"
+    );
+    kit.check(
+      `5 ${tag}: with two asks waiting, the thread's composer shows one card, the first, "1 of 2"`,
+      !!proposed?.includes(`asks [${proposal?.requestId}]`) &&
+        !!proposed?.includes("place 1 of 2"),
+      proposed
     );
     await tap("prompt-approve");
     const settled = await until(
@@ -595,6 +628,28 @@ async function onDevice(
       !!proposed?.includes(proposal?.requestId ?? "-") && settled === true,
       `card ${proposed}; settled ${settled}`
     );
+    const next = await listed(
+      (l) =>
+        !!beside &&
+        l.includes(`asks [${beside.requestId}]`) &&
+        l.includes("place 2 of 2"),
+      "his question moved in, two of two"
+    );
+    kit.check(
+      `5 ${tag}: answered, the next ask moves in, "2 of 2"`,
+      !!next?.includes(`asks [${beside?.requestId}]`) &&
+        !!next?.includes("place 2 of 2"),
+      next
+    );
+    await tap("prompt-option-1-1");
+    await tap("prompt-answer");
+    await until(
+      `${tag}: his question beside it answered`,
+      async () =>
+        !(await ctx.pending()).some((a) => a.requestId === beside?.requestId),
+      Boolean,
+      60_000
+    ).catch(() => undefined);
 
     // 6. A tapped push of his ask opens the thread at its card.
     await ctx.idle();

@@ -271,9 +271,10 @@ enum PushTaps {
         switch parts[0] {
         // A push's own `cawco` data, as JSON: routed as its tap is (`PushNote.route`).
         case "push":
+            // Read as a delivered push's are (`PushNote.fields`): its strings, its nulls left out.
             guard let data = parts[1].data(using: .utf8),
-                  let fields = (try? JSONSerialization.jsonObject(with: data)) as? [String: String] else { return nil }
-            return PushNote.route(fields)
+                  let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return nil }
+            return PushNote.route(object.compactMapValues { $0 as? String })
         case "session": return .session(parts[1])
         case "task":
             let ids = parts[1].split(separator: "/", maxSplits: 1).map(String.init)
