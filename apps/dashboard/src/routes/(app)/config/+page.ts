@@ -8,9 +8,12 @@ import type { PageLoad } from "./$types";
  * browser asks the live query the Shell asks, since the layout's cookie
  * answer is only re-read on a full load and a turned phone outruns it.
  */
-export const load: PageLoad = async ({ parent }) => {
+export const load: PageLoad = async ({ parent, url }) => {
   const { narrow } = await parent();
   if (!(browser ? matchMedia(NARROW_QUERY).matches : narrow)) {
-    redirect(307, "/config/rules");
+    // What the link asked for comes along: its query. A load cannot read the
+    // fragment (SvelteKit's `disable_hash`); on a full load the browser
+    // keeps it across the 307.
+    redirect(307, `/config/rules${url.search}`);
   }
 };

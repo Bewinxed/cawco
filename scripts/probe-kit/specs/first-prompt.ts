@@ -6,10 +6,13 @@
  * against the mock model), the built dashboard at the desk, the session's
  * transcript sampled every animation frame:
  *
- * 1. New session: `?spawn=` opens the dialog, a first prompt, Ctrl+Enter.
- *    From submit until its answer: no frame draws the indicator without the
- *    first message, and no indicator, live call or placeholder row is ever
- *    above the newest message.
+ * 1. New session: `/?spawn=` opens the dialog (the root's redirect keeps
+ *    the query), a first prompt, Ctrl+Enter twice while the machine is still
+ *    reading the folder: Start says it is checking the folder, and exactly
+ *    one session starts once the check passes. From submit until its
+ *    answer: no frame draws the indicator without the first message, and no
+ *    indicator, live call or placeholder row is ever above the newest
+ *    message.
  * 2. A composer send into that session, idle: the same, for that send.
  * 3. A send into the same session while its turn's indicator stands (the
  *    mock holds each event 2.5 s): the indicator never stands above it.
@@ -18,7 +21,7 @@
  */
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen } from "../../scratch-fleet";
-import { open, type Spec } from "../kit";
+import type { Spec } from "../kit";
 
 const MARK = {
   first: "PROBE-FP-FIRST say one",
@@ -198,16 +201,27 @@ const spec: Spec = {
     const page = await kit.page("desk");
     const logged: string[] = [];
     page.on("console", (message) => logged.push(message.text().slice(0, 300)));
-    // The session index itself: the root's redirect drops the query.
-    const spawnAt = `${base}/session?spawn=${encodeURIComponent(MACHINE)}&cwd=${encodeURIComponent(fleet.workdir)}`;
-    await open(page, spawnAt, '[aria-label="First prompt"]').catch(
-      async (error: unknown) => {
-        const shown = await page.evaluate(() =>
-          document.body.innerText.replace(/\s+/g, " ").slice(0, 1500)
-        );
-        throw new Error(`${String(error)} at ${page.url()}: ${shown}`);
-      }
+    // The root, as a "Spawn here" link names it: its redirect to the session
+    // index carries the query, and `?spawn=` opens New session.
+    const spawnAt = `${base}/?spawn=${encodeURIComponent(MACHINE)}&cwd=${encodeURIComponent(fleet.workdir)}`;
+    await page.goto(spawnAt, { waitUntil: "domcontentloaded" });
+    const opened = await page
+      .waitForSelector('[aria-label="First prompt"]', { timeout: 60_000 })
+      .then(
+        () => "",
+        async (error: unknown) =>
+          `${String(error)} at ${page.url()}: ${await page.evaluate(() =>
+            document.body.innerText.replace(/\s+/g, " ").slice(0, 600)
+          )}`
+      );
+    kit.check(
+      "/?spawn=<machine> opens New session (the root's redirect keeps the query)",
+      opened === "",
+      opened || page.url()
     );
+    if (opened) {
+      return;
+    }
     await page.evaluate(sampleFrames);
     /** A wait that ran out, with what the page, the hub and the agent said by then. */
     const why = async (error: unknown): Promise<never> => {
@@ -228,24 +242,45 @@ const spec: Spec = {
       }, name);
 
     // 1. The new session's first prompt.
+    // Pressed twice while the machine is still reading the folder: the press
+    // waits for the check, Start says so, and one session starts.
     const prompt = page.locator('[aria-label="First prompt"]');
     await prompt.click();
-    await page.keyboard.type(MARK.first);
-    // Start holds until the machine has read the folder (the dialog's
-    // `validate`): its "Reading…" line gone.
-    await page
-      .waitForFunction(
-        () =>
-          !document
-            .querySelector("[role=dialog]")
-            ?.textContent?.includes("Reading…"),
-        null,
-        { timeout: 60_000 }
-      )
-      .catch(why);
+    await page.keyboard.insertText(MARK.first);
+    const checking = await page.evaluate(
+      () =>
+        document
+          .querySelector("[role=dialog]")
+          ?.textContent?.includes("Reading…") ?? false
+    );
     await phase("first");
     await page.keyboard.press("Control+Enter");
+    const waiting = await page
+      .waitForFunction(
+        () =>
+          document
+            .querySelector("#session-start")
+            ?.textContent?.includes("Checking the folder…"),
+        null,
+        { timeout: 2000, polling: "raf" }
+      )
+      .then(
+        () => true,
+        () => false
+      );
+    await page.keyboard.press("Control+Enter");
     await answered(page, ANSWER.first).catch(why);
+    kit.check(
+      "Ctrl+Enter pressed during the folder check: Start says it is checking the folder",
+      checking && waiting,
+      `the dialog was reading: ${checking}; Start said it was checking: ${waiting}`
+    );
+    const started = fleet.query<{ id: string }>("SELECT id FROM instances");
+    kit.check(
+      "two presses during the check start exactly one session, once the check passes",
+      started.length === 1,
+      `${started.length} instances`
+    );
 
     // 2. A composer send into the idle session.
     await phase("idle");

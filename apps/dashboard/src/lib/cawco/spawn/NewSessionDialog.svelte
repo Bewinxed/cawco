@@ -248,6 +248,12 @@
   let unreadable = $state(false);
   let missingMachines = $state<string[]>([]);
   let verifiedLocation = $state("");
+  /**
+   * A Start pressed while the machine was still reading the folder: the
+   * location it was pressed for. The session starts the moment that check
+   * lands (or the press is answered with its refusal), never a press lost.
+   */
+  let pressedFor = $state<string | null>(null);
   let popover = $state<"machines" | "project" | "location" | "lifetime" | null>(
     null
   );
@@ -842,7 +848,6 @@
       machineIds.length === 0 ||
       Boolean(offlineMachine) ||
       unreadable ||
-      locationUnverified ||
       (repo !== undefined && !REPO.test(repo.trim())) ||
       (moveTo !== null && !(moving || movedAlready))
   );
@@ -858,6 +863,15 @@
       title: continueFrom.title,
     }
   );
+  /** What Start says while its press waits: on the folder check, the summary, the start. */
+  const busyLabel = $derived.by(() => {
+    if (pressedFor !== null) {
+      return "Checking the folder…";
+    }
+    return continueFrom && followed?.stage !== "starting"
+      ? "Summarising…"
+      : "Starting…";
+  });
   const startLabel = $derived.by(() => {
     if (continueFrom) {
       return "Continue";
@@ -1116,10 +1130,29 @@
     if (unreadable || offlineMachine) {
       return locationReading;
     }
-    return locationUnverified ? "Reading…" : "";
+    return "";
   }
+  // The press held for the folder check, played once the check has landed:
+  // `start` then goes, or says the check's refusal. A press for a location
+  // edited since is the old form's, and goes with it.
+  $effect(() => {
+    const held = pressedFor;
+    if (held === null) {
+      return;
+    }
+    if (held !== locationKey) {
+      pressedFor = null;
+      return;
+    }
+    if (locationUnverified && !unreadable && !offlineMachine) {
+      return;
+    }
+    pressedFor = null;
+    untrack(start);
+  });
   function close() {
     submission += 1;
+    pressedFor = null;
     firstMessage.text = "";
     firstMessage.dropAttachments();
     keptDraft.discard();
@@ -1336,6 +1369,11 @@
     error = validate();
     if (error) {
       document.getElementById("session-dir")?.focus();
+      return true;
+    }
+    // The folder not read yet: the press waits for it (`pressedFor`).
+    if (locationUnverified) {
+      pressedFor = locationKey;
       return true;
     }
     if (moving && !moveStep) {
@@ -1947,11 +1985,9 @@
   {/if}
   <div class="footer" data-vaul-no-drag>
     <SessionFooter
-      {busy}
-      busyLabel={continueFrom && followed?.stage !== "starting"
-        ? "Summarising…"
-        : "Starting…"}
-      cancellable={job !== null}
+      busy={busy || pressedFor !== null}
+      {busyLabel}
+      cancellable={job !== null || pressedFor !== null}
       disabled={cantStart}
       failed={startFailed}
       oncancel={job ? cancelContinue : close}
