@@ -120,6 +120,12 @@ export interface Seen {
  * completions alike).
  */
 export interface Reply {
+  /**
+   * The request is refused with this HTTP status and the provider's words, as
+   * a provider refuses a credential it does not take (`401`, chat completions
+   * and Anthropic messages alike).
+   */
+  deny?: { message: string; status: number };
   everyMs: number;
   /**
    * The request is refused at its account's usage limit, as Anthropic
@@ -132,6 +138,25 @@ export interface Reply {
 }
 
 /** Anthropic's refusal of a request past its account's usage limit, until `resetsAt`. */
+/**
+ * What the mock refuses a request with, if it does: a credential the
+ * provider does not take ({@link Reply.deny}, either API), or Anthropic's
+ * usage limit ({@link Reply.refuse}, its messages only).
+ */
+const refusalOf = (reply: Reply, chat: boolean): Response | undefined => {
+  if (reply.deny) {
+    return Response.json(
+      {
+        error: { message: reply.deny.message, type: "authentication_error" },
+      },
+      { status: reply.deny.status }
+    );
+  }
+  return reply.refuse && !chat
+    ? limitRefusal(reply.refuse.resetsAt)
+    : undefined;
+};
+
 const limitRefusal = (resetsAt: number): Response => {
   const reset = String(Math.ceil(resetsAt / 1000));
   return Response.json(
@@ -924,8 +949,9 @@ async function standUp(
       seen.push(one);
       const reply = options.respond(one);
       const chat = path.endsWith("/chat/completions");
-      if (reply.refuse && !chat) {
-        return limitRefusal(reply.refuse.resetsAt);
+      const refused = refusalOf(reply, chat);
+      if (refused) {
+        return refused;
       }
       if (body.stream === false && !chat) {
         return Response.json({

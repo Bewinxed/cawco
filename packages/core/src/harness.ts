@@ -1244,6 +1244,29 @@ export interface HarnessCapabilities {
   thinking: boolean;
 }
 
+/** One of a machine's own sign-ins its provider refused ({@link HarnessReport.signInFaults}). */
+export interface SignInFault {
+  /** When the refusal came, epoch ms. */
+  at: number;
+  /** The provider's id in the harness (`anthropic`). */
+  provider: string;
+  /** What the home says, whole: what was refused, and the fix ({@link opencodeSignInFaultWords}). */
+  words: string;
+}
+
+/**
+ * What the home says of a machine's own OpenCode sign-in its provider
+ * refused: the provider by name, the refusal in its words, and the fix,
+ * signing in again on that machine. One source for every surface (the web's
+ * machine row and the Apple app's read it from the report).
+ */
+export const opencodeSignInFaultWords = (
+  machine: string,
+  providerName: string,
+  refusal: string
+): string =>
+  `OpenCode's own ${providerName} sign-in on ${machine} was refused: ${refusal}. Run \`opencode auth login\` on ${machine} and pick ${providerName}.`;
+
 /** What a machine knows about one harness: is it installed, can it work, what can it do. */
 export interface HarnessReport {
   /**
@@ -1290,6 +1313,13 @@ export interface HarnessReport {
    * nothing.
    */
   models?: ModelInfo[];
+  /**
+   * OpenCode only: each of the machine's own OpenCode sign-ins (not a CawCo
+   * account) whose provider refused it the last time a session here used
+   * it, until a turn on that provider succeeds. The home says each on the
+   * machine's row, with the fix ({@link opencodeSignInFaultWords}).
+   */
+  signInFaults?: SignInFault[];
   /** The CLI/SDK version, when it can be read. */
   version?: string;
 }

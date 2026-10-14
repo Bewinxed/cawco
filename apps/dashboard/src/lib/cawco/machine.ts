@@ -28,15 +28,21 @@ export function machineOs(os: string) {
  * rail needs — which is the remedy, on which machine, and for the macOS case why
  * its existing login does not reach its agent. pi's and OpenCode's are their
  * reports' own words (`authReason`): pi's sign-in, OpenCode's server refusing
- * to start. Undefined when there is nothing to say.
+ * to start; then OpenCode's own sign-ins their providers refused, each with
+ * its fix (`signInFaults`, core `opencodeSignInFaultWords`). Undefined when
+ * there is nothing to say.
  */
 export function signInWarning(
   machine: AgentRow,
   harness: "claude" | "pi" | "opencode" = "claude"
 ): string | undefined {
   if (harness !== "claude") {
-    return machine.harnesses?.find((report) => report.harness === harness)
-      ?.authReason;
+    const report = machine.harnesses?.find((one) => one.harness === harness);
+    const said = [
+      report?.authReason,
+      ...(report?.signInFaults ?? []).map((fault) => fault.words),
+    ].filter(Boolean);
+    return said.length > 0 ? said.join(" ") : undefined;
   }
   switch (machine.auth) {
     case "unreadable-credentials":

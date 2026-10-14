@@ -1486,8 +1486,10 @@ const attach = (
     );
 
     // A spawn also checks pi's sign-in, and any OpenCode call can find its
-    // server refusing to start or starting again: a changed word on either
-    // goes out on the next heartbeat, the other harnesses' reports kept.
+    // server refusing to start or starting again, or a turn find one of the
+    // machine's own OpenCode sign-ins refused or answering again: a changed
+    // word on either goes out on the next heartbeat, the other harnesses'
+    // reports kept.
     const authed = [pi, harness("opencode")].filter(
       (adapter): adapter is Harness => adapter !== undefined
     );
@@ -1498,7 +1500,10 @@ const attach = (
         );
         return (
           old !== undefined &&
-          (old.auth !== adapter.auth || old.authReason !== adapter.authReason)
+          (old.auth !== adapter.auth ||
+            old.authReason !== adapter.authReason ||
+            JSON.stringify(old.signInFaults ?? []) !==
+              JSON.stringify(adapter.signInFaults ?? []))
         );
       });
       if (moved.length === 0) {
@@ -1509,11 +1514,18 @@ const attach = (
         if (!adapter) {
           return report;
         }
-        const { authReason: _oldReason, ...rest } = report;
+        const {
+          authReason: _oldReason,
+          signInFaults: _oldFaults,
+          ...rest
+        } = report;
         return {
           ...rest,
           auth: adapter.auth,
           ...(adapter.authReason ? { authReason: adapter.authReason } : {}),
+          ...(adapter.signInFaults?.length
+            ? { signInFaults: adapter.signInFaults }
+            : {}),
         };
       });
       return reportedHarnesses;

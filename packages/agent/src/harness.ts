@@ -28,6 +28,7 @@ import type {
   SendPayload,
   SentMessage,
   SessionMessage,
+  SignInFault,
   SpawnPayload,
   TextAttachment,
 } from "@cawco/core";
@@ -368,6 +369,8 @@ export interface Harness {
   sessionsOn?(procId: string): string[];
   /** Lifecycle guards read the supervisor's one machine recovery barrier. */
   readonly setCustodyReadiness?: (read: () => boolean) => void;
+  /** The machine's own sign-ins their providers last refused, cached beside {@link auth} (OpenCode's, {@link HarnessReport.signInFaults}). */
+  readonly signInFaults?: SignInFault[];
   /** Start a session; resolves once the runtime handle is in place. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   spawn(spec: SpawnPayload, ctx: HarnessContext): Promise<HarnessSession>;

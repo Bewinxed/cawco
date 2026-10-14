@@ -663,8 +663,13 @@ function exceptionOf(machine: (typeof cawco.machines)[number]): string | null {
   if (machine.status !== "online") {
     return "unreachable";
   }
-  const signIn =
-    signInWarning(machine, "pi") ?? signInWarning(machine, "opencode");
+  // Every harness's sign-in words: one never hides another's.
+  const signIn = [
+    signInWarning(machine, "pi"),
+    signInWarning(machine, "opencode"),
+  ]
+    .filter(Boolean)
+    .join(" ");
   if (signIn) {
     return signIn;
   }

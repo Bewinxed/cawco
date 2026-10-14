@@ -32888,6 +32888,13 @@
               "$ref": "#/components/schemas/ModelInfo"
             }
           },
+          "signInFaults": {
+            "description": "OpenCode only: each of the machine's own OpenCode sign-ins (not a CawCo\naccount) whose provider refused it the last time a session here used\nit, until a turn on that provider succeeds. The home says each on the\nmachine's row, with the fix ({@link opencodeSignInFaultWords}).",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SignInFault"
+            }
+          },
           "version": {
             "description": "The CLI/SDK version, when it can be read.",
             "type": "string"
@@ -33106,6 +33113,29 @@
           "max",
           "medium",
           "xhigh"
+        ]
+      },
+      "SignInFault": {
+        "description": "One of a machine's own sign-ins its provider refused ({@link HarnessReport.signInFaults}).",
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "When the refusal came, epoch ms.",
+            "type": "number"
+          },
+          "provider": {
+            "description": "The provider's id in the harness (`anthropic`).",
+            "type": "string"
+          },
+          "words": {
+            "description": "What the home says, whole: what was refused, and the fix ({@link opencodeSignInFaultWords}).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "provider",
+          "words"
         ]
       },
       "MachineCapabilities": {

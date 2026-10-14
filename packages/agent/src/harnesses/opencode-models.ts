@@ -53,6 +53,7 @@ const ATTEMPT_DELAYS_MS = [0, 2000, 8000];
 interface CatalogProvider {
   env?: unknown;
   models?: Record<string, unknown>;
+  name?: unknown;
 }
 
 type Catalog = Record<string, CatalogProvider>;
@@ -241,6 +242,16 @@ class OpencodeModels {
       .update(canonical(entries))
       .digest("hex")
       .slice(0, 16);
+  }
+
+  /**
+   * A provider's name as the catalog gives it, which `opencode auth login`
+   * lists it under ("Anthropic"); its id when the agent holds no catalog, or
+   * the catalog names it not.
+   */
+  providerName(id: string): string {
+    const name = this.#catalog?.[id]?.name;
+    return typeof name === "string" && name ? name : id;
   }
 
   /** The providers whose key OpenCode takes from an environment variable set in `env`. */

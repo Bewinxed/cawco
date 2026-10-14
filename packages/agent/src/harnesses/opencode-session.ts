@@ -597,6 +597,12 @@ export interface OpencodeSessionOptions {
   ready: Promise<McpNotConnected[]>;
   registerChild: (childId: string, callID: string) => void;
   sessionId: string;
+  /**
+   * A turn ended on `provider` (its last model step's): refused by it with
+   * `refusal` (an execution failed `provider.auth`, in the provider's words),
+   * or answered (undefined). The harness keeps it as a sign-in's fault.
+   */
+  turnOutcome: (provider: string, refusal: string | undefined) => void;
   workflowStepId?: string;
 }
 
@@ -622,6 +628,12 @@ export class OpencodeSession implements HarnessSession {
   /** The instruction entries put on the session, by key, as the hash of the value put. */
   readonly #instructions = new Map<string, string>();
   readonly #registerChild: (childId: string, callID: string) => void;
+  readonly #turnOutcome: (
+    provider: string,
+    refusal: string | undefined
+  ) => void;
+  /** The provider of the open turn's last model step: whose answer or refusal its end is. */
+  #turnProvider: string | undefined;
   readonly #onRelease: () => void;
   readonly #isConfigGateHeld: (joinsTurn?: boolean) => boolean;
   readonly #readActivity: () => Promise<boolean>;
@@ -723,6 +735,7 @@ export class OpencodeSession implements HarnessSession {
     this.#workflowStepId = options.workflowStepId;
     this.#canDelegate = options.canDelegate;
     this.#registerChild = options.registerChild;
+    this.#turnOutcome = options.turnOutcome;
     this.#onRelease = options.onRelease;
     this.#isConfigGateHeld = options.isConfigGateHeld;
     this.#readActivity = options.readActivity;
@@ -962,6 +975,7 @@ export class OpencodeSession implements HarnessSession {
         break;
       }
       case "session.execution.started":
+        this.#turnProvider = undefined;
         this.#turnRevision += 1;
         this.#busy = true;
         this.#turnOpen = true;
@@ -971,6 +985,7 @@ export class OpencodeSession implements HarnessSession {
         this.#drainQueue();
         break;
       case "session.step.started": {
+        this.#turnProvider = event.data.model.providerID;
         const id = event.data.assistantMessageID;
         const timestamp = new Date(event.data.started).toISOString();
         this.#created.set(id, timestamp);
@@ -1187,10 +1202,31 @@ export class OpencodeSession implements HarnessSession {
           session_id: this.sessionId ?? undefined,
         });
         break;
+      // A turn's end, as OpenCode 2.0.28 says it. A failure before its first
+      // model step (`models.resolve`, context preparation) is only logged
+      // ("Failed to drain Session") and the execution still settles
+      // `succeeded`, so such a turn ends here with no answer and no error:
+      // anomalyco/opencode#34839, fixed by #45959, unreleased as of 2.0.29.
+      // On the upgrade that carries it, check that the failure arrives here as
+      // `session.execution.failed`. A refusal by the provider itself (Zen's
+      // free tier, a 401) does arrive as `failed` on 2.0.28 (observed).
       case "session.execution.succeeded":
+        if (this.#turnProvider) {
+          this.#turnOutcome(this.#turnProvider, undefined);
+        }
         this.#turnEnded();
         break;
       case "session.execution.failed":
+        if (this.#turnProvider && event.data.error.type === "provider.auth") {
+          const { message, status } = event.data.error as {
+            message: string;
+            status?: number;
+          };
+          this.#turnOutcome(
+            this.#turnProvider,
+            status ? `${status} ${message}` : message
+          );
+        }
         this.#turnEnded({
           subtype: "error_during_execution",
           is_error: true,

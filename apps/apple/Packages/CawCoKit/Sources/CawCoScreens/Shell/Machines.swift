@@ -12,15 +12,28 @@ import UIKit
 // MARK: Health
 
 /// What is wrong with a machine, in a word or two (home-state.svelte.ts
-/// `exceptionOf`): it is unreachable, pi cannot sign in, its build is behind
-/// the hub's, or a fleet-sync row failed on it. Nil when nothing is.
+/// `exceptionOf`): it is unreachable, pi or OpenCode cannot sign in (one of
+/// the machine's own OpenCode sign-ins refused, with its fix), its build is
+/// behind the hub's, or a fleet-sync row failed on it. Nil when nothing is.
 enum MachineHealth {
     static func fault(_ machine: MachineRow, hubBuild: Components.Schemas.BuildInfo?) -> String? {
         if machine.status != "online" { return "unreachable" }
-        if let reason = machine.harnesses?.first(where: { $0.harness == .pi })?.authReason { return reason }
+        // Every harness's sign-in words: one never hides another's.
+        let signIns = [signIn(machine, .pi), signIn(machine, .opencode)].compactMap { $0 }
+        if !signIns.isEmpty { return signIns.joined(separator: " ") }
         if let commit = machine.build?.commit, let hub = hubBuild?.commit, commit != hub { return "behind hub" }
         if syncFailed(machine.fleet) { return "sync failed" }
         return nil
+    }
+
+    /// A harness's own words on why it cannot sign in here (machine.ts
+    /// `signInWarning`): its `authReason`, then each of the machine's own
+    /// sign-ins its provider refused, in the report's words (core
+    /// `opencodeSignInFaultWords`). Nil when there are none.
+    static func signIn(_ machine: MachineRow, _ harness: Components.Schemas.HarnessKind) -> String? {
+        guard let report = machine.harnesses?.first(where: { $0.harness == harness }) else { return nil }
+        let said = [report.authReason].compactMap { $0 } + (report.signInFaults ?? []).map(\.words)
+        return said.isEmpty ? nil : said.joined(separator: " ")
     }
 
     /// Every row one machine's fleet report says it could not apply

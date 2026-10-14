@@ -32,6 +32,7 @@ import {
   stat,
   symlink,
 } from "node:fs/promises";
+import { hostname } from "node:os";
 import { join } from "node:path";
 import type {
   FleetConfig,
@@ -44,6 +45,7 @@ import type {
   ModelInfo,
   NeutralSessionInfo,
   SessionMessage,
+  SignInFault,
   SlashCommand,
   SpawnPayload,
   WorkspaceRef,
@@ -53,7 +55,9 @@ import {
   CONTROL_SUPPORTED_COMMANDS,
   CUSTODY_HELD,
   IMAGE_GENERATION_TIMEOUT_MS,
+  machineLabel,
   mcpFleetState,
+  opencodeSignInFaultWords,
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import {
@@ -1069,6 +1073,9 @@ interface ServerSlot {
 
 /** Each account's OpenCode models, by OpenCode's provider id, as its own server last listed them. */
 const ACCOUNT_CATALOGS = join(OPENCODE_DIR, "cawco-account-catalogs.json");
+
+/** The machine's own OpenCode sign-ins their providers last refused, by provider ({@link HarnessReport.signInFaults}), kept across an agent's restart. */
+const SIGN_IN_FAULTS = join(OPENCODE_DIR, "cawco-sign-in-faults.json");
 
 /** The id CawCo puts an account's credential on its server under: its own, named for its value. */
 const CREDENTIAL_PREFIX = "cred_cawco_";
@@ -2442,7 +2449,79 @@ export class OpencodeHarness implements Harness {
       ...(reason ? { authReason: reason } : {}),
       capabilities: OPENCODE_CAPABILITIES,
       ...(models ? { models } : {}),
+      ...(this.signInFaults.length > 0
+        ? { signInFaults: this.signInFaults }
+        : {}),
     };
+  }
+
+  /** The machine's own sign-ins their providers last refused, read once from {@link SIGN_IN_FAULTS}. */
+  #faults: Map<string, SignInFault> | undefined;
+
+  #faultsHeld(): Map<string, SignInFault> {
+    if (!this.#faults) {
+      let stored: SignInFault[] = [];
+      try {
+        stored = existsSync(SIGN_IN_FAULTS)
+          ? (JSON.parse(readFileSync(SIGN_IN_FAULTS, "utf8")) as SignInFault[])
+          : [];
+      } catch (error) {
+        console.warn(
+          `[opencode] ${SIGN_IN_FAULTS} could not be read (${errorText(error)}); no refused sign-in is reported until one is refused again`
+        );
+      }
+      this.#faults = new Map(stored.map((fault) => [fault.provider, fault]));
+    }
+    return this.#faults;
+  }
+
+  /**
+   * The machine's own OpenCode sign-ins their providers refused the last
+   * time a session here used them: what the machine's report carries
+   * ({@link detect}), and the daemon's beat when it moves.
+   */
+  get signInFaults(): SignInFault[] {
+    return [...this.#faultsHeld().values()].sort((a, b) =>
+      a.provider.localeCompare(b.provider)
+    );
+  }
+
+  /**
+   * A turn on the machine's server ended on `provider`: refused by it
+   * (`refusal`, the provider's words), or answered. A refusal is a sign-in's
+   * fault only when the machine's own OpenCode holds a sign-in for that
+   * provider (Zen's keyless free tier refusing is no sign-in's); an answer
+   * clears the provider's fault. Kept across a restart, said once.
+   */
+  #signInOutcome(provider: string, refusal: string | undefined): void {
+    const faults = this.#faultsHeld();
+    if (refusal === undefined) {
+      if (!faults.delete(provider)) {
+        return;
+      }
+      console.info(
+        `[opencode] the machine's own ${provider} sign-in answered again`
+      );
+    } else {
+      if (!opencodeOwnIntegrations().includes(provider)) {
+        return;
+      }
+      const words = opencodeSignInFaultWords(
+        machineLabel(hostname()),
+        opencodeModels.providerName(provider),
+        refusal
+      );
+      if (faults.get(provider)?.words === words) {
+        return;
+      }
+      faults.set(provider, { provider, words, at: Date.now() });
+      console.warn(`[opencode] ${words}`);
+    }
+    writeJson(SIGN_IN_FAULTS, this.signInFaults).catch((error: unknown) =>
+      console.warn(
+        `[opencode] ${SIGN_IN_FAULTS} was not written: ${errorText(error)}`
+      )
+    );
   }
 
   /**
@@ -4095,6 +4174,13 @@ export class OpencodeHarness implements Harness {
       lead: spec.lead === true,
       applied,
       ready,
+      // Only the machine's server sends with the machine's own sign-ins; an
+      // account's runs on the account, whose faults stand on its own row.
+      turnOutcome: (provider, refusal) => {
+        if (account === undefined) {
+          this.#signInOutcome(provider, refusal);
+        }
+      },
       registerChild: (childId, callID) => {
         const owner = this.#sessionOwners.get(ctx.instanceId) ?? identity;
         this.#activity(owner).bind(childId, ctx.instanceId);
