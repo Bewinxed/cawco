@@ -41,6 +41,7 @@ import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import { type KeepAliveRow, promptCacheExpiresAt } from "./keep-alive";
 import { leafOf, sessionLabel } from "./labels";
 import { type QueuedDelegate, resolveSpawnType } from "./work-items";
+import type { KeptWorkspace } from "./workspace-retire";
 
 const WS_SCHEME = /^ws/;
 const WS_PATH_SUFFIX = /\/ws$/;
@@ -718,10 +719,16 @@ export interface HandoffActions {
       budget?: WorkBudget;
     }
   ): Promise<DelegateResult>;
-  /** This session's delegation tree: its delegates, theirs nested. */
-  readonly delegateList: (
-    include: DelegateListInclude
-  ) => Promise<{ delegates: DelegateNode[]; queued: QueuedDelegate[] }>;
+  /**
+   * This session's delegation tree: its delegates, theirs nested; the
+   * delegates still queued; and the fleet's spent workspaces kept for the
+   * unlanded work in them (workspace-retire.ts).
+   */
+  readonly delegateList: (include: DelegateListInclude) => Promise<{
+    delegates: DelegateNode[];
+    kept: KeptWorkspace[];
+    queued: QueuedDelegate[];
+  }>;
   /**
    * Finishes this session's work item: the hub runs its checks, or fails it
    * as blocked. Answers what the hub says of the results.
@@ -1072,17 +1079,20 @@ export const handoffActions = ({
         "delegate_list is read by the hub, which is not wired here."
       );
     }
-    const [delegates, waiting] = await Promise.all([
+    const [delegates, waiting, spent] = await Promise.all([
       delegateList(include),
       fetch(
         `${hubHttpUrl()}/api/work-items/queued?for=${encodeURIComponent(instanceId)}`
       ),
+      fetch(`${hubHttpUrl()}/api/workspaces/kept`),
     ]);
-    if (!waiting.ok) {
-      throw new Error(await waiting.text());
+    const refused = [waiting, spent].find((answer) => !answer.ok);
+    if (refused) {
+      throw new Error(await refused.text());
     }
     const { queued } = (await waiting.json()) as { queued: QueuedDelegate[] };
-    return { delegates, queued };
+    const { kept } = (await spent.json()) as { kept: KeptWorkspace[] };
+    return { delegates, kept, queued };
   },
   async continueSession(input) {
     const { rows, hosts } = fleetInstances(fleet);

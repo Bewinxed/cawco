@@ -9,7 +9,10 @@
 # A landing check runs `build-both.sh ios`: it launches on the floor (iOS
 # 18.5) and the newest runtime, so a binary that dies at launch fails it.
 # `--compile-only` never launches; it is for a workspace that cannot.
-# Exits non-zero at the first failure.
+# Exits non-zero at the first failure. It starts only with room for a whole
+# build root: below 10 GB free (CAWCO_MIN_FREE_GB) where it builds, it exits 3
+# with one sentence naming the free space and the biggest folders under
+# CawCo's workspace roots (scripts/lib/disk-room.sh).
 #
 # The builds run one after the other into one DerivedData: two xcodebuilds
 # sharing it lock its build.db. -skipPackagePluginValidation lets the
@@ -210,6 +213,11 @@ if [[ -z ${APPLE_ROOT:-} ]]; then
     retire "$directory" "$ROOT/.locks/legacy-${directory##*/}"
   done
 fi
+# Room for a whole build root before anything is synced or built, once the
+# spent ones above are gone (scripts/lib/disk-room.sh): a refusal here, not
+# a linker dying mid-build with errno 28.
+eval "$DISK_ROOM"
+disk_room "$ROOT" "build-both.sh $PLATFORM ($BUILD)"
 mkdir -p "$ROOT/$BUILD/apps/apple"
 rm -f "$ROOT/$BUILD/tree"
 echo READY
@@ -359,8 +367,9 @@ if [[ $PLATFORM != ios ]]; then macos; fi
 if [[ $PLATFORM != macos ]]; then ios 'iOS 18.5'; fi
 EOF
 
-printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q APPLE_ROOT=%q BUILD_SCRIPT=%q bash --norc -c %q --' \
-  "$PLATFORM" "$COMPILE_ONLY" "$APPLE_ROOT" "$BUILD_SCRIPT" "$PREPARE"
+DISK_ROOM=$(<scripts/lib/disk-room.sh)
+printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q APPLE_ROOT=%q BUILD_SCRIPT=%q DISK_ROOM=%q CAWCO_MIN_FREE_GB=%q bash --norc -c %q --' \
+  "$PLATFORM" "$COMPILE_ONLY" "$APPLE_ROOT" "$BUILD_SCRIPT" "$DISK_ROOM" "${CAWCO_MIN_FREE_GB:-}" "$PREPARE"
 for argument in "$BUILD" "${LIVE[@]}"; do printf -v COMMAND '%s %q' "$COMMAND" "$argument"; done
 # The ssh link's stdin and stdout are two FIFOs held on fds 3 (to the Mac)
 # and 4 (from it): the Mac's /bin/bash 3.2 has no coproc and no {var}>&
@@ -383,7 +392,8 @@ while IFS= read -r line <&4; do
   [[ $line != READY ]] || break
   echo "$line"
 done
-if [[ ${line:-} != READY ]]; then wait "$MAC_PID"; exit 1; fi
+# The Mac side's own status when it ended before READY (3: no room on its disk).
+if [[ ${line:-} != READY ]]; then wait "$MAC_PID" || exit $?; exit 1; fi
 # The apps/apple this build is made from: stamped as it is synced, after the
 # wait for the slot, and again once synced. An edit in between would leave
 # the stamp naming other code than the app's, so the run stops instead.

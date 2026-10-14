@@ -5,17 +5,32 @@
  * sessions can be continued, and deletes it all on archive.
  */
 import { constants } from "node:fs";
-import { chmod, copyFile, mkdir, open, rm, stat } from "node:fs/promises";
+import {
+  chmod,
+  copyFile,
+  mkdir,
+  open,
+  readdir,
+  rm,
+  stat,
+} from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type {
   CommandResult,
+  WorkspaceArchive,
   WorkspaceCheckout,
   WorkspaceCommit,
+  WorkspaceHolding,
   WorkspaceRef,
 } from "@cawco/core";
-import { WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core";
+import {
+  holdingWords,
+  holdsNothing,
+  WORKSPACE_GIT_TIMEOUT_MS,
+} from "@cawco/core";
 import {
   isSecretFileName,
+  workspaceCacheDir,
   workspaceScratchDir,
   workspacesDir,
 } from "@cawco/core/paths";
@@ -489,9 +504,151 @@ const createdPath = async (id: string): Promise<string | undefined> => {
   }
 };
 
-/** {@link CONTROL_WORKSPACE_ARCHIVE}: the boundary killed with everything in it, then the clone deleted. */
+/**
+ * What the workspace holds that is nowhere else ({@link CONTROL_WORKSPACE_LANDED}),
+ * read by git inside its boundary; `skip` are paths `git status` passes over.
+ */
+const holding = async (
+  workspace: WorkspaceRef,
+  skip: readonly string[]
+): Promise<Omit<WorkspaceHolding, "bytes">> => {
+  const git = insideGit(workspace);
+  const excluded = skip
+    .map((path) => shellQuote(`:(exclude,literal)${path}`))
+    .join(" ");
+  const lines = (out: string): number => out.split("\n").filter(Boolean).length;
+  const [ahead, status, stashes] = await Promise.all([
+    git("git rev-list --count HEAD --branches --not --remotes"),
+    git(
+      excluded
+        ? `git status --porcelain -- . ${excluded}`
+        : "git status --porcelain"
+    ),
+    git("git stash list"),
+  ]);
+  return {
+    ahead: Number(ahead),
+    dirty: lines(status),
+    stashes: lines(stashes),
+  };
+};
+
+/** A folder's size on disk in bytes (`du -sk`), 0 when it cannot be read. */
+const sizeOf = async (path: string): Promise<number> => {
+  const du = Bun.spawn(["du", "-sk", path], {
+    stdout: "pipe",
+    stderr: "ignore",
+  });
+  const [out] = await Promise.all([new Response(du.stdout).text(), du.exited]);
+  return Number(out.split("\t")[0]) * 1024 || 0;
+};
+
+/** {@link CONTROL_WORKSPACE_LANDED}: what the workspace holds that is nowhere else, and its clone's size. */
+export const workspaceLanded = async (
+  ref: unknown,
+  skip: unknown
+): Promise<WorkspaceHolding> => {
+  const workspace = ref as WorkspaceRef;
+  const [held, bytes] = await Promise.all([
+    holding(workspace, Array.isArray(skip) ? skip.map(String) : []),
+    sizeOf(workspace.path),
+  ]);
+  return { ...held, bytes };
+};
+
+/** Trees a search for a clone's Swift packages passes over: never a package of the clone's own. */
+const NOT_PACKAGES = new Set([
+  ...PACKAGE_TREES,
+  ".git",
+  ".build",
+  ".swiftpm",
+  "DerivedData",
+]);
+
+/** The folders of the clone that hold a `Package.swift`, down to `depth` levels. */
+const swiftPackages = async (dir: string, depth = 6): Promise<string[]> => {
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  const found = entries.some(
+    (entry) => entry.isFile() && entry.name === "Package.swift"
+  )
+    ? [dir]
+    : [];
+  if (depth === 0) {
+    return found;
+  }
+  const below = await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory() && !NOT_PACKAGES.has(entry.name))
+      .map((entry) => swiftPackages(join(dir, entry.name), depth - 1))
+  );
+  return [...found, ...below.flat()];
+};
+
+/**
+ * The folders in the workspaces' cache (paths.ts `workspaceCacheDir`) that
+ * belong to the clone at `clone` alone, each built from it and read by
+ * nothing else:
+ * - its Apple build root, `xdg/cawco-apple/<clone's folder name>`, where
+ *   build-both.sh syncs, builds (DerivedData) and logs (~5 GB), and its lock;
+ * - on macOS, Xcode's DerivedData folders whose `info.plist` names a project
+ *   inside the clone (the boundary's xcodebuild puts every build's in
+ *   `DerivedData/`), and SwiftPM's build dirs for each of the clone's
+ *   packages, `swiftpm/build/<md5 of the package dir>` (boundary.ts's swift
+ *   shim names them so).
+ * Read before the clone goes: its packages are found in it.
+ */
+const cacheOfClone = async (clone: string): Promise<string[]> => {
+  const cache = workspaceCacheDir();
+  const apple = join(cache, "xdg", "cawco-apple");
+  const name = basename(clone);
+  const owned = [join(apple, name), join(apple, ".locks", name)];
+  if (process.platform !== "darwin") {
+    return owned;
+  }
+  const derived = join(cache, "DerivedData");
+  const builds = await readdir(derived).catch(() => [] as string[]);
+  const ofClone = await Promise.all(
+    builds.map(async (build) => {
+      const plutil = Bun.spawn(
+        [
+          "/usr/bin/plutil",
+          "-extract",
+          "WorkspacePath",
+          "raw",
+          "-o",
+          "-",
+          join(derived, build, "info.plist"),
+        ],
+        { stdout: "pipe", stderr: "ignore" }
+      );
+      const [named] = await Promise.all([
+        new Response(plutil.stdout).text(),
+        plutil.exited,
+      ]);
+      const project = named.trim();
+      return project.startsWith(`${clone}/`) ? [join(derived, build)] : [];
+    })
+  );
+  const packages = (await swiftPackages(clone)).map((dir) =>
+    join(
+      cache,
+      "swiftpm",
+      "build",
+      new Bun.CryptoHasher("md5").update(dir).digest("hex")
+    )
+  );
+  return [...owned, ...ofClone.flat(), ...packages];
+};
+
+/**
+ * {@link CONTROL_WORKSPACE_ARCHIVE}: the boundary killed with everything in
+ * it, then the clone deleted with what it owns in the workspaces' cache
+ * ({@link cacheOfClone}); `closeBoundary` takes its state and scratch dirs.
+ * With `ifLanded`, first read again what it holds that is nowhere else, its
+ * boundary still up: anything there refuses the archive, and nothing goes.
+ */
 export const archiveWorkspace = async (ref: unknown): Promise<void> => {
-  const request = ref as { id: string; path?: string };
+  const request = ref as Partial<WorkspaceArchive> & { id: string };
   const path = request.path ?? (await createdPath(request.id));
   if (!path) {
     await Promise.all(
@@ -502,6 +659,21 @@ export const archiveWorkspace = async (ref: unknown): Promise<void> => {
     return;
   }
   const workspace: WorkspaceRef = { id: request.id, path };
+  if (request.ifLanded) {
+    const held = await holding(workspace, request.skip ?? []);
+    if (!holdsNothing({ ...held, bytes: 0 })) {
+      throw new Error(
+        `Workspace ${request.id} was not archived: its clone ${path} holds ${holdingWords({ ...held, bytes: 0 })}.`
+      );
+    }
+  }
+  const cached = await cacheOfClone(path);
   await closeBoundary(workspace);
   await rm(workspace.path, { recursive: true, force: true });
+  await Promise.all(
+    cached.map((dir) => rm(dir, { recursive: true, force: true }))
+  );
+  console.info(
+    `[workspace] ${request.id}: archived; its clone ${path}, state, scratch dir and ${cached.length} cache folders of its own are gone`
+  );
 };

@@ -1624,10 +1624,63 @@ export const CONTROL_WORKSPACE_BOUNDARY = "workspaceBoundary";
 
 /**
  * Archives a workspace on its machine: its boundary is killed, with every
- * process in it, and its clone is deleted. Args `[WorkspaceRef]`, or `[{ id }]`
+ * process in it, and its clone is deleted with everything else of its own on
+ * that machine (its state and scratch dirs, its Apple build root, its
+ * DerivedData and SwiftPM build dirs). Args `[WorkspaceArchive]`, or `[{ id }]`
  * for an unfiled create: the machine's create record names its clone.
  */
 export const CONTROL_WORKSPACE_ARCHIVE = "workspaceArchive";
+
+/**
+ * What {@link CONTROL_WORKSPACE_ARCHIVE} is asked: the workspace, and with
+ * `ifLanded` set, only if nothing in it is unlanded at that moment
+ * ({@link CONTROL_WORKSPACE_LANDED}); else the archive is refused in words
+ * naming what would be lost, and nothing is removed. `skip` as there.
+ */
+export interface WorkspaceArchive extends WorkspaceRef {
+  ifLanded?: boolean;
+  skip?: string[];
+}
+
+/**
+ * What a workspace holds that is nowhere else, read inside its boundary:
+ * commits on HEAD or any local branch that no remote-tracking ref has
+ * (`git rev-list --count HEAD --branches --not --remotes`: landed work was
+ * pushed, whether onto the base or to a branch of its own), entries of `git
+ * status --porcelain` (untracked files included; the paths `skip` names, the
+ * outputs its items handed over, left out), and stash entries. `bytes` is the
+ * clone's size on disk. Args `[WorkspaceRef, skip]`; answers
+ * {@link WorkspaceHolding}. Machine-scoped.
+ */
+export const CONTROL_WORKSPACE_LANDED = "workspaceLanded";
+
+/** What {@link CONTROL_WORKSPACE_LANDED} answers. */
+export interface WorkspaceHolding {
+  ahead: number;
+  bytes: number;
+  dirty: number;
+  stashes: number;
+}
+
+/** Whether a workspace holds nothing that is nowhere else. */
+export const holdsNothing = (holding: WorkspaceHolding): boolean =>
+  holding.ahead === 0 && holding.dirty === 0 && holding.stashes === 0;
+
+const counted = (count: number, one: string, many: string): string =>
+  `${count} ${count === 1 ? one : many}`;
+
+/** What a workspace holds that is nowhere else, in words: "2 commits on no remote, 1 uncommitted change". */
+export const holdingWords = (holding: WorkspaceHolding): string =>
+  [
+    holding.ahead > 0 &&
+      counted(holding.ahead, "commit on no remote", "commits on no remote"),
+    holding.dirty > 0 &&
+      counted(holding.dirty, "uncommitted change", "uncommitted changes"),
+    holding.stashes > 0 &&
+      counted(holding.stashes, "stash entry", "stash entries"),
+  ]
+    .filter(Boolean)
+    .join(", ") || "nothing unlanded";
 
 /**
  * A workspace's commit as another machine takes it: `head`, the clone's

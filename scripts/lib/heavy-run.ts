@@ -28,6 +28,12 @@
  * waits, core harness.ts `QUEUE_MARKER`), polls until a slot frees, then
  * prints `CAWCO-QUEUE held heavy`. It waits as long as that takes.
  *
+ * A run starts only with room on the disk for what it writes: below
+ * disk-room.sh's threshold (10 GB free, `CAWCO_MIN_FREE_GB`) it is refused
+ * with one sentence naming the free space and the biggest folders under
+ * CawCo's workspace roots, before it waits for a slot and again once a wait
+ * ends, and holds none.
+ *
  * One process holds one slot however many of its parts ask (the kit's spec
  * and the scratch fleet under it), and a run's descendants hold none of
  * their own: the holder exports `CAWCO_HEAVY_RUN_HELD`.
@@ -173,25 +179,65 @@ const tryTake = (
   }
 };
 
+const DISK_ROOM = join(import.meta.dir, "disk-room.sh");
+
+/**
+ * Why `what` must not start for want of disk space on the filesystem the
+ * workspaces' cache is on (disk-room.sh's sentence), or nothing. A run
+ * starts only with room for what it writes: a precondition, checked as it
+ * asks for a slot and again once a wait for one ends.
+ */
+const roomProblem = (what: string): string | undefined => {
+  const checked = Bun.spawnSync(
+    [
+      "bash",
+      "-c",
+      'source "$1" && disk_room "$2" "$3"',
+      "disk-room",
+      DISK_ROOM,
+      workspaceCacheDir(),
+      what || `A heavy run (pid ${process.pid})`,
+    ],
+    { stdout: "ignore", stderr: "pipe" }
+  );
+  return checked.exitCode === 0
+    ? undefined
+    : checked.stderr.toString().trim() ||
+        `disk-room.sh exited ${checked.exitCode} with nothing said`;
+};
+
+/** What {@link take} came to: a slot, a refusal for want of disk space, or nothing (its shell left). */
+type Taken = { fd: number } | { refused: string } | undefined;
+
 /**
  * Takes a slot for `holder`, waiting as long as it takes; `gone` ends the
- * wait early (a `hold` whose shell left): no slot then.
+ * wait early (a `hold` whose shell left): no slot then. Refused, with no
+ * slot, when the disk has no room for a run ({@link roomProblem}).
  */
 const take = async (
   holder: Holder,
   gone: () => boolean = () => false
-): Promise<number | undefined> => {
+): Promise<Taken> => {
   const count = slotCount();
   const dir = slotsDir();
   mkdirSync(dir, { recursive: true });
+  const before = roomProblem(holder.command);
+  if (before) {
+    return { refused: before };
+  }
   let waited = false;
   for (;;) {
     const look = tryTake(dir, count, holder);
     if ("fd" in look) {
       if (waited) {
         process.stderr.write(`${QUEUE_MARKER} held heavy\n`);
+        const after = roomProblem(holder.command);
+        if (after) {
+          unlock(look.fd);
+          return { refused: after };
+        }
       }
-      return look.fd;
+      return look;
     }
     if (!waited && look.held.length > 0) {
       waited = true;
@@ -213,12 +259,13 @@ export interface HeavySlot {
 }
 
 let held: { fd: number | undefined; holds: number } | undefined;
-let taking: Promise<number | undefined> | undefined;
+let taking: Promise<Taken> | undefined;
 
 /**
  * One of the machine's heavy-run slots for this process, waiting for one
  * when all are held. A process whose ancestor holds one ({@link HELD_ENV})
- * takes none.
+ * takes none. Throws disk-room.sh's sentence when the disk has no room for
+ * a run.
  */
 export async function heavySlot(): Promise<HeavySlot> {
   if (!held) {
@@ -231,9 +278,12 @@ export async function heavySlot(): Promise<HeavySlot> {
         since: Date.now(),
         command: process.argv.slice(1).join(" "),
       });
-      const fd = await taking;
+      const taken = await taking;
       taking = undefined;
-      held ??= { fd, holds: 0 };
+      if (taken && "refused" in taken) {
+        throw new Error(taken.refused);
+      }
+      held ??= { fd: taken?.fd, holds: 0 };
       process.env[HELD_ENV] = "1";
     }
   }
@@ -280,7 +330,7 @@ if (import.meta.main) {
     process.exit(2);
   }
   const gone = () => parentPid() !== shell;
-  const fd = await take(
+  const taken = await take(
     {
       pid: shell,
       where: where(),
@@ -289,9 +339,15 @@ if (import.meta.main) {
     },
     gone
   );
-  if (fd === undefined) {
+  if (taken === undefined) {
     process.exit(0);
   }
+  if ("refused" in taken) {
+    process.stderr.write(`${taken.refused}\n`);
+    process.stdout.write("refused\n");
+    process.exit(3);
+  }
+  const { fd } = taken;
   process.stdout.write("held\n");
   while (!gone()) {
     // biome-ignore lint/performance/noAwaitInLoops: one look at the shell per tick, for its whole life

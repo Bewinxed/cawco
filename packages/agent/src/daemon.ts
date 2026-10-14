@@ -51,6 +51,7 @@ import {
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
+  CONTROL_WORKSPACE_LANDED,
   CONTROL_WORKSPACE_MIGRATE,
   UPDATE_CAWCO,
 } from "@cawco/core";
@@ -180,6 +181,7 @@ import {
   workspaceAt,
   workspaceBoundary,
   workspaceBundle,
+  workspaceLanded,
 } from "./workspace";
 
 const DEFAULT_HUB_URL = `ws://localhost:${CAWCO_HUB_PORT}/ws`;
@@ -2392,6 +2394,11 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_ARCHIVE,
       archiveWorkspace
+    );
+    // What a spent workspace holds that is nowhere else, before the hub retires it.
+    supervisor.registerDaemonFunction(
+      CONTROL_WORKSPACE_LANDED,
+      workspaceLanded
     );
     // A check that names another machine: the commit leaves here, and arrives there.
     supervisor.registerDaemonFunction(

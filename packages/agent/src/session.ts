@@ -56,6 +56,7 @@ import {
   CONTROL_WORKSPACE_AT,
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
+  CONTROL_WORKSPACE_LANDED,
   type DeliveryMark,
   FLEET_STATUS,
   FLEET_SYNC,
@@ -1091,6 +1092,7 @@ export class SessionSupervisor {
       key = `workspace:${String(control.args?.[1])}`;
     } else if (
       control?.method === CONTROL_WORKSPACE_ARCHIVE ||
+      control?.method === CONTROL_WORKSPACE_LANDED ||
       control?.method === CONTROL_WORKSPACE_BUNDLE ||
       control?.method === CONTROL_WORKSPACE_AT
     ) {

@@ -50,6 +50,7 @@ import type {
   SessionRole,
   SpawnPayload,
   WorkItemSummary,
+  WorkspaceArchive,
   WorkspaceCheckout,
   WorkspaceCommit,
   WorkspaceRef,
@@ -2112,13 +2113,19 @@ export const createWorkItems = ({
           queuedSummaryOf(row).leadInstanceId === caller
       );
 
-  /** A workspace's clone and boundary gone on its machine, its places with them, and its row archived. */
+  /**
+   * A workspace's clone and boundary gone on its machine, its places with
+   * them, and its row archived. `guard` asks the machine to archive only if
+   * nothing in it is unlanded ({@link WorkspaceArchive}).
+   */
   const closeWorkspace = async (
-    workspace: WorkspaceRow
+    workspace: WorkspaceRow,
+    guard?: { skip: string[] }
   ): Promise<WorkspaceRow> => {
-    await call(workspace.machineId, CONTROL_WORKSPACE_ARCHIVE, [
-      refOf(workspace),
-    ]);
+    const request: WorkspaceArchive = guard
+      ? { ...refOf(workspace), ifLanded: true, skip: guard.skip }
+      : refOf(workspace);
+    await call(workspace.machineId, CONTROL_WORKSPACE_ARCHIVE, [request]);
     db.removeWorkspacePlaces(workspace.machineId, workspace.path);
     placesChanged(workspace.machineId);
     return (
@@ -4390,9 +4397,14 @@ export const createWorkItems = ({
     /**
      * Archives a workspace: its machine kills the boundary with every process
      * in it and deletes the clone. Refused while an item there is live — stop
-     * it first — and for a workspace already archived.
+     * it first — and for a workspace already archived. `guard` (the
+     * retirement sweep, workspace-retire.ts) has the machine refuse it too
+     * when the clone holds anything unlanded once its sessions have ended.
      */
-    async archive(needle: string): Promise<WorkspaceRow> {
+    async archive(
+      needle: string,
+      guard?: { skip: string[] }
+    ): Promise<WorkspaceRow> {
       const named = db.workspacesNamed(needle.trim());
       if (named.length !== 1) {
         throw new WorkItemRefusal(
@@ -4442,8 +4454,21 @@ export const createWorkItems = ({
           `Workspace ${workspace.id} stays active: ${unconfirmed.join(" ")} Retry once its machine has ended it.`
         );
       }
+      if (guard) {
+        // Retired: the workspace itself first, which its machine refuses
+        // when something there is unlanded; its check workspaces only then.
+        const closed = await closeWorkspace(workspace, guard);
+        await Promise.all(
+          db
+            .checkWorkspacesOf(workspace.id)
+            .map((check) => closeWorkspace(check))
+        );
+        return closed;
+      }
       // Its check workspaces on other machines go first: none outlives it.
-      await Promise.all(db.checkWorkspacesOf(workspace.id).map(closeWorkspace));
+      await Promise.all(
+        db.checkWorkspacesOf(workspace.id).map((check) => closeWorkspace(check))
+      );
       return closeWorkspace(workspace);
     },
 

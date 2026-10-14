@@ -13,7 +13,14 @@
  * it answered in `seen`.
  */
 import { Database } from "bun:sqlite";
-import { existsSync, mkdirSync, renameSync, rmSync, unlinkSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  unlinkSync,
+} from "node:fs";
 import {
   chmod,
   mkdir,
@@ -395,22 +402,26 @@ const chatEvents = (words: string[], tool?: Reply["tool"]): string[] => {
 };
 
 /**
- * Where a fleet's folders stand: its sandbox under the cache root (on real
- * disk, not /tmp: a delegate's workspace boundary mounts paths from its
- * home, and a /tmp private to whatever runs this is not one it sees), and
- * its services' HOME and runtime dirs, two hex under the shortest root this
- * can write: a CawCo workspace's own TMPDIR (`~/.cawco/tmp/<id8>`, 35 bytes,
- * on disk), else the cache root (`~/.cache`, 22).
+ * Where a fleet's folders stand, all on real disk (not /tmp: a delegate's
+ * workspace boundary mounts paths from its home, and a /tmp private to
+ * whatever runs this is not one it sees). In a CawCo workspace, everything
+ * is under the workspace's own scratch dir, its TMPDIR (`~/.cawco/tmp/<id8>`,
+ * 35 bytes), which goes with the workspace when it is archived, so no fleet
+ * a SIGKILL cut short outlives it: the sandbox at the dir's real path, and
+ * the services' HOME and runtime dirs two hex under TMPDIR as named (on
+ * macOS a short link to it, for sockets' sake). Elsewhere both are under the
+ * cache root (`~/.cache`, 22 bytes).
  */
 function fleetRoots(): { scratch: string; short: string } {
-  const scratch =
+  const workspaceTmp =
+    process.env.CAWCO_WORKSPACE && process.env.TMPDIR
+      ? process.env.TMPDIR
+      : undefined;
+  const cache =
     process.env.XDG_CACHE_HOME ?? join(process.env.HOME ?? "/tmp", ".cache");
   return {
-    scratch,
-    short:
-      process.env.CAWCO_WORKSPACE && process.env.TMPDIR
-        ? process.env.TMPDIR
-        : scratch,
+    scratch: workspaceTmp ? realpathSync(workspaceTmp) : cache,
+    short: workspaceTmp ?? cache,
   };
 }
 

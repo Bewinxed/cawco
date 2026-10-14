@@ -165,6 +165,7 @@ import {
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
+  CONTROL_WORKSPACE_LANDED,
   type CommandQueue,
   type CommandQueueFrame,
   type CommandRun,
@@ -372,6 +373,7 @@ import type {
   PublicInstanceRow,
   SentMessageRow,
   WorkItemRow,
+  WorkspaceRow,
 } from "./db";
 import { checkoutOf, hashHookMaterial, listedAt, TURN_UNRECORDED } from "./db";
 import type { LoginMove } from "./db/accounts";
@@ -575,6 +577,7 @@ import {
 } from "./work-items";
 import { workflowRoutes } from "./workflows/routes";
 import { createWorkflowRuntime } from "./workflows/runtime";
+import { createWorkspaceRetire } from "./workspace-retire";
 
 /** The frame a forwarded `control` comes back as, whoever asked for it. */
 type ControlResult = Extract<FramePayload, { kind: "control_result" }>;
@@ -14759,6 +14762,7 @@ export const createServer = (
     const timeout =
       method === CONTROL_WORKSPACE_CREATE ||
       method === CONTROL_WORKSPACE_ARCHIVE ||
+      method === CONTROL_WORKSPACE_LANDED ||
       method === CONTROL_WORKSPACE_BUNDLE ||
       method === CONTROL_WORKSPACE_AT ||
       method === CONTROL_PLACE_REPO ||
@@ -15490,15 +15494,30 @@ export const createServer = (
       throw error;
     }
   };
+  /** What follows a workspace's archive: its sessions' pending sends and routed asks, and the dashboards. */
+  const workspaceArchived = (workspace: WorkspaceRow): void => {
+    for (const item of db.workItemsIn(workspace.id)) {
+      forgetPending(item.instanceId, UNREAD.ended);
+      escalateRoutedAsks(item.instanceId);
+    }
+    publishInstances(workspace.machineId);
+  };
+  // Spent workspaces retired on their own (workspace-retire.ts).
+  const workspaceRetire = createWorkspaceRetire({
+    archived: workspaceArchived,
+    call: callMachine,
+    db,
+    inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
+    lifetime,
+    machineName,
+    online: onlineMachines,
+    workItems,
+  });
   // `delegate_list`: a session's own delegation tree (§5.2).
   const delegationTree = createDelegationTree({
     db,
     checkQueue: (itemId) => workItems.checkQueueOf(itemId),
-    machineName: (machineId) =>
-      machineLabel(
-        db.listAgents().find((agent) => agent.machineId === machineId)
-          ?.hostname ?? machineId
-      ),
+    machineName,
     activity: (row) => {
       const state = followupState(row);
       // The same test the cold check makes: warm mid-turn, unmeasured, or unexpired.
@@ -20842,14 +20861,18 @@ export const createServer = (
       })
       // Archiving a workspace: its machine kills the boundary with every
       // process in it and deletes the clone. Refused while an item runs there.
+      // Spent workspaces kept for unlanded work, as the last sweep read them
+      // (workspace-retire.ts); `delegate_list` shows the same list.
+      .get("/api/workspaces/kept", hidden, () => ({
+        kept: workspaceRetire.kept(),
+      }))
+      // A retirement sweep now, rather than at its next tick: what it retired,
+      // kept and could not retire.
+      .post("/api/workspaces/retire", hidden, () => workspaceRetire.sweep())
       .post("/api/workspaces/:id/archive", async ({ params, status }) => {
         try {
           const workspace = await workItems.archive(params.id);
-          for (const item of db.workItemsIn(workspace.id)) {
-            forgetPending(item.instanceId, UNREAD.ended);
-            escalateRoutedAsks(item.instanceId);
-          }
-          publishInstances(workspace.machineId);
+          workspaceArchived(workspace);
           return workspace;
         } catch (error) {
           const message =
