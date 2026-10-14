@@ -506,6 +506,7 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         #if DEBUG
         RecallProbe.arm(self)
         CanvasProbe.arm(self)
+        SendProbe.arm(self)
         #endif
     }
 
@@ -925,9 +926,12 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         if action != .sending { submit() }
     }
 
-    /// A refused send never eats what was typed: nothing to send, the last
-    /// one still out, or a swipe still carrying the conversation leaves the
-    /// draft as it is. The pane clears it once it has the message.
+    /// A refused send never eats what was typed: nothing to send, the canvas
+    /// still being read for the last press, or a swipe still carrying the
+    /// conversation leaves the draft as it is. The pane clears it once it
+    /// has the message. A send still waiting for the hub's word holds back
+    /// nothing typed since: Return sends it after (Composer.svelte's Enter
+    /// `submit`), while the box, spinning, takes no press.
     private func submit() {
         // A queued message's words go back in its place.
         if let edit {
@@ -940,7 +944,7 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
             }
             return
         }
-        guard let binding, writable, !held, action != .sending, !canvasWorking, hasContent, !unready, flight == nil else { return }
+        guard let binding, writable, !held, !canvasWorking, hasContent, !unready, flight == nil else { return }
         // The canvas goes as its file, its outline and its picture, read now.
         if let canvas = binding.canvas {
             sendCanvas(canvas, binding)
@@ -1515,6 +1519,33 @@ extension ComposerView {
         textViewDidChange(field)
     }
 
+    /// A press on the action box, as a finger's lands: only while it takes one. Answers whether it did.
+    func probePressSend() -> Bool {
+        guard actionBox.isEnabled, actionBox.isUserInteractionEnabled, !actionBox.isHidden else { return false }
+        actionBox.sendActions(for: .primaryActionTriggered)
+        return true
+    }
+
+    /// Return on the keyboard: the field's own insert of a line break.
+    func probeReturn() {
+        field.insertText("\n")
+    }
+
+    /// The action box's face now, and whether it draws anything: its glyph's
+    /// image, or the spinner's inked stroke, on a box and a face not faded out.
+    var probeGlyph: (face: String, drawn: Bool, detail: String) {
+        guard let glyph else { return ("none", false, "no face") }
+        // As the frame's commit lays it out: a face swapped in since the last one is read as it will be drawn.
+        glyph.layoutIfNeeded()
+        let face = switch glyph.face {
+        case let .glyph(one): one == Glyph.send ? "send" : one == .stop ? "stop" : one == .warning ? "warning" : "glyph"
+        case .spinner: "spinner"
+        }
+        let ink = glyph.probeInk
+        let shown = !actionBox.isHidden && actionBox.alpha > 0.01 && glyph.alpha > 0.01 && glyph.superview === actionBox
+        return (face, shown && ink.drawn, "\(ink.detail), box alpha \(String(format: "%.2f", actionBox.alpha)), face alpha \(String(format: "%.2f", glyph.alpha))")
+    }
+
     /// Every button in the pill, by what VoiceOver calls it.
     var probeButtons: [String] {
         var found: [String] = []
@@ -1632,7 +1663,7 @@ enum CanvasSendRefusal: Error {
 
     var sentence: String {
         switch self {
-        case .notConnected: "The canvas isn't connected to the hub, so nothing was sent."
+        case .notConnected: "The canvas isn't connected to the hub, so nothing was sent. Send again once it reconnects, or remove the canvas to send your words alone."
         case .notReached: "Your drawing hasn't reached the hub yet, so nothing was sent. Wait a moment, then send again."
         }
     }
@@ -1980,17 +2011,28 @@ extension ComposerView {
     /// doc synced, its picture drawn, and the hub's export counting what the
     /// page's doc counts, waited for up to 5 s. A canvas whose link has
     /// stood lost, or that never synced, is refused; a count the hub hasn't
-    /// caught up with after the wait is refused too.
+    /// caught up with after the wait is refused too. Every ask of the hub
+    /// is bounded with the wait it belongs to: the page's place by its load's
+    /// 10 s, each export by what is left of the 5 s, so a hub that doesn't
+    /// answer is said, never waited on with the box spinning.
     private func readForSend(_ canvas: DraftCanvas, _ binding: SessionComposerBinding, _ host: CanvasHost) async throws -> (export: CanvasExport, count: Int) {
+        let clock = ContinuousClock()
+        func export(within: Duration) async throws -> CanvasExport {
+            do {
+                return try await host.hub.exportCanvas(canvas.id, name: canvas.name, within: within)
+            } catch let error as URLError where error.code == .timedOut {
+                let seconds = Double(within.components.seconds) + Double(within.components.attoseconds) / 1e18
+                throw CanvasRefusal(message: "the hub didn't answer for it within \(Int(seconds.rounded(.up))) s")
+            }
+        }
         var page = canvas.page
         if page == nil {
-            page = try await host.hub.exportCanvas(canvas.id, name: canvas.name).page
+            page = try await export(within: CanvasWeb.loadRefuses).page
             binding.canvas?.page = page
         }
         guard let page, self.binding === binding else { throw CanvasRefusal(message: "the conversation changed") }
         let web = room(for: canvas).attach(page, instanceId: binding.sessionId)
         try await web.ready()
-        let clock = ContinuousClock()
         let deadline = clock.now + CanvasWeb.lostRefuses
         // Lost long enough that the pen stopped drawing: nothing here reaches the hub.
         if web.refused, web.hasSynced { throw CanvasSendRefusal.notConnected }
@@ -2000,7 +2042,7 @@ extension ComposerView {
         guard web.hasSynced else { throw CanvasSendRefusal.notConnected }
         try await web.picture()
         while true {
-            let export = try await host.hub.exportCanvas(canvas.id, name: canvas.name)
+            let export = try await export(within: max(.seconds(1), deadline - clock.now))
             if web.link == .synced, let count = web.drawn, export.drawn == count {
                 noteCanvas("Send reads the hub's export: \(export.drawn) drawn, the page's \(count)")
                 return (export, count)
@@ -2352,6 +2394,19 @@ final class SwapGlyph: UIView {
         }.startAnimation()
     }
 
+    #if DEBUG
+    /// Whether the face draws anything: the glyph's sharp image, or the spinner's inked stroke.
+    var probeInk: (drawn: Bool, detail: String) {
+        switch face {
+        case .glyph:
+            (sharp.image != nil && sharp.alpha > 0.01, "image \(sharp.image != nil), sharp alpha \(String(format: "%.2f", sharp.alpha))")
+        case .spinner:
+            (spinner.probeStroke.width > 0 && spinner.probeStroke.inked && spinner.bounds.width > 0,
+             "stroke \(String(format: "%.2f", spinner.probeStroke.width))pt inked \(spinner.probeStroke.inked), box \(String(format: "%.0f", spinner.bounds.width))pt")
+        }
+    }
+    #endif
+
     func swapOut(animated: Bool) {
         guard animated, !UIAccessibility.isReduceMotionEnabled else {
             removeFromSuperview()
@@ -2369,7 +2424,8 @@ final class SwapGlyph: UIView {
 }
 
 /// The kit spinner (components/ui/spinner): a 16pt ring at 25% with a
-/// quarter arc turning on it, in the tint.
+/// quarter arc turning on it, in the tint. Its stroke is the ring's own
+/// 2.5/24 of the box it is laid out in, whatever frame it was made with.
 public final class SpinnerView: UIView {
     private let track = CAShapeLayer()
     private let arc = CAShapeLayer()
@@ -2380,7 +2436,6 @@ public final class SpinnerView: UIView {
         accessibilityLabel = "Loading"
         for layer in [track, arc] {
             layer.fillColor = nil
-            layer.lineWidth = 2.5 * frame.width / 24
             layer.lineCap = .round
             self.layer.addSublayer(layer)
         }
@@ -2399,8 +2454,16 @@ public final class SpinnerView: UIView {
         for layer in [track, arc] {
             layer.frame = bounds
             layer.path = path
+            layer.lineWidth = 2.5 * bounds.width / 24
         }
     }
+
+    #if DEBUG
+    /// The arc's stroke as drawn: its width, and whether it has an ink.
+    var probeStroke: (width: CGFloat, inked: Bool) {
+        (arc.lineWidth, arc.strokeColor != nil)
+    }
+    #endif
 
     override public func tintColorDidChange() {
         super.tintColorDidChange()
@@ -2411,7 +2474,7 @@ public final class SpinnerView: UIView {
     override public func didMoveToWindow() {
         super.didMoveToWindow()
         tintColorDidChange()
-        guard window != nil, arc.animation(forKey: "spin") == nil else { return }
+        guard window != nil, layer.animation(forKey: "spin") == nil else { return }
         // Tailwind's animate-spin: a turn a second, linear.
         let spin = CABasicAnimation(keyPath: "transform.rotation.z")
         spin.fromValue = 0

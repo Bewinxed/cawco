@@ -89,7 +89,7 @@ const EXPORT_AGAIN_MS = 250;
 
 /** The page's doc never synced, or its link has stood lost. */
 const NOT_CONNECTED =
-  "The canvas isn't connected to the hub, so nothing was sent.";
+  "The canvas isn't connected to the hub, so nothing was sent. Send again once it reconnects, or remove the canvas to send your words alone.";
 /** The hub's export doesn't count what the page's doc counts after the wait. */
 const NOT_REACHED =
   "Your drawing hasn't reached the hub yet, so nothing was sent. Wait a moment, then send again.";

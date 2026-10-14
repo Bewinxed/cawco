@@ -116,9 +116,16 @@ enum CanvasDebug {
     static let pencil = ProcessInfo.processInfo.arguments.contains("-cawcoProbePencil")
     /// The canvas's decisions, which a simulator pass reads (scripts/probe-ios-composer-canvas.ts).
     static let log = Logger(subsystem: "dev.cawco.app", category: "Canvas")
-    /// `-canvas-probe-sync`: the canvas page's sync socket starts refused
-    /// (the probe opens it, and cuts it, with `cawco:probe-sync`).
-    static let syncGate = ProcessInfo.processInfo.arguments.contains("-canvas-probe-sync")
+    /// The mode a canvas page's sync gate starts in as the page is made, or
+    /// no gate. `-canvas-probe-sync`: refused (the probe opens it, and cuts
+    /// it, with `cawco:probe-sync`); `-send-probe-busy`: open, until the
+    /// probe sets `hang` for the canvas it makes next.
+    @MainActor static var gateStart: String? = {
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("-canvas-probe-sync") { return "refuse" }
+        if arguments.contains("-send-probe-busy") { return "open" }
+        return nil
+    }()
 }
 #endif
 
@@ -176,6 +183,8 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
     private(set) var drawn: Int?
     /// How long a lost link stands before the canvas refuses (artifact.ts `LOST_REFUSES_MS`).
     static let lostRefuses = Duration.seconds(5)
+    /// How long the page may take to join its document (stage.svelte.ts `ready`).
+    static let loadRefuses = Duration.seconds(10)
     /// What is drawn here wouldn't reach the hub (artifact.ts `refused`):
     /// before the doc first synced, and once a lost link has stood 5 s. The
     /// page shows its refusal and its pen draws nothing meanwhile.
@@ -212,8 +221,8 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         configuration.userContentController.addUserScript(WKUserScript(source: Self.host, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         #if DEBUG
         configuration.userContentController.addUserScript(WKUserScript(source: Self.errors, injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        if CanvasDebug.syncGate {
-            configuration.userContentController.addUserScript(WKUserScript(source: Self.gate, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        if let start = CanvasDebug.gateStart {
+            configuration.userContentController.addUserScript(WKUserScript(source: Self.gate(start: start), injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
         #endif
         web = WKWebView(frame: .zero, configuration: configuration)
@@ -306,7 +315,7 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
             readyWaiters[id] = continuation
             Task { [weak self] in
-                try? await Task.sleep(for: .seconds(10))
+                try? await Task.sleep(for: Self.loadRefuses)
                 guard let waiter = self?.readyWaiters.removeValue(forKey: id) else { return }
                 waiter.resume(throwing: CanvasRefusal(message: "the canvas page didn't load within 10 s"))
             }
@@ -507,38 +516,60 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
     })
     """
 
-    /// `-canvas-probe-sync`: the page's artifact sockets go through a gate,
-    /// refused from the start. Refused, a socket asks for a path beside its
-    /// own that the listener upgrades nothing on (it answers 404), so the
-    /// handshake fails as a refused upgrade does. `cawco:probe-sync` with
+    /// The page's artifact sockets go through a gate, starting in `start`
+    /// (CanvasDebug `gateStart`). Refused, a socket asks for a path beside
+    /// its own that the listener upgrades nothing on (it answers 404), so the
+    /// handshake fails as a refused upgrade does. Hung, it is a socket that
+    /// never answers: connecting until it is closed. `cawco:probe-sync` with
     /// `open` lets the next one through; with `cut` it closes every open one
     /// and refuses again.
-    private static let gate = """
-    (() => {
-      const Native = window.WebSocket;
-      let mode = "refuse";
-      const open = new Set();
-      const ARTIFACT = /\\/__cawco\\/artifact\\/[0-9a-f-]{36}$/;
-      function Gate(url, protocols) {
-        const at = new URL(String(url), location.href);
-        if (!ARTIFACT.test(at.pathname)) return new Native(url, protocols);
-        if (mode !== "open") at.pathname += "/probe-refused";
-        const socket = new Native(at.toString(), protocols);
-        open.add(socket);
-        socket.addEventListener("close", () => open.delete(socket));
-        return socket;
-      }
-      Gate.prototype = Native.prototype;
-      Object.assign(Gate, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 });
-      window.WebSocket = Gate;
-      window.addEventListener("message", (event) => {
-        if (event.data?.type !== "cawco:probe-sync") return;
-        if (event.data.mode === "open") { mode = "open"; return; }
-        mode = "refuse";
-        for (const socket of open) socket.close();
-      });
-    })();
-    """
+    private static func gate(start: String) -> String {
+        """
+        (() => {
+          const Native = window.WebSocket;
+          let mode = "\(start)";
+          const open = new Set();
+          const ARTIFACT = /\\/__cawco\\/artifact\\/[0-9a-f-]{36}$/;
+          const Hung = (url) => {
+            const socket = new EventTarget();
+            Object.assign(socket, {
+              url: String(url), readyState: 0, protocol: "", extensions: "", bufferedAmount: 0, binaryType: "blob",
+              onopen: null, onmessage: null, onerror: null, onclose: null,
+              send() {},
+              close() {
+                if (socket.readyState === 3) return;
+                socket.readyState = 3;
+                setTimeout(() => {
+                  const closed = new CloseEvent("close", { code: 1006, wasClean: false });
+                  socket.onclose?.(closed);
+                  socket.dispatchEvent(closed);
+                }, 0);
+              },
+            });
+            return socket;
+          };
+          function Gate(url, protocols) {
+            const at = new URL(String(url), location.href);
+            if (!ARTIFACT.test(at.pathname)) return new Native(url, protocols);
+            if (mode === "hang") return Hung(at);
+            if (mode !== "open") at.pathname += "/probe-refused";
+            const socket = new Native(at.toString(), protocols);
+            open.add(socket);
+            socket.addEventListener("close", () => open.delete(socket));
+            return socket;
+          }
+          Gate.prototype = Native.prototype;
+          Object.assign(Gate, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 });
+          window.WebSocket = Gate;
+          window.addEventListener("message", (event) => {
+            if (event.data?.type !== "cawco:probe-sync") return;
+            if (event.data.mode === "open") { mode = "open"; return; }
+            mode = "refuse";
+            for (const socket of open) socket.close();
+          });
+        })();
+        """
+    }
 
     /// One pen stroke through Excalidraw's own pointer path: the rail's Pen,
     /// then a pen's down, moves and up on the canvas. Answers how many

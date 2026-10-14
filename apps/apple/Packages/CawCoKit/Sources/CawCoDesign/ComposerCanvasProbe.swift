@@ -334,7 +334,7 @@ enum CanvasProbe {
     }
 
     /// Draws a rectangle with a word in it on the canvas, as `artifact_update` does.
-    private static func drawAsAgent(on id: String, in instanceId: String, hub: HubConnection) async -> Bool {
+    static func drawAsAgent(on id: String, in instanceId: String, hub: HubConnection) async -> Bool {
         guard let address = hub.address else { return false }
         var request = URLRequest(url: address.appending(path: "api/instances/\(instanceId)/artifacts/\(id)"))
         request.httpMethod = "PATCH"

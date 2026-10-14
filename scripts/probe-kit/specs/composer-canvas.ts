@@ -1295,7 +1295,7 @@ const goodLinkCheck = async (on: On) => {
 
 /** The sentences a Send of the canvas refuses with (canvas-room.svelte.ts). */
 const NOT_CONNECTED =
-  "The canvas isn't connected to the hub, so nothing was sent.";
+  "The canvas isn't connected to the hub, so nothing was sent. Send again once it reconnects, or remove the canvas to send your words alone.";
 const NOT_REACHED =
   "Your drawing hasn't reached the hub yet, so nothing was sent. Wait a moment, then send again.";
 

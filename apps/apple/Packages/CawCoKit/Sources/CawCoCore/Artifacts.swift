@@ -70,11 +70,16 @@ public extension HubConnection {
     /// A canvas's export (`GET /api/artifacts/:id/export`). Read raw rather
     /// than through the generated client: its `CanvasElement` keeps only the
     /// fields the outline reads, and the `.excalidraw` file a send carries is
-    /// every field the hub keeps.
-    func exportCanvas(_ id: String, name: String) async throws -> CanvasExport {
+    /// every field the hub keeps. `within` bounds the wait for its answer
+    /// (`URLError.timedOut` past it); without it, URLSession's own.
+    func exportCanvas(_ id: String, name: String, within: Duration? = nil) async throws -> CanvasExport {
         guard let address else { throw TaskRefusal(message: "No hub is connected.") }
-        let url = address.appending(path: "api/artifacts/\(id)/export")
-        let (data, response) = try await URLSession.shared.data(from: url)
+        var request = URLRequest(url: address.appending(path: "api/artifacts/\(id)/export"))
+        if let within {
+            let parts = within.components
+            request.timeoutInterval = Double(parts.seconds) + Double(parts.attoseconds) / 1e18
+        }
+        let (data, response) = try await URLSession.shared.data(for: request)
         guard (response as? HTTPURLResponse)?.statusCode == 200 else {
             let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
             throw TaskRefusal(message: text.isEmpty ? "The hub refused to read the canvas." : text)
