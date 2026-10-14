@@ -1851,13 +1851,72 @@ workspace_archived() {
 export -f workspace_archived
 check "the proof's workspace is archived through the hub, and nothing of it is left on the joined machine" workspace_archived 300 "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential"
 
-# ---------------------------------------------------------------- Install now on a joined machine, through a failure
+# ---------------------------------------------------------------- Install now on a joined machine
 # The owner's Mac on 2026-10-13: Install now for a joined machine answered `installed`, and the machine then said
-# installing, with no helper and nothing applied, until its agent was restarted by hand. A joined machine applies on
-# the command, its agent restarted only by the update's own helper; a download its hub cannot supply leaves it failed,
-# saying why, never installing, and the same command tries the build again by itself once the hub can supply it.
-# Build 11 is the build it installs; it comes after build 10 (the workspace checks above), on the nightly channel.
-export RETRY_BUILD=0.0.1-nightly.11+bbbbbbbbbbbb RETRY_COMMIT=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+# installing, with no helper and nothing applied, until its agent was restarted by hand. The command had landed while
+# the machine's own auto-update pass was draining for that build: that pass took the command and started the helper,
+# and the pass Install now runs after it began at once and booted the helper's launchd job out before the helper had
+# taken its lock. That sweep runs on macOS only, where scripts/binary/probe-helper-jobs-launchd.ts proves it leaves
+# such a helper alone; here the same interleaving runs on the joined machine, and the build must apply on that
+# command, its agent restarted only by the update's own helper. Then a download its hub cannot supply leaves the
+# machine failed, saying why, never installing, and the same command tries the build again by itself once the hub can.
+# Builds 11 and 12 are the builds these install; they come after build 10 (the workspace checks above).
+export RACE_BUILD=0.0.1-nightly.11+bbbbbbbbbbbb RACE_COMMIT=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+export RETRY_BUILD=0.0.1-nightly.12+cccccccccccc RETRY_COMMIT=cccccccccccccccccccccccccccccccccccccccc
+# Publishes a build ($1, its commit $2, its binary $3, its sequence $4) and installs it on the hub's machine, one update
+# at a time, each asked for: the joined machine is on the hub's build first, auto-update is off, and once the hub runs
+# the new build its joined machine is offered it.
+hub_installs_first() {
+  put_policy nightly false
+  sleep 15
+  wait_until 300 '[[ "$(phase $hid)" != installing && "$(phase $jid)" != installing ]]'
+  if [[ "$(build_version $jid)" != "$(build_version $hid)" ]]; then install_now_request "$jid" > /dev/null; fi
+  wait_until 600 '[[ "$(build_version $jid)" == "$(build_version $hid)" && "$(phase $jid)" != installing ]]'
+  publish ok nightly "$1" "$2" "$3" "$key" "$4" "$schema"
+  learn
+  install_now_request "$hid" > /dev/null
+  wait_until 400 '[[ "$(build_version $hid)" == "'"$1"'" && "$(phase $hid)" == installed ]]'
+  wait_until 120 '[[ "$(field $jid availableVersion)" == "'"$1"'" ]]'
+}
+# How many helpers started applying build $2 on machine $1, as its apply.log says.
+apply_starts() { as_user "$1" sh -c 'grep -c "start $1 keeperOnly=false" /home/cawco/.local/share/cawco/binary/apply.log || true' sh "$2"; }
+# A workflow whose one step is a long command on the machine it runs on: work in flight an agent's drain waits on.
+export HOLD_WORKFLOW='{"name":"hold-the-joined-drain","program":"import { z } from \"zod\"; export const inputs = z.object({}); export default async function (w: Workflow<typeof inputs>) { await w.exec(\"sleep 150\"); return {}; }"}'
+joiner_command_mid_drain() {
+  need_hub
+  local wf run since answer
+  on_exit 'put_policy nightly false > /dev/null; as_user "$joinerc" pkill -f "sleep 150"'
+  hub_installs_first "$RACE_BUILD" "$RACE_COMMIT" "$bins/cawco-11" 48
+  # Work in flight on the joined machine, started before any fence: the workflow's command, run there by its agent.
+  wf=$(hub_api /api/workflows -X POST -H 'content-type: application/json' -d "$HOLD_WORKFLOW" | json 'd => d.id')
+  [[ -n $wf ]]
+  on_exit "hub_api /api/workflows/$wf -X DELETE > /dev/null"
+  run=$(hub_api "/api/workflows/$wf/runs" -X POST -H 'content-type: application/json' -d "{\"inputs\":{},\"workspace\":{\"path\":\"/home/cawco\",\"machineId\":\"$jid\"}}" | json 'd => d.runId')
+  [[ -n $run ]]
+  # The run ends with the check, so no step of it is run again on the machine after its agent restarts.
+  on_exit "hub_api /api/workflow-runs/$run/cancel -X POST > /dev/null"
+  wait_until 60 'as_user "$joinerc" pgrep -f "sleep 150" > /dev/null'
+  since=$(as_user "$joinerc" date +%s)
+  # Auto-update on: the joined machine's own pass stages the hub's build, raises its fence, says installing, and drains
+  # for up to 45 s on that command before it starts any helper.
+  put_policy nightly true
+  wait_until 150 '[[ "$(phase $jid)" == installing ]]'
+  as_user "$joinerc" test ! -e /home/cawco/.local/share/cawco/binary/apply.lock
+  [[ "$(apply_starts "$joinerc" "$RACE_BUILD")" == 0 ]]
+  # Install now lands in that pass's drain.
+  answer=$(install_now_request "$jid")
+  echo "the joined machine answered: $answer"
+  grep -q '"installed":true' <<< "$answer"
+  as_user "$joinerc" journalctl --user --no-pager -o cat -u cawco-agent.service --since "@$since" | grep "\[update\]" || true
+  as_user "$joinerc" journalctl --user --no-pager -o cat -u cawco-agent.service --since "@$since" | grep -q "arrived during an update pass, which takes it"
+  # One helper applies the build at once, from that command, with no agent restart by hand.
+  wait_until 60 '[[ "$(apply_starts "$joinerc" "$RACE_BUILD")" == 1 ]]'
+  wait_until 300 '[[ "$(build_version $jid)" == "$RACE_BUILD" && "$(phase $jid)" == installed ]]'
+  [[ "$(apply_starts "$joinerc" "$RACE_BUILD")" == 1 ]]
+}
+export -f hub_installs_first apply_starts joiner_command_mid_drain
+check "Install now sent while a joined machine's own auto-update pass drains for the build applies on that command: one helper, at once, with no agent restart by hand" joiner_command_mid_drain 1200 "Install now applies the newer build|a second container joins the hub" "$RACE_BUILD"
+
 # Moves the retry build's archive ($1) `aside` where the hub gets it, its own copy and the release host's, or `back`.
 retry_archive() {
   local cached="/home/cawco/.local/share/cawco/binary-releases/$RETRY_BUILD/$1" hosted="$out/release/ok/nightly/$1"
@@ -1873,17 +1932,7 @@ agent_pid() { as_user "$1" systemctl --user show -p MainPID --value cawco-agent.
 joiner_install_retries() {
   need_hub
   local archive agent answer
-  # One update at a time, each asked for: the hub's machine, then the joined one.
-  put_policy nightly false
-  sleep 15
-  wait_until 300 '[[ "$(phase $hid)" != installing && "$(phase $jid)" != installing ]]'
-  if [[ "$(build_version $jid)" != "$(build_version $hid)" ]]; then install_now_request "$jid" > /dev/null; fi
-  wait_until 600 '[[ "$(build_version $jid)" == "$(build_version $hid)" && "$(phase $jid)" != installing ]]'
-  publish ok nightly "$RETRY_BUILD" "$RETRY_COMMIT" "$bins/cawco-11" "$key" 48 "$schema"
-  learn
-  install_now_request "$hid" > /dev/null
-  wait_until 400 '[[ "$(build_version $hid)" == "$RETRY_BUILD" && "$(phase $hid)" == installed ]]'
-  wait_until 120 '[[ "$(field $jid availableVersion)" == "$RETRY_BUILD" ]]'
+  hub_installs_first "$RETRY_BUILD" "$RETRY_COMMIT" "$bins/cawco-12" 49
   # The hub cannot supply the build: the copy it fetched for its own machine, and the release host's, are aside.
   archive=$(hub_api /api/binary-updates/release | json "d => d.manifest.artifacts.find(a => a.target === 'linux-x64')?.archive")
   [[ -n $archive ]]
@@ -1902,7 +1951,7 @@ joiner_install_retries() {
   # applies it, with no agent restart by hand.
   retry_archive "$archive" back
   wait_until 300 '[[ "$(build_version $jid)" == "$RETRY_BUILD" && "$(phase $jid)" == installed ]]'
-  [[ "$(as_user "$joinerc" sh -c 'grep -c "start $1 keeperOnly=false" /home/cawco/.local/share/cawco/binary/apply.log || true' sh "$RETRY_BUILD")" == 1 ]]
+  [[ "$(apply_starts "$joinerc" "$RETRY_BUILD")" == 1 ]]
 }
 export -f retry_archive agent_pid joiner_install_retries
 check "an install commanded on a joined machine whose hub cannot supply the build says failed and why, then applies it by itself once the hub can, with no agent restart by hand" joiner_install_retries 1200 "Install now applies the newer build|a second container joins the hub" "$RETRY_BUILD"
