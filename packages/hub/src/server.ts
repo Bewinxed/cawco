@@ -6473,14 +6473,13 @@ export const createServer = (
     if (!taken) {
       return false;
     }
-    taken.catch((error: unknown) => {
+    /** The send's own record, when no wake under its uuid made one. */
+    const settle = (
+      outcome: { state: "read" } | { state: "failed"; reason: string }
+    ): void => {
       if (db.sendRecord(message.uuid)) {
         return;
       }
-      const reason = error instanceof Error ? error.message : String(error);
-      console.warn(
-        `[caw] ${payload.instanceId}: your words to Caw did not reach him: ${reason}`
-      );
       publishSend(
         db.recordSend({
           uuid: message.uuid,
@@ -6488,13 +6487,29 @@ export const createServer = (
           acceptedAt: new Date(),
           body: externalizeImages(sentFrame(payload)),
           mode: sendMode(payload),
-          state: "failed",
-          reason,
-          refusal: null,
-          anchor: anchors.get(payload.instanceId) ?? null,
+          ...(outcome.state === "failed"
+            ? {
+                state: "failed" as const,
+                reason: outcome.reason,
+                refusal: null,
+                anchor: anchors.get(payload.instanceId) ?? null,
+              }
+            : { state: "read" as const }),
         })
       );
-    });
+    };
+    taken.then(
+      // Taken with no wake: "Make a note: …" went into AGENTS.md as the
+      // thread's composer sends it, which is what taking it means.
+      () => settle({ state: "read" }),
+      (error: unknown) => {
+        const reason = error instanceof Error ? error.message : String(error);
+        console.warn(
+          `[caw] ${payload.instanceId}: your words to Caw did not reach him: ${reason}`
+        );
+        settle({ state: "failed", reason });
+      }
+    );
     return true;
   };
 
