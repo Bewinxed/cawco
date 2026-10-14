@@ -7073,7 +7073,44 @@ export const createServer = (
    * against but this.
    */
   const waiting = new Map<string, (frame: ControlResult) => void>();
-  const waitingMachines = new Map<string, string>();
+  /**
+   * Each call to a machine that waits in {@link waiting}: its machine, and the
+   * socket it went out on (none when the machine had none: it goes on the
+   * next one to register, as an owed start does).
+   */
+  const waitingMachines = new Map<
+    string,
+    { machineId: string; socketId: string | undefined }
+  >();
+  /** A call to `machineId` now waits on the socket the machine has now. */
+  const waitOn = (requestId: string, machineId: string): void => {
+    waitingMachines.set(requestId, {
+      machineId,
+      socketId: registry.agent(machineId)?.id,
+    });
+  };
+  /**
+   * A socket stopped being its machine's (registry `onAgentLeft`: a newer
+   * register replaced it, or it closed): every call waiting on it fails now
+   * with MACHINE_DISCONNECTED, so its caller can ask again on the socket the
+   * machine has now, instead of waiting out its timeout. A reply that comes
+   * on the old socket later is refused, as any frame from it is.
+   */
+  registry.onAgentLeft((machineId, socketId) => {
+    for (const [requestId, call] of waitingMachines) {
+      if (
+        call.socketId === socketId ||
+        (call.socketId === undefined && call.machineId === machineId)
+      ) {
+        waiting.get(requestId)?.({
+          kind: "control_result",
+          requestId,
+          ok: false,
+          error: MACHINE_DISCONNECTED,
+        });
+      }
+    }
+  });
   /** Who hears a running command's slot waits, by the run id it was sent with. */
   const commandQueues = new Map<string, (queue: CommandQueue | null) => void>();
   const unroutedReplies = new Set<string>();
@@ -7142,7 +7179,7 @@ export const createServer = (
         waitingMachines.delete(requestId);
         resolve("timeout");
       });
-      waitingMachines.set(requestId, machineId);
+      waitOn(requestId, machineId);
       waiting.set(requestId, (frame) => {
         lifetime.cancel(timer);
         waiting.delete(requestId);
@@ -9120,7 +9157,7 @@ export const createServer = (
         waitingMachines.delete(requestId);
         resolve("timeout");
       });
-      waitingMachines.set(requestId, machineId);
+      waitOn(requestId, machineId);
       waiting.set(requestId, (frame) => {
         lifetime.cancel(timer);
         waiting.delete(requestId);
@@ -24014,22 +24051,14 @@ export const createServer = (
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: releases each kind of machine-owned state when its socket goes away.
         close(ws) {
           closeLine(ws);
+          // Calls waiting on it fail as it leaves (registry `onAgentLeft`),
+          // here or at the register that replaced it, whichever came first.
           const machineId = registry.dropAgent(ws.id);
           if (!machineId) {
             return;
           }
           // Sends to it wait for its next register, within the grace.
           awaitGrace(machineId, "agent");
-          for (const [requestId, machine] of waitingMachines) {
-            if (machine === machineId) {
-              waiting.get(requestId)?.({
-                kind: "control_result",
-                requestId,
-                ok: false,
-                error: MACHINE_DISCONNECTED,
-              });
-            }
-          }
           // A summariser's turn cannot end where nobody hears it: its
           // continuation waits for the machine's next register instead.
           for (const waiter of turnWaiters.values()) {

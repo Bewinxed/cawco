@@ -65,9 +65,16 @@
  *    closed page (404, `cawco-preview-down` closed), and the hub's journal
  *    says so in one `[preview] hub listener` line.
  * 8. No journal says "No preview selected".
+ *
+ * 18. A call never waits out its timeout on a socket that is no longer its
+ *     machine's: the spec plays a machine over a raw agent socket, a config
+ *     read (10 s timeout) waits on it, and a second socket registers as the
+ *     same machine. The read answers MACHINE_DISCONNECTED within a second,
+ *     and the old socket's late reply is refused.
  */
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the checks are read in order, one after another.
 import type { Frame, Page } from "playwright-core";
+import { INSPECT_CONFIG } from "../../../packages/core/src/fleet";
 import { PREVIEW_PING_PATH } from "../../../packages/core/src/frames";
 import { OVERLAY_PATH } from "../../../packages/core/src/preview-proxy";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -87,6 +94,8 @@ const SERVE = "PROBE-WORKSPACE-SERVE";
 const SERVING = "WORKSPACE-SERVER-UP";
 /** How long a preview has to answer again after a restart. Our call: a register and a listener start take a few seconds. */
 const BOUND_MS = 30_000;
+/** A machine this spec plays itself, over raw agent sockets (check 18). */
+const PROBE_MACHINE = "probe-superseded";
 const HTTP = /^http/;
 
 /** A page whose script opens a WebSocket back to its own origin, as an HMR client does, and keeps what its server said. */
@@ -1012,6 +1021,99 @@ const run = async (kit: Kit) => {
     "8: no journal says 'No preview selected'",
     ![hubLog, agentLog].some((text) => text.includes("No preview selected"))
   );
+
+  // 18. A call waiting on a socket a newer register replaced fails at once.
+  const agentUrl = `${fleet.base.replace(HTTP, "ws")}/ws`;
+  /** A raw agent socket registered as {@link PROBE_MACHINE}, and every frame it hears. */
+  const rawAgent = async () => {
+    const frames: { verb?: string; payload?: unknown; requestId?: string }[] =
+      [];
+    const ws = new WebSocket(agentUrl);
+    ws.onmessage = (event) => {
+      frames.push(JSON.parse(String(event.data)));
+    };
+    await new Promise<void>((done, fail) => {
+      ws.onopen = () => done();
+      ws.onerror = () => fail(new Error(`no socket at ${agentUrl}`));
+    });
+    ws.send(
+      JSON.stringify({
+        verb: "register",
+        machineId: PROBE_MACHINE,
+        payload: { hostname: PROBE_MACHINE, os: "linux" },
+      })
+    );
+    return { heard: frames, ws };
+  };
+  const old = await rawAgent();
+  await until(
+    "the probe machine online",
+    async () =>
+      (
+        (await fetch(`${fleet.base}/api/agents`).then((r) => r.json())) as {
+          machineId: string;
+          status: string;
+        }[]
+      ).some(
+        (row) => row.machineId === PROBE_MACHINE && row.status === "online"
+      ),
+    Boolean,
+    15_000
+  );
+  // A call the old socket never answers: the machine's config read.
+  const pending = fetch(`${fleet.base}/api/agents/${PROBE_MACHINE}/inspect`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  }).then(async (response) => ({
+    status: response.status,
+    text: await response.text(),
+    at: Date.now(),
+  }));
+  const asked = await until(
+    "the inspect call on the old socket",
+    () =>
+      old.heard.find(
+        (frame) =>
+          frame.verb === "control" &&
+          (frame.payload as { method?: string }).method === INSPECT_CONFIG
+      ),
+    Boolean,
+    5000
+  );
+  const replacing = await rawAgent();
+  const replacedAt = Date.now();
+  const answer = await pending;
+  // The old socket answers late: refused, as any frame from it is.
+  const { requestId } = asked.payload as { requestId?: string };
+  old.ws.send(
+    JSON.stringify({
+      verb: "frames",
+      machineId: PROBE_MACHINE,
+      requestId,
+      payload: { kind: "control_result", requestId, ok: true, result: {} },
+    })
+  );
+  const refusal = await until(
+    "the late reply's refusal",
+    () =>
+      old.heard.find((frame) =>
+        JSON.stringify(frame.payload ?? "").includes("not machine")
+      ),
+    Boolean,
+    5000
+  ).catch(() => undefined);
+  const waited = answer.at - replacedAt;
+  kit.check(
+    "18: a call waiting on an agent socket a newer register replaced fails within a second with MACHINE_DISCONNECTED, not its 10 s timeout, and a late reply on the old socket is refused",
+    answer.status === 500 &&
+      answer.text.includes("The machine disconnected during this request") &&
+      waited < 1000 &&
+      !!refusal,
+    `${answer.status} after ${waited} ms: ${answer.text.slice(0, 120)}; late reply: ${refusal ? JSON.stringify(refusal.payload).slice(0, 160) : "no refusal"}`
+  );
+  old.ws.close();
+  replacing.ws.close();
   second.server.stop(true);
 };
 

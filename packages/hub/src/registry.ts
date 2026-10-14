@@ -71,6 +71,14 @@ export interface RegistryShape {
    * to send whatever `Origin` it likes.
    */
   readonly noteDashboardOrigin: (origin: string | undefined) => void;
+  /**
+   * Hears each agent socket once, the moment it stops being its machine's:
+   * a newer register replaced it ({@link registerAgent}), or it was dropped
+   * ({@link dropAgent}), whichever comes first.
+   */
+  readonly onAgentLeft: (
+    listener: (machineId: string, socketId: string) => void
+  ) => void;
   readonly registerAgent: (
     machineId: string,
     socket: HubSocket,
@@ -167,11 +175,25 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
     }
   });
 
+  const leftListeners: ((machineId: string, socketId: string) => void)[] = [];
+  const left = (machineId: string, socketId: string): void => {
+    for (const listener of leftListeners) {
+      listener(machineId, socketId);
+    }
+  };
+
   return {
+    onAgentLeft: (listener) => {
+      leftListeners.push(listener);
+    },
     registerAgent: (machineId, socket, address) => {
+      const before = agents.get(machineId);
       agents.set(machineId, socket);
       if (address) {
         addresses.set(machineId, address);
+      }
+      if (before && before.id !== socket.id) {
+        left(machineId, before.id);
       }
     },
     dropAgent: (socketId) => {
@@ -179,6 +201,7 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
         if (socket.id === socketId) {
           agents.delete(machineId);
           addresses.delete(machineId);
+          left(machineId, socketId);
           return machineId;
         }
       }
