@@ -77,11 +77,25 @@ console.log(
 );
 
 const failed: string[] = [];
+/** How far into the app's Probe lines the last check stood: a failure prints what the app said since. */
+let checkedAt = 0;
+/** The most of the app's lines a failure prints, and of each line's characters. */
+const FAIL_LINES = 40;
+const FAIL_LINE_CHARS = 200;
 const check = (step: string, ok: boolean, detail: string) => {
   console.log(`${ok ? "PASS" : "FAIL"} ${step}: ${detail}`);
   if (!ok) {
     failed.push(`${step}: ${detail}`);
+    // The outside run is the only one that taps: its log carries the evidence.
+    const said = seen.slice(checkedAt).slice(-FAIL_LINES);
+    console.log(
+      `  the app's Probe lines since the last check (${said.length}):`
+    );
+    for (const line of said) {
+      console.log(`    | ${line.slice(0, FAIL_LINE_CHARS)}`);
+    }
   }
+  checkedAt = seen.length;
 };
 
 /** Runs `script` in bash here; its stdout, or throws with its stderr. */
@@ -181,7 +195,7 @@ const CARD_LINE =
   /^preview card pin=(\d+) field=(none|-?\d+,-?\d+) reply=(none|-?\d+,-?\d+) resolve=(\S+)@(none|-?\d+,-?\d+) close=(none|-?\d+,-?\d+) live=(yes|no) thread=(\d+) problem=(.*)$/;
 /** Pins.swift's `preview list …` line, logged once the sheet is in its window: the counts, the filter, each row's number and centre, the live rows. */
 const LIST_LINE =
-  /^preview list open=(\d+) resolved=(\d+) moved=(\d+) filter=(\S+)@(none|-?\d+,-?\d+) rows=(\S*) live=(\S*)$/;
+  /^preview list open=(\d+) resolved=(\d+) moved=(\d+) filter=(\S+)@(none|-?\d+,-?\d+) rows=(\S*) live=(\S*) scrim=(none|-?\d+,-?\d+)$/;
 /** The overlay's answer to the app's reply or resolve, as the app logs it. */
 const RESULT_LINE =
   /^preview (reply|resolve)-result (?:pin=(\d+) (ok|refused: .*)|none)$/;
@@ -215,12 +229,6 @@ const pageOf = (line: string): Page | undefined => {
 /** The newest page line after `from`. */
 const pageAfter = (from: number) =>
   seen.slice(from).map(pageOf).filter(Boolean).at(-1) as Page | undefined;
-/**
- * The newest page line so far, where nothing on the page changed: after a
- * drag the app has the page report where its parts stand (on the layout
- * that moved the drawer), and the page's own timer may post nothing more.
- */
-const pageLast = () => pageAfter(0);
 /** Waits for a log line after `from` that `match` takes. */
 const lineAfter = (
   what: string,
@@ -231,7 +239,11 @@ const lineAfter = (
   until(what, () => seen.slice(from).find(match), Boolean, ms).catch(
     () => undefined
   );
-/** Waits for the page to post after `from` (it posts every 700ms), so its rects are where they are drawn now. */
+/**
+ * Waits for the page to post after `from`, so its rects are where they are
+ * drawn now: the app has it report every 0.7 s on the app's own clock (and
+ * the page's timer does too, while WebKit runs it).
+ */
 const freshPage = async (what: string, from: number, ms = 15_000) => {
   await lineAfter(what, from, (line) => pageOf(line) !== undefined, ms);
   return pageAfter(from);
@@ -328,6 +340,8 @@ const cardOf = (line: string): Card | undefined => {
   };
 };
 /** The newest card line after `from` that `match` takes, waited for. */
+/** The newest card line so far, where nothing moved the card. */
+const cardLast = () => seen.map(cardOf).findLast((card) => card !== undefined);
 const cardAfter = async (
   what: string,
   from: number,
@@ -358,6 +372,8 @@ interface List {
   open: number;
   resolved: number;
   rows: Record<string, Point | undefined>;
+  /** A point on the scrim above the sheet: a tap there puts the sheet away. */
+  scrim?: Point;
 }
 const listOf = (line: string): List | undefined => {
   const m = line.match(LIST_LINE);
@@ -375,6 +391,7 @@ const listOf = (line: string): List | undefined => {
     filter: pointOf(m[5]),
     rows,
     live: m[7].split(";").filter(Boolean),
+    scrim: pointOf(m[8]),
   };
 };
 /** The newest list line after `from`, waited for: the sheet logs it once it stands in its window. */
@@ -542,18 +559,32 @@ xcrun simctl install ${udid} "${app}"`);
         `/api/instances/${id}/artifacts/comments?artifact=${made.id}&filter=all`
       )
     ).artifacts.find((one) => one.id === made.id)?.pins ?? [];
-  /** One finger's tap, the runner's `POST /touch` (where every `tapOn` of Maestro's ends). */
-  const tap = (point: Point) =>
-    runner("touch", { x: Math.round(point.x), y: Math.round(point.y) });
+  /**
+   * One finger's tap, the runner's `POST /touch` (where every `tapOn` of
+   * Maestro's ends), printed with what it is for and the read it came from.
+   */
+  const tap = (point: Point, what: string) => {
+    console.log(
+      `  tap ${what} at ${Math.round(point.x)},${Math.round(point.y)}`
+    );
+    return runner("touch", {
+      x: Math.round(point.x),
+      y: Math.round(point.y),
+    });
+  };
   /** One finger from `from` to `to` over half a second, the runner's `POST /swipeV2`. */
-  const drag = (from: Point, to: Point) =>
-    runner("swipeV2", {
+  const drag = (from: Point, to: Point) => {
+    console.log(
+      `  drag from ${from.x},${from.y} to ${to.x},${to.y} (the grabber, from the newest header)`
+    );
+    return runner("swipeV2", {
       startX: Math.round(from.x),
       startY: Math.round(from.y),
       endX: Math.round(to.x),
       endY: Math.round(to.y),
       duration: 0.5,
     });
+  };
   /** A tap on what the page named, at its centre, which must lie in the web view's frame of the same post. */
   const tapPage = async (name: string, now: Page) => {
     const at = now.at[name];
@@ -566,15 +597,15 @@ xcrun simctl install ${udid} "${app}"`);
       at.x <= web.x + web.width &&
       at.y >= web.y &&
       at.y <= web.y + web.height;
-    console.log(
-      `  tap ${name} at ${at.x},${at.y}: ${inside ? "inside" : "OUTSIDE"} the web view at ${frameText(web)}`
-    );
     if (!inside) {
       throw new Error(
         `${name} at ${at.x},${at.y} lies outside the web view at ${frameText(web)}`
       );
     }
-    await tap(at);
+    await tap(
+      at,
+      `the page's ${name} (${inside ? "inside" : "OUTSIDE"} the web view at ${frameText(web)}, from its newest post)`
+    );
   };
   const grabber = async () => (await headNow("the grabber")).grabber;
 
@@ -678,7 +709,7 @@ xcrun simctl install ${udid} "${app}"`);
     `button "${head.words}", commenting line ${head.note}pt, Pins ${head.pins ? "shown" : "hidden"}`
   );
   mark = seen.length;
-  await tap(head.comment);
+  await tap(head.comment, `Comment ("${head.words}", from the newest header)`);
   const on = await lineAfter(
     "Comment on",
     mark,
@@ -721,7 +752,10 @@ xcrun simctl install ${udid} "${app}"`);
   // ── 7. The Pins sheet lists it; its row opens the card ────────────────
   // The card goes first, so the row is what opens it again.
   if (card?.close) {
-    await tap(card.close);
+    await tap(
+      card.close,
+      `pin ${card.number}'s card Close (from its newest line)`
+    );
   }
   await pause(1200);
   /** The Pins sheet opened from the header, as it lists the pins once it stands. */
@@ -734,7 +768,7 @@ xcrun simctl install ${udid} "${app}"`);
     ).catch(() => headLast() as Head);
     const from = seen.length;
     if (now.pins) {
-      await tap(now.pins);
+      await tap(now.pins, "Pins (from the newest header)");
     }
     return { list: await listAfter(what, from), pins: now.pins };
   };
@@ -752,7 +786,7 @@ xcrun simctl install ${udid} "${app}"`);
   mark = seen.length;
   const row = sheet.list?.rows["1"];
   if (row) {
-    await tap(row);
+    await tap(row, "pin 1's row in the sheet (from the sheet's list line)");
   }
   card = await cardAfter("the card from its row", mark, (c) => c.number === 1);
   check(
@@ -768,7 +802,10 @@ xcrun simctl install ${udid} "${app}"`);
   // `cawco:resolve`), which writes the doc and answers with its result.
   const REPLY = "Make the count bigger";
   if (card?.field) {
-    await tap(card.field);
+    await tap(
+      card.field,
+      `pin ${card.number}'s card field (from its newest line)`
+    );
   }
   await pause(800);
   await type(REPLY);
@@ -777,7 +814,10 @@ xcrun simctl install ${udid} "${app}"`);
   card = await cardAfter("the card with words in it", seen.length);
   mark = seen.length;
   if (card?.reply) {
-    await tap(card.reply);
+    await tap(
+      card.reply,
+      `pin ${card.number}'s card Reply (from its newest line)`
+    );
   }
   const replied = await resultAfter("reply", mark);
   const thread = await until(
@@ -801,7 +841,7 @@ xcrun simctl install ${udid} "${app}"`);
   ).catch(() => headLast() as Head);
   mark = seen.length;
   if (head.sendWords === "Send 1" && head.send) {
-    await tap(head.send);
+    await tap(head.send, `${head.sendWords} (from the newest header)`);
   }
   const sent = await lineAfter(
     "the send",
@@ -851,34 +891,43 @@ xcrun simctl install ${udid} "${app}"`);
     (c) => c.number === 1 && c.live,
     15_000
   );
-  // The card goes first (its keyboard with it), so the sheet stands where it
-  // logs its rows, and the live row is what opens the card again.
-  card = await cardAfter("the card before the sheet", seen.length);
-  if (card?.close) {
-    await tap(card.close);
-  }
-  await pause(1200);
+  // The sheet opens over the card, which stays up: its live row is read
+  // from the sheet's list line, and the sheet goes again by its scrim.
   sheet = await openSheet("the Pins sheet after the send");
-  await pause(800);
-  mark = seen.length;
-  const liveRow = sheet.list?.rows["1"];
-  if (liveRow) {
-    await tap(liveRow);
-  }
-  card = await cardAfter(
-    "the card from the live row",
-    mark,
-    (c) => c.number === 1
-  );
   check(
     "with the frame's sentAt set and the session working, the pin's row and card show the live dot",
     liveCard !== undefined && sheet.list?.live.includes("1") === true,
     `card ${liveCard ? "live" : "not live"}; the sheet's live rows ${JSON.stringify(sheet.list?.live ?? null)}`
   );
+  await pause(800);
   mark = seen.length;
-  if (card?.resolve) {
-    await tap(card.resolve);
+  if (sheet.list?.scrim) {
+    await tap(
+      sheet.list.scrim,
+      "the scrim over the Pins sheet, which puts it away (from the sheet's list line)"
+    );
   }
+  await pause(1200);
+  // The card as it stands once the sheet is gone: its line after the
+  // dismissal (the app logs it when a layout moves it, and with each page
+  // post), else the newest, when it never moved.
+  card =
+    (await cardAfter(
+      "pin 1's card after the sheet",
+      mark,
+      (c) => c.number === 1,
+      5000
+    )) ?? cardLast();
+  if (card?.number !== 1 || !card.resolve) {
+    throw new Error(
+      `no card for pin 1 up after the sheet went (newest card line: ${seen.findLast((l) => cardOf(l) !== undefined) ?? "none"})`
+    );
+  }
+  mark = seen.length;
+  await tap(
+    card.resolve,
+    `pin 1's card ${card.resolveWords} (from its newest line)`
+  );
   const resolvedLine = await resultAfter("resolve", mark);
   const [resolvedOnHub] = await pinsOnHub();
   const resolvedPins = await lineAfter(
@@ -902,14 +951,17 @@ xcrun simctl install ${udid} "${app}"`);
   );
   card = await cardAfter("the card before it closes", seen.length);
   if (card?.close) {
-    await tap(card.close);
+    await tap(
+      card.close,
+      `pin ${card.number}'s card Close (from its newest line)`
+    );
   }
   await pause(1200);
 
   // ── 9. Done: the page takes taps again ────────────────────────────────
   head = await headNow("the header before Done");
   mark = seen.length;
-  await tap(head.comment);
+  await tap(head.comment, `Comment ("${head.words}", from the newest header)`);
   const off = await lineAfter(
     "Comment off",
     mark,
@@ -937,11 +989,11 @@ xcrun simctl install ${udid} "${app}"`);
 
   // ── 10. Reload with Comment on: it comes back off ─────────────────────
   mark = seen.length;
-  await tap(head.comment);
+  await tap(head.comment, `Comment ("${head.words}", from the newest header)`);
   await lineAfter("Comment on again", mark, (l) => l === "preview comment on");
   head = await headNow("the header before Reload");
   mark = seen.length;
-  await tap(head.reload);
+  await tap(head.reload, "Reload (from the newest header)");
   const reloaded = await lineAfter(
     "the reload's document",
     mark,
@@ -990,12 +1042,9 @@ xcrun simctl install ${udid} "${app}"`);
     await drag(from, { x: from.x, y: from.y + by });
     await pause(1500);
     const to = headLast()?.grabber;
-    // The page as it reported on the drawer's move: nothing on it changed.
-    const moved = pageLast();
-    if (!moved) {
-      throw new Error(`no page line at the ${height} height`);
-    }
-    page = moved;
+    // The page's first post once the drawer rests: the app has it report on
+    // its own clock (every 0.7 s), so its points are where it stands now.
+    page = await pageNow(`the page at ${height} height`);
     before = page.count;
     mark = seen.length;
     await tapPage("button-end", page);

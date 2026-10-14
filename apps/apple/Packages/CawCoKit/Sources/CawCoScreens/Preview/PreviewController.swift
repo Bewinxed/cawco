@@ -313,12 +313,19 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         super.viewDidAppear(animated)
         startPolling()
         sayShown()
+        #if DEBUG
+        startHeartbeat()
+        #endif
     }
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         polling?.cancel()
         polling = nil
+        #if DEBUG
+        heartbeat?.invalidate()
+        heartbeat = nil
+        #endif
     }
 
     @objc private func cameForward() { sayShown() }
@@ -1118,17 +1125,41 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// The header as last logged on a layout: logged again only when it moved.
     private var laidHead = ""
 
+    /// The card as last logged on a layout.
+    private var laidCard = ""
+
     /// A layout that moved the header (a drawer drag, a mode) says so at once,
-    /// whatever the page's own posts do.
+    /// whatever the page's own posts do; so does the open card, once the pass
+    /// has laid it out (a keyboard leaving, a sheet put away).
     private func probeLayout() {
         guard PreviewProbe.on, view.window != nil else { return }
         let line = headLine()
-        guard line != laidHead else { return }
-        laidHead = line
-        PreviewProbe.say(line)
-        // The probe's page says where its parts stand now (its `report`), so
-        // a post follows a moved drawer whatever the page's own timers do.
-        web.evaluateJavaScript("typeof report === 'function' && report()")
+        if line != laidHead {
+            laidHead = line
+            PreviewProbe.say(line)
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, openPin != nil, !card.isHidden else { return }
+            view.layoutIfNeeded()
+            let now = card.probeLine()
+            guard now != laidCard else { return }
+            laidCard = now
+            PreviewProbe.say(now)
+        }
+    }
+
+    /// The probe's page reports where its parts stand (its `report`) on the
+    /// app's own clock: the page's timers can stop in WebKit while the app
+    /// runs on, and every post is read where the views stand when it lands.
+    private var heartbeat: Timer?
+
+    private func startHeartbeat() {
+        guard PreviewProbe.on, heartbeat == nil else { return }
+        heartbeat = Timer.scheduledTimer(withTimeInterval: 0.7, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.web.evaluateJavaScript("typeof report === 'function' && report()")
+            }
+        }
     }
 
     /// The probe's page posts `cawco:probe` with its state and the viewport

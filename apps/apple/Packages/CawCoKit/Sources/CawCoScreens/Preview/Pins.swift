@@ -165,7 +165,11 @@ final class PinListController: UIViewController {
         view.layoutIfNeeded()
         let placed = pins.filter { !$0.moved }
         let shown = rows.arrangedSubviews.compactMap { $0 as? PinRow }
-        PreviewProbe.say("preview list open=\(placed.count { !$0.resolved }) resolved=\(placed.count(where: \.resolved)) moved=\(pins.count(where: \.moved)) filter=\(resolvedShown ? "resolved" : "open")@\(PreviewProbe.centre(filter)) rows=\(shown.map { "\($0.number)@\(PreviewProbe.centre($0))" }.joined(separator: ";")) live=\(shown.filter(\.live).map { "\($0.number)" }.joined(separator: ";"))")
+        // A point on the scrim above the sheet, whose tap puts the sheet away:
+        // 100pt over its content's top, which the sheet's grabber and title stand under.
+        let top = view.convert(view.bounds, to: nil)
+        let scrim = "\(Int(top.midX.rounded())),\(Int(max(20, top.minY - 100).rounded()))"
+        PreviewProbe.say("preview list open=\(placed.count { !$0.resolved }) resolved=\(placed.count(where: \.resolved)) moved=\(pins.count(where: \.moved)) filter=\(resolvedShown ? "resolved" : "open")@\(PreviewProbe.centre(filter)) rows=\(shown.map { "\($0.number)@\(PreviewProbe.centre($0))" }.joined(separator: ";")) live=\(shown.filter(\.live).map { "\($0.number)" }.joined(separator: ";")) scrim=\(scrim)")
     }
     #endif
 
