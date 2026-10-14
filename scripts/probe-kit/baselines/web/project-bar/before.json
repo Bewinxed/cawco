@@ -1,0 +1,322 @@
+{
+  "desk 1440": {
+    "top": {
+      "left": 228,
+      "top": 0,
+      "width": 1212,
+      "height": 44
+    },
+    "barStrip": null,
+    "barTabs": 0,
+    "crumbs": ["Routines"],
+    "namedInBar": 2,
+    "head": {
+      "left": 228,
+      "top": 44,
+      "width": 1212,
+      "height": 80.89
+    },
+    "row": {
+      "left": 228,
+      "top": 124.89,
+      "width": 1212,
+      "height": 50
+    },
+    "rowTabs": [
+      {
+        "left": 257,
+        "top": 128.89,
+        "width": 60,
+        "height": 28
+      },
+      {
+        "left": 319,
+        "top": 128.89,
+        "width": 55,
+        "height": 28
+      },
+      {
+        "left": 376,
+        "top": 128.89,
+        "width": 70,
+        "height": 28
+      },
+      {
+        "left": 448,
+        "top": 128.89,
+        "width": 78,
+        "height": 28
+      },
+      {
+        "left": 528,
+        "top": 128.89,
+        "width": 94,
+        "height": 28
+      },
+      {
+        "left": 624,
+        "top": 128.89,
+        "width": 92,
+        "height": 28
+      },
+      {
+        "left": 718,
+        "top": 128.89,
+        "width": 105,
+        "height": 28
+      },
+      {
+        "left": 825,
+        "top": 128.89,
+        "width": 109,
+        "height": 28
+      }
+    ],
+    "pane": {
+      "left": 228,
+      "top": 174.89,
+      "width": 1212,
+      "height": 725.11
+    }
+  },
+  "desk 1024": {
+    "top": {
+      "left": 228,
+      "top": 0,
+      "width": 796,
+      "height": 44
+    },
+    "barStrip": null,
+    "barTabs": 0,
+    "crumbs": ["Routines"],
+    "namedInBar": 2,
+    "head": {
+      "left": 228,
+      "top": 44,
+      "width": 796,
+      "height": 80.89
+    },
+    "row": {
+      "left": 228,
+      "top": 124.89,
+      "width": 796,
+      "height": 50
+    },
+    "rowTabs": [
+      {
+        "left": 257,
+        "top": 128.89,
+        "width": 60,
+        "height": 28
+      },
+      {
+        "left": 319,
+        "top": 128.89,
+        "width": 55,
+        "height": 28
+      },
+      {
+        "left": 376,
+        "top": 128.89,
+        "width": 70,
+        "height": 28
+      },
+      {
+        "left": 448,
+        "top": 128.89,
+        "width": 78,
+        "height": 28
+      },
+      {
+        "left": 528,
+        "top": 128.89,
+        "width": 94,
+        "height": 28
+      },
+      {
+        "left": 624,
+        "top": 128.89,
+        "width": 92,
+        "height": 28
+      },
+      {
+        "left": 718,
+        "top": 128.89,
+        "width": 105,
+        "height": 28
+      },
+      {
+        "left": 825,
+        "top": 128.89,
+        "width": 109,
+        "height": 28
+      }
+    ],
+    "pane": {
+      "left": 228,
+      "top": 174.89,
+      "width": 796,
+      "height": 593.11
+    }
+  },
+  "tablet 1024 sideways": {
+    "top": {
+      "left": 228,
+      "top": 0,
+      "width": 796,
+      "height": 44
+    },
+    "barStrip": null,
+    "barTabs": 0,
+    "crumbs": ["Routines"],
+    "namedInBar": 2,
+    "head": {
+      "left": 228,
+      "top": 44,
+      "width": 796,
+      "height": 80.89
+    },
+    "row": {
+      "left": 228,
+      "top": 124.89,
+      "width": 796,
+      "height": 54
+    },
+    "rowTabs": [
+      {
+        "left": 257,
+        "top": 128.89,
+        "width": 60,
+        "height": 32
+      },
+      {
+        "left": 319,
+        "top": 128.89,
+        "width": 55,
+        "height": 32
+      },
+      {
+        "left": 376,
+        "top": 128.89,
+        "width": 70,
+        "height": 32
+      },
+      {
+        "left": 448,
+        "top": 128.89,
+        "width": 78,
+        "height": 32
+      },
+      {
+        "left": 528,
+        "top": 128.89,
+        "width": 94,
+        "height": 32
+      },
+      {
+        "left": 624,
+        "top": 128.89,
+        "width": 92,
+        "height": 32
+      },
+      {
+        "left": 718,
+        "top": 128.89,
+        "width": 105,
+        "height": 32
+      },
+      {
+        "left": 825,
+        "top": 128.89,
+        "width": 109,
+        "height": 32
+      }
+    ],
+    "pane": {
+      "left": 228,
+      "top": 178.89,
+      "width": 796,
+      "height": 589.11
+    }
+  },
+  "phone 390": {
+    "top": {
+      "left": 0,
+      "top": 0,
+      "width": 390,
+      "height": 44
+    },
+    "barStrip": null,
+    "barTabs": 0,
+    "crumbs": ["Routines"],
+    "namedInBar": 2,
+    "head": {
+      "left": 0,
+      "top": 44,
+      "width": 390,
+      "height": 119.39
+    },
+    "row": {
+      "left": 0,
+      "top": 163.39,
+      "width": 390,
+      "height": 54
+    },
+    "rowTabs": [
+      {
+        "left": 22,
+        "top": 167.39,
+        "width": 60,
+        "height": 32
+      },
+      {
+        "left": 84,
+        "top": 167.39,
+        "width": 55,
+        "height": 32
+      },
+      {
+        "left": 141,
+        "top": 167.39,
+        "width": 70,
+        "height": 32
+      },
+      {
+        "left": 213,
+        "top": 167.39,
+        "width": 78,
+        "height": 32
+      },
+      {
+        "left": 293,
+        "top": 167.39,
+        "width": 94,
+        "height": 32
+      },
+      {
+        "left": 389,
+        "top": 167.39,
+        "width": 92,
+        "height": 32
+      },
+      {
+        "left": 483,
+        "top": 167.39,
+        "width": 105,
+        "height": 32
+      },
+      {
+        "left": 590,
+        "top": 167.39,
+        "width": 109,
+        "height": 32
+      }
+    ],
+    "pane": {
+      "left": 0,
+      "top": 217.39,
+      "width": 390,
+      "height": 626.61
+    }
+  }
+}

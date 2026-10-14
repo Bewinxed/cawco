@@ -42,6 +42,8 @@ export const load: PageLoad = async ({ fetch, params, url }) => {
       null)
     : null;
   return {
+    /** The page hands the shell's bar its view strip (bar-strip.svelte). */
+    barStrip: project !== null,
     project,
     machine,
     tasks,

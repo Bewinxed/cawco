@@ -1,7 +1,8 @@
 <script lang="ts">
   /**
    * The project's views (design §2, PRD §5.2): the head with Caw as the
-   * lead's face, then the view strip and the view. Board, Table and
+   * lead's face, then the view; the view strip stands in the shell's bar on
+   * a wide screen and under the head on a phone. Board, Table and
    * Pipeline always; Calendar when a task carries a date; then each view
    * kept in `views/`, then each Caw drafted, marked `draft`, with Keep and
    * Discard over it. The tasks are the hub's: every change is a commit, so
@@ -16,7 +17,9 @@
    */
   import type { ProjectView } from "@cawco/core";
   import { untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
+  import { barStrip } from "#lib/cawco/bar-strip.svelte.js";
   import {
     cawco,
     discardView,
@@ -83,6 +86,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
     IconNeedsYou,
     IconPlus,
@@ -255,6 +259,28 @@
   };
 
   // --- the strip ----------------------------------------------------------------
+
+  /**
+   * Where the strip stands: in the shell's bar on a wide screen, where the
+   * crumb would only have said the name the head says (bar-strip); a
+   * phone's bar is the burger's, so there it is the page's own row under
+   * the head. The line the shell hosts a conversation's tabs by.
+   */
+  const narrowQuery = new MediaQuery(NARROW_QUERY);
+  const hosted = $derived(
+    !(browser ? narrowQuery.current : Boolean(page.data.narrow))
+  );
+  $effect(() => {
+    if (!(hosted && project)) {
+      return;
+    }
+    barStrip.strip = inBar;
+    return () => {
+      if (barStrip.strip === inBar) {
+        barStrip.strip = null;
+      }
+    };
+  });
 
   interface StripTab {
     draft: boolean;
@@ -710,6 +736,91 @@
   <title>{project?.name ?? "Project"} &middot; CawCo</title>
 </svelte:head>
 
+<!-- The view strip: the views, then what acts on them. Drawn in the shell's
+     bar on a wide screen (`inBar`, bar-strip), as the page's own row under
+     the head on a phone. -->
+{#snippet strip(
+  inBar: boolean
+)}
+  <div class="strip" class:in-bar={inBar}>
+    <Tabs onValueChange={choose} value={current}>
+      <TabsList aria-label="Views" scrollable>
+        {#each tabs as each (each.value)}
+          <TabItem
+            href={hrefOf(null, each.value)}
+            label={each.label}
+            value={each.value}
+          >
+            {#snippet trail()}
+              {#if each.draft}
+                <Badge class="draft-badge" variant="secondary">draft</Badge>
+              {/if}
+            {/snippet}
+          </TabItem>
+        {/each}
+      </TabsList>
+    </Tabs>
+    {#if trailing}
+      <!-- Under 640px New task and Ask Caw are in the head's ⋯: the rule
+           stands only while Needs you follows it there. -->
+      <span
+        aria-hidden="true"
+        class="rule"
+        class:wide={needsYou.length === 0}
+      ></span>
+    {/if}
+    <div class="trail">
+      {#if needsYou.length > 0}
+        <button
+          aria-pressed={filtering}
+          class="needs pressable"
+          onclick={() => {
+            needsOnly = !filtering;
+          }}
+          type="button"
+          in:crossIn
+          out:crossOut
+        >
+          <IconNeedsYou aria-hidden="true" />
+          Needs you
+          <span class="num">{needsYou.length}</span>
+        </button>
+      {/if}
+      {#if strippedNewTask}
+        <Button
+          class="wide pressable"
+          onclick={() => {
+            if (current !== "table") {
+              choose("board");
+            }
+            adding = true;
+          }}
+          size="sm"
+          variant="outline"
+        >
+          <IconPlus />
+          New task
+        </Button>
+      {/if}
+      {#if canTalk}
+        <Button
+          class="wide pressable"
+          onclick={(event) => ask(event.currentTarget as HTMLElement)}
+          size="sm"
+          variant="ghost"
+        >
+          <IconSparkles />
+          Ask Caw for a view
+        </Button>
+      {/if}
+    </div>
+  </div>
+{/snippet}
+
+{#snippet inBar()}
+  {@render strip(true)}
+{/snippet}
+
 {#snippet pane(
   value: string
 )}
@@ -916,79 +1027,9 @@
       </Alert>
     {/if}
 
-    <div class="strip">
-      <Tabs onValueChange={choose} value={current}>
-        <TabsList aria-label="Views" scrollable>
-          {#each tabs as each (each.value)}
-            <TabItem
-              href={hrefOf(null, each.value)}
-              label={each.label}
-              value={each.value}
-            >
-              {#snippet trail()}
-                {#if each.draft}
-                  <Badge class="draft-badge" variant="secondary">draft</Badge>
-                {/if}
-              {/snippet}
-            </TabItem>
-          {/each}
-        </TabsList>
-      </Tabs>
-      {#if trailing}
-        <!-- Under 640px New task and Ask Caw are in the head's ⋯: the rule
-             stands only while Needs you follows it there. -->
-        <span
-          aria-hidden="true"
-          class="rule"
-          class:wide={needsYou.length === 0}
-        ></span>
-      {/if}
-      <div class="trail">
-        {#if needsYou.length > 0}
-          <button
-            aria-pressed={filtering}
-            class="needs pressable"
-            onclick={() => {
-              needsOnly = !filtering;
-            }}
-            type="button"
-            in:crossIn
-            out:crossOut
-          >
-            <IconNeedsYou aria-hidden="true" />
-            Needs you
-            <span class="num">{needsYou.length}</span>
-          </button>
-        {/if}
-        {#if strippedNewTask}
-          <Button
-            class="wide pressable"
-            onclick={() => {
-              if (current !== "table") {
-                choose("board");
-              }
-              adding = true;
-            }}
-            size="sm"
-            variant="outline"
-          >
-            <IconPlus />
-            New task
-          </Button>
-        {/if}
-        {#if canTalk}
-          <Button
-            class="wide pressable"
-            onclick={(event) => ask(event.currentTarget as HTMLElement)}
-            size="sm"
-            variant="ghost"
-          >
-            <IconSparkles />
-            Ask Caw for a view
-          </Button>
-        {/if}
-      </div>
-    </div>
+    {#if !hosted}
+      {@render strip(false)}
+    {/if}
 
     <div
       aria-busy={cawco.hub === "unreachable" || awaiting || reading}
@@ -1100,6 +1141,14 @@
     gap: var(--space-3);
     min-inline-size: 0;
     padding: 0 var(--space-6) var(--space-4) var(--space-7);
+  }
+  /* In the bar the strip takes the crumb's place: its leading inset (the
+     page's own edge, so the tabs stand over the head's name) and, past the
+     bar's gap, its --space-3 clear of the glass group. */
+  .strip.in-bar {
+    flex: 1 1 0;
+    align-self: stretch;
+    padding: 0 var(--space-3) 0 var(--space-7);
   }
   .strip > :global([data-slot="tabs"]) {
     display: flex;

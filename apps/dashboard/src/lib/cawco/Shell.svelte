@@ -38,6 +38,7 @@
   import { page } from "$app/state";
   import AddMachineDialog from "./AddMachineDialog.svelte";
   import { barGlass, type GlassCard as GlassFace } from "./bar-glass.svelte";
+  import { barStrip } from "./bar-strip.svelte";
   import CawOffDialog from "./CawOffDialog.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import { cawco, hubSocketUrl, reconnectNow } from "./client.svelte";
@@ -533,16 +534,39 @@
   const barLeaves = $derived(surfaceMounted && !narrow ? gridView.tops : []);
   /** Whether the bar shows them: on a session page. */
   const hosting = $derived(onSession && barLeaves.length > 0);
+  /**
+   * Whether the bar shows a page's own strip (bar-strip): a project's
+   * views, where the crumb would only repeat the name its head says. On a
+   * wide screen, the line the session's tabs are hosted by; the page's
+   * data says so, so the server draws the bar without the crumb.
+   */
+  const stripHosted = $derived(
+    !(narrow || page.error) &&
+      (page.data as { barStrip?: boolean }).barStrip === true
+  );
+  /**
+   * A page's strip leaving stands as it was while its place fades: an
+   * outro pauses what it holds, so the page's state, already reading the
+   * next route's data, is never drawn again; it goes when the fade has.
+   */
+  const stands = (_node: Element) => ({ duration: dur("--dur-control") });
+  /** The strip's place in the slot, kept from the first paint in the browser so its first arrival moves as every later one does. */
+  let stripMounted = $state(untrack(() => stripHosted));
+  onMount(() => {
+    stripMounted = true;
+  });
 
   /* ── The bar's slot ──────────────────────────────────────────────────
-     The hosted tabs, the crumb and Configure's back link take turns in one
-     slot. The one leaving is lifted out of the row where it stands and
-     fades over --dur-control; the one arriving rises 4px as it fades in
-     over the same length, and the hosted strip comes down 6px from the
-     bar's edge instead. With less motion, only the fades run.
-     The strip is the session surface's, so like the surface it is kept
-     once it has been drawn: under another spoke it is lifted out of the
-     row and hidden, not unmounted, and comes back as it was left. */
+     The hosted tabs, a page's strip, the crumb and Configure's back link
+     take turns in one slot. The one leaving is lifted out of the row where
+     it stands and fades over --dur-control; the one arriving rises 4px as
+     it fades in over the same length, and a hosted strip comes down 6px
+     from the bar's edge instead. With less motion, only the fades run.
+     The session's strip is the session surface's, so like the surface it
+     is kept once it has been drawn: under another spoke it is lifted out
+     of the row and hidden, not unmounted, and comes back as it was left.
+     A page's strip has a place kept the same way, which holds whatever
+     the page in front hands it. */
   const riseIn = (_node: Element) => ({
     duration: dur("--dur-control"),
     easing: easeOut,
@@ -634,6 +658,8 @@
     return (node: HTMLElement) => {
       let seen = untrack(shown);
       let fading: Animation | undefined;
+      // One mounted hidden stands out of the row, as one that has left does.
+      node.classList.toggle("lifted", !seen);
       node.classList.toggle("away", !seen);
       node.inert = !seen;
       $effect(() => {
@@ -946,7 +972,18 @@
               {/each}
             </div>
           {/if}
-          {#if hosting || (!railed && onSession)}
+          {#if stripMounted && !narrow}
+            <!-- The page's own strip (bar-strip), standing where the crumb
+               would. -->
+            <div class="slot-strip" {@attach barTabs(() => stripHosted)}>
+              {#if stripHosted}
+                <div class="strip-held" out:stands>
+                  {@render barStrip.strip?.()}
+                </div>
+              {/if}
+            </div>
+          {/if}
+          {#if hosting || stripHosted || (!railed && onSession)}
             <!-- The strips above have the slot; on a phone the session's tabs
                are its own row, and the board needs no name over it. -->
           {:else if narrow && page.url.pathname.startsWith("/config/")}
@@ -1278,13 +1315,29 @@
       transition: opacity var(--dur-control) var(--ease-out);
     }
   }
-  /* Leaving, the strip keeps its box but gives up the row; gone, it is
+  /* A page's strip: the room the crumb had, its own insets the page's. */
+  .slot-strip {
+    position: relative;
+    display: flex;
+    flex: 1 1 0;
+    align-items: center;
+    align-self: stretch;
+    min-width: 0;
+  }
+  /* What holds the page's strip while it leaves lays nothing out itself:
+     the page's strip is the slot's row. */
+  .strip-held {
+    display: contents;
+  }
+  /* Leaving, a strip keeps its box but gives up the row; gone, it is
      not drawn. */
-  .slot-tabs:global(.lifted) {
+  .slot-tabs:global(.lifted),
+  .slot-strip:global(.lifted) {
     position: absolute;
     inset: 0;
   }
-  .slot-tabs:global(.away) {
+  .slot-tabs:global(.away),
+  .slot-strip:global(.away) {
     visibility: hidden;
   }
   /* Padding, not margin: the crumb leaving is pinned where its border box
@@ -1383,7 +1436,8 @@
       flex: 0 1 auto;
       padding-left: 0;
     }
-    .top.hosting .slot-tabs {
+    .top.hosting .slot-tabs,
+    .slot-strip {
       display: none;
     }
   }
