@@ -177,6 +177,21 @@ export const dashboardUrl = (registry: RegistryShape): string =>
   registry.dashboardOrigin() ??
   `http://${hostname()}:${DASHBOARD_PORT}`;
 
+/**
+ * The dashboard's https address, or null when none is known: where a sign-in
+ * that may only return over https (OpenRouter's OAuth callback, which takes
+ * "https URLs and localhost/127.0.0.1 URLs") sends the person back to. The
+ * operator's override when it is https, else the last https origin a
+ * dashboard connected from. Never composed: an https address the hub only
+ * guessed would send the sign-in somewhere nothing answers.
+ */
+export const secureDashboardUrl = (registry: RegistryShape): string | null =>
+  (DASHBOARD_URL_OVERRIDE?.startsWith("https://")
+    ? DASHBOARD_URL_OVERRIDE
+    : undefined) ??
+  registry.secureDashboardOrigin() ??
+  null;
+
 /** One bridged message, and what replying to it means. */
 interface Tracked {
   at: number;

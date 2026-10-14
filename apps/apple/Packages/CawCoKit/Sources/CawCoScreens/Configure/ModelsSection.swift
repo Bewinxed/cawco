@@ -16,9 +16,13 @@ import UIKit
 ///
 /// OpenRouter connects through the web's own route: the hub's connect
 /// address opens in the system's authentication sheet with the dashboard's
-/// Models page as OpenRouter's callback, and that page hands the `code` to
-/// the hub. While the sheet is up the connection is read every two seconds,
-/// and the sheet closes itself once the hub holds the key.
+/// Models page on its https address (`/health` `secureDashboard`) as
+/// OpenRouter's callback, and that page hands the `code` to the hub. The
+/// sheet shares Safari's cookies, so a sign-in the dashboard's address sits
+/// behind (Cloudflare Access) carries over. While the sheet is up the
+/// connection is read every two seconds, and the sheet closes itself once
+/// the hub holds the key. With no https address known, nothing opens and
+/// the group says so.
 final class ModelsSectionController: ConfigSectionController, ASWebAuthenticationPresentationContextProviding {
     fileprivate static let log = Logger(subsystem: "dev.cawco.app", category: "Models")
 

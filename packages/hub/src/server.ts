@@ -503,6 +503,7 @@ import {
 import {
   dashboardUrl,
   type MediaReader,
+  secureDashboardUrl,
   type TelegramBridge,
 } from "./telegram";
 import {
@@ -17034,6 +17035,8 @@ export const createServer = (
       // against something rather than taken on faith. `dashboard` is where the
       // web dashboard is reached (the one a Telegram link opens): the app
       // takes a person there for what it has no screen of its own for yet.
+      // `secureDashboard` is its https address, or null: where the app's
+      // OpenRouter sign-in returns (telegram.ts `secureDashboardUrl`).
       .get("/health", hidden, async () => ({
         ok: true,
         version: HUB_VERSION,
@@ -17041,6 +17044,7 @@ export const createServer = (
         // Which hub this is, whatever address answered (hub-id.ts).
         hubId: hubId(),
         dashboard: dashboardUrl(registry),
+        secureDashboard: secureDashboardUrl(registry),
       }))
       .get("/api/agents", () => withPresence(db.listAgents()))
       .post(

@@ -1,6 +1,7 @@
 public import CawCoAPI
 import Foundation
 import Observation
+import OSLog
 
 /// Configure › Models CawCo uses (routes/config/models/+page.svelte): the
 /// models the hub itself talks to. Jev is reached one of two ways: a
@@ -39,6 +40,7 @@ public final class ModelsSettings {
     public private(set) var savingWatch = false
 
     @ObservationIgnored private weak var hub: HubConnection?
+    private static let log = Logger(subsystem: "dev.cawco.app", category: "Models")
 
     public init(hub: HubConnection) {
         self.hub = hub
@@ -91,17 +93,32 @@ public final class ModelsSettings {
 
     // MARK: OpenRouter
 
+    /// What Connect says when the hub knows no https address for the
+    /// dashboard: OpenRouter returns only to https (its OAuth `callback_url`
+    /// takes "https URLs and localhost/127.0.0.1 URLs"), so nothing starts.
+    public static let needsSecureDashboard = "OpenRouter signs in only through the dashboard's https address. Open the dashboard there once, then connect."
+
     /// Where OpenRouter asks the operator to authorise the hub, its callback
-    /// the dashboard's own Models page (the web's `callbackUrl`), which hands
-    /// the `code` back to the hub. Nil, with the refusal said, when the hub
-    /// would not start it.
+    /// the dashboard's own Models page on its https address (`/health`
+    /// `secureDashboard`), which hands the `code` back to the hub. Nil, with
+    /// why said, when the hub knows no https address or would not start it.
     public func connectAddress() async -> URL? {
         guard let hub, !connecting else { return nil }
         connecting = true
         openRouterError = nil
         defer { connecting = false }
         do {
-            let page = try await hub.dashboardAddress().appending(path: "config/models")
+            guard let secure = try await hub.secureDashboardAddress() else {
+                openRouterError = Self.needsSecureDashboard
+                #if DEBUG
+                Self.log.notice("models: connect refused, the hub knows no https dashboard address")
+                #endif
+                return nil
+            }
+            let page = secure.appending(path: "config/models")
+            #if DEBUG
+            Self.log.notice("models: connect callback \(page.absoluteString, privacy: .public)")
+            #endif
             switch try await api().models.connect(.init(body: .json(.init(callbackUrl: page.absoluteString)))) {
             case let .ok(answer):
                 guard let url = URL(string: try answer.body.json.authUrl) else {

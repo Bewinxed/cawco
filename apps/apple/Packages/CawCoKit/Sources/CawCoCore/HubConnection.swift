@@ -941,6 +941,18 @@ public final class HubConnection {
         return url
     }
 
+    /// The dashboard's https address, as the hub says (`/health`
+    /// `secureDashboard`): the last https origin a dashboard reached it
+    /// from. Nil when the hub knows none (or is older than the field).
+    public func secureDashboardAddress() async throws -> URL? {
+        guard let address else { throw URLError(.notConnectedToInternet) }
+        let (data, _) = try await URLSession.shared.data(from: address.appending(path: "health"))
+        guard let body = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw ControlError(message: "The hub's health answer did not read. Try again.")
+        }
+        return (body["secureDashboard"] as? String).flatMap { URL(string: $0) }
+    }
+
     /// The hub's version, as its `/health` says it.
     @concurrent
     private nonisolated static func hubVersion(_ address: URL) async -> String? {

@@ -131,9 +131,21 @@
   });
   let keyHeight = $state(0);
 
+  /**
+   * OpenRouter returns only to https (its OAuth `callback_url` takes "https
+   * URLs and localhost/127.0.0.1 URLs"), and the callback is this page's own
+   * origin: on plain http nothing starts, and the group says why.
+   */
+  const NEEDS_HTTPS =
+    "OpenRouter signs in only through the dashboard's https address. Open the dashboard there once, then connect.";
+
   async function connect() {
-    connecting = true;
     openrouterError = null;
+    if (location.protocol !== "https:") {
+      openrouterError = NEEDS_HTTPS;
+      return;
+    }
+    connecting = true;
     const response = await fetch("/api/openrouter/connect", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

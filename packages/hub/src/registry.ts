@@ -78,6 +78,12 @@ export interface RegistryShape {
   ) => void;
   /** Routes the reply to a forwarded `control` back to the dashboard that asked. */
   readonly rememberRequester: (requestId: string, socket: HubSocket) => void;
+  /**
+   * The most recent usable dashboard origin on https, or nothing if none has
+   * connected over https: the only address OpenRouter's sign-in returns to
+   * (its OAuth `callback_url` takes "https URLs and localhost/127.0.0.1 URLs").
+   */
+  readonly secureDashboardOrigin: () => string | undefined;
   /** Consumes the route — a `requestId` is answered once. */
   readonly takeRequester: (requestId: string) => HubSocket | undefined;
 }
@@ -144,6 +150,13 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
    * telling the hub so by opening the dashboard there.
    */
   let lastDashboardOrigin: string | undefined;
+  /**
+   * The last of those on https, kept apart: the address a person is linked to
+   * is the one that reached the hub last, whatever its scheme, but a sign-in
+   * that must return over https needs the last https one even when a plain
+   * http page connected since.
+   */
+  let lastSecureDashboardOrigin: string | undefined;
 
   lifetime.every(SWEEP_INTERVAL_MS, () => {
     const cutoff = Date.now() - REQUESTER_TTL_MS;
@@ -213,9 +226,13 @@ const make = (lifetime: HubLifetimeShape): RegistryShape => {
       const usable = usableOrigin(origin);
       if (usable) {
         lastDashboardOrigin = usable;
+        if (usable.startsWith("https://")) {
+          lastSecureDashboardOrigin = usable;
+        }
       }
     },
     dashboardOrigin: () => lastDashboardOrigin,
+    secureDashboardOrigin: () => lastSecureDashboardOrigin,
     rememberRequester: (requestId, socket) => {
       requesters.set(requestId, { socket, at: Date.now() });
     },
