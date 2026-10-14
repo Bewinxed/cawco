@@ -26,6 +26,7 @@
  */
 import { existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
+import { sweepDeadFleets } from "../scratch-fleet";
 import { Run, type Spec } from "./kit";
 
 const args = process.argv.slice(2);
@@ -64,6 +65,14 @@ if (unknown.length > 0) {
 const chosen = named.length > 0 ? named : all;
 
 const started = performance.now();
+// Folders of scratch fleets that died before they cleaned up (a SIGKILL), out
+// of the 256 names a fleet's HOME and runtime dir are drawn from.
+const swept = await sweepDeadFleets(Date.now());
+if (swept.length > 0) {
+  console.log(
+    `… removed ${swept.length} folder(s) of scratch fleets that died: ${swept.join(", ")}`
+  );
+}
 const run = new Run();
 try {
   for (const name of chosen) {

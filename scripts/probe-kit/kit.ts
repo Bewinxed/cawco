@@ -143,6 +143,9 @@ function installRuns(): void {
 export async function build(): Promise<void> {
   const child = Bun.spawn(["bunx", "vite", "build"], {
     cwd: DASHBOARD,
+    // This process's own, git's repository variables gone (scratch-fleet.ts
+    // `GIT_REPOSITORY_ENV`): the build reads `git rev-parse` for its version.
+    env: process.env,
     stdout: "pipe",
     stderr: "pipe",
   });

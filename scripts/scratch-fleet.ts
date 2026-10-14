@@ -13,8 +13,16 @@
  * it answered in `seen`.
  */
 import { Database } from "bun:sqlite";
-import { existsSync } from "node:fs";
-import { chmod, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { existsSync, readFileSync, rmSync, unlinkSync } from "node:fs";
+import {
+  chmod,
+  mkdir,
+  readdir,
+  readFile,
+  readlink,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseProcId } from "../packages/agent/src/proc-id";
 import { SessiondClient } from "../packages/agent/src/sessiond-client";
@@ -22,6 +30,33 @@ import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
 import { DEPS_INSTALLING, depsScript } from "../packages/core/src/move";
 import { socketPathProblem } from "../packages/core/src/paths";
 import { STARTER_ENV } from "./scratch-fleet-leash";
+
+/**
+ * WHERE GIT LOOKS. Git finds its repository from these variables before its
+ * folder, and `git bisect run` and a git hook export them to what they run
+ * (GIT_DIR, the caller's own gitdir). Inherited here, every git a fleet, the
+ * probe kit or a spec starts (`git init`, `clone`, `commit`, `push` on a
+ * scratch repository) acted on the caller's repository instead: a fleet
+ * spec run as a bisect step committed "init" onto the bisect's checkout and
+ * failed every step. So they leave this process's environment as this module
+ * loads, which every probe and the kit do before they start anything: `Bun.$`
+ * reads `process.env` as it runs, and a `Bun.spawn` passes `env: process.env`
+ * (without one it is handed the environment the process started with). Git's
+ * config (GIT_CONFIG_*), which a workspace passes its own through, stays.
+ */
+const GIT_REPOSITORY_ENV = [
+  "GIT_DIR",
+  "GIT_WORK_TREE",
+  "GIT_INDEX_FILE",
+  "GIT_PREFIX",
+  "GIT_COMMON_DIR",
+  "GIT_OBJECT_DIRECTORY",
+  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+  "GIT_IMPLICIT_WORK_TREE",
+];
+for (const name of GIT_REPOSITORY_ENV) {
+  delete process.env[name];
+}
 
 export type Harness = "claude" | "opencode" | "pi";
 export const HARNESSES: Harness[] = ["claude", "opencode", "pi"];
@@ -264,27 +299,251 @@ const chatEvents = (words: string[], tool?: Reply["tool"]): string[] => {
 };
 
 /**
- * A dir of its own under `root`, named two hex, made with mode 700: three
- * bytes past `root`. A name another fleet holds is drawn again.
+ * Where a fleet's folders stand: its sandbox under the cache root (on real
+ * disk, not /tmp: a delegate's workspace boundary mounts paths from its
+ * home, and a /tmp private to whatever runs this is not one it sees), and
+ * its services' HOME and runtime dirs, two hex under the shortest root this
+ * can write: a CawCo workspace's own TMPDIR (`~/.cawco/tmp/<id8>`, 35 bytes,
+ * on disk), else the cache root (`~/.cache`, 22).
  */
-async function shortDir(root: string): Promise<string> {
-  for (;;) {
-    const dir = join(root, crypto.randomUUID().slice(0, 2));
-    // biome-ignore lint/performance/noAwaitInLoops: a name is drawn again only when the last one was taken
-    const made = await mkdir(dir, { mode: 0o700 }).then(
-      () => true,
-      (error: NodeJS.ErrnoException) => {
-        if (error.code === "EEXIST") {
-          return false;
-        }
-        throw error;
-      }
+function fleetRoots(): { scratch: string; short: string } {
+  const scratch =
+    process.env.XDG_CACHE_HOME ?? join(process.env.HOME ?? "/tmp", ".cache");
+  return {
+    scratch,
+    short:
+      process.env.CAWCO_WORKSPACE && process.env.TMPDIR
+        ? process.env.TMPDIR
+        : scratch,
+  };
+}
+
+/**
+ * The file in each folder a fleet makes that names the process it belongs
+ * to (`{ pid, at }`): what proves a folder left behind is a dead fleet's
+ * ({@link sweepDeadFleets}). A folder without one is never swept.
+ */
+const OWNER_FILE = ".scratch-fleet";
+
+/** Every two-hex name, in an order of its own each draw. */
+function shuffledHex(): string[] {
+  const names = Array.from({ length: 256 }, (_, n) =>
+    n.toString(16).padStart(2, "0")
+  );
+  for (let i = names.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [names[i], names[j]] = [names[j] as string, names[i] as string];
+  }
+  return names;
+}
+
+/**
+ * The folders one fleet made, each stamped with its owner as it is made, and
+ * what its setup started that has to stop with them. They go with the fleet
+ * however it ends: `clean`, a setup that throws (`scratchFleet`), this
+ * process exiting, or a signal ending it ({@link LIVE}); a SIGKILL leaves
+ * them to the next probe run's sweep.
+ */
+class FleetDirs {
+  readonly dirs: string[] = [];
+  readonly #stops: (() => Promise<void> | void)[] = [];
+
+  /** `dir`, made (with its parents) and stamped as this process's. */
+  async own(dir: string, mode?: number): Promise<string> {
+    await mkdir(dir, { recursive: true, mode });
+    this.dirs.push(dir);
+    LIVE.add(this);
+    await writeFile(
+      join(dir, OWNER_FILE),
+      JSON.stringify({ pid: process.pid, at: Date.now() })
     );
-    if (made) {
-      await chmod(dir, 0o700);
-      return dir;
+    return dir;
+  }
+
+  /**
+   * A dir of its own under `root`, named two hex, made with mode 700: three
+   * bytes past `root`. Each of the 256 names is tried once, in an order of
+   * its own; every one taken is a fleet that died before it cleaned up (or
+   * one still running), and the setup fails naming where.
+   */
+  async short(root: string): Promise<string> {
+    for (const name of shuffledHex()) {
+      const dir = join(root, name);
+      // biome-ignore lint/performance/noAwaitInLoops: a name is tried only when the last one was taken
+      const made = await mkdir(dir, { mode: 0o700 }).then(
+        () => true,
+        (error: NodeJS.ErrnoException) => {
+          if (error.code === "EEXIST") {
+            return false;
+          }
+          throw error;
+        }
+      );
+      if (made) {
+        await chmod(dir, 0o700);
+        return this.own(dir);
+      }
+    }
+    throw new Error(
+      `No two-hex folder is free under ${root}: all 256 names are taken. A scratch fleet's HOME and runtime dirs are drawn from them, and each fleet removes its own; a probe run removes those of fleets that died at its start, when no live process holds them. What is left is a fleet still running or folders no fleet stamped (${OWNER_FILE}): see \`ls -la ${root}\`.`
+    );
+  }
+
+  /** Something the setup started, stopped before the folders go. */
+  onRemove(stop: () => Promise<void> | void): void {
+    this.#stops.push(stop);
+  }
+
+  /** Stops what the setup started and deletes every folder. */
+  async remove(): Promise<void> {
+    LIVE.delete(this);
+    for (const stop of this.#stops.splice(0)) {
+      // biome-ignore lint/performance/noAwaitInLoops: one at a time, in order
+      await Promise.resolve(stop()).catch(() => undefined);
+    }
+    for (const dir of this.dirs.splice(0)) {
+      // biome-ignore lint/performance/noAwaitInLoops: a handful of dirs
+      await rm(dir, { recursive: true, force: true });
     }
   }
+
+  /** Deletes every folder now, from an exit or a signal, where nothing can wait. */
+  removeNow(): void {
+    LIVE.delete(this);
+    for (const dir of this.dirs.splice(0)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  /** Leaves the folders for reading: unstamped, so no sweep takes them. */
+  keep(): void {
+    LIVE.delete(this);
+    for (const dir of this.dirs.splice(0)) {
+      try {
+        unlinkSync(join(dir, OWNER_FILE));
+      } catch {
+        // already gone
+      }
+    }
+  }
+}
+
+/** The fleets of this process whose folders still stand. */
+const LIVE = new Set<FleetDirs>();
+const END_SIGNALS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
+const removeLive = () => {
+  for (const one of [...LIVE]) {
+    one.removeNow();
+  }
+};
+// This process ending, however it ends but a SIGKILL, takes its fleets'
+// folders with it (their services end under the leash). On a signal it then
+// ends as the signal would have, unless something else of the probe's
+// listens for it too and ends it its own way (its own close and clean).
+process.on("exit", removeLive);
+for (const [name, number] of Object.entries(END_SIGNALS)) {
+  const signal = name as keyof typeof END_SIGNALS;
+  const onSignal = () => {
+    removeLive();
+    if (process.listenerCount(signal) === 1) {
+      process.exit(128 + number);
+    }
+  };
+  process.on(signal, onSignal);
+}
+
+/** A process's own folder in /proc. */
+const PID_ENTRY = /^\d+$/;
+
+/**
+ * Whether a live process holds `dir`: has it as its working directory, an
+ * open file under it, or a path under it in its environment (a service's
+ * HOME, XDG_RUNTIME_DIR, database). Read from /proc; a process this one may
+ * not read is not counted. Elsewhere (macOS) none is known to, and the
+ * owner's pid answers alone: a fleet's services end under the leash once it
+ * is gone.
+ */
+async function heldByLive(dir: string): Promise<boolean> {
+  if (process.platform !== "linux") {
+    return false;
+  }
+  const under = (path: string) => path === dir || path.startsWith(`${dir}/`);
+  for (const entry of await readdir("/proc")) {
+    if (!PID_ENTRY.test(entry)) {
+      continue;
+    }
+    const at = `/proc/${entry}`;
+    // biome-ignore lint/performance/noAwaitInLoops: one process at a time
+    const cwd = await readlink(`${at}/cwd`).catch(() => "");
+    if (under(cwd)) {
+      return true;
+    }
+    const fds = await readdir(`${at}/fd`).catch(() => [] as string[]);
+    const targets = await Promise.all(
+      fds.map((fd) => readlink(`${at}/fd/${fd}`).catch(() => ""))
+    );
+    if (targets.some(under)) {
+      return true;
+    }
+    const environ = await readFile(`${at}/environ`, "utf8").catch(() => "");
+    if (
+      environ
+        .split("\0")
+        .some((pair) => under(pair.slice(pair.indexOf("=") + 1)))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Whether `pid` names a running process (one this process may signal or not). */
+const alive = (pid: number): boolean => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+};
+
+/**
+ * Removes the folders of scratch fleets that died before they cleaned up (a
+ * SIGKILL, a host that went down), from the roots every fleet uses: those
+ * stamped before `before` by a process that is gone, which no live process
+ * holds. A folder whose owner's pid runs (its own, or a pid given to another
+ * process since) is kept. The probe kit runs it as a run starts. Answers the
+ * folders removed.
+ */
+export async function sweepDeadFleets(before: number): Promise<string[]> {
+  const { scratch, short } = fleetRoots();
+  const removed: string[] = [];
+  for (const root of new Set([scratch, short])) {
+    // biome-ignore lint/performance/noAwaitInLoops: one root at a time
+    const entries = await readdir(root).catch(() => [] as string[]);
+    for (const entry of entries) {
+      const dir = join(root, entry);
+      let owner: { at?: unknown; pid?: unknown };
+      try {
+        owner = JSON.parse(readFileSync(join(dir, OWNER_FILE), "utf8"));
+      } catch {
+        continue;
+      }
+      if (
+        typeof owner.at !== "number" ||
+        typeof owner.pid !== "number" ||
+        owner.at >= before ||
+        alive(owner.pid) ||
+        // biome-ignore lint/performance/noAwaitInLoops: one folder at a time, each read against every process
+        (await heldByLive(dir))
+      ) {
+        continue;
+      }
+      await rm(dir, { recursive: true, force: true });
+      removed.push(dir);
+    }
+  }
+  return removed;
 }
 
 export const MACHINE = "scratch-fleet";
@@ -366,20 +625,30 @@ export interface SendSnapshot {
 /**
  * Stands the fleet's files up (the sandbox, the harnesses' config pointed at
  * the mock, a signed-in fake Claude account, a repository with a remote) and
- * returns what drives it. Nothing runs until the probe launches it.
+ * returns what drives it. Nothing runs until the probe launches it. A setup
+ * that fails takes what it made and started with it.
  */
 export async function scratchFleet(options: {
   name: string;
   respond: (request: Seen) => Reply;
 }) {
+  const dirs = new FleetDirs();
+  try {
+    return await standUp(options, dirs);
+  } catch (error) {
+    await dirs.remove();
+    throw error;
+  }
+}
+
+async function standUp(
+  options: { name: string; respond: (request: Seen) => Reply },
+  dirs: FleetDirs
+) {
   const root = resolve(import.meta.dir, "..");
-  // On real disk, not /tmp: a delegate's workspace boundary mounts paths from
-  // its home, and a /tmp private to whatever runs this is not one it sees.
-  const scratch =
-    process.env.XDG_CACHE_HOME ?? join(process.env.HOME ?? "/tmp", ".cache");
-  const sandbox = join(
-    scratch,
-    `${options.name}-${crypto.randomUUID().slice(0, 8)}`
+  const { scratch, short: shortRoot } = fleetRoots();
+  const sandbox = await dirs.own(
+    join(scratch, `${options.name}-${crypto.randomUUID().slice(0, 8)}`)
   );
   // The checkout's dependencies as its lockfile names them, by the rule a
   // work item's checks use (move.ts `depsScript`): a hub that imports a
@@ -397,24 +666,19 @@ export async function scratchFleet(options: {
     );
   }
   // The services' HOME and the agent's XDG_RUNTIME_DIR, apart from the
-  // sandbox, two hex under the shortest root this can write: a CawCo
-  // workspace's own TMPDIR (`~/.cawco/tmp/<id8>`, 35 bytes, on disk), else
-  // the cache root (`~/.cache`, 22). Mode 700, as a runtime dir is. The agent
-  // keeps a workspace's sockets out of its HOME (paths.ts `workspaceDoorDir`)
-  // and refuses one under it that does not fit (`scratchSocketProblem`); the
-  // longest under the runtime dir is a preview's bridge (preview-bridge.ts
-  // `bridgeDir`), `/cawco/previews/<instance id>.sock`, checked here.
-  const shortRoot =
-    process.env.CAWCO_WORKSPACE && process.env.TMPDIR
-      ? process.env.TMPDIR
-      : scratch;
-  const home = await shortDir(shortRoot);
+  // sandbox, two hex under the shortest root (`fleetRoots`). Mode 700, as a
+  // runtime dir is. The agent keeps a workspace's sockets out of its HOME
+  // (paths.ts `workspaceDoorDir`) and refuses one under it that does not fit
+  // (`scratchSocketProblem`); the longest under the runtime dir is a
+  // preview's bridge (preview-bridge.ts `bridgeDir`),
+  // `/cawco/previews/<instance id>.sock`, checked here.
+  const home = await dirs.short(shortRoot);
   // In a folder of its own: a workspace boundary hides the database's folder.
   const dbPath = join(sandbox, "hub", "hub.db");
   const sessiondSocket = join(sandbox, "sessiond.sock");
   await mkdir(join(home, ".config", "cawco"), { recursive: true });
   await mkdir(join(sandbox, "hub"), { recursive: true });
-  const runtime = await shortDir(shortRoot);
+  const runtime = await dirs.short(shortRoot);
   const bridge = socketPathProblem(
     join(runtime, "cawco", "previews", `${crypto.randomUUID()}.sock`),
     "The scratch agent's longest socket under its runtime dir, a preview's bridge,"
@@ -506,6 +770,7 @@ export async function scratchFleet(options: {
       );
     },
   });
+  dirs.onRemove(() => mock.stop(true));
   const mockBase = `http://127.0.0.1:${mock.port}`;
 
   // ── The harnesses' config, pointed at the mock ────────────────────────
@@ -929,9 +1194,8 @@ export async function scratchFleet(options: {
       120_000
     );
 
-  /** What {@link launchMachine} started, agents first, for `close`; and made, for `clean`. */
+  /** What {@link launchMachine} started, agents first, for `close`. Its folders are the fleet's (`dirs`). */
   const machineProcs: ReturnType<typeof Bun.spawn>[] = [];
-  const machineDirs: string[] = [];
   /**
    * One more machine on this fleet, beside {@link MACHINE}: its own agent and
    * sessiond under machine id `machineId`, with a HOME of its own (furnished
@@ -944,9 +1208,8 @@ export async function scratchFleet(options: {
    * the hub names them all by its hostname.
    */
   const launchMachine = async (machineId: string): Promise<Machine> => {
-    const machineHome = await shortDir(shortRoot);
-    const machineRuntime = await shortDir(shortRoot);
-    machineDirs.push(machineHome, machineRuntime);
+    const machineHome = await dirs.short(shortRoot);
+    const machineRuntime = await dirs.short(shortRoot);
     await furnish(machineHome);
     const socketPath = join(machineRuntime, "sessiond.sock");
     const machineEnv: Record<string, string> = {
@@ -1192,21 +1455,16 @@ export async function scratchFleet(options: {
     await killSessiond();
     await mock.stop(true);
   };
-  /** Deletes the sandbox, the HOME and the runtime dir beside it, unless `keep`. */
+  /** Deletes the sandbox, the HOME and the runtime dir beside it (and every added machine's), unless `keep`. */
   const clean = async (keep: boolean) => {
     if (keep) {
+      dirs.keep();
       console.log(
         `The sandbox is kept for reading: ${sandbox} (HOME ${home}, runtime dir ${runtime})`
       );
       return;
     }
-    await rm(sandbox, { recursive: true, force: true });
-    await rm(home, { recursive: true, force: true });
-    await rm(runtime, { recursive: true, force: true });
-    for (const dir of machineDirs) {
-      // biome-ignore lint/performance/noAwaitInLoops: a handful of dirs
-      await rm(dir, { recursive: true, force: true });
-    }
+    await dirs.remove();
   };
 
   return {
