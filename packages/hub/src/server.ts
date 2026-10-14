@@ -2677,7 +2677,7 @@ export const createServer = (
   const archiveView = (): ArchiveView => {
     const rows = db.listInstances();
     const delegates = db.runningDelegateCounts();
-    const runs = db.listWorkflowRuns();
+    const runs = db.workflowRunHeads();
     const children = new Map<string, string[]>();
     const under = (parent: string | null, child: string) => {
       if (parent) {

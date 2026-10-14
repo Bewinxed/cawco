@@ -1950,6 +1950,17 @@ export interface DbShape {
   readonly watchLinesOf: (id: string) => WatchLine[];
   /** Fleet watch's open needs-you notices, oldest first. */
   readonly watchNotices: () => FleetWatchNotice[];
+  /**
+   * Each run's place in the tree and its status, nothing else (every run, or
+   * one workflow's): what the archive walk and a workflow's delete read.
+   * Ended runs too, since sessions under one may still work.
+   */
+  readonly workflowRunHeads: (
+    workflowId?: string
+  ) => Pick<
+    WorkflowRunRow,
+    "id" | "parentRunId" | "status" | "supervisorInstanceId"
+  >[];
   readonly workflowTransition: (
     run: typeof workflowRuns.$inferInsert,
     step?: typeof workflowSteps.$inferInsert,
@@ -3387,6 +3398,17 @@ const make = async (path: string): Promise<DbShape> => {
         .from(workflowRuns)
         .where(workflowId ? eq(workflowRuns.workflowId, workflowId) : undefined)
         .orderBy(desc(workflowRuns.startedAt))
+        .all(),
+    workflowRunHeads: (workflowId) =>
+      db
+        .select({
+          id: workflowRuns.id,
+          parentRunId: workflowRuns.parentRunId,
+          status: workflowRuns.status,
+          supervisorInstanceId: workflowRuns.supervisorInstanceId,
+        })
+        .from(workflowRuns)
+        .where(workflowId ? eq(workflowRuns.workflowId, workflowId) : undefined)
         .all(),
     listLiveWorkflowRuns: ({ machineId, parentRunId }) =>
       db

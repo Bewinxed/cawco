@@ -204,7 +204,7 @@ export function workflowRoutes(
         if (!row) {
           throw new Error("Workflow not found.");
         }
-        const runs = db.listWorkflowRuns(row.id);
+        const runs = db.workflowRunHeads(row.id);
         if (runs.some((run) => ["running", "waiting"].includes(run.status))) {
           throw new Error("A workflow with a live run cannot be deleted.");
         }
@@ -212,7 +212,7 @@ export function workflowRoutes(
         // Awaited above: a run launched meanwhile would lose its rows under it.
         if (
           db
-            .listWorkflowRuns(row.id)
+            .workflowRunHeads(row.id)
             .some((run) => ["running", "waiting"].includes(run.status))
         ) {
           throw new WorkItemRefusal(
