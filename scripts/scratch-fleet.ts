@@ -3,7 +3,9 @@
  * process with a temp HOME, on loopback, against a local mock model endpoint.
  * Fake keys only; nothing here reaches a real provider or this machine's
  * services. Each process is stopped by the PID it was started under, never
- * by pattern.
+ * by pattern. None outlives the process that started the fleet: each runs
+ * under a leash (scratch-fleet-leash.ts) that ends it and everything under
+ * it once its starter is gone, a SIGKILL included, where `close` never runs.
  *
  * The mock answers every harness's model request (Anthropic messages for
  * Claude Code, OpenAI chat completions for opencode and pi) with the words
@@ -19,6 +21,7 @@ import { SessiondClient } from "../packages/agent/src/sessiond-client";
 import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
 import { DEPS_INSTALLING, depsScript } from "../packages/core/src/move";
 import { socketPathProblem } from "../packages/core/src/paths";
+import { STARTER_ENV } from "./scratch-fleet-leash";
 
 export type Harness = "claude" | "opencode" | "pi";
 export const HARNESSES: Harness[] = ["claude", "opencode", "pi"];
@@ -296,6 +299,37 @@ const ENTRY = {
   sessiond: "packages/sessiond/src/main.ts",
 } as const;
 export type Role = keyof typeof ENTRY;
+
+/**
+ * How every service of a fleet starts, the one way: under the leash
+ * (scratch-fleet-leash.ts), which ends it and everything under it once this
+ * process is gone, however it went; and leading a process group of its own,
+ * so what it starts stays findable by its group after its own parent is gone,
+ * and a signal to the probe's terminal group reaches the probe alone.
+ */
+const serviceSpawn = (
+  root: string,
+  role: Role,
+  options: {
+    cwd: string;
+    env: Record<string, string>;
+    stderr: ReturnType<typeof Bun.file>;
+    stdout: ReturnType<typeof Bun.file>;
+  }
+) =>
+  Bun.spawn(
+    [
+      process.execPath,
+      "--preload",
+      join(import.meta.dir, "scratch-fleet-leash.ts"),
+      join(root, ENTRY[role]),
+    ],
+    {
+      ...options,
+      env: { ...options.env, [STARTER_ENV]: String(process.pid) },
+      detached: true,
+    }
+  );
 
 /** A machine `launchMachine` added to the fleet. */
 export interface Machine {
@@ -596,7 +630,7 @@ export async function scratchFleet(options: {
   const launch = (role: Role) => {
     launches += 1;
     const err = join(sandbox, `${role}-${launches}.err`);
-    const child = Bun.spawn([process.execPath, join(root, ENTRY[role])], {
+    const child = serviceSpawn(root, role, {
       // The keeper's children start where it runs, and OpenCode's server
       // writes `.opencode/` in its own directory: in the sandbox, never the
       // clone, whose `.opencode` a workspace boundary holds read-only (EROFS).
@@ -923,7 +957,7 @@ export async function scratchFleet(options: {
     };
     const start = (role: "agent" | "sessiond") => {
       const err = join(sandbox, `${machineId}-${role}.err`);
-      const child = Bun.spawn([process.execPath, join(root, ENTRY[role])], {
+      const child = serviceSpawn(root, role, {
         cwd: role === "sessiond" ? sandbox : root,
         env: machineEnv,
         stdout: Bun.file(join(sandbox, `${machineId}-${role}.log`)),
