@@ -18253,6 +18253,83 @@
         }
       }
     },
+    "/api/workspaces/{id}/held": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiWorkspacesByIdHeld",
+        "responses": {
+          "200": {
+            "description": "getApiWorkspacesByIdHeld 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeldWork"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiWorkspacesByIdHeld 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "getApiWorkspacesByIdHeld 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiWorkspacesByIdHeld 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "getApiWorkspacesByIdHeld 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "getApiWorkspacesByIdHeld 502",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/workspaces/{id}/archive": {
       "post": {
         "parameters": [
@@ -18265,6 +18342,21 @@
             }
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "discard": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
         "operationId": "postApiWorkspacesByIdArchive",
         "responses": {
           "200": {
@@ -18313,6 +18405,16 @@
               "text/plain": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiWorkspacesByIdArchive 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -23716,6 +23818,12 @@
       "postApiWorkspacesByIdArchive200": {
         "type": "object",
         "properties": {
+          "carry": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "id": {
             "type": "string"
           },
@@ -23773,6 +23881,7 @@
           "base",
           "boundaryPid",
           "branch",
+          "carry",
           "checksFor",
           "createdAt",
           "createdByInstanceId",
@@ -36821,6 +36930,56 @@
           "offline",
           "parentId",
           "title"
+        ]
+      },
+      "HeldWork": {
+        "description": "What a workspace holds that is nowhere else, read on its machine now, and where it is.",
+        "type": "object",
+        "properties": {
+          "holds": {
+            "description": "What it holds, in words: \"2 commits on no remote, 3 changed files, 1 stash\".",
+            "type": "string"
+          },
+          "machine": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "size": {
+            "description": "The clone's size on disk, in words.",
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          },
+          "ahead": {
+            "type": "number"
+          },
+          "bytes": {
+            "type": "number"
+          },
+          "dirty": {
+            "type": "number"
+          },
+          "stashes": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "ahead",
+          "bytes",
+          "dirty",
+          "holds",
+          "machine",
+          "machineId",
+          "path",
+          "size",
+          "stashes",
+          "workspaceId"
         ]
       },
       "WorkspaceState": {

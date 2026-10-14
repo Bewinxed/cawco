@@ -166,6 +166,7 @@ import {
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_LANDED,
+  CONTROL_WORKSPACE_MIGRATE,
   type CommandQueue,
   type CommandQueueFrame,
   type CommandRun,
@@ -977,6 +978,25 @@ const strategyChoice = t.Object({
 });
 /** Deduplicate recently orphaned replies without retaining every request forever. */
 const UNROUTED_REPLY_LIMIT = 4096;
+/** Machine controls only the hub sends: a dashboard's control naming one is refused at the relay. */
+const HUB_WORKSPACE_CONTROLS: ReadonlySet<string> = new Set([
+  CONTROL_WORKSPACE_ARCHIVE,
+  CONTROL_WORKSPACE_AT,
+  CONTROL_WORKSPACE_BOUNDARY,
+  CONTROL_WORKSPACE_BUNDLE,
+  CONTROL_WORKSPACE_CREATE,
+  CONTROL_WORKSPACE_LANDED,
+  CONTROL_WORKSPACE_MIGRATE,
+]);
+/** Why a dashboard's control naming `method` is the hub's alone, or nothing when it may go to the machine. */
+const hubOwnedControl = (method: string): string | undefined => {
+  if (method === CONTROL_RELOAD_SKILLS) {
+    return "Skills reload when synced fleet content changes.";
+  }
+  if (HUB_WORKSPACE_CONTROLS.has(method)) {
+    return `${method} is the hub's to send. Archive a workspace with POST /api/workspaces/:id/archive, which refuses while its clone holds work that is nowhere else.`;
+  }
+};
 /**
  * Workspace controls other than create/archive: enough for their boundary work.
  * Create and its discard share the longer git-plus-boundary budget; archive
@@ -13942,13 +13962,16 @@ export const createServer = (
     }
     // The hub owns skill reloads: an unchanged catalog must retain the CLI's
     // sent-skills record, including when an older dashboard asks to reload it.
-    if (message.payload.method === CONTROL_RELOAD_SKILLS) {
+    // It owns every workspace control too: archive and a move to another
+    // commit delete a clone's work, and only the hub reads it first.
+    const hubOwned = hubOwnedControl(message.payload.method);
+    if (hubOwned) {
       const requestId = message.requestId ?? message.payload.requestId;
       const frame: ControlResult = {
         kind: "control_result",
         requestId,
         ok: false,
-        error: "Skills reload when synced fleet content changes.",
+        error: hubOwned,
       };
       if (remember) {
         sendFrame(dashboard, { ...message, verb: "frames", payload: frame });
@@ -15555,7 +15578,6 @@ export const createServer = (
   // Spent workspaces retired on their own (workspace-retire.ts).
   const workspaceRetire = createWorkspaceRetire({
     archived: workspaceArchived,
-    call: callMachine,
     db,
     inTurn: (row) => row.status === "running" && !!pulses.get(row.id)?.busy,
     lifetime,
@@ -20919,11 +20941,12 @@ export const createServer = (
       // A retirement sweep now, rather than at its next tick: what it retired,
       // kept and could not retire.
       .post("/api/workspaces/retire", hidden, () => workspaceRetire.sweep())
-      .post("/api/workspaces/:id/archive", async ({ params, status }) => {
+      // What a workspace's clone holds that is nowhere else, read on its
+      // machine now: what an archive would refuse over, or with `discard`
+      // save to a carry before deleting.
+      .get("/api/workspaces/:id/held", async ({ params, status }) => {
         try {
-          const workspace = await workItems.archive(params.id);
-          workspaceArchived(workspace);
-          return workspace;
+          return await workItems.held(params.id);
         } catch (error) {
           const message =
             error instanceof Error ? error.message : String(error);
@@ -20933,6 +20956,30 @@ export const createServer = (
           );
         }
       })
+      // Refused (409, in words naming what and how big) when its clone holds
+      // work that is nowhere else, and nothing is deleted. `discard: true` is
+      // a person letting that work go: its machine writes it to a carry
+      // first, whose folder the answer names as `carry`.
+      .post(
+        "/api/workspaces/:id/archive",
+        { body: t.Optional(t.Object({ discard: t.Optional(t.Boolean()) })) },
+        async ({ params, body, status }) => {
+          try {
+            const { workspace, carry } = await workItems.archive(params.id, {
+              discard: body?.discard === true,
+            });
+            workspaceArchived(workspace);
+            return { ...workspace, carry };
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            return status(
+              error instanceof WorkItemRefusal ? error.status : 502,
+              message
+            );
+          }
+        }
+      )
       // ── Accounts ─────────────────────────────────────────────────────────────
       // Several sign-ins per provider, where each is signed in for which
       // harness, how new sessions choose among them, and what they read of

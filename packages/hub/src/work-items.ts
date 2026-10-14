@@ -51,9 +51,12 @@ import type {
   SpawnPayload,
   WorkItemSummary,
   WorkspaceArchive,
+  WorkspaceArchived,
   WorkspaceCheckout,
   WorkspaceCommit,
+  WorkspaceHolding,
   WorkspaceRef,
+  WorkspaceUnlanded,
 } from "@cawco/core";
 import {
   byPerson,
@@ -62,13 +65,17 @@ import {
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_BUNDLE,
   CONTROL_WORKSPACE_CREATE,
+  CONTROL_WORKSPACE_LANDED,
   CONTROL_WORKSPACE_MIGRATE,
   DEPS_INSTALLING,
   depsScript,
   ENDED_STATUSES,
   handoffMarker,
+  holdingWords,
+  holdsNothing,
   machineLabel,
   queueWords,
+  sizeWords,
   type WorkspaceLanding,
   withLandingLine,
   withWorkspaceLine,
@@ -199,6 +206,40 @@ export class WorkItemRefusal extends Error {
   constructor(status: 400 | 403 | 404 | 409, message: string) {
     super(message);
     this.status = status;
+  }
+}
+
+/** What a workspace holds that is nowhere else, read on its machine now, and where it is. */
+export interface HeldWork extends WorkspaceHolding {
+  /** What it holds, in words: "2 commits on no remote, 3 changed files, 1 stash". */
+  holds: string;
+  machine: string;
+  machineId: string;
+  path: string;
+  /** The clone's size on disk, in words. */
+  size: string;
+  workspaceId: string;
+}
+
+/** A workspace archived: its row, and the carry its machine wrote first, when its work was discarded. */
+export interface ArchivedWorkspace {
+  carry: string | null;
+  workspace: WorkspaceRow;
+}
+
+/**
+ * An archive refused because the clone holds work that is nowhere else: it
+ * names what, and nothing is deleted. `discard` archives it anyway, its
+ * work saved to a carry first.
+ */
+export class WorkspaceHoldsWork extends WorkItemRefusal {
+  readonly held: HeldWork;
+  constructor(held: HeldWork) {
+    super(
+      409,
+      `Workspace ${held.workspaceId} on ${held.machine} holds ${held.holds} (${held.size} at ${held.path}), so it was not archived and nothing was deleted. Land or push its work, or archive it with discard: true, which first saves its commits and changes to a carry in ~/.cawco/carries on ${held.machine}.`
+    );
+    this.held = held;
   }
 }
 
@@ -1352,7 +1393,8 @@ export const createWorkItems = ({
     if (pending !== undefined) {
       return pending;
     }
-    const discarded = call(machineId, CONTROL_WORKSPACE_ARCHIVE, [{ id }])
+    const unmade: WorkspaceArchive = { id, unlanded: "unmade" };
+    const discarded = call(machineId, CONTROL_WORKSPACE_ARCHIVE, [unmade])
       .then(() => db.finishWorkspaceCreate(id))
       .finally(() => discarding.delete(id));
     discarding.set(id, discarded);
@@ -2124,27 +2166,74 @@ export const createWorkItems = ({
           queuedSummaryOf(row).leadInstanceId === caller
       );
 
+  /** The one workspace `needle` names; refused when it names none or several. */
+  const namedWorkspace = (needle: string): WorkspaceRow => {
+    const named = db.workspacesNamed(needle.trim());
+    if (named.length !== 1) {
+      throw new WorkItemRefusal(
+        404,
+        named.length
+          ? `"${needle}" names ${named.length} workspaces. Pass the full workspace id.`
+          : `No workspace "${needle}".`
+      );
+    }
+    return named[0];
+  };
+
+  /** The paths a workspace's items handed over as outputs: `git status` passes over them. */
+  const handedOver = (workspace: WorkspaceRow): string[] => [
+    ...new Set(
+      db.workItemsIn(workspace.id).flatMap((item) => item.outputs ?? [])
+    ),
+  ];
+
+  /** What a workspace's clone holds that is nowhere else, read inside its boundary on its machine now. */
+  const heldIn = async (
+    workspace: WorkspaceRow,
+    skip: string[]
+  ): Promise<HeldWork> => {
+    const holding = (await call(workspace.machineId, CONTROL_WORKSPACE_LANDED, [
+      refOf(workspace),
+      skip,
+    ])) as WorkspaceHolding;
+    return {
+      ...holding,
+      holds: holdingWords(holding),
+      size: sizeWords(holding.bytes),
+      machine: machineName(workspace.machineId),
+      machineId: workspace.machineId,
+      path: workspace.path,
+      workspaceId: workspace.id,
+    };
+  };
+
   /**
    * A workspace's clone and boundary gone on its machine, its places with
-   * them, and its row archived. `guard` asks the machine to archive only if
-   * nothing in it is unlanded ({@link WorkspaceArchive}).
+   * them, and its row archived. Its machine reads again what it holds that
+   * is nowhere else and does with it what `unlanded` says
+   * ({@link WorkspaceUnlanded}); `skip`, its items' handed-over outputs.
    */
   const closeWorkspace = async (
     workspace: WorkspaceRow,
-    guard?: { skip: string[] }
-  ): Promise<WorkspaceRow> => {
-    const request: WorkspaceArchive = guard
-      ? { ...refOf(workspace), ifLanded: true, skip: guard.skip }
-      : refOf(workspace);
-    await call(workspace.machineId, CONTROL_WORKSPACE_ARCHIVE, [request]);
+    unlanded: WorkspaceUnlanded,
+    skip: string[] = []
+  ): Promise<ArchivedWorkspace> => {
+    const request: WorkspaceArchive = { ...refOf(workspace), unlanded, skip };
+    const { carry } = (await call(
+      workspace.machineId,
+      CONTROL_WORKSPACE_ARCHIVE,
+      [request]
+    )) as WorkspaceArchived;
     db.removeWorkspacePlaces(workspace.machineId, workspace.path);
     placesChanged(workspace.machineId);
-    return (
-      db.updateWorkspace(workspace.id, {
-        state: "archived",
-        boundaryPid: null,
-      }) ?? workspace
-    );
+    return {
+      workspace:
+        db.updateWorkspace(workspace.id, {
+          state: "archived",
+          boundaryPid: null,
+        }) ?? workspace,
+      carry,
+    };
   };
 
   /**
@@ -4416,32 +4505,35 @@ export const createWorkItems = ({
       return workspace ? refOf(workspace) : undefined;
     },
 
+    /** What a workspace holds that is nowhere else, read on its machine now ({@link HeldWork}). */
+    held(needle: string): Promise<HeldWork> {
+      const workspace = namedWorkspace(needle);
+      return heldIn(workspace, handedOver(workspace));
+    },
+
     /**
      * Archives a workspace: its machine kills the boundary with every process
      * in it and deletes the clone. Refused while an item there is live — stop
-     * it first — and for a workspace already archived. `guard` (the
-     * retirement sweep, workspace-retire.ts) has the machine refuse it too
-     * when the clone holds anything unlanded once its sessions have ended.
+     * it first — and for a workspace already archived. Refused, before any
+     * session is ended, when the clone holds work that is nowhere else
+     * ({@link WorkspaceHoldsWork}), unless `discard`: a person chose to let
+     * it go, and its machine saves it to a carry before deleting anything.
+     * The machine reads the clone again, its boundary still up, right before
+     * it deletes, and refuses on its own what appeared since.
      */
     async archive(
       needle: string,
-      guard?: { skip: string[] }
-    ): Promise<WorkspaceRow> {
-      const named = db.workspacesNamed(needle.trim());
-      if (named.length !== 1) {
-        throw new WorkItemRefusal(
-          404,
-          named.length
-            ? `"${needle}" names ${named.length} workspaces. Pass the full workspace id.`
-            : `No workspace "${needle}".`
-        );
-      }
-      const [workspace] = named;
+      { discard = false }: { discard?: boolean } = {}
+    ): Promise<ArchivedWorkspace> {
+      const workspace = namedWorkspace(needle);
       if (workspace.state === "archived") {
         throw new WorkItemRefusal(
           409,
           `Workspace ${workspace.id} is already archived.`
         );
+      }
+      if (workspace.checksFor) {
+        return closeWorkspace(workspace, "check");
       }
       const live = db
         .workItemsIn(workspace.id)
@@ -4451,6 +4543,11 @@ export const createWorkItems = ({
           409,
           `Workspace ${workspace.id} has a live work item: ${live.title} (${live.id}) is ${live.state}. Stop it before archiving the workspace.`
         );
+      }
+      const skip = handedOver(workspace);
+      const held = await heldIn(workspace, skip);
+      if (!(holdsNothing(held) || discard)) {
+        throw new WorkspaceHoldsWork(held);
       }
       // Bounded well inside the HTTP call's own idle timeout: a machine that
       // never confirms leaves the workspace active, and the answer says so.
@@ -4476,22 +4573,14 @@ export const createWorkItems = ({
           `Workspace ${workspace.id} stays active: ${unconfirmed.join(" ")} Retry once its machine has ended it.`
         );
       }
-      if (guard) {
-        // Retired: the workspace itself first, which its machine refuses
-        // when something there is unlanded; its check workspaces only then.
-        const closed = await closeWorkspace(workspace, guard);
-        await Promise.all(
-          db
-            .checkWorkspacesOf(workspace.id)
-            .map((check) => closeWorkspace(check))
-        );
-        return closed;
-      }
       // Its check workspaces on other machines go first: none outlives it.
+      // Their commits are this one's, which keeps them until it goes.
       await Promise.all(
-        db.checkWorkspacesOf(workspace.id).map((check) => closeWorkspace(check))
+        db
+          .checkWorkspacesOf(workspace.id)
+          .map((check) => closeWorkspace(check, "check"))
       );
-      return closeWorkspace(workspace);
+      return closeWorkspace(workspace, discard ? "carry" : "keep", skip);
     },
 
     /**

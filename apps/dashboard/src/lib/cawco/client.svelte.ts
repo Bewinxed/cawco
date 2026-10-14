@@ -84,6 +84,7 @@ import type {
   UsageSpend,
   WorkflowRun,
   WorkItemSummary,
+  WorkspaceHolding,
 } from "@cawco/core";
 import {
   ASK_USER_QUESTION,
@@ -5692,16 +5693,50 @@ export async function deleteTranscript(
  * refuses any other kind and says why; that answer is thrown as it is, for
  * the confirm dialog to show under its question.
  */
+/** What a workspace's clone holds that is nowhere else, as its machine read it now (hub work-items.ts `HeldWork`). */
+export interface WorkspaceHeld extends WorkspaceHolding {
+  /** In words: "2 commits on no remote, 3 changed files, 1 stash". */
+  holds: string;
+  machine: string;
+  path: string;
+  /** The clone's size on disk, in words. */
+  size: string;
+}
+
+/** Reads what a workspace holds that is nowhere else (`GET /api/workspaces/:id/held`); the hub's refusal is the error. */
+export async function workspaceHeld(
+  workspaceId: string
+): Promise<WorkspaceHeld> {
+  const response = await fetch(
+    `/api/workspaces/${encodeURIComponent(workspaceId)}/held`
+  );
+  if (!response.ok) {
+    throw new Error(
+      (await response.text()) ||
+        `The hub answered ${response.status}, so what the workspace holds is unread.`
+    );
+  }
+  return (await response.json()) as WorkspaceHeld;
+}
+
 /**
  * Archives a workspace through the hub (`POST /api/workspaces/:id/archive`):
  * its machine kills the boundary with everything in it and deletes the
  * clone and its records, a damaged one among them. The hub's refusal (a live
- * item there) is the error.
+ * item there, or work in the clone that is nowhere else) is the error.
+ * `discard` lets that work go: its machine saves it to a carry first.
  */
-export async function archiveWorkspace(workspaceId: string): Promise<void> {
+export async function archiveWorkspace(
+  workspaceId: string,
+  { discard = false }: { discard?: boolean } = {}
+): Promise<void> {
   const response = await fetch(
     `/api/workspaces/${encodeURIComponent(workspaceId)}/archive`,
-    { method: "POST" }
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ discard }),
+    }
   );
   if (!response.ok) {
     throw new Error(

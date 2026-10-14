@@ -34,15 +34,14 @@
  * `delegate_list`'s `kept` and at `GET /api/workspaces/kept`, re-read every
  * sweep until it lands, is cleaned, or is archived by hand.
  */
-import type { WorkspaceHolding } from "@cawco/core";
-import {
-  CONTROL_WORKSPACE_LANDED,
-  holdingWords,
-  holdsNothing,
-} from "@cawco/core";
 import type { DbShape, PublicInstanceRow, WorkspaceRow } from "./db";
 import type { HubLifetimeShape } from "./lifetime";
-import { isLive, type WorkItems } from "./work-items";
+import {
+  type HeldWork,
+  isLive,
+  type WorkItems,
+  WorkspaceHoldsWork,
+} from "./work-items";
 
 /** How long a workspace whose work is over stays continuable (see the module's words). */
 export const RETIRE_IDLE_MS = 2 * 3_600_000;
@@ -50,15 +49,8 @@ export const RETIRE_IDLE_MS = 2 * 3_600_000;
 const RETIRE_SWEEP_MS = 10 * 60_000;
 
 /** A spent workspace kept for the unlanded work in it. */
-export interface KeptWorkspace extends WorkspaceHolding {
+export interface KeptWorkspace extends HeldWork {
   checkedAt: string;
-  /** What it holds that is nowhere else, in words. */
-  holds: string;
-  /** The machine's name as the fleet shows it. */
-  machine: string;
-  machineId: string;
-  path: string;
-  workspaceId: string;
 }
 
 /** What one sweep did. */
@@ -72,11 +64,6 @@ export interface RetireSweep {
 export interface WorkspaceRetireDeps {
   /** After a workspace is archived: its sessions' pending sends and asks, and the dashboards. */
   archived: (workspace: WorkspaceRow) => void;
-  call: (
-    machineId: string,
-    method: string,
-    args: unknown[]
-  ) => Promise<unknown>;
   db: Pick<DbShape, "activeWorkspacesOn" | "getInstancesByIds" | "workItemsIn">;
   /** Whether the session is in a turn now. */
   inTurn: (row: PublicInstanceRow) => boolean;
@@ -95,23 +82,20 @@ export const createWorkspaceRetire = (deps: WorkspaceRetireDeps) => {
   const kept = new Map<string, KeptWorkspace>();
   let running: Promise<RetireSweep> | undefined;
 
-  /** Its items' outputs, which `git status` passes over, when the workspace is spent; else undefined. */
-  const spent = (
-    workspace: WorkspaceRow,
-    now: number
-  ): { skip: string[] } | undefined => {
+  /** Whether the workspace is spent: a delegate's, its items all ended, its sessions idle {@link RETIRE_IDLE_MS}. */
+  const spent = (workspace: WorkspaceRow, now: number): boolean => {
     if (workspace.checksFor) {
-      return;
+      return false;
     }
     const items = db.workItemsIn(workspace.id);
     if (items.length === 0 || items.some((item) => isLive(item.state))) {
-      return;
+      return false;
     }
     const rows = db.getInstancesByIds([
       ...new Set(items.map((item) => item.instanceId)),
     ]);
     if (rows.some(deps.inTurn)) {
-      return;
+      return false;
     }
     const last = Math.max(
       ...items.map((item) => time(item.endedAt) || now),
@@ -119,49 +103,28 @@ export const createWorkspaceRetire = (deps: WorkspaceRetireDeps) => {
         Math.max(time(row.turnEndedAt), time(row.lastRequestAt))
       )
     );
-    if (now - last < RETIRE_IDLE_MS) {
-      return;
-    }
-    return { skip: [...new Set(items.flatMap((item) => item.outputs ?? []))] };
+    return now - last >= RETIRE_IDLE_MS;
   };
 
   /**
-   * One spent workspace: kept and listed when its machine reads anything
-   * unlanded in it, else archived (its machine reading it again first).
+   * One spent workspace, archived as any archive is (work-items.ts
+   * `archive`, never with `discard`): its machine reads what it holds before
+   * its sessions end and again before it deletes anything, and a refusal
+   * naming unlanded work keeps it and lists it.
    */
   const retireOne = async (
     machineId: string,
     workspace: WorkspaceRow,
-    guard: { skip: string[] },
     now: number,
     done: RetireSweep
   ): Promise<void> => {
     const machine = deps.machineName(machineId);
     try {
-      const holding = (await deps.call(machineId, CONTROL_WORKSPACE_LANDED, [
-        { id: workspace.id, path: workspace.path },
-        guard.skip,
-      ])) as WorkspaceHolding;
-      if (!holdsNothing(holding)) {
-        const entry: KeptWorkspace = {
-          ...holding,
-          workspaceId: workspace.id,
-          machine,
-          machineId,
-          path: workspace.path,
-          holds: holdingWords(holding),
-          checkedAt: new Date(now).toISOString(),
-        };
-        if (kept.get(workspace.id)?.holds !== entry.holds) {
-          console.log(
-            `[workspace-retire] ${workspace.id} on ${machine}: kept, ${entry.holds} (${(entry.bytes / 1e9).toFixed(1)} GB at ${workspace.path})`
-          );
-        }
-        kept.set(workspace.id, entry);
-        return;
-      }
+      const { workspace: archived } = await deps.workItems.archive(
+        workspace.id
+      );
       kept.delete(workspace.id);
-      deps.archived(await deps.workItems.archive(workspace.id, guard));
+      deps.archived(archived);
       done.retired.push({
         workspaceId: workspace.id,
         machine,
@@ -171,6 +134,19 @@ export const createWorkspaceRetire = (deps: WorkspaceRetireDeps) => {
         `[workspace-retire] ${workspace.id} on ${machine}: retired, its work over and landed; ${workspace.path} and what it owned there are gone`
       );
     } catch (error) {
+      if (error instanceof WorkspaceHoldsWork) {
+        const entry: KeptWorkspace = {
+          ...error.held,
+          checkedAt: new Date(now).toISOString(),
+        };
+        if (kept.get(workspace.id)?.holds !== entry.holds) {
+          console.log(
+            `[workspace-retire] ${workspace.id} on ${machine}: kept, ${entry.holds} (${entry.size} at ${workspace.path})`
+          );
+        }
+        kept.set(workspace.id, entry);
+        return;
+      }
       const reason = error instanceof Error ? error.message : String(error);
       done.failed.push({ workspaceId: workspace.id, reason });
       console.warn(
@@ -195,10 +171,9 @@ export const createWorkspaceRetire = (deps: WorkspaceRetireDeps) => {
         }
       }
       for (const workspace of active) {
-        const guard = spent(workspace, now);
-        if (guard) {
+        if (spent(workspace, now)) {
           // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time, so a sweep never loads a machine with many git reads at once
-          await retireOne(machineId, workspace, guard, now, done);
+          await retireOne(machineId, workspace, now, done);
         }
       }
     }

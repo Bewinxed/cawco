@@ -383,6 +383,14 @@ export const releaseEnvPath = (): string =>
 export const workspaceCacheDir = (): string =>
   join(homedir(), ".cawco", "workspace-cache");
 
+/**
+ * Where a workspace's unlanded work is saved when a person archives it
+ * anyway (core `WorkspaceUnlanded` `carry`), one folder per archive: outside
+ * every workspace's reach, so no workspace writes or deletes one.
+ */
+export const workspaceCarriesDir = (): string =>
+  join(homedir(), ".cawco", "carries");
+
 /** Where every workspace's boundary keeps its state, one dir per workspace; read-only inside the boundary. */
 export const workspacesDir = (): string =>
   join(homedir(), ".cawco", "workspaces");

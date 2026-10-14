@@ -22,6 +22,17 @@
  *     it is kept and listed, at GET /api/workspaces/kept and in the
  *     parent's delegate_list, with its machine, 1 commit on no remote and
  *     its clone's size.
+ * (e) Every archive reads the clone first (hub work-items.ts `archive`,
+ *     agent `archiveWorkspace`). K given a changed and an untracked file: a
+ *     dashboard's raw `workspaceArchive` control, even one asking to carry,
+ *     is refused at the hub's relay; POST /api/workspaces/K/archive answers
+ *     409 naming "1 commit on no remote, 2 changed files" and the clone's
+ *     size, and the clone, its files and its row stand. With `discard: true`
+ *     it answers 200 naming a carry in ~/.cawco/carries that holds the
+ *     commit (a bundle listing K's branch, a patch with its file) and the
+ *     uncommitted diff (both files), then the clone is gone and the row
+ *     archived. A third delegate M, landed and clean, archives with 200 and
+ *     no carry, its clone gone.
  * (d) A heavy run, and build-both.sh, refuse to start below the free-space
  *     threshold (here forced up with CAWCO_MIN_FREE_GB), exit 3, with one
  *     sentence naming the free space and the biggest folders. build-both.sh
@@ -36,7 +47,10 @@ import { basename, join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
-const TAG = /PROBE-RETIRE-([LK])/;
+const TAG = /PROBE-RETIRE-([LKM])/;
+/** A size in words (core `sizeWords`), alone and as the 409 places it before the clone's path. */
+const SIZE = /^\d+(\.\d)? (GB|MB|KB)$/;
+const SIZE_AT = / \d+(\.\d)? (GB|MB|KB) at /;
 const FINISH = "mcp__cawco__finish_item";
 /** Past the rule's two idle hours (workspace-retire.ts `RETIRE_IDLE_MS`). */
 const BACKDATE_MS = 3 * 3_600_000;
@@ -81,12 +95,12 @@ const respond = (request: Seen): Reply => {
     step.finish = true;
     return tool(
       FINISH,
-      tag === "L"
-        ? { summary: "Committed retire-L.txt." }
-        : {
+      tag === "K"
+        ? {
             summary: "Committed retire-K.txt and stopped.",
             blocked: { command: "probe", error: "K stops here on purpose" },
           }
+        : { summary: `Committed retire-${tag}.txt.` }
     );
   }
   if (
@@ -171,6 +185,152 @@ const diskPhase = async (kit: Kit): Promise<void> => {
   );
 };
 
+type Fleet = Awaited<ReturnType<Kit["fleet"]>>;
+
+/** An archive asked over HTTP: its status and its answer's text. */
+const archiveOver = async (
+  fleet: Fleet,
+  id: string,
+  body?: object
+): Promise<{ status: number; text: string }> => {
+  const response = await fetch(`${fleet.base}/api/workspaces/${id}/archive`, {
+    method: "POST",
+    ...(body && {
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+    signal: AbortSignal.timeout(120_000),
+  });
+  return { status: response.status, text: await response.text() };
+};
+
+/** (e) No archive deletes unlanded work unless a person discards it, and then a carry holds it. */
+const archivePhase = async (
+  kit: Kit,
+  fleet: Fleet,
+  {
+    k,
+    workspaceOf,
+    delegate,
+  }: {
+    k: Workspace;
+    workspaceOf: (id: string) => Workspace;
+    delegate: (
+      tag: "M"
+    ) => Promise<{ workspaceId: string; item: { state: string } }>;
+  }
+): Promise<void> => {
+  const { check } = kit;
+  await writeFile(join(k.path, "README.md"), "changed by the probe\n");
+  await writeFile(join(k.path, "uncommitted-K.txt"), "dirty K\n");
+
+  // A dashboard's raw control, asking to carry: the hub's relay refuses it.
+  await fleet.post({
+    verb: "control",
+    machineId: MACHINE,
+    requestId: crypto.randomUUID(),
+    payload: {
+      requestId: crypto.randomUUID(),
+      method: "workspaceArchive",
+      args: [{ id: k.id, path: k.path, unlanded: "carry" }],
+    },
+  });
+
+  const held = await fleet.api<{ holds: string; size: string }>(
+    `/api/workspaces/${k.id}/held`
+  );
+  check(
+    "(e) GET held names what K holds: 1 commit on no remote, 2 changed files, and its size",
+    held.holds === "1 commit on no remote, 2 changed files" &&
+      SIZE.test(held.size),
+    JSON.stringify(held)
+  );
+  const kept = await archiveOver(fleet, k.id);
+  check(
+    "(e) POST archive on K answers 409 naming its commit, its changed files and its size; nothing deleted",
+    kept.status === 409 &&
+      kept.text.includes("holds 1 commit on no remote, 2 changed files (") &&
+      SIZE_AT.test(kept.text) &&
+      kept.text.includes(k.path) &&
+      kept.text.includes("nothing was deleted"),
+    `${kept.status} ${kept.text}`
+  );
+  check(
+    "(e) after the raw control and the refused POST, K's clone, its commit, its changed files and its row stand",
+    existsSync(join(k.path, "retire-K.txt")) &&
+      existsSync(join(k.path, "uncommitted-K.txt")) &&
+      (await Bun.file(join(k.path, "README.md")).text()) ===
+        "changed by the probe\n" &&
+      workspaceOf(k.id).state === "active",
+    workspaceOf(k.id).state
+  );
+
+  const discarded = await archiveOver(fleet, k.id, { discard: true });
+  const carry =
+    discarded.status === 200
+      ? ((JSON.parse(discarded.text) as { carry: string | null }).carry ?? "")
+      : "";
+  check(
+    "(e) POST archive on K with discard answers 200 naming a carry in ~/.cawco/carries",
+    discarded.status === 200 &&
+      carry.startsWith(join(fleet.home, ".cawco", "carries", `${k.id}-`)) &&
+      existsSync(carry),
+    `${discarded.status} ${discarded.text.slice(0, 600)}`
+  );
+  const heads = carry
+    ? (
+        await Bun.$`git bundle list-heads ${join(carry, "commits.bundle")}`
+          .quiet()
+          .nothrow()
+      ).stdout.toString()
+    : "";
+  const patches = carry
+    ? await Array.fromAsync(new Bun.Glob("commits/*.patch").scan(carry))
+    : [];
+  const patch = patches[0]
+    ? await Bun.file(join(carry, patches[0])).text()
+    : "";
+  check(
+    "(e) the carry holds K's commit: a bundle listing its branch, and a patch adding retire-K.txt",
+    heads.includes(`refs/heads/ws/${k.id.slice(0, 8)}`) &&
+      patches.length === 1 &&
+      patch.includes("Delegate commit K") &&
+      patch.includes("+made by K"),
+    `heads: ${heads.trim()}; patches: ${patches.join(", ")}`
+  );
+  const diff = carry
+    ? await Bun.file(join(carry, "uncommitted.patch"))
+        .text()
+        .catch(() => "")
+    : "";
+  check(
+    "(e) the carry holds K's uncommitted diff: README.md changed and uncommitted-K.txt added, and a README saying how to take it back",
+    diff.includes("+changed by the probe") &&
+      diff.includes("+dirty K") &&
+      diff.includes("uncommitted-K.txt") &&
+      existsSync(join(carry, "README.md")),
+    diff.slice(0, 800)
+  );
+  check(
+    "(e) then K's clone is gone and its row archived",
+    !existsSync(k.path) && workspaceOf(k.id).state === "archived",
+    `${existsSync(k.path) ? "clone stands" : "clone gone"}, ${workspaceOf(k.id).state}`
+  );
+
+  const m = await delegate("M");
+  const wm = workspaceOf(m.workspaceId);
+  const landed = await archiveOver(fleet, wm.id);
+  check(
+    "(e) M, landed and clean, archives with 200 and no carry; its clone is gone",
+    m.item.state === "done" &&
+      landed.status === 200 &&
+      (JSON.parse(landed.text) as { carry: string | null }).carry === null &&
+      !existsSync(wm.path) &&
+      workspaceOf(wm.id).state === "archived",
+    `${m.item.state}; ${landed.status} ${landed.text.slice(0, 400)}`
+  );
+};
+
 const spec: Spec = {
   name: "workspace-retire",
   run: async (kit: Kit) => {
@@ -212,7 +372,7 @@ const spec: Spec = {
         "SELECT id, path, state, tmp FROM workspaces WHERE id = ?",
         id
       )[0] as Workspace;
-    const delegate = async (tag: "L" | "K") => {
+    const delegate = async (tag: "L" | "K" | "M") => {
       const started = await fleet.api<{
         instanceId: string;
         workItemId: string;
@@ -368,6 +528,7 @@ const spec: Spec = {
       `${listing.status} ${said.slice(0, 1500)}`
     );
 
+    await archivePhase(kit, fleet, { k: wk, workspaceOf, delegate });
     await diskPhase(kit);
   },
 };

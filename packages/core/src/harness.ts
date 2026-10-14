@@ -1626,20 +1626,40 @@ export const CONTROL_WORKSPACE_BOUNDARY = "workspaceBoundary";
  * Archives a workspace on its machine: its boundary is killed, with every
  * process in it, and its clone is deleted with everything else of its own on
  * that machine (its state and scratch dirs, its Apple build root, its
- * DerivedData and SwiftPM build dirs). Args `[WorkspaceArchive]`, or `[{ id }]`
- * for an unfiled create: the machine's create record names its clone.
+ * DerivedData and SwiftPM build dirs). Args `[WorkspaceArchive]`; answers
+ * {@link WorkspaceArchived}. Only the hub sends it: a dashboard's control
+ * naming it is refused at the relay.
  */
 export const CONTROL_WORKSPACE_ARCHIVE = "workspaceArchive";
 
 /**
- * What {@link CONTROL_WORKSPACE_ARCHIVE} is asked: the workspace, and with
- * `ifLanded` set, only if nothing in it is unlanded at that moment
- * ({@link CONTROL_WORKSPACE_LANDED}); else the archive is refused in words
- * naming what would be lost, and nothing is removed. `skip` as there.
+ * What an archive does with work in the clone that is nowhere else
+ * ({@link CONTROL_WORKSPACE_LANDED}, read again by the machine right before
+ * it deletes anything):
+ * - `keep`: any refuses the archive, in words naming it, and nothing is
+ *   removed. What every archive is unless one of the others is named.
+ * - `carry`: a person chose to discard it. The machine first writes it to a
+ *   carry (`~/.cawco/carries/<id>-<time>`: a bundle and patch series of the
+ *   commits, the uncommitted diff, each stash as a patch), then deletes.
+ * - `check`: a check workspace, detached at its source workspace's commit;
+ *   the commits it has are its source's, which keeps them, and what its
+ *   checks wrote is theirs. Not read.
+ * - `unmade`: a create that never finished, whose clone nobody worked in.
+ *   Not read; `path` may be absent, and the machine's create record names it.
  */
-export interface WorkspaceArchive extends WorkspaceRef {
-  ifLanded?: boolean;
+export type WorkspaceUnlanded = "keep" | "carry" | "check" | "unmade";
+
+/** What {@link CONTROL_WORKSPACE_ARCHIVE} is asked. `skip` as {@link CONTROL_WORKSPACE_LANDED}'s. */
+export interface WorkspaceArchive {
+  id: string;
+  path?: string;
   skip?: string[];
+  unlanded: WorkspaceUnlanded;
+}
+
+/** What {@link CONTROL_WORKSPACE_ARCHIVE} answers: the carry's folder on the machine, when one was written. */
+export interface WorkspaceArchived {
+  carry: string | null;
 }
 
 /**
@@ -1669,18 +1689,28 @@ export const holdsNothing = (holding: WorkspaceHolding): boolean =>
 const counted = (count: number, one: string, many: string): string =>
   `${count} ${count === 1 ? one : many}`;
 
-/** What a workspace holds that is nowhere else, in words: "2 commits on no remote, 1 uncommitted change". */
+/** What a workspace holds that is nowhere else, in words: "2 commits on no remote, 3 changed files, 1 stash". */
 export const holdingWords = (holding: WorkspaceHolding): string =>
   [
     holding.ahead > 0 &&
       counted(holding.ahead, "commit on no remote", "commits on no remote"),
     holding.dirty > 0 &&
-      counted(holding.dirty, "uncommitted change", "uncommitted changes"),
-    holding.stashes > 0 &&
-      counted(holding.stashes, "stash entry", "stash entries"),
+      counted(holding.dirty, "changed file", "changed files"),
+    holding.stashes > 0 && counted(holding.stashes, "stash", "stashes"),
   ]
     .filter(Boolean)
     .join(", ") || "nothing unlanded";
+
+/** A size on disk in words: "1.4 GB", "312 MB", "18 KB". */
+export const sizeWords = (bytes: number): string => {
+  if (bytes >= 1e9) {
+    return `${(bytes / 1e9).toFixed(1)} GB`;
+  }
+  if (bytes >= 1e6) {
+    return `${Math.round(bytes / 1e6)} MB`;
+  }
+  return `${Math.max(1, Math.round(bytes / 1e3))} KB`;
+};
 
 /**
  * A workspace's commit as another machine takes it: `head`, the clone's

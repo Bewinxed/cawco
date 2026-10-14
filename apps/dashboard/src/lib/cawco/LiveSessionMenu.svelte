@@ -16,7 +16,7 @@
    * The row is the trigger itself: `children` is handed the trigger's props
    * and spreads them on its own root element, so a table row stays a `<tr>`.
    */
-  import { type HarnessKind, machineLabel } from "@cawco/core";
+  import { type HarnessKind, holdsNothing, machineLabel } from "@cawco/core";
   import type { Snippet } from "svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
@@ -44,6 +44,7 @@
     type InstanceRow,
     keepSession,
     removeSession,
+    workspaceHeld,
   } from "./client.svelte";
   import { continueInNewSession } from "./continue.svelte";
   import {
@@ -184,12 +185,37 @@
       : undefined
   );
 
+  /**
+   * Reads what the clone holds that is nowhere else before asking. Held
+   * work turns the question into Keep or Save and archive, which has its
+   * machine write it to a carry before deleting anything. A read that fails
+   * asks plainly: the hub reads again on archive and refuses in its own
+   * words what it cannot read.
+   */
   async function askArchiveWorkspace() {
     const workspaceId = damagedWorkspace as string;
+    const where = machine ? machineLabel(machine.hostname) : "its machine";
+    const held = await workspaceHeld(workspaceId).catch(() => undefined);
+    if (held && !holdsNothing(held)) {
+      await asker.ask({
+        at: instance.id,
+        title: "This workspace holds work that is nowhere else",
+        body: [
+          `Its clone ${held.path} on ${held.machine} holds ${held.holds}, ${held.size} in all.`,
+          `Save and archive writes that work to a carry on ${held.machine} (in ~/.cawco/carries), then deletes the clone, its boundary and its records. Keep leaves it all where it is.`,
+        ],
+        cancelLabel: "Keep",
+        confirmLabel: "Save and archive",
+        destructive: true,
+        pendingLabel: "Saving…",
+        run: () => archiveWorkspace(workspaceId, { discard: true }),
+      });
+      return;
+    }
     await asker.ask({
       at: instance.id,
       title: "Archive this workspace?",
-      body: `Its record ${instance.damaged?.file ?? ""} is damaged, so it cannot run. Archiving deletes its clone, its boundary and its records on ${machine ? machineLabel(machine.hostname) : "its machine"}, for good. Every other workspace runs as before.`,
+      body: `Its record ${instance.damaged?.file ?? ""} is damaged, so it cannot run. Archiving deletes its clone, its boundary and its records on ${where}, for good. Every other workspace runs as before.`,
       confirmLabel: "Archive workspace",
       destructive: true,
       pendingLabel: "Archiving…",
