@@ -31,7 +31,11 @@ import { type Kit, type KitFleet, ROOT, type Spec } from "../kit";
 const ASK = "AskUserQuestion";
 const ASKING = /PROBE-ASK-([A-Z]+)/;
 const AXE = "/opt/homebrew/bin/axe";
-const LOG_HEAD = /^.*\] /;
+/**
+ * A log line's head, up to and with its `[dev.cawco.app:<category>] `: never
+ * further, as a probe line may carry `] ` of its own (`asks [...]`).
+ */
+const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 const TRAILING_SLASH = /\/$/;
 const DEVICES = [
   {
