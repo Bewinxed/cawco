@@ -160,6 +160,10 @@ const run = async (kit: Kit) => {
     return;
   }
   const fleet = await kit.fleet(respond);
+  // The hub's temp dir: in a workspace, its own (`/tmp` is outside its boundary).
+  if (process.env.TMPDIR) {
+    fleet.env.TMPDIR = process.env.TMPDIR;
+  }
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
