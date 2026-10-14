@@ -1049,6 +1049,8 @@
             {#each orderedProjects as project (project.id)}
               {@const runningCount = runningIn(project)}
               {@const expanded = !folderPrefs.collapsed(project.id)}
+              {@const href = `/project/${project.id}`}
+              {@const here = path === href || path.startsWith(`${href}/`)}
               <li
                 class="group/menu-item relative"
                 data-flip="box"
@@ -1061,25 +1063,41 @@
                   onnew={() => newSession({ projectId: project.id })}
                   {project}
                 >
-                  <Sidebar.MenuButton
-                    aria-expanded={expanded}
-                    class={LIST_ROW}
-                    onclick={() => toggle(project)}
-                  >
-                    <!-- Its mark says what is running in it, as a
-                         session's says its delegates; the whole row is the
-                         switch, so the mark only draws the morph. -->
-                    <ProjectMark
-                      count={runningCount}
-                      hue={markHue(folderOf(project))}
-                      open={expanded}
-                    />
-                    <span class="min-w-0 flex-1 truncate"
-                      >{project.name}
-                      {#if runningCount > 0}
-                        <span class="sr-only">, {runningCount} running</span>
-                      {/if}</span
-                    >
+                  <Sidebar.MenuButton class={LIST_ROW} isActive={here}>
+                    {#snippet child({
+                      props,
+                    })}
+                      <!-- The row is the link to the project's page. Its
+                           mark says what is running in it, as a session's
+                           says its delegates, and is the switch that folds
+                           its sessions, as a session's mark folds its
+                           delegates; its press never reaches the link. Under
+                           a finger the switch reaches sideways to the name,
+                           the row's own gap (LIST_ROW's), as a session
+                           row's does. -->
+                      <a
+                        {href}
+                        {...props}
+                        aria-current={here ? "page" : undefined}
+                        class="{props.class} [--mark-hit-gap:--spacing(2.5)]"
+                      >
+                        <ProjectMark
+                          count={runningCount}
+                          hue={markHue(folderOf(project))}
+                          name={project.name}
+                          ontoggle={() => toggle(project)}
+                          open={expanded}
+                        />
+                        <span class="min-w-0 flex-1 truncate"
+                          >{project.name}
+                          {#if runningCount > 0}
+                            <span class="sr-only"
+                              >, {runningCount} running</span
+                            >
+                          {/if}</span
+                        >
+                      </a>
+                    {/snippet}
                   </Sidebar.MenuButton>
                 </FolderMenu>
 

@@ -19,9 +19,11 @@
    * - A switch: under a fine pointer, and while its rows are open, what the
    *   tile shows gives way to a chevron. With `ontoggle` the mark's own hit
    *   area is the switch, and the rest of the row still does what the row
-   *   does (a session row opens the session). With `rowToggles` the row is
-   *   the switch (a project's row, the "N older" row, each a button): the
-   *   mark draws the same morph and takes no press of its own. A count that
+   *   does (a session row opens the session, a project row its page). A
+   *   switch the caller names (`switchLabel`: a project's sessions) is there
+   *   whatever its count. With `rowToggles` the row is the switch (the
+   *   "N older" row, a button): the mark draws the same morph and takes no
+   *   press of its own. A count that
    *   is the parent's own status (`countIsStatus`: a project's running
    *   sessions) stays on the tile while its rows are out.
    * - Working: the tile echoes. A copy of it grows from under the tile and
@@ -55,6 +57,7 @@
     fill,
     status,
     noun = "delegate",
+    switchLabel,
     faceAlways = false,
     face,
   }: {
@@ -78,6 +81,11 @@
     status?: MarkStatus;
     /** What one row under it is, for the switch's name ("3 delegates"). */
     noun?: string;
+    /**
+     * The switch's name, when the caller says what it opens ("Show cockpit's
+     * sessions"). With one and `ontoggle`, the mark is a switch at any count.
+     */
+    switchLabel?: string;
     /** What the tile shows when it has no count. */
     face: Snippet;
     /** The face stays on the tile with a count; the chevron never takes it. */
@@ -90,12 +98,17 @@
       : undefined
   );
   const has = $derived(count > 0);
+  /** Its own hit area opens and folds its rows. */
+  const switches = $derived(
+    Boolean(ontoggle) && (has || switchLabel !== undefined)
+  );
   /** Rows hang under it: it draws the chevron its face gives way to. */
-  const parent = $derived(has || rowToggles);
+  const parent = $derived(has || rowToggles || switches);
   /** The tile has room for two figures. */
   const shown = $derived(count >= 100 ? "99" : String(count));
   const label = $derived(
-    `${open ? "Hide" : "Show"} ${count} ${noun}${count === 1 ? "" : "s"}`
+    switchLabel ??
+      `${open ? "Hide" : "Show"} ${count} ${noun}${count === 1 ? "" : "s"}`
   );
 
   /**
@@ -117,7 +130,7 @@
   data-has={has || undefined}
   data-open={(parent && open) || undefined}
   data-status-count={countIsStatus ? "" : undefined}
-  data-switch={(has && ontoggle) || rowToggles ? "" : undefined}
+  data-switch={switches || rowToggles ? "" : undefined}
   style:--fill={fill}
   style:--n={Math.min(count, 3)}
 >
@@ -158,7 +171,7 @@
          dot it is the dot's own colour, so it needs no cut. -->
     <span aria-hidden="true" class="dot ping" data-echo></span>
   {/if}
-  {#if has && ontoggle}
+  {#if switches}
     <!-- biome-ignore lint/a11y/useSemanticElements: it sits inside the row's link, and a <button> cannot nest in an <a>. -->
     <span
       aria-expanded={open}
