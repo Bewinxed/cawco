@@ -1126,6 +1126,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         guard line != laidHead else { return }
         laidHead = line
         PreviewProbe.say(line)
+        // The probe's page says where its parts stand now (its `report`), so
+        // a post follows a moved drawer whatever the page's own timers do.
+        web.evaluateJavaScript("typeof report === 'function' && report()")
     }
 
     /// The probe's page posts `cawco:probe` with its state and the viewport

@@ -215,6 +215,12 @@ const pageOf = (line: string): Page | undefined => {
 /** The newest page line after `from`. */
 const pageAfter = (from: number) =>
   seen.slice(from).map(pageOf).filter(Boolean).at(-1) as Page | undefined;
+/**
+ * The newest page line so far, where nothing on the page changed: after a
+ * drag the app has the page report where its parts stand (on the layout
+ * that moved the drawer), and the page's own timer may post nothing more.
+ */
+const pageLast = () => pageAfter(0);
 /** Waits for a log line after `from` that `match` takes. */
 const lineAfter = (
   what: string,
@@ -845,6 +851,13 @@ xcrun simctl install ${udid} "${app}"`);
     (c) => c.number === 1 && c.live,
     15_000
   );
+  // The card goes first (its keyboard with it), so the sheet stands where it
+  // logs its rows, and the live row is what opens the card again.
+  card = await cardAfter("the card before the sheet", seen.length);
+  if (card?.close) {
+    await tap(card.close);
+  }
+  await pause(1200);
   sheet = await openSheet("the Pins sheet after the send");
   await pause(800);
   mark = seen.length;
@@ -852,7 +865,11 @@ xcrun simctl install ${udid} "${app}"`);
   if (liveRow) {
     await tap(liveRow);
   }
-  card = await cardAfter("the card again", mark, (c) => c.number === 1);
+  card = await cardAfter(
+    "the card from the live row",
+    mark,
+    (c) => c.number === 1
+  );
   check(
     "with the frame's sentAt set and the session working, the pin's row and card show the live dot",
     liveCard !== undefined && sheet.list?.live.includes("1") === true,
@@ -973,7 +990,12 @@ xcrun simctl install ${udid} "${app}"`);
     await drag(from, { x: from.x, y: from.y + by });
     await pause(1500);
     const to = headLast()?.grabber;
-    page = await pageNow(`the page at ${height} height`);
+    // The page as it reported on the drawer's move: nothing on it changed.
+    const moved = pageLast();
+    if (!moved) {
+      throw new Error(`no page line at the ${height} height`);
+    }
+    page = moved;
     before = page.count;
     mark = seen.length;
     await tapPage("button-end", page);
