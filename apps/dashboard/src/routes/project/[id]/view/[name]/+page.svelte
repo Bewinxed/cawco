@@ -3,7 +3,8 @@
    * One custom view of a project and nothing around it (PRD §5.2): what the
    * app shows in a web view, since OpenUI has no Swift renderer. The root
    * layout draws this route without the app's shell. The kept view of that
-   * name, else the draft; a task in it opens the project's page on it.
+   * name, else the draft; a task in it opens the project's page on it, or in
+   * the app, the app's own task sheet.
    */
   import type { ProjectView } from "@cawco/core";
   import { viewsOf } from "#lib/cawco/client.svelte.js";
@@ -53,6 +54,25 @@
 
   const hrefOf = (task: string) =>
     `/project/${encodeURIComponent(projectId)}?task=${encodeURIComponent(task)}`;
+
+  /**
+   * The app's web view hears the page here (ProjectViewPane.swift): a task
+   * opens the app's own sheet over the project, as a card in its board does.
+   * A browser has no such host and opens the project's page on the task.
+   */
+  interface AppHost {
+    postMessage: (message: { task: string; type: "cawco:open-task" }) => void;
+  }
+  const appHost = (
+    globalThis as { webkit?: { messageHandlers?: { cawco?: AppHost } } }
+  ).webkit?.messageHandlers?.cawco;
+  const open = (task: string) => {
+    if (appHost) {
+      appHost.postMessage({ type: "cawco:open-task", task });
+    } else {
+      goto(hrefOf(task));
+    }
+  };
 </script>
 
 <!-- Named as the project page's tab names it. -->
@@ -62,12 +82,7 @@
   {#if problem}
     <EmptyState icon={IconAlert} line={problem} title="This view didn't open" />
   {:else if view}
-    <ViewOpenUi
-      {hrefOf}
-      onopen={(task) => goto(hrefOf(task))}
-      {projectId}
-      {view}
-    />
+    <ViewOpenUi {hrefOf} onopen={open} {projectId} {view} />
   {:else}
     <Skeleton class="h-64 w-full rounded-[var(--radius-lg)]" />
   {/if}

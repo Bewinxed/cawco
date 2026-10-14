@@ -148,6 +148,10 @@ public final class HubConnection {
     /// changed (`tasks.changed`), whoever changed them: what shows a
     /// project's tasks reads them again when it moves.
     public private(set) var tasksChanged: [String: Int] = [:]
+    /// A count per project that moves each time one of its Caw threads
+    /// changes (`thread.upsert`): Caw drafts a view in a thread, so the
+    /// project's views are read again when it moves, as the web's are.
+    public private(set) var threadsMoved: [String: Int] = [:]
 
     @ObservationIgnored private var projectStopListeners: [UUID: (Components.Schemas.ProjectStopFrame) -> Void] = [:]
 
@@ -1121,11 +1125,12 @@ public final class HubConnection {
             fleet.adopt(spend: frame.spend)
             // The hub says this when an account's reading, sign-in or catalog moved.
             readAccounts()
-        case .thread:
+        case let .thread(projectId):
+            if let projectId { threadsMoved[projectId, default: 0] += 1 }
             // Said once per connection object, never per frame: threads arrive for every Caw thread.
             if !threadsNoted {
                 threadsNoted = true
-                log.info("hub sends Caw thread frames; this app has no thread screen yet, so they are ignored")
+                log.info("hub sends Caw thread frames; this app has no thread screen yet, so they only move their project's views")
             }
         case let .preview(frame):
             previews.adopt(frame)

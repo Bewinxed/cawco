@@ -8,7 +8,10 @@ import Observation
 /// is read again after each of the page's own writes, whenever the hub says
 /// the project's tasks changed (`tasks.changed`: Caw filed one, an attempt
 /// moved one), on a reconnect, and when the app comes back. A move shows at
-/// once, in the column it is going to, until the hub answers it.
+/// once, in the column it is going to, until the hub answers it. The
+/// project's custom views are read with them, and again whenever one of its
+/// Caw threads moves (he drafts a view in a thread), so a new draft arrives
+/// as a tab.
 @MainActor
 @Observable
 public final class ProjectTaskList {
@@ -22,16 +25,24 @@ public final class ProjectTaskList {
     public private(set) var stagesProblem: String?
     /// Moves the hub has not answered yet, by task: the card already stands in its new column.
     public private(set) var moving: [String: String] = [:]
+    /// The project's views, kept then drafted, once read.
+    public private(set) var views: [ProjectView]?
+    /// Why the views could not be read, in the hub's words; the last read stays shown.
+    public private(set) var viewsProblem: String?
 
     /// Reads so far: only the newest one's answer is kept.
     @ObservationIgnored private var reads = 0
+    /// Views reads so far, and keeps and discards: only the newest one's answer is kept.
+    @ObservationIgnored private var viewReads = 0
     @ObservationIgnored private var changesSeen: Int
+    @ObservationIgnored private var threadsSeen: Int
     @ObservationIgnored private var wasConnected: Bool
 
     public init(hub: HubConnection, projectId: String) {
         self.hub = hub
         self.projectId = projectId
         changesSeen = hub.tasksChanged[projectId] ?? 0
+        threadsSeen = hub.threadsMoved[projectId] ?? 0
         wasConnected = hub.state == .connected
         watch()
     }
@@ -69,7 +80,7 @@ public final class ProjectTaskList {
 
     // MARK: The hub's reads and writes
 
-    /// The tasks and the stages, read together; a failed read keeps what was shown and says why.
+    /// The tasks, the stages and the views, read together; a failed read keeps what was shown and says why.
     public func refresh() async {
         reads += 1
         let ticket = reads
@@ -82,7 +93,9 @@ public final class ProjectTaskList {
         }
         async let readList = Result(catching: { try await api.list() })
         async let readStages = Result(catching: { try await api.stages() })
+        async let viewsRead: Void = readViews()
         let (listed, staged) = await (readList, readStages)
+        await viewsRead
         guard ticket == reads else { return }
         switch listed {
         case let .success(value):
@@ -121,6 +134,37 @@ public final class ProjectTaskList {
         await refresh()
     }
 
+    /// The project's views as the hub lists them now.
+    public func readViews() async {
+        viewReads += 1
+        let ticket = viewReads
+        do {
+            let read = try await ProjectTasks(hub: hub, projectId: projectId).views()
+            guard ticket == viewReads else { return }
+            views = read
+            viewsProblem = nil
+        } catch {
+            guard ticket == viewReads else { return }
+            viewsProblem = error.localizedDescription
+        }
+    }
+
+    /// Keep: the draft becomes a kept view where its tab stands. The hub's
+    /// refusal is thrown to whoever asked.
+    public func keepView(_ name: String) async throws {
+        let kept = try await ProjectTasks(hub: hub, projectId: projectId).keepView(name)
+        // A read still out answers from before the keep.
+        viewReads += 1
+        views = views?.map { $0.name == name ? kept : $0 }
+    }
+
+    /// Discard: the draft goes. The hub's refusal is thrown to whoever asked.
+    public func discardView(_ name: String) async throws {
+        try await ProjectTasks(hub: hub, projectId: projectId).discardView(name)
+        viewReads += 1
+        views = views?.filter { $0.name != name }
+    }
+
     /// The project has stages of its own now (StagesControl); the list is read again.
     public func applied(_ next: StagesView) {
         stages = next
@@ -155,10 +199,12 @@ public final class ProjectTaskList {
 
     /// Reads again when the hub says the tasks changed, and on every
     /// reconnect (a foregrounded app's socket is a new one): the tasks the
-    /// hub may have moved while it was away.
+    /// hub may have moved while it was away. The views alone when one of the
+    /// project's threads moved.
     private func watch() {
         withObservationTracking {
             _ = hub.tasksChanged[projectId]
+            _ = hub.threadsMoved[projectId]
             _ = hub.state
         } onChange: { [weak self] in
             Task { @MainActor [weak self] in
@@ -171,12 +217,19 @@ public final class ProjectTaskList {
 
     private func moved() {
         let changes = hub.tasksChanged[projectId] ?? 0
+        let threads = hub.threadsMoved[projectId] ?? 0
         let connected = hub.state == .connected
         let reread = (changes != changesSeen) || (connected && !wasConnected)
+        let threadsMoved = threads != threadsSeen
         changesSeen = changes
+        threadsSeen = threads
         wasConnected = connected
-        guard reread, connected else { return }
-        Task { await refresh() }
+        guard connected else { return }
+        if reread {
+            Task { await refresh() }
+        } else if threadsMoved {
+            Task { await readViews() }
+        }
     }
 }
 

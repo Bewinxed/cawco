@@ -228,9 +228,10 @@ enum Frame {
     case workflow(Components.Schemas.WorkflowFrame)
     /// A delegate's work item changed: its parent's tray reads it.
     case workItem(Components.Schemas.WorkItemSummary)
-    /// A Caw thread's row or message (wire protocol 6): read by the thread
-    /// screen, which this app does not have yet.
-    case thread
+    /// A Caw thread's row or message (wire protocol 6). The app has no thread
+    /// screen yet; a row's change names its project, whose views are read
+    /// again on it (Caw drafts a view in a thread). A message alone names none.
+    case thread(projectId: String?)
     /// A session's preview opened, changed or closed.
     case preview(Components.Schemas.PreviewFrame)
     /// Every project move the hub is carrying, whole, on each change.
@@ -269,8 +270,10 @@ enum Frame {
             self = .workflow(frame)
         case .workItem(let frame):
             self = .workItem(frame.item)
-        case .thread_upsert, .thread_message:
-            self = .thread
+        case .thread_upsert(let frame):
+            self = .thread(projectId: frame.thread.projectId)
+        case .thread_message:
+            self = .thread(projectId: nil)
         case .preview(let frame):
             self = .preview(frame)
         case .moves(let frame):

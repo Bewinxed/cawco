@@ -16,6 +16,8 @@ public typealias StagesView = Components.Schemas.StagesView
 public typealias TaskList = Components.Schemas.TaskList
 public typealias TaskStage = Components.Schemas.Stage
 public typealias StagesTemplateView = Components.Schemas.StagesTemplateView
+/// A project's custom view (`views/<name>.oui`, a draft under `views/drafts/`).
+public typealias ProjectView = Components.Schemas.ProjectView
 
 /// The hub's refusal, in its own words (`said` in project-tasks.ts).
 public struct TaskRefusal: Error, LocalizedError {
@@ -140,6 +142,27 @@ public struct ProjectTasks: Sendable {
         let output = try await client.patchApiProjectsByIdTasksByTaskIdTodosByTodo(path: .init(id: projectId, taskId: taskId, todo: todo),
             body: .json(.init(done: done, text: text)))
         if case let .ok(ok) = output { return try ok.body.json }
+        throw await TaskRefusal.reading(output)
+    }
+
+    /// The project's views (client.svelte.ts `viewsOf`): kept ones, then Caw's drafts.
+    public func views() async throws -> [ProjectView] {
+        let output = try await client.getApiProjectsByIdViews(path: .init(id: projectId))
+        if case let .ok(ok) = output { return try ok.body.json }
+        throw await TaskRefusal.reading(output)
+    }
+
+    /// Keeps a draft (`keepView`): it becomes `views/<name>.oui`, one commit.
+    public func keepView(_ name: String) async throws -> ProjectView {
+        let output = try await client.postApiProjectsByIdViewsByNameKeep(path: .init(id: projectId, name: name))
+        if case let .ok(ok) = output { return try ok.body.json }
+        throw await TaskRefusal.reading(output)
+    }
+
+    /// Discards a draft (`discardView`): its file is deleted, one commit.
+    public func discardView(_ name: String) async throws {
+        let output = try await client.deleteApiProjectsByIdViewsDraftsByName(path: .init(id: projectId, name: name))
+        if case .ok = output { return }
         throw await TaskRefusal.reading(output)
     }
 

@@ -5,20 +5,25 @@ import UIKit
 /// The kit's segmented control (ui/fluid-tabs, `variant="segmented"`): a
 /// `--muted` well at `--radius-sm` with 4pt of pad, items 28pt tall (32
 /// under a finger) and 2pt apart, each a 16pt glyph and its name in label
-/// type, 12pt in. The chosen item's raised sheet (`--surface-raised`,
+/// type, 12pt in, and a tag after the name when it has one (the strip's
+/// `draft`). The chosen item's raised sheet (`--surface-raised`,
 /// `--shadow-tile`) glides to it over `durToggle` on the out curve, and its
 /// ink turns strong over `durGhost`; a press tints the item.
 public final class SegmentedTabs: UIControl {
-    public struct Item: Sendable {
+    public struct Item: Sendable, Equatable {
         public let label: String
         public let glyph: Glyph?
-        public init(_ label: String, glyph: Glyph? = nil) {
+        /// A secondary badge after the name, `space-1` from it.
+        public let badge: String?
+        public init(_ label: String, glyph: Glyph? = nil, badge: String? = nil) {
             self.label = label
             self.glyph = glyph
+            self.badge = badge
         }
     }
 
     public private(set) var selectedIndex: Int
+    public private(set) var items: [Item] = []
     private let stack = UIStackView()
     private let sheet = UIView()
     private var cells: [Cell] = []
@@ -49,15 +54,40 @@ public final class SegmentedTabs: UIControl {
             stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.pad),
             stack.heightAnchor.constraint(equalToConstant: coarse ? 32 : 28),
         ])
-        for (index, item) in items.enumerated() {
-            let cell = Cell(item)
-            cell.addAction(UIAction { [weak self] _ in self?.choose(index) }, for: .primaryActionTriggered)
-            cells.append(cell)
-            stack.addArrangedSubview(cell)
-        }
+        build(items)
         isAccessibilityElement = false
         accessibilityTraits = .tabBar
+    }
+
+    private func build(_ next: [Item]) {
+        items = next
+        cells.forEach { $0.removeFromSuperview() }
+        cells = next.enumerated().map { index, item in
+            let cell = Cell(item)
+            cell.addAction(UIAction { [weak self] _ in self?.choose(index) }, for: .primaryActionTriggered)
+            stack.addArrangedSubview(cell)
+            return cell
+        }
         mark()
+    }
+
+    /// The items as they stand now (a project's views come and go), with
+    /// `selected` chosen, without a glide and without an action: the caller
+    /// already knows what it chose.
+    public func set(_ next: [Item], selected: Int) {
+        guard next != items || selected != selectedIndex else { return }
+        if next != items { build(next) }
+        selectedIndex = selected
+        mark()
+        setNeedsLayout()
+        layoutIfNeeded()
+        place()
+    }
+
+    /// The item's box in `space`'s points: where a tap on it lands, and what a scroller brings into view.
+    public func frame(ofItem index: Int, in space: UIView?) -> CGRect? {
+        guard cells.indices.contains(index) else { return nil }
+        return cells[index].convert(cells[index].bounds, to: space)
     }
 
     @available(*, unavailable)
@@ -115,8 +145,11 @@ public final class SegmentedTabs: UIControl {
             super.init(frame: .zero)
             layer.cornerRadius = Radius.radiusSm - 4
             label.text = item.label
-            let row = UIStackView(arrangedSubviews: [glyph, label].compactMap(\.self))
+            let badge = item.badge.map { KitBadge($0, variant: .secondary) }
+            badge?.isAccessibilityElement = false
+            let row = UIStackView(arrangedSubviews: [glyph, label, badge].compactMap(\.self))
             row.spacing = 6
+            row.setCustomSpacing(Space.space1, after: label)
             row.alignment = .center
             row.isUserInteractionEnabled = false
             row.translatesAutoresizingMaskIntoConstraints = false
@@ -128,7 +161,7 @@ public final class SegmentedTabs: UIControl {
             ])
             addTarget(self, action: #selector(tapped), for: .touchUpInside)
             isAccessibilityElement = true
-            accessibilityLabel = item.label
+            accessibilityLabel = [item.label, item.badge].compactMap(\.self).joined(separator: ", ")
             addInteraction(UIPointerInteraction(delegate: nil))
         }
 

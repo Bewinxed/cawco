@@ -4,21 +4,30 @@ import CawCoDesign
 import UIKit
 
 /// A project's views (routes/project/[id]/+page.svelte): the head, then the
-/// view strip and the view. Board, Table and Pipeline; Needs you is a filter,
-/// not a stage — the tasks whose stage is of kind `you`. The tasks are the
-/// hub's: the page shows what the hub answered and reads the list again
-/// after each of its own writes, whenever the hub says the project's tasks
-/// changed, on a reconnect, and when the app comes back (ProjectTaskList).
-/// A card or a row opens the task's sheet, the same one a push opens.
+/// view strip and the view. Board, Table and Pipeline, then each view kept
+/// in `views/`, then each Caw drafted, marked `draft`, with Keep and Discard
+/// over it (ProjectViewPane); Needs you is a filter, not a stage — the tasks
+/// whose stage is of kind `you`. The tasks are the hub's: the page shows
+/// what the hub answered and reads the list again after each of its own
+/// writes, whenever the hub says the project's tasks changed, on a
+/// reconnect, and when the app comes back (ProjectTaskList). A card or a
+/// row, in the board or in a view, opens the task's sheet, the same one a
+/// push opens.
 final class ProjectViewController: ObservedViewController {
-    enum View: Int, CaseIterable {
+    enum Tab: Hashable {
         case board, table, pipeline
+        /// A project's own view, by its name.
+        case custom(String)
 
+        static let fixed: [Tab] = [.board, .table, .pipeline]
+
+        /// The tab's name (`viewLabel`: a view's name as a stage's is said).
         var label: String {
             switch self {
             case .board: "Board"
             case .table: "Table"
             case .pipeline: "Pipeline"
+            case let .custom(name): TaskWords.stage(name)
             }
         }
     }
@@ -27,7 +36,7 @@ final class ProjectViewController: ObservedViewController {
     private let context: ShellContext
     private let store: ProjectTaskList
 
-    private var current = View.board
+    private var current = Tab.board
     private var needsOnly = false
     private var adding = false
 
@@ -55,7 +64,11 @@ final class ProjectViewController: ObservedViewController {
     private let notices = UIStackView()
     private let strip = UIStackView()
     private let tabsScroll = UIScrollView()
-    private let tabs = SegmentedTabs(View.allCases.map { SegmentedTabs.Item($0.label) })
+    private let tabs = SegmentedTabs(Tab.fixed.map { SegmentedTabs.Item($0.label) })
+    /// What the strip holds now, in its order.
+    private var stripTabs = Tab.fixed
+    /// A strip longer than its room fades at the edge it goes on past (`scrollable kit-edge-fade`).
+    private var tabsFade: EdgeFade?
     private let rule = UIView()
     private let needs = NeedsYouToggle()
     private var newTask: UIButton!
@@ -65,6 +78,7 @@ final class ProjectViewController: ObservedViewController {
     private let column = UIStackView()
     private let table = TaskTableView()
     private let pipeline = PipelineView()
+    private var custom: ProjectViewPane!
     private let tableAdd = UIView()
     private var boardForm: NewTaskForm!
     private var tableForm: NewTaskForm!
@@ -194,8 +208,8 @@ final class ProjectViewController: ObservedViewController {
 
     private func buildStrip() {
         tabs.addAction(UIAction { [weak self] _ in
-            guard let self, let next = View(rawValue: tabs.selectedIndex) else { return }
-            choose(next)
+            guard let self, stripTabs.indices.contains(tabs.selectedIndex) else { return }
+            choose(stripTabs[tabs.selectedIndex])
         }, for: .valueChanged)
         tabs.accessibilityLabel = "Views"
         tabsScroll.addSubview(tabs)
@@ -212,6 +226,10 @@ final class ProjectViewController: ObservedViewController {
             fit,
         ])
         tabsScroll.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        tabsFade = EdgeFade(tabsScroll, axis: .horizontal)
+        #if DEBUG
+        if ViewsProbe.on { tabsScroll.delegate = self }
+        #endif
 
         rule.backgroundColor = Palette.borderHairline
         rule.translatesAutoresizingMaskIntoConstraints = false
@@ -273,6 +291,19 @@ final class ProjectViewController: ObservedViewController {
             measure,
         ])
 
+        // A project's own view: Keep and Discard answer in place, as the web's
+        // do; a discarded draft leaves the board in its place.
+        custom = ProjectViewPane(hub: context.hub)
+        custom.onOpenTask = { [weak self] id in self?.open(id) }
+        custom.keep = { [weak self] name in try await self?.store.keepView(name) }
+        custom.discard = { [weak self] name in
+            guard let self else { return }
+            try await store.discardView(name)
+            choose(.board)
+        }
+        custom.isHidden = true
+        pane.addSubview(custom)
+
         board.translatesAutoresizingMaskIntoConstraints = false
         pane.addSubview(board)
         scroller.translatesAutoresizingMaskIntoConstraints = false
@@ -283,6 +314,10 @@ final class ProjectViewController: ObservedViewController {
         column.translatesAutoresizingMaskIntoConstraints = false
         scroller.addSubview(column)
         NSLayoutConstraint.activate([
+            custom.topAnchor.constraint(equalTo: pane.topAnchor),
+            custom.bottomAnchor.constraint(equalTo: pane.bottomAnchor),
+            custom.leadingAnchor.constraint(equalTo: pane.leadingAnchor),
+            custom.trailingAnchor.constraint(equalTo: pane.trailingAnchor),
             board.topAnchor.constraint(equalTo: pane.topAnchor),
             board.bottomAnchor.constraint(equalTo: pane.bottomAnchor),
             board.leadingAnchor.constraint(equalTo: pane.leadingAnchor),
@@ -344,6 +379,7 @@ final class ProjectViewController: ObservedViewController {
             lines.append("The project's stages could not be read: \(problem)")
         }
         if let list = store.list, !list.problems.isEmpty { lines.append(list.problems.joined(separator: " ")) }
+        if let problem = store.viewsProblem { lines.append("The project's views could not be read: \(problem)") }
         if lines != shownNotices {
             shownNotices = lines
             notices.arrangedSubviews.forEach { $0.removeFromSuperview() }
@@ -354,8 +390,29 @@ final class ProjectViewController: ObservedViewController {
 
     private var shownNotices: [String] = []
 
+    /// The project's views as the hub lists them, kept then drafted.
+    private var views: [ProjectView] { store.views ?? [] }
+
+    /// The tab on screen: the one chosen while it exists, the board once it
+    /// is gone (a draft discarded elsewhere), as the web's `current` is.
+    private var shownTab: Tab { stripTabs.contains(current) ? current : .board }
+
     private func showStrip() {
-        if tabs.selectedIndex != current.rawValue { tabs.choose(current.rawValue) }
+        stripTabs = Tab.fixed + views.map { Tab.custom($0.name) }
+        let items = stripTabs.map { tab in
+            if case let .custom(name) = tab, views.first(where: { $0.name == name })?.draft == true {
+                return SegmentedTabs.Item(tab.label, badge: "draft")
+            }
+            return SegmentedTabs.Item(tab.label)
+        }
+        let chosen = stripTabs.firstIndex(of: shownTab) ?? 0
+        let moved = chosen != tabs.selectedIndex || items != tabs.items
+        tabs.set(items, selected: chosen)
+        // The chosen tab stays in view in a strip too long for the width.
+        if moved, let box = tabs.frame(ofItem: chosen, in: tabsScroll) {
+            tabsScroll.layoutIfNeeded()
+            tabsScroll.scrollRectToVisible(box.insetBy(dx: -Space.space4, dy: 0), animated: view.window != nil)
+        }
         let waiting = store.needsYou.count
         needs.isHidden = waiting == 0
         needs.configure(count: waiting, on: filtering)
@@ -364,6 +421,9 @@ final class ProjectViewController: ObservedViewController {
         // Under 640pt New task is in the head's ⋯; the rule stands only while Needs you follows it.
         newTask.isHidden = !stripped || phone
         rule.isHidden = phone ? waiting == 0 : (waiting == 0 && !stripped)
+        #if DEBUG
+        probeStrip()
+        #endif
     }
 
     private func showPane() {
@@ -372,10 +432,16 @@ final class ProjectViewController: ObservedViewController {
         let shownTasks = filtering ? store.needsYou : tasks
         let shownStages = filtering ? stages.filter { $0.kind == .you } : stages
         column.arrangedSubviews.forEach { column.removeArrangedSubview($0); $0.removeFromSuperview() }
-        var useBoard = false
+        /// Which of the pane's three surfaces shows: the board, the column (the
+        /// table, the pipeline, a state), or a project's own view.
+        var surface: UIView = scroller
         var what: String
 
-        if store.list == nil {
+        if case let .custom(name) = shownTab, let shown = views.first(where: { $0.name == name }) {
+            what = "view:\(name)"
+            surface = custom
+            custom.show(shown, projectId: projectId)
+        } else if store.list == nil {
             if let problem = store.listProblem {
                 what = "unread"
                 let retry = KitButton.make("Retry", variant: .outline) { [weak self] in Task { await self?.store.refresh() } }
@@ -396,10 +462,10 @@ final class ProjectViewController: ObservedViewController {
             column.addArrangedSubview(KitEmptyState(icon: .toolTodo, title: "Nothing on the board yet",
                                                     line: "Add a task, or turn Caw on to plan it with him.", action: first))
         } else {
-            switch current {
-            case .board:
+            switch shownTab {
+            case .board, .custom:
                 what = "board"
-                useBoard = true
+                surface = board
                 boardForm.stage = store.newIn ?? ""
                 boardForm.setOpen(adding, announce: false)
                 let kinds = Dictionary(tasks.map { ($0.id, $0.kind) }, uniquingKeysWith: { first, _ in first })
@@ -425,14 +491,14 @@ final class ProjectViewController: ObservedViewController {
         if what != shown {
             let first = shown == nil
             shown = what
+            let showing = surface
+            let place: @MainActor @Sendable () -> Void = {
+                for each in [self.board, self.scroller, self.custom!] as [UIView] { each.isHidden = each !== showing }
+            }
             if !first, view.window != nil, !UIAccessibility.isReduceMotionEnabled {
-                UIView.transition(with: pane, duration: Motion.durFade, options: [.transitionCrossDissolve, .allowUserInteraction]) {
-                    self.board.isHidden = !useBoard
-                    self.scroller.isHidden = useBoard
-                }
+                UIView.transition(with: pane, duration: Motion.durFade, options: [.transitionCrossDissolve, .allowUserInteraction], animations: place)
             } else {
-                board.isHidden = !useBoard
-                scroller.isHidden = useBoard
+                place()
             }
         }
     }
@@ -474,6 +540,7 @@ final class ProjectViewController: ObservedViewController {
         // The pane keeps the page's gutters: the board scrolls to the edge from them.
         let leading = wide ? Space.space7 : Space.space5, trailing = wide ? Space.space6 : Space.space5
         board.inset = leading
+        custom.inset(leading: leading, trailing: trailing)
         NSLayoutConstraint.deactivate(edgeConstraints)
         edgeConstraints = [
             column.leadingAnchor.constraint(equalTo: scroller.frameLayoutGuide.leadingAnchor, constant: leading),
@@ -485,7 +552,7 @@ final class ProjectViewController: ObservedViewController {
 
     // MARK: Acting
 
-    private func choose(_ next: View) {
+    private func choose(_ next: Tab) {
         guard next != current else { return }
         current = next
         requestRefresh()
@@ -527,14 +594,19 @@ final class ProjectViewController: ObservedViewController {
         }
     }
 
-    /// `⋯`: under 640pt the views (the strip's chosen one checked) and New
-    /// task; Pick stages… while the code stages stand in; Forget project….
+    /// `⋯`: under 640pt the views (the strip's chosen one checked, a draft
+    /// saying so) and New task; Pick stages… while the code stages stand in;
+    /// Forget project….
     private func moreMenu() -> [UIMenuElement] {
         var sections: [UIMenuElement] = []
         if phone {
-            let views = View.allCases.map { each in
+            let shown = shownTab
+            let views = stripTabs.map { each in
                 let action = UIAction(title: each.label) { [weak self] _ in self?.choose(each) }
-                action.state = each == current ? .on : .off
+                if case let .custom(name) = each, self.views.first(where: { $0.name == name })?.draft == true {
+                    action.subtitle = "draft"
+                }
+                action.state = each == shown ? .on : .off
                 return action
             }
             sections.append(UIMenu(title: "View", options: .displayInline, children: views))
@@ -608,7 +680,46 @@ final class ProjectViewController: ObservedViewController {
             if let refused { UIAccessibility.post(notification: .announcement, argument: refused) }
         }
     }
+
+    #if DEBUG
+    // MARK: The simulator probe (scripts/probe-kit/specs/ios-views.ts)
+
+    private var probedStrip = ""
+
+    /// The strip as it stands: each tab's words (a draft's tag after them)
+    /// and its centre in the window, the chosen one; under 640pt the ⋯
+    /// menu's view list as it would draw now. Said again only when it moved.
+    private func probeStrip() {
+        guard ViewsProbe.on, view.window != nil else { return }
+        view.layoutIfNeeded()
+        let items = tabs.items.enumerated().map { index, item in
+            let box = tabs.frame(ofItem: index, in: nil) ?? .zero
+            return "\(item.label)\(item.badge.map { "+\($0)" } ?? "")@\(Int(box.midX.rounded())),\(Int(box.midY.rounded()))"
+        }.joined(separator: ";")
+        let room = tabsScroll.convert(tabsScroll.bounds, to: nil)
+        var line = "views strip chosen=\(shownTab.label) phone=\(phone) room=\(Int(room.minX.rounded()))-\(Int(room.maxX.rounded())) items=\(items)"
+        if phone, let list = moreMenu().first as? UIMenu {
+            line += " more=\(ViewsProbe.centre(more)) menu=" + list.children.compactMap { $0 as? UIAction }.map {
+                "\($0.title)\($0.subtitle.map { "+\($0)" } ?? "")\($0.state == .on ? "*" : "")"
+            }.joined(separator: ";")
+        }
+        guard line != probedStrip else { return }
+        probedStrip = line
+        ViewsProbe.say(line)
+    }
+    #endif
 }
+
+#if DEBUG
+/// Under the probe, a strip that came to rest says where its tabs stand now.
+extension ProjectViewController: UIScrollViewDelegate {
+    func scrollViewDidEndDecelerating(_: UIScrollView) { probeStrip() }
+    func scrollViewDidEndScrollingAnimation(_: UIScrollView) { probeStrip() }
+    func scrollViewDidEndDragging(_: UIScrollView, willDecelerate decelerate: Bool) {
+        if !decelerate { probeStrip() }
+    }
+}
+#endif
 
 /// Needs you, as the needs-you tile is: a real button in the needs-you
 /// tint, never coral. Chosen, the filter is on: its edge takes the

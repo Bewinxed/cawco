@@ -46,10 +46,14 @@ public final class RootViewController: ObservedViewController {
     #if DEBUG
     /// A simulator pass's `-open-session <id>[,<id>…]`: these conversations
     /// land the way a restored scene's does, as tabs, the last in front.
+    /// `-open-project <id>`: the shell lands on that project's page.
     private static func probing(_ landing: ShellLanding) -> ShellLanding {
         let arguments = ProcessInfo.processInfo.arguments
-        guard let at = arguments.firstIndex(of: "-open-session"), arguments.indices.contains(at + 1) else { return landing }
         var probed = landing
+        if let at = arguments.firstIndex(of: "-open-project"), arguments.indices.contains(at + 1) {
+            probed.place = .project(arguments[at + 1])
+        }
+        guard let at = arguments.firstIndex(of: "-open-session"), arguments.indices.contains(at + 1) else { return probed }
         probed.sessionIds = arguments[at + 1].split(separator: ",").map(String.init)
         return probed
     }
