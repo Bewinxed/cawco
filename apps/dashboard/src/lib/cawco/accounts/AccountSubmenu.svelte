@@ -2,13 +2,16 @@
   /**
    * A session's Account submenu, in its row's and its tab's menus: each
    * account of the session's provider signed in on its machine, as its dot
-   * and name, the current one checked. Choosing one moves the session whole
-   * (switch.svelte.ts); until it lands, that item reads "Moving to {name}…".
-   * Nothing at all when there is no other account to move to.
+   * and name, one radio item each (the kit's, so bits-ui writes its
+   * `menuitemradio` role and `aria-checked`), the current one checked.
+   * Choosing one moves the session whole (switch.svelte.ts); the check stays
+   * on the account it runs on until the move lands, and until then the item
+   * chosen reads "Moving to {name}…". Nothing at all when there is no other
+   * account to move to.
    */
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
-  import { IconAccounts, IconCheck } from "#lib/icons.js";
+  import { IconAccounts } from "#lib/icons.js";
   import type { InstanceRow } from "../client.svelte";
   import { hueVar, nameOf } from "./model.svelte";
   import { moveTo, movingTo, switchable } from "./switch.svelte";
@@ -27,24 +30,31 @@
       Account
     </ContextMenu.SubTrigger>
     <ContextMenu.SubContent class="min-w-52">
-      {#each accounts as account (account.id)}
-        {@const current = account.id === instance.accountId}
-        {@const going = account.id === target}
-        <ContextMenu.Item
-          aria-checked={current}
-          disabled={going}
-          onSelect={() => moveTo(instance, account.id)}
-          role="menuitemradio"
-        >
-          <i aria-hidden="true" class="dot" style:--c={hueVar(account.hue)}></i>
-          <span class="name"
-            >{going ? `Moving to ${nameOf(account)}…` : nameOf(account)}</span
-          >
-          {#if current}
-            <IconCheck class="check" />
-          {/if}
-        </ContextMenu.Item>
-      {/each}
+      <!-- Its value is the account the session runs on, always: a pick asks
+           for the move (moveTo, which leaves the current one alone) and the
+           check follows the session once it has moved. -->
+      <ContextMenu.RadioGroup
+        bind:value={
+          () => instance.accountId ?? "",
+          (id) => {
+    moveTo(instance, id);
+  }
+        }
+      >
+        {#each accounts as account (account.id)}
+          {@const going = account.id === target}
+          <ContextMenu.RadioItem disabled={going} value={account.id}>
+            <i
+              aria-hidden="true"
+              class="dot"
+              style:--c={hueVar(account.hue)}
+            ></i>
+            <span class="name"
+              >{going ? `Moving to ${nameOf(account)}…` : nameOf(account)}</span
+            >
+          </ContextMenu.RadioItem>
+        {/each}
+      </ContextMenu.RadioGroup>
     </ContextMenu.SubContent>
   </ContextMenu.Sub>
 {/if}
@@ -64,8 +74,5 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-  .name ~ :global(.check) {
-    color: var(--selected-icon);
   }
 </style>

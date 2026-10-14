@@ -15,7 +15,9 @@
  *  - the session's tab menu and its sidebar row's menu, each opened as the
  *    hand opens it (a long press, a right click), Account pressed: the
  *    submenu's box lies inside the viewport; the hit test at each item's
- *    centre is that item; a press on the other account starts the move (the
+ *    centre is that item; every account is a radio item (`menuitemradio`),
+ *    exactly one `aria-checked`, the session's current account (by its
+ *    label at the hub); a press on the other account starts the move (the
  *    hub's row for the session lands on it);
  *  - New session (Ctrl+Shift+N), a model picked: the chosen row's name and
  *    the Effort and Permission chips share no area; the hit test at each
@@ -123,24 +125,25 @@ async function account(
   const read = await page.evaluate((sel) => {
     const sub = document.querySelector(sel) as HTMLElement;
     const r = sub.getBoundingClientRect();
-    const items = [
-      ...sub.querySelectorAll("[data-slot='context-menu-item']"),
-    ].map((item) => {
-      const b = item.getBoundingClientRect();
-      const x = b.left + b.width / 2;
-      const y = b.top + b.height / 2;
-      const hit = document.elementFromPoint(x, y);
-      return {
-        name: (item.textContent ?? "").trim(),
-        // The current account is the one its check mark stands on.
-        checked: item.querySelector(".check") !== null,
-        x,
-        y,
-        hits: Boolean(hit && item.contains(hit)),
-        hit: hit ? `${hit.tagName.toLowerCase()}.${hit.className}` : "none",
-      };
-    });
+    const items = [...sub.querySelectorAll("[role='menuitemradio']")].map(
+      (item) => {
+        const b = item.getBoundingClientRect();
+        const x = b.left + b.width / 2;
+        const y = b.top + b.height / 2;
+        const hit = document.elementFromPoint(x, y);
+        return {
+          name: (item.textContent ?? "").trim(),
+          checked: item.getAttribute("aria-checked") === "true",
+          x,
+          y,
+          hits: Boolean(hit && item.contains(hit)),
+          hit: hit ? `${hit.tagName.toLowerCase()}.${hit.className}` : "none",
+        };
+      }
+    );
     return {
+      // Items the submenu holds that are not radio items: none, if each is the kit's.
+      plain: sub.querySelectorAll("[role='menuitem']").length,
       box: {
         left: r.left,
         top: r.top,
@@ -171,8 +174,22 @@ async function account(
       )
       .join("; ") || "no items"
   );
-  const other = read.items.find((item) => !item.checked);
   const was = accountOf(fleet, id);
+  const label = (accountId: string | null) =>
+    fleet.query<{ label: string }>(
+      "SELECT label FROM accounts WHERE id = ?",
+      accountId ?? ""
+    )[0]?.label ?? "?";
+  const checked = read.items.filter((item) => item.checked);
+  kit.check(
+    `${name}: every account is a radio item (role menuitemradio), exactly one checked, the session's current account`,
+    read.items.length >= 2 &&
+      read.plain === 0 &&
+      checked.length === 1 &&
+      checked[0]?.name === label(was),
+    `${read.items.length} radio items, ${read.plain} plain; checked: ${checked.map((item) => item.name).join(", ") || "none"}; the session runs on ${label(was)} (${was})`
+  );
+  const other = read.items.find((item) => !item.checked);
   const to = was === ACCOUNT ? B : ACCOUNT;
   if (!other) {
     kit.check(`${name}: the submenu offers the other account`, false);
