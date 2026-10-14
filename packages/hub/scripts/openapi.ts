@@ -21,7 +21,6 @@
  */
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 
@@ -80,14 +79,12 @@ const scratch = mkdtempSync(join(tmpdir(), "cawco-openapi-"));
 process.env.CAWCO_DB_PATH = join(scratch, "hub.db");
 
 const { Effect, Layer } = await import("effect");
-// The schema generator owns its compiler dependency. A Program built by the
-// repository's newer TypeScript has different TypeFlags and cannot be handed
-// to a generator interpreting them with its own TypeScript version.
-const schemaRequire = createRequire(
-  import.meta.resolve("typescript-json-schema")
-);
-const ts = schemaRequire("typescript") as typeof import("typescript");
+// The schema generator owns its compiler dependency and exports it. A Program
+// built by the repository's newer TypeScript has different TypeFlags and
+// cannot be handed to a generator interpreting them with its own TypeScript
+// version, so the program is built with the generator's `ts`.
 const TJS = await import("typescript-json-schema");
+const { ts } = TJS;
 const { toOpenAPISchema } = await import("@elysia/openapi");
 const { CAWCO_HUB_PORT } = await import("@cawco/core");
 const { HUB_VERSION } = await import("../src/config");
@@ -711,7 +708,9 @@ const SENT = new Set([
   "FsPayload",
   "SendPayload",
 ]);
-const isStringEnum = (value: unknown): value is Schema =>
+const isStringEnum = (
+  value: unknown
+): value is Schema & { type: "string"; enum: string[] } =>
   typeof value === "object" &&
   value !== null &&
   (value as Schema).type === "string" &&

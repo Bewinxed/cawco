@@ -422,6 +422,7 @@ if (role === "sessiond") {
               checkedAt: Date.now(),
               movedAt: null,
               movedFrom: null,
+              reason: null,
             })),
           ],
         };
@@ -865,7 +866,7 @@ if (role === "sessiond") {
     auth: "unauthenticated" as const,
     capabilities: {
       permissionModes: ["bypassPermissions"],
-    } as import("@cawco/core").HarnessCapabilities,
+    } as import("../packages/core/src/index").HarnessCapabilities,
     detect: async () => ({
       harness: "claude" as const,
       installed: false,
@@ -915,7 +916,7 @@ if (role === "sessiond") {
       ctx: import("../packages/agent/src/harness").HarnessContext
     ) => session(ctx, `conversation-${id}`, undefined),
     reattach: async (
-      spec: import("@cawco/core").SpawnPayload,
+      spec: import("../packages/core/src/index").SpawnPayload,
       ctx: import("../packages/agent/src/harness").HarnessContext
     ) =>
       session(
@@ -924,7 +925,7 @@ if (role === "sessiond") {
         spec.accountDir?.accountId
       ),
     spawn: async (
-      spec: import("@cawco/core").SpawnPayload,
+      spec: import("../packages/core/src/index").SpawnPayload,
       ctx: import("../packages/agent/src/harness").HarnessContext
     ) => {
       // A start with nothing to resume begins a conversation of its own, as
@@ -1898,7 +1899,7 @@ if (role === "sessiond") {
       said.set(id, lines3);
     }
     await delay(2000);
-    const g = [g1, g2, g3];
+    const g: string[] = [g1, g2, g3];
     const shown = failuresShown.filter((one) =>
       g.some((id) => one.startsWith(id))
     );

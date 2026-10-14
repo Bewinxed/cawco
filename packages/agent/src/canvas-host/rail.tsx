@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 /**
  * The canvas's tool rail (DESIGN.md, Artifact panel, canvas and ink): two
  * floating groups in the panel material over Excalidraw, whose own chrome

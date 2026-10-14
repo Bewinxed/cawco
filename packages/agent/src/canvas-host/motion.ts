@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 /**
  * The canvas's motion clocks (DESIGN.md, Motion grammar). Excalidraw draws
  * its elements on a canvas, so what fades there is an element's opacity set

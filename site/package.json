@@ -6,6 +6,7 @@
     "dev": "vite",
     "build": "node scripts/build.mjs",
     "check": "biome check . && tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "deploy": "node scripts/deploy.mjs"
   },
   "dependencies": {
@@ -17,6 +18,7 @@
     "@biomejs/biome": "2.5.15",
     "@iconify-json/simple-icons": "^1.2.98",
     "@iconify-json/solar": "^1.2.13",
+    "@iconify/types": "^2.0.0",
     "@iconify/utils": "^3.1.7",
     "@types/node": "^26.6.4",
     "esbuild": "^0.28.2",

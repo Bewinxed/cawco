@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 import {
   boxOf,
   CANVAS_LIMITS,

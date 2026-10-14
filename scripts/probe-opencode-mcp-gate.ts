@@ -141,7 +141,10 @@ const fleet = await scratchFleet({
 let cawcoDown = false;
 const hubOrigin = fleet.base;
 const hubWs = hubOrigin.replace("http", "ws");
-const proxy = Bun.serve<{ upstream: WebSocket; queue: (string | Buffer)[] }>({
+const proxy = Bun.serve<{
+  upstream: WebSocket;
+  queue: (string | Buffer<ArrayBuffer>)[];
+}>({
   hostname: "127.0.0.1",
   port: 0,
   idleTimeout: 0,
@@ -152,7 +155,7 @@ const proxy = Bun.serve<{ upstream: WebSocket; queue: (string | Buffer)[] }>({
     }
     if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
       const upstream = new WebSocket(`${hubWs}${url.pathname}${url.search}`);
-      upstream.binaryType = "nodebuffer";
+      upstream.binaryType = "arraybuffer";
       if (server.upgrade(request, { data: { upstream, queue: [] } })) {
         return;
       }
@@ -172,7 +175,7 @@ const proxy = Bun.serve<{ upstream: WebSocket; queue: (string | Buffer)[] }>({
     open(socket) {
       const { upstream, queue } = socket.data;
       upstream.onmessage = (event) =>
-        socket.send(event.data as string | Buffer);
+        socket.send(event.data as string | ArrayBuffer);
       upstream.onclose = () => socket.close();
       const flush = () => {
         for (const message of queue.splice(0)) {

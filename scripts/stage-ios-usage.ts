@@ -350,7 +350,7 @@ async function ownAnswer(
 }
 
 const server = Bun.serve<
-  { upstream: WebSocket; queue: (string | Buffer)[] },
+  { upstream: WebSocket; queue: (string | Buffer<ArrayBuffer>)[] },
   never
 >({
   hostname: "127.0.0.1",
@@ -364,7 +364,7 @@ const server = Bun.serve<
     }
     if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
       const upstream = new WebSocket(`${hubWs}${url.pathname}${url.search}`);
-      const queue: (string | Buffer)[] = [];
+      const queue: (string | Buffer<ArrayBuffer>)[] = [];
       if (srv.upgrade(request, { data: { upstream, queue } })) {
         return;
       }

@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 /**
  * The page's host and its origin. A preview is an origin of its own: the
  * dashboard's pane that frames it is another (in the Apple app, the host

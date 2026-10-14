@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 /**
  * A pen stroke held still at its end becomes the shape it was drawn as
  * (Projects spec §5.10, slice 5a): a pen that stays within {@link HOLD_PX}

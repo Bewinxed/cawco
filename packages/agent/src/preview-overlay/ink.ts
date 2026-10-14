@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 /**
  * Ink on any artifact (Projects spec §5.10, D27; DESIGN.md, Artifact panel,
  * canvas and ink: "Ink on any artifact"). A pen inks at once, in Comment

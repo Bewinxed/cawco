@@ -17,7 +17,7 @@
   "scripts": {
     "dev": "bun --watch src/cli.ts",
     "start": "bun src/cli.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.browser.json"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.296",

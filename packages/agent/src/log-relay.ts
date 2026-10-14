@@ -31,12 +31,13 @@ const encoder = new TextEncoder();
 async function* framesOf(
   proc: Bun.Subprocess<"ignore", "pipe", "pipe">
 ): AsyncGenerator<Uint8Array> {
-  const readers = new Map<number, ReadableStreamDefaultReader<Uint8Array>>([
-    [LOG_FRAME.stdout, proc.stdout.getReader()],
+  const stdout = proc.stdout.getReader();
+  const readers = new Map<number, typeof stdout>([
+    [LOG_FRAME.stdout, stdout],
     [LOG_FRAME.stderr, proc.stderr.getReader()],
   ]);
   const next = (kind: number) =>
-    (readers.get(kind) as ReadableStreamDefaultReader<Uint8Array>)
+    (readers.get(kind) as typeof stdout)
       .read()
       .then((result) => ({ kind, result }));
   const reads = new Map([...readers.keys()].map((kind) => [kind, next(kind)]));

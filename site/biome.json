@@ -9,7 +9,6 @@
       "!research",
       "!art",
       "!src/assets",
-      "!package-lock.json",
       "!wrangler.jsonc",
       "!scripts/deploy.mjs"
     ]

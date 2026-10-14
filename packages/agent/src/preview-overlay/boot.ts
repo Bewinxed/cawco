@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 /**
  * What every document the preview proxy serves runs first, the overlay's
  * own or not: its history watch, and this window's mark.

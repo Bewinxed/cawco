@@ -33,7 +33,7 @@
 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { NeutralMessage } from "@cawco/core";
+import type { NeutralMessage, SentMessage } from "@cawco/core";
 import type { HarnessContext, HarnessSession } from "./src/harness";
 import { claudeHarness } from "./src/harnesses/claude";
 
@@ -72,6 +72,12 @@ const ctx: HarnessContext = {
   },
   closed: () => {
     // not measured by this proof
+  },
+  keeperRefused: (error) => {
+    failures.push(`keeperRefused(): ${String(error)}`);
+  },
+  rejected: (uuid, error) => {
+    failures.push(`rejected(${uuid}): ${String(error)}`);
   },
 };
 
@@ -176,11 +182,12 @@ if (!spawned) {
 }
 session = spawned;
 
-const user = (content: string): NeutralMessage =>
-  ({
-    type: "user",
-    message: { role: "user", content },
-  }) as unknown as NeutralMessage;
+const user = (content: string): SentMessage => ({
+  type: "user",
+  message: { role: "user", content },
+  origin: { kind: "human" },
+  uuid: crypto.randomUUID(),
+});
 
 // ---- A: one foreground Bash tool call (slow enough to survive the instant
 // path, matching the ~3s production command) ----

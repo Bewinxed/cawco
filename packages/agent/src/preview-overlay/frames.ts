@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 /**
  * Same-origin child frames, as Comment mode reaches into them (Projects spec
  * §5.7): a page whose content stands in a frame of its own origin (a dev

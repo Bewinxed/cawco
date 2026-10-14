@@ -81,6 +81,7 @@
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import type { DbShape, WorkItemRow } from "../packages/hub/src/db";
+import type { RegistryShape } from "../packages/hub/src/registry";
 import { macSideApp, macSideStale } from "./lib/apple-app";
 import { type MacSim, macSim } from "./lib/mac-sim";
 import { MACHINE, scratchFleet, until } from "./scratch-fleet";
@@ -1040,6 +1041,10 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
 
   // ── 6. Reply on a failed attempt's push arrives as a user message ──────
   const { createPush } = await import("../packages/hub/src/push");
+  const { createNotifications } = await import(
+    "../packages/hub/src/notifications"
+  );
+  const { makeLifetime } = await import("../packages/hub/src/lifetime");
   const deviceRows = () =>
     fleet
       .query<{
@@ -1057,12 +1062,20 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
         quiet: Boolean(row.quiet),
       }));
   // The hub's own push.ts over the scratch hub's device and session: the
-  // parts of the database the attempt push reads.
+  // parts of the database the attempt push and its gate (notifications.ts)
+  // read. Nothing was cleared, so every push carries no cleared ids.
   const db = {
     push: {
       devices: deviceRows,
       noteResult: () => undefined,
       dropDevice: () => false,
+    },
+    notifications: {
+      sent: () => undefined,
+      sentAt: () => new Map<string, Date>(),
+      clear: () => [],
+      clearedSince: () => [],
+      prune: () => undefined,
     },
     getInstancesByIds: (ids: string[]) =>
       ids.map((instanceId) => ({
@@ -1076,8 +1089,18 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
     project: () => undefined,
     projectAttempts: () => [],
   } as unknown as DbShape;
+  const lifetime = makeLifetime();
+  // No client beats presence here, so the gate sends every offer, and a
+  // clear (none happen) has nobody to broadcast to.
+  const notifications = createNotifications({
+    db,
+    lifetime,
+    registry: { broadcastTyped: () => undefined } as unknown as RegistryShape,
+  });
   const attemptPush = createPush({
     db,
+    lifetime,
+    notifications,
     task: () => Promise.resolve({ kind: "you", title: `Probe task ${tag}` }),
   });
   attemptPush.itemEnded({
@@ -1087,12 +1110,13 @@ rm -f "$F"`).catch((error: unknown) => `sample failed: ${String(error)}`);
     taskId: `probe-task-${tag}`,
     state: "failed",
   } as WorkItemRow);
-  const attempt = (await until(
+  const attempt = await until(
     "the attempt push",
     () => captured.find((p) => p.payload.cawco.kind === "attempt"),
     (found) => found !== undefined,
     30_000
-  )) as Captured;
+  );
+  lifetime.close();
   check(
     "the attempt push names its session and machine",
     attempt.payload.aps.category === "CAWCO_ATTEMPT" &&

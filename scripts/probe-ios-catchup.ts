@@ -186,13 +186,13 @@ if (LIVE) {
     import("bun").ServerWebSocket<{
       path: string;
       upstream?: WebSocket;
-      queue: (string | Uint8Array)[];
+      queue: (string | Buffer<ArrayBuffer>)[];
     }>
   >();
   const live = Bun.serve<{
     path: string;
     upstream?: WebSocket;
-    queue: (string | Uint8Array)[];
+    queue: (string | Buffer<ArrayBuffer>)[];
   }>({
     hostname: "127.0.0.1",
     port: 0,

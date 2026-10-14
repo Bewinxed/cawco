@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 /**
  * `yjs` in the canvas's host bundle: the overlay's own Yjs
  * (`window.cawcoArtifact.Y`, preview-overlay/artifact.ts), so the page runs

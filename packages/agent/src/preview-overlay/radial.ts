@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 import { solarGlyphs } from "./glyphs" with { type: "macro" };
 /**
  * The icon at a stroke's end and its radial menu (DESIGN.md, Artifact

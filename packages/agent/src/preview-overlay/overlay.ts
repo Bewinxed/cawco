@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 /**
  * The overlay's entry, in every document the preview proxy serves (core
  * `injectOverlay`). It applies the proxy's address patches and sets this

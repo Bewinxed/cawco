@@ -33,18 +33,20 @@ that folder on `cawco.dev/*` (see `wrangler.jsonc`).
 
 ## Work on it
 
+`site/` is one of the repository's Bun workspaces: `bun install` at the
+repository root installs its packages, and the root `bun run typecheck` checks
+it with the rest.
+
 ```sh
 cd site
-npm install
-npm run dev      # the page, with reload
-npm run build    # site/dist
-npm run check    # Biome, then tsc
+bun run dev      # the page, with reload
+bun run build    # site/dist
+bun run check    # Biome, then tsc
 ```
 
-`npm run check` lints and type-checks the page's own files. `wrangler.jsonc` and
+`bun run check` lints and type-checks the page's own files. `wrangler.jsonc` and
 `scripts/deploy.mjs` are left out of it on purpose. The Biome config here is a
-nested one (`"root": false`), so Biome also reads the repository's root config:
-run `bun install` at the repository root once before `npm run check`.
+nested one (`"root": false`), so Biome also reads the repository's root config.
 
 ## Pictures
 
@@ -86,13 +88,13 @@ is a 1200 x 630 screenshot of it.
 ## Deploy
 
 ```sh
+bun install
 cd site
-npm install
 node scripts/deploy.mjs
 ```
 
 The script refuses to run unless the tracked tree is clean and `HEAD` is
-already on `origin/main`. It then runs `npm run build`, writes
+already on `origin/main`. It then runs `bun run build`, writes
 `dist/version.txt` and calls `wrangler deploy`. Wrangler needs a Cloudflare
 login on the machine (`npx wrangler login`) or `CLOUDFLARE_API_TOKEN` in the
 environment.

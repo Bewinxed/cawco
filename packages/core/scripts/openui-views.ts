@@ -28,7 +28,7 @@ const {
   viewToolSpecs,
   VIEW_COMPONENTS,
   VIEW_ROOT,
-} = await import("../src/views-library.ts");
+} = await import("../src/views-library");
 
 const ROOT = join(import.meta.dir, "../../..");
 const OUT = join(import.meta.dir, "../src/views-spec.json");

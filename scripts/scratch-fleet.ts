@@ -154,14 +154,6 @@ const limitRefusal = (resetsAt: number): Response => {
 
 export const delay = (ms: number) => Bun.sleep(ms);
 
-/**
- * Reads until `accept` holds, every half second, or throws naming `label`.
- *
- * A read that throws counts as no reading yet (a service still starting), and
- * so does one that returns `undefined`: `accept` never sees it. So a wait for
- * something to be gone cannot return `undefined` as its "gone"; that is
- * `untilGone`, built on this.
- */
 /** How many preview ports a scratch hub gets: one per session that shows a preview or a canvas. */
 export const PREVIEW_PORTS = 12;
 
@@ -197,9 +189,17 @@ export async function freePortRange(count: number): Promise<string> {
   throw new Error(`no ${count} free consecutive ports after 50 tries`);
 }
 
+/**
+ * Reads until `accept` holds, every half second, or throws naming `label`.
+ *
+ * A read that throws counts as no reading yet (a service still starting), and
+ * so does one that returns `undefined`: `accept` never sees it, and it is
+ * never returned. So a wait for something to be gone cannot return
+ * `undefined` as its "gone"; that is `untilGone`, built on this.
+ */
 export async function until<T>(
   label: string,
-  read: () => T | Promise<T>,
+  read: () => T | undefined | Promise<T | undefined>,
   accept: (value: T) => boolean,
   ms = 120_000
 ): Promise<T> {
@@ -210,7 +210,7 @@ export async function until<T>(
     // biome-ignore lint/performance/noAwaitInLoops: each look follows the scratch services' last state
     const value = await Promise.resolve()
       .then(read)
-      .catch(() => undefined as T);
+      .catch(() => undefined);
     if (value !== undefined && accept(value)) {
       return value;
     }

@@ -370,7 +370,7 @@ const send = async <T>(
 };
 const deliver = async (
   path: string,
-  body: string | Uint8Array,
+  body: string | Uint8Array<ArrayBuffer>,
   headers: Record<string, string>,
   method = "POST"
 ) => {

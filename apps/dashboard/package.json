@@ -13,7 +13,7 @@
     "preview": "vite preview",
     "tab-icon": "bun scripts/tab-icon-art.ts",
     "tokens": "bun scripts/build-tokens.ts && biome format --write src/lib/tokens/tokens.css ../../packages/hub/skills/decision-page/kit/tokens.css ../apple/Packages/CawCoKit/Sources/CawCoDesign/Resources",
-    "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+    "typecheck": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && tsc -p tsconfig.node.json"
   },
   "overrides": {
     "vite": "^8.3.1"

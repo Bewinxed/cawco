@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 /**
  * The person's pins on a page (Projects spec §5.7, §5.10; core comments.ts;
  * DESIGN.md, Artifact panel, canvas and ink). A pin is tsk-3's numbered pin,

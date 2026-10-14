@@ -24,7 +24,7 @@ const revision = execFileSync('git', ['rev-parse', '--short=8', 'HEAD'], {
   encoding: 'utf8',
 }).trim();
 
-run('npm', ['run', 'build']);
+run('bun', ['run', 'build']);
 writeFileSync('dist/version.txt', `${revision}\n`);
 
 const logDirectory = mkdtempSync(join(tmpdir(), 'cawco-site-wrangler-'));

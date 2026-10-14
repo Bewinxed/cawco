@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 /**
  * Every field of a page is state (Projects spec §5.10): each `input`,
  * `select`, `textarea` and `[contenteditable]` with a `name` or an `id` is

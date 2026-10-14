@@ -27,7 +27,7 @@ import {
   TOOL_KINDS,
   TRANSFORMS,
   type Variant,
-} from "../src/tool-presentation.ts";
+} from "../src/tool-presentation";
 
 const OUT = join(
   import.meta.dir,

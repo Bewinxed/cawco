@@ -2401,7 +2401,7 @@ export class OpencodeHarness implements Harness {
       );
     }
     const dropWhenGone = async (
-      input: RequestInfo | URL,
+      input: string | URL | Request,
       init?: RequestInit
     ): Promise<Response> => {
       try {

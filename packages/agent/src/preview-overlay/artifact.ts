@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 /**
  * The page's hold on its artifact's document (Projects spec §5.10, D23): the
  * Yjs doc the hub keeps, joined by the overlay itself over the y-websocket

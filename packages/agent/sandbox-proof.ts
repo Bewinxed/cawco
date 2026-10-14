@@ -53,6 +53,12 @@ const ctx: HarnessContext = {
   closed: () => {
     // no-op: this proof doesn't assert on close
   },
+  keeperRefused: (error) => {
+    failures.push(`keeperRefused(): ${String(error)}`);
+  },
+  rejected: (uuid, error) => {
+    failures.push(`rejected(${uuid}): ${String(error)}`);
+  },
 };
 
 let assertions = 0;
@@ -117,7 +123,9 @@ session.send(
         "the dangerouslyDisableSandbox parameter to true in that Bash tool call. " +
         "Then tell me exactly what the command printed.",
     },
-  } as unknown as NeutralMessage,
+    origin: { kind: "human" },
+    uuid: crypto.randomUUID(),
+  },
   {}
 );
 

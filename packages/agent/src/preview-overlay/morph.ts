@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 /**
  * A re-published page morphs in place (Projects spec §5.10): the live
  * document becomes the new HTML with idiomorph, keeping every node it can,

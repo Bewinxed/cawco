@@ -1,24 +1,19 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "lib": ["ESNext"],
-    "strict": true,
-    "skipLibCheck": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true
+    "types": ["bun"]
   },
+  "include": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
   "exclude": [
-    "node_modules",
-    "**/dist/**",
-    "**/build/**",
-    "**/.svelte-kit/**",
-    "apps/**"
+    "**/node_modules",
+    "**/dist",
+    "**/build",
+    "**/.svelte-kit",
+    "apps/cawrier",
+    "apps/dashboard",
+    "packages",
+    "scripts",
+    "site"
   ]
 }

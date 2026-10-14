@@ -1,6 +1,3 @@
-/// <reference lib="dom" />
-/// <reference lib="dom.iterable" />
-
 /**
  * The overlay where it runs: the outermost previewed document (overlay.ts
  * decides; a same-origin frame inside stands down and is reached from here).

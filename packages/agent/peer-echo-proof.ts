@@ -24,7 +24,7 @@
 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { NeutralMessage } from "@cawco/core";
+import type { NeutralMessage, SentMessage } from "@cawco/core";
 import type { HarnessContext, HarnessSession } from "./src/harness";
 import { claudeHarness } from "./src/harnesses/claude";
 
@@ -64,6 +64,12 @@ const ctx: HarnessContext = {
   closed: () => {
     // no-op: this proof doesn't assert on close
   },
+  keeperRefused: (error) => {
+    failures.push(`keeperRefused(): ${String(error)}`);
+  },
+  rejected: (uuid, error) => {
+    failures.push(`rejected(${uuid}): ${String(error)}`);
+  },
 };
 
 const PEER = {
@@ -76,12 +82,20 @@ const PEER = {
 const peerMessage = (
   content: string,
   extra: { shouldQuery?: boolean } = {}
-) => ({
-  type: "user" as const,
-  message: { role: "user" as const, content },
+): SentMessage => ({
+  type: "user",
+  message: { role: "user", content },
   parent_tool_use_id: null,
   origin: { ...PEER },
+  uuid: crypto.randomUUID(),
   ...extra,
+});
+
+const humanMessage = (content: string): SentMessage => ({
+  type: "user",
+  message: { role: "user", content },
+  origin: { kind: "human" },
+  uuid: crypto.randomUUID(),
 });
 
 /** The dashboard's structural peer test, mirrored here. */
@@ -245,13 +259,7 @@ const counts: Record<string, number> = {};
 {
   const start = frames.length;
   session.send(
-    {
-      type: "user",
-      message: {
-        role: "user",
-        content: "Count from 1 to 400 in English words, one per line.",
-      },
-    },
+    humanMessage("Count from 1 to 400 in English words, one per line."),
     {}
   );
   const busy = await waitForFrame(
@@ -277,13 +285,7 @@ const counts: Record<string, number> = {};
 {
   const start = frames.length;
   session.send(
-    {
-      type: "user",
-      message: {
-        role: "user",
-        content: "Count from 1 to 400 in English words, one per line.",
-      },
-    },
+    humanMessage("Count from 1 to 400 in English words, one per line."),
     {}
   );
   const busy = await waitForFrame(

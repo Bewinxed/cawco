@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 /**
  * A canvas artifact's host page (Projects spec §5.10, D24): Excalidraw with
  * its own chrome hidden, our tool rail over it, the empty state when it

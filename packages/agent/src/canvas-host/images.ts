@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 /**
  * Images on the canvas (DESIGN.md, Artifact panel, canvas and ink): a PNG,
  * JPEG, WebP, SVG or GIF of at most 4 MB (Excalidraw's own ceiling), pasted

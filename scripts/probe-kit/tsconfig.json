@@ -1,4 +1,6 @@
 {
-  "extends": "../tsconfig.binary.json",
-  "include": ["**/*.ts"]
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../tsconfig.json",
+  "include": ["**/*.ts"],
+  "exclude": []
 }
