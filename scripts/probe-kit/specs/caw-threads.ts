@@ -56,6 +56,7 @@ const SIM = {
 };
 const TRAILING_SLASH = /\/$/;
 const PLAIN = /PROBE-PLAIN-([A-Z]+)/g;
+const WAKE_BODY = /\):\n\n([\s\S]*?)\n\nAnswer with thread_reply/g;
 const SLOW_REPLY = /PROBE-REPLY-([A-Z]+)/g;
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
@@ -93,9 +94,13 @@ const respond = (request: Seen): Reply => {
   if (!request.all.includes(CAW)) {
     return text("ok");
   }
-  const event = request.last;
-  const thread = THREAD_ID.exec(event)?.[1] ?? "";
-  // The wake names its thread by its title first: your words come last.
+  const wake = request.last;
+  const thread = THREAD_ID.exec(wake)?.[1] ?? "";
+  // A thread's wake names the thread by its title first: your words are
+  // what stands between its "):" and "Answer with thread_reply".
+  // Prompts queued behind a turn may be read as one: each body counts.
+  const bodies = [...wake.matchAll(WAKE_BODY)].map((m) => m[1]).join("\n");
+  const event = bodies || wake;
   const replying = [...event.matchAll(SLOW_REPLY)].at(-1)?.[1];
   if (replying) {
     if (made.has(`reply ${replying}`)) {
