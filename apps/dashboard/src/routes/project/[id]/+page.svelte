@@ -38,6 +38,7 @@
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
   import { depart } from "#lib/cawco/motion/share.svelte.js";
   import CawField from "#lib/cawco/project/CawField.svelte";
+  import CawStarters from "#lib/cawco/project/CawStarters.svelte";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
   import {
@@ -777,11 +778,12 @@
             </div>
           {/snippet}
           {#snippet action()}
-            <CawField
+            <CawStarters
               flies
               label="Message the project"
               onsend={firstWords}
               placeholder="Message the project…"
+              starters={stages?.starters ?? []}
             />
           {/snippet}
         </EmptyState>
@@ -1237,9 +1239,11 @@
   .state {
     max-inline-size: 72ch;
   }
+  /* As wide as four starters across, so a desk shows them in one row. */
   .caw-empty {
+    inline-size: 100%;
     margin-inline: auto;
-    max-inline-size: 36rem;
+    max-inline-size: var(--c-starters-w);
   }
   .caw-empty :global(.kit-empty) {
     align-items: center;

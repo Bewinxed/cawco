@@ -4519,6 +4519,101 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/StarterGlyph`.
+    public enum StarterGlyph: OpenEnum {
+        case brief
+        case bug
+        case calendar
+        case draft
+        case explore
+        case grill
+        case ideas
+        case mail
+        case palette
+        case people
+        case refresh
+        case reply
+        case rocket
+        case routine
+        case screen
+        case search
+        case site
+        case stages
+        case tasks
+        case triage
+        case voice
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "brief": self = .brief
+            case "bug": self = .bug
+            case "calendar": self = .calendar
+            case "draft": self = .draft
+            case "explore": self = .explore
+            case "grill": self = .grill
+            case "ideas": self = .ideas
+            case "mail": self = .mail
+            case "palette": self = .palette
+            case "people": self = .people
+            case "refresh": self = .refresh
+            case "reply": self = .reply
+            case "rocket": self = .rocket
+            case "routine": self = .routine
+            case "screen": self = .screen
+            case "search": self = .search
+            case "site": self = .site
+            case "stages": self = .stages
+            case "tasks": self = .tasks
+            case "triage": self = .triage
+            case "voice": self = .voice
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .brief: "brief"
+            case .bug: "bug"
+            case .calendar: "calendar"
+            case .draft: "draft"
+            case .explore: "explore"
+            case .grill: "grill"
+            case .ideas: "ideas"
+            case .mail: "mail"
+            case .palette: "palette"
+            case .people: "people"
+            case .refresh: "refresh"
+            case .reply: "reply"
+            case .rocket: "rocket"
+            case .routine: "routine"
+            case .screen: "screen"
+            case .search: "search"
+            case .site: "site"
+            case .stages: "stages"
+            case .tasks: "tasks"
+            case .triage: "triage"
+            case .voice: "voice"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.brief, .bug, .calendar, .draft, .explore, .grill, .ideas, .mail, .palette, .people, .refresh, .reply, .rocket, .routine, .screen, .search, .site, .stages, .tasks, .triage, .voice]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/TaskHistoryActorMover`.
     public enum TaskHistoryActorMover: OpenEnum {
         case action

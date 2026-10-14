@@ -745,6 +745,12 @@
       var(--c-suggest-chip)
     );
     --c-suggest-room: calc(var(--c-suggest-row) + var(--space-2));
+    /* A Caw starter card's narrowest: the empty state's cards fill each row at this width or wider (CawStarters). */
+    --c-starter-w: 11rem;
+    /* A Caw starter card's shortest: one line of words with its padding, a thumb's height on a phone. */
+    --c-starter-h: 56px;
+    /* The column an empty state with starters takes at most: four cards across with their gaps. */
+    --c-starters-w: calc(var(--c-starter-w) * 4 + var(--space-2) * 3);
     /* The delegate tray's row: a chip, and the step down to the pill. */
     --c-tray-chip: 28px;
     --c-tray-gap: var(--space-2);

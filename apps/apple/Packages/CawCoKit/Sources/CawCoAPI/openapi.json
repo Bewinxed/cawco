@@ -26932,6 +26932,13 @@
               "$ref": "#/components/schemas/Stage"
             }
           },
+          "starters": {
+            "description": "What an empty board offers to start with Caw: the recorded template's, or the general four.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Starter"
+            }
+          },
           "template": {
             "$ref": "#/components/schemas/StagesTemplate",
             "description": "The template the stages are, word for word, if any."
@@ -26948,6 +26955,7 @@
           "problems",
           "source",
           "stages",
+          "starters",
           "views"
         ]
       },
@@ -27025,6 +27033,48 @@
           "todo",
           "waiting",
           "you"
+        ]
+      },
+      "Starter": {
+        "description": "One starter on an empty board: a sentence the person would say to Caw,\nsent as it stands when pressed, and the glyph for its kind of work.",
+        "type": "object",
+        "properties": {
+          "glyph": {
+            "$ref": "#/components/schemas/StarterGlyph"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "glyph",
+          "text"
+        ]
+      },
+      "StarterGlyph": {
+        "type": "string",
+        "enum": [
+          "brief",
+          "bug",
+          "calendar",
+          "draft",
+          "explore",
+          "grill",
+          "ideas",
+          "mail",
+          "palette",
+          "people",
+          "refresh",
+          "reply",
+          "rocket",
+          "routine",
+          "screen",
+          "search",
+          "site",
+          "stages",
+          "tasks",
+          "triage",
+          "voice"
         ]
       },
       "StageView": {

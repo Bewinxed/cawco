@@ -73,7 +73,9 @@ import {
   type StagesReading,
   type StagesTemplate,
   type StageView,
+  type Starter,
   stageNamed,
+  startersFor,
   startProblem,
   TEMPLATES,
   templateStages,
@@ -270,7 +272,9 @@ export interface TaskStore {
   readonly index: (projectId: string) => TaskIndexRow[];
   readonly project: (
     id: string
-  ) => { id: string; tracker: Tracker } | undefined;
+  ) =>
+    | { id: string; template: StagesTemplate | null; tracker: Tracker }
+    | undefined;
   readonly projectIds: () => string[];
   readonly put: (rows: TaskIndexRow[]) => void;
   /** The tasks whose hook start waits for a slot (dispatch.ts). */
@@ -354,6 +358,8 @@ export interface StagesView {
   /** `file`: the project's stages.md; `template`: it has none, and the code template stands in. */
   source: "file" | "template";
   stages: Stage[];
+  /** What an empty board offers to start with Caw: the recorded template's, or the general four. */
+  starters: readonly Starter[];
   /** The template the stages are, word for word, if any. */
   template: StagesTemplate | null;
   views: StageView[];
@@ -1058,9 +1064,12 @@ const applyTodos = (doc: TaskDoc, changes: TodoChanges): string => {
 const stagesView = (
   source: "file" | "template",
   content: string,
-  reading: StagesReading
+  reading: StagesReading,
+  /** The template the project was made from or last had applied (`projects.template`). */
+  recorded: StagesTemplate | null
 ): StagesView => ({
   source,
+  starters: startersFor(recorded),
   template: TEMPLATES.find((name) => templateText(name) === content) ?? null,
   stages: reading.ok ? reading.stages.stages : [],
   moves: reading.ok ? reading.stages.moves : [],
@@ -2871,7 +2880,12 @@ export const createTasks = (store: TaskStore) => {
     async stages(projectId: string): Promise<StagesView> {
       known(projectId);
       const { source, content, reading } = await stagesOf(projectId);
-      return stagesView(source, content, reading);
+      return stagesView(
+        source,
+        content,
+        reading,
+        store.project(projectId)?.template ?? null
+      );
     },
 
     /** Writes stages.md, once it reads; a file that does not is refused with every problem. */
@@ -2891,7 +2905,12 @@ export const createTasks = (store: TaskStore) => {
           author: actor.author,
           message: message?.trim() || `stages: update ${byWhom(actor)}`,
         });
-        return stagesView("file", content, reading);
+        return stagesView(
+          "file",
+          content,
+          reading,
+          store.project(projectId)?.template ?? null
+        );
       }).then((written) => told({ kind: "changed", projectId }, written));
     },
 
@@ -2916,7 +2935,7 @@ export const createTasks = (store: TaskStore) => {
         const stages = templateStages(template);
         const { rows } = await sync(projectId);
         return {
-          ...stagesView("file", content, { ok: true, stages }),
+          ...stagesView("file", content, { ok: true, stages }, template),
           stranded: rows
             .filter((row) => !stageNamed(stages, row.stage))
             .map((row) => row.id),

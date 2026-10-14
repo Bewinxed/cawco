@@ -677,6 +677,117 @@ views
     },
   };
 
+// --- starters ----------------------------------------------------------------------
+
+/**
+ * The kinds of work a starter names, each drawn by the dashboard as its
+ * Solar duotone glyph (CawStarters).
+ */
+export const STARTER_GLYPHS = [
+  "brief",
+  "bug",
+  "calendar",
+  "draft",
+  "explore",
+  "grill",
+  "ideas",
+  "mail",
+  "palette",
+  "people",
+  "refresh",
+  "reply",
+  "rocket",
+  "routine",
+  "screen",
+  "search",
+  "site",
+  "stages",
+  "tasks",
+  "triage",
+  "voice",
+] as const;
+export type StarterGlyph = (typeof STARTER_GLYPHS)[number];
+
+/**
+ * One starter on an empty board: a sentence the person would say to Caw,
+ * sent as it stands when pressed, and the glyph for its kind of work.
+ */
+export interface Starter {
+  glyph: StarterGlyph;
+  text: string;
+}
+
+/**
+ * Each template's four starters, worded so Caw reaches the skill that does
+ * the work: grill ("Grill me on"), to-tasks ("into tasks"), triage
+ * ("Triage"), screen ("Design the … flow"), and the template's own starter
+ * skill (bundled-skills.ts `TEMPLATE_SKILLS`).
+ */
+const TEMPLATE_STARTERS: Record<StagesTemplate, readonly Starter[]> = {
+  code: [
+    { glyph: "triage", text: "Triage the repo's open issues into Ready" },
+    { glyph: "tasks", text: "Turn the repo's spec into tasks" },
+    {
+      glyph: "grill",
+      text: "Grill me on the next feature until it has a spec",
+    },
+    { glyph: "bug", text: "Find the riskiest bugs and file a task for each" },
+  ],
+  social: [
+    { glyph: "draft", text: "Draft this week's posts in our voice" },
+    { glyph: "ideas", text: "Write ten post ideas into Idea" },
+    { glyph: "reply", text: "Draft replies to this week's mentions" },
+    { glyph: "calendar", text: "Plan two weeks of posts on the calendar" },
+  ],
+  launch: [
+    { glyph: "rocket", text: "Plan the launch as tasks on a timeline" },
+    { glyph: "draft", text: "Draft the launch announcement" },
+    { glyph: "mail", text: "Write the launch email to our list" },
+    { glyph: "grill", text: "Grill me on the launch until it has a plan" },
+  ],
+  seo: [
+    { glyph: "search", text: "Find ten topics we could rank for" },
+    { glyph: "brief", text: "Write a content brief for our best topic" },
+    { glyph: "refresh", text: "Refresh our weakest article for search" },
+    { glyph: "grill", text: "Grill me on who we're writing for" },
+  ],
+  brand: [
+    { glyph: "site", text: "Read our site and build the brand kit" },
+    { glyph: "voice", text: "Write a voice guide from our past posts" },
+    { glyph: "palette", text: "Pull our colours, type and logo into the kit" },
+    { glyph: "grill", text: "Grill me on the brand until its voice is clear" },
+  ],
+  design: [
+    { glyph: "explore", text: "Explore three directions for the home screen" },
+    { glyph: "screen", text: "Design the onboarding flow and every state" },
+    {
+      glyph: "grill",
+      text: "Grill me on the next screen until it has a brief",
+    },
+    { glyph: "tasks", text: "Turn my design notes into briefs" },
+  ],
+  outreach: [
+    { glyph: "people", text: "Find ten prospects who fit what we sell" },
+    { glyph: "mail", text: "Write a first message to our best prospect" },
+    { glyph: "reply", text: "Write the follow-up for three days of silence" },
+    { glyph: "grill", text: "Grill me on who we sell to and why" },
+  ],
+};
+
+/** A project with no template recorded. */
+const GENERAL_STARTERS: readonly Starter[] = [
+  { glyph: "grill", text: "Grill me on what this project is for" },
+  { glyph: "tasks", text: "Read the project and file its first tasks" },
+  { glyph: "stages", text: "Set up stages that fit this project's work" },
+  { glyph: "routine", text: "Suggest routines that fit this project" },
+];
+
+/** The starters for a project made from `template`, or from none. */
+export const startersFor = (
+  template: StagesTemplate | null | undefined
+): readonly Starter[] =>
+  template ? TEMPLATE_STARTERS[template] : GENERAL_STARTERS;
+
 /** A template as the stages.md it writes. */
 export const templateText = (name: StagesTemplate): string => {
   const { block, about } = TEMPLATE_TEXT[name];

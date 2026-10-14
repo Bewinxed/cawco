@@ -50,8 +50,40 @@ export interface StagesView {
   /** `file`: the project's stages.md; `template`: it has none, and the code template stands in. */
   source: "file" | "template";
   stages: Stage[];
+  /** What an empty board offers to start with Caw: the recorded template's, or the general four. */
+  starters: Starter[];
   template: StagesTemplate | null;
   views: { by: string | null; name: string }[];
+}
+
+/** The kind of work a starter names (stages.ts `STARTER_GLYPHS`); CawStarters draws its glyph. */
+export type StarterGlyph =
+  | "brief"
+  | "bug"
+  | "calendar"
+  | "draft"
+  | "explore"
+  | "grill"
+  | "ideas"
+  | "mail"
+  | "palette"
+  | "people"
+  | "refresh"
+  | "reply"
+  | "rocket"
+  | "routine"
+  | "screen"
+  | "search"
+  | "site"
+  | "stages"
+  | "tasks"
+  | "triage"
+  | "voice";
+
+/** A sentence to Caw an empty board offers, sent as it stands (stages.ts `Starter`). */
+export interface Starter {
+  glyph: StarterGlyph;
+  text: string;
 }
 
 /** The hub's stage templates (stages.ts `TEMPLATES`), in its order. */

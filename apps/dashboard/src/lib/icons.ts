@@ -41,6 +41,8 @@ export { default as IconSubagent } from "~icons/solar/branching-paths-down-bold-
 export { default as IconFork } from "~icons/solar/branching-paths-up-bold-duotone";
 /** A release's Fixed section (ReleaseNotes). */
 export { default as IconBug } from "~icons/solar/bug-bold-duotone";
+/** Work set for dates: a Caw starter that plans on the calendar. */
+export { default as IconCalendar } from "~icons/solar/calendar-bold-duotone";
 export { default as IconUsage } from "~icons/solar/chart-2-bold-duotone";
 /** Comment: the artifact panel's mode and the radial menu's sector (DESIGN.md, Artifact panel, canvas and ink). */
 export { default as IconComment } from "~icons/solar/chat-round-dots-bold-duotone";

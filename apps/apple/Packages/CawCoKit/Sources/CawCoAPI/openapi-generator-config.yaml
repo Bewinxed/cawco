@@ -112,6 +112,7 @@ typeOverrides:
     StageKind: OpenEnums.StageKind
     StagesTemplate: OpenEnums.StagesTemplate
     StagesViewSource: OpenEnums.StagesViewSource
+    StarterGlyph: OpenEnums.StarterGlyph
     TaskHistoryActorMover: OpenEnums.TaskHistoryActorMover
     TaskHistoryKind: OpenEnums.TaskHistoryKind
     TaskHistoryState: OpenEnums.TaskHistoryState

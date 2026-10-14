@@ -2543,6 +2543,21 @@
       "$type": "dimension",
       "$value": "calc({size.c-suggest-row} + {space.space-2})"
     },
+    "c-starter-w": {
+      "$type": "dimension",
+      "$value": "11rem",
+      "$description": "A Caw starter card's narrowest: the empty state's cards fill each row at this width or wider (CawStarters)."
+    },
+    "c-starter-h": {
+      "$type": "dimension",
+      "$value": "56px",
+      "$description": "A Caw starter card's shortest: one line of words with its padding, a thumb's height on a phone."
+    },
+    "c-starters-w": {
+      "$type": "dimension",
+      "$value": "calc({size.c-starter-w} * 4 + {space.space-2} * 3)",
+      "$description": "The column an empty state with starters takes at most: four cards across with their gaps."
+    },
     "c-tray-chip": {
       "$type": "dimension",
       "$value": "28px",

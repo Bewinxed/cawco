@@ -572,6 +572,12 @@ public enum Size {
     public static let cSuggestChip: Double = 30
     public static let cSuggestRow: Double = 52
     public static let cSuggestRoom: Double = 59
+    /// A Caw starter card's narrowest: the empty state's cards fill each row at this width or wider (CawStarters).
+    public static let cStarterW: Double = 176
+    /// A Caw starter card's shortest: one line of words with its padding, a thumb's height on a phone.
+    public static let cStarterH: Double = 56
+    /// The column an empty state with starters takes at most: four cards across with their gaps.
+    public static let cStartersW: Double = 725
     /// The delegate tray's row: a chip, and the step down to the pill.
     public static let cTrayChip: Double = 28
     /// `cTrayChip` under a coarse pointer (touch).
