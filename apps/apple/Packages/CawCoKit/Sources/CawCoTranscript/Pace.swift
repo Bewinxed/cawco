@@ -71,6 +71,9 @@ enum Pace {
         // when nothing else wakes the main thread.
         if probing { RunLoop.main.add(Timer(timeInterval: 1, repeats: true) { _ in }, forMode: .common) }
         #endif
+        #if DEBUG && arch(arm64)
+        MainSampler.start()
+        #endif
     }
 
     /// The Markdown cache let sources go (BlockCache `sweep`).
@@ -91,8 +94,10 @@ enum Pace {
     /// `warm`: rows built ahead of the screen (RowStore `warm`, in the
     /// frame); `frameBuild`, `frameMeasure`: rows set up and measured inside
     /// the frame (an update applied), outside `warm`; `layout`: the list's
-    /// layout preparing (its rows' places solved again), wherever it runs.
-    enum Part: Int, CaseIterable { case build, measure, warm, frameBuild, frameMeasure, layout }
+    /// layout preparing (its rows' places solved again), wherever it runs;
+    /// `text`: a text view laying its whole text out to know its height
+    /// (ProseView `intrinsicContentSize`), wherever it runs, inside the others.
+    enum Part: Int, CaseIterable { case build, measure, warm, frameBuild, frameMeasure, layout, text }
 
     /// Runs `body`; while a simulator pass measures, its time is counted to `part`.
     static func time<T>(_ part: Part, _ body: () -> T) -> T {
@@ -142,6 +147,8 @@ extension Pace {
         var mainHitch = 0.0, mainHitches = 0
         var streamWall = 0.0, streamCPU = 0.0, streamAwake = 0.0
         var blankFrames = 0, blankRows = 0, checked = 0
+        /// What the blank check itself took of the main thread (`afterCommit`).
+        var checking = 0.0
         /// What turns took while the list scrolled, by part (`Part`).
         var spent = Parts()
     }
@@ -165,7 +172,7 @@ extension Pace {
     private static var lastTick: CFTimeInterval = 0
 
     fileprivate static func probeTime<T>(_ part: Part, _ body: () -> T) -> T {
-        guard probing, part == .warm || part == .layout || !warming else { return body() }
+        guard probing, !warming || (part != .build && part != .measure) else { return body() }
         let slot: Part = switch part {
         case .build where inFrame: .frameBuild
         case .measure where inFrame: .frameMeasure
@@ -188,12 +195,14 @@ extension Pace {
             "\(String(format: "%.0f", p.time[part.rawValue] * 1000)) ms (\(p.count[part.rawValue]))"
         }
         let rest = held - taken - p.time[Part.build.rawValue] - p.time[Part.measure.rawValue]
-        log.notice("probe stretch \(held * 1000, format: .fixed(precision: 0)) ms\(scrollingNow ? " scrolling" : "", privacy: .public): transcript frames \(taken * 1000, format: .fixed(precision: 0)) ms (\(frames)) [warm \(ms(.warm), privacy: .public), build \(ms(.frameBuild), privacy: .public), measure \(ms(.frameMeasure), privacy: .public)]; outside them build \(ms(.build), privacy: .public), measure \(ms(.measure), privacy: .public); the rest \(rest * 1000, format: .fixed(precision: 0)) ms; layout preparing \(ms(.layout), privacy: .public) of all that")
+        log.notice("probe stretch \(held * 1000, format: .fixed(precision: 0)) ms\(scrollingNow ? " scrolling" : "", privacy: .public): text laid out \(ms(.text), privacy: .public) inside what follows; transcript frames \(taken * 1000, format: .fixed(precision: 0)) ms (\(frames)) [warm \(ms(.warm), privacy: .public), build \(ms(.frameBuild), privacy: .public), measure \(ms(.frameMeasure), privacy: .public)]; outside them build \(ms(.build), privacy: .public), measure \(ms(.measure), privacy: .public); the rest \(rest * 1000, format: .fixed(precision: 0)) ms; layout preparing \(ms(.layout), privacy: .public) of all that")
     }
     private static var lastSeen = 0.0
     private static var lastCPU = 0.0
     private static var said = 0.0
     private static var blankThisTurn = false
+    /// The display link ran since the screen was last checked.
+    private static var framed = false
 
     /// The main thread's own CPU time, in seconds; read on it.
     private static func threadCPU() -> Double {
@@ -207,6 +216,10 @@ extension Pace {
         let held = heldSinceTick
         heldSinceTick = 0
         scrollingNow = scrolling
+        framed = true
+        #if arch(arm64)
+        MainSampler.phase.store(scrolling ? 1 : streaming ? 2 : 0, ordering: .relaxed)
+        #endif
         defer { lastTick = scrolling ? link.timestamp : 0 }
         guard probing, scrolling, lastTick > 0 else { return }
         let gap = link.timestamp - lastTick
@@ -233,6 +246,56 @@ extension Pace {
     /// The screen of a turn was looked at for blank rows.
     static func checkedScreen() { tally.checked += 1 }
 
+    /// What `part` has taken of this turn so far.
+    static func turnTime(_ part: Part) -> Double { turn.time[part.rawValue] }
+
+    /// Rows built ahead of the screen (RowStore `warm`), by row view: how
+    /// many, how many were new views, and the time each step took in all:
+    /// set up for the item, laid out at its width, measured, laid out at its height.
+    private struct Warmed {
+        var rows = 0, fresh = 0
+        var steps = [0.0, 0.0, 0.0, 0.0]
+    }
+
+    private static var warmedKinds: [String: Warmed] = [:]
+    private static var kindsSaid = 0.0
+    /// Row views set up for an item: taken from the spares (RowStore `spare`), or made new.
+    private static var fromSpare = 0
+    private static var madeNew = 0
+
+    static func madeRow(spare: Bool) {
+        if spare { fromSpare += 1 } else { madeNew += 1 }
+    }
+
+    /// Rows that measured a height other than the one they measured before, for the same item at the same width.
+    private static var drifts = 0
+
+    static func drifted(_ kind: String, id: String, was: Double, now: Double, fresh: Bool) {
+        drifts += 1
+        guard drifts <= 40 else { return }
+        log.notice("probe height drift \(kind, privacy: .public) \(id, privacy: .public): \(was, format: .fixed(precision: 2)) then \(now, format: .fixed(precision: 2)) (\(fresh ? "a view new to the item" : "its own view", privacy: .public))")
+    }
+
+    /// One row built ahead: its view's type, whether it was a new view, and the time at each step's end.
+    static func warmed(_ kind: String, fresh: Bool, marks: [Double]) {
+        var entry = warmedKinds[kind, default: Warmed()]
+        entry.rows += 1
+        if fresh { entry.fresh += 1 }
+        for i in 0 ..< 4 { entry.steps[i] += marks[i + 1] - marks[i] }
+        warmedKinds[kind] = entry
+    }
+
+    /// The rows built ahead so far, by kind, said every five seconds.
+    private static func sayKinds(_ now: Double) {
+        guard now - kindsSaid >= 5, !warmedKinds.isEmpty else { return }
+        kindsSaid = now
+        let said = warmedKinds.sorted { $0.key < $1.key }.map { kind, w in
+            let ms = w.steps.map { String(format: "%.0f", $0 * 1000) }.joined(separator: "/")
+            return "\(kind) \(w.rows) rows (\(w.fresh) new) \(ms) ms"
+        }.joined(separator: "; ")
+        log.notice("probe warmed kinds (set up/laid out/measured/laid out again): \(said, privacy: .public); row views from spares \(fromSpare), made new \(madeNew); heights that drifted \(drifts)")
+    }
+
     /// The end of one turn of the main thread, after Core Animation's commit.
     fileprivate static func measure(_ now: Double, held: Double) {
         let cpu = threadCPU()
@@ -249,15 +312,26 @@ extension Pace {
                 tally.spent.count[i] += turn.count[i]
             }
         }
-        blankThisTurn = false
-        for check in afterCommit { check() }
-        if blankThisTurn { tally.blankFrames += 1 }
+        // Once a frame: after the commit of the turn the display link ran in.
+        // Run after every turn, the check ran some 24 times a frame (a turn
+        // for every touch, timer and source) and took a third of the main
+        // thread while the list scrolled, after `held` was read: the late
+        // frames it caused were counted as the main thread's being free.
+        if framed {
+            framed = false
+            blankThisTurn = false
+            let checking = CACurrentMediaTime()
+            for check in afterCommit { check() }
+            tally.checking += CACurrentMediaTime() - checking
+            if blankThisTurn { tally.blankFrames += 1 }
+        }
+        sayKinds(now)
         if now - said >= 1 {
             said = now
             let t = tally
             let s = t.spent
             func ms(_ part: Part) -> String { String(format: "%.1f", s.time[part.rawValue] * 1000) }
-            log.notice("probe pace scroll=\(t.scroll * 1000, format: .fixed(precision: 1)) hitch=\(t.hitch * 1000, format: .fixed(precision: 1)) hitches=\(t.hitches) mainHitch=\(t.mainHitch * 1000, format: .fixed(precision: 1)) mainHitches=\(t.mainHitches) ticks=\(t.ticks) streamWall=\(t.streamWall * 1000, format: .fixed(precision: 1)) streamCPU=\(t.streamCPU * 1000, format: .fixed(precision: 1)) streamAwake=\(t.streamAwake * 1000, format: .fixed(precision: 1)) blankFrames=\(t.blankFrames) blankRows=\(t.blankRows) checked=\(t.checked) build=\(ms(.build), privacy: .public) builds=\(s.count[Part.build.rawValue]) measure=\(ms(.measure), privacy: .public) measures=\(s.count[Part.measure.rawValue]) warm=\(ms(.warm), privacy: .public) frameBuild=\(ms(.frameBuild), privacy: .public) frameMeasure=\(ms(.frameMeasure), privacy: .public) layout=\(ms(.layout), privacy: .public) layouts=\(s.count[Part.layout.rawValue])")
+            log.notice("probe pace scroll=\(t.scroll * 1000, format: .fixed(precision: 1)) hitch=\(t.hitch * 1000, format: .fixed(precision: 1)) hitches=\(t.hitches) mainHitch=\(t.mainHitch * 1000, format: .fixed(precision: 1)) mainHitches=\(t.mainHitches) ticks=\(t.ticks) streamWall=\(t.streamWall * 1000, format: .fixed(precision: 1)) streamCPU=\(t.streamCPU * 1000, format: .fixed(precision: 1)) streamAwake=\(t.streamAwake * 1000, format: .fixed(precision: 1)) blankFrames=\(t.blankFrames) blankRows=\(t.blankRows) checked=\(t.checked) checking=\(t.checking * 1000, format: .fixed(precision: 1)) build=\(ms(.build), privacy: .public) builds=\(s.count[Part.build.rawValue]) measure=\(ms(.measure), privacy: .public) measures=\(s.count[Part.measure.rawValue]) warm=\(ms(.warm), privacy: .public) frameBuild=\(ms(.frameBuild), privacy: .public) frameMeasure=\(ms(.frameMeasure), privacy: .public) layout=\(ms(.layout), privacy: .public) layouts=\(s.count[Part.layout.rawValue]) text=\(ms(.text), privacy: .public) texts=\(s.count[Part.text.rawValue])")
         }
         // The probe's own work is not the thread's: counted from here.
         lastCPU = threadCPU()

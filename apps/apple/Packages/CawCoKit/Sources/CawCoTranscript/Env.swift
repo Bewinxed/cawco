@@ -76,6 +76,14 @@ protocol RowContent: UIView {
     func configure(_ item: Item)
 }
 
+/// A row view a RowStore may stand for another item once its own is let go
+/// (RowStore `spare`): `configure` sets everything it draws for an item, and
+/// `recycle` forgets what it kept of the one before.
+@MainActor
+protocol Recycled: RowContent {
+    func recycle()
+}
+
 /// A row that stands at a width its list knows before layout does
 /// (ProseView `fitWidth`), so its text is laid out once, at that width.
 @MainActor
@@ -111,6 +119,18 @@ final class RowStore {
     private var clock = 0
     /// Rows kept that are not on the screen.
     static let limit = 96
+    /// Row views let go of (`trim`), by type, set up again for the next item
+    /// of their kind rather than a new one made. Making a row's views was
+    /// 3.5 ms of the 6 ms a row took to come on the screen, and a fling past
+    /// `limit` rows made every row it reached anew (probe-kit spec
+    /// `ios-scroll-up`). Only views that set everything again (`Recycled`).
+    private var spare: [ObjectIdentifier: [UIView & RowContent]] = [:]
+    /// Spare views kept of each type.
+    static let spares = 32
+    #if DEBUG
+    /// Each item's height as first measured here, by its id, print and width (`stand`).
+    private var measuredOnce: [String: CGFloat] = [:]
+    #endif
 
     init(env: RowEnv) { self.env = env }
 
@@ -146,8 +166,24 @@ final class RowStore {
             entries[item.id] = entry
             return view
         }
-        let view = V(env: env)
-        view.translatesAutoresizingMaskIntoConstraints = false
+        let view: V
+        if let kept = spare[ObjectIdentifier(V.self)]?.popLast() as? V {
+            (kept as? any Recycled)?.recycle()
+            // It stands for its new item from nothing, as a new view does:
+            // left at the last item's height, its first layout there laid its
+            // texts out at a size they are not to have.
+            kept.frame = .zero
+            view = kept
+            #if DEBUG
+            Pace.madeRow(spare: true)
+            #endif
+        } else {
+            view = V(env: env)
+            view.translatesAutoresizingMaskIntoConstraints = false
+            #if DEBUG
+            Pace.madeRow(spare: false)
+            #endif
+        }
         (view as? FitsWidth)?.fitWidth = width
         view.configure(item)
         Pace.row()
@@ -169,7 +205,17 @@ final class RowStore {
         // screen, or one prepared to come on it (a prefetched cell).
         guard !isReady(item, width: width), entries[item.id]?.view.superview == nil else { return false }
         func build<V: RowContent>(_ type: V.Type) -> UIView { row(type, for: item, width: width) }
+        #if DEBUG
+        let fresh = entries[item.id] == nil
+        var marks = [CACurrentMediaTime()]
+        defer {
+            if Pace.probing, marks.count == 5 { Pace.warmed(String(describing: type), fresh: fresh, marks: marks) }
+        }
+        #endif
         let view = build(type)
+        #if DEBUG
+        marks.append(CACurrentMediaTime())
+        #endif
         // A row with no superview takes no width from its frame: layout gave
         // it the width its content asked for. A grouped turn's clock alone
         // made one 39pt wide, and its list, its tab stop past the line's end
@@ -182,12 +228,27 @@ final class RowStore {
         // every text learns it, then measured.
         view.frame = CGRect(x: 0, y: 0, width: width, height: max(view.bounds.height, 1))
         view.layoutIfNeeded()
+        #if DEBUG
+        marks.append(CACurrentMediaTime())
+        #endif
         let size = view.systemLayoutSizeFitting(CGSize(width: width, height: 0), withHorizontalFittingPriority: .required,
                                                 verticalFittingPriority: .fittingSizeLevel)
+        #if DEBUG
+        marks.append(CACurrentMediaTime())
+        #endif
         // Laid out where it will stand, so the cell that shows it finds its
         // text views at their size and lays nothing out again.
         view.frame = CGRect(x: 0, y: 0, width: width, height: size.height)
         view.layoutIfNeeded()
+        #if DEBUG
+        marks.append(CACurrentMediaTime())
+        // The same item at the same width measures the same, whichever view stands it.
+        let key = "\(item.id)|\(item.print.hashValue)|\(Int(width * 2))"
+        if Pace.probing, let was = measuredOnce[key], abs(was - size.height) > 0.5 {
+            Pace.drifted(String(describing: type), id: item.id, was: was, now: size.height, fresh: fresh)
+        }
+        measuredOnce[key] = size.height
+        #endif
         entries[item.id]?.height = size.height
         return true
     }
@@ -245,6 +306,7 @@ final class RowStore {
     /// ones off the screen are let go; the ones on it are set again the next
     /// time their cell asks.
     func clear() {
+        spare = [:]
         entries = entries.filter { $0.value.view.window != nil }
         for id in entries.keys {
             entries[id]?.print = ""
@@ -256,9 +318,22 @@ final class RowStore {
     private func trim() {
         let off = entries.filter { $0.value.view.window == nil }
         guard off.count > Self.limit else { return }
-        for (id, _) in off.sorted(by: { $0.value.used < $1.value.used }).prefix(off.count - Self.limit) {
+        for (id, entry) in off.sorted(by: { $0.value.used < $1.value.used }).prefix(off.count - Self.limit) {
             entries[id] = nil
+            keepSpare(entry.view)
         }
+    }
+
+    /// Keeps a row view let go of for the next item of its kind. Only one in
+    /// no cell: a cell off the screen still holding its row may be one the
+    /// list prepared to show next, which shows what it holds without being
+    /// asked for its row again. A cell given another item lets its row go
+    /// (HostCell `host`), so most rows let go of are in none.
+    private func keepSpare(_ view: UIView & RowContent) {
+        guard view is any Recycled, view.superview == nil else { return }
+        let type = ObjectIdentifier(Swift.type(of: view))
+        guard spare[type, default: []].count < Self.spares else { return }
+        spare[type, default: []].append(view)
     }
 }
 

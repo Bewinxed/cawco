@@ -154,11 +154,13 @@ class ProseView: UITextView, NSTextLayoutManagerDelegate {
             return CGSize(width: natural, height: 0)
         }
         let inner = width - textContainerInset.left - textContainerInset.right
-        if abs(textContainer.size.width - inner) > 0.01 { textContainer.size = CGSize(width: inner, height: 0) }
-        exclude(at: width)
-        rewrap(at: inner, measuring: true)
-        manager.ensureLayout(for: manager.documentRange)
-        fitted = manager.usageBoundsForTextContainer.height + textContainerInset.top + textContainerInset.bottom
+        Pace.time(.text) {
+            if abs(textContainer.size.width - inner) > 0.01 { textContainer.size = CGSize(width: inner, height: 0) }
+            exclude(at: width)
+            rewrap(at: inner, measuring: true)
+            manager.ensureLayout(for: manager.documentRange)
+            fitted = manager.usageBoundsForTextContainer.height + textContainerInset.top + textContainerInset.bottom
+        }
         return CGSize(width: natural, height: fitted)
     }
 

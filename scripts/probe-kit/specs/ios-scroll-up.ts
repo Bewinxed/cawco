@@ -17,17 +17,28 @@
  *    list coasts), again as soon as the list rests or 700 ms on, until it
  *    rests at the top with no page before it (`probe rest … top=1 older=0`);
  *    then Jump to latest. The first pass reads the older pages as it goes.
- *    - No blank frame: no turn whose committed screen showed a visible row
+ *    - No blank frame: no frame whose committed screen showed a visible row
  *      blank (a stretch no cell covers, a cell with no row, a text in sight
  *      0pt tall, past its words, or with its lines in sight not laid out or
- *      outside its viewport). Must be 0.
+ *      outside its viewport), checked once a display frame. Must be 0.
  *    - Hitch ratio: ms the transcript's display-link frames came late, per
- *      second the list was scrolling. Under 5 ms/s on every pass.
+ *      second the list was scrolling. Under 5 ms/s on every pass. Its detail
+ *      splits the late frames after a main-thread turn over a frame (the
+ *      app's) from those with the main thread free (the render side, or the
+ *      Mac's load, which each pass notes), and a note says where the main
+ *      thread's scrolling time went (rows built, measured, laid out).
  * 2. A turn streams a long reply into the foot: the main thread's own CPU
  *    time over the wall time the tail was busy. Under 50% (mostly idle).
+ *    And every commit of its rows takes under 8 ms (the app says one of
+ *    8 ms or more, `probe commit`, with what it took).
  *
  *   bash apps/apple/scripts/build-both.sh ios --compile-only
  *   bun scripts/probe-kit/run.ts ios-scroll-up
+ *
+ * With `PROBE_SAMPLE=1` the app also samples its main thread's stack every
+ * millisecond (MainSampler.swift) and the run notes where it was busy while
+ * the list scrolled and while the turn streamed: where no Instruments
+ * template that samples is at hand, the profile that says why.
  *
  * The app is this checkout's simulator build. The simulator runs on the
  * Mac's CPU and GPU, not a phone's: its hitches and CPU are this build's on
@@ -62,6 +73,11 @@ const LOG_HEAD = /^.*\] /;
 const MARK = /(seed|stream)-mark-[0-9a-f]{6}/g;
 const PACE = /probe pace (.*)$/;
 const REST = /probe rest \w+: top=(\d) older=(\d) rows=(\d+)/;
+const COMMIT = /probe commit ([\d.]+) ms/;
+/** `PROBE_SAMPLE=1`: the app samples its main thread's stack (MainSampler.swift) and says where it was busy. */
+const SAMPLE = process.env.PROBE_SAMPLE === "1";
+/** The most a commit of the rows may take while a turn streams. */
+const COMMIT_MS = 8;
 
 /** One stretch of the seeding turn's words: Markdown of every kind a reply draws. */
 const said = (n: number): string => {
@@ -120,6 +136,7 @@ const KEYS = [
   "mainHitches",
   "ticks",
   "checked",
+  "checking",
   "build",
   "builds",
   "measure",
@@ -129,6 +146,8 @@ const KEYS = [
   "frameMeasure",
   "layout",
   "layouts",
+  "text",
+  "texts",
   "streamWall",
   "streamCPU",
   "streamAwake",
@@ -250,8 +269,17 @@ async function flingLine(
   };
 }
 
+/** The Mac's load over the last minute, against its cores: the simulator draws on the same CPU. */
+const LOADAVG = /\{\s*([\d.]+)/;
+async function hostLoad(): Promise<string> {
+  const [avg, cores] = (await sh("sysctl -n vm.loadavg hw.ncpu")).split("\n");
+  return `host load ${LOADAVG.exec(avg ?? "")?.[1] ?? "?"} on ${cores ?? "?"} cores`;
+}
+
 interface Pass {
   flings: number;
+  /** The host's load as the pass began. */
+  load: string;
   ms: number;
   /** The rows the list held when it rested at the top; undefined if it never did. */
   rows: number | undefined;
@@ -266,6 +294,7 @@ async function flingToTop(
 ): Promise<Pass> {
   const start = heard.length;
   const before = await tally(heard, 0);
+  const load = await hostLoad();
   const began = Date.now();
   let flings = 0;
   let rows: number | undefined;
@@ -294,7 +323,7 @@ async function flingToTop(
   // The totals once the last coast is over.
   await Bun.sleep(1500);
   const totals = minus(await tally(heard, start), before);
-  return { flings, ms, rows, totals };
+  return { flings, load, ms, rows, totals };
 }
 
 /** Seeds the session: one turn of `CALLS` replies. Returns its id and what the hub holds. */
@@ -409,15 +438,15 @@ function judge(kit: Kit, passes: Pass[]): void {
     kit.check(
       `pass ${i + 1}: no blank frame`,
       t.blankFrames === 0 && t.checked > 0,
-      `${t.blankFrames} blank frame(s) of ${t.checked} screens checked, ${t.blankRows} row(s) blank`
+      `${t.blankFrames} blank frame(s) of ${t.checked} screens checked, ${t.blankRows} row(s) blank; the check took ${t.checking.toFixed(0)} ms of the main thread`
     );
     kit.check(
       `pass ${i + 1}: hitch ratio under ${HITCH_MS_PER_S} ms/s`,
       ratio < HITCH_MS_PER_S,
-      `${ratio.toFixed(2)} ms/s: ${t.hitch.toFixed(1)} ms late in ${t.hitches} hitch(es) over ${seconds.toFixed(1)}s scrolling (${t.ticks} frames); ${main.toFixed(2)} ms/s of it (${t.mainHitches} hitches) after a main-thread turn over a frame, the rest with the main thread free`
+      `${ratio.toFixed(2)} ms/s: ${t.hitch.toFixed(1)} ms late in ${t.hitches} hitch(es) over ${seconds.toFixed(1)}s scrolling (${t.ticks} frames); ${main.toFixed(2)} ms/s of it (${t.mainHitches} hitches) after a main-thread turn over a frame, the rest with the main thread free; ${p.load}`
     );
     kit.note(
-      `pass ${i + 1} main thread while scrolling: rows built in the layout pass ${t.build.toFixed(0)} ms (${t.builds}), measured there ${t.measure.toFixed(0)} ms (${t.measures}); in the transcript's frames warm ${t.warm.toFixed(0)} ms, built ${t.frameBuild.toFixed(0)} ms, measured ${t.frameMeasure.toFixed(0)} ms; the layout preparing ${t.layout.toFixed(0)} ms (${t.layouts})`
+      `pass ${i + 1} main thread while scrolling: rows built in the layout pass ${t.build.toFixed(0)} ms (${t.builds}), measured there ${t.measure.toFixed(0)} ms (${t.measures}); in the transcript's frames warm ${t.warm.toFixed(0)} ms, built ${t.frameBuild.toFixed(0)} ms, measured ${t.frameMeasure.toFixed(0)} ms; the layout preparing ${t.layout.toFixed(0)} ms (${t.layouts}); whole texts laid out ${t.text.toFixed(0)} ms (${t.texts}), inside the rest`
     );
   }
 }
@@ -443,20 +472,27 @@ async function run(kit: Kit): Promise<void> {
     await sh(`xcrun simctl install ${udid} "${app}"`);
     stop = listen(udid, heard);
     await Bun.sleep(1500);
-    await sh(
-      `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${fleet.base} -open-session ${session} -probe-pace >/dev/null`
-    );
-    await until(
-      "the newest page drawn",
-      () =>
-        Promise.resolve(
-          heard.some((h) => h.line.includes(`page adopted for ${session}`)) &&
-            heard.some((h) => PACE.test(h.line))
-        ),
-      Boolean,
-      60_000
-    );
-    await Bun.sleep(2500);
+    /** The app opened fresh on the session, its newest page drawn; `extra`: launch arguments of a pass's own. */
+    const launch = async (extra = "") => {
+      const from = heard.length;
+      await sh(
+        `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${fleet.base} -open-session ${session} -probe-pace ${SAMPLE ? "-probe-sample" : ""} ${extra} >/dev/null`
+      );
+      await until(
+        "the newest page drawn",
+        () =>
+          Promise.resolve(
+            heard
+              .slice(from)
+              .some((h) => h.line.includes(`page adopted for ${session}`)) &&
+              heard.slice(from).some((h) => PACE.test(h.line))
+          ),
+        Boolean,
+        60_000
+      );
+      await Bun.sleep(2500);
+    };
+    await launch();
     const line = await flingLine(udid);
 
     // ── 1. Three passes from the foot to the top ─────────────────────────
@@ -495,6 +531,32 @@ async function run(kit: Kit): Promise<void> {
       busy < STREAM_CPU,
       `main thread CPU ${(busy * 100).toFixed(1)}% (${d.streamCPU.toFixed(0)} ms of ${d.streamWall.toFixed(0)} ms), awake ${(awake * 100).toFixed(1)}%; ${d.blankFrames} blank frame(s)`
     );
+    // The app says a commit only when it took 8 ms or more (TranscriptView `probe commit`).
+    const slow = heard
+      .slice(streamFrom)
+      .map((h) => COMMIT.exec(h.line))
+      .filter((m) => m !== null);
+    kit.check(
+      `while a turn streams, each commit of its rows takes under ${COMMIT_MS} ms`,
+      slow.length === 0,
+      slow.length === 0
+        ? "no commit of 8 ms or more"
+        : `${slow.length} commit(s) of 8 ms or more, the longest ${Math.max(...slow.map((m) => Number(m[1]))).toFixed(1)} ms: ${slow[0]?.input.slice(slow[0].index) ?? ""}`
+    );
+    // The sampler's last profile of each phase: its header and the lines after it.
+    for (const phase of ["scrolling", "streaming"]) {
+      const head = heard.findLastIndex((h) =>
+        h.line.includes(`probe sample ${phase}:`)
+      );
+      if (head === -1) {
+        continue;
+      }
+      for (const h of heard.slice(head)) {
+        if (h.line.includes(`probe sample ${phase}`)) {
+          kit.note(h.line.slice(h.line.indexOf("probe sample")));
+        }
+      }
+    }
   } finally {
     await writeFile(
       join(kit.out, "app-log.txt"),

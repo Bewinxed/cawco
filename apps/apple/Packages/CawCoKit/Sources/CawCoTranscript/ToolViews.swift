@@ -66,7 +66,7 @@ class RailRow: UIView, FitsWidth {
 /// One call of a run (ToolGroup.svelte): its glyph in the rail cell, the
 /// verb, the mono argument, a chip, what it measured out, and — when it has
 /// a body — a chevron, the body opening under the line.
-final class ToolLineView: RailRow, RowContent, Disclosing {
+final class ToolLineView: RailRow, Recycled, Disclosing {
     var disclosed: Bool { reveal.isOpen }
 
     private let cell = UIView()
@@ -212,8 +212,10 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
         }
         favicon.isHidden = true
         if let url = d.favicon.flatMap(env.url) {
+            let call = key
             ImageStore.shared.load(url) { [weak self] image in
-                guard let self, let image else { return }
+                // A row view stands for another call once its own is let go (`Recycled`).
+                guard let self, let image, key == call else { return }
                 favicon.image = image
                 favicon.isHidden = false
                 glyph.isHidden = true
@@ -251,6 +253,14 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
         if open { fillBody(force: true) } else { bodyPrint = "" ; opened.arrangedSubviews.forEach { $0.removeFromSuperview() } }
         reveal.set(open: open)
         configureShots(block, renderer: d.renderer)
+    }
+
+    /// Forgets the call it stood for, so the next is drawn as new: no status
+    /// change crossfades on a row that only came on the screen.
+    func recycle() {
+        status = ""
+        block = nil
+        bodyPrint = ""
     }
 
     /// The call as the shared rules read it (packages/core tool-presentation).

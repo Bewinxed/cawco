@@ -131,7 +131,7 @@ final class FloatNote: UILabel {
 /// One block of an assistant turn: under its speaker line when it opens the
 /// turn, its clock floated into the first line when grouped. The live tail's
 /// block shows each chunk's words fading in.
-final class PieceView: UIView, RowContent, FitsWidth {
+final class PieceView: UIView, Recycled, FitsWidth {
     private let env: RowEnv
     private let stack = UIStackView()
     private let who = WhoView()
@@ -215,6 +215,9 @@ final class PieceView: UIView, RowContent, FitsWidth {
     func fade(_ now: Double) {
         for case let view as ProseView in blocks { view.fade(now) }
     }
+
+    /// `configure` sets everything a piece draws: nothing of the last one is kept.
+    func recycle() {}
 
     private static func kind(_ block: MarkdownBlock) -> Int {
         switch block.kind {

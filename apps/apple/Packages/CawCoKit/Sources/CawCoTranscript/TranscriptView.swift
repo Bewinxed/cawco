@@ -170,7 +170,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         /// iOS 18 reads the list's place after it has been told of the update,
         /// not after `prepare`: the list is stood there too.
         override func prepare(forCollectionViewUpdates updates: [UICollectionViewUpdateItem]) {
-            super.prepare(forCollectionViewUpdates: updates)
+            Pace.time(.layout) { super.prepare(forCollectionViewUpdates: updates) }
             settle()
         }
 
@@ -1318,8 +1318,14 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // being read is in the window too, and what lands in it is simply there
         // when the reader comes to it, not an arrival played where nothing draws.
         env.watched = landed && onScreen
+        #if DEBUG
+        let began = CACurrentMediaTime()
+        #endif
         if fresh { drawn = build() }
         let built = drawn
+        #if DEBUG
+        let builtAt = CACurrentMediaTime()
+        #endif
         // A named state stands in the area instead of the transcript (SessionPane `namedState`).
         if let transcript {
             let blank = !transcript.loading && transcript.fault == nil && !transcript.missing && blocks.isEmpty
@@ -1417,20 +1423,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             // The same rows, some drawn anew (the streamed reply, mostly): each
             // on screen is configured where it stands and sizes itself, and the
             // list takes no update. One off the screen is reconfigured below.
-            var unseen: [String] = []
-            for id in changed {
-                if let index = dataSource.indexPath(for: id), let item = items[id],
-                   let cell = collection.cellForItem(at: index) as? ItemCell {
-                    // A row whose body is moving is sized by the body's steps, not the list's own resizing.
-                    if moving.contains(where: { Self.cell(of: $0) === cell }) {
-                        quietly { cell.redraw(item) }
-                    } else {
-                        cell.redraw(item)
-                    }
-                } else {
-                    unseen.append(id)
-                }
-            }
+            let unseen = redrawInPlace(changed)
             drewThisFrame = true
             if unseen.isEmpty {
                 collection.layoutIfNeeded()
@@ -1440,11 +1433,25 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             }
             changed = unseen
         }
+        #if DEBUG
+        let snapshotAt = CACurrentMediaTime()
+        var madeAt = snapshotAt
+        let layoutBefore = Pace.turnTime(.layout)
+        defer {
+            let end = CACurrentMediaTime()
+            if Pace.probing, end - began >= 0.008 {
+                Self.dockLog.notice("probe commit \((end - began) * 1000, format: .fixed(precision: 1)) ms: build \((builtAt - began) * 1000, format: .fixed(precision: 1)), rows looked at \((snapshotAt - builtAt) * 1000, format: .fixed(precision: 1)), snapshot made \((madeAt - snapshotAt) * 1000, format: .fixed(precision: 1)), applied \((end - madeAt) * 1000, format: .fixed(precision: 1)) (the layout preparing \((Pace.turnTime(.layout) - layoutBefore) * 1000, format: .fixed(precision: 1)) of it); \(built.count) items, \(quiet ? "quiet" : "whole", privacy: .public), \(changed.count) reconfigured")
+            }
+        }
+        #endif
         var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
         snapshot.appendSections([0, 1])
         snapshot.appendItems(section.settled, toSection: 0)
         snapshot.appendItems(section.tail, toSection: 1)
         snapshot.reconfigureItems(changed)
+        #if DEBUG
+        madeAt = CACurrentMediaTime()
+        #endif
         listed = section
         drewThisFrame = true
         let follow = following
@@ -1524,6 +1531,27 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             layout.stand = nil
         }
         announce(looked)
+    }
+
+    /// Draws each of `ids` anew in the cell that stands it on screen, where it
+    /// sizes itself; the list takes no update for them. Returns the ones no
+    /// cell on screen stands, which only an update reconfigures.
+    private func redrawInPlace(_ ids: [String]) -> [String] {
+        var unseen: [String] = []
+        for id in ids {
+            if let index = dataSource.indexPath(for: id), let item = items[id],
+               let cell = collection.cellForItem(at: index) as? ItemCell {
+                // A row whose body is moving is sized by the body's steps, not the list's own resizing.
+                if moving.contains(where: { Self.cell(of: $0) === cell }) {
+                    quietly { cell.redraw(item) }
+                } else {
+                    cell.redraw(item)
+                }
+            } else {
+                unseen.append(id)
+            }
+        }
+        return unseen
     }
 
     /// The rows the list holds this frame. Once the first screen is whole that
@@ -1629,9 +1657,6 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// out, and the frame it enters in only shows it. A frame that has
     /// already taken its share builds nothing. Says whether rows were left
     /// unvisited when the frame's share ran out: the next frame has them.
-    ///
-    /// Each row's height, once measured here, is given to the list's layout
-    /// at once (`tellHeights`), so a row comes on the screen at its height.
     private func warm(since start: Double, frame: Double) -> Bool {
         let offset = collection.contentOffset.y
         let up = offset < lastOffset - 0.5
@@ -1649,51 +1674,12 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             : (0 ..< max(above.count, below.count)).flatMap { i in
                 (i < above.count ? [above[i]] : []) + (i < below.count ? [below[i]] : [])
             }
-        var known: [(index: Int, item: Item)] = []
-        defer { tellHeights(known, width: width) }
         for index in order {
+            guard CACurrentMediaTime() < until else { return true }
             guard let item = items[ids[index]] else { continue }
-            if !store.isReady(item, width: width) {
-                guard CACurrentMediaTime() < until else { return true }
-                store.warm(Self.rowType(item.kind), item: item, width: width)
-            }
-            known.append((index, item))
+            store.warm(Self.rowType(item.kind), item: item, width: width)
         }
         return false
-    }
-
-    /// Gives the list's layout the heights of rows built off the screen, as a
-    /// cell gives its row's on coming on it (`resize`). Laid out with only
-    /// the list's estimate (`estimated(44)`), a row came on the screen at
-    /// that height and was measured there, every row above it moved by the
-    /// difference, and more rows came into the view to be built and measured
-    /// in the same pass: a fling up through rows never shown held the main
-    /// thread 50–100 ms a turn (probe-kit spec `ios-scroll-up`). The first
-    /// row in view keeps its place on the screen while rows above it take
-    /// their heights, as when older history joins (`commit`'s anchor).
-    private func tellHeights(_ rows: [(index: Int, item: Item)], width: CGFloat) {
-        guard moving.isEmpty, !gliding, revealing == nil else { return }
-        var told = false
-        var anchor: (index: IndexPath, y: CGFloat)?
-        for (index, item) in rows {
-            let path = IndexPath(item: index, section: 0)
-            guard let height = store.height(item.id, print: item.print, width: width),
-                  let original = layout.layoutAttributesForItem(at: path) else { continue }
-            let want = CGFloat(item.top) + height
-            guard abs(original.size.height - want) > 0.5, let asked = original.copy() as? UICollectionViewLayoutAttributes else { continue }
-            asked.size.height = want
-            guard layout.shouldInvalidateLayout(forPreferredLayoutAttributes: asked, withOriginalAttributes: original) else { continue }
-            if !told, let first = collection.indexPathsForVisibleItems.min(), let frame = layout.layoutAttributesForItem(at: first)?.frame {
-                anchor = (first, frame.minY - collection.contentOffset.y)
-            }
-            told = true
-            layout.invalidateLayout(with: layout.invalidationContext(forPreferredLayoutAttributes: asked, withOriginalAttributes: original))
-        }
-        guard told else { return }
-        collection.layoutIfNeeded()
-        guard let anchor, let frame = layout.layoutAttributesForItem(at: anchor.index)?.frame else { return }
-        let moved = frame.minY - collection.contentOffset.y - anchor.y
-        if abs(moved) > 0.5 { collection.contentOffset.y += moved }
     }
 
     // MARK: A queued message in the composer
