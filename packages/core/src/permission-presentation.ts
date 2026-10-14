@@ -722,20 +722,8 @@ function builtIn(
         `Edit notebook ${text(input.notebook_path) ?? path ?? "(no path)"}`,
         fieldsOf(input, ["notebook_path", ...FILE_KEYS])
       );
-    case "bash": {
-      const described = text(input.description);
-      const whole = commandOf(input);
-      const command = whole?.split("\n")[0] ?? "";
-      return only(
-        described
-          ? `Run a command: ${described}`
-          : `Run: ${cut(command, COMMAND_CAP)}`,
-        fieldsOf(whole === null ? input : { ...input, command: whole }, [
-          "command",
-          "description",
-        ])
-      );
-    }
+    case "bash":
+      return shellCall(input);
     case "webfetch":
       return only(
         `Fetch ${text(input.url) ?? "a web page"}`,
@@ -787,6 +775,28 @@ const BOUNDED =
 export const unboundedCommand = (command: string): string => {
   const inner = BOUNDED.exec(command)?.[1];
   return inner === undefined ? command : inner.replaceAll("'\\''", "'");
+};
+
+/**
+ * A shell call, presented: the command first, on every surface that shows
+ * the summary alone (Caw's panel, the peek), since what runs is what the
+ * person approves; the session's own words for it follow. Its fields carry
+ * the command whole, out of a boundary's rewrite.
+ */
+const shellCall = (input: Record<string, unknown>): Presented => {
+  const described = text(input.description);
+  const whole = commandOf(input);
+  const command = whole?.split("\n")[0]?.trim() ?? "";
+  const words = described ? ` · ${described}` : "";
+  return only(
+    command
+      ? `Run: ${cut(command, COMMAND_CAP)}${words}`
+      : `Run a command${words}`,
+    fieldsOf(whole === null ? input : { ...input, command: whole }, [
+      "command",
+      "description",
+    ])
+  );
 };
 
 /** The shell command a permission is about, said whole under the summary. */

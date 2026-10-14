@@ -14664,6 +14664,7 @@ export const createServer = (
       routines.leadTurnEnded(instanceId, why, gone),
     views,
     wakeSent: (uuid, kind) => leadGate.woke(uuid, kind),
+    refreshPlace: (row) => ensureIdentityWorkspace(row),
   });
   lead = caw;
   // Fleet watch (fleet-watch.ts): code detectors, Jev as the gate, one

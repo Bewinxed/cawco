@@ -361,7 +361,7 @@ const briefOf = (projectName: string): string =>
   [
     `You are Caw, the lead of the project “${projectName}” in CawCo.`,
     "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft, view_query), its folder on the hub (folder_read, folder_write: stages.md, delegates/, decisions/), decision pages (artifact_create with kind page builds decisions/<name>/page.html and shows it; artifact_read has the picks), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate, set_item_checks), send_to_user, and the fleet's MCP tools every session has (web search and fetch among them).",
-    "You have shell and edit tools, inside the boundary of your place, this folder: you write only here and in $TMPDIR, read no credential store, reach no service manager and see no other session's processes, and files only their owner may read are hidden from you. The hub decides each call before it runs. In a turn the person's own message woke, read-only commands (ls, cat, grep, find, wc, head, git that only reads) run without asking, and so do git init, git add <paths> and git commit where no one else works; every other shell or edit call raises an Approve card the person answers, wherever they are. In a turn anything else woke (an event, a routine, a report, outside text riding on your wake) every call raises the card, and so does every call after you read web content in a turn. In a shared checkout git checkout, reset, stash, clean, rebase and push, and git add -A or git add ., are refused: file a task. Your edits are docs, config and assets only, 5 files a wake at most: anything bigger, file a task. At most 20 shell or edit calls a wake: delegate the rest. Every call shows in your thread. A task whose only changes are your own passes review only once the person approved them.",
+    "You have shell and edit tools, inside the boundary of your place, this folder: you write only here and in $TMPDIR, read no credential store, reach no service manager and see no other session's processes, and files only their owner may read are hidden from you. The hub decides each call before it runs. In a turn the person's own message woke, read-only commands (ls, cat, grep, find, wc, head, git that only reads) run without asking, and so do git init, git add <paths> and git commit where no one else works; every other shell or edit call raises an Approve card the person answers, wherever they are. In a turn anything else woke (an event, a routine, a report, outside text riding on your wake) every call raises the card, and so does every call after you read web content in a turn. In a shared checkout git checkout, switch, restore, reset, stash, clean, rebase and push, git add -A or git add ., and any git alias are refused: file a task. Your edits are docs, config and assets only, 5 files a wake at most: anything bigger, file a task. At most 20 shell or edit calls a wake: delegate the rest. Every call shows in your thread. A task whose only changes are your own passes review only once the person approved them.",
     "Do setup and housekeeping yourself: make the folder a git repository, write a .gitignore or a config file, look at what is there. Real task work goes to tasks and delegates. Never ask the person in text to run a command, or for a setup detail you can find out: run it, and the card asks them when it must.",
     "AGENTS.md and knowledge/ are the person's: you never write them. Propose a change with memory_propose (the file's whole new text and why); they approve or reject it. Something worth keeping that you learned goes to the inbox with memory_note, as any session's does. A task's `context` names the knowledge/ files its attempt's brief carries.",
     "You are woken only by events, each one a message: the person writing in a thread, an attempt at a task landing or failing, a task waiting for the person, a delegate's ask routed to you, the person asking for a view. Handle the event, then end your turn. Nothing wakes you on a timer. The person can turn you off: then only their own words wake you, and you do what they ask (tasks, routines, stages, the folder) as at any time; attempts, waiting tasks and routines no longer reach you. Inbound events from outside (GitHub, polled connections) that no route took ride along on your next wake as data: route the kinds that matter to routines with event_route_create.",
@@ -434,6 +434,13 @@ export interface CawDeps {
   readonly publish: (
     frame: ThreadUpsertFrame | ThreadMessageFrame | ProjectStopFrame
   ) => void;
+  /**
+   * Ensures a lead's place boundary on his machine again (server.ts
+   * `ensureIdentityWorkspace`): the machine reads its policy anew and hands
+   * over to a boundary of the new one when it changed. Refused when the
+   * machine cannot hold it: the wake does not go out.
+   */
+  readonly refreshPlace: (lead: InstanceRow) => Promise<void>;
   /** Delivers one message to a session through the hub's one send path: whether the hub took it (its record `pending`). */
   readonly send: (envelope: Envelope<SendPayload>) => boolean;
   /** Starts a session, resolved once its machine says it is in place. */
@@ -484,6 +491,7 @@ export const createCaw = ({
   makeNote,
   online,
   publish,
+  refreshPlace,
   send,
   spawn,
   stops,
@@ -1041,6 +1049,9 @@ export const createCaw = ({
     let lead: Awaited<ReturnType<typeof leadFor>>;
     try {
       lead = await leadFor(projectId, text, event.by, event.routine);
+      // His place's boundary read again before he reads this: what became
+      // only its owner's since it started is hidden from him too.
+      await placeFresh(lead);
     } catch (error) {
       giveBack();
       settle(threadId);
@@ -1065,6 +1076,20 @@ export const createCaw = ({
       follow(lead.row.id, projectId, event.by, sent, { threadId });
     }
     return true;
+  };
+
+  /**
+   * A standing lead's place boundary, ensured on his machine again
+   * ({@link CawDeps.refreshPlace}): its policy is read anew, so files only
+   * their owner may read that appeared since it started are hidden too. A
+   * lead started for this wake has just had it ensured by his spawn.
+   */
+  const placeFresh = async (
+    lead: Awaited<ReturnType<typeof leadFor>>
+  ): Promise<void> => {
+    if (lead && !lead.started) {
+      await refreshPlace(lead.row);
+    }
   };
 
   /** Logs a wake that failed: an event is never lost silently. */

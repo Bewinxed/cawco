@@ -311,14 +311,20 @@ const run = async (kit: Kit) => {
 
   // ── d. a shared checkout: git stash is hard-denied ────────────────────
   const neighbour = await fleet.spawn("claude", "Neighbour", place);
-  script.push(bash("git stash"));
-  await say("main", "PROBE-D: stash what is there.");
+  script.push(bash("git stash"), bash("git co main"));
+  await say("main", "PROBE-D: stash what is there, then go to main.");
   await turnEnds("d");
   const stash = callOf("git stash");
+  const alias = callOf("git co main");
   kit.check(
     "d: `git stash` in a shared-checkout place is refused, no card: file a task",
     stash?.outcome === "refused" && (stash.why ?? "").includes("File a task"),
     JSON.stringify(stash)
+  );
+  kit.check(
+    "d: a git alias (`git co`) in a shared checkout is refused too",
+    alias?.outcome === "refused" && (alias.why ?? "").includes("File a task"),
+    JSON.stringify(alias)
   );
   await fleet.stopSession(neighbour);
   await until(

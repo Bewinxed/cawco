@@ -467,15 +467,33 @@ const gitOf = (
   }
 };
 
-/** The git subcommands never run in a shared checkout: they move, drop or publish what others there rely on. */
+/**
+ * The git subcommands never run in a shared checkout: they move, drop or
+ * publish what others there rely on. `switch` and `restore` are the two
+ * halves `checkout` was split into (git 2.23), so they go with it.
+ */
 const SHARED_DENIED: ReadonlySet<string> = new Set([
   "checkout",
+  "switch",
+  "restore",
   "reset",
   "stash",
   "clean",
   "rebase",
   "push",
 ]);
+
+/**
+ * git's own commands, and git-lfs's. Any other word where a subcommand goes
+ * is an alias (`git co`, `git -c alias.x=checkout x`) or another program on
+ * PATH, which the hub cannot read: refused in a shared checkout, since it
+ * may be one of {@link SHARED_DENIED}.
+ */
+const GIT_COMMANDS: ReadonlySet<string> = new Set(
+  "add am annotate apply archive bisect blame branch bugreport bundle cat-file check-attr check-ignore check-mailmap check-ref-format checkout checkout-index cherry cherry-pick citool clean clone column commit commit-graph commit-tree config count-objects credential describe diagnose diff diff-files diff-index diff-tree difftool fast-export fast-import fetch fetch-pack filter-branch for-each-ref for-each-repo format-patch fsck gc get-tar-commit-id grep gui hash-object help index-pack init instaweb interpret-trailers lfs log ls-files ls-remote ls-tree mailinfo mailsplit maintenance merge merge-base merge-file merge-tree mergetool mktag mktree multi-pack-index mv name-rev notes pack-objects pack-refs patch-id prune prune-packed pull push range-diff read-tree rebase reflog remote repack replace request-pull rerere reset restore rev-list rev-parse revert rm send-email shortlog show show-branch show-ref sparse-checkout stash status stripspace submodule switch symbolic-ref tag unpack-file unpack-objects update-index update-ref update-server-info var verify-commit verify-pack verify-tag version whatchanged worktree write-tree".split(
+    " "
+  )
+);
 /** `git add`'s arguments that stage the whole tree. */
 const ADD_ALL =
   /^(?:-[a-zA-Z]*A[a-zA-Z]*|--all|--no-ignore-removal|\.|\.\/|:\/|:|\*)$/;
@@ -490,7 +508,7 @@ const sharedDenial = (argvs: string[][]): string | undefined => {
     if (!git) {
       continue;
     }
-    if (SHARED_DENIED.has(git.sub)) {
+    if (SHARED_DENIED.has(git.sub) || !GIT_COMMANDS.has(git.sub)) {
       return `git ${git.sub}`;
     }
     if (git.sub === "add" && addsAll(git.args)) {

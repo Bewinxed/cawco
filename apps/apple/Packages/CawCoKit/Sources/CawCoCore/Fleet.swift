@@ -560,8 +560,25 @@ public struct ParkedAsk: Sendable {
     public var questions: [Components.Schemas.UserQuestion] { Naming.questions(toolName, input.value) ?? [] }
     /// What will happen and to what, in one line.
     public var summary: String { presentation.summary }
-    /// The shell command a permission is about, said whole (Prompt.svelte `.cmd`).
-    public var command: String? { input.value["command"] as? String }
+    /// The shell command a permission is about, said whole (Prompt.svelte `.cmd`): as its
+    /// session wrote it, out of a workspace boundary's rewrite (core `commandOf`).
+    public var command: String? {
+        (input.value["command"] as? String).map(ParkedAsk.unboundedCommand)
+    }
+
+    /// The command a shell call runs, out of a workspace boundary's rewrite once when it is
+    /// in one (core permission-presentation.ts `unboundedCommand`): Claude Code runs the
+    /// boundary's hook before it asks, so a bounded session's ask (every one of a project's
+    /// Caw's) carries `'<exec>' --cwd-out '<file>' '<command>'; __cawco_status=$?; …`. The
+    /// ask's input keeps the rewrite, so an answer never runs it unbounded.
+    static func unboundedCommand(_ command: String) -> String {
+        guard
+            let bounded = try? Regex(#"^'[^']+' --cwd-out '[^']+' '((?:[^']|'\\'')*)'; __cawco_status=\$\?; "#),
+            let match = command.firstMatch(of: bounded),
+            let inner = match.output[1].substring
+        else { return command }
+        return String(inner).replacingOccurrences(of: #"'\''"#, with: "'")
+    }
 }
 
 /// Every ask parked on the operator, across every machine, and the answers

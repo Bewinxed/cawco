@@ -156,6 +156,7 @@ export const measureRoles = (): RoleSize[] => {
         turnEnded: () => undefined,
         views: {} as never,
         wakeSent: () => undefined,
+        refreshPlace: () => Promise.resolve(),
       }).tools(actor),
     routineTools: (actor) =>
       createRoutines({

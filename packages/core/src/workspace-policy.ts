@@ -27,14 +27,8 @@
  *   writing, even inside an allowed tree. On Linux so are the host's runtime
  *   dirs, with every daemon's socket, and the journal.
  */
-import {
-  lstat,
-  open,
-  readdir,
-  readFile,
-  realpath,
-  stat,
-} from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { open, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { binaryRoot } from "./binary-installation";
@@ -208,50 +202,72 @@ export const workspaceDenies = async (
   return isRepo ? all : all.filter((deny) => !deny.path.startsWith(`${git}/`));
 };
 
-/** The dirs {@link ownerOnlyIn} never walks into: git's own, and installed dependencies. */
-const OWNER_ONLY_SKIP = new Set([".git", "node_modules"]);
-/** The most entries {@link ownerOnlyIn} looks at, nearest the root first. */
-const OWNER_ONLY_SCAN_MAX = 50_000;
+/**
+ * `find`'s test for a mode with no group or other bit: GNU find's `/077`
+ * (any of them set), BSD find's (macOS) `+077`, negated.
+ */
+const ANY_GROUP_OR_OTHER_BIT = process.platform === "darwin" ? "+077" : "/077";
+/** The most `find` writes: a place's every owner-only path, NUL-separated. */
+const OWNER_ONLY_OUTPUT_MAX = 64 * 1024 * 1024;
 
 /**
  * Every entry under `root` (never `root` itself) that only its owner may
  * read: a dir or file whose mode has no group or other bits (a 0700 dir, a
  * 0600 file), as a tool keeps its own data (x-use's accounts and cookies).
- * Not walked into, and nothing under a link. A lead's place hides each from
- * his shell and file tools; an MCP server the owner runs reaches its own
- * data on its own. Nearest the root first, at most
- * {@link OWNER_ONLY_SCAN_MAX} entries looked at.
+ * Not walked into, and nothing under a link; git's own dirs and installed
+ * dependencies (`.git`, `node_modules`) are not looked in. The whole place,
+ * by `find`, which reads a tree of hundreds of thousands of entries in a
+ * second. A lead's place hides each from his shell and file tools; an MCP
+ * server the owner runs reaches its own data on its own. `find` exits 1
+ * when a dir under the place is not the owner's to read, which nothing in
+ * the boundary reads either; any other failure refuses the boundary.
  */
 export const ownerOnlyIn = async (root: string): Promise<string[]> => {
-  const found: string[] = [];
-  const pending = [root];
-  let looked = 0;
-  for (let dir = pending.shift(); dir; dir = pending.shift()) {
-    // biome-ignore lint/performance/noAwaitInLoops: breadth first, one dir at a time, nearest the root first
-    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
-    for (const entry of entries) {
-      looked += 1;
-      if (looked > OWNER_ONLY_SCAN_MAX) {
-        return found;
+  const { stdout } = await new Promise<{ stdout: string }>((done, fail) => {
+    execFile(
+      "find",
+      [
+        root,
+        "-mindepth",
+        "1",
+        "(",
+        "-name",
+        ".git",
+        "-o",
+        "-name",
+        "node_modules",
+        ")",
+        "-prune",
+        "-o",
+        "(",
+        "-type",
+        "d",
+        "-o",
+        "-type",
+        "f",
+        ")",
+        "!",
+        "-perm",
+        ANY_GROUP_OR_OTHER_BIT,
+        "-print0",
+        "-prune",
+      ],
+      { encoding: "utf8", maxBuffer: OWNER_ONLY_OUTPUT_MAX },
+      (error, out) => {
+        if (error && error.code !== 1) {
+          fail(
+            new Error(
+              `the files only their owner may read in ${root} could not be found: ${error.message}`,
+              { cause: error }
+            )
+          );
+          return;
+        }
+        done({ stdout: out });
       }
-      if (!(entry.isDirectory() || entry.isFile())) {
-        continue;
-      }
-      const path = join(dir, entry.name);
-      // biome-ignore lint/performance/noAwaitInLoops: one entry at a time, the scan's count kept as it goes
-      const mode = (await lstat(path).catch(() => undefined))?.mode;
-      if (mode === undefined) {
-        continue;
-      }
-      // biome-ignore lint/suspicious/noBitwiseOperators: a mode's group and other bits
-      if ((mode & 0o077) === 0) {
-        found.push(path);
-      } else if (entry.isDirectory() && !OWNER_ONLY_SKIP.has(entry.name)) {
-        pending.push(path);
-      }
-    }
-  }
-  return found;
+    );
+  });
+  return stdout.split("\0").filter(Boolean);
 };
 
 const unique = (paths: string[]): string[] => [...new Set(paths)];
