@@ -369,8 +369,14 @@ final class PeerView: RailRow, RowContent, Disclosing {
         else if block.state == "pending" || block.queued { stateWord = ("queued", Palette.inkMuted) }
         state.attributedText = stateWord.map { Styled.string($0.0, TypeScale.typeLabel, color: $0.1, leading: TypeScale.leadingUi) }
         state.isHidden = stateWord == nil
-        let first = block.content.split(separator: "\n").map { $0.replacing(/[*_`#>]/, with: "").trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? ""
-        excerpt.attributedText = Styled.string(first, TypeScale.typeLabel, color: Palette.inkMuted, weight: TypeScale.weightBody, leading: TypeScale.leadingUi)
+        // A report's headline is written to be read whole (Peer `.excerpt.headline`):
+        // it wraps rather than being cut to the one line. Else the body's first line.
+        let headline = block.string("reportHeadline") ?? ""
+        let first = !headline.isEmpty ? headline
+            : block.content.split(separator: "\n").map { $0.replacing(/[*_`#>]/, with: "").trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? ""
+        excerpt.numberOfLines = headline.isEmpty ? 1 : 0
+        excerpt.attributedText = Styled.string(first, TypeScale.typeLabel, color: Palette.inkMuted, weight: TypeScale.weightBody, leading: TypeScale.leadingUi,
+                                               lineBreak: headline.isEmpty ? .byTruncatingTail : .byWordWrapping)
         let open = env.isOpen(key)
         excerpt.alpha = open ? 0 : 1
         excerpt.isHidden = first.isEmpty

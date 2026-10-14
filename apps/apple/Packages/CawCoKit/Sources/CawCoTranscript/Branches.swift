@@ -597,7 +597,13 @@ final class DelegateView: RailRow, RowContent, Disclosing {
 
     enum Phase: String { case spawning, working, blocked, reported, idle, sleeping, stopping, stopped, failed }
 
-    struct Report { let body: String; let failed: Bool; let count: Int; let at: Date? }
+    /// `headline`: the delegate's own short outcome (`metadata.reportHeadline`),
+    /// shown whole; reports from before it carry none.
+    struct Report {
+        let body: String; let headline: String?; let failed: Bool; let count: Int; let at: Date?
+        /// What the card's lines say of it: the headline whole, else the body's first line.
+        var line: String { headline.flatMap { $0.isEmpty ? nil : $0 } ?? CawCoTranscript.headline(body) }
+    }
 
     private func facts(_ block: Block) -> (phase: Phase, report: Report?, asks: [String], failure: String, row: InstanceRow?) {
         let id = block.string("delegateInstanceId")
@@ -605,7 +611,7 @@ final class DelegateView: RailRow, RowContent, Disclosing {
         let parent = env.parentBlocks()
         // Its reports and asks, read back out of this transcript's own peer lines.
         let peers = id.map { id in parent.filter { $0.type == "user.peer" && $0.meta["reportKind"] != nil && Self.matches($0.string("peerSession"), id) } } ?? []
-        let report = peers.last.map { Report(body: $0.content, failed: $0.string("reportKind") == "failed", count: peers.count, at: $0.date) }
+        let report = peers.last.map { Report(body: $0.content, headline: $0.string("reportHeadline"), failed: $0.string("reportKind") == "failed", count: peers.count, at: $0.date) }
         var waiting: [String] = []
         if let id {
             for ask in parent where ask.type == "user.delegate_ask" && Self.matches(ask.string("peerSession"), id) {
@@ -628,7 +634,7 @@ final class DelegateView: RailRow, RowContent, Disclosing {
         else if row?.status == .stopped { phase = .stopped }
         else { phase = report == nil ? .idle : .reported }
         let failure = spawnFailed ? headline(block.toolResult ?? "The spawn failed.")
-            : (row?.lastError ?? (report?.failed == true ? headline(report?.body ?? "") : ""))
+            : (row?.lastError ?? (report?.failed == true ? report?.line ?? "" : ""))
         return (phase, report, waiting, failure, row)
     }
 
@@ -719,7 +725,7 @@ final class DelegateView: RailRow, RowContent, Disclosing {
             status.set(f.failure, beat: false, ink: Palette.statusFailInk)
         default:
             if let report = f.report, !open {
-                status.set(headline(report.body), beat: false, ink: report.failed ? Palette.statusFailInk : Palette.inkStrong)
+                status.set(report.line, beat: false, ink: report.failed ? Palette.statusFailInk : Palette.inkStrong)
             } else { shown = false }
         }
         // Each line under the head brings its own 4pt above it (Delegate
