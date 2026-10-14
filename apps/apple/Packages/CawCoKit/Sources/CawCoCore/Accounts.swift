@@ -13,7 +13,13 @@ public enum FleetAccounts {
     /// Whether CawCo reads a provider's limits (core `LIMITED_PROVIDERS`):
     /// reserves, Spread, Soonest reset and the at-limit moves apply.
     public static func limits(_ provider: String) -> Bool {
-        [claude, "openai-codex", "opencode-go"].contains(provider)
+        Words.Accounts.Rules.limitedProviders.contains(provider)
+    }
+
+    /// Whether a provider with this many accounts has a routing to choose
+    /// (core `hasRouting`): the list's Routing, and the routing editor's page.
+    public static func hasRouting(_ accounts: Int) -> Bool {
+        accounts >= Words.Accounts.Rules.routingFrom
     }
 
     // MARK: Wire
@@ -61,7 +67,9 @@ public enum FleetAccounts {
         public var prepareAtPct: Int
 
         /// core `DEFAULT_AT_LIMIT`.
-        public static let standard = AtLimit(move: true, waitMinutes: 15, moveWholeUnderK: 200, prepareAtPct: 90)
+        public static let standard = AtLimit(move: Words.Accounts.Rules.AtLimit.move, waitMinutes: Words.Accounts.Rules.AtLimit.waitMinutes,
+                                             moveWholeUnderK: Words.Accounts.Rules.AtLimit.moveWholeUnderK,
+                                             prepareAtPct: Words.Accounts.Rules.AtLimit.prepareAtPct)
     }
 
     /// One provider's routing (core `ProviderRouting`).
@@ -74,8 +82,10 @@ public enum FleetAccounts {
         /// A provider's routing until it is saved (core `defaultRouting`).
         public static func standard(_ provider: String) -> Routing {
             limits(provider)
-                ? Routing(provider: provider, yours: .init(strategy: "pinned"), delegates: .init(strategy: "soonest-reset"), atLimit: .standard)
-                : Routing(provider: provider, yours: .init(strategy: "fill-first"), delegates: .init(strategy: "fill-first"), atLimit: .standard)
+                ? Routing(provider: provider, yours: .init(strategy: Words.Accounts.Rules.LimitedDefaults.yours),
+                          delegates: .init(strategy: Words.Accounts.Rules.LimitedDefaults.delegates), atLimit: .standard)
+                : Routing(provider: provider, yours: .init(strategy: Words.Accounts.Rules.UnlimitedDefaults.yours),
+                          delegates: .init(strategy: Words.Accounts.Rules.UnlimitedDefaults.delegates), atLimit: .standard)
         }
     }
 
@@ -119,9 +129,10 @@ public enum FleetAccounts {
     // MARK: Names
 
     /// The colours an account can take, in the order the swatches offer them.
-    public static let swatches = ["orange", "cyan", "green", "amber", "blue", "rose", "violet"]
+    public static let swatches = Words.Accounts.swatches.map(\.hue)
 
-    public static let hueNames = ["amber": "Amber", "blue": "Blue", "cyan": "Cyan", "green": "Green", "orange": "Orange", "rose": "Rose", "violet": "Violet"]
+    /// Each colour's name, as a swatch is read out.
+    public static let hueNames = Dictionary(uniqueKeysWithValues: Words.Accounts.swatches.map { ($0.hue, $0.name) })
 
     /// A new account's colour: the first swatch none of its provider's accounts wears.
     public static func nextHue(_ accounts: [Account]) -> String {
@@ -132,10 +143,11 @@ public enum FleetAccounts {
     /// nickname goes by its last four characters (its identity's email is `…a1b2`).
     public static func name(label: String?, email: String?, kind: String?) -> String {
         if kind == "api_key", label == nil, let email {
-            let tail = email.hasPrefix("…") ? String(email.dropFirst()) : email
-            return "••••\(tail.suffix(4))"
+            // Its identity's email is `…a1b2`: the ellipsis is not one of the four.
+            let tail = email.drop { $0 == "\u{2026}" }
+            return Words.Accounts.keyTail(tail: String(tail.suffix(4)))
         }
-        return label ?? email ?? "an account not signed in yet"
+        return label ?? email ?? Words.Accounts.unnamed
     }
 
     public static func name(_ account: Account) -> String {
@@ -145,13 +157,13 @@ public enum FleetAccounts {
     /// A provider row as the picker names it: "OpenRouter API key", "Anthropic Console".
     public static func choiceLabel(_ choice: Choice) -> String {
         guard choice.provider == claude else { return choice.name }
-        return choice.kind == "console" ? "Anthropic Console" : "Claude"
+        return choice.kind == "console" ? Words.Accounts.anthropicConsole : Words.Accounts.claude
     }
 
     /// What a provider is called: its first picker row's name ("Claude" for Anthropic).
     @MainActor
     public static func providerName(_ provider: String, hub: HubConnection) -> String {
-        choices(hub)?.first { $0.provider == provider }?.name ?? (provider == claude ? "Claude" : provider)
+        choices(hub)?.first { $0.provider == provider }?.name ?? (provider == claude ? Words.Accounts.claude : provider)
     }
 
     /// The harnesses that use an account of a provider.
@@ -165,19 +177,17 @@ public enum FleetAccounts {
         return seen
     }
 
-    public static let harnessWords = ["claude": "Claude Code", "opencode": "OpenCode", "pi": "pi"]
+    /// A harness as a sentence names it ("Claude Code"), by its kind.
+    public static let harnessWords = Words.Accounts.Harnesses.byKey
+
+    /// The order harnesses are named in: "OpenCode and pi".
+    private static let harnessOrder = ["claude", "opencode", "pi"]
 
     /// "Claude Code", "OpenCode and pi": the harnesses that use a provider's accounts.
     @MainActor
     public static func harnessWords(_ provider: String, hub: HubConnection) -> String {
         let uses = harnesses(provider, hub: hub)
-        return list(["claude", "opencode", "pi"].filter(uses.contains).compactMap { harnessWords[$0] })
-    }
-
-    /// "obelisk", "obelisk and mac", "a, b and c": names as a sentence lists them.
-    public static func list(_ names: [String]) -> String {
-        guard names.count > 1 else { return names.first ?? "" }
-        return names.dropLast().joined(separator: ", ") + " and " + names[names.count - 1]
+        return Words.Accounts.harnessList(names: harnessOrder.filter(uses.contains).compactMap { harnessWords[$0] })
     }
 
     // MARK: Machines
@@ -239,13 +249,12 @@ public enum FleetAccounts {
         let mine = view.signins.filter { $0.accountId == account.id }
         let online = machines(for: account.provider, hub: hub).filter(Self.online)
         if let other = online.first(where: { state(mine, account: account.id, machine: $0.machineId) == "mismatch" }) {
-            return "\(other.name) is signed in as someone else"
+            return Words.Accounts.Problem.someoneElse(machine: other.name)
         }
-        if !mine.contains(where: { $0.state == "signed-in" }) { return "Not signed in on any machine" }
+        if !mine.contains(where: { $0.state == "signed-in" }) { return Words.Accounts.Problem.nowhere }
         let missing = online.filter { state(mine, account: account.id, machine: $0.machineId) != "signed-in" }
         guard let first = missing.first else { return nil }
-        let others = missing.count - 1
-        return others == 0 ? "Not signed in on \(first.name)" : "Not signed in on \(first.name) and \(others) other\(others == 1 ? "" : "s")"
+        return Words.Accounts.Problem.missingOn(machine: first.name, others: missing.count - 1)
     }
 
     /// The accounts the Accounts row flags: one a machine signed in as
@@ -264,24 +273,15 @@ public enum FleetAccounts {
         view.routing.first { $0.provider == provider }
     }
 
-    /// A strategy, as the picker draws it.
-    public struct Strategy: Equatable, Sendable {
-        public let id: String
-        public let label: String
-        public let line: String
-    }
+    /// A strategy, as the picker draws it: its id, its card's name and line.
+    public typealias Strategy = Words.Accounts.Strategy
 
-    public static let strategies = [
-        Strategy(id: "pinned", label: "Pinned", line: "Always one account"),
-        Strategy(id: "fill-first", label: "Fill first", line: "In your order; the next when one is blocked"),
-        Strategy(id: "spread", label: "Spread", line: "The account with the most headroom"),
-        Strategy(id: "soonest-reset", label: "Soonest reset", line: "Whose 5-hour window resets first"),
-    ]
+    public static let strategies = Words.Accounts.strategies
 
     /// The strategies a provider's routing offers (core `strategiesFor`): all
     /// four where CawCo reads its limits, Pinned and Fill first where it doesn't.
     public static func strategies(for provider: String) -> [Strategy] {
-        limits(provider) ? strategies : strategies.filter { ["pinned", "fill-first"].contains($0.id) }
+        limits(provider) ? strategies : strategies.filter { Words.Accounts.Rules.unlimitedStrategies.contains($0.id) }
     }
 
     public static func strategyLabel(_ id: String) -> String {
@@ -297,16 +297,16 @@ public enum FleetAccounts {
     static func choiceLine(_ accounts: [Account], _ choice: StrategyChoice) -> String {
         let label = strategyLabel(choice.strategy)
         guard choice.strategy == "pinned", let pin = pinned(accounts, choice.pinnedAccountId) else { return label }
-        return "\(label) to \(name(pin))"
+        return Words.Accounts.RoutingEditor.pinnedTo(strategy: label, account: name(pin))
     }
 
     /// "You: Pinned to you@gmail.com · Delegates: Soonest reset".
     public static func routingLine(_ accounts: [Account], yours: StrategyChoice, delegates: StrategyChoice) -> String {
-        "You: \(choiceLine(accounts, yours)) · Delegates: \(choiceLine(accounts, delegates))"
+        Words.Accounts.RoutingEditor.line(yours: choiceLine(accounts, yours), delegates: choiceLine(accounts, delegates))
     }
 
-    /// The terms that cover moving a conversation between subscriptions.
-    public static let termsURL = URL(string: "https://code.claude.com/docs/en/legal-and-compliance")!
+    /// The terms that cover moving a conversation between subscriptions (core `ACCOUNT_RULES.termsUrl`).
+    public static let termsURL = URL(string: Words.Accounts.Rules.termsUrl)!
 }
 
 // MARK: Writes (client.svelte.ts)
@@ -362,7 +362,8 @@ public extension HubConnection {
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200 ..< 300).contains(status) else {
-            throw ControlError(message: Wire.words(data) ?? "The hub answered \(status).")
+            // The hub's own sentence; one it did not write is what its status says (Wire.reason).
+            throw ControlError(message: Wire.words(data) ?? Wire.reason(data, status: status))
         }
         await reloadAccounts()
         return data

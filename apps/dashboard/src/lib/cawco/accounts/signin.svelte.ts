@@ -8,6 +8,7 @@
  * the machine answers: a tab opened after an `await` is a popup the
  * browser blocks.
  */
+import { accountsWords } from "@cawco/core";
 import { beginSignin, completeSignin } from "../client.svelte";
 import { failureWords } from "../hub-read";
 
@@ -84,8 +85,7 @@ export class SigninFlow {
       this.code = "";
       if (result.state === "signed-out") {
         this.phase = "ready";
-        this.problem =
-          "That code didn't sign the machine in. Open the sign-in link again for a new code.";
+        this.problem = accountsWords.signin.refused;
         return;
       }
       this.phase = result.state;

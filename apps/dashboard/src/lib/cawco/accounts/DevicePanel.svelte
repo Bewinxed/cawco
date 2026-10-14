@@ -9,6 +9,7 @@
    * The well arrives as a transcript row does: its place opens, then its
    * content fades up 3px into it.
    */
+  import { accountsWords } from "@cawco/core";
   import type { TransitionConfig } from "svelte/transition";
   import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -23,13 +24,18 @@
     online,
   }: { flow: DeviceFlow; machine: string; online: boolean } = $props();
 
+  const words = accountsWords.device;
+
   /** The code as it is read out: in fours. */
   const groups = $derived(
     (flow.code ?? "").replace(/[^\da-z]/gi, "").match(/.{1,4}/g) ?? []
   );
   const left = $derived(Math.max(0, flow.expiresAt - flow.now));
   const clock = $derived(
-    `${Math.floor(left / 60_000)}:${String(Math.floor((left % 60_000) / 1000)).padStart(2, "0")}`
+    words.countdown(
+      Math.floor(left / 60_000),
+      Math.floor((left % 60_000) / 1000)
+    )
   );
   const shown = $derived(flow.phase === "waiting" || flow.phase === "expired");
 
@@ -65,12 +71,15 @@
   {#if flow.phase === "signed-in"}
     <p class="got" role="status">
       <Check />
-      <span>Signed in as <b>{flow.email ?? "the account"}</b></span>
+      <span
+        >{accountsWords.signin.signedInAs}
+        <b>{flow.email ?? accountsWords.signin.theAccount}</b></span
+      >
     </p>
   {:else}
     {#if shown}
       <div class={["well", flow.phase === "expired" && "dim"]} in:openPlace>
-        <span class="sr-only">Code {flow.code}</span>
+        <span class="sr-only">{words.said(flow.code ?? "")}</span>
         <span aria-hidden="true" class="code">
           {#each groups as group, at (at)}
             <span>{group}</span>
@@ -81,12 +90,12 @@
     <div class="row">
       {#if flow.phase === "waiting"}
         <CopyButton size="sm" text={flow.code ?? ""} variant="outline"
-          >Copy code</CopyButton
+          >{words.copy}</CopyButton
         >
         <Button
           href={flow.url ?? undefined}
           icon={IconArrowUpRight}
-          label="Open sign-in link"
+          label={accountsWords.signin.openLink}
           rel="noopener noreferrer"
           size="sm"
           target="_blank"
@@ -95,28 +104,27 @@
       {:else if online}
         <Button
           label={flow.phase === "idle" || flow.phase === "starting"
-            ? "Start sign-in"
-            : "Start again"}
+            ? words.start
+            : words.again}
           onclick={() => flow.start()}
           pending={flow.phase === "starting"}
-          pendingLabel="Starting…"
+          pendingLabel={words.starting}
           size="sm"
           variant="outline"
         />
       {/if}
     </div>
     {#if flow.phase === "waiting"}
-      <p class="line">Enter it within <span class="num">{clock}</span></p>
+      <p class="line">
+        {words.enterWithin}
+        <span class="num">{clock}</span>
+      </p>
     {:else if flow.phase === "expired"}
-      <p class="line">Code expired.</p>
+      <p class="line">{words.expired}</p>
     {:else if flow.phase === "mismatch"}
       <p class="warn" role="alert">
         <IconWarningTriangle aria-hidden="true" />
-        <span
-          >{machine}
-          signed in as {flow.email ?? "another account"}, so it signed out
-          again.</span
-        >
+        <span>{words.mismatch(machine, flow.email)}</span>
       </p>
     {/if}
     {#if flow.problem}

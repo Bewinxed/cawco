@@ -13,10 +13,10 @@ final class PastePanel: UIStackView, UITextFieldDelegate {
     private let machine: String
     private let expected: String?
     private let offline = metaLine()
-    private lazy var link = KitButton.make("Open sign-in link", glyph: .external, variant: .outline, height: .sm) { [weak self] in self?.openLink() }
-    private let then = metaLine("then paste the code")
-    private let field = KitField(placeholder: "Code")
-    private lazy var doneButton = KitButton.make("Done", variant: .action, height: .sm) { [weak self] in self?.submit() }
+    private lazy var link = KitButton.make(Words.Accounts.Signin.openLink, glyph: .external, variant: .outline, height: .sm) { [weak self] in self?.openLink() }
+    private let then = metaLine(Words.Accounts.Signin.thenPaste)
+    private let field = KitField(placeholder: Words.Accounts.Signin.codePlaceholder)
+    private lazy var doneButton = KitButton.make(Words.Accounts.Signin.done, variant: .action, height: .sm) { [weak self] in self?.submit() }
     private let problem = metaLine(ink: Palette.statusFailInk)
     private let warn = metaLine(ink: Palette.statusAttnInk)
     private let got = SignedInLine()
@@ -32,7 +32,7 @@ final class PastePanel: UIStackView, UITextFieldDelegate {
         let linkRow = UIStackView(arrangedSubviews: [link, then, UIView()])
         linkRow.spacing = Space.space2
         linkRow.alignment = .center
-        field.accessibilityLabel = "Code from the sign-in page"
+        field.accessibilityLabel = Words.Accounts.Signin.codeLabel
         field.accessibilityIdentifier = "signin.code.\(flow.machineId)"
         field.delegate = self
         field.returnKeyType = .done
@@ -59,7 +59,7 @@ final class PastePanel: UIStackView, UITextFieldDelegate {
 
     /// Reads the flow (an observed read: its owner draws again when it moves).
     func draw(online: Bool) {
-        offline.text = online ? nil : "\(machine) is offline. Sign in there once it's back."
+        offline.text = online ? nil : Words.Accounts.Signin.offline(machine: machine)
         offline.isHidden = online
         link.isEnabled = online || flow.url != nil
         _ = flow.phase
@@ -70,21 +70,20 @@ final class PastePanel: UIStackView, UITextFieldDelegate {
 
     private func paint() {
         let phase = flow.phase
-        KitButton.setTitle(phase == .opening ? "Opening…" : "Open sign-in link", of: link, variant: .outline, height: .sm)
+        let words = Words.Accounts.Signin.self
+        KitButton.setTitle(phase == .opening ? words.opening : words.openLink, of: link, variant: .outline, height: .sm)
         link.configuration?.showsActivityIndicator = phase == .opening
         field.isEnabled = flow.url != nil && phase != .signedIn
         if !field.isFirstResponder, field.text != flow.code { field.text = flow.code }
-        KitButton.setTitle(phase == .checking ? "Checking…" : "Done", of: doneButton, variant: .action, height: .sm)
+        KitButton.setTitle(phase == .checking ? words.checking : words.done, of: doneButton, variant: .action, height: .sm)
         doneButton.configuration?.showsActivityIndicator = phase == .checking
         doneButton.isEnabled = flow.url != nil && !flow.code.trimmingCharacters(in: .whitespaces).isEmpty && phase != .checking
-        field.accessibilityValue = flow.problem == nil ? nil : "Invalid"
+        field.accessibilityValue = flow.problem == nil ? nil : Words.Accounts.Editor.invalid
         problem.text = flow.problem
         fold(problem, open: flow.problem != nil)
-        warn.text = phase == .mismatch
-            ? "\(machine) signed in as \(flow.email ?? "another account"), so it signed out again. Sign in as \(expected ?? "this account") with a new link."
-            : nil
+        warn.text = phase == .mismatch ? words.mismatch(machine: machine, who: flow.email, expected: expected) : nil
         fold(warn, open: flow.problem == nil && phase == .mismatch)
-        if phase == .signedIn, drawnPhase != .signedIn { got.say(flow.email ?? expected ?? "the account") }
+        if phase == .signedIn, drawnPhase != .signedIn { got.say(flow.email ?? expected ?? words.theAccount) }
         fold(got, open: flow.problem == nil && phase == .signedIn)
         drawnPhase = phase
     }
@@ -129,9 +128,9 @@ final class DevicePanel: UIStackView {
     private let machine: String
     private let well = UIView()
     private let codeLabel = KitLabel(TypeScale.typeCode, ink: Palette.inkStrong)
-    private lazy var copy = KitButton.make("Copy code", glyph: .copy, variant: .outline, height: .sm) { [weak self] in self?.copyCode() }
-    private lazy var link = KitButton.make("Open sign-in link", glyph: .external, variant: .outline, height: .sm) { [weak self] in self?.openLink() }
-    private lazy var start = KitButton.make("Start sign-in", variant: .outline, height: .sm) { [weak self] in self?.begin() }
+    private lazy var copy = KitButton.make(Words.Accounts.Device.copy, glyph: .copy, variant: .outline, height: .sm) { [weak self] in self?.copyCode() }
+    private lazy var link = KitButton.make(Words.Accounts.Signin.openLink, glyph: .external, variant: .outline, height: .sm) { [weak self] in self?.openLink() }
+    private lazy var start = KitButton.make(Words.Accounts.Device.start, variant: .outline, height: .sm) { [weak self] in self?.begin() }
     private let line = metaLine()
     private let warn = metaLine(ink: Palette.statusAttnInk)
     private let problem = metaLine(ink: Palette.statusFailInk)
@@ -177,8 +176,9 @@ final class DevicePanel: UIStackView {
         self.online = online
         let phase = flow.phase
         let waiting = phase == .waiting
+        let words = Words.Accounts.Device.self
         if phase == .signedIn {
-            if drawnPhase != .signedIn { got.say(flow.email ?? "the account") }
+            if drawnPhase != .signedIn { got.say(flow.email ?? Words.Accounts.Signin.theAccount) }
             for part in [well, buttons, line, warn, problem] { fold(part, open: false) }
             fold(got, open: true)
             drawnPhase = phase
@@ -190,22 +190,23 @@ final class DevicePanel: UIStackView {
         codeLabel.text = stride(from: 0, to: bare.count, by: 4).map { at in
             String(bare.dropFirst(at).prefix(4))
         }.joined(separator: "  ")
-        codeLabel.accessibilityLabel = "Code \(flow.code ?? "")"
+        codeLabel.accessibilityLabel = words.said(code: flow.code ?? "")
         fold(well, open: waiting || phase == .expired)
         Motion.easeOut.animator(Motion.durFade) { self.well.alpha = phase == .expired ? 0.5 : 1 }.startAnimation()
         copy.isHidden = !waiting
         link.isHidden = !waiting
         start.isHidden = waiting || !online
-        KitButton.setTitle(phase == .starting ? "Starting…" : phase == .idle ? "Start sign-in" : "Start again", of: start, variant: .outline, height: .sm)
+        KitButton.setTitle(phase == .starting ? words.starting : phase == .idle ? words.start : words.again, of: start, variant: .outline, height: .sm)
         start.configuration?.showsActivityIndicator = phase == .starting
-        KitButton.setTitle(copied ? "Copied" : "Copy code", of: copy, variant: .outline, height: .sm)
+        KitButton.setTitle(copied ? words.copied : words.copy, of: copy, variant: .outline, height: .sm)
         buttons.isHidden = buttons.arrangedSubviews.dropLast().allSatisfy(\.isHidden)
         let left = max(0, flow.expiresAt - flow.now)
-        let clock = "\(Int(left / 60000)):\(String(format: "%02d", Int(left.truncatingRemainder(dividingBy: 60000) / 1000)))"
-        line.text = waiting ? "Enter it within \(clock)" : phase == .expired ? "Code expired." : nil
+        let clock = words.countdown(minutes: Int(left / 60000), seconds: Int(left.truncatingRemainder(dividingBy: 60000) / 1000))
+        // "Enter it within" and the clock, a space between as in the web's markup.
+        line.text = waiting ? [words.enterWithin, clock].joined(separator: " ") : phase == .expired ? words.expired : nil
         line.tabular = true
         fold(line, open: line.text != nil)
-        warn.text = phase == .mismatch ? "\(machine) signed in as \(flow.email ?? "another account"), so it signed out again." : nil
+        warn.text = phase == .mismatch ? words.mismatch(machine: machine, who: flow.email) : nil
         fold(warn, open: warn.text != nil)
         problem.text = flow.problem
         fold(problem, open: flow.problem != nil)
@@ -246,11 +247,11 @@ final class KeyPanel: UIStackView {
     private weak var hub: HubConnection?
     private let account: () async throws -> String
     private var machines: [MachineRow]
-    private let field = KitField(placeholder: "Paste the key")
-    private lazy var reveal = KitGhostButton(.eye, label: "Show key")
-    private lazy var send = KitButton.make("Send key", variant: .action, height: .sm) { [weak self] in self?.sendKey() }
+    private let field = KitField(placeholder: Words.Accounts.Key.placeholder)
+    private lazy var reveal = KitGhostButton(.eye, label: Words.Accounts.Key.show)
+    private lazy var send = KitButton.make(Words.Accounts.Key.send, variant: .action, height: .sm) { [weak self] in self?.sendKey() }
     /// Send key once Continue is the step's primary.
-    private lazy var sendSecondary = KitButton.make("Send key", variant: .outline, height: .sm) { [weak self] in self?.sendKey() }
+    private lazy var sendSecondary = KitButton.make(Words.Accounts.Key.send, variant: .outline, height: .sm) { [weak self] in self?.sendKey() }
     private let sendOutcome = metaLine()
     private let problem = metaLine(ink: Palette.statusFailInk)
     private let list = UIStackView()
@@ -272,7 +273,7 @@ final class KeyPanel: UIStackView {
         spacing = Space.space3
         field.isSecureTextEntry = true
         field.textContentType = .password
-        field.accessibilityLabel = "API key"
+        field.accessibilityLabel = Words.Accounts.Key.label
         field.accessibilityIdentifier = "key.field"
         field.rightView = reveal
         field.rightViewMode = .always
@@ -282,8 +283,8 @@ final class KeyPanel: UIStackView {
             field.isSecureTextEntry.toggle()
             let hidden = field.isSecureTextEntry
             reveal.configuration?.image = (hidden ? Glyph.eye : Glyph.eyeClosed).image.resized(to: Size.iconMd)
-            reveal.accessibilityLabel = hidden ? "Show key" : "Hide key"
-            reveal.accessibilityValue = hidden ? nil : "Shown"
+            reveal.accessibilityLabel = hidden ? Words.Accounts.Key.show : Words.Accounts.Key.hide
+            reveal.accessibilityValue = hidden ? nil : Words.Accounts.Key.shown
         }, for: .primaryActionTriggered)
         list.axis = .vertical
         send.accessibilityIdentifier = "key.send"
@@ -317,7 +318,7 @@ final class KeyPanel: UIStackView {
 
     private func outcome(_ machineId: String) -> (String, UIColor)? {
         guard let result = outcomes[machineId] else { return nil }
-        return result.ok ? ("Key sent", Palette.inkRow) : (result.why, Palette.statusFailInk)
+        return result.ok ? (Words.Accounts.Key.sent, Palette.inkRow) : (result.why, Palette.statusFailInk)
     }
 
     private func drawMachines() {
@@ -340,7 +341,7 @@ final class KeyPanel: UIStackView {
             let name = KitLabel(TypeScale.typeLabel, ink: online ? Palette.inkStrong : Palette.inkMuted)
             name.text = machine.name
             name.lineBreakMode = .byTruncatingTail
-            let said = online ? outcome(id) : ("Offline", Palette.inkMuted)
+            let said = online ? outcome(id) : (Words.Accounts.Key.offline, Palette.inkMuted)
             let result = metaLine(said?.0, ink: said?.1 ?? Palette.inkMuted)
             result.textAlignment = .right
             let row = UIStackView(arrangedSubviews: [box, name, UIView(), result])
@@ -358,7 +359,7 @@ final class KeyPanel: UIStackView {
         let key = (field.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         for (button, variant) in [(send, KitButton.Variant.action), (sendSecondary, .outline)] {
             button.isHidden = (variant == .action) != primary
-            KitButton.setTitle(sending ? "Sending…" : "Send key", of: button, variant: variant, height: .sm)
+            KitButton.setTitle(sending ? Words.Accounts.Key.sending : Words.Accounts.Key.send, of: button, variant: variant, height: .sm)
             button.configuration?.showsActivityIndicator = sending
             button.isEnabled = !key.isEmpty && !targets.isEmpty && !sending
         }
@@ -399,8 +400,8 @@ final class KeyPanel: UIStackView {
                         landed = true
                     } else {
                         outcomes[answer.machineId] = (false, answer.result?.state == "mismatch"
-                            ? "That's a different key from this account's; it was taken back off."
-                            : "The machine didn't take the key.")
+                            ? Words.Accounts.Key.otherKey
+                            : Words.Accounts.Key.notTaken)
                     }
                 }
                 sending = false
@@ -448,7 +449,7 @@ final class AccountMachinesView: UIStackView {
     private let hub: HubConnection
     private let accountId: String
     private var rows: [String: AccountMachineRow] = [:]
-    private let none = metaLine("No machine runs this account's agents yet.")
+    private let none = metaLine(Words.Accounts.Machines.none)
     private var open: String?
     private var paste: [String: PasteSignin] = [:]
     private var device: [String: DeviceSignin] = [:]
@@ -465,7 +466,7 @@ final class AccountMachinesView: UIStackView {
         self.accountId = accountId
         super.init(frame: .zero)
         axis = .vertical
-        accessibilityLabel = "Machines"
+        accessibilityLabel = Words.Accounts.Editor.machines
         addArrangedSubview(none)
     }
 
@@ -604,7 +605,7 @@ final class AccountMachineRow: UIStackView {
     private let state = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let stateGlyph = GlyphView(.warning, size: 12, tint: Palette.statusAttnInk)
     private let spinner = KitSpinner(side: 12)
-    private lazy var action = KitButton.make("Sign in", variant: .outline, height: .sm) { [weak self] in self?.onAction?() }
+    private lazy var action = KitButton.make(Words.Accounts.Machines.signIn, variant: .outline, height: .sm) { [weak self] in self?.onAction?() }
     private var menu: UIButton?
     private let trail = UIStackView()
     private let slot = UIStackView()
@@ -659,13 +660,9 @@ final class AccountMachineRow: UIStackView {
         name.text = text
         accessibilityIdentifier = "account.machine.\(text)"
         let shown = online ? signin : "offline"
-        let said: String? = switch shown {
-        case "signed-out": "Not signed in"
-        case "mismatch": "Signed in as someone else"
-        case "offline": "Offline"
-        default: nil
-        }
-        let words = signingOut ? "Signing out…" : said
+        // What a row says: nothing for a machine it is signed in on (`WORDS`).
+        let said = Words.Accounts.Machines.State.byKey[shown]
+        let words = signingOut ? Words.Accounts.Machines.signingOut : said
         state.text = words
         state.ink = shown == "mismatch" && !signingOut ? Palette.statusAttnInk : Palette.inkMuted
         state.isHidden = words == nil
@@ -673,15 +670,17 @@ final class AccountMachineRow: UIStackView {
         spinner.isHidden = !signingOut
         let asks = online && (signin != "signed-in" || open)
         action.isHidden = !asks
-        let verb = key ? "Send key" : "Sign in"
-        KitButton.setTitle(open ? "Close" : verb, of: action, variant: .outline, height: .sm)
-        action.accessibilityLabel = open ? "Close the sign-in on \(text)" : "\(verb) \(account) on \(text)"
+        let verb = key ? Words.Accounts.Machines.sendKey : Words.Accounts.Machines.signIn
+        KitButton.setTitle(open ? Words.Accounts.Machines.close : verb, of: action, variant: .outline, height: .sm)
+        action.accessibilityLabel = open
+            ? Words.Accounts.Machines.closeOn(machine: text)
+            : Words.Accounts.Machines.signInOn(verb: verb, account: account, machine: text)
         action.accessibilityIdentifier = "account.signin.\(text)"
         menu?.removeFromSuperview()
         menu = nil
         if online, signin == "signed-in", !open {
-            let more = rowMenu("\(account) on \(text)", actions: [
-                RowAction(label: "Sign out on this machine", glyph: .logout, destructive: true, disabled: signingOut) { [weak self] in self?.onSignOut?() },
+            let more = rowMenu(Words.Accounts.Machines.accountOn(account: account, machine: text), actions: [
+                RowAction(label: Words.Accounts.Machines.signOut, glyph: .logout, destructive: true, disabled: signingOut) { [weak self] in self?.onSignOut?() },
             ])
             more.accessibilityIdentifier = "account.more.\(text)"
             trail.addArrangedSubview(more)

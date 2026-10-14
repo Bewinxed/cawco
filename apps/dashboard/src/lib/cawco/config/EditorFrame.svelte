@@ -15,6 +15,7 @@
    * section drawn before it would move down once it has. They cross-fade in
    * over --dur-control from their final places.
    */
+  import { configureWords } from "@cawco/core";
   import { onMount, type Snippet, untrack } from "svelte";
   import { fade } from "svelte/transition";
   import {
@@ -129,7 +130,7 @@
   );
 </script>
 
-<svelte:head><title>{title} · Configure · CawCo</title></svelte:head>
+<svelte:head><title>{configureWords.documentTitle(title)}</title></svelte:head>
 
 <form
   class="editor"
@@ -171,7 +172,7 @@
           <span class="narrow-menu">
             <DropdownMenu.Root>
               <DropdownMenu.Trigger
-                aria-label="More"
+                aria-label={configureWords.more}
                 class={buttonVariants({ variant: "ghost", size: "icon" })}
               >
                 <IconMore />

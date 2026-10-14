@@ -7,7 +7,7 @@
    * the email drops under the nickname when there is no room, rather than
    * ending in an ellipsis.
    */
-  import type { Account } from "@cawco/core";
+  import { type Account, accountsWords } from "@cawco/core";
   import { nameOf } from "./model.svelte";
 
   let {
@@ -24,7 +24,9 @@
 
 <span class={["name", row && "row", wrap && "wrap"]}>
   <b
-    >{account.label || account.email ? nameOf(account) : "Not signed in yet"}</b
+    >{account.label || account.email
+      ? nameOf(account)
+      : accountsWords.notSignedInYet}</b
   >
   {#if account.label && account.email}
     <small>{account.email}</small>

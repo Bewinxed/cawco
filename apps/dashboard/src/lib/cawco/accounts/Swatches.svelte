@@ -1,37 +1,27 @@
 <script lang="ts">
   /** The seven account colours; the chosen one ringed. */
-  import type { AccountHue } from "@cawco/core";
-  import { hueVar, SWATCHES } from "./model.svelte";
+  import { type AccountHue, accountsWords } from "@cawco/core";
+  import { hueVar } from "./model.svelte";
 
   let {
     value = $bindable(),
-    label = "Colour",
+    label = accountsWords.colour,
   }: { value: AccountHue; label?: string } = $props();
-
-  const NAMES: Record<AccountHue, string> = {
-    amber: "Amber",
-    blue: "Blue",
-    cyan: "Cyan",
-    green: "Green",
-    orange: "Orange",
-    rose: "Rose",
-    violet: "Violet",
-  };
 </script>
 
 <div aria-label={label} class="swatches" role="radiogroup">
-  {#each SWATCHES as hue (hue)}
+  {#each accountsWords.swatches as swatch (swatch.hue)}
     <!-- biome-ignore lint/a11y/useSemanticElements: a colour swatch ringed when chosen; a native radio cannot draw it -->
     <button
-      aria-checked={value === hue}
-      aria-label={NAMES[hue]}
+      aria-checked={value === swatch.hue}
+      aria-label={swatch.name}
       class="swatch touch-hit"
       onclick={() => {
-        value = hue;
+        value = swatch.hue;
       }}
       role="radio"
       type="button"
-      style:--c={hueVar(hue)}
+      style:--c={hueVar(swatch.hue)}
     ></button>
   {/each}
 </div>

@@ -24,8 +24,10 @@
     "lint": "ultracite check",
     "lint:changed": "git diff --name-only --diff-filter=ACMR \"$(git merge-base HEAD origin/main)\" | xargs -r biome check --no-errors-on-unmatched",
     "lint:fix": "ultracite fix",
-    "typecheck": "bun run --filter '*' typecheck && bun run --filter '@cawco/hub' openapi:check && bun run --filter '@cawco/hub' roles:check && bun run --filter '@cawco/core' openui:check && bun run --filter '@cawco/core' tools:check && bun run claude-paths:check && bun run apple-ops:check && bunx tsc --project tsconfig.json && bunx tsc --project scripts/tsconfig.json && bunx tsc --project scripts/probe-kit/tsconfig.json && bun run typecheck:coverage",
-    "typecheck:coverage": "bun scripts/typecheck-coverage.ts"
+    "typecheck": "bun run --filter '*' typecheck && bun run --filter '@cawco/hub' openapi:check && bun run --filter '@cawco/hub' roles:check && bun run --filter '@cawco/core' openui:check && bun run --filter '@cawco/core' tools:check && bun run claude-paths:check && bun run apple-ops:check && bun run words:check && bunx tsc --project tsconfig.json && bunx tsc --project scripts/tsconfig.json && bunx tsc --project scripts/probe-kit/tsconfig.json && bun run typecheck:coverage",
+    "typecheck:coverage": "bun scripts/typecheck-coverage.ts",
+    "words": "bun scripts/words-swift.ts",
+    "words:check": "bun scripts/words-swift.ts --check"
   },
   "overrides": {
     "@types/bun": "^1.4.2",

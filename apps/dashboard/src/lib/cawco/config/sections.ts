@@ -1,4 +1,9 @@
-import { userLayerLabel } from "@cawco/core";
+import {
+  CONFIG_GROUPS,
+  CONFIG_SECTIONS,
+  type ConfigSectionDefinition,
+  type ConfigSlug,
+} from "@cawco/core";
 import type { Component } from "svelte";
 import {
   IconAccounts,
@@ -12,177 +17,63 @@ import {
   IconPhone,
   IconRules,
   IconSubagent,
-  IconSubagents,
   IconTerminal,
   IconToolMcp,
 } from "#lib/icons.js";
 
-/** One entry of the Configure rail: where it lives and what it is for. */
-export interface ConfigSection {
-  /** It lists rows the rail counts beside its name; a setting has no count. */
-  counted: boolean;
-  group: string;
+/**
+ * One entry of the Configure rail: core's definition (CONFIG_SECTIONS, which
+ * the native app reads too), its Solar glyph as the component that draws
+ * it, and its hue token as the colour it is.
+ */
+export interface ConfigSection
+  extends Omit<ConfigSectionDefinition, "hue" | "icon"> {
   hue: string;
   icon: Component;
-  label: string;
-  /** The one line under the section's title. */
-  purpose: string;
-  slug: SectionSlug;
 }
 
-export type SectionSlug =
-  | "rules"
-  | "hooks"
-  | "delegate-types"
-  | "subagents"
-  | "cli-tools"
-  | "mcp"
-  | "skills"
-  | "memory"
-  | "accounts"
-  | "models"
-  | "phone"
-  | "previews"
-  | "spend"
-  | "updates";
+export type SectionSlug = ConfigSlug;
 
-export const SECTIONS: ConfigSection[] = [
-  {
-    slug: "rules",
-    counted: true,
-    group: "Automation",
-    label: "Rules",
-    purpose: "What CawCo answers when a session says something",
-    icon: IconRules,
-    hue: "var(--hue-green-500)",
-  },
-  {
-    slug: "hooks",
-    counted: true,
-    group: "Automation",
-    label: "Hooks",
-    purpose: "Scripts each machine runs at a session's lifecycle events",
-    icon: IconHook,
-    hue: "var(--hue-cyan-500)",
-  },
-  {
-    slug: "delegate-types",
-    counted: true,
-    group: "Agents",
-    label: "Delegate types",
-    purpose: "Presets a session's delegate call picks from",
-    icon: IconSubagents,
-    hue: "var(--hue-blue-500)",
-  },
-  {
-    slug: "subagents",
-    counted: true,
-    group: "Agents",
-    label: "Subagents",
-    purpose: `Agent files written to ${userLayerLabel("agents")} on every machine`,
-    icon: IconSubagent,
-    hue: "var(--hue-orange-500)",
-  },
-  {
-    slug: "cli-tools",
-    counted: true,
-    group: "Tools",
-    label: "Command-line tools",
-    purpose: "CLIs each machine must have",
-    icon: IconTerminal,
-    hue: "var(--hue-green-600)",
-  },
-  {
-    slug: "mcp",
-    counted: true,
-    group: "Tools",
-    label: "MCP servers",
-    purpose: "Servers written to every machine",
-    icon: IconToolMcp,
-    hue: "var(--hue-cyan-400)",
-  },
-  {
-    slug: "skills",
-    counted: true,
-    group: "Tools",
-    label: "Skills & plugins",
-    purpose: "Skills, plugins and marketplaces",
-    icon: IconBolt,
-    hue: "var(--hue-amber-500)",
-  },
-  {
-    slug: "memory",
-    counted: true,
-    group: "Memory",
-    label: "Memory files",
-    purpose: "CLAUDE.md and the model documents",
-    icon: IconBook,
-    hue: "var(--hue-blue-600)",
-  },
-  {
-    slug: "accounts",
-    counted: true,
-    group: "Hub",
-    label: "Accounts",
-    purpose: "Provider sign-ins, and which one a session runs on",
-    icon: IconAccounts,
-    hue: "var(--hue-cyan-500)",
-  },
-  {
-    slug: "models",
-    counted: false,
-    group: "Hub",
-    label: "Models CawCo uses",
-    purpose: "Jev's route (OpenRouter or a TypeSafe key), and fleet watch",
-    icon: IconCpu,
-    hue: "var(--hue-orange-500)",
-  },
-  {
-    slug: "spend",
-    counted: false,
-    group: "Hub",
-    label: "Spend",
-    purpose: "Project budgets",
-    icon: IconDollar,
-    hue: "var(--hue-amber-500)",
-  },
-  {
-    slug: "phone",
-    counted: false,
-    group: "Hub",
-    label: "Phone",
-    purpose: "Pushes to the CawCo app when something needs you",
-    icon: IconPhone,
-    hue: "var(--hue-green-500)",
-  },
-  {
-    slug: "previews",
-    counted: false,
-    group: "Hub",
-    label: "Previews",
-    purpose:
-      "How a session's previews are reached, each on an origin of its own",
-    icon: IconExternal,
-    hue: "var(--hue-cyan-400)",
-  },
-  {
-    slug: "updates",
-    counted: false,
-    group: "Hub",
-    label: "Updates",
-    purpose: "The builds your machines run, and when they install them",
-    icon: IconDownload,
-    hue: "var(--hue-blue-500)",
-  },
-];
+/**
+ * The component for each Solar name a section is drawn with. A name the
+ * definition gains that is not here throws as this module loads, so every
+ * page says so at once rather than one rail row drawing nothing.
+ */
+const GLYPHS: Record<string, Component> = {
+  "shield-check-bold-duotone": IconRules,
+  "routing-2-bold-duotone": IconHook,
+  "users-group-rounded-bold-duotone": IconAccounts,
+  "branching-paths-down-bold-duotone": IconSubagent,
+  "code-square-bold-duotone": IconTerminal,
+  "plug-circle-bold-duotone": IconToolMcp,
+  "bolt-bold-duotone": IconBolt,
+  "book-bold-duotone": IconBook,
+  "cpu-bold-duotone": IconCpu,
+  "dollar-bold-duotone": IconDollar,
+  "smartphone-bold-duotone": IconPhone,
+  "square-top-down-bold-duotone": IconExternal,
+  "download-bold-duotone": IconDownload,
+};
+
+const glyphOf = (icon: string): Component => {
+  const glyph = GLYPHS[icon];
+  if (!glyph) {
+    throw new Error(`no rail glyph for the Solar icon ${icon}`);
+  }
+  return glyph;
+};
+
+export const SECTIONS: ConfigSection[] = CONFIG_SECTIONS.map((section) => ({
+  ...section,
+  icon: glyphOf(section.icon),
+  hue: `var(--${section.hue})`,
+}));
 
 export const sectionOf = (slug: SectionSlug): ConfigSection =>
   SECTIONS.find((section) => section.slug === slug) as ConfigSection;
 
 /** The rail's groups, in order, each with its sections. */
-export const GROUPS = [
-  ...new Set(SECTIONS.map((section) => section.group)),
-].map((group) => ({
+export const GROUPS = CONFIG_GROUPS.map((group) => ({
   group,
   sections: SECTIONS.filter((section) => section.group === group),
 }));

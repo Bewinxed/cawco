@@ -258,8 +258,16 @@ final class Figure {
     static let capGap = 6.0
     static let capLine = 16.0
     static let capFoot = 8.0
+    /// A lane's clock, `m` minutes from its reset: "resets 4h 25m", "resets 12m" (figure.ts `resets`).
+    static func resets(_ m: Double) -> String {
+        let whole = max(0, Int(m.rounded()))
+        return Words.Accounts.Figure.resets(time: Words.Accounts.Figure.time(hours: whole / 60, minutes: whole % 60))
+    }
+
+    /// A window that just reset: all of it ahead (figure.ts `RESET`).
+    static let reset = Words.Accounts.Figure.resets(time: Words.Accounts.Figure.window)
     /// Illustrative clocks and fills, by lane.
-    static let clocks = ["resets 4h 25m", "resets 1h 10m", "resets 4h 50m", "resets 3h 05m"]
+    static let clocks = [resets(265), resets(70), resets(290), resets(185)]
     static let fills = [0.2, 0.3, 0.15, 0.25]
 
     struct LaneSpec {
@@ -268,7 +276,7 @@ final class Figure {
         var clock: (Double) -> String
         var glow = false
         var pin = false
-        var blocked = "blocked"
+        var blocked = Words.Accounts.Figure.blocked
     }
 
     final class LaneParts {
@@ -667,11 +675,6 @@ final class FigurePath {
 // MARK: Boards
 
 extension Figure {
-    private static func mins(_ m: Double) -> String {
-        let whole = max(0, Int(m.rounded()))
-        return whole >= 60 ? "\(whole / 60)h \(String(format: "%02d", whole % 60))m" : "\(whole)m"
-    }
-
     private static func fixed(_ text: String) -> (Double) -> String { { _ in text } }
 
     /// Builds `board` in `stage`, standing at its last frame; its height.
@@ -705,7 +708,7 @@ extension Figure {
         f.notch(pin, 3.95, 0.14)
         f.fill(pin, 4.2, 1, 0.4)
         f.pulse(pin, 4.6)
-        if limits { f.cap(4.6, 99, "At the limit → the policy below") }
+        if limits { f.cap(4.6, 99, Words.Accounts.Figure.policyBelow) }
         f.seam(5.6)
         return f
     }
@@ -776,12 +779,12 @@ extension Figure {
         let clock: (Int) -> (Double) -> String = { i in
             let b = base[safe: i] ?? 240
             if i == 0 {
-                return { t in t < 2.4 ? "resets \(mins(b - rate * t))" : t < 2.8 ? "resets 0m" : "resets 5h" }
+                return { t in t < 2.4 ? resets(b - rate * t) : t < 2.8 ? resets(0) : reset }
             }
-            return { t in "resets \(mins(b - rate * t))" }
+            return { t in resets(b - rate * t) }
         }
         let f = Figure(stage: stage, board: .soonest, specs: lanes.enumerated().map { i, lane in
-            LaneSpec(lane: lane, fill: start[safe: i] ?? 0.3, clock: clock(i), glow: i == 0, blocked: "full")
+            LaneSpec(lane: lane, fill: start[safe: i] ?? 0.3, clock: clock(i), glow: i == 0, blocked: Words.Accounts.Figure.full)
         })
         let first = f.lanes[0]
         let c1 = f.chip(0, 0.7)
@@ -795,7 +798,7 @@ extension Figure {
         first.ghost.set(2.4, [1]).to(2.5, [0], 0.6, .cssEaseOut)
         f.fill(0, 2.4, 0, 0.4)
         first.glow.to(2.4, [0], 0.3, .cssEaseOut)
-        f.cap(2.4, 3.7, "What’s unused at reset is wasted, so it goes first.")
+        f.cap(2.4, 3.7, Words.Accounts.Figure.unusedWasted)
         if f.lanes.count > 1 {
             f.lanes[1].glow.to(2.8, [1], 0.3, .cssEaseOut)
             f.chip(1, 2.8)
@@ -804,7 +807,7 @@ extension Figure {
         if f.lanes.count > 2 {
             f.block(2, 3.6)
             f.block(2, 4.5, on: false)
-            f.cap(3.8, 4.5, "A full account is skipped.")
+            f.cap(3.8, 4.5, Words.Accounts.Figure.fullSkipped)
         }
         if f.lanes.count > 1 {
             f.chip(1, 3.8)
@@ -819,8 +822,8 @@ extension Figure {
         guard lanes.count >= 2 else { return fill(stage, lanes) }
         let (runsOut, free) = (lanes[0], lanes[1])
         let f = Figure(stage: stage, board: .limit, specs: [
-            LaneSpec(lane: runsOut, fill: 0.85, clock: fixed("resets 12m")),
-            LaneSpec(lane: free, fill: 0.2, clock: fixed("resets 4h 25m")),
+            LaneSpec(lane: runsOut, fill: 0.85, clock: fixed(resets(12))),
+            LaneSpec(lane: free, fill: 0.2, clock: fixed(resets(265))),
         ])
         let (work, next) = (f.lanes[0], f.lanes[1])
         let runsInk = AccountInk.color(runsOut.hue)
@@ -829,14 +832,14 @@ extension Figure {
         work.fillTrack.to(0, [1], 1.6, .linear)
         work.f = 1
         f.pulse(0, 1.6)
-        f.cap(tc, 1.95, "Summary written early, while the cache is warm.")
+        f.cap(tc, 1.95, Words.Accounts.Figure.summaryEarly)
         let scenes: [(t0: Double, t1: Double, w: Int, tok: Int)] = [(2.0, 3.4, 12, 180), (3.4, 5.2, 120, 180), (5.2, 7.0, 120, 412)]
         let s0 = f.slot(0, 0)
         let s1 = f.slot(0, 1)
         let p0 = f.slot(1, 0)
         let p1 = f.slot(1, 1)
         let dy = p0.y - s0.y
-        var clocks: [(Double, Double, (Double) -> String)] = [(0, 2.0, { _ in "resets 12m" })]
+        var clocks: [(Double, Double, (Double) -> String)] = [(0, 2.0, { _ in resets(12) })]
         /// A layer at `x, y` (its top left, as `translate`), scaled about its centre.
         let place: (CALayer) -> ([Double]) -> [(String, Any)] = { layer in
             let half = CGPoint(x: layer.bounds.width / 2, y: layer.bounds.height / 2)
@@ -866,7 +869,7 @@ extension Figure {
             wrap.isUserInteractionEnabled = false
             f.fades.addSubview(wrap)
             let (ch, chBody) = f.chipLayer(runsInk, in: wrap.layer)
-            let tg = tag("\(q.tok)k", x: s0.x - 8, y: s0.y + 8, in: wrap)
+            let tg = tag(Words.Accounts.Figure.tokens(k: q.tok), x: s0.x - 8, y: s0.y + 8, in: wrap)
             let doc = CALayer()
             doc.bounds = CGRect(x: 0, y: 0, width: 10, height: 13)
             doc.cornerRadius = Radius.radiusHair
@@ -898,34 +901,35 @@ extension Figure {
             }
             switch branch {
             case "wait":
-                f.cap(q.t0 + 0.1, capEnd, "Waits \(q.w)m for the window to reset")
+                f.cap(q.t0 + 0.1, capEnd, Words.Accounts.Figure.waits(minutes: q.w))
                 clocks.append((q.t0, q.t1, { t in
-                    t < q.t0 + 0.1 ? "resets \(q.w)m" : t < q.t0 + 0.9 ? "resets \(mins(Double(q.w) * (1 - (t - q.t0 - 0.1) / 0.8)))" : "resets 5h"
+                    t < q.t0 + 0.1 ? Words.Accounts.Figure.resets(time: Words.Accounts.Figure.time(hours: 0, minutes: q.w))
+                        : t < q.t0 + 0.9 ? resets(Double(q.w) * (1 - (t - q.t0 - 0.1) / 0.8)) : reset
                 }))
                 work.fillTrack.to(q.t0 + 0.9, [0.06], 0.4, .easeOut)
                 chipAt.to(q.t0 + 1.0, [s0.x - 6.5, s0.y - 6.5, 1.25], 0.15, .figure).to(q.t0 + 1.15, [s0.x - 6.5, s0.y - 6.5, 1], 0.3, .figure)
                 docShown.to(q.t0 + 1.0, [0], 0.3, .cssEaseOut)
             case "move":
-                f.cap(q.t0 + 0.1, capEnd, "Moves the whole conversation")
-                clocks.append((q.t0, q.t1, { _ in "resets \(mins(Double(q.w)))" }))
+                f.cap(q.t0 + 0.1, capEnd, Words.Accounts.Figure.movesWhole)
+                clocks.append((q.t0, q.t1, { _ in resets(Double(q.w)) }))
                 chipAt.to(q.t0 + 0.2, [s0.x - 6.5, s0.y - 6.5 + dy, 1], 0.7, .figure)
                 let from = UIColor(cgColor: f.rc(runsInk))
                 let to = UIColor(cgColor: f.rc(freeInk))
                 f.timeline.track(chBody, [0]) { v in [("backgroundColor", Figure.mix(from, to, v[0]))] }.to(q.t0 + 0.5, [1], 0.3, .cssEaseOut)
                 docAt.to(q.t0 + 0.26, [s1.x - 5, s1.y - 6 + dy, 1], 0.7, .figure)
-                let moved = tag("re-read \(q.tok)k", x: s0.x - 8, y: s0.y + 8 + dy, in: wrap)
+                let moved = tag(Words.Accounts.Figure.reread(k: q.tok), x: s0.x - 8, y: s0.y + 8 + dy, in: wrap)
                 f.timeline.track(tg.layer, [1]) { [("opacity", Float($0[0]))] }.to(q.t0 + 0.15, [0], 0.2, .cssEaseOut)
                 f.timeline.track(moved.layer, [0]) { [("opacity", Float($0[0]))] }.to(q.t0 + 0.8, [1], 0.3, .cssEaseOut)
                 next.fillTrack.to(q.t0 + 0.85, [min(1, 0.2 + Double(q.tok) * 0.0016)], 0.5, .figure)
             default:
-                f.cap(q.t0 + 0.1, capEnd, "Continues from a summary")
-                clocks.append((q.t0, q.t1, { _ in "resets \(mins(Double(q.w)))" }))
+                f.cap(q.t0 + 0.1, capEnd, Words.Accounts.Figure.continues)
+                clocks.append((q.t0, q.t1, { _ in resets(Double(q.w)) }))
                 docAt.to(q.t0 + 0.2, [p0.x - 5, p0.y - 6, 1], 0.7, .figure)
                 let (nc, _) = f.chipLayer(freeInk, in: wrap.layer)
                 f.timeline.track(nc, [0]) { [("opacity", Float($0[0]))] }.to(q.t0 + 0.8, [1], 0.25, .cssEaseOut)
                 f.timeline.track(nc, [p0.x - 6.5, p0.y - 6.5, 0.4], apply: place(nc)).to(q.t0 + 0.8, [p1.x - 6.5, p1.y - 6.5, 1], 0.6, .figure)
                 f.timeline.track(ch, [1]) { [("opacity", Float($0[0]))] }.to(q.t0 + 0.8, [0.35], 0.3, .cssEaseOut)
-                let stays = tag("\(q.tok)k stays on \(runsOut.name)", x: s0.x - 8, y: s0.y + 8, in: wrap)
+                let stays = tag(Words.Accounts.Figure.staysOn(k: q.tok, name: runsOut.name), x: s0.x - 8, y: s0.y + 8, in: wrap)
                 f.timeline.track(tg.layer, [1]) { [("opacity", Float($0[0]))] }.to(q.t0 + 0.75, [0], 0.2, .cssEaseOut)
                 f.timeline.track(stays.layer, [0]) { [("opacity", Float($0[0]))] }.to(q.t0 + 0.9, [1], 0.3, .cssEaseOut)
                 next.fillTrack.to(q.t0 + 0.95, [0.28], 0.5, .figure)

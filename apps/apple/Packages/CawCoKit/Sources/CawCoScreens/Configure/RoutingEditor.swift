@@ -23,15 +23,15 @@ final class RoutingEditorController: ConfigEditorController {
     private var shownTab = 0
 
     private let refusal = metaLine(ink: Palette.statusFailInk)
-    private let tabs = KitSegmented(["Your sessions", "Delegates"], selected: 0)
+    private let tabs = KitSegmented([Words.Accounts.RoutingEditor.yours, Words.Accounts.RoutingEditor.delegates], selected: 0)
     private let pane = UIView()
     private var picker: StrategyPickerView?
     private var limit: AtLimitView?
 
     init(section: ConfigSection, context: ShellContext, provider: String) {
         self.provider = provider
-        let title = "\(FleetAccounts.providerName(provider, hub: context.hub)) routing"
-        super.init(section: section, context: context, title: title, saveLabel: "Save routing")
+        let title = Words.Accounts.RoutingEditor.title(provider: FleetAccounts.providerName(provider, hub: context.hub))
+        super.init(section: section, context: context, title: title, saveLabel: Words.Accounts.RoutingEditor.save)
         tile = providerMark(provider)
     }
 
@@ -45,7 +45,7 @@ final class RoutingEditorController: ConfigEditorController {
         refusal.isHidden = true
         lead.addArrangedSubview(title)
         lead.addArrangedSubview(refusal)
-        tabs.accessibilityLabel = "Which sessions"
+        tabs.accessibilityLabel = Words.Accounts.RoutingEditor.whichSessions
         tabs.accessibilityIdentifier = "routing.tabs"
         tabs.addAction(UIAction { [weak self] _ in
             guard let self, let index = tabs.selectedIndex else { return }
@@ -61,7 +61,7 @@ final class RoutingEditorController: ConfigEditorController {
     override func refreshContent() {
         guard let view = FleetAccounts.view(hub) else { return }
         let mine = FleetAccounts.accounts(view, provider: provider)
-        guard mine.count > 1, let held = FleetAccounts.routing(view, provider: provider) else {
+        guard FleetAccounts.hasRouting(mine.count), let held = FleetAccounts.routing(view, provider: provider) else {
             // A choice among its accounts exists only with two or more.
             navigationController?.popViewController(animated: true)
             return
@@ -115,7 +115,9 @@ final class RoutingEditorController: ConfigEditorController {
     /// The picker for the tab chosen; arriving from the side its tab stands on.
     private func showPicker(animatedFrom toward: Double?) {
         let leaving = picker
-        let next = StrategyPickerView(provider: provider, label: shownTab == 0 ? "Your sessions" : "Delegates", accounts: accounts, choice: choice, order: order)
+        let next = StrategyPickerView(provider: provider,
+                                      label: shownTab == 0 ? Words.Accounts.RoutingEditor.yours : Words.Accounts.RoutingEditor.delegates,
+                                      accounts: accounts, choice: choice, order: order)
         next.onChoice = { [weak self] choice in
             guard let self else { return }
             if shownTab == 0 { yours = choice } else { delegates = choice }
@@ -254,7 +256,7 @@ final class StrategyPickerView: UIStackView {
             }
             cards.append(card)
         }
-        let forks = UIStackView(arrangedSubviews: [GlyphView(.subagent, size: 14, tint: Palette.inkMuted), metaLine("Forks stay on their parent’s account, whatever the strategy.")])
+        let forks = UIStackView(arrangedSubviews: [GlyphView(.subagent, size: 14, tint: Palette.inkMuted), metaLine(Words.Accounts.RoutingEditor.forks)])
         forks.spacing = Space.space2
         forks.alignment = .center
         addArrangedSubview(grid)
@@ -361,7 +363,7 @@ final class StrategyCard: UIControl {
         words.axis = .vertical
         words.spacing = 1
         words.isUserInteractionEnabled = false
-        pin.accessibilityLabel = "Pinned account"
+        pin.accessibilityLabel = Words.Accounts.RoutingEditor.pinnedAccount
         pin.accessibilityIdentifier = "routing.pin"
         pin.isHidden = true
         let top = UIStackView(arrangedSubviews: [radio, words])
@@ -396,7 +398,7 @@ final class StrategyCard: UIControl {
         isAccessibilityElement = false
         accessibilityIdentifier = "routing.card.\(strategy.id)"
         top.isAccessibilityElement = true
-        top.accessibilityLabel = "\(strategy.label): \(strategy.line)"
+        top.accessibilityLabel = Words.Accounts.RoutingEditor.card(label: strategy.label, line: strategy.line)
         top.accessibilityTraits = .button
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (card: StrategyCard, _: UITraitCollection) in card.paint() }
         self.top = top
@@ -499,10 +501,11 @@ final class OrderListView: UIStackView {
         super.init(frame: .zero)
         axis = .vertical
         spacing = Space.space2
-        let label = metaLine("Order: drag to change it")
+        let label = metaLine(Words.Accounts.RoutingEditor.order)
         list.axis = .vertical
         list.spacing = 3
-        list.accessibilityLabel = "Order"
+        // `aria-labelledby="order-label"`: the list is called by its label.
+        list.accessibilityLabel = Words.Accounts.RoutingEditor.order
         addArrangedSubview(label)
         addArrangedSubview(list)
         for account in accounts { rows[account.id] = row(account) }
@@ -524,7 +527,7 @@ final class OrderListView: UIStackView {
         list.arrangedSubviews.forEach { $0.removeFromSuperview() }
         for (place, id) in order.enumerated() {
             guard let row = rows[id], let account = accounts.first(where: { $0.id == id }) else { continue }
-            row.accessibilityLabel = "\(FleetAccounts.name(account)), place \(place + 1) of \(order.count)"
+            row.accessibilityLabel = Words.Accounts.RoutingEditor.placeSaid(name: FleetAccounts.name(account), place: place + 1, count: order.count)
             list.addArrangedSubview(row)
         }
     }
@@ -560,8 +563,8 @@ final class OrderListView: UIStackView {
         row.isAccessibilityElement = true
         row.accessibilityIdentifier = "routing.order.\(account.id)"
         row.accessibilityCustomActions = [
-            UIAccessibilityCustomAction(name: "Move up") { [weak self] _ in self?.nudge(account.id, by: -1) ?? false },
-            UIAccessibilityCustomAction(name: "Move down") { [weak self] _ in self?.nudge(account.id, by: 1) ?? false },
+            UIAccessibilityCustomAction(name: Words.Accounts.RoutingEditor.moveUp) { [weak self] _ in self?.nudge(account.id, by: -1) ?? false },
+            UIAccessibilityCustomAction(name: Words.Accounts.RoutingEditor.moveDown) { [weak self] _ in self?.nudge(account.id, by: 1) ?? false },
         ]
         row.addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(drag)))
         return row
@@ -649,13 +652,13 @@ final class AtLimitView: UIStackView, UITextFieldDelegate {
         super.init(frame: .zero)
         axis = .vertical
         let head = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, lines: 0)
-        head.text = "When a session hits its limit and another account is free"
+        head.text = Words.Accounts.AtLimit.head
         head.wrap = .balance
         head.accessibilityTraits = .header
         addArrangedSubview(head)
         setCustomSpacing(Space.space3, after: head)
         let moveLabel = KitLabel(TypeScale.typeBody, ink: Palette.inkRow, lines: 0)
-        moveLabel.text = "Move running sessions between accounts"
+        moveLabel.text = Words.Accounts.AtLimit.move
         move.onTintColor = Palette.inkStrong
         move.isOn = value.move
         move.accessibilityLabel = moveLabel.text
@@ -674,17 +677,18 @@ final class AtLimitView: UIStackView, UITextFieldDelegate {
         addArrangedSubview(switchLine)
 
         rows.axis = .vertical
-        rows.addArrangedSubview(line("Wait if the window resets within", field: wait, value: value.waitMinutes, unit: "minutes", id: "wait"))
-        rows.addArrangedSubview(line("Move the whole conversation if it’s under", field: under, value: value.moveWholeUnderK, unit: "k tokens",
-                                     aside: "The new account re-reads it from scratch.", id: "under"))
+        let words = Words.Accounts.AtLimit.self
+        rows.addArrangedSubview(line(words.wait, field: wait, value: value.waitMinutes, unit: words.minutes, id: "wait"))
+        rows.addArrangedSubview(line(words.under, field: under, value: value.moveWholeUnderK, unit: words.kTokens,
+                                     aside: words.rereads, id: "under"))
         let otherwise = KitLabel(TypeScale.typeBody, ink: Palette.inkRow, lines: 0)
-        otherwise.text = "Otherwise continue from a summary"
+        otherwise.text = words.otherwise
         let pad = UIStackView(arrangedSubviews: [otherwise])
         pad.isLayoutMarginsRelativeArrangement = true
         pad.directionalLayoutMargins = .init(top: Space.space2, leading: 0, bottom: Space.space2, trailing: 0)
         rows.addArrangedSubview(pad)
-        rows.addArrangedSubview(line("Write that summary early, at", field: at, value: value.prepareAtPct, unit: "%",
-                                     aside: "While the current account’s cache is still warm.", id: "at"))
+        rows.addArrangedSubview(line(words.early, field: at, value: value.prepareAtPct, unit: words.percent,
+                                     aside: words.warm, id: "at"))
         let stage = UIStackView(arrangedSubviews: [figure])
         stage.isLayoutMarginsRelativeArrangement = true
         stage.directionalLayoutMargins = .init(top: Space.space3, leading: 0, bottom: Space.space3, trailing: 0)
@@ -693,8 +697,7 @@ final class AtLimitView: UIStackView, UITextFieldDelegate {
         rows.addArrangedSubview(stage)
         if terms {
             var config = UIButton.Configuration.plain()
-            config.attributedTitle = AttributedString("Moving a conversation between Claude subscriptions is subject to Anthropic’s terms",
-                                                      attributes: TypeScale.typeLabel.container(color: Palette.linkInk))
+            config.attributedTitle = AttributedString(words.terms, attributes: TypeScale.typeLabel.container(color: Palette.linkInk))
             config.image = Glyph.external.image.resized(to: 12)
             config.imagePlacement = .trailing
             config.imagePadding = Space.space1
@@ -722,7 +725,7 @@ final class AtLimitView: UIStackView, UITextFieldDelegate {
         field.keyboardType = .numberPad
         field.textAlignment = .center
         field.delegate = self
-        field.accessibilityLabel = "\(text), \(unit)"
+        field.accessibilityLabel = Words.Accounts.Editor.fieldWithUnit(label: text, unit: unit)
         field.accessibilityIdentifier = "routing.\(id)"
         field.widthAnchor.constraint(equalToConstant: 64).isActive = true
         field.addAction(UIAction { [weak self] _ in self?.read() }, for: .editingChanged)

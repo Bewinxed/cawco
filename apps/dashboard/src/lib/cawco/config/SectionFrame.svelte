@@ -10,6 +10,7 @@
    * same place: the card does not move. With no height kept yet, three
    * skeleton rows.
    */
+  import { configureWords } from "@cawco/core";
   import { type Snippet, untrack } from "svelte";
   import { fade } from "svelte/transition";
   import { appear, dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
@@ -34,8 +35,11 @@
     settling = false,
   }: {
     title: string;
-    /** The section's one line under its title; absent where the rows say it. */
-    purpose?: string;
+    /**
+     * The section's one line under its title; absent or null where the rows
+     * say it (core `CONFIG_SECTIONS`, whose `purpose` every section passes).
+     */
+    purpose?: string | null;
     /** False until the section's rows have been read once. */
     ready?: boolean;
     problem?: string | null;
@@ -82,7 +86,7 @@
   const settled = $derived(ready && !problem && cawco.hub === "connected");
 </script>
 
-<svelte:head><title>{title} · Configure · CawCo</title></svelte:head>
+<svelte:head><title>{configureWords.documentTitle(title)}</title></svelte:head>
 
 {#snippet fault(
   text: string

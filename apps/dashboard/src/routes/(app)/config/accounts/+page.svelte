@@ -6,6 +6,7 @@
    * card holds the accounts in fill-first order, each row one link to the
    * account. Groups and rows arriving or leaving reflow (motion/rows).
    */
+  import { hasRouting, accountsWords as words } from "@cawco/core";
   import AccountListRow from "#lib/cawco/accounts/AccountListRow.svelte";
   import { groupsOf } from "#lib/cawco/accounts/model.svelte.js";
   import ProviderMark from "#lib/cawco/accounts/ProviderMark.svelte";
@@ -22,7 +23,11 @@
   const groups = $derived(groupsOf());
 </script>
 
-<SectionFrame ready={cawco.accounts !== null} title={section.label}>
+<SectionFrame
+  purpose={section.purpose}
+  ready={cawco.accounts !== null}
+  title={section.label}
+>
   {#snippet actions(
     down
   )}
@@ -32,17 +37,17 @@
       title={down ?? undefined}
     >
       <IconPlus />
-      Add account
+      {words.add}
     </Button>
   {/snippet}
 
   {#if groups.length === 0}
-    <EmptyState icon={section.icon} title="Add your first account">
+    <EmptyState icon={section.icon} title={words.addFirst}>
       {#snippet action()}
         <Button
           href="/config/accounts/new"
           icon={IconPlus}
-          label="Add account"
+          label={words.add}
           size="sm"
         />
       {/snippet}
@@ -58,7 +63,7 @@
           <header class="head">
             <ProviderMark provider={group.provider} />
             <h2 class="name" id="provider-{group.provider}">{group.name}</h2>
-            {#if group.accounts.length > 1}
+            {#if hasRouting(group.accounts.length)}
               <a
                 class="routing"
                 data-flip="pop"
@@ -66,7 +71,7 @@
                   group.provider
                 )}/routing"
               >
-                Routing
+                {words.routing}
                 <IconChevronRight aria-hidden="true" />
               </a>
             {/if}

@@ -8,7 +8,7 @@ import UIKit
 /// route between; under it the accounts in fill-first order, each row one
 /// press to the account. Add account opens the stepped setup.
 final class AccountsSectionController: ConfigSectionController {
-    private lazy var add = KitButton.make("Add account", glyph: .plus, variant: .outline, height: .sm) { [weak self] in self?.openSetup() }
+    private lazy var add = KitButton.make(Words.Accounts.add, glyph: .plus, variant: .outline, height: .sm) { [weak self] in self?.openSetup() }
     private let groups = UIStackView()
     private var empty: UIView?
     /// What the groups draw now, so a read that changed nothing redraws nothing.
@@ -48,14 +48,14 @@ final class AccountsSectionController: ConfigSectionController {
     }
 
     private func rowName(_ account: FleetAccounts.Account) -> String {
-        account.label != nil || account.email != nil ? FleetAccounts.name(account) : "Not signed in yet"
+        account.label != nil || account.email != nil ? FleetAccounts.name(account) : Words.Accounts.notSignedInYet
     }
 
     private func draw(_ list: [FleetAccounts.Group], view: FleetAccounts.View) {
         groups.arrangedSubviews.forEach { $0.removeFromSuperview() }
         guard !list.isEmpty else {
-            let action = KitButton.make("Add account", glyph: .plus, variant: .outline, height: .sm) { [weak self] in self?.openSetup() }
-            groups.addArrangedSubview(KitEmptyState(icon: section.glyph, title: "Add your first account", line: "", action: action))
+            let action = KitButton.make(Words.Accounts.add, glyph: .plus, variant: .outline, height: .sm) { [weak self] in self?.openSetup() }
+            groups.addArrangedSubview(KitEmptyState(icon: section.glyph, title: Words.Accounts.addFirst, line: "", action: action))
             return
         }
         for group in list {
@@ -69,10 +69,10 @@ final class AccountsSectionController: ConfigSectionController {
             head.isLayoutMarginsRelativeArrangement = true
             head.directionalLayoutMargins = .init(top: 0, leading: Space.space2, bottom: 0, trailing: Space.space2)
             head.heightAnchor.constraint(greaterThanOrEqualToConstant: Size.cBtnHXs).isActive = true
-            if group.accounts.count > 1 {
+            if FleetAccounts.hasRouting(group.accounts.count) {
                 let provider = group.provider
                 var config = UIButton.Configuration.plain()
-                config.attributedTitle = AttributedString("Routing", attributes: TypeScale.typeLabel.container(color: Palette.linkInk))
+                config.attributedTitle = AttributedString(Words.Accounts.routing, attributes: TypeScale.typeLabel.container(color: Palette.linkInk))
                 config.image = Glyph.chevronRight.image.resized(to: 12)
                 config.imagePlacement = .trailing
                 config.imagePadding = 2
@@ -80,7 +80,7 @@ final class AccountsSectionController: ConfigSectionController {
                 config.imageColorTransformer = UIConfigurationColorTransformer { _ in Palette.linkInk }
                 let routing = UIButton(configuration: config, primaryAction: UIAction { [weak self] _ in self?.openRouting(provider) })
                 routing.houseStyle()
-                routing.accessibilityLabel = "\(group.name) routing"
+                routing.accessibilityLabel = Words.Accounts.RoutingEditor.title(provider: group.name)
                 routing.accessibilityIdentifier = "accounts.routing.\(provider)"
                 head.addArrangedSubview(routing)
             }
@@ -230,22 +230,24 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
     private var looksHead: UIView!
     private var swatches: SwatchesView!
     private var limitsPart: UIView!
-    private let neverBackup = SwitchField(label: "Never use as a backup")
+    private let neverBackup = SwitchField(label: Words.Accounts.Editor.neverBackup)
     private let reserveField = KitField()
-    private let reserveLine = metaLine("A reserve is a whole number from 0 to 100. Empty it for none.", ink: Palette.statusFailInk)
+    private let reserveLine = metaLine(Words.Accounts.Editor.reserveInvalid, ink: Palette.statusFailInk)
     private var missing: UIView?
 
     init(section: ConfigSection, context: ShellContext, accountId: String) {
         self.accountId = accountId
         let now = FleetAccounts.view(context.hub)?.accounts.first { $0.id == accountId }
-        super.init(section: section, context: context, title: now.map(FleetAccounts.name) ?? "Account", saveLabel: "Save changes", deleteLabel: "Remove account")
+        // Until the account is read, the page is its section's, as the web's skeleton is.
+        super.init(section: section, context: context, title: now.map(FleetAccounts.name) ?? section.label,
+                   saveLabel: Words.Accounts.Editor.save, deleteLabel: Words.Accounts.Editor.remove)
         if let now { tile = providerMark(now.provider) }
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
         view.accessibilityIdentifier = "account.editor"
-        nickname = TitleInput(label: "Nickname", placeholder: "Nickname")
+        nickname = TitleInput(label: Words.Accounts.Editor.nickname, placeholder: Words.Accounts.Editor.nickname)
         nickname.accessibilityIdentifier = "account.nickname"
         nickname.delegate = self
         nickname.addAction(UIAction { [weak self] _ in
@@ -258,14 +260,14 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
 
         machines = AccountMachinesView(hub: hub, accountId: accountId)
         machines.onChange = { [weak self] in self?.requestRefresh() }
-        parts.addArrangedSubview(editorSection(.server, hue: Palette.hueCyan500, "Machines", [machines]))
+        parts.addArrangedSubview(editorSection(.server, hue: Palette.hueCyan500, Words.Accounts.Editor.machines, [machines]))
 
         swatches = SwatchesView(value: "orange")
         swatches.onPick = { [weak self] hue in
             self?.fields?.hue = hue
             self?.drawFields()
         }
-        let looks = editorSection(.palette, hue: Palette.hueCyan500, "Looks", [swatches])
+        let looks = editorSection(.palette, hue: Palette.hueCyan500, Words.Accounts.Editor.looks, [swatches])
         looksHead = looks.arrangedSubviews.first
         parts.addArrangedSubview(looks)
 
@@ -275,11 +277,11 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
         }
         neverBackup.toggle.accessibilityIdentifier = "account.neverBackup"
         let label = KitLabel(TypeScale.typeBody, ink: Palette.inkRow, lines: 0)
-        label.text = "Stop placing new work past"
+        label.text = Words.Accounts.Editor.reserve
         reserveField.keyboardType = .numberPad
         reserveField.textAlignment = .center
         reserveField.tabular()
-        reserveField.accessibilityLabel = "Stop placing new work past, percent of the week"
+        reserveField.accessibilityLabel = Words.Accounts.Editor.fieldWithUnit(label: Words.Accounts.Editor.reserve, unit: Words.Accounts.Editor.reserveUnit)
         reserveField.accessibilityIdentifier = "account.reserve"
         reserveField.widthAnchor.constraint(equalToConstant: 64).isActive = true
         reserveField.addAction(UIAction { [weak self] _ in
@@ -287,7 +289,7 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
             self?.drawFields()
         }, for: .editingChanged)
         let unit = KitLabel(TypeScale.typeBody, ink: Palette.inkRow)
-        unit.text = "% of the week"
+        unit.text = Words.Accounts.Editor.reserveUnit
         // The figure and its unit hold together on one line.
         let amount = UIStackView(arrangedSubviews: [reserveField, unit])
         amount.spacing = Space.space3
@@ -296,7 +298,7 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
         reserve.axis = .vertical
         reserve.spacing = Space.space2
         reserveLine.isHidden = true
-        limitsPart = editorSection(.usage, hue: Palette.hueAmber500, "Limits", [neverBackup, reserve, reserveLine])
+        limitsPart = editorSection(.usage, hue: Palette.hueAmber500, Words.Accounts.Editor.limits, [neverBackup, reserve, reserveLine])
         limitsPart.isHidden = true
         parts.addArrangedSubview(limitsPart)
     }
@@ -323,7 +325,7 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
         if fields == nil || fields == base { fields = saved }
         base = saved
         navigationItem.title = FleetAccounts.name(now)
-        nickname.attributedPlaceholder = NSAttributedString(string: now.label != nil ? "Nickname" : FleetAccounts.name(now),
+        nickname.attributedPlaceholder = NSAttributedString(string: now.label != nil ? Words.Accounts.Editor.nickname : FleetAccounts.name(now),
                                                             attributes: [.foregroundColor: Palette.inkSubtle, .font: nickname.font as Any])
         limitsPart.isHidden = !FleetAccounts.limits(now.provider)
         machines.draw(now, view: view)
@@ -347,7 +349,7 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
         if !reserveField.isFirstResponder, reserveField.text != fields.reserve { reserveField.text = fields.reserve }
         let valid = reservePct != nil
         fold(reserveLine, open: !valid)
-        reserveField.accessibilityValue = valid ? nil : "Invalid"
+        reserveField.accessibilityValue = valid ? nil : Words.Accounts.Editor.invalid
         refusal.text = refused
         fold(refusal, open: refused != nil)
         canSave = fields != base && valid
@@ -355,7 +357,7 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
 
     private func showMissing() {
         guard missing == nil else { return }
-        let gone = section.missing("account") { [weak self] in self?.navigationController?.popViewController(animated: true) }
+        let gone = section.missing(Words.Accounts.Editor.what) { [weak self] in self?.navigationController?.popViewController(animated: true) }
         parts.arrangedSubviews.forEach { $0.isHidden = true }
         lead.isHidden = true
         parts.addArrangedSubview(gone)
@@ -388,11 +390,9 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
         let on = FleetAccounts.machines(for: account.provider, hub: hub)
             .filter { FleetAccounts.state(view.signins, account: account.id, machine: $0.machineId) == "signed-in" }
             .map(\.name)
-        let reach = on.isEmpty
-            ? "No machine is signed in to it."
-            : "\(FleetAccounts.list(on)) \(on.count == 1 ? "is" : "are") signed in to it: \(on.count == 1 ? "it signs" : "each signs") it out of \(FleetAccounts.harnessWords(account.provider, hub: hub)) and forgets it."
-        return Question(title: "Remove \(FleetAccounts.name(account))?", body: "\(reach) New sessions stop being placed on it.",
-                        confirm: "Remove account", pending: "Removing…")
+        return Question(title: Words.Accounts.Editor.removeTitle(name: FleetAccounts.name(account)),
+                        body: Words.Accounts.Editor.removeBody(machines: on, harnesses: FleetAccounts.harnessWords(account.provider, hub: hub)),
+                        confirm: Words.Accounts.Editor.remove, pending: Words.Accounts.Editor.removing)
     }
 
     override func delete() async throws {

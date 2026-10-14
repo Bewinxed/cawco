@@ -1,3 +1,4 @@
+import { configureWords } from "@cawco/core";
 import { cawco } from "../client.svelte";
 
 /**
@@ -9,6 +10,4 @@ import { cawco } from "../client.svelte";
  * moved everything under it.
  */
 export const hubDown = (): string | null =>
-  cawco.status === "connected"
-    ? null
-    : "Can't save while the hub is unreachable";
+  cawco.status === "connected" ? null : configureWords.hubDown;

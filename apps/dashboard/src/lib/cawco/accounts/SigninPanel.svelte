@@ -5,6 +5,7 @@
    * A refusal from the hub stands under the field in its own words, the field
    * marked invalid; signed in, it says as whom.
    */
+  import { accountsWords } from "@cawco/core";
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -25,19 +26,20 @@
     expected: string | null;
   } = $props();
 
+  const words = accountsWords.signin;
   const codeId = $props.id();
 </script>
 
 <div class="panel">
   {#if !online}
-    <p class="line">{machine} is offline. Sign in there once it's back.</p>
+    <p class="line">{words.offline(machine)}</p>
   {/if}
   <div class="row">
     {#if flow.url}
       <Button
         href={flow.url}
         icon={IconArrowUpRight}
-        label="Open sign-in link"
+        label={words.openLink}
         rel="noopener noreferrer"
         size="sm"
         target="_blank"
@@ -47,15 +49,15 @@
       <Button
         disabled={!online}
         icon={IconArrowUpRight}
-        label="Open sign-in link"
+        label={words.openLink}
         onclick={() => flow.open()}
         pending={flow.phase === "opening"}
-        pendingLabel="Opening…"
+        pendingLabel={words.opening}
         size="sm"
         variant="outline"
       />
     {/if}
-    <span class="line">then paste the code</span>
+    <span class="line">{words.thenPaste}</span>
   </div>
   <form
     class="row"
@@ -67,20 +69,20 @@
     <Input
       aria-describedby={flow.problem ? `${codeId}-problem` : undefined}
       aria-invalid={flow.problem ? "true" : undefined}
-      aria-label="Code from the sign-in page"
+      aria-label={words.codeLabel}
       autocomplete="off"
       class="h-[30px] flex-1"
       disabled={flow.url === null || flow.phase === "signed-in"}
-      placeholder="Code"
+      placeholder={words.codePlaceholder}
       spellcheck="false"
       bind:value={flow.code}
     />
     <Button
       disabled={flow.url === null || flow.code.trim() === ""}
       failed={flow.problem !== null}
-      label="Done"
+      label={words.done}
       pending={flow.phase === "checking"}
-      pendingLabel="Checking…"
+      pendingLabel={words.checking}
       size="sm"
       type="submit"
     />
@@ -92,16 +94,15 @@
   {:else if flow.phase === "signed-in"}
     <p class="got" role="status">
       <Check />
-      <span>Signed in as <b>{flow.email ?? expected ?? "the account"}</b></span>
+      <span
+        >{words.signedInAs}
+        <b>{flow.email ?? expected ?? words.theAccount}</b></span
+      >
     </p>
   {:else if flow.phase === "mismatch"}
     <p class="warn" role="alert" in:appear>
       <IconWarningTriangle />
-      <span>
-        {machine}
-        signed in as {flow.email ?? "another account"}, so it signed out again.
-        Sign in as {expected ?? "this account"} with a new link.
-      </span>
+      <span>{words.mismatch(machine, flow.email, expected)}</span>
     </p>
   {/if}
 </div>

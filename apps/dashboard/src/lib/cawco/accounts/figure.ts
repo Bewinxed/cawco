@@ -14,6 +14,7 @@
  * storyboards these are. The lanes' clocks and fills are illustrations of a
  * strategy, not anybody's readings.
  */
+import { accountsWords } from "@cawco/core";
 import { ease } from "../motion/curves.svelte";
 
 export type Board = "pinned" | "fill" | "spread" | "soonest" | "limit";
@@ -250,19 +251,16 @@ const SVG = "http://www.w3.org/2000/svg";
 const PIN =
   '<g fill="currentColor"><path fill-rule="evenodd" d="M16.2188 4.83755L19.1835 7.80516C21.1954 9.81905 22.2014 10.826 21.9667 11.9115C21.7319 12.9969 20.4 13.4973 17.7362 14.4981L15.8922 15.191C15.1788 15.459 14.8221 15.593 14.5468 15.8314C14.4262 15.9358 14.3184 16.054 14.2254 16.1835C14.013 16.4795 13.9119 16.8472 13.7095 17.5825C13.2493 19.2551 13.0192 20.0914 12.4713 20.4041C12.2404 20.5358 11.9792 20.6049 11.7134 20.6045C11.0827 20.6036 10.4699 19.9902 9.24441 18.7635L7.77841 17.2961L6.69935 16.2163L5.28476 14.8C4.06698 13.581 3.45809 12.9715 3.45413 12.3446C3.45242 12.0735 3.5228 11.8069 3.65804 11.5721C3.97088 11.0289 4.80107 10.8 6.46145 10.3423C7.19811 10.1392 7.56644 10.0377 7.86251 9.82451C7.99536 9.72887 8.11619 9.61754 8.22239 9.49292C8.45908 9.2152 8.59063 8.85617 8.85373 8.1381L9.5217 6.31506C10.5086 3.62155 11.0021 2.2748 12.0904 2.03468C13.1788 1.79457 14.1921 2.8089 16.2188 4.83755Z" clip-rule="evenodd" opacity=".5"/><path d="M3.30236 21.7764L7.77841 17.2961L6.69935 16.2163L2.22345 20.6965C1.92552 20.9947 1.92552 21.4782 2.22345 21.7764C2.52138 22.0747 3.00443 22.0747 3.30236 21.7764Z"/></g>';
 
-const mins = (m: number): string => {
+const words = accountsWords.figure;
+/** A lane's clock, `m` minutes from its reset: "resets 4h 25m", "resets 12m". */
+const resets = (m: number): string => {
   const whole = Math.max(0, Math.round(m));
-  return whole >= 60
-    ? `${Math.floor(whole / 60)}h ${String(whole % 60).padStart(2, "0")}m`
-    : `${whole}m`;
+  return words.resets(words.time(Math.floor(whole / 60), whole % 60));
 };
+/** A window just reset: all of it ahead. */
+const RESET = words.resets(words.window);
 /** Illustrative clocks and fills, by lane. */
-const CLOCKS = [
-  "resets 4h 25m",
-  "resets 1h 10m",
-  "resets 4h 50m",
-  "resets 3h 05m",
-];
+const CLOCKS = [resets(265), resets(70), resets(290), resets(185)];
 const FILLS = [0.2, 0.3, 0.15, 0.25];
 
 /**
@@ -394,7 +392,7 @@ function layout(stage: HTMLElement, board: Board, lanes: LaneSpec[]) {
     const ck = el("clk", `right:${pad - 5}px;left:auto;top:${y}px`, g);
     ck.textContent = typeof ln.clock === "function" ? ln.clock(0) : ln.clock;
     const bk = el("blk", `right:${pad}px;left:auto;top:${y}px`, g);
-    bk.textContent = ln.blkText ?? "blocked";
+    bk.textContent = ln.blkText ?? words.blocked;
     // A blocked lane dims its bar, never its words.
     const bg = el("bars", "inset:0;width:100%;height:100%", g);
     const bar = `left:${barX}px;top:${y + ROW - CHIP / 2}px;width:${barW}px`;
@@ -433,8 +431,8 @@ function layout(stage: HTMLElement, board: Board, lanes: LaneSpec[]) {
   requestAnimationFrame(() => {
     for (const o of L) {
       o.cw.style.width = `${o.ck.offsetWidth}px`;
-      const words = Math.max(o.ck.offsetWidth, o.bk.offsetWidth);
-      o.lb.style.maxWidth = `${W - left - PAD - words - 8}px`;
+      const clockWidth = Math.max(o.ck.offsetWidth, o.bk.offsetWidth);
+      o.lb.style.maxWidth = `${W - left - PAD - clockWidth - 8}px`;
     }
   });
   /** Where sessions come in: off the stage's edge, level with the lanes' middle. */
@@ -601,7 +599,7 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
       F.fill(pin, 4.2, 1, 0.4);
       F.pulse(pin, 4.6);
       if (limits) {
-        F.cap(4.6, 99, "At the limit → the policy below");
+        F.cap(4.6, 99, words.policyBelow);
       }
       F.seam(5.6);
       return F;
@@ -683,12 +681,12 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
         if (i === 0) {
           return (t: number) => {
             if (t < 2.4) {
-              return `resets ${mins(b - RATE * t)}`;
+              return resets(b - RATE * t);
             }
-            return t < 2.8 ? "resets 0m" : "resets 5h";
+            return t < 2.8 ? resets(0) : RESET;
           };
         }
-        return (t: number) => `resets ${mins(b - RATE * t)}`;
+        return (t: number) => resets(b - RATE * t);
       };
       const F = layout(
         stage,
@@ -698,7 +696,7 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
           fill: fills[i] ?? 0.3,
           clock: clock(i),
           glow: i === 0,
-          blkText: "full",
+          blkText: words.full,
         }))
       );
       const [P, Wk, Sp] = F.L;
@@ -713,7 +711,7 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
       P.tgh.set(2.4, "1").to(2.5, "0", 0.6, "ease-out");
       F.fill(0, 2.4, 0, 0.4);
       P.tglow.to(2.4, "0", 0.3, "ease-out");
-      F.cap(2.4, 3.7, "What’s unused at reset is wasted, so it goes first.");
+      F.cap(2.4, 3.7, words.unusedWasted);
       if (Wk) {
         Wk.tglow.to(2.8, "1", 0.3, "ease-out");
         F.chip(1, 2.8);
@@ -722,7 +720,7 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
       if (Sp) {
         F.block(2, 3.6);
         F.block(2, 4.5, false);
-        F.cap(3.8, 4.5, "A full account is skipped.");
+        F.cap(3.8, 4.5, words.fullSkipped);
       }
       if (Wk) {
         F.chip(1, 3.8);
@@ -744,8 +742,8 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
       };
       const [Wa, Pa] = lanes;
       const F = layout(stage, "limit", [
-        { lane: Wa, fill: 0.85, clock: "resets 12m" },
-        { lane: Pa, fill: 0.2, clock: "resets 4h 25m" },
+        { lane: Wa, fill: 0.85, clock: resets(12) },
+        { lane: Pa, fill: 0.2, clock: resets(265) },
       ]);
       const { tl, mk, eo, rc } = F;
       const [Wk, Pe] = F.L;
@@ -756,7 +754,7 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
       Wk.tf.to(0, "scaleX(1)", 1.6, "linear");
       Wk.f = 1;
       F.pulse(0, 1.6);
-      F.cap(tc, 1.95, "Summary written early, while the cache is warm.");
+      F.cap(tc, 1.95, words.summaryEarly);
       const scenes = [
         { t0: 2.0, t1: 3.4, w: 12, tok: 180 },
         { t0: 3.4, t1: 5.2, w: 120, tok: 180 },
@@ -768,7 +766,7 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
       const p1 = F.slot(1, 1);
       const dyY = p0.y - s0.y;
       const clocks: [number, number, (t: number) => string][] = [
-        [0, 2.0, () => "resets 12m"],
+        [0, 2.0, () => resets(12)],
       ];
       const at = (x: number, y: number, more = "") =>
         `translate(${x}px,${y}px)${more ? ` ${more}` : ""}`;
@@ -792,7 +790,7 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
           wrap
         );
         const tg = F.el("tag", `transform:${at(s0.x - 8, s0.y + 8)}`, wrap);
-        tg.textContent = `${q.tok}k`;
+        tg.textContent = words.tokens(q.tok);
         const dc = F.el("doc", `transform:${at(s1.x - 5, s1.y - 6)}`, wrap);
         // Each branch's pieces show for its window; the last branch is the
         // still frame, so it stays.
@@ -818,17 +816,17 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
           Pe.tf.to(t0 - 0.05, "scaleX(.2)", 0.25, mk);
         }
         if (branch === "wait") {
-          F.cap(t0 + 0.1, capEnd, `Waits ${q.w}m for the window to reset`);
+          F.cap(t0 + 0.1, capEnd, words.waits(q.w));
           clocks.push([
             t0,
             t1,
             (t) => {
               if (t < t0 + 0.1) {
-                return `resets ${q.w}m`;
+                return words.resets(words.time(0, q.w));
               }
               return t < t0 + 0.9
-                ? `resets ${mins(q.w * (1 - (t - t0 - 0.1) / 0.8))}`
-                : "resets 5h";
+                ? resets(q.w * (1 - (t - t0 - 0.1) / 0.8))
+                : RESET;
             },
           ]);
           Wk.tf.to(t0 + 0.9, "scaleX(.06)", 0.4, eo);
@@ -837,8 +835,8 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
             .to(t0 + 1.15, at(s0.x - 5, s0.y - 5, "scale(1)"), 0.3, mk);
           odc.to(t0 + 1.0, "0", 0.3, "ease-out");
         } else if (branch === "move") {
-          F.cap(t0 + 0.1, capEnd, "Moves the whole conversation");
-          clocks.push([t0, t1, () => `resets ${mins(q.w)}`]);
+          F.cap(t0 + 0.1, capEnd, words.movesWhole);
+          clocks.push([t0, t1, () => resets(q.w)]);
           tch.to(t0 + 0.2, at(s0.x - 5, s0.y - 5 + dyY), 0.7, mk);
           tl.tr(ch, "backgroundColor", rc(Wa.color)).to(
             t0 + 0.5,
@@ -852,7 +850,7 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
             `transform:${at(s0.x - 8, s0.y + 8 + dyY)}`,
             wrap
           );
-          tg2.textContent = `re-read ${q.tok}k`;
+          tg2.textContent = words.reread(q.tok);
           tl.tr(tg, "opacity", "1").to(t0 + 0.15, "0", 0.2, "ease-out");
           tl.tr(tg2, "opacity", "0").to(t0 + 0.8, "1", 0.3, "ease-out");
           Pe.tf.to(
@@ -862,8 +860,8 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
             mk
           );
         } else {
-          F.cap(t0 + 0.1, capEnd, "Continues from a summary");
-          clocks.push([t0, t1, () => `resets ${mins(q.w)}`]);
+          F.cap(t0 + 0.1, capEnd, words.continues);
+          clocks.push([t0, t1, () => resets(q.w)]);
           tdc.to(t0 + 0.2, at(p0.x - 5, p0.y - 6), 0.7, mk);
           const nc = F.el(
             "chip",
@@ -879,7 +877,7 @@ const BOARDS: Record<Board, (stage: HTMLElement, spec: FigureSpec) => Figure> =
           );
           tl.tr(ch, "opacity", "1").to(t0 + 0.8, ".35", 0.3, "ease-out");
           const tg2 = F.el("tag", `transform:${at(s0.x - 8, s0.y + 8)}`, wrap);
-          tg2.textContent = `${q.tok}k stays on ${Wa.name}`;
+          tg2.textContent = words.staysOn(q.tok, Wa.name);
           tl.tr(tg, "opacity", "1").to(t0 + 0.75, "0", 0.2, "ease-out");
           tl.tr(tg2, "opacity", "0").to(t0 + 0.9, "1", 0.3, "ease-out");
           Pe.tf.to(t0 + 0.95, "scaleX(.28)", 0.5, mk);

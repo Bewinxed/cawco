@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { accountsWords } from "@cawco/core";
   import AccountEditor from "#lib/cawco/accounts/AccountEditor.svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import EditorRoute from "#lib/cawco/config/EditorRoute.svelte";
@@ -15,9 +16,9 @@
   found={account !== null}
   loaded={cawco.accounts !== null}
   problem={null}
-  saveLabel="Save changes"
+  saveLabel={accountsWords.editor.save}
   {section}
-  what="account"
+  what={accountsWords.editor.what}
 >
   {#if account}
     {#key account.id}

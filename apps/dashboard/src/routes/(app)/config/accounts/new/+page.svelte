@@ -3,6 +3,7 @@
    * Adding an account: the stepped setup, once the accounts and the
    * providers the fleet knows have been read (its first step lists them).
    */
+  import { accountsWords } from "@cawco/core";
   import AccountSetup from "#lib/cawco/accounts/AccountSetup.svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
@@ -11,7 +12,7 @@
 {#if cawco.accounts !== null && cawco.accountProviders !== null}
   <AccountSetup />
 {:else}
-  <SectionFrame ready={false} title="Add account">
+  <SectionFrame ready={false} title={accountsWords.setup.title}>
     <span></span>
   </SectionFrame>
 {/if}

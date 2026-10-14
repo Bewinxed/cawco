@@ -3,7 +3,7 @@ import { cawco } from "../client.svelte";
 import { hubFaults, machineFaults, SCOPE_ANCHOR } from "../fleet-faults";
 import { attention } from "../updates/model";
 import { updates } from "../updates/updates.svelte";
-import type { SectionSlug } from "./sections";
+import type { ConfigSection, SectionSlug } from "./sections";
 import type { ConfigStore } from "./store.svelte";
 
 /** A section's row count, or null while it has not been read. */
@@ -57,20 +57,31 @@ export function allFaults(store: ConfigStore) {
 }
 
 /** Machines whose update waits on the operator: Updates' rail badge. */
-export function updatesWaiting(): number {
+function updatesWaiting(): number {
   const { policy } = updates;
   return policy ? attention(cawco.machines, policy) : 0;
 }
 
 /**
- * How many faults belong to a section, for its rail badge. Accounts' are its
- * own: an account signed in as somebody else somewhere, or signed in nowhere.
+ * The figure on a section's rail badge, by the rule its definition names
+ * (core `ConfigBadgeRule`, which the app follows too): the fleet faults whose
+ * scope the section owns; the accounts signed in as somebody else somewhere
+ * or signed in nowhere; or the machines whose update waits on the operator.
  */
-export function faultsIn(store: ConfigStore, slug: SectionSlug): number {
-  if (slug === "accounts") {
-    return accountFaults();
+export function badgeOf(
+  store: ConfigStore,
+  section: Pick<ConfigSection, "badge" | "slug">
+): number {
+  switch (section.badge) {
+    case "account-faults":
+      return accountFaults();
+    case "updates-waiting":
+      return updatesWaiting();
+    default: {
+      const path = `/config/${section.slug}`;
+      return allFaults(store).filter(
+        (fault) => SCOPE_ANCHOR[fault.scope] === path
+      ).length;
+    }
   }
-  const path = `/config/${slug}`;
-  return allFaults(store).filter((fault) => SCOPE_ANCHOR[fault.scope] === path)
-    .length;
 }

@@ -18,23 +18,43 @@ public final class FleetConfig {
     /// Why the last read failed (`Slot.error`).
     public private(set) var problem: String?
     public private(set) var loading = false
+    /// How many rows the sections read apart from the fleet's setup hold
+    /// (store.svelte.ts's `rules`, `hooks`, `types` and `tools` slots), for
+    /// the section list's counts: each nil until read once, and kept when a
+    /// later read fails, as each slot is.
+    public private(set) var rulesCount: Int?
+    public private(set) var hooksCount: Int?
+    public private(set) var typesCount: Int?
+    /// The catalog's tools a person sets a policy for (`!dependencyOnly`).
+    public private(set) var toolsCount: Int?
     @ObservationIgnored private weak var hub: HubConnection?
 
     init(hub: HubConnection) {
         self.hub = hub
     }
 
-    /// Reads the fleet's setup again (`Slot.load`).
+    /// Reads the fleet's setup again (`Slot.load`), and the counts of the
+    /// sections that read rows of their own, each on its own: a hub that
+    /// refuses one still answers the others.
     public func load() async {
         guard let hub else { return }
         loading = true
         defer { loading = false }
+        async let rules = try? hub.api.rules.list().ok.body.json.rules.count
+        async let hooks = try? hub.api.fleet.hooks().ok.body.json.hooks.count
+        async let types = try? hub.api.delegates.types().ok.body.json.types.count
+        async let tools = try? hub.api.tools.list().ok.body.json.catalog.filter { $0.dependencyOnly != true }.count
         do {
             snapshot = try await hub.api.fleet.read().ok.body.json
             problem = nil
         } catch {
             problem = "Could not read the fleet's setup — \(error.localizedDescription)."
         }
+        let (r, h, t, c) = await (rules, hooks, types, tools)
+        if let r { rulesCount = r }
+        if let h { hooksCount = h }
+        if let t { typesCount = t }
+        if let c { toolsCount = c }
     }
 
     // MARK: Faults (counts.svelte.ts)

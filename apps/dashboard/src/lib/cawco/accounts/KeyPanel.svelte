@@ -6,6 +6,7 @@
    * machine made of it stands on its row; the field empties once it is sent.
    * With one machine (the account page's popover) there is nothing to tick.
    */
+  import { accountsWords } from "@cawco/core";
   import { untrack } from "svelte";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { sendAccountKey } from "#lib/cawco/client.svelte.js";
@@ -37,6 +38,7 @@
     primary?: boolean;
   } = $props();
 
+  const words = accountsWords.key;
   const id = $props.id();
   let key = $state("");
   let shown = $state(false);
@@ -84,8 +86,8 @@
             ok: false,
             why:
               answer.result.state === "mismatch"
-                ? "That's a different key from this account's; it was taken back off."
-                : "The machine didn't take the key.",
+                ? words.otherKey
+                : words.notTaken,
           });
         }
       }
@@ -109,7 +111,7 @@
 )}
   {@const result = results.get(machineId)}
   {#if result?.ok}
-    <span class="ok"><Check />Key sent</span>
+    <span class="ok"><Check />{words.sent}</span>
   {:else if result}
     <span class="bad"
       ><IconWarningTriangle aria-hidden="true" />{result.why}</span
@@ -126,17 +128,17 @@
 >
   <InputGroup.Root>
     <InputGroup.Input
-      aria-label="API key"
+      aria-label={words.label}
       autocomplete="off"
       id="{id}-key"
-      placeholder="Paste the key"
+      placeholder={words.placeholder}
       spellcheck="false"
       type={shown ? "text" : "password"}
       bind:value={key}
     />
     <InputGroup.Addon align="inline-end">
       <InputGroup.Button
-        aria-label={shown ? "Hide key" : "Show key"}
+        aria-label={shown ? words.hide : words.show}
         aria-pressed={shown}
         onclick={() => {
           shown = !shown;
@@ -153,7 +155,7 @@
   </InputGroup.Root>
 
   {#if !one}
-    <ul aria-label="Machines" class="machines">
+    <ul aria-label={words.machines} class="machines">
       {#each machines as machine (machine.machineId)}
         {@const online = machineOnline(machine)}
         <li class="mrow">
@@ -178,7 +180,7 @@
           </span>
           <span class="result">
             {#if !online}
-              <span class="muted">Offline</span>
+              <span class="muted">{words.offline}</span>
             {:else}
               {@render outcome(machine.machineId)}
             {/if}
@@ -191,9 +193,9 @@
   <div class="send">
     <Button
       disabled={key.trim() === "" || targets.length === 0}
-      label="Send key"
+      label={words.send}
       pending={sending}
-      pendingLabel="Sending…"
+      pendingLabel={words.sending}
       size="sm"
       type="submit"
       variant={primary ? "default" : "outline"}

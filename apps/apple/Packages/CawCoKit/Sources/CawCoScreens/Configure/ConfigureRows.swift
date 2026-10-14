@@ -45,7 +45,7 @@ struct RowAction {
 /// A row's ⋯ menu: every action a row has beyond opening it and its switch,
 /// as a pull-down from the ghost icon button.
 func rowMenu(_ label: String, actions: [RowAction]) -> UIButton {
-    let button = KitGhostButton(.more, label: "More for \(label)")
+    let button = KitGhostButton(.more, label: Words.Configure.moreFor(label: label))
     button.menu = UIMenu(children: actions.map { action in
         var attributes: UIMenuElement.Attributes = []
         if action.destructive { attributes.insert(.destructive) }

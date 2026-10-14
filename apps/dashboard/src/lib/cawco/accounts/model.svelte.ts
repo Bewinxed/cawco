@@ -7,6 +7,7 @@
  * `cawco.accountProviders`) and the fleet's machines.
  */
 import {
+  ACCOUNT_RULES,
   type Account,
   type AccountHue,
   type AccountProvider,
@@ -22,6 +23,7 @@ import {
   type ProviderRouting,
   type RebalanceNotice,
   type SigninState,
+  accountsWords as words,
 } from "@cawco/core";
 import { cawco } from "../client.svelte";
 
@@ -29,15 +31,9 @@ import { cawco } from "../client.svelte";
 export const hueVar = (hue: AccountHue): string => `var(--account-${hue})`;
 
 /** The colours an account can take, in the order the swatches offer them. */
-export const SWATCHES: readonly AccountHue[] = [
-  "orange",
-  "cyan",
-  "green",
-  "amber",
-  "blue",
-  "rose",
-  "violet",
-];
+export const SWATCHES: readonly AccountHue[] = words.swatches.map(
+  (swatch) => swatch.hue
+);
 
 /** A new account's colour: the first swatch none of its provider's accounts wears. */
 export const nextHue = (accounts: Account[]): AccountHue =>
@@ -55,7 +51,7 @@ export const nameOf = (
     Partial<Pick<Account, "kind">>
 ): string => {
   if (account.kind === "api_key" && !account.label && account.email) {
-    return `••••${account.email.replace(ELLIPSIS, "").slice(-4)}`;
+    return words.keyTail(account.email.replace(ELLIPSIS, "").slice(-4));
   }
   return accountName(account);
 };
@@ -68,7 +64,7 @@ export const choicesOf = (): ProviderChoice[] => cawco.accountProviders ?? [];
 /** A provider row as the picker names it: "OpenRouter API key", "Anthropic Console". */
 export function choiceLabel(choice: ProviderChoice): string {
   if (choice.provider === CLAUDE_PROVIDER) {
-    return choice.kind === "console" ? "Anthropic Console" : "Claude";
+    return choice.kind === "console" ? words.anthropicConsole : words.claude;
   }
   return choice.name;
 }
@@ -76,7 +72,7 @@ export function choiceLabel(choice: ProviderChoice): string {
 /** What a provider is called: its first picker row's name ("Claude" for Anthropic). */
 export const providerName = (provider: AccountProvider): string =>
   choicesOf().find((one) => one.provider === provider)?.name ??
-  (provider === CLAUDE_PROVIDER ? "Claude" : provider);
+  (provider === CLAUDE_PROVIDER ? words.claude : provider);
 
 /** The harnesses that use an account of a provider. */
 function providerHarnesses(provider: AccountProvider): HarnessKind[] {
@@ -96,21 +92,15 @@ function providerHarnesses(provider: AccountProvider): HarnessKind[] {
 export const providerLimits = (provider: AccountProvider): boolean =>
   LIMITED_PROVIDERS.includes(provider);
 
-const HARNESS_WORDS: Record<HarnessKind, string> = {
-  claude: "Claude Code",
-  opencode: "OpenCode",
-  pi: "pi",
-};
-
 /** The order harnesses are named in: "OpenCode and pi". */
 const HARNESS_ORDER: readonly HarnessKind[] = ["claude", "opencode", "pi"];
 
 /** "Claude Code", "OpenCode and pi": the harnesses that use a provider's accounts. */
 export const harnessWords = (provider: AccountProvider): string =>
-  machineList(
+  words.harnessList(
     HARNESS_ORDER.filter((harness) =>
       providerHarnesses(provider).includes(harness)
-    ).map((harness) => HARNESS_WORDS[harness])
+    ).map((harness) => words.harnesses[harness])
   );
 
 // ── Machines ────────────────────────────────────────────────────────────
@@ -196,10 +186,10 @@ export function problemOf(account: Account): string | null {
       signinState(signins, account.id, machine.machineId) === "mismatch"
   );
   if (someoneElse) {
-    return `${machineName(someoneElse)} is signed in as someone else`;
+    return words.problem.someoneElse(machineName(someoneElse));
   }
   if (!signins.some((one) => one.state === "signed-in")) {
-    return "Not signed in on any machine";
+    return words.problem.nowhere;
   }
   const missing = online.filter(
     (machine) =>
@@ -208,17 +198,11 @@ export function problemOf(account: Account): string | null {
   if (missing.length === 0) {
     return null;
   }
-  const others = missing.length - 1;
-  return others === 0
-    ? `Not signed in on ${machineName(missing[0])}`
-    : `Not signed in on ${machineName(missing[0])} and ${others} other${others === 1 ? "" : "s"}`;
+  return words.problem.missingOn(machineName(missing[0]), missing.length - 1);
 }
 
-const STORE_WORDS: Record<HomeStore, string> = {
-  claude: "Claude Code",
-  pi: "pi",
-  opencode: "OpenCode",
-};
+/** A store a login moved from, by the harness that kept it. */
+const STORE_WORDS: Record<HomeStore, string> = words.harnesses;
 
 /**
  * A machine's own login moved into CawCo: the account it went into, the
@@ -291,12 +275,6 @@ export const rebalancesUnseen = (
 ): RebalanceNotice[] =>
   (cawco.accounts?.rebalances ?? []).filter((one) => !seen.has(one.id));
 
-/** "obelisk", "obelisk and mac", "a, b and c": names as a sentence lists them. */
-const machineList = (names: readonly string[]): string =>
-  names.length < 2
-    ? (names[0] ?? "")
-    : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
-
 /**
  * An account the rail counts as a fault: one a machine signed in as
  * somebody else, or one signed in nowhere.
@@ -331,32 +309,18 @@ export interface Strategy {
   line: string;
 }
 
-export const STRATEGIES: readonly Strategy[] = [
-  {
-    id: "pinned",
-    board: "pinned",
-    label: "Pinned",
-    line: "Always one account",
-  },
-  {
-    id: "fill-first",
-    board: "fill",
-    label: "Fill first",
-    line: "In your order; the next when one is blocked",
-  },
-  {
-    id: "spread",
-    board: "spread",
-    label: "Spread",
-    line: "The account with the most headroom",
-  },
-  {
-    id: "soonest-reset",
-    board: "soonest",
-    label: "Soonest reset",
-    line: "Whose 5-hour window resets first",
-  },
-];
+/** The figure each strategy plays. */
+const BOARDS: Record<PlacementStrategy, Strategy["board"]> = {
+  pinned: "pinned",
+  "fill-first": "fill",
+  spread: "spread",
+  "soonest-reset": "soonest",
+};
+
+/** The strategies, in the picker's order, as core's words name them. */
+export const STRATEGIES: readonly Strategy[] = words.strategies.map(
+  (strategy) => ({ ...strategy, board: BOARDS[strategy.id] })
+);
 
 export const strategyLabel = (id: PlacementStrategy): string =>
   STRATEGIES.find((one) => one.id === id)?.label ?? id;
@@ -382,7 +346,7 @@ function choiceLine(
     return label;
   }
   const pinned = pinnedOf(accounts, choice.pinnedAccountId);
-  return pinned ? `${label} to ${nameOf(pinned)}` : label;
+  return pinned ? words.routingEditor.pinnedTo(label, nameOf(pinned)) : label;
 }
 
 /** "You: Pinned to you@gmail.com · Delegates: Soonest reset". */
@@ -390,7 +354,10 @@ export const routingLine = (
   accounts: Account[],
   routing: Pick<ProviderRouting, "yours" | "delegates">
 ): string =>
-  `You: ${choiceLine(accounts, routing.yours)} · Delegates: ${choiceLine(accounts, routing.delegates)}`;
+  words.routingEditor.line(
+    choiceLine(accounts, routing.yours),
+    choiceLine(accounts, routing.delegates)
+  );
 
 /** The terms that cover moving a conversation between subscriptions. */
-export const TERMS_URL = "https://code.claude.com/docs/en/legal-and-compliance";
+export const TERMS_URL = ACCOUNT_RULES.termsUrl;

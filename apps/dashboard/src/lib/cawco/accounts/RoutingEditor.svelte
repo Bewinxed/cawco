@@ -8,7 +8,11 @@
    * on, and the place takes the new height. Save writes the routing, then
    * the order of every account whose place changed.
    */
-  import type { Account, ProviderRouting } from "@cawco/core";
+  import {
+    type Account,
+    accountsWords,
+    type ProviderRouting,
+  } from "@cawco/core";
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
   import { patchAccount, putRouting } from "#lib/cawco/client.svelte.js";
@@ -47,7 +51,8 @@
     routing: ProviderRouting;
   } = $props();
 
-  const title = $derived(`${providerName(provider)} routing`);
+  const words = accountsWords.routingEditor;
+  const title = $derived(words.title(providerName(provider)));
   const limits = $derived(providerLimits(provider));
 
   type Kind = "yours" | "delegates";
@@ -135,7 +140,7 @@
   failed={refused !== undefined}
   oncancel={() => goto("/config/accounts")}
   onsubmit={save}
-  saveLabel="Save routing"
+  saveLabel={words.save}
   {saving}
   {title}
 >
@@ -157,15 +162,17 @@
       }}
       value={tab}
     >
-      <TabsList aria-label="Which sessions">
+      <TabsList aria-label={words.whichSessions}>
         {#each [
-          ["yours", "Your sessions"],
-          ["delegates", "Delegates"],
+          ["yours", words.yours],
+          ["delegates", words.delegates],
         ] as [kind, label] (kind)}
           <TabItem {label} value={kind}>
             {#snippet trail()}
               <span class="strategy"
-                >· {strategyLabel(draft[kind as Kind].strategy)}</span
+                >{words.trail(
+                  strategyLabel(draft[kind as Kind].strategy)
+                )}</span
               >
             {/snippet}
           </TabItem>
@@ -178,7 +185,7 @@
           <StrategyPicker
             {accounts}
             choice={draft[tab]}
-            label={tab === "yours" ? "Your sessions" : "Delegates"}
+            label={tab === "yours" ? words.yours : words.delegates}
             onchoice={(choice) => {
               draft[tab] = choice;
             }}

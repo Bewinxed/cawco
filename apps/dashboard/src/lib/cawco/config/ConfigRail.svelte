@@ -4,6 +4,7 @@
    * and how many of them are failing somewhere. As `list` it is the whole
    * screen under 900px — the same entries at a touch height.
    */
+  import { configureWords as words } from "@cawco/core";
   import { TextMorph } from "torph/svelte";
   import {
     dur,
@@ -13,7 +14,7 @@
     popScale,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
-  import { countOf, faultsIn, updatesWaiting } from "./counts.svelte";
+  import { badgeOf, countOf } from "./counts.svelte";
   import { unsavedIn } from "./drafts.svelte";
   import { GROUPS, type SectionSlug } from "./sections";
   import { configStore } from "./store.svelte";
@@ -56,7 +57,7 @@
 </script>
 
 <nav
-  aria-label="Configure"
+  aria-label={words.title}
   class="rail"
   data-variant={variant}
   {@attach highlight({ rows: ".row", selected: '[aria-current="page"]' })}
@@ -67,10 +68,8 @@
       <ul class="list">
         {#each sections as section (section.slug)}
           {@const count = countOf(store, section.slug)}
-          {@const waiting = section.slug === "updates"}
-          {@const faults = waiting
-            ? updatesWaiting()
-            : faultsIn(store, section.slug)}
+          {@const waiting = section.badge === "updates-waiting"}
+          {@const faults = badgeOf(store, section)}
           <li>
             <a
               aria-current={current === section.slug ? "page" : undefined}
@@ -82,24 +81,26 @@
               >
               <span class="name">{section.label}</span>
               {#if unsavedIn(store, section.slug)}
-                <span class="unsaved" title="Unsaved changes"
-                  ><span class="sr-only">Unsaved changes</span></span
+                <span class="unsaved" title={words.unsaved}
+                  ><span class="sr-only">{words.unsaved}</span></span
                 >
               {/if}
               {#if faults > 0}
                 <span
                   class="fault num"
                   title={waiting
-                    ? `${faults} waiting on you`
-                    : `${faults} failing on a machine or at the hub`}
+                    ? words.badgeWaiting(faults)
+                    : words.badgeFailing(faults)}
                   transition:badge
                   ><TextMorph
                     as="span"
                     duration={morphMs()}
                     text={String(faults)}
                   />
-                  <span class="sr-only"
-                    >{waiting ? " waiting" : " failing"}</span
+                  <span class="sr-only">
+                    {waiting
+                      ? words.badgeWaitingSaid
+                      : words.badgeFailingSaid}</span
                   ></span
                 >
               {/if}

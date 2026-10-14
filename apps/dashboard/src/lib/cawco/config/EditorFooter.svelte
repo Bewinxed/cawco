@@ -42,6 +42,7 @@
    * the save runs and draws a check for --dur-hold when it ends well, and
    * for that same hold the label says "Saved".
    */
+  import { configureWords } from "@cawco/core";
   import type { Snippet } from "svelte";
   import AskHere from "#lib/cawco/AskHere.svelte";
   import { aboveKeyboard } from "#lib/cawco/visible-viewport.svelte.js";
@@ -120,7 +121,7 @@
         label={deleteLabel}
         onclick={ondelete}
         pending={deleting}
-        pendingLabel="Deleting…"
+        pendingLabel={configureWords.deleting}
         title={down ?? undefined}
         type="button"
         variant="ghost"
@@ -137,15 +138,15 @@
       type="button"
       variant="outline"
     >
-      Cancel
+      {configureWords.cancel}
     </Button>
     <Button
       class="footer-btn save"
       disabled={down !== null || deleting || !canSave}
       {failed}
-      label={saved ? "Saved" : saveLabel}
+      label={saved ? configureWords.saved : saveLabel}
       pending={saving}
-      pendingLabel="Saving…"
+      pendingLabel={configureWords.saving}
       title={down ?? undefined}
       type="submit"
     />

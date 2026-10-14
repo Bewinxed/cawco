@@ -7,7 +7,7 @@
    * Remove signs it out everywhere first, and a refusal (a session still on
    * it, a machine away) is the hub's sentence.
    */
-  import type { Account } from "@cawco/core";
+  import { type Account, accountsWords as words } from "@cawco/core";
   import { untrack } from "svelte";
   import {
     cawco,
@@ -114,20 +114,12 @@
           signinState(signins, account.id, machine.machineId) === "signed-in"
       )
       .map(machineName);
-    const listed =
-      on.length > 1
-        ? `${on.slice(0, -1).join(", ")} and ${on.at(-1)}`
-        : (on[0] ?? "");
-    const reach =
-      on.length > 0
-        ? `${listed} ${on.length === 1 ? "is" : "are"} signed in to it: ${on.length === 1 ? "it signs" : "each signs"} it out of ${harnessWords(account.provider)} and forgets it.`
-        : "No machine is signed in to it.";
     await question.ask({
-      title: `Remove ${nameOf(account)}?`,
-      body: `${reach} New sessions stop being placed on it.`,
-      confirmLabel: "Remove account",
+      title: words.editor.removeTitle(nameOf(account)),
+      body: words.editor.removeBody(on, harnessWords(account.provider)),
+      confirmLabel: words.editor.remove,
       destructive: true,
-      pendingLabel: "Removing…",
+      pendingLabel: words.editor.removing,
       run: async () => {
         deleting = true;
         try {
@@ -147,14 +139,14 @@
 
 <EditorFrame
   canSave={dirty && reservePct !== undefined}
-  deleteLabel="Remove account"
+  deleteLabel={words.editor.remove}
   {deleting}
   failed={refused !== undefined}
   oncancel={cancel}
   ondelete={askRemove}
   onsubmit={save}
   {question}
-  saveLabel="Save changes"
+  saveLabel={words.editor.save}
   {saving}
   title={nameOf(account)}
 >
@@ -163,8 +155,8 @@
   {/snippet}
   {#snippet header()}
     <TitleInput
-      label="Nickname"
-      placeholder={account.label ? "Nickname" : nameOf(account)}
+      label={words.editor.nickname}
+      placeholder={account.label ? words.editor.nickname : nameOf(account)}
       bind:value={fields.nickname}
     />
     {#if refused}
@@ -172,23 +164,35 @@
     {/if}
   {/snippet}
 
-  <EditorSection hue="var(--hue-cyan-500)" icon={IconServer} label="Machines">
+  <EditorSection
+    hue="var(--hue-cyan-500)"
+    icon={IconServer}
+    label={words.editor.machines}
+  >
     <AccountMachines {account} />
   </EditorSection>
 
-  <EditorSection hue={hueVar(fields.hue)} icon={IconPalette} label="Looks">
+  <EditorSection
+    hue={hueVar(fields.hue)}
+    icon={IconPalette}
+    label={words.editor.looks}
+  >
     <Swatches bind:value={fields.hue} />
   </EditorSection>
 
   {#if limits}
-    <EditorSection hue="var(--hue-amber-500)" icon={IconUsage} label="Limits">
+    <EditorSection
+      hue="var(--hue-amber-500)"
+      icon={IconUsage}
+      label={words.editor.limits}
+    >
       <SwitchField
         id="never-backup"
-        label="Never use as a backup"
+        label={words.editor.neverBackup}
         bind:checked={fields.neverBackup}
       />
       <div class="reserve">
-        <label for="reserve">Stop placing new work past</label>
+        <label for="reserve">{words.editor.reserve}</label>
         <!-- The figure and its unit hold together on one line. -->
         <span class="amount">
           <Input
@@ -201,12 +205,12 @@
             inputmode="numeric"
             bind:value={fields.reserve}
           />
-          <span>% of the week</span>
+          <span>{words.editor.reserveUnit}</span>
         </span>
       </div>
       {#if reservePct === undefined}
         <p class="problem" id="reserve-line" in:appear>
-          A reserve is a whole number from 0 to 100. Empty it for none.
+          {words.editor.reserveInvalid}
         </p>
       {/if}
     </EditorSection>

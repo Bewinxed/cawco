@@ -11,6 +11,7 @@
   import {
     type Account,
     type AccountProvider,
+    accountsWords,
     type StrategyChoice,
     strategiesFor,
   } from "@cawco/core";
@@ -54,6 +55,7 @@
     onorder: (order: string[]) => void;
   } = $props();
 
+  const words = accountsWords.routingEditor;
   let hover = $state<string | null>(null);
   let grid = $state<HTMLElement | null>(null);
 
@@ -116,7 +118,7 @@
       <!-- biome-ignore lint/a11y/useSemanticElements: the card is a radio holding its own controls (Pinned's account, Fill first's order), which a native radio or button cannot hold -->
       <div
         aria-checked={checked}
-        aria-label="{strategy.label}: {strategy.line}"
+        aria-label={words.card(strategy.label, strategy.line)}
         class="card"
         onclick={(event) => {
           if (!(event.target as HTMLElement).closest("select, .order")) {
@@ -144,7 +146,7 @@
           {#if strategy.id === "pinned" && checked}
             <span class="pin" in:appear out:crossOut>
               <NativeSelect
-                aria-label="Pinned account"
+                aria-label={words.pinnedAccount}
                 onchange={(event) => {
                   onchoice({
                     strategy: "pinned",
@@ -186,7 +188,7 @@
   </div>
   <p class="forks">
     <IconSubagent />
-    Forks stay on their parent’s account, whatever the strategy.
+    {words.forks}
   </p>
 </div>
 

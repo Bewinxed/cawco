@@ -10,7 +10,7 @@
    * pill's recipe). Opening it, the name flies into the account page's title
    * (motion/share).
    */
-  import type { Account } from "@cawco/core";
+  import { type Account, accountsWords as words } from "@cawco/core";
   import { TextMorph } from "torph/svelte";
   import { morphMs } from "#lib/cawco/motion/curves.svelte.js";
   import { IconChevronRight, IconWarningTriangle } from "#lib/icons.js";
@@ -20,7 +20,7 @@
 
   const href = $derived(`/config/accounts/${account.id}`);
   const name = $derived(
-    account.label || account.email ? nameOf(account) : "Not signed in yet"
+    account.label || account.email ? nameOf(account) : words.notSignedInYet
   );
   const problem = $derived(problemOf(account));
 </script>

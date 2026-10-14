@@ -48,7 +48,7 @@ final class PasteSignin {
             let id = try await account()
             let start = try await hub.beginSignin(id, machineId: machineId)
             guard let link = start.url.flatMap(URL.init(string:)) else {
-                throw HubSaid("The machine answered a code, not a sign-in link. Update CawCo on it, then start again.")
+                throw HubSaid(Words.Accounts.Signin.notALink)
             }
             url = link
             phase = .ready
@@ -76,7 +76,7 @@ final class PasteSignin {
             case "mismatch": phase = .mismatch
             default:
                 phase = .ready
-                problem = "That code didn't sign the machine in. Open the sign-in link again for a new code."
+                problem = Words.Accounts.Signin.refused
             }
         } catch {
             phase = .ready
@@ -132,7 +132,7 @@ final class DeviceSignin {
             guard mine == round else { return }
             guard let userCode = challenge.userCode, let expires = challenge.expiresAt else {
                 phase = .idle
-                problem = "The machine answered a sign-in link, not a code. Update CawCo on it, then start again."
+                problem = Words.Accounts.Device.notACode
                 return
             }
             code = userCode
@@ -316,7 +316,7 @@ final class SwatchesView: UIStackView {
     private var rings: [String: CAShapeLayer] = [:]
     private(set) var value: String
 
-    init(value: String, label: String = "Colour") {
+    init(value: String, label: String = Words.Accounts.colour) {
         self.value = value
         super.init(frame: .zero)
         spacing = Space.space3
@@ -418,10 +418,12 @@ final class SignedInLine: UIStackView {
 
     /// Says who it signed in as and draws the tick.
     func say(_ who: String) {
-        let text = NSMutableAttributedString(string: "Signed in as ", attributes: [.font: TypeScale.typeMeta.font, .foregroundColor: Palette.inkRow])
+        // "Signed in as" and who, the name in the strong weight (`.got b`), a space between as in the web's markup.
+        let text = NSMutableAttributedString(string: Words.Accounts.Signin.signedInAs, attributes: [.font: TypeScale.typeMeta.font, .foregroundColor: Palette.inkRow])
+        text.append(NSAttributedString(string: " ", attributes: [.font: TypeScale.typeMeta.font]))
         text.append(NSAttributedString(string: who, attributes: [.font: TypeScale.typeMeta.withWeight(.semibold).font, .foregroundColor: Palette.inkStrong]))
         words.attributedText = text
-        accessibilityLabel = "Signed in as \(who)"
+        accessibilityLabel = text.string
         tick.removeAllAnimations()
         let draw = CABasicAnimation(keyPath: UIAccessibility.isReduceMotionEnabled ? "opacity" : "strokeEnd")
         draw.fromValue = 0

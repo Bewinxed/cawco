@@ -70,7 +70,9 @@ class ConfigSectionController: ObservedViewController {
         titleLabel.text = section.label
         titleLabel.accessibilityTraits = .header
         titleLabel.tracking = -0.01
+        // Only a section whose rows don't say what it is carries the line (core `CONFIG_SECTIONS`).
         purposeLabel.text = section.purpose
+        purposeLabel.isHidden = section.purpose == nil
         purposeLabel.wrap = .pretty
         let titles = UIStackView(arrangedSubviews: [titleLabel, purposeLabel])
         titles.axis = .vertical
@@ -95,7 +97,7 @@ class ConfigSectionController: ObservedViewController {
 
         skeleton.axis = .vertical
         skeleton.spacing = 2
-        skeleton.accessibilityLabel = "Loading"
+        skeleton.accessibilityLabel = Words.Configure.loading
         skeleton.isAccessibilityElement = true
         // `h-14`: the height a two-line row takes.
         for _ in 0 ..< 3 { skeleton.addArrangedSubview(SkeletonView(height: 56)) }
@@ -183,7 +185,7 @@ extension ConfigSection {
     /// What an editor shows when the row it names is not in the list
     /// (Missing.svelte): the section's empty state and the way back.
     func missing(_ what: String, back: @escaping () -> Void) -> KitEmptyState {
-        KitEmptyState(icon: glyph, title: "That \(what) is gone", line: "It was deleted, or the link is from another hub.",
-                      action: KitButton.make("Back to \(label)", variant: .outline, action: back))
+        KitEmptyState(icon: glyph, title: Words.Configure.gone(what: what), line: Words.Configure.goneLine,
+                      action: KitButton.make(Words.Configure.backTo(section: label), variant: .outline, action: back))
     }
 }

@@ -17,7 +17,9 @@
   import {
     type Account,
     type AccountHue,
+    accountsWords,
     CLAUDE_PROVIDER,
+    configureWords,
     DEFAULT_AT_LIMIT,
     defaultRouting,
     type HarnessKind,
@@ -84,14 +86,16 @@
   import Swatches from "./Swatches.svelte";
   import { SigninFlow } from "./signin.svelte";
 
+  const words = accountsWords.setup;
+
   // ── Provider ───────────────────────────────────────────────────────────
   const choices = $derived(choicesOf());
   const keyOf = (one: ProviderChoice) => `${one.provider}:${one.kind}`;
   let query = $state("");
   const shownChoices = $derived.by(() => {
-    const words = query.trim().toLowerCase();
-    return words
-      ? choices.filter((one) => choiceLabel(one).toLowerCase().includes(words))
+    const asked = query.trim().toLowerCase();
+    return asked
+      ? choices.filter((one) => choiceLabel(one).toLowerCase().includes(asked))
       : choices;
   });
   /**
@@ -102,12 +106,12 @@
     [
       {
         id: "signin",
-        label: "Sign in",
+        label: words.pickSignin,
         rows: shownChoices.filter((one) => one.signin !== "api-key"),
       },
       {
         id: "keys",
-        label: "API keys",
+        label: words.pickKeys,
         rows: shownChoices.filter((one) => one.signin === "api-key"),
       },
     ].filter((group) => group.rows.length > 0)
@@ -119,11 +123,6 @@
         harnesses.includes(entry.harness as HarnessKind)
       )
     );
-  const HARNESS: Record<HarnessKind, string> = {
-    claude: "Claude Code",
-    opencode: "OpenCode",
-    pi: "pi",
-  };
 
   let choice = $state<ProviderChoice | null>(null);
   /** The provider's one account, when this is its second: the setup goes on to routing. */
@@ -131,17 +130,19 @@
   const provider = $derived(choice?.provider ?? null);
   const limits = $derived(provider !== null && providerLimits(provider));
   const full = $derived(existing !== null);
-  const STEPS = $derived([
-    "Provider",
-    "Sign in",
-    "Name it",
+  /** A step, as the rail names it (`words.steps`). */
+  type Step = keyof typeof words.steps;
+  const STEPS = $derived<Step[]>([
+    "provider",
+    "signIn",
+    "nameIt",
     ...(full
-      ? [
-          "Your sessions",
-          "Delegates",
-          ...(limits ? ["At the limit"] : []),
-          "Done",
-        ]
+      ? ([
+          "yourSessions",
+          "delegates",
+          ...(limits ? (["atLimit"] as const) : []),
+          "done",
+        ] as const)
       : []),
   ]);
   const LAST = $derived(STEPS.length - 1);
@@ -164,7 +165,7 @@
     }
     const row = choice;
     if (!row) {
-      return Promise.reject(new Error("Choose a provider first."));
+      return Promise.reject(new Error(words.chooseFirst));
     }
     creating ??= createAccount({
       provider: row.provider,
@@ -252,17 +253,17 @@
   let refused = $state<string | null>(null);
 
   const canGo = $derived(
-    at === "Provider" ? false : at !== "Sign in" || signedIn > 0
+    at === "provider" ? false : at !== "signIn" || signedIn > 0
   );
   /** A key not yet on any machine: Send key is the step's one primary, not Continue. */
   const keyFirst = $derived(
-    at === "Sign in" && choice?.signin === "api-key" && signedIn === 0
+    at === "signIn" && choice?.signin === "api-key" && signedIn === 0
   );
   const nextLabel = $derived.by(() => {
     if (step === LAST && full) {
-      return "Open Accounts";
+      return words.openAccounts;
     }
-    return step === LAST ? "Save account" : "Continue";
+    return step === LAST ? words.save : words.next;
   });
 
   /**
@@ -323,13 +324,13 @@
     refused = null;
     busy = true;
     try {
-      if (at === "Name it" && createdId) {
+      if (at === "nameIt" && createdId) {
         await patchAccount(createdId, {
           label: nickname.trim() || null,
           hue,
         });
       }
-      const lastRouting = limits ? "At the limit" : "Delegates";
+      const lastRouting: Step = limits ? "atLimit" : "delegates";
       if (at === lastRouting && full && provider) {
         await putRouting(provider, {
           yours: $state.snapshot(yours),
@@ -412,15 +413,20 @@
   }
 </script>
 
-<SectionFrame title="Add account">
+<SectionFrame title={words.title}>
   {#snippet actions()}
-    <Button disabled={busy} label="Cancel" onclick={cancel} variant="outline" />
+    <Button
+      disabled={busy}
+      label={configureWords.cancel}
+      onclick={cancel}
+      variant="outline"
+    />
   {/snippet}
 
   <div class="host">
     <div class="setup">
-      <ol aria-label="Steps" class="steps">
-        {#each STEPS as name, place (name)}
+      <ol aria-label={words.stepsLabel} class="steps">
+        {#each STEPS as id, place (id)}
           <li
             aria-current={place === step ? "step" : undefined}
             class={["step", place < step && "done", place === step && "cur"]}
@@ -430,7 +436,7 @@
             {:else}
               <span aria-hidden="true" class="dot"></span>
             {/if}
-            <span class="name">{name}</span>
+            <span class="name">{words.steps[id]}</span>
           </li>
         {/each}
       </ol>
@@ -439,41 +445,39 @@
         <div class="box" {@attach morph()}>
           {#key step}
             <div
-              class={["in", at === "Provider" && "picker"]}
+              class={["in", at === "provider" && "picker"]}
               in:stepIn
               out:stepOut
             >
-              {#if at === "Provider"}
+              {#if at === "provider"}
                 {@render pick()}
-              {:else if at === "Sign in"}
+              {:else if at === "signIn"}
                 {@render signIn()}
-              {:else if at === "Name it"}
+              {:else if at === "nameIt"}
                 {@render nameIt()}
-              {:else if at === "Your sessions" && pair}
-                {@render strategy("Your sessions", yours, (c) => {
+              {:else if at === "yourSessions" && pair}
+                {@render strategy(words.steps.yourSessions, yours, (c) => {
                   yours = c;
                 })}
-              {:else if at === "Delegates" && pair}
-                {@render strategy("Delegates", delegates, (c) => {
+              {:else if at === "delegates" && pair}
+                {@render strategy(words.steps.delegates, delegates, (c) => {
                   delegates = c;
                 })}
-              {:else if at === "At the limit" && pair}
+              {:else if at === "atLimit" && pair}
                 <section class="sec">
-                  <h2>At the limit</h2>
+                  <h2>{words.steps.atLimit}</h2>
                   <AtLimitBlock
                     accounts={[pair[1], pair[0]]}
                     terms={provider === CLAUDE_PROVIDER}
                     bind:atLimit
                   />
                 </section>
-              {:else if at === "Done" && pair}
+              {:else if at === "done" && pair}
+                {@const line = routingLine(pair, { yours, delegates })}
                 <section class="sec">
-                  <h2>{nameOf(pair[0])} and {nameOf(pair[1])} are set up</h2>
+                  <h2>{words.setUp(nameOf(pair[0]), nameOf(pair[1]))}</h2>
                   <p class="lead">
-                    {routingLine(pair, { yours, delegates })}{limits &&
-                    atLimit.move
-                      ? " · Moves at the limit"
-                      : ""}
+                    {limits && atLimit.move ? words.withMoves(line) : line}
                   </p>
                 </section>
               {/if}
@@ -486,7 +490,7 @@
         <div class="foot" {@attach aboveKeyboard()}>
           <Button
             disabled={step === 0 || busy || (step === 1 && signedIn > 0)}
-            label="Back"
+            label={words.back}
             onclick={back}
             variant="outline"
           />
@@ -495,7 +499,7 @@
             label={nextLabel}
             onclick={next}
             pending={busy}
-            pendingLabel="Saving…"
+            pendingLabel={configureWords.saving}
             variant={keyFirst ? "outline" : "default"}
           />
         </div>
@@ -508,10 +512,10 @@
   <section class="sec">
     {#if choices.length > 8}
       <Input
-        aria-label="Search providers"
+        aria-label={words.search}
         autocomplete="off"
         class="search"
-        placeholder="Search providers"
+        placeholder={words.search}
         spellcheck="false"
         type="search"
         bind:value={query}
@@ -521,7 +525,7 @@
       <h3 class="ghead" id="pick-{group.id}">{group.label}</h3>
       {@render choiceRows(group.rows, group.id)}
     {:else}
-      <p class="none">No provider matches “{query.trim()}”</p>
+      <p class="none">{words.noMatch(query.trim())}</p>
     {/each}
   </section>
 {/snippet}
@@ -565,9 +569,9 @@
           {@render button({})}
         {:else}
           <Tip
-            label="No machine runs {row.harnesses
-              .map((one) => HARNESS[one])
-              .join(" or ")}"
+            label={words.noMachineRuns(
+              row.harnesses.map((one) => accountsWords.harnesses[one])
+            )}
           >
             {#snippet children(
               props
@@ -598,7 +602,10 @@
     {#if signedIn > 0 && choice?.signin !== "device-code"}
       <div class="signed-as" in:unfold out:unfold>
         <IconSuccess aria-hidden="true" />
-        <span>Signed in as <b>{email ?? "the account"}</b></span>
+        <span
+          >{accountsWords.signin.signedInAs}
+          <b>{email ?? accountsWords.signin.theAccount}</b></span
+        >
       </div>
     {/if}
     {#if choice?.signin === "api-key"}
@@ -620,9 +627,9 @@
               </div>
               <span class={["st", state === "mismatch" && "warn"]}>
                 {#if !done && state === "mismatch"}
-                  <IconWarningTriangle aria-hidden="true" />Someone else
+                  <IconWarningTriangle aria-hidden="true" />{words.someoneElse}
                 {:else if !online}
-                  Offline
+                  {words.offline}
                 {/if}
               </span>
             </li>
@@ -637,14 +644,14 @@
                 class={["st", done && "ok", state === "mismatch" && "warn"]}
               >
                 {#if done}
-                  <IconSuccess aria-hidden="true" />Signed in
+                  <IconSuccess aria-hidden="true" />{words.signedIn}
                 {:else if paste.phase === "mismatch" || state === "mismatch"}
-                  <IconWarningTriangle aria-hidden="true" />Someone else
+                  <IconWarningTriangle aria-hidden="true" />{words.someoneElse}
                 {:else if !online}
-                  Offline
+                  {words.offline}
                 {:else if !asked}
                   <Button
-                    label="Sign in"
+                    label={words.signIn}
                     onclick={() => paste.open()}
                     size="sm"
                     variant="outline"
@@ -657,7 +664,7 @@
                     <Button
                       href={paste.url}
                       icon={IconArrowUpRight}
-                      label="Open sign-in link"
+                      label={accountsWords.signin.openLink}
                       rel="noopener noreferrer"
                       size="sm"
                       target="_blank"
@@ -667,16 +674,16 @@
                     <Button
                       disabled
                       icon={IconArrowUpRight}
-                      label="Open sign-in link"
+                      label={accountsWords.signin.openLink}
                       pending={paste.phase === "opening"}
-                      pendingLabel="Opening…"
+                      pendingLabel={accountsWords.signin.opening}
                       size="sm"
                       variant="outline"
                     />
                   {/if}
                   <Input
                     aria-invalid={paste.problem ? "true" : undefined}
-                    aria-label="Code for {name}"
+                    aria-label={words.codeFor(name)}
                     autocomplete="off"
                     class="code h-[30px]"
                     disabled={paste.url === null}
@@ -686,17 +693,17 @@
                         paste.done();
                       }
                     }}
-                    placeholder="Paste the code"
+                    placeholder={words.pasteCode}
                     spellcheck="false"
                     bind:value={paste.code}
                   />
                   <Button
                     disabled={paste.url === null || paste.code.trim() === ""}
                     failed={paste.problem !== null}
-                    label="Done"
+                    label={accountsWords.signin.done}
                     onclick={() => paste.done()}
                     pending={paste.phase === "checking"}
-                    pendingLabel="Checking…"
+                    pendingLabel={accountsWords.signin.checking}
                     size="sm"
                   />
                 </div>
@@ -707,19 +714,14 @@
                 </p>
               {:else if paste.phase === "mismatch"}
                 <p class="row-warn" role="alert" in:appear>
-                  {name}
-                  signed in as {paste.email ?? "another account"}, so it signed
-                  out again. Open the link again and sign in as the account
-                  you're adding.
+                  {words.mismatch(name, paste.email)}
                 </p>
               {/if}
             </li>
           {/if}
         {:else}
           <li class="none">
-            No machine runs
-            {harnessWords(choice?.provider ?? CLAUDE_PROVIDER)}
-            yet. Install it on one, and it shows here.
+            {words.none(harnessWords(choice?.provider ?? CLAUDE_PROVIDER))}
           </li>
         {/each}
       </ul>
@@ -729,9 +731,9 @@
 
 {#snippet nameIt()}
   <section class="sec">
-    <h2>Name it</h2>
+    <h2>{words.steps.nameIt}</h2>
     <div class="fld">
-      <span class="label">How it shows</span>
+      <span class="label">{words.howItShows}</span>
       <div class="preview">
         <AccountTile {hue} provider={choice?.provider ?? ""} size={28} />
         <AccountName account={shown} />
@@ -739,18 +741,19 @@
     </div>
     <div class="fld">
       <label class="label" for="setup-nickname">
-        Nickname <span class="optional">optional</span>
+        {words.nickname}
+        <span class="optional">{words.optional}</span>
       </label>
       <Input
         autocomplete="off"
         class="nickname"
         id="setup-nickname"
-        placeholder="Leave empty to use the email"
+        placeholder={words.nicknamePlaceholder}
         bind:value={nickname}
       />
     </div>
     <div class="fld">
-      <span class="label">Colour</span>
+      <span class="label">{accountsWords.colour}</span>
       <Swatches bind:value={hue} />
     </div>
   </section>

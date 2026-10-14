@@ -32,7 +32,7 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
     init(context: ShellContext) {
         self.context = context
         super.init(nibName: nil, bundle: nil)
-        navigationItem.backButtonTitle = "Configure"
+        navigationItem.backButtonTitle = Words.Configure.title
     }
 
     @available(*, unavailable)
@@ -62,7 +62,7 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
         collection = UICollectionView(frame: .zero, collectionViewLayout: layout)
         collection.backgroundColor = .clear
         collection.delegate = self
-        collection.accessibilityLabel = "Configure"
+        collection.accessibilityLabel = Words.Configure.title
         collection.translatesAutoresizingMaskIntoConstraints = false
 
         let row = UICollectionView.CellRegistration<UICollectionViewListCell, String> { [weak self] cell, _, slug in
@@ -177,9 +177,9 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
                 pane.leadingAnchor.constraint(equalTo: panel.trailingAnchor),
                 pane.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             ])
-            // Wide screens open on the section last opened (`LAST_KEY`).
-            let open = ConfigSections.last.flatMap(ConfigSections.section) ?? ConfigSections.all[0]
-            show(open.slug, animated: false)
+            // Wide screens open on the section last opened (`LAST_KEY`), else the first the app opens.
+            let kept = ConfigSections.last.flatMap(ConfigSections.section).flatMap { $0.opens ? $0 : nil }
+            if let open = kept ?? ConfigSections.opening.first { show(open.slug, animated: false) }
         }
         collection.collectionViewLayout.invalidateLayout()
         reconfigureRows()
@@ -190,7 +190,7 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
     override func refreshContent() {
         var next: [String: (count: Int?, badge: ConfigBadge?)] = [:]
         for section in ConfigSections.all {
-            next[section.slug] = (section.count?(hub), section.badge(section, hub))
+            next[section.slug] = (section.count(hub), section.badge(hub))
         }
         drawn = next
     }
@@ -214,8 +214,13 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
         let compact = compact
         let state = drawn[slug]
         cell.contentConfiguration = SectionRowConfiguration(glyph: section.glyph, hue: section.hue, label: section.label,
-                                                            counted: section.count != nil, count: state?.count, badge: state?.badge)
-        cell.accessories = compact ? [.disclosureIndicator(options: .init(tintColor: Palette.inkSubtle))] : []
+                                                            counted: section.counted, count: state?.count, badge: state?.badge,
+                                                            opens: section.opens)
+        // A section the app has no screen for is not a way in: no chevron (HIG Lists and tables:
+        // the disclosure indicator says the row opens more), its place kept so every count stands in one column.
+        cell.accessories = compact
+            ? [.disclosureIndicator(options: .init(tintColor: section.opens ? Palette.inkSubtle : .clear))]
+            : []
         cell.configurationUpdateHandler = { cell, state in
             var background = UIBackgroundConfiguration.listCell()
             if compact {
@@ -243,10 +248,19 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
         cell.accessibilityIdentifier = "config.row.\(slug)"
         cell.accessibilityLabel = section.label
         cell.accessibilityValue = [state?.count.map { "\($0)" }, state?.badge?.said].compactMap(\.self).joined(separator: ", ")
-        cell.accessibilityTraits = .button
+        cell.accessibilityTraits = section.opens ? .button : [.button, .notEnabled]
     }
 
     // MARK: Sections
+
+    /// Only a section the app has a screen for takes a press.
+    private func opens(_ path: IndexPath) -> Bool {
+        source.itemIdentifier(for: path).flatMap(ConfigSections.section)?.opens ?? false
+    }
+
+    func collectionView(_: UICollectionView, shouldHighlightItemAt path: IndexPath) -> Bool { opens(path) }
+
+    func collectionView(_: UICollectionView, shouldSelectItemAt path: IndexPath) -> Bool { opens(path) }
 
     func collectionView(_: UICollectionView, didSelectItemAt path: IndexPath) {
         guard let slug = source.itemIdentifier(for: path) else { return }
@@ -255,18 +269,18 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
 
     /// Opens a section: beside the rail, or pushed over the list.
     func open(_ slug: String) {
-        guard let section = ConfigSections.section(slug) else { return }
+        guard let section = ConfigSections.section(slug), section.opens else { return }
         ConfigSections.last = slug
         if compact {
-            navigationController?.pushViewController(screen(section), animated: true)
+            if let next = screen(section) { navigationController?.pushViewController(next, animated: true) }
         } else {
             show(slug, animated: true)
         }
     }
 
-    private func screen(_ section: ConfigSection) -> UIViewController {
+    private func screen(_ section: ConfigSection) -> UIViewController? {
         if let kept = screens[section.slug] { return kept }
-        let made = section.make(section, context)
+        guard let made = section.make?(section, context) else { return nil }
         screens[section.slug] = made
         return made
     }
@@ -274,12 +288,11 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
     /// The section beside the rail. A change of section rises or drops 4%
     /// over 140ms on the drawer curve while the rail holds still (DESIGN.md Pages).
     private func show(_ slug: String, animated: Bool) {
-        guard slug != shown, let section = ConfigSections.section(slug) else { return }
+        guard slug != shown, let section = ConfigSections.section(slug), let next = screen(section) else { return }
         let order = ConfigSections.all.map(\.slug)
         let down = (order.firstIndex(of: slug) ?? 0) > (shown.flatMap(order.firstIndex) ?? 0)
         let leaving = shown.flatMap { screens[$0] }
         shown = slug
-        let next = screen(section)
         addChild(next)
         next.view.translatesAutoresizingMaskIntoConstraints = false
         pane.addSubview(next.view)
@@ -334,6 +347,8 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
 /// with its glyph in its hue, its name in the label role, its badge, and
 /// its count in tabular meta figures, three digits wide from the first
 /// paint so the dash that stands in until the count is read holds its box.
+/// A section the app has no screen for stands at half strength, as a row
+/// that cannot be used does on the web (AccountSetup.svelte `.choice[aria-disabled]`).
 private struct SectionRowConfiguration: UIContentConfiguration {
     let glyph: Glyph
     let hue: UIColor
@@ -341,6 +356,7 @@ private struct SectionRowConfiguration: UIContentConfiguration {
     let counted: Bool
     let count: Int?
     let badge: ConfigBadge?
+    let opens: Bool
     var chosen = false
 
     func makeContentView() -> any UIView & UIContentView { SectionRowView(self) }
@@ -430,5 +446,6 @@ private final class SectionRowView: UIView, UIContentView {
         count.isHidden = !current.counted
         count.text = current.count.map { "\($0)" } ?? "—"
         count.ink = current.chosen ? Palette.selectedInk : Palette.inkMuted
+        alpha = current.opens ? 1 : 0.5
     }
 }

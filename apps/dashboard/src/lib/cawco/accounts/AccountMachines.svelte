@@ -11,7 +11,7 @@
    * Signed in, the check draws, holds for --dur-hold, and the popover puts
    * itself away.
    */
-  import type { Account } from "@cawco/core";
+  import { type Account, accountsWords as words } from "@cawco/core";
   import { SvelteMap } from "svelte/reactivity";
   import { cawco, signOutOn } from "#lib/cawco/client.svelte.js";
   import RowMenu from "#lib/cawco/config/RowMenu.svelte";
@@ -42,6 +42,8 @@
   const signins = $derived(cawco.accounts?.signins ?? []);
   const claude = $derived(account.provider === "anthropic");
   const key = $derived(account.kind === "api_key");
+  /** A row's one action: a key is sent, any other account signs in. */
+  const verb = $derived(key ? words.machines.sendKey : words.machines.signIn);
 
   type Flow =
     | { kind: "paste"; flow: SigninFlow }
@@ -104,15 +106,11 @@
   }
 
   /** What a row says: nothing for a machine it is signed in on. */
-  const WORDS = {
-    "signed-out": "Not signed in",
-    mismatch: "Signed in as someone else",
-    offline: "Offline",
-  } as const;
+  const WORDS = words.machines.state;
 </script>
 
 <NsPopoverGroup>
-  <ul aria-label="Machines" class="rows" {@attach reflow()}>
+  <ul aria-label={words.editor.machines} class="rows" {@attach reflow()}>
     {#each machines as machine (machine.machineId)}
       {@const name = machineName(machine)}
       {@const online = machineOnline(machine)}
@@ -136,9 +134,7 @@
               <NsPopover
                 align="end"
                 id="signin-{account.id}-{machine.machineId}"
-                label="{key ? "Send key" : "Sign in"} {nameOf(
-                  account
-                )} on {name}"
+                label={words.machines.signInOn(verb, nameOf(account), name)}
                 onchange={(next) => setOpen(machine.machineId, next)}
                 {open}
                 triggerClass={buttonVariants({
@@ -148,7 +144,7 @@
                 width={340}
               >
                 {#snippet trigger()}
-                  {key ? "Send key" : "Sign in"}
+                  {verb}
                 {/snippet}
                 <div class="panel">
                   <p class="title">{name}</p>
@@ -179,13 +175,13 @@
               <RowMenu
                 actions={[
                   {
-                    label: "Sign out on this machine",
+                    label: words.machines.signOut,
                     icon: IconLogout,
                     destructive: true,
                     onselect: () => signOut(machine.machineId),
                   },
                 ]}
-                label="{nameOf(account)} on {name}"
+                label={words.machines.accountOn(nameOf(account), name)}
               />
             {/if}
           </span>
@@ -197,7 +193,7 @@
         {/if}
       </li>
     {:else}
-      <li class="none">No machine runs this account's agents yet.</li>
+      <li class="none">{words.machines.none}</li>
     {/each}
   </ul>
 </NsPopoverGroup>

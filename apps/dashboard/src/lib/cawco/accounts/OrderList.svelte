@@ -5,7 +5,7 @@
    * the others make room on the list's reflow (motion/rows), and the row
    * drops into its place. Up and down arrows move a focused row a place.
    */
-  import type { Account } from "@cawco/core";
+  import { type Account, accountsWords } from "@cawco/core";
   import { tick } from "svelte";
   import { dur, ease, motionOk } from "../motion/curves.svelte";
   import { REFLOW_REREAD, reflow } from "../motion/rows.svelte";
@@ -23,6 +23,7 @@
     onchange: (order: string[]) => void;
   } = $props();
 
+  const words = accountsWords.routingEditor;
   const rows = $derived(
     order
       .map((id) => accounts.find((one) => one.id === id))
@@ -107,7 +108,7 @@
 </script>
 
 <div class="order">
-  <p class="label" id="order-label">Order: drag to change it</p>
+  <p class="label" id="order-label">{words.order}</p>
   <ol
     aria-labelledby="order-label"
     class="list"
@@ -123,9 +124,12 @@
           : undefined}
       >
         <button
-          aria-label="{nameOf(account)}, place {order.indexOf(account.id) +
-            1} of {order.length}. Arrow keys move it."
-          aria-roledescription="draggable"
+          aria-label={words.place(
+            nameOf(account),
+            order.indexOf(account.id) + 1,
+            order.length
+          )}
+          aria-roledescription={words.draggable}
           class="row"
           data-id={account.id}
           onkeydown={(event) => nudge(event, account.id)}

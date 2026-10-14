@@ -133,6 +133,8 @@ public enum Glyph: String, CaseIterable, Sendable {
     case bell = "bell-bold-duotone"
     // Configure (config/sections.ts, updates/UpdateCell.svelte, updates/ReleaseNotes.svelte).
     case phone = "smartphone-bold-duotone"
+    /// Spend's (IconDollar).
+    case dollar = "dollar-bold-duotone"
     case clock = "clock-circle-bold-duotone"
     case graphUp = "graph-up-bold-duotone"
     case bug = "bug-bold-duotone"

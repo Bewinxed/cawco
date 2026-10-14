@@ -12,6 +12,7 @@
 
 <script lang="ts">
   /** A row's ⋯ menu: every action a row has beyond opening it and its switch. */
+  import { configureWords } from "@cawco/core";
   import { buttonVariants } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
@@ -22,7 +23,7 @@
 
 <DropdownMenu.Root>
   <DropdownMenu.Trigger
-    aria-label="More for {label}"
+    aria-label={configureWords.moreFor(label)}
     class={buttonVariants({ variant: "ghost", size: "icon-sm" })}
   >
     <IconMore />

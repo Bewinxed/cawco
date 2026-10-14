@@ -6,7 +6,7 @@
    * The figure under the numbers plays that policy, rebuilt as they change.
    * Off, the numbers fold away with the figure and the terms.
    */
-  import type { Account, AtLimit } from "@cawco/core";
+  import { type Account, type AtLimit, accountsWords } from "@cawco/core";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
@@ -26,6 +26,7 @@
     terms: boolean;
   } = $props();
 
+  const words = accountsWords.atLimit;
   const id = $props.id();
   const lanes = $derived(
     accounts.map((account) => ({
@@ -47,17 +48,15 @@
 </script>
 
 <div class="lim">
-  <h3 class="head">
-    When a session hits its limit and another account is free
-  </h3>
+  <h3 class="head">{words.head}</h3>
   <div class="switch-line">
-    <label for="{id}-move">Move running sessions between accounts</label>
+    <label for="{id}-move">{words.move}</label>
     <Switch id="{id}-move" bind:checked={atLimit.move} />
   </div>
   {#if atLimit.move}
     <div class="rows" in:unfold out:unfold>
       <p class="pr">
-        <label for="{id}-wait">Wait if the window resets within</label>
+        <label for="{id}-wait">{words.wait}</label>
         <Input
           class="num field"
           id="{id}-wait"
@@ -69,12 +68,10 @@
           type="number"
           value={atLimit.waitMinutes}
         />
-        <span>minutes</span>
+        <span>{words.minutes}</span>
       </p>
       <p class="pr">
-        <label for="{id}-under"
-          >Move the whole conversation if it’s under</label
-        >
+        <label for="{id}-under">{words.under}</label>
         <Input
           class="num field"
           id="{id}-under"
@@ -86,12 +83,12 @@
           type="number"
           value={atLimit.moveWholeUnderK}
         />
-        <span>k tokens</span>
-        <span class="aside">The new account re-reads it from scratch.</span>
+        <span>{words.kTokens}</span>
+        <span class="aside">{words.rereads}</span>
       </p>
-      <p class="pr">Otherwise continue from a summary</p>
+      <p class="pr">{words.otherwise}</p>
       <p class="pr">
-        <label for="{id}-at">Write that summary early, at</label>
+        <label for="{id}-at">{words.early}</label>
         <Input
           class="num field"
           id="{id}-at"
@@ -104,10 +101,8 @@
           type="number"
           value={atLimit.prepareAtPct}
         />
-        <span>%</span>
-        <span class="aside"
-          >While the current account’s cache is still warm.</span
-        >
+        <span>{words.percent}</span>
+        <span class="aside">{words.warm}</span>
       </p>
       <div class="figure">
         <StrategyFigure board="limit" {lanes} playing {policy} />
@@ -119,8 +114,7 @@
           rel="noopener noreferrer"
           target="_blank"
         >
-          Moving a conversation between Claude subscriptions is subject to
-          Anthropic’s terms
+          {words.terms}
           <IconArrowUpRight />
         </a>
       {/if}

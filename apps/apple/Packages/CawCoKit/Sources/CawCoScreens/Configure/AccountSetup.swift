@@ -51,10 +51,10 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
     private let box = UIView()
     private let content = UIStackView()
     private let problem = metaLine(ink: Palette.statusFailInk)
-    private lazy var back = KitButton.make("Back", variant: .outline) { [weak self] in self?.goBack() }
-    private lazy var forward = KitButton.make("Continue", variant: .action) { [weak self] in self?.goOn() }
+    private lazy var back = KitButton.make(Words.Accounts.Setup.back, variant: .outline) { [weak self] in self?.goBack() }
+    private lazy var forward = KitButton.make(Words.Accounts.Setup.next, variant: .action) { [weak self] in self?.goOn() }
     /// Continue while a key is not on any machine yet: Send key is the step's primary.
-    private lazy var nextQuiet = KitButton.make("Continue", variant: .outline) { [weak self] in self?.goOn() }
+    private lazy var nextQuiet = KitButton.make(Words.Accounts.Setup.next, variant: .outline) { [weak self] in self?.goOn() }
     private var drawnStep: Int?
     private var drawnMachines: [String] = []
     private var signinRows: [String: SetupMachineRow] = [:]
@@ -67,11 +67,11 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         self.section = section
         self.context = context
         super.init(nibName: nil, bundle: nil)
-        navigationItem.title = "Add account"
+        navigationItem.title = Words.Accounts.Setup.title
         navigationItem.largeTitleDisplayMode = .never
         // Leaving is Cancel's: it takes back an account no machine signed in.
         navigationItem.hidesBackButton = true
-        let cancel = UIBarButtonItem(title: "Cancel", primaryAction: UIAction { [weak self] _ in self?.cancel() })
+        let cancel = UIBarButtonItem(title: Words.Configure.cancel, primaryAction: UIAction { [weak self] _ in self?.cancel() })
         cancel.accessibilityIdentifier = "setup.cancel"
         navigationItem.leftBarButtonItem = cancel
     }
@@ -94,12 +94,19 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
     private var limits: Bool { provider.map(FleetAccounts.limits) ?? false }
     private var full: Bool { existing != nil }
 
-    private var stepNames: [String] {
-        ["Provider", "Sign in", "Name it"] + (full ? ["Your sessions", "Delegates"] + (limits ? ["At the limit"] : []) + ["Done"] : [])
+    /// A step, by the key its name stands under (`Words.Accounts.Setup.Steps`).
+    enum Step: String {
+        case provider, signIn, nameIt, yourSessions, delegates, atLimit, done
+
+        var name: String { Words.Accounts.Setup.Steps.byKey[rawValue] ?? rawValue }
     }
 
-    private var at: String { stepNames[step] }
-    private var last: Int { stepNames.count - 1 }
+    private var stepList: [Step] {
+        [.provider, .signIn, .nameIt] + (full ? [.yourSessions, .delegates] + (limits ? [.atLimit] : []) + [.done] : [])
+    }
+
+    private var at: Step { stepList[step] }
+    private var last: Int { stepList.count - 1 }
 
     private var machines: [MachineRow] {
         choice.map { FleetAccounts.machines(running: $0.harnesses, hub: hub) } ?? []
@@ -149,7 +156,7 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
 
         steps.spacing = Space.space1
         steps.alignment = .center
-        steps.accessibilityLabel = "Steps"
+        steps.accessibilityLabel = Words.Accounts.Setup.stepsLabel
         box.backgroundColor = Palette.surfaceWell
         box.layer.cornerRadius = Radius.radiusLg
         box.layer.cornerCurve = .continuous
@@ -234,8 +241,8 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
             }
             scroll.setContentOffset(.zero, animated: false)
         }
-        if at == "Sign in" { drawSignin(view) }
-        if at == "Name it" { drawPreview(view) }
+        if at == .signIn { drawSignin(view) }
+        if at == .nameIt { drawPreview(view) }
         drawFoot(view)
     }
 
@@ -243,7 +250,7 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
     private func drawSteps() {
         steps.arrangedSubviews.forEach { $0.removeFromSuperview() }
         let compact = traitCollection.horizontalSizeClass == .compact
-        for (place, name) in stepNames.enumerated() {
+        for (place, name) in stepList.map(\.name).enumerated() {
             let mark: UIView
             if place < step {
                 mark = GlyphView(.passed, size: 16, tint: Palette.statusDoneGlyph)
@@ -277,7 +284,7 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
             if place == step { item.backgroundColor = Palette.selectedBg }
             item.isAccessibilityElement = true
             item.accessibilityLabel = name
-            item.accessibilityValue = place < step ? "Done" : place == step ? "Current step" : nil
+            item.accessibilityValue = place < step ? Words.Accounts.Setup.stepPassed : place == step ? Words.Accounts.Setup.stepCurrent : nil
             item.accessibilityIdentifier = place == step ? "setup.step.current" : nil
             steps.addArrangedSubview(item)
         }
@@ -301,36 +308,36 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         preview = nil
         searchRows = nil
         switch at {
-        case "Provider": buildPick()
-        case "Sign in": buildSignin()
-        case "Name it": buildName(view)
-        case "Your sessions", "Delegates":
-            content.addArrangedSubview(heading(at))
+        case .provider: buildPick()
+        case .signIn: buildSignin()
+        case .nameIt: buildName(view)
+        case .yourSessions, .delegates:
+            content.addArrangedSubview(heading(at.name))
             if let pair = pair(view) {
-                let mine = at == "Your sessions"
-                let picker = StrategyPickerView(provider: pair[0].provider, label: at, accounts: pair, choice: mine ? yours : delegates, order: order(view))
+                let mine = at == .yourSessions
+                let picker = StrategyPickerView(provider: pair[0].provider, label: at.name, accounts: pair, choice: mine ? yours : delegates, order: order(view))
                 picker.onChoice = { [weak self] choice in
                     if mine { self?.yours = choice } else { self?.delegates = choice }
                 }
                 picker.onOrder = { [weak self] ids in self?.dragged = ids }
                 content.addArrangedSubview(picker)
             }
-        case "At the limit":
-            content.addArrangedSubview(heading(at))
+        case .atLimit:
+            content.addArrangedSubview(heading(at.name))
             if let pair = pair(view) {
                 let block = AtLimitView(accounts: (pair[1], pair[0]), terms: provider == FleetAccounts.claude, value: atLimit)
                 block.onChange = { [weak self] next in self?.atLimit = next }
                 content.addArrangedSubview(block)
             }
-        case "Done":
+        case .done:
             if let pair = pair(view) {
-                content.addArrangedSubview(heading("\(FleetAccounts.name(pair[0])) and \(FleetAccounts.name(pair[1])) are set up"))
+                content.addArrangedSubview(heading(Words.Accounts.Setup.setUp(first: FleetAccounts.name(pair[0]), second: FleetAccounts.name(pair[1]))))
                 let lead = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
-                lead.text = FleetAccounts.routingLine(pair, yours: yours, delegates: delegates) + (limits && atLimit.move ? " · Moves at the limit" : "")
+                let line = FleetAccounts.routingLine(pair, yours: yours, delegates: delegates)
+                lead.text = limits && atLimit.move ? Words.Accounts.Setup.withMoves(line: line) : line
                 lead.wrap = .pretty
                 content.addArrangedSubview(lead)
             }
-        default: break
         }
     }
 
@@ -339,8 +346,8 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
     private func buildPick() {
         let choices = FleetAccounts.choices(hub) ?? []
         if choices.count > 8 {
-            let search = KitField(placeholder: "Search providers")
-            search.accessibilityLabel = "Search providers"
+            let search = KitField(placeholder: Words.Accounts.Setup.search)
+            search.accessibilityLabel = Words.Accounts.Setup.search
             search.clearButtonMode = .whileEditing
             search.returnKeyType = .search
             search.delegate = self
@@ -363,9 +370,10 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         rows.arrangedSubviews.forEach { $0.removeFromSuperview() }
         let words = query.trimmingCharacters(in: .whitespaces).lowercased()
         let shown = (FleetAccounts.choices(hub) ?? []).filter { words.isEmpty || FleetAccounts.choiceLabel($0).lowercased().contains(words) }
-        let groups = [("Sign in", shown.filter { $0.signin != "api-key" }), ("API keys", shown.filter { $0.signin == "api-key" })].filter { !$0.1.isEmpty }
+        let groups = [(Words.Accounts.Setup.pickSignin, shown.filter { $0.signin != "api-key" }),
+                      (Words.Accounts.Setup.pickKeys, shown.filter { $0.signin == "api-key" })].filter { !$0.1.isEmpty }
         guard !groups.isEmpty else {
-            rows.addArrangedSubview(metaLine("No provider matches “\(query.trimmingCharacters(in: .whitespaces))”"))
+            rows.addArrangedSubview(metaLine(Words.Accounts.Setup.noMatch(query: query.trimmingCharacters(in: .whitespaces))))
             return
         }
         for (index, (label, choices)) in groups.enumerated() {
@@ -378,7 +386,9 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
             rows.addArrangedSubview(pad)
             for (at, row) in choices.enumerated() {
                 let runners = FleetAccounts.machines(running: row.harnesses, hub: hub)
-                let why = runners.isEmpty ? "No machine runs \(row.harnesses.compactMap { FleetAccounts.harnessWords[$0] }.joined(separator: " or "))" : nil
+                let why = runners.isEmpty
+                    ? Words.Accounts.Setup.noMachineRuns(harnesses: row.harnesses.compactMap { FleetAccounts.harnessWords[$0] })
+                    : nil
                 let control = ProviderChoiceRow(choice: row, why: why)
                 control.accessibilityIdentifier = "setup.provider.\(row.key)"
                 if at > 0 { control.addHairline() }
@@ -434,7 +444,7 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
     /// The account's id, making it first: it is made by its first sign-in.
     private func ensureAccount() async throws -> String {
         if let createdId { return createdId }
-        guard let row = choice else { throw HubSaid("Choose a provider first.") }
+        guard let row = choice else { throw HubSaid(Words.Accounts.Setup.chooseFirst) }
         let task = creating ?? Task { @MainActor [hub, hue] in
             try await hub.createAccount(provider: row.provider, kind: row.kind, hue: hue)
         }
@@ -490,7 +500,7 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         guard let choice else { return }
         let count = signedIn(view)
         let banner = signedAs.superview
-        if count > 0, choice.signin != "device-code", banner?.isHidden == true { signedAs.say(email(view) ?? "the account") }
+        if count > 0, choice.signin != "device-code", banner?.isHidden == true { signedAs.say(email(view) ?? Words.Accounts.Signin.theAccount) }
         if let banner { fold(banner, open: count > 0 && choice.signin != "device-code") }
         if let keyPanel {
             keyPanel.set(machines: machines)
@@ -504,7 +514,7 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
             rows.arrangedSubviews.forEach { $0.removeFromSuperview() }
             signinRows = [:]
             if machines.isEmpty {
-                let none = metaLine("No machine runs \(FleetAccounts.harnessWords(choice.provider, hub: hub)) yet. Install it on one, and it shows here.")
+                let none = metaLine(Words.Accounts.Setup.none(harnesses: FleetAccounts.harnessWords(choice.provider, hub: hub)))
                 rows.addArrangedSubview(none)
             }
             for machine in machines {
@@ -537,9 +547,9 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
     // MARK: Name it
 
     private func buildName(_ view: FleetAccounts.View?) {
-        content.addArrangedSubview(heading("Name it"))
+        content.addArrangedSubview(heading(Step.nameIt.name))
         let showsLabel = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
-        showsLabel.text = "How it shows"
+        showsLabel.text = Words.Accounts.Setup.howItShows
         let tile = AccountTileView(provider: choice?.provider ?? "", hue: hue, side: 28)
         let name = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
         let email = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
@@ -555,9 +565,9 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         card.accessibilityIdentifier = "setup.preview"
         card.widthAnchor.constraint(lessThanOrEqualToConstant: 360).isActive = true
         preview = (tile, name, email)
-        let field = KitField(placeholder: "Leave empty to use the email")
+        let field = KitField(placeholder: Words.Accounts.Setup.nicknamePlaceholder)
         field.text = nickname
-        field.accessibilityLabel = "Nickname, optional"
+        field.accessibilityLabel = Words.Accounts.Setup.nicknameSaid
         field.accessibilityIdentifier = "setup.nickname"
         field.delegate = self
         field.widthAnchor.constraint(lessThanOrEqualToConstant: 280).isActive = true
@@ -566,11 +576,14 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
             self?.requestRefresh()
         }, for: .editingChanged)
         let nicknameLabel = UILabel()
-        let words = NSMutableAttributedString(string: "Nickname ", attributes: [.font: TypeScale.typeLabel.font, .foregroundColor: Palette.inkStrong])
-        words.append(NSAttributedString(string: "optional", attributes: [.font: TypeScale.typeLabel.withWeight(.regular).font, .foregroundColor: Palette.inkMuted]))
+        // "Nickname" in the label's weight, then "optional" in the body's, muted, a space between.
+        let words = NSMutableAttributedString(string: Words.Accounts.Setup.nickname, attributes: [.font: TypeScale.typeLabel.font, .foregroundColor: Palette.inkStrong])
+        words.append(NSAttributedString(string: " ", attributes: [.font: TypeScale.typeLabel.font]))
+        words.append(NSAttributedString(string: Words.Accounts.Setup.optional,
+                                        attributes: [.font: TypeScale.typeLabel.withWeight(.regular).font, .foregroundColor: Palette.inkMuted]))
         nicknameLabel.attributedText = words
         let colourLabel = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
-        colourLabel.text = "Colour"
+        colourLabel.text = Words.Accounts.colour
         let swatches = SwatchesView(value: hue)
         swatches.onPick = { [weak self] picked in
             self?.hue = picked
@@ -591,7 +604,9 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         preview.tile.set(provider: choice?.provider ?? "", hue: hue)
         let label = nickname.trimmingCharacters(in: .whitespaces)
         let mail = email(view)
-        preview.name.text = !label.isEmpty || mail != nil ? FleetAccounts.name(label: label.isEmpty ? nil : label, email: mail, kind: choice?.kind) : "Not signed in yet"
+        preview.name.text = !label.isEmpty || mail != nil
+            ? FleetAccounts.name(label: label.isEmpty ? nil : label, email: mail, kind: choice?.kind)
+            : Words.Accounts.notSignedInYet
         preview.email.text = !label.isEmpty ? mail : nil
         preview.email.isHidden = preview.email.text == nil
     }
@@ -600,12 +615,12 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
 
     private func drawFoot(_ view: FleetAccounts.View?) {
         let count = signedIn(view)
-        let canGo = at == "Provider" ? false : at != "Sign in" || count > 0
-        let keyFirst = at == "Sign in" && choice?.signin == "api-key" && count == 0
-        let label = step == last ? (full ? "Open Accounts" : "Save account") : "Continue"
+        let canGo = at == .provider ? false : at != .signIn || count > 0
+        let keyFirst = at == .signIn && choice?.signin == "api-key" && count == 0
+        let label = step == last ? (full ? Words.Accounts.Setup.openAccounts : Words.Accounts.Setup.save) : Words.Accounts.Setup.next
         for (button, variant) in [(forward, KitButton.Variant.action), (nextQuiet, .outline)] {
             button.isHidden = (variant == .outline) != keyFirst
-            KitButton.setTitle(busy ? "Saving…" : label, of: button, variant: variant, height: .standard)
+            KitButton.setTitle(busy ? Words.Configure.saving : label, of: button, variant: variant, height: .standard)
             button.configuration?.showsActivityIndicator = busy
             button.isEnabled = canGo && !busy
         }
@@ -624,11 +639,11 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                if at == "Name it", let made = createdId {
+                if at == .nameIt, let made = createdId {
                     let label = nickname.trimmingCharacters(in: .whitespaces)
                     try await hub.patchAccount(made, label: .some(label.isEmpty ? nil : label), hue: hue)
                 }
-                if at == (limits ? "At the limit" : "Delegates"), full, let provider {
+                if at == (limits ? .atLimit : .delegates), full, let provider {
                     try await hub.putRouting(provider, yours: yours, delegates: delegates, atLimit: atLimit)
                     // Each account whose place the drag changed takes it, from 0.
                     let latest = FleetAccounts.view(hub) ?? view
@@ -694,7 +709,7 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
     }
 
     #if DEBUG
-    var probeStep: String { at }
+    var probeStep: String { at.name }
     var probeCreated: String? { createdId }
     func probeChoose(_ key: String) {
         guard let row = FleetAccounts.choices(hub)?.first(where: { $0.key == key }) else { return }
@@ -788,7 +803,7 @@ final class SetupMachineRow: UIStackView {
         self.panel = panel
         self.name = name
         super.init(frame: .zero)
-        signIn = KitButton.make("Sign in", variant: .outline, height: .sm) { [weak self, weak panel] in
+        signIn = KitButton.make(Words.Accounts.Setup.signIn, variant: .outline, height: .sm) { [weak self, weak panel] in
             guard let self, let panel else { return }
             Task { @MainActor in
                 guard await flow.open(), let url = flow.url else { return }
@@ -796,7 +811,7 @@ final class SetupMachineRow: UIStackView {
                 _ = self
             }
         }
-        signIn?.accessibilityLabel = "Sign in on \(name)"
+        signIn?.accessibilityLabel = Words.Accounts.Setup.signInOn(machine: name)
         signIn?.accessibilityIdentifier = "setup.signin.\(name)"
         build(name)
         panel.isHidden = true
@@ -842,7 +857,9 @@ final class SetupMachineRow: UIStackView {
     func draw(online: Bool, state signin: String, done: Bool) {
         let mismatch = signin == "mismatch" || flow?.phase == .mismatch
         let asked = flow.map { $0.phase != .idle || $0.url != nil } ?? true
-        let words: String? = done && flow != nil ? "Signed in" : mismatch && !done ? "Someone else" : !online && !done ? "Offline" : nil
+        let words: String? = done && flow != nil ? Words.Accounts.Setup.signedIn
+            : mismatch && !done ? Words.Accounts.Setup.someoneElse
+            : !online && !done ? Words.Accounts.Setup.offline : nil
         state.text = words
         state.isHidden = words == nil
         state.ink = done ? Palette.statusDoneInk : mismatch ? Palette.statusAttnInk : Palette.inkMuted

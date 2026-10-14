@@ -144,6 +144,7 @@ const SOLAR_ICONS = [
   "bell-bold-duotone",
   // Configure (config/sections.ts, updates/UpdateCell.svelte, updates/ReleaseNotes.svelte).
   "smartphone-bold-duotone", // IconPhone
+  "dollar-bold-duotone", // IconDollar: Spend
   "clock-circle-bold-duotone", // IconClock
   "graph-up-bold-duotone", // IconGraphUp
   "bug-bold-duotone", // IconBug

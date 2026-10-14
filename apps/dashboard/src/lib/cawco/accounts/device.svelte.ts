@@ -6,7 +6,7 @@
  * a press: nothing starts on open. The setup's machine rows and the account
  * page's popover both draw this (DevicePanel).
  */
-import type { ProviderSigninChallenge } from "@cawco/core";
+import { accountsWords, type ProviderSigninChallenge } from "@cawco/core";
 import { failureWords } from "#lib/cawco/hub-read.js";
 import { awaitDeviceSignin, beginDeviceSignin } from "../client.svelte";
 
@@ -64,8 +64,7 @@ export class DeviceFlow {
       }
       if (!deviceCode(challenge)) {
         this.phase = "idle";
-        this.problem =
-          "The machine answered a sign-in link, not a code. Update CawCo on it, then start again.";
+        this.problem = accountsWords.device.notACode;
         return;
       }
       this.code = challenge.userCode;

@@ -16,6 +16,7 @@
  */
 
 import type { LimitWindow } from "./usage/types";
+import { accountsWords } from "./words/accounts";
 
 /**
  * Who bills the account: a provider id. `anthropic` is a Claude subscription
@@ -312,27 +313,54 @@ export const strategiesFor = (
 ): readonly PlacementStrategy[] =>
   LIMITED_PROVIDERS.includes(provider)
     ? PLACEMENT_STRATEGIES
-    : ["pinned", "fill-first"];
+    : ACCOUNT_RULES.unlimitedStrategies;
 
 /**
  * A provider's routing until it is saved: a person's sessions pinned and a
  * session's delegates on the soonest reset where CawCo reads its limits;
  * both Fill first where it doesn't.
  */
-export const defaultRouting = (provider: AccountProvider): ProviderRouting =>
-  LIMITED_PROVIDERS.includes(provider)
-    ? {
-        provider,
-        yours: { strategy: "pinned" },
-        delegates: { strategy: "soonest-reset" },
-        atLimit: DEFAULT_AT_LIMIT,
-      }
-    : {
-        provider,
-        yours: { strategy: "fill-first" },
-        delegates: { strategy: "fill-first" },
-        atLimit: DEFAULT_AT_LIMIT,
-      };
+export const defaultRouting = (provider: AccountProvider): ProviderRouting => {
+  const defaults = LIMITED_PROVIDERS.includes(provider)
+    ? ACCOUNT_RULES.limitedDefaults
+    : ACCOUNT_RULES.unlimitedDefaults;
+  return {
+    provider,
+    yours: { strategy: defaults.yours },
+    delegates: { strategy: defaults.delegates },
+    atLimit: DEFAULT_AT_LIMIT,
+  };
+};
+
+/**
+ * The rules that shape Configure › Accounts, which the native app follows
+ * from here too (`bun run words` writes them as `Words.Accounts.Rules`):
+ * when a provider's routing is offered, which providers' limits CawCo reads
+ * (their accounts have a Limits section, an At the limit step and every
+ * strategy), what the others offer, the routing each starts from, and the
+ * at-limit policy a routing starts with.
+ */
+export const ACCOUNT_RULES = {
+  /** A provider's routing is a choice among its accounts: it is offered from this many. */
+  routingFrom: 2,
+  limitedProviders: LIMITED_PROVIDERS,
+  unlimitedStrategies: ["pinned", "fill-first"] as readonly PlacementStrategy[],
+  limitedDefaults: {
+    yours: "pinned" as PlacementStrategy,
+    delegates: "soonest-reset" as PlacementStrategy,
+  },
+  unlimitedDefaults: {
+    yours: "fill-first" as PlacementStrategy,
+    delegates: "fill-first" as PlacementStrategy,
+  },
+  atLimit: DEFAULT_AT_LIMIT,
+  /** The terms that cover moving a conversation between Claude subscriptions. */
+  termsUrl: "https://code.claude.com/docs/en/legal-and-compliance",
+};
+
+/** Whether a provider with this many accounts has a routing to choose. */
+export const hasRouting = (accounts: number): boolean =>
+  accounts >= ACCOUNT_RULES.routingFrom;
 
 /**
  * One provider's routing. `yours` places the sessions a person starts;
@@ -883,7 +911,7 @@ export const modelScope = (model: string | null | undefined): string | null => {
 /** What an account is called: its nickname, else the email it is signed in as. */
 export const accountName = (
   account: Pick<Account, "email" | "id" | "label">
-): string => account.label ?? account.email ?? "an account not signed in yet";
+): string => account.label ?? account.email ?? accountsWords.unnamed;
 
 /** An account as a transcript line names it, as it was when the line was written. */
 export interface NamedAccount {
