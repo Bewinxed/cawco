@@ -35734,6 +35734,10 @@
           "argumentHint": {
             "type": "string"
           },
+          "builtin": {
+            "description": "Claude Code's own command, as its SDK marks it (`SlashCommand.builtin`,\nclaude-agent-sdk 0.3.296): \"Rows can share a name: when a marked row\ncarries it, /name runs that one, and an unmarked row is the one /name\nruns only when no marked row shares its name.\" Absent on every other\nharness.",
+            "type": "boolean"
+          },
           "description": {
             "type": "string"
           },
