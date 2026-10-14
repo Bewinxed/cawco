@@ -2,13 +2,34 @@ import CawCoCore
 import CawCoDesign
 import UIKit
 
+/// A project's row (`LIST_ROW`: 30pt, mark, name): a tap opens the
+/// project's page; its mark is the switch that folds its sessions.
+final class ProjectRailRow: RailRow {
+    let mark: ProjectMarkView
+
+    init(project: ProjectRow) {
+        mark = ProjectMarkView(cwd: project.folder, gap: 10)
+        super.init(height: 30, leading: 10, trailing: 8, gap: 10)
+        content.isUserInteractionEnabled = true
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        // The mark's switch owns only the lead column; the name opens the page.
+        let hit = mark.switchElement
+        if mark.point(inside: mark.convert(point, from: self), with: event) {
+            return hit.hitTest(hit.convert(point, from: self), with: event)
+        }
+        return super.hitTest(point, with: event).map { _ in self }
+    }
+}
+
 /// A project in the rail: its row (`LIST_ROW`: 30pt, mark, name, what is
 /// running in it), and while open its sessions under it on a rail of their
 /// own (`.kit-nest`: `--nest-pad` in, `--tree-gap` apart and under the row,
 /// the line from the project's mark down to each one).
 final class ProjectBlock: UIStackView, UIContextMenuInteractionDelegate {
     let project: ProjectRow
-    let row = RailRow(height: 30, leading: 10, trailing: 8, gap: 10)
+    let row: ProjectRailRow
     let sessionsBox = UIView()
     let sessions = UIStackView()
     let rail = NestRailView()
@@ -22,13 +43,14 @@ final class ProjectBlock: UIStackView, UIContextMenuInteractionDelegate {
     let emptyRow = RailTextRow()
     var onMenu: () -> UIMenu = { UIMenu() }
     private let name = KitLabel(TypeScale.typeLabel.withWeight(.regular), ink: Palette.sidebarForeground)
-    let mark: ProjectMarkView
+    var mark: ProjectMarkView { row.mark }
 
     init(project: ProjectRow) {
         self.project = project
-        mark = ProjectMarkView(cwd: project.folder)
+        row = ProjectRailRow(project: project)
         super.init(frame: .zero)
         axis = .vertical
+        name.isUserInteractionEnabled = false
         name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         row.content.addArrangedSubview(mark)
         row.content.addArrangedSubview(name)
@@ -66,12 +88,17 @@ final class ProjectBlock: UIStackView, UIContextMenuInteractionDelegate {
 
     func configure(name text: String, running: Int, open: Bool) {
         name.text = text
-        mark.configure(count: running)
+        mark.configure(count: running, open: open, name: text)
         row.accessibilityLabel = text
         // Sidebar.svelte: the name, then ", N running" while anything runs in it.
         row.accessibilityValue = running > 0 ? "\(running) running" : nil
-        row.accessibilityTraits = [.button]
-        row.accessibilityHint = open ? "Folds its sessions" : "Opens its sessions"
+    }
+
+    /// The row, then its mark's switch (which the row, an element itself,
+    /// would hide), then its sessions while they are out.
+    override var accessibilityElements: [Any]? {
+        get { [row, mark.switchElement] + (sessionsBox.isHidden || sessionsBox.superview == nil ? [] : [sessionsBox]) }
+        set {}
     }
 
     override func layoutSubviews() {

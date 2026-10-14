@@ -115,11 +115,11 @@ final class SidebarViewController: ObservedViewController {
         after(1, phase: "project-close") { [self] in
             let y = block.convert(block.bounds, to: column).minY
             scroll.setContentOffset(CGPoint(x: 0, y: min(y, max(0, scroll.contentSize.height - scroll.bounds.height))), animated: false)
-            projectTapped(block.row)
+            toggleProject(block)
         }
-        after(1.4, phase: "project-open") { [self] in projectTapped(block.row) }
-        after(2.5, phase: "project-close-again") { [self] in projectTapped(block.row) }
-        after(3, phase: "project-open-again") { [self] in projectTapped(block.row) }
+        after(1.4, phase: "project-open") { [self] in toggleProject(block) }
+        after(2.5, phase: "project-close-again") { [self] in toggleProject(block) }
+        after(3, phase: "project-open-again") { [self] in toggleProject(block) }
         let node = project.recent.first { $0.count > 0 }!
         after(4, phase: "delegate-open") { [self] in toggleTree(node.row.id, row: sessionRows[rowKey(project.project.id, node.row.id)]!) }
         after(5.5, phase: "delegate-close") { [self] in toggleTree(node.row.id, row: sessionRows[rowKey(project.project.id, node.row.id)]!) }
@@ -775,7 +775,10 @@ final class SidebarViewController: ObservedViewController {
         }
         for list in lists {
             let block = blocks[list.project.id] ?? ProjectBlock(project: list.project)
-            block.row.addTarget(self, action: #selector(projectTapped(_:)), for: .primaryActionTriggered)
+            block.row.addTarget(self, action: #selector(projectOpened(_:)), for: .primaryActionTriggered)
+            block.mark.onToggle = { [weak self, weak block] in
+                if let block { self?.toggleProject(block) }
+            }
             block.onMenu = { [weak self, weak block] in self?.folderMenu(list.project, from: block?.row) ?? UIMenu() }
             keptBlocks[list.project.id] = block
             block.clearSessions()
@@ -871,6 +874,14 @@ final class SidebarViewController: ObservedViewController {
                 projectPrints[list.project.id] = print
                 block.configure(name: name, running: running, open: open)
             }
+            // The project's page in front: its row is the place, as a session's row is its conversation.
+            let here = host?.destination == .project(list.project.id)
+            #if DEBUG
+            if block.row.active != here {
+                Self.performance.debug("rail project \(name, privacy: .public) selected \(here) open \(open) route \(String(describing: self.host?.destination), privacy: .public)")
+            }
+            #endif
+            block.row.active = here
         }
     }
 
@@ -913,10 +924,22 @@ final class SidebarViewController: ObservedViewController {
 
     // MARK: Folding
 
-    @objc private func projectTapped(_ row: RailRow) {
+    /// A project's row: its page, which the phone's sheet steps aside for (the shell's `go`).
+    @objc private func projectOpened(_ row: RailRow) {
         guard let block = blocks.first(where: { $0.value.row === row })?.value else { return }
+        #if DEBUG
+        Self.performance.debug("rail project \(block.project.name, privacy: .public) row tapped open \(!self.prefs.collapsed(block.project.id))")
+        #endif
+        host?.go(.project(block.project.id))
+    }
+
+    /// A project's mark: folds its sessions away, or brings them back.
+    private func toggleProject(_ block: ProjectBlock) {
         let project = block.project
         let shut = !prefs.collapsed(project.id)
+        #if DEBUG
+        Self.performance.debug("rail project \(project.name, privacy: .public) mark tapped \(shut ? "fold" : "unfold", privacy: .public) route \(String(describing: self.host?.destination), privacy: .public)")
+        #endif
         if fold.closingBox === block.sessionsBox {
             fold.open(block.sessionsBox, glyphs: block.sessionGlyphs(), rail: block.rail, in: view)
             return

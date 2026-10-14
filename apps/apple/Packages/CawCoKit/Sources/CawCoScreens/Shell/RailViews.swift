@@ -176,34 +176,69 @@ final class GhostIconButton: UIButton {
 // MARK: Marks
 
 /// A project's mark (ProjectMark.svelte): the folder on its hued tile, 18pt
-/// with a 12pt glyph, `--radius-xs`, the mark overlay over the hue.
+/// with a 12pt glyph, `--radius-xs`, the mark overlay over the hue. Its
+/// count is the sessions running in it, a status of the project, so it stays
+/// on the tile while the project is open. The mark is the switch that folds
+/// the project's sessions, as a session's mark folds its delegates: under a
+/// pointer on it the tile's face gives way to the chevron, turned down at the
+/// rows while they are out; the row round it opens the project's page.
 final class ProjectMarkView: UIView {
+    private let face = UIView()
     private let overlay = CAGradientLayer()
     private let glyph = GlyphView(.folder, size: 12, tint: Palette.markGlyph)
     private let count = KitLabel(TypeScale.typeMeta.with(leading: 1), ink: Palette.markGlyph)
+    private let chevron = GlyphView(.chevronBold, size: 12, tint: Palette.markGlyph)
+    private let hit = ProjectMarkSwitch()
+    private var running = 0
+    private var open = false
+    private var over = false
+    /// The row's gap from the mark to its name: a finger's switch reaches that far sideways.
+    private let gap: Double
 
-    init(cwd: String) {
+    /// Opens and folds the project's sessions from the mark's own hit area.
+    var onToggle: () -> Void = {}
+
+    init(cwd: String, gap: Double) {
+        self.gap = gap
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        layer.cornerRadius = Radius.radiusXs
-        layer.cornerCurve = .continuous
-        clipsToBounds = true
-        layer.addSublayer(overlay)
-        addSubview(glyph)
-        count.translatesAutoresizingMaskIntoConstraints = false
+        face.translatesAutoresizingMaskIntoConstraints = false
+        face.isUserInteractionEnabled = false
+        face.layer.cornerRadius = Radius.radiusXs
+        face.layer.cornerCurve = .continuous
+        face.clipsToBounds = true
+        face.layer.addSublayer(overlay)
+        addSubview(face)
         count.textAlignment = .center
         count.tabular = true
         count.isHidden = true
-        addSubview(count)
+        for part in [glyph, count, chevron] as [UIView] {
+            part.translatesAutoresizingMaskIntoConstraints = false
+            face.addSubview(part)
+            NSLayoutConstraint.activate([
+                part.centerXAnchor.constraint(equalTo: face.centerXAnchor),
+                part.centerYAnchor.constraint(equalTo: face.centerYAnchor),
+            ])
+        }
+        chevron.alpha = 0
         NSLayoutConstraint.activate([
             widthAnchor.constraint(equalToConstant: 18),
             heightAnchor.constraint(equalToConstant: 18),
-            glyph.centerXAnchor.constraint(equalTo: centerXAnchor),
-            glyph.centerYAnchor.constraint(equalTo: centerYAnchor),
-            count.centerXAnchor.constraint(equalTo: centerXAnchor),
-            count.centerYAnchor.constraint(equalTo: centerYAnchor),
+            face.leadingAnchor.constraint(equalTo: leadingAnchor),
+            face.trailingAnchor.constraint(equalTo: trailingAnchor),
+            face.topAnchor.constraint(equalTo: topAnchor),
+            face.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
-        backgroundColor = Self.hue(cwd)
+        face.backgroundColor = Self.hue(cwd)
+        hit.addAction(UIAction { [weak self] _ in self?.onToggle() }, for: .touchUpInside)
+        for event in [UIControl.Event.touchDown, .touchDragEnter] {
+            hit.addAction(UIAction { [weak self] _ in self?.press(true) }, for: event)
+        }
+        for event in [UIControl.Event.touchUpInside, .touchUpOutside, .touchCancel, .touchDragExit] {
+            hit.addAction(UIAction { [weak self] _ in self?.press(false) }, for: event)
+        }
+        hit.addGestureRecognizer(UIHoverGestureRecognizer(target: self, action: #selector(hovered(_:))))
+        addSubview(hit)
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: ProjectMarkView, _: UITraitCollection) in view.paint() }
         paint()
     }
@@ -217,15 +252,86 @@ final class ProjectMarkView: UIView {
         overlay.colors = Palette.markOverlay.colors(for: traitCollection)
     }
 
-    func configure(count total: Int) {
+    /// `running`: the sessions running in it; `open`: its sessions are out.
+    /// `name`: the project's, for the switch's ("Show cockpit's sessions").
+    func configure(count total: Int, open: Bool, name: String) {
+        let turned = open != self.open || (total > 0) != (running > 0)
+        running = total
+        self.open = open
         count.text = total >= 100 ? "99" : "\(total)"
-        count.isHidden = total == 0
-        glyph.isHidden = total > 0
+        hit.accessibilityLabel = "\(open ? "Hide" : "Show") \(name)'s sessions"
+        hit.accessibilityValue = open ? "Expanded" : "Collapsed"
+        swap(animated: turned && window != nil)
     }
+
+    /// The switch, as an accessibility element of the block the row stands in.
+    var switchElement: UIView { hit }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        overlay.frame = bounds
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        overlay.frame = face.bounds
+        CATransaction.commit()
+        hit.frame = switchBox
+    }
+
+    /// The switch's area. Under a finger: the kit's touch target centred on
+    /// the tile, sideways as far as the row's name (its gap from the mark),
+    /// up and down as a session mark's. Under a pointer: the tile and the
+    /// status dot's overhang round it, as a session mark's.
+    private var switchBox: CGRect {
+        let side = 18.0
+        let box = CGRect(x: 0, y: 0, width: side, height: side)
+        if traitCollection.userInterfaceIdiom == .mac {
+            let reach = Size.statusDotSize / 2
+            return box.insetBy(dx: -reach, dy: -reach)
+        }
+        return box.insetBy(dx: -gap, dy: -(44 - side) / 2)
+    }
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        switchBox.contains(point) || super.point(inside: point, with: event)
+    }
+
+    @objc private func hovered(_ hover: UIHoverGestureRecognizer) {
+        let now = hover.state == .began || hover.state == .changed
+        guard now != over else { return }
+        over = now
+        swap(animated: true)
+    }
+
+    /// The press: the tile gives a little under it.
+    private func press(_ down: Bool) {
+        guard !UIAccessibility.isReduceMotionEnabled else { return }
+        let scale = down ? Motion.pressScale : 1
+        Motion.easeOut.animator(Motion.durToggle) { [face] in
+            face.transform = CGAffineTransform(scaleX: scale, y: scale)
+        }.startAnimation()
+    }
+
+    /// What the tile shows at rest (the folder, or the running count, which
+    /// stays while the sessions are out) and the chevron it gives way to
+    /// under a pointer on the switch, turned down at the rows while they are out.
+    private func swap(animated: Bool) {
+        let rest: UIView = running > 0 ? count : glyph
+        let away: UIView = running > 0 ? glyph : count
+        away.isHidden = true
+        rest.isHidden = false
+        let turn = open ? CGAffineTransform(rotationAngle: .pi / 2) : .identity
+        let small = CGAffineTransform(scaleX: 0.25, y: 0.25)
+        let moves = !UIAccessibility.isReduceMotionEnabled
+        let apply: @MainActor () -> Void = { [chevron, over] in
+            rest.alpha = over ? 0 : 1
+            rest.transform = over && moves ? small : .identity
+            chevron.alpha = over ? 1 : 0
+            chevron.transform = over || !moves ? turn : turn.concatenating(small)
+        }
+        if animated {
+            Motion.easeOut.animator(Motion.durControl, animations: apply).startAnimation()
+        } else {
+            apply()
+        }
     }
 
     /// mark.ts `markHue`: `(h * 31 + c) | 0` over the UTF-16 units, one of the eight mark hues.
@@ -234,6 +340,20 @@ final class ProjectMarkView: UIView {
         for unit in seed.utf16 { h = h &* 31 &+ Int32(unit) }
         let hues = [Palette.mark1, Palette.mark2, Palette.mark3, Palette.mark4, Palette.mark5, Palette.mark6, Palette.mark7, Palette.mark8]
         return hues[Int(h.magnitude % 8)]
+    }
+}
+
+/// A project mark's switch: a clear control over the tile, a button by role.
+private final class ProjectMarkSwitch: UIControl {
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isAccessibilityElement = true
+        accessibilityTraits = .button
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("ProjectMarkSwitch is built in code")
     }
 }
 
