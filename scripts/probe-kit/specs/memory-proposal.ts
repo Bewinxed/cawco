@@ -1,42 +1,61 @@
 /**
- * A project's memory proposal (hub memory.ts) opens from its push straight
- * to a card whose Approve and Deny work, though no session row stands behind
- * it: the hub parks it on machine "hub" under its own id (`p-…`), and the
- * app answers it on the machine its envelope named.
+ * A project's memory proposals are parked, shown and answered on every
+ * surface, and Caw's own memory write needs no answer (685a5ea2: Caw's
+ * `memory_propose` commits as Caw, noted in his thread; with `ask: true` it
+ * is a proposal parked in his thread; the curator's park as before, made in
+ * the curator run's session). The hub parks each proposal on machine "hub"
+ * under its own id (`p-…`), no session row behind it.
  *
  * A scratch fleet (real hub, agent and sessiond, Claude Code against the
- * mock model): a project, a session in it that notes a fact, then Caw asked
- * on a thread for three proposals (AGENTS.md, a knowledge file citing the
- * note, a second knowledge file). The built app on an iPhone simulator of
- * its own (a mac-slot.sh slot, deleted at the end), in order:
+ * mock model, a stand-in Cawrier with a device registered on the hidden
+ * route): a project; a session in it that notes two facts; the curator's
+ * proposal of a file the person wrote, citing the second; then Caw asked on
+ * a thread for one plain write (knowledge/web.md) and three proposals with
+ * `ask: true` (AGENTS.md, a knowledge file citing the first note,
+ * knowledge/web.md again). Every push checked is titled "Memory proposal"
+ * with the project under it, never the work's words; its `projectId` the
+ * project's and its thread the project's; its `instanceId` the proposal's
+ * id; Open only; and it opens where the proposal was made. In order:
  *
- * (p) The hub's push for each (to a stand-in Cawrier, a device registered
- *     on the hidden route): titled "Memory proposal" with the project under
- *     it, never the work's words; its `projectId` the project's and its
- *     thread the project's; its `instanceId` the proposal's id; Open only.
+ * (o) The curator's proposal is parked on machine "hub" under its own id,
+ *     no session row, made in its run's session, and pushed so. The person
+ *     edits the file's head while it waits. The web dashboard at
+ *     /session/<p-…>: the tab moves to that session, the card in its
+ *     composer, nothing says a session is missing; Approve merges the
+ *     proposal into the person's edit (the hub's temp dir: memory.ts
+ *     `mergeThree`), commits as the person, and the card leaves.
+ * (m) Caw's plain write commits knowledge/web.md as Caw at once, and his
+ *     thread notes it; nothing of it is parked.
+ * (k) Caw's three are parked in his thread, each on machine "hub" under
+ *     its own id, with no session row.
+ * (p) Their pushes, each carrying his thread.
+ * (w) The web dashboard at /session/<p-…> of his knowledge/web.md
+ *     proposal: the server's HTML and the page say nothing of a missing
+ *     session, the tab moves to his thread, the card is in its composer;
+ *     Approve commits as the person, the thread says so and the card leaves.
+ * The built app on an iPhone simulator of its own (a mac-slot.sh slot,
+ * deleted at the end), which draws a proposal Caw made in a thread as the
+ * card alone until it has a thread screen (HubConnection.swift `askAlone`):
  * (a) Launched as a tap on the AGENTS.md proposal's push launches it
- *     (`-push-route session:<p-…>`, the route PushNote reads off the hub's
- *     `ask` push: its `instanceId` is the proposal's id): the route lands
- *     (not "isn't on the hub"), the card says Approve on, Deny on, nothing
- *     under them, answering on machine "hub", and the pane is the card
- *     alone: its transcript hidden (`probe alone`), no "isn't reachable"
- *     on screen.
+ *     (`-push-route session:<p-…>`): the route lands (not "isn't on the
+ *     hub"), the card says Approve on, Deny on, nothing under them,
+ *     answering on machine "hub", and the pane is the card alone: its
+ *     transcript hidden (`probe alone`), no "isn't reachable" on screen.
  * (b) Its Approve: the proposal leaves /api/pending, AGENTS.md's newest
  *     commit is the person's ("you"), titled by the proposal's why, and the
  *     pane leaves.
  * (c) Launched as a tap on the cited knowledge proposal's push, its Deny:
  *     the proposal leaves, the knowledge file is never written, the note it
  *     cited is archived "rejected", and the pane leaves.
- * (w) The web dashboard at /session/<p-…>: the server's HTML and the page
- *     say nothing of a missing session, the pane's card has Approve, which
- *     commits the file as the person, and the pane leaves.
  *
  *   bash apps/apple/scripts/build-both.sh ios
  *   bun scripts/probe-kit/run.ts memory-proposal
  *
  * The app is this checkout's simulator build (`PROBE_IOS_APP` names another).
+ * The fleet's checks run before the app is looked for, so a host without the
+ * Mac still reads them; (a) to (c) need the Mac.
  */
-// biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the push, the app's two answers and the web's are read in order, step by step.
+// biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the proposals, the web's answers and the app's are read in order, step by step.
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -55,13 +74,37 @@ const NOTE = "mcp__cawco__memory_note";
 const PROPOSE = "mcp__cawco__memory_propose";
 const CAW = "You are Caw, the lead of the project";
 const WORKER = "PROBE-PROPOSAL-WORKER";
-const FACT = "Releases are cut on Thursdays.";
+/** The worker's two notes: the first Caw's cited proposal cites, the second the curator's. */
+const FACTS = [
+  "Releases are cut on Thursdays.",
+  "Hotfixes ship the same day.",
+] as const;
+const [FACT, CURATED_FACT] = FACTS;
 const ASKED = /PROBE-PROPOSAL-ASK (n-\d{8}-\d{6}-[0-9a-f]{6})/;
+const NOTE_ID = /n-\d{8}-\d{6}-[0-9a-f]{6}/;
+/** A memory_propose result (memory.ts `propose`): committed at once, or parked. */
+const PROPOSE_RESULT = /"committed":true|"waiting":"/g;
+const NOTE_RESULT = '"taint":';
+/** A proposal id's stamp (memory.ts `PROPOSAL_ID`): `YYYYMMDD-HHMMSS`. */
+const STAMP_MARKS = /[-:T]/g;
+const STAMP_DAY = /^(\d{8})/;
 const OUTCOME = /outcome: (.*)/;
+/** The hub's log lines about Caw and memory, for a failed wait on Caw to show. */
+const CAW_LINE = /caw|memory|thread|lead/i;
 const LOG_HEAD = /^.*\] /;
 const TRAILING_SLASH = /\/$/;
-/** The three proposals Caw makes, in order. */
+
+/** knowledge/web.md as Caw writes it, then as he proposes it. */
+const WEB = {
+  path: "knowledge/web.md",
+  written:
+    "# Web\n\n- The dashboard answers proposals.\n\n## Where\n\n- Nothing yet.\n",
+  proposed:
+    "# Web\n\n- The dashboard answers proposals.\n\n## Where\n\n- In Caw's thread.\n",
+} as const;
+/** Caw's calls on the thread, in order; all but the first ask. */
 const FILES = {
+  plain: { path: WEB.path, content: WEB.written, why: "What the web is" },
   agents: {
     path: "AGENTS.md",
     content:
@@ -73,11 +116,21 @@ const FILES = {
     content: `# Releases\n\n- ${FACT}\n`,
     why: "When releases are cut",
   },
-  web: {
-    path: "knowledge/web.md",
-    content: "# Web\n\n- The dashboard answers proposals too.\n",
-    why: "The web answers",
-  },
+  web: { path: WEB.path, content: WEB.proposed, why: "Where the web answers" },
+} as const;
+const CAW_CALLS = [FILES.plain, FILES.agents, FILES.cited, FILES.web] as const;
+/**
+ * knowledge/hotfixes.md as the person wrote it, the curator's proposal of
+ * it, the person's edit of its head while that waits, and the two merged.
+ */
+const CURATED = {
+  path: "knowledge/hotfixes.md",
+  written: "# Hotfixes\n\n- They ship.\n\n## When\n\n- Not said yet.\n",
+  proposed: `# Hotfixes\n\n- They ship.\n\n## When\n\n- ${CURATED_FACT}\n`,
+  edited:
+    "# Hotfixes and patches\n\n- They ship.\n\n## When\n\n- Not said yet.\n",
+  merged: `# Hotfixes and patches\n\n- They ship.\n\n## When\n\n- ${CURATED_FACT}\n`,
+  why: "When hotfixes ship",
 } as const;
 
 /** What the hub sent a stand-in Cawrier for one push (push.ts `payloadOf`). */
@@ -92,8 +145,10 @@ interface Pushed {
     cawco: {
       instanceId?: string;
       kind: string;
+      originInstanceId?: string | null;
       projectId?: string | null;
       requestId?: string;
+      threadId?: string | null;
     };
   };
 }
@@ -105,9 +160,17 @@ interface Ask {
   machineId: string;
   payload: {
     input: { path?: string };
+    originInstanceId?: string;
+    threadId?: string;
     toolName: string;
   };
   requestId: string;
+}
+
+interface ThreadMessage {
+  author: string;
+  body?: string;
+  noteTitle?: string;
 }
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
@@ -138,20 +201,24 @@ const respond = (request: Seen): Reply => {
     if (!asked) {
       return text("ok");
     }
-    for (const [key, file] of Object.entries(FILES)) {
-      if (!all.includes(`"path":"${file.path}"`)) {
-        return call(request, PROPOSE, {
-          path: file.path,
-          content: file.content,
-          why: file.why,
-          ...(key === "cited" ? { notes: [asked[1]] } : {}),
-        });
-      }
+    // Each call answered so far moves Caw to the next.
+    const done = all.match(PROPOSE_RESULT)?.length ?? 0;
+    const file = CAW_CALLS[done];
+    if (!file) {
+      return text("ok");
     }
-    return text("ok");
+    return call(request, PROPOSE, {
+      path: file.path,
+      content: file.content,
+      why: file.why,
+      ...(file === FILES.plain ? {} : { ask: true }),
+      ...(file === FILES.cited ? { notes: [asked[1]] } : {}),
+    });
   }
-  if (all.includes(WORKER) && !all.includes('"taint":')) {
-    return call(request, NOTE, { text: FACT });
+  if (all.includes(WORKER)) {
+    const noted = all.split(NOTE_RESULT).length - 1;
+    const fact = FACTS[noted];
+    return fact ? call(request, NOTE, { text: fact }) : text("ok");
   }
   return text("ok");
 };
@@ -195,10 +262,6 @@ interface Node {
 }
 
 async function run(kit: Kit): Promise<void> {
-  const app = appPath();
-  if (!kit.check("the app is built", existsSync(app), app)) {
-    return;
-  }
   // A stand-in Cawrier: every push the hub makes, as it sent it.
   const pushed: Pushed[] = [];
   const cawrier = Bun.serve({
@@ -277,7 +340,7 @@ async function run(kit: Kit): Promise<void> {
       (ask) => ask.payload.toolName === PROPOSE
     );
 
-  // ── A project, a note in its inbox, Caw's three proposals ──────────────
+  // ── A project, and two notes in its inbox ──────────────────────────────
   const src = join(fleet.sandbox, "src");
   await mkdir(src, { recursive: true });
   await writeFile(
@@ -301,49 +364,326 @@ async function run(kit: Kit): Promise<void> {
   const worker = await fleet.spawn("claude", "Probe worker", src, {
     projectId,
   });
-  await fleet.send(worker, `${WORKER}: note when releases are cut.`);
-  const note = await until(
-    "the worker's note",
-    async (): Promise<string> => {
-      for (const path of await listing(projectId, "memory/inbox")) {
-        // biome-ignore lint/performance/noAwaitInLoops: a note or two
-        if ((await wordsOf(projectId, path)).includes(FACT)) {
-          return path;
+  await fleet.send(worker, `${WORKER}: note when releases and hotfixes go.`);
+  /** The inbox note saying `fact`: its id. */
+  const noteOf = (fact: string) =>
+    until(
+      `the worker's note "${fact}"`,
+      async (): Promise<string> => {
+        for (const path of await listing(projectId, "memory/inbox")) {
+          // biome-ignore lint/performance/noAwaitInLoops: a note or two
+          if ((await wordsOf(projectId, path)).includes(fact)) {
+            return NOTE_ID.exec(path)?.[0] ?? "";
+          }
         }
-      }
-      return "";
-    },
-    Boolean,
-    180_000
-  );
-  const noteId = note.split("/").at(-1)?.replace(".md", "") ?? "";
-  await http("POST", `/api/projects/${projectId}/threads`, {
-    body: `PROBE-PROPOSAL-ASK ${noteId}`,
+        return "";
+      },
+      Boolean,
+      180_000
+    );
+  const noteId = await noteOf(FACT);
+  const curatedNote = await noteOf(CURATED_FACT);
+
+  // ── The curator's proposal ─────────────────────────────────────────────
+  // Filed as its run's memory_propose files it (memory.ts `Proposal`), as
+  // ios-parity.ts files it: a curator run needs a workspace of its own, which
+  // a workspace's boundary refuses to make, so the worker's session stands as
+  // the run's. The hub parks every open proposal as it starts: restarted, it
+  // parks this one as a curator's, made in that session.
+  const now = new Date();
+  const stamp = now
+    .toISOString()
+    .replace(STAMP_MARKS, "")
+    .slice(0, 14)
+    .replace(STAMP_DAY, "$1-");
+  const curatedId = `p-${stamp}-${crypto.randomUUID().slice(0, 6)}`;
+  await http("PUT", `/api/projects/${projectId}/folder/file`, {
+    path: CURATED.path,
+    content: CURATED.written,
+    message: "Hotfixes",
   });
+  const history = await fleet.api<{ commits: { sha: string }[] }>(
+    `/api/projects/${projectId}/folder/history`
+  );
+  await http("PUT", `/api/projects/${projectId}/folder/file`, {
+    path: `memory/proposals/${curatedId}.json`,
+    content: JSON.stringify({
+      base: history.commits[0]?.sha ?? "",
+      before: CURATED.written,
+      by: "Memory curator",
+      content: CURATED.proposed,
+      id: curatedId,
+      notes: [curatedNote],
+      path: CURATED.path,
+      projectId,
+      session: worker,
+      time: now.toISOString(),
+      why: CURATED.why,
+    }),
+    message: `memory: propose a change to ${CURATED.path}`,
+  });
+  await fleet.stop("hub");
+  fleet.launch("hub");
+  await fleet.hubUp();
+  await fleet.agentUp();
+
+  /** Where a proposal is parked: machine "hub", its own id, no session row. */
+  const parkedAlone = (ask: Ask | undefined) =>
+    ask?.machineId === "hub" &&
+    ask.instanceId === ask.requestId &&
+    ask.instanceId.startsWith("p-") &&
+    fleet.instance(ask.instanceId) === undefined;
+  const pushFor = (ask: Ask) =>
+    pushed.find(
+      (one) =>
+        one.payload.cawco.kind === "ask" &&
+        one.payload.cawco.requestId === ask.requestId
+    );
+  /** The hub's pushes for `of`, each "Memory proposal" under the project, opening its id where it was made. */
+  const checkPushes = async (
+    label: string,
+    of: Ask[],
+    madeIn: (cawco: Pushed["payload"]["cawco"]) => boolean
+  ) => {
+    await until(
+      `${label}: a push for each proposal`,
+      () => of.every((ask) => pushFor(ask) !== undefined),
+      Boolean,
+      30_000
+    ).catch(() => undefined);
+    const pushes = of.map((ask) => ({ ask, push: pushFor(ask) }));
+    kit.check(
+      `${label}: each proposal's push is titled "Memory proposal" under its project, in its project's thread, opening its id where it was made`,
+      pushes.every(
+        ({ ask, push }) =>
+          push?.payload.aps.alert?.title === "Memory proposal" &&
+          push.payload.aps.alert.subtitle === "Proposal probe" &&
+          push.payload.aps["thread-id"] === projectId &&
+          push.payload.cawco.projectId === projectId &&
+          push.payload.cawco.instanceId === ask.instanceId &&
+          push.payload.aps.category === "CAWCO_PERMISSION_OPEN" &&
+          madeIn(push.payload.cawco)
+      ),
+      pushes
+        .map(
+          ({ ask, push }) =>
+            `${ask.payload.input.path}: ${push ? `"${push.payload.aps.alert?.title}" / "${push.payload.aps.alert?.subtitle}", project ${push.payload.cawco.projectId}, thread-id ${push.payload.aps["thread-id"]}, ${push.payload.aps.category}, opens ${push.payload.cawco.instanceId}, Caw thread ${push.payload.cawco.threadId ?? "none"}, origin ${push.payload.cawco.originInstanceId ?? "none"}` : "no push"}`
+        )
+        .join("; ")
+    );
+  };
+
+  // ── The web dashboard ──────────────────────────────────────────────────
+  const base = await fleet.dashboard();
+  const page = await kit.page("desk");
+  // The card in a composer (Prompt.svelte `.choice`).
+  const card = ".ask";
+  const approve = ".choice button:has-text('Approve'):not([disabled])";
+  const at = (id: string) => `${base}/session/${id}`;
+  const shownAt = () => decodeURIComponent(page.url());
+  /** Every missing-session word the page shows, sampled from its first paint to its card. */
+  const missingSeen: string[] = [];
+  const sample = async () => {
+    const said = await page.getByText(MISSING).count();
+    if (said > 0) {
+      missingSeen.push(`${said} at ${page.url()}`);
+    }
+  };
+  /**
+   * Opens a proposal's own id and clicks Approve on its card: where the tab
+   * moved, whether the card was drawn there, and whether it left after.
+   */
+  const approveOnWeb = async (ask: Ask, to: string, label: string) => {
+    try {
+      await page.goto(at(ask.instanceId), { waitUntil: "domcontentloaded" });
+      await sample();
+      const moved = await until(
+        `${label}: the tab moves`,
+        async () => {
+          await sample();
+          return shownAt();
+        },
+        (url) => url.endsWith(`/session/${to}`),
+        60_000
+      ).catch(() => shownAt());
+      const drawn = await until(
+        `${label}: the card in the composer`,
+        async () => {
+          await sample();
+          return page
+            .locator(card)
+            .getByText(ask.payload.input.path ?? "")
+            .count();
+        },
+        (count) => count > 0,
+        60_000
+      ).catch(() => 0);
+      await page.click(approve);
+      await until(
+        `${label}: the proposal answered`,
+        proposals,
+        (left) => !left.some((x) => x.requestId === ask.requestId),
+        60_000
+      ).catch(() => undefined);
+      const gone = await until(
+        `${label}: the card leaves`,
+        () => page.locator(approve).count(),
+        (count) => count === 0,
+        20_000
+      ).then(
+        () => true,
+        () => false
+      );
+      return {
+        moved,
+        drawn,
+        gone,
+        answered: !(await proposals()).some(
+          (x) => x.requestId === ask.requestId
+        ),
+      };
+    } catch (error) {
+      const labels = await page
+        .locator("button")
+        .evaluateAll((every) =>
+          every.map(
+            (b) => b.getAttribute("aria-label") ?? b.textContent?.trim() ?? ""
+          )
+        );
+      await writeFile(join(kit.out, `${label}-buttons.txt`), labels.join("\n"));
+      throw error;
+    }
+  };
+
+  // ── (o) the curator's proposal, parked and answered on the web ─────────
+  const curated = await until(
+    "o: the curator's proposal parked",
+    proposals,
+    (found) => found.some((one) => one.requestId === curatedId),
+    60_000
+  ).then((found) => found.find((one) => one.requestId === curatedId));
+  kit.check(
+    "o: the curator's proposal is parked on machine hub under its own id, with no session row, made in its run's session",
+    parkedAlone(curated) &&
+      curated?.payload.originInstanceId === worker &&
+      !curated.payload.threadId,
+    `${curated?.instanceId} on ${curated?.machineId}, origin ${curated?.payload.originInstanceId ?? "none"}, thread ${curated?.payload.threadId ?? "none"}`
+  );
+  if (!curated) {
+    return;
+  }
+  await checkPushes(
+    "o",
+    [curated],
+    (cawco) => cawco.originInstanceId === worker && !cawco.threadId
+  );
+  // The person edits the file's head while the proposal waits: Approve
+  // merges the two in the hub's temp dir (memory.ts `mergeThree`).
+  await http("PUT", `/api/projects/${projectId}/folder/file`, {
+    path: CURATED.path,
+    content: CURATED.edited,
+    message: "Hotfixes and patches",
+  });
+  const o = await approveOnWeb(curated, worker, "o");
+  kit.check(
+    "o: its own id opens the session it was made in, its card in the composer, nothing says the session is missing",
+    o.moved.endsWith(`/session/${worker}`) &&
+      o.drawn > 0 &&
+      missingSeen.length === 0,
+    `at ${o.moved}; card drawn ${o.drawn}; page: ${missingSeen.join(", ") || "never said it"}`
+  );
+  const curatedCommit = await newest(projectId, CURATED.path);
+  const curatedNow = await wordsOf(projectId, CURATED.path);
+  kit.check(
+    "o: Approve there merges the proposal into the person's edit, commits it as the person, and the card leaves",
+    o.answered &&
+      curatedCommit?.author === "you" &&
+      curatedCommit.message.startsWith(`${CURATED.path}: ${CURATED.why}`) &&
+      curatedNow === CURATED.merged &&
+      o.gone,
+    `commit ${curatedCommit?.sha.slice(0, 9)} by ${curatedCommit?.author}: ${curatedCommit?.message.split("\n")[0]}; file ${JSON.stringify(curatedNow)}; card ${o.gone ? "gone" : "still on screen"}`
+  );
+
+  // ── Caw's write and his three proposals ────────────────────────────────
+  const opened = JSON.parse(
+    (
+      await http("POST", `/api/projects/${projectId}/threads`, {
+        body: `PROBE-PROPOSAL-ASK ${noteId}`,
+      })
+    ).text
+  ) as { thread: { id: string } };
+  const thread = opened.thread.id;
+  const messages = async (): Promise<ThreadMessage[]> =>
+    (
+      JSON.parse(
+        (await http("GET", `/api/projects/${projectId}/threads/${thread}`)).text
+      ) as { messages: ThreadMessage[] }
+    ).messages;
+  const noted = (title: string) =>
+    until(
+      `the thread's note "${title}"`,
+      messages,
+      (all) => all.some((one) => one.noteTitle === title),
+      30_000
+    ).then(
+      (all) => all.find((one) => one.noteTitle === title),
+      () => undefined
+    );
+  const cawAsks = async () =>
+    (await proposals()).filter((ask) => ask.payload.threadId === thread);
   const asks = await until(
     "Caw's three proposals parked",
-    proposals,
+    cawAsks,
     (found) => found.length === 3,
     240_000
-  );
-  const askFor = (path: string) =>
+  ).catch(async (error: unknown) => {
+    const caw = fleet.seen.filter((one) => one.all.includes(CAW));
+    const hubSaid = (await fleet.logs("hub"))
+      .split("\n")
+      .filter((line) => CAW_LINE.test(line))
+      .slice(-25);
+    throw new Error(
+      [
+        error instanceof Error ? error.message : String(error),
+        `Parked: ${
+          (await proposals())
+            .map((ask) => `${ask.payload.input.path} (${ask.instanceId})`)
+            .join(", ") || "none"
+        }.`,
+        `Caw's requests to the model: ${caw.length}; his last ended: ${caw.at(-1)?.last.slice(-600) ?? "(none)"}`,
+        `The hub's lines of Caw and memory:\n${hubSaid.join("\n") || "(none)"}`,
+      ].join("\n"),
+      { cause: error }
+    );
+  });
+  const cawAsk = (path: string) =>
     asks.find((ask) => ask.payload.input.path === path);
-  const agents = askFor(FILES.agents.path);
-  const cited = askFor(FILES.cited.path);
-  const web = askFor(FILES.web.path);
+  const agents = cawAsk(FILES.agents.path);
+  const cited = cawAsk(FILES.cited.path);
+  const web = cawAsk(FILES.web.path);
+
+  // ── (m) Caw's plain write ──────────────────────────────────────────────
+  const plain = await newest(projectId, FILES.plain.path);
+  const plainNote = await noted(`Caw wrote ${FILES.plain.path}`);
   kit.check(
-    "each proposal is parked on machine hub under its own id, with no session row",
+    "m: Caw's memory_propose without ask commits as Caw at once, and his thread notes it",
+    plain?.author === "Caw" &&
+      plain.message.startsWith(`${FILES.plain.path}: ${FILES.plain.why}`) &&
+      (await wordsOf(projectId, FILES.plain.path)) === WEB.written &&
+      plainNote !== undefined,
+    `commit ${plain?.sha.slice(0, 9)} by ${plain?.author}: ${plain?.message.split("\n")[0]}; note ${plainNote?.body ?? "none"}`
+  );
+
+  // ── (k) where each is parked ───────────────────────────────────────────
+  kit.check(
+    "k: Caw's three with ask are parked in his thread, each on machine hub under its own id, with no session row",
     [agents, cited, web].every(
-      (ask) =>
-        ask?.machineId === "hub" &&
-        ask.instanceId === ask.requestId &&
-        ask.instanceId.startsWith("p-") &&
-        fleet.instance(ask.instanceId) === undefined
+      (ask) => parkedAlone(ask) && !ask?.payload.originInstanceId
     ),
     asks
       .map(
         (ask) =>
-          `${ask.payload.input.path}: ${ask.instanceId} on ${ask.machineId}`
+          `${ask.payload.input.path}: ${ask.instanceId} on ${ask.machineId}, thread ${ask.payload.threadId ?? "none"}, origin ${ask.payload.originInstanceId ?? "none"}`
       )
       .join("; ")
   );
@@ -352,41 +692,43 @@ async function run(kit: Kit): Promise<void> {
   }
 
   // ── (p) the hub's push for each ────────────────────────────────────────
-  const pushFor = (ask: Ask) =>
-    pushed.find(
-      (one) =>
-        one.payload.cawco.kind === "ask" &&
-        one.payload.cawco.requestId === ask.requestId
-    );
-  await until(
-    "p: a push for each proposal",
-    () => [agents, cited, web].every((ask) => pushFor(ask) !== undefined),
-    Boolean,
-    30_000
-  ).catch(() => undefined);
-  const pushes = [agents, cited, web].map((ask) => ({
-    ask,
-    push: pushFor(ask),
-  }));
-  kit.check(
-    "p: each proposal's push is titled \"Memory proposal\" under its project, in its project's thread, opening its id",
-    pushes.every(
-      ({ ask, push }) =>
-        push?.payload.aps.alert?.title === "Memory proposal" &&
-        push.payload.aps.alert.subtitle === "Proposal probe" &&
-        push.payload.aps["thread-id"] === projectId &&
-        push.payload.cawco.projectId === projectId &&
-        push.payload.cawco.instanceId === ask.instanceId &&
-        push.payload.aps.category === "CAWCO_PERMISSION_OPEN"
-    ),
-    pushes
-      .map(
-        ({ ask, push }) =>
-          `${ask.payload.input.path}: ${push ? `"${push.payload.aps.alert?.title}" / "${push.payload.aps.alert?.subtitle}", project ${push.payload.cawco.projectId}, thread ${push.payload.aps["thread-id"]}, ${push.payload.aps.category}, opens ${push.payload.cawco.instanceId}` : "no push"}`
-      )
-      .join("; ")
+  await checkPushes(
+    "p",
+    [agents, cited, web],
+    (cawco) => cawco.threadId === thread && !cawco.originInstanceId
   );
 
+  // ── (w) the web: Caw's proposal, in his thread ─────────────────────────
+  const served = await (await fetch(at(web.instanceId))).text();
+  missingSeen.length = 0;
+  const w = await approveOnWeb(web, `thread:${thread}`, "w");
+  kit.check(
+    "w: the proposal's own id opens Caw's thread, its card in the composer, nothing says the session is missing, first paint or after",
+    w.moved.endsWith(`/session/thread:${thread}`) &&
+      w.drawn > 0 &&
+      !served.includes(MISSING) &&
+      missingSeen.length === 0,
+    `at ${w.moved}; card drawn ${w.drawn}; server HTML ${served.includes(MISSING) ? "says" : "does not say"} "${MISSING}"; page: ${missingSeen.join(", ") || "never said it"}`
+  );
+  const webCommit = await newest(projectId, WEB.path);
+  const approvedNote = await noted(`You approved the change to ${WEB.path}`);
+  kit.check(
+    "w: Approve in the thread commits it as the person, the thread says so, and the card leaves",
+    w.answered &&
+      webCommit?.author === "you" &&
+      webCommit.message.startsWith(`${WEB.path}: ${FILES.web.why}`) &&
+      (await wordsOf(projectId, WEB.path)) === WEB.proposed &&
+      approvedNote !== undefined &&
+      w.gone,
+    `commit ${webCommit?.sha.slice(0, 9)} by ${webCommit?.author}: ${webCommit?.message.split("\n")[0]}; note ${approvedNote?.body ?? "none"}; card ${w.gone ? "gone" : "still on screen"}`
+  );
+
+  // ── The app ────────────────────────────────────────────────────────────
+  const app = appPath();
+  if (!kit.check("the app is built", existsSync(app), app)) {
+    await cawrier.stop(true);
+    return;
+  }
   let sim: MacSim | undefined;
   let stream: Subprocess | undefined;
   const heard: string[] = [];
@@ -491,7 +833,7 @@ async function run(kit: Kit): Promise<void> {
         Boolean,
         90_000
       ).catch(() => undefined);
-      const card = await until(
+      const shownCard = await until(
         `${label}: the card answerable`,
         () =>
           heard
@@ -521,7 +863,7 @@ async function run(kit: Kit): Promise<void> {
         join(kit.out, `${label}-tree.json`),
         JSON.stringify(shown, null, 2)
       );
-      return { landed, card, shown, alone, from };
+      return { landed, card: shownCard, shown, alone, from };
     };
     /** The pane's word that its ask settled and it leaves, and the screen after. */
     const leaves = async (ask: Ask, from: number) => {
@@ -595,9 +937,11 @@ async function run(kit: Kit): Promise<void> {
       "b: Approve commits AGENTS.md as the person",
       !(await proposals()).some((x) => x.requestId === agents.requestId) &&
         applied?.author === "you" &&
-        applied.message === `${FILES.agents.path}: ${FILES.agents.why}` &&
+        applied.message.startsWith(
+          `${FILES.agents.path}: ${FILES.agents.why}`
+        ) &&
         agentsNow.includes("The probe project ships a small service."),
-      `commit ${applied?.sha.slice(0, 9)} by ${applied?.author}: ${applied?.message}`
+      `commit ${applied?.sha.slice(0, 9)} by ${applied?.author}: ${applied?.message.split("\n")[0]}`
     );
     const bLeft = await leaves(agents, a.from);
     kit.check(
@@ -653,80 +997,8 @@ async function run(kit: Kit): Promise<void> {
     await writeFile(join(kit.out, "app-log.txt"), heard.join("\n"));
     stream?.kill();
     await sim?.release();
+    await cawrier.stop(true);
   }
-
-  // ── (w) the web dashboard's pane on the proposal's id ───────────────────
-  const base = await fleet.dashboard();
-  const at = `${base}/session/${web.instanceId}`;
-  const served = await (await fetch(at)).text();
-  const page = await kit.page("desk");
-  // The pane's own card: the composer grown into the ask (Prompt.svelte `.choice`).
-  const approve = ".choice button:has-text('Approve'):not([disabled])";
-  /** Every missing-session word the page shows, sampled from its first paint to its card. */
-  const missingSeen: string[] = [];
-  try {
-    await page.goto(at, { waitUntil: "domcontentloaded" });
-    const sample = async () => {
-      const said = await page.getByText(MISSING).count();
-      if (said > 0) {
-        missingSeen.push(`${said} at ${page.url()}`);
-      }
-    };
-    await sample();
-    await until(
-      "w: the pane's card",
-      async () => {
-        await sample();
-        return page.locator(approve).count();
-      },
-      (count) => count > 0,
-      90_000
-    );
-    await sample();
-    kit.check(
-      "w: the pane on the proposal's id is its card alone: nothing says the session is missing, first paint or after",
-      !served.includes(MISSING) && missingSeen.length === 0,
-      `server HTML ${served.includes(MISSING) ? "says" : "does not say"} "${MISSING}"; page: ${missingSeen.join(", ") || "never said it"}`
-    );
-    await page.click(approve);
-  } catch (error) {
-    const labels = await page
-      .locator("button")
-      .evaluateAll((all) =>
-        all.map(
-          (b) => b.getAttribute("aria-label") ?? b.textContent?.trim() ?? ""
-        )
-      );
-    await writeFile(join(kit.out, "web-buttons.txt"), labels.join("\n"));
-    throw error;
-  }
-  await until(
-    "w: the web proposal answered",
-    proposals,
-    (left) => !left.some((x) => x.requestId === web.requestId),
-    60_000
-  ).catch(() => undefined);
-  const webCommit = await newest(projectId, FILES.web.path);
-  kit.check(
-    "w: the web dashboard's Approve commits the file as the person",
-    !(await proposals()).some((x) => x.requestId === web.requestId) &&
-      webCommit?.author === "you" &&
-      webCommit.message === `${FILES.web.path}: ${FILES.web.why}`,
-    `commit ${webCommit?.sha.slice(0, 9)} by ${webCommit?.author}: ${webCommit?.message}`
-  );
-  const now = await until(
-    "w: the pane leaves",
-    () => page.url(),
-    (url) => !url.includes(web.instanceId),
-    20_000
-  ).catch(() => page.url());
-  kit.check(
-    "w: after Approve the pane leaves",
-    !now.includes(web.instanceId) &&
-      (await page.locator(approve).count()) === 0,
-    `now at ${now}`
-  );
-  await cawrier.stop(true);
 }
 
 export default { name: "memory-proposal", run } satisfies Spec;

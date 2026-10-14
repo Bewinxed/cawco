@@ -13,7 +13,7 @@
  * it answered in `seen`.
  */
 import { Database } from "bun:sqlite";
-import { existsSync, renameSync, rmSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, rmSync, unlinkSync } from "node:fs";
 import {
   chmod,
   mkdir,
@@ -981,9 +981,22 @@ async function standUp(
   await mkdir(workdir, { recursive: true });
 
   // ── The scratch services ──────────────────────────────────────────────
+  /**
+   * A temp dir of its own for one process the fleet starts, `name`, inside
+   * the sandbox (so it goes with the fleet): never the host's /tmp, which a
+   * workspace boundary refuses (the hub stages an approved memory proposal
+   * with `mkdtemp(tmpdir())`: `EPERM … mkdtemp '/tmp/cawco-memory-…'`).
+   */
+  const tmpFor = (name: string): string => {
+    const dir = join(sandbox, "tmp", name);
+    mkdirSync(dir, { recursive: true });
+    return dir;
+  };
   const env: Record<string, string> = {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
     HOME: home,
+    // What a spec runs itself with this environment; each service's own replaces it.
+    TMPDIR: tmpFor("probe"),
     USER: process.env.USER ?? "probe",
     XDG_CONFIG_HOME: join(home, ".config"),
     XDG_DATA_HOME: join(home, ".local", "share"),
@@ -1016,7 +1029,7 @@ async function standUp(
       // writes `.opencode/` in its own directory: in the sandbox, never the
       // clone, whose `.opencode` a workspace boundary holds read-only (EROFS).
       cwd: role === "sessiond" ? sandbox : root,
-      env,
+      env: { ...env, TMPDIR: tmpFor(role) },
       stdout: Bun.file(join(sandbox, `${role}-${launches}.log`)),
       stderr: Bun.file(err),
     });
@@ -1338,7 +1351,7 @@ async function standUp(
       const err = join(sandbox, `${machineId}-${role}.err`);
       const child = serviceSpawn(root, role, {
         cwd: role === "sessiond" ? sandbox : root,
-        env: machineEnv,
+        env: { ...machineEnv, TMPDIR: tmpFor(`${machineId}-${role}`) },
         stdout: Bun.file(join(sandbox, `${machineId}-${role}.log`)),
         stderr: Bun.file(err),
       });

@@ -176,11 +176,6 @@ async function run(kit: Kit): Promise<void> {
   });
   const fleet = await kit.fleet(respond);
   fleet.env.CAWCO_CAWRIER_ORIGIN = `http://127.0.0.1:${cawrier.port}`;
-  // Approving a proposal stages its files in the hub's temp dir: in a
-  // workspace, its own (`/tmp` is outside its boundary).
-  if (process.env.TMPDIR) {
-    fleet.env.TMPDIR = process.env.TMPDIR;
-  }
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
