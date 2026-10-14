@@ -29,7 +29,9 @@ import UIKit
 /// - `-canvas-probe-sync`: the canvas page's sync socket goes through a gate
 ///   (CanvasWeb's DEBUG `gate`), refused from the start: the canvas shows
 ///   its refusal, a pen stroke adds nothing and Send says it isn't
-///   connected; opened, a stroke is counted and synced and Send carries it;
+///   connected; opened, a stroke is counted and synced, a PNG pasted on the
+///   page is an image element with its file in the doc and the export, and
+///   Send carries it;
 ///   on a new canvas, cut after a stroke, the next stroke stays on the page
 ///   and Send says the drawing hasn't reached the hub. Then the rail's
 ///   Remove folds that drawn canvas back into the pill over durGrowExit,
@@ -372,6 +374,23 @@ enum CanvasProbe {
         check("(b) the sync up: a stroke is logged cawco:drawn count=N and cawco:sync synced, and the hub holds it",
               synced && line2 == nil && drawn.count > 0 && counted && hubDrawn == drawn.count,
               "link \(refused.link.rawValue), refusal \(line2 ?? "gone"), the page's doc holds \(drawn.count)\(drawn.error.map { " (\($0))" } ?? ""), cawco:drawn said \(refused.drawn.map(String.init) ?? "nothing"), the hub's export \(hubDrawn)")
+
+        // A PNG pasted into the canvas: an image element with its file in the doc, in the export and its picture.
+        var pasted = (images: 0, filed: 0)
+        var pasteError: String?
+        do { pasted = try await refused.probePaste() } catch { pasteError = error.localizedDescription }
+        let synced2 = await until(5) { refused.drawn == drawn.count + pasted.images && refused.link == .synced }
+        try? await refused.picture()
+        var exported = (images: 0, filed: 0, png: 0)
+        if let export = try? await host.hub.exportCanvas(refused.page.id, name: refused.page.name),
+           let file = (try? JSONSerialization.jsonObject(with: Data(export.file.utf8))) as? [String: Any] {
+            let images = (file["elements"] as? [[String: Any]] ?? []).filter { $0["type"] as? String == "image" && $0["isDeleted"] as? Bool != true }
+            let files = file["files"] as? [String: Any] ?? [:]
+            exported = (images.count, images.count { ($0["fileId"] as? String).map { files[$0] != nil } ?? false }, export.png?.count ?? 0)
+        }
+        check("a PNG pasted into the canvas is an image element with its file in the doc, the export and its picture",
+              pasted.images == 1 && pasted.filed == 1 && synced2 && exported.images == 1 && exported.filed == 1 && exported.png > 0,
+              "the page's doc: \(pasted.images) image, \(pasted.filed) with its file\(pasteError.map { " (\($0))" } ?? ""); synced \(synced2); the export: \(exported.images) image, \(exported.filed) with its file, picture \(exported.png) bytes")
         composer.returned()
         let went = await until(20) { binding.canvas == nil && !composer.probeCanvasWorking }
         let names = carried.last ?? []

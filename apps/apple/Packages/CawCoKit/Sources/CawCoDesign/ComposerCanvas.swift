@@ -555,6 +555,49 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         web.evaluateJavaScript("window.parent.postMessage({ type: \"\(type)\" }, location.origin)", completionHandler: nil)
     }
 
+    /// A PNG pasted on the page, as a paste from the pasteboard arrives: a
+    /// `paste` with the file in its clipboard data, where the pen last was.
+    /// Answers the image elements the page's doc holds after it, and how
+    /// many of them have their file in the doc's files.
+    private static let paste = """
+    const ink = document.createElement("canvas");
+    ink.width = 64;
+    ink.height = 48;
+    const pen = ink.getContext("2d");
+    pen.fillStyle = "#c0392b";
+    pen.fillRect(0, 0, 64, 48);
+    const blob = await new Promise((done) => ink.toBlob(done, "image/png"));
+    const data = new DataTransfer();
+    data.items.add(new File([blob], "probe.png", { type: "image/png" }));
+    (document.activeElement ?? document.body).dispatchEvent(
+      new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    const doc = window.cawcoArtifact.doc;
+    const read = () => {
+      const images = doc.getArray("elements").toArray().map((entry) => entry.get("el"))
+        .filter((el) => el && !el.isDeleted && el.type === "image");
+      const files = doc.getMap("files");
+      return { images: images.length, filed: images.filter((el) => el.fileId && files.has(el.fileId)).length };
+    };
+    for (let i = 0; i < 50; i += 1) {
+      const now = read();
+      if (now.filed > 0) return JSON.stringify(now);
+      await new Promise((done) => setTimeout(done, 100));
+    }
+    return JSON.stringify(read());
+    """
+
+    /// A PNG pasted on the page; the doc's image elements and how many have their file.
+    func probePaste() async throws -> (images: Int, filed: Int) {
+        let web = web
+        let said = try await withCheckedThrowingContinuation { (done: CheckedContinuation<String, any Error>) in
+            web.__callAsyncJavaScript(Self.paste, arguments: [:], inFrame: nil, in: .page) { value, error in
+                if let error { done.resume(throwing: error) } else { done.resume(returning: value as? String ?? "{}") }
+            }
+        }
+        let read = (try? JSONSerialization.jsonObject(with: Data(said.utf8))) as? [String: Any]
+        return ((read?["images"] as? NSNumber)?.intValue ?? 0, (read?["filed"] as? NSNumber)?.intValue ?? 0)
+    }
+
     /// The probe's gate on the page's sync socket: `open`, or `cut`.
     func probeSync(_ mode: String) {
         deliver(["type": "cawco:probe-sync", "mode": mode])
