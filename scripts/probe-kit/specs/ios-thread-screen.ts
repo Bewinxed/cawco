@@ -88,6 +88,7 @@ interface Node {
   id?: string;
   label?: string;
   role?: string;
+  value?: string;
 }
 
 async function sh(script: string): Promise<string> {
@@ -261,6 +262,7 @@ async function onDevice(
           id: node.AXUniqueId as string | undefined,
           label: node.AXLabel as string | undefined,
           role: (node.role ?? node.type) as string | undefined,
+          value: node.AXValue as string | undefined,
           frame: node.frame as Node["frame"],
         });
         for (const kid of (node.children as
@@ -319,11 +321,30 @@ async function onDevice(
     await fleet.send(ctx.session, `PROBE-ASK-${TAG} which voice?`);
     await launch(`-open-session ${ctx.session}`);
     const own = `PROBE-OWN-${TAG}`;
+    // Other opens its line; the words go into it as a person's do, the line
+    // tapped first, and Answer is pressed only once the line shows them (a
+    // main thread held as the keyboard rises drops keys typed into nothing).
     await tap("prompt-other-1");
-    await Bun.sleep(800);
+    await tap("prompt-other-field-1");
     await sh(`${AXE} type '${own}' --udid ${udid}`);
-    await Bun.sleep(800);
+    const written = await until(
+      `${tag}: your words in the Other line`,
+      async () =>
+        (await tree()).find((n) => n.id === "prompt-other-field-1")?.value,
+      (value) => Boolean(value?.includes(own)),
+      15_000
+    ).catch(async () => {
+      await writeFile(
+        join(kit.out, `${tag}-other-unwritten.json`),
+        JSON.stringify(await tree(), null, 1)
+      );
+    });
     await capture("question-other");
+    kit.check(
+      `2 ${tag}: the Other line takes your words`,
+      Boolean(written),
+      written ?? "the line's value never held them"
+    );
     await tap("prompt-answer");
     const read = await until(
       `${tag}: the session reads your own answer`,
