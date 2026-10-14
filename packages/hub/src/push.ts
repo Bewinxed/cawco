@@ -38,6 +38,7 @@
 import {
   type Envelope,
   type FleetWatchNotice,
+  MEMORY_PROPOSAL_TOOL,
   machineLabel,
   type PermissionRequestFrame,
   questionsOf,
@@ -101,6 +102,8 @@ const MAX_INLINE_OPTIONS = 3;
 const LOOK_GRACE_MS = 5000;
 /** A finished turn's visible body: the reply itself goes sealed. */
 const TURN_ENDED = "Finished its turn";
+/** A memory proposal's visible title (memory.ts): what it is, its project under it. */
+const MEMORY_PROPOSAL_NAME = "Memory proposal";
 
 /** Tools whose approval must be read in full: a push never offers Approve for them. */
 const OPEN_ONLY_TOOLS = new Set([
@@ -732,6 +735,8 @@ export const createPush = ({
      */
     onAsk(envelope: Envelope): void {
       const payload = envelope.payload as Partial<PermissionRequestFrame> & {
+        /** An ask no session row stands behind names its project itself (a memory proposal, memory.ts). */
+        projectId?: string;
         routedTo?: string;
         workflowRunId?: string;
       };
@@ -747,7 +752,8 @@ export const createPush = ({
       asked.add(requestId);
       const instanceId = envelope.instanceId ?? payload.instanceId ?? "";
       const [row] = instanceId ? db.getInstancesByIds([instanceId]) : [];
-      const projectId = row?.projectId ?? null;
+      // An ask with no session row (a memory proposal) is its project's.
+      const projectId = row?.projectId ?? payload.projectId ?? null;
       const project = projectName(projectId);
       // The ask's presentation, stamped as it parked (ask-presentation.ts):
       // the session as the board names it, and the needs-you card's line.
@@ -757,7 +763,10 @@ export const createPush = ({
       moment(
         {
           shown: alertOf(
-            askName(row, payload.workflowRunId, instanceId),
+            // A proposal is named by what it is, never by what it says.
+            !row && payload.toolName === MEMORY_PROPOSAL_TOOL
+              ? MEMORY_PROPOSAL_NAME
+              : askName(row, payload.workflowRunId, instanceId),
             project
           ),
           sealed: {

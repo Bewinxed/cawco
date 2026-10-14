@@ -6,6 +6,19 @@ import { isThreadTab } from "#lib/cawco/thread-tabs.js";
 import { runIdOf } from "#lib/cawco/workflow-runs.js";
 import type { PageServerLoad } from "./$types";
 
+/** Whether the hub holds an ask parked under `viewId` (`/api/pending`). */
+const askHeldFor = async (
+  fetch: typeof globalThis.fetch,
+  viewId: string
+): Promise<boolean> => {
+  const response = await fetch("/api/pending");
+  if (!response.ok) {
+    return false;
+  }
+  const pending = (await response.json()) as { instanceId?: string }[];
+  return pending.some((envelope) => envelope.instanceId === viewId);
+};
+
 /**
  * The conversation's newest transcript page, as the hub built it, which the
  * pane renders into the server's HTML so a reload shows the conversation
@@ -34,6 +47,12 @@ export const load: PageServerLoad = async ({
     return { tail: null };
   }
   const response = await fetch(transcriptUrl(viewId));
+  // No transcript, but an ask the hub holds under this id (a memory
+  // proposal): the pane is that ask's card, which the socket brings; nothing
+  // is painted for it here, least of all "no such session".
+  if (response.status === 404 && (await askHeldFor(fetch, viewId))) {
+    return { tail: null };
+  }
   if (!response.ok) {
     // A 503 naming a machine is the hub saying that machine is not connected.
     const { away, reconnecting } = machineAway(response);

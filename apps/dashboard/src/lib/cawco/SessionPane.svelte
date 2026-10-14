@@ -163,6 +163,33 @@
   const isLive = $derived(cawco.instances.some((row) => row.id === viewId));
 
   /**
+   * The hub holds an ask under this id and no session (a project's memory
+   * proposal, hub memory.ts): the pane is that ask's card and nothing else.
+   * No transcript is read and no "no such session" is said; the composer is
+   * the card (it grows into the ask). Kept once seen, so the pane does not
+   * read or say anything in the moment between the answer and its close.
+   */
+  const asking = $derived(
+    !isLive && parkedAsks(cawco.session(viewId)?.pending ?? []).length > 0
+  );
+  let askHeld = $state(false);
+  const askAlone = $derived(asking || askHeld);
+  // Answered (or settled anywhere), the pane closes as its tab's own close
+  // does: back to the tab it was opened from, else a neighbour (workspace
+  // `close`).
+  $effect(() => {
+    const now = asking;
+    const row = isLive;
+    untrack(() => {
+      if (now) {
+        askHeld = true;
+      } else if (askHeld && !row) {
+        workspace.close(viewId);
+      }
+    });
+  });
+
+  /**
    * This session's project is moving to its machine for it (move.svelte.ts).
    * Until the move starts it its row is `moving` and there is nothing to
    * read: the staged wait is the whole pane. Once it starts, the wait stays
@@ -231,8 +258,9 @@
     // biome-ignore lint/complexity/noVoid: read-only dependency — Retry bumps `attempt` purely to re-run this effect
     void attempt;
     // A session its project is still moving for has nothing to read yet;
-    // this runs again the moment the move starts it.
-    if (!id || prestart) {
+    // this runs again the moment the move starts it. An ask standing alone
+    // has no transcript at all.
+    if (!id || prestart || askAlone) {
       return;
     }
     // Retry the read once the hub can actually answer. On a reload the effect
@@ -407,7 +435,7 @@
    * which mistook every stored session still being located for a lost one;
    * now it is the hub's own 404.
    */
-  const unaddressable = $derived(missing || servedMissing);
+  const unaddressable = $derived((missing || servedMissing) && !askAlone);
 
   /**
    * A stored transcript with no machine behind it: readable, not writable.
@@ -428,7 +456,7 @@
    * `readFault`. Either one is a card with a button, never a skeleton.
    */
   const fault = $derived(
-    session?.messages.length
+    session?.messages.length || askAlone
       ? null
       : (failure ?? session?.readFault ?? servedFault)
   );
@@ -446,8 +474,8 @@
   const waiting = $derived(
     !!session && !session.initialized && session.messages.length === 0
   );
-  /** A named state stands in the transcript area instead of a transcript. */
-  const namedState = $derived(!!(fault || unaddressable || blank));
+  /** A named state stands in the transcript area instead of a transcript; an ask alone stands there as nothing. */
+  const namedState = $derived(!!(fault || unaddressable || blank || askAlone));
 
   /**
    * Whether the transcript may be built. On screen, at once. Off screen, a
@@ -874,6 +902,8 @@
   const writable = $derived(
     !!session &&
       !(prestart || unaddressable || readOnly) &&
+      // An ask alone has a composer only while the ask stands: it is the card.
+      (asking || !askAlone) &&
       // A transcript that could not be read leaves the conversation as
       // writable as it was; only a machine that is offline cannot be written
       // to, and a send needs a machine to go to.

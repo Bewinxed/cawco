@@ -257,6 +257,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     // MARK: Model
 
     override func refreshContent() {
+        syncAskAlone()
         transcriptView.configure(transcript)
         let prestart = syncMove()
 
@@ -273,6 +274,36 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         syncCards()
         composerBinding.publish()
         syncPreview()
+    }
+
+    // MARK: An ask standing alone (SessionPane.svelte `askAlone`)
+
+    /// The hub held an ask under this id and no session (`HubConnection.askAlone`,
+    /// a memory proposal): the pane is that ask's card alone, no transcript
+    /// and no "isn't reachable". Kept once seen, so nothing is said in the
+    /// moment between the answer and the pane's close.
+    private var askHeld = false
+    private var askClosed = false
+    #if DEBUG
+    private var probeAlone = ""
+    #endif
+
+    private func syncAskAlone() {
+        let asking = hub.askAlone(sessionId)
+        if asking { askHeld = true }
+        transcriptHost.view.isHidden = askHeld
+        let leaving = askHeld && !asking && hub.fleet.byId[sessionId] == nil
+        #if DEBUG
+        let said = "probe alone \(sessionId): asking \(asking) transcript \(askHeld ? "hidden" : "shown")\(leaving ? " leaving" : "")"
+        if askHeld, said != probeAlone {
+            probeAlone = said
+            Self.restoring.notice("\(said, privacy: .public)")
+        }
+        #endif
+        // Answered, or settled anywhere: the pane closes as its tab's own close does.
+        guard leaving, !askClosed else { return }
+        askClosed = true
+        DispatchQueue.main.async { [weak self] in self?.onReturnToFleet() }
     }
 
     // MARK: A project moving for this session (move/MoveWait.svelte)

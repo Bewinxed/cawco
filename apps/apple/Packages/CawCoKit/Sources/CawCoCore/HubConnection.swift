@@ -135,6 +135,12 @@ public final class HubConnection {
     /// What the new-session form was last set to: every start without a form runs on it.
     public let spawnPrefs = SpawnPrefs()
     public let needs: NeedsYouStore
+    /// The hub holds an ask under `id` and no session (a project's memory
+    /// proposal, hub memory.ts): it has no transcript, and its pane is that
+    /// ask's card alone (SessionPane.svelte `askAlone`).
+    public func askAlone(_ id: String) -> Bool {
+        fleet.byId[id] == nil && needs.blocked(id)
+    }
     public private(set) var sessions: SessionsStore!
     public private(set) var tasks: TasksStore!
     /// The delegates' work items their parents' trays read.

@@ -10,31 +10,40 @@
  * note, a second knowledge file). The built app on an iPhone simulator of
  * its own (a mac-slot.sh slot, deleted at the end), in order:
  *
+ * (p) The hub's push for each (to a stand-in Cawrier, a device registered
+ *     on the hidden route): titled "Memory proposal" with the project under
+ *     it, never the work's words; its `projectId` the project's and its
+ *     thread the project's; its `instanceId` the proposal's id; Open only.
  * (a) Launched as a tap on the AGENTS.md proposal's push launches it
  *     (`-push-route session:<p-…>`, the route PushNote reads off the hub's
  *     `ask` push: its `instanceId` is the proposal's id): the route lands
- *     (not "isn't on the hub"), and the card says Approve on, Deny on,
- *     nothing under them, answering on machine "hub".
+ *     (not "isn't on the hub"), the card says Approve on, Deny on, nothing
+ *     under them, answering on machine "hub", and the pane is the card
+ *     alone: its transcript hidden (`probe alone`), no "isn't reachable"
+ *     on screen.
  * (b) Its Approve: the proposal leaves /api/pending, AGENTS.md's newest
- *     commit is the person's ("you"), titled by the proposal's why.
+ *     commit is the person's ("you"), titled by the proposal's why, and the
+ *     pane leaves.
  * (c) Launched as a tap on the cited knowledge proposal's push, its Deny:
- *     the proposal leaves, the knowledge file is never written, and the
- *     note it cited is archived "rejected".
- * (w) The web dashboard: the third proposal's row in Caw's panel, its
- *     Approve commits the file as the person.
+ *     the proposal leaves, the knowledge file is never written, the note it
+ *     cited is archived "rejected", and the pane leaves.
+ * (w) The web dashboard at /session/<p-…>: the server's HTML and the page
+ *     say nothing of a missing session, the pane's card has Approve, which
+ *     commits the file as the person, and the pane leaves.
  *
  *   bash apps/apple/scripts/build-both.sh ios
  *   bun scripts/probe-kit/run.ts memory-proposal
  *
  * The app is this checkout's simulator build (`PROBE_IOS_APP` names another).
  */
+// biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the push, the app's two answers and the web's are read in order, step by step.
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, open, ROOT, type Spec } from "../kit";
+import { type Kit, ROOT, type Spec } from "../kit";
 
 const AXE = "/opt/homebrew/bin/axe";
 /** iOS 18.5, where axe reaches the simulator from a workspace (ios-seen.ts). */
@@ -70,6 +79,26 @@ const FILES = {
     why: "The web answers",
   },
 } as const;
+
+/** What the hub sent a stand-in Cawrier for one push (push.ts `payloadOf`). */
+interface Pushed {
+  collapseId?: string;
+  payload: {
+    aps: {
+      alert?: { body: string; subtitle?: string; title: string };
+      category?: string;
+      "thread-id"?: string;
+    };
+    cawco: {
+      instanceId?: string;
+      kind: string;
+      projectId?: string | null;
+      requestId?: string;
+    };
+  };
+}
+/** Words a pane says when it has no session to show. */
+const MISSING = "isn't reachable";
 
 interface Ask {
   instanceId: string;
@@ -170,11 +199,33 @@ async function run(kit: Kit): Promise<void> {
   if (!kit.check("the app is built", existsSync(app), app)) {
     return;
   }
+  // A stand-in Cawrier: every push the hub makes, as it sent it.
+  const pushed: Pushed[] = [];
+  const cawrier = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      if (new URL(request.url).pathname === "/v1/push") {
+        pushed.push((await request.json()) as Pushed);
+        return Response.json({ ok: true });
+      }
+      return new Response(null, { status: 204 });
+    },
+  });
   const fleet = await kit.fleet(respond);
+  fleet.env.CAWCO_CAWRIER_ORIGIN = `http://127.0.0.1:${cawrier.port}`;
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
   await fleet.hubUp();
+  const bytes = (n: number) => crypto.getRandomValues(new Uint8Array(n));
+  await fleet.api("/api/push/register", {
+    pairingId: crypto.randomUUID(),
+    secret: Buffer.from(bytes(32)).toString("base64url"),
+    key: Buffer.from(bytes(32)).toString("base64"),
+    name: "Probe iPhone",
+    platform: "ios",
+  });
   fleet.fileAccount();
   fleet.launch("agent");
   await fleet.agentUp();
@@ -300,6 +351,42 @@ async function run(kit: Kit): Promise<void> {
     return;
   }
 
+  // ── (p) the hub's push for each ────────────────────────────────────────
+  const pushFor = (ask: Ask) =>
+    pushed.find(
+      (one) =>
+        one.payload.cawco.kind === "ask" &&
+        one.payload.cawco.requestId === ask.requestId
+    );
+  await until(
+    "p: a push for each proposal",
+    () => [agents, cited, web].every((ask) => pushFor(ask) !== undefined),
+    Boolean,
+    30_000
+  ).catch(() => undefined);
+  const pushes = [agents, cited, web].map((ask) => ({
+    ask,
+    push: pushFor(ask),
+  }));
+  kit.check(
+    "p: each proposal's push is titled \"Memory proposal\" under its project, in its project's thread, opening its id",
+    pushes.every(
+      ({ ask, push }) =>
+        push?.payload.aps.alert?.title === "Memory proposal" &&
+        push.payload.aps.alert.subtitle === "Proposal probe" &&
+        push.payload.aps["thread-id"] === projectId &&
+        push.payload.cawco.projectId === projectId &&
+        push.payload.cawco.instanceId === ask.instanceId &&
+        push.payload.aps.category === "CAWCO_PERMISSION_OPEN"
+    ),
+    pushes
+      .map(
+        ({ ask, push }) =>
+          `${ask.payload.input.path}: ${push ? `"${push.payload.aps.alert?.title}" / "${push.payload.aps.alert?.subtitle}", project ${push.payload.cawco.projectId}, thread ${push.payload.aps["thread-id"]}, ${push.payload.aps.category}, opens ${push.payload.cawco.instanceId}` : "no push"}`
+      )
+      .join("; ")
+  );
+
   let sim: MacSim | undefined;
   let stream: Subprocess | undefined;
   const heard: string[] = [];
@@ -421,12 +508,48 @@ async function run(kit: Kit): Promise<void> {
           .slice(from)
           .findLast((l) => l.includes(`probe card ${ask.requestId} `))
       );
+      // SessionViewController `syncAskAlone`: the pane is the card alone.
+      const alone = heard
+        .slice(from)
+        .find((l) =>
+          l.includes(
+            `probe alone ${ask.instanceId}: asking true transcript hidden`
+          )
+        );
       const shown = await tree();
       await writeFile(
         join(kit.out, `${label}-tree.json`),
         JSON.stringify(shown, null, 2)
       );
-      return { landed, card, shown };
+      return { landed, card, shown, alone, from };
+    };
+    /** The pane's word that its ask settled and it leaves, and the screen after. */
+    const leaves = async (ask: Ask, from: number) => {
+      const line = await until(
+        "the pane leaves",
+        () =>
+          heard
+            .slice(from)
+            .find((l) =>
+              l.includes(
+                `probe alone ${ask.instanceId}: asking false transcript hidden leaving`
+              )
+            ),
+        Boolean,
+        20_000
+      ).catch(() => undefined);
+      const after = await until(
+        "the card gone from the screen",
+        async () => {
+          const nodes = await tree();
+          return nodes.some((n) => n.id === "prompt-approve")
+            ? undefined
+            : nodes;
+        },
+        Boolean,
+        20_000
+      ).catch(() => undefined);
+      return { line, gone: after !== undefined };
     };
 
     // ── (a) a tap on the AGENTS.md proposal's push ─────────────────────────
@@ -442,6 +565,11 @@ async function run(kit: Kit): Promise<void> {
         `${agents.requestId} on hub: approve on deny on said nothing`
       ) === true,
       a.card ?? "no probe card line"
+    );
+    kit.check(
+      "a: the pane is the card alone: its transcript hidden, nothing says the session is missing",
+      a.alone !== undefined && !a.shown.some((n) => n.label?.includes(MISSING)),
+      `${a.alone ?? "no probe alone line"}; on screen: ${a.shown.filter((n) => n.label?.includes(MISSING)).length} missing-session labels`
     );
     kit.check(
       "a: its tab is titled by who asked, not its id",
@@ -470,6 +598,12 @@ async function run(kit: Kit): Promise<void> {
         applied.message === `${FILES.agents.path}: ${FILES.agents.why}` &&
         agentsNow.includes("The probe project ships a small service."),
       `commit ${applied?.sha.slice(0, 9)} by ${applied?.author}: ${applied?.message}`
+    );
+    const bLeft = await leaves(agents, a.from);
+    kit.check(
+      "b: after Approve the pane leaves",
+      bLeft.line !== undefined && bLeft.gone,
+      `${bLeft.line ?? "no leaving line"}; card ${bLeft.gone ? "gone" : "still on screen"}`
     );
 
     // ── (c) the cited proposal's Deny ──────────────────────────────────────
@@ -509,23 +643,51 @@ async function run(kit: Kit): Promise<void> {
         (OUTCOME.exec(archived ?? "")?.[1] ?? "").includes("rejected"),
       `note outcome ${OUTCOME.exec(archived ?? "")?.[1] ?? "(not archived)"}`
     );
+    const cLeft = await leaves(cited, c.from);
+    kit.check(
+      "c: after Deny the pane leaves",
+      cLeft.line !== undefined && cLeft.gone,
+      `${cLeft.line ?? "no leaving line"}; card ${cLeft.gone ? "gone" : "still on screen"}`
+    );
   } finally {
     await writeFile(join(kit.out, "app-log.txt"), heard.join("\n"));
     stream?.kill();
     await sim?.release();
   }
 
-  // ── (w) the web dashboard's card ─────────────────────────────────────────
+  // ── (w) the web dashboard's pane on the proposal's id ───────────────────
   const base = await fleet.dashboard();
+  const at = `${base}/session/${web.instanceId}`;
+  const served = await (await fetch(at)).text();
   const page = await kit.page("desk");
-  // The web's needs-you path: Caw's head opens his panel (NeedsCaw.svelte),
-  // whose row for the proposal answers it (NeedsCard.svelte).
-  const head = "button[aria-label^='Needs you']";
-  const approve = `button[aria-label^='Approve Add ${FILES.web.path}']:not([disabled])`;
+  // The pane's own card: the composer grown into the ask (Prompt.svelte `.choice`).
+  const approve = ".choice button:has-text('Approve'):not([disabled])";
+  /** Every missing-session word the page shows, sampled from its first paint to its card. */
+  const missingSeen: string[] = [];
   try {
-    await open(page, base, head, 90_000);
-    await page.click(head);
-    await page.waitForSelector(approve, { timeout: 30_000 });
+    await page.goto(at, { waitUntil: "domcontentloaded" });
+    const sample = async () => {
+      const said = await page.getByText(MISSING).count();
+      if (said > 0) {
+        missingSeen.push(`${said} at ${page.url()}`);
+      }
+    };
+    await sample();
+    await until(
+      "w: the pane's card",
+      async () => {
+        await sample();
+        return page.locator(approve).count();
+      },
+      (count) => count > 0,
+      90_000
+    );
+    await sample();
+    kit.check(
+      "w: the pane on the proposal's id is its card alone: nothing says the session is missing, first paint or after",
+      !served.includes(MISSING) && missingSeen.length === 0,
+      `server HTML ${served.includes(MISSING) ? "says" : "does not say"} "${MISSING}"; page: ${missingSeen.join(", ") || "never said it"}`
+    );
     await page.click(approve);
   } catch (error) {
     const labels = await page
@@ -552,6 +714,19 @@ async function run(kit: Kit): Promise<void> {
       webCommit.message === `${FILES.web.path}: ${FILES.web.why}`,
     `commit ${webCommit?.sha.slice(0, 9)} by ${webCommit?.author}: ${webCommit?.message}`
   );
+  const now = await until(
+    "w: the pane leaves",
+    () => page.url(),
+    (url) => !url.includes(web.instanceId),
+    20_000
+  ).catch(() => page.url());
+  kit.check(
+    "w: after Approve the pane leaves",
+    !now.includes(web.instanceId) &&
+      (await page.locator(approve).count()) === 0,
+    `now at ${now}`
+  );
+  await cawrier.stop(true);
 }
 
 export default { name: "memory-proposal", run } satisfies Spec;

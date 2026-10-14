@@ -358,7 +358,8 @@ public final class SessionsStore {
     /// Only a read the hub asked for is a catch-up the dock says
     /// (`catchingUp`); the rest catch up quietly.
     public func read(_ id: String, because cause: ReadCause) {
-        guard let transcript = transcripts[id], let client = hub.client else { return }
+        // An ask standing alone has no transcript to read.
+        guard let transcript = transcripts[id], let client = hub.client, !hub.askAlone(id) else { return }
         log.info("read \(id.prefix(8), privacy: .public) because \(cause.rawValue, privacy: .public)")
         readers[id]?.cancel()
         failedReads[id]?.timer?.cancel()
