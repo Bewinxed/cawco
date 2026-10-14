@@ -1,5 +1,6 @@
 /**
- * Dragging conversations between groups.
+ * Dragging conversations between groups: what a drop does, and the hints
+ * that say so while it hovers.
  *
  * Every arrangement this file makes possible was already reachable by
  * command before it existed — the context menus and `mod+\` came first,
@@ -7,12 +8,12 @@
  * than the only way. What drag adds is directness: you can see where a
  * conversation is going while you are deciding.
  *
- * Built on Pragmatic drag and drop, which is framework-agnostic — these are
- * plain Svelte actions around it, no adapter layer. Two things it gives us
- * that hand-rolled HTML5 drag would not: `attachClosestEdge`, which answers
- * "which edge of this pane is the pointer nearest" (that IS the split
- * gesture), and `getReorderDestinationIndex`, which turns an edge and two
- * indices into the array position a tab should land at.
+ * Two hands drag here, onto the same targets and the same outcomes
+ * (`paneEdgeAt`, `dropOnPane`, `dropInStrip`): a tab is carried by the
+ * pointer itself, the real tab moving in its strip (tab-drag.svelte.ts); a
+ * session row from the rail or the fleet is an HTML5 drag on Pragmatic drag
+ * and drop (`dragSession`, `paneDropTarget`, `tabDropTarget`), plain Svelte
+ * actions around it with no adapter layer.
  *
  * Deliberately NOT offered under a coarse pointer. A long press is already
  * bound to the context menu on touch (`enableLongPressMenus`), and two
@@ -26,10 +27,7 @@ import {
 } from "@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter";
 // biome-ignore lint/style/noExportedImports: export-from here would make this a single-export barrel file, flagged by noBarrelFile instead
 import { combine } from "@atlaskit/pragmatic-drag-and-drop/utils/combine";
-import { attachClosestEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge/attach-closest-edge";
-import { extractClosestEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge/extract-closest-edge";
 import type { Edge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/types";
-import { getReorderDestinationIndex } from "@atlaskit/pragmatic-drag-and-drop-hitbox/util/get-reorder-destination-index";
 import { depart } from "../motion/share.svelte";
 import { workingSet } from "../working-set.svelte";
 import { workspace } from "./workspace.svelte";
@@ -64,20 +62,28 @@ const asDrag = (data: Record<string | symbol, unknown>): SessionDrag | null =>
  */
 const EDGE_BAND = 0.25;
 
+/** A point on the screen, as a pointer reports it. */
+export interface Point {
+  clientX: number;
+  clientY: number;
+}
+
 /**
- * Which edge a drop at this point would split against, or `null` for "put it
- * in this group's tabs".
+ * Which edge a drop at this point would split group `leafId` against, or
+ * `null` for "put it in this group's tabs": inside the pane's edge band, the
+ * edge the point is nearest. A conversation dragged from the group's own
+ * only tab joins it instead (a split there would leave an empty half).
  *
- * Computed from the pointer and the element, NOT read back from whatever the
- * last hover happened to leave behind. `onDrag` is rAF-throttled by pdnd, so
- * a drop can genuinely arrive without the hover callback having run for that
- * position — and a drop that quietly does the wrong thing because a preview
- * never landed is worse than one that does nothing.
+ * Computed from the pointer and the element, never read back from whatever
+ * the last hover left behind: a drop can arrive without the hover having run
+ * for that position, and a drop that quietly does the wrong thing because a
+ * preview never landed is worse than one that does nothing.
  */
-function edgeAt(
+export function paneEdgeAt(
+  leafId: string,
   element: HTMLElement,
-  input: { clientX: number; clientY: number },
-  data: Record<string | symbol, unknown>
+  input: Point,
+  from: string | null
 ): Edge | null {
   const rect = element.getBoundingClientRect();
   if (rect.width === 0 || rect.height === 0) {
@@ -90,7 +96,20 @@ function edgeAt(
     x > rect.width * (1 - EDGE_BAND) ||
     y < rect.height * EDGE_BAND ||
     y > rect.height * (1 - EDGE_BAND);
-  return nearEdge ? extractClosestEdge(data) : null;
+  if (!nearEdge) {
+    return null;
+  }
+  if (from === leafId && (workspace.leaf(leafId)?.tabs.length ?? 0) < 2) {
+    return null;
+  }
+  const away: [Edge, number][] = [
+    ["left", x],
+    ["right", rect.width - x],
+    ["top", y],
+    ["bottom", rect.height - y],
+  ];
+  away.sort((a, b) => a[1] - b[1]);
+  return away[0]?.[0] ?? null;
 }
 
 /* ── What the indicators read ─────────────────────────────────────────── */
@@ -128,10 +147,33 @@ export const dropHint = {
   },
 };
 
+/** A drop over group `leafId`'s pane would split it at `edge`, or join it. */
+export function showPaneHint(leafId: string, edge: Edge | null): void {
+  tabHint.leafId = null;
+  tabHint.index = null;
+  hint.leafId = leafId;
+  hint.edge = edge;
+}
+
+/** A drop over group `leafId`'s strip would land at `index`. */
+export function showTabHint(leafId: string, index: number): void {
+  hint.leafId = null;
+  hint.edge = null;
+  tabHint.leafId = leafId;
+  tabHint.index = index;
+}
+
+export function clearHints(): void {
+  hint.leafId = null;
+  hint.edge = null;
+  tabHint.leafId = null;
+  tabHint.index = null;
+}
+
 /**
- * A drop that puts a conversation in another group's strip: the tab there
- * flies in from what was dragged (the tab it left, or the fleet or sidebar
- * row), on the shared-element flight every opened tab uses.
+ * A drop that puts a conversation in another group: the tab there flies in
+ * from what was dragged (the tab it left, or the fleet or sidebar row), on
+ * the shared-element flight every opened tab uses.
  */
 const flyFrom = (element: HTMLElement, sessionId: string) => {
   element.dataset.share = `session:${sessionId}`;
@@ -139,30 +181,69 @@ const flyFrom = (element: HTMLElement, sessionId: string) => {
   delete element.dataset.share;
 };
 
-const clearHints = () => {
-  hint.leafId = null;
-  hint.edge = null;
-  tabHint.leafId = null;
-  tabHint.index = null;
-};
+/**
+ * `sessionId`, dragged from group `from` (`null` from the fleet), dropped on
+ * group `leafId`'s pane: split at `edge`, or join its tabs at the end.
+ */
+export function dropOnPane(
+  leafId: string,
+  edge: Edge | null,
+  sessionId: string,
+  from: string | null,
+  source: HTMLElement
+): void {
+  clearHints();
+  if (edge || from !== leafId) {
+    flyFrom(source, sessionId);
+  }
+  if (edge) {
+    workspace.split(leafId, edge, sessionId);
+  } else {
+    workspace.move(sessionId, leafId);
+  }
+}
+
+/**
+ * `sessionId` dropped in group `leafId`'s strip at `index` (counted with it
+ * out of the strip): a reorder when it is already there — only its place in
+ * the row changes, which must not disturb its pane, and the strip slides it
+ * there itself (PaneTabs) — else a move in, flown from `source`.
+ */
+export function dropInStrip(
+  leafId: string,
+  index: number,
+  sessionId: string,
+  source: HTMLElement
+): void {
+  clearHints();
+  const leaf = workspace.leaf(leafId);
+  if (!leaf) {
+    return;
+  }
+  if (leaf.tabs.includes(sessionId)) {
+    workspace.reorder(leafId, sessionId, index);
+    return;
+  }
+  flyFrom(source, sessionId);
+  workspace.move(sessionId, leafId, index);
+}
 
 /** Touch keeps its long-press menu; the pointer path is for pointers. */
-const coarse = (): boolean =>
+export const coarse = (): boolean =>
   typeof window !== "undefined" &&
   window.matchMedia("(pointer: coarse)").matches;
 
-/* ── Actions ──────────────────────────────────────────────────────────── */
+/* ── A session row's drag (HTML5, Pragmatic drag and drop) ────────────── */
 
 /**
- * Makes something a conversation can be dragged FROM: a tab, a fleet row, a
- * sidebar entry. `from` names the group it currently lives in, so a drop can
- * tell a reorder from a move.
+ * Makes a session row from the rail or the fleet something a conversation
+ * can be dragged FROM, into a group's pane or strip. A tab is carried by the
+ * pointer instead (tab-drag.svelte.ts).
  */
 export function dragSession(
   node: HTMLElement,
   params: {
     sessionId: string;
-    from?: string | null;
     ctx?: () => {
       machine?: string | null;
       cwd?: string;
@@ -184,10 +265,9 @@ export function dragSession(
     getInitialData: (): Record<string, unknown> => ({
       kind: "cawco/session",
       sessionId: current.sessionId,
-      from: current.from ?? null,
+      from: null,
     }),
     onDragStart: () => {
-      node.dataset.dragging = "";
       // A conversation dragged in from the board is not open yet, and the
       // machine and folder it is addressed by have to be recorded BEFORE it
       // lands — a stored session without them resolves to a different
@@ -197,10 +277,7 @@ export function dragSession(
         workingSet.visit(current.sessionId, ctx);
       }
     },
-    onDrop: () => {
-      delete node.dataset.dragging;
-      clearHints();
-    },
+    onDrop: clearHints,
   });
 
   return {
@@ -212,8 +289,9 @@ export function dragSession(
 }
 
 /**
- * A group's body as a drop target. Near an edge the drop splits against it;
- * anywhere in the middle it joins that group's tabs.
+ * A group's body as a drop target for a row's drag. Near an edge the drop
+ * splits against it; anywhere in the middle it joins that group's tabs. The
+ * pointer's tab drag finds the same pane by its `data-drop-leaf`.
  */
 export function paneDropTarget(node: HTMLElement, leafId: string) {
   let current = leafId;
@@ -225,39 +303,20 @@ export function paneDropTarget(node: HTMLElement, leafId: string) {
     };
   }
 
-  const allowedEdge = (
-    edge: Edge | null,
-    raw: Record<string | symbol, unknown>
-  ): Edge | null => {
-    if (!edge) {
-      return null;
-    }
-    const data = asDrag(raw);
-    const leaf = workspace.leaf(current);
-    if (data?.from === current && (leaf?.tabs.length ?? 0) < 2) {
-      return null;
-    }
-    return edge;
-  };
-
   const cleanup = dropTargetForElements({
     element: node,
     canDrop: ({ source }) => isSessionDrag(source.data),
-    getData: ({ input, element }) =>
-      attachClosestEdge(
-        { leafId: current },
-        { element, input, allowedEdges: ["top", "right", "bottom", "left"] }
-      ),
-    onDrag: ({ self, location, source }) => {
+    getData: () => ({ leafId: current }),
+    onDrag: ({ location, source }) => {
       // Only the innermost group under the pointer answers; without this a
       // nested split lights up every ancestor it sits inside.
       if (location.current.dropTargets[0]?.element !== node) {
         return;
       }
-      hint.leafId = current;
-      hint.edge = allowedEdge(
-        edgeAt(node, location.current.input, self.data),
-        source.data
+      const data = asDrag(source.data);
+      showPaneHint(
+        current,
+        paneEdgeAt(current, node, location.current.input, data?.from ?? null)
       );
     },
     onDragLeave: () => {
@@ -266,28 +325,22 @@ export function paneDropTarget(node: HTMLElement, leafId: string) {
         hint.edge = null;
       }
     },
-    onDrop: ({ self, location, source }) => {
+    onDrop: ({ location, source }) => {
       if (location.current.dropTargets[0]?.element !== node) {
         return;
       }
       const data = asDrag(source.data);
-      // Recomputed here rather than trusted from the hover: see `edgeAt`.
-      const edge = allowedEdge(
-        edgeAt(node, location.current.input, self.data),
-        source.data
-      );
-      clearHints();
       if (!data) {
+        clearHints();
         return;
       }
-      if (edge || data.from !== current) {
-        flyFrom(source.element, data.sessionId);
-      }
-      if (edge) {
-        workspace.split(current, edge, data.sessionId);
-      } else {
-        workspace.move(data.sessionId, current);
-      }
+      dropOnPane(
+        current,
+        paneEdgeAt(current, node, location.current.input, data.from),
+        data.sessionId,
+        data.from,
+        source.element
+      );
     },
   });
 
@@ -300,10 +353,20 @@ export function paneDropTarget(node: HTMLElement, leafId: string) {
 }
 
 /**
- * One tab as a drop target, so a drag can land at a position in the strip
- * rather than merely in the group. `getReorderDestinationIndex` turns the
- * nearest edge of the hovered tab into the index the dragged one belongs at,
- * accounting for the hole it leaves behind when it is already in this list.
+ * Where a drop at `x` lands among a strip's tabs, in order, counted with the
+ * dragged conversation out of it: after every tab whose middle it has passed.
+ */
+export function stripIndexAt(tabs: HTMLElement[], x: number): number {
+  return tabs.filter((tab) => {
+    const r = tab.getBoundingClientRect();
+    return r.left + r.width / 2 < x;
+  }).length;
+}
+
+/**
+ * One tab as a drop target for a row's drag, so it can land at a position in
+ * the strip rather than merely in the group: before the tab, or after it once
+ * the pointer has passed its middle.
  */
 export function tabDropTarget(
   node: HTMLElement,
@@ -317,59 +380,44 @@ export function tabDropTarget(
       },
     };
   }
+  const indexAt = (input: Point, sessionId: string) => {
+    const r = node.getBoundingClientRect();
+    const after = input.clientX > r.left + r.width / 2;
+    const at = workspace.leaf(current.leafId)?.tabs.indexOf(sessionId) ?? -1;
+    const index = current.index + (after ? 1 : 0);
+    // Counted with the dragged one out of the strip.
+    return at !== -1 && at < index ? index - 1 : index;
+  };
 
   const cleanup = dropTargetForElements({
     element: node,
     canDrop: ({ source }) => isSessionDrag(source.data),
-    getData: ({ input, element }) =>
-      attachClosestEdge(
-        { leafId: current.leafId, index: current.index },
-        { element, input, allowedEdges: ["left", "right"] }
-      ),
-    onDrag: ({ self, source }) => {
+    onDrag: ({ location, source }) => {
       const data = asDrag(source.data);
-      const leaf = workspace.leaf(current.leafId);
-      if (!(leaf && data)) {
-        return;
+      if (data) {
+        showTabHint(
+          current.leafId,
+          indexAt(location.current.input, data.sessionId)
+        );
       }
-      const startIndex = leaf.tabs.indexOf(data.sessionId);
-      tabHint.leafId = current.leafId;
-      tabHint.index = getReorderDestinationIndex({
-        startIndex: startIndex === -1 ? leaf.tabs.length : startIndex,
-        indexOfTarget: current.index,
-        closestEdgeOfTarget: extractClosestEdge(self.data),
-        axis: "horizontal",
-      });
     },
     onDragLeave: () => {
       if (tabHint.leafId === current.leafId) {
         tabHint.index = null;
       }
     },
-    onDrop: ({ self, source }) => {
+    onDrop: ({ location, source }) => {
       const data = asDrag(source.data);
-      const leaf = workspace.leaf(current.leafId);
-      const edge = extractClosestEdge(self.data);
-      clearHints();
-      if (!(leaf && data)) {
+      if (!data) {
+        clearHints();
         return;
       }
-      const startIndex = leaf.tabs.indexOf(data.sessionId);
-      const index = getReorderDestinationIndex({
-        startIndex: startIndex === -1 ? leaf.tabs.length : startIndex,
-        indexOfTarget: current.index,
-        closestEdgeOfTarget: edge,
-        axis: "horizontal",
-      });
-      // Same strip is a reorder — the conversation is already here and only
-      // its place in the row changes, which must not disturb its pane; the
-      // strip slides it there itself (PaneTabs).
-      if (startIndex === -1) {
-        flyFrom(source.element, data.sessionId);
-        workspace.move(data.sessionId, current.leafId, index);
-      } else {
-        workspace.reorder(current.leafId, data.sessionId, index);
-      }
+      dropInStrip(
+        current.leafId,
+        indexAt(location.current.input, data.sessionId),
+        data.sessionId,
+        source.element
+      );
     },
   });
 

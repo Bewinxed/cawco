@@ -377,6 +377,7 @@
        left painted until it lands (gesture.svelte.ts, `veiled`, `leaving`). -->
   <div
     class="stack"
+    data-drop-leaf={leaf.id}
     bind:this={stack}
     class:swipe={swipeable}
     use:swipe.action={swipeable}

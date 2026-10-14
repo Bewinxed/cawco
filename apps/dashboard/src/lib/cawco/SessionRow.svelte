@@ -375,7 +375,6 @@
         {href}
         use:dragSession={{
           sessionId,
-          from: null,
           ctx: () =>
             info
               ? {

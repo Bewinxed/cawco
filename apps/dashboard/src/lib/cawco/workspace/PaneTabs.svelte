@@ -88,11 +88,12 @@
   import { isThreadTab } from "../thread-tabs";
   import { runIdOf } from "../workflow-runs";
   import { workingSet } from "../working-set.svelte";
-  import { dragSession, dropHint, tabDropTarget } from "./dnd.svelte";
+  import { dropHint, tabDropTarget } from "./dnd.svelte";
   import SessionDetails from "./SessionDetails.svelte";
   import SessionStatus from "./SessionStatus.svelte";
   import { rebuildScheduler } from "./scheduler.svelte";
   import { type StatusTone, sessionStatus } from "./session-status";
+  import { pressTab } from "./tab-drag.svelte";
   import { contextOf, type LeafNode, workspace } from "./workspace.svelte";
 
   let {
@@ -1400,6 +1401,7 @@
      is drawn as chosen. -->
 <Tabs
   class="session-tabs {hosted ? "hosted" : ""}"
+  data-strip={leaf.id}
   onValueChange={(id) => workspace.activate(id, leaf.id)}
   {travel}
   value={leaf.active ?? ""}
@@ -1428,7 +1430,17 @@
         data-hung={cardHere || menuHere ? "" : undefined}
         data-tone={tab.tone}
         oncontextmenucapture={anchorMenu}
-        onpointerdown={(event) => pullMenu(tab.id, event)}
+        onpointerdown={(event) => {
+          pullMenu(tab.id, event);
+          pressTab(event, {
+            leafId: leaf.id,
+            sessionId: tab.id,
+            onlift: () => {
+              clearTimeout(timer);
+              closeDetails();
+            },
+          });
+        }}
         onpointerenter={(event) => {
           // A tab that came under a pointer at rest was not pointed at:
           // nothing to warm and no card to open. Clicking a tab and then
@@ -1459,7 +1471,6 @@
           i === tabs.length - 1}
         class:drop-before={dropHint.tabIndexIn(leaf.id) === i}
         class:needs={tab.activity === "blocked"}
-        use:dragSession={{ sessionId: tab.id, from: leaf.id }}
         use:tabDropTarget={{ leafId: leaf.id, index: i, sessionId: tab.id }}
         out:leavingTab={tab.id}
         {@attach attachmentsOf(tab.id).enter}
@@ -2153,9 +2164,31 @@
       inset-inline-end: -2px;
     }
   }
-  /* The tab being carried recedes; it is somewhere else now. */
-  :global(.tab[data-dragging]) {
-    opacity: 0.4;
+  /* ── A tab carried along its strip (tab-drag.svelte.ts) ────────────
+     The tab itself is what moves. Lifted, it stands over every tab in the
+     strip (its whole stack above the track's, under the drop caret and
+     the focus ring), upright as a pointer's lift takes a receded tab all
+     the way, in front of both neighbours: both its feet drawn and both its
+     edges cast. It follows the pointer with no easing (`data-following`);
+     its neighbours slide into the slots it leaves on the strip's own slide
+     (PaneTabs `slide`), and it takes the same on its way back. With less
+     motion they stand in their slots at once. */
+  .tab[data-lifted] {
+    --under-start: 0 !important;
+    --under-end: 0 !important;
+    --lone-start: 0 !important;
+    --lone-end: 0 !important;
+    --lean-lift-now: 1;
+    z-index: var(--stack-top) !important;
+
+    & :global(.ff-tab) {
+      --lean-lift-now: 1 !important;
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    :global(.ff-tabs-list[data-reordering]) > .tab:not([data-following]) {
+      transition: translate var(--dur-panel) var(--ease-drawer);
+    }
   }
   /* A finger's sideways drag is the strip's scroll; a downward one is the
      tab's (`pullMenu`), never the page's. */
