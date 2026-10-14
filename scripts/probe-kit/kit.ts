@@ -70,9 +70,9 @@ export interface Kit {
   /** One assertion: a PASS or FAIL line. Returns `ok`. */
   check: (assertion: string, ok: boolean, detail?: string) => boolean;
   /**
-   * A scratch fleet (scratch-fleet.ts), nothing launched yet; its
-   * `dashboard()` serves the built dashboard against its hub once asked.
-   * Both go when the spec ends.
+   * A scratch fleet (scratch-fleet.ts), nothing launched yet, answered once
+   * the run's dashboard is built; its `dashboard()` serves that build
+   * against its hub once asked. Both go when the spec ends.
    */
   fleet: (respond: (request: Seen) => Reply) => Promise<KitFleet>;
   /** A line that is neither a pass nor a fail (a capture awaiting its baseline). */
@@ -286,6 +286,13 @@ export class Run {
       bench: () => this.bench(),
       built: () => this.builtBench(),
       fleet: async (respond) => {
+        // Built before the fleet starts, never between its start and the
+        // dashboard's: the build runs once per run, so a fleet left waiting
+        // on it ran its sessions on for the build's length when its spec
+        // came first and not at all after another, and a capture read its
+        // sessions in one state alone and another in a run (tab-strip's
+        // working tabs, idle when a fleet spec ran before it).
+        await this.build();
         const fleet = await scratchFleet({
           name: `probe-kit-${spec.name}`,
           respond,

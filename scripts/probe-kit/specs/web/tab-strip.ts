@@ -268,7 +268,45 @@ async function strip(
   }, ws);
   await open(page, `${base}/session/${active}`, `${TAB} .tclose`);
   await tabsAre(page, tabs.length);
+  await tonesHold(page);
   return page;
+}
+
+/**
+ * Until every tab's status (`data-tone`) has held for 2s, and each of
+ * `working` reads working. The server's page draws a working session
+ * working, and the load's first read of the hub drops it to quiet for
+ * ~0.75s before its pulse says working again (traced at 250ms:
+ * `wqqqwwww…`): a step taken in that window met the tab's tone and rim
+ * changing under it, a capture an idle Echo, a held clock transitions
+ * retargeted under it. Nothing in the run before a spec stands in for this
+ * wait (kit.ts `fleet`).
+ */
+async function tonesHold(page: Page, working: string[] = []) {
+  await page.evaluate(() => {
+    (window as unknown as { __tones?: object }).__tones = undefined;
+  });
+  await page.waitForFunction(
+    ([tab, ids]) => {
+      const w = window as unknown as {
+        __tones?: { key: string; since: number };
+      };
+      const tabs = [...document.querySelectorAll(tab as string)];
+      const key = tabs.map((el) => el.getAttribute("data-tone")).join(" ");
+      const ready = (ids as readonly string[]).every((id) =>
+        document.querySelector(
+          `${tab}:has([data-session-tab="${id}"])[data-tone="working"]`
+        )
+      );
+      if (!ready || w.__tones?.key !== key) {
+        w.__tones = { key, since: performance.now() };
+        return false;
+      }
+      return performance.now() - w.__tones.since >= 2000;
+    },
+    [TAB, working] as const,
+    { polling: 100 }
+  );
 }
 
 const near = (a: number, b: number, px = 1) => Math.abs(a - b) <= px;
@@ -1136,6 +1174,8 @@ async function pixels(kit: Kit, base: string, ids: string[]) {
   const three = [ids[0], ids[1], ids[4]] as string[];
   for (const theme of ["light", "dark"] as Theme[]) {
     const page = await strip(kit, base, three, three[0] as string, theme);
+    // The owner's case: Alpha and Echo working, as the live page holds it.
+    await tonesHold(page, [three[0], three[2]]);
     await page.mouse.move(2, 880);
     await settle(page);
     await holdLoops(page);
