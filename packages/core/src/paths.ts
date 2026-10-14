@@ -847,9 +847,15 @@ export const workspaceCacheEnv = (): Record<string, string> => {
   return {
     BUN_INSTALL_CACHE_DIR: join(cache, "bun"),
     npm_config_cache: join(cache, "npm"),
-    // node-gyp's headers: on macOS its default is `~/Library/Caches/node-gyp`,
-    // a host cache, whatever XDG_CACHE_HOME says.
-    npm_config_devdir: join(cache, "node-gyp"),
+    // node-gyp's headers. Its default is env-paths' cache dir (bin/node-gyp.js:
+    // `prog.devDir = envPaths('node-gyp', { suffix: '' }).cache`): on Linux
+    // `$XDG_CACHE_HOME/node-gyp`, on macOS `~/Library/Caches/node-gyp`, a host
+    // cache, whatever XDG_CACHE_HOME says. It takes its options from
+    // `npm_package_config_node_gyp_<key>` too (lib/node-gyp.js: "This is the
+    // preferred way to set options for node-gyp since npm v11"), and npm
+    // passes it through (run-script make-spawn-args.js: `...process.env`);
+    // `npm_config_devdir` npm 11 warns of ("Unknown env config") and will drop.
+    npm_package_config_node_gyp_devdir: join(cache, "node-gyp"),
     XDG_CACHE_HOME: join(cache, "xdg"),
     UV_CACHE_DIR: join(cache, "uv"),
     PLAYWRIGHT_BROWSERS_PATH: hostPlaywrightBrowsers(),
