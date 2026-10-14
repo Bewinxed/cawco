@@ -105,8 +105,9 @@ export class TabsListState {
   optimisticIndex = $state<number | null>(null);
   focusedIndex = $state<number | null>(null);
   /**
-   * A folder tab's sides that stand under a neighbour (start, end), by its
-   * item, as the track ranks its stack: those draw no foot (TabItem).
+   * A folder tab's sides whose foot a tab above it covers where the two are
+   * drawn now (start, end), by its item (TabsList `fold`): those draw no
+   * foot (TabItem).
    */
   folds = new SvelteMap<HTMLElement, readonly [boolean, boolean]>();
 

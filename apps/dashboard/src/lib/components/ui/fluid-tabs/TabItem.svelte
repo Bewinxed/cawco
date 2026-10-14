@@ -152,9 +152,10 @@
   });
   const shape = $derived(measured ?? tabs.boxes[value] ?? null);
   /**
-   * Which of its sides stand under a neighbour, as the track ranks its
-   * stack; until it has, from the order and the value alone. A side the
-   * host stands flush (`flush`) is square too.
+   * Which of its sides a tab above it covers, as the track reads them where
+   * they are drawn (TabsList `fold`); until it has, the neighbour above it
+   * at rest, from the order and the value alone. A side the host stands
+   * flush (`flush`) is square too.
    */
   const fold = $derived.by((): readonly [boolean, boolean] => {
     const ranked = node ? list.folds.get(node) : undefined;
@@ -202,6 +203,7 @@
 
 <span
   class={cn("ff-tab", selected && "selected", className)}
+  data-flush={flush}
   data-tab-index={index}
   bind:this={node}
   style:--pick={pick}

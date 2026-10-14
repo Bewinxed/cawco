@@ -78,9 +78,16 @@
      top, then each tab above those farther from it, the nearer the first
      (`restRank`); until the track has measured its tabs (the first render,
      the server's included) each stands at that rank from the order and the
-     value alone (`--z-rest`). A side under its neighbour's tab draws no
-     foot (`list.folds`, read by TabItem): its foot would lie under that
-     neighbour, and the path, not a mask, says so.
+     value alone (`--z-rest`). A side whose foot lies under a tab ranked
+     above it, where the two are drawn now, draws no foot (`list.folds`,
+     read by TabItem): the path, not a mask, says so. Covered is where the
+     two bodies still meet, so a side folds and unfolds only out of sight:
+     at that point the foot lies whole under the other's sheet. Read as
+     the tabs are drawn, slides and lifts included, every frame anything in
+     the track moves (`watchFolds`), never only from the ranks: a tab
+     sliding out from under its neighbour shows its foot as it emerges, not
+     a square side that flares later, and the neighbour a lifted tab leaves
+     stands on its own foot.
 
      A switch is a shuffle, not a fold (owner: "instead of the fold we can
      have a fold like right-forward-left, so the tab that is "behind" slides
@@ -111,31 +118,90 @@
   const SHUFFLE = "tab-shuffle";
   /** The item a drag has lifted, laid out (`data-lifted`), if one is. */
   let lifted = $state<HTMLElement | null>(null);
+  /** Each tab's rank as the stack was last ranked, by its item. */
+  const ranks = new Map<HTMLElement, number>();
   /**
    * Ranks the stack for the choice at `chosen` (the lifted tab over every
-   * other), writes each tab's rank (`--z`) and folds each side that stands
-   * under its neighbour (`list.folds`).
+   * other), writes each tab's rank (`--z`) and folds the sides that stand
+   * under a tab above them.
    */
   function stack(track: HTMLElement, items: HTMLElement[], chosen: number) {
     const n = items.length;
-    const ranks = items.map((item, i) =>
-      lifted !== null && laidOf(item, track) === lifted
-        ? n + 1
-        : restRank(n, chosen, i)
-    );
+    ranks.clear();
     items.forEach((item, i) => {
       const laid = laidOf(item, track);
-      const z = String(ranks[i]);
+      const rank =
+        lifted !== null && laid === lifted ? n + 1 : restRank(n, chosen, i);
+      ranks.set(item, rank);
+      const z = String(rank);
       if (laid.style.getPropertyValue("--z") !== z) {
         laid.style.setProperty("--z", z);
       }
-      const start = i > 0 && (ranks[i - 1] ?? 0) > (ranks[i] ?? 0);
-      const end = i < n - 1 && (ranks[i + 1] ?? 0) > (ranks[i] ?? 0);
-      const was = list.folds.get(item);
-      if (!was || was[0] !== start || was[1] !== end) {
-        list.folds.set(item, [start, end]);
-      }
     });
+    fold(items);
+    watchFolds(track);
+  }
+  /** Half a pixel: an edge as drawn, rounded. */
+  const EDGE = 0.5;
+  /**
+   * Folds each side whose foot a tab ranked above it covers where the two
+   * are drawn now (`list.folds`): the other's body reaches from that side's
+   * edge back over the tab. Its sheet then holds the foot whole (its own
+   * foot curving out at least as far), so the side changes out of sight.
+   */
+  function fold(items: HTMLElement[]) {
+    const drawn = items.map((item) => {
+      const box = item.getBoundingClientRect();
+      return {
+        item,
+        left: box.left,
+        right: box.right,
+        z: ranks.get(item) ?? 0,
+      };
+    });
+    for (const t of drawn) {
+      const over = drawn.filter((u) => u.z > t.z);
+      const start = over.some(
+        (u) => u.left <= t.left + EDGE && u.right >= t.left - EDGE
+      );
+      const end = over.some(
+        (u) => u.right >= t.right - EDGE && u.left <= t.right + EDGE
+      );
+      const was = list.folds.get(t.item);
+      if (!was || was[0] !== start || was[1] !== end) {
+        list.folds.set(t.item, [start, end]);
+      }
+    }
+  }
+  /**
+   * Frames with nothing moving the folds are kept through before the watch
+   * stops: a slide a change starts is started in the next frame's
+   * callbacks (PaneTabs `slide`), after the change ranks the stack.
+   */
+  const STILL_FRAMES = 3;
+  let watching = 0;
+  /** A run that still stands somewhere between its ends: playing, or held there. */
+  const underWay = (run: Animation) =>
+    run.playState === "running" || run.playState === "paused";
+  /**
+   * Keeps the folds on the tabs as drawn, each frame, while anything moves
+   * them: a shuffle, a lifted tab, or a slide or settle of a tab's box.
+   */
+  function watchFolds(track: HTMLElement) {
+    if (watching) {
+      return;
+    }
+    let still = 0;
+    const moving = () =>
+      shuffle !== null ||
+      lifted !== null ||
+      [...track.children].some((laid) => laid.getAnimations().some(underWay));
+    const step = () => {
+      fold(rects.items);
+      still = moving() ? 0 : still + 1;
+      watching = still > STILL_FRAMES ? 0 : requestAnimationFrame(step);
+    };
+    watching = requestAnimationFrame(step);
   }
   /** The shuffle under way, from one choice to another, and its frame. */
   let shuffle: {
@@ -326,6 +392,8 @@
     return () => watch.disconnect();
   });
   $effect(() => () => {
+    cancelAnimationFrame(watching);
+    watching = 0;
     if (shuffle) {
       cancelAnimationFrame(shuffle.frame);
       shuffle.run.cancel();

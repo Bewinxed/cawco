@@ -9,10 +9,14 @@
  *
  * Engine, never pictures:
  * - feet (owner: "A curved foot on inactive tabs: their sides curve out at
- *   the base like the chosen tab's"): every inactive tab's free side's rim
- *   is the chosen tab's flared path on that side, drawn whole, and its card
- *   ends on the chosen card's flared foot; its side under a neighbour folds
- *   both (DESIGN.md, Session tab status rim).
+ *   the base like the chosen tab's"): every tab's path is its box's
+ *   outline, every free foot the chosen tab's own quarter turn, and a side
+ *   is folded exactly where a tab ranked above covers its foot as the two
+ *   are drawn: at rest, under the lift, through a neighbour's slide and the
+ *   release's settle, and at every 5% of a switch (DESIGN.md, Folder tabs).
+ * - shuffle: a switch slides the tab being chosen out past its neighbour's
+ *   foot and back on one run of translate, the stack swapping at the
+ *   furthest point with no foot changing there; with less motion, at once.
  * - follow: every pointermove puts the dragged tab's left edge where the
  *   pointer's travel says, within 1px, clamped to the strip's ends.
  * - no capture: nothing is added to the page during a drag that is an img,
@@ -326,6 +330,46 @@ function geometry(s: Shape, fold: readonly [boolean, boolean]): string[] {
   return out;
 }
 
+/**
+ * Every tab's sides as its path draws them, against the rule: a side is
+ * folded exactly where a tab ranked above it covers its foot as the two are
+ * drawn now (that tab's body reaching from the side's edge back over it),
+ * or where the host stands it flush (`data-flush`). Answers what breaks it.
+ */
+const covers = (page: Page) =>
+  page.evaluate((sel) => {
+    const tabs = [...document.querySelectorAll<HTMLElement>(sel)].map((tab) => {
+      const ff = tab.querySelector(".ff-tab") as HTMLElement;
+      const box = ff.getBoundingClientRect();
+      const d = ff.querySelector("svg.fold defs path")?.getAttribute("d") ?? "";
+      return {
+        name: tab.querySelector(".label .text")?.textContent ?? "?",
+        left: box.left,
+        right: box.right,
+        z: Number(getComputedStyle(tab).zIndex),
+        flush: ff.dataset.flush ?? "",
+        start: !d.startsWith("M 0"),
+        end: d.lastIndexOf("A") < d.lastIndexOf("L"),
+      };
+    });
+    return tabs.flatMap((t) => {
+      const over = tabs.filter((u) => u.z > t.z);
+      const start =
+        t.flush === "start" ||
+        over.some((u) => u.left <= t.left + 0.5 && u.right >= t.left - 0.5);
+      const end =
+        t.flush === "end" ||
+        over.some((u) => u.right >= t.right - 0.5 && u.left <= t.right + 0.5);
+      const say = (side: string, folded: boolean, want: boolean) =>
+        folded === want
+          ? []
+          : [
+              `${t.name} ${side} ${folded ? "folded" : "flared"}, ${want ? "covered" : "uncovered"}`,
+            ];
+      return [...say("start", t.start, start), ...say("end", t.end, end)];
+    });
+  }, `${STRIPS} .tab`);
+
 async function feet(kit: Kit, page: Page, ids: string[]) {
   const read = await shapes(page);
   kit.check(
@@ -410,6 +454,12 @@ async function follow(kit: Kit, at: Along) {
     lifted && held.z > top && heldWrong.length === 0,
     `lifted ${lifted}, rank ${held.z} over ${top}; ${heldWrong.join("; ") || "both feet flared"}`
   );
+  const uncovered = await covers(page);
+  kit.check(
+    "lift: carried off Alpha, every side is folded exactly where a tab above covers it (Alpha's end, left bare, on its foot)",
+    uncovered.length === 0,
+    uncovered.join("; ") || "every side as drawn"
+  );
   const others = await Promise.all(
     [at.ids[0], at.ids[2], at.ids[3]].map((id) =>
       boxOf(page, tabSel(id as string))
@@ -477,10 +527,19 @@ async function neighbour(kit: Kit, at: Along) {
   );
   const slot = rest.bravo.left;
   const lefts: number[] = [];
-  for (const f of [0, 0.5, 1]) {
+  const bare: string[] = [];
+  for (const f of [0, 0.25, 0.5, 0.75, 1]) {
     await clock.seek(f);
-    lefts.push((await boxOf(page, tabSel(charlie))).left);
+    if (f === 0 || f === 0.5 || f === 1) {
+      lefts.push((await boxOf(page, tabSel(charlie))).left);
+    }
+    bare.push(...(await covers(page)).map((w) => `${f * 100}%: ${w}`));
   }
+  kit.check(
+    "neighbour: as Charlie slides under the lifted tab, every side is folded exactly where a tab above covers it, at 0/25/50/75/100%",
+    bare.length === 0,
+    bare.join("; ") || "every side as drawn"
+  );
   const [l0, l50, l100] = lefts as [number, number, number];
   kit.check(
     `neighbour: Charlie slides into Bravo's slot, ${rest.charlie.left.toFixed(1)} → ${slot.toFixed(1)}, at 0/50/100%`,
@@ -534,11 +593,18 @@ async function letGo(kit: Kit, at: Along) {
   );
   const panel = await panelSlide(page);
   const settled: number[] = [];
+  const bare: string[] = [];
   for (const f of [0, 0.5, 1]) {
     await clock.seek(f, "tab-slide");
     settled.push((await boxOf(page, tabSel(bravo))).left);
+    bare.push(...(await covers(page)).map((w) => `${f * 100}%: ${w}`));
   }
   await clock.release();
+  kit.check(
+    "release: as Bravo and Charlie settle, every side is folded exactly where a tab above covers it, at 0/50/100%",
+    bare.length === 0,
+    bare.join("; ") || "every side as drawn"
+  );
   await settle(page);
   const after = await strips(page);
   const kept = await stored(page);
@@ -830,18 +896,21 @@ async function shuffled(kit: Kit, base: string, ids: string[]) {
     `${clock.runs.map((run) => `${run.type} ${run.name} ${run.start}+${run.end}`).join(", ")}`
   );
   const frames: string[] = [];
-  const at50: Awaited<ReturnType<typeof drawn>>[] = [];
+  const bare: string[] = [];
   const rows: Record<number, Awaited<ReturnType<typeof drawn>>> = {};
-  for (const f of [0, 0.25, 0.49, 0.5, 0.75, 1]) {
+  const fractions = [
+    ...Array.from({ length: 21 }, (_, k) => k / 20),
+    0.49,
+    0.51,
+  ].sort((p, q) => p - q);
+  for (const f of fractions) {
     await clock.seek(f, "tab-shuffle");
     const now = await drawn(page);
     rows[f] = now;
-    if (f === 0.5) {
-      at50.push(now);
-    }
+    bare.push(...(await covers(page)).map((w) => `${f * 100}%: ${w}`));
     const [a, b] = now as [(typeof now)[number], (typeof now)[number]];
     frames.push(
-      `${f * 100}%: Bravo +${(b.left - (rest[1]?.left ?? 0)).toFixed(1)}px, z Alpha ${a.z} Bravo ${b.z}, Bravo start ${b.foldStart ? "folded" : "flared"}, pick ${a.pick.toFixed(2)}/${b.pick.toFixed(2)}`
+      `${Math.round(f * 100)}%: Bravo +${(b.left - (rest[1]?.left ?? 0)).toFixed(1)}px, z Alpha ${a.z} Bravo ${b.z}, Bravo start ${b.foldStart ? "folded" : "flared"}, Alpha end ${a.foldEnd ? "folded" : "flared"}, pick ${a.pick.toFixed(2)}/${b.pick.toFixed(2)}`
     );
   }
   await clock.release();
@@ -860,15 +929,22 @@ async function shuffled(kit: Kit, base: string, ids: string[]) {
     frames.join(" | ")
   );
   kit.check(
-    "shuffle: the stack swaps at the furthest point: Bravo behind Alpha to 49%, in front from 50%, its start foot flared once in front",
+    "shuffle: the stack swaps at the furthest point, Bravo behind Alpha to 49% and in front from 50%, and no foot changes there (Bravo's start and Alpha's end both on their feet, clear of each other's body)",
     !(front(0) || front(0.25) || front(0.49)) &&
       front(0.5) &&
-      front(0.75) &&
+      front(0.51) &&
       front(1) &&
-      rows[0.49]?.[1]?.foldStart === 1 &&
-      rows[0.5]?.[1]?.foldStart === 0 &&
-      rows[0.5]?.[0]?.foldEnd === 1,
+      [0.49, 0.5, 0.51].every(
+        (f) => rows[f]?.[1]?.foldStart === 0 && rows[f]?.[0]?.foldEnd === 0
+      ),
     frames.join(" | ")
+  );
+  kit.check(
+    "shuffle: at every 5% (and 49, 51%) every side is folded exactly where a tab above covers it as drawn: Bravo's start folded only while under Alpha, Alpha's end only once Bravo is back over it",
+    bare.length === 0 &&
+      rows[0]?.[1]?.foldStart === 1 &&
+      rows[1]?.[0]?.foldEnd === 1,
+    bare.join("; ") || frames.join(" | ")
   );
   await settle(page);
   const after = await shapes(page);
