@@ -9,8 +9,10 @@
  * Engine (every frame read), from computed values:
  *  - one clock: everything moving in the strip as the switch starts runs on
  *    one (sheets, cards, titles, rims, their lean and their glow);
- *  - feet: each switching tab's flared foot in front and in view stands at
- *    its sheet's opacity, within 0.03: body and feet one shape on one clock;
+ *  - feet: each switching tab's flared foot in front and in view stands
+ *    whole, chosen or not (owner: "A curved foot on inactive tabs"), but
+ *    where its seam glides, where it gives way to the plain foot by the
+ *    glide (flared 1 - glide, plain glide), within 0.03;
  *  - handover: no rim's strength moves over 0.08 from 49% to 51%, and where
  *    a seam's front changes there its stroke's strength holds within 15%;
  *  - jump (the second tab to the fourth, past the rimless idle third): the
@@ -63,7 +65,7 @@ const PCTS = [...Array.from({ length: 21 }, (_, k) => k * 5), 49, 51].sort(
 );
 /** Room round the strip in every capture, css px. */
 const ROOM = 24;
-/** How far a foot may stand off its sheet's opacity. */
+/** How far a foot may stand off what its seam's glide says. */
 const FOOT_TOLERANCE = 0.03;
 
 interface Strip {
@@ -161,6 +163,9 @@ function layoutOf({ root, tab }: { root: string; tab: string }) {
                   plain: op(s.querySelector(".rim-plain")),
                   flared: op(s.querySelector(".rim-flared")),
                   under: ls.getPropertyValue(`--under-${side}`).trim() === "1",
+                  glide:
+                    Number.parseFloat(ls.getPropertyValue(`--glide-${side}`)) ||
+                    0,
                 };
               }),
             }
@@ -976,7 +981,9 @@ function frameFaults(strip: Strip, f: Frame): Record<string, string[]> {
 /** The engine's rules across a switch's frames (the strip with a rim). */
 function switchFaults(series: { pct: number; L: Layout }[], from: number) {
   const out: Record<string, string[]> = { feet: [], handover: [] };
-  // feet: each switching tab's flared foot in front and in view at its sheet's opacity.
+  // feet: each switching tab's flared foot in front and in view, chosen or
+  // not, stands whole but where its seam glides: there it gives way to the
+  // plain foot by the glide (1 - glide), so the handover shows nothing.
   const read = new Set<number>();
   for (const { pct, L } of series) {
     for (const i of [from, from + 1]) {
@@ -986,9 +993,12 @@ function switchFaults(series: { pct: number; L: Layout }[], from: number) {
           continue;
         }
         read.add(i);
-        if (Math.abs(s.flared - t.sheet) > FOOT_TOLERANCE) {
+        if (
+          Math.abs(s.flared - (1 - s.glide)) > FOOT_TOLERANCE ||
+          Math.abs(s.plain - s.glide) > FOOT_TOLERANCE
+        ) {
           out.feet.push(
-            `${i}${s.side[0]} ${pct}%: foot ${s.flared.toFixed(3)} sheet ${t.sheet.toFixed(3)}`
+            `${i}${s.side[0]} ${pct}%: flared ${s.flared.toFixed(3)} plain ${s.plain.toFixed(3)} glide ${s.glide.toFixed(3)}`
           );
         }
       }

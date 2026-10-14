@@ -8,10 +8,11 @@
  * and Delta working after it (the owner's order), a mouse in Chromium.
  *
  * Engine, never pictures:
- * - feet: every inactive tab's free side draws its plain foot to the shelf
- *   (`.rim-plain` path down to 100%, its box's foot on the tab's), and its
- *   side under a neighbour stops a flare above it (DESIGN.md, Session tab
- *   status rim).
+ * - feet (owner: "A curved foot on inactive tabs: their sides curve out at
+ *   the base like the chosen tab's"): every inactive tab's free side's rim
+ *   is the chosen tab's flared path on that side, drawn whole, and its card
+ *   ends on the chosen card's flared foot; its side under a neighbour folds
+ *   both (DESIGN.md, Session tab status rim).
  * - follow: every pointermove puts the dragged tab's left edge where the
  *   pointer's travel says, within 1px, clamped to the strip's ends.
  * - no capture: nothing is added to the page during a drag that is an img,
@@ -265,20 +266,21 @@ async function feet(kit: Kit, page: Page, ids: string[]) {
     return {
       flare,
       tabs: [...document.querySelectorAll<HTMLElement>(sel)].map((tab) => {
-        const r = tab.getBoundingClientRect();
+        const ff = tab.querySelector(".ff-tab") as Element;
         return {
           name: tab.querySelector(".label .text")?.textContent ?? "?",
           chosen: tab.hasAttribute("data-chosen"),
+          card: getComputedStyle(ff, "::before").clipPath,
           sides: [...tab.querySelectorAll<HTMLElement>(".rim-side")].map(
             (side) => {
+              const flared = side.querySelector(".rim-flared") as Element;
               const plain = side.querySelector(".rim-plain") as Element;
-              const p = plain.getBoundingClientRect();
               return {
-                side: side.dataset.side,
+                side: side.dataset.side ?? "",
                 u: getComputedStyle(side).getPropertyValue("--u").trim(),
-                path: getComputedStyle(plain).clipPath,
-                shown: Number(getComputedStyle(plain).opacity),
-                foot: p.bottom - r.bottom,
+                path: getComputedStyle(flared).clipPath,
+                flared: Number(getComputedStyle(flared).opacity),
+                plain: Number(getComputedStyle(plain).opacity),
               };
             }
           ),
@@ -291,25 +293,40 @@ async function feet(kit: Kit, page: Page, ids: string[]) {
     read.flare === 8,
     `${read.flare}px`
   );
+  const chosenTab = read.tabs.find((t) => t.chosen);
+  const chosenEnd = chosenTab?.sides.find((s) => s.side === "end");
+  /** A card's outline from its trailing side down: that side's foot. */
+  const endFoot = (path: string) => {
+    const arc = path.lastIndexOf("arc to");
+    return path.slice(
+      path.lastIndexOf("line to", path.lastIndexOf("line to", arc) - 1)
+    );
+  };
+  /** A card's outline up its leading side: that side's foot. */
+  const startFoot = (path: string) => path.slice(0, path.indexOf("line to"));
   for (const tab of read.tabs.filter((t) => !t.chosen)) {
-    const [start, end] = tab.sides;
-    const free = end;
-    const under = start;
+    const [under, free] = tab.sides;
     kit.check(
-      `feet: ${tab.name}'s free (end) side draws its plain foot down to the shelf`,
+      `feet: ${tab.name}'s free (end) rim side flares round the chosen tab's own foot, drawn whole`,
       free?.u === "0" &&
-        free.shown === 1 &&
-        free.path.includes(`line to ${read.flare}px 100%`) &&
-        near(free.foot, 0, 0.5),
-      `--u ${free?.u}, shown ${free?.shown}, box foot ${free?.foot.toFixed(2)}px off the tab's, path ${free?.path.slice(0, 120)}`
+        free.flared === 1 &&
+        free.plain === 0 &&
+        free.path === chosenEnd?.path,
+      `--u ${free?.u}, flared ${free?.flared}, plain ${free?.plain}; ${free?.path === chosenEnd?.path ? "path = the chosen tab's end side" : `path ${free?.path.slice(0, 260)} against ${chosenEnd?.path.slice(0, 260)}`}`
     );
     kit.check(
-      `feet: ${tab.name}'s side under its neighbour stops a flare above the shelf`,
+      `feet: ${tab.name}'s card flares at its end foot as the chosen tab's does`,
+      endFoot(tab.card) === endFoot(chosenTab?.card ?? ""),
+      `${endFoot(tab.card)} against ${endFoot(chosenTab?.card ?? "")}`
+    );
+    kit.check(
+      `feet: ${tab.name}'s start side, under its neighbour, draws no foot (rim and card folded)`,
       under?.u === "1" &&
         under.path.includes(
-          `line to ${read.flare}px calc(100% - ${read.flare}px), curve`
-        ),
-      `--u ${under?.u}, path ${under?.path.slice(0, 160)}`
+          `arc to ${read.flare}px calc(100% - ${read.flare}px)`
+        ) &&
+        startFoot(tab.card) !== startFoot(chosenTab?.card ?? ""),
+      `--u ${under?.u}; rim ${under?.path.slice(0, 200)}; card ${startFoot(tab.card)} (chosen ${startFoot(chosenTab?.card ?? "")})`
     );
   }
   kit.note(`feet read on ${ids.length} tabs`);
@@ -578,6 +595,8 @@ async function along(kit: Kit, base: string, ids: string[]) {
   ];
   const page = await strip(kit, base, ids, alpha);
   await feet(kit, page, ids);
+  // The strip at rest, for a reviewer: its feet as drawn.
+  await page.screenshot({ path: `${kit.out}/rest.png` });
   await resetWatch(page);
   const start = await grip(page, bravo);
   const at: Along = {

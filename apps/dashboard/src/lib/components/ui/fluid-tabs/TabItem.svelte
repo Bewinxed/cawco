@@ -296,15 +296,25 @@
         --lean-lift-now: var(--lean-lift);
       }
     }
-    /* The card: straight up from the shelf as far as the sheet's flare
-       reaches, then the sloped side, so its outline is the sheet's body.
-       Its fill is the receded one (a host may set it, `--tab-fill`) and the
-       sheet's own on the chosen tab, so the overlap between the tab going
-       and the tab coming looks the same from either as they pass. */
+    /* The card: the sheet's outline, on a box one flare wider than the tab
+       each side, on every tab chosen or not (owner: "A curved foot on
+       inactive tabs: their sides curve out at the base like the chosen
+       tab's"). Each side stands straight up from the flare to where the
+       slope begins, its foot curving out into the shelf on the sheet's own
+       flare; a side under its neighbour's card (TabsList `--under-start`,
+       `--under-end`) draws no foot, the curve folded to nothing, straight
+       down to the shelf. Its fill is the receded one (a host may set it,
+       `--tab-fill`) and the sheet's own on the chosen tab, so the overlap
+       between the tab going and the tab coming looks the same from either
+       as they pass. */
     &::before {
+      /* How far in each foot's tip stands: 0 flared out, the flare folded. */
+      --foot-s: calc(var(--flare) * var(--under-start, 0));
+      --foot-e: calc(var(--flare) * var(--under-end, 0));
       content: "";
       position: absolute;
-      inset: 0;
+      inset-block: 0;
+      inset-inline: calc(-1 * var(--flare));
       z-index: calc(var(--z, var(--z-rest, 1)) * 4);
       background: color-mix(
         in oklab,
@@ -312,16 +322,32 @@
         var(--tab-fill, var(--surface-recess-deep))
       );
       clip-path: shape(
-        from var(--cut-s) 100%,
-        line to var(--cut-s) calc(100% - var(--flare)),
-        line to calc(var(--cut-s) + var(--slope-start)) var(--radius),
-        arc to calc(var(--cut-s) + var(--slope-start) + var(--radius)) 0 of
-          var(--radius) cw,
-        line to calc(100% - var(--cut-e) - var(--slope-end) - var(--radius)) 0,
-        arc to calc(100% - var(--cut-e) - var(--slope-end)) var(--radius) of
-          var(--radius) cw,
-        line to calc(100% - var(--cut-e)) calc(100% - var(--flare)),
-        line to calc(100% - var(--cut-e)) 100%,
+        from calc(var(--cut-s) + var(--foot-s)) 100%,
+        arc to calc(var(--cut-s) + var(--flare))
+          calc(100% - var(--flare) + var(--foot-s)) of var(--flare) ccw,
+        line to calc(var(--cut-s) + var(--flare)) calc(100% - var(--flare)),
+        line to calc(var(--cut-s) + var(--flare) + var(--slope-start))
+          var(--radius),
+        arc to
+          calc(var(--cut-s) + var(--flare) + var(--slope-start) + var(--radius))
+          0 of var(--radius) cw,
+        line to
+          calc(
+            100% -
+            var(--cut-e) -
+            var(--flare) -
+            var(--slope-end) -
+            var(--radius)
+          )
+          0,
+        arc to calc(100% - var(--cut-e) - var(--flare) - var(--slope-end))
+          var(--radius) of var(--radius) cw,
+        line to calc(100% - var(--cut-e) - var(--flare))
+          calc(100% - var(--flare)),
+        line to calc(100% - var(--cut-e) - var(--flare))
+          calc(100% - var(--flare) + var(--foot-e)),
+        arc to calc(100% - var(--cut-e) - var(--foot-e)) 100% of var(--flare)
+          ccw,
         close
       );
     }

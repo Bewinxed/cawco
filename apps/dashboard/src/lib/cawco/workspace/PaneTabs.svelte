@@ -2276,10 +2276,11 @@
   /* ── The status rim, on every width ───────────────────────────────
      Each tab's rim wears its session's status (`data-tone`, the rail's
      scale) on the tab's whole outline at one weight, 1.5px: across the
-     top, round both shoulders, down both sloped sides, and at the foot
-     either straight down to the shelf or, on the chosen tab, out round the
-     sheet's flared foot to the shelf's line, with a soft glow following
-     the outline at half its strength. The desk keeps its status glyph
+     top, round both shoulders, down both sloped sides, and at the foot out
+     round the sheet's flare to the shelf's line, on every tab chosen or not
+     (owner: "A curved foot on inactive tabs: their sides curve out at the
+     base like the chosen tab's"), with a soft glow following the outline
+     at half its strength. The desk keeps its status glyph
      before the title as well (owner: "desktop and mobile should all have
      rims, desktop has icons mobile not").
 
@@ -2290,8 +2291,8 @@
      should have a more subtle rim", "or any other status").
 
      It is drawn in pieces (`.rim-top`; a `.rim-side` for each side holding
-     its shoulder and run twice, once on its plain foot and once on its
-     flared foot), opaque in the tone (`--tone`, `TONE_INK`), and the rim
+     its shoulder and run twice, once on its flared foot and once on a
+     plain one for a gliding seam's handover), opaque in the tone (`--tone`, `TONE_INK`), and the rim
      as a whole carries the tone's strength as its opacity (`--rim-mix`:
      how chosen the tab is, `--pick`, sets it), so the strength travels on
      the compositor and cross-fades on the switch's clock. It leans with
@@ -2328,8 +2329,8 @@
     /* How much of its chosen sheet shows now: the sheet's own opacity on
        every frame, read off the sheet's fade by the track (TabsList
        `--depth`, 0 chosen to 1 receded; how chosen it is drawn until the
-       track has measured it). The rim's strength and its feet follow it,
-       so body, feet and rim are one shape on one clock. */
+       track has measured it). The rim's strength follows it, on the
+       sheet's own clock. */
     --sheet-now: calc(1 - var(--depth, calc(1 - var(--pick))));
     /* Its strength now, and its neighbours': from how chosen each stands
        on the switch's clock (`--sheet-now`, `--depth-prev`,
@@ -2574,18 +2575,20 @@
       }
     }
   }
-  /* The side on its plain foot (a receded tab's) and on its flared foot
-     (the chosen tab's), each one shape from shoulder to tip (so no seam
-     where the run meets its foot) with its own fade, measured along its
-     own stroke from its tip. They cross-fade on the sheet's own curve,
-     frame by frame: the flared side shows exactly as much as the tab's
-     sheet does (`--sheet-now`), whose foot it outlines, and the plain side
-     the rest, so the curve at the foot never runs ahead of the body or
-     behind it (owner: the tab animation "animates the tabs body then the
-     curve on the sides separately"). Their strengths always sum to one and
-     they add as light (`plus-lighter`), so where the two run on the same
-     pixels (the run, and its fading stretch above a foot) the stroke holds
-     its strength through the switch.
+  /* The side on its flared foot and on a plain one, each one shape from
+     shoulder to tip (so no seam where the run meets its foot) with its own
+     fade, measured along its own stroke from its tip. Every tab stands on
+     its flared foot, chosen or not, as its card and sheet do (owner: "A
+     curved foot on inactive tabs: their sides curve out at the base like
+     the chosen tab's"), so a choice changes no foot: body and feet are one
+     shape through the switch. Only a gliding seam's sides straighten, by
+     how far it has glided (`--glide`, 0 at either edge, 1 half way): at
+     the handover, where its front changes, both its sides stand plain on
+     the same pixels, so the curve passing from one side of the seam to the
+     other shows nothing, and each flares again as the seam settles. Their
+     strengths always sum to one and they add as light (`plus-lighter`), so
+     where the two run on the same pixels (the run, and its fading stretch
+     above a foot) the stroke holds its strength through the switch.
 
      A foot never shows from under a neighbour: the rank does that, not a
      timing. A side under its neighbour's card draws no foot (`--u`,
@@ -2604,7 +2607,7 @@
      control at the tip's height), so the stroke widens fast off the point
      and slows into its full width. */
   .rim-plain {
-    opacity: calc(1 - var(--sheet-now));
+    opacity: var(--glide);
     clip-path: shape(
       from calc(var(--F) + var(--s) + var(--radius)) 0,
       arc to calc(var(--F) + var(--s)) var(--radius) of var(--radius) ccw,
@@ -2641,7 +2644,7 @@
      to the shelf's line, narrowing from where the taper's ink is 90%
      whole (`--th`) to a point where it meets it. */
   .rim-flared {
-    opacity: var(--sheet-now);
+    opacity: calc(1 - var(--glide));
     mix-blend-mode: plus-lighter;
     clip-path: shape(
       from calc(var(--F) + var(--s) + var(--radius)) 0,
@@ -2749,8 +2752,8 @@
       );
     mask-repeat: no-repeat;
   }
-  /* The feet ease nothing of their own: they are the sheet's, frame by
-     frame (`--sheet-now`). */
+  /* The feet ease nothing of their own: a seam's glide moves them, frame
+     by frame (`--glide`). */
   @media (prefers-reduced-motion: no-preference) {
     /* A pointer's lift runs at the control tier (TabItem). */
     @media (hover: hover) and (pointer: fine) {
@@ -2812,9 +2815,12 @@
     min-inline-size: max(12rem, var(--hang-min, 0px));
     --hang-surface: var(--surface-recess);
   }
-  /* Flush with the pane's edge (`flushAt`): the sheet's foot is square on
-     the leading side while its card hangs there, so the tab's flank runs
-     straight down into the card's side. */
+  /* Flush with the pane's edge (`flushAt`): the sheet's foot and the
+     card's are square on the leading side while its card hangs there, so
+     the tab's flank runs straight down into the card's side. */
+  .tab[data-flush="start"] :global(.ff-tab)::before {
+    --foot-s: var(--flare);
+  }
   .tab[data-flush="start"] :global(.ff-tab.selected)::after {
     clip-path: shape(
       from calc(var(--cut-s) + var(--flare)) 100%,
