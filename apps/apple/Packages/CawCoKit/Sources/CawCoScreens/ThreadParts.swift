@@ -19,6 +19,103 @@ extension UIView {
     }
 }
 
+extension UIViewController {
+    /// Why nothing can be sent from a session's or a thread's composer now,
+    /// other than an empty field: the composer's action box wears it as its
+    /// warning state and explains on a tap. Nothing is said unasked (HIG
+    /// Alerts: "Avoid using an alert merely to provide information"). The
+    /// first seconds of a connect, and a swipe, are too brief to explain.
+    func sendBlock(_ hub: HubConnection) -> SendBlock? {
+        // The hub answered in a shape this app cannot read (HubConnection
+        // `incompatible`, the same check, words and `/health` version the
+        // connect screen uses): the fix is an update, so it is told in an alert.
+        if let incompatible = hub.incompatible {
+            return SendBlock(reason: HubConnection.Incompatible.title) { [weak self, weak hub] in
+                guard let self, let hub else { return }
+                explainIncompatible(incompatible, hub: hub)
+            }
+        }
+        // Local Network privacy refuses the hub: known as soon as the socket is
+        // refused, so said from then (no outage grace), and its one fix is the
+        // status line's, Open Settings (no Reconnect: trying again can't help).
+        if hub.localNetworkDenied {
+            let reason = LocalNetwork.refusal
+            return SendBlock(reason: reason, menu: UIMenu(title: reason, children: [
+                UIAction(title: LocalNetwork.settingsAction, image: Glyph.settings.image) { _ in UIApplication.shared.open(LocalNetwork.settingsURL) },
+            ]))
+        }
+        if hub.state == .unreachable {
+            let reason = "Reconnecting to the hub…"
+            return SendBlock(reason: reason, menu: UIMenu(title: reason, children: [
+                UIAction(title: "Reconnect", image: Glyph.refresh.image) { [weak hub] _ in hub?.reconnectNow() },
+            ]))
+        }
+        return nil
+    }
+
+    /// The one reason that carries its fix in an alert: this app and the hub
+    /// don't match, and either update fixes it (HubMismatchController's words).
+    private func explainIncompatible(_ incompatible: HubConnection.Incompatible, hub: HubConnection) {
+        let alert = UIAlertController(title: HubConnection.Incompatible.title,
+                                      message: incompatible.message(host: hub.address?.host() ?? "your hub"), preferredStyle: .alert)
+        let open = UIAlertAction(title: "Open TestFlight", style: .default) { _ in
+            UIApplication.shared.open(HubConnection.Incompatible.testFlight)
+        }
+        alert.addAction(open)
+        alert.addAction(UIAlertAction(title: "Reconnect", style: .default) { [weak hub] _ in hub?.reconnect() })
+        alert.preferredAction = open
+        present(alert, animated: true)
+    }
+}
+
+/// The task cards under one of Caw's replies (ThreadPane.svelte
+/// `.thread-tasks`, `repeat(auto-fill, minmax(14rem, 1fr))`): as many
+/// 14rem columns as the row's width holds, each card stretched to its
+/// column. The column count is chosen at the width the row is laid out at,
+/// which the transcript gives it before measuring its height.
+final class TaskGridView: UIView {
+    private let cards: [UIView]
+    private let lines = UIStackView()
+    private var columns = 0
+    private static let column: CGFloat = 14 * 16
+
+    init(_ cards: [UIView]) {
+        self.cards = cards
+        super.init(frame: .zero)
+        lines.axis = .vertical
+        lines.spacing = Space.space2
+        hold(lines)
+        arrange(1)
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) { fatalError("TaskGridView is built in code") }
+
+    override func layoutSubviews() {
+        if bounds.width > 0 {
+            arrange(max(1, Int((bounds.width + Space.space2) / (Self.column + Space.space2))))
+        }
+        super.layoutSubviews()
+    }
+
+    private func arrange(_ count: Int) {
+        guard count != columns else { return }
+        columns = count
+        for line in lines.arrangedSubviews { line.removeFromSuperview() }
+        for start in stride(from: 0, to: cards.count, by: count) {
+            let line = UIStackView()
+            line.axis = .horizontal
+            line.spacing = Space.space2
+            line.distribution = .fillEqually
+            line.alignment = .top
+            for at in start ..< start + count {
+                line.addArrangedSubview(at < cards.count ? cards[at] : UIView())
+            }
+            lines.addArrangedSubview(line)
+        }
+    }
+}
+
 /// A thread row's mark (SessionMark.svelte): Caw at what the thread is
 /// doing, on the row's tile; nothing for a session's row.
 @MainActor

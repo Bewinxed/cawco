@@ -63,8 +63,6 @@ REMOTE=build/cawco-apple/$BUILD/apps/apple
 # run from apps/apple) builds the same tree.
 cd "$ROOT"
 [[ -f apps/apple/project.yml ]] || { echo "no apps/apple/project.yml under $ROOT" >&2; exit 2; }
-# The apps/apple this build is made from, stamped beside each simulator app.
-TREE=$(bash apps/apple/scripts/tree-stamp.sh)
 PLATFORM=${1:-both}
 COMPILE_ONLY=${2:-}
 [[ -z $COMPILE_ONLY || $COMPILE_ONLY == --compile-only ]] || { echo "usage: build-both.sh [ios|macos|both] [--compile-only]" >&2; exit 2; }
@@ -138,12 +136,17 @@ trap 'exit 143' TERM HUP
 trap 'GO=1' USR1
 
 # The caller holds stdin open for the whole run and writes a heartbeat line
-# every 10 s, plus GO once the sync is done. EOF, or no line for 45 s, means
+# every 10 s, plus `GO <stamp>` once the sync is done: the stamp of the
+# apps/apple it synced (tree-stamp.sh), kept in $ROOT/$BUILD/tree for the
+# build to write beside each simulator app. EOF, or no line for 45 s, means
 # the caller has left: TERM this shell, whose EXIT trap ends the build group
 # and releases the locks.
 (
   while IFS= read -r -t 45 line; do
-    if [[ $line == GO ]]; then kill -USR1 "$$"; fi
+    if [[ $line == "GO "* ]]; then
+      printf '%s\n' "${line#GO }" >"$ROOT/$BUILD/tree"
+      kill -USR1 "$$"
+    fi
   done
   kill -TERM "$$"
 ) <&0 &
@@ -208,6 +211,7 @@ if [[ -z ${APPLE_ROOT:-} ]]; then
   done
 fi
 mkdir -p "$ROOT/$BUILD/apps/apple"
+rm -f "$ROOT/$BUILD/tree"
 echo READY
 # The same SSH process keeps the locks while the caller rsyncs; GO starts the
 # build. A failed sync ends the caller, and its EOF releases the locks.
@@ -231,6 +235,8 @@ DD="$5/$BUILD/DerivedData"
 LOGS="$5/$BUILD/logs"
 mkdir -p "$LOGS"
 SETTLE=8
+# The apps/apple synced here, as the caller stamped it with GO.
+TREE=$(<"$5/$BUILD/tree")
 # This build holds the Mac build slot: mac-slot.sh may take a simulator slot
 # inside it.
 export CAWCO_MAC_SLOT=build DD LOGS SETTLE TREE
@@ -353,8 +359,8 @@ if [[ $PLATFORM != ios ]]; then macos; fi
 if [[ $PLATFORM != macos ]]; then ios 'iOS 18.5'; fi
 EOF
 
-printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q APPLE_ROOT=%q TREE=%q BUILD_SCRIPT=%q bash --norc -c %q --' \
-  "$PLATFORM" "$COMPILE_ONLY" "$APPLE_ROOT" "$TREE" "$BUILD_SCRIPT" "$PREPARE"
+printf -v COMMAND 'PLATFORM=%q COMPILE_ONLY=%q APPLE_ROOT=%q BUILD_SCRIPT=%q bash --norc -c %q --' \
+  "$PLATFORM" "$COMPILE_ONLY" "$APPLE_ROOT" "$BUILD_SCRIPT" "$PREPARE"
 for argument in "$BUILD" "${LIVE[@]}"; do printf -v COMMAND '%s %q' "$COMMAND" "$argument"; done
 # The ssh link's stdin and stdout are two FIFOs held on fds 3 (to the Mac)
 # and 4 (from it): the Mac's /bin/bash 3.2 has no coproc and no {var}>&
@@ -378,6 +384,10 @@ while IFS= read -r line <&4; do
   echo "$line"
 done
 if [[ ${line:-} != READY ]]; then wait "$MAC_PID"; exit 1; fi
+# The apps/apple this build is made from: stamped as it is synced, after the
+# wait for the slot, and again once synced. An edit in between would leave
+# the stamp naming other code than the app's, so the run stops instead.
+TREE=$(bash apps/apple/scripts/tree-stamp.sh)
 SYNC=(rsync -rlpD --checksum --delete
   --exclude .build --exclude DerivedData
   --exclude CawCo.xcodeproj --exclude CawCo/Info.plist)
@@ -388,6 +398,10 @@ else
   echo "BUILD DIRECTORY mac:~/build/cawco-apple/$BUILD"
   "${SYNC[@]}" -e "ssh -F $HOME/.ssh/config -o BatchMode=yes" apps/apple/ "mac:$REMOTE/"
 fi
-echo GO >&3
+if [[ $(bash apps/apple/scripts/tree-stamp.sh) != "$TREE" ]]; then
+  echo "FAILED sync: apps/apple changed while it was copied to the build; run build-both.sh again" >&2
+  exit 1
+fi
+echo "GO $TREE" >&3
 cat <&4
 wait "$MAC_PID"

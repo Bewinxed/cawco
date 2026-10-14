@@ -279,7 +279,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
             composerBinding.action = transcript.tail?.busy == true && canStop ? .stop : .send
         }
         composerBinding.sendError = editNote ?? (command?.stage == .failed ? "Couldn't send that message.\(command?.reason.map { " \($0)" } ?? "")" : nil)
-        composerBinding.sendBlock = sendBlock()
+        composerBinding.sendBlock = sendBlock(hub)
         syncCards()
         composerBinding.publish()
         syncPreview()
@@ -1131,52 +1131,6 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     }
 
     // MARK: Steer and Stop
-
-    /// Why nothing can be sent here now, other than an empty field: the
-    /// composer's action box wears it as its warning state and explains on a
-    /// tap. Nothing is said unasked (HIG Alerts: "Avoid using an alert merely
-    /// to provide information"). The first seconds of a connect, and a swipe,
-    /// are too brief to explain.
-    private func sendBlock() -> SendBlock? {
-        // The hub answered in a shape this app cannot read (HubConnection
-        // `incompatible`, the same check, words and `/health` version the
-        // connect screen uses): the fix is an update, so it is told in an alert.
-        if let incompatible = hub.incompatible {
-            return SendBlock(reason: HubConnection.Incompatible.title) { [weak self] in
-                self?.explainIncompatible(incompatible)
-            }
-        }
-        // Local Network privacy refuses the hub: known as soon as the socket is
-        // refused, so said from then (no outage grace), and its one fix is the
-        // status line's, Open Settings (no Reconnect: trying again can't help).
-        if hub.localNetworkDenied {
-            let reason = LocalNetwork.refusal
-            return SendBlock(reason: reason, menu: UIMenu(title: reason, children: [
-                UIAction(title: LocalNetwork.settingsAction, image: Glyph.settings.image) { _ in UIApplication.shared.open(LocalNetwork.settingsURL) },
-            ]))
-        }
-        if hub.state == .unreachable {
-            let reason = "Reconnecting to the hub…"
-            return SendBlock(reason: reason, menu: UIMenu(title: reason, children: [
-                UIAction(title: "Reconnect", image: Glyph.refresh.image) { [weak hub] _ in hub?.reconnectNow() },
-            ]))
-        }
-        return nil
-    }
-
-    /// The one reason that carries its fix in an alert: this app and the hub
-    /// don't match, and either update fixes it (HubMismatchController's words).
-    private func explainIncompatible(_ incompatible: HubConnection.Incompatible) {
-        let alert = UIAlertController(title: HubConnection.Incompatible.title,
-                                      message: incompatible.message(host: hub.address?.host() ?? "your hub"), preferredStyle: .alert)
-        let open = UIAlertAction(title: "Open TestFlight", style: .default) { _ in
-            UIApplication.shared.open(HubConnection.Incompatible.testFlight)
-        }
-        alert.addAction(open)
-        alert.addAction(UIAlertAction(title: "Reconnect", style: .default) { [weak hub] _ in hub?.reconnect() })
-        alert.preferredAction = open
-        present(alert, animated: true)
-    }
 
     func focusComposer() { composerBinding.focus() }
     /// Composer.svelte's rule: a conversation on the board takes a message

@@ -160,6 +160,10 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         off.layer.cornerRadius = Radius.radiusLg
         off.layer.cornerCurve = .continuous
         off.layer.borderWidth = 1
+        off.layer.borderColor = Palette.borderControl.resolvedColor(with: traitCollection).cgColor
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (self: Self, _) in
+            self.off.layer.borderColor = Palette.borderControl.resolvedColor(with: self.traitCollection).cgColor
+        }
         off.boxShadow = Shadow.shadowTile
         off.isHidden = true
         off.translatesAutoresizingMaskIntoConstraints = false
@@ -296,6 +300,7 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         composerBinding.writable = connected && writable
         composerBinding.action = sending ? .sending : (status == .working ? .stop : .send)
         composerBinding.sendError = sendError
+        composerBinding.sendBlock = sendBlock(hub)
         syncCards()
         composerBinding.publish()
         if composing != writable {
@@ -314,7 +319,7 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
                 try await hub.threads.read(projectId: projectId, threadId: threadId)
                 self?.readProblem = nil
             } catch {
-                self?.readProblem = error.localizedDescription
+                self?.readProblem = ThreadsStore.failureWords(error)
                 Self.log.error("thread \(threadId, privacy: .public) unreadable: \(error.localizedDescription, privacy: .public)")
             }
             self?.requestRefresh()
@@ -489,24 +494,16 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         column.axis = .vertical
         column.spacing = Space.space3
         column.alignment = .fill
-        let cards = extras.tasks.compactMap { id in tasks.first { $0.id == id } }
-        if !cards.isEmpty {
-            let list = UIStackView()
-            list.axis = .vertical
-            list.spacing = Space.space2
-            for task in cards {
-                let card = TaskCardView()
-                card.configure(task, waitsOn: [])
-                card.addAction(UIAction { [weak self] _ in
-                    guard let self else { return }
-                    onOpenTask(projectId, task.id)
-                }, for: .touchUpInside)
-                card.widthAnchor.constraint(lessThanOrEqualToConstant: 28 * 16).isActive = true
-                list.addArrangedSubview(card)
-            }
-            list.alignment = .leading
-            column.addArrangedSubview(list)
+        let cards = extras.tasks.compactMap { id in tasks.first { $0.id == id } }.map { task in
+            let card = TaskCardView()
+            card.configure(task, waitsOn: [])
+            card.addAction(UIAction { [weak self] _ in
+                guard let self else { return }
+                onOpenTask(projectId, task.id)
+            }, for: .touchUpInside)
+            return card
         }
+        if !cards.isEmpty { column.addArrangedSubview(TaskGridView(cards)) }
         if !extras.files.isEmpty {
             let files = FolderFilesView(files: extras.files) { [weak self] path in self?.openFile(path) }
             column.addArrangedSubview(files)
@@ -555,7 +552,7 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
                 if threadId == nil { self?.started(said.id) }
             } catch {
                 self?.composerBinding.setDraft(words)
-                self?.sendError = error.localizedDescription
+                self?.sendError = ThreadsStore.unreachable(error) ? ThreadsStore.sendUnreached : ThreadsStore.failureWords(error)
                 Self.log.error("thread send refused: \(error.localizedDescription, privacy: .public)")
             }
             self?.sending = false

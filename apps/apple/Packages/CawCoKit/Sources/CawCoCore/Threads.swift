@@ -244,12 +244,37 @@ public final class ThreadsStore {
         #endif
     }
 
+    /// A thread send that got no answer, in the error formula: what, why,
+    /// what is kept, the way back (ThreadPane.svelte `THREAD_SEND_UNREACHED`).
+    public static let sendUnreached =
+        "Message not sent: the app couldn't reach the hub. Your words are back in the field. Send again once the hub answers."
+
+    /// A request that got no answer, in the error formula (hub-read.ts `HUB_UNREACHABLE`).
+    public static let hubUnreached =
+        "The app couldn't reach the hub: the request got no answer. Check that the hub's machine is up and this device is online, then try again."
+
+    /// The request got no answer from the hub (hub-read.ts `unreachable`).
+    public static func unreachable(_ error: any Error) -> Bool {
+        let cause = (error as? ClientError)?.underlyingError ?? error
+        return cause is URLError || (cause as? TaskRefusal)?.message == noHub
+    }
+
+    /// A failed request as a person reads it (hub-read.ts `failureWords`):
+    /// no answer is said in the formula, a refusal in the hub's own words.
+    public static func failureWords(_ error: any Error) -> String {
+        if unreachable(error) { return hubUnreached }
+        let cause = (error as? ClientError)?.underlyingError ?? error
+        return (cause as? TaskRefusal)?.message ?? cause.localizedDescription
+    }
+
+    private static let noHub = "No hub is connected."
+
     /// Your words in a thread, or the first of a new one (`sayInThread`,
     /// `startThread`): Caw is woken with them. `id` is the message's, so its
     /// row lands the words that flew under it. Answers the thread they went to.
     @discardableResult
     public func say(projectId: String, threadId: String?, body: String, id: String) async throws -> ThreadSummary {
-        guard let client = hub.client else { throw TaskRefusal(message: "No hub is connected.") }
+        guard let client = hub.client else { throw TaskRefusal(message: Self.noHub) }
         let said: Components.Schemas.ThreadSaid
         if let threadId {
             let output = try await client.postApiProjectsByIdThreadsByThreadIdMessages(
