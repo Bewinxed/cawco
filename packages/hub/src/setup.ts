@@ -122,7 +122,7 @@ export const setupEvent = (ask: SetupAsk): string => {
         ? ", and their words are the first message of the Setup thread"
         : " from a session's offer, noted in the Setup thread"
     } (thread ${ask.threadId}). ${ask.template ? `They picked the ${ask.template} template.` : "They picked no template; start from the code template unless their words say otherwise."} Set the project up with them.`,
-    `1. Load the decision-page skill and build one decision page named "${SETUP_PAGE}". You have no shell or file tools: write decisions/${SETUP_PAGE}/page.html into the project's folder with folder_write (start from the skill's kit/page.html; read it with your Read tool), then call artifact_create({ kind: "page", name: "${SETUP_PAGE}" }). Its cards, with exactly these ids:`,
+    `1. Load the decision-page skill and build one decision page named "${SETUP_PAGE}". The page lives in the project's folder on the hub, which your own edit tools do not write: write decisions/${SETUP_PAGE}/page.html there with folder_write (start from the skill's kit/page.html; read it with your Read tool), then call artifact_create({ kind: "page", name: "${SETUP_PAGE}" }). Its cards, with exactly these ids:`,
     [
       ...(ask.askFleet ? [fleetCards] : []),
       `- \`stages\`: the project's stages, from the ${template} template below, adjusted to their words. Show each stage's name in an editable text field and store the list with \`cawco.set("stages", [{ "name": …, "kind": … }, …])\` on every edit (kinds stay as the template has them; show each kind in words: to do, active, waiting, you, done, dropped).`,

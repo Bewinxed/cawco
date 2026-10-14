@@ -82,6 +82,7 @@ import {
   INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
   identityOf,
+  LEAD_GATED_TOOLS,
   MESSAGES_HELD,
   MESSAGES_READ,
   RATE_LIMIT_READ,
@@ -1191,26 +1192,43 @@ const scratchDirectory = (boundary: HarnessContext["boundary"]) =>
 const SESSION_SETTINGS = { totalTokensReminder: "off" } as const;
 
 /**
- * Flag settings a project's Caw launches with besides: no claude.ai account
- * connectors. `strictMcpConfig` keeps every other MCP source out ("Only use
- * MCP servers passed via the `mcpServers` option … ignoring all other MCP
- * configurations: project `.mcp.json`, user settings, plugins, and on-disk
- * agent frontmatter", sdk.d.ts 0.3.296), but the connectors are fetched from
- * the account, not read from a config: "When true in any settings source,
- * claude.ai MCP cloud connectors are not auto-fetched or connected"
- * (`disableClaudeAiConnectors`, sdk.d.ts 0.3.296). The CLI's fetch returns
- * none on it: `w=jue();if(S||w)return t(\`[claudeai-mcp] Disabled via
+ * Flag settings a fenced session (a memory curator or fleet-watch triage
+ * run, {@link SpawnPayload.fence}) launches with besides: no claude.ai
+ * account connectors. `strictMcpConfig` keeps every other MCP source out
+ * ("Only use MCP servers passed via the `mcpServers` option … ignoring all
+ * other MCP configurations: project `.mcp.json`, user settings, plugins, and
+ * on-disk agent frontmatter", sdk.d.ts 0.3.296), but the connectors are
+ * fetched from the account, not read from a config: "When true in any
+ * settings source, claude.ai MCP cloud connectors are not auto-fetched or
+ * connected" (`disableClaudeAiConnectors`, sdk.d.ts 0.3.296). The CLI's fetch
+ * returns none on it: `w=jue();if(S||w)return t(\`[claudeai-mcp] Disabled via
  * ${S?"env var":"disableClaudeAiConnectors setting"}\`)…{}` (2.1.296).
  */
-const LEAD_SETTINGS = { disableClaudeAiConnectors: true } as const;
+const FENCE_SETTINGS = { disableClaudeAiConnectors: true } as const;
+
+/**
+ * Flag settings a project's Caw launches with besides
+ * ({@link SpawnPayload.lead}): an `ask` rule on each of his shell and edit
+ * tools, so every call of one is put to the hub (`canUseTool`, then the
+ * hub's gate, lead-gate.ts) whatever his mode: "If an ask rule matches, the
+ * call falls through to your `canUseTool` callback for confirmation, even in
+ * `bypassPermissions` mode" (code.claude.com/docs/en/agent-sdk/permissions).
+ * Full Send never answers an ask a rule forced ({@link SessionMode}). Flag
+ * settings outrank every settings file, so none in his place turns it off.
+ */
+const LEAD_SETTINGS: { permissions: { ask: string[] } } = {
+  permissions: { ask: [...LEAD_GATED_TOOLS.claude] },
+};
 
 /**
  * {@link claudeBoundaryOptions} with {@link SESSION_SETTINGS} in its
- * `settings`, and a lead's {@link LEAD_SETTINGS} over them.
+ * `settings`, and a lead's {@link LEAD_SETTINGS} or a fenced session's
+ * {@link FENCE_SETTINGS} over them.
  */
 const sessionSettingsOptions = (
   boundary: HarnessContext["boundary"],
-  lead: boolean
+  lead: boolean,
+  fence: boolean
 ) => {
   const bounded = claudeBoundaryOptions(boundary);
   return {
@@ -1219,21 +1237,22 @@ const sessionSettingsOptions = (
       ...SESSION_SETTINGS,
       ...("settings" in bounded ? bounded.settings : {}),
       ...(lead ? LEAD_SETTINGS : {}),
+      ...(fence ? FENCE_SETTINGS : {}),
     },
   };
 };
 
 /**
  * The MCP servers a session launches with: the caller's and CawCo's, or
- * CawCo's alone for a project's Caw.
+ * CawCo's alone for a fenced session.
  */
 const sessionMcpServers = (
   instanceId: string,
   ctx: HarnessContext,
   options: unknown,
-  lead: boolean
+  fence: boolean
 ): Record<string, McpServerConfig> => ({
-  ...(lead
+  ...(fence
     ? {}
     : ((options as { mcpServers?: Record<string, McpServerConfig> } | undefined)
         ?.mcpServers ?? {})),
@@ -1253,16 +1272,19 @@ const sessionMcpServers = (
  * at any value. `--chrome` short-circuits above that gate. A spec that names
  * `chrome` or `no-chrome` itself still wins.
  *
- * A project's Caw launches with `--no-chrome` and no caller's flags: on
+ * A fenced session launches with `--no-chrome` and no caller's flags: on
  * `--chrome` the browser's MCP server joins the launch's own
  * (`le={...le,...w}`, which `--strict-mcp-config` keeps: CLI 2.1.296), and a
- * caller's `mcp-config` would add servers of its own.
+ * caller's `mcp-config` would add servers of its own. A project's Caw
+ * launches with `--no-chrome` too: every delegate type denies Claude in
+ * Chrome, and he is of none.
  */
 const sessionExtraArgs = (
   options: unknown,
+  fence: boolean,
   lead: boolean
 ): Record<string, string | null> => {
-  if (lead) {
+  if (fence || lead) {
     return { "no-chrome": null };
   }
   const callerArgs =
@@ -1428,10 +1450,15 @@ class ClaudeSession implements HarnessSession {
     /** What the fleet denies this session, resolved once by `spawn()` via {@link sessionFleetDenials}. */
     fleetDenyList: readonly string[] = [],
     /**
-     * A project's Caw ({@link SpawnPayload.lead}): CawCo's MCP server is the
-     * only one it has, from no source but this launch.
+     * How the hub marked the spawn: a project's Caw ({@link SpawnPayload.lead})
+     * asks the hub before each shell and edit call; a fenced session
+     * ({@link SpawnPayload.fence}) has CawCo's MCP server alone, from no
+     * source but this launch.
      */
-    lead = false,
+    { lead, fence }: { lead: boolean; fence: boolean } = {
+      lead: false,
+      fence: false,
+    },
     /**
      * The sessiond connection this session's CLI child lives under. Not
      * optional in practice — `spawn()` always supplies it, and there is no
@@ -1455,7 +1482,7 @@ class ClaudeSession implements HarnessSession {
     const cliMode = this.#mode.cli;
     this.#launchCredential = ctx.sessionCredential;
     this.#boundaryHook = workspaceHook(ctx.boundary);
-    const mcpServers = sessionMcpServers(instanceId, ctx, options, lead);
+    const mcpServers = sessionMcpServers(instanceId, ctx, options, fence);
     this.#sessiond = sessiond;
     this.#stored = persistSession !== false;
     const seqs = this.#seqs;
@@ -1463,7 +1490,7 @@ class ClaudeSession implements HarnessSession {
     this.#input = input;
     const turn = new Turn();
     this.#turn = turn;
-    const extraArgs = sessionExtraArgs(options, lead);
+    const extraArgs = sessionExtraArgs(options, fence, lead);
 
     const handle = query({
       prompt: input,
@@ -1474,12 +1501,12 @@ class ClaudeSession implements HarnessSession {
         ...claudeExecutableOptions(),
         extraArgs,
         mcpServers,
-        // A lead's servers are these and no others: the CLI's
+        // A fenced session's servers are these and no others: the CLI's
         // `--strict-mcp-config`, set after the caller's options so none of
         // them turns it off. It keeps the servers of `agents` passed in
         // ("and servers declared by explicitly-passed agent definitions in
-        // `agents`", sdk.d.ts 0.3.296), so a lead takes no caller's agents.
-        ...(lead ? { strictMcpConfig: true, agents: undefined } : {}),
+        // `agents`", sdk.d.ts 0.3.296), so it takes no caller's agents.
+        ...(fence ? { strictMcpConfig: true, agents: undefined } : {}),
         // What the CLI holds for later, said at each turn's end: the SDK's
         // `Stop` hook input lists the wake-ups the session has scheduled
         // ("Lets hooks distinguish 'session is done' from 'session is paused
@@ -1553,7 +1580,7 @@ class ClaudeSession implements HarnessSession {
         includePartialMessages: true,
         // A work item's session runs every shell command inside its
         // workspace's boundary: a hook the CLI itself runs rewrites each one.
-        ...sessionSettingsOptions(ctx.boundary, lead),
+        ...sessionSettingsOptions(ctx.boundary, lead, fence),
         ...scratchDirectory(ctx.boundary),
         // THE SEAM (design §4.1). The SDK builds the CLI's command line and
         // hands it here instead of spawning it; we forward it to sessiond and
@@ -3054,7 +3081,7 @@ export class ClaudeHarness implements Harness {
       spec.skills,
       spec.denyTools,
       fleetDenyList,
-      spec.lead === true,
+      { lead: spec.lead === true, fence: spec.fence === true },
       { client, procId: procIdFor("claude", ctx.instanceId) }
     );
   }
@@ -3255,7 +3282,8 @@ export class ClaudeHarness implements Harness {
       undefined,
       undefined,
       [],
-      false,
+      // An attach launches nothing: its launch's MCP servers and settings are its own.
+      { lead: false, fence: false },
       {
         client,
         procId,

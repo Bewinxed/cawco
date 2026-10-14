@@ -114,7 +114,11 @@ import {
   standalone,
 } from "@cawco/core/runtime";
 import type { ProcSpec } from "@cawco/core/sessiond";
-import { cloneDenies, workspacePolicy } from "@cawco/core/workspace-policy";
+import {
+  isLeadPlace,
+  workspaceDenies,
+  workspacePolicy,
+} from "@cawco/core/workspace-policy";
 import { rgPath } from "@vscode/ripgrep-universal";
 import { seatbeltProfile, srtSettings } from "./boundary-policy";
 import { cloneInPlace } from "./clone";
@@ -1419,16 +1423,19 @@ const ensureNow = (ref: WorkspaceRef): Promise<Boundary> => {
   return started;
 };
 
-const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
-  if (process.platform !== "linux" && process.platform !== "darwin") {
-    throw refusal(
-      ref.id,
-      `workspace boundaries run on Linux and macOS, and this machine runs ${process.platform}`
-    );
-  }
-  const missing = missingHostTools();
-  if (missing.length > 0) {
-    throw refusal(ref.id, `this machine has no ${missing.join(" and no ")}`);
+/**
+ * The folder a boundary holds, ready for it: a delegate's clone (refused
+ * when it is none), or a project lead's place, whatever folder his project
+ * is in, a plain one too, which stays as the person keeps it: never made
+ * into a clone.
+ */
+const placeReady = async (ref: WorkspaceRef): Promise<void> => {
+  if (isLeadPlace(ref.id)) {
+    const place = await stat(ref.path).catch(() => undefined);
+    if (!place?.isDirectory()) {
+      throw refusal(ref.id, `${ref.path} is not a folder`);
+    }
+    return;
   }
   const git = await stat(join(ref.path, ".git")).catch(() => undefined);
   if (!git) {
@@ -1440,6 +1447,20 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
   if (!git.isDirectory()) {
     await cloneInPlace(ref.path);
   }
+};
+
+const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
+  if (process.platform !== "linux" && process.platform !== "darwin") {
+    throw refusal(
+      ref.id,
+      `workspace boundaries run on Linux and macOS, and this machine runs ${process.platform}`
+    );
+  }
+  const missing = missingHostTools();
+  if (missing.length > 0) {
+    throw refusal(ref.id, `this machine has no ${missing.join(" and no ")}`);
+  }
+  await placeReady(ref);
   // Asked before the keeper is: the endpoint only ever moves on to this
   // build's keeper, so a keeper dialled after "not owed" is this build's.
   const owed = await ownKeeperOwed();
@@ -1737,7 +1758,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
   // What the host makes in the clone before each sandbox, so srt binds
   // each deny path onto itself and leaves nothing on the host
   // (`cloneDenies`), and guards for the sandbox's whole life.
-  const denies = `${JSON.stringify(cloneDenies(policy.clone), null, 2)}\n`;
+  const denies = `${JSON.stringify(await workspaceDenies(ref), null, 2)}\n`;
   const files = {
     settings: join(generationDir(id, gen), "srt.json"),
     runner: join(generationDir(id, gen), "runner.sh"),

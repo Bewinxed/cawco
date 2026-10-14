@@ -17,8 +17,9 @@
  *   drafting views, its project's folder on the hub and decision pages in it,
  *   its routines, its ingress and relays (opening a relay asks you),
  *   proposing approved actions, delegating and steering the
- *   project's work, the person's phone. It has
- *   no edit or shell tools in its harness either (caw.ts).
+ *   project's work, the person's phone. Its harness's shell and edit tools
+ *   run inside its place's boundary, each call decided by the hub first
+ *   (lead-gate.ts).
  * - **overseer**: fleet-watch triage (fleet-watch.ts): it reads the fleet
  *   and the session's task, and decides once with `triage_decide` (nudge the
  *   lead, interrupt, stop, tell you, or leave it), which the hub carries
@@ -243,7 +244,7 @@ export const connectionToolsFor = (
 export const refusal = (role: SessionRole, name: string): string => {
   switch (role) {
     case "lead":
-      return `${name} isn't available to Caw: the lead works through the board, threads and delegates, with no edit, shell or fleet-settings tools. Delegate the work instead.`;
+      return `${name} isn't available to Caw: the lead works through the board, threads, delegates and his own shell in his place, with no fleet-settings tools. Delegate the work instead.`;
     case "web-facing":
       return `${name} isn't available here: this session reads the outside world, so it has no posting, spawning or admin tools. Say what should happen in finish_item or with handoff.`;
     case "overseer":

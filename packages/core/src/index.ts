@@ -227,6 +227,13 @@ export interface SpawnPayload {
    * model knows which stops it has.
    */
   effort?: import("./harness").EffortLevel;
+  /**
+   * This spawn is a project's memory curator or a fleet-watch triage run (a
+   * `curator` or `overseer` row): the machine gives it CawCo's MCP server
+   * and no other. Set by the hub alone, on every launch of such a row, and
+   * never taken from a caller.
+   */
+  fence?: true;
   /** Which harness runs the session. Absent = `claude`. */
   harness?: import("./harness").HarnessKind;
   /**
@@ -246,10 +253,11 @@ export interface SpawnPayload {
   /** The in-flight maintenance send a surviving Claude process is answering. */
   keepAliveTurn?: string;
   /**
-   * This spawn is a project's Caw, its memory curator or a fleet-watch
-   * triage run (a `lead`, `curator` or `overseer` row): the machine gives it
-   * CawCo's MCP server and no other. Set by the hub alone, on every launch
-   * of such a row, and never taken from a caller.
+   * This spawn is a project's Caw (a `lead` row): the machine puts each of
+   * his shell and edit calls to the hub as a permission ask
+   * (`LEAD_GATED_TOOLS`), whatever his mode, and answers none of them
+   * itself; the hub's gate decides each (hub lead-gate.ts). Set by the hub
+   * alone, on every launch of a lead row, and never taken from a caller.
    */
   lead?: true;
   /**

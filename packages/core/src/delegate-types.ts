@@ -172,23 +172,19 @@ export type SessionRole = (typeof SESSION_ROLES)[number];
 
 /**
  * What a project's Caw may never call, in Claude's names, per harness: no
- * edit, shell or subagent tools, so the lead coordinates through the board
- * and delegates, and no subagent holds a tool the lead lacks. Claude's
- * `Monitor` runs a script and `EnterWorktree`/`ExitWorktree` make and remove
- * git worktrees; `Agent` (its old name `Task`) and `Workflow` start
- * subagents. OpenCode's `Agent` is its `subagent`, and its `edit` covers
- * `write` and `patch`, which ask as `edit`. Every MCP server but CawCo's
- * is held off by the spawn itself (`SpawnPayload.lead`), not by a name
- * here. pi cannot deny tools ({@link denyToolsProblem}), so Caw does not run
- * on pi.
+ * subagent, no shell the hub cannot see a command of, and no git worktree.
+ * Claude's `Monitor` runs a script outside the per-call gate and
+ * `EnterWorktree`/`ExitWorktree` make and remove git worktrees; `Agent` (its
+ * old name `Task`) and `Workflow` start subagents. OpenCode's `Agent` is its
+ * `subagent`. His shell and edit tools are his, inside the boundary of his
+ * place, each call put to the hub's gate first ({@link LEAD_GATED_TOOLS},
+ * hub lead-gate.ts). Every MCP server but CawCo's is held off by the spawn
+ * itself (`SpawnPayload.lead`), not by a name here. pi has no permission
+ * ask to put a call to the hub with, nor can it deny tools
+ * ({@link denyToolsProblem}), so Caw does not run on pi.
  */
 export const CAW_DENIED_TOOLS = {
   claude: [
-    "Bash",
-    "Edit",
-    "Write",
-    "MultiEdit",
-    "NotebookEdit",
     "Monitor",
     "EnterWorktree",
     "ExitWorktree",
@@ -196,22 +192,53 @@ export const CAW_DENIED_TOOLS = {
     "Task",
     "Workflow",
   ],
-  opencode: ["Bash", "Edit", "Write", "Agent"],
+  opencode: ["Agent"],
 } as const satisfies Partial<Record<HarnessKind, readonly string[]>>;
 
-/** The harnesses a project's Caw can run on: the ones that deny its edit and shell tools. */
+/** The harnesses a project's Caw can run on: the ones whose every shell and edit call the hub's gate decides. */
 export type CawHarness = keyof typeof CAW_DENIED_TOOLS;
 
 /**
- * What a project's memory curator may never call (Projects spec §5.4): Caw's
- * list, and the web. It reads agents' inbox notes, which are untrusted
- * words, and answers only with proposals the person approves; it has no
- * reason to fetch anything, so a note cannot send it to a page. Like Caw it
- * gets CawCo's MCP server and no other (`SpawnPayload.lead`).
+ * Caw's shell and edit tools, by the name each harness asks permission
+ * under: every call of one is a permission ask (Claude Code's `ask` rules,
+ * OpenCode's `ask` rules) that the hub's gate decides (hub lead-gate.ts),
+ * whatever the session's mode. OpenCode's `edit` covers `write` and `patch`.
+ */
+export const LEAD_GATED_TOOLS = {
+  claude: ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit"],
+  opencode: ["bash", "edit"],
+} as const satisfies Record<CawHarness, readonly string[]>;
+
+/** Which of a lead's gated tools are shell, by any harness's name; the rest edit files. */
+export const LEAD_SHELL_TOOLS: ReadonlySet<string> = new Set(["Bash", "bash"]);
+
+/**
+ * What a session on the board alone may never call: no edit, shell or
+ * subagent tools. A fleet-watch triage run (`overseer`) decides one thing and
+ * exits; it is {@link CAW_DENIED_TOOLS} and Caw's gated tools together.
+ */
+export const BOARD_ONLY_DENIED_TOOLS = {
+  claude: [
+    ...CAW_DENIED_TOOLS.claude,
+    "Bash",
+    "Edit",
+    "Write",
+    "MultiEdit",
+    "NotebookEdit",
+  ],
+  opencode: [...CAW_DENIED_TOOLS.opencode, "Bash", "Edit", "Write"],
+} as const satisfies Record<CawHarness, readonly string[]>;
+
+/**
+ * What a project's memory curator may never call (Projects spec §5.4): the
+ * board-only list, and the web. It reads agents' inbox notes, which are
+ * untrusted words, and answers only with proposals the person approves; it
+ * has no reason to fetch anything, so a note cannot send it to a page. Like
+ * Caw it gets CawCo's MCP server and no other (`SpawnPayload.lead`).
  */
 export const CURATOR_DENIED_TOOLS = {
-  claude: [...CAW_DENIED_TOOLS.claude, "WebFetch", "WebSearch"],
-  opencode: [...CAW_DENIED_TOOLS.opencode, "WebFetch", "WebSearch"],
+  claude: [...BOARD_ONLY_DENIED_TOOLS.claude, "WebFetch", "WebSearch"],
+  opencode: [...BOARD_ONLY_DENIED_TOOLS.opencode, "WebFetch", "WebSearch"],
 } as const satisfies Record<CawHarness, readonly string[]>;
 
 /**

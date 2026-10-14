@@ -425,6 +425,30 @@ export const firstStage = (stages: Stages): Stage =>
 export const stageNamed = (stages: Stages, name: string): Stage | undefined =>
   stages.stages.find((stage) => stage.name === name);
 
+/**
+ * Whether a move closes a task or takes it past review: into a stage of kind
+ * done, or out of a stage of kind `you` to one after it that is not dropped.
+ */
+export const passesReview = (
+  stages: Stages,
+  from: string,
+  to: string
+): boolean => {
+  const target = stageNamed(stages, to);
+  if (!target) {
+    return false;
+  }
+  if (target.kind === "done") {
+    return true;
+  }
+  const source = stageNamed(stages, from);
+  return (
+    source?.kind === "you" &&
+    target.kind !== "dropped" &&
+    stages.stages.indexOf(target) > stages.stages.indexOf(source)
+  );
+};
+
 /** Whether `who` may enter `to` at all: its `by:` names them, or nobody. */
 const mayEnter = (to: Stage, who: Mover): boolean =>
   !to.hooks.by || to.hooks.by === who;

@@ -64,6 +64,7 @@ import {
   firstStage,
   type Mover,
   moveProblem,
+  passesReview,
   readStages,
   STAGE_NAME,
   type Stage,
@@ -270,6 +271,15 @@ export interface TaskStore {
   >[];
   readonly drop: (projectId: string, paths: string[]) => void;
   readonly index: (projectId: string) => TaskIndexRow[];
+  /**
+   * Why a task may not close or pass review on anyone's move but yours: its
+   * only changes are Caw's own, not all approved by you (lead-gate.ts
+   * `reviewProblem`); nothing when it may.
+   */
+  readonly leadReview?: (
+    projectId: string,
+    taskId: string
+  ) => string | undefined;
   readonly project: (
     id: string
   ) =>
@@ -2299,6 +2309,15 @@ export const createTasks = (store: TaskStore) => {
         : moveProblem(stages, id, from, to, actor.mover);
     if (problem) {
       refuse(stageNamed(stages, to) ? 403 : 400, problem);
+    }
+    // The lead reviews, never the doer: a task whose only changes are
+    // Caw's own closes or passes review on your move, or once you approved
+    // them (lead-gate.ts `reviewProblem`).
+    if (actor.mover !== "you" && passesReview(stages, from, to)) {
+      const held = store.leadReview?.(projectId, id);
+      if (held) {
+        refuse(403, held);
+      }
     }
     doc.setField("stage", to);
     return { from, to };

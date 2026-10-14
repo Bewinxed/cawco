@@ -318,7 +318,13 @@ import {
 } from "./at-limit";
 import { createBinaryUpdates } from "./binary-updates";
 import { bodyLimitRefusal } from "./body-limits";
-import { type Caw, cawRoutes, createCaw, withCawDenials } from "./caw";
+import {
+  type Caw,
+  cawRoutes,
+  createCaw,
+  leadPlaceRef,
+  withCawDenials,
+} from "./caw";
 import {
   ARTIFACTS_ROOT,
   DB_PATH,
@@ -396,6 +402,7 @@ import {
   promptCacheExpiresAt,
 } from "./keep-alive";
 import { type LabelledRow, leafOf, sessionLabel } from "./labels";
+import { createLeadGate, reviewProblem } from "./lead-gate";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import { basicCaller, createMachineCredentials } from "./machine-credentials";
 import { MeaningJudge } from "./meaning";
@@ -2509,6 +2516,55 @@ export const createServer = (
     },
     put: (row) => db.putSessionTaint(row),
   });
+  /**
+   * The gate on a project's Caw's shell and edit calls (lead-gate.ts): each
+   * of his asks is decided here before it parks, his wake's source read from
+   * the sends his harness reads and the web content his turn reads.
+   */
+  const leadGate = createLeadGate({
+    db,
+    note: (instanceId, note) => lead?.noteCall(instanceId, note),
+    shared: (row) => sharedPlace(row),
+    thread: (row) => lead?.askThread(row),
+    webContext: () => ({
+      fleet: new Set(
+        [
+          osHostname(),
+          ...db
+            .listAgents()
+            .flatMap((agent) => [agent.hostname, agent.machineId]),
+        ].map((host) => host.toLowerCase())
+      ),
+      mcpUrl: (server) => {
+        const config = db.getMcpServer(server)?.config;
+        return config && "url" in config ? config.url : undefined;
+      },
+    }),
+  });
+  /**
+   * Whether a lead's place is a shared checkout: the project's folder on the
+   * hub (the hub commits to it), or a folder another live session on its
+   * machine works in or above, or a live workspace there was cut from.
+   */
+  const sharedPlace = (row: InstanceRow): boolean => {
+    const place = posix.resolve(row.cwd);
+    const nested = (a: string, b: string): boolean =>
+      a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
+    if (row.projectId && place === posix.resolve(projectRoot(row.projectId))) {
+      return true;
+    }
+    return (
+      db
+        .liveInstancesOn(row.machineId)
+        .some(
+          (other) =>
+            other.id !== row.id && nested(posix.resolve(other.cwd), place)
+        ) ||
+      db
+        .activeWorkspacesOn(row.machineId)
+        .some((workspace) => nested(posix.resolve(workspace.repoRoot), place))
+    );
+  };
   pending.onSettled((parked, outcome, why) => {
     if (!(parked.requestId && parked.instanceId)) {
       return;
@@ -3628,6 +3684,7 @@ export const createServer = (
     lead?.sessionEnded(instanceId);
     // And whatever its turn had read or started with it (memory.ts).
     memoryWatch.ended(instanceId);
+    leadGate.ended(instanceId);
     touched.delete(instanceId);
     // A session that died before it ever said anything is never going to name
     // itself; nothing should still be waiting to hear its first words.
@@ -4597,12 +4654,17 @@ export const createServer = (
       .sendsFor(ids)
       .filter((row) => row.instanceId === instanceId && row.state === "pending")
       .sort((a, b) => order(a) - order(b));
+    const [reader] = db.getInstancesByIds([instanceId]);
     for (const row of read) {
       if (!isKeepAlive(row.body)) {
         db.updateKeepAlive(instanceId, { keepAliveTurn: null });
       }
       // A routine's wake of a lead: the turn it joins is that run's (memory.ts).
       memoryWatch.read(instanceId, row.body?.origin);
+      // Whose a lead's wake is: your words alone, or outside text (lead-gate.ts).
+      if (reader && !isKeepAlive(row.body)) {
+        leadGate.read(reader, row.uuid, row.body?.origin);
+      }
       readSend(row, true);
     }
     const latest = Math.max(
@@ -5307,6 +5369,13 @@ export const createServer = (
       });
     }
   };
+  /**
+   * The boundary a session's every spawn carries: its work item's workspace,
+   * else, for a project's Caw, his place's (caw.ts `leadPlaceRef`); none for
+   * any other session.
+   */
+  const sessionWorkspace = (row: InstanceRow): WorkspaceRef | undefined =>
+    workItems.workspaceOf(row) ?? leadPlaceRef(row);
   const bounded = (
     payload: SpawnPayload,
     knownRow?: InstanceRow
@@ -5327,7 +5396,7 @@ export const createServer = (
     // to mid-turn; a reattach takes the process as it runs.
     const stored = payload.reattachOnly ? read : takeOwedMove(read);
     const row = knownRow ?? stored;
-    const workspace = row ? workItems.workspaceOf(row) : undefined;
+    const workspace = row ? sessionWorkspace(row) : undefined;
     const harness = payload.harness ?? row?.harness ?? "claude";
     // A launch carries no credential and no account: its machine asks for
     // both as it starts it ({@link grantLaunch}). It is refused here when it
@@ -5346,8 +5415,9 @@ export const createServer = (
       db.accounts.removeMovedFrom(payload.instanceId);
     }
     return {
-      // A project's Caw never has edit or shell tools: every spawn of its
-      // row — the first, and each revive, restore and relaunch — denies them.
+      // A project's Caw runs in his place's boundary, each shell and edit
+      // call put to the hub's gate (lead-gate.ts): every spawn of his row —
+      // the first, and each revive, restore and relaunch — says so.
       ...withCawDenials(asked, row, harness),
       ...(owned?.scratchWorktree
         ? { scratchWorktree: owned.scratchWorktree }
@@ -7868,7 +7938,7 @@ export const createServer = (
    * A decision page to show (Projects spec §5.8): `decisions/<page>/` in the
    * session's project folder. The hub builds it (decision-page.ts) from a
    * `page.html`: with `dir`, the one in the session's work folder on its
-   * machine; else the one in `decisions/<page>/` (Caw's, who has no shell),
+   * machine; else the one in `decisions/<page>/` (Caw's, written with folder_write),
    * else the page already published there is shown as it is. The built
    * `index.html` is committed by the session; a revision is another commit at
    * the same place, so the canvas and its picks stay.
@@ -7982,7 +8052,7 @@ export const createServer = (
    * A page artifact's HTML (artifacts/service.ts `page`), built as the
    * decision-page skill builds one: from inline `html`, from page.html in
    * `dir` on the session's machine, or from `decisions/<name>/page.html` in
-   * the session's project folder (Caw's, who has no shell), else the page
+   * the session's project folder (Caw's, written with folder_write), else the page
    * already published there as it is. In a project, what was built is
    * committed to `decisions/<name>/index.html` by the session, as before.
    */
@@ -12720,6 +12790,8 @@ export const createServer = (
       recordDelegateAnswer(parked.machineId, instanceId, requestId, result);
       // A project lead's question: your answer lands in its thread.
       lead?.answered(parked, result);
+      // A call of his on your card: Approve lets it run, as yours; Deny means it does not.
+      leadGate.answered(requestId, result);
     } finally {
       answeringPermissions.delete(requestId);
     }
@@ -14463,6 +14535,15 @@ export const createServer = (
       fanOutFleet();
     },
     attempts: db.projectAttempts,
+    // The lead reviews, never the doer (lead-gate.ts `reviewProblem`).
+    leadReview: (projectId, taskId) =>
+      reviewProblem(db.leadCalls.since(projectId, new Date(0)), {
+        id: taskId,
+        landed: db
+          .projectAttempts(projectId)
+          .some((item) => item.taskId === taskId && item.state === "done"),
+        threadId: db.threadOfTask(projectId, taskId)?.id,
+      }),
     startProblem: (projectId, task) => dispatcher.problemOf(projectId, task),
     queuedStarts: (projectId) =>
       db.queuedTaskStarts(projectId).map((row) => row.taskId),
@@ -14582,6 +14663,7 @@ export const createServer = (
     turnEnded: (instanceId, why, gone) =>
       routines.leadTurnEnded(instanceId, why, gone),
     views,
+    wakeSent: (uuid, kind) => leadGate.woke(uuid, kind),
   });
   lead = caw;
   // Fleet watch (fleet-watch.ts): code detectors, Jev as the gate, one
@@ -15177,6 +15259,12 @@ export const createServer = (
             "That ask is a fleet-settings change waiting on the person; only they answer it."
           );
         }
+        if (leadGate.owns(answer.requestId)) {
+          throw new WorkItemRefusal(
+            403,
+            "That ask is Caw's own shell or edit call waiting on the person; only they answer it."
+          );
+        }
         await answerPermission(pending, row.id, answer.requestId, result);
         return;
       }
@@ -15228,7 +15316,7 @@ export const createServer = (
   };
 
   const ensureIdentityWorkspace = async (row: InstanceRow): Promise<void> => {
-    const workspace = workItems.workspaceOf(row);
+    const workspace = sessionWorkspace(row);
     if (!workspace) {
       return;
     }
@@ -21972,6 +22060,14 @@ export const createServer = (
                   admitted.message,
                   admitted.harness
                 );
+                // A lead's web reads, his calls' results and his turn's end
+                // (lead-gate.ts): none of a stream's deltas carry them.
+                if (admitted.message.type !== "stream_event") {
+                  const [framed] = db.getInstancesByIds([message.instanceId]);
+                  if (framed?.role === "lead") {
+                    leadGate.frame(framed, admitted.message);
+                  }
+                }
               }
               // Pings share admission and send receipts, then leave before every
               // consumer that makes a turn into work, attention or activity.
@@ -22323,17 +22419,54 @@ export const createServer = (
                   detach(withdrawUnshown(message, refusal), "ask withdrawal");
                   break;
                 }
+                // A project's Caw's shell or edit call: his gate decides it
+                // before it parks (lead-gate.ts). Allowed or refused, it is
+                // answered here and never shown; one for your card parks as
+                // any ask does, in his thread.
+                const gated = owner
+                  ? leadGate.decide(owner, message)
+                  : undefined;
+                if (owner && gated && gated.kind !== "card") {
+                  const askerAgent = registry.agent(message.machineId);
+                  if (askerAgent) {
+                    sendFrame(askerAgent, {
+                      verb: "control",
+                      machineId: message.machineId,
+                      instanceId: owner.id,
+                      requestId: message.requestId,
+                      payload: {
+                        instanceId: owner.id,
+                        requestId: message.requestId,
+                        method: RESOLVE_PERMISSION,
+                        args: [
+                          message.requestId,
+                          gated.kind === "allow"
+                            ? {
+                                behavior: "allow",
+                                updatedInput: (
+                                  message.payload as PermissionRequestFrame
+                                ).input,
+                              }
+                            : { behavior: "deny", message: gated.message },
+                        ],
+                      },
+                    });
+                  }
+                  break;
+                }
                 // A replayed ask (the daemon re-announces unresolved asks after
                 // every register) refreshes the parked copy without a second
                 // Telegram message or a second routing decision.
                 const parkedBefore = pending.get(message.requestId);
                 const alreadyParked = parkedBefore !== undefined;
-                // A project lead's question goes to a thread: the one whose
-                // message woke this turn, else the project's newest. A replay
-                // keeps the thread it was first given.
+                // A project lead's question, or a call of his on your card,
+                // goes to a thread: the one whose message woke this turn,
+                // else the project's newest. A replay keeps the thread it was
+                // first given.
                 const askPayload = message.payload as PermissionRequestFrame;
                 const asking =
-                  questionsOf(askPayload.toolName, askPayload.input) !== null;
+                  questionsOf(askPayload.toolName, askPayload.input) !== null ||
+                  gated?.kind === "card";
                 let threadId = (
                   parkedBefore?.payload as PermissionRequestFrame | undefined
                 )?.threadId;

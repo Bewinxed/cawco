@@ -3932,7 +3932,7 @@ export class OpencodeHarness implements Harness {
       sessionId = spec.resume.sessionKey;
     } else {
       // Its permission set is put before its first turn, whole, with what it
-      // needs then (a lead's fence reads the location's MCP servers).
+      // needs then (a fenced session's fence reads the location's MCP servers).
       const created = await client.session.create(
         {
           location: { directory: ctx.cwd },
@@ -3999,6 +3999,7 @@ export class OpencodeHarness implements Harness {
       canDelegate: spec.canDelegate,
       deniedRules,
       account,
+      fence: spec.fence === true,
       lead: spec.lead === true,
       applied,
       ready,

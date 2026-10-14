@@ -27,7 +27,14 @@
  *   writing, even inside an allowed tree. On Linux so are the host's runtime
  *   dirs, with every daemon's socket, and the journal.
  */
-import { open, readdir, readFile, realpath, stat } from "node:fs/promises";
+import {
+  lstat,
+  open,
+  readdir,
+  readFile,
+  realpath,
+  stat,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { binaryRoot } from "./binary-installation";
@@ -167,6 +174,85 @@ export const cloneDenies = (clone: string): readonly CloneDeny[] => [
     srt: true as const,
   })),
 ];
+
+/**
+ * A project lead's place (Caw's): the workspace id the hub gives the
+ * boundary of the folder Caw starts in (hub `leadPlaceRef`), never a
+ * delegate's. Its policy differs from a clone's in two ways
+ * ({@link workspaceDenies}, {@link ownerOnlyIn}).
+ */
+export const LEAD_PLACE_SUFFIX = "-caw";
+export const isLeadPlace = (id: string): boolean =>
+  id.endsWith(LEAD_PLACE_SUFFIX);
+
+/**
+ * The clone-side denies a workspace's boundary keeps ({@link cloneDenies}).
+ * A lead's place without a `.git` dir (a plain folder) keeps none under
+ * `.git`: a stand-in there would make `.git` and a deny on `.git/config`
+ * would leave `git init` nothing to write its config into. Once the place is
+ * a repository, the boundary's next start denies them as a clone's.
+ */
+export const workspaceDenies = async (
+  workspace: WorkspaceRef
+): Promise<readonly CloneDeny[]> => {
+  const clone = resolveReal(workspace.path);
+  const all = cloneDenies(clone);
+  if (!isLeadPlace(workspace.id)) {
+    return all;
+  }
+  const git = join(clone, ".git");
+  const isRepo = await stat(git).then(
+    (found) => found.isDirectory(),
+    () => false
+  );
+  return isRepo ? all : all.filter((deny) => !deny.path.startsWith(`${git}/`));
+};
+
+/** The dirs {@link ownerOnlyIn} never walks into: git's own, and installed dependencies. */
+const OWNER_ONLY_SKIP = new Set([".git", "node_modules"]);
+/** The most entries {@link ownerOnlyIn} looks at, nearest the root first. */
+const OWNER_ONLY_SCAN_MAX = 50_000;
+
+/**
+ * Every entry under `root` (never `root` itself) that only its owner may
+ * read: a dir or file whose mode has no group or other bits (a 0700 dir, a
+ * 0600 file), as a tool keeps its own data (x-use's accounts and cookies).
+ * Not walked into, and nothing under a link. A lead's place hides each from
+ * his shell and file tools; an MCP server the owner runs reaches its own
+ * data on its own. Nearest the root first, at most
+ * {@link OWNER_ONLY_SCAN_MAX} entries looked at.
+ */
+export const ownerOnlyIn = async (root: string): Promise<string[]> => {
+  const found: string[] = [];
+  const pending = [root];
+  let looked = 0;
+  for (let dir = pending.shift(); dir; dir = pending.shift()) {
+    // biome-ignore lint/performance/noAwaitInLoops: breadth first, one dir at a time, nearest the root first
+    const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      looked += 1;
+      if (looked > OWNER_ONLY_SCAN_MAX) {
+        return found;
+      }
+      if (!(entry.isDirectory() || entry.isFile())) {
+        continue;
+      }
+      const path = join(dir, entry.name);
+      // biome-ignore lint/performance/noAwaitInLoops: one entry at a time, the scan's count kept as it goes
+      const mode = (await lstat(path).catch(() => undefined))?.mode;
+      if (mode === undefined) {
+        continue;
+      }
+      // biome-ignore lint/suspicious/noBitwiseOperators: a mode's group and other bits
+      if ((mode & 0o077) === 0) {
+        found.push(path);
+      } else if (entry.isDirectory() && !OWNER_ONLY_SKIP.has(entry.name)) {
+        pending.push(path);
+      }
+    }
+  }
+  return found;
+};
 
 const unique = (paths: string[]): string[] => [...new Set(paths)];
 
@@ -522,9 +608,13 @@ export const workspacePolicy = async (
     ]),
     ...(await accountLayers(workspace.id)),
   ]);
+  // A lead's place: what only its owner may read in it is hidden from the
+  // lead's shell and file tools, for reading and writing (`ownerOnlyIn`).
+  const ownerOnly = isLeadPlace(workspace.id) ? await ownerOnlyIn(clone) : [];
   const denyRead = unique([
     resolveDenied(home),
     ...stores,
+    ...ownerOnly,
     ...(mac ? [] : denied(LINUX_HOST_PRIVATE)),
   ]);
   return {
@@ -544,11 +634,12 @@ export const workspacePolicy = async (
     ]),
     denyWrite: unique([
       ...denied(
-        cloneDenies(workspace.path)
+        (await workspaceDenies(workspace))
           .filter((deny) => !deny.srt)
           .map(({ path }) => path)
       ),
       ...stores,
+      ...ownerOnly,
     ]),
   };
 };

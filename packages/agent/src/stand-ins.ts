@@ -33,7 +33,7 @@ import {
   rmdir,
   writeFile,
 } from "node:fs/promises";
-import { relative } from "node:path";
+import { join, relative } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
 import { mountedAnywhere } from "@cawco/core/mount-table";
 import { projectClaudeDir } from "@cawco/core/paths";
@@ -84,10 +84,13 @@ const untrackedIn = async (
     "--",
     ...denies.map((deny) => relative(clone, deny.path)),
   ]);
-  if (listed === undefined) {
+  // A plain folder (a project lead's place before it is a repository) tracks
+  // nothing; a repository git cannot read is refused.
+  const repository = await statOf(join(clone, ".git"));
+  if (listed === undefined && repository) {
     throw new Error(`${clone}: git could not say which deny paths it tracks`);
   }
-  const tracked = listed
+  const tracked = (listed ?? "")
     .split("\0")
     .filter(Boolean)
     .map((file) => `${clone}/${file}`);
@@ -215,6 +218,11 @@ export const listStandIns = async (
   willStandIn: boolean
 ): Promise<void> => {
   const { clone, entries } = await untrackedIn(ref.path);
+  // A plain folder (a project lead's place before it is a repository) has
+  // no status to keep them out of.
+  if (!(await statOf(join(clone, ".git")))) {
+    return;
+  }
   const listed = new Set(await excludedStandIns(clone));
   const own: string[] = [];
   for (const one of entries) {

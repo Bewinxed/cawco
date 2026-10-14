@@ -112,6 +112,7 @@ import {
   instanceAliases,
   instances,
   jevSettings,
+  leadCalls,
   leadTurns,
   limitEvents,
   limitHolds,
@@ -253,6 +254,8 @@ export type ProjectOfferRow = typeof projectOffers.$inferSelect;
 export type SessionPlanRow = typeof sessionPlans.$inferSelect;
 /** What a session has done that taints its memory notes (memory.ts). */
 export type SessionTaintRow = typeof sessionTaints.$inferSelect;
+/** One of Caw's shell or edit calls (lead-gate.ts). */
+export type LeadCallRow = typeof leadCalls.$inferSelect;
 export type ThreadRow = typeof projectThreads.$inferSelect;
 export type ThreadMessageRow = typeof threadMessages.$inferSelect;
 /** A thread as its project's list shows it: with its newest message. */
@@ -795,6 +798,21 @@ export interface DbShape {
     id: string
   ) => { cwd: string } | { unknown: true } | undefined;
   /** Adds what a Caw turn the thread woke cost to the thread's spend. */
+  /** Caw's shell and edit calls (lead-gate.ts): kept, read back and changed as each one's outcome is known. */
+  readonly leadCalls: {
+    readonly add: (row: LeadCallRow) => void;
+    readonly ofRequest: (requestId: string) => LeadCallRow | undefined;
+    readonly ofToolUse: (
+      instanceId: string,
+      toolUseId: string
+    ) => LeadCallRow | undefined;
+    readonly set: (
+      id: string,
+      patch: Partial<Omit<LeadCallRow, "id" | "projectId">>
+    ) => void;
+    /** A project's calls from `since` on, oldest first. */
+    readonly since: (projectId: string, since: Date) => LeadCallRow[];
+  };
   /** The turn each project's Caw is in now, as stored (caw.ts reads them back on start). */
   readonly leadTurns: () => (typeof leadTurns.$inferSelect)[];
   /** The limit lines kept on the session's row, oldest first. */
@@ -5670,6 +5688,40 @@ const make = async (path: string): Promise<DbShape> => {
           )
         )
         .get()?.usd ?? 0),
+    leadCalls: {
+      add: (row) => {
+        db.insert(leadCalls).values(row).onConflictDoNothing().run();
+      },
+      ofRequest: (requestId) =>
+        db
+          .select()
+          .from(leadCalls)
+          .where(eq(leadCalls.requestId, requestId))
+          .get(),
+      ofToolUse: (instanceId, toolUseId) =>
+        db
+          .select()
+          .from(leadCalls)
+          .where(
+            and(
+              eq(leadCalls.instanceId, instanceId),
+              eq(leadCalls.toolUseId, toolUseId)
+            )
+          )
+          .get(),
+      set: (id, patch) => {
+        db.update(leadCalls).set(patch).where(eq(leadCalls.id, id)).run();
+      },
+      since: (projectId, since) =>
+        db
+          .select()
+          .from(leadCalls)
+          .where(
+            and(eq(leadCalls.projectId, projectId), gte(leadCalls.at, since))
+          )
+          .orderBy(leadCalls.at)
+          .all(),
+    },
     leadTurns: () => db.select().from(leadTurns).all(),
     putLeadTurn: (turn) => {
       const { instanceId: _id, ...rest } = turn;

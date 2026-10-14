@@ -54,6 +54,7 @@ import {
   CONTROL_SUPPORTED_MODELS,
   EFFORT_READ,
   INSTALL_SESSION_CREDENTIAL,
+  LEAD_GATED_TOOLS,
   MCP_NOT_CONNECTED,
   MESSAGES_READ,
   MESSAGES_STORED,
@@ -264,6 +265,17 @@ const deny = (action: string): OpencodeRule => ({
   effect: "deny",
 });
 
+/**
+ * A project's Caw on OpenCode (`SpawnPayload.lead`): each of his shell and
+ * edit calls asks (`LEAD_GATED_TOOLS`), and the ask goes to the hub whatever
+ * his mode ({@link OpencodeSession}'s `#asked`), whose gate answers it.
+ * OpenCode 2.0's `edit` covers `write` and `patch`.
+ */
+const leadAsks: readonly OpencodeRule[] = LEAD_GATED_TOOLS.opencode.map(
+  (action) => ({ action, resource: "*", effect: "ask" })
+);
+const LEAD_ASKED: ReadonlySet<string> = new Set(LEAD_GATED_TOOLS.opencode);
+
 /** The CawCo tools only a workflow step calls (the plugin's own). */
 const WORKFLOW_TOOLS = [
   "cawco_submit_result",
@@ -290,13 +302,14 @@ const DELEGATION_TOOLS = [
 const MCP_NAME_UNSAFE = /[^a-zA-Z0-9_-]/g;
 
 /**
- * A project's Caw on OpenCode: every tool of every MCP server the location
- * has, but CawCo's, denied (`<server>_*`, which hides the tool from the turn
- * and from Code Mode's catalog alike and refuses a call to it). The list is
- * the location's MCP servers, read each time a turn is about to run, so a
- * server added later is fenced too.
+ * A fenced session on OpenCode (a memory curator or fleet-watch triage run,
+ * `SpawnPayload.fence`): every tool of every MCP server the location has,
+ * but CawCo's, denied (`<server>_*`, which hides the tool from the turn and
+ * from Code Mode's catalog alike and refuses a call to it). The list is the
+ * location's MCP servers, read each time a turn is about to run, so a server
+ * added later is fenced too.
  */
-const leadMcpFence = async (
+const mcpFence = async (
   client: OpencodeClient,
   directory: string
 ): Promise<OpencodeRule[]> => {
@@ -555,10 +568,12 @@ export interface OpencodeSessionOptions {
   deniedRules: OpencodeRule[];
   directory: string;
   effort?: EffortLevel;
+  /** A fenced session: it has CawCo's MCP server and no other. */
+  fence: boolean;
   instanceId: string;
   /** Returns true while the harness's config gate holds this session's sends. */
   isConfigGateHeld: (urgent?: boolean) => boolean;
-  /** A project's Caw: it has CawCo's MCP server and no other. */
+  /** A project's Caw: each of his shell and edit calls asks, and the hub's gate answers it ({@link leadAsks}). */
   lead: boolean;
   /** The OpenCode session ids this agent runs, so a credential store keeps only theirs. */
   liveSessions: () => ReadonlySet<string>;
@@ -597,6 +612,7 @@ export class OpencodeSession implements HarnessSession {
   #permissionMode: string | undefined;
   readonly #applied: Applied;
   readonly #deniedRules: OpencodeRule[];
+  readonly #fence: boolean;
   readonly #lead: boolean;
   readonly #workflowStepId?: string;
   readonly #canDelegate?: boolean;
@@ -690,6 +706,7 @@ export class OpencodeSession implements HarnessSession {
     this.#permissionMode = options.permissionMode;
     this.#applied = { ...options.applied };
     this.#deniedRules = options.deniedRules;
+    this.#fence = options.fence;
     this.#lead = options.lead;
     this.#workflowStepId = options.workflowStepId;
     this.#canDelegate = options.canDelegate;
@@ -804,13 +821,18 @@ export class OpencodeSession implements HarnessSession {
 
   // ------------------------------------------------------------ settings
 
-  /** The whole permission ruleset the session runs on: its denials, the tools its role leaves out, a lead's fence. */
+  /**
+   * The whole permission ruleset the session runs on: its denials, the tools
+   * its role leaves out, a fenced session's fence, and last, so no rule
+   * before it can allow one, a lead's asks ({@link leadAsks}).
+   */
   async #rules(): Promise<OpencodeRule[]> {
     return [
       ...(this.#workflowStepId ? [] : WORKFLOW_TOOLS.map(deny)),
       ...(this.#canDelegate === false ? DELEGATION_TOOLS.map(deny) : []),
       ...this.#deniedRules,
-      ...(this.#lead ? await leadMcpFence(this.#client, this.#directory) : []),
+      ...(this.#fence ? await mcpFence(this.#client, this.#directory) : []),
+      ...(this.#lead ? leadAsks : []),
     ];
   }
 
@@ -1497,10 +1519,14 @@ export class OpencodeSession implements HarnessSession {
       return;
     }
     this.#seenGates.add(asked.id);
-    // OpenCode asks; the daemon is where a session's mode is enforced.
+    // OpenCode asks; the daemon is where a session's mode is enforced. A
+    // lead's shell and edit asks are the hub's gate's to answer, never his
+    // mode's ({@link leadAsks}).
+    const gated = this.#lead && LEAD_ASKED.has(asked.action);
     if (
-      autoAllows(this.#permissionMode, "tool") ||
-      (this.#permissionMode === "acceptEdits" && asked.action === "edit")
+      !gated &&
+      (autoAllows(this.#permissionMode, "tool") ||
+        (this.#permissionMode === "acceptEdits" && asked.action === "edit"))
     ) {
       this.#replyPermission(asked.id, "once");
       return;

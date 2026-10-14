@@ -339,7 +339,7 @@ export const projects = sqliteTable("projects", {
    * before it, and off means nothing for the project wakes a model.
    */
   caw: integer("caw", { mode: "boolean" }).notNull().default(false),
-  /** The harness Caw runs on: one that can deny its edit and shell tools. */
+  /** The harness Caw runs on: one whose every shell and edit call the hub's gate decides. */
   cawHarness: text("caw_harness")
     .$type<import("@cawco/core").CawHarness>()
     .notNull()
@@ -2543,6 +2543,55 @@ export const sessionTaints = sqliteTable("session_taints", {
     .notNull(),
   updatedAt: timestamp("updated_at").notNull(),
 });
+
+/**
+ * What became of one of Caw's shell or edit calls (lead-gate.ts): `asked`
+ * while it waits on your Approve card, `ran` once it was let run (its exit
+ * once its result came), `refused` by the hub's rules, `denied` by you.
+ */
+export type LeadCallOutcome = "asked" | "ran" | "refused" | "denied";
+
+/**
+ * Every shell or edit call a project's Caw made (lead-gate.ts), one row each,
+ * so his thread shows it and a hub restart keeps what you approved: a task
+ * whose only changes are his own edits passes review only once you approved
+ * them (tasks.ts `moveTo`).
+ */
+export const leadCalls = sqliteTable(
+  "lead_calls",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    instanceId: text("instance_id").notNull(),
+    /** The thread his turn answered: a task named in it owns the call's changes. */
+    threadId: text("thread_id"),
+    /** The permission ask it came as. */
+    requestId: text("request_id").notNull(),
+    /** The tool call, as its transcript names it; its result carries the exit. */
+    toolUseId: text("tool_use_id"),
+    tool: text("tool").notNull(),
+    /** The shell command, or the file an edit names. */
+    command: text("command").notNull(),
+    /** The files it names that it changes. */
+    files: text("files", { mode: "json" }).$type<string[]>().notNull(),
+    /** Whether it changes anything: every edit, and every shell call but a read-only one. */
+    writes: integer("writes", { mode: "boolean" }).notNull(),
+    outcome: text("outcome").$type<LeadCallOutcome>().notNull(),
+    /** You approved it on its card. */
+    approved: integer("approved", { mode: "boolean" }).notNull().default(false),
+    /** Why the hub refused it. */
+    why: text("why"),
+    /** Its exit as its result said it: a code, or `failed` for an edit that did not apply. */
+    exit: text("exit"),
+    at: timestamp("at").notNull(),
+  },
+  (table) => [
+    index("lead_calls_project_at").on(table.projectId, table.at),
+    uniqueIndex("lead_calls_request").on(table.requestId),
+  ]
+);
 
 /** A conversation with a project's Caw (caw.ts). */
 export const projectThreads = sqliteTable(
