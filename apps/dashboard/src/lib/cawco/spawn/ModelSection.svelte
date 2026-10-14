@@ -6,6 +6,7 @@
    */
   import { HARNESSES, type HarnessKind } from "@cawco/core";
   import { untrack } from "svelte";
+  import { crossfade } from "svelte/transition";
   import { autowidth } from "#lib/cawco/motion/autosize.svelte.js";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
@@ -21,7 +22,15 @@
     providerOf,
     rememberModel,
   } from "../models.svelte";
-  import { crossIn, crossOut } from "../motion/curves.svelte";
+  import {
+    crossIn,
+    crossOut,
+    dur,
+    easeInOut,
+    lifting,
+    motionOk,
+    pinned,
+  } from "../motion/curves.svelte";
   import { ListSwap } from "../motion/list-swap.svelte";
   import Rail from "../motion/Rail.svelte";
   import AccountChip, { type AccountTool } from "./AccountChip.svelte";
@@ -111,8 +120,45 @@
       disabled: tab.soon || !installed.includes(tab.id as HarnessKind),
     }))
   );
-  let toolsWidth = $state(0);
   let accountOpen = $state(false);
+
+  /**
+   * The chosen option's height: its row, and the line its chips dropped to
+   * when the row could not hold them beside its name. The fill stands on the
+   * whole of it.
+   */
+  let chosenHeight = $state(44);
+  const chosen = (node: HTMLElement) => {
+    const sized = new ResizeObserver(() => {
+      chosenHeight = node.offsetHeight;
+    });
+    sized.observe(node);
+    chosenHeight = node.offsetHeight;
+    return () => sized.disconnect();
+  };
+
+  /**
+   * The chosen model's run settings glide from the row it leaves to the one
+   * picked, beside the fill. The pair stands in the flow of each; the one
+   * leaving is lifted out of it as it goes (motion/curves `lifting`), so only
+   * the picked option is ever taller than a row. Without motion, or with no
+   * pair to glide from, they cross-fade in place.
+   */
+  const [send, receive] = crossfade({
+    duration: () => dur("--dur-toggle"),
+    easing: easeInOut,
+    fallback: (node) => crossIn(node),
+  });
+  const TOOLS = { key: "tools" };
+  const toolsIn = (node: HTMLElement) =>
+    motionOk.current ? receive(node, TOOLS) : crossIn(node);
+  const toolsOut = (node: HTMLElement) => {
+    if (!motionOk.current) {
+      return crossOut(node);
+    }
+    const glide = send(node, TOOLS);
+    return () => lifting(node, pinned(node), glide());
+  };
 
   $effect(() => {
     const next = harness;
@@ -301,28 +347,17 @@
         class="list fai-scroll"
         id={`${uid}-models`}
         role="listbox"
-        style={`--tools-w:${tools && hiOpacity ? toolsWidth : 0}px`}
         tabindex="-1"
         bind:this={list}
         {@attach highlight({ rows: "[data-fh]" })}
       >
+        <!-- Every option above the chosen one is a row (46px a step), so the
+             fill travels by its index; it is as tall as the chosen option. -->
         <span
           aria-hidden="true"
           class="fill"
-          style={`transform:translateY(calc(${modelIdx} * 46px));opacity:${hiOpacity}`}
+          style={`transform:translateY(calc(${modelIdx} * 46px));height:${chosenHeight}px;opacity:${hiOpacity}`}
         ></span>
-        {#if tools}
-          <!-- The chosen model's run settings travel with the selection fill, so
-           picking another model carries them across rather than redrawing. -->
-          <div
-            class="tools"
-            inert={!hiOpacity}
-            style={`transform:translateY(calc(${modelIdx} * 46px));opacity:${hiOpacity}`}
-            bind:clientWidth={toolsWidth}
-          >
-            <ToolChips {tools} />
-          </div>
-        {/if}
         {#if swap.leaving.length}
           <div aria-hidden="true" class="leaving" data-leaving inert>
             {#each swap.leaving as entry, i (entry.id)}
@@ -361,21 +396,34 @@
         {/if}
         {#each rows as entry, i (`${swap.gen}:${entry.id}`)}
           {@const reason = unavailable?.(entry)}
-          <button
-            aria-disabled={reason ? true : undefined}
-            aria-selected={entry.id === selectedId}
-            class="row press-tint"
-            data-fh="1"
-            data-model={entry.id}
-            disabled={Boolean(reason)}
-            onclick={() => pick(entry)}
-            role="option"
+          {@const picked = entry.id === selectedId}
+          <!-- A row, and on the chosen one its run settings, in its flow: at
+               the row's end while the row holds its name beside them, on a
+               line of their own under it where it cannot (a phone). -->
+          <div
+            class="option"
             style={`animation:${swap.rowAnim(i)}`}
-            type="button"
-            class:picked={entry.id === selectedId}
+            {@attach picked && tools ? chosen : undefined}
           >
-            {@render rowBody(entry, reason)}
-          </button>
+            <button
+              aria-disabled={reason ? true : undefined}
+              aria-selected={picked}
+              class="row press-tint"
+              data-fh="1"
+              data-model={entry.id}
+              disabled={Boolean(reason)}
+              onclick={() => pick(entry)}
+              role="option"
+              type="button"
+            >
+              {@render rowBody(entry, reason)}
+            </button>
+            {#if picked && tools}
+              <div class="tools" in:toolsIn out:toolsOut>
+                <ToolChips {tools} />
+              </div>
+            {/if}
+          </div>
         {/each}
       </div>
     </div>
@@ -548,7 +596,6 @@
     left: 4px;
     right: 4px;
     top: 4px;
-    height: 44px;
     background: var(--surface-fill);
     border-radius: var(--radius-sm);
     transition: opacity var(--dur-control) var(--ease-out);
@@ -556,11 +603,10 @@
     @media (prefers-reduced-motion: no-preference) {
       transition:
         transform var(--dur-toggle) var(--ease-in-out),
+        height var(--dur-toggle) var(--ease-in-out),
         opacity var(--dur-control) var(--ease-out);
     }
   }
-  /* The chosen row's run settings: effort and permission chips, riding the
-     selection fill's transform so they slide to whichever model is picked. */
   /* The account chip on the heading's line, at its end; its name gives way
      before the line wraps. */
   .account {
@@ -568,21 +614,25 @@
     justify-content: flex-end;
     min-width: 0;
   }
-  .tools {
-    position: absolute;
-    top: 4px;
-    right: 10px;
-    z-index: 2;
+  /* A row and the chosen one's chips: the chips keep the row's end, and drop
+     to a line of their own under it once the row would be left less than
+     12rem for its name (`flex-basis`), so they never stand over its text.
+     Relative, so the chips leaving it are lifted where they stand. */
+  .option {
+    position: relative;
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+  }
+  /* The chosen model's run settings: effort and permission chips. */
+  .tools {
+    display: flex;
+    flex: none;
     align-items: center;
     gap: 4px;
     height: 44px;
-    transition: opacity var(--dur-control) var(--ease-out);
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        transform var(--dur-toggle) var(--ease-in-out),
-        opacity var(--dur-control) var(--ease-out);
-    }
+    padding-inline: 4px 6px;
   }
   .tools :global(.ns-chip-btn.tool) {
     height: 28px;
@@ -603,9 +653,9 @@
     text-align: left;
     color: var(--ink-strong);
   }
-  /* Room for the chips, so the chosen row's name ends before them. */
-  .row.picked {
-    padding-right: calc(var(--tools-w, 0px) + 14px);
+  .option > .row {
+    flex: 1 1 12rem;
+    min-width: 0;
   }
   .custom {
     background: var(--surface-raised);

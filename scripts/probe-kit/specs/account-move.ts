@@ -28,7 +28,7 @@ import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
 import { ACCOUNT, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
-const B = "acct-scratch-fleet-b";
+export const B = "acct-scratch-fleet-b";
 /** Each account's token, as its requests carry it. */
 const TOKEN: Record<string, string> = {
   [ACCOUNT]: "sk-ant-oat01-fake-scratch-fleet",
@@ -129,7 +129,7 @@ const respond = (request: Seen): Reply => {
 };
 
 /** A signed-in fake login for account `id` in `home`, with its own token and identity, one organization with A's. */
-const furnishAccount = async (home: string, id: string) => {
+export const furnishAccount = async (home: string, id: string) => {
   const dir = join(home, ".cawco", "accounts", id, "claude");
   await mkdir(dir, { recursive: true });
   await writeFile(
