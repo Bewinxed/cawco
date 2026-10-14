@@ -678,7 +678,10 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         joinTray()
         env.machineId = transcript.location?.machineId
         var agent = env.agentName
-        if let harness = transcript.facts?.harness ?? transcript.location?.harness {
+        // A voice names who answers (a project's Caw); else the harness does.
+        if let voice {
+            agent = voice.name
+        } else if let harness = transcript.facts?.harness ?? transcript.location?.harness {
             agent = ["claude": "Claude Code", "opencode": "opencode", "code": "opencode", "pi": "pi"][harness] ?? harness
         }
         // A revision of the hub's blocks is prepared off the main thread and

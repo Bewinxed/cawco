@@ -11,6 +11,8 @@ import UIKit
 /// stands in for rows not there yet.
 @MainActor
 public struct TranscriptVoice {
+    /// Who answers, on the speaker line (Transcript.svelte `agentName`).
+    public var name: String
     /// What each reply carries under it, by its block's id.
     public var extras: [String: ThreadExtras]
     /// Moves when what `accessory` draws from changed (the tasks were read
@@ -19,7 +21,8 @@ public struct TranscriptVoice {
     /// The view for a reply's extras: its tasks' cards and its files' chips.
     public var accessory: (ThreadExtras, _ blockId: String) -> UIView?
 
-    public init(extras: [String: ThreadExtras], revision: Int = 0, accessory: @escaping (ThreadExtras, String) -> UIView?) {
+    public init(name: String, extras: [String: ThreadExtras], revision: Int = 0, accessory: @escaping (ThreadExtras, String) -> UIView?) {
+        self.name = name
         self.extras = extras
         self.revision = revision
         self.accessory = accessory

@@ -184,6 +184,7 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         ])
         placeSeat()
         clearComposer()
+        Self.log.notice("thread screen \(self.viewId, privacy: .public) loaded")
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -263,7 +264,7 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
             cawReadOn = on
             readCaw()
         }
-        transcriptView.voice = TranscriptVoice(extras: threadId.map(hub.threads.extras) ?? [:], revision: tasksRead) { [weak self] extras, blockId in
+        transcriptView.voice = TranscriptVoice(name: "Caw", extras: threadId.map(hub.threads.extras) ?? [:], revision: tasksRead) { [weak self] extras, blockId in
             self?.accessory(extras, blockId: blockId)
         }
         transcriptView.configure(transcript)
