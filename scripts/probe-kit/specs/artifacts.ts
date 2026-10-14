@@ -18,8 +18,9 @@
  *    reads it back (the other option marked).
  * 5. The session hears nothing of the person's change, or of the agent's own
  *    patch: only a Send tells it (artifact-responses.ts).
- * 6. No cawco tool about previews or choices is among the session's tools
- *    (the ones the artifact tools replaced); the artifact tools are.
+ * 6. None of the tools the artifact tools replaced (show_preview, page_show,
+ *    page_choices, canvas_choices, read_choices) is among the session's
+ *    tools; the artifact tools are.
  *
  * Slice 2, on a page of fields (a text input `title`, a radio group `size`,
  * a select `tone`, and a `data-cawco-choice` `mood`):
@@ -90,8 +91,16 @@ const COMMAND = /PROBE-CALL:(\d+)/g;
 /** Anything the hub would tell the session of the person's responses, or the person's picks as words. */
 const TOLD =
   /\[CawCo\] The (?:page|canvas|preview) "|changed my picks|sent my picks/;
-/** A cawco tool named for previews or choices: the tools the artifact tools replaced. */
-const PREVIEW_TOOL = /mcp__cawco__\w*(?:preview|choices)\w*/g;
+/** The tools the artifact tools replaced (a4f208b90, Artifacts slice 1), by name. */
+const REPLACED = [
+  "show_preview",
+  "page_show",
+  "page_choices",
+  "canvas_choices",
+  "read_choices",
+].map((tool) => `mcp__cawco__${tool}`);
+/** A replaced tool's name, whole: `admin_previews_read` and the like are other tools. */
+const PREVIEW_TOOL = new RegExp(`\\b(?:${REPLACED.join("|")})\\b`, "g");
 /** The id in artifact_create's answer, as the tool result carries it. */
 const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 /** How long a probe listens for a word the session must not hear. Our call: past any debounce the hub could have. */
@@ -537,12 +546,12 @@ const run = async (kit: Kit) => {
     ...new Set(offered.flatMap((each) => each.match(PREVIEW_TOOL) ?? [])),
   ];
   kit.check(
-    "6: no preview or choices tool is in the tool list; the artifact tools are",
+    "6: none of the tools the artifact tools replaced is in the tool list; the artifact tools are",
     strays.length === 0 &&
       ["artifact_create", "artifact_update", "artifact_read", "artifact_show"]
         .map(names)
         .every(Boolean),
-    `preview or choices tools: ${strays.join(", ") || "none"}; artifact_read ${names("artifact_read")}`
+    `replaced tools: ${strays.join(", ") || "none"}; artifact_read ${names("artifact_read")}`
   );
 
   await fieldChecks({ kit, fleet, session, page, base, call, said });
@@ -626,6 +635,11 @@ const promoteChecks = async ({
     (count) => count === 1,
     60_000
   );
+  // The panel slides in as the session opens: a click while it moves is
+  // aimed where the button was and lands outside the frame (the frame heard
+  // no pointerdown, with 85 runs going on the page). Clicked once it lands,
+  // as check 2 is.
+  await settle(page);
   await frame.locator('[data-option="b"]').click();
   await until(
     "the pick in the hub's read",

@@ -26,7 +26,8 @@
  * - **The output contract**, on the run's `finish_item` summary: exactly
  *   `NO_REPLY` is silent; `AUTOMATION_FAILED: <why>` (or an item that
  *   failed) is a failure, its reason the why (a bare token's is the last
- *   text the run's session said; a failed item's its error's first line),
+ *   text the run's session said, read once its turn's result frame is in;
+ *   a failed item's its error's first line),
  *   retried once at once (same slot, attempt 2), and a
  *   second failure needs you (a push, and a note in the routine's thread);
  *   anything else is delivered, as a note in the routine's own thread of
@@ -397,6 +398,13 @@ const leadContract = (runId: string): string =>
 /** A lead run's end when Caw's turn that took its wake ends with no `routine_result`. */
 const NO_RESULT = "Caw ended its turn without saying how the run went";
 
+/** How a run ended, as its answer or its work item says. */
+interface RunEnd {
+  outcome: RoutineOutcome;
+  output: string | null;
+  reason: string | null;
+}
+
 export const createRoutines = ({
   anyOnline,
   caw,
@@ -459,6 +467,15 @@ export const createRoutines = ({
    * that restarts mid-run has not heard it.
    */
   const lastSaid = new Map<string, string>();
+  /**
+   * Runs failed with a bare `AUTOMATION_FAILED`, by the session that
+   * answered, waiting for its turn's end to read their reason
+   * ({@link failBare}).
+   */
+  const held = new Map<
+    string,
+    { runId: string; usd: number | null; who: string }[]
+  >();
   /** The scheduler's one timer. */
   let timer: HubTimer | undefined;
   let started = false;
@@ -1015,15 +1032,105 @@ export const createRoutines = ({
       );
   };
 
+  /** The reason of a bare {@link AUTOMATION_FAILED} from `instanceId`: the last text its session said. */
+  const bareReason = (instanceId: string, who: string): string => {
+    const why = lastSaid.get(instanceId);
+    return why
+      ? clipReason(why)
+      : `${who} answered ${AUTOMATION_FAILED} and said nothing about why`;
+  };
+
   /**
-   * A session's model message: a run's session's last text is kept, for a
-   * failure that gives no reason ({@link resultOf}).
+   * The session's turn is over (its result frame, after every text frame of
+   * the turn was admitted, or the session itself is gone): its held bare
+   * failures settle, each with the last text it said.
+   */
+  const turnOver = (instanceId: string): void => {
+    const runs = held.get(instanceId);
+    if (!runs) {
+      return;
+    }
+    held.delete(instanceId);
+    // Read once: settling the first clears the session's words.
+    const ends = runs.map((each) => ({
+      ...each,
+      reason: bareReason(instanceId, each.who),
+    }));
+    for (const each of ends) {
+      settle(
+        each.runId,
+        { outcome: "failed", output: null, reason: each.reason, usd: each.usd },
+        instanceId
+      );
+    }
+  };
+
+  /**
+   * A run failed with a bare {@link AUTOMATION_FAILED}: its reason is the
+   * last text its session says this turn, so it settles when the turn is
+   * over, never as the answer arrives. The answer (`routine_result`, or the
+   * `finish_item` whose item ends inside the call) comes over MCP within the
+   * turn, and the turn's text over the session's frame stream: only the
+   * turn's result frame says every text frame before it is in. `over`: the
+   * turn is already over (a restarted hub finding an item that ended while
+   * it was down).
+   */
+  const failBare = (
+    runId: string,
+    who: string,
+    usd: number | null,
+    instanceId: string,
+    over: boolean
+  ): void => {
+    held.set(instanceId, [
+      ...(held.get(instanceId) ?? []),
+      { runId, who, usd },
+    ]);
+    if (over) {
+      turnOver(instanceId);
+    }
+  };
+
+  /** Whether run `runId` is held for its turn's end ({@link failBare}). */
+  const isHeld = (runId: string): boolean =>
+    [...held.values()].flat().some((each) => each.runId === runId);
+
+  /** A run's answer, settled now, or held for its turn's end when it is a bare failure. */
+  const answered = (
+    runId: string,
+    end: RunEnd | "bare",
+    who: string,
+    usd: number | null,
+    instanceId: string,
+    over: boolean
+  ): void => {
+    if (end === "bare") {
+      failBare(runId, who, usd, instanceId, over);
+    } else {
+      settle(runId, { ...end, usd }, instanceId);
+    }
+  };
+
+  /**
+   * A session's frame: a run's session's last text is kept, for a failure
+   * that gives no reason, and its turn's result frame settles what it held
+   * ({@link failBare}).
    */
   const said = (instanceId: string, neutral: NeutralMessage): void => {
     if (
-      neutral.type !== "assistant" ||
-      !(armed.has(instanceId) || running.has(instanceId))
+      !(
+        armed.has(instanceId) ||
+        running.has(instanceId) ||
+        held.has(instanceId)
+      )
     ) {
+      return;
+    }
+    if (neutral.type === "result") {
+      turnOver(instanceId);
+      return;
+    }
+    if (neutral.type !== "assistant") {
       return;
     }
     const text = neutral.message.content
@@ -1037,46 +1144,28 @@ export const createRoutines = ({
 
   /**
    * A run's answer under the output contract, a delegate's `finish_item`
-   * summary or Caw's `routine_result` from `instanceId`: exactly
-   * {@link NO_REPLY} is silent, {@link AUTOMATION_FAILED} failed, its reason
-   * the words after it, else the last text the session said before it;
-   * anything else delivered.
+   * summary or Caw's `routine_result`: exactly {@link NO_REPLY} is silent,
+   * `AUTOMATION_FAILED: <why>` failed with that why, a bare
+   * {@link AUTOMATION_FAILED} `"bare"` (its reason comes at its turn's end,
+   * {@link failBare}), anything else delivered.
    */
-  const resultOf = (
-    words: string,
-    who: string,
-    instanceId: string
-  ): {
-    outcome: RoutineOutcome;
-    output: string | null;
-    reason: string | null;
-  } => {
+  const resultOf = (words: string): RunEnd | "bare" => {
     const answer = words.trim();
     if (answer === NO_REPLY) {
       return { outcome: "silent", output: null, reason: null };
     }
     const failed = FAILED_ANSWER.exec(answer);
     if (failed) {
-      const why = failed[1].trim() || lastSaid.get(instanceId);
-      return {
-        outcome: "failed",
-        output: null,
-        reason: why
-          ? clipReason(why)
-          : `${who} answered ${AUTOMATION_FAILED} and said nothing about why`,
-      };
+      const why = failed[1].trim();
+      return why
+        ? { outcome: "failed", output: null, reason: clipReason(why) }
+        : "bare";
     }
     return { outcome: "delivered", output: answer, reason: null };
   };
 
   /** What a run's ended work item says, under the output contract. */
-  const outcomeOf = (
-    item: WorkItemRow
-  ): {
-    outcome: RoutineOutcome;
-    output: string | null;
-    reason: string | null;
-  } => {
+  const outcomeOf = (item: WorkItemRow): RunEnd | "bare" => {
     if (item.state === "cancelled") {
       return { outcome: "cancelled", output: null, reason: "it was stopped" };
     }
@@ -1088,7 +1177,7 @@ export const createRoutines = ({
         reason: why?.trim() || "its work item failed",
       };
     }
-    return resultOf(item.summary ?? "", "its delegate", item.instanceId);
+    return resultOf(item.summary ?? "");
   };
 
   /**
@@ -1153,10 +1242,17 @@ export const createRoutines = ({
     why: string = NO_RESULT,
     gone?: string
   ): void => {
+    // A session that is over will send no result frame: what it held settles now.
+    if (gone !== undefined) {
+      turnOver(instanceId);
+    }
     if (!(armed.delete(instanceId) || gone)) {
       return;
     }
-    lastSaid.delete(instanceId);
+    // A run held for its turn's result frame keeps the words that frame reads.
+    if (!held.has(instanceId)) {
+      lastSaid.delete(instanceId);
+    }
     const unread = (run: RoutineRunRow): boolean =>
       gone !== undefined &&
       run.leadInstanceId === null &&
@@ -1166,6 +1262,7 @@ export const createRoutines = ({
     for (const run of store.liveRuns()) {
       if (
         run.state === "running" &&
+        !isHeld(run.id) &&
         (run.leadInstanceId === instanceId || unread(run))
       ) {
         settle(
@@ -1210,16 +1307,19 @@ export const createRoutines = ({
     if (run.state !== "running") {
       return refuse(409, `Run ${runId} has not reached you yet.`);
     }
-    settle(
-      run.id,
-      { ...resultOf(result, "Caw", actor.id), usd: null },
-      actor.id
-    );
+    if (isHeld(run.id)) {
+      return refuse(409, `Run ${runId} has already ended failed.`);
+    }
+    answered(run.id, resultOf(result), "Caw", null, actor.id, false);
     return runView(store.run(run.id) ?? run);
   };
 
-  /** A routine's run's work item ended: the run settles. */
-  const itemEnded = (item: WorkItemRow): void => {
+  /**
+   * A routine's run's work item ended: the run settles. `over`: its
+   * session's turn is known to be over (a restarted hub, which heard none of
+   * its frames, reading an item that ended while it was down).
+   */
+  const itemEnded = (item: WorkItemRow, over = false): void => {
     if (!isRoutineParent(item.parentInstanceId)) {
       return;
     }
@@ -1227,10 +1327,13 @@ export const createRoutines = ({
     if (!run || run.state === "ended") {
       return;
     }
-    settle(
+    answered(
       run.id,
-      { ...outcomeOf(item), usd: workItems.spentBy(item) },
-      item.instanceId
+      outcomeOf(item),
+      "its delegate",
+      workItems.spentBy(item),
+      item.instanceId,
+      over
     );
   };
 
@@ -1366,7 +1469,7 @@ export const createRoutines = ({
     if (["starting", "running"].includes(item.state)) {
       running.add(item.instanceId);
     } else {
-      itemEnded(item);
+      itemEnded(item, true);
     }
   };
 
