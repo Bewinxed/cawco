@@ -26,6 +26,10 @@
  *    order, at their times, with the hub's note; a second restart adds
  *    nothing.
  *
+ * Caw starts in his own place's boundary, whose scratch dir is a link under
+ * the machine's temp root that a CawCo workspace may not write: run it on a
+ * host, outside any workspace (inside one his start fails with EPERM).
+ *
  *   bash apps/apple/scripts/build-both.sh ios
  *   bun scripts/probe-kit/run.ts caw-threads
  *
