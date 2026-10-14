@@ -11,8 +11,9 @@
  *
  * A pin is placed again after every revision of the page by its anchor, in
  * one order ({@link findAnchor}): the element at its source's file:line
- * (among several written by that one line, the one its selector or text
- * names), then its selector, then the first element holding its text; none of them,
+ * (among several written by that one line, the one its selector names that
+ * still reads its text, else the one that reads it), then its selector, then
+ * the first element holding its text; none of them,
  * and it waits in the moved tray (`movedAt`) until the person places it
  * again.
  *
@@ -327,12 +328,14 @@ export function deletePin(doc: Doc, pin: string): string | null {
  * not loaded, or of another origin), then, in the document the anchor's frames
  * lead to, every element whose dev source is `file` at `line` (in document
  * order; none when nothing matches), the element `selector` names, and the
- * deepest element whose text is `text`, null when nothing matches.
+ * deepest element whose text is `text`, null when nothing matches; and an
+ * element's text as an anchor keeps it.
  */
 export interface AnchorLookup<E, D> {
   bySelector: (within: D, selector: string) => E | null;
   bySource: (within: D, file: string, line: number) => E[];
   byText: (within: D, text: string) => E | null;
+  textOf: (el: E) => string;
   frame: (within: D, selector: string) => D | null;
   /** The top document, where an anchor's frames start. */
   top: D;
@@ -358,36 +361,48 @@ export function findAnchor<E, D>(
   const doc: D = within;
   const named = lookup.bySelector(doc, anchor.selector);
   const text = anchor.text?.trim();
-  let said: E | null | undefined;
-  /** The deepest element holding the anchor's text, looked for once, when it is asked. */
-  const byText = () => {
-    if (said === undefined) {
-      said = text ? lookup.byText(doc, text) : null;
-    }
-    return said;
-  };
   if (source?.file && source.line !== null && source.of === "self") {
-    // A file:line names a line of markup, not an element: a component in a
-    // list (each card of a transcript) writes all of its instances from it.
-    // One element there is the mark's; among several, the one its selector
-    // or its text names, never merely the first.
     const written = lookup.bySource(doc, source.file, source.line);
     if (written.length === 1) {
       return { by: "source", el: written[0] };
     }
-    if (named && written.includes(named)) {
-      return { by: "selector", el: named };
-    }
-    const found = written.length > 1 ? byText() : null;
-    if (found && written.includes(found)) {
-      return { by: "text", el: found };
+    const among =
+      written.length > 1 ? amongWritten(written, named, text, lookup) : null;
+    if (among) {
+      return among;
     }
   }
   if (named) {
     return { by: "selector", el: named };
   }
-  const found = byText();
+  const found = text ? lookup.byText(doc, text) : null;
   return found ? { by: "text", el: found } : null;
+}
+
+/**
+ * The mark's element among several one line of markup writes (a component
+ * in a list: each card of a transcript), never merely the first: the one its
+ * selector names that still reads its text; else the one instance that
+ * reads its text, wherever the list moved it; else, when no one instance
+ * does (a card whose text streams on), the one its selector names. Null
+ * when its selector names none of them and no one of them reads its text.
+ */
+function amongWritten<E, D>(
+  written: E[],
+  named: E | null,
+  text: string | undefined,
+  lookup: AnchorLookup<E, D>
+): { by: "selector" | "text"; el: E } | null {
+  const reads = (el: E) => !!text && lookup.textOf(el) === text;
+  const isNamed = !!named && written.includes(named);
+  if (named && isNamed && reads(named)) {
+    return { by: "selector", el: named };
+  }
+  const reading = written.filter(reads);
+  if (reading.length === 1) {
+    return { by: "text", el: reading[0] };
+  }
+  return named && isNamed ? { by: "selector", el: named } : null;
 }
 
 /** A section's head and what its pin stands on: the element by selector, source, page and text, or a canvas's element. */

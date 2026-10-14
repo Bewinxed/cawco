@@ -56,8 +56,11 @@
  *    and through all of it the scroller's offset never moves from where it
  *    stood; the pin's anchor names that card, and its disc stands at the
  *    tapped point on it (±2px), after 200px more scroll, and after a reload
- *    scrolled back to the same offset. In the container, the disc is not
- *    drawn while the container has scrolled the card under its edge.
+ *    scrolled back to the same offset. In the container, neither the disc
+ *    nor a pen stroke on the card is drawn while the container has scrolled
+ *    the card under its edge, and both are back when it scrolls back. A
+ *    revision that moves the card to the list's third place, and a reload:
+ *    the pin stands on that card, not on the one now at its old place.
  */
 import { join } from "node:path";
 import type { Frame } from "playwright-core";
@@ -1318,9 +1321,13 @@ const TAP = { x: 0.3, y: 0.5 } as const;
 /**
  * A transcript of subagent cards, each with the one `data-insp-path` its
  * component's line gives it and no id, as a dev server's Svelte list is:
- * scrolled by the window, or by a container under a header.
+ * scrolled by the window, or by a container under a header; `order` the
+ * cards' numbers as the list stands, 1 to {@link CARDS} when none.
  */
-const cardsPage = (scroller: Scroller) => `<!doctype html>
+const cardsPage = (
+  scroller: Scroller,
+  order = Array.from({ length: CARDS }, (_, i) => i + 1)
+) => `<!doctype html>
 <html><head><meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   body { margin: 0; font: 16px/1.5 system-ui; }
@@ -1329,11 +1336,12 @@ const cardsPage = (scroller: Scroller) => `<!doctype html>
   ${scroller === "container" ? `html, body { height: 100%; overflow: hidden; } .transcript { position: absolute; top: ${HEADER}px; right: 0; bottom: 0; left: 0; overflow: auto; }` : ""}
 </style></head>
 <body data-scroller="${scroller}"><header>Session</header><main class="transcript">
-${Array.from(
-  { length: CARDS },
-  (_, i) =>
-    `<article class="card" data-n="${i + 1}" data-insp-path="src/AgentCard.svelte:7:3">Subagent ${i + 1} ran the probe.</article>`
-).join("\n")}
+${order
+  .map(
+    (n) =>
+      `<article class="card" data-n="${n}" data-insp-path="src/AgentCard.svelte:7:3">Subagent ${n} ran the probe.</article>`
+  )
+  .join("\n")}
 </main></body></html>`;
 
 /** The page's scroll offset, by its scroller (the window's or the container's), and the window's. */
@@ -1368,7 +1376,8 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
     name: `cards-${scroller}`,
     html: cardsPage(scroller),
   });
-  if (!made.match(ANSWERED_ID)) {
+  const artifactId = made.match(ANSWERED_ID)?.[1];
+  if (!artifactId) {
     on.kit.check(
       `d (${scroller}): the page is made`,
       false,
@@ -1556,18 +1565,46 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
   );
 
   if (scroller === "container") {
+    // A pen stroke across the card's middle, where the pin stands.
+    const groups = Object.keys((await docOf(frame)).ink).length;
+    await strokeOver(on, frame, selector);
+    await until(
+      "the stroke on the card in the doc",
+      async () => Object.keys((await docOf(frame)).ink).length,
+      (count) => count > groups,
+      10_000
+    ).catch(() => 0);
+    await settle(on.page, 300);
+    const inkShown = await inkAt(frame);
     // The tapped point scrolled up under the container's top edge, still inside the window.
     const r = await boxIn(frame, selector);
     await scrollPage(frame, start.top + 200 + r.y + r.h * TAP.y - HEADER / 2);
     await settle(on.page, 300);
     const under = await discAt(frame, pin.number);
+    const inkUnder = await inkAt(frame);
     await scrollPage(frame, start.top + 200);
     await settle(on.page, 300);
     const back = await standing(frame);
+    const inkBack = await inkAt(frame);
+    /** The stroke's box lies wholly inside its clip, which is the container's box: drawn. */
+    const drawn = (seen: Awaited<ReturnType<typeof inkAt>>) =>
+      !!seen?.clip &&
+      Math.abs(seen.clip.y - HEADER) <= 1 &&
+      seen.stroke.y >= seen.clip.y &&
+      seen.stroke.y + seen.stroke.h <= seen.clip.y + seen.clip.h;
+    /** The stroke's box lies wholly above its clip's top edge, the container's: not drawn. */
+    const hidden = (seen: Awaited<ReturnType<typeof inkAt>>) =>
+      !!seen?.clip &&
+      Math.abs(seen.clip.y - HEADER) <= 1 &&
+      seen.stroke.y + seen.stroke.h <= seen.clip.y;
     on.kit.check(
-      "d (container): while the container has scrolled the tapped point under its top edge the disc is not drawn, and scrolled back it stands on the card again",
-      under === null && back.on,
-      `under the edge ${JSON.stringify(under)}; back ${JSON.stringify(back)}`
+      "d (container): while the container has scrolled the tapped point under its top edge neither the disc nor the card's ink stroke is drawn (the stroke wholly outside its clip, the container's box); scrolled back, the disc stands on the card and the stroke is wholly inside its clip again",
+      under === null &&
+        back.on &&
+        drawn(inkShown) &&
+        hidden(inkUnder) &&
+        drawn(inkBack),
+      `under the edge disc ${JSON.stringify(under)}, ink ${JSON.stringify(inkUnder)}; before ink ${JSON.stringify(inkShown)}; back ${JSON.stringify(back)}, ink ${JSON.stringify(inkBack)}`
     );
   }
 
@@ -1594,7 +1631,87 @@ const scrollChecks = async (on: On, scroller: Scroller) => {
     after.on && stillNames === String(n),
     `anchor ${anchored.anchor?.selector} → card ${stillNames}; ${JSON.stringify(after)}`
   );
+
+  // The list reorders: card n moves up to the third place, and the card
+  // standing at its old place is another written by the same line.
+  const order = Array.from({ length: CARDS }, (_, i) => i + 1).filter(
+    (one) => one !== n
+  );
+  order.splice(2, 0, n);
+  await on.call(UPDATE, { id: artifactId, html: cardsPage(scroller, order) });
+  await until(
+    "the reordered list in the page",
+    () =>
+      reloaded.evaluate(
+        () =>
+          document.querySelectorAll(".card")[2]?.getAttribute("data-n") ?? null
+      ),
+    (third) => third === String(n),
+    15_000
+  ).catch(() => null);
+  await on.page.locator('.preview-pane button[aria-label="Reload"]').click();
+  const reordered = await loaded(reloaded);
+  await reordered.evaluate(
+    (s) => document.querySelector(s)?.scrollIntoView({ block: "center" }),
+    selector
+  );
+  const onMoved = await until(
+    "the pin on the moved card after the reload",
+    () => standing(reordered),
+    (seen) => seen.on,
+    10_000
+  ).catch(() => standing(reordered));
+  const keptAnchor = ((await docOf(reordered)).pins[pin.id] ?? {}) as {
+    anchor?: { selector?: string };
+  };
+  const place = keptAnchor.anchor?.selector
+    ? await reordered.evaluate((s) => {
+        const el = document.querySelector(s);
+        return el
+          ? {
+              n: el.getAttribute("data-n"),
+              at: [...document.querySelectorAll(".card")].indexOf(el) + 1,
+            }
+          : null;
+      }, keptAnchor.anchor.selector)
+    : null;
+  on.kit.check(
+    `d (${scroller}): after the list moves card ${n} to the third place and the page reloads, the pin's anchor names card ${n} in its new place and its disc stands at the tapped point on it (±2px), not on the card now at its old place`,
+    onMoved.on && place?.n === String(n) && place.at === 3,
+    `anchor ${keptAnchor.anchor?.selector} → ${JSON.stringify(place)}; ${JSON.stringify(onMoved)}`
+  );
 };
+
+/** The first ink group's stroke box and its clip's box, in the page's viewport; null when no group is drawn. */
+const inkAt = (frame: Frame) =>
+  frame.evaluate(() => {
+    const g = document.querySelector<SVGGElement>(
+      "svg[data-cawco-ink] g[data-ink-group]"
+    );
+    if (!g) {
+      return null;
+    }
+    const id = g.getAttribute("clip-path")?.slice("url(#".length, -1);
+    const rect = id ? document.getElementById(id)?.querySelector("rect") : null;
+    const at = (name: string) => Number(rect?.getAttribute(name));
+    const box = g.getBBox();
+    return {
+      clip: rect
+        ? {
+            x: at("x") - scrollX,
+            y: at("y") - scrollY,
+            w: at("width"),
+            h: at("height"),
+          }
+        : null,
+      stroke: {
+        x: box.x - scrollX,
+        y: box.y - scrollY,
+        w: box.width,
+        h: box.height,
+      },
+    };
+  });
 
 /** Pin `number`'s card in the pane, and whether its field has the keyboard. */
 const focusedCard = async (on: On, number: number | undefined) => {

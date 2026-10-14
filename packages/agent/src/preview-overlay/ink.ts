@@ -36,7 +36,7 @@ import { INK_LIMITS, type InkGroup, type InkPoint } from "@cawco/core/ink";
 import { getStroke } from "perfect-freehand";
 import type { Map as YMap } from "yjs";
 import { artifact } from "./artifact";
-import { framesOf, rectOf } from "./frames";
+import { clipOf, framesOf, rectOf } from "./frames";
 import { newId } from "./id";
 import type { Pins } from "./pins";
 import type { InkChrome, Pick } from "./radial";
@@ -219,6 +219,8 @@ export function startInk(deps: InkDeps): Ink {
 
   /** Each placed group: its points in the page, its box, the element it stands on. */
   const placed = new Map<string, { box: Box; anchor: Element | null }>();
+  /** Each clipped group's clip in the page, px: the part of it that is drawn. */
+  const clips = new Map<string, Box>();
   const anchors = new ResizeObserver(() => later());
 
   // --- drawing --------------------------------------------------------------
@@ -274,6 +276,11 @@ export function startInk(deps: InkDeps): Ink {
       );
       const group = path.parentElement?.getAttribute("data-ink-group");
       if (!(crossed && group)) {
+        continue;
+      }
+      // A stroke clipped away where the eraser is stands unseen there, and is not rubbed out.
+      const clip = clips.get(group);
+      if (clip && !contains(clip, { x, y, w: 0, h: 0 }, 0)) {
         continue;
       }
       const hit = erasing.hits.get(group) ?? new Set<number>();
@@ -581,6 +588,7 @@ export function startInk(deps: InkDeps): Ink {
     }
     anchors.disconnect();
     placed.clear();
+    clips.clear();
     if (onCanvas()) {
       return;
     }
@@ -624,12 +632,37 @@ export function startInk(deps: InkDeps): Ink {
       : null;
   }
 
-  /** One group's strokes over `el`, where `el` stands now. */
+  /**
+   * One group's strokes over `el`, where `el` stands now, clipped to what
+   * `el`'s frames and scroll containers show (frames.ts `clipOf`), as its
+   * pins are: a stroke a transcript has scrolled under its edge is not
+   * drawn over what stands there.
+   */
   function drawGroup(group: InkGroup, el: Element, brand: string) {
     anchors.observe(el);
     const strokes = strokesInPage(group);
     const g = document.createElementNS(SVG, "g");
     g.setAttribute("data-ink-group", group.id);
+    const shown = clipOf(el);
+    if (shown) {
+      const box = {
+        x: shown.x + scrollX,
+        y: shown.y + scrollY,
+        w: shown.width,
+        h: shown.height,
+      };
+      const clip = document.createElementNS(SVG, "clipPath");
+      clip.id = `cawco-ink-clip-${group.id}`;
+      const rect = document.createElementNS(SVG, "rect");
+      rect.setAttribute("x", String(box.x));
+      rect.setAttribute("y", String(box.y));
+      rect.setAttribute("width", String(box.w));
+      rect.setAttribute("height", String(box.h));
+      clip.append(rect);
+      layer.append(clip);
+      g.setAttribute("clip-path", `url(#${clip.id})`);
+      clips.set(group.id, box);
+    }
     for (const [index, stroke] of strokes.entries()) {
       const path = document.createElementNS(SVG, "path");
       path.setAttribute("data-stroke", String(index));

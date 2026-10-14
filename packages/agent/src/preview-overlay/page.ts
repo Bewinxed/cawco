@@ -856,6 +856,7 @@ function locate(anchor: PageAnchor) {
         return null;
       }
     },
+    textOf,
     byText: (within, text) => {
       const matches = pageElements(within).filter((el) => textOf(el) === text);
       // The deepest: the one holding no other match.
