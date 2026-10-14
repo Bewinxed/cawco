@@ -10,13 +10,18 @@
    * Open Page Rule: AskHere under the footer, the page still live). What goes
    * wrong is said under the field, a refused delete under its question.
    *
+   * A column: the head over it, the field and its actions at its foot, both
+   * always in view, and between them the picture and the thread, the only
+   * part that scrolls, under the house edge fade. Past the card's cap the
+   * thread gives up height, never the actions.
+   *
    * A press anywhere outside it closes it (the house's outside-press rule,
    * press-outside.ts), as Esc and its Close do; the page in the well, whose
    * presses this document never hears, says its own (`cawco:press`). What
    * the field holds is the pin's draft, which the pane keeps with the pin.
    */
   import type { Pin } from "@cawco/core/comments";
-  import { untrack } from "svelte";
+  import { tick, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconClose, IconReopen, IconSuccess, IconTrash } from "#lib/icons.js";
@@ -71,6 +76,63 @@
   let width = $state(0);
   let field = $state<HTMLTextAreaElement | null>(null);
   let card = $state<HTMLDivElement | null>(null);
+  let roomEl = $state<HTMLDivElement | null>(null);
+  let head = $state<HTMLElement | null>(null);
+  let foot = $state<HTMLDivElement | null>(null);
+  /** The head and the foot alone outgrow the card (a phone's keyboard over a short well). */
+  let squeezed = $state(false);
+  /** The thread is read at its end: a new entry keeps it there. */
+  let atEnd = true;
+
+  // The thread opens at its newest entry, beside the field that answers it,
+  // and follows a new one while the person reads at its end; reading
+  // further back, they are left where they are.
+  let shownPin: string | null = null;
+  $effect(() => {
+    const count = pin.thread.length;
+    const fresh = pin.id !== shownPin;
+    shownPin = pin.id;
+    if (roomEl && count > 0 && (fresh || atEnd)) {
+      const holder = roomEl;
+      tick().then(() => {
+        holder.scrollTop = holder.scrollHeight;
+        atEnd = true;
+      });
+    }
+  });
+  const readAt = () => {
+    if (roomEl) {
+      atEnd = roomEl.scrollTop + roomEl.clientHeight >= roomEl.scrollHeight - 1;
+    }
+  };
+
+  // When the head and the foot alone outgrow the card, the thread keeps
+  // its whole height and the card scrolls, the field kept in view while
+  // writing: the thread stays readable above the field instead of
+  // shrinking to nothing.
+  $effect(() => {
+    if (!(card && head && foot)) {
+      return;
+    }
+    const holder = card;
+    const top = head;
+    const bottom = foot;
+    const measure = () => {
+      const style = getComputedStyle(holder);
+      const gap = Number.parseFloat(style.rowGap) || 0;
+      const edges =
+        (Number.parseFloat(style.paddingTop) || 0) +
+        (Number.parseFloat(style.paddingBottom) || 0);
+      squeezed =
+        top.offsetHeight + bottom.offsetHeight + 2 * gap + edges >
+        holder.clientHeight + 1;
+    };
+    const watch = new ResizeObserver(measure);
+    for (const part of [holder, top, bottom]) {
+      watch.observe(part);
+    }
+    return () => watch.disconnect();
+  });
 
   // A press outside the card closes it; one in the picture's lightbox, a
   // modal layer the card opened over everything, is that layer's.
@@ -177,7 +239,7 @@
   bind:offsetHeight={height}
   bind:offsetWidth={width}
 >
-  <header class="head">
+  <header class="head" bind:this={head}>
     <PinDisc number={pin.number} resolved={!!pin.resolvedAt} />
     <span class="anchor">
       <span class="name">{pinName(pin)}</span>
@@ -201,91 +263,110 @@
       variant="ghost"
     />
   </header>
-  {#if thumb}
-    <button
-      aria-label={`Pin ${pin.number}'s picture, full size`}
-      class="thumb"
-      onclick={(event) => onpicture(event.currentTarget)}
-      type="button"
+  <!-- What the pin holds, the one part that scrolls: the head stands over it
+       and the field and its actions under it, never a scroll away; the
+       house edge fade says there is more above or below. -->
+  {#if thumb || pin.thread.length > 0}
+    <div
+      class={["room kit-edge-fade-block", squeezed && "whole"]}
+      data-pin-room
+      onscroll={readAt}
+      bind:this={roomEl}
     >
-      <img alt="" src={`data:image/png;base64,${thumb}`}>
-    </button>
-  {/if}
-  {#if pin.thread.length > 0}
-    <ol class="thread">
-      {#each pin.thread as entry (entry.id)}
-        <li class="entry" data-by={entry.by}>
-          <p class="who">
-            <span>{entry.by === "agent" ? "Agent" : "You"}</span>
-            <time datetime={entry.at}
-              >{formatAgeShort(Date.parse(entry.at))}</time
-            >
-          </p>
-          {#if entry.by === "agent"}
-            <MessageBody source={entry.text} />
-            {#if entry.files?.length}
-              <p class="files">
-                {#each entry.files as file (file)}
-                  <code>{file}</code>
-                {/each}
+      {#if thumb}
+        <button
+          aria-label={`Pin ${pin.number}'s picture, full size`}
+          class="thumb"
+          onclick={(event) => onpicture(event.currentTarget)}
+          type="button"
+        >
+          <img alt="" src={`data:image/png;base64,${thumb}`}>
+        </button>
+      {/if}
+      {#if pin.thread.length > 0}
+        <ol class="thread">
+          {#each pin.thread as entry (entry.id)}
+            <li class="entry" data-by={entry.by}>
+              <p class="who">
+                <span>{entry.by === "agent" ? "Agent" : "You"}</span>
+                <time datetime={entry.at}
+                  >{formatAgeShort(Date.parse(entry.at))}</time
+                >
               </p>
-            {/if}
-          {:else}
-            <p class="words">{entry.text}</p>
-          {/if}
-        </li>
-      {/each}
-    </ol>
+              {#if entry.by === "agent"}
+                <MessageBody source={entry.text} />
+                {#if entry.files?.length}
+                  <p class="files">
+                    {#each entry.files as file (file)}
+                      <code>{file}</code>
+                    {/each}
+                  </p>
+                {/if}
+              {:else}
+                <p class="words">{entry.text}</p>
+              {/if}
+            </li>
+          {/each}
+        </ol>
+      {/if}
+    </div>
   {/if}
-  <Textarea
-    aria-describedby={problem ? `pin-error-${pin.id}` : undefined}
-    aria-invalid={problem ? true : undefined}
-    aria-label={pin.thread.length > 0 ? "Reply" : "Comment"}
-    class="field"
-    onkeydown={(event: KeyboardEvent) => {
-      if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-        event.preventDefault();
-        reply();
-      }
-    }}
-    placeholder={pin.thread.length > 0 ? "Reply" : "Say what to change here"}
-    rows={2}
-    bind:ref={field}
-    bind:value={draft}
-  />
-  {#if problem}
-    <p class="error" id={`pin-error-${pin.id}`} role="alert">{problem}</p>
-  {/if}
-  <footer class="actions">
-    <Button
-      aria-expanded={asks.pending !== null}
-      class="delete"
-      icon={IconTrash}
-      label="Delete"
-      onclick={askDelete}
-      size="sm"
-      variant="ghost"
+  <div class="foot" bind:this={foot}>
+    <Textarea
+      aria-describedby={problem ? `pin-error-${pin.id}` : undefined}
+      aria-invalid={problem ? true : undefined}
+      aria-label={pin.thread.length > 0 ? "Reply" : "Comment"}
+      class="field"
+      onkeydown={(event: KeyboardEvent) => {
+        if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+          event.preventDefault();
+          reply();
+        }
+      }}
+      placeholder={pin.thread.length > 0 ? "Reply" : "Say what to change here"}
+      rows={2}
+      bind:ref={field}
+      bind:value={draft}
     />
-    {#if pin.resolvedAt}
-      <Button
-        icon={IconReopen}
-        label="Reopen"
-        onclick={() => onresolve(false)}
-        size="sm"
-        variant="outline"
-      />
-    {:else}
-      <Button
-        icon={IconSuccess}
-        label="Resolve"
-        onclick={() => onresolve(true)}
-        size="sm"
-        variant="outline"
-      />
+    {#if problem}
+      <p class="error" id={`pin-error-${pin.id}`} role="alert">{problem}</p>
     {/if}
-    <Button disabled={!draft.trim()} label="Reply" onclick={reply} size="sm" />
-  </footer>
-  <AskHere asker={asks} at="delete" />
+    <footer class="actions">
+      <Button
+        aria-expanded={asks.pending !== null}
+        class="delete"
+        icon={IconTrash}
+        label="Delete"
+        onclick={askDelete}
+        size="sm"
+        variant="ghost"
+      />
+      {#if pin.resolvedAt}
+        <Button
+          icon={IconReopen}
+          label="Reopen"
+          onclick={() => onresolve(false)}
+          size="sm"
+          variant="outline"
+        />
+      {:else}
+        <Button
+          icon={IconSuccess}
+          label="Resolve"
+          onclick={() => onresolve(true)}
+          size="sm"
+          variant="outline"
+        />
+      {/if}
+      <Button
+        disabled={!draft.trim()}
+        label="Reply"
+        onclick={reply}
+        size="sm"
+      />
+    </footer>
+    <AskHere asker={asks} at="delete" />
+  </div>
 </div>
 
 <style>
@@ -336,7 +417,31 @@
   }
   .head {
     display: flex;
+    flex-shrink: 0;
     align-items: center;
+    gap: var(--space-2);
+  }
+  /* The one scroller: past the card's cap it gives up height, never the
+     head or the foot. The card itself scrolls only when the head and foot
+     alone outgrow its room (a phone's keyboard over a short well). */
+  .room {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: var(--space-2);
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  /* Squeezed (the head and foot alone outgrow the card): the thread keeps
+     its whole height inside the card's own scroll, never shrinking away. */
+  .room.whole {
+    flex-shrink: 0;
+  }
+  .foot {
+    display: flex;
+    flex-shrink: 0;
+    flex-direction: column;
     gap: var(--space-2);
   }
   .anchor {

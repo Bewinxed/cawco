@@ -69,6 +69,12 @@
  *    nothing written is taken back; one with words keeps them, back in its
  *    field when it opens again and after the desk reloads. A press on
  *    another pin's disc opens that pin's card in its place.
+ *
+ * And the owner's standing rule ("having the user have to scroll down to
+ * even figure out there's stuff below is terrible UX"):
+ * f. A pin whose thread runs past the card's cap: the thread scrolls in its
+ *    room and the card does not, and Resolve, Reply and the field stand
+ *    inside the card's box.
  */
 import { join } from "node:path";
 import type { Frame } from "playwright-core";
@@ -309,6 +315,7 @@ const run = async (kit: Kit) => {
   await scrollChecks(on, "window");
   await scrollChecks(on, "container");
   await dismissChecks(on);
+  await roomChecks(on);
   await cutoverCheck(kit);
   kit.check(
     "the pages said no error",
@@ -1930,6 +1937,126 @@ const dismissChecks = async (on: On) => {
 };
 
 /** Types `words` into pin `number`'s open card, unsaid: its draft. */
+/**
+ * (f) A thread longer than the card's cap: the agent answers pin 1 twenty
+ * times; its card, opened from its row, keeps its head and its foot whole
+ * and scrolls the thread alone.
+ */
+const roomChecks = async (on: On) => {
+  const frame = await pageFrame(on);
+  const pin = Object.values((await docOf(frame)).pins).find(
+    (one) => Number(one.number) === 1
+  ) as { id: string } | undefined;
+  if (!pin) {
+    on.kit.check("f: pin 1 on the page", false, "none");
+    return;
+  }
+  const replies = 20;
+  for (let n = 1; n <= replies; n += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: the replies land in order, each a thread entry
+    await on.fleet.api(
+      `/api/instances/${on.session}/artifacts/comments/${pin.id}/reply`,
+      {
+        text: `Reply ${n} of ${replies}: made the card's spacing tighter, and this line runs long enough to wrap.`,
+      }
+    );
+  }
+  await on.page.locator('.pin-list .pin-row[data-pin-row="1"]').click();
+  const card = on.page.locator('.pin-card[data-pin-card="1"]');
+  await until(
+    "the seeded replies in pin 1's card",
+    () => card.locator(".entry").count(),
+    (count) => count > replies,
+    15_000
+  ).catch(() => 0);
+  await settle(on.page, 400);
+  const seen = await card.evaluate((el) => {
+    const box = (part: Element | null) => {
+      const r = part?.getBoundingClientRect();
+      return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+    };
+    const room = el.querySelector("[data-pin-room]");
+    const button = (name: string) =>
+      [...el.querySelectorAll("button")].find(
+        (one) => one.textContent?.trim() === name
+      ) ?? null;
+    return {
+      card: box(el),
+      cardScrolls: el.scrollHeight > el.clientHeight + 1,
+      room: room
+        ? {
+            scroll: room.scrollHeight,
+            height: room.clientHeight,
+            atEnd: room.scrollTop + room.clientHeight >= room.scrollHeight - 1,
+          }
+        : null,
+      entries: el.querySelectorAll(".entry").length,
+      resolve: box(button("Resolve")),
+      reply: box(button("Reply")),
+      field: box(el.querySelector("textarea")),
+    };
+  });
+  const inside = (part: typeof seen.resolve) =>
+    !!part &&
+    !!seen.card &&
+    part.x >= seen.card.x - 1 &&
+    part.y >= seen.card.y - 1 &&
+    part.x + part.w <= seen.card.x + seen.card.w + 1 &&
+    part.y + part.h <= seen.card.y + seen.card.h + 1;
+  on.kit.check(
+    "f: with a thread longer than the card's cap, only the thread scrolls (its room overflows, the card does not), opened at its newest entry, and Resolve, Reply and the field stand inside the card's box",
+    seen.entries > replies &&
+      !!seen.room &&
+      seen.room.scroll > seen.room.height &&
+      seen.room.atEnd &&
+      !seen.cardScrolls &&
+      inside(seen.resolve) &&
+      inside(seen.reply) &&
+      inside(seen.field),
+    JSON.stringify(seen)
+  );
+
+  // Squeezed: the card's room cut to 150px, less than its head and foot
+  // alone (a phone's keyboard over a short well). The thread keeps its whole
+  // height in the card's own scroll, never shrunk to nothing.
+  await on.page.evaluate(() => {
+    const room = document.querySelector<HTMLElement>(".pin-room");
+    room?.style.setProperty("bottom", "auto");
+    room?.style.setProperty("height", "150px");
+  });
+  await settle(on.page, 400);
+  const squeezed = await card.evaluate((el) => {
+    const room = el.querySelector("[data-pin-room]");
+    return {
+      whole: room?.classList.contains("whole") ?? false,
+      room: room
+        ? { scroll: room.scrollHeight, height: room.clientHeight }
+        : null,
+      cardScrolls: el.scrollHeight > el.clientHeight + 1,
+    };
+  });
+  await on.page.evaluate(() => {
+    const room = document.querySelector<HTMLElement>(".pin-room");
+    room?.style.removeProperty("bottom");
+    room?.style.removeProperty("height");
+  });
+  await settle(on.page, 400);
+  const unsqueezed = await card.evaluate(
+    (el) =>
+      el.querySelector("[data-pin-room]")?.classList.contains("whole") ?? true
+  );
+  on.kit.check(
+    "f: squeezed below its head and foot, the card keeps the thread whole (none of it clipped) and scrolls itself; with its room back, the thread scrolls alone again",
+    squeezed.whole &&
+      !!squeezed.room &&
+      squeezed.room.height >= squeezed.room.scroll - 1 &&
+      squeezed.cardScrolls &&
+      !unsqueezed,
+    `${JSON.stringify(squeezed)}; after, whole ${unsqueezed}`
+  );
+  await on.page.keyboard.press("Escape");
+};
+
 const writeIn = (on: On, number: number, words: string) =>
   on.page
     .locator(`.pin-card[data-pin-card="${number}"]`)

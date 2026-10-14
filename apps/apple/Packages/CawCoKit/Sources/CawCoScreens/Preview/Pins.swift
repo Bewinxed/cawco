@@ -300,7 +300,10 @@ private final class MovedRow: UIView {
 /// delete under its question. A tap anywhere outside it closes it, as Esc
 /// and its Close do (PreviewController's outside tap, PinCard.svelte's
 /// outside press); what the field holds is the pin's draft, which the
-/// controller keeps with the pin.
+/// controller keeps with the pin. A column, as the web's: the head over it,
+/// the field and its actions at its foot, always in view, and between them
+/// the picture and the thread, the only part that scrolls, under the house
+/// edge fade.
 final class PinCard: UIView, UITextViewDelegate {
     var onClose: () -> Void = {}
     /// The person typed: the pin's unsaid words as they stand.
@@ -325,6 +328,18 @@ final class PinCard: UIView, UITextViewDelegate {
     private let source = KitLabel(TypeScale.typeCode.with(points: TypeScale.typeMeta.points), ink: Palette.inkMuted)
     private let thumb = UIButton(type: .custom)
     private let thread = UIStackView()
+    /// The picture and the thread, the one part of the card that scrolls
+    /// (PinCard.svelte `.room`): past the card's cap it gives up height,
+    /// never the head over it or the field and actions under it.
+    private let room = UIScrollView()
+    private let roomColumn = UIStackView()
+    /// The house edge fade on the room where more is above or below (`kit-edge-fade-block`).
+    private var roomFade: EdgeFade?
+    /// The column fits the card, so the room gives up height; off while the
+    /// head and foot alone outgrow the card (`fitRoom`).
+    private var columnFits: NSLayoutConstraint!
+    /// The thread is read at its end: a new entry keeps it there.
+    private var roomAtEnd = true
     private let field = PinField()
     private let problem = KitLabel(TypeScale.typeMeta, ink: Palette.dataBad, lines: 0)
     private var resolveButton: UIButton!
@@ -379,6 +394,14 @@ final class PinCard: UIView, UITextViewDelegate {
 
         thread.axis = .vertical
         thread.spacing = Space.space2
+        for part in [thumbRow, thread] as [UIView] { roomColumn.addArrangedSubview(part) }
+        roomColumn.axis = .vertical
+        roomColumn.spacing = Space.space2
+        roomColumn.translatesAutoresizingMaskIntoConstraints = false
+        room.translatesAutoresizingMaskIntoConstraints = false
+        room.alwaysBounceVertical = false
+        room.keyboardDismissMode = .interactive
+        room.addSubview(roomColumn)
 
         field.delegate = self
         problem.isHidden = true
@@ -404,25 +427,46 @@ final class PinCard: UIView, UITextViewDelegate {
         actions.spacing = Space.space2
         actions.alignment = .center
 
-        for part in [head, thumbRow, thread, field, problem, actions, asks] as [UIView] { column.addArrangedSubview(part) }
+        for part in [head, room, field, problem, actions, asks] as [UIView] { column.addArrangedSubview(part) }
         column.axis = .vertical
         column.spacing = Space.space2
         column.translatesAutoresizingMaskIntoConstraints = false
         scroll.translatesAutoresizingMaskIntoConstraints = false
         scroll.resized = { [weak self] in
+            self?.fitRoom()
             self?.keepWritingInView()
             self?.keepAskInView()
         }
+        room.delegate = self
         // A drag of what the card holds puts the keyboard away with it, as iOS's lists do.
         scroll.keyboardDismissMode = .interactive
         scroll.addSubview(column)
         addSubview(scroll)
         addSubview(closeButton)
-        // As tall as what it holds, up to what its place allows; past that it scrolls.
+        // As tall as what it holds, up to what its place allows. Past that
+        // the room gives up height first: it wants all of its thread (just
+        // under every label's and button's compression resistance),
+        // the column wants to fit the card (just under required), so the
+        // thread shrinks and the head, field and actions stay whole. Only
+        // when those alone outgrow the card (a keyboard over a short well)
+        // does the card itself scroll, keeping the field and its actions in
+        // view while the person writes.
         let fits = scroll.heightAnchor.constraint(equalTo: scroll.contentLayoutGuide.heightAnchor)
         fits.priority = .defaultLow
         let pad = 11.0
+        // Under every label's and button's compression resistance (750): the room is what gives.
+        let roomWhole = room.heightAnchor.constraint(equalTo: room.contentLayoutGuide.heightAnchor)
+        roomWhole.priority = .defaultHigh - 1
+        columnFits = column.heightAnchor.constraint(lessThanOrEqualTo: scroll.frameLayoutGuide.heightAnchor, constant: -pad * 2)
+        columnFits.priority = .required - 1
         NSLayoutConstraint.activate([
+            roomColumn.topAnchor.constraint(equalTo: room.contentLayoutGuide.topAnchor),
+            roomColumn.bottomAnchor.constraint(equalTo: room.contentLayoutGuide.bottomAnchor),
+            roomColumn.leadingAnchor.constraint(equalTo: room.contentLayoutGuide.leadingAnchor),
+            roomColumn.trailingAnchor.constraint(equalTo: room.contentLayoutGuide.trailingAnchor),
+            roomColumn.widthAnchor.constraint(equalTo: room.frameLayoutGuide.widthAnchor),
+            roomWhole,
+            columnFits,
             thumb.widthAnchor.constraint(equalToConstant: Size.cPinThumb),
             thumb.heightAnchor.constraint(equalToConstant: Size.cPinThumb),
             scroll.topAnchor.constraint(equalTo: topAnchor),
@@ -438,6 +482,7 @@ final class PinCard: UIView, UITextViewDelegate {
             closeButton.topAnchor.constraint(equalTo: topAnchor, constant: pad),
             closeButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -pad),
         ])
+        roomFade = EdgeFade(room)
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (card: PinCard, _: UITraitCollection) in card.paint() }
         paint()
     }
@@ -467,12 +512,20 @@ final class PinCard: UIView, UITextViewDelegate {
         thumb.setImage(image, for: .normal)
         thumb.superview?.isHidden = image == nil
         thumb.accessibilityLabel = "Pin \(pin.label)'s picture, full size"
-        if fresh || pin.thread != shownThread {
+        let threadChanged = fresh || pin.thread != shownThread
+        if threadChanged {
             shownThread = pin.thread
             for entry in thread.arrangedSubviews { entry.removeFromSuperview() }
             for entry in pin.thread { thread.addArrangedSubview(Self.entry(entry)) }
         }
         thread.isHidden = pin.thread.isEmpty
+        room.isHidden = pin.thread.isEmpty && image == nil
+        // The thread opens at its newest entry, beside the field that answers
+        // it, and follows a new one while the person reads at its end
+        // (PinCard.svelte); reading further back, they are left where they are.
+        if threadChanged, !pin.thread.isEmpty, fresh || roomAtEnd {
+            Task { @MainActor [weak self] in self?.roomToEnd() }
+        }
         if fresh { field.text = draft }
         field.placeholder = pin.thread.isEmpty ? "Say what to change here" : "Reply"
         field.accessibilityLabel = pin.thread.isEmpty ? "Comment" : "Reply"
@@ -484,6 +537,40 @@ final class PinCard: UIView, UITextViewDelegate {
         paintReply()
         // A new pin's card takes the keyboard: the person tapped to say something.
         if fresh, pin.thread.isEmpty { field.becomeFirstResponder() }
+    }
+
+    /// The room scrolled to its end, once the card has laid out where it stands.
+    private func roomToEnd() {
+        superview?.layoutIfNeeded()
+        layoutIfNeeded()
+        room.contentOffset.y = max(0, room.contentSize.height - room.bounds.height)
+        roomAtEnd = true
+    }
+
+    /// Where the person reads the room: at its end, a new entry keeps it there.
+    func scrollViewDidScroll(_ scrollView: UIScrollView) {
+        guard scrollView === room else { return }
+        roomAtEnd = room.contentOffset.y >= room.contentSize.height - room.bounds.height - 1
+    }
+
+    /// When the head and the foot alone outgrow the card (a keyboard over a
+    /// short well), the room keeps its whole thread inside the card's own
+    /// scroll, the field kept in view while writing (`keepWritingInView`):
+    /// the thread stays readable above the field instead of shrinking to
+    /// nothing. Otherwise the column fits the card and the room gives.
+    private func fitRoom() {
+        let width = column.bounds.width
+        guard width > 0 else { return }
+        let shown = column.arrangedSubviews.filter { !$0.isHidden }
+        let fixed = shown.filter { $0 !== room }.reduce(0.0) { sum, part in
+            sum + part.systemLayoutSizeFitting(CGSize(width: width, height: 0),
+                                               withHorizontalFittingPriority: .required,
+                                               verticalFittingPriority: .fittingSizeLevel).height
+        }
+        let gaps = column.spacing * Double(max(0, shown.count - 1))
+        // The column's 11pt in, top and foot.
+        let squeezed = fixed + gaps + 22 > scroll.bounds.height + 1
+        if columnFits.isActive == squeezed { columnFits.isActive = !squeezed }
     }
 
     /// Said under the field, in the error formula (PinCard.svelte `.error`).
@@ -664,7 +751,7 @@ final class PinCard: UIView, UITextViewDelegate {
     /// Where the probe taps: the field, Reply, Resolve or Reopen (its words), Close.
     /// Its scroll's offset and content height, and whether the field has the keyboard.
     var probeScroll: String {
-        "offset=\(Int(scroll.contentOffset.y)) content=\(Int(scroll.contentSize.height)) height=\(Int(scroll.bounds.height)) writing=\(field.isFirstResponder)"
+        "offset=\(Int(scroll.contentOffset.y)) content=\(Int(scroll.contentSize.height)) height=\(Int(scroll.bounds.height)) writing=\(field.isFirstResponder) room=\(Int(room.contentSize.height))/\(Int(room.bounds.height))@\(Int(room.contentOffset.y))"
     }
 
     func probeLine() -> String {

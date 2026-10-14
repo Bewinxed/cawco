@@ -207,6 +207,8 @@ const POINT = /^(-?\d+),(-?\d+)$/;
 /** PreviewController's `preview card-geometry card=x,y,w,h …` line: the open card's frame in the window. */
 const CARD_GEOMETRY =
   /^preview card-geometry card=(-?\d+),(-?\d+),(\d+),(\d+) /;
+/** The thread room's content and height on that line (`room=content/height`). */
+const CARD_ROOM = / room=(\d+)\/(\d+)@(-?\d+)/;
 /** The app's lines a failure keeps on their own: the card's, the mode's, the pins'. */
 const CARD_STORY = /^preview (card|comment|pins |read |escape|list )/;
 /** "x,y" as a point; "none" (hidden, or not in a window) as none. */
@@ -355,6 +357,13 @@ const cardLast = () => seen.map(cardOf).findLast((card) => card !== undefined);
 const writingNow = () =>
   seen.findLast((line) => CARD_LINE.test(line))?.includes(" writing=true ") ??
   false;
+/** The card's thread room as its newest `preview card-geometry` line has it: how much it holds, in how much height. */
+const roomLast = () => {
+  const m = seen.findLast((line) => CARD_GEOMETRY.test(line))?.match(CARD_ROOM);
+  return m
+    ? { content: Number(m[1]), height: Number(m[2]), offset: Number(m[3]) }
+    : undefined;
+};
 /** The open card's frame in the window's points, from its newest `preview card-geometry` line. */
 const cardFrameLast = (): Frame | undefined => {
   const m = seen
@@ -1093,6 +1102,25 @@ xcrun simctl install ${udid} "${app}"`);
   // The send stamped the frame's sentAt on the pin; the session counts as
   // working (-preview-working): its row wears the live dot, and its card,
   // opened again from that row, does too.
+  // The agent answers, at length: a thread longer than the card's cap.
+  const SEEDED = 8;
+  if (sentPin) {
+    for (let n = 1; n <= SEEDED; n += 1) {
+      // biome-ignore lint/performance/noAwaitInLoops: the replies land in order, each a thread entry
+      await fleet.api(
+        `/api/instances/${id}/artifacts/comments/${sentPin.id}/reply`,
+        {
+          text: `Reply ${n} of ${SEEDED}: the count is bigger now, and this line runs long enough to wrap in the card.`,
+        }
+      );
+    }
+  }
+  await lineAfter(
+    "the app's pins with the seeded replies",
+    mark,
+    (l) => l.startsWith("preview pins ") && l.includes(` 1=open:${SEEDED + 1}`),
+    15_000
+  );
   sheet = await openSheet("the Pins sheet after the send");
   await pause(800);
   mark = seen.length;
@@ -1114,29 +1142,32 @@ xcrun simctl install ${udid} "${app}"`);
   // The card as it stands once the sheet has gone and it has laid out: its newest line.
   await pause(1200);
   card = cardLast();
-  // On the phone the card is at most 70% of the well and scrolls what it
-  // holds past that: its footer can stand under its own lower edge (Resolve
-  // at 274,748 under a card ending at 734). A person scrolls the card to
-  // reach it; so does the probe, a drag inside the card, then its newest line.
-  const box = cardFrameLast();
-  if (card?.resolve && box && card.resolve.y > box.y + box.height - 8) {
-    await drag(
-      { x: box.x + box.width / 2, y: box.y + box.height - 12 },
-      { x: box.x + box.width / 2, y: box.y + 12 },
-      0.6,
-      "inside pin 1's card, scrolling its footer into view"
-    );
-    await pause(1200);
-    card = cardLast();
-  }
+  // The thread is longer than the card's cap (the seeded replies): the
+  // thread scrolls in its room and the actions stand whole in the card, no
+  // scroll needed to find them (the owner: "having the user have to scroll
+  // down to even figure out there's stuff below is terrible UX").
   const cardNow = cardFrameLast();
-  if (
-    card?.number !== 1 ||
-    !card.resolve ||
-    (cardNow && card.resolve.y > cardNow.y + cardNow.height)
-  ) {
+  const roomNow = roomLast();
+  const inCard = (at: Point | undefined) =>
+    !!at &&
+    !!cardNow &&
+    at.x >= cardNow.x &&
+    at.x <= cardNow.x + cardNow.width &&
+    at.y >= cardNow.y &&
+    at.y <= cardNow.y + cardNow.height;
+  check(
+    "with a thread longer than the card's cap, only the thread scrolls, opened at its newest entry: Resolve and the field stand inside the card's frame",
+    card?.number === 1 &&
+      !!roomNow &&
+      roomNow.content > roomNow.height &&
+      roomNow.offset >= roomNow.content - roomNow.height - 1 &&
+      inCard(card.resolve) &&
+      inCard(card.field),
+    `card at ${cardNow ? frameText(cardNow) : "unlogged"}; room ${roomNow ? `${roomNow.content} of content in ${roomNow.height}, at ${roomNow.offset}` : "unlogged"}; Resolve at ${card?.resolve ? `${card.resolve.x},${card.resolve.y}` : "none"}; field at ${card?.field ? `${card.field.x},${card.field.y}` : "none"}`
+  );
+  if (card?.number !== 1 || !card.resolve) {
     throw new Error(
-      `no Resolve in view on pin 1's card after the sheet went (card at ${cardNow ? frameText(cardNow) : "unlogged"}; newest card line: ${seen.findLast((l) => cardOf(l) !== undefined) ?? "none"})`
+      `no card for pin 1 up after the sheet went (newest card line: ${seen.findLast((l) => cardOf(l) !== undefined) ?? "none"})`
     );
   }
   mark = seen.length;
