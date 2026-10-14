@@ -120,10 +120,12 @@ const respond = (request: Seen): Reply => {
     return reply;
   }
   // Every plain ask not yet answered, wherever the turn read it: words sent
-  // beside his question are read mid-turn, after its answer, where `last`
-  // is the tool's result.
+  // beside his question reach the model mid-turn, after its answer, as a
+  // `system` message ("The user sent a new message while you were working"),
+  // which `last` and `all` (user messages only) do not carry; the request's
+  // own body does.
   const plain = [
-    ...new Set([...request.all.matchAll(PLAIN)].map((m) => m[1] ?? "")),
+    ...new Set([...request.body.matchAll(PLAIN)].map((m) => m[1] ?? "")),
   ].filter((tag) => tag && !answeredPlain.has(tag));
   if (plain.length > 0) {
     for (const tag of plain) {
@@ -242,6 +244,17 @@ const evidence = async (kit: Kit, fleet: KitFleet): Promise<void> => {
         last: s.last.slice(-400),
         tools: s.toolNames.filter((n) => n.includes("cawco") || n === ASK),
       })),
+      null,
+      2
+    )
+  );
+  await writeFile(
+    join(kit.out, "requests.json"),
+    JSON.stringify(
+      fleet.seen.slice(-3).map((s) => {
+        const { messages } = JSON.parse(s.body) as { messages?: unknown[] };
+        return (messages ?? []).slice(-3);
+      }),
       null,
       2
     )
