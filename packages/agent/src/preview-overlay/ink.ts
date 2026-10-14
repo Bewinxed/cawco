@@ -38,6 +38,7 @@ import { INK_LIMITS, type InkGroup, type InkPoint } from "@cawco/core/ink";
 import { getStroke } from "perfect-freehand";
 import type { Map as YMap } from "yjs";
 import { artifact } from "./artifact";
+import { framesOf, rectOf } from "./frames";
 import { newId } from "./id";
 import type { Pins } from "./pins";
 import type { InkChrome, Pick } from "./radial";
@@ -100,6 +101,8 @@ export interface InkDeps {
   /** The pins, drawn after the ink each time it is drawn. */
   pins: () => Pins;
   post: (type: string, payload?: object) => void;
+  /** Whether an anchor's frames lead to one still loading: not found yet, and not gone. */
+  waiting: (anchor: PageAnchor) => boolean;
 }
 
 export interface Ink {
@@ -117,10 +120,15 @@ export interface Ink {
   sent: () => void;
 }
 
+/** `el`'s box in the top page, px, through any frames it stands in. */
 const pageBox = (el: Element): Box => {
-  const r = el.getBoundingClientRect();
+  const r = rectOf(el);
   return { x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height };
 };
+
+/** `el`'s parent, out of its frame's document into the frame itself at the frame's root. */
+const outward = (el: Element): Element | null =>
+  el.parentElement ?? framesOf(el).at(-1) ?? null;
 
 const boxOf = (points: Point[]): Box => {
   const xs = points.map((p) => p[0]);
@@ -419,19 +427,19 @@ export function startInk(deps: InkDeps): Ink {
     passive: false,
   });
 
-  /** The deepest element whose box holds `box` (the page's px). */
+  /** The deepest element whose box holds `box` (the page's px), out through any frame the stroke spills past. */
   const anchorFor = (box: Box): Element => {
     let el =
       deps.elementAt(
         box.x + box.w / 2 - scrollX,
         box.y + box.h / 2 - scrollY
       ) ?? document.body;
-    while (
-      el.parentElement &&
-      el !== document.body &&
-      !contains(pageBox(el), box)
+    for (
+      let up = outward(el);
+      up && el !== document.body && !contains(pageBox(el), box);
+      up = outward(el)
     ) {
-      el = el.parentElement;
+      el = up;
     }
     return el;
   };
@@ -563,6 +571,10 @@ export function startInk(deps: InkDeps): Ink {
   const settled = () =>
     artifact.kind() === "page" && document.readyState !== "loading";
 
+  /** Whether a group no anchor finds is gone, not waiting on a frame still loading. */
+  const goneFrom = (group: InkGroup) =>
+    !("selector" in group.anchor && deps.waiting(group.anchor));
+
   function draw() {
     for (const node of [...layer.children]) {
       if (!node.hasAttribute("data-live")) {
@@ -576,14 +588,18 @@ export function startInk(deps: InkDeps): Ink {
     }
     fitToPage(layer);
     const { ink } = maps();
-    const gone: InkGroup[] = [];
-    const found: InkGroup[] = [];
     const brand = chrome.token("--brand-solid");
-    for (const group of ink.values()) {
-      const at = "selector" in group.anchor ? deps.locate(group.anchor) : null;
-      const el = at?.el;
+    const groups = [...ink.values()];
+    const located = groups.map((group) => ({
+      group,
+      el: "selector" in group.anchor ? deps.locate(group.anchor)?.el : null,
+    }));
+    const gone = located
+      .filter(({ group, el }) => !el && goneFrom(group))
+      .map(({ group }) => group);
+    const found: InkGroup[] = [];
+    for (const { group, el } of located) {
       if (!el) {
-        gone.push(group);
         continue;
       }
       const reread = rereadOn(group, el);

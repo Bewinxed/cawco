@@ -30,6 +30,19 @@
  *    in the moved tray, and Place again with a tap pins it anew.
  * 6. No `selection.md`, `SelectionChip` or `SelectionPopover` is left in
  *    apps/dashboard/src or packages.
+ *
+ * And the owner's report (2026-10-14: the card didn't open on a new pin,
+ * no delete, the whole iframe outlined):
+ * a. Every tapped pin's card opens with its field focused: the first, the
+ *    second, and a third tapped while the second's card is open.
+ * b. A dev server's preview whose content stands in a same-origin inner
+ *    frame: hovering the inner button outlines the button mapped to the top
+ *    document; a tap stores an anchor with the frame chain and the button's
+ *    inner selector and opens its card; a reload that moves the button finds
+ *    the pin on it again; the inner frame's own scroll moves the disc.
+ * c. Delete, asked in the card itself: the pin leaves the doc and the page,
+ *    its card closes, the other pins keep their numbers; the app's
+ *    `cawco:delete` on a gone pin answers the refusal.
  */
 import { join } from "node:path";
 import type { Frame } from "playwright-core";
@@ -57,6 +70,8 @@ const OPEN_TAB = /^Open/;
 const ROOT = join(import.meta.dir, "..", "..", "..");
 
 const MOVED_TEXT = "The paragraph, moved down and reworded.";
+/** The pane's page frame. */
+const FRAME = 'iframe[title="Preview"]';
 
 /** The page as each revision has it: first, the paragraph moved, renamed, gone. */
 const page = (revision: "first" | "moved" | "renamed" | "gone") => {
@@ -260,6 +275,8 @@ const run = async (kit: Kit) => {
   await agentChecks(on, frame, one, two);
   await hostChecks(on, frame, one);
   await anchorChecks(on, frame, id, one);
+  await tapAndDeleteChecks(on, frame);
+  await frameChecks(on);
   await cutoverCheck(kit);
   kit.check(
     "the pages said no error",
@@ -336,6 +353,12 @@ const commentChecks = async (on: On, frame: Frame) => {
   if (!(pin && cardBox)) {
     return null;
   }
+  const first = await focusedCard(on, 1);
+  on.kit.check(
+    "a: the first tapped pin's card is in the pane with its field focused",
+    first.shown && first.focused,
+    JSON.stringify(first)
+  );
 
   await on.page.keyboard.press("Escape");
   const closed = (await card.count()) === 0;
@@ -655,6 +678,18 @@ const hostChecks = async (on: On, frame: Frame, one: string) => {
     { type: "cawco:reply", pin: "no-such-pin", text: "Lost." },
     "cawco:reply-result"
   );
+  const goneDelete = await ask(
+    { type: "cawco:delete", pin: "no-such-pin" },
+    "cawco:delete-result"
+  );
+  on.kit.check(
+    "c: the host's cawco:delete on a gone pin answers cawco:delete-result with the refusal's sentence",
+    goneDelete?.pin === "no-such-pin" &&
+      goneDelete.ok === false &&
+      goneDelete.error ===
+        "This pin is gone from the page already, so there was nothing to delete.",
+    JSON.stringify(goneDelete)
+  );
   on.kit.check(
     "4: the host's cawco:reply and cawco:resolve write pin 1's doc (a person's entry, resolvedAt set then cleared) and answer ok; a gone pin answers the refusal",
     replied?.pin === one &&
@@ -762,6 +797,393 @@ const anchorChecks = async (on: On, frame: Frame, id: string, one: string) => {
       mode === "false",
     `Comment ${modeBefore} → ${during} → ${mode}; anchor ${JSON.stringify(placed.anchor)}; movedAt ${String(placed.movedAt)}`
   );
+};
+
+/**
+ * A dev server's app whose content stands in a same-origin inner frame, as
+ * the owner's Routines preview does: a header over a framed page, the frame
+ * inset and bordered so its offset is no round number, and the inner page
+ * tall enough to scroll.
+ */
+const OUTER_APP = `<!doctype html><html lang="en"><head><title>Routines</title>
+<style>
+  body { margin: 0; font: 16px/1.5 system-ui; }
+  header { height: 56px; }
+  main { padding-left: 37px; }
+  iframe { display: block; width: 80%; height: 420px; border: 3px solid #ccc; }
+</style></head>
+<body><div id="app"><div><header>Routines</header><main><div><iframe src="inner/" title="Routines inner"></iframe></div></main></div></div></body></html>`;
+/** The inner page; on every load after the first, a band above moves its button down, so a pin found again is found on the button, not where it was tapped. */
+const innerApp = (
+  moved: boolean
+) => `<!doctype html><html lang="en"><head><title>Inner</title>
+<style>
+  body { margin: 0; padding: 24px 29px; font: 16px/1.5 system-ui; }
+  .band { height: 90px; }
+  .tall { height: 1400px; }
+</style></head>
+<body><p>The routines, inside a frame.</p>${moved ? '<div class="band"></div>' : ""}<button type="button">Run routine</button><p class="tall">Below.</p></body></html>`;
+
+/** Where pin `number`'s disc stands in the outer page's viewport; null when it is not drawn. */
+const discAt = (outer: Frame, number: number) =>
+  outer.evaluate((n) => {
+    const g = document.querySelector<SVGGElement>(
+      `svg[data-cawco-pins] g[data-pin="${n}"]`
+    );
+    const m = g?.transform.baseVal.consolidate()?.matrix;
+    return m ? { x: m.e - scrollX, y: m.f - scrollY } : null;
+  }, number);
+
+/** The outer page's inner frame, once its document has the button. */
+const innerFrameOf = async (outer: Frame): Promise<Frame> =>
+  (await until(
+    "the inner frame's button",
+    async () => {
+      const handle = await outer
+        .locator('iframe[title="Routines inner"]')
+        .elementHandle()
+        .catch(() => null);
+      const inner = await handle?.contentFrame();
+      return inner && (await inner.locator("button").count()) === 1
+        ? inner
+        : null;
+    },
+    Boolean,
+    30_000
+  )) as Frame;
+
+/** The inner button's box in the outer page's viewport: the frame's content box plus the button's own. */
+const innerButtonBox = (outer: Frame) =>
+  outer.evaluate(() => {
+    const frame = document.querySelector<HTMLIFrameElement>(
+      'iframe[title="Routines inner"]'
+    );
+    const button = frame?.contentDocument?.querySelector("button");
+    if (!(frame && button)) {
+      return null;
+    }
+    const f = frame.getBoundingClientRect();
+    const b = button.getBoundingClientRect();
+    return {
+      x: f.x + frame.clientLeft + b.x,
+      y: f.y + frame.clientTop + b.y,
+      w: b.width,
+      h: b.height,
+    };
+  });
+
+/** (b) Comment mode reaches into a same-origin inner frame: the outline, the anchor, the card, re-location after a reload. */
+const frameChecks = async (on: On) => {
+  let innerLoads = 0;
+  const app = Bun.serve({
+    port: 0,
+    fetch: (request) => {
+      const inner = new URL(request.url).pathname.includes("/inner");
+      if (inner) {
+        innerLoads += 1;
+      }
+      return new Response(inner ? innerApp(innerLoads > 1) : OUTER_APP, {
+        headers: { "content-type": "text/html" },
+      });
+    },
+  });
+  try {
+    await on.call(CREATE, {
+      kind: "preview",
+      name: "routines",
+      port: app.port,
+    });
+    const outer = (await until(
+      "the preview's outer page in the pane",
+      async () => {
+        const frame = await pageFrame(on);
+        return (await frame
+          .locator('iframe[title="Routines inner"]')
+          .count()
+          .catch(() => 0)) === 1
+          ? frame
+          : null;
+      },
+      Boolean,
+      60_000
+    )) as Frame;
+    await innerFrameOf(outer);
+    await settle(on.page, 600);
+    const comment = on.page.locator(
+      ".preview-pane button[aria-keyshortcuts='C']"
+    );
+    await comment.click();
+    await pageInComment(outer, true);
+    const pane = await on.page.locator(FRAME).boundingBox();
+    const button = await innerButtonBox(outer);
+    if (!(pane && button)) {
+      on.kit.check("b: the inner frame's button has a box", false, "none");
+      return;
+    }
+    const at = {
+      x: pane.x + button.x + button.w * 0.4,
+      y: pane.y + button.y + button.h / 2,
+    };
+    await on.page.mouse.move(at.x - 20, at.y - 20);
+    await on.page.mouse.move(at.x, at.y, { steps: 4 });
+    await settle(on.page, 200);
+    const outline = await outlineOf(outer);
+    const label = await outer.evaluate(
+      () =>
+        document
+          .querySelector("cawco-overlay")
+          ?.shadowRoot?.querySelector<HTMLElement>(".label")?.textContent ?? ""
+    );
+    on.kit.check(
+      "b: hovering the inner frame's button outlines the button, mapped to the top document (±1px), not the frame",
+      near(outline, button, 1) && label.startsWith("button"),
+      `outline ${JSON.stringify(outline)}; button ${JSON.stringify(button)}; label ${JSON.stringify(label)}`
+    );
+
+    const before = Object.keys((await docOf(outer)).pins).length;
+    await on.page.mouse.click(at.x, at.y);
+    const pins = await until(
+      "the inner button's pin in the doc",
+      async () => (await docOf(outer)).pins,
+      (all) => Object.keys(all).length > before,
+      10_000
+    ).catch(() => ({}) as Pins);
+    const made = Object.values(pins).sort(
+      (a, b) => Number(b.number) - Number(a.number)
+    )[0] as
+      | {
+          anchor: { frames?: string[]; selector: string };
+          id: string;
+          number: number;
+        }
+      | undefined;
+    const resolves = made
+      ? await outer.evaluate(({ frames, selector }) => {
+          let doc: Document | null | undefined = document;
+          for (const one of frames ?? []) {
+            doc = doc?.querySelector<HTMLIFrameElement>(one)?.contentDocument;
+          }
+          const el = doc?.querySelector(selector);
+          return el?.localName === "button" && el.textContent === "Run routine";
+        }, made.anchor)
+      : false;
+    const card = await focusedCard(on, made?.number);
+    on.kit.check(
+      "b: a tap on it stores an anchor whose frame chain names the frame and whose inner selector ends at the button, and its card opens with the field focused",
+      !!made &&
+        made.anchor.frames?.length === 1 &&
+        resolves &&
+        card.shown &&
+        card.focused,
+      `anchor ${JSON.stringify(made?.anchor)}; resolves ${resolves}; card ${JSON.stringify(card)}`
+    );
+    await on.page.keyboard.press("Escape");
+    await on.page.keyboard.press("Escape");
+    if (!made) {
+      return;
+    }
+
+    await on.page.locator('.preview-pane button[aria-label="Reload"]').click();
+    const reloaded = (await until(
+      "the reloaded preview",
+      async () => {
+        const frame = await pageFrame(on);
+        return frame !== outer &&
+          (await frame
+            .locator('iframe[title="Routines inner"]')
+            .count()
+            .catch(() => 0)) === 1
+          ? frame
+          : null;
+      },
+      Boolean,
+      30_000
+    )) as Frame;
+    const inner = await innerFrameOf(reloaded);
+    const box = await innerButtonBox(reloaded);
+    const onButton = (centre: { x: number; y: number } | null) =>
+      !!centre &&
+      !!box &&
+      centre.x >= box.x - 1 &&
+      centre.x <= box.x + box.w + 1 &&
+      centre.y >= box.y - 1 &&
+      centre.y <= box.y + box.h + 1;
+    const disc = await until(
+      "the pin re-placed on the moved button",
+      () => discAt(reloaded, made.number),
+      onButton,
+      10_000
+    ).catch(() => discAt(reloaded, made.number));
+    on.kit.check(
+      "b: after a reload that moves the button 90px down in its frame, the pin is re-located on the same button",
+      onButton(disc) && innerLoads >= 2,
+      `disc ${JSON.stringify(disc)}; button ${JSON.stringify(box)}; inner loads ${innerLoads}`
+    );
+
+    // The inner frame scrolls on its own, the outer page still: the disc follows.
+    await inner.evaluate(() => scrollTo(0, 40));
+    const scrolled = await until(
+      "the disc moved with the frame's scroll",
+      () => discAt(reloaded, made.number),
+      (now) => !!now && !!disc && Math.abs(disc.y - 40 - now.y) <= 1,
+      5000
+    ).catch(() => discAt(reloaded, made.number));
+    on.kit.check(
+      "b: scrolling the inner frame 40px moves the pin's disc up 40px (±1px)",
+      !!disc && !!scrolled && Math.abs(disc.y - 40 - scrolled.y) <= 1,
+      `disc y ${disc?.y} → ${scrolled?.y}`
+    );
+  } finally {
+    await app.stop(true);
+  }
+};
+
+/**
+ * (a) Later taps: a second tapped pin, and a third while the second's card
+ * is open, each open their card with the field focused. (c) Delete, asked in
+ * the card itself: the pin goes from the doc and its disc from the page, its
+ * card closes, and the other pins keep their numbers.
+ */
+const tapAndDeleteChecks = async (on: On, frame: Frame) => {
+  const comment = on.page.locator(
+    ".preview-pane button[aria-keyshortcuts='C']"
+  );
+  await comment.click();
+  await pageInComment(frame, true);
+  const numbersNow = async () =>
+    Object.fromEntries(
+      Object.values((await docOf(frame)).pins).map((pin) => [
+        String(pin.id),
+        Number(pin.number),
+      ])
+    );
+  /** A tap on the page at the screen's `x`, `y` in Comment mode: the new pin's number, and its card as it opens. */
+  const tapPin = async (x: number, y: number) => {
+    const held = Object.keys(await numbersNow()).length;
+    await on.page.mouse.click(x, y);
+    const now = await until(
+      "the tapped pin in the doc",
+      numbersNow,
+      (pins) => Object.keys(pins).length > held,
+      10_000
+    ).catch(numbersNow);
+    const number = Math.max(...Object.values(now));
+    return { number, ...(await focusedCard(on, number)) };
+  };
+  // The second tap of the run, then a third made while the second's card is
+  // open, on the page below that card (it stands over the paragraphs).
+  const second = await screenBox(on, frame, "#second");
+  const tapped = [
+    await tapPin(second.x + second.w * 0.7, second.y + second.h / 2),
+  ];
+  const openCard = await on.page.locator(".pin-card").boundingBox();
+  const tall = await screenBox(on, frame, ".tall");
+  tapped.push(
+    await tapPin(
+      tall.x + 20,
+      Math.max(tall.y + 10, (openCard?.y ?? 0) + (openCard?.height ?? 0) + 20)
+    )
+  );
+  on.kit.check(
+    "a: the second tapped pin, and a third tapped while the second's card is open, each open their card with its field focused",
+    tapped.length === 2 &&
+      tapped[1].number === tapped[0].number + 1 &&
+      tapped.every((one) => one.shown && one.focused),
+    JSON.stringify(tapped)
+  );
+  await on.page.keyboard.press("Escape");
+  await on.page.keyboard.press("Escape");
+
+  const target = tapped[0].number;
+  await on.page.locator(`.pin-list .pin-row[data-pin-row="${target}"]`).click();
+  const before = await numbersNow();
+  const doomed = Object.entries(before).find(
+    ([, number]) => number === target
+  )?.[0];
+  const card = on.page.locator(`[data-pin-card="${target}"]`);
+  // The footer holds Delete at its start and Resolve and Reply at its end, on one row.
+  const footer = await card.locator(".actions").evaluate((row) => {
+    // The card's 11px padding and 1px edge stand before the footer's first button.
+    const holder = row.closest(".pin-card")?.getBoundingClientRect();
+    const boxes = [...row.children].map((child) =>
+      child.getBoundingClientRect()
+    );
+    return {
+      tops: boxes.map((box) => Math.round(box.top)),
+      deleteAtStart:
+        !!holder && Math.abs(boxes[0].left - holder.left - 12) <= 1,
+      labels: [...row.children].map((child) => child.textContent?.trim()),
+    };
+  });
+  on.kit.check(
+    "c: the card's footer has Delete at its start and Resolve and Reply at its end, on one row",
+    footer.deleteAtStart &&
+      new Set(footer.tops).size === 1 &&
+      footer.labels.join() === "Delete,Resolve,Reply",
+    JSON.stringify(footer)
+  );
+  await card.getByRole("button", { name: "Delete", exact: true }).click();
+  const ask = card.locator('[data-ask="delete"]');
+  const asked = await ask
+    .waitFor({ timeout: 3000 })
+    .then(() => true)
+    .catch(() => false);
+  const blocking = await on.page.evaluate(
+    () => document.querySelectorAll("dialog[open], [aria-modal='true']").length
+  );
+  await ask.getByRole("button", { name: "Delete pin" }).click();
+  const after = await until(
+    "the pin gone from the doc",
+    numbersNow,
+    (pins) => !!doomed && !(doomed in pins),
+    5000
+  ).catch(numbersNow);
+  const disc = await frame
+    .locator(`svg[data-cawco-pins] g[data-pin="${target}"]`)
+    .count();
+  const cardLeft = await card.count();
+  const kept = Object.entries(before).filter(([id]) => id !== doomed);
+  on.kit.check(
+    "c: Delete asks in the card itself (no blocking dialog); confirming removes the pin from the doc and its disc from the page, closes its card, and every other pin keeps its number",
+    asked &&
+      blocking === 0 &&
+      !!doomed &&
+      !(doomed in after) &&
+      disc === 0 &&
+      cardLeft === 0 &&
+      kept.length === Object.keys(after).length &&
+      kept.every(([id, number]) => after[id] === number),
+    `asked ${asked}; blocking ${blocking}; before ${JSON.stringify(before)}; after ${JSON.stringify(after)}; disc ${disc}; card ${cardLeft}`
+  );
+};
+
+/** Pin `number`'s card in the pane, and whether its field has the keyboard. */
+const focusedCard = async (on: On, number: number | undefined) => {
+  if (number === undefined) {
+    return { shown: false, focused: false };
+  }
+  const shown = await until(
+    `pin ${number}'s card`,
+    () => on.page.locator(`[data-pin-card="${number}"]`).count(),
+    (count) => count === 1,
+    5000
+  )
+    .then(() => true)
+    .catch(() => false);
+  const focused = await until(
+    `pin ${number}'s field focused`,
+    () =>
+      on.page.evaluate(
+        (n) =>
+          !!document.activeElement &&
+          document.activeElement.localName === "textarea" &&
+          !!document.activeElement.closest(`[data-pin-card="${n}"]`),
+        number
+      ),
+    Boolean,
+    3000
+  ).catch(() => false);
+  return { shown, focused };
 };
 
 /** 6. Select's chip, popover and selection.md are gone from the code. */

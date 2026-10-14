@@ -1,5 +1,6 @@
 import type { ArtifactChoices, ChoiceEntry } from "@cawco/core";
 import {
+  deletePin,
   type Pin,
   replyToPin,
   resolvePin,
@@ -12,7 +13,7 @@ import { Doc } from "yjs";
  * The pane's hold on an artifact's live document (Projects spec §5.10): the
  * picks and pins the session has not heard, which Send N sends, and the
  * pins' threads, which the pane's list and card read and the person writes
- * (a reply, resolve, reopen). The page in the pane joins the same doc itself
+ * (a reply, resolve, reopen, delete). The page in the pane joins the same doc itself
  * (the overlay), which writes its picks and places its pins. Joined through
  * the preview listener's sync endpoint (`/__cawco/artifact/<id>`) under the
  * dashboard's `/preview/<id>/` proxy, which names the session.
@@ -34,6 +35,8 @@ export interface ArtifactView extends ArtifactChoices {
 }
 
 export interface ArtifactDoc {
+  /** The person deletes pin `pin`, and the ink it alone stands on; a sentence when it was not. */
+  delete: (pin: string) => string | null;
   destroy: () => void;
   /** The person's words in pin `pin`'s thread; a sentence when they were not kept. */
   reply: (pin: string, text: string) => string | null;
@@ -106,6 +109,7 @@ export function joinArtifact(
   return {
     reply: (pin, text) => replyToPin(doc, pin, text),
     resolve: (pin, resolved) => resolvePin(doc, pin, resolved),
+    delete: (pin) => deletePin(doc, pin),
     destroy: () => {
       provider.destroy();
       doc.destroy();

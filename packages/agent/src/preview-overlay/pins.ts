@@ -10,6 +10,10 @@
  * 40%. Resting on a pin, or the host focusing it (J and K), outlines its
  * element; a press on it opens its card in the host.
  *
+ * A pin on an element inside a same-origin frame (frames.ts) is drawn here
+ * too, in the top document, at the element's box mapped through its frames;
+ * while its frame has scrolled the point out of view, its disc is not drawn.
+ *
  * Every pin is placed again from its anchor whenever the page changes (core
  * `findAnchor`: source file:line, then selector, then text). A page's pin
  * whose element none of them finds goes to the moved tray (`movedAt`) until
@@ -29,6 +33,7 @@ import {
 import type { InkGroup } from "@cawco/core/ink";
 import type { Map as YMap } from "yjs";
 import { artifact } from "./artifact";
+import { clipOf, framesOf, rectOf } from "./frames";
 import { newId } from "./id";
 import { fitToPage } from "./ink";
 import type { InkChrome } from "./radial";
@@ -74,6 +79,8 @@ export interface PinsDeps {
   /** The overlay's highlight round `el` (its box in the viewport), or none. */
   outline: (el: Element | null) => void;
   post: (type: string, payload?: object) => void;
+  /** Whether an anchor's frames lead to one still loading: not found yet, and not gone. */
+  waiting: (anchor: PageAnchor) => boolean;
 }
 
 export interface Pins {
@@ -102,10 +109,29 @@ export interface Pins {
   track: (id: string | null) => void;
 }
 
+/** `el`'s box in the top page, px, through any frames it stands in. */
 const pageBox = (el: Element): Box => {
-  const r = el.getBoundingClientRect();
+  const r = rectOf(el);
   return { x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height };
 };
+
+/** Whether the page's point `at` lies where `el`'s frames show it; always, for the top document's own. */
+const showsAt = (el: Element | null, at: [number, number]): boolean => {
+  const clip = el ? clipOf(el) : null;
+  if (!clip) {
+    return true;
+  }
+  const x = at[0] - scrollX;
+  const y = at[1] - scrollY;
+  return x >= clip.left && x <= clip.right && y >= clip.top && y <= clip.bottom;
+};
+
+/** Where a pin stands: its disc's centre in the page, its element, and whether its frames show that point now. */
+interface Standing {
+  at: [number, number];
+  el: Element | null;
+  shown: boolean;
+}
 
 const round = (n: number) => Math.round(n * 10_000) / 10_000;
 
@@ -128,11 +154,8 @@ export function startPins(deps: PinsDeps): Pins {
   const settled = () =>
     artifact.kind() === "page" && document.readyState !== "loading";
 
-  /** Each drawn pin: its disc's centre in the page and the element it stands on. */
-  const placed = new Map<
-    string,
-    { at: [number, number]; el: Element | null }
-  >();
+  /** Each placed pin: where it stands; a disc is drawn for it while its frames show it. */
+  const placed = new Map<string, Standing>();
   let focused: string | null = null;
   let tracked: string | null = null;
 
@@ -140,12 +163,12 @@ export function startPins(deps: PinsDeps): Pins {
     "selector" in pin.anchor ? (deps.locate(pin.anchor)?.el ?? null) : null;
 
   /** Where pin `pin` stands in the page now, or null when it is not on it. */
-  const standing = (
-    pin: Pin
-  ): { at: [number, number]; el: Element | null } | null => {
+  const standing = (pin: Pin): Standing | null => {
     if (pin.ink) {
       const box = deps.groupBox(pin.ink);
-      return box ? { at: [box.x + box.w, box.y], el: anchoredEl(pin) } : null;
+      return box
+        ? { at: [box.x + box.w, box.y], el: anchoredEl(pin), shown: true }
+        : null;
     }
     if (!("selector" in pin.anchor)) {
       return null;
@@ -156,10 +179,11 @@ export function startPins(deps: PinsDeps): Pins {
     }
     const box = pageBox(found.el);
     const point = pin.point ?? { x: 1, y: 0 };
-    return {
-      at: [box.x + point.x * box.w, box.y + point.y * box.h],
-      el: found.el,
-    };
+    const at: [number, number] = [
+      box.x + point.x * box.w,
+      box.y + point.y * box.h,
+    ];
+    return { at, el: found.el, shown: showsAt(found.el, at) };
   };
 
   /**
@@ -186,7 +210,7 @@ export function startPins(deps: PinsDeps): Pins {
   /** tsk-3's numbered pin at `where`: a 20px coral disc with its number, at 40% once resolved. */
   const disc = (
     pin: Pin,
-    where: { at: [number, number]; el: Element | null },
+    where: Standing,
     paint: { fill: string; font: string; ink: string }
   ) => {
     const g = document.createElementNS(SVG, "g");
@@ -241,6 +265,35 @@ export function startPins(deps: PinsDeps): Pins {
     });
   };
 
+  /** Whether a pin no anchor finds is gone, not waiting on a frame still loading. */
+  const goneFrom = (pin: Pin) =>
+    !("selector" in pin.anchor && deps.waiting(pin.anchor));
+
+  /** Places each pin on the page, drawing a disc for each its frames show; answers those that are gone. */
+  const placeAll = (all: Pin[]): Pin[] => {
+    const gone: Pin[] = [];
+    const paint = {
+      fill: chrome.token("--action-solid"),
+      ink: chrome.token("--on-action"),
+      font: chrome.token("--type-label", "font"),
+    };
+    for (const pin of all.filter((one) => !one.movedAt)) {
+      const where = standing(pin);
+      if (!where) {
+        if (goneFrom(pin)) {
+          gone.push(pin);
+        }
+        continue;
+      }
+      placed.set(pin.id, where);
+      // A pin in a frame scrolled away from it stands hidden until the frame shows it again.
+      if (where.shown) {
+        layer.append(disc(pin, where, paint));
+      }
+    }
+    return gone;
+  };
+
   function draw() {
     for (const node of [...layer.children]) {
       node.remove();
@@ -250,25 +303,8 @@ export function startPins(deps: PinsDeps): Pins {
       return;
     }
     fitToPage(layer);
-    const all = [...pinsMap().values()];
-    const gone: Pin[] = [];
-    const paint = {
-      fill: chrome.token("--action-solid"),
-      ink: chrome.token("--on-action"),
-      font: chrome.token("--type-label", "font"),
-    };
-    for (const pin of all.sort((a, b) => a.number - b.number)) {
-      if (pin.movedAt) {
-        continue;
-      }
-      const where = standing(pin);
-      if (where) {
-        placed.set(pin.id, where);
-        layer.append(disc(pin, where, paint));
-      } else {
-        gone.push(pin);
-      }
-    }
+    const all = [...pinsMap().values()].sort((a, b) => a.number - b.number);
+    const gone = placeAll(all);
     if (settled()) {
       settle(reanchor(all), gone);
     }
@@ -283,7 +319,8 @@ export function startPins(deps: PinsDeps): Pins {
     if (!tracked) {
       return;
     }
-    const at = placed.get(tracked)?.at;
+    const where = placed.get(tracked);
+    const at = where?.shown ? where.at : undefined;
     deps.post("cawco:pin-at", {
       id: tracked,
       ...(at ? { x: at[0] - scrollX, y: at[1] - scrollY, r: PIN_R } : {}),
@@ -422,22 +459,26 @@ export function startPins(deps: PinsDeps): Pins {
     },
     focus: (id, scroll) => {
       focused = id;
-      const el = id ? (placed.get(id)?.el ?? null) : null;
+      const el: Element | null = id ? (placed.get(id)?.el ?? null) : null;
       if (scroll && id) {
-        const at = placed.get(id)?.at;
+        const where = placed.get(id);
+        const at = where?.at;
         // A pin already in view stays where the person is looking: the page moves only to bring one in.
         const inView =
+          !!where?.shown &&
           !!at &&
           at[1] - scrollY >= PIN_R &&
           at[1] - scrollY <= innerHeight - PIN_R &&
           at[0] - scrollX >= 0 &&
           at[0] - scrollX <= innerWidth;
-        if (at && !inView) {
-          const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
-          scrollTo({
-            top: Math.max(0, at[1] - innerHeight / 3),
-            behavior: still ? "auto" : "smooth",
-          });
+        const behavior = matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth";
+        if (at && !inView && el && framesOf(el).length > 0) {
+          // Inside a frame: the frame scrolls to it, and every frame and page round it.
+          el.scrollIntoView({ block: "center", inline: "nearest", behavior });
+        } else if (at && !inView) {
+          scrollTo({ top: Math.max(0, at[1] - innerHeight / 3), behavior });
         }
       }
       deps.outline(el);

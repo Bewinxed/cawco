@@ -771,11 +771,15 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     private func adopt(_ read: ArtifactComments) {
         guard read != comments else { return }
+        // A pin just made reaches the hub after its card opened: a read that
+        // does not hold it yet leaves the card open; only a pin the last read
+        // held and this one does not (deleted, erased) closes it.
+        let held = openPin.map { open in comments.pins.contains { $0.id == open } } ?? false
         comments = read
         live = read.live(working: sessionWorking)
         paintPins()
         list?.show(read.pins, live: live)
-        if let openPin, !read.pins.contains(where: { $0.id == openPin }) { closeCard() }
+        if held, let openPin, !read.pins.contains(where: { $0.id == openPin }) { closeCard() }
         paintCard()
         #if DEBUG
         PreviewProbe.say("preview pins n=\(read.pins.count) open=\(read.open) owed=\(read.owed) " + read.pins.map {

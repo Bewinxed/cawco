@@ -16,10 +16,11 @@
  *
  * Every entry is a plain JSON value in its map.
  *
- * A person's reply to a pin, and a resolve or reopen, is one write on the
- * artifact's doc, whoever asks ({@link replyToPin}, {@link resolvePin}): the
- * web pane on the doc it joins, the page's overlay on its own for a host that
- * holds no doc (the app, by `cawco:reply` and `cawco:resolve`).
+ * A person's reply to a pin, a resolve or reopen, and a delete, is one write
+ * on the artifact's doc, whoever asks ({@link replyToPin}, {@link resolvePin},
+ * {@link deletePin}): the web pane on the doc it joins, the page's overlay on
+ * its own for a host that holds no doc (the app, by `cawco:reply`,
+ * `cawco:resolve` and `cawco:delete`).
  */
 import type { Doc, Map as YMap } from "yjs";
 import type { PreviewElement } from "./index";
@@ -60,10 +61,18 @@ export interface SendBody {
   url?: string;
 }
 
-/** What a page's mark stands on: the element, by where it is written, its selector and its text. */
+/**
+ * What a page's mark stands on: the element, by where it is written, its
+ * selector and its text. An element inside a same-origin frame names the
+ * frames it stands in, outermost first, each by its selector in the document
+ * that holds it; its selector, source and text are read in the innermost
+ * frame's document.
+ */
 export interface PageAnchor {
   /** The element's box in the page when it was anchored, px: what the moved tray shows. */
   box?: { h: number; w: number; x: number; y: number };
+  /** The frames it stands in, outermost first, each by its selector in its parent's document; none at the top. */
+  frames?: string[];
   selector: string;
   source: PreviewElement["source"];
   /** The element's text, at most {@link COMMENT_LIMITS.anchorText} characters. */
@@ -287,39 +296,76 @@ export function resolvePin(
 }
 
 /**
- * How a page looks an anchor up: the element whose dev source is `file` at
- * `line`, the element `selector` names, and the deepest element whose text
- * is `text`. Each answers null when nothing matches.
+ * The person deletes pin `pin`, and the ink group it stands on when it
+ * stands on one that no other pin stands on; the refusal's sentence when the
+ * pin is gone, and nothing was written. The other pins keep their numbers.
  */
-export interface AnchorLookup<E> {
-  bySelector: (selector: string) => E | null;
-  bySource: (file: string, line: number) => E | null;
-  byText: (text: string) => E | null;
+export function deletePin(doc: Doc, pin: string): string | null {
+  const pins = pinsOf(doc);
+  const held = pins.get(pin);
+  if (!held) {
+    return "This pin is gone from the page already, so there was nothing to delete.";
+  }
+  const shared = [...pins.values()].some(
+    (other) => other.id !== pin && !!held.ink && other.ink === held.ink
+  );
+  doc.transact(() => {
+    pins.delete(pin);
+    if (held.ink && !shared) {
+      doc.getMap("ink").delete(held.ink);
+      doc.getMap("moved").delete(held.ink);
+    }
+  });
+  return null;
 }
 
 /**
- * Where a mark stands in the page now, and by which part of its anchor: its
- * source's file:line, then its selector, then its text. Null when none of
- * them finds it: the mark goes to the moved tray.
+ * How a page looks an anchor up, in a document `D`: the same-origin frame
+ * `selector` names in `within` (its document, or null when it is not there,
+ * not loaded, or of another origin), then, in the document the anchor's frames
+ * lead to, the element whose dev source is `file` at `line`, the element
+ * `selector` names, and the deepest element whose text is `text`. Each
+ * answers null when nothing matches.
  */
-export function findAnchor<E>(
+export interface AnchorLookup<E, D> {
+  bySelector: (within: D, selector: string) => E | null;
+  bySource: (within: D, file: string, line: number) => E | null;
+  byText: (within: D, text: string) => E | null;
+  frame: (within: D, selector: string) => D | null;
+  /** The top document, where an anchor's frames start. */
+  top: D;
+}
+
+/**
+ * Where a mark stands in the page now, and by which part of its anchor: down
+ * its frames, then its source's file:line, then its selector, then its text.
+ * Null when none of them finds it: the mark goes to the moved tray.
+ */
+export function findAnchor<E, D>(
   anchor: PageAnchor,
-  lookup: AnchorLookup<E>
+  lookup: AnchorLookup<E, D>
 ): { by: "source" | "selector" | "text"; el: E } | null {
+  let within: D | null = lookup.top;
+  for (const frame of anchor.frames ?? []) {
+    within = lookup.frame(within, frame);
+    if (within === null) {
+      return null;
+    }
+  }
   const { source } = anchor;
   if (source?.file && source.line !== null && source.of === "self") {
-    const el = lookup.bySource(source.file, source.line);
+    const el = lookup.bySource(within, source.file, source.line);
     if (el) {
       return { by: "source", el };
     }
   }
-  const el = lookup.bySelector(anchor.selector);
+  const el = lookup.bySelector(within, anchor.selector);
   if (el) {
     return { by: "selector", el };
   }
   const text = anchor.text?.trim();
   if (text) {
-    const found = lookup.byText(text);
+    const found = lookup.byText(within, text);
     if (found) {
       return { by: "text", el: found };
     }
@@ -344,6 +390,9 @@ const standsOn = (pin: Pin, url: string): string[] => {
       : "";
   return [
     `## ${pin.number}. ${pin.kind} on ${anchor.selector}`,
+    ...(anchor.frames?.length
+      ? [`- Inside the frame: ${anchor.frames.join(" › ")}`]
+      : []),
     ...(source?.file
       ? [
           `- Source: ${source.file}${source.line ? `:${source.line}` : ""}${source.column ? `:${source.column}` : ""} (${source.framework}, ${source.of})`,
@@ -364,6 +413,7 @@ const standsOn = (pin: Pin, url: string): string[] => {
  */
 export const changedAnchor = (was: PageAnchor, now: PageAnchor): boolean =>
   was.selector !== now.selector ||
+  (was.frames ?? []).join("\u0000") !== (now.frames ?? []).join("\u0000") ||
   (was.text ?? "") !== (now.text ?? "") ||
   JSON.stringify(was.source) !== JSON.stringify(now.source);
 

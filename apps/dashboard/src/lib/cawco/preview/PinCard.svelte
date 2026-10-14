@@ -6,13 +6,18 @@
    * well's foot as the house drawer does. What the pin stands on (its text
    * and file:line) with its picture, which opens full size in the lightbox;
    * its thread, the agent's replies as markdown; the reply field, Reply, and
-   * Resolve or Reopen. What goes wrong is said under the field.
+   * Resolve or Reopen; Delete, asked in the card itself before it runs (The
+   * Open Page Rule: AskHere under the footer, the page still live). What goes
+   * wrong is said under the field, a refused delete under its question.
    */
   import type { Pin } from "@cawco/core/comments";
+  import { untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
-  import { IconClose, IconReopen, IconSuccess } from "#lib/icons.js";
+  import { IconClose, IconReopen, IconSuccess, IconTrash } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
+  import AskHere from "../AskHere.svelte";
+  import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import MessageBody from "../MessageBody.svelte";
   import PinDisc from "./PinDisc.svelte";
   import { pinName } from "./pin-name";
@@ -27,6 +32,7 @@
     problem,
     onreply,
     onresolve,
+    ondelete,
     onclose,
     onpicture,
   }: {
@@ -46,6 +52,8 @@
     /** Keeps the person's words in the thread: true once kept, false when refused (its reason is `problem`). */
     onreply: (text: string) => boolean;
     onresolve: (resolved: boolean) => void;
+    /** Deletes the pin once the person confirmed; rejects with the refusal's sentence. */
+    ondelete: () => Promise<void>;
     onclose: () => void;
     onpicture: (from: HTMLElement) => void;
   } = $props();
@@ -89,6 +97,38 @@
       draft = "";
     }
   }
+
+  /** The card's one question: Delete, asked under its footer. */
+  const asks = new Asker<AskHereRequest>();
+  /** What a delete takes with it, named before it runs (WORDS.md, destructive confirm). */
+  const deleteBody = $derived.by(() => {
+    const parts = [
+      pin.thread.length > 0 ? "its thread" : null,
+      pin.ink ? "the ink it stands on" : null,
+    ].filter(Boolean);
+    const taking =
+      parts.length > 0
+        ? `It goes from the page with ${parts.join(" and ")}. `
+        : "It goes from the page. ";
+    return `${taking}The other pins keep their numbers. This can't be undone.`;
+  });
+  function askDelete() {
+    asks.ask({
+      at: "delete",
+      title: `Delete pin ${pin.number}?`,
+      body: deleteBody,
+      confirmLabel: "Delete pin",
+      destructive: true,
+      pendingLabel: "Deleting…",
+      run: ondelete,
+    });
+  }
+  // Another pin in the same card: a question asked of the last one goes.
+  $effect.pre(() => {
+    if (pin.id) {
+      untrack(() => asks.dismiss());
+    }
+  });
 
   $effect(() => {
     // A new pin's card takes the keyboard: the person tapped to say something.
@@ -189,6 +229,15 @@
     <p class="error" id={`pin-error-${pin.id}`} role="alert">{problem}</p>
   {/if}
   <footer class="actions">
+    <Button
+      aria-expanded={asks.pending !== null}
+      class="delete"
+      icon={IconTrash}
+      label="Delete"
+      onclick={askDelete}
+      size="sm"
+      variant="ghost"
+    />
     {#if pin.resolvedAt}
       <Button
         icon={IconReopen}
@@ -208,6 +257,7 @@
     {/if}
     <Button disabled={!draft.trim()} label="Reply" onclick={reply} size="sm" />
   </footer>
+  <AskHere asker={asks} at="delete" />
 </div>
 
 <style>
@@ -369,5 +419,9 @@
     display: flex;
     justify-content: flex-end;
     gap: var(--space-2);
+  }
+  /* Delete stands apart from Resolve and Reply, at the footer's start. */
+  .actions :global(.delete) {
+    margin-inline-end: auto;
   }
 </style>

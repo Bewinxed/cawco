@@ -613,6 +613,28 @@
         : `The pane lost the page's document, so the pin wasn't ${resolved ? "resolved" : "reopened"}. Reload, then try again.`;
     }
   }
+  /**
+   * The card's Delete, once asked in place: the pin goes from the doc (core
+   * `deletePin`), its disc from the page, and the card closes. A refusal
+   * throws its sentence, which stays under the question.
+   */
+  function deleteOpenPin(): Promise<void> {
+    const id = openPin;
+    if (!id) {
+      return Promise.resolve();
+    }
+    const refused = doc
+      ? doc.delete(id)
+      : "The pane lost the page's document, so the pin wasn't deleted. Reload, then try again.";
+    if (refused) {
+      return Promise.reject(new Error(refused));
+    }
+    if (focusedPin === id) {
+      focusedPin = null;
+    }
+    closeCard();
+    return Promise.resolve();
+  }
   /** A pin's picture full size, in the lightbox, out of its thumbnail. */
   let lightboxFrom: HTMLElement | null = null;
   function pictureOf(from: HTMLElement) {
@@ -1216,6 +1238,7 @@
         at={pinAt}
         live={live.has(cardPin.id)}
         onclose={closeCard}
+        ondelete={deleteOpenPin}
         onpicture={pictureOf}
         onreply={reply}
         onresolve={resolvePin}

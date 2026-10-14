@@ -5,6 +5,7 @@ import type { PreviewElement } from "@cawco/core";
 import type { ChoiceChange } from "@cawco/core/choices";
 import {
   COMMENT_LIMITS,
+  deletePin,
   findAnchor,
   type PageAnchor,
   type Pin,
@@ -19,6 +20,16 @@ import { domToPng } from "modern-screenshot";
 import type { Map as YMap } from "yjs";
 import { artifact, type Link, NO_ARTIFACT, type State } from "./artifact";
 import { fillFields, trackFields } from "./fields";
+import {
+  deepElementAt,
+  frameDocument,
+  frameLoading,
+  frameOrigin,
+  framesOf,
+  isFrame,
+  rectOf,
+  watchFrames,
+} from "./frames";
 import { startInk } from "./ink";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
 import { type Pins, startPins } from "./pins";
@@ -143,7 +154,7 @@ function outline(el: Element | null) {
   highlight.hidden = !el;
   label.hidden = true;
   if (el) {
-    cover(highlight, el.getBoundingClientRect());
+    cover(highlight, rectOf(el));
   }
 }
 
@@ -167,6 +178,7 @@ const pins: Pins = startPins({
   locate,
   outline,
   post,
+  waiting,
 });
 
 /** The ink a pen draws on the page, and the icon and menu at a stroke's end (ink.ts, radial.ts). */
@@ -179,6 +191,26 @@ const ink = startInk({
   locate,
   pins: () => pins,
   post,
+  waiting,
+});
+
+/*
+ * A same-origin frame scrolled, resized, grew or navigated: the marks in it
+ * stand where its elements are now, and the outline Comment mode drew over
+ * one of them follows, once per frame.
+ */
+let framesFrame = 0;
+watchFrames(() => {
+  if (framesFrame) {
+    return;
+  }
+  framesFrame = requestAnimationFrame(() => {
+    framesFrame = 0;
+    ink.replace();
+    if (commenting && hovered) {
+      hover(hovered);
+    }
+  });
 });
 
 /** Strip the preview prefix from a URL so the pane shows the app's own path. */
@@ -597,6 +629,7 @@ function mode(on: boolean, again: string | null = null) {
   commenting = on;
   placing = on ? again : null;
   layer.classList.toggle("comment", on);
+  hovered = null;
   highlight.hidden = true;
   label.hidden = true;
 }
@@ -694,24 +727,23 @@ function sourceOf(element: Element): PreviewElement["source"] {
   return fallback;
 }
 
+/** `element`'s selector in its own document (a frame's, for an element inside one). */
 function selectorOf(element: Element): string {
+  const doc = element.ownerDocument;
   if (
     element.id &&
-    document.querySelectorAll(`#${CSS.escape(element.id)}`).length === 1
+    doc.querySelectorAll(`#${CSS.escape(element.id)}`).length === 1
   ) {
     return `#${CSS.escape(element.id)}`;
   }
   const testId = element.getAttribute("data-testid");
   const testSelector = `[data-testid="${CSS.escape(testId || "")}"]`;
-  if (testId && document.querySelectorAll(testSelector).length === 1) {
+  if (testId && doc.querySelectorAll(testSelector).length === 1) {
     return testSelector;
   }
   const path: string[] = [];
   for (let el: Element | null = element; el; el = el.parentElement) {
-    if (
-      el.id &&
-      document.querySelectorAll(`#${CSS.escape(el.id)}`).length === 1
-    ) {
+    if (el.id && doc.querySelectorAll(`#${CSS.escape(el.id)}`).length === 1) {
       path.unshift(`#${CSS.escape(el.id)}`);
       break;
     }
@@ -730,12 +762,16 @@ function selectorOf(element: Element): string {
   return path.join(" > ");
 }
 
+/** The deepest element at the viewport's `x`, `y`: inside every same-origin frame it lands on (frames.ts). */
 function elementAt(x: number, y: number): Element | null {
   layer.style.pointerEvents = "none";
   const element = document.elementFromPoint(x, y);
   layer.style.removeProperty("pointer-events");
-  return element === host ? null : element;
+  return element === host ? null : deepElementAt(element, x, y);
 }
+
+/** The selectors of the frames `el` stands in, outermost first, each in its parent's document. */
+const frameSelectors = (el: Element): string[] => framesOf(el).map(selectorOf);
 
 /** An element's own dev source, none of its ancestors': what a pin's file:line finds it by. */
 function ownSource(el: Element): Source | null {
@@ -749,10 +785,12 @@ function textOf(el: Element): string {
     .slice(0, COMMENT_LIMITS.anchorText);
 }
 
-/** What a page's mark stands on, read from `el` as it is now. */
+/** What a page's mark stands on, read from `el` as it is now: inside a frame, the frames it stands in too. */
 function anchorOf(el: Element): PageAnchor {
-  const { x, y, width, height } = el.getBoundingClientRect();
+  const { x, y, width, height } = rectOf(el);
+  const frames = frameSelectors(el);
   return {
+    ...(frames.length > 0 ? { frames } : {}),
     selector: selectorOf(el),
     source: sourceOf(el),
     text: textOf(el),
@@ -765,34 +803,71 @@ function anchorOf(el: Element): PageAnchor {
   };
 }
 
-/** The page's own elements, the overlay's left out. */
-function pageElements(): Element[] {
-  return [...(document.body?.querySelectorAll("*") ?? [])].filter(
+/** `doc`'s own elements (the page's, or a frame's), any overlay's left out. */
+function pageElements(doc: Document): Element[] {
+  return [...(doc.body?.querySelectorAll("*") ?? [])].filter(
     (el) =>
-      !(
-        host.contains(el) ||
-        el.closest("svg[data-cawco-ink], svg[data-cawco-pins]")
-      )
+      !el.closest("cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins]")
   );
 }
 
-/** Where a page's anchor stands now (core `findAnchor`: file:line, then selector, then text). */
+/** The same-origin frame `selector` names in `within`, by its document; null when it is not there or not of this origin. */
+function frameIn(within: Document, selector: string): Document | null {
+  let frame: Element | null = null;
+  try {
+    frame = within.querySelector(selector);
+  } catch {
+    return null;
+  }
+  return isFrame(frame) ? frameDocument(frame) : null;
+}
+
+/**
+ * Whether an anchor's frames lead to one still loading: its mark is not
+ * found yet, and is not gone either.
+ */
+function waiting(anchor: PageAnchor): boolean {
+  let within: Document | null = document;
+  for (const selector of anchor.frames ?? []) {
+    let frame: Element | null = null;
+    try {
+      frame = within.querySelector(selector);
+    } catch {
+      return false;
+    }
+    if (!isFrame(frame)) {
+      return false;
+    }
+    if (frameLoading(frame)) {
+      return true;
+    }
+    within = frameDocument(frame);
+    if (!within) {
+      return false;
+    }
+  }
+  return false;
+}
+
+/** Where a page's anchor stands now (core `findAnchor`: down its frames, then file:line, then selector, then text). */
 function locate(anchor: PageAnchor) {
-  return findAnchor<Element>(anchor, {
-    bySource: (file, line) =>
-      pageElements().find((el) => {
+  return findAnchor<Element, Document>(anchor, {
+    top: document,
+    frame: frameIn,
+    bySource: (within, file, line) =>
+      pageElements(within).find((el) => {
         const own = ownSource(el);
         return own?.file === file && own.line === line;
       }) ?? null,
-    bySelector: (selector) => {
+    bySelector: (within, selector) => {
       try {
-        return document.querySelector(selector);
+        return within.querySelector(selector);
       } catch {
         return null;
       }
     },
-    byText: (text) => {
-      const matches = pageElements().filter((el) => textOf(el) === text);
+    byText: (within, text) => {
+      const matches = pageElements(within).filter((el) => textOf(el) === text);
       // The deepest: the one holding no other match.
       return (
         matches.find(
@@ -803,9 +878,12 @@ function locate(anchor: PageAnchor) {
   });
 }
 
+/** `el` as a pin names it: its box in the top viewport and page, its styles, and the address of the document it is in. */
 function describe(el: Element): PinnedElement {
-  const { x, y, width, height } = el.getBoundingClientRect();
-  const computed = getComputedStyle(el);
+  const { x, y, width, height } = rectOf(el);
+  const computed = (el.ownerDocument.defaultView ?? window).getComputedStyle(
+    el
+  );
   const styles = Object.fromEntries(
     [
       "color",
@@ -831,7 +909,7 @@ function describe(el: Element): PinnedElement {
     page: { x: x + scrollX, y: y + scrollY },
     styles,
     source: sourceOf(el),
-    url: stripPrefix(location.href),
+    url: stripPrefix(el.ownerDocument.location.href),
   };
 }
 
@@ -870,7 +948,8 @@ async function capture(
   try {
     const png = await domToPng(el, {
       scale,
-      filter: (node) => node !== host,
+      // Any overlay's own UI, this one's or a same-origin frame's, is left out.
+      filter: (node) => (node as Element).localName !== "cawco-overlay",
     });
     if (!PNG_PREFIX.test(png)) {
       throw new Error("The element was too large to draw.");
@@ -883,24 +962,43 @@ async function capture(
   }
 }
 
+/** The element Comment mode last outlined under the pointer. */
+let hovered: Element | null = null;
+
+/**
+ * What the hover label says of `el`: its tag, id, first class and dev
+ * source; a frame of another origin, which cannot be read into, by its origin.
+ */
+function labelOf(el: Element): string {
+  const named = `${el.localName}${el.id ? `#${el.id}` : ""}${el.classList.length ? `.${el.classList[0]}` : ""}`;
+  if (isFrame(el) && !frameDocument(el)) {
+    return `${named} — ${frameOrigin(el)}`;
+  }
+  const source = sourceOf(el);
+  return `${named}${source?.file ? ` — ${source.file}:${source.line ?? "?"}` : ""}`;
+}
+
+/** Comment mode's outline and label over `el`, mapped to the top viewport; none hides them. */
+function hover(el: Element | null) {
+  hovered = el?.isConnected ? el : null;
+  highlight.hidden = !hovered;
+  label.hidden = !hovered;
+  if (!hovered) {
+    return;
+  }
+  const rect = rectOf(hovered);
+  cover(highlight, rect);
+  label.textContent = labelOf(hovered);
+  label.style.left = `${Math.max(0, Math.min(rect.x, innerWidth - label.offsetWidth))}px`;
+  label.style.top = `${Math.max(0, rect.y - label.offsetHeight)}px`;
+}
+
 window.addEventListener(
   "mousemove",
   (event) => {
-    if (!commenting) {
-      return;
+    if (commenting) {
+      hover(elementAt(event.clientX, event.clientY));
     }
-    const el = elementAt(event.clientX, event.clientY);
-    highlight.hidden = !el;
-    label.hidden = !el;
-    if (!el) {
-      return;
-    }
-    const rect = el.getBoundingClientRect();
-    cover(highlight, rect);
-    const source = sourceOf(el);
-    label.textContent = `${el.localName}${el.id ? `#${el.id}` : ""}${el.classList.length ? `.${el.classList[0]}` : ""}${source?.file ? ` — ${source.file}:${source.line ?? "?"}` : ""}`;
-    label.style.left = `${Math.max(0, Math.min(rect.x, innerWidth - label.offsetWidth))}px`;
-    label.style.top = `${Math.max(0, rect.y - label.offsetHeight)}px`;
   },
   true
 );
@@ -1049,7 +1147,7 @@ const idOf = (message: HostMessage) =>
  */
 async function personWrite(
   message: HostMessage,
-  result: "cawco:reply-result" | "cawco:resolve-result",
+  result: "cawco:reply-result" | "cawco:resolve-result" | "cawco:delete-result",
   write: (pin: string) => string | null
 ) {
   const { pin } = message;
@@ -1083,8 +1181,8 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
       takeTheme(message.theme);
     },
     "cawco:theme": (message) => takeTheme(message.theme),
-    // A host that holds no doc of its own (the app) writes the person's reply
-    // and resolve through this page's, by the one write core keeps.
+    // A host that holds no doc of its own (the app) writes the person's reply,
+    // resolve and delete through this page's, by the one write core keeps.
     "cawco:reply": (message) =>
       personWrite(message, "cawco:reply-result", (pin) =>
         replyToPin(
@@ -1098,6 +1196,10 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
         typeof message.resolved === "boolean"
           ? resolvePin(artifact.doc(), pin, message.resolved)
           : "A resolve says resolved or reopened, so the pin wasn't changed."
+      ),
+    "cawco:delete": (message) =>
+      personWrite(message, "cawco:delete-result", (pin) =>
+        deletePin(artifact.doc(), pin)
       ),
     "cawco:mode": (message) =>
       mode(
