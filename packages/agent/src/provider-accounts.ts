@@ -940,6 +940,34 @@ const opencodeOwnRows = (): string => {
 };
 
 /**
+ * The providers OpenCode's own sign-ins on this machine are for (each active
+ * credential's integration), read-only, never their values: the providers the
+ * machine's server sends requests to with them. None for a database 2.0 has
+ * not made yet.
+ */
+export const opencodeOwnIntegrations = (): string[] => {
+  if (!existsSync(machineOpencodeDb())) {
+    return [];
+  }
+  try {
+    const db = new Database(machineOpencodeDb(), { readonly: true });
+    try {
+      return (
+        db
+          .query(
+            "SELECT DISTINCT integration_id FROM credential WHERE active = 1"
+          )
+          .all() as { integration_id: string | null }[]
+      ).flatMap((row) => (row.integration_id ? [row.integration_id] : []));
+    } finally {
+      db.close();
+    }
+  } catch {
+    return [];
+  }
+};
+
+/**
  * A fingerprint of pi's and OpenCode's own stores as they are now: it
  * changes whenever a login is made, refreshed or moved out there, so the hub
  * moves a login made under a connected machine at once

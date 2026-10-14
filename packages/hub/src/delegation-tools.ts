@@ -593,7 +593,7 @@ export function handoffTools(deps: HandoffDeps) {
           .string()
           .optional()
           .describe(
-            "Model id for the harness, e.g. opencode-go/deepseek-v4-flash. Omit for the type's " +
+            "Model id for the harness, e.g. opencode-go/deepseek-v4.1-flash. Omit for the type's " +
               "own model. Overrides `type`'s model when both are set."
           ),
         account: accountParameter(),
@@ -817,7 +817,7 @@ export function handoffTools(deps: HandoffDeps) {
           .string()
           .min(1)
           .describe(
-            "The model that writes the summary, e.g. opencode-go/deepseek-v4-flash."
+            "The model that writes the summary, e.g. opencode-go/deepseek-v4.1-flash."
           ),
         target_harness: z
           .enum(["claude", "opencode", "pi"])

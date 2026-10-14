@@ -565,6 +565,16 @@ export interface WorkItemDeps {
   readonly leadTurn?: (instanceId: string) => WorkOrigin | undefined;
   /** Runs the budget sweep and every wait's timer until the hub closes. */
   readonly lifetime: HubLifetimeShape;
+  /**
+   * Why `machineId` would not run `model` on `harness`, in words naming the
+   * models it does offer from that provider; undefined when it offers it, or
+   * when the machine has reported no models to judge by.
+   */
+  readonly modelRefusal: (
+    machineId: string,
+    harness: HarnessKind,
+    model: string | undefined
+  ) => string | undefined;
   /** Tells every dashboard an item moved: its parent's delegate tray follows it. */
   /**
    * Why an attempt at one of the project's tasks may not start now: its spend
@@ -1291,6 +1301,7 @@ export const createWorkItems = ({
   report,
   inTurn,
   leadTurn,
+  modelRefusal,
   send,
   sessionUrl,
   spawn,
@@ -2640,6 +2651,14 @@ export const createWorkItems = ({
     }
   };
 
+  /** Refuses settings whose model the machine does not run ({@link WorkItemDeps.modelRefusal}). */
+  const modelOffered = (machineId: string, settings: Settings): void => {
+    const refusal = modelRefusal(machineId, settings.harness, settings.model);
+    if (refusal) {
+      throw new WorkItemRefusal(400, refusal);
+    }
+  };
+
   const startAdmitted = async (
     request: WorkItemRequest,
     parent: Parent,
@@ -2664,6 +2683,8 @@ export const createWorkItems = ({
     if (!request.workspace) {
       const machineId = targetMachine(request, parent);
       const settings = settingsOf(request, parent);
+      // Before the clone is cut: a model the machine does not run starts nothing.
+      modelOffered(machineId, settings);
       // Placed before the clone is cut: the boundary starts with the account
       // the session launches on, and the session opens on that same account.
       const instanceId = request.queuedAs?.instanceId ?? crypto.randomUUID();
@@ -2783,6 +2804,7 @@ export const createWorkItems = ({
     request: WorkItemRequest,
     ahead?: { instanceId: string; placement: ItemPlacement }
   ): WorkItemStart => {
+    modelOffered(workspace.machineId, settings);
     const { harness, canDelegate } = settings;
     // A queued delegate's session and item take the ids its chip stood under.
     const instanceId =

@@ -98,6 +98,7 @@ import {
   onAccountCredential,
   opencodeAccountEnv,
   opencodeCredentialOf,
+  opencodeOwnIntegrations,
   opencodeProviderOf,
   readHeld,
   setOpencodeAccountsHost,
@@ -124,6 +125,11 @@ import {
   unreachable,
   waitForMcp,
 } from "./opencode-client";
+import {
+  catalogLaunchEnv,
+  holdsCatalog,
+  opencodeModels,
+} from "./opencode-models";
 import {
   buildPluginSource,
   CHROME_DEVTOOLS,
@@ -211,8 +217,9 @@ const CONFIG_FLAG = "CAWCO_CONFIG";
 
 /**
  * How one server is launched: `opencode serve` under the keeper, with its
- * launch config, no self-update under a pinned fleet, and its sessions' git
- * reaching the hub's remote as each session (git-credential.ts). Its launch
+ * launch config, no self-update under a pinned fleet, the model catalog the
+ * agent holds (opencode-models.ts), and its sessions' git reaching the hub's
+ * remote as each session (git-credential.ts). Its launch
  * flags name the gate form its plugin judges with ({@link gateForm}), the
  * plugin version it loads and the disk config it read: a server started on
  * other flags fails its launch check and is replaced at rest, its sessions
@@ -230,6 +237,7 @@ const serverLaunch = (
     env: {
       OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
       OPENCODE_DISABLE_AUTOUPDATE: "1",
+      ...catalogLaunchEnv(),
       ...sessionGitEnv(),
       ...env,
     },
@@ -1395,8 +1403,9 @@ export class OpencodeHarness implements Harness {
 
   /**
    * {@link configHash} of opencode.json as it is on disk now, with the
-   * project servers placed for OpenCode. Null when opencode.json is missing
-   * or malformed.
+   * project servers placed for OpenCode and the held catalog's entries for
+   * the providers this machine's servers serve ({@link #catalogDigest}).
+   * Null when opencode.json is missing or malformed.
    */
   async #hashConfig(): Promise<string | null> {
     const config = await readJson<Record<string, unknown>>(OPENCODE_CONFIG);
@@ -1405,12 +1414,80 @@ export class OpencodeHarness implements Harness {
     }
     // The placed servers too: a location takes them only as it boots.
     const placed = await readJson<PlacedMcp>(OPENCODE_PLACED_MCP);
-    return placed && Object.keys(placed).length > 0
-      ? createHash("sha256")
-          .update(configHash(config))
-          .update(canonicalizeJson(placed))
-          .digest("hex")
-      : configHash(config);
+    // The catalog too: a server reads it only as it starts.
+    const catalog = holdsCatalog() ? await this.#catalogDigest() : "";
+    if (!((placed && Object.keys(placed).length > 0) || catalog)) {
+      return configHash(config);
+    }
+    const hash = createHash("sha256").update(configHash(config));
+    if (placed && Object.keys(placed).length > 0) {
+      hash.update(canonicalizeJson(placed));
+    }
+    return hash.update(catalog).digest("hex");
+  }
+
+  /**
+   * The held catalog's fingerprint over the providers this machine's
+   * servers can send a request to: Zen's (`opencode`, keyless), each CawCo
+   * account's here, each the machine's own OpenCode is signed in to, and
+   * each whose key is in the environment. A change to any other provider's
+   * entry replaces no server.
+   */
+  async #catalogDigest(): Promise<string> {
+    await opencodeModels.ready();
+    const providers = new Set<string>(["opencode"]);
+    for (const account of credentialAccountIds()) {
+      const held = readHeld(account);
+      if (held) {
+        providers.add(opencodeProviderOf(held.provider));
+      }
+    }
+    for (const integration of opencodeOwnIntegrations()) {
+      providers.add(integration);
+    }
+    for (const keyed of opencodeModels.providersKeyedIn(process.env)) {
+      providers.add(keyed);
+    }
+    return opencodeModels.digest(providers);
+  }
+
+  /**
+   * A new session's first turn runs on the catalog as it is now: the held
+   * copy confirmed the source's ({@link opencodeModels}), and the server it
+   * opens on started on it, replaced first when it did not. Refused, in
+   * words, when either cannot be had.
+   */
+  async #catalogCurrent(account: string | undefined): Promise<void> {
+    if (!(holdsCatalog() && this.#converging)) {
+      return;
+    }
+    await opencodeModels.current();
+    // The machine's server first: an account's launch carries its revision.
+    const hash = await this.#hashConfig();
+    if (hash !== null && hash !== this.#appliedHash) {
+      this.#desiredHash = hash;
+      this.#configState = "pending";
+      // biome-ignore lint/complexity/noVoid: the apply manages its own errors; its settling is awaited below
+      void this.#attemptConfigApply();
+      const unsettled = await this.#configSettled();
+      if (unsettled) {
+        throw new Error(
+          `The model catalog changed and this machine's OpenCode server has not restarted on it (${unsettled.detail}); nothing was started.`
+        );
+      }
+    }
+    if (account === undefined) {
+      return;
+    }
+    const slot = this.#accounts.get(account);
+    if (!slot?.client) {
+      // Its server starts on the current launch (#ensureAccount).
+      return;
+    }
+    const { revision, launch } = await this.#accountRevision(account);
+    if (slot.applied !== revision) {
+      await this.#replaceAccount(slot, launch, revision);
+    }
   }
 
   /** Poll the installed CLI every 30s; upgrading it does not replace sessiond's server. */
@@ -1739,10 +1816,13 @@ export class OpencodeHarness implements Harness {
         await this.#putCredential(account, candidate);
       },
       (identity) => {
-        this.#adopt(slot, identity);
+        const client = this.#adopt(slot, identity);
         slot.applied = revision;
         // biome-ignore lint/complexity/noVoid: publication does not wait for busy incumbent sessions to migrate
         void this.#handoffIdle().catch(console.warn);
+        // What it offers, as the catalog it started on says (#catalog).
+        // biome-ignore lint/complexity/noVoid: the catalog read rides on the start; nothing waits on it
+        void this.#readAccountCatalogSoon(account, client);
       }
     );
   }
@@ -2882,6 +2962,11 @@ export class OpencodeHarness implements Harness {
    * definitions win over a user's own.
    */
   async #launchConfig(): Promise<Record<string, unknown>> {
+    // A server starts only on the catalog the agent holds, never on one
+    // OpenCode would fall back to (its cache, or the binary's own copy).
+    if (holdsCatalog()) {
+      await opencodeModels.ready();
+    }
     const plugin = await this.#plugin();
     const managed = (await isMachineAgent())
       ? new Set((await readSidecar(OPENCODE_SIDECAR)).mcp ?? [])
@@ -3709,6 +3794,10 @@ export class OpencodeHarness implements Harness {
       if (recovered) {
         return recovered;
       }
+    }
+    if (!spec.resume) {
+      await this.#ensure(true);
+      await this.#catalogCurrent(account);
     }
     return this.#open(spec, ctx);
   }

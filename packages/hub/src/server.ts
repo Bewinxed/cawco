@@ -620,6 +620,12 @@ const BUSY_TIMEOUT_MS = 5000;
 /** A `Range: bytes=a-b` header (one range, either end open). */
 const BYTE_RANGE = /^bytes=(\d*)-(\d*)$/;
 
+/** What splits a model id into words (`deepseek-v4.1-flash`: `deepseek`, …). */
+const MODEL_ID_WORD = /[-.]/;
+
+/** How many offered models a refused model's refusal names. Ours: enough to choose from, short enough to read. */
+const MODELS_NAMED = 12;
+
 /**
  * A file's bytes as an answer to a request that may ask for a range of them:
  * a video element asks for ranges, and Safari plays nothing from a server
@@ -3128,6 +3134,49 @@ export const createServer = (
     }
     const model = answer.result as string | null;
     return model ? { ...payload, model } : payload;
+  };
+  /**
+   * Why `machineId`'s OpenCode would not run `model`, naming the models it
+   * offers from that provider (those sharing the asked id's first word
+   * first), by the machine's last report: the models its servers list from
+   * the catalog they run on, which drops a model the catalog deprecates
+   * (`opencode-go/deepseek-v4-flash`, 2026-10-14), so a delegate on one is
+   * refused here rather than failing at its first turn. Undefined when it
+   * offers it, for any other harness, for a model naming no provider, and
+   * when the machine has reported no OpenCode models to judge by.
+   */
+  const opencodeModelRefusal = (
+    machineId: string,
+    harness: string,
+    model: string | undefined
+  ): string | undefined => {
+    const slash = model?.indexOf("/") ?? -1;
+    if (harness !== "opencode" || !model || slash <= 0) {
+      return;
+    }
+    const offered = (harnessReportOf(machineId, "opencode")?.models ?? [])
+      .map((one) => one.value)
+      .filter((value) => value !== "default");
+    if (offered.length === 0 || offered.includes(model)) {
+      return;
+    }
+    const provider = model.slice(0, slash);
+    const fromProvider = offered.filter((value) =>
+      value.startsWith(`${provider}/`)
+    );
+    if (fromProvider.length === 0) {
+      return `OpenCode on ${machineName(machineId)} offers no model from ${provider}, so it cannot run ${model}: it holds no sign-in or key for ${provider} there. Nothing was started.`;
+    }
+    const word = model.slice(slash + 1).split(MODEL_ID_WORD)[0] ?? "";
+    const near = (value: string) =>
+      value.slice(provider.length + 1).startsWith(word);
+    const listed = [
+      ...fromProvider.filter(near),
+      ...fromProvider.filter((value) => !near(value)),
+    ];
+    const shown = listed.slice(0, MODELS_NAMED);
+    const more = listed.length - shown.length;
+    return `OpenCode on ${machineName(machineId)} does not offer ${model}: the catalog it runs on dropped it or never had it. From ${provider} it offers ${shown.join(", ")}${more > 0 ? `, and ${more} more` : ""}. Nothing was started.`;
   };
   /** A new pi session that names no model, so pi's pick in its directory is asked first. */
   const asksPiDefault = (payload: SpawnPayload): boolean =>
@@ -14800,6 +14849,7 @@ export const createServer = (
     // Whose turn a project's Caw is in, for what he starts in it. Caw is
     // made further down; nothing starts an item before the hub is up.
     leadTurn: (instanceId) => lead?.turnOrigin(instanceId),
+    modelRefusal: opencodeModelRefusal,
     // A routine run's turn makes the sessions it starts the run's (memory.ts).
     spawnedUnder: (instanceId, parentId) =>
       memoryWatch.spawned(instanceId, parentId),
