@@ -38,7 +38,7 @@ import { DEPS_INSTALLING, depsScript } from "../packages/core/src/move";
 import { socketPathProblem } from "../packages/core/src/paths";
 import { openLockFile, tryLock, unlock } from "./lib/flock";
 import { heavySlot } from "./lib/heavy-run";
-import { STARTER_ENV } from "./scratch-fleet-leash";
+import { STARTER_ENV, WRAPPED_ENV } from "./scratch-fleet-leash";
 
 /**
  * WHERE GIT LOOKS. Git finds its repository from these variables before its
@@ -695,6 +695,9 @@ export type Role = keyof typeof ENTRY;
  * process is gone, however it went; and leading a process group of its own,
  * so what it starts stays findable by its group after its own parent is gone,
  * and a signal to the probe's terminal group reaches the probe alone.
+ *
+ * `wrap` is a command the service runs under (`strace … -o file`): the
+ * returned child is then the wrapper, and the service is its child.
  */
 const serviceSpawn = (
   root: string,
@@ -704,10 +707,12 @@ const serviceSpawn = (
     env: Record<string, string>;
     stderr: ReturnType<typeof Bun.file>;
     stdout: ReturnType<typeof Bun.file>;
-  }
+  },
+  wrap: string[] = []
 ) =>
   Bun.spawn(
     [
+      ...wrap,
       process.execPath,
       "--preload",
       join(import.meta.dir, "scratch-fleet-leash.ts"),
@@ -715,7 +720,11 @@ const serviceSpawn = (
     ],
     {
       ...options,
-      env: { ...options.env, [STARTER_ENV]: String(process.pid) },
+      env: {
+        ...options.env,
+        [STARTER_ENV]: String(process.pid),
+        ...(wrap.length > 0 ? { [WRAPPED_ENV]: "1" } : {}),
+      },
       detached: true,
     }
   );
@@ -1080,18 +1089,24 @@ async function standUp(
   /** Each role's latest launch's stderr file. */
   const errs: Partial<Record<Role, string>> = {};
   let launches = 0;
-  const launch = (role: Role) => {
+  /** Starts `role`, under `wrap` when given ({@link serviceSpawn}). */
+  const launch = (role: Role, wrap: string[] = []) => {
     launches += 1;
     const err = join(sandbox, `${role}-${launches}.err`);
-    const child = serviceSpawn(root, role, {
-      // The keeper's children start where it runs, and OpenCode's server
-      // writes `.opencode/` in its own directory: in the sandbox, never the
-      // clone, whose `.opencode` a workspace boundary holds read-only (EROFS).
-      cwd: role === "sessiond" ? sandbox : root,
-      env: { ...env, TMPDIR: tmpFor(role) },
-      stdout: Bun.file(join(sandbox, `${role}-${launches}.log`)),
-      stderr: Bun.file(err),
-    });
+    const child = serviceSpawn(
+      root,
+      role,
+      {
+        // The keeper's children start where it runs, and OpenCode's server
+        // writes `.opencode/` in its own directory: in the sandbox, never the
+        // clone, whose `.opencode` a workspace boundary holds read-only (EROFS).
+        cwd: role === "sessiond" ? sandbox : root,
+        env: { ...env, TMPDIR: tmpFor(role) },
+        stdout: Bun.file(join(sandbox, `${role}-${launches}.log`)),
+        stderr: Bun.file(err),
+      },
+      wrap
+    );
     procs[role] = child;
     errs[role] = err;
     console.log(`… ${role} started, pid ${child.pid}`);

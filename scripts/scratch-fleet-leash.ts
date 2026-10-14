@@ -101,10 +101,26 @@ const endAll = async (): Promise<void> => {
   process.kill(process.pid, "SIGKILL");
 };
 
+/**
+ * Set when the service runs under a wrapper the starter started (`strace …
+ * bun <entry>`): its parent is then the wrapper, which outlives the starter
+ * re-parented, so the starter is the parent's parent.
+ */
+export const WRAPPED_ENV = "CAWCO_FLEET_WRAPPED";
+
 const starter = Number(process.env[STARTER_ENV]);
+const wrapped = process.env[WRAPPED_ENV] === "1";
+/** The process that started this one's line: its parent, or its wrapper's. */
+const starterNow = async (): Promise<number | undefined> => {
+  if (!wrapped) {
+    return process.ppid;
+  }
+  const parent = process.ppid;
+  return (await processLineage()).find((row) => row.pid === parent)?.ppid;
+};
 if (Number.isInteger(starter) && starter > 0) {
-  const watch = () => {
-    if (process.ppid !== starter) {
+  const watch = async () => {
+    if ((await starterNow()) !== starter) {
       endAll().catch((error: unknown) => {
         console.error(
           `[scratch-fleet] pid ${process.pid}: its starter is gone, and the processes under it could not be read: ${error instanceof Error ? error.message : String(error)}; it ends itself`
@@ -113,7 +129,12 @@ if (Number.isInteger(starter) && starter > 0) {
       });
     }
   };
+  const tick = () => {
+    watch().catch(() => {
+      // The process table unreadable this once: read again next tick.
+    });
+  };
   // A starter gone before this ran is seen at once.
-  watch();
-  setInterval(watch, EVERY_MS).unref();
+  tick();
+  setInterval(tick, EVERY_MS).unref();
 }

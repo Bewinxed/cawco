@@ -19,7 +19,9 @@
  * 4. `/proc/<agent pid>/io` is read every 30s: `write_bytes` (pages the agent
  *    dirtied, which is what macOS's "file backed memory dirtied" counts) and
  *    `wchar` (bytes it handed to write calls), with each database's file
- *    sizes beside them.
+ *    sizes beside them. The agent runs under strace, which logs every write
+ *    call with the path its descriptor names; the RATE line's `writers` are
+ *    the window's bytes per second by file, ids in names folded to `*`.
  * 5. After the writers stop and the usage loop has run once more, a search
  *    through the hub brings the index up to date as the dashboard's would;
  *    then the agent is stopped and the probe reads what it delivers: every
@@ -30,7 +32,7 @@
  *   bun scripts/probe-disk-writes.ts [--minutes 10] [--out result.json] [--keep]
  */
 import { Database } from "bun:sqlite";
-import { appendFile, mkdir, stat, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CLAUDE_DIR_NAME } from "../packages/core/src/claude-dirs";
 import { TranscriptIndex } from "../packages/jsonl-parser/src/fts5";
@@ -236,48 +238,80 @@ const sizeOf = (path: string) =>
   );
 
 /**
- * What one database wrote, read off its WAL index (`-shm`) once a second:
- * the frames appended to its WAL (`mxFrame`, at byte 16 of the header) and
- * the pages checkpointed back into it (`nBackfill`, byte 96), each summed
- * across WAL restarts (a counter that drops has started over). SQLite's
- * wal.c lays the header out; it is native-endian, little on x86. A database
- * in a rollback journal has no `-shm` and reads as nothing here: its writes
- * are the agent's `write_bytes` less the WAL databases' (`restBytesPerSecond`).
+ * The agent's command prefix: strace logging each write call (one file per
+ * thread, so no call is split across lines) with its descriptor's path and
+ * the epoch time. The seccomp filter stops the agent only on those calls.
  */
-const walMeter = (path: string) => {
-  const total = { frames: 0, backfilled: 0 };
-  let last = { frames: 0, backfilled: 0 };
-  let pageSize = 4096;
-  const tick = async () => {
-    const bytes = await Bun.file(`${path}-shm`)
-      .slice(0, 136)
-      .arrayBuffer()
-      .catch(() => undefined);
-    if (!bytes || bytes.byteLength < 136) {
-      return;
+const straceWrap = (prefix: string) => [
+  "strace",
+  "--seccomp-bpf",
+  "-ff",
+  "-y",
+  "-ttt",
+  "-qq",
+  "-s",
+  "0",
+  "-e",
+  "signal=none",
+  "-e",
+  "status=successful",
+  "-e",
+  "trace=write,pwrite64,writev,pwritev,pwritev2",
+  "-o",
+  prefix,
+];
+
+/** `<epoch> pwrite64(12</path>, ""..., 4096, 8192) = 4096` */
+const WRITE_CALL = /^(\d+\.\d+) \w+\(\d+<(.+?)>, .* = (\d+)$/;
+/** What strace appends to an unlinked file's path. */
+const DELETED = / \(deleted\)$/;
+/** A uuid, a run of eight or more hex characters, or of digits. */
+const ID = /[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}|[0-9a-f]{8,}|\d+/g;
+
+/**
+ * What the agent wrote to files between two epoch seconds, by file class:
+ * a path under the scratch HOME shown from `~`, with every run of digits or
+ * of eight or more hex characters (a session's id, a temp file's suffix)
+ * folded to `*`. Sockets, pipes and devices are not files and are left out.
+ */
+const writesByFile = async (
+  dir: string,
+  home: string,
+  from: number,
+  to: number
+): Promise<Map<string, number>> => {
+  const bytes = new Map<string, number>();
+  for (const name of await readdir(dir)) {
+    // biome-ignore lint/performance/noAwaitInLoops: one thread's log at a time
+    const text = await Bun.file(join(dir, name)).text();
+    for (const line of text.split("\n")) {
+      const call = WRITE_CALL.exec(line);
+      if (!call) {
+        continue;
+      }
+      const [, at, path, written] = call as unknown as [
+        string,
+        string,
+        string,
+        string,
+      ];
+      const time = Number(at);
+      if (
+        time < from ||
+        time > to ||
+        !path.startsWith("/") ||
+        path.startsWith("/dev/")
+      ) {
+        continue;
+      }
+      const shown = path
+        .replace(home, "~")
+        .replace(DELETED, "")
+        .replace(ID, "*");
+      bytes.set(shown, (bytes.get(shown) ?? 0) + Number(written));
     }
-    const view = new DataView(bytes);
-    pageSize = view.getUint16(14, true) || pageSize;
-    const now = {
-      frames: view.getUint32(16, true),
-      backfilled: view.getUint32(96, true),
-    };
-    for (const key of ["frames", "backfilled"] as const) {
-      total[key] += now[key] >= last[key] ? now[key] - last[key] : now[key];
-    }
-    last = now;
-  };
-  return {
-    tick,
-    /** Bytes written since `from`: WAL frames (a page and a 24-byte header each) and checkpointed pages. */
-    since(from: { frames: number; backfilled: number }) {
-      return {
-        walBytes: (total.frames - from.frames) * (pageSize + 24),
-        checkpointBytes: (total.backfilled - from.backfilled) * pageSize,
-      };
-    },
-    snapshot: () => ({ ...total }),
-  };
+  }
+  return bytes;
 };
 
 const projectOf = (i: number) => `-home-probe-project-${i % SEED_PROJECTS}`;
@@ -338,18 +372,13 @@ const dataDir = join(fleet.home, ".local", "share", "cawco");
 const usageDb = join(dataDir, "usage.db");
 const indexDb = join(dataDir, "transcript-index.db");
 const projectsDir = join(fleet.home, CLAUDE_DIR_NAME, "projects");
-
-const meters = { usage: walMeter(usageDb), index: walMeter(indexDb) };
-const metering = setInterval(() => {
-  meters.usage.tick();
-  meters.index.tick();
-}, 1000);
+const traceDir = join(fleet.sandbox, "strace");
+await mkdir(traceDir, { recursive: true });
 
 const dbSizes = async () => ({
   usageDb: await sizeOf(usageDb),
   usageWal: await sizeOf(`${usageDb}-wal`),
   indexDb: await sizeOf(indexDb),
-  indexWal: await sizeOf(`${indexDb}-wal`),
 });
 
 let failure: unknown;
@@ -365,7 +394,23 @@ try {
   await fleet.hubUp();
   fleet.launch("sessiond");
   await fleet.sessiondUp();
-  const agent = fleet.launch("agent");
+  // The launched child is strace; the agent is its one child.
+  const tracer = fleet.launch("agent", straceWrap(join(traceDir, "agent")));
+  const agent = {
+    pid: await until(
+      "the agent started under strace",
+      async () =>
+        Number(
+          (
+            await Bun.file(
+              `/proc/${tracer.pid}/task/${tracer.pid}/children`
+            ).text()
+          ).trim()
+        ),
+      (pid) => pid > 0,
+      30_000
+    ),
+  };
   await fleet.agentUp();
   // The index keeps a rollback journal: its writer shuts readers out while
   // it commits (and while a catch-up spills its cache), so a read waits.
@@ -425,11 +470,9 @@ try {
   );
   // The catch-up's last WAL frames, checkpointed now from this process, so
   // the window counts only what the agent writes in it.
-  for (const path of [usageDb, indexDb]) {
-    const db = new Database(path);
-    db.exec("PRAGMA busy_timeout = 60000; PRAGMA wal_checkpoint(TRUNCATE)");
-    db.close();
-  }
+  const usage0 = new Database(usageDb);
+  usage0.exec("PRAGMA busy_timeout = 60000; PRAGMA wal_checkpoint(TRUNCATE)");
+  usage0.close();
   console.log("… caught up and quiet:", await dbSizes());
 
   // ── 3. Ten sessions writing ────────────────────────────────────────────
@@ -451,10 +494,7 @@ try {
 
   // ── 4. What the agent dirtied ─────────────────────────────────────────
   const first = await ioOf(agent.pid);
-  const from = {
-    usage: meters.usage.snapshot(),
-    index: meters.index.snapshot(),
-  };
+  const windowFrom = Date.now() / 1000;
   const t0 = performance.now();
   const samples: object[] = [];
   let writing = true;
@@ -470,37 +510,14 @@ try {
       seconds: Math.round(seconds),
       writeBytes: now.writeBytes - first.writeBytes,
       wchar: now.wchar - first.wchar,
-      usage: meters.usage.since(from.usage),
-      index: meters.index.since(from.index),
       ...(await dbSizes()),
     };
     samples.push(sample);
     console.log("…", JSON.stringify(sample));
   }
   const end = await ioOf(agent.pid);
+  const windowTo = Date.now() / 1000;
   const seconds = (performance.now() - t0) / 1000;
-  const perSecond = (bytes: { walBytes: number; checkpointBytes: number }) => ({
-    walBytesPerSecond: Math.round(bytes.walBytes / seconds),
-    checkpointBytesPerSecond: Math.round(bytes.checkpointBytes / seconds),
-  });
-  const rates = {
-    seconds: Math.round(seconds),
-    writeBytesPerSecond: Math.round(
-      (end.writeBytes - first.writeBytes) / seconds
-    ),
-    wcharPerSecond: Math.round((end.wchar - first.wchar) / seconds),
-    transcriptBytesPerSecond: Math.round(appended.bytes / seconds),
-    usage: perSecond(meters.usage.since(from.usage)),
-    index: perSecond(meters.index.since(from.index)),
-    restBytesPerSecond: 0,
-  };
-  rates.restBytesPerSecond =
-    rates.writeBytesPerSecond -
-    rates.usage.walBytesPerSecond -
-    rates.usage.checkpointBytesPerSecond -
-    rates.index.walBytesPerSecond -
-    rates.index.checkpointBytesPerSecond;
-  console.log("RATE", JSON.stringify(rates));
 
   // ── 5. What it delivers, once the usage loop has run again and a search
   // has brought the index up to date ─────────────────────────────────────
@@ -528,6 +545,24 @@ try {
     60_000
   );
   await fleet.stop("agent");
+  // strace has exited with the agent, so its logs are whole.
+  const byFile = await writesByFile(traceDir, fleet.home, windowFrom, windowTo);
+  const writers = Object.fromEntries(
+    [...byFile]
+      .sort((a, b) => b[1] - a[1])
+      .map(([file, bytes]) => [file, Math.round(bytes / seconds)])
+  );
+  const rates = {
+    seconds: Math.round(seconds),
+    writeBytesPerSecond: Math.round(
+      (end.writeBytes - first.writeBytes) / seconds
+    ),
+    wcharPerSecond: Math.round((end.wchar - first.wchar) / seconds),
+    transcriptBytesPerSecond: Math.round(appended.bytes / seconds),
+    /** Write calls' bytes per second, by file (wchar's share that went to files). */
+    writers,
+  };
+  console.log("RATE", JSON.stringify(rates));
   const usage = new Database(usageDb);
   const buckets = usage
     .query(
@@ -591,7 +626,6 @@ try {
   console.error(error);
   console.error((await fleet.logs("agent")).split("\n").slice(-30).join("\n"));
 } finally {
-  clearInterval(metering);
   await fleet.close();
   await fleet.clean(keep);
 }

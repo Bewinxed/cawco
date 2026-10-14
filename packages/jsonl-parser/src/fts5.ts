@@ -12,6 +12,7 @@
  */
 
 import { Database } from "bun:sqlite";
+import { renameSync, rmSync } from "node:fs";
 import { readTranscriptTail, type Checkpoint } from "./file.ts";
 import { parseMany } from "./pool.ts";
 import { typeFilter } from "./scan.ts";
@@ -28,26 +29,36 @@ import { extractDoc, type ExtractOptions, type TranscriptDoc } from "./text.ts";
  * was most of what a sync wrote. A record with no time is deduplicated on its
  * `doc_id`.
  *
- * Nothing is indexed by `session_id`: search filters on it after the FTS
+ * Nothing is indexed by the session: search filters on it after the FTS
  * match, never through an index, and `docs_session` cost each live session a
  * page split every other sync.
+ *
+ * The harness, session, role, cwd and model are the same few strings on row
+ * after row, so a row holds each as the id of its one copy in `strings`. As
+ * text they were ~100 of a row's ~320 bytes, and half the rows (a tool call's
+ * record, found by its tool's name) carry no text at all: written in full,
+ * they made the bulk of what a sync adds to the file.
  */
 const DOCS_TABLE = `
 CREATE TABLE IF NOT EXISTS docs (
   id INTEGER PRIMARY KEY,
-  harness TEXT NOT NULL,
+  harness INTEGER NOT NULL,
   doc_id TEXT NOT NULL,
-  session_id TEXT NOT NULL,
-  role TEXT NOT NULL,
+  session INTEGER NOT NULL,
+  role INTEGER NOT NULL,
   ts TEXT,
-  cwd TEXT,
-  model TEXT,
+  cwd INTEGER,
+  model INTEGER,
   sidechain INTEGER NOT NULL DEFAULT 0,
   tools TEXT,
   text TEXT NOT NULL
 );`;
 
+const STRINGS_TABLE = `
+CREATE TABLE IF NOT EXISTS strings (id INTEGER PRIMARY KEY, value TEXT NOT NULL UNIQUE);`;
+
 const SCHEMA = `
+${STRINGS_TABLE}
 ${DOCS_TABLE}
 CREATE UNIQUE INDEX IF NOT EXISTS docs_key ON docs(coalesce(ts, ''), doc_id, harness);
 CREATE VIRTUAL TABLE IF NOT EXISTS docs_fts USING fts5(
@@ -67,9 +78,24 @@ CREATE TABLE IF NOT EXISTS files (
   offset INTEGER NOT NULL,
   lines INTEGER NOT NULL
 );
-DROP INDEX IF EXISTS docs_session;
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `;
+
+/**
+ * How many of FTS5's segments on one level wait to be merged: its most, where
+ * the default is 4 ("FTS5 begins to merge b-trees together once there exist M
+ * or more b-trees with the same level, where M is the value of the
+ * 'automerge' parameter. The maximum allowed value ... is 16",
+ * https://www.sqlite.org/fts5.html#the_automerge_configuration_option).
+ * Each sync's commit is a segment, and a merge writes its segments' postings
+ * again and frees the old pages, which the next inserts reuse, and a rollback
+ * journal copies out every reused page first. Measured on the disk probe's
+ * corpus, six ten-minute syncs: 16.4 MB written at 4, 14.9 MB at 16; the
+ * first sync after a catch-up (which merges the catch-up's segments) 4.8 MB
+ * at 4, 3.3 MB at 16. A search reads every segment: 27 ms a query at 4, 29
+ * at 16.
+ */
+const FTS_AUTOMERGE = 16;
 
 export interface SearchOptions {
   limit?: number;
@@ -177,10 +203,29 @@ function byteBatches(files: { path: string; size: number }[], limit: number): st
 }
 
 export class TranscriptIndex {
-  readonly db: Database;
+  db: Database;
+  /** `strings`, held whole: each value's id. */
+  readonly #strings = new Map<string, number>();
 
   constructor(path: string) {
-    this.db = new Database(path, { create: true });
+    this.db = this.#open(path);
+    if (this.#rowsHoldStrings()) {
+      this.#internStrings(path);
+    }
+    this.db.exec(SCHEMA);
+    const automerge = this.db
+      .query("SELECT v FROM docs_fts_config WHERE k = 'automerge'")
+      .get() as { v: number } | null;
+    if (automerge?.v !== FTS_AUTOMERGE) {
+      this.db
+        .query("INSERT INTO docs_fts(docs_fts, rank) VALUES ('automerge', ?)")
+        .run(FTS_AUTOMERGE);
+    }
+    this.#reloadStrings();
+  }
+
+  #open(path: string): Database {
+    const db = new Database(path, { create: true });
     // journal_mode: the index only grows, and a rollback journal writes a
     // page added past the end of the file once, where WAL writes every page
     // twice (to the log, then back at checkpoint). Only the few existing pages
@@ -199,36 +244,79 @@ export class TranscriptIndex {
     // that statement touches, spilling past 64 KB to a temp file: measured, a
     // tenth of a sync's writes went to `etilqs_*` files. In memory, they cost
     // a few MB of RAM for the moment of the flush.
-    this.db.exec(
+    db.exec(
       "PRAGMA journal_mode = TRUNCATE; PRAGMA synchronous = FULL; PRAGMA busy_timeout = 5000; PRAGMA temp_store = MEMORY;",
     );
-    this.#dropDocIdKey();
-    this.db.exec(SCHEMA);
+    return db;
+  }
+
+  /** Whether `docs` is an older index's, holding its strings in every row. */
+  #rowsHoldStrings(): boolean {
+    return (
+      this.db.query("SELECT 1 FROM pragma_table_info('docs') WHERE name = 'session_id'").get() !==
+      null
+    );
   }
 
   /**
-   * An index made before `docs_key` holds `docs` with `UNIQUE(harness,
-   * doc_id)`, which only a new table drops: its rows are copied across with
-   * their ids, so the FTS index over them stays as it is. Once, in one
-   * transaction.
+   * An older index's rows, each string replaced by its id in `strings`, in
+   * one transaction: copied across with their ids and text, so the FTS index
+   * over them stays as it is. Dropping the old table leaves its pages free,
+   * and a rollback journal copies out every free page a later insert reuses,
+   * so the file is then rewritten compact (`VACUUM INTO`) and put in place by
+   * a rename: a crash before it leaves the converted index, only not compact.
+   * Once per index.
    */
-  #dropDocIdKey(): void {
-    const old = this.db
-      .query("SELECT 1 FROM sqlite_master WHERE name = 'sqlite_autoindex_docs_1'")
-      .get();
-    if (!old) {
-      return;
-    }
+  #internStrings(path: string): void {
+    const id = (column: string) => `(SELECT id FROM strings WHERE value = d.${column})`;
     this.db.transaction(() => {
       this.db.exec(`
+        ${STRINGS_TABLE}
+        INSERT OR IGNORE INTO strings (value)
+          SELECT harness FROM docs UNION SELECT session_id FROM docs UNION SELECT role FROM docs
+          UNION SELECT cwd FROM docs WHERE cwd IS NOT NULL UNION SELECT model FROM docs WHERE model IS NOT NULL;
         ${DOCS_TABLE.replace("docs (", "docs_next (")}
-        INSERT INTO docs_next SELECT id, harness, doc_id, session_id, role, ts, cwd, model, sidechain, tools, text FROM docs;
+        INSERT INTO docs_next
+          SELECT d.id, ${id("harness")}, d.doc_id, ${id("session_id")}, ${id("role")}, d.ts,
+            ${id("cwd")}, ${id("model")}, d.sidechain, d.tools, d.text
+          FROM docs d;
         DROP TRIGGER IF EXISTS docs_ai;
         DROP TRIGGER IF EXISTS docs_ad;
         DROP TABLE docs;
         ALTER TABLE docs_next RENAME TO docs;
       `);
     })();
+    const compact = `${path}.compact`;
+    rmSync(compact, { force: true });
+    this.db.query("VACUUM INTO ?").run(compact);
+    this.db.close();
+    renameSync(compact, path);
+    this.db = this.#open(path);
+  }
+
+  /** `value`'s id in `strings`, added in the caller's transaction when new. */
+  #stringId(value: string): number {
+    let id = this.#strings.get(value);
+    if (id === undefined) {
+      id = (
+        this.db.query("INSERT INTO strings (value) VALUES (?) RETURNING id").get(value) as {
+          id: number;
+        }
+      ).id;
+      this.#strings.set(value, id);
+    }
+    return id;
+  }
+
+  /** `strings` read afresh: a transaction rolled back takes the ids it added with it. */
+  #reloadStrings(): void {
+    this.#strings.clear();
+    for (const row of this.db.query("SELECT id, value FROM strings").all() as {
+      id: number;
+      value: string;
+    }[]) {
+      this.#strings.set(row.value, row.id);
+    }
   }
 
   close(): void {
@@ -236,7 +324,7 @@ export class TranscriptIndex {
   }
 
   /**
-   * Insert documents (deduplicated on (harness, doc_id)) in one transaction,
+   * Insert documents (deduplicated on `docs_key`) in one transaction,
    * returning how many were new.
    *
    * Counted off `RETURNING`, which yields a row only for an insert the
@@ -251,25 +339,30 @@ export class TranscriptIndex {
     if (docs.length === 0) {
       return 0;
     }
-    return this.db.transaction(() => this.#insertDocs(docs))();
+    try {
+      return this.db.transaction(() => this.#insertDocs(docs))();
+    } catch (error) {
+      this.#reloadStrings();
+      throw error;
+    }
   }
 
   /** Inserts `docs` in the caller's transaction; answers how many were new. */
   #insertDocs(docs: TranscriptDoc[]): number {
     const insert = this.db.query(
-      `INSERT OR IGNORE INTO docs (harness, doc_id, session_id, role, ts, cwd, model, sidechain, tools, text)
+      `INSERT OR IGNORE INTO docs (harness, doc_id, session, role, ts, cwd, model, sidechain, tools, text)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     );
     let added = 0;
     for (const doc of docs) {
       const row = insert.get(
-        doc.harness,
+        this.#stringId(doc.harness),
         doc.id,
-        doc.sessionId,
-        doc.role,
+        this.#stringId(doc.sessionId),
+        this.#stringId(doc.role),
         doc.timestamp ?? null,
-        doc.cwd ?? null,
-        doc.model ?? null,
+        typeof doc.cwd === "string" ? this.#stringId(doc.cwd) : null,
+        typeof doc.model === "string" ? this.#stringId(doc.model) : null,
         doc.sidechain ? 1 : 0,
         doc.tools ?? null,
         doc.text,
@@ -328,6 +421,7 @@ export class TranscriptIndex {
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
+      this.#reloadStrings();
       throw error;
     }
     return added;
@@ -456,13 +550,20 @@ export class TranscriptIndex {
     }
     const filters: string[] = [];
     const params: (string | number)[] = [match];
-    if (options.sessionId !== undefined) {
-      filters.push("AND d.session_id = ?");
-      params.push(options.sessionId);
-    }
-    if (options.role !== undefined) {
-      filters.push("AND d.role = ?");
-      params.push(options.role);
+    // A session or role no row names has no id, and no hits.
+    for (const [column, value] of [
+      ["session", options.sessionId],
+      ["role", options.role],
+    ] as const) {
+      if (value === undefined) {
+        continue;
+      }
+      const id = this.#strings.get(value);
+      if (id === undefined) {
+        return [];
+      }
+      filters.push(`AND d.${column} = ?`);
+      params.push(id);
     }
     if (options.sidechains === false) {
       filters.push("AND d.sidechain = 0");
@@ -470,11 +571,17 @@ export class TranscriptIndex {
     params.push(options.limit ?? 20);
     const rows = this.db
       .prepare(
-        `SELECT d.harness, d.doc_id, d.session_id, d.role, d.ts, d.cwd, d.model, d.sidechain,
+        `SELECT h.value AS harness, d.doc_id, s.value AS session_id, r.value AS role, d.ts,
+                c.value AS cwd, m.value AS model, d.sidechain,
                 bm25(docs_fts, 1.0, 3.0) AS score,
                 snippet(docs_fts, 0, '「', '」', '…', 16) AS snip
          FROM docs_fts
          JOIN docs d ON d.id = docs_fts.rowid
+         JOIN strings h ON h.id = d.harness
+         JOIN strings s ON s.id = d.session
+         JOIN strings r ON r.id = d.role
+         LEFT JOIN strings c ON c.id = d.cwd
+         LEFT JOIN strings m ON m.id = d.model
          WHERE docs_fts MATCH ? ${filters.join(" ")}
          ORDER BY rank
          LIMIT ?`,
