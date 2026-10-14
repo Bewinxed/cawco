@@ -11,7 +11,7 @@
  *   A  querying opening prompt (peer origin, no shouldQuery) — the delegate spawn.
  *   B  queued hand-off (shouldQuery:false) sent while the session is IDLE —
  *      the supervisor's "wake" path, which converts it back to a querying turn.
- *   C  urgent peer message injected mid-turn via streamInput (the A2 probe).
+ *   C  querying peer message sent mid-turn, while the session streams.
  *   D  queued hand-off (shouldQuery:false) sent while the session is BUSY.
  *
  * Measured result (SDK 0.3.220): every scenario emits exactly ONE peer frame —
@@ -241,7 +241,7 @@ const counts: Record<string, number> = {};
   counts.B = diag("B-queued-idle", start);
 }
 
-// ---- C: urgent peer message injected mid-turn (A2 probe) ----
+// ---- C: querying peer message sent mid-turn ----
 {
   const start = frames.length;
   session.send(
@@ -263,14 +263,14 @@ const counts: Record<string, number> = {};
   const startU = frames.length;
   session.send(
     peerMessage(
-      "PEER-URGENT: stop counting and reply with exactly URGENT-ACK."
+      "PEER-MID-TURN: stop counting and reply with exactly MID-TURN-ACK."
     ),
-    { urgent: true }
+    {}
   );
   const got = await waitForResult(startU, TIMEOUT);
   console.log(`DIAG C: result frame arrived = ${got}`);
   dumpAll("C", startU);
-  counts.C = diag("C-urgent", startU);
+  counts.C = diag("C-mid-turn", startU);
 }
 
 // ---- D: queued hand-off while BUSY (the case the daemon echo is for) ----
@@ -338,7 +338,7 @@ assertCount("A", 1);
 assertCount("B", 1);
 assertCount("D", 1);
 // C is reported, not gated: its expectation follows from the A2 measurement.
-console.log(`DIAG ${JSON.stringify({ urgentCount: counts.C })}`);
+console.log(`DIAG ${JSON.stringify({ midTurnCount: counts.C })}`);
 
 await session.stop().catch(() => {
   // best effort: the process exits either way

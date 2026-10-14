@@ -39,8 +39,7 @@
      * A word in the clock's place, for a turn that has no clock: a queued
      * message has not happened yet, so it has no time to show and this says
      * what it is instead. Always visible — unlike the clock, which is context
-     * the reader hovers for, this is the row's whole status. A turn with a
-     * clock can carry one too (an urgent send): it stands before the clock.
+     * the reader hovers for, this is the row's whole status.
      */
     note?: string;
   } = $props();

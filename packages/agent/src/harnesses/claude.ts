@@ -2525,26 +2525,9 @@ class ClaudeSession implements HarnessSession {
     );
     this.#delivery.set(message.uuid, Promise.withResolvers<void>());
     this.#unread.add(message.uuid);
-
-    // A mid-turn injection: the model reads it at the next tool boundary without
-    // losing work. The CLI queues it and says `started` when it is read, as it
-    // does for any send (measured 2.1.280). A stream that refuses it is that
-    // send's failure.
-    if (extras.urgent && this.#turn.busy) {
-      // biome-ignore lint/suspicious/useAwait: must stay an async generator — streamInput's signature requires AsyncGenerator<SDKUserMessage>, not the plain Generator a non-async function* would produce
-      const stream = (async function* (): AsyncGenerator<SDKUserMessage> {
-        yield outgoing;
-      })();
-      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent; the rejection is handled by the .catch() right here
-      void this.#handle.streamInput(stream).catch((error: unknown) => {
-        this.#delivery.get(message.uuid)?.resolve();
-        this.#delivery.delete(message.uuid);
-        this.#unread.delete(message.uuid);
-        this.#ctx.rejected(message.uuid, error);
-      });
-      return;
-    }
-
+    // Into a running turn the CLI queues it and says `started` when it is
+    // read (measured 2.1.280); its `queued` moves the shell command or
+    // subagent holding the turn to the background ({@link #moveToBackground}).
     this.#ctx.busy(true);
     this.#turn.start();
     this.#input.push(outgoing);

@@ -1949,10 +1949,8 @@ export const rules = sqliteTable("rules", {
   /** Whether the rule reads the session's answer, its reasoning, or both. */
   watch: text("watch").$type<RuleWatch>().notNull().default("text"),
   reply: text("reply").notNull(),
-  /** `turn` wakes an idle session, `message` queues, `immediate` cuts in. */
+  /** `turn` wakes an idle session, `message` queues, `immediate` sends mid-stream. */
   timing: text("timing").$type<RuleTiming>().notNull().default("turn"),
-  /** `immediate` only: deliver mid-turn instead of waiting for a boundary. */
-  interrupt: integer("interrupt", { mode: "boolean" }).notNull().default(false),
   /**
    * On, the rule fires again on every later match (up to the ceiling). Off, it
    * fires once per session and goes quiet.

@@ -568,8 +568,12 @@ export interface OpencodeSessionOptions {
   /** A fenced session: it has CawCo's MCP server and no other. */
   fence: boolean;
   instanceId: string;
-  /** Returns true while the harness's config gate holds this session's sends. */
-  isConfigGateHeld: (urgent?: boolean) => boolean;
+  /**
+   * Returns true while the harness's config gate holds this session's sends.
+   * `joinsTurn`: the send goes into a turn running on the session's server,
+   * which a server being retired does not hold.
+   */
+  isConfigGateHeld: (joinsTurn?: boolean) => boolean;
   /** A project's Caw: each of his shell and edit calls asks, and the hub's gate answers it ({@link leadAsks}). */
   lead: boolean;
   /** The OpenCode session ids this agent runs, so a credential store keeps only theirs. */
@@ -617,7 +621,7 @@ export class OpencodeSession implements HarnessSession {
   readonly #instructions = new Map<string, string>();
   readonly #registerChild: (childId: string, callID: string) => void;
   readonly #onRelease: () => void;
-  readonly #isConfigGateHeld: (urgent?: boolean) => boolean;
+  readonly #isConfigGateHeld: (joinsTurn?: boolean) => boolean;
   readonly #readActivity: () => Promise<boolean>;
   readonly #prepareDispatch: () => Promise<void>;
   readonly #liveSessions: () => ReadonlySet<string>;
@@ -960,6 +964,9 @@ export class OpencodeSession implements HarnessSession {
         this.#busy = true;
         this.#turnOpen = true;
         this.#ctx.busy(true);
+        // Sends a retiring server's hold kept while the session was idle join
+        // the turn it has started there.
+        this.#drainQueue();
         break;
       case "session.step.started": {
         const id = event.data.assistantMessageID;
@@ -2231,7 +2238,6 @@ export class OpencodeSession implements HarnessSession {
     extras: {
       attachments?: { name: string; content: string }[];
       images?: { mediaType: string; data: string }[];
-      urgent?: boolean;
     }
   ): void {
     this.#sleepAfterRecovery = false;
@@ -2247,11 +2253,6 @@ export class OpencodeSession implements HarnessSession {
             )
             .map((block) => block.text)
             .join("\n");
-    // An urgent send is not held for a server being retired (the config
-    // gate's `urgent`). Into a running turn it goes like any send: admitted
-    // to the inbox, where its arrival moves the turn's blocking calls to the
-    // background ({@link #moveToBackground}), and read at that boundary.
-    const urgent = Boolean(extras.urgent);
     for (const attachment of extras.attachments ?? []) {
       text += `\n\n<pasted-text name="${attachment.name}">\n${attachment.content}\n</pasted-text>`;
     }
@@ -2269,23 +2270,15 @@ export class OpencodeSession implements HarnessSession {
       storedAs: { [uuid]: messageID },
       session_id: this.sessionId ?? undefined,
     });
-    const retiredUrgent =
-      urgent && this.#isConfigGateHeld() && !this.#isConfigGateHeld(true);
+    // Held while the gate holds it, behind whatever it holds already: every
+    // send is taken up in the order it was sent ({@link #drainQueue}).
     if (
-      this.#isConfigGateHeld(urgent) ||
+      this.#isConfigGateHeld(this.#busy) ||
       this.#draining ||
-      (!retiredUrgent && this.#queue.length > 0)
+      this.#queue.length > 0
     ) {
       this.#queue.push({ text, files, messageID, uuid });
       this.#drainQueue();
-      return;
-    }
-    // Past a retiring server's hold: admitted ahead of what it holds, and
-    // what it holds waits until this one is in ({@link #drained}).
-    if (retiredUrgent) {
-      this.#draining = messageID;
-      this.#ctx.busy(true);
-      this.#prompt(text, files, messageID, uuid);
       return;
     }
     // Idle or busy, every send is admitted at once: OpenCode's inbox keeps it
@@ -2351,9 +2344,15 @@ export class OpencodeSession implements HarnessSession {
     }
   }
 
-  /** Delivers what the config gate held, in arrival order, one admission at a time. */
+  /**
+   * Delivers what the config gate held, in arrival order, one admission at a
+   * time. A send into a running turn passes a retiring server's hold (the
+   * gate's `joinsTurn`): it starts no turn there, so the session can still
+   * come to rest and move, and it is read at the turn's next step, never
+   * behind the turn.
+   */
   #drainQueue(): void {
-    if (this.#draining || this.#isConfigGateHeld()) {
+    if (this.#draining || this.#isConfigGateHeld(this.#busy)) {
       return;
     }
     const next = this.#queue.shift();

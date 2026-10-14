@@ -325,8 +325,7 @@ final class UserTurnView: UIView, RowContent, FitsWidth, UIGestureRecognizerDele
         // On a touch screen, a queued message that can be edited says how.
         let tappable = waiting && !taken && Self.touch && env.canEditQueued(block.id)
         let queuedNote = tappable ? "queued · \(env.agentName) is still working · tap to edit" : "queued"
-        let note: String? = taken ? nil : ghost ? "sending…" : failed ? (sending ? "sending…" : "not sent") : waiting ? queuedNote
-            : block.meta["urgent"] as? Bool == true ? "urgent" : nil
+        let note: String? = taken ? nil : ghost ? "sending…" : failed ? (sending ? "sending…" : "not sent") : waiting ? queuedNote : nil
         let clock = failed || waiting || ghost ? nil : Item.clock(block.date)
         who.isHidden = turn.grouped
         who.configure(.init(name: "You", clock: clock, note: note, you: true))

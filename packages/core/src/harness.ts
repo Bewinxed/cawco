@@ -767,11 +767,11 @@ export type SentMessage = NeutralUserMessage & {
 };
 
 /**
- * How a send asks to be read: as a turn of its own, as a note the next turn
- * folds in (`shouldQuery: false`), or urgently — into the running turn, or
- * ahead of it.
+ * How a send asks to be read: as a turn of its own, or as a note the next
+ * turn folds in (`shouldQuery: false`). Into a running turn, either is read
+ * at its next step, a command it is running moved to the background.
  */
-export type SendMode = "turn" | "note" | "urgent";
+export type SendMode = "turn" | "note";
 
 /**
  * Where a send stands, as the hub alone decides it: waiting for the harness
@@ -837,7 +837,7 @@ export interface SendRecord {
   /**
    * Exactly what the sender submitted: its words, its pictures (as the hub's
    * media references) and pastes, and who it is from. What the agent adds on
-   * the way to the harness (a worktree line, an urgent prefix) is not in it.
+   * the way to the harness (a worktree line) is not in it.
    */
   body: NeutralUserMessage;
   /**

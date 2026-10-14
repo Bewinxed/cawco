@@ -4080,7 +4080,6 @@ public enum OpenEnums {
     public enum SendMode: OpenEnum {
         case note
         case turn
-        case urgent
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -4088,7 +4087,6 @@ public enum OpenEnums {
             switch rawValue {
             case "note": self = .note
             case "turn": self = .turn
-            case "urgent": self = .urgent
             default: self = .unrecognized(rawValue)
             }
         }
@@ -4097,7 +4095,6 @@ public enum OpenEnums {
             switch self {
             case .note: "note"
             case .turn: "turn"
-            case .urgent: "urgent"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -4106,7 +4103,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.note, .turn, .urgent]
+        public static let allCases: [Self] = [.note, .turn]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

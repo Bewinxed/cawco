@@ -165,15 +165,7 @@
       draft.wholeWord = false;
       if (draft.timing === "immediate") {
         draft.timing = "turn";
-        draft.interrupt = false;
       }
-    }
-  }
-
-  function setTiming(next: RuleTiming) {
-    draft.timing = next;
-    if (next !== "immediate") {
-      draft.interrupt = false;
     }
   }
 
@@ -469,7 +461,9 @@
       >
         <Choice
           label="Send it"
-          onchange={(next) => setTiming(next as RuleTiming)}
+          onchange={(next) => {
+            draft.timing = next as RuleTiming;
+          }}
           options={TIMING.map((option) => ({
             value: option.value,
             label: option.label,
@@ -479,16 +473,6 @@
           value={draft.timing}
         />
       </Field>
-      {#if draft.timing === "immediate"}
-        <div in:unfold out:unfold>
-          <SwitchField
-            hint="Every session reads it at its next step without stopping. A command it is running moves to the background and keeps going."
-            id="rule-interrupt"
-            label="Interrupt the running turn"
-            bind:checked={draft.interrupt}
-          />
-        </div>
-      {/if}
     </div>
   </EditorSection>
 

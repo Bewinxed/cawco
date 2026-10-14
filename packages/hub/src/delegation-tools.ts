@@ -427,8 +427,8 @@ export function handoffTools(deps: HandoffDeps) {
       "handoff",
       "Send a message to another session on the fleet — to guide one of your delegates while " +
         "its work item runs, or to brief a session that already owns the work. An idle target wakes " +
-        "and works on it immediately; a busy target finishes its current turn first, then " +
-        "reads everything queued in one wake turn. Write the message as a brief " +
+        "and works on it immediately; a busy target reads it at its next step, a command it is " +
+        "running moved to the background and kept going. Write the message as a brief " +
         "for another engineer who cannot see your conversation: what you found, where (file " +
         "and line), and what you are asking them to do. For new standalone work, use delegate instead. " +
         "To follow up on your own delegate after it reports (done, failed or cancelled), hand off to it: " +
@@ -445,19 +445,12 @@ export function handoffTools(deps: HandoffDeps) {
           .describe(
             "The brief. Include the finding, the paths involved, and the ask."
           ),
-        urgent: z
-          .boolean()
-          .optional()
-          .describe(
-            "Force delivery to one of YOUR delegates: a busy delegate reads it at its next step, " +
-              "its running shell command moved to the background, never stopped. Only valid toward your own delegates."
-          ),
       },
-      async ({ target, message, urgent }) => ({
+      async ({ target, message }) => ({
         content: [
           {
             type: "text" as const,
-            text: await actions.handoff(target, message, urgent),
+            text: await actions.handoff(target, message),
           },
         ],
       })

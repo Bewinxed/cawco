@@ -696,7 +696,7 @@ class PiSession implements HarnessSession {
         ...(streaming ? { streamingBehavior: "steer" as const } : {}),
       })
       .then(() => {
-        // Any send — the person's, urgent or not, a hand-off, a report, a
+        // Any send — the person's, a hand-off, a report, a
         // rule's reply — is steered into a running turn, which reads it once
         // its tool calls end. Once it is queued (pi's `prompt` returns from
         // `_queueSteer` while streaming), the shell commands the turn waits

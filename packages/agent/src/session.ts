@@ -3905,7 +3905,7 @@ export class SessionSupervisor {
   }
 
   async #send(payload: SendPayload): Promise<void> {
-    const { instanceId, images, urgent } = payload;
+    const { instanceId, images } = payload;
     const keepAlive =
       payload.message.origin.kind === "system" &&
       payload.message.origin.name === "keepalive";
@@ -3971,7 +3971,7 @@ export class SessionSupervisor {
       this.#failureRun.delete(instanceId);
       this.#noteHanded(payload);
     }
-    session.send(message, { attachments, images, urgent });
+    session.send(message, { attachments, images });
   }
 
   /** Ends the instance's children on every keeper that holds one, the current or a retiring one, and waits until each has gone. */

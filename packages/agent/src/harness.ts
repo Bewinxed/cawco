@@ -40,7 +40,6 @@ import type {
 export interface TurnExtras {
   attachments?: TextAttachment[];
   images?: SendPayload["images"];
-  urgent?: boolean;
 }
 
 /** Known surviving custody requires an operator decision, not another probe or a replacement. */

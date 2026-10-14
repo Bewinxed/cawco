@@ -163,8 +163,6 @@ export interface BlockMetadata {
   toolUseResult?: UserQuestionResult;
   totalCost?: number;
   trigger?: "manual" | "auto";
-  /** A send made urgently (`SendRecord.mode`): into the running turn, or ahead of it. */
-  urgent?: true;
   /** Set when a `user.peer` is a workflow's notice: what happened, e.g. `step Build failed`. */
   workflowEvent?: string;
 }

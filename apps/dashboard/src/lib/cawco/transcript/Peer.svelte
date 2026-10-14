@@ -140,8 +140,6 @@
         <span class="state">failed</span>
       {:else if message.state === "pending"}
         <span class="pending">queued</span>
-      {:else if meta.urgent}
-        <span class="pending">urgent</span>
       {/if}
       {#if !open && excerpt}
         <span class="excerpt">{excerpt}</span>

@@ -4033,9 +4033,15 @@ export class OpencodeHarness implements Harness {
         }
         this.#releaseDirectory(ctx.cwd, held);
       },
-      isConfigGateHeld: (urgent) =>
+      // A config being applied holds every send. A session still on a
+      // retiring server is held only for a send that would start a turn
+      // there: one into its running turn starts none, so the session still
+      // comes to rest and moves, and it is read at the turn's next step. A
+      // turn that ends between that check and the admission is a turn
+      // started there, which the server's retirement waits out.
+      isConfigGateHeld: (joinsTurn) =>
         this.#applyGate !== null ||
-        (!urgent &&
+        (!joinsTurn &&
           this.#sessionOwners.get(ctx.instanceId)?.procId !==
             slot.owner.active?.procId),
       readActivity: () =>

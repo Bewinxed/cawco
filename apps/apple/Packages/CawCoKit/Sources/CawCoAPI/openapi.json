@@ -15130,9 +15130,6 @@
                       "immediate"
                     ]
                   },
-                  "interrupt": {
-                    "type": "boolean"
-                  },
                   "repeat": {
                     "type": "boolean"
                   },
@@ -15164,7 +15161,6 @@
                   "watch",
                   "reply",
                   "timing",
-                  "interrupt",
                   "repeat",
                   "scope"
                 ]
@@ -15268,9 +15264,6 @@
                       "immediate"
                     ]
                   },
-                  "interrupt": {
-                    "type": "boolean"
-                  },
                   "repeat": {
                     "type": "boolean"
                   },
@@ -15302,7 +15295,6 @@
                   "watch",
                   "reply",
                   "timing",
-                  "interrupt",
                   "repeat",
                   "scope"
                 ]
@@ -22176,10 +22168,6 @@
                 "id": {
                   "type": "string"
                 },
-                "interrupt": {
-                  "description": "`immediate` only: cut into the running turn rather than queueing.",
-                  "type": "boolean"
-                },
                 "matchKind": {
                   "$ref": "#/components/schemas/RuleMatchKind"
                 },
@@ -22218,7 +22206,6 @@
                 "createdAt",
                 "enabled",
                 "id",
-                "interrupt",
                 "matchKind",
                 "name",
                 "pattern",
@@ -25608,10 +25595,6 @@
           "message": {
             "$ref": "#/components/schemas/SentMessage",
             "description": "The user turn, under the uuid it keeps everywhere it is shown."
-          },
-          "urgent": {
-            "description": "Force delivery: a busy session reads it at its next step (claude mid-turn\nvia `streamInput`), and a shell command holding the turn is moved to the\nbackground, never stopped. The hub honours urgency only when the target is\n`from`'s own delegate; otherwise it downgrades to a normal queued send.",
-            "type": "boolean"
           }
         },
         "required": [
@@ -34695,11 +34678,6 @@
           "trigger": {
             "$ref": "#/components/schemas/BlockMetadataTrigger"
           },
-          "urgent": {
-            "description": "A send made urgently (`SendRecord.mode`): into the running turn, or ahead of it.",
-            "const": true,
-            "type": "boolean"
-          },
           "workflowEvent": {
             "description": "Set when a `user.peer` is a workflow's notice: what happened, e.g. `step Build failed`.",
             "type": "string"
@@ -36024,7 +36002,7 @@
         }
       },
       "RuleTiming": {
-        "description": "When the reply is delivered.\n\n- `turn` — the session has stopped and is idle, so the reply wakes it into a\n  new turn. This is the one that makes a session keep working.\n- `message` — queued the moment the assistant message that matched is\n  complete; the session reads it at the next turn boundary without being\n  interrupted.\n- `immediate` — sent the moment the phrase appears mid-stream, optionally\n  interrupting the turn in flight ({@link Rule.interrupt}).",
+        "description": "When the reply is delivered.\n\n- `turn` — the session has stopped and is idle, so the reply wakes it into a\n  new turn. This is the one that makes a session keep working.\n- `message` — queued the moment the assistant message that matched is\n  complete; the session reads it at the next turn boundary without being\n  interrupted.\n- `immediate` — sent the moment the phrase appears mid-stream; the session\n  reads it at its next step, a command it is running moved to the\n  background.",
         "type": "string",
         "enum": [
           "immediate",
@@ -36061,10 +36039,6 @@
             "description": "What the session is sent when the rule fires.",
             "type": "string"
           },
-          "interrupt": {
-            "description": "`immediate` only: cut into the running turn rather than queueing.",
-            "type": "boolean"
-          },
           "watch": {
             "$ref": "#/components/schemas/RuleWatch"
           },
@@ -36091,7 +36065,6 @@
         "required": [
           "caseSensitive",
           "enabled",
-          "interrupt",
           "matchKind",
           "name",
           "pattern",
@@ -36118,10 +36091,6 @@
           },
           "id": {
             "type": "string"
-          },
-          "interrupt": {
-            "description": "`immediate` only: cut into the running turn rather than queueing.",
-            "type": "boolean"
           },
           "matchKind": {
             "$ref": "#/components/schemas/RuleMatchKind"
@@ -36161,7 +36130,6 @@
           "createdAt",
           "enabled",
           "id",
-          "interrupt",
           "matchKind",
           "name",
           "pattern",
@@ -38480,7 +38448,7 @@
           },
           "body": {
             "$ref": "#/components/schemas/NeutralUserMessage",
-            "description": "Exactly what the sender submitted: its words, its pictures (as the hub's\nmedia references) and pastes, and who it is from. What the agent adds on\nthe way to the harness (a worktree line, an urgent prefix) is not in it."
+            "description": "Exactly what the sender submitted: its words, its pictures (as the hub's\nmedia references) and pastes, and who it is from. What the agent adds on\nthe way to the harness (a worktree line) is not in it."
           },
           "harnessId": {
             "description": "The id the harness stored the send under, where that is not its uuid:\nopencode's message id, pi's entry id, and — for a send Claude joined into\nanother's record ({@link SessionMessage.joined}) — that record's uuid.",
@@ -39005,12 +38973,11 @@
         ]
       },
       "SendMode": {
-        "description": "How a send asks to be read: as a turn of its own, as a note the next turn\nfolds in (`shouldQuery: false`), or urgently — into the running turn, or\nahead of it.",
+        "description": "How a send asks to be read: as a turn of its own, or as a note the next\nturn folds in (`shouldQuery: false`). Into a running turn, either is read\nat its next step, a command it is running moved to the background.",
         "type": "string",
         "enum": [
           "note",
-          "turn",
-          "urgent"
+          "turn"
         ]
       },
       "SendState": {

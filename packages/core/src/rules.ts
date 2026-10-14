@@ -38,8 +38,9 @@ export type RuleWatch = "text" | "thinking" | "both";
  * - `message` — queued the moment the assistant message that matched is
  *   complete; the session reads it at the next turn boundary without being
  *   interrupted.
- * - `immediate` — sent the moment the phrase appears mid-stream, optionally
- *   interrupting the turn in flight ({@link Rule.interrupt}).
+ * - `immediate` — sent the moment the phrase appears mid-stream; the session
+ *   reads it at its next step, a command it is running moved to the
+ *   background.
  */
 export type RuleTiming = "turn" | "message" | "immediate";
 
@@ -70,8 +71,6 @@ export interface Rule {
   createdAt: number;
   enabled: boolean;
   id: string;
-  /** `immediate` only: cut into the running turn rather than queueing. */
-  interrupt: boolean;
   matchKind: RuleMatchKind;
   /** What the rule is called in the list, and in the reply the session reads. */
   name: string;
@@ -249,11 +248,6 @@ export function ruleProblem(draft: Partial<RuleDraft>): Record<string, string> {
   if (!draft.reply?.trim()) {
     wrong.reply = "Write what the session should be told when this fires.";
   }
-
-  if (draft.timing !== "immediate" && draft.interrupt) {
-    wrong.interrupt =
-      "Only an immediate rule can interrupt — the other two wait for a boundary.";
-  }
   return wrong;
 }
 
@@ -302,9 +296,7 @@ export function ruleSentence(rule: Partial<RuleDraft>): string {
 
   let when: string;
   if (rule.timing === "immediate") {
-    when = rule.interrupt
-      ? "send straight away, moving any command it is running to the background"
-      : "send, without waiting for the message to finish";
+    when = "send, without waiting for the message to finish";
   } else if (rule.timing === "message") {
     when = "wait for that message to finish, then send";
   } else {
@@ -339,7 +331,6 @@ export const RULE_TEMPLATES: {
       reply:
         "if there's an honest caveat that you are aware of and you're just reporting it to the user instead of fixing it, then your work is not done yet",
       timing: "turn",
-      interrupt: false,
       repeat: true,
       scope: {},
     },
@@ -358,7 +349,6 @@ export const RULE_TEMPLATES: {
       reply:
         "You left a placeholder. Go back and write the real implementation, or tell me exactly what is blocking you from writing it.",
       timing: "turn",
-      interrupt: false,
       repeat: true,
       scope: {},
     },
@@ -377,7 +367,6 @@ export const RULE_TEMPLATES: {
       reply:
         "You said it should work. Run it and report what actually happened, with the output.",
       timing: "turn",
-      interrupt: false,
       repeat: true,
       scope: {},
     },

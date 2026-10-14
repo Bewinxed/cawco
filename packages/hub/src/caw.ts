@@ -259,7 +259,7 @@ const sourceOf = (event: CawEvent, inboxed: number): "owner" | "outside" =>
 
 /** A person's send to Caw's session, as its wake carries it on: its uuid and what it carried besides its words. */
 interface PersonSend {
-  carried: Pick<SendPayload, "attachments" | "images" | "urgent">;
+  carried: Pick<SendPayload, "attachments" | "images">;
   uuid: string;
 }
 
@@ -2005,7 +2005,6 @@ export const createCaw = ({
           ...(payload.attachments?.length
             ? { attachments: payload.attachments }
             : {}),
-          ...(payload.urgent ? { urgent: true } : {}),
         },
       };
       const words = wordsOf(sent.message.content);

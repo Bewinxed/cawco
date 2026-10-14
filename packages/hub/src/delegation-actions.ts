@@ -549,7 +549,7 @@ const HOLD_WORDS: Record<SendHold, string> = {
 };
 
 /** What the hub did with a hand-off, as its sender is told. */
-const deliveryWords = (delivery: SendDelivery, urgent: boolean): string => {
+const deliveryWords = (delivery: SendDelivery): string => {
   if (delivery.hold) {
     return HOLD_WORDS[delivery.hold];
   }
@@ -559,13 +559,8 @@ const deliveryWords = (delivery: SendDelivery, urgent: boolean): string => {
   if (delivery.woke === "fresh") {
     return "It never started; it is being started fresh under its id to read it.";
   }
-  if (urgent) {
-    return delivery.busy
-      ? "Its current turn was interrupted to read it now; a claude delegate reads it mid-turn instead."
-      : "It was idle, so it reads it now.";
-  }
   return delivery.busy
-    ? "It is queued there and will be picked up when that session finishes its current turn; it was not interrupted."
+    ? "It is working, and reads it at its next step: a command it is running moves to the background and keeps going."
     : "It was idle, so it reads it now.";
 };
 
@@ -736,7 +731,7 @@ export interface HandoffActions {
     request: ImageGenerationRequest
   ) => Promise<GeneratedImage>;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
-  handoff(target: string, message: string, urgent?: boolean): Promise<string>;
+  handoff(target: string, message: string): Promise<string>;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   interruptDelegate(target: string): string;
   readonly listDelegateTypes: () => Promise<{ types: DelegateType[] }>;
@@ -1345,11 +1340,7 @@ export const handoffActions = ({
     return `${listed}\n\n${where}`;
   },
 
-  async handoff(
-    target: string,
-    message: string,
-    urgent = false
-  ): Promise<string> {
+  async handoff(target: string, message: string): Promise<string> {
     const { peers, asleep, own, hosts } = roster(fleet, instanceId);
     // A session named by a former id is reached by its id now.
     const followed = formerOf(formerIds(), target);
@@ -1359,9 +1350,7 @@ export const handoffActions = ({
         ? instanceById(addressed)
         : undefined;
     const sleeping = unlisted ? [...asleep, toPeer(unlisted, hosts)] : asleep;
-    const peer = urgent
-      ? resolveDelegate(peers, addressed, instanceId, ledBy)
-      : resolveHandoff(peers, sleeping, addressed, own);
+    const peer = resolveHandoff(peers, sleeping, addressed, own);
     if (peer.row.id !== own?.parentInstanceId) {
       await checkCold(peer.row.id, undefined, instanceId, message);
     }
@@ -1384,7 +1373,6 @@ export const handoffActions = ({
         },
         shouldQuery: false,
       },
-      ...(urgent ? { urgent: true, from: instanceId } : {}),
     };
     // Delivered now, so the answer says what the hub did with it, not what
     // the roster suggested before it went.
@@ -1395,10 +1383,8 @@ export const handoffActions = ({
       payload,
     });
     const continues = continuesWords(followed);
-    const handed = urgent
-      ? `Delivered urgently to your delegate ${peer.label}${continues}.`
-      : `Handed to ${peer.label}${continues} (${peer.dir} on ${peer.host}${whose}).`;
-    return `${handed} ${deliveryWords(delivery, urgent)}`;
+    const handed = `Handed to ${peer.label}${continues} (${peer.dir} on ${peer.host}${whose}).`;
+    return `${handed} ${deliveryWords(delivery)}`;
   },
 
   async startSession(

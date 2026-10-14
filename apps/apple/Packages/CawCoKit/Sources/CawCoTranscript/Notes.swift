@@ -328,7 +328,6 @@ final class PeerView: RailRow, RowContent, Disclosing {
         if block.state == "failed" { stateWord = ("not sent", Palette.statusFailInk) }
         else if failed, block.string("reportKind") != nil { stateWord = ("failed", Palette.statusFailInk) }
         else if block.state == "pending" || block.queued { stateWord = ("queued", Palette.inkMuted) }
-        else if meta["urgent"] as? Bool == true { stateWord = ("urgent", Palette.inkMuted) }
         state.attributedText = stateWord.map { Styled.string($0.0, TypeScale.typeLabel, color: $0.1, leading: TypeScale.leadingUi) }
         state.isHidden = stateWord == nil
         let first = block.content.split(separator: "\n").map { $0.replacing(/[*_`#>]/, with: "").trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? ""

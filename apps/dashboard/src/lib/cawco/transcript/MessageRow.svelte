@@ -346,9 +346,6 @@
       }
       return "queued";
     }
-    if (message.metadata?.urgent) {
-      return "urgent";
-    }
   });
 
   /** The session this row was sent to. */

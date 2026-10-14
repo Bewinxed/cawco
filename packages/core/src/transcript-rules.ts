@@ -1830,7 +1830,6 @@ export function sendRow(
     ...row.metadata,
     ...(record.reason ? { sendFailed: record.reason } : {}),
     ...(record.refusal ? { sendRefusal: record.refusal } : {}),
-    ...(record.mode === "urgent" ? { urgent: true as const } : {}),
     ...(origin?.kind === "system" && origin.name === CONTINUATION_ORIGIN
       ? { continuation: true as const }
       : {}),

@@ -123,7 +123,6 @@ export const blankRule = (): RuleDraft => ({
   // Waking an idle session is what makes a rule change what the session does;
   // the other two timings are for the cases where that is too late.
   timing: "turn",
-  interrupt: false,
   repeat: true,
   scope: {},
 });
@@ -139,7 +138,6 @@ export const draftOf = (rule: Rule): RuleDraft => ({
   watch: rule.watch,
   reply: rule.reply,
   timing: rule.timing,
-  interrupt: rule.interrupt,
   repeat: rule.repeat,
   scope: { ...rule.scope },
 });

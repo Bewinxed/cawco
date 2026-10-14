@@ -1194,7 +1194,6 @@ const ruleBody = t.Object({
     t.Literal("message"),
     t.Literal("immediate"),
   ]),
-  interrupt: t.Boolean(),
   repeat: t.Boolean(),
   scope: t.Object({
     machineId: t.Optional(t.String()),
@@ -1495,28 +1494,6 @@ export const resolveDelegatePermissionMode = (
  */
 export const resolveCanDelegate = (parent: InstanceRow | undefined): boolean =>
   !!parent && parent.canDelegate !== false;
-
-/**
- * Urgency is only honoured toward the caller's own delegate; anything else
- * downgrades to a normal queued send. Mutates the relay body in place.
- */
-const downgradeNonDelegateUrgent = (
-  row: InstanceRow | undefined,
-  body: unknown,
-  instanceId: string
-): void => {
-  if ((body as { urgent?: unknown }).urgent !== true) {
-    return;
-  }
-  const from = peek(body, "from");
-  if (!(from && row) || row.parentInstanceId !== from) {
-    console.warn(
-      `[hub] downgraded urgent send to ${instanceId}: not its delegate`
-    );
-    // biome-ignore lint/performance/noDelete: an undefined assignment would leave the key present, and the check above reads `.urgent === true` — a present-but-undefined value must still read as not urgent, but the field must not ride along into what gets relayed.
-    delete (body as Record<string, unknown>).urgent;
-  }
-};
 
 /** The report beat's word on what each harness adapter on the machine can do. */
 const peekHarnesses = (payload: unknown): HarnessReport[] | undefined => {
@@ -2106,16 +2083,9 @@ const peekSendSignal = (
   }
 };
 
-/**
- * How a send asks to be read. The hub has already downgraded an urgent send
- * it does not honour by the time this is asked.
- */
-const sendMode = ({ urgent, message }: SendPayload): SendMode => {
-  if (urgent) {
-    return "urgent";
-  }
-  return message.shouldQuery === false ? "note" : "turn";
-};
+/** How a send asks to be read. */
+const sendMode = ({ message }: SendPayload): SendMode =>
+  message.shouldQuery === false ? "note" : "turn";
 
 /** A record as it goes out: on the stream, and with a history read. */
 const toSendRecord = (row: SentMessageRow): SendRecord => ({
@@ -4223,9 +4193,8 @@ export const createServer = (
   };
 
   /**
-   * The session's turn was cut into — an interrupt, or an urgent send that
-   * aborts it — so the error that closes it is the cut, not a failure of
-   * what it had read.
+   * The session's turn was cut into by an interrupt, so the error that closes
+   * it is the cut, not a failure of what it had read.
    */
   const noteInterrupt = (instanceId: string): void => {
     unanswered.delete(instanceId);
@@ -4315,18 +4284,13 @@ export const createServer = (
 
   /**
    * Whether a later send of the session has been taken up ahead of `send`.
-   * Every harness takes up what it is sent in the order it was sent — an
-   * urgent send, which cuts ahead, excepted — so a send overtaken like this
-   * was never handed to it.
+   * Every harness takes up what it is sent in the order it was sent, so a
+   * send overtaken like this was never handed to it.
    */
   const overtaken = (send: SentMessageRow): boolean =>
     db
       .sendsIn(send.instanceId, ["read"])
-      .some(
-        (later) =>
-          later.mode !== "urgent" &&
-          later.acceptedAt.getTime() > send.acceptedAt.getTime()
-      );
+      .some((later) => later.acceptedAt.getTime() > send.acceptedAt.getTime());
 
   /**
    * What a session was sent and has not read, decided against its stored
@@ -4735,7 +4699,7 @@ export const createServer = (
 
   /**
    * Sends the harness has read, read in the order named; then every pending
-   * send accepted before the latest of them that is not urgent is overtaken
+   * send accepted before the latest of them is overtaken
    * ({@link overtaken}), and decided against the transcript at once.
    */
   const takeRead = (instanceId: string, ids: string[]): void => {
@@ -4760,11 +4724,7 @@ export const createServer = (
       }
       readSend(row, true);
     }
-    const latest = Math.max(
-      ...read
-        .filter((row) => row.mode !== "urgent")
-        .map((row) => row.acceptedAt.getTime())
-    );
+    const latest = Math.max(...read.map((row) => row.acceptedAt.getTime()));
     if (Number.isFinite(latest)) {
       settlePending(
         instanceId,
@@ -6450,20 +6410,13 @@ export const createServer = (
    * What taking a send means beyond the send itself, whoever sent it — the
    * one place it is done. The reader's hand takes down fleet watch's notice
    * about the session; a session's first words name it; a queued hand-off is work the target now
-   * carries, and a send that starts a turn reads it; an urgent send cuts into
-   * the turn it lands in; the parent's or the reader's word to a delegate
-   * starts its item's count of quiet turns over.
+   * carries, and a send that starts a turn reads it; the parent's or the
+   * reader's word to a delegate starts its item's count of quiet turns over.
    */
-  const afterSend = (
-    { machineId, payload }: Envelope<SendPayload>,
-    mode: SendMode
-  ): void => {
+  const afterSend = ({ machineId, payload }: Envelope<SendPayload>): void => {
     const { instanceId, message } = payload;
     if (isKeepAlive(message)) {
       return;
-    }
-    if (mode === "urgent") {
-      noteInterrupt(instanceId);
     }
     if (message.origin.kind === "human") {
       watch?.humanSend(instanceId);
@@ -6712,7 +6665,7 @@ export const createServer = (
       if (from) {
         workItems.delivered(from, instanceId);
       }
-      afterSend(envelope, mode);
+      afterSend(envelope);
     }
     return record;
   };
@@ -6855,11 +6808,6 @@ export const createServer = (
     if (malformed) {
       throw new WorkItemRefusal(400, malformed);
     }
-    downgradeNonDelegateUrgent(
-      db.listedInstancesByIds([envelope.instanceId ?? ""])[0],
-      payload,
-      envelope.instanceId ?? ""
-    );
     const { instanceId } = payload;
     const [before] = db.getInstancesByIds([instanceId]);
     const record = deliverSend({

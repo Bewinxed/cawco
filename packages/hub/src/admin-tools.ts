@@ -615,10 +615,6 @@ export function adminTools() {
             "'turn' fires after the session stops (wakes it); 'message' fires after each " +
               "assistant message; 'immediate' fires mid-stream."
           ),
-        interrupt: z
-          .boolean()
-          .optional()
-          .describe("For immediate: cut into the running turn."),
         repeat: z
           .boolean()
           .optional()
@@ -675,7 +671,6 @@ export function adminTools() {
               watch: "text",
               reply: "",
               timing: "turn",
-              interrupt: false,
               repeat: false,
               scope: {},
               ...given,

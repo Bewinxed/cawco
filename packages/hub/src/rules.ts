@@ -565,7 +565,6 @@ export class RuleEngine {
           // transcript can render it as the standing instruction it is.
           origin: { kind: "system", name: `rule:${rule.name}` },
         },
-        urgent: rule.timing === "immediate" && rule.interrupt,
       },
     });
     return true;
