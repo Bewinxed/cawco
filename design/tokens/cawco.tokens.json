@@ -2525,7 +2525,8 @@
     },
     "c-sidebar-w": {
       "$type": "dimension",
-      "$value": "248px"
+      "$value": "228px",
+      "$description": "The desk's sidebar rail at its default width (DESIGN.md, the shell: \"a resizable rail (228px by default, the reader's own width wins)\"). The rail reads it until the reader drags or steps it to a width of their own."
     },
     "c-composer-field": {
       "$type": "dimension",

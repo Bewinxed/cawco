@@ -16,7 +16,8 @@
  * 3. overlap: an every-minute routine whose runs sleep 75 s: the slot after a
  *    live run is skipped, "the test run is still going".
  * 4. contract: NO_REPLY is silent; words are delivered as a note in the
- *    routine's thread; AUTOMATION_FAILED fails, retries once (attempt 2) and
+ *    routine's thread; `AUTOMATION_FAILED: <why>` fails with that why as its
+ *    reason, retries once (attempt 2) and
  *    then needs you (a note, and the push the hub logs).
  * 5. test run: every routine made runs once at once, slot `test:<made at>`.
  * 6. expiry: a routine a worker session made (through routine_create) whose
@@ -55,7 +56,7 @@ const SAYS: Record<string, string> = {
   silent: "NO_REPLY",
   slow: "NO_REPLY",
   say: "Report: three new issues since yesterday.",
-  fail: "AUTOMATION_FAILED",
+  fail: "AUTOMATION_FAILED: the issue tracker answered 503",
   agent: "NO_REPLY",
 };
 
@@ -342,7 +343,7 @@ try {
         failRuns.every(
           (run) =>
             run.outcome === "failed" &&
-            run.reason === "its delegate answered AUTOMATION_FAILED"
+            run.reason === "the issue tracker answered 503"
         ) &&
         failRuns[0]?.slot === failRuns[1]?.slot &&
         failRuns.map((run) => run.attempt).join() === "1,2",

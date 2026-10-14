@@ -730,7 +730,8 @@
     --c-caw-ring: 2px;
     /* A page head under the top bar. */
     --c-page-head-h: 96px;
-    --c-sidebar-w: 248px;
+    /* The desk's sidebar rail at its default width (DESIGN.md, the shell: "a resizable rail (228px by default, the reader's own width wins)"). The rail reads it until the reader drags or steps it to a width of their own. */
+    --c-sidebar-w: 228px;
     /* The group composer's field at one line; every transcript keeps the composer's standing parts clear at its foot. */
     --c-composer-field: 34px;
     --c-composer-inset: var(--space-2);

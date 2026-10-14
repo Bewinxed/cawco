@@ -24,8 +24,10 @@
  *   parent is the routine (`routine:<id>`): they report to no session, and
  *   this module reads how each ended.
  * - **The output contract**, on the run's `finish_item` summary: exactly
- *   `NO_REPLY` is silent; exactly `AUTOMATION_FAILED` (or an item that
- *   failed) is a failure, retried once at once (same slot, attempt 2), and a
+ *   `NO_REPLY` is silent; `AUTOMATION_FAILED: <why>` (or an item that
+ *   failed) is a failure, its reason the why (a bare token's is the last
+ *   text the run's session said; a failed item's its error's first line),
+ *   retried once at once (same slot, attempt 2), and a
  *   second failure needs you (a push, and a note in the routine's thread);
  *   anything else is delivered, as a note in the routine's own thread of
  *   its project (a push for a routine in no project).
@@ -54,6 +56,7 @@ import type {
   DelegateType,
   InstanceRow,
   LandsMode,
+  NeutralMessage,
   NeutralOrigin,
   SessionRole,
 } from "@cawco/core";
@@ -363,7 +366,26 @@ const runView = (run: RoutineRunRow): RoutineRunView => ({
 });
 
 /** The output contract's three answers, as every run is told them. */
-const ANSWERS = `say exactly ${NO_REPLY} when there is nothing worth telling the owner, exactly ${AUTOMATION_FAILED} when the work could not be done (the hub retries once, then asks the owner), and anything else is shown to the owner as the result.`;
+const ANSWERS = `say exactly ${NO_REPLY} when there is nothing worth telling the owner, ${AUTOMATION_FAILED}: <one sentence on why> when the work could not be done (the owner reads that sentence; the hub retries once, then asks the owner), and anything else is shown to the owner as the result.`;
+
+/** A failing answer and its reason: `AUTOMATION_FAILED`, then the why after a colon, dash or space. */
+const FAILED_ANSWER = new RegExp(
+  `^${AUTOMATION_FAILED}(?:\\s*[:\\-—–]\\s*|\\s+|$)([\\s\\S]*)$`
+);
+
+/** The longest reason a run keeps: the owner's "Failed: …" line, not a transcript. */
+const REASON_MAX = 500;
+
+/** A reason clipped to {@link REASON_MAX}, on its word. */
+const clipReason = (words: string): string => {
+  const said = words.trim().replace(/\s+/g, " ");
+  if (said.length <= REASON_MAX) {
+    return said;
+  }
+  const cut = said.slice(0, REASON_MAX - 1);
+  const space = cut.lastIndexOf(" ");
+  return `${space > REASON_MAX / 2 ? cut.slice(0, space) : cut}…`;
+};
 
 /** What a delegate run is told about its output, after the routine's prompt. */
 const CONTRACT = `## Your answer\n\nWhen you are done, call finish_item. Its summary is this run's output, read by the hub: ${ANSWERS}`;
@@ -426,6 +448,17 @@ export const createRoutines = ({
    * runs as the hub starts.
    */
   const armed = new Set<string>();
+  /**
+   * Delegate sessions doing a run: their words are kept ({@link said}), as
+   * an armed lead's are.
+   */
+  const running = new Set<string>();
+  /**
+   * The last text each run's session said (a lead armed for a run, a run's
+   * delegate): a failure that gives no reason records it. In memory: a hub
+   * that restarts mid-run has not heard it.
+   */
+  const lastSaid = new Map<string, string>();
   /** The scheduler's one timer. */
   let timer: HubTimer | undefined;
   let started = false;
@@ -751,6 +784,7 @@ export const createRoutines = ({
       })
     );
     store.setRun(run.id, { state: "running", workItemId: begun.item.id });
+    running.add(begun.item.instanceId);
     console.log(
       `[routines] ${routine.name} (${run.slot}, attempt ${run.attempt}): work item ${begun.item.id}`
     );
@@ -880,6 +914,10 @@ export const createRoutines = ({
     /** The session its work item ran, when it had one: a push's Reply writes to it. */
     instanceId: string | null = null
   ): void => {
+    if (instanceId) {
+      running.delete(instanceId);
+      lastSaid.delete(instanceId);
+    }
     const run = store.setRun(runId, {
       state: "ended",
       outcome: end.outcome,
@@ -978,30 +1016,57 @@ export const createRoutines = ({
   };
 
   /**
+   * A session's model message: a run's session's last text is kept, for a
+   * failure that gives no reason ({@link resultOf}).
+   */
+  const said = (instanceId: string, neutral: NeutralMessage): void => {
+    if (
+      neutral.type !== "assistant" ||
+      !(armed.has(instanceId) || running.has(instanceId))
+    ) {
+      return;
+    }
+    const text = neutral.message.content
+      .flatMap((block) => (block.type === "text" ? [block.text] : []))
+      .join("\n")
+      .trim();
+    if (text) {
+      lastSaid.set(instanceId, text);
+    }
+  };
+
+  /**
    * A run's answer under the output contract, a delegate's `finish_item`
-   * summary or Caw's `routine_result`: exactly {@link NO_REPLY} is silent,
-   * exactly {@link AUTOMATION_FAILED} failed, anything else delivered.
+   * summary or Caw's `routine_result` from `instanceId`: exactly
+   * {@link NO_REPLY} is silent, {@link AUTOMATION_FAILED} failed, its reason
+   * the words after it, else the last text the session said before it;
+   * anything else delivered.
    */
   const resultOf = (
     words: string,
-    who: string
+    who: string,
+    instanceId: string
   ): {
     outcome: RoutineOutcome;
     output: string | null;
     reason: string | null;
   } => {
-    const said = words.trim();
-    if (said === NO_REPLY) {
+    const answer = words.trim();
+    if (answer === NO_REPLY) {
       return { outcome: "silent", output: null, reason: null };
     }
-    if (said === AUTOMATION_FAILED) {
+    const failed = FAILED_ANSWER.exec(answer);
+    if (failed) {
+      const why = failed[1].trim() || lastSaid.get(instanceId);
       return {
         outcome: "failed",
         output: null,
-        reason: `${who} answered ${AUTOMATION_FAILED}`,
+        reason: why
+          ? clipReason(why)
+          : `${who} answered ${AUTOMATION_FAILED} and said nothing about why`,
       };
     }
-    return { outcome: "delivered", output: said, reason: null };
+    return { outcome: "delivered", output: answer, reason: null };
   };
 
   /** What a run's ended work item says, under the output contract. */
@@ -1023,7 +1088,7 @@ export const createRoutines = ({
         reason: why?.trim() || "its work item failed",
       };
     }
-    return resultOf(item.summary ?? "", "its delegate");
+    return resultOf(item.summary ?? "", "its delegate", item.instanceId);
   };
 
   /**
@@ -1091,6 +1156,7 @@ export const createRoutines = ({
     if (!(armed.delete(instanceId) || gone)) {
       return;
     }
+    lastSaid.delete(instanceId);
     const unread = (run: RoutineRunRow): boolean =>
       gone !== undefined &&
       run.leadInstanceId === null &&
@@ -1144,7 +1210,11 @@ export const createRoutines = ({
     if (run.state !== "running") {
       return refuse(409, `Run ${runId} has not reached you yet.`);
     }
-    settle(run.id, { ...resultOf(result, "Caw"), usd: null }, actor.id);
+    settle(
+      run.id,
+      { ...resultOf(result, "Caw", actor.id), usd: null },
+      actor.id
+    );
     return runView(store.run(run.id) ?? run);
   };
 
@@ -1293,7 +1363,9 @@ export const createRoutines = ({
       });
       return;
     }
-    if (!["starting", "running"].includes(item.state)) {
+    if (["starting", "running"].includes(item.state)) {
+      running.add(item.instanceId);
+    } else {
       itemEnded(item);
     }
   };
@@ -1520,7 +1592,7 @@ export const createRoutines = ({
     return [
       tool(
         "routine_create",
-        `Make a routine in your project: a prompt the hub runs on a schedule. target 'delegate' starts a fresh delegate each run; its finish_item summary is the output: exactly ${NO_REPLY} is silent, exactly ${AUTOMATION_FAILED} retries once then asks the owner, anything else is noted in the routine's thread. target 'lead' messages Caw (skipped while Caw is off). It runs once at once as a test, and turns itself off after 7 days unless kept.`,
+        `Make a routine in your project: a prompt the hub runs on a schedule. target 'delegate' starts a fresh delegate each run; its finish_item summary is the output: exactly ${NO_REPLY} is silent, ${AUTOMATION_FAILED}: <one sentence on why> fails it with that reason, retried once then the owner is asked, anything else is noted in the routine's thread. target 'lead' messages Caw (skipped while Caw is off). It runs once at once as a test, and turns itself off after 7 days unless kept.`,
         {
           name: z.string().describe("3–6 plain words."),
           prompt: z.string().describe("What each run does."),
@@ -1623,7 +1695,7 @@ export const createRoutines = ({
       ),
       tool(
         "routine_result",
-        `Say how a routine's run that woke you went, before your turn ends (a turn that ends without it fails the run): exactly ${NO_REPLY} is silent, exactly ${AUTOMATION_FAILED} retries once then asks the owner, anything else is noted in the routine's thread as the result. One call per run.`,
+        `Say how a routine's run that woke you went, before your turn ends (a turn that ends without it fails the run): exactly ${NO_REPLY} is silent, ${AUTOMATION_FAILED}: <one sentence on why> fails it with that reason, retried once then the owner is asked, anything else is noted in the routine's thread as the result. One call per run.`,
         {
           run: z
             .string()
@@ -1648,6 +1720,7 @@ export const createRoutines = ({
     list,
     remove,
     runForEvent,
+    said,
     runNow,
     start,
     tick,

@@ -5,6 +5,9 @@
  * shown in the built dashboard at the desk (1440), read from the hub's
  * answers and the page's own attributes, never from pixels. In order:
  *
+ * 0. The shell's sidebar, in a browser with no width of its own, is drawn
+ *    (getBoundingClientRect) at the `c-sidebar-w` token of
+ *    design/tokens/cawco.tokens.json, as tokens.css carries it.
  * 1. `artifact_create` of a page holding one `data-cawco-choice` answers an
  *    id, and the panel's menu lists it.
  * 2. A click on an option in the page (inside the panel's frame) is in
@@ -71,6 +74,11 @@ import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
+/** The design tokens' one source (CLAUDE.md, Design Context). */
+const TOKENS = join(
+  import.meta.dir,
+  "../../../design/tokens/cawco.tokens.json"
+);
 const UPDATE = "mcp__cawco__artifact_update";
 const PROMOTE = "mcp__cawco__artifact_promote";
 /** The commit in artifact_promote's answer. */
@@ -378,6 +386,27 @@ const run = async (kit: Kit) => {
     socket.on("close", () => said.push(`socket closed: ${socket.url()}`))
   );
   await open(page, `${base}/session/${session}`, ".artifact-trigger");
+  // The shell's rail, in a browser with no width of its own, is drawn at the
+  // `c-sidebar-w` token (DESIGN.md: "228px by default"), its one source.
+  const token = (
+    (await Bun.file(TOKENS).json()) as {
+      size: { "c-sidebar-w": { $value: string } };
+    }
+  ).size["c-sidebar-w"].$value;
+  const rail = await page.evaluate(() => ({
+    css: getComputedStyle(document.documentElement)
+      .getPropertyValue("--c-sidebar-w")
+      .trim(),
+    drawn: document.querySelector("aside.rail")?.getBoundingClientRect().width,
+    viewport: innerWidth,
+  }));
+  kit.check(
+    "0: at 1440 the sidebar is drawn at the c-sidebar-w token",
+    rail.viewport === 1440 &&
+      rail.css === token &&
+      rail.drawn === Number.parseFloat(token),
+    `token ${token}, css ${rail.css}, drawn ${rail.drawn}px at ${rail.viewport}`
+  );
   await page.click(".artifact-trigger");
   await page.locator(`.artifact-row[data-artifact="${id}"]`).waitFor();
   // The menu rises from 0.92 as it opens: read its geometry once it has landed.

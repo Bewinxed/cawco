@@ -566,7 +566,8 @@ public enum Size {
     public static let cCawRing: Double = 2
     /// A page head under the top bar.
     public static let cPageHeadH: Double = 96
-    public static let cSidebarW: Double = 248
+    /// The desk's sidebar rail at its default width (DESIGN.md, the shell: "a resizable rail (228px by default, the reader's own width wins)"). The rail reads it until the reader drags or steps it to a width of their own.
+    public static let cSidebarW: Double = 228
     /// The group composer's field at one line; every transcript keeps the composer's standing parts clear at its foot.
     public static let cComposerField: Double = 34
     public static let cComposerInset: Double = 7

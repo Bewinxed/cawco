@@ -9,12 +9,12 @@ import type { LayoutServerLoad } from "./$types";
  * read here from a cookie so the server renders the resolved width into the
  * first paint — before this, the width lived only in localStorage, so SSR drew
  * the default and the rail visibly jumped once the client read the real value
- * on mount. The bounds mirror Shell.svelte's clamp.
+ * on mount. The bounds mirror Shell.svelte's clamp. No cookie is null: the
+ * shell then draws the `c-sidebar-w` token, the default's one source.
  */
 const RAIL_KEY = "cawco-rail-width";
 const RAIL_MIN = 216;
 const RAIL_MAX = 520;
-const RAIL_DEFAULT = 228;
 
 /**
  * The cookie workspace.svelte.ts mirrors its localStorage into — declared here
@@ -165,7 +165,7 @@ export const load: LayoutServerLoad = async ({
   const railWidth =
     Number.isFinite(stored) && stored > 0
       ? Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(stored)))
-      : RAIL_DEFAULT;
+      : null;
 
   let workspace = parse(pref(WORKSPACE_KEY));
   if (workspace) {

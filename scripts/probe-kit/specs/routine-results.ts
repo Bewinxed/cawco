@@ -10,8 +10,10 @@
  * 2. Run now, answered with words: delivered, the words stored as its
  *    output and noted in the routine's thread.
  * 3. Run now, answered `NO_REPLY`: silent, no result note.
- * 4. Run now, answered `AUTOMATION_FAILED`: failed, retried once (attempt
- *    2), failed again, and the thread says it needs you.
+ * 4. Run now, answered `AUTOMATION_FAILED: <why>`: failed with that why as
+ *    its reason, retried once (attempt 2), failed again, and the thread says
+ *    it needs you. 4b: answered a bare `AUTOMATION_FAILED` after words of its
+ *    own: the reason is those words, the last thing Caw said.
  * 5. Run now, Caw ends his turn without the call: failed with “Caw ended
  *    its turn without saying how the run went”, retried once, failed again.
  * 6. A thread's status (caw.ts `Turn`, read from every `thread.upsert` the
@@ -32,11 +34,16 @@ const RESULT = "mcp__cawco__routine_result";
 const NAME = "Probe results";
 const WORDS = "PROBE-RESULT the board is calm";
 const NO_RESULT = "Caw ended its turn without saying how the run went";
+/** Why step 4's runs failed, in Caw's answer. */
+const WHY = "the board's machine is offline";
+/** What Caw says before step 4b's bare answer: its last text. */
+const LAST = "The board would not load: every machine is off the tailnet.";
 /** What each way of answering says to routine_result; `none` makes no call. */
 const ANSWERS: Record<string, string | undefined> = {
   delivered: WORDS,
   silent: "NO_REPLY",
-  failed: "AUTOMATION_FAILED",
+  failed: `AUTOMATION_FAILED: ${WHY}`,
+  bare: "AUTOMATION_FAILED",
   none: undefined,
 };
 
@@ -88,7 +95,8 @@ const respond = (request: Seen): Reply => {
     answered.add(run);
     return {
       everyMs: 5,
-      words: [],
+      // The bare answer comes after words of Caw's own: the run's last text.
+      words: how === "bare" ? [LAST] : [],
       tool: { name: RESULT, input: { run, result } },
     };
   }
@@ -245,19 +253,24 @@ const run = async (kit: Kit) => {
   // ── 4. failed, retried once ─────────────────────────────────────────
   const failed = await runNow("failed", 2);
   kit.check(
-    "4: answered AUTOMATION_FAILED, it fails, is retried once, and fails again",
+    "4: answered AUTOMATION_FAILED with a reason, it fails with that reason, is retried once, and fails again",
     failed.length === 2 &&
-      failed.every(
-        (row) =>
-          row.outcome === "failed" &&
-          row.reason === "Caw answered AUTOMATION_FAILED"
-      ) &&
+      failed.every((row) => row.outcome === "failed" && row.reason === WHY) &&
       failed[1]?.attempt === 2,
     describe(failed)
   );
   kit.check(
     "4: the second failure is noted as needing you",
     notes(`Routine · ${NAME} failed twice · needs you`).length === 1
+  );
+
+  // ── 4b. a bare AUTOMATION_FAILED: the reason is Caw's last text ────
+  const bare = await runNow("bare", 2);
+  kit.check(
+    "4b: answered a bare AUTOMATION_FAILED, the reason is the last thing Caw said",
+    bare.length === 2 &&
+      bare.every((row) => row.outcome === "failed" && row.reason === LAST),
+    describe(bare)
   );
 
   // ── 5. no routine_result before the turn ends ───────────────────────

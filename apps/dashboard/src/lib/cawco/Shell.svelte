@@ -71,22 +71,37 @@
   const RAIL_KEY = "cawco-rail-width";
   const RAIL_MIN = 216;
   const RAIL_MAX = 520;
-  /** The plan's measured sidebar ("sidebar | 228"); a reader's own width overrides it. */
-  const RAIL_DEFAULT = 228;
-
   const clamp = (px: number) =>
-    Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(px || RAIL_DEFAULT)));
+    Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(px)));
+
+  /**
+   * The default width is the `c-sidebar-w` token (DESIGN.md: "228px by
+   * default, the reader's own width wins"); the stylesheet draws it, and this
+   * reads it back for the handle's arithmetic.
+   */
+  const tokenWidth = () =>
+    Number.parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue(
+        "--c-sidebar-w"
+      )
+    );
 
   let {
     children,
     /** Read from the `cawco-rail-width` cookie server-side (see
      *  +layout.server.ts) so the first paint is already the resolved width —
-     *  the rail no longer renders the default and jumps on hydration. */
-    railWidth: initialRailWidth = RAIL_DEFAULT,
-  }: { children: import("svelte").Snippet; railWidth?: number } = $props();
+     *  the rail no longer renders the default and jumps on hydration. Null
+     *  when the reader has no width of their own: the token's stands. */
+    railWidth: initialRailWidth = null,
+  }: { children: import("svelte").Snippet; railWidth?: number | null } =
+    $props();
 
   // Seeded once from the server's reading; dragging owns it after that.
-  let railWidth = $state(untrack(() => clamp(initialRailWidth)));
+  let railWidth = $state<number | null>(
+    untrack(() => (initialRailWidth === null ? null : clamp(initialRailWidth)))
+  );
+  /** The width the rail is drawn at, as a number. */
+  const drawnWidth = () => railWidth ?? tokenWidth();
   let railOpen = $state(false);
   /** The sidebar toggle: what invokes the phone's sheet. */
   let burger = $state<HTMLButtonElement | null>(null);
@@ -118,7 +133,13 @@
    */
   onMount(() => {
     const stored = Number(localStorage.getItem(RAIL_KEY));
-    setRail(Number.isFinite(stored) && stored > 0 ? stored : railWidth);
+    const own = Number.isFinite(stored) && stored > 0 ? stored : railWidth;
+    if (own === null) {
+      // No width of the reader's: the token's stands, and is not stored as theirs.
+      railWidth = tokenWidth();
+      return;
+    }
+    setRail(own);
   });
 
   /**
@@ -196,7 +217,7 @@
     // Coalesced to a frame: a 120 Hz pointer emitting two moves in one frame
     // would otherwise pay for the layout twice and show one of them.
     let frame = 0;
-    let latest = railWidth;
+    let latest = drawnWidth();
     const paint = () => {
       frame = 0;
       latest = clamp(latest);
@@ -236,10 +257,10 @@
     let next: number;
     switch (event.key) {
       case "ArrowLeft":
-        next = railWidth - step;
+        next = drawnWidth() - step;
         break;
       case "ArrowRight":
-        next = railWidth + step;
+        next = drawnWidth() + step;
         break;
       case "Home":
         next = RAIL_MIN;
@@ -256,11 +277,12 @@
     const from = rail.getBoundingClientRect().width;
     railStep?.cancel();
     setRail(next);
-    if (motionOk.current && from !== railWidth) {
+    const to = drawnWidth();
+    if (motionOk.current && from !== to) {
       railStep = rail.animate(
         [
           { width: `${from}px`, flexBasis: `${from}px` },
-          { width: `${railWidth}px`, flexBasis: `${railWidth}px` },
+          { width: `${to}px`, flexBasis: `${to}px` },
         ],
         { duration: dur("--dur-control"), easing: ease("--ease-out") }
       );
@@ -875,7 +897,8 @@
 <a class="skip" href="#main-content">Skip to content</a>
 
 <!-- `--rail-w` is set before the body parses (app.html) from the same key this
-     component writes; the server's cookie width is the fallback under it. SSR
+     component writes; the server's cookie width is the fallback under it, and
+     the `c-sidebar-w` token under that when the reader has none. SSR
      therefore emits no committed width of its own, and there is nothing to
      snap away from on hydration. -->
 <!-- The tooltip provider and the lightbox, shared with an artifact's own tab. -->
@@ -884,7 +907,9 @@
        footer stand on a keyboard (cawco/visible-viewport `floor`). -->
   <div
     class="shell"
-    style="--sidebar-width: var(--rail-w, {railWidth}px)"
+    style="--sidebar-width: var(--rail-w, {railWidth === null
+      ? "var(--c-sidebar-w)"
+      : `${railWidth}px`})"
     style:height={floor.bottom > 0 ? `${floor.bottom}px` : null}
   >
     <aside class="rail hidden min-[900px]:flex">

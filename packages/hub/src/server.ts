@@ -22679,6 +22679,9 @@ export const createServer = (
                   admitted.message,
                   admitted.harness
                 );
+                // A routine run's session's last words, for a failure that
+                // gives no reason (routines.ts `said`).
+                routines.said(message.instanceId, admitted.message);
                 // A lead's web reads, his calls' results and his turn's end
                 // (lead-gate.ts): none of a stream's deltas carry them.
                 if (admitted.message.type !== "stream_event") {
