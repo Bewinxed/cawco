@@ -931,7 +931,8 @@ export class SessionSupervisor {
         : generateImage(cwd as string, input),
     [PREVIEW_START]: (options) =>
       startPreview(options as Parameters<typeof startPreview>[0]),
-    [PREVIEW_STOP]: (options) => stopPreview(options as { instanceId: string }),
+    [PREVIEW_STOP]: (options) =>
+      stopPreview(options as Parameters<typeof stopPreview>[0]),
     [AGENT_BUSY]: () => this.busyNow(),
   };
 

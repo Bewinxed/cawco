@@ -57,7 +57,8 @@ export interface PreviewTarget {
   machineId: string;
   revision: string;
   source: PreviewSource;
-  upstream?: { address: string; port: number };
+  /** The machine's listener, and the token of the start that opened it. */
+  upstream?: { address: string; port: number; token?: string };
 }
 
 export const previewTargets = new Map<string, PreviewTarget>();
@@ -222,6 +223,11 @@ export interface PreviewListenerDeps {
   socket: ReturnType<typeof artifactSocket>;
   /** A page artifact's doc as one base64 Yjs update, embedded in its overlay tag. */
   state: (artifactId: string) => string;
+  /** The machine's listener at `upstream` refused a connection: the next request reaches the preview again. */
+  unreachable: (
+    instanceId: string,
+    upstream: NonNullable<PreviewTarget["upstream"]>
+  ) => void;
 }
 
 /** An artifact's sync socket, its send (`/send`) or a canvas's picture (`/picture`), for the session that owns it only. */
@@ -313,12 +319,17 @@ const downstreamHeaders = (response: Response): Headers => {
   return headers;
 };
 
-/** A preview's request on to its machine's listener, and the answer back; a listener that does not answer is said in one line. */
+/**
+ * A preview's request on to its machine's listener, and the answer back. A
+ * listener that does not answer is said in one line, and is forgotten: the
+ * next request asks the machine where the preview is served now.
+ */
 async function relay(
   request: Request,
   server: Server<ListenerSocket>,
   instanceId: string,
-  at: NonNullable<PreviewTarget["upstream"]>
+  at: NonNullable<PreviewTarget["upstream"]>,
+  deps: PreviewListenerDeps
 ): Promise<Response | undefined> {
   const url = new URL(request.url);
   const address = at.address.includes(":") ? `[${at.address}]` : at.address;
@@ -346,6 +357,7 @@ async function relay(
       instanceId,
       `its machine's listener at ${address}:${at.port} didn't answer: ${causeOf(error)}`
     );
+    deps.unreachable(instanceId, at);
     return downResponse("machine");
   }
   return new Response(response.body, {
@@ -406,7 +418,7 @@ async function serveSession(
       reached.down === "reach" ? reached.error : undefined
     );
   }
-  return relay(request, server, instanceId, reached.upstream);
+  return relay(request, server, instanceId, reached.upstream, deps);
 }
 
 /** The fleet's preview mode could not be taken: why, in one sentence. */
@@ -600,10 +612,23 @@ export function createPreviewListeners(
   };
 
   return {
-    /** Starts what the stored mode serves: host mode's listener; port mode's start as each session asks. */
+    /**
+     * Starts what the stored mode serves: host mode's listener; in port mode
+     * each session's listener on the port it keeps, so a pane or a tab that
+     * loads its preview origin straight after a hub restart finds it bound,
+     * before any dashboard asks for its address. A kept port something else
+     * holds now says so in one line, and the session's next address takes
+     * another (`portFor`).
+     */
     start(): void {
       if (settings.mode === "host") {
         startHostMode();
+        return;
+      }
+      for (const { instanceId, port } of db.ports()) {
+        if (!sessions.has(instanceId)) {
+          serveOn(instanceId, port);
+        }
       }
     },
 
@@ -672,6 +697,7 @@ export function createPreviewListeners(
       stopAll();
       settings = { mode: "port", pattern: null };
       db.setSettings(settings);
+      this.start();
       return this.settings();
     },
   };

@@ -257,6 +257,14 @@ export interface PreviewSocket {
   url: string;
 }
 
+/**
+ * A browser's WebSocket upgrade, relayed to `url` with `headers`. The Host in
+ * `headers` goes on as the hop set it, as its HTTP requests' does: the agent
+ * names the app's own `localhost:<port>` beside the Origin it rewrites to
+ * match, and a server that checks one against the other (Vite's HMR, a
+ * dashboard's `/ws` gate) refuses the socket when they differ. A `ws+unix://`
+ * URL alone would say `Host: localhost`, and a TCP one `127.0.0.1:<port>`.
+ */
 export function upgradePreview(
   request: Request,
   server: Server<PreviewSocket>,
@@ -271,7 +279,6 @@ export function upgradePreview(
     "sec-websocket-version",
     "sec-websocket-extensions",
     "sec-websocket-protocol",
-    "host",
   ]) {
     headers.delete(name);
   }

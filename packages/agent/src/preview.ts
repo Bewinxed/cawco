@@ -20,26 +20,63 @@ import {
 } from "./preview-bridge";
 
 /**
- * The listeners this process serves, with the source each was asked for. They
- * outlive the hub connection: a hub that drops and comes back reads them off
- * the register ({@link servingPreviews}) and points its targets at them again.
+ * The listeners this process serves, with the source each was asked for and
+ * the hub's token for the start that made it. They outlive the hub
+ * connection: a hub that drops and comes back reads them off the register
+ * ({@link servingPreviews}) and points its targets at them again.
  */
 const previews = new Map<
   string,
-  { listener: Server<PreviewSocket>; source: PreviewSource }
+  { listener: Server<PreviewSocket>; source: PreviewSource; token?: string }
 >();
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
-/** Stops a preview's listener and its bridge; settles once the bridge's every connection is gone. */
-export async function stopPreview({
-  instanceId,
-}: {
-  instanceId: string;
-}): Promise<boolean> {
+/**
+ * Each preview's starts and stops, one after another: a start stops the
+ * listener before it and opens its own across awaits, so two of them side by
+ * side would each find nothing to stop and leave one listener running that
+ * nothing names.
+ */
+const turns = new Map<string, Promise<unknown>>();
+
+const inTurn = <T>(instanceId: string, work: () => Promise<T>): Promise<T> => {
+  const before = turns.get(instanceId) ?? Promise.resolve();
+  const mine = before.catch(() => undefined).then(work);
+  const settled = mine.catch(() => undefined);
+  turns.set(instanceId, settled);
+  settled.then(() => {
+    if (turns.get(instanceId) === settled) {
+      turns.delete(instanceId);
+    }
+  });
+  return mine;
+};
+
+const stopNow = async (instanceId: string): Promise<boolean> => {
   previews.get(instanceId)?.listener.stop(true);
   const had = previews.delete(instanceId);
   await closeBridge(instanceId);
   return had;
+};
+
+/**
+ * Stops a preview's listener and its bridge; settles once the bridge's every
+ * connection is gone. With `token`, only the listener that start made: the
+ * hub telling a start it gave up on to go must not take the one a later
+ * start opened.
+ */
+export function stopPreview({
+  instanceId,
+  token,
+}: {
+  instanceId: string;
+  token?: string;
+}): Promise<boolean> {
+  return inTurn(instanceId, () =>
+    token === undefined || previews.get(instanceId)?.token === token
+      ? stopNow(instanceId)
+      : Promise.resolve(false)
+  );
 }
 
 /**
@@ -63,16 +100,18 @@ const upstreamOf = async (
   return reached === "host" ? "host" : { unix: reached };
 };
 
-/** What the register tells the hub this process is serving. */
+/** What the register tells the hub this process is serving, each with the token of the start that made it. */
 export function servingPreviews(): {
   instanceId: string;
   port: number;
   source: PreviewSource;
+  token?: string;
 }[] {
-  return [...previews].map(([instanceId, { listener, source }]) => ({
+  return [...previews].map(([instanceId, { listener, source, token }]) => ({
     instanceId,
     port: listener.port as number,
     source,
+    ...(token === undefined ? {} : { token }),
   }));
 }
 
@@ -83,14 +122,22 @@ export function stopPreviews(): void {
   }
 }
 
-export async function startPreview(options: {
+export function startPreview(options: {
   instanceId: string;
   port?: number;
   dir?: string;
   /** The workspace whose network the port is in; none, the host's. */
   workspace?: string;
+  /** The hub's name for this start, which a stop of it alone names. */
+  token?: string;
 }): Promise<{ port: number }> {
-  const { instanceId, port, dir, workspace } = options;
+  return inTurn(options.instanceId, () => start(options));
+}
+
+async function start(
+  options: Parameters<typeof startPreview>[0]
+): Promise<{ port: number }> {
+  const { instanceId, port, dir, workspace, token } = options;
   if ((port === undefined) === (dir === undefined)) {
     throw new Error("Pass exactly one of port or dir.");
   }
@@ -114,7 +161,7 @@ export async function startPreview(options: {
     port === undefined
       ? { dir: root as string }
       : { port, ...(workspace === undefined ? {} : { workspace }) };
-  await stopPreview({ instanceId });
+  await stopNow(instanceId);
   if ("port" in source) {
     // A workspace no boundary runs refuses the preview in so many words.
     await upstreamOf(instanceId, source);
@@ -302,6 +349,7 @@ export async function startPreview(options: {
   previews.set(instanceId, {
     listener,
     source: "port" in source ? source : { dir: dir as string },
+    ...(token === undefined ? {} : { token }),
   });
   return { port: listener.port as number };
 }

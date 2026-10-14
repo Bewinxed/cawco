@@ -32,11 +32,31 @@
  *     loads the page, and a hello it forges is ignored: the overlay answers
  *     no `cawco:ready`.
  *
- * It survives (port mode again), between loads:
+ * Every app's server refuses a WebSocket whose Origin is not `http://<its
+ * Host>`, as a dashboard's `/ws` gate and Vite's HMR do: the agent rewrites
+ * the Origin to the app's own `localhost:<port>`, and the Host has to say the
+ * same on the socket as on a request.
+ *
+ * A second preview is of a port inside a workspace: a delegate of a project
+ * session starts a server in its own workspace (its boundary's network,
+ * reached through the agent's bridge) and shows it by its port. Needs a
+ * workspace boundary, so unprivileged user namespaces: a run inside a
+ * workspace (where bwrap is refused) notes it and checks the host's alone.
+ *
+ * 17. Three shows of each preview at once (overlapping starts, as a
+ *     re-create during a register makes): each preview still answers.
+ *
+ * It survives (port mode again), between loads. After each, every preview
+ * answers within {@link BOUND_MS}: its origin's page with HTTP 200 and the
+ * overlay injected, and a WebSocket from its origin reaches its own server.
  *
  * 2. The agent restarts (its listeners go with it).
- * 3. The hub restarts (the agent's listener stays).
+ * 3. The hub restarts (the agent's listener stays). With no dashboard open,
+ *    each preview's origin on the hub answers its ping at once: the hub
+ *    binds every session's kept port as it starts.
  * 4. The agent and the hub restart together.
+ * 4b. The install's order: the hub restarts, the old agent registers with it
+ *    again, then the agent restarts.
  * 5. The dashboard tab closes, nothing shows the session, and a new tab
  *    opens it.
  * 6. The server stops: the pane draws the worded state, and the agent's
@@ -45,14 +65,12 @@
  *    closed page (404, `cawco-preview-down` closed), and the hub's journal
  *    says so in one `[preview] hub listener` line.
  * 8. No journal says "No preview selected".
- *
- * A boundary handover needs a workspace boundary, which needs unprivileged
- * user namespaces: a run inside a workspace (where bwrap is refused) notes
- * it and goes on.
  */
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the checks are read in order, one after another.
 import type { Frame, Page } from "playwright-core";
-import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { PREVIEW_PING_PATH } from "../../../packages/core/src/frames";
+import { OVERLAY_PATH } from "../../../packages/core/src/preview-proxy";
+import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
@@ -61,10 +79,27 @@ const ANSWERED_ID = /"id":"([0-9a-f-]{36})"/;
 const FRAME = 'iframe[title="Preview"]';
 const TITLE = "Survives probe page";
 const OTHER = "Second session's page";
+const IN_WORKSPACE = "Workspace server's page";
+/** The workspace server's port, in its boundary's own network. */
+const WORKSPACE_PORT = 47_513;
+/** The delegate's brief asks for the server; its Bash's output says it is up (the command spells it apart, so its own text never matches). */
+const SERVE = "PROBE-WORKSPACE-SERVE";
+const SERVING = "WORKSPACE-SERVER-UP";
+/** How long a preview has to answer again after a restart. Our call: a register and a listener start take a few seconds. */
+const BOUND_MS = 30_000;
+const HTTP = /^http/;
 
 /** A page whose script opens a WebSocket back to its own origin, as an HMR client does, and keeps what its server said. */
 const pageOf = (title: string) =>
-  `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${title}</title></head><body><h1>${title}</h1><script>window.__said=new Promise(function(done){var ws=new WebSocket(location.origin.replace(/^http/,"ws")+"/hmr");ws.onmessage=function(e){done(String(e.data))};ws.onerror=function(){done("error")}});</script></body></html>`;
+  `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${title}</title></head><body><h1>${title}</h1><script>window.__said=new Promise(function(done){var ws=new WebSocket(location.origin.replace(/^http/,"ws")+"/hmr");ws.onmessage=function(e){done(String(e.data))};ws.onerror=function(){done("error")};ws.onclose=function(e){done("closed "+e.code)}});</script></body></html>`;
+
+/** Why a WebSocket upgrade is refused, as a dashboard's `/ws` gate refuses one: an Origin that is not `http://<Host>`. */
+const crossOrigin = (headers: Headers): string | null => {
+  const origin = headers.get("origin");
+  return origin && origin !== `http://${headers.get("host")}`
+    ? `a socket from ${origin} to ${headers.get("host")}`
+    : null;
+};
 
 /** A server for one session's page: its page, its socket saying its title, and every Cookie header it was sent. */
 const appOf = (title: string) => {
@@ -75,6 +110,10 @@ const appOf = (title: string) => {
     fetch(request, bun) {
       cookies.push(request.headers.get("cookie") ?? "");
       if (new URL(request.url).pathname === "/hmr") {
+        const refused = crossOrigin(request.headers);
+        if (refused) {
+          return new Response(`refused ${refused}`, { status: 403 });
+        }
         return bun.upgrade(request, { data: { title } })
           ? undefined
           : new Response("no upgrade", { status: 400 });
@@ -93,14 +132,55 @@ const appOf = (title: string) => {
   return { cookies, server };
 };
 
+/** `text` as one single-quoted shell word. */
+const quoted = (text: string): string => `'${text.replaceAll("'", `'\\''`)}'`;
+
+/**
+ * What the delegate runs in its workspace: the same app as {@link appOf}, on
+ * {@link WORKSPACE_PORT} of its boundary's loopback, left running in a
+ * session of its own; the marker once it answers.
+ */
+const serveCommand = (): string => {
+  const app = [
+    `const page=${JSON.stringify(pageOf(IN_WORKSPACE))};`,
+    `Bun.serve({hostname:"127.0.0.1",port:${WORKSPACE_PORT},fetch(r,s){`,
+    `if(new URL(r.url).pathname==="/hmr"){const o=r.headers.get("origin");`,
+    `if(o&&o!=="http://"+r.headers.get("host"))return new Response("refused",{status:403});`,
+    `return s.upgrade(r)?undefined:new Response("no upgrade",{status:400})}`,
+    `return new Response(page,{headers:{"content-type":"text/html"}})},`,
+    `websocket:{open(w){w.send(${JSON.stringify(IN_WORKSPACE)})},message(){}}});`,
+  ].join("");
+  const [head, tail] = [SERVING.slice(0, 10), SERVING.slice(10)];
+  return [
+    `printf '%s' ${quoted(app)} > "$TMPDIR/workspace-app.js"`,
+    `(setsid nohup bun "$TMPDIR/workspace-app.js" > "$TMPDIR/workspace-app.log" 2>&1 < /dev/null &)`,
+    `for i in $(seq 100); do bun -e ${quoted(`await fetch("http://127.0.0.1:${WORKSPACE_PORT}/")`)} 2>/dev/null && echo "${head}""${tail}" && break; sleep 0.1; done`,
+  ].join(" && ");
+};
+
 const asks = new Map<string, { input: object; name: string }>();
 const issued = new Set<string>();
 const answered = new Map<string, string>();
+let serveIssued = false;
 
 const respond = (request: Seen): Reply => {
   const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
   if (!request.tools) {
     return text("Probe title");
+  }
+  if (request.all.includes(SERVE) && !request.all.includes(SERVING)) {
+    if (serveIssued) {
+      return text("The workspace's server did not start.");
+    }
+    serveIssued = true;
+    return {
+      everyMs: 5,
+      words: [],
+      tool: {
+        name: "Bash",
+        input: { command: serveCommand(), description: "Start the server" },
+      },
+    };
   }
   const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
   const ask = marker ? asks.get(marker) : undefined;
@@ -166,12 +246,87 @@ const paneFrame = async (
   return { frame: frame ?? null, last };
 };
 
+/** What a WebSocket from `origin` to its own `/hmr` heard first: its server's word, or why it said nothing. */
+const socketSays = (origin: string): Promise<string> =>
+  new Promise((done) => {
+    const ws = new (
+      WebSocket as unknown as new (
+        url: string,
+        options: { headers: Record<string, string> }
+      ) => WebSocket
+    )(`${origin.replace(HTTP, "ws")}/hmr`, { headers: { origin } });
+    const timer = setTimeout(() => {
+      ws.close();
+      done("nothing in 5 s");
+    }, 5000);
+    ws.onmessage = (event) => {
+      clearTimeout(timer);
+      ws.close();
+      done(String(event.data));
+    };
+    ws.onerror = () => {
+      clearTimeout(timer);
+      done("error");
+    };
+    ws.onclose = (event) => {
+      clearTimeout(timer);
+      done(`closed ${event.code}`);
+    };
+  });
+
+interface Shown {
+  /** Which preview, in a check's words. */
+  label: string;
+  origin: string;
+  title: string;
+}
+
+/**
+ * Polls `preview`'s origin until its page answers 200 with its title and the
+ * overlay's tag, and a WebSocket from its origin hears its server: how long
+ * that took, or what it last answered once {@link BOUND_MS} is out.
+ */
+const served = async (
+  preview: Shown
+): Promise<{ ok: boolean; ms: number; last: string }> => {
+  const started = Date.now();
+  let last = "nothing yet";
+  while (Date.now() - started < BOUND_MS) {
+    try {
+      // biome-ignore lint/performance/noAwaitInLoops: polls until it answers or the bound passes
+      const response = await fetch(`${preview.origin}/`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      const body = await response.text();
+      const injected = body.includes(`src="${OVERLAY_PATH}"`);
+      last = `${response.status}${injected ? " with the overlay" : ""}: ${body.replace(/\s+/g, " ").slice(0, 120)}`;
+      if (
+        response.status === 200 &&
+        injected &&
+        body.includes(`<title>${preview.title}</title>`)
+      ) {
+        const said = await socketSays(preview.origin);
+        last = `200 with the overlay; its socket heard ${JSON.stringify(said)}`;
+        if (said === preview.title) {
+          return { ok: true, ms: Date.now() - started, last };
+        }
+      }
+    } catch (error) {
+      last = (error as Error).message;
+    }
+    await Bun.sleep(500);
+  }
+  return { ok: false, ms: Date.now() - started, last };
+};
+
 const run = async (kit: Kit) => {
+  let boundaries = true;
   try {
     await Bun.$`bwrap --unshare-user --unshare-net --ro-bind / / --dev /dev --proc /proc true`.quiet();
   } catch (error) {
+    boundaries = false;
     kit.note(
-      `boundary handover not run here: ${(error as { stderr?: Buffer }).stderr?.toString().trim() ?? String(error)}`
+      `the workspace preview and the boundary handover not run here (no workspace boundary can start): ${(error as { stderr?: Buffer }).stderr?.toString().trim() ?? String(error)}`
     );
   }
   const first = appOf(TITLE);
@@ -646,22 +801,153 @@ const run = async (kit: Kit) => {
     );
   };
   await load("1b", "back in port mode");
+
+  // The workspace's preview: a delegate's server in its own boundary.
+  const previews: (Shown & { artifact: string; session: string })[] = [
+    {
+      label: "the host port's preview",
+      origin: firstOrigin,
+      title: TITLE,
+      artifact: madeFirst,
+      session,
+    },
+  ];
+  if (boundaries) {
+    const project = await fleet.api<{ id: string }>("/api/projects", {
+      name: "Survives",
+      machineId: MACHINE,
+      cwd: fleet.repo,
+    });
+    const parent = await fleet.spawn("claude", "Parent", fleet.repo, {
+      projectId: project.id,
+    });
+    sent += 1;
+    const marker = String(sent);
+    asks.set(marker, {
+      name: CREATE,
+      input: { kind: "preview", name: "in-workspace", port: WORKSPACE_PORT },
+    });
+    const delegated = await fleet.api<{
+      instanceId: string;
+      workspaceId: string;
+    }>("/api/work-items", {
+      parentInstanceId: parent,
+      title: "Serve a page in the workspace",
+      prompt: `${SERVE}: start the server, then show it. PROBE-CALL:${marker}`,
+      harness: "claude",
+      model: "claude-haiku-4-5",
+      cwd: fleet.repo,
+      checks: [{ name: "Probe check", command: "true" }],
+    });
+    const made = await until(
+      "the workspace preview's artifact_create answer",
+      () => answered.get(marker),
+      Boolean,
+      240_000
+    ).catch(() => "no answer");
+    const { port } = await address(delegated.instanceId);
+    const inWorkspace = {
+      label: `the workspace port's preview (workspace ${delegated.workspaceId.slice(0, 8)})`,
+      origin: `http://127.0.0.1:${port}`,
+      title: IN_WORKSPACE,
+      artifact: made.match(ANSWERED_ID)?.[1] ?? "",
+      session: delegated.instanceId,
+    };
+    const shownThere = await served(inWorkspace);
+    kit.check(
+      "1c: a delegate's server on a port in its workspace is previewed: 200 with the overlay, and its WebSocket through the bridge opens",
+      !!inWorkspace.artifact && shownThere.ok,
+      `${made.slice(0, 160)}; ${shownThere.ms} ms; ${shownThere.last}`
+    );
+    previews.push(inWorkspace);
+  }
+
+  /** Every preview answers again within the bound, each its own check. */
+  const answering = async (step: string, label: string) => {
+    for (const preview of previews) {
+      // biome-ignore lint/performance/noAwaitInLoops: one preview at a time, each its own line
+      const again = await served(preview);
+      kit.check(
+        `${step}: ${label}, ${preview.label} answers 200 with the overlay and its WebSocket opens, within ${BOUND_MS / 1000} s`,
+        again.ok,
+        `${again.ms} ms; ${again.last}`
+      );
+    }
+  };
+
+  // 17. Overlapping starts: three shows of each at once.
+  for (const preview of previews) {
+    // biome-ignore lint/performance/noAwaitInLoops: one preview's shows at a time
+    const shows = await Promise.all(
+      [1, 2, 3].map(() =>
+        fetch(
+          `${fleet.base}/api/instances/${preview.session}/artifacts/${preview.artifact}/show`,
+          { method: "POST", signal: AbortSignal.timeout(30_000) }
+        )
+          .then((response) => response.status)
+          .catch((error: Error) => error.message)
+      )
+    );
+    const after = await served(preview);
+    kit.check(
+      `17: three shows of ${preview.label} at once leave it answering, 200 with the overlay and its WebSocket open`,
+      after.ok,
+      `shows answered ${shows.join(", ")}; ${after.ms} ms; ${after.last}`
+    );
+  }
+
   await fleet.stop("agent");
   fleet.launch("agent");
   await fleet.agentUp();
+  await answering("2", "after the agent restarts");
   await load("2", "after the agent restarts");
+
+  // No dashboard open across the hub's restart: nothing asks for an address.
+  await tab.context().close();
   await fleet.stop("hub");
   fleet.launch("hub");
   await fleet.hubUp();
+  const pings = await Promise.all(
+    previews.map(async (preview) => {
+      const answer = await fetch(`${preview.origin}${PREVIEW_PING_PATH}`, {
+        signal: AbortSignal.timeout(3000),
+      })
+        .then((response) => String(response.status))
+        .catch((error: Error) => error.message);
+      return `${preview.origin} ${answer}`;
+    })
+  );
+  kit.check(
+    "3: with no dashboard open, the restarted hub answers each preview origin's ping at once",
+    pings.every((line) => line.endsWith(" 200")),
+    pings.join("; ")
+  );
   await fleet.agentUp();
+  await answering("3", "after the hub restarts");
+  tab = await kit.page("desk");
+  await open(tab, where, FRAME);
   await load("3", "after the hub restarts");
+
   await fleet.stop("agent");
   await fleet.stop("hub");
   fleet.launch("hub");
   await fleet.hubUp();
   fleet.launch("agent");
   await fleet.agentUp();
+  await answering("4", "after the agent and the hub restart together");
   await load("4", "after the agent and the hub restart together");
+
+  // The install's order: the hub first, the old agent registering with it
+  // again, then the agent.
+  await fleet.stop("hub");
+  fleet.launch("hub");
+  await fleet.hubUp();
+  await fleet.agentUp();
+  await fleet.stop("agent");
+  fleet.launch("agent");
+  await fleet.agentUp();
+  await answering("4b", "after the install's restarts (hub, then agent)");
+  await load("4b", "after the install's restarts (hub, then agent)");
   await tab.context().close();
   await Bun.sleep(3000);
   tab = await kit.page("desk");

@@ -1584,6 +1584,8 @@ interface ServingPreview {
   instanceId: string;
   port: number;
   source: PreviewSource;
+  /** The hub's token for the start that opened it. */
+  token?: string;
 }
 
 /** The preview listeners a registering daemon is still serving. */
@@ -8129,7 +8131,11 @@ export const createServer = (
   /**
    * Starts the daemon's listener for an instance's preview of `source`. A
    * start the instance's counter moved past while it awaited the daemon (a
-   * close, a newer start, the machine leaving) is told to go, and answers 409.
+   * close, a newer start, the machine leaving or registering again) is told
+   * to go, and answers 409. The start carries a token of its own and the stop
+   * names it, so the daemon takes that start's listener alone: a later start
+   * of the same preview has already replaced it, and its listener is the one
+   * the target points at (agent preview.ts `stopPreview`).
    */
   const startListener = async (
     instanceId: string,
@@ -8137,15 +8143,26 @@ export const createServer = (
     source: PreviewSource,
     generation: number
   ): Promise<ListenerStart> => {
-    const stopLate = () =>
+    const token = crypto.randomUUID();
+    const stopLate = () => {
+      // Not when a register has since pointed the target at this very listener.
+      if (previewTargets.get(instanceId)?.upstream?.token === token) {
+        return;
+      }
       detach(
-        callAgent(machineId, PREVIEW_STOP, [{ instanceId }], BUSY_TIMEOUT_MS),
+        callAgent(
+          machineId,
+          PREVIEW_STOP,
+          [{ instanceId, token }],
+          BUSY_TIMEOUT_MS
+        ),
         "late preview stop"
       );
+    };
     const answer = await callAgent(
       machineId,
       PREVIEW_START,
-      [{ instanceId, ...source }],
+      [{ instanceId, ...source, token }],
       BUSY_TIMEOUT_MS
     );
     if (answer === "offline") {
@@ -8199,14 +8216,31 @@ export const createServer = (
     }
     return {
       ok: true,
-      upstream: { address, port: (answer.result as { port: number }).port },
+      upstream: {
+        address,
+        port: (answer.result as { port: number }).port,
+        token,
+      },
     };
   };
 
   /**
+   * Each preview's listener while it starts on an open, a request or a
+   * register: one start per generation, however many ask. A start of an
+   * earlier generation (from before the machine registered again, or before
+   * a newer open) is not the one to wait on.
+   */
+  const reaching = new Map<
+    string,
+    { generation: number; reach: Promise<PreviewReach> }
+  >();
+
+  /**
    * Makes an artifact what an instance's panel shows: its machine's listener
    * started (a page is the hub's own, preview.ts), the intent kept in the
-   * database so a hub restart serves it still, and the "open" published.
+   * database so a hub restart serves it still, and the "open" published. Its
+   * start is the generation's one start: a request that comes meanwhile
+   * waits on it (reachPreview).
    */
   const openPreview = async (
     instanceId: string,
@@ -8234,12 +8268,18 @@ export const createServer = (
       throw error;
     }
     if (!("page" in source)) {
-      const started = await startListener(
-        instanceId,
-        machineId,
-        source,
-        generation
+      const starting = startListener(instanceId, machineId, source, generation);
+      const reach = starting.then(
+        (answer): PreviewReach =>
+          answer.ok
+            ? answer
+            : { ok: false, down: answer.down, error: answer.error }
       );
+      reaching.set(instanceId, { generation, reach });
+      const started = await starting;
+      if (reaching.get(instanceId)?.reach === reach) {
+        reaching.delete(instanceId);
+      }
       if (!started.ok) {
         return { ok: false, code: started.code, error: started.error };
       }
@@ -8250,20 +8290,19 @@ export const createServer = (
     return { ok: true, frame: publishPreview(instanceId, "open", target) };
   };
 
-  /** Each preview's listener while it starts on a request or a register: one start, however many ask. */
-  const reaching = new Map<string, Promise<PreviewReach>>();
-
   /**
    * Where a shown preview is served now: its machine's listener, started
    * here when it has none (the daemon restarted, or the last start failed:
    * its workspace was not running, its bridge did not open). The target is
    * the operator's intent and stays whatever this answers; only a close ends
-   * it.
+   * it. A start the counter moved past while it ran (the machine registered
+   * again, a newer open) answers with where the preview is served now.
    */
   const reachPreview = (instanceId: string): Promise<PreviewReach> => {
+    const generation = previewGenerationOf(instanceId);
     const inFlight = reaching.get(instanceId);
-    if (inFlight !== undefined) {
-      return inFlight;
+    if (inFlight?.generation === generation) {
+      return inFlight.reach;
     }
     const target = previewTargets.get(instanceId);
     if (!target) {
@@ -8283,7 +8322,6 @@ export const createServer = (
         error: `machine ${target.machineId} is not connected`,
       });
     }
-    const generation = previewGenerationOf(instanceId);
     const reach = (async (): Promise<PreviewReach> => {
       const started = await startListener(
         instanceId,
@@ -8291,22 +8329,52 @@ export const createServer = (
         target.source,
         generation
       );
-      if (!started.ok) {
-        return started;
-      }
       const now = previewTargets.get(instanceId);
-      if (!now || previewGenerationOf(instanceId) !== generation) {
+      if (!now) {
         return {
           ok: false,
           down: "closed",
           error: "Preview was closed while starting.",
         };
       }
+      if (previewGenerationOf(instanceId) !== generation) {
+        return reachPreview(instanceId);
+      }
+      if (!started.ok) {
+        return started;
+      }
       previewTargets.set(instanceId, { ...now, upstream: started.upstream });
       return started;
-    })().finally(() => reaching.delete(instanceId));
-    reaching.set(instanceId, reach);
+    })().finally(() => {
+      if (reaching.get(instanceId)?.reach === reach) {
+        reaching.delete(instanceId);
+      }
+    });
+    reaching.set(instanceId, { generation, reach });
     return reach;
+  };
+
+  /**
+   * The listener a preview's upstream names refused a connection: that is
+   * not where it is served, so the target forgets it and the next request
+   * reaches the machine again (reachPreview) instead of dialing it again.
+   */
+  const previewUnreachable = (
+    instanceId: string,
+    upstream: NonNullable<PreviewTarget["upstream"]>
+  ): void => {
+    const target = previewTargets.get(instanceId);
+    if (
+      target?.upstream?.address === upstream.address &&
+      target.upstream.port === upstream.port
+    ) {
+      previewTargets.set(instanceId, {
+        artifact: target.artifact,
+        machineId: target.machineId,
+        source: target.source,
+        revision: target.revision,
+      });
+    }
   };
 
   /**
@@ -8800,6 +8868,7 @@ export const createServer = (
     ownerOf: (artifactId: string) => db.artifacts.get(artifactId)?.instanceId,
     kindOf: (artifactId: string) => db.artifacts.get(artifactId)?.kind,
     reach: reachPreview,
+    unreachable: previewUnreachable,
     picture: artifactPicture(ARTIFACTS_ROOT, artifactDocs),
     send: artifactSend(artifacts.send),
     socket: artifactSocket(artifactDocs),
@@ -8814,15 +8883,19 @@ export const createServer = (
 
   /**
    * A register squares the machine's preview listeners with this hub's
-   * targets. A target whose listener the daemon still serves, on the same
-   * source, is pointed at it again. One it does not serve (the daemon
-   * restarted) is started again on the same source, and the "open" that
-   * follows reloads every dashboard's pane onto the new listener. A start
-   * that fails says why in one line and leaves the target as it is: the
-   * operator's intent, its next request asks again (reachPreview), and the
-   * pane draws the hop that failed. A listener no target names is stopped;
-   * one whose session shows another source is left to the start, which
-   * replaces it.
+   * targets. The register is the machine's whole account of what it serves,
+   * so nothing the hub held for it before stands: every target of the
+   * machine's drops its upstream and takes a new generation, which voids any
+   * start still in flight from before (on a connection the machine has
+   * since replaced, its old socket's close perhaps not yet heard). A target
+   * whose listener the daemon still serves, on the same source, is pointed
+   * at it again. One it does not serve (the daemon restarted) is started
+   * again on the same source, and the "open" that follows reloads every
+   * dashboard's pane onto the new listener. A start that fails says why in
+   * one line and leaves the target without an upstream: the operator's
+   * intent, its next request asks again (reachPreview), and the pane draws
+   * the hop that failed. A listener no target names is stopped; one whose
+   * session shows another source is left to the start, which replaces it.
    */
   const reconcilePreviews = (
     machineId: string,
@@ -8836,17 +8909,29 @@ export const createServer = (
       if (target.machineId !== machineId || "page" in target.source) {
         continue;
       }
+      nextPreviewGeneration(instanceId);
+      const held: PreviewTarget = {
+        artifact: target.artifact,
+        machineId,
+        source: target.source,
+        revision: target.revision,
+      };
       const listener = listeners.get(instanceId);
       if (
         listener &&
         previewSourceKey(listener.source) === previewSourceKey(target.source)
       ) {
         previewTargets.set(instanceId, {
-          ...target,
-          upstream: { address, port: listener.port },
+          ...held,
+          upstream: {
+            address,
+            port: listener.port,
+            ...(listener.token === undefined ? {} : { token: listener.token }),
+          },
         });
         continue;
       }
+      previewTargets.set(instanceId, held);
       reachPreview(instanceId)
         .then((reached) => {
           if (!reached.ok) {
