@@ -526,6 +526,7 @@ import {
   secureDashboardUrl,
   type TelegramBridge,
 } from "./telegram";
+import { createThreadRepair } from "./thread-repair";
 import {
   createTranscripts,
   type HistoryFault,
@@ -3920,7 +3921,7 @@ export const createServer = (
       parent.id,
       delegate,
       `a question from ${label}`,
-      sent.state === "pending" ? sent.uuid : undefined,
+      sent?.state === "pending" ? sent.uuid : undefined,
       false
     );
     const toolName = peek(ask.payload, "toolName");
@@ -4010,7 +4011,7 @@ export const createServer = (
       parent.id,
       delegate,
       `a report from ${label}`,
-      sent.state === "pending" ? sent.uuid : undefined,
+      sent?.state === "pending" ? sent.uuid : undefined,
       true
     );
     publishDelegateEvent(
@@ -6441,9 +6442,68 @@ export const createServer = (
   const deliverSend = (
     asked: Envelope<SendPayload>,
     ahead = false
+  ): SentMessageRow | undefined => {
+    const envelope = byIdNow(asked);
+    return toCawThread(envelope)
+      ? undefined
+      : deliverToSession(envelope, ahead);
+  };
+
+  /**
+   * A person's words to a project's Caw are a thread's (caw.ts
+   * `personSent`), whatever sent them to his session: they go into the
+   * thread he is in, and the wake that carries them to him goes under the
+   * send's own uuid, so the row the sender's screen drew becomes that wake's
+   * record. A refusal there (no machine for him, the spend cap, no words)
+   * fails the send's record with its sentence. True when the thread took it;
+   * a send the hub already has a record of is the same send again, and goes
+   * on to say that record.
+   */
+  const toCawThread = (envelope: Envelope<SendPayload>): boolean => {
+    const { payload } = envelope;
+    const { message } = payload;
+    if (
+      message.origin.kind !== "human" ||
+      isKeepAlive(message) ||
+      db.sendRecord(message.uuid)
+    ) {
+      return false;
+    }
+    const taken = lead?.personSent(payload);
+    if (!taken) {
+      return false;
+    }
+    taken.catch((error: unknown) => {
+      if (db.sendRecord(message.uuid)) {
+        return;
+      }
+      const reason = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[caw] ${payload.instanceId}: your words to Caw did not reach him: ${reason}`
+      );
+      publishSend(
+        db.recordSend({
+          uuid: message.uuid,
+          instanceId: payload.instanceId,
+          acceptedAt: new Date(),
+          body: externalizeImages(sentFrame(payload)),
+          mode: sendMode(payload),
+          state: "failed",
+          reason,
+          refusal: null,
+          anchor: anchors.get(payload.instanceId) ?? null,
+        })
+      );
+    });
+    return true;
+  };
+
+  /** {@link deliverSend}'s session path: the message into the session itself. */
+  const deliverToSession = (
+    envelope: Envelope<SendPayload>,
+    ahead: boolean
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the single send transaction orders refusal, recovery, delivery and persistence.
   ): SentMessageRow => {
-    const envelope = byIdNow(asked);
     const { instanceId, message } = envelope.payload;
     const { machineId } = envelope;
     const keepAlive = isKeepAlive(message);
@@ -6706,6 +6766,10 @@ export const createServer = (
       ...envelope,
       machineId: envelope.machineId || requester.machineId,
     });
+    // A person's words to Caw went into his thread, whose wake reaches him.
+    if (!record) {
+      return { busy: pulses.get(instanceId)?.busy === true };
+    }
     if (record.state === "failed") {
       throw new WorkItemRefusal(404, record.reason ?? "the send failed");
     }
@@ -8234,38 +8298,44 @@ export const createServer = (
     db: db.artifacts,
     docs: artifactDocs,
     root: ARTIFACTS_ROOT,
+    // Your picks and pins on a session's own page reach that session as the
+    // page's word for its tools to read (artifact_read, comment_read), not as
+    // a message: Caw's decision page is his to read, never a thread line.
     deliver: (instance, content, images = []) =>
-      deliverSend({
-        verb: "send",
-        machineId: instance.machineId,
-        instanceId: instance.id,
-        payload: {
+      deliverToSession(
+        {
+          verb: "send",
+          machineId: instance.machineId,
           instanceId: instance.id,
-          message: {
-            type: "user",
-            uuid: crypto.randomUUID(),
+          payload: {
+            instanceId: instance.id,
             message: {
-              role: "user",
-              content:
-                images.length === 0
-                  ? content
-                  : [
-                      ...images.map(({ mediaType, data }) => ({
-                        type: "image" as const,
-                        source: {
-                          type: "base64" as const,
-                          media_type: mediaType,
-                          data,
-                        },
-                      })),
-                      { type: "text" as const, text: content },
-                    ],
+              type: "user",
+              uuid: crypto.randomUUID(),
+              message: {
+                role: "user",
+                content:
+                  images.length === 0
+                    ? content
+                    : [
+                        ...images.map(({ mediaType, data }) => ({
+                          type: "image" as const,
+                          source: {
+                            type: "base64" as const,
+                            media_type: mediaType,
+                            data,
+                          },
+                        })),
+                        { type: "text" as const, text: content },
+                      ],
+              },
+              parent_tool_use_id: null,
+              origin: { kind: "human" },
             },
-            parent_tool_use_id: null,
-            origin: { kind: "human" },
           },
         },
-      }),
+        false
+      ),
     instance: (id) => db.getInstancesByIds([id])[0],
     machines: () => db.listAgents(),
     // A page is the hub's: its target names no machine.
@@ -11939,7 +12009,7 @@ export const createServer = (
     );
   };
   // Telegram's replies use the same recorded send path as every other device.
-  telegram?.setSender((envelope) => deliverSend(envelope).state !== "failed");
+  telegram?.setSender((envelope) => deliverSend(envelope)?.state !== "failed");
 
   const awaitingInstall = (machineId: string, toolId: string): boolean => {
     for (const install of pendingInstalls.values()) {
@@ -12719,7 +12789,7 @@ export const createServer = (
     };
     const record = deliverSend(message);
     console.log(
-      `[hub] send -> ${record.instanceId} (${record.state})${
+      `[hub] send -> ${message.payload.instanceId} (${record?.state ?? "to Caw's thread"})${
         provenance ? ` client ${provenance.clientId ?? "?"}` : ""
       }`
     );
@@ -14367,7 +14437,10 @@ export const createServer = (
     types: (projectId?: string | null) => projectTypes.typesFor(projectId),
     placeAhead: placeItem,
     spawn: issueSpawn,
-    send: deliverSend,
+    // A person's words to Caw that went to his thread were taken: its wake
+    // carries them to him (caw.ts `personSent`).
+    send: (envelope) =>
+      deliverSend(envelope) ?? { reason: null, state: "pending" },
     // What a pull request an attempt opens links back to and is titled by.
     sessionUrl: (instanceId) =>
       `${dashboardUrl(registry)}/session/${instanceId}`,
@@ -14679,7 +14752,7 @@ export const createServer = (
       running: (projectId) => projectStops.running(projectId),
       stop: (projectId, ids) => projectStops.stop(projectId, ids),
     },
-    send: (envelope) => deliverSend(envelope).state === "pending",
+    send: (envelope) => deliverSend(envelope)?.state === "pending",
     end: (instanceId) =>
       endSession(instanceId, "stop", { kind: "session", name: "Caw" }),
     task: (projectId, id) => tasks.get(projectId, id),
@@ -14692,6 +14765,15 @@ export const createServer = (
     refreshPlace: (row) => ensureIdentityWorkspace(row),
   });
   lead = caw;
+  // The owner's thread whose words went to Caw's session alone, before every
+  // word to him went through his threads: written in once (thread-repair.ts),
+  // now and, while his machine is away, as the next machine registers.
+  const repairThread = createThreadRepair({
+    db,
+    history: (instanceId) => readHistory(instanceId),
+    restore: caw.restore,
+  });
+  repairThread();
   // Fleet watch (fleet-watch.ts): code detectors, Jev as the gate, one
   // triage run per episode whose word goes to the session's lead.
   watch = createFleetWatch({
@@ -15634,27 +15716,31 @@ export const createServer = (
    * The send that hands a cut turn back, by a uuid its turn decides: one
    * made again for the same turn (a second register, a hub that died after
    * making it) is the same send, which {@link deliverSend} hands over once.
+   * The hub's own word, never a person's, so it goes into the session itself.
    */
   const handTurnBack = (
     row: { id: string; machineId: string },
     turn: string,
     content: string
   ): SentMessageRow =>
-    deliverSend({
-      verb: "send",
-      machineId: row.machineId,
-      instanceId: row.id,
-      payload: {
+    deliverToSession(
+      {
+        verb: "send",
+        machineId: row.machineId,
         instanceId: row.id,
-        message: {
-          type: "user",
-          uuid: uuidOf(`${row.id}\u0000${turn}`),
-          message: { role: "user", content },
-          parent_tool_use_id: null,
-          origin: { kind: "system", name: "restore" },
+        payload: {
+          instanceId: row.id,
+          message: {
+            type: "user",
+            uuid: uuidOf(`${row.id}\u0000${turn}`),
+            message: { role: "user", content },
+            parent_tool_use_id: null,
+            origin: { kind: "system", name: "restore" },
+          },
         },
-      },
-    } satisfies Envelope<SendPayload>);
+      } satisfies Envelope<SendPayload>,
+      false
+    );
 
   /**
    * The turn of `row` a restart or a kill cut and nothing has taken up
@@ -21074,7 +21160,10 @@ export const createServer = (
               }
               registry.registerAgent(message.machineId, ws, ws.remoteAddress);
               // A project Caw could not set up while no machine was online is set up now.
-              queueMicrotask(() => caw.machineOnline());
+              queueMicrotask(() => {
+                caw.machineOnline();
+                repairThread();
+              });
               workItems.discardUnfiled(message.machineId);
               // Checks a stopped hub left running on this machine run again
               // the moment it can run commands — waiting on nothing else the
@@ -22749,6 +22838,11 @@ export const createServer = (
                     .filter((block) => block.type === "text")
                     .map((block) => block.text)
                     .join("");
+                  // What a project's Caw says in plain text is kept for the
+                  // threads of yours his turn may leave unanswered.
+                  if (text.trim()) {
+                    caw.spoke(message.instanceId, text);
+                  }
                   // A tool call means the turn goes on: everything said up
                   // to it, this frame's own text included, was narration.
                   if (

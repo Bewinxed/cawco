@@ -432,13 +432,23 @@ export interface DbShape {
     path: string;
     kind: PlaceKind;
   }) => { place: PlaceRow; added: boolean };
-  /** Adds a message to a thread, which moves it to the top of its project's list. */
+  /**
+   * Adds a message to a thread, which moves it to the top of its project's
+   * list. `createdAt` is when it was said, for words written in after the
+   * fact (a repair): the thread's own time moves only forward.
+   */
   readonly addThreadMessage: (
     message: Pick<ThreadMessageRow, "threadId" | "author" | "body"> &
       Partial<
         Pick<
           ThreadMessageRow,
-          "id" | "noteTitle" | "tasks" | "files" | "question" | "answer"
+          | "id"
+          | "noteTitle"
+          | "tasks"
+          | "files"
+          | "question"
+          | "answer"
+          | "createdAt"
         >
       >
   ) => { thread: ThreadRow; message: ThreadMessageRow };
@@ -797,6 +807,8 @@ export interface DbShape {
   readonly launchDirOf: (
     id: string
   ) => { cwd: string } | { unknown: true } | undefined;
+  /** The sends to a project's Caw sessions (role `lead`) accepted after `after`, oldest first. */
+  readonly leadSends: (projectId: string, after: Date) => SentMessageRow[];
   /** Adds what a Caw turn the thread woke cost to the thread's spend. */
   /** Caw's shell and edit calls (lead-gate.ts): kept, read back and changed as each one's outcome is known. */
   readonly leadCalls: {
@@ -6008,9 +6020,9 @@ const make = async (path: string): Promise<DbShape> => {
           .get();
         return { thread, message };
       }),
-    addThreadMessage: ({ threadId, id, ...said }) =>
+    addThreadMessage: ({ threadId, id, createdAt, ...said }) =>
       db.transaction((tx) => {
-        const at = new Date();
+        const at = createdAt ?? new Date();
         const message = tx
           .insert(threadMessages)
           .values({
@@ -6021,9 +6033,20 @@ const make = async (path: string): Promise<DbShape> => {
           })
           .returning()
           .get();
+        const before = tx
+          .select({ updatedAt: projectThreads.updatedAt })
+          .from(projectThreads)
+          .where(eq(projectThreads.id, threadId))
+          .get();
+        if (!before) {
+          throw new Error(`thread ${threadId} is not on this hub`);
+        }
         const thread = tx
           .update(projectThreads)
-          .set({ updatedAt: at })
+          .set({
+            updatedAt:
+              at.getTime() > before.updatedAt.getTime() ? at : before.updatedAt,
+          })
           .where(eq(projectThreads.id, threadId))
           .returning()
           .get();
@@ -6449,6 +6472,21 @@ const make = async (path: string): Promise<DbShape> => {
       db.insert(sentMessages).values(send).returning().get(),
     sendRecord: (uuid) =>
       db.select().from(sentMessages).where(eq(sentMessages.uuid, uuid)).get(),
+    leadSends: (projectId, after) =>
+      db
+        .select({ send: sentMessages })
+        .from(sentMessages)
+        .innerJoin(instances, eq(instances.id, sentMessages.instanceId))
+        .where(
+          and(
+            eq(instances.projectId, projectId),
+            eq(instances.role, "lead"),
+            gt(sentMessages.acceptedAt, after)
+          )
+        )
+        .orderBy(asc(sentMessages.acceptedAt))
+        .all()
+        .map((row) => row.send),
     sendsIn: (instanceId, states) =>
       db
         .select()

@@ -237,6 +237,12 @@ export interface CawEvent {
   note?: { body?: string; title: string };
   /** The routine whose run this wake is (routines.ts): its turn is that run's, and a note in it is tainted (memory.ts). */
   routine?: string;
+  /**
+   * The person's own send this wake carries ({@link Caw.personSent}): it
+   * goes under that send's uuid, so the row their screen drew is the wake's
+   * record, with what the send carried besides its words.
+   */
+  send?: PersonSend;
   text: string;
   /** Its thread: the note goes there, and that thread is `working` while the turn it wakes runs. */
   threadId?: string;
@@ -248,6 +254,20 @@ export interface CawEvent {
  */
 const sourceOf = (event: CawEvent, inboxed: number): "owner" | "outside" =>
   event.by === "you" && !event.routine && inboxed === 0 ? "owner" : "outside";
+
+/** A person's send to Caw's session, as its wake carries it on: its uuid and what it carried besides its words. */
+interface PersonSend {
+  carried: Pick<SendPayload, "attachments" | "images" | "urgent">;
+  uuid: string;
+}
+
+/** A send's words: its text, or the text blocks of its content. */
+const wordsOf = (content: SendPayload["message"]["message"]["content"]) =>
+  typeof content === "string"
+    ? content
+    : content
+        .flatMap((block) => (block.type === "text" ? [block.text] : []))
+        .join("\n");
 
 const messageOf = (row: ThreadMessageRow): ThreadMessage => {
   const base = {
@@ -366,7 +386,7 @@ const briefOf = (projectName: string): string =>
     "AGENTS.md and knowledge/ are your project's memory: write one with memory_propose (the file's whole new text and why); it commits as you and is noted in the thread. Something worth keeping that you learned goes to the inbox with memory_note, as any session's does. A task's `context` names the knowledge/ files its attempt's brief carries.",
     "Your project's settings are yours to change with project_settings: grant it a connection, link its GitHub repository, set where its work lands, or publish its place to a new private GitHub repository (create_repo, always an Approve card first). Each change applies at once and is noted in the thread. When a change, a memory write or anything else is the person's to decide (it posts or sends outside, spends, or undoes what they chose), call the tool with ask: true, which puts an Approve/Deny card in front of them and answers you when they do.",
     "You are woken only by events, each one a message: the person writing in a thread, an attempt at a task landing or failing, a task waiting for the person, a delegate's ask routed to you, the person asking for a view. Handle the event, then end your turn. Nothing wakes you on a timer. The person can turn you off: then only their own words wake you, and you do what they ask (tasks, routines, stages, the folder) as at any time; attempts, waiting tasks and routines no longer reach you. Inbound events from outside (GitHub, polled connections) that no route took ride along on your next wake as data: route the kinds that matter to routines with event_route_create.",
-    "When the person writes in a thread, answer in that thread with thread_reply; the person does not see what you say outside it. Name the tasks a reply is about in its `tasks`.",
+    "When the person writes in a thread, answer in that thread with thread_reply, and name the tasks a reply is about in its `tasks`. A turn their words started that ends without a thread_reply to their thread has what you said in plain text posted there as your reply, so say nothing in plain text you would not say to them.",
     "When you need the person's decision, ask with AskUserQuestion, with options; it shows as a card in the thread and their pick comes back to you. Never end a message with a question for them to answer in text. Never hand them shell commands or ask them for setup details in text: do it with your tools, or ask with the card.",
     "A view-request event is the person asking for a view of the project: it carries how to write one. Answer it with view_draft, then say in that thread what you drafted; the person keeps or discards it.",
     'Judgments go to Jev while the person has connected it; while Jev is off some are yours, and never about your own work. Mark a task `fields: { ready: "yes" }` when an agent can do it from its file alone: the dispatcher starts no other. Rank tasks with `rank`: the dispatcher starts them in that order. Triage the tasks a wake lists for triage. Judge an attempt\'s acceptance criteria when a wake asks you to.',
@@ -599,6 +619,66 @@ export const createCaw = ({
    */
   const answered = new Map<string, string>();
 
+  /**
+   * Your words' wakes not yet read, by send uuid: the thread each woke. The
+   * turn that reads one owes that thread what he says ({@link speech}).
+   */
+  const yourWakes = new Map<string, string>();
+  /**
+   * Each lead's turn under way, as far as his words go: `heard`, the threads
+   * whose wake of your words it read; `words`, what he said in plain text in
+   * it (main loop only); `replied`, the threads he answered with
+   * thread_reply. A turn that read your words and ends without answering
+   * their thread leaves what it said there, as his reply
+   * ({@link answerUnreplied}): you read only the thread, so nothing he says
+   * to you stays in his session alone.
+   */
+  const speech = new Map<
+    string,
+    { heard: Set<string>; replied: Set<string>; words: string[] }
+  >();
+
+  /**
+   * His turn read a send: one that starts the turn (`started` false) starts
+   * what it says over; one your words woke from `yours` owes that thread.
+   */
+  const heardIn = (
+    instanceId: string,
+    started: boolean,
+    yours: string | undefined
+  ): void => {
+    const now = (started && speech.get(instanceId)) || {
+      heard: new Set<string>(),
+      replied: new Set<string>(),
+      words: [],
+    };
+    if (yours) {
+      now.heard.add(yours);
+    }
+    speech.set(instanceId, now);
+  };
+
+  /**
+   * The turn under way ended: each thread whose your-words wake it read and
+   * that it did not answer with thread_reply gets what he said in it, as his
+   * message. A turn that said nothing in plain text leaves nothing.
+   */
+  const answerUnreplied = (instanceId: string): void => {
+    const turn = speech.get(instanceId);
+    speech.delete(instanceId);
+    const body = turn?.words.join("\n\n").trim();
+    if (!(turn && body)) {
+      return;
+    }
+    for (const threadId of turn.heard) {
+      if (turn.replied.has(threadId) || !db.thread(threadId)) {
+        continue;
+      }
+      const added = db.addThreadMessage({ threadId, author: "caw", body });
+      said(added.thread, added.message);
+    }
+  };
+
   const projectOf = (projectId: string) =>
     db.project(projectId) ??
     refuse(404, `The hub keeps no project ${projectId}.`);
@@ -677,6 +757,9 @@ export const createCaw = ({
     const threadId = "threadId" in to ? to.threadId : before?.threadId;
     if ("threadId" in to) {
       answered.set(leadId, to.threadId);
+      if (by === "you") {
+        yourWakes.set(sent, to.threadId);
+      }
     }
     keep(leadId, {
       by: joined(before?.by, by),
@@ -704,6 +787,7 @@ export const createCaw = ({
 
   /** A lead's record is over: his session ended, his machine went, or he was replaced. */
   const unfollow = (instanceId: string): void => {
+    speech.delete(instanceId);
     // Every stored turn is in the working copy: one it lacks has no row.
     const turn = turns.get(instanceId);
     if (!turn) {
@@ -715,11 +799,14 @@ export const createCaw = ({
   };
 
   /**
-   * The lead's turn under way ended (its idle, or it was cut): the threads
-   * it read go `ready`; the wakes still unread keep the record, and their
-   * threads `working`, for the turn that reads them.
+   * The lead's turn under way ended (its idle, or it was cut): what he said
+   * in it reaches the threads of yours he left unanswered
+   * ({@link answerUnreplied}); the threads it read go `ready`; the wakes
+   * still unread keep the record, and their threads `working`, for the turn
+   * that reads them.
    */
   const endTurn = (instanceId: string): void => {
+    answerUnreplied(instanceId);
     const turn = turns.get(instanceId);
     if (!turn) {
       return;
@@ -744,9 +831,14 @@ export const createCaw = ({
     uuid: string,
     wasRead: boolean
   ): void => {
+    const yours = yourWakes.get(uuid);
+    yourWakes.delete(uuid);
     const turn = turns.get(instanceId);
     if (!turn) {
       return;
+    }
+    if (wasRead) {
+      heardIn(instanceId, turn.started, yours);
     }
     const woke = turn.waiting[uuid];
     if (woke === undefined) {
@@ -864,20 +956,24 @@ export const createCaw = ({
 
   /**
    * One message to Caw's session. A routine's wake says so in its origin
-   * (`routine:<id>`): the turn it starts is that run's (memory.ts). Answers
-   * the send's uuid when the hub took it, for {@link follow}.
+   * (`routine:<id>`): the turn it starts is that run's (memory.ts). A
+   * person's send it carries ({@link PersonSend}) gives it its uuid and what
+   * it carried. Answers the send's uuid when the hub took it, for
+   * {@link follow}.
    */
   const message = (
     target: InstanceRow,
     content: string,
-    routine?: string
+    routine?: string,
+    person?: PersonSend
   ): string | undefined => {
-    const uuid = crypto.randomUUID();
+    const uuid = person?.uuid ?? crypto.randomUUID();
     const taken = send({
       verb: "send",
       machineId: target.machineId,
       instanceId: target.id,
       payload: {
+        ...person?.carried,
         instanceId: target.id,
         message: {
           type: "user",
@@ -902,7 +998,8 @@ export const createCaw = ({
   const startLead = async (
     project: ReturnType<typeof projectOf>,
     event: string,
-    routine?: string
+    routine?: string,
+    person?: PersonSend
   ): Promise<{ lead: InstanceRow; sent: string | undefined }> => {
     const place =
       (await placeFor(project)) ??
@@ -928,7 +1025,12 @@ export const createCaw = ({
     if (!lead) {
       throw new Error(`Caw's session ${instanceId} has no row on this hub.`);
     }
-    const sent = message(lead, `${briefOf(project.name)}\n\n${event}`, routine);
+    const sent = message(
+      lead,
+      `${briefOf(project.name)}\n\n${event}`,
+      routine,
+      person
+    );
     console.log(
       `[caw] ${project.name}: started Caw on ${project.cawHarness} (${instanceId})`
     );
@@ -946,7 +1048,8 @@ export const createCaw = ({
     projectId: string,
     event: string,
     by: Origin,
-    routine?: string
+    routine?: string,
+    person?: PersonSend
   ): Promise<
     | { row: InstanceRow; sent?: string | undefined; started: boolean }
     | undefined
@@ -963,7 +1066,7 @@ export const createCaw = ({
     if (pending !== undefined) {
       return { row: await pending, started: false };
     }
-    const start = startLead(project, event, routine).finally(() =>
+    const start = startLead(project, event, routine, person).finally(() =>
       starting.delete(projectId)
     );
     const shared = start.then((made) => made.lead);
@@ -1050,7 +1153,13 @@ export const createCaw = ({
       db.ingress.releaseInbox(inbox.map((line) => line.id));
     let lead: Awaited<ReturnType<typeof leadFor>>;
     try {
-      lead = await leadFor(projectId, text, event.by, event.routine);
+      lead = await leadFor(
+        projectId,
+        text,
+        event.by,
+        event.routine,
+        event.send
+      );
       // His place's boundary read again before he reads this: what became
       // only its owner's since it started is hidden from him too.
       await placeFresh(lead);
@@ -1066,7 +1175,7 @@ export const createCaw = ({
     }
     const sent = lead.started
       ? lead.sent
-      : message(lead.row, text, event.routine);
+      : message(lead.row, text, event.routine, event.send);
     if (!sent) {
       // His session refused it: nothing woke him, and the thread is not his.
       giveBack();
@@ -1529,7 +1638,30 @@ export const createCaw = ({
       : undefined;
   };
 
-  return {
+  /**
+   * The thread your words sent straight to Caw's session belong to: the one
+   * his parked question stands in (you are answering beside it), else the
+   * one his turn under way answers, else the one he answered last, else the
+   * project's newest; none when the project has no thread yet.
+   */
+  const threadOfLead = (
+    leadId: string,
+    projectId: string
+  ): string | undefined => {
+    const asked = asks().find((ask) => ask.instanceId === leadId)?.payload as
+      | { threadId?: string }
+      | undefined;
+    return [
+      asked?.threadId,
+      turns.get(leadId)?.threadId,
+      answered.get(leadId),
+      db.newestThread(projectId)?.id,
+    ].find(
+      (id): id is string => !!id && db.thread(id)?.projectId === projectId
+    );
+  };
+
+  const api = {
     /**
      * The lead an attempt nobody asked for reports to (dispatch.ts): its Caw
      * session, started for that attempt when it has none.
@@ -1695,11 +1827,16 @@ export const createCaw = ({
       return byProject;
     },
 
-    /** Starts a thread with your first message, and wakes Caw with it; "Make a note: …" goes to AGENTS.md instead. */
+    /**
+     * Starts a thread with your first message, and wakes Caw with it; "Make a
+     * note: …" goes to AGENTS.md instead. `person`: the send to his session it
+     * came as ({@link personSent}).
+     */
     async start(
       projectId: string,
       raw: string,
-      id?: string
+      id?: string,
+      person?: PersonSend
     ): Promise<ThreadSaid> {
       const body = bodyOf(raw);
       unsaid(id);
@@ -1716,6 +1853,7 @@ export const createCaw = ({
         by: "you",
         text: yourWords(opened.row, body, true),
         threadId: opened.row.id,
+        ...(person ? { send: person } : {}),
       });
       return { ...opened.said, thread: summaryOf(opened.row) };
     },
@@ -1725,13 +1863,15 @@ export const createCaw = ({
      * goes to AGENTS.md instead, waking nobody). `id` is the
      * message's when the dashboard chose it, as a session's composer does:
      * the row your words fly into is then the one they went out as, however
-     * soon the hub's frame draws it.
+     * soon the hub's frame draws it. `person`: the send to his session it
+     * came as ({@link personSent}).
      */
     async say(
       projectId: string,
       threadId: string,
       raw: string,
-      id?: string
+      id?: string,
+      person?: PersonSend
     ): Promise<ThreadSaid> {
       const body = bodyOf(raw);
       threadIn(projectId, threadId);
@@ -1760,8 +1900,80 @@ export const createCaw = ({
         by: "you",
         text: yourWords(added.thread, body, false),
         threadId,
+        ...(person ? { send: person } : {}),
       });
       return { ...out, thread: summaryOf(added.thread) };
+    },
+
+    /**
+     * Your words sent straight to Caw's session (server.ts `deliverSend`):
+     * his session's composer in the app, a push's Reply, Telegram, a relay.
+     * Everything you say to him is a thread's, so they go into the thread he
+     * is in ({@link threadOfLead}, a new one when the project has none) by
+     * the thread's own path, and wake him from there under the send's uuid:
+     * the row your screen drew of them is the wake's. Undefined when
+     * `payload` is not to a project's Caw; resolved at once when its words
+     * are in a thread already (the same send again).
+     */
+    personSent(payload: SendPayload): Promise<unknown> | undefined {
+      const project = leadOf(row(payload.instanceId));
+      if (!project) {
+        return;
+      }
+      const sent = payload.message;
+      if (db.threadMessage(sent.uuid)) {
+        return Promise.resolve();
+      }
+      const person: PersonSend = {
+        uuid: sent.uuid,
+        carried: {
+          ...(payload.images?.length ? { images: payload.images } : {}),
+          ...(payload.attachments?.length
+            ? { attachments: payload.attachments }
+            : {}),
+          ...(payload.urgent ? { urgent: true } : {}),
+        },
+      };
+      const words = wordsOf(sent.message.content);
+      const threadId = threadOfLead(payload.instanceId, project.id);
+      return threadId
+        ? api.say(project.id, threadId, words, sent.uuid, person)
+        : api.start(project.id, words, sent.uuid, person);
+    },
+
+    /**
+     * Words a session said in plain text, in its main loop (server.ts, each
+     * assistant frame): a lead's, in a turn under way, are kept for the
+     * threads of yours it may leave unanswered ({@link answerUnreplied}).
+     */
+    spoke(instanceId: string, words: string): void {
+      speech.get(instanceId)?.words.push(words);
+    },
+
+    /**
+     * Words said to and by Caw that missed their thread, written into it at
+     * the times they were said, oldest first, through the thread's own
+     * storage; then a note from the hub saying so (thread-repair.ts).
+     */
+    restore(
+      threadId: string,
+      lines: { at: Date; author: "you" | "caw"; body: string }[],
+      note: { body: string; title: string }
+    ): void {
+      const thread = db.thread(threadId);
+      if (!thread) {
+        return;
+      }
+      for (const line of lines) {
+        const added = db.addThreadMessage({
+          threadId,
+          author: line.author,
+          body: line.body,
+          createdAt: line.at,
+        });
+        said(added.thread, added.message);
+      }
+      noteIn(thread.projectId, threadId, note);
     },
 
     /** "Ask Caw for a view": a new thread with your words, and Caw woken by `view-request`. */
@@ -2211,6 +2423,9 @@ export const createCaw = ({
               ...(named.length ? { files: named } : {}),
             });
             said(added.thread, added.message);
+            if (actor) {
+              speech.get(actor.id)?.replied.add(thread);
+            }
             return ok({ ok: true, message: added.message.id });
           }
         ),
@@ -2331,6 +2546,7 @@ export const createCaw = ({
       ];
     },
   };
+  return api;
 };
 
 export type Caw = ReturnType<typeof createCaw>;
