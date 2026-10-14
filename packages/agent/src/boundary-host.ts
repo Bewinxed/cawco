@@ -222,7 +222,11 @@ const denies = JSON.parse(readFileSync(deniesFile, "utf8")) as Deny[];
 const placeFile = join(process.cwd(), "sandbox");
 /** `<state>/guarded`: the running sandbox's protected binds, which the executor checks before every command. */
 const guardedFile = join(process.cwd(), "guarded");
-process.chdir(clone);
+// srt resolves its own mandatory names against this working directory and
+// makes a mount point for each that is absent. A project lead's place is a
+// person's own folder, never written into, so there srt starts in the place's
+// scratch dir (`CAWCO_SANDBOX_CWD`); a clone's are stood in for (standIn).
+process.chdir(process.env.CAWCO_SANDBOX_CWD || clone);
 await SandboxManager.initialize(settings, ask);
 
 const lstatOf = (path: string): Stats | undefined => {
@@ -484,7 +488,15 @@ interface Sandbox {
 
 // What the runner starts with: nothing of this process's own environment but
 // who the user is. Each command brings its own (the executor's request).
-const inherited = ["HOME", "USER", "LOGNAME", "LANG", "CAWCO_WORKSPACE"];
+const inherited = [
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "LANG",
+  "CAWCO_WORKSPACE",
+  // A lead's place: nothing a command starts outlives it (boundary.ts `LAUNCH`).
+  "CAWCO_LEAD_PLACE",
+];
 const runnerEnv = {
   PATH: "/usr/sbin:/usr/bin:/sbin:/bin",
   ...Object.fromEntries(

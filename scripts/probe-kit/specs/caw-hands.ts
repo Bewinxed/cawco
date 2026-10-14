@@ -19,6 +19,14 @@
  * g. A task whose only change is Caw's unapproved commit cannot be moved to
  *    done by him; one whose only change is his edit you approved can.
  * h. Every call is a note in his thread.
+ * s. Never write into a person's own folder: after his wake `ls -A` of the
+ *    place shows only its own files (no stand-in of the boundary's).
+ * p. Its protected config is kept all the same: his Write to `.mcp.json` is
+ *    refused by the judge; a shell `echo {} > .mcp.json` and a link to
+ *    `~/.claude/settings.json` are moved to scratch by the place's guard,
+ *    the call failing with a thread note; `sleep 300 &` is gone when its
+ *    command returns.
+ * k. A delegate's clone still gets its stand-ins.
  * w. He has the fleet's Exa server: he fetches a page with it and sums it up
  *    in the thread, and the shell call after it in that same turn your words
  *    woke raises the card.
@@ -29,7 +37,7 @@ import { chmod, mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { commandOf } from "../../../packages/core/src/permission-presentation";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import type { Kit, KitFleet, Spec } from "../kit";
 
 const CAW = "You are Caw";
 const SECRET = "PROBE-SECRET-6f1c";
@@ -231,6 +239,15 @@ const run = async (kit: Kit) => {
     init?.outcome === "ran" && init.exit === "0" && repo && cardsSeen === 0,
     JSON.stringify({ init, repo, cardsSeen })
   );
+  // Never write into a person's own folder: after his wake it holds only its
+  // own files and the repository he made, no stand-in of the boundary's.
+  const placeFiles = (await readdir(place)).sort();
+  kit.check(
+    "s: after his wake, `ls -A` of the place shows only its own files",
+    JSON.stringify(placeFiles) ===
+      JSON.stringify([".git", "notes.txt", "vault"]),
+    placeFiles.join(" ")
+  );
 
   // ── b. your message: rm raises the card; Deny, and it does not run ────
   script.push(bash("rm notes.txt"));
@@ -380,6 +397,19 @@ const run = async (kit: Kit) => {
       .join(" | ")
   );
 
+  await placeCases({
+    kit,
+    fleet,
+    place,
+    projectId: project.id,
+    script,
+    say,
+    cardFor,
+    answer,
+    turnEnds,
+    callOf,
+  });
+
   // ── g. review independence ────────────────────────────────────────────
   await fetch(`${fleet.base}/api/projects/${project.id}/folder/file`, {
     method: "PUT",
@@ -513,6 +543,184 @@ const run = async (kit: Kit) => {
     "h: every call appears as a note in his thread (command, exit, files)",
     settled.length > 0 && notes.length === settled.length,
     `${settled.length} calls, ${notes.length} notes`
+  );
+
+  await cloneCase(kit, fleet, script);
+};
+
+/** What the place cases drive Caw and read the hub with ({@link run}'s own). */
+interface Hands {
+  answer: (ask: Ask, allow: boolean) => Promise<void>;
+  callOf: (command: string) => CallRow | undefined;
+  cardFor: (match: (ask: Ask) => boolean, label: string) => Promise<Ask>;
+  fleet: KitFleet;
+  kit: Kit;
+  place: string;
+  projectId: string;
+  say: (name: string, body: string) => Promise<string>;
+  script: (Reply | ((request: Seen) => Reply))[];
+  turnEnds: (label: string) => Promise<void>;
+}
+
+/** Where a place's guard says it moved something. */
+const MOVED_TO = /moved to (\S+) and this command is refused/;
+
+const exists = (path: string): Promise<boolean> =>
+  stat(path).then(
+    () => true,
+    () => false
+  );
+
+/**
+ * p. His place's protected config, kept without stand-ins (never write into
+ * a person's own folder): the judge refuses a Write to it, the place's
+ * guard moves aside what a command makes of it or links to outside, and
+ * nothing a command starts outlives it.
+ */
+const placeCases = async (hands: Hands): Promise<void> => {
+  const { kit, fleet, place, script, say, turnEnds } = hands;
+  // A Write to `.mcp.json`: the boundary's judge refuses it before any card.
+  script.push(
+    call("Write", { file_path: join(place, ".mcp.json"), content: "{}\n" })
+  );
+  await say("main", "PROBE-P1: write an MCP config here.");
+  await turnEnds("p1");
+  const judged = fleet.seen.some(
+    (request) =>
+      request.all.includes(CAW) &&
+      request.all.includes("is protected config (.mcp.json)")
+  );
+  const mcpThere = await exists(join(place, ".mcp.json"));
+  kit.check(
+    "p: Caw's Write to `.mcp.json` is refused by the boundary's judge",
+    judged && !mcpThere,
+    JSON.stringify({ judged, mcpThere })
+  );
+  /** His thread's notes from his place's guard, newest last. */
+  const guardNotes = () =>
+    fleet.query<{ body: string; note_title: string }>(
+      "SELECT m.note_title, m.body FROM thread_messages m JOIN project_threads t ON t.id = m.thread_id WHERE t.project_id = ? AND m.note_title LIKE '%place''s guard%' ORDER BY m.created_at",
+      hands.projectId
+    );
+  // A shell write of `.mcp.json`: found after the command, moved aside.
+  const echoed = await approvedRun(hands, "P2", "echo {} > .mcp.json");
+  const echoNote = guardNotes().at(-1);
+  const movedTo = MOVED_TO.exec(echoNote?.body ?? "")?.[1];
+  const keptAside = movedTo ? await exists(movedTo) : false;
+  const echoGone = !(await exists(join(place, ".mcp.json")));
+  kit.check(
+    "p: a shell `echo {} > .mcp.json` is caught after the command: moved to scratch, the call failed, a thread note says so",
+    echoed?.exit !== "0" &&
+      echoGone &&
+      keptAside &&
+      (echoNote?.body ?? "").includes(
+        ".mcp.json is config a host session would load"
+      ),
+    JSON.stringify({ row: echoed, echoGone, keptAside, note: echoNote })
+  );
+  // A link to the host's own Claude Code settings: moved aside.
+  const linked = await approvedRun(
+    hands,
+    "P3",
+    "ln -s ~/.claude/settings.json x"
+  );
+  const linkGone = !(await readdir(place)).includes("x");
+  const linkNote = guardNotes().at(-1);
+  kit.check(
+    "p: `ln -s ~/.claude/settings.json x` is refused and moved aside",
+    linked?.exit !== "0" &&
+      linkGone &&
+      (linkNote?.body ?? "").includes("x links to"),
+    JSON.stringify({ row: linked, linkGone, note: linkNote })
+  );
+  // Nothing he starts outlives its command.
+  const sleeper = await approvedRun(hands, "P4", "sleep 300 & echo started");
+  const sleeping = (
+    await Bun.$`pgrep -f ${"^sleep 300$"}`.nothrow().quiet()
+  ).stdout
+    .toString()
+    .trim();
+  kit.check(
+    "p: a backgrounded `sleep 300 &` is gone when the command returns",
+    sleeper?.exit === "0" && sleeping === "",
+    JSON.stringify({ row: sleeper, sleeping })
+  );
+  const after = (await readdir(place)).sort();
+  kit.check(
+    "p: after all that, the place holds only its own files and what he was let write",
+    JSON.stringify(after) ===
+      JSON.stringify([".git", "docs", "notes.txt", "vault"]),
+    after.join(" ")
+  );
+};
+
+/** A shell call of his you approve, its turn played out; its row after. */
+const approvedRun = async (hands: Hands, label: string, command: string) => {
+  hands.script.push(bash(command));
+  await hands.say("main", `PROBE-${label}: ${command}`);
+  const card = await hands.cardFor(
+    (ask) => commandOf(ask.payload.input) === command,
+    `${label}: the card for ${command}`
+  );
+  await hands.answer(card, true);
+  await hands.turnEnds(label);
+  return hands.callOf(command);
+};
+
+/** The newest workspace's clone, once its boundary has stood its config in. */
+const standInsOf = async (
+  fleet: KitFleet
+): Promise<{ names: string[]; path: string } | undefined> => {
+  const [made] = fleet.query<{ path: string }>(
+    "SELECT path FROM workspaces ORDER BY created_at DESC LIMIT 1"
+  );
+  if (!made) {
+    return;
+  }
+  const names = await readdir(made.path).catch((): string[] => []);
+  return names.includes(".mcp.json") ? { path: made.path, names } : undefined;
+};
+
+/**
+ * k. A clone keeps its stand-ins: a delegate's workspace is a disposable
+ * clone, and its boundary still stands in for each protected path it lacks,
+ * as before. In a second project, on the fleet's repository.
+ */
+const cloneCase = async (
+  kit: Kit,
+  fleet: KitFleet,
+  script: (Reply | ((request: Seen) => Reply))[]
+): Promise<void> => {
+  const coded = await fleet.api<{ id: string }>("/api/projects", {
+    name: "Caw clones",
+    machineId: MACHINE,
+    cwd: fleet.repo,
+    caw: true,
+  });
+  script.push(
+    call("mcp__cawco__delegate", {
+      title: "Look at the repository",
+      prompt: "PROBE-CLONE-CHILD: say ok.",
+      checks: [{ name: "Nothing to check", command: "true" }],
+      lands: "none",
+    })
+  );
+  await fleet.api(`/api/projects/${coded.id}/threads`, {
+    body: "PROBE-K: hand this to a delegate.",
+  });
+  const clone = await until(
+    "k: the delegate's workspace with its stand-ins",
+    () => standInsOf(fleet),
+    (found) => found !== undefined,
+    240_000
+  ).catch(() => undefined);
+  kit.check(
+    "k: a clone still gets its stand-ins as before",
+    clone !== undefined &&
+      [".mcp.json", ".claude", ".vscode", "opencode.json"].every((name) =>
+        clone.names.includes(name)
+      ),
+    clone ? clone.names.join(" ") : "no workspace with stand-ins"
   );
 };
 

@@ -902,6 +902,15 @@ const noteFor = (
   }
 };
 
+/** A line a lead's place's guard said (agent boundary.ts `PLACE_GUARD`). */
+const GUARD_LINE = /^cawco place-guard: .+$/gm;
+
+/** What a call's result says its place's guard found: each line, without its tag. */
+const guardLines = (text: string): string[] =>
+  (text.match(GUARD_LINE) ?? []).map((line) =>
+    line.slice("cawco place-guard: ".length)
+  );
+
 /** A ran call's exit, from its result: a shell's code, an edit's `ok` or `failed`. */
 const exitOf = (
   row: LeadCallRow,
@@ -1036,6 +1045,17 @@ export const createLeadGate = ({
     }
     const exit = exitOf(row, block);
     db.leadCalls.set(row.id, { exit });
+    const guarded = guardLines(resultText(block.content));
+    const said = noteFor({ ...row, exit });
+    if (said && guarded.length > 0) {
+      // What his place's guard moved aside or saw change: said whole, under
+      // a title that says so.
+      note(row.instanceId, {
+        title: `Caw · his place's guard on \`${shortly(row.command)}\``,
+        body: [said.body, ...guarded].filter(Boolean).join("\n"),
+      });
+      return;
+    }
     noteOf({ ...row, exit });
   };
 

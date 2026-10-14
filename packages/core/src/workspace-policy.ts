@@ -50,7 +50,13 @@ import {
   workspaceScratchDir,
   xdgDataHome,
 } from "./paths";
-import { type Policy, resolveDenied, resolveReal } from "./workspace-judge";
+import {
+  type Policy,
+  PROTECTED_NAMES,
+  PROTECTED_UNDER,
+  resolveDenied,
+  resolveReal,
+} from "./workspace-judge";
 
 /**
  * What stands in for a clone-side deny path its clone does not have, before
@@ -172,34 +178,136 @@ export const cloneDenies = (clone: string): readonly CloneDeny[] => [
 /**
  * A project lead's place (Caw's): the workspace id the hub gives the
  * boundary of the folder Caw starts in (hub `leadPlaceRef`), never a
- * delegate's. Its policy differs from a clone's in two ways
- * ({@link workspaceDenies}, {@link ownerOnlyIn}).
+ * delegate's. It is a person's own folder, not a disposable clone, so its
+ * boundary never writes into it (no stand-ins, no copied inodes, no exclude
+ * lines): its policy denies what is there ({@link workspaceDenies},
+ * {@link ownerOnlyIn}, {@link linkedIn}), its judge refuses protected config
+ * by name (`protectConfig`), and its guard checks each command
+ * (boundary.ts `PLACE_GUARD`).
  */
 export const LEAD_PLACE_SUFFIX = "-caw";
 export const isLeadPlace = (id: string): boolean =>
   id.endsWith(LEAD_PLACE_SUFFIX);
 
+/** The most `find` writes about a place: every path it names, NUL-separated. */
+const FIND_OUTPUT_MAX = 64 * 1024 * 1024;
+
+/**
+ * The paths `find root -mindepth 1 <expression>` prints with `-print0`, over
+ * the whole place: `find` reads a tree of hundreds of thousands of entries in
+ * a second. It exits 1 when a dir under the place is not the owner's to
+ * read, which nothing in the boundary reads either; any other failure
+ * refuses the boundary, saying `what` could not be found.
+ */
+const findIn = (
+  root: string,
+  expression: readonly string[],
+  what: string
+): Promise<string[]> =>
+  new Promise((done, fail) => {
+    execFile(
+      "find",
+      [root, "-mindepth", "1", ...expression],
+      { encoding: "utf8", maxBuffer: FIND_OUTPUT_MAX },
+      (error, out) => {
+        if (error && error.code !== 1) {
+          fail(
+            new Error(
+              `${what} in ${root} could not be found: ${error.message}`,
+              {
+                cause: error,
+              }
+            )
+          );
+          return;
+        }
+        done(out.split("\0").filter(Boolean));
+      }
+    );
+  });
+
+/** `find`'s test for an entry that is a dir or a file of its own: never a link. */
+const DIR_OR_FILE = ["(", "-type", "d", "-o", "-type", "f", ")"];
+
+/**
+ * The protected config a lead's place has now, anywhere in it but installed
+ * dependencies ({@link PROTECTED_NAMES}, {@link PROTECTED_UNDER}): each a dir
+ * or file of its own, which srt binds onto itself and so leaves nothing on
+ * the host. One that is absent is never denied to srt, which would make its
+ * mount point in the person's folder.
+ */
+const protectedIn = async (root: string): Promise<string[]> => {
+  const found = await foundProtected(root);
+  const made = await Promise.all(
+    found.map((path) => standInAsMade(root, path))
+  );
+  return found.filter((_, at) => !made[at]);
+};
+
+/**
+ * Whether `path` is still exactly a stand-in an earlier build made in a
+ * lead's place (an empty dir, or a file holding a stand-in's text): left
+ * unbound so the agent can take it away (stand-ins.ts `removeStandIns`); the
+ * place's guard still sees every change to it.
+ */
+const standInAsMade = async (root: string, path: string): Promise<boolean> => {
+  const texts = new Set(
+    cloneDenies(root).flatMap(({ empty }) =>
+      empty.kind === "file" ? [empty.text] : []
+    )
+  );
+  const found = await stat(path).catch(() => undefined);
+  if (found?.isDirectory()) {
+    return (await readdir(path).catch(() => ["?"])).length === 0;
+  }
+  return (
+    found?.isFile() === true &&
+    texts.has(await readFile(path, "utf8").catch(() => "\0"))
+  );
+};
+
+const foundProtected = (root: string): Promise<string[]> =>
+  findIn(
+    root,
+    [
+      "-name",
+      "node_modules",
+      "-prune",
+      "-o",
+      "(",
+      ...PROTECTED_NAMES.flatMap((name, at) => [
+        ...(at > 0 ? ["-o"] : []),
+        "-name",
+        name,
+      ]),
+      ...Object.entries(PROTECTED_UNDER).flatMap(([dir, names]) =>
+        names.flatMap((name) => ["-o", "-path", `*/${dir}/${name}`])
+      ),
+      ")",
+      ...DIR_OR_FILE,
+      "-print0",
+      "-prune",
+    ],
+    "the protected config"
+  );
+
 /**
  * The clone-side denies a workspace's boundary keeps ({@link cloneDenies}).
- * A lead's place without a `.git` dir (a plain folder) keeps none under
- * `.git`: a stand-in there would make `.git` and a deny on `.git/config`
- * would leave `git init` nothing to write its config into. Once the place is
- * a repository, the boundary's next start denies them as a clone's.
+ * A lead's place keeps only the protected config it has
+ * ({@link protectedIn}), each with nothing to stand in for it: a person's own
+ * folder is never written into.
  */
 export const workspaceDenies = async (
   workspace: WorkspaceRef
 ): Promise<readonly CloneDeny[]> => {
   const clone = resolveReal(workspace.path);
-  const all = cloneDenies(clone);
   if (!isLeadPlace(workspace.id)) {
-    return all;
+    return cloneDenies(clone);
   }
-  const git = join(clone, ".git");
-  const isRepo = await stat(git).then(
-    (found) => found.isDirectory(),
-    () => false
-  );
-  return isRepo ? all : all.filter((deny) => !deny.path.startsWith(`${git}/`));
+  return (await protectedIn(clone)).map((path) => ({
+    path,
+    empty: { kind: "none" },
+  }));
 };
 
 /**
@@ -207,68 +315,71 @@ export const workspaceDenies = async (
  * (any of them set), BSD find's (macOS) `+077`, negated.
  */
 const ANY_GROUP_OR_OTHER_BIT = process.platform === "darwin" ? "+077" : "/077";
-/** The most `find` writes: a place's every owner-only path, NUL-separated. */
-const OWNER_ONLY_OUTPUT_MAX = 64 * 1024 * 1024;
 
 /**
  * Every entry under `root` (never `root` itself) that only its owner may
  * read: a dir or file whose mode has no group or other bits (a 0700 dir, a
  * 0600 file), as a tool keeps its own data (x-use's accounts and cookies).
  * Not walked into, and nothing under a link; git's own dirs and installed
- * dependencies (`.git`, `node_modules`) are not looked in. The whole place,
- * by `find`, which reads a tree of hundreds of thousands of entries in a
- * second. A lead's place hides each from his shell and file tools; an MCP
- * server the owner runs reaches its own data on its own. `find` exits 1
- * when a dir under the place is not the owner's to read, which nothing in
- * the boundary reads either; any other failure refuses the boundary.
+ * dependencies (`.git`, `node_modules`) are not looked in. A lead's place
+ * hides each from his shell and file tools; an MCP server the owner runs
+ * reaches its own data on its own.
  */
-export const ownerOnlyIn = async (root: string): Promise<string[]> => {
-  const { stdout } = await new Promise<{ stdout: string }>((done, fail) => {
-    execFile(
-      "find",
-      [
-        root,
-        "-mindepth",
-        "1",
-        "(",
-        "-name",
-        ".git",
-        "-o",
-        "-name",
-        "node_modules",
-        ")",
-        "-prune",
-        "-o",
-        "(",
-        "-type",
-        "d",
-        "-o",
-        "-type",
-        "f",
-        ")",
-        "!",
-        "-perm",
-        ANY_GROUP_OR_OTHER_BIT,
-        "-print0",
-        "-prune",
-      ],
-      { encoding: "utf8", maxBuffer: OWNER_ONLY_OUTPUT_MAX },
-      (error, out) => {
-        if (error && error.code !== 1) {
-          fail(
-            new Error(
-              `the files only their owner may read in ${root} could not be found: ${error.message}`,
-              { cause: error }
-            )
-          );
-          return;
-        }
-        done({ stdout: out });
-      }
-    );
-  });
-  return stdout.split("\0").filter(Boolean);
-};
+export const ownerOnlyIn = (root: string): Promise<string[]> =>
+  findIn(
+    root,
+    [
+      "(",
+      "-name",
+      ".git",
+      "-o",
+      "-name",
+      "node_modules",
+      ")",
+      "-prune",
+      "-o",
+      ...DIR_OR_FILE,
+      "!",
+      "-perm",
+      ANY_GROUP_OR_OTHER_BIT,
+      "-print0",
+      "-prune",
+    ],
+    "the files only their owner may read"
+  );
+
+/**
+ * What in a lead's place shares its inodes with files elsewhere: each
+ * installed dependencies dir (bun installs by hardlinking from its cache),
+ * and every other file with more than one link. A clone's are copied apart
+ * (boundary.ts `ownInodes`); a person's own folder is never rewritten, so
+ * these are only denied for writing: a write through one would change a file
+ * the host runs.
+ */
+export const linkedIn = (root: string): Promise<string[]> =>
+  findIn(
+    root,
+    [
+      "-xdev",
+      "(",
+      "-name",
+      "node_modules",
+      "-type",
+      "d",
+      "-print0",
+      "-prune",
+      ")",
+      "-o",
+      "(",
+      "-type",
+      "f",
+      "-links",
+      "+1",
+      "-print0",
+      ")",
+    ],
+    "the files that share their inodes"
+  );
 
 const unique = (paths: string[]): string[] => [...new Set(paths)];
 
@@ -626,7 +737,10 @@ export const workspacePolicy = async (
   ]);
   // A lead's place: what only its owner may read in it is hidden from the
   // lead's shell and file tools, for reading and writing (`ownerOnlyIn`).
-  const ownerOnly = isLeadPlace(workspace.id) ? await ownerOnlyIn(clone) : [];
+  const lead = isLeadPlace(workspace.id);
+  const ownerOnly = lead ? await ownerOnlyIn(clone) : [];
+  // What shares an inode with a file elsewhere is only read (`linkedIn`).
+  const linked = lead ? await linkedIn(clone) : [];
   const denyRead = unique([
     resolveDenied(home),
     ...stores,
@@ -637,6 +751,7 @@ export const workspacePolicy = async (
     home,
     clone,
     scratch,
+    ...(lead ? { protectConfig: true } : {}),
     denyRead,
     // An entry that is a deny entry itself would re-allow it whole (srt:
     // `allowRead` wins a tie; the judge: a tie denies), so it is left out, and
@@ -656,6 +771,7 @@ export const workspacePolicy = async (
       ),
       ...stores,
       ...ownerOnly,
+      ...linked,
     ]),
   };
 };

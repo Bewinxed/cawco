@@ -114,6 +114,7 @@ import {
   standalone,
 } from "@cawco/core/runtime";
 import type { ProcSpec } from "@cawco/core/sessiond";
+import { PROTECTED_NAMES, PROTECTED_UNDER } from "@cawco/core/workspace-judge";
 import {
   isLeadPlace,
   workspaceDenies,
@@ -906,7 +907,15 @@ const rearmOne = async (id: string): Promise<boolean> => {
   // A gate an agent left as it died names no process this one waits for.
   await rm(gateOf(id), { force: true });
   const ref = { id, path: held.path };
-  if (process.platform === "linux") {
+  if (isLeadPlace(id)) {
+    // A person's own folder: what earlier builds stood in there goes once
+    // nothing holds it, and nothing is listed in its exclude.
+    await removeStandIns(ref).catch(
+      said(
+        "the stand-ins earlier builds left in its place could not be taken away"
+      )
+    );
+  } else if (process.platform === "linux") {
     // Before anything is armed: each mount point a running sandbox left
     // where a file stands in holds that file's stand-in now, in place; one
     // where a dir stands in goes with its boundary, once nothing runs in it
@@ -921,9 +930,11 @@ const rearmOne = async (id: string): Promise<boolean> => {
   }
   // Only CawCo's stand-ins in the clone's `info/exclude`: the fixed names
   // an earlier build wrote there go, and a user's own files show again.
-  await listStandIns(ref, false).catch(
-    said("its clone's stand-ins could not be listed in its info/exclude")
-  );
+  if (!isLeadPlace(id)) {
+    await listStandIns(ref, false).catch(
+      said("its clone's stand-ins could not be listed in its info/exclude")
+    );
+  }
   const form = await formOf(ref).catch(
     said("its boundary's form could not be checked")
   );
@@ -1435,6 +1446,14 @@ const placeReady = async (ref: WorkspaceRef): Promise<void> => {
     if (!place?.isDirectory()) {
       throw refusal(ref.id, `${ref.path} is not a folder`);
     }
+    // What earlier builds stood in there goes, once nothing holds it: at
+    // each ensure (each of the lead's wakes), so once the boundary that bound
+    // them is gone (stand-ins.ts `removeStandIns`).
+    await removeStandIns(ref).catch((error: unknown) =>
+      console.warn(
+        `[workspace] ${ref.id}: the stand-ins earlier builds left in its place were not all taken away: ${error instanceof Error ? error.message : String(error)}`
+      )
+    );
     return;
   }
   const git = await stat(join(ref.path, ".git")).catch(() => undefined);
@@ -1553,17 +1572,54 @@ const gateOf = (id: string): string => join(stateDir(id), "replacing");
  * proxy credential git presents) is read once as the runner starts and set
  * again over each request's environment, which the executor writes on the
  * host, so no caller's environment can drop it.
+ *
+ * Each command starts through {@link LAUNCH}.
  */
+/**
+ * How the runner starts one command, a perl program (no single quote,
+ * backslash or `${`: it goes into bash single quotes inside this template).
+ * Every command leads a process group of its own. In a project lead's place
+ * (`CAWCO_LEAD_PLACE`, a person's own folder) nothing it starts outlives it:
+ * the launcher makes itself the command's child subreaper (Linux
+ * `prctl(PR_SET_CHILD_SUBREAPER)`, 36, by the machine's syscall number), so
+ * whatever the command leaves running, backgrounded, `setsid` or
+ * double-forked, is reparented to it; once the command exits it kills the
+ * command's group and every process left under it, then exits with the
+ * command's status. A TERM to its group (the executor's cut-off) does the
+ * same. A machine whose syscall number it does not know runs no command
+ * there. macOS has no subreaper: the command's group goes.
+ */
+const LAUNCH = [
+  "setpgrp(0, 0);",
+  "exec @ARGV unless $ENV{CAWCO_LEAD_PLACE};",
+  'if ($^O eq "linux") {',
+  "  my %nr = (x86_64 => 157, aarch64 => 167, i686 => 172, armv7l => 172, armv6l => 172, riscv64 => 167);",
+  "  my $n = $nr{(POSIX::uname())[4]};",
+  '  (defined $n && syscall($n, 36, 1, 0, 0, 0) == 0) or die "cawco: this place keeps no command to its own processes on this machine, so the command did not run.";',
+  "}",
+  "my $child = fork;",
+  'defined $child or die "cawco: the command could not be started: $!";',
+  "if ($child == 0) { setpgrp(0, 0); exec @ARGV; exit 127; }",
+  'sub kids { my @k; for my $t (glob "/proc/$$/task/*/children") { if (open(my $f, "<", $t)) { local $/; my $s = <$f>; push @k, split(" ", $s) if defined $s; } } return @k; }',
+  'sub reap { kill "KILL", -$child; for (1 .. 300) { 1 while waitpid(-1, POSIX::WNOHANG()) > 0; my @k = kids(); last unless @k; kill "KILL", @k; select(undef, undef, undef, 0.01); } }',
+  "$SIG{TERM} = $SIG{INT} = $SIG{HUP} = sub { reap(); exit 143; };",
+  "waitpid($child, 0);",
+  "my $status = $?;",
+  "reap();",
+  "exit(($status & 127) ? 128 + ($status & 127) : $status >> 8);",
+].join(" ");
+
 const RUNNER = `fifo=$1
 CAWCO_SANDBOX_ENV=$(export -p | grep -E '^declare -x (HTTPS?_PROXY|https?_proxy|ALL_PROXY|all_proxy|NO_PROXY|no_proxy|GIT_SSH_COMMAND|SANDBOX_RUNTIME|JAVA_TOOL_OPTIONS|GIT_CONFIG_[A-Z0-9_]+|DOCKER_HTTPS?_PROXY|CLOUDSDK_PROXY_[A-Z_]+|GRPC_PROXY|grpc_proxy|RSYNC_PROXY|FTP_PROXY|ftp_proxy|CLAUDE_CODE_HOST_[A-Z_]+)=')
 export CAWCO_SANDBOX_ENV
 sandbox=$(readlink /proc/self/ns/pid 2>/dev/null)
+launch='${LAUNCH}'
 echo ${READY}
 while :; do
   while IFS= read -r req; do
     (
       printf '%s\\n' "$sandbox" > "$req/sandbox"
-      /usr/bin/perl -e 'setpgrp(0, 0); exec @ARGV' /bin/bash --norc --noprofile -c '. "$1/env" >/dev/null 2>&1; eval "$CAWCO_SANDBOX_ENV"; if [ -n "\${CAWCO_GIT_PARAMETERS:-}" ]; then export GIT_CONFIG_PARAMETERS="\${GIT_CONFIG_PARAMETERS:+$GIT_CONFIG_PARAMETERS }$CAWCO_GIT_PARAMETERS"; fi; cd "$(cat "$1/cwd")" || exit 1; eval "$(cat "$1/cmd")"; status=$?; pwd -P > "$1/cwd-out"; exit $status' cawco "$req" > "$req/out" 2> "$req/err" < /dev/null &
+      /usr/bin/perl -MPOSIX -e "$launch" /bin/bash --norc --noprofile -c '. "$1/env" >/dev/null 2>&1; eval "$CAWCO_SANDBOX_ENV"; if [ -n "\${CAWCO_GIT_PARAMETERS:-}" ]; then export GIT_CONFIG_PARAMETERS="\${GIT_CONFIG_PARAMETERS:+$GIT_CONFIG_PARAMETERS }$CAWCO_GIT_PARAMETERS"; fi; cd "$(cat "$1/cwd")" || exit 1; eval "$(cat "$1/cmd")"; status=$?; pwd -P > "$1/cwd-out"; exit $status' cawco "$req" > "$req/out" 2> "$req/err" < /dev/null &
       echo $! > "$req/pid"
       wait $!
       echo $? > "$req/status"
@@ -1712,13 +1768,15 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
     });
     const file = join(generationDir(id, gen), "boundary.sb");
     return {
-      files: [[file, profile]],
+      files: [[file, profile], ...guardFiles(id, gen)],
       form: hash
         .update(profile)
         .update("\0")
         .update(RUNNER)
         .update("\0")
         .update(exec)
+        .update("\0")
+        .update(isLeadPlace(id) ? PLACE_GUARD : "")
         .digest("hex")
         .slice(0, 16),
       spec: {
@@ -1747,6 +1805,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
           CAWCO_WORKSPACE: id,
           [BOUNDARY_MARKER]: gen,
           TMPDIR: workspaceTmpDir(id),
+          ...(isLeadPlace(id) ? { [LEAD_PLACE_ENV]: "1" } : {}),
         },
       },
     };
@@ -1764,11 +1823,13 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
     runner: join(generationDir(id, gen), "runner.sh"),
     denies: join(generationDir(id, gen), "denies.json"),
   };
+  const lead = isLeadPlace(id);
   return {
     files: [
       [files.settings, settings],
       [files.runner, RUNNER],
       [files.denies, denies],
+      ...guardFiles(id, gen),
     ],
     form: hash
       .update(settings)
@@ -1780,6 +1841,8 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
       .update(denies)
       .update("\0")
       .update(await hostText)
+      .update("\0")
+      .update(lead ? `${policy.scratch}\0${PLACE_GUARD}` : "")
       .digest("hex")
       .slice(0, 16),
     spec: {
@@ -1806,10 +1869,217 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         CLAUDE_CODE_TMPDIR: policy.scratch,
         CAWCO_WORKSPACE: id,
         PATH: SYSTEM_PATH,
+        // A lead's place is a person's own folder: srt resolves its own
+        // mandatory names against the host's working directory and makes a
+        // mount point for each one absent, so the host starts srt in the
+        // place's scratch dir, never in the place (boundary-host.ts); and
+        // what each command leaves running goes with it (RUNNER).
+        ...(lead
+          ? { CAWCO_SANDBOX_CWD: policy.scratch, [LEAD_PLACE_ENV]: "1" }
+          : {}),
       },
     },
   };
 };
+
+/** A list of words as perl writes it: each single-quoted (none holds a quote or backslash). */
+const perlWords = (words: readonly string[]): string =>
+  words.map((word) => `'${word}'`).join(", ");
+
+/** `find`'s tests for a protected entry ({@link PROTECTED_NAMES}, {@link PROTECTED_UNDER}), as the guard runs it. */
+const PROTECTED_TESTS = [
+  "(",
+  ...PROTECTED_NAMES.flatMap((name, at) => [
+    ...(at > 0 ? ["-o"] : []),
+    "-name",
+    name,
+  ]),
+  ...Object.entries(PROTECTED_UNDER).flatMap(([dir, names]) =>
+    names.flatMap((name) => ["-o", "-path", `*/${dir}/${name}`])
+  ),
+  ")",
+];
+
+/**
+ * A project lead's place's guard (`place-guard.pl before REQ PLACE` before
+ * each command, `after REQ PLACE SCRATCH POLICY HOME` once it has run), the
+ * executor's on the host ({@link execScript}). A person's own folder gets no
+ * stand-ins (never write into a person's own folder), so srt binds only the
+ * protected config the place has; what a command makes of the rest is
+ * judged here, by the place's real path, once the command and everything it
+ * started is over (`LAUNCH`):
+ *
+ * - A protected entry ({@link PROTECTED_NAMES}, {@link PROTECTED_UNDER}) that
+ *   is new, by any means (written, `mv`, `ln`, a link), or that changed while
+ *   no bind held it, is moved to the place's scratch dir
+ *   (`.cawco-moved/<stamp>/<path>`), never deleted, and the command fails
+ *   saying so. A repository the command made keeps the `.git/config`
+ *   `git init` writes and sample hooks only.
+ * - One that changed under its read-only bind (only if a bind failed) is
+ *   left, and said with its sha256 before and after.
+ * - A link the command made anywhere in the place to protected config
+ *   outside it, or into a dot-dir of the home dir, is moved aside the same
+ *   way.
+ *
+ * What the person changes between commands is never looked at. It prints a
+ * line per finding (`cawco place-guard: …`) and exits 3 when it moved
+ * anything; any other failure refuses the command.
+ */
+export const PLACE_GUARD = String.raw`#!/usr/bin/perl
+use strict;
+use warnings;
+use Cwd ();
+use Digest::SHA ();
+use File::Basename ();
+use File::Find ();
+use File::Path ();
+use JSON::PP ();
+
+my %NAMES = map { $_ => 1 } (${perlWords(PROTECTED_NAMES)});
+my %UNDER = (${Object.entries(PROTECTED_UNDER)
+  .map(
+    ([dir, names]) => `'${dir}' => { map { $_ => 1 } (${perlWords(names)}) }`
+  )
+  .join(", ")});
+my @TESTS = (${perlWords(PROTECTED_TESTS)});
+my %SAFE_GIT = map { $_ => 1 } qw(core.repositoryformatversion core.filemode core.bare core.logallrefupdates core.ignorecase core.precomposeunicode core.symlinks extensions.objectformat extensions.refstorage lfs.repositoryformatversion);
+
+my ($mode, $req, $given, $scratch, $policy, $home) = @ARGV;
+my $place = Cwd::realpath($given);
+defined $place or die "cawco: the place $given is gone\n";
+
+sub protected_rel {
+  my @p = grep { length $_ && $_ ne "." } split m{/}, shift;
+  for my $i (0 .. $#p) {
+    my $parent = $i > 0 ? $p[$i - 1] : "";
+    return join("/", @p[0 .. $i]) if $NAMES{$p[$i]} || ($UNDER{$parent} && $UNDER{$parent}{$p[$i]});
+  }
+  return undef;
+}
+
+sub find0 {
+  open(my $fh, "-|", "find", $place, "-mindepth", "1", @_) or die "cawco: find could not run: $!\n";
+  local $/ = "\0";
+  my @out;
+  while (my $line = <$fh>) { chomp $line; push @out, $line; }
+  close $fh;
+  die "cawco: find failed in $place\n" if ($? >> 8) > 1;
+  return @out;
+}
+
+sub protected_now { return find0("-name", "node_modules", "-prune", "-o", @TESTS, "-print0", "-prune"); }
+
+sub file_digest {
+  my $digest = Digest::SHA->new(256);
+  return eval { $digest->addfile(shift, "b"); $digest->hexdigest } // "unreadable";
+}
+
+sub digest_of {
+  my $path = shift;
+  return "link:" . (readlink($path) // "") if -l $path;
+  return file_digest($path) if -f $path;
+  return "absent" unless -d $path;
+  my @all;
+  File::Find::find({ no_chdir => 1, wanted => sub { push @all, $File::Find::name } }, $path);
+  my $digest = Digest::SHA->new(256);
+  for my $entry (sort @all) {
+    my $kind = -l $entry ? "l:" . (readlink($entry) // "") : -d $entry ? "d" : "f:" . file_digest($entry);
+    $digest->add(substr($entry, length $path), "\0", $kind, "\0");
+  }
+  return $digest->hexdigest;
+}
+
+my $state = "$req/guard.json";
+my $mark = "$req/guard.mark";
+
+if ($mode eq "before") {
+  my %snap = map { $_ => digest_of($_) } protected_now();
+  my @gits = find0("-name", "node_modules", "-prune", "-o", "-name", ".git", "-type", "d", "-print0", "-prune");
+  open(my $out, ">", $state) or die "cawco: $state: $!\n";
+  print $out JSON::PP->new->canonical->encode({ protected => \%snap, gits => \@gits });
+  close $out or die "cawco: $state: $!\n";
+  open(my $m, ">", $mark) or die "cawco: $mark: $!\n";
+  close $m;
+  exit 0;
+}
+$mode eq "after" or die "usage: place-guard.pl before|after REQ PLACE [SCRATCH POLICY HOME]\n";
+
+my $before = JSON::PP->new->decode(do { local $/; open(my $in, "<", $state) or die "cawco: $state: $!\n"; <$in> });
+my $rules = JSON::PP->new->decode(do { local $/; open(my $in, "<", $policy) or die "cawco: $policy: $!\n"; <$in> });
+my %bound = map { $_ => 1 } @{ $rules->{denyWrite} };
+my %gits = map { $_ => 1 } @{ $before->{gits} };
+my $aside = "$scratch/.cawco-moved/" . time() . "-$$";
+my $moved = 0;
+
+sub move_aside {
+  my ($path, $rel, $why) = @_;
+  my $dest = "$aside/$rel";
+  File::Path::make_path(File::Basename::dirname($dest));
+  rename($path, $dest) or system("/bin/mv", "--", $path, $dest) == 0 or die "cawco: $rel could not be moved aside: $!\n";
+  print STDERR "cawco place-guard: $rel $why, so it was moved to $dest and this command is refused.\n";
+  $moved = 1;
+}
+
+sub git_config_safe {
+  my $file = shift;
+  open(my $in, "-|", "git", "config", "--file", $file, "--name-only", "--list") or return 0;
+  my @keys = <$in>;
+  close $in;
+  return 0 if $?;
+  chomp @keys;
+  return !grep { !$SAFE_GIT{lc $_} } @keys;
+}
+
+sub hooks_samples {
+  my $dir = shift;
+  opendir(my $dh, $dir) or return 0;
+  my @bad = grep { $_ ne "." && $_ ne ".." && !/\.sample$/ } readdir $dh;
+  return !@bad;
+}
+
+sub git_own {
+  my ($rel, $path) = @_;
+  return 0 unless $rel =~ m{(?:^|/)\.git/(config|hooks)$};
+  my $part = $1;
+  return $part eq "config" ? git_config_safe($path) : hooks_samples($path);
+}
+
+for my $path (protected_now()) {
+  my $rel = substr($path, length($place) + 1);
+  my $was = $before->{protected}{$path};
+  my $now = digest_of($path);
+  next if defined $was && $was eq $now;
+  if (defined $was && $bound{$path}) {
+    print STDERR "cawco place-guard: $rel changed under its read-only bind (sha256 $was before, $now after); it is left as it is.\n";
+    next;
+  }
+  next if git_own($rel, $path);
+  move_aside($path, $rel, "is config a host session would load from this folder");
+}
+
+for my $link (find0("-name", "node_modules", "-prune", "-o", "-type", "l", "-newer", $mark, "-print0")) {
+  next unless -l $link;
+  my $target = readlink($link) // next;
+  $target = File::Basename::dirname($link) . "/$target" unless $target =~ m{^/};
+  my $real = Cwd::realpath($target) // $target;
+  next if $real eq $place || index($real, "$place/") == 0;
+  my $dotted = index($real, "$home/") == 0 && substr($real, length($home) + 1) =~ m{(?:^|/)\.};
+  next unless $dotted || defined protected_rel($real);
+  move_aside($link, substr($link, length($place) + 1), "links to $real, config outside this folder");
+}
+
+exit($moved ? 3 : 0);
+`;
+
+/** The runner's word that its commands are a project lead's ({@link RUNNER}): nothing a command starts outlives it. */
+const LEAD_PLACE_ENV = "CAWCO_LEAD_PLACE";
+
+/** A lead's place's guard, written into the boundary's generation dir ({@link PLACE_GUARD}); none for a clone. */
+const guardFiles = (id: string, gen: string): [string, string][] =>
+  isLeadPlace(id) ? [[guardOf(id, gen), PLACE_GUARD]] : [];
+
+const guardOf = (id: string, gen: string | undefined): string =>
+  join(generationDir(id, gen), "place-guard.pl");
 
 /** One process, as {@link busy} reads it. */
 interface Seen {
@@ -2521,6 +2791,29 @@ take() {
  * with the command's status. It finds its own tools on {@link SYSTEM_PATH};
  * the command runs with its caller's PATH, behind the shims on macOS.
  */
+/** A lead's place's guard, looking before its command ({@link PLACE_GUARD}): a place it cannot look at runs no command. Nothing for a clone. */
+const guardBefore = (id: string, held: Pick<Held, "gen" | "path">): string =>
+  isLeadPlace(id)
+    ? `if ! /usr/bin/perl ${shellQuote(guardOf(id, held.gen))} before "$req" ${shellQuote(held.path)} 2> "$req/guard-err"; then
+  echo "cawco: this place's guard could not look at it before the command, so the command did not run: $(cat "$req/guard-err")" >&2
+  rm -rf "$req"
+  exit 126
+fi
+`
+    : "";
+
+/** A lead's place's guard, judging what its command did ({@link PLACE_GUARD}): what it moved fails the command, and so does a guard that could not look. Nothing for a clone. */
+const guardAfter = (
+  id: string,
+  held: Pick<Held, "gen" | "path" | "scratch">
+): string =>
+  isLeadPlace(id)
+    ? `/usr/bin/perl ${shellQuote(guardOf(id, held.gen))} after "$req" ${shellQuote(held.path)} ${shellQuote(held.scratch)} ${shellQuote(workspacePolicyFile(id))} "$HOME" >&2
+guarded=$?
+if [ "$guarded" = 3 ]; then status=1; elif [ "$guarded" != 0 ]; then echo "cawco: this place's guard could not check what the command changed, so the command is taken as failed." >&2; status=1; fi
+`
+    : "";
+
 const execScript = (
   id: string,
   held: Pick<Held, "exec" | "gen" | "path" | "pid" | "scratch">,
@@ -2563,7 +2856,7 @@ ${commandEnv(id, held.path)
 } > "$req/env"
 mkfifo "$req/out" "$req/err"
 trap 'kill -TERM -- "-$(cat "$req/pid" 2>/dev/null)" 2>/dev/null; rm -rf "$req"; exit 143' TERM INT HUP
-printf '%s\\n' "$req" > "$fifo"
+${guardBefore(id, held)}printf '%s\\n' "$req" > "$fifo"
 cat "$req/out" & out=$!
 cat "$req/err" >&2 & err=$!
 wait "$out" "$err"
@@ -2579,7 +2872,7 @@ ${linux ? '  [ -z "$taker" ] && [ -s "$req/sandbox" ] && take' : ""}
   sleep 0.01
 done
 status=$(cat "$req/status")
-if [ -n "$cwd_out" ] && [ -s "$req/cwd-out" ]; then cp "$req/cwd-out" "$cwd_out"; fi
+${guardAfter(id, held)}if [ -n "$cwd_out" ] && [ -s "$req/cwd-out" ]; then cp "$req/cwd-out" "$cwd_out"; fi
 rm -rf "$req"
 exit "$status"
 `;
@@ -2795,9 +3088,12 @@ const launch = async (
   gen: string
 ): Promise<Boundary> => {
   const linux = process.platform === "linux";
+  // A lead's place is a person's own folder: nothing of the boundary's is
+  // written into it (no copied inodes, no stand-ins, no exclude lines).
+  const own = !isLeadPlace(ref.id);
   const procId = boundaryProcId(ref.id, gen);
   if (linux) {
-    const split = await ownInodes(ref.path);
+    const split = own ? await ownInodes(ref.path) : 0;
     if (split > 0) {
       console.info(
         `[workspace] ${ref.id}: ${split} file(s) in its clone shared an inode with a file outside it, and each now has its own`
@@ -2807,8 +3103,11 @@ const launch = async (
     await rm(srtTmp, { recursive: true, force: true });
     await mkdir(srtTmp, { recursive: true, mode: 0o700 });
   }
-  // Linux: the host makes each missing deny path before the sandbox starts.
-  await listStandIns(ref, linux);
+  // Linux: the host makes each missing deny path in a clone before the
+  // sandbox starts.
+  if (own) {
+    await listStandIns(ref, linux);
+  }
   const plan = await planOf(ref, gen);
   for (const [path, content] of plan.files) {
     // biome-ignore lint/performance/noAwaitInLoops: a few small files
