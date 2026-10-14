@@ -1282,7 +1282,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var laidHead = ""
 
     /// The card and its question as last logged on a layout.
-    private var laidCard = ""
+    private var laidCard: [String] = []
 
     /// A layout that moved the header (a drawer drag, a mode) says so at once,
     /// whatever the page's own posts do; so does the open card, once the pass
@@ -1297,12 +1297,18 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         DispatchQueue.main.async { [weak self] in
             guard let self, openPin != nil, !card.isHidden else { return }
             view.layoutIfNeeded()
-            let now = card.probeLine() + "\n" + card.askLine()
+            let now = cardLines()
             guard now != laidCard else { return }
             laidCard = now
-            PreviewProbe.say(card.probeLine())
-            PreviewProbe.say(card.askLine())
+            now.forEach(PreviewProbe.say)
         }
+    }
+
+    /// The open card's lines: its controls, its question, and its footer's
+    /// buttons against the keyboard's top, all in the window's points.
+    private func cardLines() -> [String] {
+        let keyboard = view.convert(view.keyboardLayoutGuide.layoutFrame, to: nil)
+        return [card.probeLine(), card.askLine(), "preview card-keys \(card.probeFooter) keyboardTop=\(Int(keyboard.minY))"]
     }
 
     /// The probe's page reports where its parts stand (its `report`) on the
@@ -1328,10 +1334,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private func probePage(_ body: [String: Any]) {
         guard PreviewProbe.on, let web else { return }
         PreviewProbe.say(headLine())
-        if openPin != nil, !card.isHidden {
-            PreviewProbe.say(card.probeLine())
-            PreviewProbe.say(card.askLine())
-        }
+        if openPin != nil, !card.isHidden { cardLines().forEach(PreviewProbe.say) }
         var parts = [Self.text(body["state"], 200) ?? ""]
         let rects = body["rects"] as? [String: Any] ?? [:]
         for name in rects.keys.sorted() {

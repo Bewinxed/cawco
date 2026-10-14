@@ -530,8 +530,7 @@ final class PinCard: UIView, UITextViewDelegate {
     /// unless the person is writing.
     private func keepAskInView() {
         guard asks.asked != nil, !field.isFirstResponder else { return }
-        scroll.layoutIfNeeded()
-        let box = column.convert(asks.frame, to: scroll)
+        let box = laidOut(asks)
         let room = scroll.bounds.height
         let most = max(0, scroll.contentSize.height - room)
         let offset = scroll.contentOffset.y
@@ -574,6 +573,17 @@ final class PinCard: UIView, UITextViewDelegate {
         }
     }
 
+    /// Where `part` (one of the column's own) stands in the scroll's content
+    /// as laid out now. A resize is heard inside the scroll's own layout pass,
+    /// before the column has given its parts their new frames (a thumbnail
+    /// arriving above the field while the keyboard shrinks the card), and the
+    /// scroll can't be laid out again from within that pass: so the column
+    /// is laid out first, and its parts are read where they now stand.
+    private func laidOut(_ parts: UIView...) -> CGRect {
+        column.layoutIfNeeded()
+        return parts.reduce(CGRect.null) { $0.union(column.convert($1.frame, to: scroll)) }
+    }
+
     /// While the person writes, the field and what sends it stay in view
     /// however small the keyboard leaves the card (a phone's drawer with the
     /// keyboard up has room for little more than them): brought in, their
@@ -581,8 +591,7 @@ final class PinCard: UIView, UITextViewDelegate {
     /// changes size; a scroll of the person's own is left alone.
     private func keepWritingInView() {
         guard field.isFirstResponder else { return }
-        scroll.layoutIfNeeded()
-        let writing = column.convert(field.frame.union(actions.frame), to: scroll)
+        let writing = laidOut(field, actions)
         let room = scroll.bounds.height
         let most = max(0, scroll.contentSize.height - room)
         let offset = scroll.contentOffset.y
@@ -652,6 +661,14 @@ final class PinCard: UIView, UITextViewDelegate {
     func probeLine() -> String {
         let words = resolveButton.configuration?.attributedTitle.map { String($0.characters) } ?? "?"
         return "preview card pin=\(number) field=\(PreviewProbe.centre(field)) reply=\(PreviewProbe.centre(replyButton)) resolve=\(words)@\(PreviewProbe.centre(resolveButton)) close=\(PreviewProbe.centre(closeButton)) live=\(liveMark.isHidden ? "no" : "yes") thread=\(shownThread.count) delete=\(PreviewProbe.centre(deleteButton)) writing=\(field.isFirstResponder) asking=\(asks.asked != nil) problem=\(problem.isHidden ? "none" : problem.text ?? "")"
+    }
+
+    /// The footer's buttons as frames in the window's points, `x,y,w,h`, to set against the keyboard's top.
+    var probeFooter: String {
+        [("delete", deleteButton!), ("resolve", resolveButton!), ("reply", replyButton!)].map { name, button in
+            let box = button.convert(button.bounds, to: nil)
+            return "\(name)=\(Int(box.minX)),\(Int(box.minY)),\(Int(box.width)),\(Int(box.height))"
+        }.joined(separator: " ")
     }
 
     /// The card's question as it stands: where Cancel and the confirm are, then its words.
