@@ -98,8 +98,9 @@ export const previewParents = (): string[] => [...parents];
  * response a hop made with headers it holds fixed goes on as a copy.
  */
 const framedBy = (answer: Response): Response => {
-  const named = previewParents();
-  const policy = `frame-ancestors ${named.length > 0 ? named.join(" ") : "'none'"}`;
+  // `'self'` too: every ancestor is checked, and a page's own frames (an
+  // app's inner frame) have the preview's origin among theirs.
+  const policy = `frame-ancestors 'self' ${previewParents().join(" ")}`.trim();
   try {
     answer.headers.set("content-security-policy", policy);
     return answer;
