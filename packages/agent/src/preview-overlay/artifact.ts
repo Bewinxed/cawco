@@ -59,9 +59,25 @@ export interface ArtifactRef {
 
 export type State = Record<string, ChoiceEntry>;
 
+/**
+ * The doc's link to the hub, as the page's host hears it (`cawco:sync`):
+ * `connecting` until its socket first fails or syncs, `synced` while the
+ * hub holds what the page holds, `lost` from a failed or closed socket
+ * until it syncs again; `error` says why it was lost.
+ */
+export interface Link {
+  error: string | null;
+  state: "connecting" | "synced" | "lost";
+}
+
+/** How long a lost link stands before the canvas refuses the pen: the brief's 5 s. */
+export const LOST_REFUSES_MS = 5000;
+
 export interface Watchers {
   /** The ink, its moved groups or its pins changed, here or elsewhere; or the doc was replaced. */
   ink: () => void;
+  /** The doc's link to the hub changed. */
+  link: (link: Link) => void;
   /** `meta` changed: a new revision, a send. */
   meta: () => void;
   /** The hub would not keep what this page wrote; the doc was joined again from the hub's. */
@@ -113,7 +129,14 @@ export interface ArtifactHold {
   doc: Doc;
   /** Which doc this is: it moves when the overlay replaces its doc (another artifact's, or one the hub refused). */
   generation: number;
+  /** The doc's link to the hub now. */
+  link: Link;
   ref: ArtifactRef | null;
+  /**
+   * Whether what is written here would not reach the hub: before the doc
+   * first synced, and once a lost link has stood {@link LOST_REFUSES_MS}.
+   */
+  refused: boolean;
   sync: string | null;
 }
 
@@ -151,9 +174,17 @@ let seededKind: ArtifactRef["kind"] | null = null;
 let syncPath: string | null = null;
 const holders = new Set<(hold: ArtifactHold) => void>();
 let generation = 0;
+let link: Link = { state: "connecting", error: null };
+/** The doc has synced with the hub since it was joined. */
+let everSynced = false;
+/** A lost link has stood {@link LOST_REFUSES_MS}. */
+let lostLong = false;
+let lostTimer: ReturnType<typeof setTimeout> | undefined;
 const hold = (): ArtifactHold => ({
   doc,
   generation,
+  link,
+  refused: !everSynced || lostLong,
   ref: joined,
   sync: syncPath,
 });
@@ -162,6 +193,36 @@ const handed = () => {
     holder(hold());
   }
 };
+
+/** The link moved: the holders and the host hear it; a lost one refuses once it has stood {@link LOST_REFUSES_MS}. */
+const linked = (next: Link) => {
+  if (next.state === "synced") {
+    everSynced = true;
+  }
+  if (next.state !== "lost") {
+    clearTimeout(lostTimer);
+    lostTimer = undefined;
+    lostLong = false;
+  } else if (lostTimer === undefined && !lostLong) {
+    lostTimer = setTimeout(() => {
+      lostTimer = undefined;
+      lostLong = true;
+      handed();
+    }, LOST_REFUSES_MS);
+  }
+  if (next.state === link.state && next.error === link.error) {
+    return;
+  }
+  link = next;
+  watchers?.link(link);
+  handed();
+};
+
+/** Why a socket to the hub closed, as one clause. */
+const closedBecause = (event: CloseEvent | null): string =>
+  event
+    ? `Its link to ${location.host} closed (code ${event.code}${event.reason ? `: ${event.reason.slice(0, 80)}` : ""})`
+    : `Its link to ${location.host} stopped answering`;
 
 /**
  * The one global a canvas's host page takes the doc from, and its Yjs:
@@ -223,6 +284,9 @@ const replaceDoc = () => {
   generation += 1;
   observe(doc);
   synced = false;
+  // The new doc holds nothing of the hub's until it syncs.
+  everSynced = false;
+  linked({ state: "connecting", error: null });
   syncedOnce = new Promise<void>((resolve) => {
     whenSynced = resolve;
   });
@@ -253,15 +317,27 @@ const connect = () => {
     }
   );
   provider = own;
+  linked({
+    state: link.state === "lost" ? "lost" : "connecting",
+    error: link.error,
+  });
   own.on("sync", (isSynced: boolean) => {
-    if (isSynced && own === provider && !synced) {
+    if (!isSynced || own !== provider) {
+      return;
+    }
+    linked({ state: "synced", error: null });
+    if (!synced) {
       synced = true;
       whenSynced();
       watchers?.synced();
     }
   });
   own.on("connection-close", (event) => {
-    if (event?.code !== REFUSED || own !== provider) {
+    if (own !== provider) {
+      return;
+    }
+    if (event?.code !== REFUSED) {
+      linked({ state: "lost", error: closedBecause(event) });
       return;
     }
     // What this page wrote the hub would not keep: start again from the hub's.
@@ -340,6 +416,9 @@ export const artifact = {
 
   /** Whether there is a doc to keep ink in: the host named the artifact, or the hub embedded it. */
   keeps: () => status === "joined" || seeded !== null,
+
+  /** The doc's link to the hub now. */
+  link: (): Link => link,
 
   /** Whether the doc holds the hub's state: embedded, or synced. */
   known: () => synced || seeded !== null,

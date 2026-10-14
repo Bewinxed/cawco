@@ -17,7 +17,7 @@ import {
 import type { InkGroup } from "@cawco/core/ink";
 import { domToPng } from "modern-screenshot";
 import type { Map as YMap } from "yjs";
-import { artifact, NO_ARTIFACT, type State } from "./artifact";
+import { artifact, type Link, NO_ARTIFACT, type State } from "./artifact";
 import { fillFields, trackFields } from "./fields";
 import { startInk } from "./ink";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
@@ -202,6 +202,14 @@ function post(type: string, payload: object = {}) {
   window.parent.postMessage({ type, ...payload }, location.origin);
 }
 
+/** The doc's link to the hub, to the host (`cawco:sync`): connecting, synced or lost, and why it was lost. */
+function tellLink(link: Link) {
+  post("cawco:sync", {
+    state: link.state,
+    ...(link.error ? { error: link.error } : {}),
+  });
+}
+
 function ready() {
   post("cawco:ready", {
     url: stripPrefix(location.href),
@@ -306,6 +314,7 @@ artifact.watch({
   },
   meta: () => republished(),
   ink: () => ink.changed(),
+  link: (link) => tellLink(link),
   synced: () => {
     reflect();
     if (keepsFields()) {
@@ -1066,7 +1075,9 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
         artifact: Parameters<typeof artifact.join>[0];
         sync: Parameters<typeof artifact.join>[1];
       };
-      if (!artifact.join(named.artifact, named.sync)) {
+      if (artifact.join(named.artifact, named.sync)) {
+        tellLink(artifact.link());
+      } else {
         failed("artifact", NO_ARTIFACT);
       }
       takeTheme(message.theme);

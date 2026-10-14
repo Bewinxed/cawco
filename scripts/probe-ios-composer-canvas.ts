@@ -27,6 +27,14 @@
  *       for this run the canvas's recognizer takes a finger as one; on the
  *       app's `canvas swipe at X,Y` line a finger drags up from there (axe);
  *     - `-canvas-probe-wheel`: the same drag, no stand-in, brings the wheel;
+ *     - `-canvas-probe-sync`: the canvas page's sync socket goes through the
+ *       app's DEBUG gate: refused, the canvas shows its refusal and a pen
+ *       stroke adds 0 elements; opened, the app logs `cawco:drawn count=N`
+ *       and `cawco:sync synced` and Send carries the files; cut after a
+ *       stroke, Send refuses with "Your drawing hasn't reached the hub yet";
+ *       then the rail's Remove folds that drawn canvas back into the pill
+ *       over durGrowExit, no chip, the draft out of the message, the
+ *       session still listing it;
  *     - `-canvas-probe-still` with Reduce Motion on: Draw and Done fade only;
  *  4. reads the hub's transcript of the session: the message the pencil pass
  *     sent carries `canvas.excalidraw` and `canvas.md` and one image.
@@ -157,14 +165,14 @@ async function dragUp(
   return true;
 }
 
-/** One launch of the app on `id` with `args`, its Probe lines as they come, swipes answered. */
+/** One launch of the app on `id` with `args`: its Probe lines as they come, swipes answered, and its Canvas lines. */
 async function launchPass(
   udid: string,
   id: string,
   port: number,
   label: string,
   args: string[]
-): Promise<string[]> {
+): Promise<{ lines: string[]; canvas: string[] }> {
   const stream = Bun.spawn(
     [
       "xcrun",
@@ -181,6 +189,7 @@ async function launchPass(
     { stdout: "pipe", stderr: "ignore" }
   );
   const lines: string[] = [];
+  const canvas: string[] = [];
   /** The pass's drag was refused: it is over. */
   let refused = false;
   // Cancelled when the pass is done: the simulator's own `log` keeps the pipe open.
@@ -188,7 +197,9 @@ async function launchPass(
   /** One line of the log: a Canvas line printed, a Probe line kept and its swipe answered. */
   const hear = async (part: string) => {
     if (CANVAS_PREFIX.test(part)) {
-      console.log(`  ${label} [Canvas]: ${part.replace(CANVAS_PREFIX, "")}`);
+      const said = part.replace(CANVAS_PREFIX, "");
+      canvas.push(said);
+      console.log(`  ${label} [Canvas]: ${said}`);
       return;
     }
     const line = part.replace(PROBE_PREFIX, "");
@@ -246,7 +257,7 @@ async function launchPass(
   if (!lines.some((l) => l.startsWith("canvas PASS"))) {
     fail(`${label}: no checks ran`);
   }
-  return lines;
+  return { lines, canvas };
 }
 
 /** A transcript block as the hub sends it: a user message's files and pictures are in its metadata (core transcript-rules.ts `userBody`). */
@@ -298,7 +309,7 @@ xcrun simctl install ${udid} "${app}"`);
   // `--draw`: the passes that need no input from outside the app (inside a
   // workspace boundary, which refuses the simulator's input): Attach → Draw
   // opens the canvas, and every check after the opening runs the same.
-  const pen = drawOnly
+  const { lines: pen } = drawOnly
     ? await launchPass(udid, id, port, "draw", ["-canvas-probe-draw"])
     : await launchPass(udid, id, port, "pencil", [
         "-canvas-probe",
@@ -306,6 +317,18 @@ xcrun simctl install ${udid} "${app}"`);
       ]);
   if (!drawOnly) {
     await launchPass(udid, id, port, "finger", ["-canvas-probe-wheel"]);
+  }
+  // The canvas's link to the hub: refused, up, cut (no input from outside).
+  const sync = await launchPass(udid, id, port, "sync", ["-canvas-probe-sync"]);
+  for (const [want, line] of [
+    ["cawco:sync synced", /cawco:sync synced/],
+    ["cawco:drawn count=N (N > 0)", /cawco:drawn count=[1-9]/],
+  ] as const) {
+    if (sync.canvas.some((l) => line.test(l))) {
+      pass(`sync: the app logged ${want}`);
+    } else {
+      fail(`sync: the app logged ${want}`);
+    }
   }
   // Reduce Motion: the app reads it at launch.
   await sh(

@@ -295,6 +295,26 @@ interface Said {
   text: string;
 }
 
+/**
+ * The canvas can't reach the hub (artifact.ts `refused`): said over its
+ * grid in the error formula while it can't, and the pen draws nothing
+ * meanwhile, so nothing is drawn that the agent would never see.
+ */
+function Unlinked({ why }: { why: string }) {
+  return (
+    <div className="canvas-unlinked" role="alert">
+      <p className="canvas-unlinked-line">
+        The canvas isn't connected to the hub, so what you draw wouldn't reach
+        the agent. {why}. Open it again once the connection is back.
+      </p>
+    </div>
+  );
+}
+
+/** Why the canvas can't reach the hub, as the formula's middle clause. */
+const unlinkedBecause = (hold: ArtifactHold | null): string =>
+  hold?.link.error ?? `It is still connecting to ${location.host}`;
+
 function Host() {
   const hold = useSyncExternalStore(holdStore.subscribe, holdStore.now);
   const [refusal, setRefusal] = useState<Said | null>(null);
@@ -437,6 +457,7 @@ function Host() {
     () => api?.setActiveTool({ type: "freedraw" }),
     [api]
   );
+  const unlinked = hold?.refused ?? true;
   return (
     <div className="canvas-host" ref={surface}>
       <Excalidraw
@@ -449,6 +470,7 @@ function Host() {
         onScrollChange={scrolled}
         theme={theme}
         UIOptions={UI_OPTIONS}
+        viewModeEnabled={unlinked}
         zenModeEnabled={false}
       />
       {api ? (
@@ -462,7 +484,8 @@ function Host() {
           tool={tool}
         />
       ) : null}
-      {empty ? <Empty onDraw={draw} /> : null}
+      {unlinked ? <Unlinked why={unlinkedBecause(hold)} /> : null}
+      {!unlinked && empty ? <Empty onDraw={draw} /> : null}
       {refusal ? <Refusal gone={cleared} refusal={refusal} /> : null}
     </div>
   );

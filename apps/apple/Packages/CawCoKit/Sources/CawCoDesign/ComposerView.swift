@@ -1623,6 +1623,21 @@ struct CanvasRefusal: LocalizedError {
     var errorDescription: String? { message }
 }
 
+/// Why a send carried no canvas: the hub doesn't hold what the page shows.
+enum CanvasSendRefusal: Error {
+    /// The page's doc never synced, or its link has stood lost 5 s.
+    case notConnected
+    /// The hub's export doesn't yet count what the page's doc counts.
+    case notReached
+
+    var sentence: String {
+        switch self {
+        case .notConnected: "The canvas isn't connected to the hub, so nothing was sent."
+        case .notReached: "Your drawing hasn't reached the hub yet, so nothing was sent. Wait a moment, then send again."
+        }
+    }
+}
+
 extension ComposerView {
     /// The field's accessibility action that opens the canvas, as Attach → Draw does.
     static let drawAction = "Draw"
@@ -1818,12 +1833,25 @@ extension ComposerView {
         if canvas.docked { undockCanvas() } else { openCanvas() }
     }
 
-    /// The chip's remove: the canvas leaves the message (the panel still lists it).
-    private func removeCanvas() {
+    /// The chip's ✕ and the rail's Remove: the canvas leaves the message
+    /// (the panel still lists it). Standing over the field, it first folds
+    /// back into the pill over `durGrowExit` as Done folds, with no chip
+    /// left (Reduce Motion: Done's fade); its page closes once it has.
+    func removeCanvas() {
         guard let binding, binding.canvas != nil, !canvasWorking else { return }
+        let room = canvasRoom
+        if let room, room.moving { return }
         binding.canvas = nil
-        closeCanvas()
         syncCanvasChip()
+        guard let room, room.up else {
+            closeCanvas()
+            return
+        }
+        noteCanvas("Remove folds the canvas back into the pill")
+        room.fold(into: nil) { [weak self, weak room] in
+            guard let self, let room, canvasRoom === room else { return }
+            closeCanvas()
+        }
     }
 
     /// The canvas's page and shape go at once (another conversation, or the canvas left the message).
@@ -1911,12 +1939,14 @@ extension ComposerView {
         renderAction(animated: true)
         Task { [weak self] in
             do {
-                let read = try await self?.readForSend(canvas, binding, host)
-                guard let self, let read else { return }
+                let reached = try await self?.readForSend(canvas, binding, host)
+                guard let self, let reached else { return }
+                let read = reached.export
                 canvasWorking = false
                 renderAction(animated: true)
                 guard self.binding === binding, binding.canvas?.id == canvas.id else { return }
-                guard read.drawn > 0 else {
+                // The hub holds what the page shows: the page's own count says whether anything is drawn.
+                guard reached.count > 0 else {
                     return setCanvasNote("Nothing is drawn on the canvas, so nothing was sent. Draw on it, or remove it from the message, then send again.")
                 }
                 guard let png = read.png else {
@@ -1936,14 +1966,22 @@ extension ComposerView {
                 guard let self, self.binding === binding else { return }
                 canvasWorking = false
                 renderAction(animated: true)
-                setCanvasNote("The canvas couldn't be read for sending: \(error.localizedDescription). Nothing was sent; send again.")
+                if let refusal = error as? CanvasSendRefusal {
+                    setCanvasNote(refusal.sentence)
+                } else {
+                    setCanvasNote("The canvas couldn't be read for sending: \(error.localizedDescription). Nothing was sent; send again.")
+                }
             }
         }
     }
 
-    /// The canvas as it stands now: its page loaded (out of sight, if it is
-    /// folded or docked), its picture drawn, then the hub's export.
-    private func readForSend(_ canvas: DraftCanvas, _ binding: SessionComposerBinding, _ host: CanvasHost) async throws -> CanvasExport {
+    /// The canvas as the hub holds it, once the hub holds what the page
+    /// shows: its page loaded (out of sight, if it is folded or docked), its
+    /// doc synced, its picture drawn, and the hub's export counting what the
+    /// page's doc counts, waited for up to 5 s. A canvas whose link has
+    /// stood lost, or that never synced, is refused; a count the hub hasn't
+    /// caught up with after the wait is refused too.
+    private func readForSend(_ canvas: DraftCanvas, _ binding: SessionComposerBinding, _ host: CanvasHost) async throws -> (export: CanvasExport, count: Int) {
         var page = canvas.page
         if page == nil {
             page = try await host.hub.exportCanvas(canvas.id, name: canvas.name).page
@@ -1952,8 +1990,27 @@ extension ComposerView {
         guard let page, self.binding === binding else { throw CanvasRefusal(message: "the conversation changed") }
         let web = room(for: canvas).attach(page, instanceId: binding.sessionId)
         try await web.ready()
+        let clock = ContinuousClock()
+        let deadline = clock.now + CanvasWeb.lostRefuses
+        // Lost long enough that the pen stopped drawing: nothing here reaches the hub.
+        if web.refused, web.hasSynced { throw CanvasSendRefusal.notConnected }
+        while web.link != .synced, clock.now < deadline {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        guard web.hasSynced else { throw CanvasSendRefusal.notConnected }
         try await web.picture()
-        return try await host.hub.exportCanvas(canvas.id, name: canvas.name)
+        while true {
+            let export = try await host.hub.exportCanvas(canvas.id, name: canvas.name)
+            if web.link == .synced, let count = web.drawn, export.drawn == count {
+                noteCanvas("Send reads the hub's export: \(export.drawn) drawn, the page's \(count)")
+                return (export, count)
+            }
+            guard clock.now < deadline else {
+                noteCanvas("Send refused: the hub's export holds \(export.drawn) drawn, the page's \(web.drawn.map(String.init) ?? "unknown"), the link \(web.link.rawValue)")
+                throw CanvasSendRefusal.notReached
+            }
+            try await Task.sleep(for: .milliseconds(250))
+        }
     }
 
     /// Dock (the page's rail): the panel shows the canvas (`artifact_show`),

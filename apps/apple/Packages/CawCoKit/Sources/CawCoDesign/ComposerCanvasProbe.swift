@@ -23,15 +23,25 @@ import UIKit
 ///   the wheel up, never the canvas; the recognizers' touch types.
 /// - `-canvas-probe-still`, with Reduce Motion on: Draw opens the canvas and
 ///   Done folds it with opacity animations only, nothing travelling.
+/// - `-canvas-probe-sync`: the canvas page's sync socket goes through a gate
+///   (CanvasWeb's DEBUG `gate`), refused from the start: the canvas shows
+///   its refusal, a pen stroke adds nothing and Send says it isn't
+///   connected; opened, a stroke is counted and synced and Send carries it;
+///   on a new canvas, cut after a stroke, the next stroke stays on the page
+///   and Send says the drawing hasn't reached the hub. Then the rail's
+///   Remove folds that drawn canvas back into the pill over durGrowExit,
+///   no chip left, the draft out of the message, the session still
+///   listing it.
 @MainActor
 enum CanvasProbe {
-    private enum Pass { case pen, draw, wheel, still }
+    private enum Pass { case pen, draw, wheel, still, sync }
     private static var pass: Pass? = {
         let arguments = ProcessInfo.processInfo.arguments
         if arguments.contains("-canvas-probe") { return .pen }
         if arguments.contains("-canvas-probe-draw") { return .draw }
         if arguments.contains("-canvas-probe-wheel") { return .wheel }
         if arguments.contains("-canvas-probe-still") { return .still }
+        if arguments.contains("-canvas-probe-sync") { return .sync }
         return nil
     }()
 
@@ -82,6 +92,7 @@ enum CanvasProbe {
         case .draw: await penPass(composer, window, draw: true)
         case .wheel: await wheelPass(composer, window)
         case .still: await stillPass(composer)
+        case .sync: await syncPass(composer)
         }
         say("done")
     }
@@ -245,6 +256,132 @@ enum CanvasProbe {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if status != 200 { say("the hub answered the drawing \(status): \(String(decoding: data, as: UTF8.self).prefix(300))") }
         return status == 200
+    }
+
+    // MARK: The sync's pass
+
+    /// A pen stroke on the page: the page's doc's count after it, or why it couldn't be drawn.
+    private static func stroke(_ web: CanvasWeb) async -> (count: Int, error: String?) {
+        do {
+            return (try await web.probeStroke(), nil)
+        } catch {
+            return (-1, error.localizedDescription)
+        }
+    }
+
+    /// The canvas the composer opens, standing, its page bound to its doc (it has said its count).
+    private static func openedPage(_ composer: ComposerView, after old: CanvasWeb?) async -> CanvasWeb? {
+        composer.openCanvas()
+        guard await until(30, { composer.canvasRoom?.up == true && composer.canvasRoom?.moving == false }),
+              let web = composer.canvasRoom?.web, web !== old,
+              await until(20, { web.connected && web.drawn != nil }) else { return nil }
+        return web
+    }
+
+    private static func syncPass(_ composer: ComposerView) async {
+        guard let binding = composer.binding, let host = binding.canvasHost else { return }
+        var carried: [[String]] = []
+        let send = binding.onSend
+        binding.onSend = { words, attachments in
+            carried.append(attachments.map(\.name))
+            send(words, attachments)
+        }
+        defer { binding.onSend = send }
+
+        // (a) The sync socket refused from the start.
+        guard let refused = await openedPage(composer, after: nil) else {
+            return check("the sync pass opens a canvas", false, "note \(composer.probeCanvasNote ?? "none")")
+        }
+        await wait(1)
+        let line = await refused.probeRefusal() ?? "none"
+        let none = await stroke(refused)
+        await wait(0.5)
+        check("(a) the sync socket refused: the canvas shows the refusal and a pen stroke adds 0 elements",
+              refused.refused && line.hasPrefix("The canvas isn't connected to the hub, so what you draw wouldn't reach the agent.")
+                  && none.count == 0 && refused.drawn == 0,
+              "link \(refused.link.rawValue) (\(refused.linkError ?? "no error")), refused \(refused.refused), over the grid \"\(line)\", the page's doc holds \(none.count) after the stroke\(none.error.map { " (\($0))" } ?? ""), cawco:drawn said \(refused.drawn.map(String.init) ?? "nothing")")
+        composer.returned()
+        _ = await until(15) { !composer.probeCanvasWorking }
+        check("(a) Send on the refused canvas sends nothing and says it isn't connected",
+              carried.isEmpty && composer.probeCanvasNote == CanvasSendRefusal.notConnected.sentence,
+              "sends \(carried.count), over the field: \(composer.probeCanvasNote ?? "none")")
+
+        // (b) The sync up: a stroke is counted, synced, and Send carries it.
+        refused.probeSync("open")
+        let synced = await until(10) { refused.link == .synced && !refused.refused }
+        let line2 = await refused.probeRefusal()
+        let drawn = await stroke(refused)
+        let counted = await until(5) { refused.drawn == drawn.count && refused.link == .synced }
+        let hubDrawn = (try? await host.hub.exportCanvas(refused.page.id, name: refused.page.name).drawn) ?? -1
+        check("(b) the sync up: a stroke is logged cawco:drawn count=N and cawco:sync synced, and the hub holds it",
+              synced && line2 == nil && drawn.count > 0 && counted && hubDrawn == drawn.count,
+              "link \(refused.link.rawValue), refusal \(line2 ?? "gone"), the page's doc holds \(drawn.count)\(drawn.error.map { " (\($0))" } ?? ""), cawco:drawn said \(refused.drawn.map(String.init) ?? "nothing"), the hub's export \(hubDrawn)")
+        composer.returned()
+        let went = await until(20) { binding.canvas == nil && !composer.probeCanvasWorking }
+        let names = carried.last ?? []
+        check("(b) Send carries canvas.excalidraw, canvas.md and one image",
+              went && carried.count == 1 && names.contains("canvas.excalidraw") && names.contains("canvas.md")
+                  && names.filter { $0.hasSuffix(".png") }.count == 1,
+              "sent \(carried.count) message, carrying \(names.joined(separator: ", ")); over the field: \(composer.probeCanvasNote ?? "none")")
+
+        // (c) A new canvas, its sync cut after a stroke: the next stroke stays on the page.
+        guard let cut = await openedPage(composer, after: refused) else {
+            return check("(c) a second canvas opens", false, "note \(composer.probeCanvasNote ?? "none")")
+        }
+        cut.probeSync("open")
+        _ = await until(10) { cut.link == .synced }
+        let first = await stroke(cut)
+        let reached = await until(5) {
+            cut.drawn == first.count
+        }
+        var hubFirst = -1
+        for _ in 0 ..< 20 where hubFirst != first.count {
+            hubFirst = (try? await host.hub.exportCanvas(cut.page.id, name: cut.page.name).drawn) ?? -1
+            if hubFirst != first.count { await wait(0.25) }
+        }
+        cut.probeSync("cut")
+        let lost = await until(5) { cut.link == .lost }
+        let second = await stroke(cut)
+        let sends = carried.count
+        composer.returned()
+        _ = await until(20) { !composer.probeCanvasWorking }
+        let hubAfter = (try? await host.hub.exportCanvas(cut.page.id, name: cut.page.name).drawn) ?? -1
+        check("(c) the sync cut after a stroke: Send refuses, the drawing hasn't reached the hub",
+              reached && first.count > 0 && hubFirst == first.count && lost && second.count == first.count + 1
+                  && carried.count == sends && composer.probeCanvasNote == CanvasSendRefusal.notReached.sentence,
+              "first stroke: page \(first.count), hub \(hubFirst); cut: link \(cut.link.rawValue) (\(cut.linkError ?? "no error")); second stroke: page \(second.count)\(second.error.map { " (\($0))" } ?? ""), hub \(hubAfter); sends \(carried.count - sends), over the field: \(composer.probeCanvasNote ?? "none")")
+
+        // Remove, the rail's (`cawco:remove`, posted by the page): the drawn
+        // canvas folds back into the pill over durGrowExit, one run, and
+        // leaves the message with no chip; the session still lists it.
+        guard let room = composer.canvasRoom, room.up, !room.moving else {
+            return check("Remove: the drawn canvas stands over the field", false, "canvas up \(composer.canvasRoom?.up == true)")
+        }
+        let removed = cut.page.id
+        cut.probePost("cawco:remove")
+        let down = await until(10) { composer.canvasRoom == nil }
+        let paints = room.probePaints
+        var ran = "no paints were recorded"
+        var oneRun = false
+        if let firstPaint = paints.first, let lastPaint = paints.last {
+            let ms = (lastPaint.time - firstPaint.time) * 1000
+            let frame = 1000.0 / Double(composer.window?.screen.maximumFramesPerSecond ?? 60)
+            let folds = zip(paints, paints.dropFirst()).allSatisfy { $1.open <= $0.open + 0.001 }
+            oneRun = firstPaint.open > 0.8 && lastPaint.open == 0 && folds && abs(ms - Motion.durGrowExit * 1000) <= 2 * frame + 1
+            ran = "\(paints.count) paints, growth \(f(firstPaint.open, 3)) → \(f(lastPaint.open, 3)), only folding \(folds), \(f(ms))ms against durGrowExit \(Int(Motion.durGrowExit * 1000))ms"
+        }
+        let listed = await listed(removed, in: binding.sessionId, hub: host.hub)
+        check("Remove folds the drawn canvas back into the pill over durGrowExit, leaves no chip, takes the draft out of the message, and the session still lists it",
+              down && oneRun && composer.canvasChip == nil && binding.canvas == nil && listed,
+              "canvas down \(down), \(ran); chip \(composer.canvasChip != nil), the draft holds a canvas \(binding.canvas != nil), listed \(listed)")
+    }
+
+    /// Whether the hub lists `id` among the session's artifacts (`GET /api/instances/:id/artifacts`).
+    private static func listed(_ id: String, in instanceId: String, hub: HubConnection) async -> Bool {
+        guard let address = hub.address,
+              let (data, _) = try? await URLSession.shared.data(from: address.appending(path: "api/instances/\(instanceId)/artifacts")),
+              let rows = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return false }
+        return rows.contains { $0["id"] as? String == id }
     }
 
     // MARK: The finger's pass

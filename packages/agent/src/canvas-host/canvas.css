@@ -384,6 +384,27 @@ body {
   }
 }
 
+/* ---- The canvas that can't reach the hub: one line in the error formula,
+   centred over the grid, standing while it can't. The pen draws nothing
+   under it (view mode); the rail still takes Done and Dock. */
+.canvas-unlinked {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  display: grid;
+  padding: var(--space-6);
+  pointer-events: none;
+  place-items: center;
+}
+
+.canvas-unlinked-line {
+  max-width: 60ch;
+  margin: 0;
+  color: var(--status-fail-ink);
+  font: var(--type-body);
+  text-align: center;
+}
+
 /* ---- The empty canvas: the empty recipe, centred. Only its action takes
    a press; the canvas under it stays drawable. */
 .canvas-empty {

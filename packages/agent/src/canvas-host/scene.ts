@@ -509,6 +509,7 @@ export function bindScene(
   schedulePicture();
 
   stops.push(serveRequests(live, options.ink));
+  stops.push(tellDrawn(live));
 
   return {
     /** The picture drawn and posted now, for a send that carries it. */
@@ -528,6 +529,35 @@ export function bindScene(
     },
   };
 }
+
+/**
+ * How many elements the page's doc holds, drawn and not deleted, told to
+ * the host (`cawco:drawn`) whenever it changes and once as the binding
+ * starts: the count the hub's export answers (`drawn`) once the doc has
+ * reached it, so the host can tell a send whether it has.
+ */
+const tellDrawn = (live: Doc): (() => void) => {
+  const elements = live.getArray<Entry>("elements");
+  let told = -1;
+  const tell = () => {
+    const count = elements
+      .toArray()
+      .filter(
+        (map) =>
+          (map.get("el") as ExcalidrawElement | undefined)?.isDeleted !== true
+      ).length;
+    if (count !== told) {
+      told = count;
+      window.parent.postMessage(
+        { type: "cawco:drawn", count },
+        location.origin
+      );
+    }
+  };
+  elements.observeDeep(tell);
+  tell();
+  return () => elements.unobserveDeep(tell);
+};
 
 /** The room round a drawing fitted to the view, px; the zoom it may take. The brief's numbers. */
 const FIT_MARGIN = 32;

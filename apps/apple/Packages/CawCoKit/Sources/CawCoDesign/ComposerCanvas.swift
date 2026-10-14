@@ -20,6 +20,9 @@ import WebKit
 //   the finger's speed; a press mid-settle takes it from where it stands.
 // - Done folds it over `durGrowExit` into its chip, the export's picture
 //   the chip's thumbnail.
+// - Remove (the rail's, or the chip's ✕) takes it out of the message: an
+//   open canvas folds back into the pill as Done folds, with no chip left;
+//   the panel still lists it.
 // - Dock shows it in the artifact panel (`artifact_show`) and flies its web
 //   view there (280ms, drawer curve) while the shape gives the field its
 //   room back on the composer's clock; the composer keeps its chip, and a
@@ -106,8 +109,16 @@ enum CanvasDebug {
     static let pencil = ProcessInfo.processInfo.arguments.contains("-cawcoProbePencil")
     /// The canvas's decisions, which a simulator pass reads (scripts/probe-ios-composer-canvas.ts).
     static let log = Logger(subsystem: "dev.cawco.app", category: "Canvas")
+    /// `-canvas-probe-sync`: the canvas page's sync socket starts refused
+    /// (the probe opens it, and cuts it, with `cawco:probe-sync`).
+    static let syncGate = ProcessInfo.processInfo.arguments.contains("-canvas-probe-sync")
 }
 #endif
+
+/// The canvas page's doc's link to the hub (artifact.ts `Link`), as its `cawco:sync` says.
+enum CanvasLink: String {
+    case connecting, synced, lost
+}
 
 // MARK: The pen's swipe
 
@@ -143,12 +154,31 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
     let page: CanvasPage
     let web: WKWebView
     private let instanceId: String
-    /// The page has joined its document (`cawco:ready`).
+    /// The page's overlay heard its hello (`cawco:ready`). Whether its
+    /// document reached the hub is `link`'s to say, not this.
     private(set) var connected = false
+    /// The page's doc's link to the hub, as the page last said (`cawco:sync`).
+    private(set) var link = CanvasLink.connecting
+    /// Why the link was lost, the page's own clause.
+    private(set) var linkError: String?
+    /// The doc has synced with the hub since this page loaded.
+    private(set) var hasSynced = false
+    /// Since when the link has stood lost.
+    private var lostSince: ContinuousClock.Instant?
+    /// Elements the page's doc holds, drawn and not deleted (`cawco:drawn`); nil until it said.
+    private(set) var drawn: Int?
+    /// How long a lost link stands before the canvas refuses (artifact.ts `LOST_REFUSES_MS`).
+    static let lostRefuses = Duration.seconds(5)
+    /// What is drawn here wouldn't reach the hub (artifact.ts `refused`):
+    /// before the doc first synced, and once a lost link has stood 5 s. The
+    /// page shows its refusal and its pen draws nothing meanwhile.
+    var refused: Bool {
+        !hasSynced || lostSince.map { ContinuousClock.now - $0 >= Self.lostRefuses } ?? false
+    }
     /// Its last load failed: the next attach loads it again.
     private(set) var broken = false
     /// This load's answer was refused by status: WebKit's own word for the cancel is not the reason.
-    private var refused = false
+    private var answerRefused = false
     /// Where the canvas stands, told to the page (`cawco:place`): the rail's Dock reads Undock while docked.
     var docked = false {
         didSet { if docked != oldValue { tellPlace() } }
@@ -156,6 +186,8 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
     var onDock: () -> Void = {}
     var onUndock: () -> Void = {}
     var onDone: () -> Void = {}
+    /// The rail's Remove (`cawco:remove`): the canvas leaves the message.
+    var onRemove: () -> Void = {}
     var onFailed: (String) -> Void = { _ in }
     private var readyWaiters: [UUID: CheckedContinuation<Void, any Error>] = [:]
     private var pictureWaiter: (id: UUID, continuation: CheckedContinuation<Void, any Error>)?
@@ -168,6 +200,9 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         configuration.userContentController.addUserScript(WKUserScript(source: Self.host, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         #if DEBUG
         configuration.userContentController.addUserScript(WKUserScript(source: Self.errors, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        if CanvasDebug.syncGate {
+            configuration.userContentController.addUserScript(WKUserScript(source: Self.gate, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
         #endif
         web = WKWebView(frame: .zero, configuration: configuration)
         super.init()
@@ -213,8 +248,13 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
 
     func load() {
         broken = false
-        refused = false
+        answerRefused = false
         connected = false
+        link = .connecting
+        linkError = nil
+        hasSynced = false
+        lostSince = nil
+        drawn = nil
         guard let cookie = HTTPCookie(properties: [
             .name: "cawco-preview", .value: instanceId, .domain: page.origin.host() ?? "", .path: "/",
         ]) else {
@@ -292,7 +332,7 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         #endif
         guard navigationResponse.isForMainFrame, status != 200 else { return decisionHandler(.allow) }
         // The cancel ends the navigation with WebKit's own "interrupted": this sentence stands.
-        refused = true
+        answerRefused = true
         decisionHandler(.cancel)
         fail("the hub answered \(status) for its page")
     }
@@ -334,7 +374,7 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
     }
 
     private func failed(_ error: any Error) {
-        guard !refused else { return }
+        guard !answerRefused else { return }
         fail(error.localizedDescription)
     }
 
@@ -363,11 +403,22 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         }
         if type == "cawco:error" {
             CanvasDebug.log.error("canvas page posted cawco:error \(String(describing: body["of"] ?? "?"), privacy: .public): \(String(describing: body["message"] ?? "?").prefix(300), privacy: .public)")
+        } else if type == "cawco:sync" {
+            let error = (body["error"] as? String).map { ": \($0)" } ?? ""
+            CanvasDebug.log.notice("cawco:sync \(String(describing: body["state"] ?? "?"), privacy: .public)\(error, privacy: .public)")
+        } else if type == "cawco:drawn" {
+            CanvasDebug.log.notice("cawco:drawn count=\(String(describing: body["count"] ?? "?"), privacy: .public)")
         } else if type != "cawco:ink" {
             CanvasDebug.log.notice("canvas page posted \(type, privacy: .public)")
         }
         #endif
         switch type {
+        case "cawco:sync":
+            guard let state = (body["state"] as? String).flatMap(CanvasLink.init(rawValue:)) else { break }
+            heard(state, error: body["error"] as? String)
+        case "cawco:drawn":
+            guard let count = (body["count"] as? NSNumber)?.intValue, count >= 0 else { break }
+            drawn = count
         case "cawco:ready":
             connected = true
             let waiters = readyWaiters.values
@@ -383,8 +434,18 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         case "cawco:dock": onDock()
         case "cawco:undock": onUndock()
         case "cawco:done": onDone()
+        // A docked canvas isn't the message's: its rail offers no Remove there.
+        case "cawco:remove" where !docked: onRemove()
         default: break
         }
+    }
+
+    /// The page's word on its link: a lost one keeps the time it was first lost.
+    private func heard(_ state: CanvasLink, error: String?) {
+        if state == .synced { hasSynced = true }
+        lostSince = state == .lost ? (lostSince ?? .now) : nil
+        link = state
+        linkError = error
     }
 
     private func tellPlace() {
@@ -425,6 +486,94 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
       files: performance.getEntriesByType("resource").map((entry) => `${entry.name.split("/").slice(-2).join("/")}:${entry.responseStatus ?? "?"}`),
     })
     """
+
+    /// `-canvas-probe-sync`: the page's artifact sockets go through a gate,
+    /// refused from the start. Refused, a socket asks for a path beside its
+    /// own that the listener upgrades nothing on (it answers 404), so the
+    /// handshake fails as a refused upgrade does. `cawco:probe-sync` with
+    /// `open` lets the next one through; with `cut` it closes every open one
+    /// and refuses again.
+    private static let gate = """
+    (() => {
+      const Native = window.WebSocket;
+      let mode = "refuse";
+      const open = new Set();
+      const ARTIFACT = /\\/__cawco\\/artifact\\/[0-9a-f-]{36}$/;
+      function Gate(url, protocols) {
+        const at = new URL(String(url), location.href);
+        if (!ARTIFACT.test(at.pathname)) return new Native(url, protocols);
+        if (mode !== "open") at.pathname += "/probe-refused";
+        const socket = new Native(at.toString(), protocols);
+        open.add(socket);
+        socket.addEventListener("close", () => open.delete(socket));
+        return socket;
+      }
+      Gate.prototype = Native.prototype;
+      Object.assign(Gate, { CONNECTING: 0, OPEN: 1, CLOSING: 2, CLOSED: 3 });
+      window.WebSocket = Gate;
+      window.addEventListener("message", (event) => {
+        if (event.data?.type !== "cawco:probe-sync") return;
+        if (event.data.mode === "open") { mode = "open"; return; }
+        mode = "refuse";
+        for (const socket of open) socket.close();
+      });
+    })();
+    """
+
+    /// One pen stroke through Excalidraw's own pointer path: the rail's Pen,
+    /// then a pen's down, moves and up on the canvas. Answers how many
+    /// elements the page's doc holds after it, drawn and not deleted.
+    private static let stroke = """
+    document.querySelector('[data-action="tool:freedraw"]')?.click();
+    await new Promise((done) => setTimeout(done, 300));
+    const target = document.querySelector("canvas.excalidraw__canvas.interactive");
+    if (!target) throw new Error("no interactive canvas to draw on");
+    const box = target.getBoundingClientRect();
+    const x = box.left + box.width * 0.3, y = box.top + box.height * 0.4;
+    const pen = (type, dx, dy, buttons) => new PointerEvent(type, {
+      bubbles: true, cancelable: true, composed: true, pointerId: 7, pointerType: "pen", isPrimary: true,
+      clientX: x + dx, clientY: y + dy, button: 0, buttons, pressure: buttons ? 0.5 : 0,
+    });
+    target.dispatchEvent(pen("pointerdown", 0, 0, 1));
+    for (let i = 1; i <= 24; i += 1) {
+      await new Promise((done) => requestAnimationFrame(done));
+      target.dispatchEvent(pen("pointermove", i * 8, Math.sin(i / 4) * 30, 1));
+    }
+    target.dispatchEvent(pen("pointerup", 192, Math.sin(6) * 30, 0));
+    await new Promise((done) => setTimeout(done, 600));
+    return window.cawcoArtifact.doc.getArray("elements").toArray()
+      .filter((entry) => entry.get("el")?.isDeleted !== true).length;
+    """
+
+    /// The page posts `type` to its host, as its rail's boxes do (`cawco:remove`).
+    func probePost(_ type: String) {
+        web.evaluateJavaScript("window.parent.postMessage({ type: \"\(type)\" }, location.origin)", completionHandler: nil)
+    }
+
+    /// The probe's gate on the page's sync socket: `open`, or `cut`.
+    func probeSync(_ mode: String) {
+        deliver(["type": "cawco:probe-sync", "mode": mode])
+    }
+
+    /// A pen stroke on the page; the page's doc's count after it.
+    func probeStroke() async throws -> Int {
+        let web = web
+        return try await withCheckedThrowingContinuation { (done: CheckedContinuation<Int, any Error>) in
+            web.__callAsyncJavaScript(Self.stroke, arguments: [:], inFrame: nil, in: .page) { value, error in
+                if let error { done.resume(throwing: error) } else { done.resume(returning: (value as? NSNumber)?.intValue ?? -1) }
+            }
+        }
+    }
+
+    /// The refusal the page shows over its grid; nil while it shows none.
+    func probeRefusal() async -> String? {
+        let web = web
+        return await withCheckedContinuation { (done: CheckedContinuation<String?, Never>) in
+            web.evaluateJavaScript("document.querySelector('.canvas-unlinked-line')?.textContent ?? null") { value, _ in
+                done.resume(returning: value as? String)
+            }
+        }
+    }
     #endif
 
     /// PreviewController's host script: what the page posts goes to the app,
@@ -621,6 +770,7 @@ final class CanvasRoom: NSObject {
         made.onDone = { [weak self] in self?.composer.foldCanvas() }
         made.onDock = { [weak self] in self?.composer.dockCanvas() }
         made.onUndock = { [weak self] in self?.composer.undockCanvas() }
+        made.onRemove = { [weak self] in self?.composer.removeCanvas() }
         made.onFailed = { [weak self] reason in self?.composer.canvasFailed("The canvas couldn't load: \(reason). Close it with Done, then open it again.") }
         made.web.frame = stage.bounds
         made.web.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -782,6 +932,9 @@ final class CanvasRoom: NSObject {
         stage.isUserInteractionEnabled = false
         place(sizes)
         cutting = chip.map { .box(from: stage.bounds, to: stage.convert($0, from: nil), grow: false) } ?? .shape
+        #if DEBUG
+        probePaints = []
+        #endif
         let finish = { [weak self] in
             guard let self else { return }
             putAway()
