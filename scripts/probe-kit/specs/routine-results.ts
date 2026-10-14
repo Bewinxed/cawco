@@ -24,6 +24,7 @@
  *
  *   bun scripts/probe-kit/run.ts routine-results
  */
+import { readdirSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
@@ -49,6 +50,8 @@ const ANSWERS: Record<string, string | undefined> = {
 
 /** The run id a wake names, and how the prompt steers Caw to answer it. */
 const RUN_ID = /routine_result with run "([^"]+)"/;
+/** The hub's stdout files in a fleet's sandbox (scratch-fleet `launch`). */
+const HUB_LOG = /^hub-\d+\.log$/;
 const STEER = /PROBE-ANSWER (\w+)/;
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
@@ -266,12 +269,27 @@ const run = async (kit: Kit) => {
 
   // ── 4b. a bare AUTOMATION_FAILED: the reason is Caw's last text ────
   const bare = await runNow("bare", 2);
-  kit.check(
+  const bareOk = kit.check(
     "4b: answered a bare AUTOMATION_FAILED, the reason is the last thing Caw said",
     bare.length === 2 &&
       bare.every((row) => row.outcome === "failed" && row.reason === LAST),
     describe(bare)
   );
+  if (!bareOk) {
+    // The hub's own account of 4b's frames (routines.ts DEBUG lines).
+    const logs = readdirSync(fleet.sandbox).filter((name) =>
+      HUB_LOG.test(name)
+    );
+    const texts = await Promise.all(
+      logs.map((name) => Bun.file(join(fleet.sandbox, name)).text())
+    );
+    logs.forEach((name, i) => {
+      const lines = (texts[i] ?? "")
+        .split("\n")
+        .filter((line) => line.includes("[routines]"));
+      kit.note(`${name}:\n${lines.slice(-80).join("\n")}`);
+    });
+  }
 
   // ── 5. no routine_result before the turn ends ───────────────────────
   const silentTurn = await runNow("none", 2);

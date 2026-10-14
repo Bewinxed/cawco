@@ -1134,6 +1134,9 @@ export const createRoutines = ({
       ...each,
       reason: bareReason(instanceId, each.runId, each.who),
     }));
+    console.log(
+      `[routines] turn over ${instanceId.slice(0, 8)}: ${ends.map((each) => `${each.runId.slice(0, 8)} → ${JSON.stringify(each.reason.slice(0, 60))}`).join("; ")}`
+    );
     for (const each of ends) {
       settle(
         each.runId,
@@ -1165,6 +1168,14 @@ export const createRoutines = ({
       ...(held.get(instanceId) ?? []),
       { runId, who, usd },
     ]);
+    console.log(
+      `[routines] held ${runId.slice(0, 8)} (bare ${AUTOMATION_FAILED} from ${instanceId.slice(0, 8)}); kept before: ${
+        [...before.keys()]
+          .filter((key) => key.startsWith(instanceId))
+          .map((key) => key.slice(37, 45) || "session")
+          .join("|") || "none"
+      }`
+    );
     if (over) {
       turnOver(instanceId);
     }
@@ -1197,15 +1208,19 @@ export const createRoutines = ({
    * ({@link before}); its turn's result frame settles what it held
    * ({@link failBare}).
    */
-  const said = (instanceId: string, neutral: NeutralMessage): void => {
-    if (
-      !(
-        armed.has(instanceId) ||
-        running.has(instanceId) ||
-        held.has(instanceId)
-      )
-    ) {
+  const said = (
+    instanceId: string,
+    neutral: NeutralMessage,
+    /** The session is a project's lead: his words count from before his wake's read receipt arms him. */
+    lead = false
+  ): void => {
+    const watched =
+      armed.has(instanceId) || running.has(instanceId) || held.has(instanceId);
+    if (!(watched || lead)) {
       return;
+    }
+    if (watched) {
+      debugFrame(instanceId, neutral);
     }
     if (neutral.type === "result") {
       turnOver(instanceId);
@@ -1214,6 +1229,43 @@ export const createRoutines = ({
     if (neutral.type === "assistant") {
       spoke(instanceId, neutral);
     }
+  };
+
+  /**
+   * DEBUG (routine-results 4b on the host): each frame a run's session's
+   * stream admits, its blocks in order, and each call's name and `run`.
+   */
+  const debugFrame = (instanceId: string, neutral: NeutralMessage): void => {
+    const blocks =
+      neutral.type === "assistant"
+        ? neutral.message.content
+            .map((block) => {
+              if (block.type === "tool_use") {
+                return `tool_use:${block.name} run=${JSON.stringify(runOf(block.input))}`;
+              }
+              return block.type === "text"
+                ? `text:${JSON.stringify(block.text.slice(0, 60))}`
+                : block.type;
+            })
+            .join(", ")
+        : "";
+    console.log(
+      `[routines] frame ${instanceId.slice(0, 8)} ${neutral.type}${blocks ? ` [${blocks}]` : ""} armed=${armed.has(instanceId)} held=${(held.get(instanceId) ?? []).map((each) => each.runId.slice(0, 8)).join("|") || "none"} last=${JSON.stringify((lastSaid.get(instanceId) ?? "").slice(0, 40))}`
+    );
+  };
+
+  /** A call's `run` input, given as an object or as its JSON. */
+  const runOf = (input: unknown): string | null => {
+    let value = input;
+    if (typeof value === "string") {
+      try {
+        value = JSON.parse(value);
+      } catch {
+        return null;
+      }
+    }
+    const run = (value as { run?: unknown } | null)?.run;
+    return typeof run === "string" ? run.trim() : null;
   };
 
   /** A model message's blocks in order: its text, and the text before each answer's call. */
@@ -1228,13 +1280,8 @@ export const createRoutines = ({
         words.push(block.text);
         continue;
       }
-      const key =
-        block.type === "tool_use"
-          ? answerOf(instanceId, block.name, block.input)
-          : null;
-      const text = key ? sofar() : undefined;
-      if (key && text) {
-        before.set(key, text);
+      if (block.type === "tool_use") {
+        keepBefore(instanceId, block.name, block.input, sofar());
       }
     }
     const text = words.join("\n").trim();
@@ -1243,19 +1290,34 @@ export const createRoutines = ({
     }
   };
 
-  /** The {@link answerKey} a tool call answers with, when it is a run's answer. */
-  const answerOf = (
+  /**
+   * A call that is a run's answer keeps `text`, what was said before it,
+   * under its run and under its session (the run key is the one read
+   * first; the session's covers a call whose run did not parse).
+   */
+  const keepBefore = (
     instanceId: string,
     name: string,
-    input: unknown
-  ): string | null => {
-    if (ROUTINE_RESULT_CALL.test(name)) {
-      const run = (input as { run?: unknown } | null)?.run;
-      return typeof run === "string" ? answerKey(instanceId, run.trim()) : null;
+    input: unknown,
+    text: string | undefined
+  ): void => {
+    const answer =
+      ROUTINE_RESULT_CALL.test(name) ||
+      (FINISH_CALL.test(name) && running.has(instanceId));
+    if (!answer) {
+      return;
     }
-    return FINISH_CALL.test(name) && running.has(instanceId)
-      ? answerKey(instanceId)
-      : null;
+    const run = runOf(input);
+    console.log(
+      `[routines] answer call ${instanceId.slice(0, 8)} ${name} run=${JSON.stringify(run)} before=${text ? JSON.stringify(text.slice(0, 60)) : "nothing"}`
+    );
+    if (!text) {
+      return;
+    }
+    before.set(answerKey(instanceId), text);
+    if (run) {
+      before.set(answerKey(instanceId, run), text);
+    }
   };
 
   /**
@@ -1328,6 +1390,9 @@ export const createRoutines = ({
     if (send.state === "read") {
       store.setRun(run.id, { leadInstanceId: send.instanceId });
       armed.add(send.instanceId);
+      console.log(
+        `[routines] armed ${send.instanceId.slice(0, 8)} for ${run.id.slice(0, 8)} (wake read)`
+      );
       return;
     }
     if (send.state === "failed" || send.state === "cancelled") {

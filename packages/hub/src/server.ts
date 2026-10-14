@@ -22789,13 +22789,18 @@ export const createServer = (
                   admitted.message,
                   admitted.harness
                 );
-                // A routine run's session's last words, for a failure that
-                // gives no reason (routines.ts `said`).
-                routines.said(message.instanceId, admitted.message);
                 // A lead's web reads, his calls' results and his turn's end
-                // (lead-gate.ts): none of a stream's deltas carry them.
+                // (lead-gate.ts): none of a stream's deltas carry them. A
+                // routine run's session's words, for a failure that gives no
+                // reason (routines.ts `said`): a lead's from before his wake's
+                // read receipt too.
                 if (admitted.message.type !== "stream_event") {
                   const [framed] = db.getInstancesByIds([message.instanceId]);
+                  routines.said(
+                    message.instanceId,
+                    admitted.message,
+                    framed?.role === "lead"
+                  );
                   if (framed?.role === "lead") {
                     leadGate.frame(framed, admitted.message);
                   }
