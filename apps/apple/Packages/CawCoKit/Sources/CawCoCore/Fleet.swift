@@ -540,8 +540,12 @@ public struct ParkedAsk: Sendable {
     public let raisedAt: Double?
     /// Set when the hub routed it to the delegate's parent rather than to the operator.
     public let routedTo: String?
+    /// The machine its envelope names, where the hub parked it: its answer
+    /// names it. An ask no session row stands behind (a project's memory
+    /// proposal, hub memory.ts) has only this; its machine is "hub".
+    public let machineId: String
 
-    init(_ frame: AskFrame, routedTo: String?) {
+    init(_ frame: AskFrame, routedTo: String?, machineId: String) {
         instanceId = frame.instanceId
         requestId = frame.requestId
         toolName = frame.toolName
@@ -549,6 +553,7 @@ public struct ParkedAsk: Sendable {
         presentation = frame.presentation
         raisedAt = frame.raisedAt
         self.routedTo = routedTo
+        self.machineId = machineId
     }
 
     public var isQuestion: Bool { Naming.questions(toolName, input.value) != nil }
@@ -591,14 +596,15 @@ public final class NeedsYouStore {
         return heard
     }
 
-    func park(_ frame: AskFrame, routedTo: String?) {
+    func park(_ frame: AskFrame, routedTo: String?, machineId: String) {
         parkedHeard[frame.requestId] = hear()
         var list = parked[frame.instanceId] ?? []
+        let ask = ParkedAsk(frame, routedTo: routedTo, machineId: machineId)
         if let at = list.firstIndex(where: { $0.requestId == frame.requestId }) {
             // A re-broadcast follows the hub's latest word on it.
-            list[at] = ParkedAsk(frame, routedTo: routedTo)
+            list[at] = ask
         } else {
-            list.append(ParkedAsk(frame, routedTo: routedTo))
+            list.append(ask)
         }
         parked[frame.instanceId] = list
     }
@@ -626,7 +632,7 @@ public final class NeedsYouStore {
     /// holds is not parked. What the socket said since is newer than the read:
     /// an ask parked meanwhile (a restarted hub hearing its agents replay
     /// theirs) stays, and one settled meanwhile is not put back.
-    func replace(with asks: [(AskFrame, String?)], asOf mark: Int) {
+    func replace(with asks: [(frame: AskFrame, routedTo: String?, machineId: String)], asOf mark: Int) {
         var kept: [String: [ParkedAsk]] = [:]
         for (instanceId, list) in parked {
             let newer = list.filter { (parkedHeard[$0.requestId] ?? 0) > mark }
@@ -635,8 +641,8 @@ public final class NeedsYouStore {
         let keptIds = Set(kept.values.flatMap { $0.map(\.requestId) })
         parkedHeard = parkedHeard.filter { keptIds.contains($0.key) }
         parked = kept
-        for (frame, routedTo) in asks where (settledHeard[frame.requestId] ?? 0) <= mark {
-            park(frame, routedTo: routedTo)
+        for (frame, routedTo, machineId) in asks where (settledHeard[frame.requestId] ?? 0) <= mark {
+            park(frame, routedTo: routedTo, machineId: machineId)
         }
     }
 
@@ -653,21 +659,23 @@ public final class NeedsYouStore {
     /// stage, until the daemon confirms (`applied`); a refusal leaves it
     /// parked to answer again. A denial says `message` when it is given (a
     /// push's "Other…": what to do instead, which the agent reads), else the
-    /// words the card's Deny says.
+    /// words the card's Deny says. It names the machine the ask's envelope
+    /// named (client.svelte.ts `adoptAskMachine`): an ask no session row
+    /// stands behind is answered all the same.
     @discardableResult
-    public func answer(_ ask: ParkedAsk, machineId: String, _ answer: Answer, message: String? = nil) -> Bool {
+    public func answer(_ ask: ParkedAsk, _ answer: Answer, message: String? = nil) -> Bool {
         let result: [String: (any Sendable)?] = switch answer {
         case .allow: ["behavior": "allow", "updatedInput": ask.input.value]
         case .deny: ["behavior": "deny", "message": message ?? (ask.isQuestion ? "The user dismissed the question without answering it." : "User denied permission")]
         }
-        return submit(ask, machineId: machineId, result: result)
+        return submit(ask, result: result)
     }
 
     /// question.ts `questionAnswer`: the whole parked input survives, and
     /// multi-select answers stay arrays even when just one option was picked.
     /// Returns false when nothing could be sent, so the card stops pending.
     @discardableResult
-    public func answerQuestion(_ ask: ParkedAsk, machineId: String, answers: [String: [String]]) -> Bool {
+    public func answerQuestion(_ ask: ParkedAsk, answers: [String: [String]]) -> Bool {
         guard !ask.questions.isEmpty, ask.questions.allSatisfy({ !(answers[$0.question] ?? []).isEmpty }) else { return false }
         var shaped: [String: (any Sendable)?] = [:]
         for question in ask.questions {
@@ -682,11 +690,11 @@ public final class NeedsYouStore {
         }
         var updated = ask.input.value
         updated["answers"] = shaped
-        return submit(ask, machineId: machineId, result: ["behavior": "allow", "updatedInput": updated])
+        return submit(ask, result: ["behavior": "allow", "updatedInput": updated])
     }
 
     @discardableResult
-    private func submit(_ ask: ParkedAsk, machineId: String, result: [String: (any Sendable)?]) -> Bool {
+    private func submit(_ ask: ParkedAsk, result: [String: (any Sendable)?]) -> Bool {
         let key = "\(ask.instanceId):\(ask.requestId)"
         let payload: OpenAPIValueContainer
         do {
@@ -705,7 +713,7 @@ public final class NeedsYouStore {
         answers[key] = ledger.submit(
             kind: .permission_answer,
             sessionId: instanceId,
-            machineId: machineId,
+            machineId: ask.machineId,
             payload: payload,
             settlesAt: .applied,
             effects: Ledger.Effects(settled: { [weak self] stage, _ in

@@ -197,7 +197,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         cawPanel.onChoose = { [weak self] item in self?.openWaiting(item) }
         cawPanel.onAnswer = { [weak self] item, ask, answer in
             guard let self, home.live else { return }
-            hub.needs.answer(ask, machineId: item.machineId, answer)
+            hub.needs.answer(ask, answer)
         }
         cawPanel.onDismiss = { [weak self] notice in self?.home.dismiss(notice) }
         cawPanel.onAcknowledge = { [weak self] ids in self?.home.acknowledge(ids) }
@@ -324,7 +324,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         pushRoute = nil
         switch route {
         case let .session(id):
-            guard id.hasPrefix(BoardRun.prefix) || hub.fleet.byId[id] != nil else {
+            // An ask no session row stands behind (a memory proposal) opens as
+            // its own tab, its card answerable there; the read above holds the hub's asks.
+            guard id.hasPrefix(BoardRun.prefix) || hub.fleet.byId[id] != nil || hub.needs.blocked(id) else {
                 Self.pushLog.notice("route session \(id, privacy: .public) is not on the hub")
                 Toast.show("That session isn't on the hub any more.", in: view.window)
                 return

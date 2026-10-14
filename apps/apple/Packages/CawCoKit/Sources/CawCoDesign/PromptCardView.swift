@@ -497,6 +497,15 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
         render()
     }
 
+    #if DEBUG
+    /// A simulator pass's reading of the card: whether each button can be
+    /// pressed, and the line under them.
+    public var probeState: String {
+        let on = { (choice: Choice) in self.buttons[choice].map { $0.isEnabled ? "on" : "off" } ?? "none" }
+        return "approve \(on(.allow)) deny \(on(.deny)) said \(wait.isHidden ? "nothing" : wait.text ?? "")"
+    }
+    #endif
+
     /// The answer never left this device: the card is answerable again,
     /// with the reason under it.
     public func refuse(_ reason: String) {

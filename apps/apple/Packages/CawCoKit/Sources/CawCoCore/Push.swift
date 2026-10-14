@@ -652,8 +652,7 @@ enum PushPending {
     struct Parked: Sendable {
         let requestId: String
         let instanceId: String?
-        let machineId: String
-        /// Set for a session's permission request; nil for a run's question and anything else.
+        /// Set for a permission request, with the machine its envelope named; nil for a run's question and anything else.
         let ask: ParkedAsk?
     }
 
@@ -664,12 +663,12 @@ enum PushPending {
             guard envelope.verb == .frames, let data = try? Wire.data(envelope.payload) else { return nil }
             let payloadRequestId = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["requestId"] as? String
             var ask: ParkedAsk?
-            if case let .permissionRequest(frame, routedTo) = try? Inbound.frame(data) {
-                ask = ParkedAsk(frame, routedTo: routedTo)
+            if case let .permissionRequest(frame, routedTo, machineId) = try? Inbound.frame(data, machineId: envelope.machineId) {
+                ask = ParkedAsk(frame, routedTo: routedTo, machineId: machineId)
             }
             // push.ts `onAsk`: the envelope's id, else the payload's.
             guard let requestId = envelope.requestId ?? payloadRequestId else { return nil }
-            return Parked(requestId: requestId, instanceId: envelope.instanceId ?? ask?.instanceId, machineId: envelope.machineId, ask: ask)
+            return Parked(requestId: requestId, instanceId: envelope.instanceId ?? ask?.instanceId, ask: ask)
         }
     }
 }
@@ -734,9 +733,9 @@ public enum PushActions {
         guard note.kind == "ask", let requestId = note.requestId else { return false }
         let deadline = ContinuousClock.now + window
         guard let found = await parked(note, deadline: deadline, failed: { await notApproved(note) }) else { return false }
-        let (connection, match, ask) = found
+        let (connection, ask) = found
         defer { connection.disconnect() }
-        connection.needs.answer(ask, machineId: match.machineId, .allow)
+        connection.needs.answer(ask, .allow)
         let stage = await settled(connection.needs.answers["\(ask.instanceId):\(ask.requestId)"], on: connection, deadline: deadline)
         log.notice("approve \(requestId, privacy: .public): \(stage?.rawValue ?? "unanswered", privacy: .public)")
         guard stage == .applied else {
@@ -763,9 +762,9 @@ public enum PushActions {
         }
         let deadline = ContinuousClock.now + window
         guard let found = await parked(note, deadline: deadline, failed: { await notDenied(note, "The hub couldn't be reached.") }) else { return false }
-        let (connection, match, ask) = found
+        let (connection, ask) = found
         defer { connection.disconnect() }
-        connection.needs.answer(ask, machineId: match.machineId, .deny, message: words)
+        connection.needs.answer(ask, .deny, message: words)
         let stage = await settled(connection.needs.answers["\(ask.instanceId):\(ask.requestId)"], on: connection, deadline: deadline)
         log.notice("deny \(requestId, privacy: .public): \(stage?.rawValue ?? "unanswered", privacy: .public)")
         guard stage == .applied else {
@@ -798,7 +797,7 @@ public enum PushActions {
         }
         let deadline = ContinuousClock.now + window
         guard let found = await parked(note, deadline: deadline, failed: { await notAnswered(note, nil) }) else { return false }
-        let (connection, match, ask) = found
+        let (connection, ask) = found
         defer { connection.disconnect() }
         guard ask.questions.count == 1, let question = ask.questions.first else {
             await notAnswered(note, "This question has more than one part.")
@@ -815,7 +814,7 @@ public enum PushActions {
         case let .words(words):
             label = words.trimmingCharacters(in: .whitespacesAndNewlines)
         }
-        guard connection.needs.answerQuestion(ask, machineId: match.machineId, answers: [question.question: [label]]) else {
+        guard connection.needs.answerQuestion(ask, answers: [question.question: [label]]) else {
             await notAnswered(note, nil)
             return false
         }
@@ -880,7 +879,7 @@ public enum PushActions {
     /// on, open. Otherwise nil, having said why: "Already answered." when the
     /// hub no longer holds it, `failed` when the hub couldn't be read or reached.
     private static func parked(_ note: PushNote, deadline: ContinuousClock.Instant,
-                               failed: () async -> Void) async -> (HubConnection, PushPending.Parked, ParkedAsk)? {
+                               failed: () async -> Void) async -> (HubConnection, ParkedAsk)? {
         guard let requestId = note.requestId, let instanceId = note.instanceId, let hub = HubConnection.keptAddress else { return nil }
         guard let parked = await PushPending.read(hub) else {
             log.error("\(note.action, privacy: .public) \(requestId, privacy: .public): /api/pending unreadable")
@@ -899,7 +898,7 @@ public enum PushActions {
             await failed()
             return nil
         }
-        return (connection, match, ask)
+        return (connection, ask)
     }
 
     /// The command's last stage by `deadline`; nil when nothing was sent.

@@ -186,7 +186,7 @@ public final class RootViewController: ObservedViewController {
 
     /// The first ask in the needs-you queue, the card at its top: a session's
     /// permission or question (a run's is answered in its run).
-    private var firstAsk: (ask: ParkedAsk, machineId: String)? {
+    private var firstAsk: ParkedAsk? {
         guard home.live, !gate.isLocked else {
             return nil
         }
@@ -195,7 +195,7 @@ public final class RootViewController: ObservedViewController {
             if case let .ask(ask) = item.kind, !ask.isQuestion {
                 // One answer at a time: an ask already answered here waits for the hub.
                 let sent = hub.needs.answerSent(for: ask)
-                return sent == nil || sent?.stage == .failed ? (ask, item.machineId) : nil
+                return sent == nil || sent?.stage == .failed ? ask : nil
             }
         }
         return nil
@@ -279,7 +279,7 @@ public final class RootViewController: ObservedViewController {
         guard let first = firstAsk else {
             return
         }
-        hub.needs.answer(first.ask, machineId: first.machineId, allow ? .allow : .deny)
+        hub.needs.answer(first, allow ? .allow : .deny)
     }
 
     /// Whether the socket is down and waiting out its backoff.

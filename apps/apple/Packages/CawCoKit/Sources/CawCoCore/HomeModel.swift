@@ -237,6 +237,12 @@ public final class HomeModel {
         }
     }
 
+    /// Who asked, as the hub named them parking it; nil when it named nobody.
+    public static func asker(_ ask: ParkedAsk) -> String? {
+        let asker = ask.presentation.asker.trimmingCharacters(in: .whitespacesAndNewlines)
+        return asker.isEmpty ? nil : asker
+    }
+
     /// Every ask parked on the operator, longest wait first; one the hub has not stamped sorts last.
     public var needs: [NeedsItem] {
         var items: [NeedsItem] = []
@@ -250,12 +256,15 @@ public final class HomeModel {
                 continue
             }
             for ask in asks where ask.routedTo != "parent" {
-                let machineId = row?.machineId ?? ""
+                // An ask no session row stands behind (a memory proposal) is
+                // on the machine its envelope named, titled by who asked
+                // (home-state.svelte.ts).
+                let machineId = row?.machineId ?? ask.machineId
                 var item = NeedsItem(
                     id: "\(ask.instanceId):\(ask.requestId)",
                     kind: .ask(ask),
                     machineId: machineId,
-                    title: row.map(fleet.title) ?? fleet.machineName(machineId),
+                    title: row.map(fleet.title) ?? Self.asker(ask) ?? fleet.machineName(machineId),
                     place: Naming.unbroken(fleet.placeOf(machineId, row?.cwd)),
                     raisedAt: ask.raisedAt
                 )

@@ -148,6 +148,9 @@ enum Inbound {
         /// refused spawn, a machine that is not connected) names its request
         /// here and nowhere in its payload (server.ts `failure`).
         let requestId: String?
+        /// The machine the envelope is from: an ask's is where the hub parked
+        /// it, which its answer names (a memory proposal's is "hub").
+        let machineId: String?
     }
 
     /// A frame's own discriminators, and the structural fields the hub adds
@@ -196,14 +199,15 @@ enum Inbound {
         }
         let peek = try decoder.decode(Envelope<PayloadRoute>.self, from: data).payload
         let payload = try decoder.decode(Envelope<Components.Schemas.FramePayload>.self, from: data).payload
-        return .frame(Frame(payload, peek, answering: route.requestId))
+        return .frame(Frame(payload, peek, answering: route.requestId, machineId: route.machineId ?? ""))
     }
 
-    /// A frame payload on its own (a `/api/pending` envelope's payload).
-    static func frame(_ data: Data) throws -> Frame {
+    /// A frame payload on its own (a `/api/pending` envelope's payload), from
+    /// the envelope's `machineId`.
+    static func frame(_ data: Data, machineId: String) throws -> Frame {
         let decoder = Wire.decoder()
         let peek = try decoder.decode(PayloadRoute.self, from: data)
-        return Frame(try decoder.decode(Components.Schemas.FramePayload.self, from: data), peek, answering: nil)
+        return Frame(try decoder.decode(Components.Schemas.FramePayload.self, from: data), peek, answering: nil, machineId: machineId)
     }
 }
 
@@ -215,8 +219,9 @@ typealias AskFrame = Components.Schemas.PermissionRequestFrame
 enum Frame {
     case instances(Components.Schemas.InstancesFrame, hubBuild: Components.Schemas.BuildInfo?)
     case instancesDelta(Components.Schemas.InstancesDeltaFrame, hubBuild: Components.Schemas.BuildInfo?)
-    /// A session's ask, and where the hub routed it (`parent`: its delegate's parent answers).
-    case permissionRequest(AskFrame, routedTo: String?)
+    /// An ask, where the hub routed it (`parent`: its delegate's parent
+    /// answers), and the machine its envelope names, which its answer names.
+    case permissionRequest(AskFrame, routedTo: String?, machineId: String)
     /// An ask is over, whoever settled it.
     case permissionSettled(Components.Schemas.PermissionSettledFrame)
     /// A workflow run's question: answered in its run, never parked as a session's ask.
@@ -246,7 +251,8 @@ enum Frame {
 
     /// `answering`: the envelope's own `requestId`, which an error frame takes
     /// when its payload names none (client.svelte.ts reads it the same way).
-    fileprivate init(_ payload: Components.Schemas.FramePayload, _ peek: Inbound.PayloadRoute, answering: String?) {
+    /// `machineId`: the envelope's.
+    fileprivate init(_ payload: Components.Schemas.FramePayload, _ peek: Inbound.PayloadRoute, answering: String?, machineId: String) {
         switch payload {
         case .instances(let frame):
             self = .instances(frame, hubBuild: peek.hubBuild)
@@ -256,7 +262,7 @@ enum Frame {
             if let runId = peek.workflowRunId {
                 self = .runQuestion(runId: runId, raisedAt: frame.raisedAt)
             } else {
-                self = .permissionRequest(frame, routedTo: peek.routedTo)
+                self = .permissionRequest(frame, routedTo: peek.routedTo, machineId: machineId)
             }
         case .permissionSettled(let frame):
             self = .permissionSettled(frame)

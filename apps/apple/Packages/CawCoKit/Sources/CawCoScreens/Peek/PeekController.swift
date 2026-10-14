@@ -430,7 +430,7 @@ final class PeekController: ObservedViewController {
 
         // What the hub holds parked, whatever the row says: the hub settles a dead process's asks
         // (`permission_settled`), and one whose agent is restarting is still waiting on its answer.
-        drawAsks(hub.needs.parked[target.viewId] ?? [], machineId: row?.machineId ?? "")
+        drawAsks(hub.needs.parked[target.viewId] ?? [])
 
         if let asked, asked.failed {
             // The hub refused what was asked from this peek: said here, where it was asked.
@@ -463,7 +463,7 @@ final class PeekController: ObservedViewController {
         }
     }
 
-    private func drawAsks(_ parked: [ParkedAsk], machineId: String) {
+    private func drawAsks(_ parked: [ParkedAsk]) {
         let sent = parked.map { hub.needs.answerSent(for: $0) }
         let live = home.live
         let print = zip(parked, sent).map { "\($0.requestId)\u{1f}\($0.summary)\u{1f}\($0.isQuestion)\u{1f}\($1.map { "\($0.stage)" } ?? "")" }.joined(separator: "\u{1e}") + "\(live)"
@@ -485,10 +485,10 @@ final class PeekController: ObservedViewController {
                 // Equal peers at opposite ends (DESIGN.md, The Peer Rule).
                 let inFlight = sent.map { $0.stage != .failed } ?? false
                 let deny = KitButton.make("Deny", glyph: .close, glyphTint: Palette.inkMuted, variant: .secondary, height: .sm) { [weak self] in
-                    _ = self?.hub.needs.answer(ask, machineId: machineId, .deny)
+                    _ = self?.hub.needs.answer(ask, .deny)
                 }
                 let approve = KitButton.make("Approve", glyph: .tick, glyphTint: Palette.inkStrong, variant: .secondary, height: .sm) { [weak self] in
-                    _ = self?.hub.needs.answer(ask, machineId: machineId, .allow)
+                    _ = self?.hub.needs.answer(ask, .allow)
                 }
                 deny.accessibilityLabel = "Deny \(summary)"
                 approve.accessibilityLabel = "Approve \(summary)"

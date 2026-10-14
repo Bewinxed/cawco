@@ -137,7 +137,8 @@ final class PaneHost {
 
     /// The one name a tab, its details and its pane go by: the row's own
     /// title (remembered), else the name it last had, else its stored
-    /// transcript's, else its row's folder, else its id.
+    /// transcript's, else its row's folder, else who asked what is parked
+    /// on it (an ask no row stands behind: a memory proposal), else its id.
     func label(_ id: String) -> String {
         let fleet = hub.fleet
         let row = fleet.byId[id]
@@ -149,7 +150,8 @@ final class PaneHost {
             }
             return name
         }
-        return names[id] ?? title(id) ?? row.map(fleet.title) ?? String(id.prefix(8))
+        return names[id] ?? title(id) ?? row.map(fleet.title)
+            ?? hub.needs.parked[id]?.lazy.compactMap(HomeModel.asker).first ?? String(id.prefix(8))
     }
 
     private func forgetName(_ id: String) {

@@ -828,14 +828,14 @@ public final class HubConnection {
         }
         // The hub's whole list of asks: one settled while this device was away
         // sent its `permission_settled` to nobody listening.
-        var asks: [(AskFrame, String?)] = []
+        var asks: [(frame: AskFrame, routedTo: String?, machineId: String)] = []
         var runAsks: [(String, Double?)] = []
         for envelope in readPending ?? [] where envelope.verb == .frames {
-            guard let data = try? Wire.data(envelope.payload), let frame = try? Inbound.frame(data) else {
+            guard let data = try? Wire.data(envelope.payload), let frame = try? Inbound.frame(data, machineId: envelope.machineId) else {
                 continue
             }
             switch frame {
-            case let .permissionRequest(ask, routedTo): asks.append((ask, routedTo))
+            case let .permissionRequest(ask, routedTo, machineId): asks.append((ask, routedTo, machineId))
             case let .runQuestion(runId, raisedAt): runAsks.append((runId, raisedAt))
             default: break
             }
@@ -1098,8 +1098,8 @@ public final class HubConnection {
             fleet.patch(upserts: delta.upserts, removed: delta.removed)
             previews.reconcile(delta.previews)
             tasks.sweepLiveLedgers()
-        case let .permissionRequest(ask, routedTo):
-            needs.park(ask, routedTo: routedTo)
+        case let .permissionRequest(ask, routedTo, machineId):
+            needs.park(ask, routedTo: routedTo, machineId: machineId)
         case let .permissionSettled(settled):
             needs.settle(settled.instanceId, settled.requestId)
         case let .runQuestion(runId, raisedAt):

@@ -257,7 +257,6 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     // MARK: Model
 
     override func refreshContent() {
-        let row = hub.fleet.byId[sessionId]
         transcriptView.configure(transcript)
         let prestart = syncMove()
 
@@ -271,7 +270,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         }
         composerBinding.sendError = editNote ?? (command?.stage == .failed ? "Couldn't send that message.\(command?.reason.map { " \($0)" } ?? "")" : nil)
         composerBinding.sendBlock = sendBlock()
-        syncCards(machineId: row?.machineId)
+        syncCards()
         composerBinding.publish()
         syncPreview()
     }
@@ -375,7 +374,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         guard let move = hub.fleet.move(for: sessionId),
               let ask = hub.needs.parked[move.targetInstanceId]?.first(where: { $0.requestId == move.askId }),
               let question = ask.questions.first?.question else { return }
-        hub.needs.answerQuestion(ask, machineId: move.targetMachineId, answers: [question: [moveIt ? "Move it" : "Don't move"]])
+        hub.needs.answerQuestion(ask, answers: [question: [moveIt ? "Move it" : "Don't move"]])
     }
 
     // MARK: The preview (SessionPane's preview split, PreviewSheet)
@@ -674,8 +673,9 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
 
     /// The parked asks as the composer's cards, in arrival order: a card that
     /// comes in while the session is on screen settles in, and one the hub
-    /// has settled leaves.
-    private func syncCards(machineId: String?) {
+    /// has settled leaves. Each is answered on the machine its envelope named,
+    /// so one no session row stands behind (a memory proposal) answers too.
+    private func syncCards() {
         let parked = hub.needs.parked[sessionId] ?? []
         let ids = Set(parked.map(\.requestId))
         for id in cards.keys where !ids.contains(id) { cards[id] = nil }
@@ -693,21 +693,33 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
                 cards[ask.requestId] = made
                 return made
             }()
-            card.update(sent: hub.needs.answerSent(for: ask), connected: hub.state == .connected && machineId != nil)
+            card.update(sent: hub.needs.answerSent(for: ask), connected: hub.state == .connected)
+            #if DEBUG
+            let said = "\(ask.requestId) on \(ask.machineId): \(card.probeState)"
+            if probeCards[ask.requestId] != said {
+                probeCards[ask.requestId] = said
+                Self.restoring.notice("probe card \(said, privacy: .public)")
+            }
+            #endif
             ordered.append(card)
         }
         composerBinding.prompts = ordered
     }
 
+    #if DEBUG
+    /// What each card last said to a simulator pass's log.
+    private var probeCards: [String: String] = [:]
+    #endif
+
     private func answer(_ ask: ParkedAsk, _ choice: PromptCardView.Choice, _ picks: [String: [String]]) {
-        guard hub.state == .connected, let row = hub.fleet.byId[sessionId] else {
+        guard hub.state == .connected else {
             cards[ask.requestId]?.refuse("Couldn't send that answer. The hub is unreachable.")
             return
         }
         let sent = switch choice {
-        case .allow: hub.needs.answer(ask, machineId: row.machineId, .allow)
-        case .deny: hub.needs.answer(ask, machineId: row.machineId, .deny)
-        case .answer: hub.needs.answerQuestion(ask, machineId: row.machineId, answers: picks)
+        case .allow: hub.needs.answer(ask, .allow)
+        case .deny: hub.needs.answer(ask, .deny)
+        case .answer: hub.needs.answerQuestion(ask, answers: picks)
         }
         if !sent { cards[ask.requestId]?.refuse("Couldn't send that answer.") }
         requestRefresh()
@@ -771,10 +783,10 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
 
     /// The first permission parked here, for the menu bar's Approve and Deny.
     private var pendingAsk: ParkedAsk? { hub.needs.parked[sessionId]?.first { !$0.isQuestion } }
-    var answerTarget: (ask: ParkedAsk, machineId: String)? {
-        guard hub.state == .connected, let ask = pendingAsk, let row = hub.fleet.byId[sessionId] else { return nil }
+    var answerTarget: ParkedAsk? {
+        guard hub.state == .connected, let ask = pendingAsk else { return nil }
         let sent = hub.needs.answerSent(for: ask)
-        return sent == nil || sent?.stage == .failed ? (ask, row.machineId) : nil
+        return sent == nil || sent?.stage == .failed ? ask : nil
     }
 
     func stopTurn() {
