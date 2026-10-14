@@ -676,15 +676,43 @@
       return;
     }
     const origin = listing.getBoundingClientRect().top;
+    // A row put in above that opens its own place from nothing (its arrival,
+    // Row's `arrive`) moves every row under it as it opens: they slide by
+    // whatever else moved them, never by its place too. Slid by it as well,
+    // a send put in above the turn's indicator sent the indicator up over the
+    // message before it for the frames the opening took to be measured. Its
+    // place is the room virtua gave it — the next item's top less its own,
+    // its size estimated until it is measured — not the row's own height.
+    let opening = 0;
+    let arrivedAt: number | null = null;
     for (const row of drawn.slice(start + 1)) {
       const box = boxes.get(settled.get(row.key) ?? row.key);
       const node = listing.querySelector<HTMLElement>(
         `[data-row="${CSS.escape(row.key)}"]`
       );
       const item = node?.parentElement;
-      if (box && node && item) {
-        const now = item.getBoundingClientRect();
-        slide(node, box, now.top - origin, now.height, timing);
+      if (!(node && item)) {
+        continue;
+      }
+      const now = item.getBoundingClientRect();
+      if (arrivedAt !== null) {
+        opening += now.top - arrivedAt;
+        arrivedAt = null;
+      }
+      if (box) {
+        slide(
+          node,
+          box,
+          now.top - origin - opening,
+          now.height,
+          timing,
+          opening > 0
+        );
+      } else if (
+        tickets.get(row.key)?.kind === "arrive" &&
+        !presentation.handed.has(row.key)
+      ) {
+        arrivedAt = now.top;
       }
     }
   }
@@ -719,16 +747,23 @@
 
   /**
    * One row sliding from `box`, where it was drawn, to its item's place now
-   * (`top`, drawn `height` tall), by its bottom edge.
+   * (`top`, drawn `height` tall), by its bottom edge — or by its top edge
+   * (`byTop`), for a row an arrival above is pushing down: its top is what
+   * moves, and a change of its own height belongs below it. Slid by the
+   * bottom edge, the turn's indicator grew 5px at its top as a send arrived
+   * above it and stood that far over the send for a frame.
    */
   function slide(
     node: HTMLElement,
     box: Box,
     top: number,
     height: number,
-    timing: KeyframeAnimationOptions
+    timing: KeyframeAnimationOptions,
+    byTop = false
   ): void {
-    const delta = box.top + box.shift + box.height - (top + height);
+    const delta = byTop
+      ? box.top + box.shift - top
+      : box.top + box.shift + box.height - (top + height);
     if (Math.abs(delta) <= 0.5) {
       return;
     }
@@ -738,7 +773,9 @@
     // travels. The sides and bottom stay open as far as a well bleeds past
     // its box (motion/rows `BLEED`): the row slides on a layer as large as
     // its clip.
-    const gained = Math.max(0, height - box.height - node.offsetTop);
+    const gained = byTop
+      ? 0
+      : Math.max(0, height - box.height - node.offsetTop);
     const open = `${-BLEED}px`;
     for (const running of node.getAnimations()) {
       if (running.id === SLIDE) {

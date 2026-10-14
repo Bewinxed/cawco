@@ -876,8 +876,6 @@ export interface FoldMemo {
   told: readonly Told[];
   /** Where the speakers stand after the settled rows. */
   voices: Voices;
-  /** The waiting sends this fold drew, by key. */
-  waited: string[];
 }
 
 /**
@@ -1408,7 +1406,15 @@ export function buildRowsFrom(
   const waited = session.messages
     .slice(from)
     .map((message, i) => keyOf(message, from + i));
-  const ahead = aheadOf(memo, waited, content !== null || tool !== null);
+  const ahead = aheadOf(
+    memo,
+    waited,
+    content !== null || tool !== null,
+    content !== null &&
+      tool === null &&
+      content.text === "" &&
+      !content.thinking?.trim()
+  );
   return {
     rows: [
       ...withoutEndedWaits(withoutEchoes(drawn.rows)),
@@ -1427,7 +1433,6 @@ export function buildRowsFrom(
       branches,
       voices,
       ahead,
-      waited,
       live: content
         ? {
             gen,
@@ -1731,16 +1736,30 @@ export function called(session: SessionState, toolId: string): boolean {
  *
  * The keys drawn ahead are carried while the agent's tail stays up, less the
  * ones that stopped waiting; with no tail, nothing is ahead of it.
+ *
+ * NOTHING THE AGENT HAS NOT SAID STANDS ABOVE THE READER'S NEWEST MESSAGE.
+ * A tail that begins in this fold begins under every send waiting in it: a
+ * send and the busy it causes land in one tick, and a session's pane first
+ * folds after its first prompt has gone, so "already on screen" was never
+ * true of the send that opened the turn, and the working indicator drew above
+ * the first message until the harness read it. And a `bare` tail — the
+ * working indicator, no words of its own yet — is under every waiting send,
+ * whenever it arrived: only words being written or a call in flight keep a
+ * send sent after them below them.
  */
 function aheadOf(
   memo: FoldMemo | null,
   waited: string[],
-  tail: boolean
+  tail: boolean,
+  bare: boolean
 ): string[] | null {
   if (!tail) {
     return null;
   }
-  const before = memo?.ahead ?? memo?.waited ?? [];
+  if (bare || (memo !== null && memo.ahead === null)) {
+    return waited;
+  }
+  const before = memo?.ahead ?? [];
   return waited.filter((key) => before.includes(key));
 }
 

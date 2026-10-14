@@ -949,7 +949,17 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             Self.called(blocks, glance.toolId) ? nil : (glance.name, glance.glance)
         }
         let hasTail = liveOn || tool != nil
-        if hasTail, ahead == nil { ahead = Set(queued.map(\.id)) } else if !hasTail { ahead = nil }
+        // Nothing the agent has not said stands above the reader's newest
+        // message (rows.ts `aheadOf`). A tail that begins starts under every
+        // send waiting then; and the working indicator with no words of its
+        // own is under every waiting send whenever it arrived: a send's row
+        // comes through preparation a generation after the busy it causes is
+        // read off the tail, and pinning the sends ahead at the first of
+        // those builds left the first prompt under the indicator. Only words
+        // being written or a call in flight keep a later send below them.
+        let bare = liveOn && tool == nil && received.isEmpty
+            && (!reasoning || (tail?.thinkingStream ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        if hasTail, ahead == nil || bare { ahead = Set(queued.map(\.id)) } else if !hasTail { ahead = nil }
         var tailVoices = voices
         func queuedItems(_ ahead: Bool) -> [Item] {
             let rows = queued.filter { (self.ahead?.contains($0.id) ?? false) == ahead }.map { block -> Row in
