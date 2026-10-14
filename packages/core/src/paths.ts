@@ -727,16 +727,30 @@ export const darwinUserDirs = async (): Promise<string[]> =>
 
 /**
  * Where the impeccable skill's engine is installed on the host, one folder
- * per version (`<version>/impeccable`), where its launcher looks for the
- * version its skill pins (`${IMPECCABLE_HOME:-~/.impeccable}/bin/<version>`).
- * A workspace runs it from there, read-only: the launcher's own download
- * cannot be trusted to work inside one (on 2026-10-14 the curl first on the
- * Linux host's PATH, zerobrew's, verified no certificate: its OpenSSL's CA
- * dir does not exist), so each host has it installed, and a skill that pins a version
- * the host lacks is refused in the launcher's words naming that step.
+ * per version (`<version>/impeccable`), at the path its launcher computes
+ * for the version its skill pins (`${IMPECCABLE_HOME:-$HOME/.impeccable}/bin/
+ * <version>`, skills/impeccable/scripts/impeccable). Only `bin`: the cache
+ * root beside it is the launcher's own to write.
  */
-export const hostImpeccableEngines = (): string =>
-  join(homedir(), ".impeccable", "bin");
+const hostImpeccableEngines = (): string =>
+  join(process.env.IMPECCABLE_HOME ?? join(homedir(), ".impeccable"), "bin");
+
+/**
+ * The host's tool caches that skills and their commands run binaries from,
+ * which every workspace reads at the same path, read-only (workspace-policy.ts
+ * `workspacePolicy`): Playwright's browsers and the impeccable skill's
+ * engines. The home dir stays hidden around them; a skill launcher that
+ * finds its binary here never downloads (inside a workspace a download is
+ * refused: it writes nothing under home, and on 2026-10-14 the curl first on
+ * the Linux host's PATH, zerobrew's, verified no certificate), so each host
+ * installs what its skills pin, and one it lacks is refused in the launcher's
+ * own words. A dir that holds a tool's keys or settings (`~/.heygen`,
+ * `~/.media`) is never one of these; a new cache joins by being added here.
+ */
+export const hostToolCaches = (): string[] => [
+  hostPlaywrightBrowsers(),
+  hostImpeccableEngines(),
+];
 
 /**
  * Where the host's operating system keeps its trusted CA certificates: the
