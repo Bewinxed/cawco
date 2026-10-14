@@ -109,6 +109,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     #if DEBUG
     private var commentedAtLaunch = false
     private var sentAtLaunch = false
+    private var repliedAtLaunch = false
     #endif
 
     init(hub: HubConnection, instanceId: String) {
@@ -674,6 +675,15 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         if PreviewProbe.sendAtLaunch, !sentAtLaunch, read.owed > 0, connected {
             sentAtLaunch = true
             send()
+        }
+        if PreviewProbe.replyAtLaunch, !repliedAtLaunch, let openPin, connected, !sending,
+           read.pins.first(where: { $0.id == openPin })?.sentAt != nil {
+            repliedAtLaunch = true
+            Task { [weak self] in
+                self?.reply("Make it bigger")
+                while self?.replying == true { try? await Task.sleep(for: .milliseconds(100)) }
+                self?.resolve(true)
+            }
         }
         #endif
     }

@@ -658,6 +658,8 @@ enum PreviewProbe {
     static let tapAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-comment-tap")
     /// `-preview-working`: the session counts as mid-turn, for the live dot (the probe's mock session ends its turns at once).
     static let workingAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-working")
+    /// `-preview-reply`: once the open card's pin has gone with a send, the card's Reply runs once, then Resolve.
+    static let replyAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-reply")
     /// `-preview-send`: Send N runs once, the first time something is owed.
     static let sendAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-send")
     /// The click, in the page: what the overlay's Comment mode hears from a mouse.
