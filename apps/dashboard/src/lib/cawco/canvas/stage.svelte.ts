@@ -71,6 +71,9 @@ const boxOf = (el: Element): Box => {
   return { left: r.left, top: r.top, width: r.width, height: r.height };
 };
 
+/** Each session's preview origin, as the hub last named it (`Stage.#reach`). */
+const sessionOrigins = new Map<string, string>();
+
 export class Stage {
   readonly id: string;
   readonly instanceId: string;
@@ -216,6 +219,10 @@ export class Stage {
     this.instanceId = instanceId;
     this.id = id;
     this.name = name;
+    // The origin its session's canvases already stand on: a stage made anew
+    // for the same canvas (its holder let go and took it again) keeps its
+    // iframe, never reloaded for a moment with no address.
+    this.origin = sessionOrigins.get(instanceId) ?? null;
     this.#reach();
   }
 
@@ -239,10 +246,17 @@ export class Stage {
       this.changed();
       return;
     }
-    this.origin = previewOrigin(
+    const origin = previewOrigin(
       (await answer.json()) as PreviewAddress,
       location
     );
+    if (origin) {
+      sessionOrigins.set(this.instanceId, origin);
+    }
+    // Asked again each time: the fleet's preview mode may have moved it.
+    if (origin !== this.origin) {
+      this.origin = origin;
+    }
     this.changed();
   }
 
