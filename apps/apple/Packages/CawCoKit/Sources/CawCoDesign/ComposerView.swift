@@ -1461,8 +1461,8 @@ extension ComposerView {
     /// which stand outside the composer's bounds, where a touch lands on them.
     fileprivate func grownHit(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         let menu: UIView? = commandMenu?.closing == false ? commandMenu : nil
-        // The canvas standing over the field, its grabs first (they stand over the page's edges).
-        let canvas: [UIView] = canvasRoom.map { $0.up ? $0.grabs + [$0.stage] : $0.docked ? [$0.stage] : [] } ?? []
+        // The canvas standing over the field, its handles first (they stand over the page's top edge and corners).
+        let canvas: [UIView] = canvasRoom.map { $0.up ? $0.handles + [$0.stage] : $0.docked ? [$0.stage] : [] } ?? []
         for view in [menu, wheel?.ghostsView, edit?.keepButton].compactMap(\.self) + canvas
             where view.window != nil && !view.isHidden && view.isUserInteractionEnabled {
             let inside = convert(point, to: view)

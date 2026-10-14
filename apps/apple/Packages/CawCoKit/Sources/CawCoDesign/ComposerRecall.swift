@@ -112,28 +112,6 @@ enum Recall {
         return (path, height, up)
     }
 
-    /// How far in from its reach each side of the grown outline stands `y`
-    /// points below its top (grown.ts `taperAt`): the shoulder's curve, which
-    /// runs from the pill's top to the top corner, found by halving.
-    static func taperAt(_ y: Double, geometry: RecallGeometry, extra: Double) -> Double {
-        let r = Radius.radiusLg
-        let k = taper(width: geometry.width, extra: extra, spread: geometry.spread, rows: geometry.taperRows)
-        let s = max(r, extra), d = s - r
-        guard y < s else { return 0 }
-        // y(t) falls from s at t = 0 to r at t = 1; x(t) moves in by k·(3t² − 2t³).
-        func yAt(_ t: Double) -> Double {
-            let u = 1 - t
-            return u * u * u * s + 3 * u * u * t * (s - d * 0.55) + 3 * u * t * t * (r + d * 0.35) + t * t * t * r
-        }
-        var lo = 0.0, hi = 1.0
-        for _ in 0 ..< 24 {
-            let mid = (lo + hi) / 2
-            if yAt(mid) > y { lo = mid } else { hi = mid }
-        }
-        let t = (lo + hi) / 2
-        return k * (3 * t * t - 2 * t * t * t)
-    }
-
     /// A ghost row `off` rows above the field's line (below it when negative):
     /// `translateY(-off·row) rotateX(up·lean) scale(1 − up·shrink)` about its
     /// foot, under the wheel's 900pt perspective.

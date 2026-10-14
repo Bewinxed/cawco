@@ -85,10 +85,14 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
 
     // MARK: The composer's canvas
 
-    /// The pane's box in the window: the column the canvas stands in.
+    /// The column the canvas stands in, in the window: the pane's height, and
+    /// across, the transcript's share of it (the composer's group,
+    /// ComposerDock `transcriptShare`), never the side preview beside it.
     private func canvasColumn() -> CGRect? {
         guard isViewLoaded, view.window != nil else { return nil }
-        return view.convert(view.bounds, to: nil)
+        let pane = view.convert(view.bounds, to: nil)
+        let transcript = transcriptHost.view.convert(transcriptHost.view.bounds, to: nil)
+        return CGRect(x: transcript.minX, y: pane.minY, width: transcript.width, height: pane.height)
     }
 
     /// The artifact panel's page (its web view, inside the well) in the

@@ -12,11 +12,14 @@ import UIKit
 ///   itself: the grown shape's growth paints over `durGrow` from one start,
 ///   the cut on the page following the shape at every paint (one clock);
 ///   standing, the page fills the column above the field, and the field
-///   takes the keys; the grab's drag settles at 40% of the column and at the
-///   column less the field, one spring each; the right edge dragged out
-///   120pt widens it by 120 with the left edge still, on one spring, holds
-///   at its bounds, and the width survives Done and reopen; Dock stands the canvas's own
-///   view on the artifact panel's page, and its page's Undock brings it
+///   takes the keys, and the rail stands clear of the top grab's band and
+///   the sides; the grab's drag settles at 40% of the column and at the
+///   column less the field, one spring each; turned landscape (room either
+///   side of the pill), a drag on the top-right corner by (+60, −80) widens
+///   it by 120 with its centre unmoved and raises its top by 80 on one
+///   spring, holds at its bounds both ways, and the size survives Done and
+///   reopen; Dock stands the canvas's own view on the artifact panel's page,
+///   its rail 8pt from the top, and its page's Undock brings it
 ///   back over the field; Send with nothing drawn sends
 ///   nothing and says so; drawn on (as the agent draws, through the hub),
 ///   Done leaves a chip whose picture is the export's PNG, byte for byte;
@@ -24,8 +27,8 @@ import UIKit
 /// - `-canvas-probe-wheel`: the same drag without the pencil stand-in brings
 ///   the wheel up, never the canvas; the recognizers' touch types.
 /// - `-canvas-probe-still`, with Reduce Motion on: Draw opens the canvas and
-///   Done folds it with opacity animations only, nothing travelling; a side
-///   edge's release lands at once.
+///   Done folds it with opacity animations only, nothing travelling; a
+///   corner's release lands at once.
 /// - `-canvas-probe-sync`: the canvas page's sync socket goes through a gate
 ///   (CanvasWeb's DEBUG `gate`), refused from the start: the canvas shows
 ///   its refusal, a pen stroke adds nothing and Send says it isn't
@@ -166,6 +169,12 @@ enum CanvasProbe {
         composer.field.resignFirstResponder()
         await wait(0.8)
 
+        // The rail stands clear of the top grab's band (44pt, then space2) and space3 in from the sides.
+        let rail = await room.web?.probeRail()
+        check("over the field the rail stands 52pt below the canvas's top and 12pt in from its sides",
+              rail.map { abs($0.top - 52) <= 1.5 && abs($0.left - 12) <= 1.5 && abs($0.right - 12) <= 1.5 } ?? false,
+              rail.map { "rail top \(f($0.top)), left \(f($0.left)), right \(f($0.right))" } ?? "no rail in the page")
+
         // The grab: 40% of the column, then the column less the field, each on one spring.
         for (label, height, speed) in [("40% of the column", 0.0, -900.0), ("the column less the field", 5000.0, 900.0)] {
             guard let before = room.sizes else { break }
@@ -180,7 +189,7 @@ enum CanvasProbe {
                   "rested at \(f(rested)), wanted \(f(want)) (\(f(want / Double(column.height) * 100))% of the column), \(room.probeSettles - settles) spring")
         }
 
-        await sidePass(composer, room)
+        await cornerPass(composer, room, window)
 
         // Dock: the same view flies into the panel and stands on its page; the page's Undock brings it back.
         room.web?.onDock()
@@ -193,6 +202,9 @@ enum CanvasProbe {
         check("Dock stands the canvas's own view on the panel's page, its chip in the composer",
               docked && gap <= 1 && binding.canvas?.docked == true,
               "docked \(room.docked), the view against the panel's page \(f(gap, 2))pt off, chip \(composer.canvasChip != nil), note \(composer.probeCanvasNote ?? "none")")
+        let dockedRail = await room.web?.probeRail()
+        check("docked, the rail stands 8pt from the canvas's top", dockedRail.map { abs($0.top - 8) <= 1.5 } ?? false,
+              dockedRail.map { "rail top \(f($0.top)), left \(f($0.left)), right \(f($0.right))" } ?? "no rail in the page")
         room.web?.onUndock()
         let back = await until(15) { room.up && !room.moving && binding.canvas?.docked == false }
         await wait(1.0)
@@ -248,55 +260,81 @@ enum CanvasProbe {
         binding.onSend = send
     }
 
-    /// The side edges: the right edge dragged out by 120pt (as far as the
-    /// column lets it) widens the canvas by that, the left edge still, on one
-    /// spring; past its reach it holds at the reach, under the pill's width
-    /// at the pill's; the width it is left at survives Done and reopen.
-    private static func sidePass(_ composer: ComposerView, _ room: CanvasRoom) async {
-        guard let reach = room.probeReach, let wide = room.probeWide else {
-            return check("the side grabs stand over the canvas", false, "no sizes")
+    /// Turns the scene to `orientations` and waits for the window to take it.
+    private static func turn(_ window: UIWindow, to orientations: UIInterfaceOrientationMask, wide: Bool) async -> Bool {
+        window.windowScene?.requestGeometryUpdate(.iOS(interfaceOrientations: orientations)) { error in
+            say("the scene refused to turn: \(error.localizedDescription)")
         }
-        let grabs = [room.leftGrab, room.rightGrab].map { !$0.isHidden && $0.isUserInteractionEnabled && $0.superview != nil }
+        return await until(5) { (window.bounds.width > 900) == wide }
+    }
+
+    /// Waits for a settle to come to rest.
+    private static func rested(_ room: CanvasRoom) async {
+        _ = await until(3) { !room.probeSpringRunning }
+        await wait(0.2)
+    }
+
+    /// The top corners' resize handles. Turned landscape: past a 900pt
+    /// window the pill is at most 720pt wide, centred, with room either side
+    /// (at 834pt in portrait it spans its column, and there is none). A drag
+    /// on the top-right corner by (+60, −80) widens the canvas by 120 with
+    /// its centre unmoved and raises its top by 80, on one spring; dragged
+    /// far out and in it holds at its bounds; the size it is left at
+    /// survives Done and reopen. Turned back to portrait after.
+    private static func cornerPass(_ composer: ComposerView, _ room: CanvasRoom, _ window: UIWindow) async {
+        let turned = await turn(window, to: .landscapeRight, wide: true)
+        _ = await until(5) { (room.probeReach ?? 0) > 60 && room.up && !room.moving }
+        await wait(0.8)
+        await cornerChecks(composer, room, window, turned: turned)
+        let back = await turn(window, to: .portrait, wide: false)
+        _ = await until(5) { room.up && !room.moving && (room.probeReach ?? 0) < 1 }
+        await wait(0.8)
+        if !back { say("the scene didn't turn back to portrait: window \(f(window.bounds.width, 0))pt") }
+    }
+
+    private static func cornerChecks(_ composer: ComposerView, _ room: CanvasRoom, _ window: UIWindow, turned: Bool) async {
+        let shown = [room.leftCorner, room.rightCorner].map { !$0.isHidden && $0.isUserInteractionEnabled && $0.superview != nil && $0.alpha > 0.99 }
+        guard let sizes = room.sizes, let reach = room.probeReach else {
+            return check("the corner handles stand over the canvas", false, "no sizes")
+        }
+        // A height with 80pt of room above it, so the corner can raise the top.
+        room.probeDrag(to: max(sizes.min, sizes.max - 160), speed: 0)
+        await rested(room)
         let before = room.probeBox
-        let out = min(120, reach.right - wide.right)
         let settles = room.probeSettles
-        room.probeDrag(.right, to: wide.right + out, speed: 0)
-        _ = await until(3) { !room.probeSpringRunning }
-        await wait(0.2)
+        room.probeCorner(.topRight, by: CGPoint(x: 60, y: -80), speed: .zero)
+        await rested(room)
         let after = room.probeBox
-        check("the right edge dragged out by \(f(out, 0))pt widens the canvas by that, the left edge still, on one spring",
-              grabs.allSatisfy(\.self) && out > 0 && abs(after.width - before.width - out) <= 0.5 && abs(after.minX - before.minX) <= 0.5
-                  && room.probeSettles == settles + 1,
-              "side grabs live \(grabs), reach right \(f(reach.right)), width \(f(before.width)) → \(f(after.width)), left edge \(f(before.minX)) → \(f(after.minX)), \(room.probeSettles - settles) spring")
+        check("a drag on the top-right corner by (+60, −80) widens the canvas by 120 with its centre unmoved and raises its top by 80, on one spring",
+              shown.allSatisfy(\.self) && turned && reach >= 60 && abs(after.width - before.width - 120) <= 0.5
+                  && abs(after.midX - before.midX) <= 0.5 && abs(after.minY - (before.minY - 80)) <= 0.5 && room.probeSettles == settles + 1,
+              "corners shown \(shown), landscape \(turned) (window \(f(window.bounds.width, 0))pt), reach \(f(reach)) each side; width \(f(before.width)) → \(f(after.width)), left edge \(f(before.minX)) → \(f(after.minX)), right \(f(before.maxX)) → \(f(after.maxX)), top \(f(before.minY)) → \(f(after.minY)), \(room.probeSettles - settles) spring")
 
-        // Past the reach, the edge holds at the reach; in past the pill, at the pill's edge.
-        room.probeDrag(.right, to: reach.right + 400, speed: 900)
-        _ = await until(3) { !room.probeSpringRunning }
-        await wait(0.2)
-        let most = room.probeWide?.right ?? .nan
-        room.probeDrag(.right, to: -400, speed: -900)
-        _ = await until(3) { !room.probeSpringRunning }
-        await wait(0.2)
-        let least = room.probeWide?.right ?? .nan
-        let pillWidth = room.probeBox.width
-        check("a side edge holds at the column less space3 at most and at the pill's width at least",
-              abs(most - reach.right) < 0.5 && abs(least) < 0.5,
-              "right edge rested \(f(most)) past the pill (reach \(f(reach.right))), then \(f(least)) (the canvas \(f(pillWidth))pt wide)")
+        // Far out it holds at the reach and the column less the field; far in, at the pill's width and 40%.
+        room.probeCorner(.topRight, by: CGPoint(x: 2000, y: -3000), speed: CGPoint(x: 900, y: -900))
+        await rested(room)
+        let most = (room.probeSpread ?? .nan, room.probeRested ?? .nan)
+        room.probeCorner(.topLeft, by: CGPoint(x: 2000, y: 3000), speed: CGPoint(x: 900, y: 900))
+        await rested(room)
+        let least = (room.probeSpread ?? .nan, room.probeRested ?? .nan)
+        check("a corner holds at its bounds both ways: the reach and the column less the field, the pill's width and 40% of the column",
+              abs(most.0 - reach) < 0.5 && abs(most.1 - sizes.max) < 0.5 && abs(least.0) < 0.5 && abs(least.1 - sizes.min) < 0.5,
+              "out: each side \(f(most.0)) of \(f(reach)), \(f(most.1))pt tall of \(f(sizes.max)); in: each side \(f(least.0)), \(f(least.1))pt tall of \(f(sizes.min))")
 
-        // The width it is left at survives Done and reopen.
-        room.probeDrag(.right, to: out, speed: 0)
-        _ = await until(3) { !room.probeSpringRunning }
-        await wait(0.2)
-        let kept = room.probeBox.width
+        // The size it is left at survives Done and reopen.
+        room.probeCorner(.topRight, by: CGPoint(x: 60, y: -80), speed: .zero)
+        await rested(room)
+        let kept = room.probeBox
         composer.foldCanvas()
         let folded = await until(10) { !room.up && !room.moving }
         await wait(0.6)
         composer.openCanvas()
         let reopened = await until(10) { room.up && !room.moving }
         await wait(0.4)
-        let again = room.probeBox.width
-        check("the width survives Done and reopen", folded && reopened && abs(again - kept) <= 0.5,
-              "\(f(kept))pt before Done, \(f(again))pt reopened (folded \(folded), reopened \(reopened))")
+        let again = room.probeBox
+        check("the size survives Done and reopen",
+              folded && reopened && abs(again.width - kept.width) <= 0.5 && abs(again.height - kept.height) <= 0.5,
+              "\(f(kept.width))×\(f(kept.height)) before Done, \(f(again.width))×\(f(again.height)) reopened (folded \(folded), reopened \(reopened))")
     }
 
     /// Draws a rectangle with a word in it on the canvas, as `artifact_update` does.
@@ -488,15 +526,15 @@ enum CanvasProbe {
         check("Reduce Motion: the canvas fades in, nothing travels", opening.travelled == 0 && travels(opening.keys).isEmpty && opening.faded,
               "animated keys \(opening.keys.sorted()), travelling \(travels(opening.keys).sorted()), the shape grown from the first look \(opening.travelled == 0), faded \(opening.faded)")
         _ = await until(5) { !room.moving }
-        // A side edge's release lands at once: no spring runs.
-        if let wide = room.probeWide, let reach = room.probeReach {
+        // A corner's release lands at once: no spring runs.
+        if let sizes = room.sizes {
             let settles = room.probeSettles
-            room.probeDrag(.right, to: wide.right, speed: 900)
+            room.probeCorner(.topRight, by: CGPoint(x: 0, y: 40), speed: .zero)
             let rested = room.probeRested ?? .nan
-            let at = room.probeWide?.right ?? .nan
-            check("Reduce Motion: a side edge's release lands at once",
-                  !room.probeSpringRunning && room.probeSettles == settles + 1 && abs(rested - at) < 0.5 && abs(at - reach.right) < 0.5,
-                  "spring running \(room.probeSpringRunning), rested at \(f(rested)) with the edge \(f(at)) past the pill (reach \(f(reach.right)))")
+            let at = room.sizes?.height ?? .nan
+            check("Reduce Motion: a corner's release lands at once",
+                  !room.probeSpringRunning && room.probeSettles == settles + 1 && abs(rested - (sizes.height - 40)) < 0.5 && abs(at - rested) < 0.5,
+                  "spring running \(room.probeSpringRunning), rested at \(f(rested))pt tall (from \(f(sizes.height)), lowered by 40), standing \(f(at))")
         }
         composer.foldCanvas()
         let folding = await watch(room, for: Motion.durFade + 0.1)
