@@ -113,13 +113,13 @@ import {
   standalone,
 } from "@cawco/core/runtime";
 import type { ProcSpec } from "@cawco/core/sessiond";
-import { PROTECTED_NAMES, PROTECTED_UNDER } from "@cawco/core/workspace-judge";
 import {
   DamagedRecord,
   isDamagedRecord,
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
+import { PROTECTED_NAMES, PROTECTED_UNDER } from "@cawco/core/workspace-judge";
 import {
   isLeadPlace,
   workspaceDenies,
