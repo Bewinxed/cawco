@@ -324,6 +324,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         case .compaction: CompactionDividerView.self
         case .livetool: LiveToolView.self
         case .notice, .retry, .empty: NoticeView.self
+        case .voice: VoiceExtrasView.self
         }
     }
 
@@ -339,6 +340,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         let question = registration(QuestionCardView.self), subagent = registration(SubagentView.self)
         let delegate = registration(DelegateView.self), run = registration(RunView.self), live = registration(LiveToolView.self)
         let notice = registration(NoticeView.self), compaction = registration(CompactionDividerView.self)
+        let voice = registration(VoiceExtrasView.self)
         dataSource = UICollectionViewDiffableDataSource(collectionView: collection) { [weak self] view, index, id in
             guard let kind = self?.items[id]?.kind else { return view.dequeueConfiguredReusableCell(using: notice, for: index, item: id) }
             switch kind {
@@ -355,6 +357,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             case .compaction: return view.dequeueConfiguredReusableCell(using: compaction, for: index, item: id)
             case .livetool: return view.dequeueConfiguredReusableCell(using: live, for: index, item: id)
             case .notice, .retry, .empty: return view.dequeueConfiguredReusableCell(using: notice, for: index, item: id)
+            case .voice: return view.dequeueConfiguredReusableCell(using: voice, for: index, item: id)
             }
         }
     }
@@ -655,6 +658,16 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
     }
 
+    /// Who answers here when it is not a harness session's agent (a
+    /// project's Caw): his face, and what his replies carry under them. The
+    /// transcript is bare with one: nothing stands in for rows not there yet.
+    public var voice: TranscriptVoice? {
+        didSet {
+            env.voice = voice
+            if oldValue?.extras != voice?.extras || oldValue?.revision != voice?.revision || (oldValue == nil) != (voice == nil) { request() }
+        }
+    }
+
     public func configure(_ transcript: SessionTranscript) {
         // Read again only when the hub's facts changed: a transcript is handed
         // in on every frame of a streaming reply.
@@ -714,9 +727,13 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         guard let transcript else { return }
         let streams = (try? JSONEncoder().encode(transcript.tail?.streams))
             .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: String] } ?? [:]
-        wanted = TranscriptPrep.Input(revision: transcript.blockRevision, history: transcript.historyRevision,
-                                      blocks: transcript.blocks, branches: transcript.branches, queued: transcript.queued,
-                                      local: transcript.local, streams: streams, agentName: env.agentName, keys: keys)
+        var input = TranscriptPrep.Input(revision: transcript.blockRevision, history: transcript.historyRevision,
+                                         blocks: transcript.blocks, branches: transcript.branches, queued: transcript.queued,
+                                         local: transcript.local, streams: streams, agentName: env.agentName, keys: keys)
+        input.voiced = voice != nil
+        input.extras = voice?.extras ?? [:]
+        input.voiceRevision = voice?.revision ?? 0
+        wanted = input
         pump()
     }
 
@@ -915,6 +932,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // settled rows come prepared.
         var builder = Builder(agentName: env.agentName, cache: env.cache)
         builder.keys = keys
+        builder.voiced = voice != nil
         var out = settled?.items ?? []
         var rail = settled?.rail ?? false
         // Read once a build: a fleet row is a large value, and going through
@@ -975,7 +993,11 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
                  print: "failed\(fault.message)")
         }
         older = transcript.cursor == nil ? "" : fault?.print ?? "loading"
-        if out.isEmpty {
+        if out.isEmpty, voice != nil {
+            // A transcript with a voice is bare: its pane stands in for rows not there yet.
+            out = fault.map { [$0] } ?? []
+            settledCount = out.count
+        } else if out.isEmpty {
             // Empty is what is drawn: with a page before it, the transcript is still loading.
             let loading = transcript.loading || prepared == nil || transcript.cursor != nil
             out = [fault

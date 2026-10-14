@@ -193,6 +193,14 @@ public final class HomeModel {
         if let run = fleet.run(id) {
             return run.activity
         }
+        // A thread is what its status says (client.svelte.ts `THREAD_DOING`).
+        if let thread = fleet.thread(id) {
+            switch thread.status {
+            case .working: return .working
+            case .needsYou: return .blocked
+            case .ready, .unrecognized: return .idle
+            }
+        }
         if needsStore.blocked(id) || fleet.activityPulse(id)?.activity == .blocked {
             return .blocked
         }
@@ -272,11 +280,13 @@ public final class HomeModel {
                 // on the machine its envelope named, titled by who asked
                 // (home-state.svelte.ts).
                 let machineId = row?.machineId ?? ask.machineId
+                // An ask a project's Caw made is his thread's: titled by it, and it opens the thread.
+                let thread = ask.threadId.flatMap { fleet.thread(ThreadTabs.tabId($0)) }
                 var item = NeedsItem(
                     id: "\(ask.instanceId):\(ask.requestId)",
                     kind: .ask(ask),
                     machineId: machineId,
-                    title: row.map(fleet.title) ?? Self.asker(ask) ?? fleet.machineName(machineId),
+                    title: thread?.title ?? row.map(fleet.title) ?? Self.asker(ask) ?? fleet.machineName(machineId),
                     place: Naming.unbroken(fleet.placeOf(machineId, row?.cwd)),
                     raisedAt: ask.raisedAt
                 )
@@ -323,7 +333,8 @@ public final class HomeModel {
 
     /// Every session and run mid-turn, ordered by when it joined Working, newest first.
     public var working: [InstanceRow] {
-        let rows = (fleet.rows + boardRuns).filter { $0.isLive && activity($0.id) == .working }
+        // A thread Caw is working on is working too (home-state.svelte.ts `runningRows`).
+        let rows = (fleet.rows + boardRuns + fleet.threadRows).filter { $0.isLive && activity($0.id) == .working }
         let present = Set(rows.map(\.id))
         for id in enteredWorking.keys where !present.contains(id) {
             enteredWorking[id] = nil

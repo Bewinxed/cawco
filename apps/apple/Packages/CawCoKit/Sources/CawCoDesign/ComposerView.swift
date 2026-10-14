@@ -143,6 +143,10 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
     }
 
     private let column = UIStackView()
+    /// The row on the pill: the binding's perch and plan ring.
+    private let perchRow = UIView()
+    private var perch: UIView?
+    private var planRing: UIView?
     private let error = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
     private var errorBox: UIView?
     private let chips = UIStackView()
@@ -278,6 +282,18 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
             chipsRow.heightAnchor.constraint(equalTo: chips.heightAnchor, constant: Space.space1 * 2),
         ])
         column.addArrangedSubview(chipsRow)
+
+        // The row standing on the pill (Composer.svelte `.perch`, `.progress-slot`):
+        // what perches on its top-leading corner, its foot on the pill's top
+        // edge, and the plan's ring at its trailing end. Cards stand above it.
+        perchRow.isHidden = true
+        perchRow.isUserInteractionEnabled = true
+        // As tall as the taller of what stands in it, no more.
+        let snug = perchRow.heightAnchor.constraint(equalToConstant: 0)
+        snug.priority = .defaultLow
+        snug.isActive = true
+        column.addArrangedSubview(perchRow)
+        column.setCustomSpacing(0, after: perchRow)
 
         buildPill()
         column.addArrangedSubview(ring)
@@ -490,6 +506,7 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
             endFlight()
             writable = false
             syncPrompts([])
+            syncPerch(nil, ring: nil)
             renderAction(animated: false)
             return
         }
@@ -519,6 +536,10 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         block = source.sendBlock
         attach.menu = attachMenu(source)
         attach.showsMenuAsPrimaryAction = true
+        attach.isHidden = source.attachMenu == nil
+        hint.text = source.placeholder ?? Self.hintShort
+        field.accessibilityLabel = "Message \(source.agentName ?? "the agent")"
+        syncPerch(source.perch, ring: source.ring)
         showError(source.sendError ?? canvasNote)
         syncPrompts(source.prompts)
         renderAction(animated: window != nil)
@@ -590,6 +611,32 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
             prompts.isHidden = empty
             onHeight()
         }
+    }
+
+    /// The binding's perch and plan ring in the row on the pill; the row is
+    /// as tall as the taller of them, and gone with neither.
+    private func syncPerch(_ next: UIView?, ring nextRing: UIView?) {
+        guard next !== perch || nextRing !== planRing else { return }
+        perch?.removeFromSuperview()
+        planRing?.removeFromSuperview()
+        perch = next
+        planRing = nextRing
+        for view in [next, nextRing].compactMap(\.self) {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            perchRow.addSubview(view)
+            NSLayoutConstraint.activate([
+                view.bottomAnchor.constraint(equalTo: perchRow.bottomAnchor, constant: view === next ? 0 : -Space.space2),
+                view.topAnchor.constraint(greaterThanOrEqualTo: perchRow.topAnchor),
+            ])
+        }
+        next?.isUserInteractionEnabled = false
+        next?.leadingAnchor.constraint(equalTo: perchRow.leadingAnchor, constant: Space.space3).isActive = true
+        nextRing?.trailingAnchor.constraint(equalTo: perchRow.trailingAnchor, constant: -Space.space1).isActive = true
+        let empty = next == nil && nextRing == nil
+        if perchRow.isHidden != empty {
+            perchRow.isHidden = empty
+        }
+        onHeight()
     }
 
     /// The tray row shown when the host wants it and no minimized bar has

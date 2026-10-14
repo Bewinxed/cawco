@@ -246,7 +246,8 @@ enum PushTaps {
 
     #if DEBUG
     /// A simulator pass's tapped push, where `simctl push` and a banner tap
-    /// can't be driven: `-push-route session:<id>` or `task:<projectId>/<taskId>`
+    /// can't be driven: `-push-route session:<id>`, `task:<projectId>/<taskId>`
+    /// or `push:<the push's cawco data as JSON>` (routed by `PushNote.route`)
     /// at launch, before any window, as a tap that launched the app; and,
     /// running, the `debug-push-route` default on `dev.cawco.debug.push-route`
     /// (notifyutil). Each goes through `deliver`, as the delegate's tap does.
@@ -268,6 +269,11 @@ enum PushTaps {
         let parts = text.split(separator: ":", maxSplits: 1).map(String.init)
         guard parts.count == 2 else { return nil }
         switch parts[0] {
+        // A push's own `cawco` data, as JSON: routed as its tap is (`PushNote.route`).
+        case "push":
+            guard let data = parts[1].data(using: .utf8),
+                  let fields = (try? JSONSerialization.jsonObject(with: data)) as? [String: String] else { return nil }
+            return PushNote.route(fields)
         case "session": return .session(parts[1])
         case "task":
             let ids = parts[1].split(separator: "/", maxSplits: 1).map(String.init)

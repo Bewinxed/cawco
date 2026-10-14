@@ -2,6 +2,23 @@ import CawCoCore
 import CawCoDesign
 import UIKit
 
+/// A tab's screen that its group's one composer writes into: a session's,
+/// and a Caw thread's.
+@MainActor
+protocol ComposerPane: UIViewController {
+    var composerBinding: SessionComposerBinding { get }
+    /// How far up from the pane's foot the group's composer reaches.
+    var composerInset: CGFloat { get set }
+    /// The transcript's share of the pane's width, beside a preview.
+    var transcriptShare: CGFloat { get }
+    var onTranscriptShare: () -> Void { get set }
+    var restorationValues: [String: Any] { get }
+    func restoreValues(_ values: [AnyHashable: Any])
+    func close()
+}
+
+extension SessionViewController: ComposerPane {}
+
 /// The conversations live on screen, and one swipe from it
 /// (workspace/PaneHost.svelte): a group docks a screen, and a move, a split
 /// or a change of layout hands the same controller to another group. A tab
@@ -20,6 +37,14 @@ final class PaneHost {
     var onEditWorkflow: (String) -> Void = { _ in }
     /// Session details' "Continue in new session…", when that flow exists.
     var continueHandler: ((String) -> Void)?
+    /// A thread's task card: the task's sheet over its project's page.
+    var onOpenTask: (_ projectId: String, _ taskId: String) -> Void = { _, _ in }
+    /// A thread's "Open the board": its project's page.
+    var onOpenProject: (String) -> Void = { _ in }
+    /// A thread's "Check machines": the machines card, from the button.
+    var onCheckMachines: (UIView) -> Void = { _ in }
+    /// A new thread's tab is the thread's now: the workspace re-addresses it.
+    var onRetarget: (_ from: String, _ to: String) -> Void = { _, _ in }
 
     init(hub: HubConnection) {
         self.hub = hub
@@ -39,6 +64,16 @@ final class PaneHost {
             run.onOpen = { [weak self] id in self?.onOpen(id) }
             run.onEdit = { [weak self] id in self?.onEditWorkflow(id) }
             made = run
+        } else if ThreadTabs.isThread(id) {
+            let thread = ThreadViewController(hub: hub, id: id)
+            thread.onReturnToFleet = { [weak self, weak thread] in self?.onReturnToFleet(thread?.viewId ?? id) }
+            thread.onOpenSession = { [weak self] id in self?.onOpen(id) }
+            thread.onOpenTask = { [weak self] projectId, taskId in self?.onOpenTask(projectId, taskId) }
+            thread.onOpenProject = { [weak self] projectId in self?.onOpenProject(projectId) }
+            thread.onCheckMachines = { [weak self] source in self?.onCheckMachines(source) }
+            thread.onRetarget = { [weak self] from, to in self?.retarget(from, to: to) }
+            if let values = parked.removeValue(forKey: id) { thread.restoreValues(values) }
+            made = thread
         } else {
             let session = SessionViewController(hub: hub, id: id)
             session.onReturnToFleet = { [weak self] in self?.onReturnToFleet(id) }
@@ -50,23 +85,33 @@ final class PaneHost {
         return made
     }
 
+    /// A new thread's first message made it: the screen that wrote it is the
+    /// thread's tab now, under the thread's id.
+    private func retarget(_ from: String, to: String) {
+        if let screen = built.removeValue(forKey: from) { built[to] = screen }
+        onRetarget(from, to)
+    }
+
     /// Ends what a closed tab held.
     func drop(_ id: String) {
         parked[id] = nil
         forgetName(id)
-        (built.removeValue(forKey: id) as? SessionViewController)?.close()
+        (built.removeValue(forKey: id) as? ComposerPane)?.close()
     }
 
     /// A tab left its group's window: its subscription ends, and its draft
     /// and scroll wait here for it.
     func release(_ id: String) {
-        guard let session = built.removeValue(forKey: id) as? SessionViewController else {
+        guard let pane = built.removeValue(forKey: id) as? ComposerPane else {
             built[id] = nil
             return
         }
-        parked[id] = session.restorationValues
-        session.close()
+        parked[id] = pane.restorationValues
+        pane.close()
     }
+
+    /// The tab's screen when its group's composer writes into it.
+    func pane(_ id: String) -> ComposerPane? { built[id] as? ComposerPane }
 
     /// Keeps only the conversations the workspace still holds.
     func keep(_ ids: Set<String>) {
@@ -98,7 +143,10 @@ final class PaneHost {
     /// for it (design 2b), as there is no session to write to yet.
     func binding(for id: String?) -> SessionComposerBinding? {
         guard let id, !hub.fleet.moving(id) else { return nil }
-        return (controller(for: id) as? SessionViewController)?.composerBinding
+        let screen = controller(for: id)
+        // A thread whose Caw cannot start now has no composer: a line says why in its place.
+        if let thread = screen as? ThreadViewController { return thread.composes ? thread.composerBinding : nil }
+        return (screen as? SessionViewController)?.composerBinding
     }
 
     /// A stored conversation's name, before its transcript has answered.
@@ -140,6 +188,8 @@ final class PaneHost {
     /// transcript's, else its row's folder, else who asked what is parked
     /// on it (an ask no row stands behind: a memory proposal), else its id.
     func label(_ id: String) -> String {
+        // A thread not started yet (FolderMenu.svelte "New thread").
+        if ThreadTabs.newProject(of: id) != nil { return "New thread" }
         let fleet = hub.fleet
         let row = fleet.byId[id]
         if let row, let title = row.title, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

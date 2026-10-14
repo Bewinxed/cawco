@@ -1,3 +1,4 @@
+import CawCoCore
 import CawCoDesign
 import Foundation
 
@@ -14,6 +15,11 @@ nonisolated struct Builder {
     /// The answers this view streamed, by block id: the live row's key each keeps,
     /// so a streamed answer settles into the cells already drawing it (rows.ts `keepLive`).
     var keys: [String: String] = [:]
+    /// The transcript has a voice (a project's Caw, TranscriptVoice): his
+    /// face marks his turns, and what each reply carries stands under it.
+    var voiced = false
+    var extras: [String: ThreadExtras] = [:]
+    var voiceRevision = 0
 
     /// rows' kinds that never paint (Transcript `unpainted`).
     static func unpainted(_ row: Row) -> Bool {
@@ -78,7 +84,11 @@ nonisolated struct Builder {
             return [Item(id: key, top: grouped ? 0 : Space.space4, kind: .user(.init(block: block, grouped: grouped, runsOn: runsOn)),
                          print: Self.print(block) + "\(grouped)\(runsOn)")]
         case "assistant":
-            return pieces(id: keys[key] ?? key, source: block.content, grouped: grouped, date: block.date)
+            let turn = pieces(id: keys[key] ?? key, source: block.content, grouped: grouped, date: block.date)
+            // The tasks the reply is about and the files it wrote, under it (MessageRow.svelte).
+            guard let carried = extras[block.id] else { return turn }
+            let print = "voice:\(voiceRevision):\(carried.tasks.joined(separator: ","))|\(carried.files.joined(separator: ","))"
+            return turn + [Item(id: "\(key):voice", top: Space.space3, kind: .voice(block.id, carried), print: print)]
         case "thinking":
             return [Item(id: key, top: gap, kind: .thinking(.init(key: "think:\(block.id)", text: block.content, live: false, folding: false)),
                          print: block.content)]
@@ -110,7 +120,8 @@ nonisolated struct Builder {
             let tail = streaming && i == sources.count - 1
             let blocks = tail ? MarkdownRender.blocks(PartialSyntax.hide(piece.text)) : cache.blocks(piece.text)
             guard let first = blocks.first else { continue }
-            let header = out.isEmpty && !grouped ? Item.Header(name: agentName, clock: streaming ? nil : Item.clock(date), note: nil, you: false) : nil
+            let header = out.isEmpty && !grouped
+                ? Item.Header(name: agentName, clock: streaming ? nil : Item.clock(date), note: nil, you: false, face: voiced) : nil
             let float = out.isEmpty && grouped ? (streaming ? nil : Item.clock(date)) : nil
             var top = out.isEmpty ? (grouped ? Space.space2 : Space.space4) : above.map { MarkdownRender.gap(after: $0, before: first) } ?? Space.space3
             if piece.joinsAbove, !out.isEmpty { top = 0 }
@@ -119,7 +130,7 @@ nonisolated struct Builder {
             out.append(Item(id: "\(id):\(i)", top: top,
                             kind: .piece(.init(blocks: blocks, header: header, float: float, streaming: tail,
                                                joinsAbove: piece.joinsAbove, joinsBelow: piece.joinsBelow)),
-                            print: piece.text + (header?.clock ?? "") + (float ?? "") + "\(tail)\(grouped)\(piece.joinsAbove)\(piece.joinsBelow)" + agentName))
+                            print: piece.text + (header?.clock ?? "") + (float ?? "") + "\(tail)\(grouped)\(piece.joinsAbove)\(piece.joinsBelow)\(voiced)" + agentName))
             above = blocks.last
         }
         return out

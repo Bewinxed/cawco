@@ -116,7 +116,7 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         panes.installTray(in: dock)
         dock.onInset = { [weak self] inset in
             guard let self else { return }
-            for id in mounted { panes.session(id)?.composerInset = inset }
+            for id in mounted { panes.pane(id)?.composerInset = inset }
         }
         rail.backgroundColor = Palette.inkMuted
         rail.alpha = 0
@@ -270,6 +270,11 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         let label = panes.label(id)
         let activity = context.home.activity(id)
         let face: SessionStatusView.Face = {
+            // A thread is what its status says: Caw working on it, waiting on you in it, or at rest.
+            if ThreadTabs.isThread(id) {
+                if context.hub.state != .connected { return .unreachable }
+                return activity == .blocked ? .needsYou : activity == .working ? .working : .idle
+            }
             guard let row else { return .stored }
             if row.isFailed { return .failed }
             if row.isStale || context.hub.state != .connected { return .unreachable }
@@ -281,7 +286,9 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
             return .idle
         }()
         let status = face == .idle || face == .stored ? "" : face.label
-        return PaneTab(id: id, label: label, face: face, needs: activity == .blocked, isRun: BoardRun.runId(of: id) != nil, status: status)
+        // A thread, like a run, has no session details behind its tab.
+        return PaneTab(id: id, label: label, face: face, needs: activity == .blocked,
+                       isRun: BoardRun.runId(of: id) != nil || ThreadTabs.isThread(id), status: status)
     }
 
     // MARK: Panes
@@ -308,9 +315,14 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
         }
         singleFingerLists(controller.view)
         controller.didMove(toParent: self)
-        if let session = controller as? SessionViewController {
-            session.composerInset = dock.inset
-            session.onTranscriptShare = { [weak self] in self?.shareChanged() }
+        if var pane = controller as? ComposerPane {
+            pane.composerInset = dock.inset
+            pane.onTranscriptShare = { [weak self] in self?.shareChanged() }
+        }
+        // A thread's composer comes when Caw can start, and goes when he cannot.
+        (controller as? ThreadViewController)?.onComposes = { [weak self, weak controller] in
+            guard let self, let thread = controller as? ThreadViewController, shownId == thread.viewId else { return }
+            dock.bind(panes.binding(for: thread.viewId), direction: 0, landing: 0)
         }
         layoutPanes()
     }
@@ -318,7 +330,7 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
     /// The composer stands over the active conversation's transcript, not
     /// over a side preview beside it.
     private func shareChanged() {
-        dock.transcriptShare = shownId.flatMap { panes.session($0)?.transcriptShare } ?? 1
+        dock.transcriptShare = shownId.flatMap { panes.pane($0)?.transcriptShare } ?? 1
     }
 
     private func unmount(_ id: String) {
@@ -490,7 +502,8 @@ final class PaneGroupController: UIViewController, UIDropInteractionDelegate {
     /// a tab's long press, its pull down and VoiceOver all offer (`TabAction`).
     private func actions(for id: String) -> [[TabAction]] {
         var first: [TabAction] = []
-        if BoardRun.runId(of: id) == nil {
+        // A run and a Caw thread are no harness session: no details, no continuing.
+        if BoardRun.runId(of: id) == nil, !ThreadTabs.isThread(id) {
             first.append(TabAction(title: "Session details") { [weak self] in
                 guard let self else { return }
                 tabDetails.pin(id, tab: strip.tabView(id))

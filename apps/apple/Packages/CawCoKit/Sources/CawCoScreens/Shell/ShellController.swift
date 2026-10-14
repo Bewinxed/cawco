@@ -134,6 +134,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         panes.onOpen = { [weak self] id in self?.openSession(id) }
         panes.onEditWorkflow = { [weak self] id in self?.go(.workflow(id: id, program: true)) }
         panes.continueHandler = { [weak self] id in self?.newSession.continueSession(id) }
+        // A Caw thread's task cards, its way to the board, its machines line and its first message's new tab.
+        panes.onOpenTask = { [weak self] projectId, taskId in self?.openTask(projectId: projectId, taskId: taskId, attempt: nil) }
+        panes.onOpenProject = { [weak self] projectId in self?.go(.project(projectId)) }
+        panes.onCheckMachines = { [weak self] source in self?.openMachines(from: source) }
+        panes.onRetarget = { [weak self] from, to in self?.workspace.retarget(from, to: to) }
         // The details' "N MCP" leads to the fleet's MCP configuration (`/config/mcp`).
         panes.onOpenMcp = { [weak self] in
             self?.dialogPresenter.dismiss(animated: true)
@@ -1282,7 +1287,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// `animated` false: a landing, the conversation put in front with no push.
     private func openSession(_ id: String, animated: Bool) {
         railSheet?.dismiss(animated: true)
-        workspace.open(id)
+        workspace.open(Self.tabId(id, hub: hub))
         // From another place the board and the conversations arrive as one
         // stack; `showWorkspace` then finds them in front on a compact width
         // and does the wide screen's part.
@@ -1290,6 +1295,15 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         showWorkspace(animated: animated)
         hostTabs()
         rail.requestRefresh()
+    }
+
+    /// What opens for `id`: itself, but a project's Caw session is never a
+    /// tab of its own (thread-tabs.ts `inLists`): it opens his newest
+    /// thread, else a new one, so what is said there reaches the thread the
+    /// web shows.
+    static func tabId(_ id: String, hub: HubConnection) -> String {
+        guard let row = hub.fleet.byId[id], row.role == .lead, let projectId = row.projectId else { return id }
+        return hub.threads.of(projectId).first.map { ThreadTabs.tabId($0.id) } ?? ThreadTabs.newTabId(projectId)
     }
 
     /// Puts the workspace where the width shows it.
@@ -1318,11 +1332,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// session's tab comes to the front, the composer already holding the
     /// parked ask, the transcript where it was left. A run is answered in its
     /// run; a fleet-watch notice opens the session it is about. An ask opens
-    /// where it was made (NeedsCard.svelte `href`): the session that made it
-    /// (a curator run's proposal), else its own.
+    /// where it was made (NeedsCard.svelte `href`, ParkedAsk `paneId`): Caw's
+    /// thread, the session that made it (a curator run's proposal), else its own.
     private func openWaiting(_ item: HomeModel.NeedsItem) {
         switch item.kind {
-        case let .ask(ask): openSession(ask.originInstanceId ?? ask.instanceId)
+        case let .ask(ask): openSession(ask.paneId)
         case let .run(run): openSession(run.rowId)
         case let .watch(notice): openSession(notice.instanceId)
         }
@@ -1405,7 +1419,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private func landIfEmpty() {
         guard !compact, workspace.openIds.isEmpty, home.ready else { return }
         let ask = home.needs.lazy.compactMap { item -> String? in
-            if case let .ask(ask) = item.kind { return ask.originInstanceId ?? ask.instanceId }
+            if case let .ask(ask) = item.kind { return ask.paneId }
             return nil
         }.first
         let latest = hub.fleet.rows.filter { $0.isLive && (home.delegates || $0.parentInstanceId == nil) }.max { hub.fleet.lastAt($0) < hub.fleet.lastAt($1) }?.id

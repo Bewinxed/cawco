@@ -9,6 +9,8 @@ import UIKit
 final class RowEnv {
     var columns = Columns(rail: Size.txXRailNarrow)
     var agentName = "Agent"
+    /// Who answers here, when the pane says (a project's Caw): what his replies carry is drawn through it.
+    var voice: TranscriptVoice?
     var hub: HubConnection?
     var machineId: String?
     var sessionId = ""

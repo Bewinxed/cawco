@@ -345,13 +345,14 @@ public final class SessionsStore {
 
     /// Peek and delegate readers share the same counted transcript watches as
     /// tabs, so one reader closing never drops another reader's stream.
-    public func watchDelegate(_ id: String) { if !id.hasPrefix("run:") { _ = open(id) } }
+    /// A run or a Caw thread streams no transcript of its own: its frames are the board's.
+    public func watchDelegate(_ id: String) { if !id.hasPrefix("run:"), !ThreadTabs.isThread(id) { _ = open(id) } }
     public func unwatchDelegate(_ id: String) { close(id) }
     public func setPeeked(_ id: String?) {
         guard peeked != id else { return }
         if let peeked { close(peeked) }
         peeked = id
-        if let id, !id.hasPrefix("run:") { _ = open(id) }
+        if let id, !id.hasPrefix("run:"), !ThreadTabs.isThread(id) { _ = open(id) }
     }
 
     /// Why the newest page is read: each caller of `read` names itself.

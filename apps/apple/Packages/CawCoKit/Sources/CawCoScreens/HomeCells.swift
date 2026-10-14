@@ -749,7 +749,8 @@ final class SessionRowView: UIView, HoverSessionRow {
 
         /// The session Peek shows: a live instance's. A workflow run has no
         /// tail of its own (its card is its steps), and a stored session no instance.
-        var peek: String? { hover.flatMap { BoardRun.runId(of: $0) == nil ? $0 : nil } }
+        // A run or a thread is opened, never peeked: it is the conversation itself.
+        var peek: String? { hover.flatMap { BoardRun.runId(of: $0) == nil && !ThreadTabs.isThread($0) ? $0 : nil } }
     }
 
     /// HomeRow.svelte's `data-hover-session`: the rail's session card opens over the home's rows too.
@@ -771,6 +772,7 @@ final class SessionRowView: UIView, HoverSessionRow {
         hoverSessionId = content.hover
         mark.beat = (content.beat, content.beats)
         mark.configure(id: content.id, place: content.place, status: content.status, count: content.fold?.count ?? 0, open: content.fold?.open ?? false)
+        mark.portrait = ThreadFace.portrait(content.id, status: content.status, held: mark.portrait)
         title.text = content.title
         title.ink = content.context ? Palette.inkMuted : Palette.inkStrong
         trail.text = content.trail

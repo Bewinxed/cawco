@@ -1079,10 +1079,23 @@ final class SidebarViewController: ObservedViewController {
         }
         let colour = UIMenu(title: "Colour", options: .displayAsPalette, children: swatches)
         let open = UIAction(title: "Open project page", image: Glyph.external.image) { [weak self] _ in self?.host?.go(.project(project.id)) }
+        // A thread with the project's Caw, while he can start: his view is read
+        // as the menu opens, so it says what is true then (FolderMenu.svelte `canTalk`).
+        let newThread = UIDeferredMenuElement.uncached { [weak self] answer in
+            guard let self else { return answer([]) }
+            Task { [hub] in
+                let view = try? await hub.threads.caw(project.id)
+                guard let view, view.problem == nil else { return answer([]) }
+                answer([UIAction(title: "New thread", image: Glyph.chat.image) { [weak self] _ in
+                    self?.host?.openSession(ThreadTabs.newTabId(project.id))
+                }])
+            }
+        }
         var sections: [UIMenuElement] = [
             UIAction(title: "New session here", image: Glyph.plus.image) { [weak self] _ in
                 self?.host?.startSession(machineId: nil, cwd: nil, projectId: project.id)
             },
+            newThread,
             open,
             UIAction(title: pinned ? "Unpin from rail" : "Pin to rail", image: Glyph.pin.image) { [weak self] _ in
                 self?.prefs.togglePin(project.id)

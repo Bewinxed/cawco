@@ -84,15 +84,17 @@ public struct PushNote: Sendable {
     /// attempt opens the same sheet at that attempt.
     public var route: PushRoute { Self.route(fields) }
 
-    /// Where a push whose `cawco` object holds `fields` opens.
+    /// Where a push whose `cawco` object holds `fields` opens (push.ts `PushData`).
     public static func route(_ fields: [String: String]) -> PushRoute {
         let kind = fields["kind"]
         let instanceId = fields["instanceId"]
         switch kind {
         case "ask":
             if let runId = fields["workflowRunId"], !runId.isEmpty { return .session(BoardRun.prefix + runId) }
-            // An ask is opened where it was made: the session whose pane
-            // draws it (a memory curator run's proposal), else its own.
+            // Caw's ask opens the thread it was made in, its card on the composer (push.ts `threadId`).
+            if let threadId = fields["threadId"], !threadId.isEmpty { return .session(ThreadTabs.tabId(threadId)) }
+            // Else where it was made: the session whose pane draws it (a
+            // memory curator run's proposal), else its own.
             if let origin = fields["originInstanceId"], !origin.isEmpty { return .session(origin) }
             if let instanceId, !instanceId.isEmpty { return .session(instanceId) }
             return .board

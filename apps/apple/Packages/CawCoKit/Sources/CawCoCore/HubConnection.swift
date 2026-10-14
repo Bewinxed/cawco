@@ -141,18 +141,17 @@ public final class HubConnection {
         fleet.byId[id] == nil ? needs.parked[id] ?? [] : []
     }
 
-    /// The session a row-less ask under `id` was made in (SessionPane.svelte
-    /// `madeIn`): a pane opened on `id` moves there, where the ask is drawn
-    /// and answered in the composer.
+    /// Where a row-less ask under `id` is drawn and answered: the Caw thread
+    /// it was made in (`thread:<id>`), else the session it was made in
+    /// (SessionPane.svelte `madeIn`). A pane opened on `id` moves there.
     public func askOrigin(_ id: String) -> String? {
-        rowlessAsks(id).lazy.compactMap(\.originInstanceId).first
+        rowlessAsks(id).lazy.compactMap { $0.threadId.map(ThreadTabs.tabId) ?? $0.originInstanceId }.first
     }
 
-    /// A row-less ask made in no session the app draws: its pane is that
-    /// ask's card alone (SessionPane.svelte `askAlone`). One Caw made in a
-    /// thread is here too until the app has a thread screen.
+    /// A row-less ask made in no thread and in no session the app draws: its
+    /// pane is that ask's card alone (SessionPane.svelte `askAlone`).
     public func askAlone(_ id: String) -> Bool {
-        rowlessAsks(id).contains { $0.originInstanceId == nil }
+        rowlessAsks(id).contains { $0.threadId == nil && $0.originInstanceId == nil }
     }
     public private(set) var sessions: SessionsStore!
     public private(set) var tasks: TasksStore!
@@ -171,6 +170,10 @@ public final class HubConnection {
     /// changes (`thread.upsert`): Caw drafts a view in a thread, so the
     /// project's views are read again when it moves, as the web's are.
     public private(set) var threadsMoved: [String: Int] = [:]
+    /// Every project's threads with its Caw, and the messages of those opened here.
+    public private(set) var threads: ThreadsStore!
+    /// The plans followed beside the sessions streamed: a thread's lead's.
+    public let plans = PlanFollows()
 
     @ObservationIgnored private var projectStopListeners: [UUID: (Components.Schemas.ProjectStopFrame) -> Void] = [:]
 
@@ -219,6 +222,16 @@ public final class HubConnection {
         workItems = WorkItemsStore(hub: self)
         workflowRuns = WorkflowRunsStore(hub: self)
         workflows = WorkflowsStore(hub: self)
+        threads = ThreadsStore(hub: self)
+        threads.onThreads = { [weak self] in
+            guard let self else { return }
+            fleet.adopt(threads: Array(threads.byId.values))
+        }
+        plans.post = { [weak self] data in
+            guard let self, socket == .connected, let live else { return false }
+            live.post(data)
+            return true
+        }
         ledger.applyFrame = { [weak self] id, data in self?.sessions.apply(id, data: data) }
         ledger.rereadHistory = { [weak self] id, cause in self?.sessions.read(id, because: cause) }
         hubNewer = HubNewer.met
@@ -344,6 +357,7 @@ public final class HubConnection {
         tasks.reset()
         workItems.reset()
         workflowRuns.reset()
+        threads.reset()
         live = nil
         for waiter in waiters.values { waiter.resume(throwing: URLError(.cancelled)) }
         waiters = [:]
@@ -369,6 +383,7 @@ public final class HubConnection {
         workItems.reset()
         workflowRuns.reset()
         workflows.reset()
+        threads.reset()
     }
 
     private func start() {
@@ -445,6 +460,7 @@ public final class HubConnection {
         incompatible = nil
         sessions.reconnected()
         workItems.reconnected()
+        plans.reconnected()
         readFleet(after: .seconds(1))
         if let address { PushRegistry.shared.connected(to: address) }
     }
@@ -876,6 +892,8 @@ public final class HubConnection {
         // What the socket says about asks from here on is newer than the read.
         let adopt = await Self.readFleet(client, asksFrom: needs.heardMark)
         guard adopt(self) else { return false }
+        // Every project's threads, for the rail and the thread screens; frames keep them from here.
+        await threads.readAll()
         await workflows.refresh()
         return true
     }
@@ -1171,6 +1189,8 @@ public final class HubConnection {
                 apply(frame)
             case let .notificationsCleared(ids):
                 NotificationSync.socketCleared(ids)
+            case let .plan(data):
+                plans.take(data)
             case .other:
                 break
             }
@@ -1208,6 +1228,11 @@ public final class HubConnection {
         case let .permissionRequest(ask, routedTo, machineId):
             needs.park(ask, routedTo: routedTo, machineId: machineId)
         case let .permissionSettled(settled):
+            // Withdrawn, not answered: a thread's ask leaves its quiet line there.
+            if settled.outcome == .cancelled,
+               let ask = needs.parked[settled.instanceId]?.first(where: { $0.requestId == settled.requestId }), ask.threadId != nil {
+                threads.withdraw(ask, reason: settled.reason)
+            }
             needs.settle(settled.instanceId, settled.requestId)
         case let .runQuestion(runId, raisedAt):
             // Represented once, by its waiting run; only the moment it was parked is kept.
@@ -1238,13 +1263,11 @@ public final class HubConnection {
             fleet.adopt(spend: frame.spend)
             // The hub says this when an account's reading, sign-in or catalog moved.
             readAccounts()
-        case let .thread(projectId):
-            if let projectId { threadsMoved[projectId, default: 0] += 1 }
-            // Said once per connection object, never per frame: threads arrive for every Caw thread.
-            if !threadsNoted {
-                threadsNoted = true
-                log.info("hub sends Caw thread frames; this app has no thread screen yet, so they only move their project's views")
-            }
+        case let .threadUpsert(thread):
+            threads.adopt(thread)
+            threadsMoved[thread.projectId, default: 0] += 1
+        case let .threadMessage(note):
+            if let note { threads.adopt(note) }
         case let .preview(frame):
             previews.adopt(frame)
         case let .moves(jobs):
@@ -1259,9 +1282,6 @@ public final class HubConnection {
             break
         }
     }
-
-    /// The first thread frame has been logged.
-    @ObservationIgnored private var threadsNoted = false
 
     struct ControlError: LocalizedError {
         let message: String

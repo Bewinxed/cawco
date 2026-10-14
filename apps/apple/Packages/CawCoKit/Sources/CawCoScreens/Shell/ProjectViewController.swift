@@ -56,6 +56,13 @@ final class ProjectViewController: ObservedViewController {
     /// The hub's refusal of a move, on the card it refused, until that card moves again.
     private var refusals: [String: (reason: String, stage: String)] = [:]
     private var more: UIButton!
+    /// The project's Caw: his seat on the head, and his words in the line's place while he has some.
+    private lazy var lead = ProjectCawLead(hub: context.hub, projectId: projectId)
+    private let seat = ProjectCawSeat()
+    private let cawWords = UIButton(configuration: .plain())
+    /// The line under the name: where the project lives, while Caw has nothing to say.
+    private var placeLine: UIView?
+    private var leadReadOn = ""
     private var headTop: NSLayoutConstraint!
     private var headLeading: NSLayoutConstraint!
     private var headTrailing: NSLayoutConstraint!
@@ -201,7 +208,17 @@ final class ProjectViewController: ObservedViewController {
         let actions = UIStackView(arrangedSubviews: [acts, spinOffProblem])
         actions.axis = .vertical
         actions.spacing = Space.space1
-        head.addArrangedSubview(who)
+        // Caw on the head's leading edge (ProjectHead.svelte): his panel on a tap.
+        seat.addAction(UIAction { [weak self] _ in self?.openCaw() }, for: .touchUpInside)
+        let identity = UIStackView(arrangedSubviews: [seat, who])
+        identity.spacing = Space.space3
+        identity.alignment = .center
+        cawWords.addAction(UIAction { [weak self] _ in self?.openAsk() }, for: .touchUpInside)
+        cawWords.configuration?.contentInsets = .zero
+        cawWords.contentHorizontalAlignment = .leading
+        cawWords.isHidden = true
+        who.addArrangedSubview(cawWords)
+        head.addArrangedSubview(identity)
         head.addArrangedSubview(actions)
         head.isLayoutMarginsRelativeArrangement = true
     }
@@ -369,6 +386,43 @@ final class ProjectViewController: ObservedViewController {
         // Spin off starts in the primary checkout at once: only a project with one offers it.
         spinOff.isHidden = primary == nil
         more.accessibilityLabel = "More for \(project.name)"
+        showCaw()
+    }
+
+    /// Caw's face, and his words in the place line's stead while he has
+    /// something to say: what his session is doing, his question as a way
+    /// to its thread (ProjectHead.svelte). His view is read on arrival, on
+    /// each connection, and as a turn begins.
+    private func showCaw() {
+        let hub = context.hub
+        let working = lead.view?.leadInstanceId.flatMap { hub.fleet.activityPulse($0)?.activity } == .working
+        let on = "\(hub.state == .connected)|\(working)|\(hub.threadsMoved[projectId] ?? 0)"
+        if hub.state == .connected, on != leadReadOn {
+            leadReadOn = on
+            Task { [lead] in await lead.read() }
+        }
+        seat.configure(lead.status, sentence: lead.sentence)
+        let words = lead.words
+        placeLine = placeLine ?? place.superview
+        placeLine?.isHidden = words != nil
+        cawWords.isHidden = words == nil
+        let ink = words?.threadId != nil ? Palette.linkInk : Palette.inkMuted
+        cawWords.configuration?.attributedTitle = AttributedString(words?.text ?? "", attributes: TypeScale.typeLabel.container(color: ink))
+        cawWords.isEnabled = words?.threadId != nil
+    }
+
+    private func openCaw() {
+        guard let project else { return }
+        let panel = ProjectCawPanel(lead: lead, hub: context.hub, projectName: project.name,
+                                    openThread: { [weak self] id in self?.context.openSession(ThreadTabs.tabId(id)) },
+                                    openUsage: { [weak self] in self?.context.go(.usage) })
+        KitPopover.present(panel, from: seat, in: self, align: .start)
+    }
+
+    /// His question, as a link: its thread, the card on its composer.
+    private func openAsk() {
+        guard let threadId = lead.words?.threadId else { return }
+        context.openSession(ThreadTabs.tabId(threadId))
     }
 
     private func showNotices(_ project: ProjectRow) {

@@ -112,9 +112,10 @@ final class ComposerDock {
     /// be written to (a run) or no tab at all.
     func bind(_ binding: SessionComposerBinding?, direction: Int, landing: TimeInterval) {
         composer.bind(binding, direction: direction, landing: landing)
-        // One conversation's tray hands its place to the next.
-        tray?.parentId = binding?.sessionId
-        composer.trayWanted = tray != nil && binding != nil
+        // One conversation's tray hands its place to the next; a Caw thread has none.
+        let delegates = binding?.delegates ?? false
+        tray?.parentId = delegates ? binding?.sessionId : nil
+        composer.trayWanted = tray != nil && delegates
         show(binding != nil)
     }
 

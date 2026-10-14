@@ -71,6 +71,27 @@ public final class SessionMarkView: UIView {
     private var over = false
     private var hue = UIColor.clear
 
+    /// Who stands in the sprite's place, when the row is someone's own (a
+    /// Caw thread's: Caw at what the thread is doing, SessionMark.svelte):
+    /// the tile keeps its face, and this is drawn on it.
+    public var portrait: UIView? {
+        didSet {
+            guard portrait !== oldValue else { return }
+            oldValue?.removeFromSuperview()
+            sprite.isHidden = portrait != nil
+            guard let portrait else { return }
+            portrait.translatesAutoresizingMaskIntoConstraints = false
+            portrait.isUserInteractionEnabled = false
+            face.addSubview(portrait)
+            NSLayoutConstraint.activate([
+                portrait.centerXAnchor.constraint(equalTo: face.centerXAnchor),
+                portrait.centerYAnchor.constraint(equalTo: face.centerYAnchor),
+                portrait.widthAnchor.constraint(equalToConstant: side),
+                portrait.heightAnchor.constraint(equalToConstant: side),
+            ])
+        }
+    }
+
     /// Opens and folds the rows under it from the mark's own hit area; without it the mark only says the count.
     public var onToggle: (() -> Void)? {
         didSet { arm() }

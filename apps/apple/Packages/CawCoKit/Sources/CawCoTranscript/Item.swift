@@ -1,4 +1,5 @@
 import CawCoAPI
+import CawCoCore
 import Foundation
 
 /// One cell of the transcript list: a row, or one call of a run, or one
@@ -32,6 +33,8 @@ nonisolated struct Item: Sendable {
         case retry(String)
         /// The read said the conversation is empty (EmptyState).
         case empty
+        /// What a reply of a transcript's voice carries under it (Caw's tasks and files), by its block id.
+        case voice(String, ThreadExtras)
     }
 
     /// One block of an assistant turn (MessageRow's `.turn`, LiveRow's answer).
@@ -53,6 +56,8 @@ nonisolated struct Item: Sendable {
         let clock: String?
         let note: String?
         let you: Bool
+        /// The speaker is a transcript's voice (a project's Caw): his face is the mark.
+        var face = false
     }
 
     /// The reader's own turn (MessageRow `.turn.you`).

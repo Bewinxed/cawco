@@ -1,5 +1,6 @@
 import CawCoCore
 import CawCoDesign
+import CawCoMascot
 import UIKit
 
 /// The role label leading a turn (Who.svelte): the speaker's mark, the name,
@@ -56,8 +57,26 @@ final class WhoView: UIView {
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("built in code") }
 
+    /// A voice's face in the mark's place (Who.svelte `voice.face`): Caw, still.
+    private var face: UIView?
+
     func configure(_ header: Item.Header) {
         you = header.you
+        let voiced = header.face && !header.you
+        mark.isHidden = voiced
+        if voiced, face == nil, let box = mark.superview {
+            let made = CawMark(status: .ready, side: Size.rowMarkBox)
+            made.translatesAutoresizingMaskIntoConstraints = false
+            box.addSubview(made)
+            NSLayoutConstraint.activate([
+                made.centerXAnchor.constraint(equalTo: box.centerXAnchor),
+                made.centerYAnchor.constraint(equalTo: box.centerYAnchor),
+                made.widthAnchor.constraint(equalToConstant: Size.rowMarkBox),
+                made.heightAnchor.constraint(equalToConstant: Size.rowMarkBox),
+            ])
+            face = made
+        }
+        face?.isHidden = !voiced
         // The reader's mark: 17pt in the action material, centred in the 18pt cell.
         markSide.constant = you ? Size.rowMark : Size.rowMarkBox
         markLead.constant = you ? Size.wellX : 0

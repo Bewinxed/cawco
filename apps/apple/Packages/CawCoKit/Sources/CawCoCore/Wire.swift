@@ -134,6 +134,8 @@ enum Inbound {
     /// `{ type: "notificationsCleared", collapseIds }`: notifications cleared
     /// on another device, which this one removes (`NotificationSync`).
     case notificationsCleared([String])
+    /// A followed session's plan, whole or changed (`plan.snapshot`, `plan.delta`).
+    case plan(Data)
     case other
 
     private struct Cleared: Decodable {
@@ -194,6 +196,9 @@ enum Inbound {
         if route.type == "notificationsCleared" {
             return .notificationsCleared(try decoder.decode(Cleared.self, from: data).collapseIds)
         }
+        if route.type == "plan.snapshot" || route.type == "plan.delta" {
+            return .plan(data)
+        }
         guard route.verb == "frames" else {
             return .other
         }
@@ -233,10 +238,10 @@ enum Frame {
     case workflow(Components.Schemas.WorkflowFrame)
     /// A delegate's work item changed: its parent's tray reads it.
     case workItem(Components.Schemas.WorkItemSummary)
-    /// A Caw thread's row or message (wire protocol 6). The app has no thread
-    /// screen yet; a row's change names its project, whose views are read
-    /// again on it (Caw drafts a view in a thread). A message alone names none.
-    case thread(projectId: String?)
+    /// A Caw thread started, or its last message or status changed.
+    case threadUpsert(ThreadSummary)
+    /// A message added to a Caw thread; nil when it does not read as one.
+    case threadMessage(ThreadNote?)
     /// A session's preview opened, changed or closed.
     case preview(Components.Schemas.PreviewFrame)
     /// Every project move the hub is carrying, whole, on each change.
@@ -279,9 +284,9 @@ enum Frame {
         case .workItem(let frame):
             self = .workItem(frame.item)
         case .thread_upsert(let frame):
-            self = .thread(projectId: frame.thread.projectId)
-        case .thread_message:
-            self = .thread(projectId: nil)
+            self = .threadUpsert(frame.thread)
+        case .thread_message(let frame):
+            self = .threadMessage(ThreadNote.read(frame.message))
         case .preview(let frame):
             self = .preview(frame)
         case .moves(let frame):

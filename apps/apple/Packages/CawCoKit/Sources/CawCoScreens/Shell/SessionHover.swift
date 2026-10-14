@@ -153,6 +153,8 @@ final class SessionHover: NSObject {
 
     /// The session whose tail a card draws: its own, or for a workflow run its running step's.
     private func tailId(of id: String) -> String? {
+        // A thread's card has no tail: it is the conversation itself.
+        if ThreadTabs.isThread(id) { return nil }
         guard let runId = BoardRun.runId(of: id) else { return id }
         return hub.workflowRuns.details[runId]?.run?.steps.first { $0.status == "running" && $0.instanceId != nil }?.instanceId
     }

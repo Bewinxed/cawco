@@ -468,7 +468,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             cell.row.configure(content)
             // LiveSessionMenu, read from the fleet as it opens; a workflow run takes no session commands.
             cell.row.menu = { [weak self] copy in
-                guard let self, let context = sessionMenus?()?.at(workPlace), BoardRun.runId(of: id) == nil, let now = hub.fleet.byId[id] else { return nil }
+                guard let self, let context = sessionMenus?()?.at(workPlace), BoardRun.runId(of: id) == nil, !ThreadTabs.isThread(id), let now = hub.fleet.byId[id] else { return nil }
                 let archive: (() -> Void)? = content.archives ? { [weak self] in
                     guard let self else { return }
                     home.archive(home.treeOf(id))
@@ -525,7 +525,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             cell.row.menu = { [weak self] copy in
                 guard let self, let context = sessionMenus?()?.at(Self.recentPlace), let recent = recentItems[id] else { return nil }
                 if let held = recent.instance {
-                    guard BoardRun.runId(of: held.id) == nil, let now = hub.fleet.byId[held.id] else { return nil }
+                    guard BoardRun.runId(of: held.id) == nil, !ThreadTabs.isThread(held.id), let now = hub.fleet.byId[held.id] else { return nil }
                     return SessionMenus.live(now, context: context, copy: copy)
                 }
                 let fleet = hub.fleet

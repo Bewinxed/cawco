@@ -24,9 +24,13 @@ public struct TaskRefusal: Error, LocalizedError {
     public let message: String
     public var errorDescription: String? { message }
 
+    public init(message: String) {
+        self.message = message
+    }
+
     /// The sentence a non-OK answer carries: every error response here is
     /// `text/plain`, found in whichever case the operation's output took.
-    static func reading(_ output: some Sendable) async -> TaskRefusal {
+    public static func reading(_ output: some Sendable) async -> TaskRefusal {
         guard let body = Self.body(in: output),
               let raw = try? await String(collecting: body, upTo: 64_000)
         else { return TaskRefusal(message: "The hub could not be reached. Try again.") }

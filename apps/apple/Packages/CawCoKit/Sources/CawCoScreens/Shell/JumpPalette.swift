@@ -13,7 +13,7 @@ import UIKit
 // MARK: Index
 
 /// Which group a row belongs to: its mark and its cap.
-enum JumpKind { case project, machine, live, stored }
+enum JumpKind { case project, thread, machine, live, stored }
 
 /// Where a row goes.
 enum JumpTarget {
@@ -62,8 +62,8 @@ struct JumpIndex {
     /// sessionId → its title, so a transcript hit can name its conversation.
     var sessionTitles: [String: String] = [:]
 
-    static let names = ["Projects", "Machines", "Running sessions", "Recent sessions"]
-    static let caps: [String: Int] = ["Projects": 8, "Machines": 8, "Running sessions": 10, "Recent sessions": 16]
+    static let names = ["Projects", "Threads", "Machines", "Running sessions", "Recent sessions"]
+    static let caps: [String: Int] = ["Projects": 8, "Threads": 8, "Machines": 8, "Running sessions": 10, "Recent sessions": 16]
     /// The empty query is a preview, not a listing.
     static let previewCap = 8
     static let recentPerMachine = 8
@@ -72,18 +72,26 @@ struct JumpIndex {
     static func build(hub: HubConnection, home: HomeModel) -> JumpIndex {
         let fleet = hub.fleet
         let leaf = { (path: String) in path.split(separator: "/").last.map(String.init) ?? path }
-        var lists: [[JumpRow]] = [[], [], [], []]
+        var lists: [[JumpRow]] = [[], [], [], [], []]
         for project in fleet.projects {
             lists[0].append(JumpRow(id: "project:\(project.id)", kind: .project, label: project.name, detail: project.primaryPlace?.path ?? "", target: .project(project.id)))
         }
+        let words: [Activity: String] = [.working: "Working", .blocked: "Needs you", .idle: "Idle"]
+        // Every thread with a project's Caw (jump-index.ts `threads`): its project, what it is doing, when it last moved.
+        let projectNames = Dictionary(fleet.projects.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
+        for row in fleet.threadRows {
+            let when = Date(timeIntervalSince1970: fleet.lastAt(row) / 1000).formatted(.relative(presentation: .named))
+            lists[1].append(JumpRow(id: row.id, kind: .thread, label: row.title ?? "Thread",
+                                    detail: "\(row.projectId.flatMap { projectNames[$0] } ?? "") · \(words[home.activity(row.id)] ?? "") · \(when)",
+                                    target: .conversation(row.id)))
+        }
         for machine in fleet.machines where machine.status == "online" {
-            lists[1].append(JumpRow(id: "machine:\(machine.machineId)", kind: .machine, label: machine.name,
+            lists[2].append(JumpRow(id: "machine:\(machine.machineId)", kind: .machine, label: machine.name,
                                     detail: "\(machine.os) · start a session here", target: .machine(machine.machineId)))
         }
-        let words: [Activity: String] = [.working: "Working", .blocked: "Needs you", .idle: "Idle"]
         let running = fleet.rows.filter(\.isLive)
         for row in running {
-            lists[2].append(JumpRow(id: "live:\(row.id)", kind: .live, label: leaf(row.cwd).isEmpty ? row.id : leaf(row.cwd),
+            lists[3].append(JumpRow(id: "live:\(row.id)", kind: .live, label: leaf(row.cwd).isEmpty ? row.id : leaf(row.cwd),
                                     detail: "\(row.cwd.isEmpty ? "—" : row.cwd) · \(words[home.activity(row.id)] ?? "")", target: .conversation(row.id)))
         }
         var destinations = Set(running.map(\.id))
@@ -94,11 +102,12 @@ struct JumpIndex {
                 let title = fleet.storedTitle(info, machineId: machine.machineId)
                 titles[info.sessionId] = title
                 let to = fleet.conversationId(sessionKey: info.sessionId, machineId: machine.machineId, cwd: info.cwd)
-                guard !destinations.contains(to) else { continue }
+                // A project's Caw is his threads: his own transcript is no row (`hidden: leadSessions`).
+                guard !destinations.contains(to), fleet.byId[to]?.role != .lead else { continue }
                 destinations.insert(to)
                 let row = JumpRow(id: "stored:\(machine.machineId):\(info.sessionId)", kind: .stored, label: title,
                                   detail: "\(machine.name) · \(info.cwd ?? "")", target: .conversation(to))
-                lists[3].append(row)
+                lists[4].append(row)
                 if i < recentPerMachine { recentStored.append(row) }
             }
         }
@@ -106,8 +115,8 @@ struct JumpIndex {
         index.sessionTitles = titles
         index.groups = zip(names, lists).filter { !$0.1.isEmpty }.map { (name: $0.0, rows: $0.1) }
         let preview = { (rows: [JumpRow]) in rows.prefix(previewCap).map { RankedRow(row: $0, labelRanges: [], detailRanges: []) } }
-        index.recent = (zip(names.prefix(3), lists.prefix(3)).map { JumpGroup(name: $0.0, rows: preview($0.1)) }
-            + [JumpGroup(name: names[3], rows: preview(recentStored))]).filter { !$0.rows.isEmpty }
+        index.recent = (zip(Self.names.prefix(4), lists.prefix(4)).map { JumpGroup(name: $0.0, rows: preview($0.1)) }
+            + [JumpGroup(name: Self.names[4], rows: preview(recentStored))]).filter { !$0.rows.isEmpty }
         return index
     }
 
@@ -772,6 +781,7 @@ final class JumpCard: GlassContent, UITextFieldDelegate {
     private static func mark(_ kind: JumpKind) -> Glyph {
         switch kind {
         case .project: .folder
+        case .thread: .chatRound
         case .machine: .monitor
         case .live: .cpu
         case .stored: .chat

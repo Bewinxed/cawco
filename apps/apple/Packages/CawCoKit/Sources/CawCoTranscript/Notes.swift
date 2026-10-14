@@ -78,6 +78,32 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
         return reveal.toggle(open: open)
     }
 
+    /// The dashed box a Caw event's line stands in (`.note[data-code] .hline`).
+    private let dashes = CAShapeLayer()
+
+    private func code(_ on: Bool) {
+        line.isLayoutMarginsRelativeArrangement = on
+        line.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: on ? Space.space2 : 0, bottom: 0, trailing: on ? Space.space2 : 0)
+        if on, dashes.superlayer == nil {
+            dashes.fillColor = nil
+            dashes.lineWidth = 1
+            dashes.lineDashPattern = [3, 2]
+            line.layer.addSublayer(dashes)
+        }
+        dashes.isHidden = !on
+        setNeedsLayout()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard !dashes.isHidden, dashes.superlayer != nil else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        dashes.strokeColor = Palette.borderControl.resolvedColor(with: traitCollection).cgColor
+        dashes.path = UIBezierPath(roundedRect: line.bounds.insetBy(dx: 0.5, dy: 0.5), cornerRadius: Radius.radiusXs).cgPath
+        CATransaction.commit()
+    }
+
     /// What the transcript's line reaches below a note's line (21.27 - 18.85 at the label size).
     private static let under = 2.42 * TypeScale.textLabel / 13
 
@@ -128,6 +154,8 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
         responses = nil
         alpha = 1
         var openable = false
+        var coded = false
+        defer { code(coded) }
         switch item.kind {
         case let .harness(note, key):
             self.key = key
@@ -200,6 +228,17 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
                     below.addArrangedSubview(spaced)
                 }
                 alpha = waiting ? Effect.ghostPresence : 1
+            case "ui.system_note" where block.string("noteKind") == ThreadNote.cawEvent:
+                // Something that woke a project's Caw (SystemLine.svelte `wokeCaw`):
+                // its line is code, in the dashed box, with when it happened in
+                // the reader's own time; what happened opens under it.
+                coded = true
+                set(.info, title: noteTitle ?? "")
+                if let at = block.date, let clock = Item.clock(at) {
+                    status.attributedText = words(clock, ink: Palette.inkSubtle, strong: false)
+                    status.isHidden = false
+                }
+                if !block.content.isEmpty { opened.addArrangedSubview(report(block.content)); openable = true }
             case "ui.system_note" where block.string("subtype") == "moved_here":
                 // Where the project came from (core MOVED_HERE): what moved
                 // with the done glyph, and what stayed under it, open.

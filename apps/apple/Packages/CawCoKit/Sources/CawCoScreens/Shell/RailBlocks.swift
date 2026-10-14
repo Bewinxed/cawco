@@ -203,6 +203,7 @@ final class SessionRailRow: RailRow, HoverSessionRow {
     func configure(title: String, status: MarkStatus, word: String, place: String, age text: String, count total: Int, failed: Int, open: Bool) {
         name.text = title
         mark.configure(id: id, place: place, status: status, count: total, open: open)
+        mark.portrait = ThreadFace.portrait(id, status: status, held: mark.portrait)
         age.text = text
         accessibilityLabel = "\(word): \(title)"
         accessibilityValue = text.isEmpty ? nil : text

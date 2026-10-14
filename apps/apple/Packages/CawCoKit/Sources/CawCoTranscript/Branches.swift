@@ -23,6 +23,7 @@ enum RowFactory {
         case .compaction: CompactionDividerView(env: env)
         case .livetool: LiveToolView(env: env)
         case .notice, .retry, .empty: NoticeView(env: env)
+        case .voice: VoiceExtrasView(env: env)
         }
     }
 
@@ -41,6 +42,7 @@ enum RowFactory {
         case .compaction: view is CompactionDividerView
         case .livetool: view is LiveToolView
         case .notice, .retry, .empty: view is NoticeView
+        case .voice: view is VoiceExtrasView
         }
     }
 }

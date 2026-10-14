@@ -348,7 +348,29 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
                 row.append(chip)
             }
             chips.append(row)
-            place(WrapLayout(row), gap: Space.space2)
+            // The reader's own answer, written in the line it opens
+            // (Prompt.svelte "Other"): one of the question's chips, its keycap
+            // the next digit, while a digit is left for it.
+            var shown: [UIView] = row
+            if question.options.count < 9 {
+                let other = OptionChip(key: question.options.count + 1, label: "Other")
+                other.accessibilityIdentifier = "prompt-other-\(qi + 1)"
+                other.accessibilityHint = "Write your own answer. Key \(question.options.count + 1)"
+                other.addAction(UIAction { [weak self] _ in self?.openOther(qi) }, for: .touchUpInside)
+                otherChips[qi] = other
+                shown.append(other)
+            }
+            place(WrapLayout(shown), gap: Space.space2)
+            // The line under the choices it stands in for, before the card's actions.
+            let field = KitField(placeholder: "Your answer…")
+            field.accessibilityLabel = "Your answer to: \(question.question)"
+            field.accessibilityIdentifier = "prompt-other-field-\(qi + 1)"
+            field.returnKeyType = .done
+            field.isHidden = true
+            field.addAction(UIAction { [weak self, weak field] _ in self?.writeOther(field?.text ?? "") }, for: .editingChanged)
+            field.addAction(UIAction { [weak self] _ in self?.otherReturned() }, for: .editingDidEndOnExit)
+            otherFields[qi] = field
+            place(field, gap: Space.space2)
         }
         let answer = Self.button("Answer", glyph: Glyph.answer, kind: .primary) { [weak self] in self?.submitQuestion() }
         let dismiss = Self.button("Dismiss", glyph: nil, kind: .outline) { [weak self] in self?.choose(.deny) }
@@ -358,6 +380,68 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
         let actions = UIStackView(arrangedSubviews: [answer, dismiss, UIView()])
         actions.spacing = Space.space2
         foot.addArrangedSubview(actions)
+    }
+
+    // MARK: Other
+
+    /// The chip and the line of each question's own answer, by question.
+    private var otherChips: [Int: OptionChip] = [:]
+    private var otherFields: [Int: KitField] = [:]
+    /// The question whose line is open (`otherAt`), and what was written
+    /// for each, kept so going back to it finds it there (`others`).
+    private var otherAt: Int?
+    private var others: [String: String] = [:]
+
+    /// Whether a question's answer is the reader's own words (`otherPicked`).
+    private func otherPicked(_ index: Int) -> Bool {
+        let question = ask.questions[index]
+        guard let own = others[question.question]?.trimmingCharacters(in: .whitespacesAndNewlines), !own.isEmpty else { return false }
+        return (picks[question.question] ?? []).contains(own)
+    }
+
+    /// "Other": the line opens for this question's own answer, and words
+    /// already written there are its answer again (`openOther`).
+    private func openOther(_ index: Int) {
+        guard answerable, index < ask.questions.count else { return }
+        current = index
+        otherAt = index
+        writeOther(others[ask.questions[index].question] ?? "")
+        let field = otherFields[index]
+        field?.text = others[ask.questions[index].question] ?? ""
+        onHeight()
+        field?.becomeFirstResponder()
+        #if DEBUG
+        Self.layoutLog.notice("other opened q=\(index + 1, privacy: .public)")
+        #endif
+    }
+
+    /// The line's words become the answer, in place of what they were before (`writeOther`).
+    private func writeOther(_ text: String) {
+        guard let index = otherAt, index < ask.questions.count else { return }
+        let question = ask.questions[index]
+        let was = others[question.question]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let own = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        others[question.question] = text
+        if question.multiSelect == true {
+            let kept = (picks[question.question] ?? []).filter { $0 != was }
+            picks[question.question] = own.isEmpty ? kept : kept + [own]
+        } else {
+            picks[question.question] = own.isEmpty ? [] : [own]
+        }
+        render()
+    }
+
+    /// Return in the line: it sends once every question has an answer, else
+    /// moves on to the first one still unanswered (`otherKey`).
+    private func otherReturned() {
+        if allAnswered {
+            submitQuestion()
+            return
+        }
+        if let next = ask.questions.firstIndex(where: { (picks[$0.question] ?? []).isEmpty }) {
+            current = next
+            render()
+        }
     }
 
     private func toggle(_ index: Int, _ label: String) {
@@ -370,6 +454,12 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
         } else {
             // Re-picking the chosen option clears it, so a mis-keyed digit undoes with the same digit.
             chosen = chosen == [label] ? [] : [label]
+            // A picked option is the answer: the line of its own goes back to waiting.
+            if otherAt == index {
+                otherAt = nil
+                otherFields[index]?.resignFirstResponder()
+                onHeight()
+            }
         }
         picks[question.question] = chosen
         if !chosen.isEmpty, question.multiSelect != true,
@@ -525,6 +615,12 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
             toggle(current, ask.questions[current].options[digit - 1].label)
             return true
         }
+        // The digit after the options is Other's.
+        if ask.isQuestion, let digit = Int(input), current < ask.questions.count,
+           digit == ask.questions[current].options.count + 1, otherChips[current] != nil {
+            openOther(current)
+            return true
+        }
         if input == "\r", ask.isQuestion, allAnswered {
             submitQuestion()
             return true
@@ -550,6 +646,12 @@ public final class PromptCardView: UIView, UIGestureRecognizerDelegate {
             for (i, chip) in row.enumerated() {
                 let label = question.options[i].label
                 chip.configure(selected: (picks[question.question] ?? []).contains(label), live: qi == current && i < 9, enabled: answerable)
+            }
+            otherChips[qi]?.configure(selected: otherPicked(qi) || otherAt == qi, live: qi == current, enabled: answerable)
+            if let field = otherFields[qi] {
+                let open = otherAt == qi
+                if field.isHidden == open { field.isHidden = !open }
+                field.isEnabled = answerable
             }
         }
         let line: String? = refused ?? (pressed == nil && !connected ? "Reconnecting — can't answer yet." : nil)

@@ -48,6 +48,10 @@ actor TranscriptPrep {
         let streams: [String: String]
         let agentName: String
         let keys: [String: String]
+        /// The transcript has a voice (TranscriptVoice), and what its replies carry.
+        var voiced = false
+        var extras: [String: ThreadExtras] = [:]
+        var voiceRevision = 0
     }
 
     /// Each block as last read, with the hub's value it was read from.
@@ -95,6 +99,9 @@ actor TranscriptPrep {
         let rows = Fold.rows(drawn, branches: branches, voices: &voices)
         var builder = Builder(agentName: input.agentName, cache: cache)
         builder.keys = input.keys
+        builder.voiced = input.voiced
+        builder.extras = input.extras
+        builder.voiceRevision = input.voiceRevision
         let (items, rail) = builder.items(rows)
         var fleet: [Int] = []
         var compacts = false

@@ -26,8 +26,20 @@ public final class SessionComposerBinding {
     /// The parked permission and question cards, in arrival order. The pane
     /// builds them; the composer stands them on its pill.
     public var prompts: [UIView] = []
-    /// What Attach offers.
+    /// What Attach offers; none, no Attach (a Caw thread takes words alone).
     public var attachMenu: UIMenu?
+    /// Who answers here, when it is not "the agent" (ComposerBinding
+    /// `agentName`): the field is named for them.
+    public var agentName: String?
+    /// The field's hint, when it is not the session's (`placeholder`).
+    public var placeholder: String?
+    /// What stands on the pill's top-leading corner (`perch`): a project's
+    /// Caw, peeking over the composer. Takes no touches.
+    public var perch: UIView?
+    /// The plan's ring, at the trailing end of the row over the pill (`planRing`).
+    public var ring: UIView?
+    /// The group's delegate tray stands for this conversation (`delegatesOf`).
+    public var delegates = true
     public var onSend: (String, [ComposerAttachment]) -> Void = { _, _ in }
     public var onStop: () -> Void = {}
     /// Pictures and files pasted into the field, for the pane to attach.

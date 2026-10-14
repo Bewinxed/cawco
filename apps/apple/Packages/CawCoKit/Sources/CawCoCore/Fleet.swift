@@ -169,10 +169,23 @@ public final class FleetStore {
     public internal(set) var hubBuild: BuildInfo?
     /// The hub's session rows as it sent them.
     private var hubRows: [InstanceRow] = []
-    /// The sessions, each workflow step hung under its run (`stepUnderRun`).
+    /// The sessions as every list shows them (thread-tabs.ts `inLists`): each
+    /// workflow step hung under its run (`stepUnderRun`), a session Caw's
+    /// work started under the thread it works for, and no project's Caw
+    /// session of its own: a project's Caw is its threads. `byId` still
+    /// holds his session.
     public private(set) var rows: [InstanceRow] = []
     /// Every workflow run as a session row (`runRowOf`).
     public private(set) var runRows: [InstanceRow] = []
+    /// Every thread with a project's Caw as a session row (thread-tabs.ts `threadRowOf`).
+    public private(set) var threadRows: [InstanceRow] = []
+    /// Each thread by its id, as the hub last said (ThreadsStore).
+    private var threads: [Components.Schemas.ThreadSummary] = []
+
+    func adopt(threads next: [Components.Schemas.ThreadSummary]) {
+        threads = next
+        reindex()
+    }
     public internal(set) var runs: [String: BoardRun] = [:] {
         didSet { if indexing { reindex() } }
     }
@@ -193,7 +206,10 @@ public final class FleetStore {
     public internal(set) var runAskRaisedAt: [String: Double] = [:]
     /// The first read of every workflow and its runs came back, or failed.
     public internal(set) var runsRead = false
-    public internal(set) var projects: [Components.Schemas.GetApiProjects200Payload] = []
+    /// The projects; a thread's row stands at its project's primary checkout, so they are indexed again with it.
+    public internal(set) var projects: [Components.Schemas.GetApiProjects200Payload] = [] {
+        didSet { if indexing, !threads.isEmpty { reindex() } }
+    }
     /// The continuations the hub is carrying, settled ones for a few minutes after.
     public internal(set) var continuations: [Components.Schemas.ContinuationJob] = []
     /// The project moves the hub is carrying (core move.ts), settled ones for a
@@ -356,20 +372,57 @@ public final class FleetStore {
     }
 
     private func reindex() {
-        rows = hubRows.map(stepUnderRun)
+        let all = hubRows.map(stepUnderRun).map(underThread)
+        rows = all.filter { $0.role != .lead }
         runRows = runs.values.sorted { $0.startedAt > $1.startedAt }.map(runRow)
+        let places = Dictionary(projects.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        threadRows = threads.sorted { $0.lastAt > $1.lastAt }.compactMap { thread in
+            places[thread.projectId].map { threadRow(thread, project: $0) }
+        }
         var index: [String: InstanceRow] = [:]
-        for row in rows + runRows {
+        for row in all + runRows + threadRows {
             index[row.id] = row
         }
         byId = index
         var sessions: [String: [InstanceRow]] = [:]
-        for row in rows {
+        for row in all {
             if let key = row.sessionId {
                 sessions[key, default: []].append(row)
             }
         }
         bySession = sessions
+    }
+
+    /// A session Caw's work started hangs under the thread it works for
+    /// (thread-tabs.ts `underThread`): that thread is where the work was asked for.
+    private func underThread(_ row: InstanceRow) -> InstanceRow {
+        guard let threadId = row.threadId, row.role != .lead else { return row }
+        var row = row
+        row.parentInstanceId = ThreadTabs.tabId(threadId)
+        return row
+    }
+
+    /// A thread as a session row under its project (thread-tabs.ts
+    /// `threadRowOf`): running while Caw works on it or waits on you in it,
+    /// at rest otherwise, at the project's primary checkout, else its folder
+    /// on the hub; its age its newest message's.
+    private func threadRow(_ thread: Components.Schemas.ThreadSummary, project: Components.Schemas.GetApiProjects200Payload) -> InstanceRow {
+        let place = project.primaryPlace ?? project.places.first
+        return InstanceRow(
+            cwd: place?.path ?? "projects/\(project.id)",
+            id: ThreadTabs.tabId(thread.id),
+            launchDir: .known,
+            machineId: place?.machineId ?? "hub",
+            projectId: thread.projectId,
+            status: thread.status == .ready ? .sleeping : .running,
+            title: thread.title,
+            updatedAt: .init(value1: Date(timeIntervalSince1970: thread.lastAt / 1000))
+        )
+    }
+
+    /// The thread a row is, when it is one.
+    public func thread(_ rowId: String) -> Components.Schemas.ThreadSummary? {
+        ThreadTabs.threadId(of: rowId).flatMap { id in threads.first { $0.id == id } }
     }
 
     /// A step's session hangs under its run, called by its step alone: the hub
@@ -576,15 +629,12 @@ public struct ParkedAsk: Sendable {
     /// names it. An ask no session row stands behind (a project's memory
     /// proposal, hub memory.ts) has only this; its machine is "hub".
     public let machineId: String
-    /// An ask a project's Caw made (his question, a project setting, a memory
-    /// proposal he asked about): the thread it was made in, where the web
-    /// draws and answers it. The app has no thread screen yet, so such an
-    /// ask parked under its own id stays its card alone (`HubConnection.askAlone`).
+    /// An ask a project's Caw made: the thread it was made in, drawn and answered there.
     public let threadId: String?
-    /// The session whose conversation made this ask, when it is parked under
-    /// an id of its own (a memory curator run's proposal on machine "hub"):
-    /// that session's pane draws and answers it (SessionPane.svelte `parked`).
+    /// The session whose pane draws the ask when it is not its own (a memory curator run's proposal).
     public let originInstanceId: String?
+    /// The call the ask gates, as its transcript names it.
+    public let toolUseId: String?
 
     init(_ frame: AskFrame, routedTo: String?, machineId: String) {
         instanceId = frame.instanceId
@@ -593,11 +643,17 @@ public struct ParkedAsk: Sendable {
         input = frame.input
         presentation = frame.presentation
         raisedAt = frame.raisedAt
-        threadId = frame.threadId
-        originInstanceId = frame.originInstanceId
         self.routedTo = routedTo
         self.machineId = machineId
+        threadId = frame.threadId
+        originInstanceId = frame.originInstanceId
+        toolUseId = frame.toolUseId
     }
+
+    /// Where the ask is drawn and answered: the Caw thread it was made in,
+    /// else the session it was made in (a memory curator run's proposal),
+    /// else its own session's pane (home-state.svelte.ts `thread`, `origin`).
+    public var paneId: String { threadId.map(ThreadTabs.tabId) ?? originInstanceId ?? instanceId }
 
     public var isQuestion: Bool { Naming.questions(toolName, input.value) != nil }
     public var questions: [Components.Schemas.UserQuestion] { Naming.questions(toolName, input.value) ?? [] }
