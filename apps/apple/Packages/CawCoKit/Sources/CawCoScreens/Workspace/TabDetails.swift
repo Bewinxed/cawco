@@ -31,7 +31,13 @@ final class TabDetails: NSObject, UIGestureRecognizerDelegate {
     private weak var presenter: UIViewController?
     private var card: Card?
     private var details: SessionDetailsController?
-    private weak var anchor: UIView?
+    /// The tab the card hangs from. A tab the card leaves stands on its own
+    /// feet again (`TabView.flushLeading`).
+    private weak var anchor: UIView? {
+        didSet {
+            if oldValue !== anchor { (oldValue as? TabView)?.flushLeading = false }
+        }
+    }
     private(set) var openId: String?
     private(set) var pinned = false
     private var timer: Task<Void, Never>?
@@ -252,6 +258,9 @@ final class TabDetails: NSObject, UIGestureRecognizerDelegate {
         let size = details.preferredContentSize
         // As tall as what it holds up to 760pt; before its content has been measured, a first 240pt.
         let spot = spot(in: host, for: anchor, height: size.height > 0 ? min(760, size.height) : 240)
+        // Hung flush with the tab: its card's foot and its sheet's are square
+        // on that side, so its flank runs straight down into the card's side.
+        (anchor as? TabView)?.flushLeading = spot.neck.flush == .start
         // Standing there already: nothing to move.
         if card.frame == spot.frame, card.hang.neck == spot.neck { return }
         let box = { (r: CGRect) in String(format: "%.2f %.2f %.2f %.2f", r.minX, r.minY, r.width, r.height) }
@@ -275,6 +284,7 @@ final class TabDetails: NSObject, UIGestureRecognizerDelegate {
         outside = []
         pinned = false
         openId = nil
+        (anchor as? TabView)?.flushLeading = false
         guard let card, let details else { return }
         self.card = nil
         self.details = nil
@@ -341,6 +351,7 @@ final class TabDetails: NSObject, UIGestureRecognizerDelegate {
         outside = []
         pinned = false
         openId = nil
+        (anchor as? TabView)?.flushLeading = false
         self.card = nil
         self.details = nil
         card.hang.settle(open: false, velocity: velocity) {

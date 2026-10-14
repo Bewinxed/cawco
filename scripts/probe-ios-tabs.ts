@@ -10,7 +10,7 @@
  * takes the pages while a tap's switch runs carries the strip on from where
  * it was drawn, with no jump.
  *
- *   bun scripts/probe-ios-tabs.ts [--built] [--keep]
+ *   bun scripts/probe-ios-tabs.ts [--built] [--keep] [--only phone|pad] [--style light|dark]
  *
  * Run from the repo root on the Mac itself (a CawCo workspace on the Mac
  * included). It:
@@ -37,10 +37,18 @@
  *     until it takes the tap's own switch between 0.1 and 0.9 of the way;
  *  4. checks every logged frame and copies the captures and the log to
  *     $TMPDIR/ios-tabs/ (or ./.probe/ios-tabs). At each held stop it also
- *     reads every tab's flared feet (the web proof's "feet"): each foot in
- *     front and in view draws its ink within 0.03 of its sheet's opacity,
- *     against the same foot drawn whole in the same frame, and a side under
- *     its neighbour's card has no foot to draw and changes no pixel.
+ *     reads every tab's flared feet (the web proof's "feet"): every tab
+ *     stands on the flared foot, chosen or not, so each foot in front and in
+ *     view draws its ink within 0.03 of 1 - its seam's glide, against the
+ *     same foot drawn whole in the same frame, and a side under its
+ *     neighbour's card has no foot to draw and changes no pixel. From the
+ *     layer geometry the app logs (`tabs geom`, `tabs ft`): at rest with the
+ *     first tab chosen, every inactive tab's free side's flared foot is the
+ *     chosen tab's, card and rim, and its side under its neighbour is
+ *     folded; on every frame each side's plain foot is its seam's glide and
+ *     its flared foot the rest, so the plain foot shows only on a gliding
+ *     seam (the held step at t = 0, 0.5, 1: none, the gliding seam's two
+ *     sides whole, none).
  *
  * Prints `PASS <check>` / `FAIL <check>` and exits 0 only if all pass. It
  * stops only what it started; the simulators it created are deleted.
@@ -52,6 +60,13 @@ import { type Seen, scratchFleet, until } from "./scratch-fleet";
 
 const args = process.argv.slice(2);
 const keep = args.includes("--keep");
+/** `--only phone|pad`, `--style light|dark`: one device, one appearance. */
+const flag = (name: string) => {
+  const at = args.indexOf(name);
+  return at >= 0 ? args[at + 1] : undefined;
+};
+const only = flag("--only");
+const styleOnly = flag("--style");
 const root = resolve(import.meta.dir, "..");
 const out = join(process.env.TMPDIR ?? join(root, ".probe"), "ios-tabs");
 await mkdir(out, { recursive: true });
@@ -660,11 +675,19 @@ type Foot =
   | { kind: "free"; ink: number; whole: number }
   | { kind: "under"; path: boolean; px: number }
   | { kind: "out" };
-const FEET = /tabs feet (\S+) (\S+) sheet=(\S+) lead=(\S+) trail=(\S+)/;
-/** How far a foot's ink may stand off its sheet's opacity at any held stop. */
+const FEET =
+  /tabs feet (\S+) (\S+) sheet=(\S+) glide=([\d.]+),([\d.]+) lead=(\S+) trail=(\S+)/;
+/** How far a foot's ink may stand off 1 - its seam's glide at any held stop. */
 const FOOT_TOLERANCE = 0.03;
-/** Under this whole (summed channel change, 0 to 3 a pixel) a foot is too faint to read. */
-const FOOT_LEAST = 3;
+/**
+ * Under this whole (summed channel change, 0 to 3 a pixel) a foot is too
+ * faint to read: a gliding side beside a rimless tab leans its strength to
+ * a tenth, and there a whole of 3 read 0.135 for 0.100 drawn, one 8-bit step
+ * on a few pixels past the tolerance, where every foot of 17 or more read
+ * within 0.008 (iPad, light). Its drawn opacity is read exactly every
+ * frame (`judgeFootFrames`).
+ */
+const FOOT_LEAST = 10;
 
 function parseFoot(text: string): Foot {
   const [kind, a, b] = text.split(":");
@@ -687,9 +710,10 @@ function parseFeet(log: string) {
             stop: m[1],
             id: m[2],
             sheet: +m[3],
+            glide: { lead: +m[4], trail: +m[5] },
             sides: [
-              ["lead", parseFoot(m[4])],
-              ["trail", parseFoot(m[5])],
+              ["lead", parseFoot(m[6])],
+              ["trail", parseFoot(m[7])],
             ] as const,
           },
         ]
@@ -702,57 +726,254 @@ const readable = (f: Foot): f is Extract<Foot, { kind: "free" }> =>
   f.kind === "free" && f.whole >= FOOT_LEAST;
 
 /**
- * The feet are the sheet's (PaneTabs.svelte `--sheet-now`, web rule
- * "feet"): at every held stop, each tab's flared foot in front of its
- * neighbour and in view draws its ink within 0.03 of its sheet's opacity,
- * read against the same foot drawn whole in the same frame; part way
- * through each held switch, each of its two tabs has a foot read at some
- * stop, as the web proof asks (a tab can stand with one side under its
- * neighbour and the other in the strip's edge fade for half the switch,
- * the first tab arriving; and on the phone's row, mid-jump, the strip
- * scrolls both tabs' feet into its fades at once). And every side
- * under its neighbour's card has no foot to draw and changes no pixel
- * (`judgeCovered`).
+ * Every tab stands on the flared foot, chosen or not, and only a gliding
+ * seam's sides give way to the plain foot (PaneTabs.svelte `--glide`, web
+ * rule "feet", c44af833): at every held stop, each tab's flared foot in
+ * front of its neighbour and in view draws its ink within 0.03 of
+ * 1 - its seam's glide, read against the same foot drawn whole in the same
+ * frame; part way through each held switch, some foot whose seam glides is
+ * read. And every side under its neighbour's card has no foot to draw and
+ * changes no pixel (`judgeCovered`).
  */
 function judgeFeet(run: string, log: string) {
   const rows = parseFeet(log);
   const read = rows.flatMap((r) =>
     r.sides.flatMap(([side, foot]) =>
-      readable(foot) ? [{ r, side, ink: foot.ink }] : []
+      readable(foot) ? [{ r, side, ink: foot.ink, glide: r.glide[side] }] : []
     )
   );
   const off = read
-    .filter(({ r, ink }) => Math.abs(ink - r.sheet) > FOOT_TOLERANCE)
+    .filter(({ ink, glide }) => Math.abs(ink - (1 - glide)) > FOOT_TOLERANCE)
     .map(
-      ({ r, side, ink }) =>
-        `${r.stop} ${r.id} ${side} foot ${ink} sheet ${r.sheet}`
+      ({ r, side, ink, glide }) =>
+        `${r.stop} ${r.id} ${side} foot ${ink} glide ${glide}`
     );
-  const shown = read
-    .filter(({ r }) => r.sheet > 0.001 && r.sheet < 0.999)
-    .map(({ r, side, ink }) => `${r.stop} ${r.id} ${side} ${r.sheet}/${ink}`);
-  // Each held switch, part way (the sheets between rest and whole): each of
-  // its two tabs read at some stop.
-  const unread = ["step-held", "jump-held"].flatMap((held) => {
-    const tabs = new Set(
-      rows
-        .filter(
-          (r) =>
-            r.stop.startsWith(`${held}-`) &&
-            r.sheet > 0.001 &&
-            r.sheet < 0.999 &&
-            r.sides.some(([, f]) => readable(f))
-        )
-        .map((r) => r.id)
-    );
-    return tabs.size >= 2 ? [] : [`${held} ${tabs.size} of its two tabs read`];
-  });
+  const gliding = read.filter(({ glide }) => glide > 0.001 && glide < 0.999);
+  const shown = gliding.map(
+    ({ r, side, ink, glide }) => `${r.stop} ${r.id} ${side} ${glide}/${ink}`
+  );
+  // Each held switch: a foot read part way along its seam's glide.
+  const unread = ["step-held", "jump-held"].flatMap((held) =>
+    gliding.some(({ r }) => r.stop.startsWith(`${held}-`))
+      ? []
+      : [`${held}: no gliding foot read`]
+  );
   const faults = [...off, ...unread];
   check(
-    `${run} feet follow the sheet`,
+    `${run} feet flared but where a seam glides`,
     read.length > 0 && faults.length === 0,
-    `${faults.map((f) => `${f}; `).join("")}${read.length} feet read; sheet/foot part way: ${shown.join(" ")}`
+    `${faults.map((f) => `${f}; `).join("")}${read.length} feet read; glide/foot part way: ${shown.join(" ")}`
   );
   judgeCovered(run, rows);
+}
+
+/** One side of a tab as `TabView.probeGeometry` logged it. */
+interface GeomSide {
+  /** Its flared foot's box: out past the card's side, in from it, up from the shelf, its gap to the shelf, pt. */
+  foot: number[] | null;
+  op: number;
+  plain: number;
+  under: boolean;
+}
+const GEOM =
+  /tabs geom (\S+) (\d+) (\S+) chosen=(\d) flush=(\d) lead=(\S+) trail=(\S+) card=([-\d.]+),([-\d.]+) sheet=([-\d.]+),([-\d.]+)/;
+function parseSide(text: string): GeomSide {
+  const [u, foot, ...rest] = text.split(":");
+  const field = (name: string) =>
+    +(
+      rest.find((p) => p.startsWith(`${name}=`))?.slice(name.length + 1) ??
+      Number.NaN
+    );
+  return {
+    under: u === "u1",
+    foot: foot === "none" ? null : foot.slice(5).split("/").map(Number),
+    op: foot === "none" ? 0 : field("op"),
+    plain: field("plain"),
+  };
+}
+function parseGeom(log: string) {
+  return log.split("\n").flatMap((line) => {
+    const m = GEOM.exec(line);
+    return m
+      ? [
+          {
+            name: m[1],
+            index: +m[2],
+            id: m[3],
+            chosen: m[4] === "1",
+            flush: m[5] === "1",
+            lead: parseSide(m[6]),
+            trail: parseSide(m[7]),
+            card: [+m[8], +m[9]],
+            sheet: [+m[10], +m[11]],
+          },
+        ]
+      : [];
+  });
+}
+const near = (a: number, b: number, within = 0.01) => Math.abs(a - b) <= within;
+const sameFoot = (a: number[] | null, b: number[] | null) =>
+  a !== null &&
+  b !== null &&
+  a.length === b.length &&
+  a.every((v, i) => near(v, b[i]));
+
+/**
+ * The owner's pick, as laid out (DESIGN.md "Folder tabs"; the web's
+ * tab-drag "feet"): with the first tab chosen at rest, every inactive tab's
+ * free (trailing) side's flared foot is the chosen tab's trailing one, the
+ * same box to 0.01pt, drawn whole with no plain foot; its card's outline
+ * stands out past that side by the chosen card's flare; and its leading
+ * side, under its neighbour, draws no foot, its card square there.
+ */
+type Geom = ReturnType<typeof parseGeom>[number];
+const REST_FIRST_CHOSEN = /^rest\d+-0$/;
+
+/** What an inactive tab's feet get wrong against the chosen tab's, at rest. */
+function geomFaults(tab: Geom, chosen: Geom): string[] {
+  const { lead, trail } = tab;
+  const faults: string[] = [];
+  if (trail.under || !sameFoot(trail.foot, chosen.trail.foot)) {
+    faults.push(`${tab.id} trailing foot ${trail.foot?.join("/")}`);
+  }
+  if (!(near(trail.op, 1, 0.001) && near(trail.plain, 0, 0.001))) {
+    faults.push(`${tab.id} trailing op ${trail.op} plain ${trail.plain}`);
+  }
+  if (!(near(tab.card[1], chosen.card[1]) && chosen.card[1] > 1)) {
+    faults.push(`${tab.id} card trailing ${tab.card[1]} vs ${chosen.card[1]}`);
+  }
+  if (!(lead.under && lead.foot === null && near(tab.card[0], 0))) {
+    faults.push(
+      `${tab.id} leading ${lead.under ? "under" : "free"} ${lead.foot ? "foot" : "none"} card ${tab.card[0]}`
+    );
+  }
+  return faults;
+}
+
+function judgeGeometry(run: string, log: string) {
+  const all = parseGeom(log);
+  const name = all.find((g) => REST_FIRST_CHOSEN.test(g.name))?.name;
+  const rest = all.filter((g) => g.name === name);
+  const chosen = rest.find((g) => g.chosen);
+  if (!(chosen && rest.length >= 4)) {
+    check(
+      `${run} geometry: inactive feet are the chosen tab's`,
+      false,
+      `no strip at rest with the first tab chosen (${rest.length} tabs read)`
+    );
+    return;
+  }
+  const inactive = rest.filter((g) => !g.chosen);
+  const faults = inactive.flatMap((tab) => geomFaults(tab, chosen));
+  const lines = [
+    `chosen ${chosen.id} trail foot ${chosen.trail.foot?.join("/")} card ${chosen.card.join(",")} sheet ${chosen.sheet.join(",")}`,
+    ...inactive.map(
+      ({ id, lead, trail, card }) =>
+        `${id} trail ${trail.under ? "under" : "free"} foot ${trail.foot?.join("/") ?? "none"} op ${trail.op} plain ${trail.plain} card ${card.join(",")}; lead ${lead.under ? "under" : "free"} ${lead.foot ? "foot" : "none"}`
+    ),
+  ];
+  check(
+    `${run} geometry (${name}): inactive feet are the chosen tab's`,
+    faults.length === 0,
+    `${faults.map((f) => `${f}; `).join("")}${lines.join(" | ")}`
+  );
+}
+
+const FT = /tabs ft (\S+) t=(\S+) seams=(\S*) \|\| (.*)$/;
+const FT_TAB =
+  /^(\S+) u=(\d)(\d) lead=(-?[\d.]+)\/([\d.]+) trail=(-?[\d.]+)\/([\d.]+)/;
+const WHOLE = /[=]1\.000$/;
+
+/**
+ * One logged frame's feet: each side's plain share against its seam's glide
+ * (2·min(q, 1 - q), 0 on an end) and its flared foot, where it has one,
+ * against the rest; and the sides that draw any plain foot.
+ */
+function frameFeet(m: RegExpExecArray, q: number[]) {
+  const glide = (k: number) =>
+    k < 0 || k >= q.length || Number.isNaN(q[k])
+      ? 0
+      : 2 * Math.min(q[k], 1 - q[k]);
+  const faults: string[] = [];
+  const plainSides: string[] = [];
+  m[4].split(" | ").forEach((part, k) => {
+    const t = FT_TAB.exec(part.trim());
+    if (!t) {
+      return;
+    }
+    for (const [side, flared, plain, want] of [
+      ["lead", +t[4], +t[5], glide(k - 1)],
+      ["trail", +t[6], +t[7], glide(k)],
+    ] as const) {
+      const where = `${m[1]} t=${m[2]} ${t[1]} ${side}`;
+      if (!near(plain, want, 0.002)) {
+        faults.push(`${where} plain ${plain} want ${want.toFixed(3)}`);
+      }
+      if (flared >= 0 && !near(flared, 1 - plain, 0.002)) {
+        faults.push(`${where} flared ${flared} plain ${plain}`);
+      }
+      if (plain > 0.001) {
+        plainSides.push(`${k}${side[0]}=${plain}`);
+      }
+    }
+  });
+  return { faults, plainSides };
+}
+
+/**
+ * The held step at t (the stepped clock): no plain foot at either end, and
+ * at half way the plain foot whole on the gliding seam's two sides alone.
+ */
+function heldFeetFault(t: string, q: number[], plainSides: string[]) {
+  const gliding = q.flatMap((v, k) => (v > 0.001 && v < 0.999 ? [k] : []));
+  const half = t === "0.500";
+  const want = half
+    ? gliding.flatMap((k) => [`${k}t=1`, `${k + 1}l=1`]).sort()
+    : [];
+  const got = plainSides.map((s) => s.replace(WHOLE, "=1")).sort();
+  const ok =
+    want.length === got.length &&
+    want.every((w, i) => w === got[i]) &&
+    !(half && gliding.length === 0);
+  return ok
+    ? []
+    : [
+        `step-held t=${t}: plain on ${plainSides.join(",") || "none"}, gliding seams ${gliding.join(",") || "none"}`,
+      ];
+}
+
+/**
+ * The plain foot only on a gliding seam, every frame logged (`frameFeet`),
+ * and at the held step's stops t = 0, 0.5 and 1 (`heldFeetFault`).
+ */
+function judgeFootFrames(run: string, log: string) {
+  const faults: string[] = [];
+  const held: string[] = [];
+  let frames = 0;
+  for (const line of log.split("\n")) {
+    const m = FT.exec(line);
+    if (!m) {
+      continue;
+    }
+    frames += 1;
+    const q = m[3].split(",").map(Number);
+    const frame = frameFeet(m, q);
+    faults.push(...frame.faults);
+    if (m[1] === "step-held" && ["0.000", "0.500", "1.000"].includes(m[2])) {
+      held.push(
+        `t=${m[2]} seams ${m[3]} plain on ${frame.plainSides.join(",") || "none"}`
+      );
+      faults.push(...heldFeetFault(m[2], q, frame.plainSides));
+    }
+  }
+  check(
+    `${run} the plain foot only on a gliding seam`,
+    frames > 0 && held.length >= 3 && faults.length === 0,
+    `${faults
+      .slice(0, 6)
+      .map((f) => `${f}; `)
+      .join("")}${frames} frames read; step-held: ${held.join(" | ")}`
+  );
 }
 
 /** Every side under its neighbour's card at a held stop has no foot to draw and changes no pixel there. */
@@ -919,6 +1140,9 @@ try {
       1.0,
     ],
   ] as const) {
+    if (only && only !== kind) {
+      continue;
+    }
     // biome-ignore lint/performance/noAwaitInLoops: one simulator at a time, its runs in order
     const sim = await macSim({
       runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
@@ -928,6 +1152,9 @@ try {
     const { udid } = sim;
     await sh(`xcrun simctl install ${udid} "${app}"`);
     for (const style of ["light", "dark"] as const) {
+      if (styleOnly && styleOnly !== style) {
+        continue;
+      }
       const run = `${kind} ${style}`;
       // biome-ignore lint/performance/noAwaitInLoops: one appearance at a time on the one app
       await sh(`xcrun simctl ui ${udid} appearance ${style}`);
@@ -1099,6 +1326,8 @@ try {
       check(`${run} stops captured`, held.length === 18, held.join(" "));
       judgeRims(run, log);
       judgeFeet(run, log);
+      judgeGeometry(run, log);
+      judgeFootFrames(run, log);
       const step = begins.find((b) => b[1] === "step-held");
       if (step) {
         judgeSeam(

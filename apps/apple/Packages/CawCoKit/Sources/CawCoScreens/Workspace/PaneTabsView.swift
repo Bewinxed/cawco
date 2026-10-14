@@ -919,6 +919,8 @@ extension PaneTabsView {
             }
             let step = steps[index]
             guard order.indices.contains(step.to), let view = views[order[step.to]] else { return }
+            // The strip at rest, the step before landed: its feet as laid out.
+            probeGeometry("rest\(index)-\(self.active.flatMap { self.order.firstIndex(of: $0) } ?? -1)")
             probeLabel = step.label
             probeHold = step.hold
             probeStair = -1
@@ -1022,6 +1024,17 @@ extension PaneTabsView {
         let f = passage.map { String(format: "%.3f", $0.f) } ?? "1.000"
         let toward = passage.map { String($0.toward.prefix(8)) } ?? "-"
         Self.probeLog.notice("tabs \(label, privacy: .public) t=\(at, privacy: .public) f=\(f, privacy: .public) front=\(String(front?.prefix(8) ?? "-"), privacy: .public) toward=\(toward, privacy: .public) seams=\(seams, privacy: .public) scroll=\(String(format: "%.2f", self.scroll.contentOffset.x), privacy: .public) || \(tabs, privacy: .public)")
+        // Every tab's feet this frame, on a line of their own (the frame's is near the log's 1KB).
+        let feet = order.compactMap { id in views[id].map { "\(id.prefix(8)) \($0.probeFeetNow)" } }.joined(separator: " | ")
+        Self.probeLog.notice("tabs ft \(label, privacy: .public) t=\(at, privacy: .public) seams=\(seams, privacy: .public) || \(feet, privacy: .public)")
+    }
+
+    /// Every tab's feet as laid out, one line a tab (`TabView.probeGeometry`).
+    private func probeGeometry(_ name: String) {
+        for (index, id) in order.enumerated() {
+            guard let view = views[id] else { continue }
+            Self.probeLog.notice("tabs geom \(name, privacy: .public) \(index) \(id.prefix(8), privacy: .public) \(view.probeGeometry, privacy: .public)")
+        }
     }
 
     private func probeCapture(_ name: String) {
@@ -1042,13 +1055,15 @@ extension PaneTabsView {
             try? UIImage(cgImage: crop, scale: scale, orientation: .up).pngData()?.write(to: folder.appendingPathComponent("\(file)-strip.png"))
         }
         Self.probeLog.notice("tabs probe hold \(file, privacy: .public)")
+        probeGeometry(name)
         probeRims(name, in: image, window: window)
         probeFeet(name, drawn: image, window: window)
     }
 
     /// Every tab's flared feet in a held stop's capture (`drawn`), one line a
-    /// tab (PaneTabs.svelte's proof, rule "feet"): its sheet's opacity, and
-    /// each side's foot read in the box its quarter turn stands in, clear of
+    /// tab (PaneTabs.svelte's proof, rule "feet"): its sheet's opacity, each
+    /// side's seam's glide (its flared foot shows 1 less it), and each
+    /// side's foot read in the box its quarter turn stands in, clear of
     /// the run, against the window captured again with every flared foot
     /// hidden and with its own tab's drawn whole, so only how much of it is
     /// drawn is read (its rim's and side's strength, under both, cancel).
@@ -1089,7 +1104,8 @@ extension PaneTabsView {
                 let ink = drawnPixels.ink(over: barePixels, in: foot.box)
                 return String(format: "free:%.3f:%.1f", full > 0 ? ink / full : 0, full)
             }
-            Self.probeLog.notice("tabs feet \(name, privacy: .public) \(id.prefix(8), privacy: .public) sheet=\(String(format: "%.3f", view.probeSheet), privacy: .public) lead=\(feet[0], privacy: .public) trail=\(feet[1], privacy: .public)")
+            let glide = String(format: "%.3f,%.3f", view.edges.glide.leading, view.edges.glide.trailing)
+            Self.probeLog.notice("tabs feet \(name, privacy: .public) \(id.prefix(8), privacy: .public) sheet=\(String(format: "%.3f", view.probeSheet), privacy: .public) glide=\(glide, privacy: .public) lead=\(feet[0], privacy: .public) trail=\(feet[1], privacy: .public)")
         }
     }
 
@@ -1374,14 +1390,31 @@ final class TabView: UIView {
     /// Its shoulders' radius.
     var radius: Double { phoneRow ? Radius.radiusLg : Radius.radiusSm }
 
+    /// Its details card hangs flush with its leading side (TabDetails,
+    /// PaneTabs.svelte `data-flush="start"`): its card's foot and its
+    /// sheet's are square there, so its flank runs straight down into the
+    /// card's side.
+    var flushLeading = false {
+        didSet {
+            guard flushLeading != oldValue else { return }
+            setNeedsLayout()
+        }
+    }
+
+    /// Its card (TabItem.svelte `::before`): the sheet's own outline, each
+    /// free side's foot curving out into the shelf on the sheet's flare,
+    /// chosen or not (owner: "A curved foot on inactive tabs: their sides
+    /// curve out at the base like the chosen tab's"); folded, straight down,
+    /// on a side under its neighbour's card or hung flush.
     private let tint = CAShapeLayer()
     private let sheet = CAShapeLayer()
     /// The status rim (PaneTabs.svelte `.rim`): the tab's outline at
     /// `tabRimWidth`, with a soft glow at half its strength, each foot
     /// narrowing to a point on the shelf, fading out up the side over
-    /// `tabRimTaper` short of the shoulder: straight down on a receded tab,
-    /// out round the sheet's flare on the chosen one. Whole on the chosen
-    /// tab, subtle on an unchosen one, none on an unchosen idle one (`strength`).
+    /// `tabRimTaper` short of the shoulder: out round the sheet's flare on
+    /// every tab, chosen or not, and straight down only where a seam glides
+    /// (`paintFeet`). Whole on the chosen tab, subtle on an unchosen one,
+    /// none on an unchosen idle one (`strength`).
     private let rimHost = CALayer()
     /// The rim's reach: off the phone's row it stops at a tucked shoulder's
     /// crest, stroke and glow (`layoutRim`).
@@ -1400,11 +1433,12 @@ final class TabView: UIView {
     private let rimFade = CAGradientLayer()
     /// The glow: the outline's own shadow (`0 0 6px`, half the rim's
     /// strength), kept outside the tab as the web's box shadow is, so it
-    /// never deepens the stroke or the tab under it; and the same off the
-    /// outline with the sheet's flared feet (`glowFlared`), the two
-    /// cross-fading with the feet. It leans at a gliding seam's side as
-    /// that side's stroke does (`glowSides`), as the web's glow, drawn off
-    /// the pieces it shows, does.
+    /// never deepens the stroke or the tab under it; off the outline with
+    /// the sheet's flared feet (`glowFlared`), and off the plain outline
+    /// (`glow`) for a gliding seam, each side's half of the two cross-fading
+    /// with that side's feet (`glowPlainFeet`, `glowFlaredFeet`). It leans at
+    /// a gliding seam's side as that side's stroke does (`glowSides`), as
+    /// the web's glow, drawn off the pieces it shows, does.
     private let glowFade = CALayer()
     private let glowHost = CALayer()
     private let glowLean = CALayer()
@@ -1414,6 +1448,10 @@ final class TabView: UIView {
     private let glowFlaredHost = CALayer()
     private let glowFlared = CALayer()
     private let glowFlaredOutside = CAShapeLayer()
+    private let glowPlainFeet = CALayer()
+    private let glowPlainWeights = CAGradientLayer()
+    private let glowFlaredFeet = CALayer()
+    private let glowFlaredWeights = CAGradientLayer()
     /// Room round the outline for the glow, inside the fade.
     private static let spill = 6.0
 
@@ -1446,6 +1484,7 @@ final class TabView: UIView {
             guard edges != oldValue else { return }
             if edges.under != oldValue.under || edges.inset != oldValue.inset { setNeedsLayout() }
             if edges.lean != oldValue.lean || edges.beside != oldValue.beside || edges.glide != oldValue.glide { paintRim(animated: false) }
+            if edges.glide != oldValue.glide { paintFeet() }
         }
     }
 
@@ -1517,13 +1556,21 @@ final class TabView: UIView {
         rim.addSublayer(rimTop)
         rim.addSublayer(lead.layer)
         rim.addSublayer(trail.layer)
-        for (shine, host, outside) in [(glow, glowHost, glowOutside), (glowFlared, glowFlaredHost, glowFlaredOutside)] {
+        for (shine, host, outside, feet, weights) in [(glow, glowHost, glowOutside, glowPlainFeet, glowPlainWeights),
+                                                      (glowFlared, glowFlaredHost, glowFlaredOutside, glowFlaredFeet, glowFlaredWeights)] {
             shine.shadowOffset = .zero
             shine.shadowRadius = 3
             outside.fillRule = .evenOdd
             host.mask = outside
             host.addSublayer(shine)
-            glowLean.addSublayer(host)
+            // Each side's half of it, at that side's feet (`paintFeet`).
+            weights.startPoint = CGPoint(x: 0, y: 0.5)
+            weights.endPoint = CGPoint(x: 1, y: 0.5)
+            weights.locations = [0, 0.5, 0.5, 1]
+            weights.colors = Array(repeating: UIColor.black.cgColor, count: 4)
+            feet.mask = weights
+            feet.addSublayer(host)
+            glowLean.addSublayer(feet)
         }
         glowSides.startPoint = CGPoint(x: 0, y: 0.5)
         glowSides.endPoint = CGPoint(x: 1, y: 0.5)
@@ -1733,6 +1780,41 @@ final class TabView: UIView {
         Double(sheet.presentation()?.opacity ?? sheet.opacity)
     }
 
+    /// Its feet this frame, for `-tabs-probe`: which sides stand under a
+    /// neighbour, then each side's flared foot's opacity (-1 where it has
+    /// none to draw) over its plain foot's share (its seam's glide).
+    var probeFeetNow: String {
+        func foot(_ side: RimSide) -> Double { side.flared.path == nil ? -1 : Double(side.flared.opacity) }
+        return String(format: "u=%d%d lead=%.3f/%.3f trail=%.3f/%.3f", edges.under.leading ? 1 : 0, edges.under.trailing ? 1 : 0,
+                      foot(lead), edges.glide.leading, foot(trail), edges.glide.trailing)
+    }
+
+    /// Its feet as laid out, for `-tabs-probe`: whether it is chosen and
+    /// hung flush; each side's rim foot, whether it stands under a neighbour,
+    /// its flared foot's box against the card's side and the shelf (how far
+    /// out past the side, how far in from it, how high above the shelf, and
+    /// its gap to the shelf, pt; `none` where it draws none), that foot's
+    /// opacity and the plain foot's share; and how far the card's outline
+    /// and the sheet's stand out past the card's sides at the shelf, pt (the
+    /// flare where the foot flares, 0 folded).
+    var probeGeometry: String {
+        let card = cardRect
+        let tinted = tint.path?.boundingBoxOfPath ?? card
+        let sheeted = layer.convert(sheet.path?.boundingBoxOfPath ?? .zero, from: sheet)
+        func side(_ s: RimSide, under: Bool, glide: Double, trailing: Bool) -> String {
+            guard let path = s.flared.path else { return String(format: "u%d:none:plain=%.3f", under ? 1 : 0, glide) }
+            let box = layer.convert(path.boundingBoxOfPath, from: s.flared)
+            let out = trailing ? box.maxX - card.maxX : card.minX - box.minX
+            let inward = trailing ? card.maxX - box.minX : box.maxX - card.minX
+            return String(format: "u%d:foot=%.2f/%.2f/%.2f/%.2f:op=%.3f:plain=%.3f", under ? 1 : 0, out, inward, card.maxY - box.minY, card.maxY - box.maxY,
+                          s.flared.opacity, glide)
+        }
+        return String(format: "chosen=%d flush=%d lead=%@ trail=%@ card=%.2f,%.2f sheet=%.2f,%.2f", chosen ? 1 : 0, flushLeading ? 1 : 0,
+                      side(lead, under: edges.under.leading, glide: edges.glide.leading, trailing: false),
+                      side(trail, under: edges.under.trailing, glide: edges.glide.trailing, trailing: true),
+                      card.minX - tinted.minX, tinted.maxX - card.maxX, card.minX - sheeted.minX, sheeted.maxX - card.maxX)
+    }
+
     /// One side's flared foot for `-tabs-probe`: whether it stands under its
     /// neighbour's card, whether it has a foot to draw, and the box its
     /// quarter turn stands in, out past the card's side from the run's foot
@@ -1868,13 +1950,12 @@ final class TabView: UIView {
         // The sheet shows as far as the tab is chosen, over its own card,
         // which hides once the sheet covers it whole; the chevron (its slot
         // kept on every tab) comes and goes with it. They follow the
-        // switch's clock alone, so no implicit action runs on them. The
-        // rim's feet are the sheet's, on the same frame (`paintFeet`).
+        // switch's clock alone, so no implicit action runs on them. A
+        // choice changes no foot: the seams' glide moves them (`paintFeet`).
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         sheet.opacity = Float(look.pick)
         tint.opacity = look.pick >= 1 ? 0 : 1
-        paintFeet()
         CATransaction.commit()
         let scale = look.pick >= 1 || UIAccessibility.isReduceMotionEnabled ? 1 : Motion.popScale + (1 - Motion.popScale) * look.pick
         UIView.performWithoutAnimation {
@@ -1947,10 +2028,14 @@ final class TabView: UIView {
         tint.frame = bounds
         let corners = shoulders
         let card = cardRect
-        tint.path = Self.outline(card, leading: corners.leading, trailing: corners.trailing).cgPath
-        // The sheet stands on the card's own box, its foot flaring past it.
+        // The card on the sheet's outline, each free side flared; folded
+        // under a neighbour (flipped with the stack at half way) or hung flush.
+        let cardFeet = TabSides(leading: !edges.under.leading && !flushLeading, trailing: !edges.under.trailing)
+        tint.path = Self.flaredOutline(card, leading: corners.leading, trailing: corners.trailing, flare: flare, feet: cardFeet).cgPath
+        // The sheet stands on the card's own box, its foot flaring past it,
+        // square on a side hung flush.
         sheet.frame = card.insetBy(dx: -flare, dy: 0)
-        sheet.path = Self.sheetPath(in: sheet.bounds, radius: radius, flare: flare)
+        sheet.path = Self.sheetPath(in: sheet.bounds, radius: radius, flare: flare, feet: TabSides(leading: !flushLeading, trailing: true))
         layoutRim()
         CATransaction.commit()
     }
@@ -1973,10 +2058,11 @@ final class TabView: UIView {
     /// where that is lower (`.rim-plain`, `narrowing`); and the rim and its
     /// glow fading out up each side to that tip over `tabRimTaper` along the
     /// stroke on the taper's ease-out, stopping at the shoulder (`rimFade`,
-    /// `taperInk`). The chosen tab's feet run out round the sheet's own
-    /// flare instead (`.rim-flared`, `flaredFoot`), each side cross-fading
-    /// between the two on the sheet's clock (`paintFeet`). Off the phone's
-    /// row a tucked card's
+    /// `taperInk`): the plain foot, which only a gliding seam's sides draw.
+    /// Every tab's free sides run out round the sheet's own flare
+    /// (`.rim-flared`, `flaredFoot`), chosen or not, each side giving way to
+    /// its plain foot by how far its seam has glided (`paintFeet`). Off the
+    /// phone's row a tucked card's
     /// rim stops at that shoulder's crest, stroke and glow (`rimClip`): the
     /// neighbour's stroke alone runs down into the notch between the two
     /// shoulders, one outline where they meet (PaneTabs.svelte, the desk's
@@ -2036,20 +2122,24 @@ final class TabView: UIView {
             side.flaredFade.frame = CGRect(x: x, y: centre.y - 1, width: ro + 2, height: CGFloat(flare) + 2)
             side.flaredFade.contents = Self.footTaper(flare: flare, width: top, scale: traitCollection.displayScale, trailing: trailing)
         }
-        // The body's ink up from the shelf, both feet's tapers, by how chosen
-        // the tab stands (`BodyMask`, `paintFeet`).
+        // The body's ink up from the shelf, both feet's tapers, by how far
+        // that side's seam has glided (`BodyMask`, `paintFeet`).
         bodyMask = BodyMask(height: Double(span.height), flare: flare, arc: (flare + top / 2) * .pi / 2, shoulder: shoulderHeight)
         let locations = bodyMask.stops.map { NSNumber(value: ($0.height - $0.h) / max(1, $0.height)) }
         for side in [lead, trail] { side.bodyFade.locations = locations }
-        // The glow is the outline's shadow, shown only outside the outline,
-        // and the same off the outline with the sheet's flared feet,
-        // cross-fading with the feet (`paintFeet`); each side's share of
-        // them at that side's strength (`paintRim`): the mask steps from one
-        // to the other over the glow's own reach about each join, as the
-        // web's glow, blurred off its pieces, blends.
+        // The glow is the outline's shadow, shown only outside the outline:
+        // off the outline with the sheet's flared feet on its free sides
+        // (folded under a neighbour, as the stroke draws none there), and off
+        // the plain outline, each side's half cross-fading with that side's
+        // feet (`paintFeet`); each side's share of them at that side's
+        // strength (`paintRim`): the mask steps from one to the other over
+        // the glow's own reach about each join, as the web's glow, blurred
+        // off its pieces, blends.
         let shape = Self.outline(outline, leading: corners.leading, trailing: corners.trailing)
-        let flaredShape = Self.flaredOutline(outline, leading: corners.leading, trailing: corners.trailing, flare: flare)
-        for piece in [glowFade, glowLean, glowSides, glowHost, glowFlaredHost, glow, glowFlared, glowOutside, glowFlaredOutside, rimFade] {
+        let flaredShape = Self.flaredOutline(outline, leading: corners.leading, trailing: corners.trailing, flare: flare,
+                                             feet: TabSides(leading: !edges.under.leading, trailing: !edges.under.trailing))
+        for piece in [glowFade, glowLean, glowSides, glowPlainFeet, glowPlainWeights, glowFlaredFeet, glowFlaredWeights,
+                      glowHost, glowFlaredHost, glow, glowFlared, glowOutside, glowFlaredOutside, rimFade] {
             piece.frame = rimHost.bounds
         }
         let width = max(1, Double(span.width))
@@ -2123,41 +2213,48 @@ final class TabView: UIView {
             return points.last?.1 ?? 1
         }
 
-        /// The ink at a stop with the tab `pick` chosen.
-        func ink(_ stop: (h: Double, run: Bool, height: Double), pick: Double) -> Double {
+        /// The ink at a stop with its side's seam `glide` of the way to half
+        /// way (0 at either edge, 1 half way): the flared foot's taper, and the
+        /// plain foot's as far as the seam has glided.
+        func ink(_ stop: (h: Double, run: Bool, height: Double), glide: Double) -> Double {
             let taper = Effect.tabRimTaper
             let plain = Self.along(TabView.taperStops.map { (min($0 * taper, shoulder), TabView.taperInk($0)) }, stop.h)
-            guard stop.run else { return (1 - pick) * plain }
+            guard stop.run else { return glide * plain }
             let first = TabView.taperInk(arc / taper)
             let flared = Self.along([(flare, first)] + TabView.taperStops.map {
                 (flare + min(max(0, $0 * taper - arc), max(0, shoulder - flare)), TabView.taperInk(max($0, arc / taper)))
             }, stop.h)
-            return min(1, (1 - pick) * plain + pick * flared)
+            return min(1, glide * plain + (1 - glide) * flared)
         }
     }
 
     private var bodyMask = BodyMask()
 
-    /// The feet as the tab stands this frame: the flared foot shows exactly
-    /// as much as the sheet does (`look.pick`, the sheet's own opacity), and
-    /// the plain foot the rest, carried by each side's body mask, with the
-    /// two glows likewise (PaneTabs.svelte `--sheet-now`). They ease nothing
-    /// of their own: body, feet and rim are one shape on one clock.
+    /// The feet as the tab stands this frame. Every side stands on the
+    /// flared foot, chosen or not, so a choice changes no foot; only a
+    /// gliding seam's sides straighten, each by how far its seam has glided
+    /// (`edges.glide`, 0 at either edge, 1 half way): its plain foot drawn in
+    /// as its flared one fades, so at the handover both sides of the seam
+    /// stand plain on the same pixels and the curve passing from one side to
+    /// the other shows nothing (PaneTabs.svelte `.rim-plain`/`.rim-flared`,
+    /// `--glide`). The body mask carries the plain foot and both tapers, the
+    /// flared foot its own opacity, and each side's half of the two glows
+    /// likewise. They ease nothing of their own: the seam's glide moves them.
     private func paintFeet() {
+        let glide = edges.glide
         #if DEBUG
-        let footPick = probeFootOpacity.map(Double.init) ?? look.pick
+        let shown = probeFootOpacity.map(Double.init)
         #else
-        let footPick = look.pick
+        let shown: Double? = nil
         #endif
-        let colors = bodyMask.stops.map { UIColor.black.withAlphaComponent(bodyMask.ink($0, pick: look.pick)).cgColor }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        for side in [lead, trail] {
-            side.bodyFade.colors = colors
-            side.flared.opacity = Float(footPick)
+        for (side, g) in [(lead, glide.leading), (trail, glide.trailing)] {
+            side.bodyFade.colors = bodyMask.stops.map { UIColor.black.withAlphaComponent(bodyMask.ink($0, glide: g)).cgColor }
+            side.flared.opacity = Float(shown ?? 1 - g)
         }
-        glow.opacity = Float(1 - look.pick)
-        glowFlared.opacity = Float(look.pick)
+        glowPlainWeights.colors = [glide.leading, glide.leading, glide.trailing, glide.trailing].map { UIColor.black.withAlphaComponent($0).cgColor }
+        glowFlaredWeights.colors = [glide.leading, glide.leading, glide.trailing, glide.trailing].map { UIColor.black.withAlphaComponent(1 - $0).cgColor }
         CATransaction.commit()
     }
 
@@ -2230,9 +2327,10 @@ final class TabView: UIView {
     }
 
     /// Rounded shoulders, and a foot that curves outward by `flare` each side
-    /// (fluid-tabs' sheet), on a box one flare wider than the card each side.
-    static func sheetPath(in rect: CGRect, radius: Double, flare: Double) -> CGPath {
-        flaredOutline(rect.insetBy(dx: flare, dy: 0), leading: radius, trailing: radius, flare: flare).cgPath
+    /// `feet` flares (fluid-tabs' sheet), on a box one flare wider than the
+    /// card each side.
+    static func sheetPath(in rect: CGRect, radius: Double, flare: Double, feet: TabSides<Bool>) -> CGPath {
+        flaredOutline(rect.insetBy(dx: flare, dy: 0), leading: radius, trailing: radius, flare: flare, feet: feet).cgPath
     }
 
     /// The centre of the sheet's flared foot beside the side at `edge` on the
@@ -2246,19 +2344,29 @@ final class TabView: UIView {
 
     /// A tab's outline with the sheet's flared feet: down each side to one
     /// flare above the shelf, then out round a quarter turn to the shelf one
-    /// flare past it; `leading` and `trailing` its shoulders' radii.
-    static func flaredOutline(_ rect: CGRect, leading: Double, trailing: Double, flare: Double) -> UIBezierPath {
+    /// flare past it, on each side `feet` flares; a folded side runs straight
+    /// down to the shelf (TabItem.svelte `--foot-s`, `--foot-e` at the
+    /// flare). `leading` and `trailing` its shoulders' radii.
+    static func flaredOutline(_ rect: CGRect, leading: Double, trailing: Double, flare: Double, feet: TabSides<Bool>) -> UIBezierPath {
         let path = UIBezierPath()
         let left = flareCentre(edge: rect.minX, shelf: rect.maxY, flare: flare, outward: -1)
         let right = flareCentre(edge: rect.maxX, shelf: rect.maxY, flare: flare, outward: 1)
-        path.move(to: CGPoint(x: left.x, y: rect.maxY))
-        path.addArc(withCenter: left, radius: flare, startAngle: .pi / 2, endAngle: 0, clockwise: false)
+        if feet.leading {
+            path.move(to: CGPoint(x: left.x, y: rect.maxY))
+            path.addArc(withCenter: left, radius: flare, startAngle: .pi / 2, endAngle: 0, clockwise: false)
+        } else {
+            path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+        }
         path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + leading))
         path.addArc(withCenter: CGPoint(x: rect.minX + leading, y: rect.minY + leading), radius: leading, startAngle: .pi, endAngle: .pi * 1.5, clockwise: true)
         path.addLine(to: CGPoint(x: rect.maxX - trailing, y: rect.minY))
         path.addArc(withCenter: CGPoint(x: rect.maxX - trailing, y: rect.minY + trailing), radius: trailing, startAngle: .pi * 1.5, endAngle: 0, clockwise: true)
-        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - flare))
-        path.addArc(withCenter: right, radius: flare, startAngle: .pi, endAngle: .pi / 2, clockwise: false)
+        if feet.trailing {
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - flare))
+            path.addArc(withCenter: right, radius: flare, startAngle: .pi, endAngle: .pi / 2, clockwise: false)
+        } else {
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        }
         path.close()
         return path
     }
@@ -2337,11 +2445,11 @@ final class TabView: UIView {
 
 /// One side of a tab's rim (PaneTabs.svelte `.rim-side`): its shoulder,
 /// run and plain foot as one shape (`body`), its ink up from the shelf a
-/// mask carrying both feet's tapers by how chosen the tab stands
+/// mask carrying both feet's tapers by how far its seam has glided
 /// (`TabView.BodyMask`); and its flared foot round the sheet's own flare
-/// (`flared`), shown as much as the sheet is, its taper round the turn its
-/// own mask. The side as a whole leans its strength at a gliding seam (its
-/// layer's opacity).
+/// (`flared`), whole on every tab but where its seam glides, its taper
+/// round the turn its own mask. The side as a whole leans its strength at a
+/// gliding seam (its layer's opacity).
 private final class RimSide {
     let layer = CALayer()
     let body = CAShapeLayer()
