@@ -446,18 +446,36 @@ const steps = async (kit: Kit, fleet: KitFleet) => {
     Boolean,
     120_000
   );
-  await page.locator('[aria-label="Minimize question"]').click();
-  await page.fill(FIELD, "PROBE-PLAIN-CW beside the card");
-  await page.keyboard.press("Enter");
+  /** Whether the thread's page shows his question. */
+  const cardShown = () =>
+    page
+      .getByText(QUESTION)
+      .first()
+      .waitFor({ timeout: 20_000 })
+      .then(
+        () => true,
+        () => false
+      );
+  const shownBefore = await cardShown();
+  // The thread composer's own route (ThreadPane `sayInThread`).
+  await fleet.api(`/api/projects/${project.id}/threads/${threadId}/messages`, {
+    body: "PROBE-PLAIN-CW beside the card",
+  });
   await said("you", "PROBE-PLAIN-CW beside the card");
+  await Bun.sleep(2000);
   const webStill = (await pending()).some(
     (a) => a.requestId === asked.requestId
   );
   const webStatus = await statusOf();
+  const shownAfter = await cardShown();
   kit.check(
-    "c web: your words beside his question land in the thread; the card stays parked, needs-you, nothing dismissed",
-    webStill && webStatus === "needs-you" && dismissed() === 0,
-    `parked ${webStill}; status ${webStatus}; dismissed ${dismissed()}`
+    "c web: your words beside his question land in the thread; the card stays parked and on the page, needs-you, nothing dismissed",
+    webStill &&
+      shownBefore &&
+      shownAfter &&
+      webStatus === "needs-you" &&
+      dismissed() === 0,
+    `parked ${webStill}; on the page ${shownBefore}→${shownAfter}; status ${webStatus}; dismissed ${dismissed()}`
   );
 
   const app = appPath();
