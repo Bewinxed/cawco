@@ -82,55 +82,141 @@ const typing = (target: EventTarget | null) =>
     target instanceof HTMLInputElement ||
     target instanceof HTMLTextAreaElement);
 
+/** The page's images a pasted HTML carries, as Excalidraw reads them (its `parseHTMLTree`): every `img` whose `src` is http(s). */
+const imagesOf = (html: string | undefined): string[] => {
+  if (!html) {
+    return [];
+  }
+  const { body } = new DOMParser().parseFromString(html, "text/html");
+  return [...body.querySelectorAll("img")]
+    .map((img) => img.getAttribute("src") ?? "")
+    .filter((src) => src.startsWith("http"));
+};
+
+/** Pasted text that is one SVG, as Excalidraw reads it: `<svg`…`</svg>`, trimmed. */
+const svgOf = (text: string | undefined): File | null => {
+  const svg = text?.trim() ?? "";
+  return svg.startsWith("<svg") && svg.endsWith("</svg>")
+    ? new File([svg], "pasted.svg", { type: "image/svg+xml" })
+    : null;
+};
+
+/** An image a pasted page names, fetched as Excalidraw fetches it (its `ImageURLToFile`). */
+const fetchImage = async (url: string): Promise<File> => {
+  const answer = await fetch(url);
+  if (!answer.ok) {
+    throw new Error(`${new URL(url).host} answered ${answer.status}`);
+  }
+  const blob = await answer.blob();
+  return new File([blob], new URL(url).pathname.split("/").at(-1) ?? "", {
+    type: blob.type,
+  });
+};
+
+/** The gap between images a paste stacks, scene px (Excalidraw's own, `addElementsFromMixedContentPaste`). */
+const STACK_GAP = 25;
+
 /**
- * Every pasted or dropped file is taken before Excalidraw's own listeners
- * (the window's capture phase runs first); Excalidraw takes the first file
- * only, so that is the one checked. One the canvas won't take is said
- * through `refuse`. One it takes is placed here (`placeImage`), its file in
- * the doc before its element, at the pointer: a drop's own point, a paste's
- * last pointer over the page. Excalidraw's own paste inserts the element
- * first and fills in its file once it has hashed, resized and read it (its
- * `insertImageElement`), so a screen or a send could hold an image whose
- * file was not there yet. A press, a key, a paste or a drop first takes
- * away the refusal standing from before.
+ * Every image a paste or a drop would make goes on the canvas here, before
+ * Excalidraw's own listeners (the window's capture phase runs first):
+ * a dropped or pasted file (Excalidraw takes the first only, so that is the
+ * one checked); else, not a plain paste (⌘⇧V, as Excalidraw tells it), the
+ * http(s) images of a pasted page, stacked down from the pointer as
+ * Excalidraw stacks them, or pasted text that is one SVG. One the canvas
+ * won't take is said through `refuse`. One it takes is placed by
+ * `placeImage`, its file in the doc before its element, at the pointer: a
+ * drop's own point, a paste's last pointer over the page. Excalidraw's own
+ * paste inserts the element first and fills in its file once it has hashed,
+ * resized and read it (its `insertImageElement`), so a screen or a send
+ * could hold an image whose file was not there yet. A press, a key, a paste
+ * or a drop first takes away the refusal standing from before.
  */
 export const guardImages = (
   api: ExcalidrawImperativeAPI,
   refuse: (why: string) => void
 ): (() => void) => {
   let pointer: At | null = null;
-  const take = (event: Event, files: FileList | undefined, at: At | null) => {
-    dismiss();
-    const file = files?.[0];
-    if (!file || typing(event.target)) {
-      return;
+  let plain = false;
+  let plainTimer: ReturnType<typeof setTimeout> | undefined;
+  const unread = (error: unknown) =>
+    `That image couldn't be read (${error instanceof Error ? error.message : String(error)}), so it wasn't added. Paste it again.`;
+  /** Each file checked, then placed in turn: the first on `at`, each next under the last. */
+  const place = async (files: Promise<File>[], at: At | null) => {
+    let below: { x: number; bottom: number } | null = null;
+    for (const next of files) {
+      try {
+        // biome-ignore lint/performance/noAwaitInLoops: each image stands under the one before
+        const file = await next;
+        const why = refusalOf(file);
+        if (why) {
+          refuse(why);
+          continue;
+        }
+        below = await placeImage(
+          api,
+          file,
+          at,
+          below && { x: below.x, top: below.bottom + STACK_GAP }
+        );
+      } catch (error) {
+        refuse(unread(error));
+      }
     }
+  };
+  const take = (event: Event, files: Promise<File>[], at: At | null) => {
     event.preventDefault();
     event.stopImmediatePropagation();
-    const why = refusalOf(file);
-    if (why) {
-      refuse(why);
+    place(files, at);
+  };
+  const pasted = (event: ClipboardEvent) => {
+    dismiss();
+    const data = event.clipboardData;
+    if (typing(event.target)) {
       return;
     }
-    placeImage(api, file, at).catch((error: unknown) =>
-      refuse(
-        `That image couldn't be read (${error instanceof Error ? error.message : String(error)}), so it wasn't added. Paste it again.`
-      )
-    );
+    const file = data?.files?.[0];
+    if (file) {
+      return take(event, [Promise.resolve(file)], pointer);
+    }
+    if (plain) {
+      return;
+    }
+    const urls = imagesOf(data?.getData("text/html"));
+    if (urls.length > 0) {
+      return take(event, urls.map(fetchImage), pointer);
+    }
+    const svg = svgOf(data?.getData("text/plain"));
+    if (svg) {
+      take(event, [Promise.resolve(svg)], pointer);
+    }
   };
-  const pasted = (event: ClipboardEvent) =>
-    take(event, event.clipboardData?.files, pointer);
-  const dropped = (event: DragEvent) =>
-    take(event, event.dataTransfer?.files, event);
+  const dropped = (event: DragEvent) => {
+    dismiss();
+    const file = event.dataTransfer?.files?.[0];
+    if (file && !typing(event.target)) {
+      take(event, [Promise.resolve(file)], event);
+    }
+  };
   const moved = (event: PointerEvent) => {
     pointer = { clientX: event.clientX, clientY: event.clientY };
+  };
+  // Excalidraw's plain paste: ⌘⇧V (Ctrl+Shift+V), told for the next 100 ms.
+  const keyed = (event: KeyboardEvent) => {
+    dismiss();
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "v") {
+      plain = event.shiftKey;
+      clearTimeout(plainTimer);
+      plainTimer = setTimeout(() => {
+        plain = false;
+      }, 100);
+    }
   };
   const listeners: [string, (event: never) => void][] = [
     ["paste", pasted],
     ["drop", dropped],
     ["pointermove", moved],
     ["pointerdown", dismiss],
-    ["keydown", dismiss],
+    ["keydown", keyed],
   ];
   for (const [type, listener] of listeners) {
     window.addEventListener(type, listener as EventListener, true);
@@ -159,15 +245,18 @@ const newFileId = () =>
 /**
  * An image placed on the canvas, its file in the doc before its element:
  * centred on `at` (a paste's or a drop's point) or, picked, on the middle of
- * the view; as tall as it is up to half the view (and never past the view
+ * the view, or, stacked under another, its top at `under.top` centred on
+ * `under.x`; as tall as it is up to half the view (and never past the view
  * less 120px), as Excalidraw sizes one it inserts
  * (`initializeImageDimensions`); then chosen, the selection tool picked.
+ * Answers its centre and its foot, scene px, for the next one under it.
  */
 export const placeImage = async (
   api: ExcalidrawImperativeAPI,
   file: File,
-  at: At | null = null
-): Promise<void> => {
+  at: At | null = null,
+  under: { x: number; top: number } | null = null
+): Promise<{ x: number; bottom: number }> => {
   const dataURL = await readURL(file);
   const image = new Image();
   image.src = dataURL;
@@ -180,12 +269,15 @@ export const placeImage = async (
   );
   const height = Math.min(image.naturalHeight, tallest);
   const width = height * (image.naturalWidth / image.naturalHeight);
-  const middle = at
-    ? viewportCoordsToSceneCoords(at, state)
-    : {
-        x: state.width / 2 / zoom - state.scrollX,
-        y: state.height / 2 / zoom - state.scrollY,
-      };
+  let middle = {
+    x: state.width / 2 / zoom - state.scrollX,
+    y: state.height / 2 / zoom - state.scrollY,
+  };
+  if (under) {
+    middle = { x: under.x, y: under.top + height / 2 };
+  } else if (at) {
+    middle = viewportCoordsToSceneCoords(at, state);
+  }
   const id = newFileId();
   // The file is in the doc before the element that shows it: the binding
   // (y-excalidraw) writes a change's elements before its files, each in a
@@ -225,4 +317,5 @@ export const placeImage = async (
     captureUpdate: CaptureUpdateAction.IMMEDIATELY,
   });
   api.setActiveTool({ type: "selection" });
+  return { x: middle.x, bottom: middle.y + height / 2 };
 };

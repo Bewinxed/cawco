@@ -625,7 +625,8 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
     }
 
     /// A PNG pasted on the page, as a paste from the pasteboard arrives: a
-    /// `paste` with the file in its clipboard data, where the pen last was.
+    /// `paste` with the file in its clipboard data, where the pen last was;
+    /// then SVG markup pasted as text, which becomes an image too.
     /// Answers the image elements the page's doc holds after it, how many of
     /// them have their file in the doc's files, and in how many of the doc's
     /// states from the paste on an image element stood without its file
@@ -668,9 +669,19 @@ final class CanvasWeb: NSObject, WKScriptMessageHandler, WKNavigationDelegate, U
         focus: active ? `${active.tagName}.${active.className}`.slice(0, 80) : "none", carried, pointed };
     };
     // The image read and placed (its file first, then its element): it lands once the page has decoded it.
-    for (let i = 0; i < 50 && imagesNow().length === 0; i += 1) {
-      await new Promise((done) => setTimeout(done, 100));
-    }
+    const landed = async (count) => {
+      for (let i = 0; i < 50 && imagesNow().length < count; i += 1) {
+        await new Promise((done) => setTimeout(done, 100));
+      }
+    };
+    await landed(1);
+    // Then SVG markup pasted as text, which the canvas makes an image of too.
+    const svg = new DataTransfer();
+    svg.setData("text/plain", '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="32"><rect width="48" height="32" fill="#2e86de"/></svg>');
+    const pasteSvg = new ClipboardEvent("paste", { clipboardData: svg, bubbles: true, cancelable: true });
+    if (!pasteSvg.clipboardData?.getData("text/plain")) Object.defineProperty(pasteSvg, "clipboardData", { value: svg });
+    (active ?? document.body).dispatchEvent(pasteSvg);
+    await landed(2);
     await new Promise((done) => setTimeout(done, 300));
     doc.off("update", look);
     return JSON.stringify(read());

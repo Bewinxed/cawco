@@ -262,11 +262,23 @@ const runSpec = async (kit: Kit) => {
     refused.slice(0, 300)
   );
 
-  // 7. Every request any page made, by host.
+  // 7. Every request any page made, by host: the dashboard's, or the
+  // session's preview origin, where its canvases stand (an origin of its
+  // own, which the hub names: core frames.ts `previewOrigin`).
+  const address = await on.fleet.api<{ host?: string; port?: number }>(
+    `/api/instances/${on.session}/preview-address`,
+    {}
+  );
+  const base = new URL(await on.fleet.dashboard());
+  const previewHost =
+    address.host ?? (address.port ? `${base.hostname}:${address.port}` : null);
+  const elsewhere = on.offOrigin.filter(
+    (url) => new URL(url).host !== previewHost
+  );
   kit.check(
-    "7: every request the pages made was to the dashboard's own origin",
-    on.offOrigin.length === 0,
-    on.offOrigin.slice(0, 6).join(" | ") || "none"
+    "7: every request the pages made was to the dashboard's own origin or the session's preview origin",
+    previewHost !== null && elsewhere.length === 0,
+    `preview origin ${previewHost ?? "none named"}; elsewhere: ${elsewhere.slice(0, 6).join(" | ") || "none"}`
   );
 };
 
@@ -469,7 +481,7 @@ const imageChecks = async (on: OnCanvas) => {
     kit.check("26: the image canvas is made", false, made.slice(0, 300));
     return;
   }
-  const frame = await frameOf(page, id);
+  await frameOf(page, id);
   // A second screen joined to the same canvas: its own browser, its panel showing it.
   const other = await kit.page("desk");
   other.on("pageerror", (error) =>
@@ -482,6 +494,10 @@ const imageChecks = async (on: OnCanvas) => {
   );
   await fleet.api(`/api/instances/${session}/artifacts/${id}/show`, {});
   const otherFrame = await frameOf(other, id);
+  // This screen's frame as it stands after the show: the canvas is an
+  // origin of its own, its frame a target of its own, and the show's load
+  // closes the one read before it.
+  const frame = await frameOf(page, id);
   const empty = await fleet.api<{ png: string | null }>(
     `/api/artifacts/${id}/export`
   );
@@ -2217,11 +2233,12 @@ const swapUnder = async (
   on: OnCanvas,
   frame: Frame,
   pen: Pen,
+  cdp: CDPSession,
   stroke: { at: Pt; points: Pt[] },
   motion: "reduce" | "no-preference"
 ) => {
   await on.page.emulateMedia({ reducedMotion: motion });
-  const runs = catchNamed(pen.cdp, "shape-swap");
+  const runs = catchNamed(cdp, "shape-swap");
   const known = (await sceneOf(frame)).map((el) => el.id);
   await watchSwap(frame);
   await pen.draw(stroke.points, stroke.at, { hold: true });
@@ -2232,10 +2249,10 @@ const swapUnder = async (
   if (run) {
     for (const fraction of [0, 0.5, 1]) {
       // biome-ignore lint/performance/noAwaitInLoops: one moment of the clock at a time
-      await seekTo(frame, pen.cdp, run, fraction * (run.source?.duration ?? 0));
+      await seekTo(frame, cdp, run, fraction * (run.source?.duration ?? 0));
       samples.push(await opacities(frame, known));
     }
-    await letGo(pen.cdp, [run]);
+    await letGo(cdp, [run]);
   }
   await settle(on.page, 600);
   return {
@@ -2280,14 +2297,15 @@ const motionCheck = async (
   on: OnCanvas,
   frame: Frame,
   pen: Pen,
+  runs: CDPSession,
   strokes: Strokes,
   at: Pt
 ) => {
-  await pen.cdp.send("Animation.enable");
+  await runs.send("Animation.enable");
   const tokens = await motionTokens(frame);
   const stroke = { at, points: strokes.rectangle };
-  const moving = await swapUnder(on, frame, pen, stroke, "no-preference");
-  const reduced = await swapUnder(on, frame, pen, stroke, "reduce");
+  const moving = await swapUnder(on, frame, pen, runs, stroke, "no-preference");
+  const reduced = await swapUnder(on, frame, pen, runs, stroke, "reduce");
   await on.page.emulateMedia({ reducedMotion: "no-preference" });
   const said = (swap: typeof moving) =>
     `${swap.runs} run ${JSON.stringify(swap.run?.source)}, scrubbed ${JSON.stringify(swap.samples)}, first frame ${JSON.stringify(swap.first)}`;
@@ -2431,8 +2449,14 @@ const shapeChecks = async (on: OnCanvas) => {
   await staysInkChecks(on, frame, pen, strokes, at);
   await shapeTypeCheck(on, frame, pen, strokes, at, id);
   await doubleTapCheck(on, frame);
-  await motionCheck(on, frame, pen, strokes, at);
-  await arrivalCheck(on, frame, pen.cdp, id);
+  // The canvas's frame is an origin of its own (the session's preview
+  // origin), so Chromium runs it in a process of its own: its animations are
+  // that frame's target's, heard and held through a session on the frame.
+  // The pen's input stays the page's: Chromium routes it into the frame.
+  const runs = await on.page.context().newCDPSession(frame);
+  await motionCheck(on, frame, pen, runs, strokes, at);
+  await arrivalCheck(on, frame, runs, id);
+  await runs.detach();
   await pen.cdp.detach();
 };
 

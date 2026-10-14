@@ -67,6 +67,9 @@
  * 18. A canvas opened over the composer: the tools' group, read each frame
  *    from the page's start, is first drawn visible where it settles, its
  *    44px inset already taken (it stands unseen until the host says it).
+ * 19. A PNG pasted into the canvas, then SVG markup pasted as text: two
+ *    image elements, each with its file, and in no state of the doc from
+ *    the first paste on does an image element stand without its file.
  *
  * (9: `canvas` and `artifacts` are their own specs, run beside this one.)
  */
@@ -165,6 +168,8 @@ const penOf = (cdp: CDPSession) => {
 
 declare global {
   interface Window {
+    /** The dashboard's window: every animation standing on it as a held press was made (11). */
+    kitBefore?: Set<Animation>;
     /** The dashboard's window: what the canvas pages it holds said of their link (`cawco:sync`, `cawco:drawn`). */
     kitLinks?: string[];
     /** A canvas page's window: the tools' group on the first frame it was drawn visible, and the frames it stood laid out unseen before. */
@@ -575,6 +580,7 @@ const probe = async (kit: Kit) => {
   await syncCheck(on);
   await heldExportCheck(on);
   await firstRailCheck(on);
+  await pasteOrderCheck(on);
   await phoneCheck(on, "phone");
   await phoneCheck(on, "tablet");
   await phoneCheck(on, "tablet", 768);
@@ -606,9 +612,12 @@ const SWAP = ".stop .swap";
 const swapNow = (page: Page) =>
   page.evaluate((sel) => {
     const meta = ["offset", "easing", "composite", "computedOffset"];
+    // Only this press's runs: none that stood on the page as it was pressed.
+    const before = window.kitBefore ?? new Set<Animation>();
     return [...document.querySelectorAll(sel)].flatMap((el) => {
       const runs = el
         .getAnimations()
+        .filter((run) => !before.has(run))
         .map((run) => {
           const effect = run.effect as KeyframeEffect;
           const named = run as Animation & {
@@ -701,21 +710,18 @@ const swapCheck = async (on: On, clock: Clock) => {
     );
   }
   const press = async (motion: "reduce" | "no-preference") => {
-    await until(
-      "the button back on Send",
-      () => page.locator(SEND).getAttribute("aria-label"),
-      (label) => label === "Send message",
-      60_000
-    );
-    // The last press's swaps played out: no carrier is still leaving. One
-    // still leaving would be caught by this press's clock with the outro its
-    // own press built (under the other motion), its CSS way in restarted by
-    // the media switch below.
+    // The last press settled: the hub has taken its message (the button no
+    // longer pending: its label reads Send throughout, `aria-busy` alone
+    // says it is still out) and no carrier is still leaving. A press whose
+    // answer lands later swaps again then, its outro built under the motion
+    // of its own press, and would run into this one's catch.
     const button = () =>
       page.evaluate((sel) => {
         const send = document.querySelector(sel);
         const carriers = [...(send?.querySelectorAll(".swap") ?? [])];
         return {
+          label: send?.getAttribute("aria-label") ?? null,
+          busy: send?.getAttribute("aria-busy") ?? null,
           carriers: carriers.length,
           leaving: carriers.filter((el) =>
             el
@@ -729,21 +735,34 @@ const swapCheck = async (on: On, clock: Clock) => {
           html: send?.innerHTML.slice(0, 400) ?? "no button",
         };
       }, SEND);
+    const settledNow = (seen: Awaited<ReturnType<typeof button>>) =>
+      seen.label === "Send message" && seen.busy === null && seen.leaving === 0;
     const ready = await until(
-      "the last press's swaps played out",
+      "the last press settled",
       button,
-      (seen) => seen.leaving === 0,
-      10_000
+      settledNow,
+      60_000
     ).catch(button);
     kit.check(
-      `11 (${motion}): before the held press no glyph is still leaving`,
-      ready.leaving === 0,
+      `11 (${motion}): before the held press the last one has settled: the hub has its message and no glyph is still leaving`,
+      settledNow(ready),
       JSON.stringify(ready)
     );
     await page.emulateMedia({ reducedMotion: motion });
     await page.focus(FIELD);
     await page.keyboard.type("Swap");
-    const kept = await clock.catchRuns(() => page.click(SEND), SWAP, 5000);
+    // Each press reads only its own runs: what stands on the page as it is
+    // made is set aside (swapNow).
+    const kept = await clock.catchRuns(
+      async () => {
+        await page.evaluate(() => {
+          window.kitBefore = new Set(document.getAnimations());
+        });
+        await page.click(SEND);
+      },
+      SWAP,
+      5000
+    );
     // The swap's own length: the pending spinner's endless turn is caught too.
     const of = kept.find((run) => run.name.includes("icon-swap"))?.name;
     const looks: Awaited<ReturnType<typeof swapNow>>[] = [];
@@ -758,9 +777,9 @@ const swapCheck = async (on: On, clock: Clock) => {
       );
     }
     await clock.release();
-    // A later swap's outro (the spinner's, Stop's) holds Svelte's 0 ms first
-    // run, which builds the real keyframes as it finishes, from the options
-    // its press made: let each finish now, so none builds in the next press.
+    // A later swap's runs (the spinner's, Stop's, started as the hub's
+    // answer lands) stand held at their first frame after the release:
+    // let each finish now, so none is still running into the next press.
     await page.evaluate((sel) => {
       for (const run of window.kitRuns()) {
         const target = (run.effect as KeyframeEffect | null)?.target;
@@ -1757,6 +1776,122 @@ const heldExportCheck = async (on: On) => {
     `held ${held} export request(s); said after ${after} ms: "${said}"; sent ${sent}; ${JSON.stringify(after2)}`
   );
   await page.unroute("**/api/artifacts/*/export");
+  await page.close();
+};
+
+/** An element in the canvas's doc, as far as a paste's order is read. */
+interface PastedElement {
+  fileId?: string;
+  isDeleted?: boolean;
+  type?: string;
+}
+
+/**
+ * 19. A PNG pasted into the canvas, then SVG markup pasted as text: every
+ * state of the page's doc from the first paste on is read (its `update`),
+ * and none holds an image element whose file is not in the doc's files.
+ */
+const pasteOrderCheck = async (on: On) => {
+  const { kit, base, session } = on;
+  const page = await kit.page("desk");
+  await open(page, `${base}/session/${session}`, FIELD);
+  await settle(page);
+  await page.focus(FIELD);
+  await page.keyboard.press("Control+Shift+KeyD");
+  await page.waitForSelector(STAGE, { timeout: 20_000 });
+  const frame = await (
+    await page.locator(FRAME).elementHandle()
+  )?.contentFrame();
+  if (!frame) {
+    kit.check("19: a canvas opens to paste images into", false);
+    await page.close();
+    return;
+  }
+  await frame.waitForSelector(".canvas-host .excalidraw", { timeout: 60_000 });
+  await settle(page, 1000);
+  const seen = await frame.evaluate(async () => {
+    const { doc } = (
+      window as unknown as {
+        cawcoArtifact: {
+          doc: {
+            getArray: (name: string) => {
+              toArray: () => { get: (key: string) => unknown }[];
+            };
+            getMap: (name: string) => { has: (key: string) => boolean };
+            on: (event: string, f: () => void) => void;
+            off: (event: string, f: () => void) => void;
+          };
+        };
+      }
+    ).cawcoArtifact;
+    const files = doc.getMap("files");
+    const images = () =>
+      doc
+        .getArray("elements")
+        .toArray()
+        .map((entry) => entry.get("el") as PastedElement | undefined)
+        .filter(
+          (el) => el && !el.isDeleted && el.type === "image"
+        ) as PastedElement[];
+    let bare = 0;
+    const look = () => {
+      if (images().some((el) => !(el.fileId && files.has(el.fileId)))) {
+        bare += 1;
+      }
+    };
+    doc.on("update", look);
+    const paste = (data: DataTransfer) =>
+      document.body.dispatchEvent(
+        new ClipboardEvent("paste", {
+          clipboardData: data,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+    const landed = async (count: number) => {
+      for (let i = 0; i < 50 && images().length < count; i += 1) {
+        // biome-ignore lint/performance/noAwaitInLoops: read until the image lands
+        await new Promise((done) => setTimeout(done, 100));
+      }
+    };
+    const ink = document.createElement("canvas");
+    ink.width = 64;
+    ink.height = 48;
+    const pen = ink.getContext("2d");
+    if (pen) {
+      pen.fillStyle = "#c0392b";
+      pen.fillRect(0, 0, 64, 48);
+    }
+    const blob = await new Promise<Blob | null>((done) =>
+      ink.toBlob(done, "image/png")
+    );
+    const png = new DataTransfer();
+    png.items.add(
+      new File([blob ?? new Blob()], "probe.png", { type: "image/png" })
+    );
+    paste(png);
+    await landed(1);
+    const svg = new DataTransfer();
+    svg.setData(
+      "text/plain",
+      '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="32"><rect width="48" height="32" fill="#2e86de"/></svg>'
+    );
+    paste(svg);
+    await landed(2);
+    await new Promise((done) => setTimeout(done, 300));
+    doc.off("update", look);
+    const now = images();
+    return {
+      images: now.length,
+      filed: now.filter((el) => el.fileId && files.has(el.fileId)).length,
+      bare,
+    };
+  });
+  kit.check(
+    "19: a PNG and an SVG's markup pasted into the canvas are each an image element with its file, never the element without it",
+    seen.images === 2 && seen.filed === 2 && seen.bare === 0,
+    `${seen.images} images, ${seen.filed} with their file, ${seen.bare} state(s) of the doc with an image standing without its file`
+  );
   await page.close();
 };
 

@@ -163,9 +163,17 @@ export class Clock {
   /**
    * Pauses the run at once, the command sent before anything else is asked
    * of the page; then finds where its target lies, and lets a child frame's
-   * run go.
+   * run go. A run of no length is never paused: it is over as it starts, and
+   * the page may build on its end. Svelte opens every transition with one
+   * (transitions.js: "create a dummy animation that lasts as long as the
+   * delay … in the common case that it is `0`, we keep it anyway"), and
+   * builds the real keyframes in its `onfinish`: held, the transition never
+   * ran, and whether the pause beat that end was the host's load.
    */
   private hold(run: Described, within: string): void {
+    if (runOf(run).end <= 0) {
+      return;
+    }
     this.cdp
       .send("Animation.setPaused", { animations: [run.id], paused: true })
       .catch(() => undefined);

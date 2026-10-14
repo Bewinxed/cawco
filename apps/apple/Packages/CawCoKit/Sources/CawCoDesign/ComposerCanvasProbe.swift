@@ -445,8 +445,9 @@ enum CanvasProbe {
               synced && line2 == nil && drawn.count > 0 && counted && hubDrawn == drawn.count,
               "link \(refused.link.rawValue), refusal \(line2 ?? "gone"), the page's doc holds \(drawn.count)\(drawn.error.map { " (\($0))" } ?? ""), cawco:drawn said \(refused.drawn.map(String.init) ?? "nothing"), the hub's export \(hubDrawn)")
 
-        // A PNG pasted into the canvas: an image element with its file in the doc, in the export and its
-        // picture; the file in the doc before its element, in every state of the doc from the paste on.
+        // A PNG pasted into the canvas, then SVG markup pasted as text: each an image element with its file
+        // in the doc, in the export and its picture; each file in the doc before its element, in every state
+        // of the doc from the first paste on.
         var pasted = (images: 0, filed: 0, bare: -1, said: "")
         var pasteError: String?
         do { pasted = try await refused.probePaste() } catch { pasteError = error.localizedDescription }
@@ -455,18 +456,18 @@ enum CanvasProbe {
         // The hub has the image once the page's doc has synced it: read until its element is there, up to
         // 10 s; its file came first, so it is there with it.
         var exported = (images: 0, filed: 0, png: 0)
-        for _ in 0 ..< 40 where exported.images == 0 {
+        for _ in 0 ..< 40 where exported.images < 2 {
             if let export = try? await host.hub.exportCanvas(refused.page.id, name: refused.page.name),
                let file = (try? JSONSerialization.jsonObject(with: Data(export.file.utf8))) as? [String: Any] {
                 let images = (file["elements"] as? [[String: Any]] ?? []).filter { $0["type"] as? String == "image" && $0["isDeleted"] as? Bool != true }
                 let files = file["files"] as? [String: Any] ?? [:]
                 exported = (images.count, images.count { ($0["fileId"] as? String).map { files[$0] != nil } ?? false }, export.png?.count ?? 0)
             }
-            if exported.images == 0 { await wait(0.25) }
+            if exported.images < 2 { await wait(0.25) }
         }
-        check("a PNG pasted into the canvas is an image element with its file in the doc (never the element without it), the export and its picture",
-              pasted.images == 1 && pasted.filed == 1 && pasted.bare == 0 && synced2 && exported.images == 1 && exported.filed == 1 && exported.png > 0,
-              "the page's doc: \(pasted.images) image, \(pasted.filed) with its file, \(pasted.bare) state(s) with an image standing without its file (\(pasteError ?? pasted.said)); synced \(synced2); the export: \(exported.images) image, \(exported.filed) with its file, picture \(exported.png) bytes")
+        check("a PNG and an SVG's markup pasted into the canvas are each an image element with its file in the doc (never the element without it), the export and its picture",
+              pasted.images == 2 && pasted.filed == 2 && pasted.bare == 0 && synced2 && exported.images == 2 && exported.filed == 2 && exported.png > 0,
+              "the page's doc: \(pasted.images) images, \(pasted.filed) with their file, \(pasted.bare) state(s) with an image standing without its file (\(pasteError ?? pasted.said)); synced \(synced2); the export: \(exported.images) image, \(exported.filed) with its file, picture \(exported.png) bytes")
         composer.returned()
         let went = await until(20) { binding.canvas == nil && !composer.probeCanvasWorking }
         let names = carried.last ?? []
