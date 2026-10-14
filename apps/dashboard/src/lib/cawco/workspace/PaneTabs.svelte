@@ -2415,9 +2415,11 @@
     /* Where on the flare (an angle up from its tip, about the quarter
        turn's centre) the stroke starts to narrow: that length round it,
        never so near the tip that its inner edge would cross the shelf, and
-       at most 60deg of the turn, past which the curve below swells wider
+       at most 45deg of the turn: further up, the curve below swells wider
        than the stroke before it meets it (35% wider at the quarter on the
-       phone's flare). Its inner edge runs round at the stroke's width
+       phone's flare at 90deg; at 60deg on the desk a bump of ink and a dip
+       past it, 0.095 of the foot's whole as folder-tabs' composite reads
+       it on a faint leaning foot, 0.048 at 45deg). Its inner edge runs round at the stroke's width
        (radius `--ro`) down to there, at `--px` out and `--py` above the
        shelf, then on a curve that leaves along that circle and lands flat
        on the shelf at the tip (its control on the shelf at `--cx`): the
@@ -2426,7 +2428,7 @@
     --th: clamp(
       acos(calc(var(--fn) / var(--ro))),
       calc(var(--tn90) / var(--R) * 1rad),
-      60deg
+      45deg
     );
     --px: calc(var(--ro) * sin(var(--th)) * 1px);
     --py: calc((var(--fn) - var(--ro) * cos(var(--th))) * 1px);

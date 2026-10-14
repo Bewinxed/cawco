@@ -27,7 +27,8 @@
  * Ink, at rest and at 0, 25, 49, 50, 51, 75 and 100% (what drawing alone
  * decides): one stroke down every shared edge, drawn by its front side only;
  * one piece where two tops meet; the chosen rim at 3:1; each free foot's
- * taper; and on the rimless strip, each seam's edge where the glide puts it,
+ * taper, on a rim drawn at a strength someone reads (`TAPER_READABLE`),
+ * every foot at rest among them; and on the rimless strip, each seam's edge where the glide puts it,
  * moving one way. Ink at every 5% of the switch (composite): each switching
  * tab's flared foot as drawn never falls back along it by more than 0.07 of
  * its whole.
@@ -595,6 +596,21 @@ async function litFrame(
 const COMPOSITE_FALL = 0.07;
 
 /**
+ * The least rim strength (its opacity, as `strength`) whose foot's taper
+ * is read against the taper rule: under it a rim is a trace no one reads,
+ * and the screen's own grain decides the reading. Measured on the desk at
+ * night, the switch's 25% frame, the idle tab coming forward at 0.138: its
+ * foot reaches 90% at 13.25px leaning (the limit is 12.8, 40% of 32) and at
+ * 11.25px with its rim drawn upright, and under any lean of the rim's layer
+ * (rotateX, the same 2D scale, a counter-scaled side, will-change alike)
+ * its quarter turn plateaus at 0.85 to 0.88 of the run from 9 to 13px
+ * whatever its mask asks: the leaning layer's rasterisation, not the
+ * drawing. Every foot at this strength or more keeps the 12.8px limit; one
+ * at rest is never under it (`taper at rest`).
+ */
+const TAPER_READABLE = 0.25;
+
+/**
  * composite: each of the switching tabs' flared feet as drawn (both feet at
  * their strengths, glow off), drawn strong enough to read (0.1 of a rim or
  * more: a rim at a tenth reads as noise), never falls back along it, up to
@@ -904,11 +920,20 @@ function frameFaults(strip: Strip, f: Frame): Record<string, string[]> {
   out.corner = ink.corners.flatMap((c) =>
     c.pieces <= 1 ? [] : [`${c.between} ${c.pieces} pieces`]
   );
+  // taper: every foot drawn at a strength someone can read; the rest are
+  // counted (`TAPER_READABLE`), and none of them may be at rest.
   out.taper = ink.taper.flatMap((p) =>
-    p.faults.length === 0
+    p.strength < TAPER_READABLE || p.faults.length === 0
       ? []
       : [`${p.tab}${p.side[0]} ${p.path} ${p.faults.join(",")}`]
   );
+  const faint = ink.taper.flatMap((p) =>
+    p.strength < TAPER_READABLE
+      ? [`${p.tab}${p.side[0]} ${p.path} ${p.strength.toFixed(3)}`]
+      : []
+  );
+  out["taper unread"] = faint;
+  out["taper at rest"] = rest ? faint : [];
   // 3:1 at rest: the chosen rim's top against the shelf, and each side it
   // stands in front of (in view, out of the fades) against the fills.
   out["3:1"] = [];
@@ -1095,7 +1120,7 @@ async function readStrip(
   const layout = () => page.evaluate(layoutOf, { root: s.root, tab: s.tab });
   const api = s.api === "work" ? "window.__ft.work" : "window.__ft";
   const where = `${s.api} ${view} ${theme}`;
-  const faults: Record<string, string[]> = {};
+  const faults: Partial<Record<string, string[]>> = {};
   const add = (when: string, found: Record<string, string[]>) => {
     for (const [name, list] of Object.entries(found)) {
       faults[name] = [
@@ -1258,6 +1283,7 @@ async function readStrip(
         "idle none",
         "subtle",
         "taper",
+        "taper at rest",
         "handover",
         "jump",
         "feet",
@@ -1266,6 +1292,12 @@ async function readStrip(
         "titles",
       ]
     : ["sheet edge", "fades", "titles"];
+  if (s.rim) {
+    const unread = faults["taper unread"] ?? [];
+    kit.note(
+      `${where}: ${unread.length} foot reading(s) under TAPER_READABLE (${TAPER_READABLE}), not held to the taper rule: ${unread.join("; ") || "none"}`
+    );
+  }
   for (const name of rules) {
     const list = faults[name] ?? [];
     kit.check(
