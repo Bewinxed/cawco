@@ -1385,10 +1385,10 @@ export interface CarrySessionRequest {
   /**
    * End the session's process first when it is between turns: what a move
    * to another account does before it relaunches the session there with its
-   * conversation. Only a turn running, an ask parked or a send it has not
-   * read keep it (`live`); what the process holds for later (background
-   * work, scheduled wake-ups) ends with it. Without `stop`, a session whose
-   * process runs is left where it is.
+   * conversation. A turn running, an ask parked, a send it has not read, a
+   * background task it started or a wake-up its resume would not bring back
+   * keep it (`live`), and the move waits for that turn's end. Without `stop`,
+   * a session whose process runs is left where it is.
    */
   stop?: boolean;
 }

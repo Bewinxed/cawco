@@ -37,6 +37,8 @@ export interface Seen {
   /** Every user message's text, joined: the conversation so far. */
   all: string;
   at: number;
+  /** The credential the request carried (its `authorization`, else its `x-api-key`): which account it ran on. */
+  auth: string;
   /** The request's body as sent: where a catalog tool (OpenCode's Code Mode) is named. */
   body: string;
   /** The last user message's text: what started this request. */
@@ -461,6 +463,10 @@ export async function scratchFleet(options: {
       const final = body.messages?.at(-1);
       const one: Seen = {
         at: Date.now(),
+        auth:
+          request.headers.get("authorization") ??
+          request.headers.get("x-api-key") ??
+          "",
         afterTool:
           final?.role === "tool" ||
           (Array.isArray(final?.content) &&

@@ -176,7 +176,13 @@ import {
   sessiondBridge,
 } from "../sessiond-client";
 import { ChildActivity, type RingLine, readRing } from "../sessiond-custody";
-import { forgetWakeups, keepWakeups, keptWakeups, writtenAt } from "../wakeups";
+import {
+  forgetWakeups,
+  keepWakeups,
+  keptWakeups,
+  type Wakeups,
+  writtenAt,
+} from "../wakeups";
 import {
   hookFailureId,
   readSessionContext,
@@ -982,20 +988,28 @@ const restingSince = async (
 };
 
 /**
- * How many wake-ups a `Stop` hook's input says the session has scheduled
+ * The wake-ups a `Stop` hook's input says the session has scheduled
  * (`session_crons`: "Session-scoped cron tasks (CronCreate, ScheduleWakeup,
  * /loop) that will wake this session later. Empty array when none are
- * scheduled", sdk.d.ts). `undefined` when the input is not a `Stop` hook's or
- * carries no list.
+ * scheduled", sdk.d.ts), and how many of them fire once (`recurring`: "False
+ * for one-shot wakeups"); an entry that does not say counts as one-shot.
+ * `undefined` when the input is not a `Stop` hook's or carries no list.
  */
-const scheduledWakeups = (input: unknown): number | undefined => {
+const scheduledWakeups = (input: unknown): Wakeups | undefined => {
   const { hook_event_name, session_crons } = (input ?? {}) as {
     hook_event_name?: unknown;
     session_crons?: unknown;
   };
-  return hook_event_name === "Stop" && Array.isArray(session_crons)
-    ? session_crons.length
-    : undefined;
+  if (!(hook_event_name === "Stop" && Array.isArray(session_crons))) {
+    return undefined;
+  }
+  return {
+    all: session_crons.length,
+    once: session_crons.filter(
+      (cron: unknown) =>
+        (cron as { recurring?: unknown } | null)?.recurring !== true
+    ).length,
+  };
 };
 
 /**
@@ -1378,14 +1392,14 @@ class ClaudeSession implements HarnessSession {
    */
   readonly #unread = new Set<string>();
   /**
-   * How many wake-ups the session has scheduled for itself (a cron, a loop's
-   * next tick), as the CLI listed them when its last turn ended: its `Stop`
-   * hook carries them (`session_crons`). Their timers live in the CLI
-   * process. None for a child this host started; `undefined` for one it
-   * attached to whose ring no longer holds a turn's end
-   * ({@link adoptWakeups}): not known until its next turn ends.
+   * The wake-ups the session has scheduled for itself (a cron, a loop's next
+   * tick), as the CLI listed them when its last turn ended: its `Stop` hook
+   * carries them (`session_crons`). Their timers live in the CLI process.
+   * None for a child this host started; `undefined` for one it attached to
+   * whose ring no longer holds a turn's end ({@link adoptWakeups}): not known
+   * until its next turn ends.
    */
-  #crons: number | undefined = 0;
+  #crons: Wakeups | undefined = { all: 0, once: 0 };
   /**
    * When an attached session whose wake-ups are not known last wrote its
    * conversation: its turns' ends since then would have said them. Undefined
@@ -2255,19 +2269,19 @@ class ClaudeSession implements HarnessSession {
    * had scheduled as its last turn there ended, or `undefined` when the ring
    * holds no turn's end.
    */
-  adoptWakeups(count: number | undefined, since?: number): void {
-    this.#crons = count;
+  adoptWakeups(wakeups: Wakeups | undefined, since?: number): void {
+    this.#crons = wakeups;
     this.#restingSince = since;
-    this.#wakeupsKnown(count);
+    this.#wakeupsKnown(wakeups);
   }
 
-  /** A turn's end said how many wake-ups it scheduled: kept, so an agent that attaches later knows too. */
-  #wakeupsKnown(count: number | undefined): void {
-    if (count === undefined) {
+  /** A turn's end said which wake-ups it scheduled: kept, so an agent that attaches later knows too. */
+  #wakeupsKnown(wakeups: Wakeups | undefined): void {
+    if (wakeups === undefined) {
       return;
     }
-    this.#crons = count;
-    keepWakeups(this.instanceId, count).catch((error: unknown) =>
+    this.#crons = wakeups;
+    keepWakeups(this.instanceId, wakeups).catch((error: unknown) =>
       console.warn(
         `[claude] ${this.instanceId}: keeping its wake-ups failed: ${error instanceof Error ? error.message : String(error)}`
       )
@@ -2290,13 +2304,11 @@ class ClaudeSession implements HarnessSession {
     if (!this.#stored) {
       return "its conversation is not stored, so nothing could wake it";
     }
-    // A move between turns ends the process and resumes its conversation on
-    // another account: what it holds for later ends with it, and keeping
-    // the process for that would keep the move from ever happening (the SDK
-    // keeps a session's process alive between turns).
-    if (forMove) {
-      return undefined;
-    }
+    // A background task's completion is what wakes the session for it, and
+    // no resume brings the task back ("Background Bash and monitor tasks are
+    // never restored on resume", code.claude.com/docs/en/scheduled-tasks):
+    // a sleep or a move waits for it, as for a running turn. Its completion
+    // starts the turn whose end the move then takes.
     if (this.#background.size > 0) {
       return `${this.#background.size} background task(s) it started are still running`;
     }
@@ -2309,8 +2321,16 @@ class ClaudeSession implements HarnessSession {
         ? undefined
         : "its scheduled wake-ups are not known until its next turn ends";
     }
-    return this.#crons > 0
-      ? `it has scheduled itself ${this.#crons} wake-up(s)`
+    // A move resumes the conversation at once on another account, which
+    // brings back the recurring wake-ups and not every one-shot
+    // ({@link Wakeups}); a sleep fires none of them until it is woken.
+    if (forMove) {
+      return this.#crons.once > 0
+        ? `it has scheduled itself ${this.#crons.once} one-time wake-up(s), which resuming it on another account may not bring back`
+        : undefined;
+    }
+    return this.#crons.all > 0
+      ? `it has scheduled itself ${this.#crons.all} wake-up(s)`
       : undefined;
   }
 
@@ -3168,7 +3188,7 @@ export class ClaudeHarness implements Harness {
     const handed = new Set<string>();
     // The wake-ups the session had scheduled as its last turn in the ring
     // ended: what its `Stop` hook was told ({@link scheduledWakeups}).
-    let wakeups: number | undefined;
+    let wakeups: Wakeups | undefined;
     let { sessionId } = options;
     // `head` is the listing's, taken before every earlier row was adopted; a
     // ring that has since dropped past it ends the read rather than stalling

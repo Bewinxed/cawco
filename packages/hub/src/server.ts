@@ -6835,10 +6835,11 @@ export const createServer = (
    * ({@link CONTROL_CARRY_SESSIONS}) and its row says the new account only
    * once the machine answers that it all is: a reader with the row reads
    * that one dir. `stop` ends a session's process first when it is between
-   * turns (no turn running, no ask parked, no send unread), for a move that
-   * relaunches it with its conversation; what the process holds for later
-   * ends with it. Without `stop`, a session whose process runs stays where
-   * it is. A row with no conversation yet, or of another harness, has
+   * turns (no turn running, no ask parked, no send unread, no background
+   * task, no wake-up its resume would not bring back), for a move that
+   * relaunches it with its conversation; one that holds any of those is
+   * kept `running`, and its move waits for its next turn's end. Without
+   * `stop`, a session whose process runs stays where it is. A row with no conversation yet, or of another harness, has
    * nothing of Claude's to carry. Answers the rows that moved, and why each
    * other did not.
    */
@@ -12942,6 +12943,16 @@ export const createServer = (
     };
   };
 
+  /** Why a move does not relaunch `row` now: it is being ended, or its process is not running. Nothing when it runs. */
+  const notRunning = (row: StoredRow): string | undefined => {
+    if (db.ownedInstance(row.id, row.machineId)?.endIntent) {
+      return "it is being ended";
+    }
+    return ["sleeping", "stopped", "error"].includes(row.status)
+      ? `it is ${row.status}`
+      : undefined;
+  };
+
   /** What a person's move that went says: copied, and relaunched now or at its next start. */
   const handMovedWords = (
     running: boolean,
@@ -12975,6 +12986,16 @@ export const createServer = (
     const row = stored && takeOwedMove(stored);
     const agent = row ? registry.agent(row.machineId) : undefined;
     if (!(row?.sessionId && agent)) {
+      return;
+    }
+    // Ended (its work item over, a person's stop) or no longer running: a
+    // move never starts it. Its row names the account now, so whatever
+    // wakes it next starts it there.
+    const stopped = notRunning(row);
+    if (stopped) {
+      console.log(
+        `[hub] ${sessionName(row)} is on ${accountWords(row.accountId)} now, and isn't relaunched: ${stopped}. Whatever wakes it next starts it there.`
+      );
       return;
     }
     console.log(
@@ -16323,6 +16344,9 @@ export const createServer = (
       if (!(agent && now?.sessionId)) {
         return { running: false, why: awayWords(row.machineId, "offline") };
       }
+      console.log(
+        `[hub] ${sessionName(now)} relaunches on ${accountWords(now.accountId)}, its conversation resumed${stopped ? " and told to carry on past what stopped it" : ""}.`
+      );
       resumeSpawn(
         agent,
         row.machineId,

@@ -188,10 +188,11 @@ export interface HarnessSession {
    * What stopping this session's processes now would lose, in words, beyond
    * what the supervisor sees for itself (a running turn, a parked ask): work
    * the runtime holds in its own process. Nothing when it holds nothing.
-   * `forMove`: the stop is a move's, which relaunches it on another account
-   * with its conversation, so what it holds for later (background work,
-   * scheduled wake-ups) ends with it and is not counted (core
-   * `CarrySessionRequest.stop`).
+   * `forMove`: the stop is a move's, which relaunches it at once on another
+   * account with its conversation (core `CarrySessionRequest.stop`): what
+   * that resume brings back is not counted, and everything it would lose
+   * (background work, a wake-up no resume restores) is, so the move waits
+   * for it.
    */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches the session methods
   holding?(forMove?: boolean): string | undefined;

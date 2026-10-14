@@ -1516,7 +1516,7 @@ export class SessionSupervisor {
     serverBusy?: string[],
     /** The hub's keep-alive is left out: {@link CONTROL_RESTLESS} asks for the rest alone. */
     keepAliveAside = false,
-    /** A move's stop: what it holds for later is not counted ({@link HarnessSession.holding}). */
+    /** A move's stop: what its resume on the new account brings back is not counted ({@link HarnessSession.holding}). */
     forMove = false
   ): Promise<{ why: string; unsure?: true } | undefined> {
     if (this.#adopting.has(instanceId)) {
@@ -1645,10 +1645,10 @@ export class SessionSupervisor {
    * Carries each Claude session's own data into the dir its row is to say
    * ({@link CONTROL_CARRY_SESSIONS}). A session whose process runs is left
    * where it is, `live`, unless the request says `stop` and it is between
-   * turns (no turn running, no ask parked, no send unread): then its process
-   * ends first, the way a relaunch ends it, and the hub starts it again on
-   * the account it moved to. What it holds for later (background work,
-   * scheduled wake-ups) ends with it. A process sessiond still holds that no
+   * turns (no turn running, no ask parked, no send unread, nothing it would
+   * lose: a background task, a wake-up its resume does not bring back): then
+   * its process ends first, the way a relaunch ends it, and the hub starts it
+   * again on the account it moved to. A process sessiond still holds that no
    * session here has taken back is live too.
    */
   async carrySessions(
