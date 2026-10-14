@@ -46,6 +46,11 @@ import {
 import { signInWarning } from "../machine";
 import { type MarkHue, markHue } from "../mark";
 import { heldOrder } from "../motion/held-order.svelte";
+import {
+  listTasksWaiting,
+  stageLabel,
+  type TaskSummary,
+} from "../project-tasks";
 import { folderOf } from "../projects";
 import { rail } from "../rail.svelte";
 import { onRow } from "../session-acts.svelte";
@@ -350,7 +355,35 @@ export interface WatchItem {
   title: string;
 }
 
-export type NeedsItem = AskItem | RunItem | CapItem | ActionItem | WatchItem;
+/**
+ * A project's task waiting on you, as the hub says (its stage is of kind
+ * `you`, or its last attempt failed): it opens the task, its deliverable and
+ * the way to act on it first.
+ */
+export interface TaskItem {
+  href: string;
+  key: string;
+  kind: "task";
+  place: string;
+  /** Its project, named and marked as the rail marks it. */
+  project: ProjectMarking | null;
+  /** When the task last changed, ms epoch: how long it has waited. */
+  raisedAt: number;
+  /** Why it waits on you. */
+  reason: "review" | "failed";
+  /** Its stage, as the board names it. */
+  stage: string;
+  taskId: string;
+  title: string;
+}
+
+export type NeedsItem =
+  | AskItem
+  | RunItem
+  | CapItem
+  | ActionItem
+  | WatchItem
+  | TaskItem;
 
 export interface RecentItem {
   at: number;
@@ -792,8 +825,37 @@ class Home {
     return this.#ready ? "connected" : "reading";
   }
 
+  /**
+   * Each project's tasks the hub says wait on you, as last read: on arrival,
+   * on a reconnect, and whenever the hub says that project's tasks changed.
+   */
+  #waiting = $state<Record<string, TaskSummary[]>>({});
+  /** The change count each project's waiting tasks were last read at. */
+  readonly #waitingRead = new Map<string, number>();
+
   constructor() {
     $effect.root(() => {
+      $effect(() => {
+        if (cawco.hub !== "connected") {
+          this.#waitingRead.clear();
+          return;
+        }
+        for (const project of cawco.projects) {
+          const changes = cawco.tasksChangedOf(project.id);
+          if (this.#waitingRead.get(project.id) === changes) {
+            continue;
+          }
+          this.#waitingRead.set(project.id, changes);
+          const { id } = project;
+          listTasksWaiting(id)
+            .then((tasks) => {
+              this.#waiting = { ...this.#waiting, [id]: tasks };
+            })
+            .catch(() => {
+              // The next change reads it again; Needs you keeps the last read.
+            });
+        }
+      });
       $effect(() => {
         if (
           cawco.hub === "unreachable" ||
@@ -947,8 +1009,29 @@ class Home {
         raisedAt: notice.at,
       };
     });
+    const waitingTasks: NeedsItem[] = cawco.projects.flatMap((project) =>
+      (this.#waiting[project.id] ?? []).map((task) => ({
+        kind: "task" as const,
+        key: `task:${project.id}:${task.id}`,
+        taskId: task.id,
+        title: task.title,
+        reason: task.kind === "you" ? ("review" as const) : ("failed" as const),
+        stage: stageLabel(task.stage),
+        place: project.name,
+        project: { name: project.name, hue: markHue(folderOf(project)) },
+        href: `/project/${encodeURIComponent(project.id)}?task=${encodeURIComponent(task.id)}`,
+        raisedAt: task.updatedAt,
+      }))
+    );
     // Longest wait first; an ask the hub has not stamped sorts last.
-    return [...asks, ...runs, ...caps, ...actions, ...watched].sort(
+    return [
+      ...asks,
+      ...runs,
+      ...caps,
+      ...actions,
+      ...watched,
+      ...waitingTasks,
+    ].sort(
       (a, b) =>
         (a.raisedAt ?? Number.POSITIVE_INFINITY) -
         (b.raisedAt ?? Number.POSITIVE_INFINITY)

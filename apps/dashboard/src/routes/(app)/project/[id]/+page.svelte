@@ -66,6 +66,7 @@
   import { checkoutOf } from "#lib/cawco/projects.js";
   import Split from "#lib/cawco/side/Split.svelte";
   import NewTaskForm from "#lib/cawco/tasks/NewTaskForm.svelte";
+  import { setTaskProject, waitsOnYou } from "#lib/cawco/tasks/needs.svelte.js";
   import StagesControl from "#lib/cawco/tasks/StagesControl.svelte";
   import TaskBoard from "#lib/cawco/tasks/TaskBoard.svelte";
   import TaskPane from "#lib/cawco/tasks/TaskPane.svelte";
@@ -124,6 +125,7 @@
       : null;
   });
   const projectId = $derived(data.project?.id ?? "");
+  setTaskProject(() => projectId);
 
   /** A refused read, as a sentence with its status for support. */
   const refusal = (read: HubRead<unknown>): string | null =>
@@ -158,16 +160,29 @@
         return task;
       }
       const kind = kindByStage.get(stage) ?? null;
-      return { ...task, stage, kind, needsYou: kind === "you" };
+      return {
+        ...task,
+        stage,
+        kind,
+        needsYou: kind === "you" || task.lastAttemptFailed,
+      };
     })
   );
   const kindById = $derived(new Map(tasks.map((task) => [task.id, task.kind])));
-  const needsYou = $derived(tasks.filter((task) => task.kind === "you"));
+  /** What waits on you: the hub's reasons, a session's ask, an action (needs.svelte.ts). */
+  const needsYou = $derived(
+    tasks.filter((task) => waitsOnYou(projectId, task))
+  );
   /** The filter holds only while something needs you. */
   const filtering = $derived(needsOnly && needsYou.length > 0);
   const shownTasks = $derived(filtering ? needsYou : tasks);
+  /** Filtered, the columns those tasks stand in. */
   const shownStages = $derived(
-    filtering ? stageList.filter((stage) => stage.kind === "you") : stageList
+    filtering
+      ? stageList.filter((stage) =>
+          needsYou.some((task) => task.stage === stage.name)
+        )
+      : stageList
   );
   const newIn = $derived(firstTodoStage(stageList)?.name);
   const empty = $derived(list !== null && list.tasks.length === 0);

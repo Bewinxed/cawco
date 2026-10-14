@@ -1,8 +1,10 @@
 <script lang="ts">
   /**
    * One thing parked on the operator, as a row of Caw's panel (NeedsCaw):
-   * a session's permission or question, a workflow run's question, or a
-   * project past its spend cap. The session's mark leads (a run and a
+   * a session's permission or question, a workflow run's question, a
+   * project past its spend cap, or a project's task waiting on you (its
+   * review, or a failed attempt), which opens the task with its deliverable
+   * and the way to act on it first. The session's mark leads (a run and a
    * budget their glyphs), then the title and its wait, what it wants in the
    * words it is asked, and the kind and where. The row itself opens it (the
    * session at the request, the run, the project's spend) and the panel
@@ -38,6 +40,7 @@
     IconError,
     IconFolder,
     IconMaximize,
+    IconNeedsYou,
     IconSend,
     IconTick,
     IconWarningTriangle,
@@ -99,6 +102,10 @@
         return "Waiting on your answer";
       case "watch":
         return item.notice.title;
+      case "task":
+        return item.reason === "review"
+          ? `Review the draft: it waits on you in ${item.stage}`
+          : "Its last attempt failed: read it, then retry";
       case "action":
         if (item.action.state === "unknown") {
           return `This may or may not have happened. Check ${item.action.service}.`;
@@ -314,6 +321,12 @@
       />
     {:else if item.kind === "run"}
       <IconWorkflow aria-hidden="true" />
+    {:else if item.kind === "task"}
+      {#if item.reason === "failed"}
+        <IconError aria-hidden="true" />
+      {:else}
+        <IconNeedsYou aria-hidden="true" />
+      {/if}
     {:else if item.kind === "action"}
       {#if item.action.state === "unknown"}
         <IconWarningTriangle aria-hidden="true" />
@@ -408,6 +421,23 @@
         <span aria-hidden="true" class="dot">·</span>
         <span class="task">{item.action.taskId}</span>
       {/if}
+    </span>
+  {:else if item.kind === "task"}
+    <span class="meta where">
+      {#if item.project}
+        <span class="project">
+          <IconFolder
+            aria-hidden="true"
+            class="mark"
+            style="color: var(--mark-{item.project.hue})"
+          />
+          <span class="project-name">{item.project.name}</span>
+        </span>
+        <span aria-hidden="true" class="dot">·</span>
+      {/if}
+      <span>Task</span>
+      <span aria-hidden="true" class="dot">·</span>
+      <span class="task">{item.taskId}</span>
     </span>
   {:else}
     <span class="meta">{meta}</span>

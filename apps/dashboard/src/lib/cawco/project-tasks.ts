@@ -366,6 +366,12 @@ const one = (projectId: string, taskId: string) =>
 export const listTasks = (projectId: string): Promise<TaskList> =>
   send(`${base(projectId)}/tasks`);
 
+/** The project's tasks the hub says wait on you (`needsYou`): Caw's Needs you lists them. */
+export const listTasksWaiting = async (
+  projectId: string
+): Promise<TaskSummary[]> =>
+  (await send<TaskList>(`${base(projectId)}/tasks?needsYou=1`)).tasks;
+
 export const readStages = (projectId: string): Promise<StagesView> =>
   send(`${base(projectId)}/stages`);
 

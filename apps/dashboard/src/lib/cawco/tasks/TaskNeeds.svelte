@@ -35,7 +35,7 @@
     IconTick,
   } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
-  import { cawco, decideAction } from "../client.svelte";
+  import { decideAction } from "../client.svelte";
   import { rowHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
   import {
@@ -50,6 +50,7 @@
     type TaskView,
   } from "../project-tasks";
   import RowFault from "../RowFault.svelte";
+  import { actionsOf, asksOf } from "./needs.svelte";
   import TaskOutput from "./TaskOutput.svelte";
 
   let {
@@ -86,18 +87,9 @@
 
   // --- the reasons ---------------------------------------------------------------
 
-  /** Its attempts' sessions, newest first: an ask from one of them is the task's. */
-  const sessions = $derived(
-    new Set(task.attempts.map((attempt) => attempt.instanceId))
-  );
-  const asks = $derived(
-    cawco.blocked.filter((blocked) => sessions.has(blocked.instanceId))
-  );
-  const actions = $derived(
-    cawco.actions.filter(
-      (action) => action.projectId === projectId && action.taskId === task.id
-    )
-  );
+  // The reasons past the hub's, as every place reads them (needs.svelte.ts).
+  const asks = $derived(asksOf(task));
+  const actions = $derived(actionsOf(projectId, task.id));
   const reviewing = $derived(task.kind === "you");
   const failed = $derived(task.lastAttemptFailed && !task.liveAttempt);
   const lastAttempt = $derived(task.attempts[0]);

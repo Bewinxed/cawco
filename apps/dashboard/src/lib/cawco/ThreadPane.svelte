@@ -69,6 +69,7 @@
     type TaskView,
   } from "./project-tasks";
   import SideSplit from "./side/SideSplit.svelte";
+  import { setTaskProject, waitsOnYou } from "./tasks/needs.svelte";
   import TaskCard from "./tasks/TaskCard.svelte";
   import TaskNeedsFor from "./tasks/TaskNeedsFor.svelte";
   import TaskPane from "./tasks/TaskPane.svelte";
@@ -106,6 +107,7 @@
   const projectId = $derived(
     thread?.projectId ?? newThreadProjectOf(viewId) ?? ""
   );
+  setTaskProject(() => projectId);
 
   let paneWidth = $state(0);
   const coarse = new MediaQuery("(pointer: coarse)");
@@ -570,7 +572,7 @@
       {#if task}
         <li class="thread-task">
           <TaskCard href={taskHref(id)} {kindOf} onopen={openTaskOf} {task} />
-          {#if task.needsYou && stages}
+          {#if stages && waitsOnYou(projectId, task)}
             <TaskNeedsFor
               onchanged={changedIn}
               onmove={moveIn}

@@ -29,6 +29,7 @@
     IconWarningTriangle,
   } from "#lib/icons.js";
   import { dragTask } from "./board-dnd.svelte.js";
+  import { actionsOf, asksOf, taskProject } from "./needs.svelte";
 
   let {
     task,
@@ -54,6 +55,13 @@
   } = $props();
 
   const flags = $derived(flagsOf(task));
+  /** The project the card stands in: an action names its task within it. */
+  const project = taskProject();
+  /** Its session asks you, or an action filed for it waits on you. */
+  const asks = $derived(asksOf(task).length > 0);
+  const approves = $derived(
+    project ? actionsOf(project(), task.id).length > 0 : false
+  );
   const retry = $derived(isRetry(task));
   /**
    * What it waits on that has not landed: the hub's word when it gives one,
@@ -114,9 +122,13 @@
     {/if}
   </span>
   <span class="title">{task.title}</span>
-  {#if flags.live || task.kind === "you" || date}
+  {#if flags.live || task.kind === "you" || asks || approves || date}
     <span class="live-foot">
-      {#if flags.live}
+      {#if asks || approves}
+        <!-- Waiting on you outranks working: the attempt is stopped on you. -->
+        <IconNeedsYou aria-hidden="true" class="attn" />
+        <span>{asks ? "its session asks you" : "an action waits on you"}</span>
+      {:else if flags.live}
         <span aria-hidden="true" class="dot live"></span>
         {#if retry}
           <span>retrying · attempt {task.attempts.length}</span>
