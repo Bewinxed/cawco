@@ -77,22 +77,24 @@
   const GAP = 7;
   const MORE = 59;
   /**
-   * The fewest characters of its title a chip in the row shows: a title cut
-   * shorter than this reads as noise, so the chip goes into "+N" instead.
+   * The fewest characters of its title, and of its state ("queued for a
+   * heavy-run slot behind 2 checks, 4m", "2 questions"), a chip in the row
+   * shows: cut shorter, either reads as noise, so the chip goes into "+N"
+   * instead. A state this short or shorter is shown whole.
    */
   const TITLE_FLOOR = 8;
+  const NOTE_FLOOR = 12;
   let ruler: CanvasRenderingContext2D | null = null;
-  /** The title's floor as drawn: its first TITLE_FLOOR characters and the ellipsis, in its own face. */
-  function titleFloor(title: HTMLElement): number {
-    const text = title.textContent ?? "";
-    const style = getComputedStyle(title);
+  /** A text's floor as drawn: its first `chars` characters and the ellipsis, in its own face. */
+  function textFloor(part: HTMLElement, chars: number): number {
+    const text = part.textContent ?? "";
+    const style = getComputedStyle(part);
     ruler ??= document.createElement("canvas").getContext("2d");
     if (!ruler) {
       return 0;
     }
     ruler.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
-    const shown =
-      text.length > TITLE_FLOOR ? `${text.slice(0, TITLE_FLOOR)}…` : text;
+    const shown = text.length > chars ? `${text.slice(0, chars)}…` : text;
     return Math.ceil(ruler.measureText(shown).width) + 1;
   }
 
@@ -377,10 +379,18 @@
   let rowWidth = $state(0);
   /**
    * Each chip's floor as drawn, by item: what does not give way in it (its
-   * mark, its note, its state, its padding and gaps) and its title's floor
-   * (`titleFloor`), never under CHIP. The fit counts these, and each chip is
-   * held to its own, so the count and the row cannot disagree: a chip whose
-   * fixed parts outgrow CHIP no longer spills over the next one.
+   * mark, its state glyph, its padding and gaps), its title's floor and its
+   * state's (`textFloor`), never under CHIP. Both texts give way down to
+   * their floors, which each holds as its least width, so a long state
+   * ("queued for a heavy-run slot behind …") is cut inside its chip instead
+   * of widening it. The fit counts these, and each chip in the row is held
+   * to its own, so the count and the row cannot disagree. Measured in the
+   * fan too: a chip's floor is known before it comes into the row.
+   *
+   * Counted whole, the state made a queued chip's floor about 400px; held
+   * to that, the chip stretched across the row and every chip after it
+   * folded into "+N" (owner: "why the delegate chips here show +9 even
+   * though there's space for them").
    */
   const floors = new SvelteMap<string, number>();
   const floorOf = (id: string): number => floors.get(id) ?? CHIP;
@@ -388,9 +398,22 @@
     return (node: HTMLElement) => {
       const title = node.querySelector<HTMLElement>(".title");
       const take = () => {
-        const fixed = node.scrollWidth - (title?.clientWidth ?? 0);
-        const least = title ? titleFloor(title) : 0;
-        const floor = Math.max(CHIP, Math.ceil(fixed + least));
+        const note = node.querySelector<HTMLElement>(".note");
+        const titleLeast = title ? textFloor(title, TITLE_FLOOR) : 0;
+        const noteLeast = note ? textFloor(note, NOTE_FLOOR) : 0;
+        for (const [part, least] of [
+          [title, titleLeast],
+          [note, noteLeast],
+        ] as const) {
+          if (part && part.style.minInlineSize !== `${least}px`) {
+            part.style.minInlineSize = `${least}px`;
+          }
+        }
+        const fixed =
+          node.scrollWidth -
+          (title?.clientWidth ?? 0) -
+          (note?.clientWidth ?? 0);
+        const floor = Math.max(CHIP, Math.ceil(fixed + titleLeast + noteLeast));
         if (floors.get(id) !== floor) {
           floors.set(id, floor);
         }
@@ -984,7 +1007,7 @@
     style:min-inline-size={fanned ? undefined : `${floorOf(item.id)}px`}
     class:finished={tone === "done" && (item.endedAt ?? 0) > mountedAt}
     class:fly={flies}
-    {@attach fanned ? undefined : measureFloor(item.id)}
+    {@attach measureFloor(item.id)}
   >
     {@render mark(item, flies)}
     <span aria-hidden="true" class="words">
@@ -1253,9 +1276,13 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* The state gives way like the title, to its floor (`measureFloor`), cut
+     with an ellipsis inside the chip, before its glyph. */
   .note {
-    flex: none;
+    min-inline-size: 0;
     font-weight: var(--weight-body);
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
   .cancelled .note {
