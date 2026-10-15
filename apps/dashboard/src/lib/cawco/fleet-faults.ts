@@ -381,6 +381,9 @@ export function machineFaults(
  * machine from its own marketplace instead, so its fetch error is a fault only
  * while no machine reports it applied — a plugin bigger than the hub carries
  * works everywhere and is not broken.
+ *
+ * A row the hub is fetching again is no fault while it does: its `error` is
+ * the last fetch's, and the fetch under way answers it.
  */
 export function hubFaults(
   skills: readonly FleetSkillMeta[],
@@ -391,7 +394,7 @@ export function hubFaults(
     reports.some((report) => report?.plugins[id]?.state === "applied");
   return [
     ...skills
-      .filter((row) => row.error)
+      .filter((row) => row.error && !row.fetching)
       .map((row) => ({
         origin: "hub" as const,
         scope: "skills" as const,
@@ -400,7 +403,7 @@ export function hubFaults(
         cause: causeOf(row.error, "hub"),
       })),
     ...plugins
-      .filter((row) => row.error && !appliedSomewhere(row.id))
+      .filter((row) => row.error && !row.fetching && !appliedSomewhere(row.id))
       .map((row) => ({
         origin: "hub" as const,
         scope: "plugins" as const,

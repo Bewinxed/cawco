@@ -1,5 +1,5 @@
 /** Named frame shapes keep schema and generated-client names independent of union order. */
-import type { FleetMcpServer } from "./fleet";
+import type { FleetMcpServer, FleetPlugin, FleetSkillMeta } from "./fleet";
 import type {
   HarnessKind,
   NeutralMessage,
@@ -527,6 +527,22 @@ export interface ProjectsChangedFrame {
    * opened or was archived): read `/api/projects` again.
    */
   kind: "projects.changed";
+}
+
+/**
+ * Hub-originated: a skill or plugin fetch at the hub began (`fetching`) or
+ * landed (files, or the sentence it failed with). Carries the row whole, as
+ * `/api/fleet` reads it. A fetch runs after the request that asked for it
+ * has answered, so this is how every dashboard learns what came of it.
+ * Exactly one of `skill` and `plugin` is set.
+ */
+export interface FleetFetchFrame {
+  instanceId?: undefined;
+  kind: "fleet.fetch";
+  plugin?: FleetPlugin;
+  /** The row was removed while it was fetched; its `error` says so. */
+  removed?: boolean;
+  skill?: FleetSkillMeta;
 }
 
 export interface TasksChangedFrame {

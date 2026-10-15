@@ -11,6 +11,7 @@ import {
   type ConfigInspection,
   type FleetAgent,
   type FleetConfig,
+  type FleetFetchFrame,
   type FleetHook,
   type FleetMarketplace,
   type FleetMcpConfig,
@@ -25,7 +26,7 @@ import {
   type McpSSEServerConfig,
   parseAgentFrontMatter,
 } from "@cawco/core";
-import { machineFs } from "./client.svelte";
+import { machineFs, onFleetFetch } from "./client.svelte";
 import type { ListedVersion } from "./config/PreviousVersions.svelte";
 
 /** The fleet's user-scope CLAUDE.md, as the hub stores it (NEW.md §11). */
@@ -67,15 +68,6 @@ export interface FleetSnapshot {
   skills: FleetSkillMeta[];
   /** Machines the hub could not write the subagents to, by machineId → why. */
   unpushable: Record<string, string>;
-}
-
-/**
- * What a skill write answers with: the row as the hub stored it, plus — when
- * the repo held several skills and the source named none — the ones it could
- * have meant. The row is stored either way, error and all.
- */
-export interface SkillWriteResult extends FleetSkillMeta {
-  choices?: string[];
 }
 
 /** The charset MCP server names are held to, on the hub and here. */
@@ -546,6 +538,64 @@ export const removeMarketplace = (name: string): Promise<void> =>
     `unlink ${name}`
   );
 
+/**
+ * A fetch asked of the hub, resolved with the row once it has landed. The
+ * request answers at once with the row marked `fetching`, because a large
+ * repo's download outlasts any HTTP request; what came of it is the
+ * `fleet.fetch` frame that follows, which may even arrive before the answer.
+ */
+const untilFetched = <T extends { fetching?: boolean }>(
+  attempt: string,
+  pick: (frame: FleetFetchFrame) => T | undefined,
+  ask: () => Promise<T>
+): Promise<T> =>
+  new Promise<T>((resolve, reject) => {
+    let answered = false;
+    let landed: T | undefined;
+    const stop = onFleetFetch({
+      heard: (frame) => {
+        const row = pick(frame);
+        if (!row || row.fetching) {
+          return;
+        }
+        landed = row;
+        if (answered) {
+          stop();
+          resolve(row);
+        }
+      },
+      dropped: () => {
+        stop();
+        reject(
+          new Error(
+            `Could not ${attempt} — the connection to the hub dropped while it fetched. The row says what came of it once the page reconnects.`
+          )
+        );
+      },
+    });
+    ask().then(
+      (row) => {
+        answered = true;
+        if (!row.fetching) {
+          stop();
+          resolve(row);
+        } else if (landed) {
+          stop();
+          resolve(landed);
+        }
+      },
+      (error: unknown) => {
+        stop();
+        reject(error);
+      }
+    );
+  });
+
+/**
+ * Installs or switches a plugin. The hub fetches its bytes after it answers;
+ * the row comes back marked `fetching`, and its `fleet.fetch` frame says how
+ * that went.
+ */
 export const savePlugin = (
   id: string,
   patch: { enabled?: boolean }
@@ -558,26 +608,37 @@ export const removePlugin = (id: string): Promise<void> =>
 /**
  * Resolves a plugin's bytes at the hub again — the answer to a plugin the hub
  * could not fetch, and to a machine that could not fetch it for itself. Comes
- * back with the row, `error` and all, so a retry that failed again says so
- * without a reload.
+ * back with the row once the fetch has landed, `error` and all, so a retry
+ * that failed again says so without a reload.
  */
 export const refreshPlugin = (id: string): Promise<FleetPlugin> =>
-  send(
-    `/api/fleet/plugins/${encodeURIComponent(id)}/refresh`,
-    { method: "POST" },
-    `refresh ${id}`
+  untilFetched(
+    `refresh ${id}`,
+    (frame) => (frame.plugin?.id === id ? frame.plugin : undefined),
+    () =>
+      send(
+        `/api/fleet/plugins/${encodeURIComponent(id)}/refresh`,
+        { method: "POST" },
+        `refresh ${id}`
+      )
   );
 
 /**
- * Stores a skill and resolves it on the hub, once, for every machine. A source
- * the hub could not resolve still answers with a row — the failure is the row's
- * to carry, not this call's to throw.
+ * Stores a skill and resolves it on the hub, once, for every machine; comes
+ * back with the row once the fetch has landed. A source the hub could not
+ * resolve still lands as a row — the failure is the row's to carry, not this
+ * call's to throw — and an ambiguous one carries its `choices`.
  */
 export const saveSkill = (
   name: string,
   body: { source: string; enabled?: boolean; projectId?: string | null }
-): Promise<SkillWriteResult> =>
-  put(`/api/fleet/skills/${encodeURIComponent(name)}`, body, `save ${name}`);
+): Promise<FleetSkillMeta> =>
+  untilFetched(
+    `save ${name}`,
+    (frame) => (frame.skill?.name === name ? frame.skill : undefined),
+    () =>
+      put(`/api/fleet/skills/${encodeURIComponent(name)}`, body, `save ${name}`)
+  );
 
 /**
  * What a machine really has, fleet or not (NEW.md §11), and what a session in
@@ -652,12 +713,21 @@ export const restoreSkillVersion = (id: number): Promise<FleetSkillMeta> =>
     "restore that version"
   );
 
-/** Resolves the same source again — for a skill whose repo has moved on. */
+/**
+ * Resolves the same source again — for a skill whose repo has moved on. Comes
+ * back with the row once the fetch has landed (an adopted skill's machine
+ * read answers whole, as it is bounded).
+ */
 export const refreshSkill = (name: string): Promise<FleetSkillMeta> =>
-  send(
-    `/api/fleet/skills/${encodeURIComponent(name)}/refresh`,
-    { method: "POST" },
-    `refresh ${name}`
+  untilFetched(
+    `refresh ${name}`,
+    (frame) => (frame.skill?.name === name ? frame.skill : undefined),
+    () =>
+      send(
+        `/api/fleet/skills/${encodeURIComponent(name)}/refresh`,
+        { method: "POST" },
+        `refresh ${name}`
+      )
   );
 
 export const removeSkill = (name: string): Promise<void> =>

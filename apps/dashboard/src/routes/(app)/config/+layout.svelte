@@ -5,7 +5,7 @@
    * beside each entry are the rows the section shows.
    */
   import { onMount } from "svelte";
-  import { cawco } from "#lib/cawco/client.svelte.js";
+  import { cawco, onFleetFetch } from "#lib/cawco/client.svelte.js";
   import ConfigRail from "#lib/cawco/config/ConfigRail.svelte";
   import {
     LAST_KEY,
@@ -33,6 +33,24 @@
   onMount(() => {
     // biome-ignore lint/complexity/noVoid: each slot reports its own outcome
     void store.loadAll();
+    // A skill or plugin fetch runs at the hub after its request answered;
+    // its frames keep the rows, and the rail's counts, as the hub has them.
+    return onFleetFetch({
+      heard: (frame) => store.heardFetch(frame),
+      dropped: () => {
+        dropped = true;
+      },
+    });
+  });
+  // A fetch that landed while the socket was down was never heard: the rows
+  // are read again once it is back.
+  let dropped = false;
+  $effect(() => {
+    if (cawco.status === "connected" && dropped) {
+      dropped = false;
+      // biome-ignore lint/complexity/noVoid: the slot reports its own outcome
+      void store.fleet.load();
+    }
   });
 
   const slug = $derived(

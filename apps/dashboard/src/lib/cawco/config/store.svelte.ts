@@ -1,6 +1,7 @@
 import type {
   FleetAgent,
   FleetConfig,
+  FleetFetchFrame,
   FleetSkillMeta,
   RuleRow,
   ToolPolicy,
@@ -113,6 +114,55 @@ export class ConfigStore {
       };
     }
   );
+
+  /**
+   * Rows (`skill:<name>`, `plugin:<id>`) whose fetch a `fleet.fetch` frame
+   * said landed since {@link asking} last named them. A request's answer can
+   * arrive after that frame; the answer's `fetching` row is then older than
+   * the one on screen, and {@link answered} leaves it out.
+   */
+  readonly #landed = new Set<string>();
+
+  /** A request that starts a fetch of `key` is about to go. */
+  asking(key: string): void {
+    this.#landed.delete(key);
+  }
+
+  /** Whether the answer `row` to a request for `key` is older than what a frame already brought. */
+  answered(key: string, row: { fetching?: boolean }): boolean {
+    return !(row.fetching && this.#landed.has(key));
+  }
+
+  /**
+   * A `fleet.fetch` frame into the rows: a fetch began or landed, here or
+   * in another tab. A row removed meanwhile leaves the list.
+   */
+  heardFetch(frame: FleetFetchFrame): void {
+    const fleet = this.fleet.value;
+    const { skill, plugin, removed } = frame;
+    if (skill) {
+      if (!skill.fetching) {
+        this.#landed.add(`skill:${skill.name}`);
+      }
+      if (fleet && removed) {
+        fleet.skills = fleet.skills.filter((row) => row.name !== skill.name);
+      } else if (fleet) {
+        upsert(fleet.skills, skill, (row) => row.name === skill.name);
+      }
+    }
+    if (plugin) {
+      if (!plugin.fetching) {
+        this.#landed.add(`plugin:${plugin.id}`);
+      }
+      if (fleet && removed) {
+        fleet.config.plugins = fleet.config.plugins.filter(
+          (row) => row.id !== plugin.id
+        );
+      } else if (fleet) {
+        upsert(fleet.config.plugins, plugin, (row) => row.id === plugin.id);
+      }
+    }
+  }
 
   /** The row a save just returned to, marked once when the list renders. */
   flash = $state<string | null>(null);

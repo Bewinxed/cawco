@@ -25,10 +25,10 @@ const main = Effect.gen(function* () {
   const lifetime = yield* HubLifetime;
   const telegram =
     createTelegramBridge({ registry, db, pending, lifetime }) ?? undefined;
-  // `idleTimeout` past Bun's 10s default: a skill refresh re-downloads and
-  // hashes the whole skill before it says anything (impeccable is 3.2MB /
-  // 147 files), and the socket is silent that whole time. 120s clears the
-  // resolver's own 60s fetch timeout with room for the hash.
+  // `idleTimeout` past Bun's 10s default: linking or browsing a marketplace
+  // downloads it inside the request, and the socket is silent that whole
+  // time. A skill or plugin fetch is not one of these: its request answers
+  // with the row marked `fetching` and the outcome is a `fleet.fetch` frame.
   // Before `listen`: every dashboard's first frame names this commit (see
   // `HubServices.build`), and two git calls are not worth a socket without it.
   const build = yield* Effect.promise(buildInfo);

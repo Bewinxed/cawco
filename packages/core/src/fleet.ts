@@ -132,6 +132,11 @@ export interface FleetPlugin extends FleetPlacement {
   enabled: boolean;
   /** Why the last resolve at the hub failed, when it did. */
   error?: string;
+  /**
+   * The hub is fetching it now. `hash`, `bytes` and `error` are the last
+   * fetch's until this one lands, which a `fleet.fetch` frame announces.
+   */
+  fetching?: boolean;
   /** Content hash of the resolved files; absent until a resolve succeeds. */
   hash?: string;
   id: string;
@@ -168,9 +173,19 @@ export interface SkillFile {
 export interface FleetSkillMeta extends FleetPlacement {
   /** Decoded size of the resolved files, for the dashboard to show. */
   bytes?: number;
+  /**
+   * When the last fetch found several skills in a source that named none:
+   * the ones it could have meant, to pick from with `@<name>`.
+   */
+  choices?: string[];
   enabled: boolean;
   /** Why the last resolve failed, when it did. */
   error?: string;
+  /**
+   * The hub is fetching it now. `hash`, `bytes` and `error` are the last
+   * fetch's until this one lands, which a `fleet.fetch` frame announces.
+   */
+  fetching?: boolean;
   /** Content hash of the resolved files; absent until a resolve succeeds. */
   hash?: string;
   name: string;

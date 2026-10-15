@@ -1838,6 +1838,17 @@ export interface DbShape {
   readonly spendOnCap: () => OnCap;
   readonly stageSessionIdentity: (instanceId: string, hash: string) => void;
   /**
+   * The row a fetch is about to resolve: a new one is stored with no files
+   * yet; an existing one takes `enabled` and its placement now and keeps its
+   * source and files until the fetch's {@link putSkill}.
+   */
+  readonly stageSkill: (skill: {
+    name: string;
+    source: string;
+    enabled?: boolean;
+    projectId?: string | null;
+  }) => FleetSkillMeta;
+  /**
    * The one-time reclassification a taxonomy change needs when the column is
    * plain text and there is no SQL migration to hang it on. Idempotent by
    * construction — both halves select on states they then leave — so running it
@@ -2963,6 +2974,22 @@ const make = async (path: string): Promise<DbShape> => {
     db.delete(table)
       .where(and(of, notInArray(id, keep)))
       .run();
+  };
+
+  /** A `wf-` skill a workflow owns is that workflow's to change, never a fleet write's. */
+  const refuseWorkflowSkill = (name: string): void => {
+    if (
+      name.startsWith("wf-") &&
+      db
+        .select({ id: workflows.id })
+        .from(workflows)
+        .where(eq(workflows.slug, name.slice("wf-".length)))
+        .get()
+    ) {
+      throw new Error(
+        `Skill ${name} is owned by a workflow; edit or delete that workflow instead.`
+      );
+    }
   };
 
   /** A skill's version, kept before it is replaced or destroyed. */
@@ -5328,18 +5355,7 @@ const make = async (path: string): Promise<DbShape> => {
       files,
       projectId,
     }) => {
-      if (
-        name.startsWith("wf-") &&
-        db
-          .select({ id: workflows.id })
-          .from(workflows)
-          .where(eq(workflows.slug, name.slice("wf-".length)))
-          .get()
-      ) {
-        throw new Error(
-          `Skill ${name} is owned by a workflow; edit or delete that workflow instead.`
-        );
-      }
+      refuseWorkflowSkill(name);
       const stored = db
         .select()
         .from(skills)
@@ -5393,6 +5409,35 @@ const make = async (path: string): Promise<DbShape> => {
         })
         .run();
       return skillMeta({ ...row, ...placement });
+    },
+    stageSkill: ({ name, source, enabled, projectId }) => {
+      refuseWorkflowSkill(name);
+      const stored = db
+        .select()
+        .from(skills)
+        .where(eq(skills.name, name))
+        .get();
+      const placement = placementOf(projectId, stored?.projectId, "project");
+      if (!stored) {
+        const row = {
+          name,
+          source,
+          enabled: enabled ?? true,
+          hash: null,
+          bytes: null,
+          error: null,
+          files: null,
+        };
+        db.insert(skills)
+          .values({ ...row, ...placement })
+          .run();
+        return skillMeta({ ...row, ...placement });
+      }
+      // The source, hash and files stay the last fetch's until this one lands
+      // (`putSkill`), so a fetch that fails keeps what the machines serve.
+      const next = { enabled: enabled ?? stored.enabled, ...placement };
+      db.update(skills).set(next).where(eq(skills.name, name)).run();
+      return skillMeta({ ...stored, ...next });
     },
     deleteSkill: (name) => {
       // A delete takes a final snapshot, as a hook's does.

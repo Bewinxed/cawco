@@ -28,6 +28,7 @@ import type {
   DelegateEvent,
   EffortLevel,
   Envelope,
+  FleetFetchFrame,
   FleetWatchNotice,
   FramePayload,
   FsPayload,
@@ -2849,6 +2850,13 @@ function handleFrame(frame: FramePayload): void {
     return;
   }
 
+  if (frame.kind === "fleet.fetch") {
+    for (const listener of fleetFetchListeners) {
+      listener.heard(frame);
+    }
+    return;
+  }
+
   if (frame.kind === "tasks.changed") {
     state.tasksChanged[frame.projectId] =
       (state.tasksChanged[frame.projectId] ?? 0) + 1;
@@ -4480,6 +4488,9 @@ function socketClosed(): void {
     }, OUTAGE_GRACE);
   }
   abandonInflight("The connection to the hub dropped before that finished.");
+  for (const listener of fleetFetchListeners) {
+    listener.dropped();
+  }
   // Subscriptions, resumes and unanswered commands all died with the socket,
   // and the next one reads every followed transcript again (`rereadFollowed`).
   // With the host, for the same reason the traffic sweep passes it: a socket
@@ -5709,6 +5720,24 @@ export async function projectRunning(id: string): Promise<RunningSession[]> {
     );
   }
   return ((await response.json()) as { sessions: RunningSession[] }).sessions;
+}
+
+/** Who hears `fleet.fetch` frames, and is told when the socket that carries them drops. */
+interface FleetFetchListener {
+  dropped: () => void;
+  heard: (frame: FleetFetchFrame) => void;
+}
+
+const fleetFetchListeners = new Set<FleetFetchListener>();
+
+/**
+ * Hears each `fleet.fetch` frame: a skill or plugin fetch at the hub began
+ * or landed, with its row whole. `dropped` runs when the socket closes, as a
+ * fetch that lands meanwhile is never heard. Returns the unsubscribe.
+ */
+export function onFleetFetch(listener: FleetFetchListener): () => void {
+  fleetFetchListeners.add(listener);
+  return () => fleetFetchListeners.delete(listener);
 }
 
 const projectStopListeners = new Set<(frame: ProjectStopFrame) => void>();

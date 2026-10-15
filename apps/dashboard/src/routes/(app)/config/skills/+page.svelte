@@ -105,11 +105,19 @@
     }
   }
 
+  /**
+   * A plugin row a request answered with. An install or a switch answers
+   * while its fetch is still under way; the `fleet.fetch` frame that lands it
+   * may come first, and then the answer is the older of the two.
+   */
   function landedPlugin(row: FleetPlugin) {
-    if (fleet) {
+    if (fleet && store.answered(`plugin:${row.id}`, row)) {
       upsert(fleet.config.plugins, row, (other) => other.id === row.id);
     }
   }
+
+  /** What a skill or plugin row says while the hub fetches it, the words a fetch button says. */
+  const FETCHING = "Fetching…";
 
   /**
    * What a row's last action came to when the hub refused it, by the row's
@@ -333,6 +341,7 @@
     const id = `${plugin.name}@${marketplace}`;
     busy[id] = true;
     delete installFailed[id];
+    store.asking(`plugin:${id}`);
     try {
       landedPlugin(await savePlugin(id, { enabled: true }));
     } catch (err) {
@@ -345,6 +354,7 @@
   async function togglePlugin(id: string, enabled: boolean) {
     busy[id] = true;
     delete rowFaults[id];
+    store.asking(`plugin:${id}`);
     try {
       landedPlugin(await savePlugin(id, { enabled }));
     } catch (err) {
@@ -432,9 +442,9 @@
           <SectionRow
             actions={[
               {
-                label: "Fetch again",
+                label: row.fetching ? FETCHING : "Fetch again",
                 icon: IconRefresh,
-                disabled: busy[row.name] === true,
+                disabled: busy[row.name] === true || row.fetching === true,
                 onselect: () => refetchSkill(row),
               },
               {
@@ -457,7 +467,10 @@
             flash={store.flash === row.name}
             hue={HUE}
             icon={IconBolt}
-            meta={[row.source, ...sized(row)].join(" · ")}
+            meta={[
+              row.source,
+              ...(row.fetching ? [FETCHING] : sized(row)),
+            ].join(" · ")}
             name={row.name}
             ontoggle={(next) => switchSkill(row, next)}
             toggling={busy[row.name] === true}
@@ -647,9 +660,9 @@
           <SectionRow
             actions={[
               {
-                label: "Fetch again",
+                label: row.fetching ? FETCHING : "Fetch again",
                 icon: IconRefresh,
-                disabled: busy[row.id] === true,
+                disabled: busy[row.id] === true || row.fetching === true,
                 onselect: () => refetchPlugin(row),
               },
               {
@@ -663,7 +676,9 @@
             enabled={row.enabled}
             hue={HUE}
             icon={IconLayers}
-            meta={sized(row).join(" · ") || "No bytes resolved yet"}
+            meta={row.fetching
+              ? FETCHING
+              : sized(row).join(" · ") || "No bytes resolved yet"}
             mono
             name={row.id}
             ontoggle={(next) => togglePlugin(row.id, next)}

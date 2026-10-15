@@ -16526,7 +16526,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/putApiFleetSkillsByName200"
+                  "$ref": "#/components/schemas/FleetSkillMeta"
                 }
               }
             }
@@ -23048,67 +23048,6 @@
           "ok"
         ]
       },
-      "putApiFleetSkillsByName200": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/FleetSkillMeta"
-          },
-          {
-            "type": "object",
-            "properties": {
-              "choices": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
-              "bytes": {
-                "description": "Decoded size of the resolved files, for the dashboard to show.",
-                "type": "number"
-              },
-              "enabled": {
-                "type": "boolean"
-              },
-              "error": {
-                "description": "Why the last resolve failed, when it did.",
-                "type": "string"
-              },
-              "hash": {
-                "description": "Content hash of the resolved files; absent until a resolve succeeds.",
-                "type": "string"
-              },
-              "name": {
-                "type": "string"
-              },
-              "source": {
-                "type": "string"
-              },
-              "cwd": {
-                "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
-                "type": "string"
-              },
-              "placeId": {
-                "description": "The place (`project_places` row) this copy is for, on a copy the hub\nplaced: the machine reports what it came to under `<key>@<placeId>`, and\nthe hub folds every place's report back onto the row.",
-                "type": "string"
-              },
-              "projectId": {
-                "description": "The hub `projects` row this is bound to. Required unless `user`.",
-                "type": "string"
-              },
-              "scope": {
-                "$ref": "#/components/schemas/FleetScope",
-                "description": "Where a fleet row applies, in Claude Code's own vocabulary:\n\n- `user` — every machine, every project. MCP goes to `~/.claude.json`'s\n  top-level `mcpServers`, skills to `~/.claude/skills/`, plugins install\n  `--scope user`. The default, and what most rows want.\n- `local` — one project, privately: `~/.claude.json`'s\n  `projects[\"<cwd>\"].mcpServers`, the map Claude Code already keeps per\n  checkout and git never sees; plugins `--scope local`. What a\n  project-bound row should be unless the reader asks to share it.\n- `project` — one project, shared with whoever clones it: `.mcp.json` at\n  the repo root, plugins `--scope project`. It writes inside the working\n  tree, so it is never the default.\n\nSkills have no `local` in Claude Code, so a project-bound skill lands in\n`<cwd>/.claude/skills/` under either scope."
-              }
-            },
-            "required": [
-              "choices",
-              "enabled",
-              "name",
-              "source"
-            ]
-          }
-        ]
-      },
       "deleteApiFleetSkillsByName200": {
         "type": "object",
         "properties": {
@@ -25760,6 +25699,9 @@
             "$ref": "#/components/schemas/ProjectsChangedFrame"
           },
           {
+            "$ref": "#/components/schemas/FleetFetchFrame"
+          },
+          {
             "$ref": "#/components/schemas/ProjectCapFrame"
           },
           {
@@ -25820,6 +25762,7 @@
             "thread.message": "#/components/schemas/ThreadMessageFrame",
             "tasks.changed": "#/components/schemas/TasksChangedFrame",
             "projects.changed": "#/components/schemas/ProjectsChangedFrame",
+            "fleet.fetch": "#/components/schemas/FleetFetchFrame",
             "project.cap": "#/components/schemas/ProjectCapFrame",
             "actions": "#/components/schemas/ActionsFrame",
             "project.stop": "#/components/schemas/ProjectStopFrame",
@@ -37468,6 +37411,10 @@
             "description": "Why the last resolve at the hub failed, when it did.",
             "type": "string"
           },
+          "fetching": {
+            "description": "The hub is fetching it now. `hash`, `bytes` and `error` are the last\nfetch's until this one lands, which a `fleet.fetch` frame announces.",
+            "type": "boolean"
+          },
           "hash": {
             "description": "Content hash of the resolved files; absent until a resolve succeeds.",
             "type": "string"
@@ -37505,12 +37452,23 @@
             "description": "Decoded size of the resolved files, for the dashboard to show.",
             "type": "number"
           },
+          "choices": {
+            "description": "When the last fetch found several skills in a source that named none:\nthe ones it could have meant, to pick from with `@<name>`.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "enabled": {
             "type": "boolean"
           },
           "error": {
             "description": "Why the last resolve failed, when it did.",
             "type": "string"
+          },
+          "fetching": {
+            "description": "The hub is fetching it now. `hash`, `bytes` and `error` are the last\nfetch's until this one lands, which a `fleet.fetch` frame announces.",
+            "type": "boolean"
           },
           "hash": {
             "description": "Content hash of the resolved files; absent until a resolve succeeds.",
@@ -43565,6 +43523,33 @@
             "enum": [
               "projects.changed"
             ]
+          }
+        },
+        "required": [
+          "kind"
+        ]
+      },
+      "FleetFetchFrame": {
+        "description": "Hub-originated: a skill or plugin fetch at the hub began (`fetching`) or\nlanded (files, or the sentence it failed with). Carries the row whole, as\n`/api/fleet` reads it. A fetch runs after the request that asked for it\nhas answered, so this is how every dashboard learns what came of it.\nExactly one of `skill` and `plugin` is set.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "fleet.fetch"
+            ]
+          },
+          "plugin": {
+            "$ref": "#/components/schemas/FleetPlugin",
+            "description": "One installed plugin. `id` is the CLI's own `plugin@marketplace` form.\n\n`hash`, `bytes` and `error` are what the HUB resolved this row to, and they\nride the dashboard's read only — the copy a machine is sent carries the\nfiles themselves ({@link FleetPluginPayload}) and has no use for the\nbookkeeping. `error` is a hub-side failure and a different fact from a\nmachine's `failed` in {@link FleetSyncReport.plugins}: one says the bytes\nwere never fetched, the other says a machine would not take them."
+          },
+          "removed": {
+            "description": "The row was removed while it was fetched; its `error` says so.",
+            "type": "boolean"
+          },
+          "skill": {
+            "$ref": "#/components/schemas/FleetSkillMeta",
+            "description": "A skill row as the hub stores and the dashboard reads it: where it came\nfrom and what the hub resolved it to. The files themselves stay out of\nthis shape — a catalog read should not weigh megabytes.\n\n`source` forms the hub's resolver accepts. Installer CLIs are deliberately\nnever run: an installer is a wrapper around \"copy files into\n`~/.claude/skills/<name>`\", and cawco does the copy itself.\n- `skills:owner/repo[@skill][#ref]` — a skills.sh-style slug (what the\n  user would have typed after `bunx skills add`). The repo tarball is\n  walked in the CLI's own discovery order, except `.claude/skills/` wins\n  over `.agents/skills/` — cawco wants the Claude-tuned variant.\n- `github:owner/repo[/path][@ref]` — the repo tarball, `path` pointing at\n  the skill directory.\n- `npm:package[@version]` — the registry tarball, for the few packages\n  that embed `skills/<name>/SKILL.md` (most installer packages carry no\n  content — their CLIs fetch from GitHub at runtime).\n- a plain URL to a `SKILL.md` (single-file skill)."
           }
         },
         "required": [

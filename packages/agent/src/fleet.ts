@@ -1096,10 +1096,7 @@ const dirExists = async (path: string): Promise<boolean> => {
  * callers remove the directory first, so every write is a fresh file and a bit
  * that flipped off in the source lands off here too.
  */
-export const writeSkillFile = async (
-  dir: string,
-  file: SkillFile
-): Promise<void> => {
+const writeSkillFile = async (dir: string, file: SkillFile): Promise<void> => {
   const path = join(dir, file.path);
   await writeStateFile(path, Buffer.from(file.contentBase64, "base64"));
   if (file.executable) {

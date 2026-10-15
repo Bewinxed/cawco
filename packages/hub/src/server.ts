@@ -22,6 +22,7 @@ import type {
   FleetHoldings,
   FleetHook,
   FleetMcpConfig,
+  FleetPlugin,
   FleetSkillMeta,
   FleetSyncReport,
   FleetWatchNotice,
@@ -13526,45 +13527,176 @@ export const createServer = (
     }
   };
 
-  /** A stored skill fetched again from the source it names; the row as it now is. */
-  const reresolveSkill = async (
-    stored: FleetSkillMeta
-  ): Promise<FleetSkillMeta> => {
-    const resolved = await resolveSkill(stored.source);
-    return db.putSkill({
-      name: stored.name,
-      source: stored.source,
-      enabled: stored.enabled,
-      ...("error" in resolved
-        ? { error: resolved.error }
-        : {
-            hash: resolved.hash,
-            bytes: resolved.bytes,
-            files: resolved.files,
-          }),
+  /**
+   * The skill and plugin fetches running at the hub, by `skill:<name>` and
+   * `plugin:<id>`. A fetch never runs inside the request that asked for it: a
+   * large repo's download outlasts any HTTP idle timeout, so the request
+   * answers with the row marked `fetching` and the outcome reaches every
+   * dashboard as a `fleet.fetch` frame. A second ask for a row already being
+   * fetched joins the fetch under way.
+   */
+  const fetches = new Map<string, Promise<unknown>>();
+  /** What an ambiguous source's last fetch could have meant, by skill name. */
+  const skillChoices = new Map<string, string[]>();
+
+  /** A skill row as the dashboard reads it: the stored row, and its fetch. */
+  const skillRow = (row: FleetSkillMeta): FleetSkillMeta => {
+    const choices = skillChoices.get(row.name);
+    return {
+      ...row,
+      ...(fetches.has(`skill:${row.name}`) ? { fetching: true } : {}),
+      ...(choices ? { choices } : {}),
+    };
+  };
+  /** A plugin row as the dashboard reads it: the stored row, and its fetch. */
+  const pluginRow = (row: FleetPlugin): FleetPlugin =>
+    fetches.has(`plugin:${row.id}`) ? { ...row, fetching: true } : row;
+
+  const announceFetch = (
+    row: ({ skill: FleetSkillMeta } | { plugin: FleetPlugin }) & {
+      removed?: true;
+    }
+  ): void =>
+    registry.broadcast({
+      verb: "frames",
+      machineId: "hub",
+      payload: { kind: "fleet.fetch", ...row },
     });
+
+  const REMOVED_WHILE_FETCHING = "Removed while it was being fetched.";
+
+  /** Says how a skill's fetch stands now; a row removed meanwhile says so. */
+  const announceSkill = (name: string, source: string): void => {
+    const row = db.listSkills().find((skill) => skill.name === name);
+    announceFetch(
+      row
+        ? { skill: skillRow(row) }
+        : {
+            skill: {
+              name,
+              source,
+              enabled: false,
+              error: REMOVED_WHILE_FETCHING,
+            },
+            removed: true,
+          }
+    );
+  };
+
+  /**
+   * Fetches a skill's source at the hub and stores what came of it, announced
+   * as it starts and as it lands. Resolves once it has landed; never rejects.
+   */
+  const fetchSkill = (name: string, source: string): Promise<unknown> => {
+    const key = `skill:${name}`;
+    const running = fetches.get(key);
+    if (running !== undefined) {
+      return running;
+    }
+    skillChoices.delete(name);
+    const work = (async () => {
+      const resolved = await resolveSkill(source);
+      const stored = db.listSkills().find((skill) => skill.name === name);
+      if (!stored) {
+        return;
+      }
+      db.putSkill({
+        name,
+        source,
+        enabled: stored.enabled,
+        ...("error" in resolved
+          ? { error: resolved.error }
+          : {
+              hash: resolved.hash,
+              bytes: resolved.bytes,
+              files: resolved.files,
+            }),
+      });
+      if ("choices" in resolved && resolved.choices) {
+        skillChoices.set(name, resolved.choices);
+      } else {
+        skillChoices.delete(name);
+      }
+      // Nothing on any machine changed unless there are files to change it with.
+      if (!("error" in resolved)) {
+        fanOutFleet();
+      }
+    })()
+      .catch((error: unknown) => {
+        console.warn(
+          `[hub] skill ${name}: fetch from ${source} failed: ${error instanceof Error ? error.message : String(error)}`
+        );
+      })
+      .finally(() => {
+        fetches.delete(key);
+        announceSkill(name, source);
+      });
+    fetches.set(key, work);
+    announceSkill(name, source);
+    return work;
+  };
+
+  /**
+   * Fetches plugins at the hub, as {@link fetchSkill} does a skill; resolves
+   * with whether any came to files, which is news for the machines.
+   */
+  const fetchPlugins = async (ids: readonly string[]): Promise<boolean> => {
+    const fresh = ids.filter((id) => !fetches.has(`plugin:${id}`));
+    const joined = ids
+      .filter((id) => fetches.has(`plugin:${id}`))
+      .map((id) => fetches.get(`plugin:${id}`));
+    const announce = (id: string): void => {
+      const row = db.listPlugins().find((plugin) => plugin.id === id);
+      announceFetch(
+        row
+          ? { plugin: pluginRow(row) }
+          : {
+              plugin: { id, enabled: false, error: REMOVED_WHILE_FETCHING },
+              removed: true,
+            }
+      );
+    };
+    const work = resolvePlugins(fresh).catch((error: unknown) => {
+      console.warn(
+        `[hub] plugins ${fresh.join(", ")}: fetch failed: ${error instanceof Error ? error.message : String(error)}`
+      );
+      return false;
+    });
+    for (const id of fresh) {
+      fetches.set(`plugin:${id}`, work);
+      announce(id);
+    }
+    const carried = await work;
+    for (const id of fresh) {
+      fetches.delete(`plugin:${id}`);
+      announce(id);
+    }
+    await Promise.all(joined);
+    return carried;
   };
 
   // Every row the hub holds no bytes for, plugin or skill: never fetched, or
-  // fetched and failed. Done once at boot rather than on every sync: a resolved
-  // row is bytes the fleet already agrees on, and re-fetching it would be a
-  // download per restart for a file nobody asked to change. A failed one is
-  // tried again so the sentence on it is this hub's, in this hub's words, and a
-  // source that came back heals with nobody pressing refresh. An adopted
-  // skill's source is a machine, which is not fetched from here.
+  // fetched and failed, or staged by a fetch a restart cut short. Done once at
+  // boot rather than on every sync: a resolved row is bytes the fleet already
+  // agrees on, and re-fetching it would be a download per restart for a file
+  // nobody asked to change. A failed one is tried again so the sentence on it
+  // is this hub's, in this hub's words, and a source that came back heals with
+  // nobody pressing refresh. An adopted skill's source is a machine, which is
+  // not fetched from here.
   // Boot does not stall on network fetches for rows that were already unresolved.
   const reresolveFailed = async (): Promise<void> => {
-    let moved = await resolvePlugins(db.unresolvedPlugins());
-    const failedSkills = db
-      .listSkills()
-      .filter((skill) => skill.error && !skill.source.startsWith("machine:"));
-    for (const stored of failedSkills) {
-      // biome-ignore lint/performance/noAwaitInLoops: one source fetched at a time, as a refresh does it
-      const skill = await reresolveSkill(stored);
-      moved ||= skill.hash !== stored.hash;
-    }
-    if (moved) {
+    if (await fetchPlugins(db.unresolvedPlugins())) {
       fanOutFleet();
+    }
+    const unfetched = db
+      .listSkills()
+      .filter(
+        (skill) =>
+          (skill.error || !skill.hash) && !skill.source.startsWith("machine:")
+      );
+    for (const stored of unfetched) {
+      // biome-ignore lint/performance/noAwaitInLoops: one source fetched at a time, as a refresh does it
+      await fetchSkill(stored.name, stored.source);
     }
   };
   /**
@@ -19578,8 +19710,12 @@ export const createServer = (
           // resolve produced nor the sentence a failed one left. The dashboard
           // needs both — a plugin the hub could not fetch and a plugin a machine
           // would not install are different faults with different fixes.
-          config: { mcp, marketplaces, plugins: db.listPlugins() },
-          skills: db.listSkills(),
+          config: {
+            mcp,
+            marketplaces,
+            plugins: db.listPlugins().map(pluginRow),
+          },
+          skills: db.listSkills().map(skillRow),
           agents: db.listFleetAgents(),
           memory: db.getFleetMemory() ?? null,
           // The linked documents carry their files for the same reason the
@@ -20005,39 +20141,44 @@ export const createServer = (
           // reaches them already carries the files rather than a name to go and
           // resolve. A fetch that fails leaves its sentence on the row and the
           // fan-out still happens — the fleet is not held up by one plugin.
-          // The route answers now; the resolve and fan-out finish after it.
+          // The route answers now, the row marked `fetching`; the outcome is
+          // a `fleet.fetch` frame (`fetchPlugins`).
           detach(
-            resolvePlugins([params.id]).finally(() => fanOutFleet()),
+            fetchPlugins([params.id]).finally(() => fanOutFleet()),
             "plugin resolve"
           );
-          return plugin;
+          const row = db.listPlugins().find(({ id }) => id === params.id);
+          return pluginRow(row ?? plugin);
         }
       )
       // Re-fetch one plugin's bytes. The same verb a skill has, and the way a
       // fleet takes a new version of something upstream moved: nothing else
       // re-resolves on its own, because a plugin that resolved once is a plugin
-      // every machine already agrees on.
-      .post("/api/fleet/plugins/:id/refresh", async ({ params, status }) => {
-        const known = db.listPlugins().some(({ id }) => id === params.id);
-        if (!known) {
+      // every machine already agrees on. Answers at once, the row marked
+      // `fetching`, as the PUT does.
+      .post("/api/fleet/plugins/:id/refresh", ({ params, status }) => {
+        const row = db.listPlugins().find(({ id }) => id === params.id);
+        if (!row) {
           return status(404, `no plugin ${params.id} in this fleet`);
         }
-        await resolvePlugins([params.id]);
-        fanOutFleet();
-        // The row itself, not `{ ok: true }`: a retry whose answer does not say
-        // whether it resolved is a retry the reader has to reload to read.
-        const row = db.listPlugins().find(({ id }) => id === params.id);
-        return row ?? status(404, `no plugin ${params.id} in this fleet`);
+        detach(
+          fetchPlugins([params.id]).then(() => fanOutFleet()),
+          "plugin refresh"
+        );
+        return pluginRow(row);
       })
       .delete("/api/fleet/plugins/:id", ({ params }) => {
         db.deletePlugin(params.id);
         fanOutFleet();
         return { ok: true };
       })
-      // A plain skill is resolved here and now, once for the whole fleet: the hub
-      // downloads it, and the machines are handed the files (NEW.md §11). A source
-      // that would not resolve is still stored — the row is where the dashboard
-      // reads why, and the ambiguous case answers with what it could have meant.
+      // A plain skill is resolved here, once for the whole fleet: the hub
+      // downloads it, and the machines are handed the files (NEW.md §11). The
+      // route answers with the row marked `fetching` before the download
+      // starts; what came of it is a `fleet.fetch` frame (`fetchSkill`). A
+      // source that would not resolve is still stored — the row is where the
+      // dashboard reads why, and the ambiguous case carries what it could have
+      // meant (`choices`).
       //
       // `fromMachine` is the other way in: a skill somebody wrote on one machine,
       // read off it and stored like any fetched one, so it reaches the rest.
@@ -20057,7 +20198,6 @@ export const createServer = (
             projectId: t.Optional(t.Union([t.String(), t.Null()])),
           }),
         },
-        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: resolves a skill from any of its source shapes (url/npm/repo/fromMachine) in one place; splitting it would scatter the validation order this route depends on.
         async ({ params, body, status }) => {
           if (!SKILL_NAME.test(params.name)) {
             return status(400, `${params.name} is not a usable skill name`);
@@ -20115,30 +20255,23 @@ export const createServer = (
             );
           }
 
-          const resolved = await resolveSkill(body.source);
-          const skill = db.putSkill({
+          db.stageSkill({
             name: params.name,
             source: body.source,
             enabled: body.enabled,
             projectId: body.projectId,
-            ...("error" in resolved
-              ? { error: resolved.error }
-              : {
-                  hash: resolved.hash,
-                  bytes: resolved.bytes,
-                  files: resolved.files,
-                }),
           });
-          // Nothing on any machine changed unless there are files to change it with.
-          if (!("error" in resolved)) {
-            fanOutFleet();
-          }
-          return "choices" in resolved && resolved.choices
-            ? { ...skill, choices: resolved.choices }
-            : skill;
+          detach(fetchSkill(params.name, body.source), "skill fetch");
+          const staged = db
+            .listSkills()
+            .find((entry) => entry.name === params.name);
+          return staged
+            ? skillRow(staged)
+            : status(404, `no skill ${params.name}`);
         }
       )
       // The same source, fetched again — for a skill whose repo has moved on.
+      // Answers at once, the row marked `fetching`, as the PUT does.
       .post("/api/fleet/skills/:name/refresh", async ({ params, status }) => {
         const stored = db
           .listSkills()
@@ -20189,14 +20322,12 @@ export const createServer = (
           return skill;
         }
 
-        const skill = await reresolveSkill(stored);
-        if (skill.hash !== stored.hash) {
-          fanOutFleet();
-        }
-        return skill;
+        detach(fetchSkill(stored.name, stored.source), "skill refresh");
+        return skillRow(stored);
       })
       .delete("/api/fleet/skills/:name", ({ params }) => {
         db.deleteSkill(params.name);
+        skillChoices.delete(params.name);
         fanOutFleet();
         return { ok: true };
       })

@@ -23,7 +23,7 @@ import {
   memoryPlan,
   skillDrift,
   skillRecords,
-  writeSkillFile,
+  writeSkill,
 } from "../fleet";
 import {
   guardWorkflowSkillRemoval,
@@ -80,19 +80,6 @@ const dirExists = async (path: string): Promise<boolean> => {
 /** A path a skill's file may take under its own directory. */
 const isSafeSkillPath = (path: string): boolean =>
   path !== "" && !isAbsolute(path) && !path.split("/").includes("..");
-
-/** The skill's directory, as the hub resolved it. Written whole — it is ours. */
-export const writeSkill = async (
-  dir: string,
-  skill: FleetSkillPayload
-): Promise<void> => {
-  const target = join(dir, skill.name);
-  await rm(target, { recursive: true, force: true });
-  for (const file of skill.files ?? []) {
-    // biome-ignore lint/performance/noAwaitInLoops: writes must land after the directory removal above; a failed write partway through still has to leave whatever files it got to
-    await writeSkillFile(target, file);
-  }
-};
 
 /**
  * Writes the skills whose files this machine does not have yet, and takes away
@@ -165,7 +152,7 @@ export const syncSkillFiles = async (
     }
 
     try {
-      await writeSkill(dir, skill);
+      await writeSkill(skill, dir);
       written[skill.name] = skill.hash;
       report[skill.name] = { state: "applied" };
     } catch (error) {
