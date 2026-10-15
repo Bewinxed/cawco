@@ -322,6 +322,8 @@ import {
   type ArtifactServiceDeps,
   type Artifacts,
   createArtifacts,
+  type MarksDelivery,
+  type MarksOutcome,
 } from "./artifacts/service";
 import {
   artifactPicture,
@@ -8985,8 +8987,11 @@ export const createServer = (
    * it already read is not repeated. Each artifact's events settle one after
    * another.
    */
-  const artifactEventsInFlight = new Map<string, Promise<void>>();
-  const artifactInOrder = (key: string, run: () => Promise<void>) => {
+  const artifactEventsInFlight = new Map<string, Promise<unknown>>();
+  const artifactInOrder = <T>(
+    key: string,
+    run: () => Promise<T>
+  ): Promise<T> => {
     const before = artifactEventsInFlight.get(key) ?? Promise.resolve();
     const next = before.catch(() => undefined).then(run);
     artifactEventsInFlight.set(key, next);
@@ -9062,45 +9067,77 @@ export const createServer = (
     }
     return { withdrawn, ...(replaces ? { replaces } : {}) };
   };
-  /** One artifact event to its session, through the one send path. */
+  /** An artifact event's payload to `instance`: its words, its pictures first, and the unread event it replaces. */
+  const artifactEventPayload = (
+    instance: InstanceRow,
+    text: string,
+    images: { data: string; mediaType: string }[],
+    replaces: string | undefined
+  ): SendPayload => ({
+    instanceId: instance.id,
+    message: {
+      type: "user",
+      uuid: crypto.randomUUID(),
+      message: {
+        role: "user",
+        content:
+          images.length === 0
+            ? text
+            : [
+                ...images.map(({ mediaType, data }) => ({
+                  type: "image" as const,
+                  source: {
+                    type: "base64" as const,
+                    media_type: mediaType,
+                    data,
+                  },
+                })),
+                { type: "text" as const, text },
+              ],
+      },
+      parent_tool_use_id: null,
+      origin: { kind: "system", name: ARTIFACT_ORIGIN },
+      ...(replaces ? { replaces } : {}),
+    },
+  });
+  /** One artifact event to its session, through the one send path: its record. */
   const sendArtifactEvent = (
     instance: InstanceRow,
     text: string,
     images: { data: string; mediaType: string }[],
     replaces: string | undefined
-  ) => {
+  ): SentMessageRow | undefined =>
     deliverSend({
       verb: "send",
       machineId: instance.machineId,
       instanceId: instance.id,
-      payload: {
-        instanceId: instance.id,
-        message: {
-          type: "user",
-          uuid: crypto.randomUUID(),
-          message: {
-            role: "user",
-            content:
-              images.length === 0
-                ? text
-                : [
-                    ...images.map(({ mediaType, data }) => ({
-                      type: "image" as const,
-                      source: {
-                        type: "base64" as const,
-                        media_type: mediaType,
-                        data,
-                      },
-                    })),
-                    { type: "text" as const, text },
-                  ],
-          },
-          parent_tool_use_id: null,
-          origin: { kind: "system", name: ARTIFACT_ORIGIN },
-          ...(replaces ? { replaces } : {}),
-        },
-      },
+      payload: artifactEventPayload(instance, text, images, replaces),
     });
+  /**
+   * An artifact event that reached no one, kept in the session's
+   * transcript as the send path keeps one it refused: its line (core
+   * `ARTIFACT_RESPONSES`) reads "not sent", `reason` under it.
+   */
+  const recordUndelivered = (
+    instance: InstanceRow,
+    text: string,
+    images: { data: string; mediaType: string }[],
+    reason: string
+  ) => {
+    const payload = artifactEventPayload(instance, text, images, undefined);
+    publishSend(
+      db.recordSend({
+        uuid: payload.message.uuid,
+        instanceId: instance.id,
+        acceptedAt: new Date(),
+        body: externalizeImages(sentFrame(payload)),
+        mode: sendMode(payload),
+        state: "failed",
+        reason,
+        refusal: null,
+        anchor: anchors.get(instance.id) ?? null,
+      })
+    );
   };
   const signalResponses: ArtifactServiceDeps["signal"] = (
     instance,
@@ -9141,49 +9178,96 @@ export const createServer = (
    * plan's §5.8 says for a page whose writer ended ("wakes the session that
    * wrote the page, or Caw if it has ended"). Outside a project there is no
    * Caw, and the send records why it was not taken.
+   *
+   * Answers whether someone took them: a send the session accepted, or Caw
+   * woken. When no one did (the send refused, Caw's wake refused), the
+   * writer's transcript keeps the event as not sent, with why
+   * ({@link recordUndelivered}, as deliverSend keeps a refused send), and
+   * the marks stay owed for the next delivery.
    */
   const deliverArtifactMarks: ArtifactServiceDeps["deliverMarks"] = (
     instance,
     artifact,
     { text, images }
   ) =>
-    artifactInOrder(`${artifact.id}:marks`, async () => {
+    artifactInOrder(`${artifact.id}:marks`, () => {
       const refused = inputRefusal(instance.id, {
         kind: "system",
         name: ARTIFACT_ORIGIN,
       });
-      if (refused && artifact.projectId && lead) {
-        await lead.wake(artifact.projectId, {
-          by: "you",
-          text: `${text}\n\nThe session that made it, ${sessionName(instance)}, takes no input now (${refused.reason.replace(CLOSING_STOP, "")}), so these come to you: answer each in its pin's thread with comment_reply({ pin, text }), naming the pin by its id above.`,
-          ...(images.length > 0 ? { carried: { images } } : {}),
-        });
-        return;
-      }
-      const { withdrawn, replaces } = await withdrawArtifactEvents(
-        instance,
-        artifact,
-        (words) => parseArtifactComments(words)?.id === artifact.id
-      );
-      const sections = [
-        ...withdrawn.flatMap((one) => {
-          const earlier = parseArtifactComments(one.text);
-          return earlier ? [earlier.sections] : [];
-        }),
-        parseArtifactComments(text)?.sections ?? "",
-      ];
-      sendArtifactEvent(
-        instance,
-        withdrawn.length === 0
-          ? text
-          : artifactCommentsNotice(artifact, sections),
-        [...withdrawn.flatMap((one) => one.images), ...images].slice(
-          0,
-          COMMENT_LIMITS.pictures
-        ),
-        replaces
-      );
+      return refused && artifact.projectId && lead
+        ? marksToCaw(lead, instance, artifact.projectId, refused.reason, {
+            text,
+            images,
+          })
+        : marksToSession(instance, artifact, { text, images });
     });
+  /** {@link deliverArtifactMarks} to the project's Caw: woken with them, or the writer's transcript says why not. */
+  const marksToCaw = async (
+    their: Caw,
+    instance: InstanceRow,
+    projectId: string,
+    why: string,
+    { text, images }: MarksDelivery
+  ): Promise<MarksOutcome> => {
+    const woke = await their
+      .wakeOnce(projectId, {
+        by: "you",
+        text: `${text}\n\nThe session that made it, ${sessionName(instance)}, takes no input now (${why.replace(CLOSING_STOP, "")}), so these come to you: answer each in its pin's thread with comment_reply({ pin, text }), naming the pin by its id above.`,
+        ...(images.length > 0 ? { carried: { images } } : {}),
+      })
+      .catch((error: unknown) => ({
+        woke: false as const,
+        why: { words: error instanceof Error ? error.message : String(error) },
+      }));
+    if (woke.woke) {
+      return { ok: true };
+    }
+    const reason = `This session takes no input now, and the project's Caw couldn't take them: ${woke.why.words.replace(CLOSING_STOP, "")}.`;
+    recordUndelivered(instance, text, images, reason);
+    return { ok: false, reason };
+  };
+  /** {@link deliverArtifactMarks} to the session itself, an unread earlier delivery folded in: whether it took them. */
+  const marksToSession = async (
+    instance: InstanceRow,
+    artifact: ArtifactRow,
+    { text, images }: MarksDelivery
+  ): Promise<MarksOutcome> => {
+    const { withdrawn, replaces } = await withdrawArtifactEvents(
+      instance,
+      artifact,
+      (said) => parseArtifactComments(said)?.id === artifact.id
+    );
+    const words =
+      withdrawn.length === 0
+        ? text
+        : artifactCommentsNotice(artifact, [
+            ...withdrawn.flatMap((one) => {
+              const earlier = parseArtifactComments(one.text);
+              return earlier ? [earlier.sections] : [];
+            }),
+            parseArtifactComments(text)?.sections ?? "",
+          ]);
+    const pictures = [
+      ...withdrawn.flatMap((one) => one.images),
+      ...images,
+    ].slice(0, COMMENT_LIMITS.pictures);
+    let record: SentMessageRow | undefined;
+    try {
+      record = sendArtifactEvent(instance, words, pictures, replaces);
+    } catch (error) {
+      // A refusal the send path throws (a conversation gone) keeps no record of its own.
+      const reason = error instanceof Error ? error.message : String(error);
+      recordUndelivered(instance, words, pictures, reason);
+      return { ok: false, reason };
+    }
+    return record && record.state !== "failed"
+      ? { ok: true }
+      : {
+          ok: false,
+          reason: record?.reason ?? "The session didn't take them.",
+        };
+  };
 
   // Artifacts (Projects spec §5.10): one Yjs doc each, synced on the preview
   // listener; the person's picks' Send tells the session to read them, and

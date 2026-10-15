@@ -292,15 +292,35 @@ export const pinUnsent = (pin: Pin): boolean =>
 export const pinReady = (pin: Pin): boolean =>
   pin.kind === "annotation" || pin.thread.length > 0 || !!pin.resolvedAt;
 
-/** Pin `pin` as delivered at `at`: stamped sent, its person's entries too, and what it says now as heard. */
-export const pinDelivered = (pin: Pin, at: string): Pin => ({
-  ...pin,
-  sentAt: pin.sentAt ?? at,
-  heard: pinSaid(pin),
-  thread: pin.thread.map((entry) =>
-    entry.by === "person" && !entry.sentAt ? { ...entry, sentAt: at } : entry
-  ),
-});
+/**
+ * Pin `current` as the session heard pin `sent` at `at`: stamped sent, its
+ * person's entries that went in `sent` stamped too when their words are
+ * unchanged, and `heard` what `sent` said. Whatever the person changed since
+ * `sent` was taken (a new entry, an edit, a resolve) stays owed.
+ */
+export const pinHeard = (current: Pin, sent: Pin, at: string): Pin => {
+  const went = new Map(
+    sent.thread
+      .filter((entry) => entry.by === "person")
+      .map((entry) => [entry.id, entry.text])
+  );
+  return {
+    ...current,
+    sentAt: current.sentAt ?? at,
+    heard: pinSaid(sent),
+    thread: current.thread.map((entry) =>
+      entry.by === "person" &&
+      !entry.sentAt &&
+      went.get(entry.id) === entry.text
+        ? { ...entry, sentAt: at }
+        : entry
+    ),
+  };
+};
+
+/** Pin `pin` as delivered at `at`, just as it stands ({@link pinHeard}). */
+export const pinDelivered = (pin: Pin, at: string): Pin =>
+  pinHeard(pin, pin, at);
 
 /**
  * A version 4 UUID from `crypto.getRandomValues`: a page or a dashboard

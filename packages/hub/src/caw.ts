@@ -2009,6 +2009,7 @@ export const createCaw = ({
         )
       )?.row,
     wake,
+    wakeOnce,
     view,
 
     /**

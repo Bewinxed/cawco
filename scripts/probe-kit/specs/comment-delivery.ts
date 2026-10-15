@@ -29,8 +29,10 @@
  *    comment_reply lands in that pin's thread, by the agent, where the
  *    person reads it (7a). Caw's own turn needs his place's sandbox: run
  *    from inside a workspace on a host that cannot nest one (core
- *    boundary-nesting.ts), the hub's refusal of his wake is noted and the
- *    writer is checked to be sent nothing. 7b, the rule through the tool:
+ *    boundary-nesting.ts), the hub's refusal of his wake is noted, the
+ *    writer is checked to be sent nothing, the pin to stay unstamped (owed
+ *    for the next delivery), and the writer's transcript to show the
+ *    comments line "not sent" with why. Live, the pin is stamped heard. 7b, the rule through the tool:
  *    a session that is not the project's lead is refused the pin; once the
  *    hub's record names it the lead, its comment_reply lands in the thread.
  *
@@ -218,6 +220,7 @@ type Pins = Record<string, Record<string, unknown>>;
 const numbered = (pins: Pins, number: number) =>
   Object.values(pins).find((pin) => pin.number === number) as
     | (Record<string, unknown> & {
+        heard?: string;
         id: string;
         resolvedAt?: string;
         sentAt?: string;
@@ -366,7 +369,7 @@ const endedWriterChecks = async (
     async () => ({
       pin: numbered((await docOf(frame)).pins, 1),
       nested: (await hubLines()).find(
-        (line) => line.includes("marks were not delivered") && NESTED.test(line)
+        (line) => line.includes("marks reached no one") && NESTED.test(line)
       ),
     }),
     (now) =>
@@ -381,10 +384,19 @@ const endedWriterChecks = async (
     "SELECT lead_instance_id FROM projects WHERE id = ?",
     project.id
   )[0]?.lead_instance_id;
-  const writerEvents = fleet.query<{ n: number }>(
-    "SELECT count(*) AS n FROM sent_messages WHERE instance_id = ? AND body LIKE '%commented on the page%'",
+  // The writer's comment events: none taken, and a refused one kept as not sent.
+  const writerRows = fleet.query<{ reason: string | null; state: string }>(
+    "SELECT state, reason FROM sent_messages WHERE instance_id = ? AND body LIKE '%commented on the page%'",
     writer
-  )[0]?.n;
+  );
+  const writerEvents = writerRows.filter(
+    (row) => row.state !== "failed"
+  ).length;
+  const unheard = (now: ReturnType<typeof numbered>) =>
+    !!now &&
+    !now.sentAt &&
+    !now.heard &&
+    now.thread.every((entry) => entry.by !== "person" || !entry.sentAt);
   const readCard = async () => {
     await tab.locator('.pin-list .pin-row[data-pin-row="1"]').click();
     const said = await tab
@@ -400,7 +412,30 @@ const endedWriterChecks = async (
     kit.check(
       "7a: the ended writer is sent nothing; its pin's delivery goes to the project's Caw (his wake, which this host's nested sandbox refuses)",
       writerEvents === 0 && !!pin,
-      `writer's comment events ${writerEvents}; hub ${outcome.nested.slice(0, 300)}`
+      `writer's comment events taken ${writerEvents}; hub ${outcome.nested.slice(0, 300)}`
+    );
+    // No one took it: the pin stays owed, and the person reads why.
+    const still = numbered((await docOf(frame)).pins, 1);
+    const line = tab.locator("[data-artifact-responses]");
+    await line
+      .first()
+      .waitFor({ timeout: 15_000 })
+      .catch(() => undefined);
+    const drawn = (await line.allInnerTexts()).map((words) =>
+      words.replace(/\s+/g, " ").trim()
+    );
+    const failed = writerRows.find((row) => row.state === "failed");
+    kit.check(
+      "7a: Caw's wake refused, the pin stays unstamped (no sentAt, no heard, its words unsent), and the writer's transcript shows the comments line not sent with why",
+      unheard(still) &&
+        !!failed?.reason?.includes("the project's Caw couldn't take them") &&
+        drawn.some(
+          (words) =>
+            words.includes(`Comments on ${WRITER_PAGE}`) &&
+            words.includes("not sent") &&
+            words.includes("Caw couldn't take them")
+        ),
+      `pin ${JSON.stringify(still && { sentAt: still.sentAt, heard: still.heard, thread: still.thread })}; failed row ${JSON.stringify(failed)}; lines ${JSON.stringify(drawn)}`
     );
   } else {
     const agentSaid = outcome.pin?.thread.find((entry) => entry.by === "agent");
@@ -416,8 +451,11 @@ const endedWriterChecks = async (
     );
     const inCard = await readCard();
     kit.check(
-      "7a: Caw's comment_reply lands in that pin's thread, by the agent, and the person reads it in the pin's card",
-      agentSaid?.text === CAW_WORDS && inCard.includes(CAW_WORDS),
+      "7a: Caw's comment_reply lands in that pin's thread, by the agent, and the person reads it in the pin's card; the pin is stamped heard",
+      agentSaid?.text === CAW_WORDS &&
+        inCard.includes(CAW_WORDS) &&
+        !!outcome.pin?.sentAt &&
+        !!outcome.pin.heard,
       `thread ${JSON.stringify(outcome.pin?.thread)}; card ${JSON.stringify(inCard)}; tool answered ${caw.answer?.slice(0, 300)}`
     );
   }

@@ -43,8 +43,8 @@ import {
   inkSection,
   type MarkPictures,
   type Pin,
-  pinDelivered,
   pinDelivery,
+  pinHeard,
   pinReady,
   pinSaid,
   pinUnsent,
@@ -459,6 +459,9 @@ export interface MarksDelivery {
   text: string;
 }
 
+/** Whether someone took a delivery of the marks; why not, when no one did. */
+export type MarksOutcome = { ok: true } | { ok: false; reason: string };
+
 export interface ArtifactServiceDeps {
   /** Closes session `instanceId`'s panel: it shows nothing, and every view of it hears so. */
   close: (instanceId: string) => Promise<void>;
@@ -477,7 +480,7 @@ export interface ArtifactServiceDeps {
     instance: InstanceRow,
     artifact: ArtifactRow,
     delivery: MarksDelivery
-  ) => Promise<void>;
+  ) => Promise<MarksOutcome>;
   docs: ArtifactDocs;
   instance: (id: string) => InstanceRow | undefined;
   /**
@@ -956,6 +959,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     string,
     { pictures: Map<string | null, string>; url?: string }
   >();
+  const delivering = new Set<string>();
   const marked = (id: string) => {
     const now = Date.now();
     const burst = bursts.get(id);
@@ -969,11 +973,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       first,
       timer: setTimeout(() => {
         bursts.delete(id);
-        deliverMarks(id).catch((error: unknown) => {
-          console.warn(
-            `[artifacts] ${id}: the person's marks were not delivered: ${error instanceof Error ? error.message : String(error)}`
-          );
-        });
+        // One delivery at a time: what is still owed when it ends goes next.
+        if (delivering.has(id)) {
+          marked(id);
+          return;
+        }
+        delivering.add(id);
+        deliverMarks(id)
+          .catch((error: unknown) => {
+            console.warn(
+              `[artifacts] ${id}: the person's marks were not delivered: ${error instanceof Error ? error.message : String(error)}`
+            );
+          })
+          .finally(() => delivering.delete(id));
       }, wait),
     });
   };
@@ -1005,27 +1017,37 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     };
   };
 
-  /** The delivered pins, their ink and the loose groups stamped heard at `at`, and the address they were made at. */
+  /**
+   * What a delivery carried, stamped heard once someone took it: each pin as
+   * it stands now, its entries that went stamped when unchanged and `heard`
+   * what went (core `pinHeard`), so what the person wrote while it was on
+   * its way stays owed; each stroke group that went, when it still stands as
+   * it went; and the address they were made at.
+   */
   const stampDelivered = (
     id: string,
-    owed: Pin[],
-    loose: InkGroup[],
+    sent: Pin[],
+    strokes: InkGroup[],
     url: string
   ) => {
     const at = new Date().toISOString();
-    const delivered = new Set([
-      ...loose.map((group) => group.id),
-      ...owed.flatMap((pin) => (pin.ink ? [pin.ink] : [])),
-    ]);
+    const went = new Map(strokes.map((group) => [group.id, group]));
     docs.transact(id, "hub", (live) => {
       const livePins = live.getMap("pins");
-      for (const pin of owed) {
-        livePins.set(pin.id, pinDelivered(pin, at));
+      for (const pin of sent) {
+        const now = livePins.get(pin.id) as Pin | undefined;
+        if (now) {
+          livePins.set(pin.id, pinHeard(now, pin, at));
+        }
       }
       const ink = live.getMap("ink");
       const groups = ink.toJSON() as Record<string, InkGroup>;
       for (const group of Object.values(groups)) {
-        if (delivered.has(group.id) && !group.sentAt) {
+        const was = went.get(group.id);
+        const unchanged =
+          !!was &&
+          JSON.stringify(was.strokes) === JSON.stringify(group.strokes);
+        if (unchanged && !group.sentAt) {
           ink.set(group.id, { ...group, sentAt: at });
         }
       }
@@ -1056,7 +1078,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * Delivers what of the person's marks on artifact `id` the session has
    * not heard ({@link marksOwed}), as one message: each pin as its section
    * or its one resolve line, each loose stroke group, with the page's
-   * pictures of them; then stamps them heard. Nothing owed, nothing goes.
+   * pictures of them. Once someone took it they are stamped heard
+   * ({@link stampDelivered}); when no one did, they stay owed, the next mark
+   * or the hub's resume delivering them again, and the person reads why in
+   * the writer's transcript (server.ts `deliverArtifactMarks`). Nothing
+   * owed, nothing goes.
    */
   const deliverMarks = async (id: string) => {
     const row = db.get(id);
@@ -1095,10 +1121,26 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       ),
       ...loose.map((group) => inkSection(group, { url, picture: shown })),
     ]);
-    stampDelivered(id, owed, loose, url);
+    const outcome = await deps.deliverMarks(instance, row, { text, images });
+    if (!outcome.ok) {
+      console.warn(
+        `[artifacts] ${id}: the person's marks reached no one, and stay owed: ${outcome.reason}`
+      );
+      return;
+    }
+    stampDelivered(
+      id,
+      owed,
+      [
+        ...loose,
+        ...owed.flatMap((pin) =>
+          pin.ink && groups[pin.ink] ? [groups[pin.ink]] : []
+        ),
+      ],
+      url
+    );
     keepComposited(row, shown ? page : undefined);
     letGoPictures(id, owed, pins);
-    await deps.deliverMarks(instance, row, { text, images });
   };
 
   /** A canvas's `.excalidraw` file and its outline, as the doc holds them now. */
