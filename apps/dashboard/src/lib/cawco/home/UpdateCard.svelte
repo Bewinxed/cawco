@@ -227,9 +227,9 @@
   <div class="body">
     {#each n.lines as line, i (i)}
       {#if line.state === "busy" && i === spinnerAt}
-        <div class="ink busy">
+        <div class="ink busy mark-line">
           <Spinner class="size-3.5 shrink-0 text-muted-foreground" />
-          {line.text}
+          <span>{line.text}</span>
         </div>
       {:else}
         <div class="ink">{line.text}</div>
@@ -265,11 +265,11 @@
     {#if leaving}
       <span class="line" {@attach arrive}>{GOODBYE}</span>
     {:else if notice}
-      <h2 class="title">
+      <h2 class="title mark-line">
         {#if notice.failed}
           <IconError aria-hidden="true" class="fail size-4 shrink-0" />
         {/if}
-        {notice.title}
+        <span>{notice.title}</span>
       </h2>
       {#if meta}
         <p class="meta">{meta}</p>
@@ -314,7 +314,7 @@
               size="sm"
               variant="ghost"
             >
-              {open ? "Hide changes" : "Show changes"}
+              <span>{open ? "Hide changes" : "Show changes"}</span>
               <IconChevronDown
                 aria-hidden="true"
                 class="chev"

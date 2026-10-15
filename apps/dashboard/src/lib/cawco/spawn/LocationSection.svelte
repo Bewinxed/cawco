@@ -202,7 +202,7 @@
         value={dir}
       />
       {#if locked}
-        <span class="badge ns-in">From project</span>
+        <span class="badge ns-in mark-line"><span>From project</span></span>
         <button
           class="override ns-in"
           onclick={onoverride}
@@ -234,7 +234,10 @@
       <div class="clip">
         <div class="browser">
           <div class="crumbs">
-            <span class="machine"><span class="dot"></span>{machineName}</span>
+            <span class="machine mark-line"
+              ><span class="dot" data-box></span><span>{machineName}</span
+              ></span
+            >
             <div class="trail">
               <div class="ancestors fai-scroll">
                 {#each crumbs.slice(0, -1) as crumb (crumb.to)}

@@ -139,7 +139,7 @@
       title={down ?? undefined}
     >
       <IconPlus />
-      Add server
+      <span>Add server</span>
     </Button>
   {/snippet}
   {#snippet toolbar()}

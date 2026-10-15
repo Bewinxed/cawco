@@ -49,11 +49,11 @@
     <DropdownMenu.Content align="start" side="top">
       <DropdownMenu.Item onSelect={() => input?.click()}>
         <IconPaperclip />
-        Files and photos
+        <span>Files and photos</span>
       </DropdownMenu.Item>
       <DropdownMenu.Item onSelect={ondraw}>
         <IconArtifactCanvas />
-        Draw
+        <span>Draw</span>
         <DropdownMenu.Shortcut>⌘⇧D</DropdownMenu.Shortcut>
       </DropdownMenu.Item>
     </DropdownMenu.Content>

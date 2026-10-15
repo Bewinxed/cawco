@@ -136,14 +136,16 @@
   <div class="body" {@attach morph()}>
     {#if failure}
       <div
-        class="flex items-center justify-center gap-2 p-8 text-label text-error"
+        class="mark-line flex items-center justify-center gap-2 p-8 text-label text-error"
         role="alert"
         in:crossIn
         out:crossOut
       >
         <IconAlert class="w-5 h-5 shrink-0" />
         <span>The diff did not draw: {failure}</span>
-        <Button onclick={retry} size="sm" variant="outline">Retry</Button>
+        <Button data-box onclick={retry} size="sm" variant="outline"
+          >Retry</Button
+        >
       </div>
     {:else}
       {#key attempt}

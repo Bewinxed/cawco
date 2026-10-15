@@ -213,13 +213,13 @@
     <div class="docs">
       {#each parsed.docs as doc (doc.path)}
         <Collapsible.Root>
-          <Collapsible.Trigger class="doc">
+          <Collapsible.Trigger class="doc mark-line">
             <span class="path">{doc.path}</span>
             {#if doc.updatedAt}
               <span class="meta">{day(doc.updatedAt)}</span>
             {/if}
             <span class="meta">{lines(doc.content)} lines</span>
-            <span class="chev"><IconChevronRight /></span>
+            <span class="chev" data-box><IconChevronRight /></span>
           </Collapsible.Trigger>
           <!-- Folds like the row that holds it: grows open and folds shut
                from the header, which the transcript holds in place. -->
@@ -286,7 +286,7 @@
   .path {
     flex: 1 1 auto;
     min-width: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-family: var(--font-mono);

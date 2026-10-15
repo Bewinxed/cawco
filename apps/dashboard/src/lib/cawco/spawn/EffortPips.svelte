@@ -201,7 +201,7 @@
               <span>{level}</span>
             {/each}
           </span>
-          <span class="content">
+          <span class="content mark-line">
             {#if n}
               <!-- One bar per level, all the same size on whole pixels; the lit
                    ones say where the level sits. -->

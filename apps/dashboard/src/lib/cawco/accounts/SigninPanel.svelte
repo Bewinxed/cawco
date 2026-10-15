@@ -100,8 +100,8 @@
       >
     </p>
   {:else if flow.phase === "mismatch"}
-    <p class="warn" role="alert" in:appear>
-      <IconWarningTriangle />
+    <p class="warn mark-line" role="alert" in:appear>
+      <span class="mark-cell"><IconWarningTriangle /></span>
       <span>{words.mismatch(machine, flow.email, expected)}</span>
     </p>
   {/if}
@@ -146,6 +146,5 @@
     flex: none;
     width: 14px;
     height: 14px;
-    margin-top: 1px;
   }
 </style>

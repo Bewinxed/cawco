@@ -117,7 +117,7 @@
       title={down ?? undefined}
     >
       <IconPlus />
-      New rule
+      <span>New rule</span>
     </Button>
   {/snippet}
   {#snippet toolbar()}
@@ -129,7 +129,7 @@
         bind:pressed={waitingOnly}
       >
         <IconAlert />
-        Waiting on an answer ({pendingTotal})
+        <span>Waiting on an answer ({pendingTotal})</span>
       </Toggle>
     {/if}
   {/snippet}

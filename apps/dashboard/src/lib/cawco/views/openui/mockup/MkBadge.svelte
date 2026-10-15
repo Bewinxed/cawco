@@ -8,8 +8,10 @@
   let { props }: OpenUIRenderProps<{ text: unknown; tone?: string }> = $props();
 </script>
 
-<span class="badge" data-mk="Badge" data-tone={props.tone ?? "neutral"}
-  >{textOf(props.text)}</span
+<span
+  class="badge mark-line"
+  data-mk="Badge"
+  data-tone={props.tone ?? "neutral"}><span>{textOf(props.text)}</span></span
 >
 
 <style>

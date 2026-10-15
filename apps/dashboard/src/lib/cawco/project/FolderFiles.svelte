@@ -49,7 +49,11 @@
 <ul class="files">
   {#each files as path (path)}
     <li>
-      <button class="file press-tint" onclick={() => read(path)} type="button">
+      <button
+        class="file mark-line press-tint"
+        onclick={() => read(path)}
+        type="button"
+      >
         <IconDocument class="icon" />
         <bdi class="path">{path}</bdi>
       </button>
@@ -124,7 +128,8 @@
     color: var(--ink-muted);
   }
   .path {
-    overflow: hidden;
+    min-inline-size: 0;
+    overflow: clip;
     font-family: var(--font-mono);
     font-size: var(--text-code);
     text-overflow: ellipsis;

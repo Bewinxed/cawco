@@ -297,26 +297,28 @@
     >
       {#each shown as key (key)}
         {@const row = dataOf(key)}
-        <div class="row {row?.kind ?? ''}">
+        <div class="row mark-line {row?.kind ?? ''}">
           {#if row?.kind === "tool"}
             {@const Icon = row.icon}
-            <span class="ic {row.color}" class:breathe={row.live}><Icon /></span
+            <span class="ic {row.color}" class:breathe={row.live} data-box
+              ><Icon /></span
             >
             {#if row.verb}
               <span class="verb">{row.verb}</span>
             {/if}
             <span class="arg">{row.arg}</span>
           {:else if row?.kind === "reason"}
-            <span class="ic"><IconCpu /></span>
+            <span class="ic" data-box><IconCpu /></span>
             <span class="verb">Reasoning</span>
           {:else if row?.kind === "say"}
             <span class="text">{row.text}</span>
           {:else if row?.kind === "stream"}
-            <span class="text"><MessageBody source={row.text} streaming /></span
+            <span class="text" data-box
+              ><MessageBody source={row.text} streaming /></span
             >
           {:else if row?.kind === "peer"}
             {@const Icon = row.icon}
-            <span class="ic"><Icon /></span>
+            <span class="ic" data-box><Icon /></span>
             <span class="verb">{row.lead}</span>
             <span class="text">{row.name}</span>
           {:else if row}
@@ -401,7 +403,7 @@
   .text {
     flex: 0 1 auto;
     min-inline-size: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
   }
   .arg {

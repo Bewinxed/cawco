@@ -33,7 +33,7 @@
 </script>
 
 <div
-  class={cn("kit-empty", inline && "kit-empty-inline", className)}
+  class={cn("kit-empty", inline && "kit-empty-inline mark-line", className)}
   data-slot="empty"
   {...restProps}
 >
@@ -51,7 +51,7 @@
   {/snippet}
   {#if inline}
     <!-- One sentence: what is missing, then why. -->
-    <p class="kit-empty-line">
+    <p class="kit-empty-line mark-text">
       <span class="kit-empty-title">{title}</span>
       <span aria-hidden="true">·</span>
       {@render why()}
@@ -59,10 +59,10 @@
   {:else}
     <p class="kit-empty-title">{title}</p>
     {#if line}
-      <p class="kit-empty-line">{@render why()}</p>
+      <p class="kit-empty-line mark-text">{@render why()}</p>
     {/if}
   {/if}
   {#if action}
-    <div class="kit-empty-action">{@render action()}</div>
+    <div class="kit-empty-action" data-box>{@render action()}</div>
   {/if}
 </div>

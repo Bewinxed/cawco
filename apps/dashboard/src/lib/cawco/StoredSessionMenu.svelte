@@ -122,7 +122,7 @@
   <ContextMenu.Content onCloseAutoFocus={closeFocus}>
     <ContextMenu.Item onSelect={() => goto(href)}>
       <IconExternal />
-      Open
+      <span>Open</span>
     </ContextMenu.Item>
     {#if canOpenBeside(info.sessionId)}
       <ContextMenu.Item
@@ -134,7 +134,7 @@
           })}
       >
         <IconColumns />
-        Open in split view
+        <span>Open in split view</span>
       </ContextMenu.Item>
     {/if}
     <ContextMenu.Item
@@ -148,11 +148,11 @@
         })}
     >
       <IconArrowRight />
-      Continue in new session…
+      <span>Continue in new session…</span>
     </ContextMenu.Item>
     <ContextMenu.Item onSelect={() => window.open(href, "_blank", "noopener")}>
       <IconExternal />
-      Open in new tab
+      <span>Open in new tab</span>
     </ContextMenu.Item>
     <ContextMenu.PendingItem
       icon={IconFork}
@@ -169,7 +169,7 @@
       }}
     >
       <IconPenLine />
-      Rename
+      <span>Rename</span>
     </ContextMenu.Item>
     <ContextMenu.CopyItem
       disabled={!info.cwd}
@@ -186,7 +186,7 @@
 
     <ContextMenu.Item onSelect={askDelete} variant="destructive">
       <IconTrash />
-      Delete transcript
+      <span>Delete transcript</span>
     </ContextMenu.Item>
   </ContextMenu.Content>
 </ContextMenu.Lazy>

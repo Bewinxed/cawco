@@ -52,6 +52,7 @@
 <span
   aria-hidden="true"
   class="face"
+  data-box
   style:--bleed="{CAW_STILL_BLEED}px"
   style:--side="{size}px"
 >

@@ -584,7 +584,7 @@
                 variant="ghost"
               >
                 <IconSearch />
-                {browsing === row.name ? "Hide" : "Browse"}
+                <span>{browsing === row.name ? "Hide" : "Browse"}</span>
               </Button>
             {/snippet}
             {#snippet below()}

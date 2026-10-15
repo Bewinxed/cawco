@@ -117,10 +117,10 @@
     aria-label="{what}: on {applied} of {machines.length} machines{failed > 0
       ? `, ${failed} refused`
       : ''}"
-    class="rollout-chip"
+    class="rollout-chip mark-line"
     data-fail={failed > 0 ? "" : undefined}
   >
-    <span aria-hidden="true" class="glyph" data-glyph={glyph}>
+    <span aria-hidden="true" class="glyph" data-box data-glyph={glyph}>
       <IconWarningTriangle data-for="fail" />
       <IconCheck data-for="done" />
       <Spinner aria-hidden="true" data-for="busy" role="presentation" />
@@ -195,8 +195,8 @@
           {/each}
         {/if}
         {#if refused[machine.machineId]}
-          <p class="note refused" role="alert" in:appear>
-            <IconWarningTriangle />
+          <p class="note refused mark-line" role="alert" in:appear>
+            <span class="mark-cell"><IconWarningTriangle /></span>
             <span>{refused[machine.machineId]}</span>
           </p>
         {/if}
@@ -222,8 +222,8 @@
           />
         {:else if item?.detail}
           <!-- A detail on a row that did not fail is a note, not an error. -->
-          <p class="note">
-            <IconInfo />
+          <p class="note mark-line">
+            <span class="mark-cell"><IconInfo /></span>
             <span>{item.detail}</span>
           </p>
         {/if}

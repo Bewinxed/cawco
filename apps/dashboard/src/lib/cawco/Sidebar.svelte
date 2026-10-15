@@ -821,7 +821,11 @@
         <Sidebar.MenuItem>
           <Sidebar.MenuButton class={NAV_ROW} isActive={false}>
             {#snippet child({ props })}
-              <a href="/session" {...props} class="{props.class} no-underline">
+              <a
+                href="/session"
+                {...props}
+                class="{props.class} mark-line no-underline"
+              >
                 <!-- The app's own icon (the crow on spark), in the lead
                      column every row's mark stands in. -->
                 <img
@@ -831,8 +835,11 @@
                   src={cawcoIcon}
                   width="18"
                 />
-                <span class="brand-wordmark min-w-0 truncate text-foreground"
-                  >Caw&amp;Co</span
+                <!-- The wordmark is the logotype, set as a lockup with the
+                     icon in its own box (its face is Nunito, not a label's). -->
+                <span
+                  class="brand-wordmark min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-foreground"
+                  data-box>Caw&amp;Co</span
                 >
               </a>
             {/snippet}
@@ -868,7 +875,7 @@
       <div class="px-2 pb-1">
         <button
           aria-haspopup="dialog"
-          class="search press-tint focus-inset"
+          class="search mark-line press-tint focus-inset"
           data-share="jump"
           onclick={() => onsearch()}
           type="button"
@@ -894,8 +901,9 @@
             isActive={path.startsWith("/session") && activeSession === null}
           >
             {#snippet child({ props })}
-              <a href="/session" {...props}>
-                <span class={SLOT}><IconBox class={SLOT_GLYPH} /></span>
+              <a href="/session" {...props} class="{props.class} mark-line">
+                <span class={SLOT} data-box><IconBox class={SLOT_GLYPH} /></span
+                >
                 <span>Fleet</span>
               </a>
             {/snippet}
@@ -921,8 +929,9 @@
             isActive={path.startsWith("/workflows")}
           >
             {#snippet child({ props })}
-              <a href="/workflows" {...props}
-                ><span class={SLOT}><IconWorkflow class={SLOT_GLYPH} /></span
+              <a href="/workflows" {...props} class="{props.class} mark-line"
+                ><span class={SLOT} data-box
+                  ><IconWorkflow class={SLOT_GLYPH} /></span
                 ><span>Workflows</span></a
               >
             {/snippet}
@@ -1047,7 +1056,7 @@
                         {href}
                         {...props}
                         aria-current={here ? "page" : undefined}
-                        class="{props.class} [--mark-hit-gap:--spacing(2.5)]"
+                        class="{props.class} mark-line [--mark-hit-gap:--spacing(2.5)]"
                       >
                         <ProjectMark
                           count={runningCount}
@@ -1056,7 +1065,8 @@
                           ontoggle={() => toggle(project)}
                           open={expanded}
                         />
-                        <span class="min-w-0 flex-1 truncate"
+                        <span
+                          class="min-w-0 flex-1 overflow-clip text-ellipsis whitespace-nowrap"
                           >{project.name}
                           {#if runningCount > 0}
                             <span class="sr-only">, {runningCount} running</span
@@ -1116,10 +1126,10 @@
                           data-branch-item
                           onclick={() => newSession({ projectId: project.id })}
                         >
-                          <span class="{SLOT} row-lead"
+                          <span class="{SLOT} row-lead" data-box
                             ><IconPlus class="size-3" /></span
                           >
-                          No sessions — start one
+                          <span>No sessions — start one</span>
                         </Sidebar.MenuSubButton>
                       </Sidebar.MenuSubItem>
                     {/if}

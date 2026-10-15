@@ -28,7 +28,7 @@
   {#each under(parentId) as item (item.id)}
     {@const kids = under(item.id)}
     <li data-item={item.id}>
-      <div class="row">
+      <div class="row mark-line">
         {#if item.lead.kind === "session"}
           <SessionMark
             caw={item.lead.caw ?? null}
@@ -38,9 +38,13 @@
             status={item.lead.status ?? "idle"}
           />
         {:else if item.lead.kind === "machine"}
-          <span class="lead"><OsMark class="size-4" os={item.lead.os} /></span>
+          <span class="lead" data-box
+            ><OsMark class="size-4" os={item.lead.os} /></span
+          >
         {:else}
-          <span class="lead"><item.lead.icon aria-hidden="true" /></span>
+          <span class="lead" data-box
+            ><item.lead.icon aria-hidden="true" /></span
+          >
         {/if}
         <span class="title">{item.title}</span>
         {#if item.status}
@@ -105,7 +109,7 @@
   .title {
     flex: 1 1 auto;
     min-inline-size: 0;
-    overflow: hidden;
+    overflow: clip;
     font: var(--type-label);
     text-overflow: ellipsis;
     white-space: nowrap;

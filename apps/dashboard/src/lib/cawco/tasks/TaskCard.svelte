@@ -105,15 +105,15 @@
     {#if flags.failed && !flags.live}
       <Badge class="ml-auto" variant="fail">
         <IconError aria-hidden="true" />
-        Failed
+        <span>Failed</span>
       </Badge>
     {/if}
   </span>
   <span class="title">{task.title}</span>
   {#if flags.live || task.kind === "you" || date}
-    <span class="live-foot">
+    <span class="live-foot mark-line">
       {#if flags.live}
-        <span aria-hidden="true" class="dot live"></span>
+        <span aria-hidden="true" class="dot live" data-box></span>
         {#if retry}
           <span>retrying · attempt {task.attempts.length}</span>
         {:else}
@@ -132,7 +132,7 @@
     <span class="foot">
       {#if task.todos.total > 0}
         <span
-          class="todos"
+          class="todos mark-line"
           title="{task.todos.done} of {task.todos.total} to-dos done"
         >
           <TaskRing done={task.todos.done} size="sm" total={task.todos.total} />
@@ -140,7 +140,7 @@
         </span>
       {/if}
       {#if waitsOn.length > 0}
-        <span class="after">
+        <span class="after mark-line">
           <IconLock aria-hidden="true" />
           <span>after</span>
           <span class="ref">{waitsOn[0]}</span>
@@ -150,10 +150,12 @@
         </span>
       {/if}
       {#each task.labels.slice(0, 2) as label (label)}
-        <Badge variant="secondary">{label}</Badge>
+        <Badge variant="secondary"><span>{label}</span></Badge>
       {/each}
       {#if task.labels.length > 2}
-        <Badge class="num" variant="secondary">+{task.labels.length - 2}</Badge>
+        <Badge class="num" variant="secondary"
+          ><span>+{task.labels.length - 2}</span></Badge
+        >
       {/if}
     </span>
   {/if}

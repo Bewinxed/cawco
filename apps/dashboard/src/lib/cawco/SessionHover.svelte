@@ -341,8 +341,12 @@
       {@const runId = runIdOf(id)}
       {@const thread = cawco.threadOf(id)}
       <div data-nest-host>
-        <div class="head">
-          <span aria-hidden="true" class="mark m{markHue(row?.cwd || id)}">
+        <div class="head mark-line">
+          <span
+            aria-hidden="true"
+            class="mark m{markHue(row?.cwd || id)}"
+            data-box
+          >
             {#if thread}
               <CawFace size={14} status={thread.status} />
             {:else}
@@ -350,7 +354,12 @@
             {/if}
           </span>
           <span class="title">{row ? instanceTitle(row) : "Session"}</span>
-          <span aria-label={WORD[tone]} class="state {tone}" role="img">
+          <span
+            aria-label={WORD[tone]}
+            class="state {tone}"
+            data-box
+            role="img"
+          >
             {#if tone === "live"}
               <span class="dot"></span>
             {:else if tone === "needs"}
@@ -403,7 +412,7 @@
   .title {
     flex: 1 1 auto;
     min-inline-size: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: var(--text-label);

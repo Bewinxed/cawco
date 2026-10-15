@@ -75,6 +75,8 @@
   class:expanded
   class:recessed
 >
+  <!-- mark-line: its icons are controls at the head's end, each its own
+       button, not marks set beside the title -->
   <header class="side-head">
     {#if switcher}
       {@render switcher()}

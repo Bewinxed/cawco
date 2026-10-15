@@ -635,8 +635,8 @@
 <!-- The title: what asks, and who, with where it stands among the asks
      waiting when there are several ("2 of 3"): they come one at a time. -->
 {#snippet title(text: string)}
-  <h2 class="part" style:--part="0">
-    <span aria-hidden="true" class="glyph">
+  <h2 class="part mark-line" style:--part="0">
+    <span aria-hidden="true" class="glyph" data-box>
       {#if questions}
         <IconAsk />
       {:else}
@@ -645,13 +645,14 @@
     </span>
     <span class="title">{text}</span>
     {#if place && place.of > 1}
-      <Kbd class="place num">{place.at} of {place.of}</Kbd>
+      <Kbd class="place num" data-box>{place.at} of {place.of}</Kbd>
     {/if}
     {#if questions && onminimize}
       <!-- Folds the card to its bar over the composer; answers nothing. -->
       <Button
         aria-label="Minimize question"
         class="minimize touch-hit"
+        data-box
         onclick={onminimize}
         size="icon-xs"
         title="Minimize"
@@ -995,7 +996,7 @@
   }
   .title {
     min-inline-size: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
   }

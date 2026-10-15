@@ -539,7 +539,8 @@
   /* The mark line (DESIGN.md, The Mark Line Rule): a mark (an icon, a
      glyph, an avatar, a status dot, a keycap) and the words set beside it,
      centred on one cross axis. The kit's rows are mark lines by their own
-     class (an option or tray chip, a menu item, a segment, a rail line, and
+     class (an option or tray chip, a menu item, a segment, a section head,
+     a rail line, and
      the button, badge and toggle, whose base class carries .mark-line); any
      other row takes .mark-line. Centring boxes centres line boxes, and a line
      box's middle is not its words' middle: Figtree's ascent and descent sit
@@ -559,22 +560,45 @@
      .kit-slot, .icon-swap), and anything else that says so with `data-box`: a mark's
      own tile, a chevron's cell, a pill or badge that draws its own edge
      around its words. A run that truncates clips with `overflow: clip`,
-     never `hidden`: Gecko does not trim a scroll container, so a hidden
-     run stays 1.25px low there (the padding box is still its whole line,
-     so the clip is where hidden's was). */
+     never `hidden` or `auto`: Gecko does not trim a scroll container, so
+     there a hidden run would keep its line box and take the padding on top
+     of it (the padding box is still its whole line, so the clip is where
+     hidden's was). A run of words whose row cannot be a mark line (a grid
+     whose other rows hold other things) takes .mark-text itself. */
+  :where(.mark-text),
   :where(
       .mark-line,
       .kit-chip,
       .kit-tray-chip,
       .kit-item,
       .kit-segment,
+      .kit-section-head,
       .rail-line
     )
     > :where(
-      :not(svg, img, .rail-cell, .kit-keycap, .kit-slot, .icon-swap, [data-box])
+      :not(
+        svg,
+        img,
+        .rail-cell,
+        .kit-keycap,
+        .kit-slot,
+        .icon-swap,
+        .mark-cell,
+        [data-box]
+      )
     ) {
     text-box: trim-both ex alphabetic;
     padding-block: calc((1lh - 1ex) / 2);
+  }
+  /* A mark beside words that wrap stands on their first line: the row is
+     set to its start, and the mark in a cell one line box tall centres it
+     where the first line's x-height centres (the words' padding puts that
+     at half a line from their top). */
+  .mark-cell {
+    display: grid;
+    flex: none;
+    place-items: center;
+    block-size: 1lh;
   }
 
   /* The option chip (DESIGN.md "Option chip"): a 30px box including its

@@ -41,7 +41,7 @@
   {@const count = counts.get(stage.name) ?? 0}
   <li>
     <div class="row" data-kind={stage.kind}>
-      <span class="name">
+      <span class="name mark-line">
         {#if stage.kind === "you"}
           <IconNeedsYou aria-hidden="true" />
         {/if}
@@ -110,7 +110,8 @@
     font: var(--type-label);
   }
   .label {
-    overflow: hidden;
+    min-inline-size: 0;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
   }

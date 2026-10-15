@@ -1499,7 +1499,7 @@
                 continueInNewSession(continueSourceOf(tab.id, tab.label))}
             >
               <IconArrowRight />
-              Continue in new session…
+              <span>Continue in new session…</span>
             </ContextMenu.Item>
             {@const row = cawco.instances.find((one) => one.id === tab.id)}
             {#if row}

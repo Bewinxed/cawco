@@ -110,7 +110,7 @@
       title={down ?? undefined}
     >
       <IconPlus />
-      New hook
+      <span>New hook</span>
     </Button>
   {/snippet}
 

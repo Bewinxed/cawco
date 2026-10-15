@@ -54,6 +54,7 @@
       out:crossOut
     >
       {#if outcome.kind === "working"}
+        <!-- mark-line: a column; the mark stands above the title -->
         <div
           aria-live="polite"
           class="flex flex-col gap-[var(--space-2)] outline-none"
@@ -73,6 +74,7 @@
           </Button>
         </div>
       {:else if answer}
+        <!-- mark-line: a column; the mark stands above the title -->
         <div class="flex flex-col gap-[var(--space-2)]" role="status">
           <span class="mark enter {ok ? 'text-success' : 'text-warning'}">
             {#if ok}

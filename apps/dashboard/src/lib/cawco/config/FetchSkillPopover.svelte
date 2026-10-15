@@ -119,7 +119,7 @@
     {#snippet child({ props })}
       <Button {...props} disabled={down !== null} title={down ?? undefined}>
         <IconPlus />
-        Fetch skill
+        <span>Fetch skill</span>
       </Button>
     {/snippet}
   </Popover.Trigger>

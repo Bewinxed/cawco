@@ -106,7 +106,7 @@
     aria-label={compacting
       ? "Compacting context"
       : `Context ${shown}% used. Show the breakdown.`}
-    class="flex h-7 shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-1.5
+    class="mark-line flex h-7 shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-1.5
            text-label tabular-nums
            hover:bg-muted
            transition-[background-color,color] duration-(--dur-control) ease-out
@@ -145,7 +145,9 @@
     class="w-72 rounded-[var(--radius-lg)] shadow-lg p-0"
     side="top"
   >
-    <div class="flex items-center gap-2 border-b border-border px-3 py-2.5">
+    <div
+      class="mark-line flex items-center gap-2 border-b border-border px-3 py-2.5"
+    >
       <IconWindow class="size-4 text-muted-foreground" />
       <span class="text-label font-medium">Context window</span>
       {#if usage}
@@ -195,10 +197,10 @@
 
     {#if compacting}
       <p
-        class="flex items-center gap-2 border-t border-border px-3 py-2 text-label"
+        class="mark-line flex items-center gap-2 border-t border-border px-3 py-2 text-label"
       >
         <IconCompact class="size-3.5 animate-pulse" />
-        Compacting now — the session is rewriting its own context.
+        <span>Compacting now — the session is rewriting its own context.</span>
       </p>
     {:else if compaction}
       <p

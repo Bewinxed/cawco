@@ -332,7 +332,7 @@
         {#key phase}
           <p
             aria-live="polite"
-            class="status num"
+            class="status num mark-line"
             data-tone={phase === "connected" ? "ok" : "off"}
             in:blur={{
               duration: dur("--dur-panel"),
@@ -346,17 +346,21 @@
             }}
           >
             {#if phase === "exchanging"}
-              <span aria-hidden="true" class="dot pulse"></span>
-              Finishing the connection with OpenRouter…
+              <span aria-hidden="true" class="dot pulse" data-box></span>
+              <span>Finishing the connection with OpenRouter…</span>
             {:else if phase === "connected" && openrouter?.connectedAt}
               <svg aria-hidden="true" class="check" viewBox="0 0 20 20">
                 <circle cx="10" cy="10" r="10"></circle>
                 <path d="M6.2 10.4l2.5 2.5 5.1-5.6"></path>
               </svg>
-              Connected {formatDistanceToNow(new Date(openrouter.connectedAt))}
+              <span
+                >Connected {formatDistanceToNow(
+                  new Date(openrouter.connectedAt)
+                )}</span
+              >
             {:else}
-              <span aria-hidden="true" class="dot"></span>
-              Not connected
+              <span aria-hidden="true" class="dot" data-box></span>
+              <span>Not connected</span>
             {/if}
           </p>
         {/key}
@@ -401,12 +405,12 @@
     </p>
     <p
       aria-live="polite"
-      class="status"
+      class="status mark-line"
       data-testid="jev-route"
       data-tone={jev?.route ? "ok" : "off"}
     >
-      <span aria-hidden="true" class="dot"></span>
-      {routeLine}
+      <span aria-hidden="true" class="dot" data-box></span>
+      <span>{routeLine}</span>
     </p>
     <Field id="typesafe-key" label="TypeSafe key">
       <Input
@@ -427,7 +431,7 @@
         {#key keyPhase}
           <p
             aria-live="polite"
-            class="status num"
+            class="status num mark-line"
             data-testid="typesafe-key-state"
             data-tone={keyPhase === "held" ? "ok" : "off"}
             in:blur={{
@@ -446,10 +450,10 @@
                 <circle cx="10" cy="10" r="10"></circle>
                 <path d="M6.2 10.4l2.5 2.5 5.1-5.6"></path>
               </svg>
-              Held, ends …{jev.typesafe.ends}
+              <span>Held, ends …{jev.typesafe.ends}</span>
             {:else}
-              <span aria-hidden="true" class="dot"></span>
-              Not set
+              <span aria-hidden="true" class="dot" data-box></span>
+              <span>Not set</span>
             {/if}
           </p>
         {/key}
@@ -602,7 +606,7 @@
   }
   .status {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 8px;
     font: var(--type-body);
     color: var(--ink-muted);
@@ -617,7 +621,6 @@
     border-radius: 50%;
     background: var(--ink-muted);
     opacity: 0.5;
-    translate: 0 -1px;
   }
   [data-tone="ok"] .dot {
     background: var(--status-live-glyph);

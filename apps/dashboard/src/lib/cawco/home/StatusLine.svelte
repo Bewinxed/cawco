@@ -39,7 +39,7 @@
     {#key home.status === "unreachable"}
       <div class="line" in:crossIn out:crossOut>
         {#if home.status === "unreachable"}
-          <span class="down">
+          <span class="down mark-line">
             <IconWarningTriangle aria-hidden="true" />
             <span
               >Hub unreachable,

@@ -181,11 +181,11 @@
             <Table.Head aria-sort={sort} class="col-{column.id}" scope="col">
               {#if column.getCanSort()}
                 <button
-                  class="sort press-tint focus-inset"
+                  class="sort mark-line press-tint focus-inset"
                   onclick={column.getToggleSortingHandler()}
                   type="button"
                 >
-                  {column.columnDef.header}
+                  <span>{column.columnDef.header}</span>
                   {#if sorted === "desc"}
                     <IconChevronDown aria-hidden="true" />
                   {:else if sorted === "asc"}
@@ -217,7 +217,7 @@
                   <span class="name">{task.title}</span>
                 </a>
               {:else if cell.column.id === "stage"}
-                <span class="stage" data-kind={task.kind ?? "none"}>
+                <span class="stage mark-line" data-kind={task.kind ?? "none"}>
                   {#if task.kind === "you"}
                     <IconNeedsYou aria-hidden="true" />
                   {/if}
@@ -226,12 +226,12 @@
               {:else if cell.column.id === "labels"}
                 <span class="labels">
                   {#each task.labels as label (label)}
-                    <Badge variant="secondary">{label}</Badge>
+                    <Badge variant="secondary"><span>{label}</span></Badge>
                   {/each}
                 </span>
               {:else if cell.column.id === "todos"}
                 {#if task.todos.total > 0}
-                  <span class="todos">
+                  <span class="todos mark-line">
                     <TaskRing
                       done={task.todos.done}
                       size="sm"

@@ -109,12 +109,12 @@
       </div>
       {#if terms}
         <a
-          class="terms"
+          class="terms mark-line"
           href={TERMS_URL}
           rel="noopener noreferrer"
           target="_blank"
         >
-          {words.terms}
+          <span>{words.terms}</span>
           <IconArrowUpRight />
         </a>
       {/if}

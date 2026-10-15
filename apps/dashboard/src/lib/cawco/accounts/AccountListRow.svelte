@@ -31,7 +31,7 @@
       ><span class="words" data-share="title:{href}">{name}</span></span
     >
     {#if problem}
-      <span class="problem" data-flip>
+      <span class="problem mark-line" data-flip>
         <IconWarningTriangle aria-hidden="true" />
         <span><MorphText text={problem} /></span>
       </span>

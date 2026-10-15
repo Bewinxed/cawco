@@ -155,8 +155,10 @@
 >
   {#if needs.length > 0}
     <section aria-labelledby="caw-needs" class="section" data-flip="box">
-      <div class="head">
-        <span class="glyph needs"><IconNeedsYou aria-hidden="true" /></span>
+      <div class="head mark-line">
+        <span class="glyph needs" data-box
+          ><IconNeedsYou aria-hidden="true" /></span
+        >
         <span class="title" id="caw-needs">Needs you</span>
         <span class="count">{needs.length}</span>
       </div>
@@ -170,13 +172,14 @@
 
   {#if noticeCount > 0}
     <section aria-labelledby="caw-notices" class="section" data-flip="box">
-      <div class="head">
-        <span class="glyph"><IconNotices aria-hidden="true" /></span>
+      <div class="head mark-line">
+        <span class="glyph" data-box><IconNotices aria-hidden="true" /></span>
         <span class="title" id="caw-notices">Notices</span>
         <span class="count">{noticeCount}</span>
         {#if clearable}
           <Button
             aria-label="Clear all {noticeCount} notices"
+            data-box
             class="clear text-[var(--ink-muted)] hover:text-[var(--ink-strong)]"
             onclick={clearAll}
             size="xs"
@@ -244,6 +247,7 @@
   {/if}
 
   {#if needs.length === 0 && noticeCount === 0}
+    <!-- mark-line: Caw stands above the words, not beside them -->
     <div class="empty" data-flip role="status" tabindex="-1">
       {#if feed.connected}
         <CawFace size={48} status="ready" />
@@ -319,7 +323,7 @@
   }
   .head {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: var(--space-2);
     padding: var(--space-2) var(--space-3) var(--space-1);
   }

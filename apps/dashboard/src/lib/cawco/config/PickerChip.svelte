@@ -44,7 +44,7 @@
 </script>
 
 <Popover.Root bind:open={expanded}>
-  <Popover.Trigger aria-label="{label}: {chosen}" class="picker-chip">
+  <Popover.Trigger aria-label="{label}: {chosen}" class="picker-chip mark-line">
     <span class="k">{label}</span>
     <span class="v num"><MorphText text={chosen} /></span>
     <IconChevronDown />
@@ -129,7 +129,7 @@
   }
   :global(.picker-chip) .v {
     min-width: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -155,7 +155,7 @@
   .label {
     flex: 1;
     min-width: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
   }

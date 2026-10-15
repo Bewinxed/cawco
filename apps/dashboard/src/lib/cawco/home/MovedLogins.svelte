@@ -93,9 +93,11 @@
           size="xs"
           variant="ghost"
         >
-          {open ? "Hide" : "Show"}
-          {done.length}
-          signed in everywhere
+          <span
+            >{open ? "Hide" : "Show"}
+            {done.length}
+            signed in everywhere</span
+          >
           <IconChevronDown
             aria-hidden="true"
             class="chev"

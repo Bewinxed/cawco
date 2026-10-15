@@ -38,7 +38,7 @@
         {#if action.icon}
           <action.icon />
         {/if}
-        {action.label}
+        <span>{action.label}</span>
       </DropdownMenu.Item>
     {/each}
   </DropdownMenu.Content>

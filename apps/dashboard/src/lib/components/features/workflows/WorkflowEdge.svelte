@@ -38,7 +38,7 @@
 
 <BaseEdge {id} path={route[0]} {style} />
 <EdgeLabel selectEdgeOnClick transparent x={route[1]} y={route[2]}>
-  <div class="edge-label nodrag nopan">
+  <div class="edge-label mark-line nodrag nopan">
     {#if data?.label}
       <span>{String(data.label)}</span>
     {/if}
@@ -46,6 +46,7 @@
       <button
         aria-label="Delete edge"
         class="touch-hit pressable"
+        data-box
         onclick={() => {
           if (typeof data?.remove === "function") {
             data.remove(id);

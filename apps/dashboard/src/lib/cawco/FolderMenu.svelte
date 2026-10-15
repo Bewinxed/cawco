@@ -99,28 +99,28 @@
   >
     <ContextMenu.Item onSelect={onnew}>
       <IconSessionAdd />
-      New session here
+      <span>New session here</span>
     </ContextMenu.Item>
     {#if project && canTalk}
       <ContextMenu.Item
         onSelect={() => goto(`/session/${newThreadTabId(project.id)}`)}
       >
         <IconChatAdd />
-        New thread
+        <span>New thread</span>
       </ContextMenu.Item>
     {/if}
     {#if project}
       <ContextMenu.Item onSelect={() => goto(`/project/${project.id}`)}>
         <IconExternal />
-        Open project page
+        <span>Open project page</span>
       </ContextMenu.Item>
       <ContextMenu.Item onSelect={() => rail.togglePin(project.id)}>
         {#if pinned}
           <IconPin />
-          Unpin from rail
+          <span>Unpin from rail</span>
         {:else}
           <IconPin />
-          Pin to rail
+          <span>Pin to rail</span>
         {/if}
       </ContextMenu.Item>
     {/if}
@@ -132,7 +132,7 @@
       <!-- The kit's sub-trigger is the one menu row without the item's gap. -->
       <ContextMenu.SubTrigger class="gap-2.5">
         <IconPalette class="size-4" />
-        Customize
+        <span>Customize</span>
       </ContextMenu.SubTrigger>
       <ContextMenu.SubContent
         class="w-64 rounded-[var(--radius-lg)] p-3 shadow-xl"
@@ -186,7 +186,7 @@
     {#if oncollapseothers}
       <ContextMenu.Item onSelect={oncollapseothers}>
         <IconCollapseOthers />
-        Collapse other folders
+        <span>Collapse other folders</span>
       </ContextMenu.Item>
     {/if}
 
@@ -198,7 +198,7 @@
         variant="destructive"
       >
         <IconTrash />
-        Forget project…
+        <span>Forget project…</span>
       </ContextMenu.Item>
     {/if}
   </ContextMenu.Content>

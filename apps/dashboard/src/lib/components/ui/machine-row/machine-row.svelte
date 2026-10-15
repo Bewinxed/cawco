@@ -31,9 +31,10 @@
 <span class="tile" style={ink ? "" : `color:${hue}`} class:ink><Icon /></span>
 <span class="text">
   <span class="name">{name}</span>
-  <span class="meta"
+  <span class="meta mark-line"
     ><span
       class="dot"
+      data-box
       class:away={presence === "away"}
       class:online={presence === "online"}
     ></span><span class="line">{meta}</span></span
@@ -88,7 +89,7 @@
      that overflows, never by the flex row holding it. */
   .line {
     min-width: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
   }

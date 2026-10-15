@@ -271,7 +271,9 @@
         {#each others as other (other.id)}
           <Select.Item label="{other.id} {other.title}" value={other.id}>
             <span class="font-mono text-muted-foreground">{other.id}</span>
-            <span class="truncate">{other.title}</span>
+            <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+              >{other.title}</span
+            >
           </Select.Item>
         {/each}
       </Select.Content>
@@ -391,25 +393,28 @@
       {#if shown?.needsYou || flags.live || flags.failed || flags.stopped || flags.queued || flags.blockedBy.length > 0 || (shown?.labels.length ?? 0) > 0}
         <div class="flags">
           {#if shown?.needsYou}
-            <Badge variant="attn"><IconNeedsYou />Needs you</Badge>
+            <Badge variant="attn"><IconNeedsYou /><span>Needs you</span></Badge>
           {/if}
           {#if flags.live}
-            <Badge variant="live"><IconWorking />Working</Badge>
+            <Badge variant="live"><IconWorking /><span>Working</span></Badge>
           {:else if flags.failed}
-            <Badge variant="fail"><IconError />Last attempt failed</Badge>
+            <Badge variant="fail"
+              ><IconError /><span>Last attempt failed</span></Badge
+            >
           {:else if flags.stopped}
             <!-- Who stopped it is the attempt's own line below. -->
-            <Badge variant="secondary">Stopped</Badge>
+            <Badge variant="secondary"><span>Stopped</span></Badge>
           {:else if flags.queued}
-            <Badge variant="secondary">Queued</Badge>
+            <Badge variant="secondary"><span>Queued</span></Badge>
           {/if}
           {#if flags.blockedBy.length > 0}
             <Badge variant="secondary"
-              ><IconLock />Waits on {flags.blockedBy.join(", ")}</Badge
+              ><IconLock /><span>Waits on {flags.blockedBy.join(", ")}</span
+              ></Badge
             >
           {/if}
           {#each shown?.labels ?? [] as label (label)}
-            <Badge variant="secondary">{label}</Badge>
+            <Badge variant="secondary"><span>{label}</span></Badge>
           {/each}
         </div>
       {/if}
@@ -561,7 +566,9 @@
                     href={rowHref(attempt.instanceId)}
                     >Attempt {shown.attempts.length - index}</a
                   >
-                  <Badge variant={TINT[word] ?? "secondary"}>{word}</Badge>
+                  <Badge variant={TINT[word] ?? "secondary"}
+                    ><span>{word}</span></Badge
+                  >
                   <span class="attempt-when"
                     >{when(attempt.endedAt ?? attempt.startedAt)}</span
                   >

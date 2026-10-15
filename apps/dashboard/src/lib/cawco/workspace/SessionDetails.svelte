@@ -507,9 +507,9 @@
         : "Applying change…"}
     </p>
   {:else if done[slot]}
-    <p class="feedback done" role="status" in:crossIn out:crossOut>
+    <p class="feedback done mark-line" role="status" in:crossIn out:crossOut>
       <IconCheck aria-hidden="true" />
-      {DONE[slot]()}
+      <span>{DONE[slot]()}</span>
     </p>
   {/if}
 {/snippet}

@@ -143,7 +143,7 @@
       onSelect={() => goto(`/session?spawn=${machine.machineId}`)}
     >
       <IconPlus />
-      New session here
+      <span>New session here</span>
     </ContextMenu.Item>
     {#if isMac && stuck}
       <ContextMenu.Item
@@ -152,13 +152,13 @@
         }}
       >
         <IconKey />
-        Unlock keychain…
+        <span>Unlock keychain…</span>
       </ContextMenu.Item>
     {/if}
     {#if phase === "available"}
       <ContextMenu.Item onSelect={() => updates.installNow(machine)}>
         <IconDownload />
-        Install update now
+        <span>Install update now</span>
       </ContextMenu.Item>
     {/if}
     <!-- Nothing CawCo starts runs there until the time: turns stop, work
@@ -175,7 +175,7 @@
       <!-- The kit's sub-trigger is the one menu row without the item's gap. -->
       <ContextMenu.SubTrigger class="gap-2.5">
         <IconPause class="size-4" />
-        Pause until…
+        <span>Pause until…</span>
       </ContextMenu.SubTrigger>
       <!-- Each end says its clock beside it: no sums before choosing. -->
       <ContextMenu.SubContent class="min-w-52">
@@ -203,7 +203,7 @@
       <ContextMenu.Separator />
       <ContextMenu.Item onSelect={askRemove} variant="destructive">
         <IconTrash />
-        Remove machine…
+        <span>Remove machine…</span>
       </ContextMenu.Item>
     {/if}
   </ContextMenu.Content>

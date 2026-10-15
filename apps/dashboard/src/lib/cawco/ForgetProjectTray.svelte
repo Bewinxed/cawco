@@ -143,9 +143,9 @@
   <!-- The forget was pressed: said here while what runs is read, so the
        press is answered before the tray can be. -->
   {#if sessions === null && unread === null}
-    <p class={cn("reading", className)} role="status">
+    <p class={cn("reading", "mark-line", className)} role="status">
       <Spinner aria-hidden="true" />
-      Reading what runs in {asked.name}…
+      <span>Reading what runs in {asked.name}…</span>
     </p>
   {/if}
   <RowFault again={() => read(asked)} class={className} reason={unread} />

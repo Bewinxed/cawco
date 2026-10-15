@@ -25,7 +25,7 @@
   {/each}
 {/snippet}
 
-<div class="key" style:--c={ring.color}>
+<div class="key mark-line" style:--c={ring.color}>
   {#each rows as row (row.id)}
     {#if row.glyph === "rim"}
       <!-- The week's own mark: the rim in small, filled to what is left. -->
@@ -43,11 +43,12 @@
         <circle cx="5" cy="5" r={row.glyph === "disc" ? 4.5 : 4.25} />
       </svg>
     {:else}
-      <span></span>
+      <span data-box></span>
     {/if}
     <span class="label">{row.label}</span>
-    <span class="value" data-key-value>{@render said(row.value)}</span>
-    <span class="reset">{@render said(row.reset)}</span>
+    <span class="value mark-text" data-key-value>{@render said(row.value)}</span
+    >
+    <span class="reset mark-text">{@render said(row.reset)}</span>
   {/each}
 </div>
 

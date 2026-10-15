@@ -16,15 +16,15 @@
 
 <Collapsible.Trigger
   {...rest}
-  class="thinking-header press-tint {className}"
+  class="thinking-header mark-line press-tint {className}"
   data-slot="thinking-steps-header"
 >
   {#if children}
     {@render children()}
   {:else}
-    Thinking
+    <span>Thinking</span>
   {/if}
-  <span aria-hidden="true" class="chevron"><IconChevronRight /></span>
+  <span aria-hidden="true" class="chevron" data-box><IconChevronRight /></span>
   {@render after?.()}
 </Collapsible.Trigger>
 

@@ -150,7 +150,7 @@
           : value || "The model the harness picks for itself"}
         variant="outline"
       >
-        <span class="num truncate"
+        <span class="num min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
           >{unreported ? "—" : modelLabel(value, harness)}</span
         >
         <!-- 16px, the control size, so this unfold mark matches the one on
@@ -200,7 +200,10 @@
                 value={id}
               >
                 <ProviderLogo model={id} />
-                <span class="truncate font-mono text-meta">{id}</span>
+                <span
+                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-mono text-meta"
+                  >{id}</span
+                >
               </Command.Item>
             {/each}
           </Command.Group>
@@ -253,7 +256,7 @@
             value="refresh-models"
           >
             <IconRefresh />
-            Refresh models
+            <span>Refresh models</span>
           </Command.Item>
         </Command.Group>
       </Command.List>

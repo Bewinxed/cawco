@@ -36,9 +36,9 @@
   <Dialog.Content class="sm:max-w-2xl">
     <div class="flex flex-col gap-6">
       <Dialog.Header>
-        <Dialog.Title class="flex items-center gap-2">
+        <Dialog.Title class="mark-line flex items-center gap-2">
           <IconAlert class="size-4 shrink-0 text-destructive" />
-          {title}
+          <span>{title}</span>
         </Dialog.Title>
       </Dialog.Header>
 
@@ -52,7 +52,7 @@
             <span data-active={!copied}><IconCopy /></span>
             <span data-active={copied}><IconCheck /></span>
           </span>
-          Copy error
+          <span>Copy error</span>
         </Button>
         <Button
           onclick={() => {

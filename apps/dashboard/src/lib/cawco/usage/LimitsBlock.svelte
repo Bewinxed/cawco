@@ -201,8 +201,8 @@
       </div>
     {/if}
 
-    <div class="provider">
-      <span aria-hidden="true" class="glyph"><ClaudeIcon /></span>
+    <div class="provider mark-line">
+      <span aria-hidden="true" class="glyph" data-box><ClaudeIcon /></span>
       <span class="name">Claude</span>
       {#if claude?.delegate}
         {@const why = delegateTip(claude, claude.delegate)}
@@ -257,8 +257,8 @@
     {/if}
 
     {#if openCode || (spend && spend.all > 0)}
-      <div class="provider">
-        <span aria-hidden="true" class="glyph"><OpenCodeLogo /></span>
+      <div class="provider mark-line">
+        <span aria-hidden="true" class="glyph" data-box><OpenCodeLogo /></span>
         <span class="name">opencode Go</span>
       </div>
       {#if openCode}

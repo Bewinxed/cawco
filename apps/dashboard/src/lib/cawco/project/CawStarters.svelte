@@ -125,7 +125,7 @@
         {@const Glyph = GLYPHS[starter.glyph]}
         <li>
           <button
-            class="starter press-tint"
+            class="starter mark-line press-tint"
             onclick={() => start(starter)}
             type="button"
           >

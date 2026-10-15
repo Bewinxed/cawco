@@ -755,7 +755,9 @@
           >
             {#snippet trail()}
               {#if each.draft}
-                <Badge class="draft-badge" variant="secondary">draft</Badge>
+                <Badge class="draft-badge" variant="secondary"
+                  ><span>draft</span></Badge
+                >
               {/if}
             {/snippet}
           </TabItem>
@@ -772,7 +774,7 @@
       {#if needsYou.length > 0}
         <button
           aria-pressed={filtering}
-          class="needs pressable"
+          class="needs mark-line pressable"
           onclick={() => {
             needsOnly = !filtering;
           }}
@@ -781,7 +783,7 @@
           out:crossOut
         >
           <IconNeedsYou aria-hidden="true" />
-          Needs you
+          <span>Needs you</span>
           <span class="num">{needsYou.length}</span>
         </button>
       {/if}
@@ -798,7 +800,7 @@
           variant="outline"
         >
           <IconPlus />
-          New task
+          <span>New task</span>
         </Button>
       {/if}
       {#if canTalk}
@@ -809,7 +811,7 @@
           variant="ghost"
         >
           <IconSparkles />
-          Ask Caw for a view
+          <span>Ask Caw for a view</span>
         </Button>
       {/if}
     </div>

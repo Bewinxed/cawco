@@ -12,13 +12,13 @@
 </script>
 
 <button
-  class="latest pressable"
+  class="latest mark-line pressable"
   onclick={onjump}
   type="button"
   in:rise={"--dur-panel"}
   out:rise={"--dur-exit"}
 >
-  <IconArrowDown />Jump to latest
+  <IconArrowDown /><span>Jump to latest</span>
 </button>
 
 <style>

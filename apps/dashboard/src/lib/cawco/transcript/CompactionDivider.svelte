@@ -171,6 +171,8 @@
   <span class="arm start">
     <svg aria-hidden="true" class="wave"><path d={WAVE} /></svg>
   </span>
+  <!-- mark-line: a line of text; Caw and the chevron stand in it on
+       vertical-align: middle, the x-height's middle -->
   <span class="mid"
     ><span class="caw" data-caw
       >{#if working}

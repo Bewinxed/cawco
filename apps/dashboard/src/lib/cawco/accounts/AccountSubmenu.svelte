@@ -27,7 +27,7 @@
     <!-- The kit's sub-trigger is the one menu row without the item's gap. -->
     <ContextMenu.SubTrigger class="gap-2.5">
       <IconAccounts class="size-4" />
-      Account
+      <span>Account</span>
     </ContextMenu.SubTrigger>
     <ContextMenu.SubContent class="min-w-52">
       <!-- Its value is the account the session runs on, always: a pick asks
@@ -72,7 +72,7 @@
   .name {
     flex: 1 1 auto;
     min-width: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
   }

@@ -223,14 +223,14 @@
         <div class="fold">
           <button
             aria-expanded={foldOpen}
-            class="trigger"
+            class="trigger mark-line"
             onclick={() => {
               foldOpen = !foldOpen;
             }}
             type="button"
           >
             <IconChevronRight class="chev" />
-            What's new in {displayVersion(release.version)}
+            <span>What's new in {displayVersion(release.version)}</span>
           </button>
           {#if foldOpen}
             <div class="notes" transition:unfold>

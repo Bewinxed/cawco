@@ -150,9 +150,9 @@
       over your tailnet.
     </p>
     {#each testLines as line, index (index)}
-      <p class="status num" data-tone={line.tone} transition:unfold>
-        <span aria-hidden="true" class="dot"></span>
-        {line.text}
+      <p class="status num mark-line" data-tone={line.tone} transition:unfold>
+        <span aria-hidden="true" class="dot" data-box></span>
+        <span>{line.text}</span>
       </p>
     {/each}
     {#if devices.length === 0}
@@ -223,7 +223,7 @@
   }
   .status {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 8px;
     font: var(--type-body);
     color: var(--ink-muted);
@@ -238,7 +238,6 @@
     border-radius: 50%;
     background: var(--ink-muted);
     opacity: 0.5;
-    translate: 0 -1px;
   }
   [data-tone="ok"] .dot {
     background: var(--status-live-glyph);

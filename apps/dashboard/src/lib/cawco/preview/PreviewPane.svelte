@@ -1428,7 +1428,7 @@
       aria-expanded={listOpen}
       aria-haspopup="dialog"
       aria-label={`Comments, ${openCount} open${pinsShown ? "" : ", pins hidden"}`}
-      class="comments touch-hit"
+      class="comments mark-line touch-hit"
       onclick={() => showList(!listOpen)}
       title={pinsShown
         ? "Comments (⇧C hides the pins)"

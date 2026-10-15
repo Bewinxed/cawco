@@ -20,6 +20,8 @@
 </script>
 
 {#key key}
+  <!-- mark-line: a line of text; an account's dot stands in it on
+       vertical-align: middle, the x-height's middle -->
   <span class="words" in:wordsIn
     >{#each parts as part, i (i)}
       {#if typeof part === "string"}
@@ -47,6 +49,6 @@
     margin-inline-end: 4px;
     border-radius: 50%;
     background: var(--c);
-    vertical-align: 1px;
+    vertical-align: middle;
   }
 </style>

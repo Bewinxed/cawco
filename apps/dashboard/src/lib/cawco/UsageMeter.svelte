@@ -546,6 +546,8 @@
             >
           </span>
           {#if goWeek !== null}
+            <!-- mark-line: one clamped line of text; the week ring stands in
+                 it on vertical-align: middle, the x-height's middle -->
             <span class="cap" data-strip-go-week
               ><WeekMark ring={openCode} />
               <span class="mono-figure">{goWeek}%</span></span
@@ -729,9 +731,9 @@
     {#if claude}
       <header class="pop-head" data-pop-head>
         <div class="head-line">
-          <h3 class="provider">
-            <span aria-hidden="true" class="mark"><ClaudeIcon /></span>
-            Claude
+          <h3 class="provider mark-line">
+            <span aria-hidden="true" class="mark" data-box><ClaudeIcon /></span>
+            <span>Claude</span>
           </h3>
           <!-- The answer first: how long until nothing can carry you, or,
                when nothing can now, after the refresh mark, when an
@@ -828,9 +830,9 @@
         <!-- Claude's gap: the whole why the strip's line stands for, and
              the sign-in that fixes it when one does. -->
         <div class="pop-empty pop-gap">
-          <p class="pop-note">
-            <span aria-hidden="true" class="mark"><ClaudeIcon /></span>
-            {gap.reason}
+          <p class="pop-note mark-line">
+            <span aria-hidden="true" class="mark" data-box><ClaudeIcon /></span>
+            <span>{gap.reason}</span>
           </p>
           {#if gap.signIn}
             <Button
@@ -846,9 +848,9 @@
       {#each notes as note (note.id)}
         {@const Mark = note.mark}
         <!-- A provider with nothing to draw: why, and what to do about it. -->
-        <p class="pop-empty pop-note">
-          <span aria-hidden="true" class="mark"><Mark /></span>
-          {note.text}
+        <p class="pop-empty pop-note mark-line">
+          <span aria-hidden="true" class="mark" data-box><Mark /></span>
+          <span>{note.text}</span>
         </p>
       {/each}
     </div>

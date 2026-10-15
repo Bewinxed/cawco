@@ -195,7 +195,10 @@
 </script>
 
 <DropdownMenu.Root bind:open>
-  <DropdownMenu.Trigger class="artifact-trigger" data-artifact={shown.id}>
+  <DropdownMenu.Trigger
+    class="artifact-trigger mark-line"
+    data-artifact={shown.id}
+  >
     {@const Glyph = GLYPHS[shown.kind]}
     <Glyph />
     <span class="artifact-name">{shown.name}</span>
@@ -282,7 +285,7 @@
   }
   .artifact-name {
     min-width: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -298,7 +301,7 @@
   .row-name {
     flex: 1 1 auto;
     min-width: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
     font: var(--type-label);
@@ -312,7 +315,7 @@
   .row-promoted {
     flex-shrink: 100;
     min-width: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
   }

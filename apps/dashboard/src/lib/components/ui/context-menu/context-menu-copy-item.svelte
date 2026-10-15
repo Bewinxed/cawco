@@ -53,5 +53,5 @@
     <span data-active={!copied}><IconCopy /></span>
     <span data-active={copied}><IconCheck /></span>
   </span>
-  {@render children()}
+  <span class="mark-text">{@render children()}</span>
 </ContextMenuItem>

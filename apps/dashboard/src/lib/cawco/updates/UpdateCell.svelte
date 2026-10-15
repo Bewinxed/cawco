@@ -40,7 +40,7 @@
         <span class="plain">{cell.text}</span>
       {:else if cell.text}
         {#if cell.icon === "spinner"}
-          <span class="line">
+          <span class="line mark-line">
             <Spinner class="size-4 shrink-0 text-muted-foreground" />
             <span class="words">{cell.text}</span>
           </span>
@@ -54,7 +54,7 @@
             {:else if cell.icon === "download"}
               <IconDownload class="size-4 shrink-0" />
             {/if}
-            {cell.text}
+            <span>{cell.text}</span>
           </Badge>
         {/if}
         {#if cell.meta}

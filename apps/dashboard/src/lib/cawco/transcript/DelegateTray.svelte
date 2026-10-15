@@ -1141,12 +1141,13 @@
         {#snippet children()}
           {#if openChip}
             {@const { item, tone } = openChip}
-            <div class="phead">
+            <div class="phead mark-line">
               {@render mark(item, false)}
               <span class="ptitle">{item.title}</span>
               <span
                 aria-label={stateWords(openChip)}
                 class="pstate {tone}"
+                data-box
                 role="img"
               >
                 {#if tone === "starting"}
@@ -1174,6 +1175,7 @@
                 <a
                   aria-label="Open {item.title} in its own view"
                   class="jump touch-hit"
+                  data-box
                   href={hrefOf(item)}
                   title="Open {item.title} in its own view"
                 >
@@ -1412,7 +1414,7 @@
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
   }

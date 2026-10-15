@@ -136,7 +136,7 @@
     {/if}
     {#if moved.length > 0}
       <section aria-label="Moved" class="moved">
-        <p class="moved-head"><IconMapPoint />Moved</p>
+        <p class="moved-head mark-line"><IconMapPoint /><span>Moved</span></p>
         <ul class="rows">
           {#each moved as pin (pin.id)}
             <li class="moved-row" data-moved-row={pin.number}>

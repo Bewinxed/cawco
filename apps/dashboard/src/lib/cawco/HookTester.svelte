@@ -55,7 +55,7 @@
 >
   <div class="flex flex-wrap items-center gap-2">
     <Badge class="shrink-0 {KIND_TONE[kind]}" variant="outline"
-      >{KIND_LABEL[kind]}</Badge
+      ><span>{KIND_LABEL[kind]}</span></Badge
     >
     <span class="text-meta text-muted-foreground">{KIND_HOW[kind]}</span>
   </div>

@@ -242,6 +242,7 @@
   </div>
   <div aria-hidden="true" class="ticks">
     {#each ticks as tick (tick.hour)}
+      <!-- mark-line: the tick stands above its hour, not beside it -->
       <span
         class="tick"
         data-tick={tick.hour}

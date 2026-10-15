@@ -612,7 +612,7 @@
 {#snippet header(group: Group, style: string)}
   {@const finished = shown === "finished" ? finishedOn(group.machineId) : []}
   <!-- Where these run, said once for the rows under it. -->
-  <h3 class="machine" data-key="head:{group.machineId}" {style}>
+  <h3 class="machine mark-line" data-key="head:{group.machineId}" {style}>
     <OsMark class="size-3.5" os={group.os} />
     <span>{group.name}</span>
     {#if finished.length > 0}
@@ -620,11 +620,12 @@
            in one go. -->
       <button
         aria-label="Archive all finished on {group.name}"
-        class="archive-all focus-inset touch-hit press-tint"
+        class="archive-all mark-line focus-inset touch-hit press-tint"
+        data-box
         onclick={() => archive(finished)}
         type="button"
       >
-        <IconArchive aria-hidden="true" />Archive all
+        <IconArchive aria-hidden="true" /><span>Archive all</span>
       </button>
     {/if}
   </h3>
@@ -891,7 +892,7 @@
               <p>Nothing is working right now.</p>
               <Button onclick={onstart} size="xs" variant="outline">
                 <IconPlus />
-                Start session
+                <span>Start session</span>
               </Button>
             {:else}
               <p>Finished sessions land here.</p>

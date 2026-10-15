@@ -24,7 +24,7 @@
     press === "scale"
       ? "pressable [transition:var(--transition-control),transform_var(--dur-toggle)_var(--ease-out)]"
       : "press-tint [transition:var(--transition-control)]",
-    "flex w-fit data-[size=default]:h-9 data-[size=sm]:h-[30px]",
+    "mark-line flex w-fit data-[size=default]:h-9 data-[size=sm]:h-[30px]",
     "items-center justify-between gap-1.5 whitespace-nowrap",
     "border border-[var(--border-control)] [--hit-edge:1px]",
     "bg-[var(--surface-raised)] px-3 text-[var(--ink-strong)]",
@@ -45,6 +45,8 @@
   bind:ref
   {...restProps}
 >
-  {@render children?.()}
+  <!-- Its words in an element, so the mark line centres their x-height on
+       the unfold mark's (app.css). -->
+  <span class="mark-text">{@render children?.()}</span>
   <IconUnfold class="size-4 text-muted-foreground pointer-events-none" />
 </SelectPrimitive.Trigger>

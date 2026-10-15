@@ -261,7 +261,9 @@
     <ContextMenu.Trigger class="contents">
       <header class="flex items-start gap-2 px-4 py-3">
         <div class="min-w-0 flex-1">
-          <h2 class="flex min-w-0 items-center gap-2 text-body font-medium">
+          <h2
+            class="mark-line flex min-w-0 items-center gap-2 text-body font-medium"
+          >
             <!-- The directory's hue, the same one its row wears: the peek
                  belongs to a project. -->
             {#if cwd}
@@ -270,14 +272,16 @@
                 style={identityVar(cwd)}
               />
             {/if}
-            <span class="truncate">{target.title}</span>
+            <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+              >{target.title}</span
+            >
           </h2>
           <p class="flex items-baseline gap-2 text-meta text-muted-foreground">
-            <span class="flex shrink-0 items-center gap-1.5">
+            <span class="mark-line flex shrink-0 items-center gap-1.5">
               {#if machine}
                 <OsMark class="size-3.5" os={machine.os} />
               {/if}
-              {host}
+              <span>{host}</span>
             </span>
             {#if cwd}
               <!-- Truncated from the left, as every path in the app is: the
@@ -305,7 +309,7 @@
     <ContextMenu.Content>
       <ContextMenu.Item onSelect={() => goto(target.href)}>
         <IconExternal />
-        Open
+        <span>Open</span>
       </ContextMenu.Item>
       <ContextMenu.PendingItem
         disabled={!(forkable && machine)}
@@ -317,20 +321,23 @@
       {#if running && row}
         <ContextMenu.Item onSelect={() => stopOnRow(row.id, row.machineId)}>
           <IconStop />
-          {activity === "working" ? "Stop mid-turn" : "Stop"}
+          <span>{activity === "working" ? "Stop mid-turn" : "Stop"}</span>
         </ContextMenu.Item>
       {/if}
       <ContextMenu.Separator />
       <ContextMenu.Item onSelect={onclose}>
         <IconClose />
-        Close peek
+        <span>Close peek</span>
       </ContextMenu.Item>
     </ContextMenu.Content>
   </ContextMenu.Root>
 
   <!-- The mark's echo runs only on a beat (motion/echo): this line is its
        list of one, so a working session's mark echoes here too. -->
-  <div class="flex items-center gap-2 px-4 pb-3 text-meta" {@attach echoBeat()}>
+  <div
+    class="mark-line flex items-center gap-2 px-4 pb-3 text-meta"
+    {@attach echoBeat()}
+  >
     <SessionMark
       caw={cawOf(target.viewId)}
       id={target.viewId}
@@ -343,14 +350,20 @@
         : 'text-muted-foreground'}">{stateLabel}</span
     >
     {#if activity === "working" && tool}
-      <span class="flex min-w-0 items-baseline gap-1.5 text-muted-foreground">
+      <span
+        class="mark-line flex min-w-0 items-center gap-1.5 text-muted-foreground"
+        data-box
+      >
         <span class="shrink-0">{tool.name}</span>
         <span class="shrink-0">·</span>
-        <span class="truncate font-mono">{tool.glance}</span>
+        <span
+          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-mono"
+          >{tool.glance}</span
+        >
       </span>
     {/if}
     {#if running}
-      <span class="ml-auto flex shrink-0 items-center gap-1">
+      <span class="ml-auto flex shrink-0 items-center gap-1" data-box>
         <ContextMeter
           compaction={session?.lastCompaction ?? null}
           onrefresh={() => {
@@ -411,7 +424,7 @@
             variant="secondary"
           >
             <IconClose />
-            Deny
+            <span>Deny</span>
           </Button>
           <Button
             aria-label="Approve {summary}"
@@ -421,7 +434,7 @@
             variant="secondary"
           >
             <IconTick />
-            Approve
+            <span>Approve</span>
           </Button>
         </div>
       {/if}

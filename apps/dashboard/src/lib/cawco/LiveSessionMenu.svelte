@@ -284,12 +284,12 @@
   <ContextMenu.Content onCloseAutoFocus={closeFocus}>
     <ContextMenu.Item onSelect={() => goto(href)}>
       <IconExternal />
-      Open
+      <span>Open</span>
     </ContextMenu.Item>
     {#if canOpenBeside(instance.id)}
       <ContextMenu.Item onSelect={() => openBeside(instance.id)}>
         <IconColumns />
-        Open in split view
+        <span>Open in split view</span>
       </ContextMenu.Item>
     {/if}
     <ContextMenu.PendingItem
@@ -311,7 +311,7 @@
         })}
     >
       <IconArrowRight />
-      Continue in new session…
+      <span>Continue in new session…</span>
     </ContextMenu.Item>
     <AccountSubmenu {instance} />
     {#if running}
@@ -319,24 +319,24 @@
         onSelect={() => stopOnRow(instance.id, instance.machineId)}
       >
         <IconStop />
-        {midTurn ? "Stop mid-turn" : "Stop"}
+        <span>{midTurn ? "Stop mid-turn" : "Stop"}</span>
       </ContextMenu.Item>
     {/if}
     {#if onarchive}
       <ContextMenu.Item onSelect={onarchive}>
         <IconArchive />
-        Archive
+        <span>Archive</span>
       </ContextMenu.Item>
     {:else if archivedRow(instance)}
       <ContextMenu.Item onSelect={() => unarchive([instance])}>
         <IconUnarchive />
-        Unarchive
+        <span>Unarchive</span>
       </ContextMenu.Item>
     {:else if endedUnseen(instance) && home.archivable(instance)}
       <!-- Ended and listed in Finished, wherever this row is drawn. -->
       <ContextMenu.Item onSelect={() => archive(home.treeOf(instance.id))}>
         <IconArchive />
-        Archive
+        <span>Archive</span>
       </ContextMenu.Item>
     {/if}
     <ContextMenu.Item
@@ -345,14 +345,14 @@
       }}
     >
       <IconPenLine />
-      Rename
+      <span>Rename</span>
     </ContextMenu.Item>
 
     {#if asleepWithTranscript}
       <ContextMenu.Separator />
       <ContextMenu.Item onSelect={askDeleteTranscript} variant="destructive">
         <IconTrash />
-        Delete transcript
+        <span>Delete transcript</span>
       </ContextMenu.Item>
     {/if}
 
@@ -360,7 +360,7 @@
       <ContextMenu.Separator />
       <ContextMenu.Item onSelect={askArchiveWorkspace} variant="destructive">
         <IconArchive />
-        Archive workspace
+        <span>Archive workspace</span>
       </ContextMenu.Item>
     {/if}
 
@@ -368,7 +368,7 @@
       <ContextMenu.Separator />
       <ContextMenu.Item onSelect={askRemove} variant="destructive">
         <IconTrash />
-        Remove session
+        <span>Remove session</span>
       </ContextMenu.Item>
     {/if}
 
@@ -382,7 +382,7 @@
       />
       <ContextMenu.Item onSelect={askDiscard} variant="destructive">
         <IconTrash />
-        Discard
+        <span>Discard</span>
       </ContextMenu.Item>
     {/if}
 

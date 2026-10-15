@@ -173,8 +173,8 @@
               }}
               type="button"
             >
-              <span class="name">
-                {NAMES[template.name]}
+              <span class="name mark-line" data-box>
+                <span>{NAMES[template.name]}</span>
                 {#if applying === template.name}
                   <Spinner class="ml-auto" />
                 {/if}

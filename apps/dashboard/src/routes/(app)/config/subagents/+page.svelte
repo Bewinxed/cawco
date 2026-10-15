@@ -192,7 +192,7 @@
       title={down ?? undefined}
     >
       <IconPlus />
-      Add subagent
+      <span>Add subagent</span>
     </Button>
   {/snippet}
 
@@ -251,9 +251,9 @@
     {#if online.length === 0}
       <p class="note">No machine is online to ask.</p>
     {:else if Object.keys(reading).length > 0}
-      <p class="note busy" role="status">
+      <p class="note busy mark-line" role="status">
         <Spinner class="size-4 shrink-0" />
-        Asking the machines…
+        <span>Asking the machines…</span>
       </p>
     {:else if discovered.length === 0}
       <p class="note">No machine has any subagent files yet.</p>

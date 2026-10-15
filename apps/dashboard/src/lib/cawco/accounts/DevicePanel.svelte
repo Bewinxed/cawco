@@ -122,8 +122,9 @@
     {:else if flow.phase === "expired"}
       <p class="line">{words.expired}</p>
     {:else if flow.phase === "mismatch"}
-      <p class="warn" role="alert">
-        <IconWarningTriangle aria-hidden="true" />
+      <p class="warn mark-line" role="alert">
+        <span class="mark-cell"><IconWarningTriangle aria-hidden="true" /></span
+        >
         <span>{words.mismatch(machine, flow.email)}</span>
       </p>
     {/if}
@@ -189,7 +190,6 @@
     flex: none;
     width: 12px;
     height: 12px;
-    margin-top: 2px;
   }
   .got {
     display: flex;

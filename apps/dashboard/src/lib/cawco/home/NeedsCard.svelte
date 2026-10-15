@@ -286,6 +286,8 @@
   }
 </script>
 
+<!-- mark-line: a grid whose first row is the mark line; its words take
+     .mark-text, centred on the lead (the rows under it hold other things) -->
 <div
   class="row"
   data-flip
@@ -325,9 +327,9 @@
       <IconDollar aria-hidden="true" />
     {/if}
   </span>
-  <span class="name">{item.title}</span>
+  <span class="name mark-text">{item.title}</span>
   {#if item.raisedAt !== undefined}
-    <span class="wait">{span(clock.now - item.raisedAt)}</span>
+    <span class="wait mark-text">{span(clock.now - item.raisedAt)}</span>
   {/if}
   {#if peeks}
     <!-- Glance → peek → dive: read what led here before answering. -->
@@ -359,9 +361,9 @@
   {#if item.kind === "ask"}
     <!-- Where it came from: the project first, in its mark and strong ink;
          then what it asks for; then the machine, by its OS mark. -->
-    <span class="meta where">
+    <span class="meta where mark-line">
       {#if item.project}
-        <span class="project">
+        <span class="project mark-line" data-box>
           <IconFolder
             aria-hidden="true"
             class="mark"
@@ -373,7 +375,7 @@
       {/if}
       <span>{item.isQuestion ? "Question" : "Permission"}</span>
       <span aria-hidden="true" class="dot">·</span>
-      <span class="machine">
+      <span class="machine mark-line" data-box>
         <OsMark class="mark" os={item.machine.os} />
         <span class="machine-name">{item.machine.name}</span>
       </span>
@@ -395,9 +397,9 @@
     <!-- A scroller with no focusable child is itself in the tab order
          (keyboard-focusable scrollers), so a keyboard scrolls it too. -->
     <pre class="args focus-inset">{call.args}</pre>
-    <span class="meta where">
+    <span class="meta where mark-line">
       {#if item.project}
-        <span class="project">
+        <span class="project mark-line" data-box>
           <IconFolder
             aria-hidden="true"
             class="mark"
@@ -474,7 +476,7 @@
           variant="secondary"
         >
           <IconClose />
-          Deny
+          <span>Deny</span>
         </Button>
         <Button
           aria-label="Approve {item.action.tool} on {item.action.connection}"
@@ -486,7 +488,7 @@
           variant="secondary"
         >
           <IconTick />
-          Approve
+          <span>Approve</span>
         </Button>
       {:else}
         <Button
@@ -498,7 +500,7 @@
           variant="secondary"
         >
           <IconCheck />
-          Remove
+          <span>Remove</span>
         </Button>
       {/if}
     </div>
@@ -564,10 +566,13 @@
     inline-size: 16px;
     block-size: 16px;
   }
+  /* The first row's words stand on the lead's middle (.mark-text, app.css). */
   .name {
     grid-row: 1;
     grid-column: 2;
-    overflow: hidden;
+    align-self: center;
+    min-inline-size: 0;
+    overflow: clip;
     font: var(--type-label);
     color: var(--ink-strong);
     text-overflow: ellipsis;
@@ -576,6 +581,7 @@
   .wait {
     grid-row: 1;
     grid-column: 3;
+    align-self: center;
     font: var(--type-meta);
     color: var(--ink-muted);
     font-variant-numeric: tabular-nums;
@@ -701,7 +707,8 @@
     color: var(--ink-strong);
   }
   .machine-name {
-    overflow: hidden;
+    min-inline-size: 0;
+    overflow: clip;
     text-overflow: ellipsis;
   }
   .dot {

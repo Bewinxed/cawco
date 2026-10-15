@@ -164,18 +164,20 @@
     <div class="below">
       {#if note}
         <p
-          class="note"
+          class="note mark-line"
           data-flip
           data-tone={note.tone}
           role={note.tone === "fail" ? "alert" : "status"}
         >
-          {#if note.tone === "busy"}
-            <Spinner aria-hidden="true" />
-          {:else if note.tone === "fail"}
-            <IconWarningTriangle />
-          {:else}
-            <IconCheck />
-          {/if}
+          <span class="mark-cell">
+            {#if note.tone === "busy"}
+              <Spinner aria-hidden="true" />
+            {:else if note.tone === "fail"}
+              <IconWarningTriangle />
+            {:else}
+              <IconCheck />
+            {/if}
+          </span>
           <span>{note.text}</span>
         </p>
       {/if}
@@ -338,7 +340,6 @@
       width: 12px;
       height: 12px;
       flex: none;
-      margin-block-start: 2px;
     }
     &[data-tone="fail"] {
       color: var(--status-fail-ink);

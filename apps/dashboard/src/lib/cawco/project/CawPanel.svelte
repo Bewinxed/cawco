@@ -129,7 +129,7 @@
 
 <div class="caw-panel">
   <p class="head">Caw · lead of {projectName}</p>
-  <div class="row status">
+  <div class="row status mark-line">
     <CawFace size={18} status={lead.status} />
     <span class="sentence">{lead.sentence}</span>
   </div>

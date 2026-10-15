@@ -52,13 +52,13 @@
   </ul>
   <!-- A working mark in no beat: it never echoes, and stands still on its
        live dot. -->
-  <p data-unbeaten>
+  <p class="mark-line" data-unbeaten>
     <TreeMark fill="var(--mark-8)" status="live">
       {#snippet face()}
         <span></span>
       {/snippet}
     </TreeMark>
-    no beat
+    <span>no beat</span>
   </p>
 </main>
 
@@ -79,7 +79,8 @@
     padding: 0;
     list-style: none;
   }
-  li {
+  li,
+  [data-unbeaten] {
     display: flex;
     align-items: center;
     gap: var(--space-5);

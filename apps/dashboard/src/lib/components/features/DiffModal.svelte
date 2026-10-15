@@ -109,9 +109,11 @@
         value={diffStyle}
       >
         <ToggleGroup.Item value="unified"
-          ><IconAlignLeft />Unified</ToggleGroup.Item
+          ><IconAlignLeft /><span>Unified</span></ToggleGroup.Item
         >
-        <ToggleGroup.Item value="split"><IconColumns />Split</ToggleGroup.Item>
+        <ToggleGroup.Item value="split"
+          ><IconColumns /><span>Split</span></ToggleGroup.Item
+        >
       </ToggleGroup.Root>
     </header>
 

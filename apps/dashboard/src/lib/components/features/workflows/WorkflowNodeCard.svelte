@@ -96,8 +96,8 @@
       type="target"
     />
   {/if}
-  <header>
-    <span class="glyph" class:filled={modelled}
+  <header class="mark-line">
+    <span class="glyph" class:filled={modelled} data-box
       ><Glyph aria-hidden="true" class="size-4" /></span
     ><strong>{title}</strong>
   </header>

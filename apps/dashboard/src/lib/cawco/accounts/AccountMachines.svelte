@@ -122,11 +122,11 @@
         <span class="mname">{name}</span>
         <span class="trail">
           {#if shown !== "signed-in"}
-            <span class="state" data-state={shown}>
+            <span class="state mark-line" data-state={shown}>
               {#if shown === "mismatch"}
                 <IconWarningTriangle aria-hidden="true" />
               {/if}
-              {WORDS[shown]}
+              <span>{WORDS[shown]}</span>
             </span>
           {/if}
           <span class="act">

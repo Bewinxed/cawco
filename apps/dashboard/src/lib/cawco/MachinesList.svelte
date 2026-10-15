@@ -147,7 +147,7 @@
     {/each}
   </ul>
   <button
-    class="row add press-tint focus-inset"
+    class="row add mark-line press-tint focus-inset"
     onclick={() => {
       onleave?.();
       addMachine.show();
@@ -155,7 +155,7 @@
     type="button"
   >
     <IconPlus aria-hidden="true" />
-    Add machine
+    <span>Add machine</span>
   </button>
 {/if}
 

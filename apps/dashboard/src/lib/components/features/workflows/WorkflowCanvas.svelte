@@ -248,7 +248,7 @@
         if (menuNode) {
           onselect(menuNode);
         }
-      }}><IconChat />Open inspector</ContextMenu.Item
+      }}><IconChat /><span>Open inspector</span></ContextMenu.Item
     >
   </ContextMenu.Content>
 </ContextMenu.Root>

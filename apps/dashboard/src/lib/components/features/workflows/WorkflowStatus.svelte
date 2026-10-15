@@ -51,10 +51,10 @@
      `reflow` list (the rail, the board's queue) the chip still pops in and
      out as a whole (motion/rows). -->
 <span
-  class="wf-status"
+  class="wf-status mark-line"
   data-flip="pop"
   style="--chip-bg: var(--status-{tone}-bg); --chip-ink: var(--status-{tone}-ink)"
-  ><span aria-hidden="true" class="glyph"
+  ><span aria-hidden="true" class="glyph" data-box
     >{#key tone}
       <span transition:crossIn><Glyph class="size-3" /></span>
     {/key}</span

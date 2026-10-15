@@ -3858,7 +3858,7 @@
   .e-label.name {
     font-family: inherit;
     min-inline-size: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     flex: 0 1 auto;
   }
@@ -3871,7 +3871,7 @@
   }
   .e-detail {
     min-width: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: var(--text-meta);

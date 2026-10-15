@@ -124,6 +124,7 @@
 
 <span
   class="tree-mark"
+  data-box
   data-bare={fill ? undefined : ""}
   data-dot={dot}
   data-face-always={faceAlways || undefined}

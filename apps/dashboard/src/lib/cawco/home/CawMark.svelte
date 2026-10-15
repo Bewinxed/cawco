@@ -92,6 +92,7 @@
 <span
   aria-hidden="true"
   class="mark"
+  data-box
   style:--bleed="{CAW_STILL_BLEED}px"
   style:--side="{size}px"
   class:playing

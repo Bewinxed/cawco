@@ -158,10 +158,10 @@
 
 <Collapsible.Root class="flex flex-col" onOpenChange={toggle} {open}>
   <Collapsible.Trigger
-    class="flex items-center gap-1.5 self-start text-meta text-muted-foreground transition-colors hover:text-foreground"
+    class="mark-line flex items-center gap-1.5 self-start text-meta text-muted-foreground transition-colors hover:text-foreground"
   >
     <IconFolder class="size-4" />
-    Browse
+    <span>Browse</span>
   </Collapsible.Trigger>
 
   <Collapsible.Content>
@@ -208,7 +208,10 @@
                   variant="ghost"
                 >
                   <IconFolder class="shrink-0 opacity-70" />
-                  <span class="truncate">{dir.name}</span>
+                  <span
+                    class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                    >{dir.name}</span
+                  >
                 </Button>
               {:else}
                 <span class="block px-2 py-1 text-meta text-muted-foreground"
@@ -223,7 +226,7 @@
       <div class="flex justify-end">
         <Button onclick={use} size="xs">
           <IconCheck />
-          Use this directory
+          <span>Use this directory</span>
         </Button>
       </div>
     </div>

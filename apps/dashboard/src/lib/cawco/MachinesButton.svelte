@@ -74,7 +74,7 @@
       aria-expanded={barGlass.open === "machines"}
       aria-haspopup="dialog"
       aria-label={label}
-      class="bar-item machines touch-hit press-tint"
+      class="bar-item machines mark-line touch-hit press-tint"
       data-tone={tone}
       type="button"
     >

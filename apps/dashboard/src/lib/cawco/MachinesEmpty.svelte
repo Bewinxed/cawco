@@ -55,6 +55,7 @@
   </div>
   <div class="body">
     {#key fleet}
+      <!-- mark-line: a column; the machine cards stand under the words -->
       <div class="words" in:crossIn out:crossOut>
         {#if fleet === "none"}
           <h1 class="title">Connect a machine to run sessions</h1>

@@ -88,7 +88,7 @@
       {/if}
       <!-- The clock is a timer (live off): in the transcript's log the phase
            and its steps are read when they change, not every second. -->
-      <span class="pill {phase}" data-box {@attach clock.watch}>
+      <span class="pill mark-text {phase}" data-box {@attach clock.watch}>
         {phase}
         {#if view.steps}
           · {view.steps} step{view.steps === 1 ? "" : "s"}
@@ -279,7 +279,9 @@
     font-weight: var(--weight-body);
     font-variant-numeric: tabular-nums;
     border-radius: var(--radius-xs);
-    padding: 2px var(--space-2);
+    /* Its words on their x-height in the box (.mark-text): 2px past the
+       trim's room given back, so the box keeps its height. */
+    padding: calc(2px + (1lh - 1ex) / 2) var(--space-2);
     background: var(--status-idle-bg);
     color: var(--status-idle-ink);
   }

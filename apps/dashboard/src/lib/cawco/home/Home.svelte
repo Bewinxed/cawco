@@ -202,7 +202,7 @@
     <div class="dock" data-safe-bottom>
       <Button class="w-full" onclick={() => newSession()} size="lg">
         <IconPlus />
-        Start session
+        <span>Start session</span>
       </Button>
     </div>
   {/if}

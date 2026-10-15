@@ -10,9 +10,9 @@
 </script>
 
 <div class="status">
-  <span aria-live="polite" class="said">
-    <span class="dot"></span>
-    Waiting for check-in…
+  <span aria-live="polite" class="said mark-line">
+    <span class="dot" data-box></span>
+    <span>Waiting for check-in…</span>
   </span>
   {#if trail}
     {@render trail()}

@@ -17,4 +17,6 @@
   );
 </script>
 
-<Badge class="self-start" {variant}>{String(props.text ?? "")}</Badge>
+<Badge class="self-start" {variant}
+  ><span>{String(props.text ?? "")}</span></Badge
+>

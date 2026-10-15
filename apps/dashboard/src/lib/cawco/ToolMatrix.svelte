@@ -116,7 +116,7 @@
   {:else if shown === "installing"}
     <Badge class="{CHIP} text-muted-foreground" variant="ghost">
       <Spinner class="size-4 shrink-0" />
-      Installing…
+      <span>Installing…</span>
     </Badge>
   {:else if shown === "missing"}
     <Button
@@ -144,7 +144,7 @@
             >
               <span class="size-2 shrink-0 rounded-full bg-error" data-box
               ></span>
-              Failed
+              <span>Failed</span>
             </Badge>
           {/snippet}
         </Popover.Trigger>
@@ -209,7 +209,7 @@
             class="{CHIP} cursor-pointer text-muted-foreground"
             variant="ghost"
           >
-            Unsupported
+            <span>Unsupported</span>
           </Badge>
         {/snippet}
       </Popover.Trigger>
@@ -230,7 +230,7 @@
             <Badge
               {...props}
               class="{CHIP} text-[var(--ink-subtle)]"
-              variant="ghost">Unknown</Badge
+              variant="ghost"><span>Unknown</span></Badge
             >
           {/snippet}
         </Tooltip.Trigger>
@@ -271,7 +271,7 @@
     {#snippet action()}
       <Button onclick={() => addMachine.show()}>
         <IconServer />
-        Add machine
+        <span>Add machine</span>
       </Button>
     {/snippet}
   </EmptyState>
@@ -295,9 +295,10 @@
             >
               <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
               <div class="flex flex-col items-start gap-[var(--space-2)]">
-                <span class="flex items-center gap-1.5">
+                <span class="mark-line flex items-center gap-1.5">
                   <span class="text-label text-foreground">{spec.name}</span>
                   <a
+                    data-box
                     aria-label="{spec.name} homepage"
                     class="pointer-hit pressable text-muted-foreground transition-colors hover:text-foreground"
                     href={spec.homepage}

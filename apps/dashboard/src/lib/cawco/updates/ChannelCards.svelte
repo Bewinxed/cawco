@@ -115,7 +115,7 @@
         </span>
         {#if card.channel === current}
           <span
-            class="status"
+            class="status mark-line"
             in:blur={{
               duration: dur("--dur-panel"),
               easing: easeOut,
@@ -131,7 +131,7 @@
               <circle cx="10" cy="10" r="10"></circle>
               <path d="M6.2 10.4l2.5 2.5 5.1-5.6"></path>
             </svg>
-            The fleet follows {card.name}
+            <span>The fleet follows {card.name}</span>
           </span>
         {/if}
       </RadioGroup.Item>
@@ -221,7 +221,7 @@
   }
   .status {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 8px;
     margin-top: var(--space-2);
     color: var(--ink-strong);

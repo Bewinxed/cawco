@@ -237,15 +237,25 @@
     <span>Question from {asker}</span>
     <span class="state" data-box>
       {#if answered}
-        <span class="pill done" in:pillSwap out:pillSwap>answered</span>
+        <span class="pill done mark-line" in:pillSwap out:pillSwap
+          ><span>answered</span></span
+        >
       {:else if dismissed}
-        <span class="pill muted" in:pillSwap out:pillSwap>dismissed</span>
+        <span class="pill muted mark-line" in:pillSwap out:pillSwap
+          ><span>dismissed</span></span
+        >
       {:else if withdrawn}
-        <span class="pill muted" in:pillSwap out:pillSwap>withdrawn</span>
+        <span class="pill muted mark-line" in:pillSwap out:pillSwap
+          ><span>withdrawn</span></span
+        >
       {:else if failed}
-        <span class="pill muted" in:pillSwap out:pillSwap>not asked</span>
+        <span class="pill muted mark-line" in:pillSwap out:pillSwap
+          ><span>not asked</span></span
+        >
       {:else}
-        <span class="pill attn" in:pillSwap out:pillSwap>needs you</span>
+        <span class="pill attn mark-line" in:pillSwap out:pillSwap
+          ><span>needs you</span></span
+        >
       {/if}
     </span>
   </h2>

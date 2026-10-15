@@ -1037,10 +1037,10 @@
             <!-- Inside a section on a phone the rail is its own page, so the bar
                leads back to it. -->
             <a
-              class="crumb back pressable"
+              class="crumb back mark-line pressable"
               href="/config"
               in:riseIn
-              out:crossOut><IconChevronLeft />Configure</a
+              out:crossOut><IconChevronLeft /><span>Configure</span></a
             >
           {:else}
             <span class="crumb" in:riseIn out:crossOut>

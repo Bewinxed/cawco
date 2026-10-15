@@ -96,12 +96,14 @@
       onclick={toggleRecent}
       type="button"
     >
-      <span class="chev" class:open={recentOpen}><IconChevronRight /></span>
-      Recent
+      <span class="chev" class:open={recentOpen} data-box
+        ><IconChevronRight /></span
+      >
+      <span>Recent</span>
       <!-- Closed, the count says what is still live inside, as an "N older"
            row says what it hides (older.ts): nothing else on a closed list
            tells the reader a running session is in it. -->
-      <span class="num count">
+      <span class="num count" data-box>
         <span
           style="display:inline-grid;inline-size:{String(home.recentCount)
             .length}ch"><MorphText text={String(home.recentCount)} /></span

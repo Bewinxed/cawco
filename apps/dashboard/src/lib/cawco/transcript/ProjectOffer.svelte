@@ -79,7 +79,7 @@
     data-offer={instanceId}
     role="status"
   >
-    <p class="line">
+    <p class="line mark-line">
       <IconFolder aria-hidden="true" class="glyph" />
       <span>{joinedLine}</span>
     </p>
@@ -104,7 +104,7 @@
     class="offer"
     data-offer={instanceId}
   >
-    <p class="line">
+    <p class="line mark-line">
       <IconFolder aria-hidden="true" class="glyph" />
       <span>{offer.line}</span>
     </p>

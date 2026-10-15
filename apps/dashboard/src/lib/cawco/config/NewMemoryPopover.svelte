@@ -91,7 +91,7 @@
     {#snippet child({ props })}
       <Button {...props} disabled={down !== null} title={down ?? undefined}>
         <IconPlus />
-        New document
+        <span>New document</span>
       </Button>
     {/snippet}
   </Popover.Trigger>

@@ -63,7 +63,7 @@
       >
         <button
           aria-label="Open the canvas"
-          class="canvas-open touch-hit"
+          class="canvas-open mark-line touch-hit"
           onclick={onopencanvas}
           type="button"
         >
@@ -92,7 +92,7 @@
         aria-label={ink.pins > 0
           ? `Ink, ${ink.pins} ${ink.pins === 1 ? "pin" : "pins"}`
           : "Ink"}
-        class="att ink-chip"
+        class="att ink-chip mark-line"
         data-artifact={ink.artifactId}
         data-flip="pop"
         role="img"
@@ -106,12 +106,13 @@
       </span>
     {/if}
     {#each draft.images as img, i (img.name + i)}
-      <span class="att" data-flip="pop">
+      <span class="att mark-line" data-flip="pop">
         <img alt="" src="data:{img.mediaType};base64,{img.data}" />
         <span class="att-name">{img.name}</span>
         <button
           aria-label={`Remove ${img.name}`}
           class="touch-hit"
+          data-box
           onclick={() => removeImage(i)}
           type="button"
         >
@@ -194,7 +195,7 @@
      remove button's touch area. */
   .att-name {
     min-width: 0;
-    overflow: hidden;
+    overflow: clip;
     white-space: nowrap;
     text-overflow: ellipsis;
   }

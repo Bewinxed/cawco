@@ -141,7 +141,7 @@
         variant="outline"
       >
         <IconShop />
-        Link marketplace
+        <span>Link marketplace</span>
       </Button>
     {/snippet}
   </Popover.Trigger>

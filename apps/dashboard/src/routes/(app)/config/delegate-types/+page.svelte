@@ -84,7 +84,7 @@
       title={down ?? undefined}
     >
       <IconPlus />
-      New delegate type
+      <span>New delegate type</span>
     </Button>
   {/snippet}
 

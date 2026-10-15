@@ -172,9 +172,9 @@
             />
           {:else}
             <div class="flex flex-col gap-[var(--space-1)]">
-              <p class="title" id="{id}-title">
+              <p class="title mark-line" id="{id}-title">
                 <IconKey class="size-4 text-warning" />
-                Unlock {machine.hostname}
+                <span>Unlock {machine.hostname}</span>
               </p>
               <p class="body">
                 Its login keychain is locked, so Claude Code there cannot read

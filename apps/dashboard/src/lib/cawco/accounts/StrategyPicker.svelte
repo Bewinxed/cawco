@@ -186,9 +186,9 @@
       </div>
     {/each}
   </div>
-  <p class="forks">
+  <p class="forks mark-line">
     <IconSubagent />
-    {words.forks}
+    <span>{words.forks}</span>
   </p>
 </div>
 

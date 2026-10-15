@@ -320,7 +320,9 @@
         {/if}
       </span>
       {#if d.chip}
-        <Badge class={chipClass} variant="secondary">{d.chip}</Badge>
+        <Badge class={chipClass} variant="secondary"
+          ><span>{d.chip}</span></Badge
+        >
       {/if}
       <!-- One chain, so a fact arriving with its result fades in (Svelte plays
            a local intro only when a block that already ran switches). -->

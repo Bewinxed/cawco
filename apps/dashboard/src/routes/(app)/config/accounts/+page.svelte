@@ -35,7 +35,7 @@
       title={down ?? undefined}
     >
       <IconPlus />
-      {words.add}
+      <span>{words.add}</span>
     </Button>
   {/snippet}
 
@@ -58,18 +58,19 @@
           class="group"
           data-flip
         >
-          <header class="head">
+          <header class="head mark-line">
             <ProviderMark provider={group.provider} />
             <h2 class="name" id="provider-{group.provider}">{group.name}</h2>
             {#if hasRouting(group.accounts.length)}
               <a
-                class="routing"
+                class="routing mark-line"
+                data-box
                 data-flip="pop"
                 href="/config/accounts/{encodeURIComponent(
                   group.provider
                 )}/routing"
               >
-                {words.routing}
+                <span>{words.routing}</span>
                 <IconChevronRight aria-hidden="true" />
               </a>
             {/if}

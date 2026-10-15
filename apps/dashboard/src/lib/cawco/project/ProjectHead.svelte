@@ -289,7 +289,7 @@
            as its column, with nothing standing after it on its row: its box
            neither grows nor narrows, so there is no size for morph() to
            tween. -->
-      <p class="line">
+      <p class="line mark-line">
         {#if words?.kind === "ask"}
           <a class="ask" href="/session/thread:{words.threadId}"
             ><MorphText text={words.text} /></a

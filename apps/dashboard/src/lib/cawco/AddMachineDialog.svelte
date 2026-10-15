@@ -293,7 +293,7 @@
           </p>
           <ol aria-live="polite" class="steps">
             {#each steps as step, index (index)}
-              <li class:current={index === steps.length - 1}>
+              <li class="mark-line" class:current={index === steps.length - 1}>
                 {#if index === steps.length - 1}
                   <Spinner class="size-4" />
                 {:else}
@@ -302,14 +302,16 @@
                 <span>{step}</span>
               </li>
             {:else}
-              <li class="current">
+              <li class="current mark-line">
                 <Spinner class="size-4" /><span>Connecting over SSH</span>
               </li>
             {/each}
           </ol>
           <details class="output">
-            <summary>
-              <IconChevronRight aria-hidden="true" class="chev size-4" />Output
+            <summary class="mark-line">
+              <IconChevronRight aria-hidden="true" class="chev size-4" /><span
+                >Output</span
+              >
             </summary>
             <pre {@attach followTail()}>{job.lines.join("\n")}</pre>
           </details>
@@ -363,9 +365,9 @@
           {/if}
 
           <details class="output" bind:open={keyOpen}>
-            <summary>
+            <summary class="mark-line">
               <IconChevronRight aria-hidden="true" class="chev size-4" />
-              This hub's SSH key
+              <span>This hub's SSH key</span>
             </summary>
             <div class="flex flex-col gap-[var(--space-2)] pt-[var(--space-2)]">
               {#if joinInfo.value?.sshPublicKey}
@@ -412,7 +414,7 @@
       {#if starting}
         <Spinner class="size-4" />
       {/if}
-      {job?.state === "failed" ? "Retry" : "Add machine"}
+      <span>{job?.state === "failed" ? "Retry" : "Add machine"}</span>
     </Button>
   {:else}
     <Button onclick={close} variant="outline">Close</Button>

@@ -74,7 +74,7 @@
           {@const going = account.id === target}
           <button
             aria-selected={current}
-            class="option"
+            class="option mark-line"
             data-account-option={account.id}
             disabled={going}
             onclick={() => pick(account.id)}
@@ -84,6 +84,7 @@
             <span
               aria-hidden="true"
               class="dot lead"
+              data-box
               style:--c={hueVar(account.hue)}
             ></span>
             {#if going}
@@ -155,7 +156,8 @@
   .going {
     font: var(--type-label);
     color: var(--ink-muted);
-    overflow: hidden;
+    min-inline-size: 0;
+    overflow: clip;
     white-space: nowrap;
     text-overflow: ellipsis;
   }

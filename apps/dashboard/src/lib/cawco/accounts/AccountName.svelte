@@ -22,7 +22,8 @@
   } = $props();
 </script>
 
-<span class={["name", row && "row", wrap && "wrap"]}>
+<!-- Its own mark line (app.css), and a box to the row it stands in. -->
+<span class={["name", "mark-line", row && "row", wrap && "wrap"]} data-box>
   <b
     >{account.label || account.email
       ? nameOf(account)

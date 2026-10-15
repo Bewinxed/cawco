@@ -42,6 +42,7 @@
         aria-label="On {name}"
         class={["dot", inline && "inline"]}
         data-account-dot={account.id}
+        data-box
         role="img"
         style:--c="var(--account-{account.hue})"
       ></span>
@@ -57,7 +58,9 @@
     block-size: 6px;
     border-radius: 50%;
     background: var(--c);
-    vertical-align: 1px;
+    /* In a line of words its middle is theirs: the baseline plus half the
+       x-height (DESIGN.md, The Mark Line Rule). */
+    vertical-align: middle;
     transition: background-color var(--dur-panel) var(--ease-out);
   }
   .dot.inline {

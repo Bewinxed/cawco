@@ -20,6 +20,7 @@
 <span
   aria-hidden="true"
   class={["mark", mono && "mono"]}
+  data-box
   style:--mark-size={`${size}px`}
 >
   {#if !mark}

@@ -544,12 +544,12 @@
           {#if id !== FLAT}
             <!-- Where these ran, said once for the rows under it. -->
             <h3
-              class="machine"
+              class="machine mark-line"
               data-key="head:{id}"
               style={headStyle(entry.kind, id)}
             >
               <OsMark class="size-4 shrink-0" os={entry.group.os} />
-              {entry.group.name}
+              <span>{entry.group.name}</span>
             </h3>
           {/if}
           <div class="rows">
@@ -603,9 +603,9 @@
     {#if item.href && live}
       <a class="name" href={item.href} title={item.label}>{item.label}</a>
     {:else if item.os}
-      <span class="name machine-name">
+      <span class="name machine-name mark-line">
         <OsMark class="size-4 shrink-0" os={item.os} />
-        {item.label}
+        <span>{item.label}</span>
       </span>
     {:else}
       <span class="name" title={item.label}>{item.label}</span>

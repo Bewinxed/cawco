@@ -776,7 +776,10 @@
       })}
     <li data-row={row.s.id} {@attach item(row.s.id)}>
       <div class="rin">
-        <div class="row" data-away={row.state === "away" || undefined}>
+        <div
+          class="row mark-line"
+          data-away={row.state === "away" || undefined}
+        >
           <TreeMark
             count={kids.length}
             faceAlways
@@ -796,8 +799,8 @@
               {title}
             {/if}</span
           >
-          <span class="stat {status.tone}">
-            <span class="glyph">
+          <span class="stat mark-line {status.tone}" data-box>
+            <span class="glyph" data-box>
               {#key status.word}
                 <span class="mark" in:glyphIn out:glyphOut>
                   {#if status.icon}
@@ -1003,7 +1006,7 @@
   .title {
     flex: 1 1 auto;
     min-inline-size: 0;
-    overflow: hidden;
+    overflow: clip;
     font: var(--type-label);
     text-overflow: ellipsis;
     white-space: nowrap;

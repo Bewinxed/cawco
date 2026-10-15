@@ -245,20 +245,22 @@
 </script>
 
 <div class="fault" class:hub={group.origin === "hub"}>
-  <div class="top">
+  <div class="top mark-line">
     <IconWarningTriangle class="size-4 shrink-0" />
     <span class="title">{copy.title}</span>
     <!-- Where, never left implicit: the whole point of the investigation this
          came out of was that a badge named no machine. -->
-    <span class="where">
+    <span class="where" data-box>
       {#if group.origin === "hub"}
         <span class="tag">at the hub</span>
       {:else if machine}
-        <span class="tag">
+        <span class="tag mark-line">
           <OsMark class="size-4 shrink-0" os={machine.os} />
-          {machineLabel(machine.hostname)}
-          {group.harness ? ` · ${group.harness}` : ""}
-          {online ? "" : " · offline"}
+          <span
+            >{machineLabel(machine.hostname)}
+            {group.harness ? ` · ${group.harness}` : ""}
+            {online ? "" : " · offline"}</span
+          >
         </span>
       {:else}
         <span class="tag">{group.machineId}</span>
@@ -267,14 +269,15 @@
     {#if compact}
       <button
         aria-expanded={expanded}
-        class="disclose more-toggle touch-hit"
+        class="disclose more-toggle mark-line touch-hit"
+        data-box
         onclick={() => {
           expanded = !expanded;
         }}
         type="button"
       >
         <IconChevronRight class="fault-chevron size-4 shrink-0" />
-        {expanded ? "Hide" : "Details"}
+        <span>{expanded ? "Hide" : "Details"}</span>
       </button>
     {/if}
   </div>
@@ -332,14 +335,14 @@
         {:else}
           <button
             aria-expanded={disclosureOpen}
-            class="disclose touch-hit"
+            class="disclose mark-line touch-hit"
             onclick={() => {
               disclosureOpen = !disclosureOpen;
             }}
             type="button"
           >
             <IconChevronRight class="fault-chevron size-4 shrink-0" />
-            What it said
+            <span>What it said</span>
           </button>
           <div
             class="saids"

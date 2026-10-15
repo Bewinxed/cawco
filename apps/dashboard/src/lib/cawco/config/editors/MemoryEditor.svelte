@@ -638,12 +638,14 @@
                   <div class="swap" {@attach morph()}>
                     {#if reading[row.id]}
                       <p
-                        class="note busy"
+                        class="note busy mark-line"
                         role="status"
                         in:crossIn
                         out:crossOut
                       >
-                        <Spinner class="size-4 shrink-0" />Reading that version…
+                        <Spinner class="size-4 shrink-0" /><span
+                          >Reading that version…</span
+                        >
                       </p>
                     {:else if contents[row.id] !== undefined}
                       <div class="reveal" in:crossIn out:crossOut>
@@ -788,13 +790,14 @@
                   <div class="swap" {@attach morph()}>
                     {#if peeking[machine.machineId]}
                       <p
-                        class="note busy"
+                        class="note busy mark-line"
                         role="status"
                         in:crossIn
                         out:crossOut
                       >
-                        <Spinner class="size-4 shrink-0" />Reading this
-                        machine's copy…
+                        <Spinner class="size-4 shrink-0" /><span
+                          >Reading this machine's copy…</span
+                        >
                       </p>
                     {:else if unread[machine.machineId]}
                       <p class="caution" role="alert" in:crossIn out:crossOut>

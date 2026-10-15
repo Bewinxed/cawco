@@ -214,6 +214,7 @@
            to the kit's spinner, as a pending Button's icon does. -->
       <button
         {...props}
+        class="{props.class} mark-line"
         aria-busy={pending || undefined}
         aria-expanded={out}
         onclick={toggle}

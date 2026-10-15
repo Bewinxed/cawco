@@ -46,9 +46,10 @@
 
 <section class="part">
   <h3 class="kit-section-head">
-    {heading}
+    <span>{heading}</span>
     {#if draft === null}
       <Button
+        data-box
         class="count"
         onclick={() => {
           draft = text;

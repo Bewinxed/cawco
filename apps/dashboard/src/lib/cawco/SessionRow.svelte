@@ -321,11 +321,13 @@
       >
     {/if}
     {#if !compact}
+      <!-- mark-line: a line of text, trimmed by .words; the account dot stands
+           in it on vertical-align: middle, the x-height's middle -->
       <span class="cell line">
         {#if pending || renaming !== null}
-          <span class="doing"
+          <span class="doing mark-line"
             ><Spinner aria-hidden="true" />
-            {renaming === null ? pending : "Renaming…"}</span
+            <span>{renaming === null ? pending : "Renaming…"}</span></span
           >
         {:else}
           <AccountDot
@@ -364,7 +366,8 @@
   >
     {#if onarchive}
       <!-- What a finger uncovers as it draws the row away. -->
-      <span aria-hidden="true" class="swipe-reveal"><IconArchive />Archive</span
+      <span aria-hidden="true" class="swipe-reveal mark-line"
+        ><IconArchive /><span>Archive</span></span
       >
     {/if}
     {#if draft !== null}

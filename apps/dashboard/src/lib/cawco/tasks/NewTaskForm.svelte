@@ -129,7 +129,7 @@
     }}
   >
     <IconPlus />
-    Add task
+    <span>Add task</span>
   </Button>
 {:else}
   <Button
@@ -142,7 +142,7 @@
     variant="ghost"
   >
     <IconPlus />
-    Add task
+    <span>Add task</span>
   </Button>
 {/if}
 

@@ -429,12 +429,17 @@
         {#each STEPS as id, place (id)}
           <li
             aria-current={place === step ? "step" : undefined}
-            class={["step", place < step && "done", place === step && "cur"]}
+            class={[
+              "step",
+              "mark-line",
+              place < step && "done",
+              place === step && "cur",
+            ]}
           >
             {#if place < step}
               <IconSuccess aria-hidden="true" />
             {:else}
-              <span aria-hidden="true" class="dot"></span>
+              <span aria-hidden="true" class="dot" data-box></span>
             {/if}
             <span class="name">{words.steps[id]}</span>
           </li>
@@ -543,7 +548,7 @@
         <button
           {...props}
           aria-disabled={free ? undefined : "true"}
-          class="choice"
+          class="choice mark-line"
           onclick={(event) => {
             if (free) {
               choose(
@@ -554,9 +559,13 @@
           }}
           type="button"
         >
-          <span class="ptile"><ProviderMark provider={row.provider} /></span>
+          <span class="ptile" data-box
+            ><ProviderMark provider={row.provider} /></span
+          >
           <span class="plabel">{label}</span>
-          <span aria-hidden="true" class="chev"><IconChevronRight /></span>
+          <span aria-hidden="true" class="chev" data-box
+            ><IconChevronRight /></span
+          >
         </button>
       {/snippet}
       <li class="crow">
@@ -581,18 +590,19 @@
 {#snippet signIn()}
   <section class="sec">
     {#if choice}
-      <h2 class="titled">
+      <h2 class="titled mark-line">
         <span
           class="ptile"
+          data-box
           {@attach land(() =>
             choice ? `provider:${keyOf(choice)}` : undefined
           )}><ProviderMark provider={choice.provider} /></span
         >
-        {choiceLabel(choice)}
+        <span>{choiceLabel(choice)}</span>
       </h2>
     {/if}
     {#if signedIn > 0 && choice?.signin !== "device-code"}
-      <div class="signed-as" in:unfold out:unfold>
+      <div class="signed-as mark-line" in:unfold out:unfold>
         <IconSuccess aria-hidden="true" />
         <span
           >{accountsWords.signin.signedInAs}
@@ -617,11 +627,13 @@
               <div class="controls">
                 <DevicePanel flow={device} machine={name} {online} />
               </div>
-              <span class={["st", state === "mismatch" && "warn"]}>
+              <span class={["st", "mark-line", state === "mismatch" && "warn"]}>
                 {#if !done && state === "mismatch"}
-                  <IconWarningTriangle aria-hidden="true" />{words.someoneElse}
+                  <IconWarningTriangle aria-hidden="true" /><span
+                    >{words.someoneElse}</span
+                  >
                 {:else if !online}
-                  {words.offline}
+                  <span>{words.offline}</span>
                 {/if}
               </span>
             </li>
@@ -633,16 +645,25 @@
             <li class="mrow paste">
               <b class="mname">{name}</b>
               <span
-                class={["st", done && "ok", state === "mismatch" && "warn"]}
+                class={[
+                  "st",
+                  "mark-line",
+                  done && "ok",
+                  state === "mismatch" && "warn",
+                ]}
               >
                 {#if done}
-                  <IconSuccess aria-hidden="true" />{words.signedIn}
+                  <IconSuccess aria-hidden="true" /><span>{words.signedIn}</span
+                  >
                 {:else if paste.phase === "mismatch" || state === "mismatch"}
-                  <IconWarningTriangle aria-hidden="true" />{words.someoneElse}
+                  <IconWarningTriangle aria-hidden="true" /><span
+                    >{words.someoneElse}</span
+                  >
                 {:else if !online}
-                  {words.offline}
+                  <span>{words.offline}</span>
                 {:else if !asked}
                   <Button
+                    data-box
                     label={words.signIn}
                     onclick={() => paste.open()}
                     size="sm"
@@ -947,7 +968,8 @@
     box-shadow: var(--shadow-tile);
   }
   .plabel {
-    overflow: hidden;
+    min-inline-size: 0;
+    overflow: clip;
     font: var(--type-label);
     color: var(--ink-row);
     text-overflow: ellipsis;
@@ -1134,7 +1156,7 @@
       position: absolute;
       width: 1px;
       height: 1px;
-      overflow: hidden;
+      overflow: clip;
       clip-path: inset(50%);
       white-space: nowrap;
     }

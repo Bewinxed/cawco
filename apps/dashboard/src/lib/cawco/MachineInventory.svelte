@@ -121,7 +121,7 @@
         <li class="machine">
           <button
             aria-expanded={open[machine.machineId] === true}
-            class="head focus-inset press-tint"
+            class="head mark-line focus-inset press-tint"
             disabled={machine.status !== "online" && !open[machine.machineId]}
             onclick={() => expand(machine)}
             type="button"
@@ -145,8 +145,10 @@
           </button>
           {#if open[machine.machineId]}
             {#if reading[machine.machineId]}
-              <p class="note busy" role="status">
-                <Spinner class="size-4 shrink-0" />Asking this machine…
+              <p class="note busy mark-line" role="status">
+                <Spinner class="size-4 shrink-0" /><span
+                  >Asking this machine…</span
+                >
               </p>
             {:else if unread[machine.machineId]}
               <Alert variant="warning">
@@ -166,13 +168,14 @@
                     <span class="text">
                       <span class="line">
                         <span class="name">{row.name}</span>
-                        <Badge variant="outline">{row.scope}</Badge>
+                        <Badge variant="outline"><span>{row.scope}</span></Badge
+                        >
                         {#if row.managed}
-                          <Badge variant="secondary">fleet</Badge>
+                          <Badge variant="secondary"><span>fleet</span></Badge>
                         {/if}
                         {#if "shadowedBy" in row && row.shadowedBy}
                           <Badge variant="attn"
-                            >shadowed by {row.shadowedBy}</Badge
+                            ><span>shadowed by {row.shadowedBy}</span></Badge
                           >
                         {/if}
                       </span>

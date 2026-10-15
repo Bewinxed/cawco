@@ -185,7 +185,7 @@
                   variant="destructive"
                 >
                   <IconTrash />
-                  {deleteLabel}
+                  <span>{deleteLabel}</span>
                 </DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu.Root>

@@ -66,7 +66,7 @@
   {@attach drop}
 >
   <header class="head">
-    <span class="line">
+    <span class="line mark-line">
       {#if kind === "you"}
         <IconNeedsYou aria-hidden="true" class="you-glyph" />
       {/if}
@@ -91,7 +91,9 @@
           {task}
         />
         {#if moving?.(task.id)}
-          <span class="moving"><Spinner aria-hidden="true" />Moving…</span>
+          <span class="moving mark-line"
+            ><Spinner aria-hidden="true" /><span>Moving…</span></span
+          >
         {/if}
         <RowFault again={fault?.again} reason={fault?.reason} />
       </li>
@@ -171,7 +173,7 @@
   }
   .name {
     min-inline-size: 0;
-    overflow: hidden;
+    overflow: clip;
     font: var(--type-label);
     color: var(--ink-strong);
     text-overflow: ellipsis;

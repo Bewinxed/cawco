@@ -32,7 +32,7 @@
     {#snippet action()}
       <Button onclick={() => addMachine.show()}>
         <IconServer />
-        Add machine
+        <span>Add machine</span>
       </Button>
     {/snippet}
   </EmptyState>
@@ -93,7 +93,7 @@
             <Table.Cell
               class="running border-l border-border px-[var(--space-4)] py-[var(--space-2)]"
             >
-              <span class="version">
+              <span class="version mark-line">
                 {#if isCurrent(machine)}
                   <IconCheck class="size-4 shrink-0 text-success" />
                 {/if}

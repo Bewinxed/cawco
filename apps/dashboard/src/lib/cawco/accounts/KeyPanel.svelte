@@ -109,10 +109,10 @@
 {#snippet outcome(machineId: string)}
   {@const result = results.get(machineId)}
   {#if result?.ok}
-    <span class="ok"><Check />{words.sent}</span>
+    <span class="ok mark-line"><Check /><span>{words.sent}</span></span>
   {:else if result}
-    <span class="bad"
-      ><IconWarningTriangle aria-hidden="true" />{result.why}</span
+    <span class="bad mark-line"
+      ><IconWarningTriangle aria-hidden="true" /><span>{result.why}</span></span
     >
   {/if}
 {/snippet}

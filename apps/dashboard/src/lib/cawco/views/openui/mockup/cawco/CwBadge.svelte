@@ -16,7 +16,7 @@
 
 <span class="badge" data-mk="Badge">
   <Badge variant={VARIANT[props.tone ?? "neutral"] ?? "secondary"}
-    >{textOf(props.text)}</Badge
+    ><span>{textOf(props.text)}</span></Badge
   >
 </span>
 

@@ -941,7 +941,7 @@
     style:left="{measured.line.left}px"
     style:width="{measured.line.width}px"
   >
-    <span class="qchip" bind:offsetWidth={chipWidth}>
+    <span class="qchip mark-line" bind:offsetWidth={chipWidth}>
       <IconSearch aria-hidden="true" />
       <span class="q">{query}</span>
       <span class="n num">{rows[0]?.kind === "none" ? 0 : pickable}</span>
@@ -1054,7 +1054,7 @@
   }
   .q {
     min-width: 0;
-    overflow: hidden;
+    overflow: clip;
     text-overflow: ellipsis;
   }
   .n {

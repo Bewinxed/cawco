@@ -19,9 +19,9 @@
     <p class="line">{line}</p>
   {/each}
   <Collapsible.Root bind:open>
-    <Collapsible.Trigger class="move-details-trigger press-tint">
-      Details
-      <span aria-hidden="true" class="chev" class:open
+    <Collapsible.Trigger class="move-details-trigger mark-line press-tint">
+      <span>Details</span>
+      <span aria-hidden="true" class="chev" class:open data-box
         ><IconChevronRight /></span
       >
     </Collapsible.Trigger>

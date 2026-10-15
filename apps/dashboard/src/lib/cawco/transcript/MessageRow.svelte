@@ -728,7 +728,7 @@
               {:else}
                 <!-- A stored transcript can name an image it no longer carries. -->
                 <Badge class={chipClass} variant="secondary"
-                  >Image {i + 1} · {img.mediaType}</Badge
+                  ><span>Image {i + 1} · {img.mediaType}</span></Badge
                 >
               {/if}
             {/each}
@@ -764,7 +764,7 @@
                         <button
                           aria-busy={going || undefined}
                           aria-disabled={going || undefined}
-                          class="pressable action"
+                          class="pressable action mark-line"
                           onclick={whileIdle(
                             () => going,
                             () => moveAndSend(action.account.id)
@@ -774,6 +774,7 @@
                           <i
                             aria-hidden="true"
                             class="dot"
+                            data-box
                             style:--c={hueVar(action.account.hue)}
                           ></i>
                           <PendingContent
@@ -786,7 +787,7 @@
                         <button
                           aria-busy={starting || undefined}
                           aria-disabled={starting || undefined}
-                          class="pressable action"
+                          class="pressable action mark-line"
                           onclick={whileIdle(
                             () => starting,
                             () => startWith(action)

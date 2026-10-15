@@ -494,7 +494,7 @@
                       variant="secondary"
                     >
                       <IconClose class="deny" />
-                      {DONT_MOVE}
+                      <span>{DONT_MOVE}</span>
                     </Button>
                     <!-- The yes is the action, coral as in New session's step 2. -->
                     <Button
@@ -503,7 +503,7 @@
                       size="sm"
                     >
                       <IconTick />
-                      {MOVE_IT}
+                      <span>{MOVE_IT}</span>
                     </Button>
                   </div>
                 </div>

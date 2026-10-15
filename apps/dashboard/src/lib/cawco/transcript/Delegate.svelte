@@ -393,9 +393,9 @@
           ><IconChevronRight /></span
         >
         {#if started}
-          <span class="kind" data-box>session</span>
+          <span class="kind mark-text" data-box>session</span>
         {:else if type}
-          <span class="kind" data-box>{type}</span>
+          <span class="kind mark-text" data-box>{type}</span>
         {/if}
         {#if harness}
           <span class="meta">{harness}</span>
@@ -406,7 +406,7 @@
         {#if mayDelegate}
           <span class="may">may delegate</span>
         {/if}
-        <span class="pill {tone}" data-box>
+        <span class="pill mark-text {tone}" data-box>
           <MorphText text={pillWords} />
           {#if elapsed}
             {pillWords ? " · " : ""}
@@ -605,7 +605,9 @@
     color: var(--ink-strong);
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-xs);
-    padding: 0 var(--space-2);
+    /* Its words on their x-height in the box (.mark-text): the trim's room
+       given back as padding, so the box keeps its 18px line. */
+    padding: calc((1lh - 1ex) / 2) var(--space-2);
     line-height: 18px;
     white-space: nowrap;
   }
@@ -633,7 +635,9 @@
     font-weight: var(--weight-body);
     font-variant-numeric: tabular-nums;
     border-radius: var(--radius-xs);
-    padding: 2px var(--space-2);
+    /* Its words on their x-height in the box (.mark-text): 2px past the
+       trim's room given back, so the box keeps its height. */
+    padding: calc(2px + (1lh - 1ex) / 2) var(--space-2);
     background: var(--status-idle-bg);
     color: var(--status-idle-ink);
     white-space: nowrap;

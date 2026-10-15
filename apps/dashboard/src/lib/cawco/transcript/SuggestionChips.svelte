@@ -225,7 +225,7 @@
       <legend class="sr-only">Suggested skills, tools and MCP servers</legend>
       {#each shown as { candidate, noul }, i (candidate.id)}
         <button
-          class="chip touch-hit"
+          class="chip mark-line touch-hit"
           onclick={() => choose(candidate)}
           title={`Likely needed · ${Math.round(noul * 100)}%${candidate.description ? `\n${candidate.description}` : ""}`}
           type="button"
@@ -246,7 +246,7 @@
           {/if}
           <span class="name">{candidate.name}</span>
           {#if i === 0}
-            <Kbd aria-hidden="true" class="key">Tab</Kbd>
+            <Kbd aria-hidden="true" class="key" data-box>Tab</Kbd>
           {/if}
           <span class="sr-only"
             >— add “{suggestionLine(candidate)}” to the message</span
@@ -394,7 +394,8 @@
   }
 
   .name {
-    overflow: hidden;
+    min-inline-size: 0;
+    overflow: clip;
     text-overflow: ellipsis;
   }
 

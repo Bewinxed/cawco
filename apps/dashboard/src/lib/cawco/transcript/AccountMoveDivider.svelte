@@ -133,9 +133,9 @@
     style:--account={hue ? hueVar(hue) : "var(--ink-muted)"}
   >
     <span class="arm"></span>
-    <span class="mid"
+    <span class="mid mark-line"
       >{#if working}
-        <span class="caw"
+        <span class="caw" data-box
           ><span class="stand"
             ><Caw
               ongone={() => {
@@ -151,6 +151,7 @@
       {#if !live}
         <span
           class="mark"
+          data-box
           in:fade={{ duration: watched ? dur("--dur-fade") : 0 }}
           ><IconTransfer aria-hidden="true" class="glyph" />
           <span aria-hidden="true" class="dot"></span></span
@@ -164,7 +165,7 @@
         {/if}</span
       >
       {#if row.brief !== null}
-        <span class="chev"><IconChevron aria-hidden="true" /></span>
+        <span class="chev" data-box><IconChevron aria-hidden="true" /></span>
       {/if}</span
     >
     <span class="arm"></span>
@@ -227,7 +228,8 @@
     gap: var(--space-2);
   }
   .words {
-    overflow: hidden;
+    min-inline-size: 0;
+    overflow: clip;
     text-overflow: ellipsis;
     font-variant-numeric: tabular-nums;
   }

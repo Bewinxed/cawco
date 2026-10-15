@@ -219,16 +219,21 @@
          which leaves no place to put a chip except on top of the text. Icon,
          chip and field are flex siblings, so nothing overlaps and nothing
          needs measuring. -->
-    <div class="jump-search field-underline">
+    <div class="jump-search field-underline mark-line">
       <IconSearch class="jump-search-icon" height={16} width={16} />
       {#if scoped}
         {@const ScopedMark = AUTHOR_MARK[scoped.token]}
-        <span class="jump-chip" transition:scale={chipMotion}>
+        <span
+          class="jump-chip mark-line"
+          data-box
+          transition:scale={chipMotion}
+        >
           <ScopedMark class="jump-chip-mark" height={12} width={12} />
-          {scoped.label}
+          <span>{scoped.label}</span>
           <button
             aria-label="Clear author filter"
             class="jump-chip-off"
+            data-box
             onclick={() => {
               kept.scope = null;
               input?.focus();
@@ -241,6 +246,7 @@
       {/if}
       <CommandPrimitive.Input
         class="jump-field"
+        data-box
         onkeydown={onSearchKey}
         placeholder={kept.scope
           ? "Search these messages…"
@@ -267,7 +273,7 @@
                 onSelect={() => chooseAuthor(author.token)}
                 value={`author:${author.token}`}
               >
-                <span class="jump-text" data-box>
+                <span class="jump-text mark-line" data-box>
                   <AuthorMark class="jump-mark" height={16} width={16} />
                   <span class="jump-name">{author.label}</span>
                   <span class="jump-trail">{trail}</span>
@@ -284,9 +290,9 @@
             {@const EntryMark = MARK[entry.kind]}
             <div data-flip>
               <Command.Item onSelect={() => jump(entry.href)} value={entry.id}>
-                <span class="jump-text" data-box>
+                <span class="jump-text mark-line" data-box>
                   {#if entry.kind === "thread"}
-                    <span class="jump-mark">
+                    <span class="jump-mark" data-box>
                       <CawFace
                         size={16}
                         status={(entry.conversation &&
@@ -363,7 +369,7 @@
                 <!-- Which conversation this line came out of. Without it a list of
                    snippets is a list of strangers. -->
                 <span class="jump-hit-head" data-box>
-                  <span class="jump-text" data-box>
+                  <span class="jump-text mark-line" data-box>
                     <IconDocument class="jump-mark" height={16} width={16} />
                     <span class="jump-name">
                       {index.sessionTitles.get(hit.sessionId) ??
@@ -376,7 +382,7 @@
                   </span>
                 </span>
                 <!-- And the line itself, with the terms that matched marked. -->
-                <span class="jump-snippet" title={plain(hit.snippet)}>
+                <span class="jump-snippet" data-box title={plain(hit.snippet)}>
                   {#each segments(hit.snippet) as part, i (i)}
                     {#if i % 2 === 1}
                       <mark>{part}</mark>
@@ -532,7 +538,7 @@
   :global(.jump-name) {
     min-width: 0;
     flex: 1;
-    overflow: hidden;
+    overflow: clip;
     color: var(--ink-strong);
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
@@ -545,7 +551,8 @@
     flex: none;
     margin-left: auto;
     max-width: 45%;
-    overflow: hidden;
+    min-width: 0;
+    overflow: clip;
     color: var(--ink-muted);
     font-size: var(--text-meta);
     font-weight: var(--weight-body);

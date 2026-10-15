@@ -45,15 +45,16 @@
     <span class="from">{one.from}</span>
     {#if one.missing > 0}
       <a
-        class="todo"
+        class="todo mark-line"
         href="/config/accounts/{one.account.id}"
         onclick={onchoose}
         ><span>Sign in on {plural(one.missing, "machine")}</span>
         <IconChevronRight aria-hidden="true" /></a
       >
     {:else}
-      <span class="done"
-        ><IconSuccess aria-hidden="true" />Signed in everywhere</span
+      <span class="done mark-line"
+        ><IconSuccess aria-hidden="true" /><span>Signed in everywhere</span
+        ></span
       >
     {/if}
   </span>
