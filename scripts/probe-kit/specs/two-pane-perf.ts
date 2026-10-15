@@ -393,8 +393,20 @@ async function measure(
         await act();
         to = await now();
       },
-      { restyles: true }
+      // Streaming is sampled for where its script goes, in either layout alike.
+      { profile: name === "stream", restyles: true }
     );
+    if (name === "stream") {
+      const [start] = main.marks;
+      const spent = main
+        .selfTime(start?.at ?? 0, Number.POSITIVE_INFINITY)
+        .slice(0, 16)
+        .map(([fn, ms]) => `${fn} ${ms.toFixed(0)}ms`)
+        .join("; ");
+      kit.note(
+        `${mode} pane(s), stream: the script it ran, by self time: ${spent}`
+      );
+    }
     const longestOf = (tasks: MainTask[]) =>
       tasks.reduce<MainTask | null>(
         (most, task) => (most && most.cpu >= task.cpu ? most : task),

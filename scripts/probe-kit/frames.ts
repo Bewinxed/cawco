@@ -385,6 +385,12 @@ export interface MainTask {
 export interface MainThread {
   /** Each `performance.mark` made while tracing: its name and when, the trace clock, µs. */
   marks: { at: number; name: string }[];
+  /**
+   * The script functions the main thread ran between two points of the
+   * trace clock (µs), by the time sampled in each function itself, ms, the
+   * most first (`profile` only; empty otherwise): `name@file:line`.
+   */
+  selfTime: (from: number, to: number) => [string, number][];
   tasks: MainTask[];
 }
 
@@ -395,15 +401,30 @@ interface StackFrame {
   url: string;
 }
 
+/** A sampling profile's chunk (`ProfileChunk`): new call-tree nodes, and samples with the µs since the last. */
+interface ProfileData {
+  cpuProfile?: {
+    nodes?: { callFrame: StackFrame; id: number }[];
+    samples?: number[];
+  };
+  startTime?: number;
+  timeDeltas?: number[];
+}
+
 interface TraceEvent {
   args?: {
     beginData?: { stackTrace?: StackFrame[] };
-    data?: { nodeName?: string; reason?: string; stackTrace?: StackFrame[] };
+    data?: ProfileData & {
+      nodeName?: string;
+      reason?: string;
+      stackTrace?: StackFrame[];
+    };
     elementCount?: number;
     endData?: { elementCount?: number };
   };
   cat: string;
   dur?: number;
+  id?: string;
   name: string;
   ph: string;
   pid: number;
@@ -413,18 +434,67 @@ interface TraceEvent {
 }
 
 /**
+ * The main thread's sampling profile, out of the trace's `Profile` and
+ * `ProfileChunk` events: each sample's time (µs, the trace clock), how long
+ * it stands for, and the function it was taken in.
+ */
+function samplesOf(
+  events: TraceEvent[],
+  pid: number,
+  tid: number
+): { at: number; fn: string; us: number }[] {
+  const head = events.find(
+    (event) =>
+      event.name === "Profile" && event.pid === pid && event.tid === tid
+  );
+  if (!head) {
+    return [];
+  }
+  const fns = new Map<number, string>();
+  const samples: { at: number; fn: string; us: number }[] = [];
+  let at = head.args?.data?.startTime ?? head.ts;
+  for (const chunk of events) {
+    if (
+      chunk.name !== "ProfileChunk" ||
+      chunk.pid !== pid ||
+      chunk.id !== head.id
+    ) {
+      continue;
+    }
+    const data = chunk.args?.data;
+    for (const { callFrame: c, id } of data?.cpuProfile?.nodes ?? []) {
+      fns.set(
+        id,
+        `${c.functionName || "(anonymous)"}@${c.url.split("/").pop() ?? ""}:${c.lineNumber + 1}`
+      );
+    }
+    const ids = data?.cpuProfile?.samples ?? [];
+    const deltas = data?.timeDeltas ?? [];
+    ids.forEach((id, i) => {
+      at += deltas[i] ?? 0;
+      samples.push({ at, fn: fns.get(id) ?? "?", us: deltas[i + 1] ?? 0 });
+    });
+  }
+  return samples;
+}
+
+/**
  * The page's main thread while `act` runs, read off a DevTools trace
  * (Chromium): every top-level task (`RunTask`) with its wall time (`dur`)
  * and its thread time (`tdur`, the thread clock: the CPU the task took),
  * and every user-timing mark. The main thread is the one the marks are made
  * on, so `act` makes at least one (`performance.mark`) in the page.
  * `restyles`: each task also says how many elements it restyled, from the
- * timeline's own category, which the trace then carries whole.
+ * timeline's own category, which the trace then carries whole. `profile`:
+ * V8 samples the main thread's script as well (`selfTime`).
  */
 export async function traceMain(
   page: Page,
   act: () => Promise<unknown>,
-  { restyles = false }: { restyles?: boolean } = {}
+  {
+    profile = false,
+    restyles = false,
+  }: { profile?: boolean; restyles?: boolean } = {}
 ): Promise<MainThread> {
   const cdp = await page.context().newCDPSession(page);
   const events: TraceEvent[] = [];
@@ -447,6 +517,7 @@ export async function traceMain(
               "disabled-by-default-devtools.timeline.invalidationTracking",
             ]
           : []),
+        ...(profile ? ["disabled-by-default-v8.cpu_profiler"] : []),
       ],
     },
   });
@@ -508,8 +579,19 @@ export async function traceMain(
         ms: (one.dur ?? 0) / 1000,
         at: forcedBy(one),
       }));
+  const samples = profile ? samplesOf(events, first.pid, first.tid) : [];
+  const selfTime = (from: number, to: number): [string, number][] => {
+    const counted = new Map<string, number>();
+    for (const { at, fn, us } of samples) {
+      if (at >= from && at < to) {
+        counted.set(fn, (counted.get(fn) ?? 0) + us / 1000);
+      }
+    }
+    return [...counted].sort((a, b) => b[1] - a[1]);
+  };
   return {
     marks: marks.map((event) => ({ at: event.ts, name: event.name })),
+    selfTime,
     tasks: main
       .filter((event) => event.name === "RunTask")
       .map((event) => {

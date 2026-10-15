@@ -397,11 +397,17 @@
             paneId === swipe.leaving))}
       {@const ctx = contextOf(paneId)}
       {@const laidOut = settling.has(paneId) || warm.holds(leaf.id, paneId)}
+      <!-- A pane laid out off screen is out of reach by its `visibility`
+           (`.pane-settling`): nothing hidden takes a pointer, the focus or a
+           reader's notice. It is not made inert as well: `inert` is an
+           inherited style (CSS `interactivity`), and lifting it at the switch
+           restyled the pane's every element in the click; `visibility` is
+           one Blink hands down without restyling them. -->
       <div
         class="pane"
         data-delta={delta}
         data-pane={paneId}
-        inert={!isActive}
+        inert={!(isActive || (laidOut && !shown))}
         class:pane-hidden={!(shown || laidOut)}
         class:pane-settling={!shown && laidOut}
         use:slot={{ id: paneId, shown }}
@@ -604,9 +610,10 @@
      rows and draws before its tab is chosen; once drawn it is skipped as
      above. So is the pane whose tab the reader is reaching for (warm.svelte.ts),
      so the switch that shows it only paints. Only the hidden state is declared, as on the surfaces (see
-     `.groups.hidden-surface` in SessionSurface). */
+     `.groups.hidden-surface` in SessionSurface). Hidden, it takes no
+     pointer, so nothing else is said: every property the switch changes on
+     this box is one more its elements are restyled for. */
   .pane-settling {
     visibility: hidden;
-    pointer-events: none;
   }
 </style>
