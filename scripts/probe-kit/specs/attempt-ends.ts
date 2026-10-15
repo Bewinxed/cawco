@@ -553,8 +553,13 @@ const queuedOwnStart = async (
   fleet: KitFleet,
   { projectId, starter, read, file, command, ended, pushedAbout }: CaseTools
 ) => {
-  const owns = { owns: ["src/**"] };
-  const holderId = await file(projectId, "PROBE-HOLD refactor src", owns);
+  // The queued task owns a file inside the holder's glob: overlapping
+  // (work-items.ts `globsOverlap`), so it waits, and not the same files and
+  // checks, which the duplicates rule drops (jev-tasks.ts `duplicateByRule`),
+  // taking its queued start with it (dispatch.ts `taskChanged`).
+  const holderId = await file(projectId, "PROBE-HOLD refactor src", {
+    owns: ["src/**"],
+  });
   await command("F1", [{ name: START, input: { id: holderId } }]);
   const holder = await until(
     `${holderId}'s attempt running`,
@@ -567,7 +572,7 @@ const queuedOwnStart = async (
     throw new Error(`${holderId}'s attempt never ran`);
   }
   const title = `${FAIL} rename src`;
-  const id = await file(projectId, title, owns);
+  const id = await file(projectId, title, { owns: ["src/names.ts"] });
   const queued = await fleet.api<{ queued: boolean; text: string }>(
     `/api/projects/${projectId}/tasks/${id}/attempts`,
     { parentInstanceId: starter }
