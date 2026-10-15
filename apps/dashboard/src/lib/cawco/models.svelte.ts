@@ -11,7 +11,12 @@ import type { HarnessKind, InstanceRow, ModelInfo } from "@cawco/core";
 import { isEffortLevel } from "@cawco/core";
 import { untrack } from "svelte";
 import { failureWords } from "#lib/cawco/hub-read.js";
-import { cawco, isCustodyRefusal, loadModels } from "./client.svelte";
+import {
+  cawco,
+  harnessCan,
+  isCustodyRefusal,
+  loadModels,
+} from "./client.svelte";
 import { type HarnessModel, modelsForHarness } from "./model-catalog";
 import { readJson, writeJson } from "./storage";
 
@@ -89,7 +94,8 @@ function candidates(kind: string, harness?: string): InstanceRow[] {
     (row) =>
       (row.harness ?? "claude") === kind &&
       !asked.has(row.id) &&
-      (!harness || kind === harness)
+      (!harness || kind === harness) &&
+      harnessCan(row, "supportedModels")
   );
 }
 

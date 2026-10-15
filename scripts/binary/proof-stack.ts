@@ -136,7 +136,7 @@ const parsed = () =>
   captured.map(
     (text) =>
       JSON.parse(text) as {
-        event?: { sessionId?: string };
+        event?: { frame?: { kind?: string }; sessionId?: string };
         payload?: { kind?: string };
         type?: string;
         verb?: string;
@@ -145,6 +145,9 @@ const parsed = () =>
 const systemd = process.env.CAWCO_PROOF_SYSTEMD === "1";
 /** Set by prove-stage1.sh's browser step: the stack stays up until that file exists. */
 const browserDone = process.env.CAWCO_PROOF_BROWSER_DONE;
+/** The session's stub dev server, and the open that shows it as its preview. */
+let devServer: Bun.Server<undefined> | undefined;
+let previewShown: Promise<Record<string, unknown>> | undefined;
 try {
   mkdirSync(home, { recursive: true });
   await exec("proof-fixture");
@@ -323,10 +326,51 @@ try {
         frame.type === "stream.event" && frame.event?.sessionId === sessionId
     )
   );
-  const kinds = new Set(
-    parsed().map((frame) => frame.payload?.kind ?? frame.type ?? frame.verb)
+  // A preview, as a session opens one on its dev server: a stub server here,
+  // shown through the hub, so the socket carries a real PreviewFrame. The
+  // open waits for a view to say it shows it (the browser step's, or none
+  // within the hub's wait), so it is read last, before PASS.
+  devServer = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch: () =>
+      new Response(
+        "<!doctype html><title>Binary proof preview</title><p>binary proof preview</p>",
+        { headers: { "content-type": "text/html; charset=utf-8" } }
+      ),
+  });
+  previewShown = post(`/api/instances/${sessionId}/artifacts`, {
+    kind: "preview",
+    name: "binary-proof",
+    port: devServer.port,
+  });
+  let previewAnswer = "no answer yet";
+  previewShown.then(
+    (answer) => {
+      previewAnswer = JSON.stringify(answer);
+    },
+    (error: unknown) => {
+      previewAnswer = String(error);
+    }
   );
-  for (const kind of ["instances", "instances_delta", "stream.event"]) {
+  await until("the hub's socket sends the session's preview", () =>
+    // Sequenced into the session's stream (hub `publishPreview`).
+    parsed().some((frame) => frame.event?.frame?.kind === "preview")
+  ).catch((error: unknown) => {
+    throw new Error(`${String(error)}; the open answered: ${previewAnswer}`);
+  });
+  const kinds = new Set(
+    parsed().flatMap((frame) => [
+      frame.payload?.kind ?? frame.type ?? frame.verb,
+      ...(frame.event?.frame?.kind ? [frame.event.frame.kind] : []),
+    ])
+  );
+  for (const kind of [
+    "instances",
+    "instances_delta",
+    "stream.event",
+    "preview",
+  ]) {
     if (!kinds.has(kind)) {
       throw new Error(`The hub's socket sent no ${kind} frame`);
     }
@@ -412,10 +456,12 @@ try {
     );
     console.log("the browser step loaded the served dashboard");
   }
+  console.log(`preview opened: ${JSON.stringify(await previewShown)}`);
   console.log("PASS");
 } finally {
   // What the socket sent, read by the release, or by whoever reads a failed run's evidence.
   writeFileSync(join(home, "frames.jsonl"), `${captured.join("\n")}\n`);
+  devServer?.stop(true);
   for (const child of children) {
     try {
       child.kill("SIGTERM");

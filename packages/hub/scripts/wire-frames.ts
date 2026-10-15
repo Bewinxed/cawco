@@ -77,13 +77,11 @@ class Reader {
     return { name, schema: current };
   }
 
-  /** Whether `value` reads as `schema`, with no problem said. */
-  fits(value: unknown, schema: Schema): boolean {
+  /** What reading `value` as `schema` would say, said nowhere. */
+  private trial(value: unknown, schema: Schema, at: string): string[] {
     const before = this.problems.length;
-    this.read(value, schema, "");
-    const fits = this.problems.length === before;
-    this.problems.length = before;
-    return fits;
+    this.read(value, schema, at);
+    return this.problems.splice(before);
   }
 
   read(value: unknown, given: Schema, at: string): void {
@@ -149,11 +147,21 @@ class Reader {
     ) {
       return;
     }
-    if (!branches.some((branch) => this.fits(value, branch))) {
-      this.problems.push(
-        `${at}: ${JSON.stringify(value).slice(0, 120)} reads as none of its ${branches.length} branches`
-      );
+    // A value one branch reads is read; else the branch it comes nearest to
+    // (fewest problems) says why, so a refusal names the property.
+    let nearest: string[] | undefined;
+    for (const branch of branches) {
+      const said = this.trial(value, branch, at);
+      if (said.length === 0) {
+        return;
+      }
+      if (!nearest || said.length < nearest.length) {
+        nearest = said;
+      }
     }
+    this.problems.push(
+      ...(nearest ?? [`${at}: reads as none of its branches`])
+    );
   }
 
   /** The value's JSON kind is one the schema admits; false when it is not, said once. */

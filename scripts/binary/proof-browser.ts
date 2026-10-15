@@ -3,7 +3,7 @@
  * serves, loaded in a headless Chromium (playwright-core, the cached
  * headless shell). It passes when the page shows the proof stack's own
  * session's answer, which the served bundle can only show by booting and
- * reading the live hub, and the page threw nothing.
+ * reading the live hub, and the page neither threw nor logged an error.
  *
  *   bun proof-browser.ts <dashboard url> <stack-ready file> <done file>
  *
@@ -51,13 +51,17 @@ try {
         { cause: error }
       );
     });
-  if (thrown.length) {
+  const errors = [
+    ...thrown.map((line) => `page error: ${line}`),
+    ...logged.map((line) => `console error: ${line}`),
+  ];
+  if (errors.length) {
     throw new Error(
-      `The served dashboard threw ${thrown.length} page error${thrown.length === 1 ? "" : "s"}:\n${thrown.map((line) => `  ${line}`).join("\n")}`
+      `The served dashboard said ${errors.length} error${errors.length === 1 ? "" : "s"}:\n${errors.map((line) => `  ${line}`).join("\n")}`
     );
   }
   console.log(
-    `served dashboard rendered session ${session} and its answer, no page errors${logged.length ? ` (${logged.length} console error${logged.length === 1 ? "" : "s"}: ${logged.join(" | ").slice(0, 300)})` : ""}: ${((performance.now() - started) / 1000).toFixed(1)} s`
+    `served dashboard rendered session ${session} and its answer, no page or console error: ${((performance.now() - started) / 1000).toFixed(1)} s`
   );
 } finally {
   await browser.close();

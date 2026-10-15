@@ -31,6 +31,7 @@ import type {
   FleetWatchNotice,
   FramePayload,
   FsPayload,
+  HarnessCapabilities,
   HarnessKind,
   InstanceRow,
   McpServerStatus,
@@ -3797,6 +3798,30 @@ export async function replaceQueued(
   return { withdraw, replacement: replacementId };
 }
 
+/** The yes-or-no capabilities a harness reports (`HarnessCapabilities`). */
+export type HarnessCapability = {
+  [K in keyof HarnessCapabilities]: HarnessCapabilities[K] extends boolean
+    ? K
+    : never;
+}[keyof HarnessCapabilities];
+
+/**
+ * Whether a session's harness does what `capability` names, as its machine
+ * reported it. A harness that reported no is never asked the control that
+ * capability backs, and neither is one whose report has not come: its answer
+ * would be read as one it never gave (a harness reporting
+ * `supportedCommands: false` answered the ask with nothing, and the menu's
+ * `.map` threw on it).
+ */
+export const harnessCan = (
+  where: { harness?: string | null; machineId: string },
+  capability: HarnessCapability
+): boolean =>
+  cawco.machines
+    .find((entry) => entry.machineId === where.machineId)
+    ?.harnesses?.find((entry) => entry.harness === (where.harness ?? "claude"))
+    ?.capabilities[capability] === true;
+
 /** One action table for every surface that draws the reader's own turns. */
 export function userTurnActions(message: Message): {
   edit: "queued" | "resend" | "restore" | null;
@@ -3810,15 +3835,12 @@ export function userTurnActions(message: Message): {
   const machine = cawco.machines.find(
     (entry) => entry.machineId === target.machineId
   );
-  const capability = machine?.harnesses?.find(
-    (entry) => entry.harness === target.harness
-  )?.capabilities;
   const delivered =
     message.type === "user" &&
     cawco.status === "connected" &&
     machine?.status === "online" &&
     !!target.sessionId &&
-    capability?.rewind === true &&
+    harnessCan(target, "rewind") &&
     rewindableTurns(target).has(message.id);
   const table = {
     pending: {
@@ -3839,7 +3861,7 @@ export function userTurnActions(message: Message): {
         delivered && !target.busy && !target.relaunching
           ? ("resend" as const)
           : null,
-      fork: delivered && capability?.fork === true,
+      fork: delivered && harnessCan(target, "fork"),
       retry: false,
     },
   };
@@ -6567,7 +6589,10 @@ export async function refreshContext(
   machineId: string
 ): Promise<void> {
   const target = session(instanceId);
-  if (target.contextPending) {
+  if (
+    target.contextPending ||
+    !harnessCan({ machineId, harness: target.harness }, "contextUsage")
+  ) {
     return;
   }
   target.contextPending = true;
@@ -6669,7 +6694,11 @@ export async function refreshCommands(
   machineId: string
 ): Promise<void> {
   const target = session(instanceId);
-  if (target.commandsPending || Date.now() - target.commands.at < 3000) {
+  if (
+    target.commandsPending ||
+    Date.now() - target.commands.at < 3000 ||
+    !harnessCan({ machineId, harness: target.harness }, "supportedCommands")
+  ) {
     return;
   }
   target.commandsPending = true;
@@ -6743,6 +6772,9 @@ export async function loadMcpServers(
 ): Promise<void> {
   const target = session(instanceId);
   if (target.mcp !== null || target.mcpPending) {
+    return;
+  }
+  if (!harnessCan({ machineId, harness: target.harness }, "mcpStatus")) {
     return;
   }
   target.mcpPending = true;
