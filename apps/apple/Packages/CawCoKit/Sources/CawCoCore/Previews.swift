@@ -77,6 +77,14 @@ public enum PreviewKey {
     }
 }
 
+/// Where a session's previews load (`HubConnection.previewRoute`): the
+/// origin, and whether it is host mode's, locked to the hub's pass and
+/// entered with a ticket (`HubConnection.previewLoad`).
+public struct PreviewRoute: Sendable, Equatable {
+    public let origin: URL
+    public let byHost: Bool
+}
+
 public extension HubConnection {
     /// Brings one of a session's artifacts to the front of its panel
     /// (ToolGroup.svelte `openArtifact`, `artifact_show`'s route). The hub
@@ -115,30 +123,36 @@ public extension HubConnection {
     }
 
     /// Where the app loads a session's preview: its own origin, never the
-    /// dashboard's (core `previewOrigin`). Port mode: the session's preview
-    /// port on the hub's host, on the hub's scheme. Host mode: the whole
-    /// origin the hub named (`scheme://name[:port]`), as given: its scheme is
-    /// how those names are served, never how the app reached the hub. The
-    /// listener knows the session by that origin.
-    func previewOrigin(_ frame: PreviewFrame) -> URL? {
-        previewOrigin(port: frame.port, origin: frame.origin)
+    /// dashboard's, picked by the host the app reached the hub by (core
+    /// `previewRoute`). Reached under host mode's domain (the origin's host
+    /// less its first label): the whole origin the hub named
+    /// (`scheme://name[:port]`), as given, its scheme how those names are
+    /// served, entered with a ticket. Reached any other way (a tailnet name,
+    /// a LAN address): the session's preview port on the hub's host, on the
+    /// hub's scheme, with no ticket.
+    func previewRoute(_ frame: PreviewFrame) -> PreviewRoute? {
+        previewRoute(port: frame.port, origin: frame.origin)
     }
 
-    /// A preview origin from what the hub named: a port, or a whole origin.
-    func previewOrigin(port: Double?, origin: String?) -> URL? {
-        if let origin {
-            guard var parts = URLComponents(string: origin), parts.scheme != nil, parts.host != nil else { return nil }
-            parts.path = "/"
-            parts.query = nil
-            parts.fragment = nil
-            return parts.url
+    /// A preview route from what the hub named: a port, and in host mode a whole origin too.
+    func previewRoute(port: Double?, origin: String?) -> PreviewRoute? {
+        if let origin, var parts = URLComponents(string: origin), parts.scheme != nil,
+           let name = parts.host?.lowercased(), let reached = address?.host()?.lowercased(),
+           let dot = name.firstIndex(of: ".") {
+            let domain = String(name[name.index(after: dot)...])
+            if !domain.isEmpty, reached == domain || reached.hasSuffix(".\(domain)") {
+                parts.path = "/"
+                parts.query = nil
+                parts.fragment = nil
+                return parts.url.map { PreviewRoute(origin: $0, byHost: true) }
+            }
         }
         guard let address, var parts = URLComponents(url: address, resolvingAgainstBaseURL: false), let port else { return nil }
         parts.path = "/"
         parts.query = nil
         parts.fragment = nil
         parts.port = Int(port)
-        return parts.url
+        return parts.url.map { PreviewRoute(origin: $0, byHost: false) }
     }
 
     /// What a web view loads to show `place`, a page on session `instanceId`'s
@@ -183,7 +197,7 @@ public extension HubConnection {
     /// The page a preview opens at: the one its `artifact_create` named
     /// (`path`, on a dev server or folder), else the listener's root.
     func previewStart(_ frame: PreviewFrame) -> URL? {
-        guard let origin = previewOrigin(frame) else { return nil }
+        guard let origin = previewRoute(frame)?.origin else { return nil }
         let path = frame.source?.value1?.path ?? frame.source?.value2?.path
         return path.flatMap { URL(string: $0, relativeTo: origin)?.absoluteURL } ?? origin
     }

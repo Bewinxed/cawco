@@ -875,8 +875,9 @@ export function adminTools() {
       "previews",
       "how every session's previews are reached, fleet-wide: 'port' (the default, " +
         "no setup) gives each session a port of the hub's preview range on the hub's " +
-        "host; 'host' gives each its own origin from `pattern`, routed to the range's " +
-        "first port. Host-mode names need the hub's own pass, no sign-in. " +
+        "host; 'host' adds an origin per session from `pattern`, routed to the range's " +
+        "first port, for clients under its domain. Host-mode names need " +
+        "the hub's own pass, no sign-in. " +
         "'get' answers the mode, the pattern and the range.",
       ["get"],
       ["set"],

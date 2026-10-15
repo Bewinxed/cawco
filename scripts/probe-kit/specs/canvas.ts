@@ -49,6 +49,7 @@
  * canvas-host.ts), which exposes the binding as `window.cawcoCanvasProbe`.
  */
 import type { CDPSession, Frame, Page } from "playwright-core";
+import { previewRoute } from "../../../packages/core/src/frames";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 import { emulateMotion } from "../motion";
@@ -265,15 +266,15 @@ const runSpec = async (kit: Kit) => {
 
   // 7. Every request any page made, by host: the dashboard's, or the
   // session's preview origin, where its canvases stand (an origin of its
-  // own, which the hub names: core frames.ts `previewOrigin`).
+  // own, which the hub names and the dashboard picks: core frames.ts
+  // `previewRoute`).
   const address = await on.fleet.api<{ origin?: string; port?: number }>(
     `/api/instances/${on.session}/preview-address`,
     {}
   );
   const base = new URL(await on.fleet.dashboard());
-  const previewHost =
-    (address.origin ? new URL(address.origin).host : null) ??
-    (address.port ? `${base.hostname}:${address.port}` : null);
+  const route = previewRoute(address, base);
+  const previewHost = route ? new URL(route.origin).host : null;
   const elsewhere = on.offOrigin.filter(
     (url) => new URL(url).host !== previewHost
   );

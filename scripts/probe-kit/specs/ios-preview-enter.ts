@@ -6,8 +6,10 @@
  *
  * A scratch fleet (real hub, agent and sessiond, Claude Code against the
  * mock model) and the built app on an iPhone simulator of its own (a
- * mac-slot.sh slot, deleted at the end), reaching the hub at its
- * `http://127.0.0.1:<port>`. A session previews a server this spec runs
+ * mac-slot.sh slot, deleted at the end), reaching the hub at
+ * `http://localhost:<port>` (under the patterns' `localhost` domain) for the
+ * host-mode passes and at `http://127.0.0.1:<port>` for the others. A
+ * session previews a server this spec runs
  * (`artifact_create` of its port), whose page opens a WebSocket to its own
  * origin as an HMR client does. Three passes, each with two launches of the
  * app on the session (`-open-session`), read from its DEBUG lines
@@ -23,6 +25,8 @@
  *   the app's ATS exception for `localhost` names (project.yml) and the
  *   hub's top-level pass there being `SameSite=Lax` with no `Secure`, which
  *   WebKit refuses over plain http (preview-access.ts `passCookie`).
+ * - **host, off its domain**: the http pattern, the app at 127.0.0.1: it
+ *   takes the session's port, as port mode does (core `previewRoute`).
  * - **port**: port mode.
  *
  * 1. (build-both.sh compiles the app; this spec runs its build.)
@@ -53,6 +57,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Socket, Subprocess, TCPSocketListener } from "bun";
+import { previewRoute } from "../../../packages/core/src/frames";
 import { freshApp } from "../../lib/apple-app";
 import { type MacSim, macSim } from "../../lib/mac-sim";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
@@ -356,7 +361,15 @@ async function run(kit: Kit): Promise<void> {
   const front = tlsFront(first, certs);
   console.log(`  TLS on 127.0.0.1:${front.port} in front of ${first}`);
 
-  const settle = async (settings: object): Promise<string> => {
+  /**
+   * The route the app takes from the hub it reached at `hub` (core
+   * `previewRoute`, Previews.swift `previewRoute`): host mode's name under
+   * the pattern's domain, else the session's port on `hub`'s host.
+   */
+  const settle = async (
+    settings: object,
+    hub: string
+  ): Promise<{ origin: string; byHost: boolean }> => {
     const put = await fetch(`${fleet.base}/api/preview-settings`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
@@ -375,7 +388,11 @@ async function run(kit: Kit): Promise<void> {
         method: "POST",
       })
     ).json()) as { origin?: string; port?: number };
-    return address.origin ?? `http://127.0.0.1:${address.port}`;
+    const route = previewRoute(address, new URL(hub));
+    if (!route) {
+      throw new Error(`no preview route in ${JSON.stringify(address)}`);
+    }
+    return route;
   };
 
   let sim: MacSim | undefined;
@@ -421,8 +438,8 @@ async function run(kit: Kit): Promise<void> {
     })().catch(() => undefined);
     await pause(1500);
 
-    /** Launches the app on the session with `flags`; the index of the first line it says. */
-    const launch = async (flags: string): Promise<number> => {
+    /** Launches the app on the session, reaching the hub at `hub`, with `flags`; the index of the first line it says. */
+    const launch = async (flags: string, hub: string): Promise<number> => {
       await sh(`xcrun simctl terminate ${udid} dev.cawco.app || true`);
       await pause(1000);
       const from = heard.length;
@@ -430,7 +447,7 @@ async function run(kit: Kit): Promise<void> {
         "the app launched",
         () =>
           sh(
-            `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${fleet.base} -open-session ${session} ${flags} >/dev/null`
+            `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${hub} -open-session ${session} ${flags} >/dev/null`
           ).then(() => true),
         Boolean,
         60_000
@@ -453,9 +470,13 @@ async function run(kit: Kit): Promise<void> {
         .map((one) => one.slice(0, 160))
         .join(" | ");
 
+    // Host mode's names are the app's when it reached the hub under the
+    // pattern's domain (`localhost` here); at 127.0.0.1 it takes the port.
+    const underDomain = fleet.base.replace("//127.0.0.1:", "//localhost:");
     const passes = [
       {
         name: "https",
+        hub: underDomain,
         settings: {
           mode: "host",
           pattern: `https://p-{port}.localhost:${front.port}`,
@@ -463,22 +484,35 @@ async function run(kit: Kit): Promise<void> {
       },
       {
         name: "http",
+        hub: underDomain,
         settings: {
           mode: "host",
           pattern: `http://p-{port}.localhost:${first}`,
         },
       },
-      { name: "port", settings: { mode: "port" } },
+      {
+        name: "host, off its domain",
+        hub: fleet.base,
+        settings: {
+          mode: "host",
+          pattern: `http://p-{port}.localhost:${first}`,
+        },
+      },
+      { name: "port", hub: fleet.base, settings: { mode: "port" } },
     ];
     for (const pass of passes) {
       // biome-ignore lint/performance/noAwaitInLoops: one pass after another, on one simulator
-      const origin = await settle(pass.settings);
-      const byHost = pass.settings.mode === "host";
+      const { origin, byHost } = await settle(pass.settings, pass.hub);
+      kit.check(
+        `${pass.name}: the app at ${new URL(pass.hub).hostname} takes ${byHost ? "host mode's name" : "the session's port"}`,
+        byHost === (pass.hub === underDomain),
+        origin
+      );
       console.log(`  ${pass.name}: ${origin}`);
 
       // The preview.
       const opened = Date.now();
-      const from = await launch("-preview-probe -preview-lapse");
+      const from = await launch("-preview-probe -preview-lapse", pass.hub);
       const ready = await line(from, (one) => one === "preview ready", 90_000);
       const before = ready
         ? since(heard, from).filter(({ at }) => at < ready.at)
@@ -514,7 +548,7 @@ async function run(kit: Kit): Promise<void> {
         );
       } else {
         kit.check(
-          "6 (port): the preview loads its origin straight, no entry and no ticket, and is ready",
+          `6 (${pass.name}): the preview loads its origin straight, no entry and no ticket, and is ready`,
           !!ready &&
             loads(before).length > 0 &&
             loads(before).every(
@@ -580,7 +614,7 @@ async function run(kit: Kit): Promise<void> {
       }
 
       // The composer's canvas.
-      const drew = await launch("-canvas-probe-enter");
+      const drew = await launch("-canvas-probe-enter", pass.hub);
       const done = await line(drew, (one) => one === "canvas done", 180_000);
       const canvasRows = since(heard, drew).filter(
         ({ at }) => !done || at <= done.at
@@ -621,7 +655,7 @@ async function run(kit: Kit): Promise<void> {
           .join(" | ");
       if (!byHost) {
         kit.check(
-          "6 (port): the canvas page loads its origin straight, no entry and no ticket, and joins",
+          `6 (${pass.name}): the canvas page loads its origin straight, no entry and no ticket, and joins`,
           passed("enter") &&
             canvasLoads(opening).length > 0 &&
             canvasLoads(opening).every(

@@ -54,8 +54,8 @@ import { FolderRefusal, folderPath } from "./project-folder";
 /**
  * A session's preview: the artifact its panel shows, and the machine and
  * address that serve it. Every preview is an origin of its own, never the
- * dashboard's: the session's listener on a port of the hub's range (port
- * mode), or the session's own host name on the first port (host mode). So a
+ * dashboard's: the session's listener on a port of the hub's range, and in
+ * host mode the session's own host name on the first port too. So a
  * previewed app keeps its own storage and cookies, routes by its own paths
  * at the root, and two sessions' previews open at once never cross.
  *
@@ -599,16 +599,18 @@ const probePattern = async (pattern: HostPattern): Promise<string | null> => {
 };
 
 /**
- * Every session's preview origin. Port mode (the default, no setup): each
- * session that shows a preview or a canvas takes a port of the range and a
- * listener on it, on the hub's own bind address; its port is kept, so the
- * previewed app keeps its storage across restarts. Host mode: one listener
- * on the range's first port routes each request by its Host, a name per
- * session from the fleet's pattern that DNS or a proxy brings there:
- * `{session}` its id, or `{port}` the preview port it keeps (taken as port
- * mode takes it, never listened on), so a fixed pool of names, one per port
- * of the range, serves every session. (The hub's own server is Elysia's, whose sockets run its
- * lifecycle: a previewed app's HMR socket cannot be upgraded there.)
+ * Every session's preview origin. In either mode each session that shows a
+ * preview or a canvas takes a port of the range and a listener on it, on the
+ * hub's own bind address; its port is kept, so the previewed app keeps its
+ * storage across restarts. That is all port mode (the default, no setup)
+ * has. Host mode adds one listener on the range's first port that routes
+ * each request by its Host, a name per session from the fleet's pattern that
+ * DNS or a proxy brings there, behind the lock: `{session}` its id, or
+ * `{port}` the preview port it keeps, so a fixed pool of names, one per port
+ * of the range, serves every session. A client reached under the pattern's
+ * domain loads the names; any other loads the ports (core `previewRoute`).
+ * (The hub's own server is Elysia's, whose sockets run its lifecycle: a
+ * previewed app's HMR socket cannot be upgraded there.)
  */
 export function createPreviewListeners(
   hostname: string,
@@ -685,7 +687,7 @@ export function createPreviewListeners(
       `[preview] ${HOP}: the host pattern ${was} now names its scheme, ${settings.pattern}; set https:// in Settings › Previews if those names are served over HTTPS.`
     );
   }
-  /** Port mode's listeners, by session. */
+  /** Each session's listener on its own port, by session. */
   const sessions = new Map<string, Server<ListenerSocket>>();
   /** Host mode's one listener. */
   let byHost: Server<ListenerSocket> | undefined;
@@ -722,6 +724,9 @@ export function createPreviewListeners(
     if (fleet) {
       return `it is ${fleet} port`;
     }
+    if (settings.mode === "host" && port === PREVIEW_PORTS.first) {
+      return "it is host mode's listener port";
+    }
     return port < PREVIEW_PORTS.first || port > PREVIEW_PORTS.last
       ? `it is outside the preview ports ${PREVIEW_PORTS_TEXT}`
       : null;
@@ -732,8 +737,8 @@ export function createPreviewListeners(
    * the port it keeps while that is still a preview port and `opens`; else
    * the lowest of the range that is not the fleet's own, not another
    * session's, and opens. A move is saved, so a collision heals itself, and
-   * said in one line. Port mode opens a listener on it (`bind`); host mode's
-   * `{port}` names it and opens nothing.
+   * said in one line. Its listener opens on it (`bind`), and host mode's
+   * `{port}` names it too.
    */
   const portFor = (
     instanceId: string,
@@ -771,9 +776,13 @@ export function createPreviewListeners(
     );
   };
 
-  /** Port mode: session `instanceId`'s listener on its port. */
+  /** Session `instanceId`'s listener on its port. */
   const bind = (instanceId: string): number =>
     portFor(instanceId, (port) => serveOn(instanceId, port));
+
+  /** Session `instanceId`'s port, its listener started when it has none. */
+  const portOf = (instanceId: string): number =>
+    sessions.get(instanceId)?.port ?? bind(instanceId);
 
   /** The session a Host header names under `pattern`; undefined when it names none, or a port no session holds. */
   const sessionOfHost = (
@@ -821,6 +830,19 @@ export function createPreviewListeners(
     }
   };
 
+  /** Each session that keeps a port and has no listener yet gets one on it (`bind`). */
+  const bindKept = (): void => {
+    for (const { instanceId } of db.ports()) {
+      if (!sessions.has(instanceId)) {
+        try {
+          bind(instanceId);
+        } catch (thrown) {
+          previewFailed(HOP, instanceId, causeOf(thrown));
+        }
+      }
+    }
+  };
+
   /** Every listener stopped, each one's connections closed, before the mode changes. */
   const stopAll = async (): Promise<void> => {
     const stopping = [...sessions.values(), ...(byHost ? [byHost] : [])].map(
@@ -833,46 +855,37 @@ export function createPreviewListeners(
 
   return {
     /**
-     * Starts what the stored mode serves: host mode's listener; in port mode
-     * each session's listener on the port it keeps, so a pane or a tab that
-     * loads its preview origin straight after a hub restart finds it bound,
-     * before any dashboard asks for its address. A kept port that is the
-     * fleet's own, or that another process holds now, moves here (`bind`).
+     * Starts what the stored mode serves: host mode's listener, then each
+     * session's listener on the port it keeps, so a pane or a tab that loads
+     * its preview origin straight after a hub restart finds it bound, before
+     * any dashboard asks for its address. A kept port that is the fleet's
+     * own, or host mode's, or that another process holds now, moves here
+     * (`bind`).
      */
     start(): void {
       if (settings.mode === "host") {
         startHostMode();
-        return;
       }
-      for (const { instanceId } of db.ports()) {
-        if (!sessions.has(instanceId)) {
-          try {
-            bind(instanceId);
-          } catch (thrown) {
-            previewFailed(HOP, instanceId, causeOf(thrown));
-          }
-        }
-      }
+      bindKept();
     },
 
     /**
-     * Session `instanceId`'s preview origin: its listener started (port
-     * mode) when it has none; in host mode its whole origin, on the
-     * pattern's scheme, named by its id or by the port it keeps (taken now
-     * when it has none).
+     * Session `instanceId`'s preview origin: its port, its listener started
+     * when it has none; in host mode its whole origin too, on the pattern's
+     * scheme, named by its id or by that port.
      */
     address(instanceId: string): PreviewAddress {
+      const port = portOf(instanceId);
       if (settings.mode === "host") {
         const pattern = parsePattern(settings.pattern ?? "");
         const origin = originFor(
           pattern,
-          pattern.key === "port" ? portFor(instanceId, () => true) : instanceId
+          pattern.key === "port" ? port : instanceId
         );
         // core `PreviewAddress`: `host` is a bridge for readers before `origin`.
-        return { origin, host: new URL(origin).host };
+        return { port, origin, host: new URL(origin).host };
       }
-      const running = sessions.get(instanceId);
-      return { port: running?.port ?? bind(instanceId) };
+      return { port };
     },
 
     /** The session ended: its listener stops and its port is free again. */
@@ -918,12 +931,13 @@ export function createPreviewListeners(
         if (failed) {
           // Nothing changes: the mode before goes on as it was.
           settings = before;
-          if (before.mode === "host") {
-            startHostMode();
-          }
+          this.start();
           throw new PreviewRefusal(503, failed);
         }
         db.setSettings(settings);
+        // Its sessions' own ports, which clients reached outside the
+        // pattern's domain load (core `previewRoute`).
+        bindKept();
         return this.settings();
       }
       await stopAll();

@@ -478,7 +478,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// says its own title and path. The same revision keeps what the page said.
     func show() {
         guard isViewLoaded, let frame = hub.previews.byInstance[instanceId], frame.state == .open,
-              let origin = hub.previewOrigin(frame) else { return }
+              let route = hub.previewRoute(frame) else { return }
+        let origin = route.origin
         guard frame.revision != revision else { return }
         revision = frame.revision
         comment(false)
@@ -501,12 +502,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         paintSend()
         cover.alpha = 1
         coverLine.isHidden = false
-        byHost = frame.origin != nil
+        byHost = route.byHost
         reentered = false
         enter(hub.previewStart(frame) ?? origin)
     }
 
-    /// Host mode: the preview's origin is locked to the hub's pass, which
+    /// Host mode's route: the preview's origin is locked to the hub's pass, which
     /// this web view's own store holds only once it has entered.
     private var byHost = false
     /// The page the current show opens at.

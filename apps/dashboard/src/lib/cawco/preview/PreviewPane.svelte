@@ -7,7 +7,7 @@
     type PreviewSettings,
     type PreviewTicket,
     previewEnterUrl,
-    previewOrigin,
+    previewRoute,
     type ShownFailure,
   } from "@cawco/core";
   import { pinUnsent, type SendPicture } from "@cawco/core/comments";
@@ -131,13 +131,13 @@
   const preview = $derived(fleet.preview(instanceId));
   const source = $derived(preview?.source);
   /**
-   * The preview's own origin, never the dashboard's (core `previewOrigin`):
-   * its port on the host this tab reached the dashboard by, or its own host
-   * name. The page runs at its root as on its own server.
+   * The preview's own origin, never the dashboard's, picked by where this
+   * tab reached the dashboard (core `previewRoute`): host mode's name when
+   * under the pattern's domain, else its port on this tab's host. The page
+   * runs at its root as on its own server.
    */
-  const paneOrigin = $derived(
-    preview ? (previewOrigin(preview, location) ?? "") : ""
-  );
+  const route = $derived(preview ? previewRoute(preview, location) : null);
+  const paneOrigin = $derived(route?.origin ?? "");
   /**
    * Where the reader had gone inside this show, kept per session so a reload
    * of the tab (by hand, or by itself once idle: reload.svelte.ts) opens the
@@ -186,12 +186,12 @@
     return untrack(keptAt) ?? startAt;
   });
   /**
-   * Host mode: every name is locked to the hub's pass (hub
+   * Host mode's route: every name is locked to the hub's pass (hub
    * preview-access.ts), so each frame load enters with a ticket of its own,
    * asked for here, and the frame's address is the entry, which sets the
-   * pass and goes on to the place. Port mode: the place, straight.
+   * pass and goes on to the place. The port's route: the place, straight.
    */
-  const byHost = $derived(!!preview?.origin);
+  const byHost = $derived(!!route?.byHost);
   /**
    * Each frame's entry in host mode, by frame key, and the origin and place
    * it was asked for: a frame standing over its replacement keeps its own.
@@ -238,17 +238,20 @@
   const unreached = $derived(
     !!paneOrigin && reached?.origin === paneOrigin && !reached.ok
   );
-  /** What previews need to be reached from this tab, from the fleet's mode. */
+  /** What previews need to be reached from this tab, by the route it took. */
   async function previewsNeed(origin: string): Promise<string> {
+    if (byHost) {
+      return `Previews need ${new URL(origin).host} to reach the hub, or switch previews to ports`;
+    }
     const settings = await fetch("/api/preview-settings")
       .then((answer) =>
         answer.ok ? (answer.json() as Promise<PreviewSettings>) : null
       )
       .catch(() => null);
-    if (settings?.mode === "host") {
-      return `Previews need ${new URL(origin).host} to reach the hub, or switch previews to ports`;
-    }
-    return `Previews need ports ${settings?.ports ?? "of the hub's range"} reachable on ${location.hostname}, or switch previews to a hostname pattern`;
+    const ports = `Previews need ports ${settings?.ports ?? "of the hub's range"} reachable on ${location.hostname}`;
+    return settings?.mode === "host"
+      ? ports
+      : `${ports}, or switch previews to a hostname pattern`;
   }
   let displayPath = $state("");
   /**

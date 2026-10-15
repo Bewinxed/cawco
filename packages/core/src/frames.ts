@@ -43,13 +43,16 @@ export interface PreviewFrame {
   instanceId: string;
   kind: "preview";
   /**
-   * Where the preview is its own origin, never the dashboard's: the session's
-   * preview listener's port on the host the client reached the hub by (port
-   * mode), or its whole origin (host mode, `scheme://name[:port]` from the
-   * fleet's pattern, whose scheme is how those names are served, not how the
-   * client reached the hub). Exactly one is set ({@link PreviewAddress}).
+   * Host mode's whole origin for the session (`scheme://name[:port]` from
+   * the fleet's pattern, whose scheme is how those names are served, not how
+   * the client reached the hub), beside `port` ({@link PreviewAddress}).
    */
   origin?: string;
+  /**
+   * The session's own preview port, listened on in either mode: a client
+   * that reached the hub by any address but one under host mode's domain
+   * loads the preview from it ({@link previewRoute}).
+   */
   port?: number;
   /** Identifies one successful open, including a rebuild of the same source. */
   revision: string;
@@ -58,35 +61,68 @@ export interface PreviewFrame {
 }
 
 /**
- * A session's preview origin, as the hub reports it: a port on the hub's
- * host, or a whole origin of its own (host mode).
+ * Where a session's preview is served, as the hub reports it: its own port,
+ * which the hub listens on in either mode, and in host mode the whole origin
+ * the fleet's pattern names it by too. Which one a client loads is its own
+ * choice, by where it reached the hub ({@link previewRoute}).
  *
  * `host` is a bridge, not part of the address: host mode's `name[:port]`,
  * the only host-mode field readers built before `origin` (8c9b79c37) decode,
- * nightly 3146's dashboard and TestFlight 20261015 among them. Every reader
- * now reads `origin`. It goes in the change that expires TestFlight 20261015,
- * once a TestFlight build that reads `origin` has shipped; the wire check
- * refuses it from the moment no shipped reader needs it (hub scripts
- * wire-compat.ts `BRIDGES`).
+ * nightly 3146's dashboard and TestFlight 20261015 among them. Those readers
+ * take `host` over `port`, so they open host-mode names as they did. Every
+ * reader now reads `origin`. It goes in the change that expires TestFlight
+ * 20261015, once a TestFlight build that reads `origin` has shipped; the
+ * wire check refuses it from the moment no shipped reader needs it (hub
+ * scripts wire-compat.ts `BRIDGES`).
  */
-export type PreviewAddress =
-  { port: number } | { origin: string; host: string };
+export interface PreviewAddress {
+  /** Host mode's `name[:port]`, beside `origin` alone: the bridge above. */
+  host?: string;
+  /** Host mode's whole origin for the session. */
+  origin?: string;
+  /** The session's own preview port, listened on in either mode. */
+  port: number;
+}
 
 /**
- * The origin a client loads a session's previews from: in port mode the
- * host and scheme it reached the hub or dashboard by (`at`), on the
- * preview's port; in host mode the origin the hub named, as given.
+ * The domain host mode's names stand under: the origin's host name less its
+ * first label (`p-3459.example.com` → `example.com`); empty for a one-label
+ * name.
  */
-export const previewOrigin = (
+const hostModeDomain = (origin: string): string => {
+  const name = new URL(origin).hostname.toLowerCase();
+  const dot = name.indexOf(".");
+  return dot === -1 ? "" : name.slice(dot + 1);
+};
+
+/** Whether `hostname` is `domain` or a name under it, label by label. */
+const under = (hostname: string, domain: string): boolean => {
+  const name = hostname.toLowerCase();
+  return !!domain && (name === domain || name.endsWith(`.${domain}`));
+};
+
+/**
+ * Where a client loads a session's previews from, picked by where it
+ * reached the hub or dashboard (`at`). Reached under host mode's domain
+ * (the dashboard behind the same DNS or proxy as the pattern's names): the
+ * origin the hub named, entered with a ticket (`byHost`). Reached any other
+ * way (a tailnet name, a LAN address, localhost): that host and scheme on
+ * the session's own port, with no ticket. Null when the hub named nothing
+ * this client can load.
+ */
+export const previewRoute = (
   address: { origin?: string; port?: number },
   at: { hostname: string; protocol: string }
-): string | null => {
-  if (address.origin) {
-    return address.origin;
+): { origin: string; byHost: boolean } | null => {
+  if (address.origin && under(at.hostname, hostModeDomain(address.origin))) {
+    return { origin: address.origin, byHost: true };
   }
   if (address.port) {
-    const host = at.hostname.includes(":") ? `[${at.hostname}]` : at.hostname;
-    return `${at.protocol}//${host}:${address.port}`;
+    const host =
+      at.hostname.includes(":") && !at.hostname.startsWith("[")
+        ? `[${at.hostname}]`
+        : at.hostname;
+    return { origin: `${at.protocol}//${host}:${address.port}`, byHost: false };
   }
   return null;
 };

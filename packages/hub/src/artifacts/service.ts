@@ -215,8 +215,9 @@ export interface Created {
   opened: boolean;
   /**
    * A draft canvas's: its session's preview origin (core `PreviewAddress`),
-   * where a client loads the canvas at `/__cawco/canvas/<id>/`: a port on
-   * the hub's host, or (host mode) a whole origin of its own.
+   * where a client loads the canvas at `/__cawco/canvas/<id>/`: its port on
+   * the hub's host, and (host mode) a whole origin of its own too, which a
+   * client picks by where it reached the hub (core `previewRoute`).
    */
   origin?: string;
   /** A canvas's outline once drawn (core `canvasOutline`). */

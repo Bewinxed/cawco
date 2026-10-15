@@ -106,7 +106,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiInstancesByIdPreviewAddress200"
+                  "$ref": "#/components/schemas/PreviewAddress"
                 }
               }
             }
@@ -20213,36 +20213,6 @@
           "type"
         ]
       },
-      "postApiInstancesByIdPreviewAddress200": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "port": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "port"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "origin": {
-                "type": "string"
-              },
-              "host": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "host",
-              "origin"
-            ]
-          }
-        ]
-      },
       "getApiDelegateTypes200": {
         "type": "object",
         "properties": {
@@ -26765,6 +26735,27 @@
           "state"
         ]
       },
+      "PreviewAddress": {
+        "description": "Where a session's preview is served, as the hub reports it: its own port,\nwhich the hub listens on in either mode, and in host mode the whole origin\nthe fleet's pattern names it by too. Which one a client loads is its own\nchoice, by where it reached the hub ({@link previewRoute}).\n\n`host` is a bridge, not part of the address: host mode's `name[:port]`,\nthe only host-mode field readers built before `origin` (8c9b79c37) decode,\nnightly 3146's dashboard and TestFlight 20261015 among them. Those readers\ntake `host` over `port`, so they open host-mode names as they did. Every\nreader now reads `origin`. It goes in the change that expires TestFlight\n20261015, once a TestFlight build that reads `origin` has shipped; the\nwire check refuses it from the moment no shipped reader needs it (hub\nscripts wire-compat.ts `BRIDGES`).",
+        "type": "object",
+        "properties": {
+          "host": {
+            "description": "Host mode's `name[:port]`, beside `origin` alone: the bridge above.",
+            "type": "string"
+          },
+          "origin": {
+            "description": "Host mode's whole origin for the session.",
+            "type": "string"
+          },
+          "port": {
+            "description": "The session's own preview port, listened on in either mode.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "port"
+        ]
+      },
       "PreviewTicket": {
         "description": "A ticket into one session's host-mode preview origin: single-use, and spent by `expiresAt` (ms epoch).",
         "type": "object",
@@ -28335,7 +28326,7 @@
             "type": "boolean"
           },
           "origin": {
-            "description": "A draft canvas's: its session's preview origin (core `PreviewAddress`),\nwhere a client loads the canvas at `/__cawco/canvas/<id>/`: a port on\nthe hub's host, or (host mode) a whole origin of its own.",
+            "description": "A draft canvas's: its session's preview origin (core `PreviewAddress`),\nwhere a client loads the canvas at `/__cawco/canvas/<id>/`: its port on\nthe hub's host, and (host mode) a whole origin of its own too, which a\nclient picks by where it reached the hub (core `previewRoute`).",
             "type": "string"
           },
           "outline": {
@@ -40102,10 +40093,11 @@
             ]
           },
           "origin": {
-            "description": "Where the preview is its own origin, never the dashboard's: the session's\npreview listener's port on the host the client reached the hub by (port\nmode), or its whole origin (host mode, `scheme://name[:port]` from the\nfleet's pattern, whose scheme is how those names are served, not how the\nclient reached the hub). Exactly one is set ({@link PreviewAddress}).",
+            "description": "Host mode's whole origin for the session (`scheme://name[:port]` from\nthe fleet's pattern, whose scheme is how those names are served, not how\nthe client reached the hub), beside `port` ({@link PreviewAddress}).",
             "type": "string"
           },
           "port": {
+            "description": "The session's own preview port, listened on in either mode: a client\nthat reached the hub by any address but one under host mode's domain\nloads the preview from it ({@link previewRoute}).",
             "type": "number"
           },
           "revision": {

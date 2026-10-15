@@ -22,7 +22,7 @@ import {
   type PreviewAddress,
   type PreviewTicket,
   previewEnterUrl,
-  previewOrigin,
+  previewRoute,
 } from "@cawco/core";
 import { SvelteMap } from "svelte/reactivity";
 import { theme } from "#lib/theme.svelte.js";
@@ -270,7 +270,8 @@ export class Stage {
       return;
     }
     const address = (await answer.json()) as PreviewAddress;
-    const origin = previewOrigin(address, location);
+    const route = previewRoute(address, location);
+    const origin = route?.origin ?? null;
     if (origin) {
       sessionOrigins.set(this.instanceId, { origin });
     }
@@ -279,10 +280,10 @@ export class Stage {
       this.origin = origin;
     }
     if (
-      origin &&
-      !(this.entry && canvasEntries.get(this.id)?.origin === origin)
+      route &&
+      !(this.entry && canvasEntries.get(this.id)?.origin === route.origin)
     ) {
-      await this.#enter(origin, "origin" in address);
+      await this.#enter(route.origin, route.byHost);
     }
     this.changed();
   }

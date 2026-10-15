@@ -25,8 +25,10 @@
  *     <range> reachable on <host>, or switch previews to a hostname pattern",
  *     with the way to the setting.
  * 14. Host mode set through Settings › Previews with
- *     `http://p-{session}.localhost`: the panel enters with a ticket and
- *     loads the page from `p-<session>.localhost`, routed by Host.
+ *     `http://p-{session}.localhost`: in a dashboard reached under that
+ *     domain (`dash.localhost`, as 14d and 14e), the panel enters with a
+ *     ticket and loads the page from `p-<session>.localhost`, routed by Host.
+ *     (A dashboard reached any other way: the preview-route spec.)
  * 14b. An `http://p-{port}.localhost` pattern: each session's origin is the
  *     port it keeps; entered with a ticket, both sessions' previews answer
  *     200 with the overlay on their own names and their WebSockets open; a
@@ -964,10 +966,14 @@ const run = async (kit: Kit) => {
     15_000
   ).catch(() => null);
   await settings.context().close();
-  await tab.reload({ waitUntil: "domcontentloaded" });
-  const byHost = await paneFrame(tab, TITLE);
+  // Host mode's names are a client's under the pattern's domain alone
+  // (core `previewRoute`): the dashboard reached as `dash.localhost`, the
+  // same server as `base`.
+  const named = await kit.page("desk");
+  await open(named, where.replace("//127.0.0.1:", "//dash.localhost:"), FRAME);
+  const byHost = await paneFrame(named, TITLE);
   kit.check(
-    "14: host mode set in Settings with http://p-{session}.localhost loads the page from the session's own host, entered with a ticket",
+    "14: host mode set in Settings with http://p-{session}.localhost loads the page from the session's own host, entered with a ticket, in a dashboard reached under localhost",
     !!saved &&
       !!byHost.frame &&
       new URL(byHost.frame.url()).origin ===
@@ -1189,8 +1195,8 @@ const run = async (kit: Kit) => {
   );
 
   // 14d. The panel enters the preview with a ticket on its `{port}` name.
-  await tab.reload({ waitUntil: "domcontentloaded" });
-  const byPortPane = await paneFrame(tab, TITLE);
+  await named.reload({ waitUntil: "domcontentloaded" });
+  const byPortPane = await paneFrame(named, TITLE);
   kit.check(
     "14d: with a {port} pattern the panel loads the page from the session's port origin, entered with a ticket",
     !!byPortPane.frame &&
@@ -1208,8 +1214,8 @@ const run = async (kit: Kit) => {
   const noteRequest = (request: { url: () => string }) => {
     paneRequests.push(request.url());
   };
-  tab.on("request", noteRequest);
-  await tab.reload({ waitUntil: "domcontentloaded" });
+  named.on("request", noteRequest);
+  await named.reload({ waitUntil: "domcontentloaded" });
   const pinged = await until(
     "the pane's ping to the https origin",
     () =>
@@ -1219,7 +1225,8 @@ const run = async (kit: Kit) => {
     Boolean,
     30_000
   ).catch(() => null);
-  tab.off("request", noteRequest);
+  named.off("request", noteRequest);
+  await named.context().close();
   kit.check(
     "14e: an https pattern gives an https origin to a client that reached the hub over http, in the hub's address and in the web pane's own derivation",
     httpsKept.ok &&
@@ -1271,6 +1278,9 @@ const run = async (kit: Kit) => {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ mode: "port" }),
   });
+  // Host mode bars the range's first port to sessions (it is its listener's):
+  // a session that kept it moved, and keeps where it moved to.
+  firstOrigin = `http://127.0.0.1:${(await address(session)).port}`;
 
   // 2–5. It survives, port mode again.
   const load = async (step: string, label: string) => {

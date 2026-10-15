@@ -100,7 +100,7 @@
     <Field
       hint={mode === "port"
         ? `Each session's previews take a port of ${settings?.ports ?? "the hub's range"} on the host you reach the dashboard by. Nothing to set up; the ports have to be reachable from your browser.`
-        : `Each session's previews get a host name of their own. Point those names at the hub's first preview port (${firstPort}), through DNS or your proxy.`}
+        : `Each session's previews get a host name of their own. Point those names at the hub's first preview port (${firstPort}), through DNS or your proxy. They open on those names when you reach the dashboard under the pattern's domain, example.com for p-{port}.example.com. At any other address, like a tailnet name, a LAN address or localhost, they open on each session's port of ${settings?.ports ?? "the hub's range"}, as with a port per session.`}
       id="preview-mode"
       label="Reach previews by"
       problem={mode === "port" ? refused : undefined}
