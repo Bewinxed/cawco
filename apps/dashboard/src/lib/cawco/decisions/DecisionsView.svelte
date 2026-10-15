@@ -17,6 +17,7 @@
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
+  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { depart } from "#lib/cawco/motion/share.svelte.js";
   import CawField from "#lib/cawco/project/CawField.svelte";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
@@ -282,10 +283,12 @@
             </EmptyState>
           </div>
         {:else}
-          <div class="grid">
+          <!-- A page published while the list is open arrives as rows do
+               (motion/rows); the tiles it moves slide to their places. -->
+          <div class="grid" {@attach reflow()}>
             {#if list}
               {#each pages as each (each.name)}
-                <div class="cell">
+                <div class="cell" data-flip>
                   <DecisionTile
                     href={hrefOf({ page: each.name, card: null })}
                     {now}
