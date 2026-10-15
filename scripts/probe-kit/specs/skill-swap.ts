@@ -31,8 +31,12 @@
  *     the carried `scripts/helper.py`) and holds nothing else archives as a
  *     husk: the agent logs "its husk", and the folder is gone with no carry.
  * (e) One that also holds a `notes.md` added in the skill keeps it as
- *     someone's: the agent logs "its own entries saved to the carry", and
- *     the note is in the carry, word for word.
+ *     someone's. An archive without `discard` refuses any folder holding an
+ *     entry of its own (hub work-items.ts `archive`: `if
+ *     (!holdsNothing(held)) { throw new WorkspaceHoldsWork(held); }`): 409,
+ *     "1 entry of its own in a folder that is no git clone" (the note alone,
+ *     the bytecode not counted), the workspace still active, and the note on
+ *     disk untouched.
  *
  *   bun scripts/probe-kit/run.ts skill-swap
  */
@@ -407,6 +411,7 @@ const spec: Spec = {
               one.includes(`${started.workspaceId}: archived; its `)
             ) ?? "";
         return {
+          workspaceId: started.workspaceId,
           path,
           ran,
           bytecode,
@@ -433,22 +438,27 @@ const spec: Spec = {
       );
 
       const e = await deletedClone("E", NOTE);
-      const kept = e.carry
-        ? (await Bun.$`find ${e.carry} -name notes.md`.quiet().nothrow()).stdout
-            .toString()
-            .trim()
-            .split("\n")
-            .filter(Boolean)
-        : [];
-      const keptNote = kept[0]
-        ? await readFile(kept[0], "utf8").catch(() => undefined)
-        : undefined;
+      const keptNote = await readFile(
+        join(e.path, projectClaudeRelative("skills", PLACED), "notes.md"),
+        "utf8"
+      ).catch(() => undefined);
+      const eState = fleet.query<{ state: string }>(
+        "SELECT state FROM workspaces WHERE id = ?",
+        e.workspaceId
+      )[0]?.state;
       check(
-        "(e) E, with a notes.md added in the skill, keeps it as someone's: saved to the carry, word for word",
-        e.status === 200 &&
-          e.line.includes("its own entries saved to the carry") &&
-          keptNote === NOTE,
-        `${e.status} ${e.text.slice(0, 300)}; ${e.line}; carry notes: ${kept.join(", ") || "none"}`
+        "(e) E, with a notes.md added in the skill, is refused: 409, 1 entry of its own (the note; the bytecode not counted), still active",
+        e.status === 409 &&
+          e.text.includes(
+            "1 entry of its own in a folder that is no git clone"
+          ) &&
+          eState === "active",
+        `${e.status} ${e.text.slice(0, 300)}; state ${eState}`
+      );
+      check(
+        "(e) the note is still on disk, untouched",
+        keptNote === NOTE,
+        JSON.stringify(keptNote)
       );
     } finally {
       await server.stop(true);
