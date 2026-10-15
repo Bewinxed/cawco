@@ -124,6 +124,17 @@ export const USER_LAYER_DIRS = [
  */
 export const VENDOR_MARKETPLACES_DIR = "cawco-marketplaces";
 
+/**
+ * Where the trees behind a dir of CawCo-written trees live: beside that dir,
+ * `<parent>/.cawco-trees/<dir name>/`. Each entry of the dir (a fleet skill,
+ * a vendored plugin) is a link into it, swapped with one rename (agent
+ * tree-swap.ts), so a session never reads a missing or half-written tree.
+ * Kept outside the dir itself because OpenCode finds skills with
+ * `**\/SKILL.md` and follows dot dirs. In {@link claudeHome} it holds the
+ * fleet's skills, which every session reads.
+ */
+export const TREE_STORE_DIR = ".cawco-trees";
+
 /** The user layer's files ({@link USER_LAYER_DIRS} has why each is the user's). */
 export const USER_LAYER_FILES = [
   "CLAUDE.md",

@@ -25,6 +25,7 @@ import {
   skillRecords,
   writeSkill,
 } from "../fleet";
+import { removeTree } from "../tree-swap";
 import {
   guardWorkflowSkillRemoval,
   workflowSkillCollision,
@@ -184,7 +185,7 @@ export const syncSkillFiles = async (
     try {
       // biome-ignore lint/performance/noAwaitInLoops: record each removal before advancing to the next managed skill.
       await guardWorkflowSkillRemoval(dir, name);
-      await rm(join(dir, name), { recursive: true, force: true });
+      await removeTree(join(dir, name));
       report[name] = { state: "removed" };
     } catch (error) {
       written[name] = managed[name];

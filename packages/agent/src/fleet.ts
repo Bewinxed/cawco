@@ -69,6 +69,7 @@ import { placedMemoryDir } from "./placed-memory";
 import { promptWrite } from "./prompt-writes";
 import { noRepositoryAt } from "./stand-ins";
 import { claudeHomeEnv, resolveBin, toolEnv, toolPath } from "./tools";
+import { linkedTree, placeTree, removeTree, treeStoreOf } from "./tree-swap";
 import {
   guardWorkflowSkillRemoval,
   workflowSkillCollision,
@@ -1102,35 +1103,17 @@ const dirExists = async (path: string): Promise<boolean> => {
 };
 
 /**
- * One resolved file onto disk under `dir`, executable when its source was. The
- * callers remove the directory first, so every write is a fresh file and a bit
- * that flipped off in the source lands off here too.
- */
-const writeSkillFile = async (dir: string, file: SkillFile): Promise<void> => {
-  const path = join(dir, file.path);
-  await writeStateFile(path, Buffer.from(file.contentBase64, "base64"));
-  if (file.executable) {
-    await chmod(path, 0o755);
-  }
-};
-
-/**
  * The skill's directory, as the hub resolved it. Written whole, because the
  * directory is cawco's own: a file the last version carried is not one this
- * version carries, and leaving it there is how a skill drifts.
+ * version carries, and leaving it there is how a skill drifts. Swapped in with
+ * one rename ({@link placeTree}), because a running session reads it.
  */
 export const writeSkill = async (
   skill: FleetSkillPayload,
   root = SKILLS_DIR
 ): Promise<void> => {
   const dir = join(root, skill.name);
-  const write = async () => {
-    await rm(dir, { recursive: true, force: true });
-    for (const file of skill.files ?? []) {
-      // biome-ignore lint/performance/noAwaitInLoops: files land after this skill's directory removal
-      await writeSkillFile(dir, file);
-    }
-  };
+  const write = () => placeTree(dir, skill.files ?? []);
   // Workflow stubs since d15e919d are manual-only and absent from the model's
   // skill catalog. Hiding a pre-cutover visible stub is still a prompt change.
   const previous = Bun.file(join(dir, "SKILL.md"));
@@ -1173,6 +1156,10 @@ const byMarketplace = (
  * vendored as a relative `source`, which is a form the CLI already installs
  * from — the official marketplace vendors its own the same way — so the
  * install that follows reaches the network for nothing.
+ *
+ * Each plugin's tree is swapped in with one rename ({@link placeTree}):
+ * Claude Code runs its hooks from `plugins/<name>` while this writes, and
+ * the list of the files the fleet carried goes with it ({@link CARRIED}).
  */
 const writeVendoredMarketplace = async (
   marketplace: string,
@@ -1186,18 +1173,30 @@ const writeVendoredMarketplace = async (
     if (!isSafeSegment(plugin.name)) {
       throw new Error(`unsafe plugin name ${plugin.name}`);
     }
-    const dir = join(into, "plugins", plugin.name);
-    // biome-ignore lint/performance/noAwaitInLoops: each plugin's directory is torn down before its own files are written; parallel plugins could interleave a rm with another plugin's write to a stale dir handle
-    await rm(dir, { recursive: true, force: true });
-    for (const file of plugin.files) {
-      // The same refusal a skill's files get: a path out of the directory is a
-      // file the fleet would write somewhere nobody asked it to.
-      if (!isSafeSkillPath(file.path)) {
-        throw new Error(`unsafe path ${file.path}`);
-      }
-      // biome-ignore lint/performance/noAwaitInLoops: must run after this plugin's own rm above completes
-      await writeSkillFile(dir, file);
+    // The same refusal a skill's files get: a path out of the directory is a
+    // file the fleet would write somewhere nobody asked it to. The carried
+    // list's own name is cawco's.
+    const unsafe = plugin.files.find(
+      ({ path }) => !isSafeSkillPath(path) || path === CARRIED
+    );
+    if (unsafe) {
+      throw new Error(`unsafe path ${unsafe.path}`);
     }
+    const carried = Buffer.from(
+      `${JSON.stringify(plugin.files.map(({ path }) => path))}\n`
+    );
+    // biome-ignore lint/performance/noAwaitInLoops: one plugin's tree at a time keeps the disk writes bounded
+    await placeTree(join(into, "plugins", plugin.name), [
+      ...plugin.files,
+      {
+        path: CARRIED,
+        contentBase64: carried.toString("base64"),
+        executable: false,
+      },
+    ]);
+    console.log(
+      `[fleet] ${plugin.name}@${marketplace} written (${plugin.files.length} files, ${plugin.hash.slice(0, 7)})`
+    );
   }
 
   // What the fleet no longer carries goes, whether or not its bytes arrived.
@@ -1208,7 +1207,7 @@ const writeVendoredMarketplace = async (
   for (const name of present) {
     if (!wanted.has(name)) {
       // biome-ignore lint/performance/noAwaitInLoops: removals are independent, but this pass mirrors the write loop above rather than adding a second concurrency strategy for the same directory
-      await rm(join(into, "plugins", name), { recursive: true, force: true });
+      await removeTree(join(into, "plugins", name));
     }
   }
 
@@ -1385,8 +1384,55 @@ export const skillDrift = (
 };
 
 /**
+ * The paths of the files the fleet carried for a vendored plugin, as a JSON
+ * list in the plugin's own tree, written with it. Not one of those files.
+ */
+const CARRIED = ".cawco-carried.json";
+
+/**
+ * The hash of a vendored plugin as it is on this disk, over exactly the files
+ * the fleet carried for it ({@link CARRIED}), in the hub's `hashFiles`, so it
+ * equals the hub's hash of the same plugin whenever those files are as
+ * written. What the plugin's own code made beside them (a hook's
+ * `__pycache__`) is in no list, so it never reads as a change and never has
+ * the hub send the bytes again (on 2026-10-16 it did on every sync, and each
+ * rewrite raced the plugin's hooks). Undefined when the list or a file it
+ * names is missing: a copy that is not whole is carried again.
+ */
+const carriedHash = async (dir: string): Promise<string | undefined> => {
+  const listed: unknown = await Bun.file(join(dir, CARRIED))
+    .json()
+    .catch(() => undefined);
+  if (!Array.isArray(listed) || listed.length === 0) {
+    return undefined;
+  }
+  const files: SkillFile[] = [];
+  for (const path of listed) {
+    if (typeof path !== "string" || !isSafeSkillPath(path)) {
+      return undefined;
+    }
+    const file = join(dir, path);
+    // biome-ignore lint/performance/noAwaitInLoops: one file read at a time keeps the disk reads bounded
+    const stats = await stat(file).catch(() => undefined);
+    if (!stats?.isFile()) {
+      return undefined;
+    }
+    files.push({
+      path,
+      contentBase64: Buffer.from(await Bun.file(file).bytes()).toString(
+        "base64"
+      ),
+      // biome-ignore lint/suspicious/noBitwiseOperators: the execute bits of a stat mode are a mask, and the mask is the question
+      executable: (stats.mode & 0o111) !== 0,
+    });
+  }
+  return hashFiles(files);
+};
+
+/**
  * What the vendored marketplaces hold on this disk now, by fleet plugin id
- * (`plugin@marketplace`) → hash: the key the hub leaves bytes out by.
+ * (`plugin@marketplace`) → hash ({@link carriedHash}): the key the hub leaves
+ * bytes out by.
  */
 const readVendoredPlugins = async (): Promise<Record<string, string>> => {
   const held: Record<string, string> = {};
@@ -1396,7 +1442,7 @@ const readVendoredPlugins = async (): Promise<Record<string, string>> => {
     const root = join(vendorDir(marketplace), "plugins");
     for (const name of await readdir(root).catch(() => [] as string[])) {
       // biome-ignore lint/performance/noAwaitInLoops: one plugin directory read at a time keeps the disk reads bounded
-      const hash = await treeHash(join(root, name));
+      const hash = await carriedHash(join(root, name));
       if (hash) {
         held[`${name}@${marketplace}`] = hash;
       }
@@ -1743,9 +1789,9 @@ const syncSkillFiles = async (
       written[skill.name] = skill.hash;
       report[skill.name] = { state: "applied" };
     } catch (error) {
-      // A write that got part of the way through still left cawco's files
-      // behind, so the name stays managed — under a hash nothing matches, which
-      // is what has the next sync write it again.
+      // A failed write left the copy that was there before (placeTree swaps
+      // whole trees), so the name stays managed — under a hash nothing
+      // matches, which is what has the next sync write it again.
       written[skill.name] = "";
       report[skill.name] = { state: "failed", detail: tail(said(error)) };
     }
@@ -1777,11 +1823,9 @@ const syncSkillFiles = async (
         (await Bun.file(join(dir, ".cawco-workflow")).exists()) &&
         MANUAL_ONLY_SKILL.test(await Bun.file(join(dir, "SKILL.md")).text());
       if (manualOnly) {
-        await rm(dir, { recursive: true, force: true });
+        await removeTree(dir);
       } else {
-        await promptWrite(`skill ${name} removed`, () =>
-          rm(dir, { recursive: true, force: true })
-        );
+        await promptWrite(`skill ${name} removed`, () => removeTree(dir));
       }
       report[name] = { state: "removed" };
     } catch (error) {
@@ -1868,14 +1912,13 @@ const placeSkill = async (
   }
   try {
     await writeSkill(skill, root);
+    // The skill's link and the store of the trees behind it (tree-swap.ts).
     await excludeFromCheckout(dir);
+    await excludeFromCheckout(dirname(treeStoreOf(root)));
     report[key] = { state: "applied" };
     return skill.hash;
   } catch (error) {
     report[key] = { state: "failed", detail: tail(said(error)) };
-    // Part of it may be on disk: taken away, so the next sync finds nothing
-    // there and writes it whole.
-    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
     return recorded;
   }
 };
@@ -1912,7 +1955,7 @@ const syncPlacedSkills = async (
       continue;
     }
     try {
-      await rm(dir, { recursive: true, force: true });
+      await removeTree(dir);
       report[key] = { state: "removed" };
     } catch (error) {
       placed[key] = record;
@@ -1943,7 +1986,9 @@ export const placedAsMade = async (cwd: string): Promise<string[]> => {
     }
     const dir = join(placedSkillsDir(folder), record.name);
     if ((await treeHash(dir)) === record.hash) {
-      made.push(dir);
+      // The skill's link, and the tree it links to (tree-swap.ts).
+      const tree = await linkedTree(dir);
+      made.push(dir, ...(tree ? [tree] : []));
     }
   }
   for (const record of Object.values(placedMemory)) {

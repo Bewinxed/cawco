@@ -45,6 +45,7 @@ import {
   hostToolCaches,
   hubProjectsDir,
   projectClaudeDir,
+  TREE_STORE_DIR,
   USER_LAYER_DIRS,
   USER_LAYER_FILES,
   userGitConfigDir,
@@ -767,6 +768,9 @@ export const workspacePolicy = async (
       // of such a plugin failed in a workspace, `python3: can't open file
       // '…/cawco-marketplaces/axiom-marketplace/plugins/axiom/hooks/…'`.
       join(claudeHome(), VENDOR_MARKETPLACES_DIR),
+      // The trees the fleet's skills link to (core paths.ts `TREE_STORE_DIR`):
+      // every `~/.claude/skills/<name>` CawCo wrote lands in it.
+      join(claudeHome(), TREE_STORE_DIR),
       ...(mac
         ? ["Developer", "Preferences", "Keychains"].map((name) =>
             join(home, "Library", name)

@@ -3,7 +3,13 @@
  * git's status through the checkout's own `info/exclude`.
  */
 import { realpath } from "node:fs/promises";
-import { dirname, isAbsolute, relative as relativePath } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative as relativePath,
+} from "node:path";
 import { projectClaudeDir } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
@@ -194,9 +200,11 @@ export const excludeFromCheckout = async (path: string): Promise<void> => {
   if (!(top && exclude)) {
     return;
   }
+  // The path itself is never resolved: a placed skill is a link into its
+  // tree store (tree-swap.ts), and the link is what git lists.
   const inside = relativePath(
     await realpath(top),
-    await realpath(path).catch(() => path)
+    join(await realpath(cwd).catch(() => cwd), basename(path))
   );
   if (!inside || inside.startsWith("..") || isAbsolute(inside)) {
     return;
