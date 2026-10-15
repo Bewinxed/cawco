@@ -53,7 +53,6 @@ import { isSecretFileName } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
-import { expandHome } from "./fs";
 import { PACKAGE_TREES } from "./workspace";
 
 /** Who the first commit is by: CawCo, at an address that takes no mail. */
@@ -567,7 +566,8 @@ export const placeRepo = (
   path: unknown,
   dryRun?: unknown
 ): Promise<PlaceRepo> => {
-  const root = expandHome(String(path));
+  // A place's path is absolute: the hub stores no other (db placePathOn).
+  const root = String(path);
   if (dryRun === true) {
     return placeRepoNow(root, true);
   }

@@ -380,7 +380,13 @@ import type {
   WorkItemRow,
   WorkspaceRow,
 } from "./db";
-import { checkoutOf, hashHookMaterial, listedAt, TURN_UNRECORDED } from "./db";
+import {
+  checkoutOf,
+  hashHookMaterial,
+  listedAt,
+  PlacePathRefused,
+  TURN_UNRECORDED,
+} from "./db";
 import type { LoginMove } from "./db/accounts";
 import type { PriorConversation } from "./db/schema";
 import { buildDecisionPage, type PageSources } from "./decision-page";
@@ -510,7 +516,7 @@ import {
   type ProjectSettings,
 } from "./project-settings";
 import { createProjectStops } from "./project-stops";
-import { placePath, readRemote } from "./projects";
+import { readRemote } from "./projects";
 import { createPush, pushRoutes } from "./push";
 import {
   type ForecastRead,
@@ -1821,6 +1827,12 @@ const peekBuild = (payload: unknown): BuildInfo | undefined => {
   return typeof (build as BuildInfo).version === "string"
     ? (build as BuildInfo)
     : undefined;
+};
+
+/** The machine's home folder its register says, when it is an absolute path. */
+const peekHome = (payload: unknown): string | undefined => {
+  const home = peek(payload, "home");
+  return home?.startsWith("/") ? home : undefined;
 };
 
 const peekMachineCapabilities = (
@@ -8614,6 +8626,26 @@ export const createServer = (
   };
 
   /**
+   * A folder on a machine as a place stores it (db `placePathOn`): absolute,
+   * `~` resolved against the machine's home. Its refusal is thrown as the
+   * caller's own, from `refuse`.
+   */
+  const askedPlacePath = (
+    machineId: string,
+    folder: string,
+    refuse: (message: string, cause: Error) => Error
+  ): string => {
+    try {
+      return db.placePathOn(machineId, folder);
+    } catch (error) {
+      if (error instanceof PlacePathRefused) {
+        throw refuse(error.message, error);
+      }
+      throw error;
+    }
+  };
+
+  /**
    * Why a place was not added: the route's status and its sentence, which a
    * setup page's send answers as it answers any refusal of its own.
    */
@@ -8652,13 +8684,11 @@ export const createServer = (
     if (!db.listAgents().some((row) => row.machineId === machineId)) {
       throw new PlaceRefusal(404, "No machine with that id on this hub.");
     }
-    const path = placePath(asked);
-    if (!path.startsWith("/")) {
-      throw new PlaceRefusal(
-        400,
-        "A place is a folder's absolute path on its machine. Pass a path that starts with /."
-      );
-    }
+    const path = askedPlacePath(
+      machineId,
+      asked,
+      (message, cause) => new PlaceRefusal(400, message, { cause })
+    );
     const { place, added } = db.addPlace({
       projectId: project.id,
       machineId,
@@ -14882,7 +14912,11 @@ export const createServer = (
   }> => {
     const checkout = asked.checkout && {
       machineId: asked.checkout.machineId,
-      path: placePath(asked.checkout.cwd),
+      path: askedPlacePath(
+        asked.checkout.machineId,
+        asked.checkout.cwd,
+        (message, cause) => new FolderRefusal(400, message, { cause })
+      ),
     };
     const remote = checkout
       ? await readRemote(runOnMachine, checkout.machineId, checkout.path)
@@ -20660,6 +20694,8 @@ export const createServer = (
               "A checkout is a machine and a folder: send both machineId and cwd, or neither."
             );
           }
+          // A folder that is no absolute path on its machine is refused in
+          // the hub's words (db `placePathOn`).
           const made = await createOrJoinProject({
             name: body.name,
             ...(body.machineId && body.cwd
@@ -20675,7 +20711,15 @@ export const createServer = (
                   },
                 }
               : {}),
+          }).catch((error: unknown) => {
+            if (error instanceof FolderRefusal && error.status === 400) {
+              return error;
+            }
+            throw error;
           });
+          if (made instanceof FolderRefusal) {
+            return status(400, made.message);
+          }
           return {
             ...projectOut(made.project),
             place: made.place,
@@ -21980,8 +22024,14 @@ export const createServer = (
                 os: peek(message.payload, "os") ?? "unknown",
                 auth: peekAuth(message.payload),
                 build: peekBuild(message.payload),
+                home: peekHome(message.payload),
                 machineCapabilities: peekMachineCapabilities(message.payload),
               });
+              // Places filed under `~` before every place was absolute take
+              // the home this register reported.
+              for (const projectId of db.resolveHomePlaces(message.machineId)) {
+                placesChanged(message.machineId, projectId);
+              }
               db.noteAgentAddressContract(
                 message.machineId,
                 claims !== undefined

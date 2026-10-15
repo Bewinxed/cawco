@@ -11,7 +11,6 @@
 import { basename } from "node:path";
 import { type PlacePush, WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core";
 import { isSecretFileName } from "@cawco/core/paths";
-import { expandHome } from "./fs";
 import { useHubCredentialHelper } from "./git-credential";
 import { hubGitEnv, hubRepo, isHubRemote } from "./move";
 import { publishCheck } from "./place-repo";
@@ -31,7 +30,8 @@ export const placePush = async (
   }
   const deadline = Date.now() + WORKSPACE_GIT_TIMEOUT_MS;
   const git = gitUntil(deadline);
-  const asked = expandHome(String(path));
+  // A place's path is absolute: the hub stores no other (db placePathOn).
+  const asked = String(path);
   const root = await git(asked, "rev-parse", "--show-toplevel").catch(
     (error: Error) => {
       throw new Error(

@@ -707,6 +707,8 @@ export interface AgentRow {
   fleet?: FleetSyncReport;
   /** What each installed harness can do, as the daemon reported at register. */
   harnesses?: import("./harness").HarnessReport[];
+  /** The machine's home folder, absolute, as its daemon reported at register; absent until one that says so has. */
+  home?: string;
   hostname: string;
   /** A `Date` inside the hub, the ISO string it serialises to everywhere else. */
   lastSeenAt: string | number | Date | null;

@@ -1794,6 +1794,8 @@
               </span>
             {:else}
               <ProjectChip
+                home={cawco.machines.find((row) => row.machineId === machineId)
+                  ?.home}
                 onchange={(value) => {
                   popover = value ? "project" : null;
                 }}

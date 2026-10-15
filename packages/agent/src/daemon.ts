@@ -1,6 +1,6 @@
 import { existsSync, watch } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { arch, hostname, platform } from "node:os";
+import { arch, homedir, hostname, platform } from "node:os";
 import { dirname, join } from "node:path";
 import type {
   AccountIdentity,
@@ -499,6 +499,11 @@ interface MachineIdentity {
    * ready to.
    */
   auth: AuthState;
+  /**
+   * The daemon's home folder, absolute: the hub resolves a place named under
+   * `~` on this machine against it, so every place it stores is absolute.
+   */
+  home: string;
   hostname: string;
   machineId: string;
   os: string;
@@ -2240,6 +2245,7 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     }
     const identity: MachineIdentity = {
       machineId: machineIdValue,
+      home: homedir(),
       hostname: hostname(),
       os: `${platform()}-${arch()}`,
       auth:

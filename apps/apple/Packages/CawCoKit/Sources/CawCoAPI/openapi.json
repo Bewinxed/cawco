@@ -33257,6 +33257,10 @@
               "$ref": "#/components/schemas/HarnessReport"
             }
           },
+          "home": {
+            "description": "The machine's home folder, absolute, as its daemon reported at register; absent until one that says so has.",
+            "type": "string"
+          },
           "hostname": {
             "type": "string"
           },

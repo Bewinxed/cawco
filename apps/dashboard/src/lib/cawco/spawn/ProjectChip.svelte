@@ -16,6 +16,7 @@
   let {
     projects,
     projectId,
+    home,
     open,
     onchange,
     onpick,
@@ -24,6 +25,8 @@
   }: {
     projects: ProjectItem[];
     projectId: string | undefined;
+    /** The chosen machine's home folder, absolute: a new project's folder is offered under it. */
+    home: string | undefined;
     open: boolean;
     onchange: (open: boolean) => void;
     onpick: (project: ProjectItem) => void;
@@ -31,6 +34,8 @@
     oncreate: (draft: { name: string; path: string }) => Promise<void>;
   } = $props();
   const project = $derived(projects.find((row) => row.id === projectId));
+  /** Where a new project's folder is offered: `code` under the machine's home, sent absolute. */
+  const codeDir = $derived(home ? `${home}/code` : undefined);
   let draft = $state<{ name: string; path: string } | null>(null);
   let creating = $state(false);
   let createError = $state("");
@@ -47,10 +52,15 @@
       return;
     }
     const follows =
-      draft.path === "" || draft.path === `~/code/${slug(draft.name)}`;
+      draft.path === "" ||
+      (codeDir !== undefined &&
+        draft.path === `${codeDir}/${slug(draft.name)}`);
     draft = {
       name: value,
-      path: follows ? `~/code/${slug(value)}` : draft.path,
+      path:
+        follows && codeDir !== undefined
+          ? `${codeDir}/${slug(value)}`
+          : draft.path,
     };
   }
   async function create() {
@@ -133,7 +143,7 @@
               draft = { ...draft, path: event.currentTarget.value };
             }
           }}
-          placeholder="~/code/project"
+          placeholder={codeDir ? `${codeDir}/project` : "/path/to/project"}
           spellcheck="false"
           value={draft.path}
         >

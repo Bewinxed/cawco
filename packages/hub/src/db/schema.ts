@@ -268,6 +268,12 @@ export const agents = sqliteTable("agents", {
   }).$type<MachineCapabilities>(),
   machineId: text("machine_id").primaryKey(),
   hostname: text("hostname").notNull(),
+  /**
+   * The machine's home folder, absolute, as its daemon reported at register.
+   * A place named under `~` on the machine is resolved against it before it
+   * is stored (db `placePathOn`). Null until a daemon that says so registers.
+   */
+  home: text("home"),
   os: text("os").notNull(),
   status: text("status")
     .$type<"online" | "offline">()

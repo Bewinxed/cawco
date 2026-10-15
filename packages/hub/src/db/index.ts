@@ -64,6 +64,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  like,
   lt,
   lte,
   ne,
@@ -80,6 +81,7 @@ import { bundledSkills, starterSkills } from "../bundled-skills";
 import { DB_PATH } from "../config";
 import { sessionLabel } from "../labels";
 import { HubLifetime } from "../lifetime";
+import { placePath } from "../projects";
 import type { StagesTemplate } from "../stages";
 import { workflowSkill } from "../workflows/skills";
 import { type AccountsDb, accountsDb } from "./accounts";
@@ -1218,6 +1220,11 @@ export interface DbShape {
       projectId?: string;
     }
   ) => PublicInstanceRow | undefined;
+  /**
+   * A folder on `machineId` as a place stores it ({@link resolvePlacePath}),
+   * against the home that machine reported. Throws {@link PlacePathRefused}.
+   */
+  readonly placePathOn: (machineId: string, path: string) => string;
   /** Each session's preview port, and the fleet's preview mode (preview.ts). */
   readonly previews: PreviewsDb;
   /** A project with its places, or undefined for an id the hub does not hold. */
@@ -1568,6 +1575,13 @@ export interface DbShape {
    * stays and the old one goes. Answers the plugin ids that moved, old → new.
    */
   readonly renameMarketplace: (from: string, to: string) => [string, string][];
+  /**
+   * Places on `machineId` filed under `~` before every place was absolute,
+   * resolved against the home it reported: one that lands on a place the
+   * project already has there is folded into it. Answers the projects
+   * whose places changed. Nothing while the machine's home is unknown.
+   */
+  readonly resolveHomePlaces: (machineId: string) => string[];
   readonly restoreRemovedSessions: (
     machineId: string,
     held: string[],
@@ -1958,6 +1972,8 @@ export interface DbShape {
     auth: AgentAuth;
     /** Absent from a register with nothing new to say about it; the row keeps what it had. */
     build?: BuildInfo;
+    /** The machine's home folder, absolute; absent from a daemon that does not say it. */
+    home?: string;
     machineCapabilities?: import("@cawco/core/capabilities").MachineCapabilities;
   }) => void;
   /**
@@ -2156,6 +2172,42 @@ export const checkoutOf = (project: ProjectRow): PlaceRow | undefined =>
 /** The project's folder on the hub, the place every project has from the start. */
 export const hubPlacePath = (projectId: string): string =>
   `projects/${projectId}`;
+
+/** A place path the hub will not store, in the words its caller answers with. */
+export class PlacePathRefused extends Error {}
+
+/** `~` or `~/…`: a folder under its machine's home. */
+const UNDER_HOME = /^~(?=\/|$)/;
+const TRAILING_SLASHES = /\/+$/;
+
+/**
+ * A machine's folder as a place stores it: absolute, `~` resolved against
+ * the home its daemon reported (`agents.home`). A path still not absolute,
+ * or under `~` on a machine whose home the hub does not know, is refused.
+ * The hub's own folder (kind `hub`) is not a machine's and is not this.
+ */
+export const resolvePlacePath = (
+  asked: string,
+  home: string | null | undefined,
+  machine: string
+): string => {
+  const path = asked.trim();
+  let resolved = path;
+  if (UNDER_HOME.test(path)) {
+    if (!home) {
+      throw new PlacePathRefused(
+        `${path} is under ~ on ${machine}, whose daemon has not said where its home folder is. Name the folder by its absolute path, or update cawco on ${machine}.`
+      );
+    }
+    resolved = `${home.replace(TRAILING_SLASHES, "")}${path.slice(1)}`;
+  }
+  if (!resolved.startsWith("/")) {
+    throw new PlacePathRefused(
+      `A place is a folder's absolute path on its machine, and ${path || "an empty path"} is not one. Pass a path that starts with /, or ~/ for the machine's home.`
+    );
+  }
+  return placePath(resolved);
+};
 
 /** Each project with its places: the primary first, then oldest first. */
 const withPlaces = (
@@ -2994,8 +3046,19 @@ const make = async (path: string): Promise<DbShape> => {
     return moved;
   };
 
+  /** {@link CawcoDb.placePathOn}: the one gate every place a machine has goes through. */
+  const placePathOn = (machineId: string, folder: string): string => {
+    const agent = db
+      .select({ home: agents.home, hostname: agents.hostname })
+      .from(agents)
+      .where(eq(agents.machineId, machineId))
+      .get();
+    return resolvePlacePath(folder, agent?.home, agent?.hostname ?? machineId);
+  };
+
   return {
     close: () => db.$client.close(),
+    placePathOn,
     dateStoredSessions,
     // A confirmed end whose process its machine turns out to hold: owed again,
     // and stopping again until the machine confirms it.
@@ -3578,6 +3641,7 @@ const make = async (path: string): Promise<DbShape> => {
       os,
       auth,
       build,
+      home,
       machineCapabilities,
     }) => {
       const lastSeenAt = new Date();
@@ -3590,6 +3654,7 @@ const make = async (path: string): Promise<DbShape> => {
           status: "online",
           lastSeenAt,
           build,
+          home,
           machineCapabilities,
         })
         .onConflictDoUpdate({
@@ -3601,10 +3666,67 @@ const make = async (path: string): Promise<DbShape> => {
             status: "online",
             lastSeenAt,
             ...(build ? { build } : {}),
+            ...(home ? { home } : {}),
             ...(machineCapabilities ? { machineCapabilities } : {}),
           },
         })
         .run();
+    },
+    resolveHomePlaces: (machineId) => {
+      const home = db
+        .select({ home: agents.home })
+        .from(agents)
+        .where(eq(agents.machineId, machineId))
+        .get()?.home;
+      if (!home) {
+        return [];
+      }
+      return db.transaction((tx) => {
+        const changed = new Set<string>();
+        for (const place of tx
+          .select()
+          .from(projectPlaces)
+          .where(
+            and(
+              eq(projectPlaces.machineId, machineId),
+              or(eq(projectPlaces.path, "~"), like(projectPlaces.path, "~/%"))
+            )
+          )
+          .all()) {
+          const resolved = resolvePlacePath(place.path, home, machineId);
+          const standing = tx
+            .select()
+            .from(projectPlaces)
+            .where(
+              and(
+                eq(projectPlaces.projectId, place.projectId),
+                eq(projectPlaces.machineId, machineId),
+                eq(projectPlaces.path, resolved)
+              )
+            )
+            .get();
+          if (standing) {
+            // The same folder twice: the one already absolute stays, primary
+            // if either was.
+            tx.delete(projectPlaces)
+              .where(eq(projectPlaces.id, place.id))
+              .run();
+            if (place.isPrimary && !standing.isPrimary) {
+              tx.update(projectPlaces)
+                .set({ isPrimary: true })
+                .where(eq(projectPlaces.id, standing.id))
+                .run();
+            }
+          } else {
+            tx.update(projectPlaces)
+              .set({ path: resolved })
+              .where(eq(projectPlaces.id, place.id))
+              .run();
+          }
+          changed.add(place.projectId);
+        }
+        return [...changed];
+      });
     },
     setAgentAuth: (machineId, auth) =>
       db
@@ -5450,6 +5572,7 @@ const make = async (path: string): Promise<DbShape> => {
             fleet,
             build,
             harnesses,
+            home,
             machineCapabilities,
             ...agent
           }) => ({
@@ -5457,6 +5580,7 @@ const make = async (path: string): Promise<DbShape> => {
             ...(fleet ? { fleet } : {}),
             ...(build ? { build } : {}),
             ...(harnesses ? { harnesses } : {}),
+            ...(home ? { home } : {}),
             ...(machineCapabilities ? { machineCapabilities } : {}),
           })
         ),
@@ -6291,8 +6415,10 @@ const make = async (path: string): Promise<DbShape> => {
         )
         .run();
     },
-    createProject: ({ id, name, checkout, remote, caw = false, template }) =>
-      db.transaction((tx) => {
+    createProject: ({ id, name, checkout, remote, caw = false, template }) => {
+      const checkoutPath =
+        checkout && placePathOn(checkout.machineId, checkout.path);
+      return db.transaction((tx) => {
         tx.insert(projects)
           .values({ id, name, remote, caw, template: template ?? null })
           .run();
@@ -6305,13 +6431,13 @@ const make = async (path: string): Promise<DbShape> => {
             kind: "hub",
           })
           .run();
-        if (checkout) {
+        if (checkout && checkoutPath) {
           tx.insert(projectPlaces)
             .values({
               id: crypto.randomUUID(),
               projectId: id,
               machineId: checkout.machineId,
-              path: checkout.path,
+              path: checkoutPath,
               kind: "checkout",
               isPrimary: true,
             })
@@ -6322,8 +6448,14 @@ const make = async (path: string): Promise<DbShape> => {
           throw new Error(`project ${id} was not filed`);
         }
         return created;
-      }),
-    addPlace: (place) => {
+      });
+    },
+    addPlace: (asked) => {
+      // Every place a machine has is absolute; the hub's own folder is not a machine's.
+      const place =
+        asked.kind === "hub"
+          ? asked
+          : { ...asked, path: placePathOn(asked.machineId, asked.path) };
       const added = db.transaction((tx) => {
         // The first checkout a project gains is its primary.
         const primary =
