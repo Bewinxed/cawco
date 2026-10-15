@@ -21,15 +21,17 @@ struct RowIndex {
     static let tailSection = Int.min
 
     let settled: [String]
-    let tail: [String]
+    private(set) var tail: [String]
     /// The origin row: its id and its settled index.
     let originId: String?
     private let origin: Int
     /// The numbers of the first and last settled sections.
     private let first: Int
     private let last: Int
-    /// Each row's place: its settled index, or `settled.count` plus its tail index.
-    private let places: [String: Int]
+    /// Each settled row's settled index.
+    private let settledPlaces: [String: Int]
+    /// Each tail row's tail index.
+    private var tailPlaces: [String: Int]
 
     /// `anchor`: the origin the list counted from (RowIndex `originId`),
     /// kept while the rows hold it; else the first row other than `skip` (the
@@ -38,16 +40,32 @@ struct RowIndex {
         self.settled = settled
         self.tail = tail
         var places: [String: Int] = [:]
-        places.reserveCapacity(settled.count + tail.count)
+        places.reserveCapacity(settled.count)
         for (i, id) in settled.enumerated() { places[id] = i }
-        for (i, id) in tail.enumerated() { places[id] = settled.count + i }
-        self.places = places
-        let held = anchor.flatMap { places[$0] }.flatMap { $0 < settled.count ? $0 : nil }
+        settledPlaces = places
+        tailPlaces = Self.places(of: tail)
+        let held = anchor.flatMap { places[$0] }
         let origin = held ?? settled.firstIndex { $0 != skip } ?? 0
         self.origin = origin
         originId = settled.indices.contains(origin) ? settled[origin] : nil
         first = Self.number(0, origin)
         last = Self.number(max(0, settled.count - 1), origin)
+    }
+
+    private static func places(of tail: [String]) -> [String: Int] {
+        var places: [String: Int] = [:]
+        for (i, id) in tail.enumerated() { places[id] = i }
+        return places
+    }
+
+    /// The same settled rows under `tail`: what a frame of a streamed reply
+    /// changes. Indexing every settled row again for each was a millisecond
+    /// of each such commit in a long session.
+    func with(tail: [String]) -> RowIndex {
+        var next = self
+        next.tail = tail
+        next.tailPlaces = Self.places(of: tail)
+        return next
     }
 
     /// The section a settled row at `row` stands in, counted from the origin's (0).
@@ -83,8 +101,8 @@ struct RowIndex {
 
     /// The index path of the row `id`, when the list holds it.
     func path(of id: String) -> IndexPath? {
-        guard let place = places[id] else { return nil }
-        return place < settled.count ? settledPath(place) : IndexPath(item: place - settled.count, section: tailIndex)
+        if let place = settledPlaces[id] { return settledPath(place) }
+        return tailPlaces[id].map { IndexPath(item: $0, section: tailIndex) }
     }
 
     /// The row at `path`, when there is one.
@@ -103,7 +121,7 @@ struct RowIndex {
     }
 
     /// Whether the list holds the row `id`.
-    func holds(_ id: String) -> Bool { places[id] != nil }
+    func holds(_ id: String) -> Bool { settledPlaces[id] != nil || tailPlaces[id] != nil }
 
     /// Every row the list holds, in order.
     var all: [String] { settled + tail }

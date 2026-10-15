@@ -702,6 +702,18 @@ async function run(kit: Kit): Promise<void> {
     const before = await tally(heard, 0);
     await fleet.send(session, `${marks.stream}: stream a long reply.`);
     await until("the streamed turn began", held, (h) => h.busy, 60_000);
+    // The foot as VoiceOver reads it while the turn streams: each element's
+    // frame, so the rows laid out by frame (the sent message, the live face)
+    // are read where they stand.
+    const foot = (await uiNodes(udid))
+      .filter((n) => n.frame && n.frame.height > 0 && n.label)
+      .filter((n) => (n.frame?.y ?? 0) > line.from - 80)
+      .slice(-16)
+      .map(
+        (n) =>
+          `"${n.label?.replace(/\s+/g, " ").slice(0, 32)}"${n.value ? `=${n.value}` : ""} ${n.frame?.x.toFixed(0)},${n.frame?.y.toFixed(0)} ${n.frame?.width.toFixed(0)}x${n.frame?.height.toFixed(0)}`
+      );
+    kit.note(`the foot while the turn streams: ${foot.join(" | ")}`);
     await until("the streamed turn ended", held, (h) => !h.busy, 5 * 60_000);
     await Bun.sleep(2500);
     const d = minus(await tally(heard, streamFrom), before);

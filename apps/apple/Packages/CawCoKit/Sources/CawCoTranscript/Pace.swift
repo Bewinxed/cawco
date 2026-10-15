@@ -270,6 +270,12 @@ extension Pace {
         if spare { fromSpare += 1 } else { madeNew += 1 }
     }
 
+    /// The live tail's pieces took 3 ms or more to build (their Markdown) and measure (PieceHeight): said.
+    static func tailBuilt(pieces: Double, measured: Double, count: Int, characters: Int) {
+        guard probing, pieces + measured >= 0.003 else { return }
+        log.notice("probe tail built \(pieces * 1000, format: .fixed(precision: 1)) ms, measured \(measured * 1000, format: .fixed(precision: 1)) ms: \(count) pieces, \(characters) characters")
+    }
+
     /// A row view took 2 ms or more to make or to set for its item (RowStore `row`): said, by kind.
     static func rowSet(_ kind: String, made: Double, configured: Double) {
         guard probing, made + configured >= 0.002 else { return }

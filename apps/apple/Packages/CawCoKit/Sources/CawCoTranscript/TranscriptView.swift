@@ -1056,7 +1056,18 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             if !tailText.isEmpty || sources.isEmpty {
                 sources.append(.init(text: tailText, joinsAbove: splitter.tailContinues))
             }
-            out += measuredTail(builder.pieces(id: liveKey, sources: sources, grouped: grouped, date: nil, streaming: true))
+            #if DEBUG
+            let start = CACurrentMediaTime()
+            #endif
+            let pieces = builder.pieces(id: liveKey, sources: sources, grouped: grouped, date: nil, streaming: true)
+            #if DEBUG
+            let piecesAt = CACurrentMediaTime()
+            #endif
+            out += measuredTail(pieces)
+            #if DEBUG
+            Pace.tailBuilt(pieces: piecesAt - start, measured: CACurrentMediaTime() - piecesAt, count: pieces.count,
+                           characters: sources.reduce(0) { $0 + $1.text.count })
+            #endif
             rail = false
         }
         if let (name, glance) = tool {
@@ -1590,7 +1601,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         #endif
         // Counted from the row the list counted from before (RowIndex `origin`).
-        let next = RowIndex(settled: section.settled, tail: section.tail, anchor: before.originId, skip: Self.olderId)
+        // Quiet, the settled rows are the ones held: only the tail is indexed again.
+        let next = quiet ? before.with(tail: section.tail)
+            : RowIndex(settled: section.settled, tail: section.tail, anchor: before.originId, skip: Self.olderId)
         // The sections this update changes, where it leaves the others as
         // they are: the tail's, and the settled sections from the first row
         // that changed (a streamed block, an answer landing at the foot). Only
@@ -1601,10 +1614,13 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // (only the whole update reconfigures it); its rows are drawn anew
         // where they stand (`redrawInPlace`).
         if next.sectionIdentifiers == before.sectionIdentifiers, before.sectionIdentifiers.count == collection.numberOfSections {
-            let common = min(before.settled.count, next.settled.count)
-            let first = (0 ..< common).first { before.settled[$0] != next.settled[$0] } ?? common
-            let from = next.settled.isEmpty ? 0 : next.settledPath(min(first, next.settled.count - 1)).section
-            let settledScope = before.settled == next.settled ? [] : Array(from ..< next.settledSections)
+            var settledScope: [Int] = []
+            if !quiet, before.settled != next.settled {
+                let common = min(before.settled.count, next.settled.count)
+                let first = (0 ..< common).first { before.settled[$0] != next.settled[$0] } ?? common
+                let from = next.settled.isEmpty ? 0 : next.settledPath(min(first, next.settled.count - 1)).section
+                settledScope = Array(from ..< next.settledSections)
+            }
             changed = redrawInPlace(changed)
             if changed.isEmpty { scope = [next.tailIndex] + settledScope }
         }
