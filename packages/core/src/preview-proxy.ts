@@ -251,11 +251,24 @@ export interface PreviewSocket {
   /** The hop relaying it and the preview's session, for its failure's line. */
   hop: string;
   instanceId: string;
+  /** Nothing listens at `url` any more: the hop forgets where it sent it (the hub's stale machine listener). */
+  nothingListens?: () => void;
+  opened: boolean;
   pending: (string | Uint8Array<ArrayBuffer>)[];
   protocol: string;
   upstream?: WebSocket;
   url: string;
 }
+
+/** Bun's words for a client socket that failed, before its reason. */
+const FAILED_PREFIX = /^WebSocket connection to '[^']*' failed: /;
+/** Bun's reason when no connection opened at all (`ECONNREFUSED`): no listener there. */
+const NOT_CONNECTED = "Failed to connect";
+
+/** Why a client socket failed, in Bun's words: "Expected 101 status code" (the server answered the upgrade with another status), "Connection ended" (it closed the connection on it), "Failed to connect". */
+const failureOf = (event: Event): string =>
+  (event as ErrorEvent).message?.replace(FAILED_PREFIX, "") ||
+  "no reason given";
 
 /**
  * A browser's WebSocket upgrade, relayed to `url` with `headers`. The Host in
@@ -270,7 +283,7 @@ export function upgradePreview(
   server: Server<PreviewSocket>,
   url: string,
   headers: Headers,
-  at: { hop: string; instanceId: string }
+  at: Pick<PreviewSocket, "hop" | "instanceId" | "nothingListens">
 ): boolean {
   const protocol =
     request.headers.get("sec-websocket-protocol")?.split(",")[0]?.trim() ?? "";
@@ -284,7 +297,15 @@ export function upgradePreview(
   }
   return server.upgrade(request, {
     headers: protocol ? { "sec-websocket-protocol": protocol } : undefined,
-    data: { url, protocol, headers, pending: [], closed: false, ...at },
+    data: {
+      url,
+      protocol,
+      headers,
+      pending: [],
+      closed: false,
+      opened: false,
+      ...at,
+    },
   });
 }
 
@@ -310,6 +331,7 @@ export const previewWebSocket: WebSocketHandler<PreviewSocket> = {
     data.upstream = upstream;
     upstream.binaryType = "arraybuffer";
     upstream.onopen = () => {
+      data.opened = true;
       if (data.closed) {
         upstream.close();
         return;
@@ -328,12 +350,16 @@ export const previewWebSocket: WebSocketHandler<PreviewSocket> = {
     // reconnects on a `restart` code must not be told 1000 instead.
     upstream.onclose = (event) =>
       socket.close(sendable(event.code), event.reason);
-    upstream.onerror = () => {
+    upstream.onerror = (event) => {
+      const why = failureOf(event);
       previewFailed(
         data.hop,
         data.instanceId,
-        `its WebSocket to ${data.url} didn't open`
+        `its WebSocket to ${data.url} ${data.opened ? "broke" : "didn't open"}: ${why}`
       );
+      if (!data.opened && why === NOT_CONNECTED) {
+        data.nothingListens?.();
+      }
       socket.close(1011, "Preview connection failed");
     };
   },

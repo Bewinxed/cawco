@@ -350,9 +350,13 @@ async function relay(
   const upstream = `${address}:${at.port}${url.pathname}${url.search}`;
   const headers = upstreamHeaders(request);
   if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+    // A machine listener that is gone (its agent restarted) is forgotten, as
+    // a request's is below: a page whose socket alone reconnects (a live
+    // dashboard's) would otherwise be sent to the dead port for good.
     return upgradePreview(request, server, `ws://${upstream}`, headers, {
       hop: HOP,
       instanceId,
+      nothingListens: () => deps.unreachable(instanceId, at),
     })
       ? undefined
       : new Response("WebSocket upgrade failed", { status: 400 });

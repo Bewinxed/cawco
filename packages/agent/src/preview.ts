@@ -32,6 +32,26 @@ const previews = new Map<
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 /**
+ * The headers a proxy in front of the hub adds to name where the browser
+ * reached it (Cloudflare sets `X-Forwarded-Proto` to the client's scheme and
+ * `CF-Visitor` to it as JSON). The app is told it is reached at its own
+ * `http://localhost:<port>` (Host and Origin below), so these go: an app that
+ * judges its origin by them (the dashboard's `publicOrigin`) would read
+ * `https://localhost:<port>`, refuse the Origin it was given as cross-site and
+ * close every WebSocket the page opens (obelisk 2026-10-15 20:11, host mode
+ * behind Cloudflare).
+ */
+const FORWARDING_HEADERS = [
+  "forwarded",
+  "x-forwarded-host",
+  "x-forwarded-proto",
+  "x-forwarded-port",
+  "x-forwarded-ssl",
+  "x-forwarded-scheme",
+  "cf-visitor",
+];
+
+/**
  * Each preview's starts and stops, one after another: a start stops the
  * listener before it and opens its own across awaits, so two of them side by
  * side would each find nothing to stop and leave one listener running that
@@ -182,6 +202,9 @@ async function start(
         headers.delete("if-none-match");
         headers.delete("if-modified-since");
         headers.set("host", `localhost:${source.port}`);
+        for (const name of FORWARDING_HEADERS) {
+          headers.delete(name);
+        }
         if (headers.has("origin")) {
           headers.set("origin", `http://localhost:${source.port}`);
         }
