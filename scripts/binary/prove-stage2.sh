@@ -1620,6 +1620,34 @@ ws_preview_open() { ws_exec "/home/cawco/.local/bin/cawco tool artifact_create '
 ws_preview_port() { as_user "$hubc" env BUN_BE_BUN=1 /home/cawco/.local/bin/cawco /shared/stage2-preview-port.ts http://127.0.0.1:3456 "$(cat "$rigdir/ws-delegate")"; }
 # What the preview answers, through the hub's preview listener, the joined machine's agent and its bridge.
 ws_preview_says() { as_user "$hubc" curl -sS --max-time 10 "http://127.0.0.1:$(cat "$rigdir/ws-preview-port")/" 2>&1 || true; }
+# Host mode, the owner's: one listener on the preview range's first port routes each request by its Host, a name of
+# the fleet's pattern (preview.ts sessionOfHost), behind the lock (preview-access.ts). Set as Settings › Previews and
+# Caw's admin_previews_write set it (PUT /api/preview-settings), `.localhost` names, which need no DNS; $1 host or port.
+ws_preview_mode() {
+  local first body
+  first=$(hub_api /api/preview-settings | json 'd => d.ports.split(/\D+/)[0]')
+  body="{\"mode\":\"$1\"}"
+  [[ $1 == port ]] || body="{\"mode\":\"host\",\"pattern\":\"http://p-{port}.localhost:$first\"}"
+  as_user "$hubc" curl -sS -w '\nHTTP %{http_code}' -X PUT http://127.0.0.1:3456/api/preview-settings -H 'content-type: application/json' -d "$body"
+}
+# The preview's host-mode name (`p-<port>.localhost:<listener port>`), as the hub gives a client its origin.
+ws_preview_host() { ws_post "/api/instances/$(cat "$rigdir/ws-delegate")/preview-address" '{}' | sed '$d' | json 'd => d.host'; }
+# One request to the preview's host-mode name ($1), with the pass cookie $2 or none: its body, then `HTTP <status>`.
+ws_preview_by_host() {
+  local host=$1 cookie=${2:-}
+  as_user "$hubc" curl -sS --max-time 10 -w '\nHTTP %{http_code}' -H "Host: $host" ${cookie:+-H "Cookie: $cookie"} "http://127.0.0.1:${host##*:}/" 2>&1 || true
+}
+# Enters the preview's host-mode name ($1) as the dashboard's pane does: a ticket from the hub's API
+# (POST /api/instances/:id/preview-ticket), spent at /__cawco/enter, whose 302 sets the pass. Prints the pass
+# cookie (`name=value`).
+ws_preview_enter() {
+  local host=$1 ticket headers
+  ticket=$(ws_post "/api/instances/$(cat "$rigdir/ws-delegate")/preview-ticket" '{}' | sed '$d' | json 'd => d.ticket')
+  [[ -n $ticket ]] || { echo "no ticket from the hub" >&2; return 1; }
+  headers=$(as_user "$hubc" curl -sS --max-time 10 -D - -o /dev/null -H "Host: $host" "http://127.0.0.1:${host##*:}/__cawco/enter?ticket=$ticket&next=/" | tr -d '\r')
+  [[ $(head -1 <<< "$headers") == *" 302"* ]] || { echo "the entry answered: $headers" >&2; return 1; }
+  grep -i '^set-cookie: cawco-preview=' <<< "$headers" | sed 's/^[^:]*: *//; s/;.*//'
+}
 # Every process that descends from the sandbox init $1, by each one's parent: the tree boundary.ts inTree judges.
 ws_tree() { as_user "$joinerc" ps -e -o pid=,ppid= | awk -v root="$1" '{ parent[$1] = $2 } END { tree[root] = 1; do { grew = 0; for (p in parent) if (!(p in tree) && (parent[p] in tree)) { tree[p] = 1; grew = 1 } } while (grew); for (p in tree) print p }'; }
 # A POST to the hub, answering its body and a last line `HTTP <status>`, so a refusal shows the hub's words.
@@ -1713,7 +1741,7 @@ workspace_opens() {
 }
 workspace_across_update() {
   need_hub
-  local id gen old_inner old_ns job listener new new_inner
+  local id gen old_inner old_ns job listener new new_inner answer
   id=$(cat "$rigdir/ws-id")
   gen=$(ws_gen)
   read -r _ old_inner _ <<< "$(ws_place "$gen")"
@@ -1779,6 +1807,19 @@ workspace_across_update() {
   wait_until 60 'ws_preview_port > "$rigdir/ws-preview-port" 2> "$rigdir/ws-preview-port.err"' || { cat "$rigdir/ws-preview-port.err"; return 1; }
   echo "the preview is served on the hub's port $(cat "$rigdir/ws-preview-port")"
   wait_until 60 '[[ "$(ws_preview_says)" == *gen-old* ]]' || { echo "the preview answered: $(ws_preview_says)"; return 1; }
+  # The same in host mode, the owner's: a request without a pass gets the lock's 401 page; one with the pass a
+  # ticket bought reaches the listener in the older generation.
+  answer=$(ws_preview_mode host)
+  echo "the hub answered host mode: $answer"
+  [[ "$answer" == *"HTTP 200" ]]
+  on_exit 'ws_preview_mode port > /dev/null'
+  ws_preview_host > "$rigdir/ws-preview-host"
+  [[ "$(cat "$rigdir/ws-preview-host")" == p-*.localhost:* ]] || { echo "the preview's host-mode name: '$(cat "$rigdir/ws-preview-host")'"; return 1; }
+  answer=$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")")
+  [[ "$answer" == *"HTTP 401" && "$answer" == *cawco-preview-locked* ]] || { echo "ASSERTION FAILED: a request without a pass got: $answer"; return 1; }
+  ws_preview_enter "$(cat "$rigdir/ws-preview-host")" > "$rigdir/ws-preview-pass"
+  [[ "$(cat "$rigdir/ws-preview-pass")" == cawco-preview=* ]] || { echo "the entry set no pass: '$(cat "$rigdir/ws-preview-pass")'"; return 1; }
+  wait_until 60 '[[ "$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")" == *gen-old*"HTTP 200" ]]' || { echo "host mode answered: $(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")"; return 1; }
   # The delegate starts its server again, on the same port, in the new generation: the older generation's work is
   # taken over, and it closes with what runs in it (boundary.ts supersededPorts). Its sandbox, its srt host, its
   # record and its files go, the old listener with them.
@@ -1788,7 +1829,13 @@ workspace_across_update() {
   ! as_user "$joinerc" kill -0 "$old_inner" 2> /dev/null
   ! as_user "$joinerc" kill -0 "$listener" 2> /dev/null || { echo "ASSERTION FAILED: the older generation's listener $listener outlived its generation"; return 1; }
   as_user "$joinerc" journalctl --user --no-pager -u cawco-agent.service | grep "$id: its older boundary .* a newer generation listens on every port its work listened on ($WS_LISTENER_PORT)"
-  # The same preview now reaches the new generation's listener.
+  # The same preview now reaches the new generation's listener: in host mode with the same pass, then by port once
+  # the fleet is back in port mode.
+  wait_until 60 '[[ "$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")" == *gen-new*"HTTP 200" ]]' || { echo "host mode answered: $(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")"; return 1; }
+  [[ "$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")")" == *"HTTP 401" ]] || { echo "ASSERTION FAILED: host mode answered a request without a pass"; return 1; }
+  answer=$(ws_preview_mode port)
+  echo "the hub answered port mode: $answer"
+  [[ "$answer" == *"HTTP 200" ]]
   wait_until 60 '[[ "$(ws_preview_says)" == *gen-new* ]]' || { echo "the preview answered: $(ws_preview_says)"; return 1; }
   # The current one is untouched.
   [[ "$(ws_gen)" == "$new" ]]
@@ -1827,10 +1874,10 @@ workspace_archive_ends_all() {
   [[ -z $left ]] || { echo "ASSERTION FAILED: these processes of the archived workspace's sandbox still run:$left"; return 1; }
   wait_until 60 '[[ -z "$(child_pids "$joinerc" "boundary-'"$id"'-'"$gen"'")" ]] && ! as_user "$joinerc" test -e "$(ws_state)"'
 }
-export -f ws_state ws_json ws_gen ws_exec ws_place ns_of ws_listener_start ws_listener_pid ws_listener_says ws_preview_open ws_preview_port ws_preview_says ws_tree ws_post ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered workspace_opens workspace_across_update workspace_archive_ends_all
+export -f ws_state ws_json ws_gen ws_exec ws_place ns_of ws_listener_start ws_listener_pid ws_listener_says ws_preview_open ws_preview_port ws_preview_says ws_preview_mode ws_preview_host ws_preview_by_host ws_preview_enter ws_tree ws_post ws_secrets ws_cannot_read ws_hook_calls_start ws_hook_calls_stop ws_hook_calls_answered workspace_opens workspace_across_update workspace_archive_ends_all
 export WS_LISTENER_PORT
 rig_workspace() {
-  local across="a workspace open across an update keeps its job and a setsid listener running, a preview reaching the listener in the older generation, its next command runs in the new build's boundary, and once the listener is started again on its port in the new generation the old boundary closes with it and the preview reaches the new one"
+  local across="a workspace open across an update keeps its job and a setsid listener running, a preview reaching the listener in the older generation by port and by host behind the lock, its next command runs in the new build's boundary, and once the listener is started again on its port in the new generation the old boundary closes with it and the preview reaches the new one in both modes"
   fleet base "$BASE" "hub joiner" "hub joiner"
   setup_done
   check "a delegate workspace on the joined machine opens with its srt boundary, and a command through its executor cannot read a planted credential" workspace_opens 600
