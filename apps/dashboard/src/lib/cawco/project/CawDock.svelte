@@ -5,17 +5,20 @@
    * by the transcript a thread tab draws (ThreadPane's Transcript, his face
    * on the speaker line), with the composer at its foot.
    *
-   * - Head: his face, his name, what he is doing (`lead.sentence`); off, it
-   *   says so and offers Turn on under it. A menu of the project's threads
-   *   stands under it once there is more than one.
+   * - Head: his face, his name, and one line saying what he is doing: your
+   *   send's standing first (Waking…, Didn't wake), then his own
+   *   (`lead.sentence`); off, it says so with Turn on on the same line. Once
+   *   the project has more than one thread, a Threads menu opens off the head
+   *   beside the dock.
    * - Body: before any thread, his greeting and three things to ask; your
    *   first words land as your row at once and the dock binds to the thread
    *   the hub makes, its rows taking the echo's place.
    * - Foot: the field to Caw (CawField, its words flying to their row) until
    *   a thread exists, then the session Composer bound to the thread.
-   * - Under your newest words, one line says where they stand: Sending…,
-   *   Delivered · waking Caw, Delivered, or Caw didn't wake with the reason
-   *   and Try again. His reply ends it.
+   * - Your newest row's note says where your words stand (sending…,
+   *   delivered · waking Caw, delivered, didn't wake), and his row under it
+   *   says Waking… until his turn starts. A wake that failed stands over the
+   *   field with its reason and Try again. His reply ends it.
    */
   import type { ThreadMessage } from "@cawco/core";
   import { untrack } from "svelte";
@@ -47,8 +50,10 @@
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Select from "#lib/components/ui/select/index.js";
-  import { IconSettings } from "#lib/icons.js";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import { IconHistory, IconSettings } from "#lib/icons.js";
+  import type { CawFile } from "../home/Caw.svelte";
+  import { dateTimeText } from "../usage";
   import CawField from "./CawField.svelte";
   import CawPanel from "./CawPanel.svelte";
   import { cawDock } from "./caw-dock.svelte";
@@ -206,6 +211,27 @@
     failed: "didn't wake",
   };
 
+  /**
+   * What the head says Caw is doing, and the face it shows: your send's
+   * standing until he is in a turn (waking, or that he did not wake), then
+   * his own (`lead`). Off and at rest, that only your words wake him.
+   */
+  const head = $derived.by((): { line: string; face: CawFile } => {
+    if (delivery?.kind === "failed") {
+      return { line: "Didn't wake", face: "sleeping" };
+    }
+    if (delivery?.kind === "sending" || delivery?.kind === "waking") {
+      return { line: "Waking…", face: "loading" };
+    }
+    if (off && lead.status === "sleeping") {
+      return { line: "Answers when you write", face: lead.status };
+    }
+    return { line: lead.sentence, face: lead.status };
+  });
+  const waking = $derived(
+    delivery?.kind === "sending" || delivery?.kind === "waking"
+  );
+
   /** The greeting: who he is and how things stand, in his voice; no model call. */
   const greeting = $derived.by((): string => {
     const how: Record<string, string> = {
@@ -254,6 +280,16 @@
         type: "user",
         content: echoShown.text,
         metadata: note ? { delivery: note } : undefined,
+      } as Message);
+    }
+    // Until his turn starts, his row under your words says he is waking;
+    // the turn's own live row takes its place.
+    if (waking) {
+      blocks.push({
+        id: `${viewId}:waking`,
+        instanceId: viewId,
+        type: "assistant",
+        content: "Waking…",
       } as Message);
     }
     session.blocks = blocks;
@@ -356,22 +392,19 @@
 
   // --- the threads menu --------------------------------------------------------------
 
-  const WHEN = new Intl.DateTimeFormat(undefined, {
+  /** Today's clock as the speaker line writes one (Who: 24-hour). */
+  const CLOCK = new Intl.DateTimeFormat(undefined, {
     hour: "2-digit",
     minute: "2-digit",
+    hourCycle: "h23",
   });
-  const DAY = new Intl.DateTimeFormat(undefined, { weekday: "short" });
+  /** When a thread last moved: today's clock, else the app's date and time ("17 Oct 08:49"). */
   function whenOf(at: number): string {
-    const day = new Date(at);
-    const today = new Date();
-    if (day.toDateString() === today.toDateString()) {
-      return `Today ${WHEN.format(day)}`;
-    }
-    today.setDate(today.getDate() - 1);
-    return day.toDateString() === today.toDateString()
-      ? "Yesterday"
-      : DAY.format(day);
+    return new Date(at).toDateString() === new Date().toDateString()
+      ? `Today ${CLOCK.format(at)}`
+      : dateTimeText(at);
   }
+  let card = $state<HTMLElement>();
   function choose(value: string) {
     echo = null;
     begunHere = false;
@@ -393,7 +426,7 @@
 
 {#snippet identity()}
   <div class="who">
-    <CawFace size={24} status={lead.status} />
+    <CawFace size={24} status={head.face} />
     <span class="words">
       <span class="name"
         >Caw
@@ -401,14 +434,71 @@
           <span class="off-word">{" · off"}</span>
         {/if}</span
       >
-      <span class="line"
-        >{off ? "Answers only when you write to him." : lead.sentence}</span
-      >
+      <!-- One line, whatever the state: off, Turn on stands on it, so
+           nothing under the head moves. -->
+      <span class="line" data-caw-head-line>
+        <span class="said">{head.line}</span>
+        {#if off}
+          <span aria-hidden="true">·</span>
+          <button
+            class="link"
+            disabled={lead.moving}
+            onclick={() => lead.configure({ on: true })}
+            type="button"
+          >
+            Turn on
+          </button>
+        {/if}
+      </span>
     </span>
   </div>
 {/snippet}
 
 {#snippet gear()}
+  {#if threads.length > 1}
+    <!-- The project's threads: a menu off the head, beside the dock, so it
+         never stands over the thread it replaces. -->
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger>
+        {#snippet child({
+          props,
+        })}
+          <button
+            {...props}
+            aria-label="Threads"
+            class="touch-hit thread-pick"
+            title="Threads"
+            type="button"
+          >
+            <IconHistory />
+          </button>
+        {/snippet}
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content
+        align="start"
+        class="w-80"
+        customAnchor={card}
+        data-caw-threads
+        side="left"
+        sideOffset={8}
+      >
+        <DropdownMenu.RadioGroup
+          onValueChange={(value) => value && choose(value)}
+          value={threadId ?? "new"}
+        >
+          <DropdownMenu.RadioItem value="new"
+            >New thread</DropdownMenu.RadioItem
+          >
+          {#each threads as each (each.id)}
+            <DropdownMenu.RadioItem value={each.id}
+              >{whenOf(each.lastAt)}
+              · {each.title}</DropdownMenu.RadioItem
+            >
+          {/each}
+        </DropdownMenu.RadioGroup>
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
+  {/if}
   <button
     aria-expanded={settingsOpen}
     aria-label="Caw's settings"
@@ -425,40 +515,6 @@
 {/snippet}
 
 {#snippet under()}
-  {#if off}
-    <div class="turn-on">
-      <button
-        class="link"
-        disabled={lead.moving}
-        onclick={() => lead.configure({ on: true })}
-        type="button"
-      >
-        Turn on
-      </button>
-    </div>
-  {/if}
-  {#if threads.length > 1}
-    <div class="threads">
-      <Select.Root
-        onValueChange={(value) => value && choose(value)}
-        type="single"
-        value={threadId ?? "new"}
-      >
-        <Select.Trigger aria-label="Thread" class="thread-pick" size="sm">
-          {thread ? `${whenOf(thread.lastAt)} · ${thread.title}` : "New thread"}
-        </Select.Trigger>
-        <Select.Content>
-          <Select.Item label="New thread" value="new" />
-          {#each threads as each (each.id)}
-            <Select.Item
-              label="{whenOf(each.lastAt)} · {each.title}"
-              value={each.id}
-            />
-          {/each}
-        </Select.Content>
-      </Select.Root>
-    </div>
-  {/if}
   {#if settingsOpen}
     <div class="settings" data-caw-settings transition:unfold>
       <div class="settings-inner">
@@ -476,16 +532,16 @@
     {@const failed = delivery}
     <div class="delivery" data-caw-delivery="failed" role="alert" in:appear>
       <p>
-        Caw didn't wake. {failed.why} Your message is kept; Try again wakes him
-        with it.
+        Caw didn't wake. {failed.why} Your message is kept. Try again to wake
+        him with it.
       </p>
+      <!-- The one place to act while he is down: the action's own weight. -->
       <Button
         label="Try again"
         onclick={() => failed.again()}
         pending={retrying}
         pendingLabel="Sending…"
         size="sm"
-        variant="outline"
       />
     </div>
   {:else if offerStarters}
@@ -508,7 +564,7 @@
   {/if}
 {/snippet}
 
-<div class="dock" data-caw-dock class:sheet={sheet}>
+<div class="dock" data-caw-dock bind:this={card} class:sheet={sheet}>
   <SideSurface
     actions={gear}
     below={under}
@@ -611,19 +667,25 @@
     color: var(--ink-muted);
   }
   .line {
-    overflow: hidden;
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-1);
+    min-inline-size: 0;
     font: var(--type-meta);
     color: var(--ink-muted);
-    text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* Under the head, on the text's column (face + gap past the card's edge). */
-  .turn-on,
-  .threads {
-    padding: 0 var(--space-2) var(--space-2)
-      calc(var(--space-1) + 24px + var(--space-2));
+  .said {
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
-  .link {
+  /* Turn on is a link on the head's line: the head's control recipe
+     (SideSurface `.side-head button`) gives way to the line's type. */
+  .words .line .link {
+    flex: none;
+    min-inline-size: 0;
+    block-size: auto;
     padding: 0;
     border: 0;
     background: none;
@@ -633,13 +695,11 @@
     cursor: pointer;
   }
   @media (hover: hover) {
-    .link:hover {
+    .words .line .link:hover {
+      background: none;
       text-decoration: underline;
       text-underline-offset: 3px;
     }
-  }
-  .threads :global(.thread-pick) {
-    max-inline-size: 100%;
   }
   /* The settings fold: a tone step under the head, not a bordered box. */
   .settings {

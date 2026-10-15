@@ -531,7 +531,10 @@
      nothing. Under a pointer the name takes the hover wash. */
   .name {
     display: block;
-    max-inline-size: 100%;
+    /* Its box reaches past the column by the margins it pulls back, and the
+       column is sized without them: capped at 100%, a name longer than the
+       line under it ("Working…") lost those 8px and broke. */
+    max-inline-size: calc(100% + var(--space-1) * 2);
     margin-inline: calc(var(--space-1) * -1);
     padding-inline: var(--space-1);
     border: 1px solid transparent;
@@ -542,6 +545,13 @@
     text-align: start;
     cursor: text;
     transition: background-color var(--dur-control) var(--ease-out);
+  }
+  /* The name never breaks across lines: a column too narrow for it ends it
+     in an ellipsis, as the line under it does (`.place`, `.said`). */
+  button.name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   @media (hover: hover) {
     button.name:hover {
