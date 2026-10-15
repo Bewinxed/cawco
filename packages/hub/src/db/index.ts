@@ -983,6 +983,8 @@ export interface DbShape {
   readonly liveWorkItems: () => WorkItemRow[];
   /** The work items a session delegated that are still `starting`/`running`. */
   readonly liveWorkItemsOf: (parentInstanceId: string) => WorkItemRow[];
+  /** The ids of a machine's workspaces with a live work item (starting or running). */
+  readonly liveWorkspacesOn: (machineId: string) => string[];
   /**
    * `raw` as a path on `machineId` ({@link machinePath}), against the home
    * that machine's daemon reported. Every path a person or a session names
@@ -7364,6 +7366,19 @@ const make = async (path: string): Promise<DbShape> => {
           )
         )
         .all(),
+    liveWorkspacesOn: (machineId) =>
+      db
+        .selectDistinct({ id: workspaces.id })
+        .from(workItems)
+        .innerJoin(workspaces, eq(workspaces.id, workItems.workspaceId))
+        .where(
+          and(
+            eq(workspaces.machineId, machineId),
+            inArray(workItems.state, ["starting", "running"])
+          )
+        )
+        .all()
+        .map((row) => row.id),
     checkWorkspacesOf: (workspaceId) =>
       db
         .select()

@@ -798,15 +798,29 @@ export class SessionSupervisor {
   readonly #ending = new WeakSet<HarnessSession>();
   readonly #generations = new Map<string, string>();
   /**
-   * Each session's harness, and the pid of the workspace boundary its
+   * Each session's harness, and the pid and workspace of the boundary its
    * commands run in when it has one, as its last start or attach set them:
    * how a keeper child's limit finds the sessions it touched
-   * ({@link #limitReached}).
+   * ({@link #limitReached}), and which boundaries a carried session holds
+   * ({@link boundedWorkspaces}).
    */
   readonly #placed = new Map<
     string,
-    { harness: HarnessKind; boundaryPid?: number }
+    { harness: HarnessKind; boundaryPid?: number; workspace?: string }
   >();
+
+  /**
+   * The workspaces whose boundary a carried session's commands run in, of
+   * every harness: each holds its boundary up while it is carried, asleep it
+   * holds nothing (boundary.ts `watchQuietBoundaries`). A CLI adopted from
+   * the agent before is held there by its process (boundary.ts `attachedIn`).
+   */
+  boundedWorkspaces(): string[] {
+    return [...this.#sessions.keys()].flatMap((instanceId) => {
+      const workspace = this.#placed.get(instanceId)?.workspace;
+      return workspace ? [workspace] : [];
+    });
+  }
   readonly #addressWaiting = new Map<
     string,
     {
@@ -2873,7 +2887,9 @@ export class SessionSupervisor {
     this.#generations.set(instanceId, processGeneration);
     this.#placed.set(instanceId, {
       harness: adapter.kind,
-      ...(boundary ? { boundaryPid: boundary.pid } : {}),
+      ...(boundary && bounded
+        ? { boundaryPid: boundary.pid, workspace: bounded.workspace }
+        : {}),
     });
     const launchOf = (message: NeutralMessage) =>
       accountReading(message) ? { processGeneration } : {};

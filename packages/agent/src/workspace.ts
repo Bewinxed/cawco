@@ -1,8 +1,9 @@
 /**
  * A delegation workspace's checkout, on the machine that holds it. The hub
- * owns the workspace record; the machine cuts the clone (`./clone`) and
- * starts its boundary once, keeps the boundary running while the workspace's
- * sessions can be continued, and deletes it all on archive.
+ * owns the workspace record; the machine cuts the clone (`./clone`), runs its
+ * boundary while something holds it (a session attached, a live work item, a
+ * preview, a command: boundary.ts `liveWhy`) and starts it again on its next
+ * command once a quiet one has closed, and deletes it all on archive.
  */
 import { constants } from "node:fs";
 import {

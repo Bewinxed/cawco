@@ -546,6 +546,13 @@ export interface HeartbeatAckPayload {
    */
   delivered: Record<string, import("./stream").DeliveryMark>;
   keepAwake: string[];
+  /**
+   * Every workspace on the machine with a live work item (starting or
+   * running), the whole list on every beat: the machine keeps each one's
+   * boundary up whatever else holds it (agent boundary.ts `liveWhy`), and
+   * closes none until it has heard this once.
+   */
+  liveWorkspaces: string[];
   ok: true;
   /**
    * The fleet's session limits as the hub holds them now ({@link SessionLimits}),

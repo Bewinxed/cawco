@@ -46,7 +46,11 @@
  * this build's form starts beside it on the current keeper, every new command
  * runs in the new one, and the older one runs on, untouched, until nothing
  * runs in it, then closes ({@link closeIdle}). Every boundary and judge
- * process is found and stopped on whichever keeper holds it. A machine that
+ * process is found and stopped on whichever keeper holds it. A boundary runs
+ * only while something holds it ({@link liveWhy}); one nothing has held for
+ * {@link QUIET_CLOSE_MS} closes with its judge, its clone and state left as
+ * they are, and its next command starts it again ({@link closeQuietly}). A
+ * machine that
  * cannot hold a boundary refuses the work: a work item never runs without
  * one.
  *
@@ -153,6 +157,7 @@ import {
   isJudgeOf,
   JUDGE_FORM_LENGTH,
   judgeProcId,
+  parseProcId,
 } from "./proc-id";
 import type { SessiondClient } from "./sessiond-client";
 import {
@@ -1040,12 +1045,15 @@ export const hookArmed = async (id: string): Promise<void> => {
  * Nothing else waits on it: the agent registers and takes custody of other
  * sessions meanwhile (it took 78 s on obelisk with 421 folders, one at a
  * time, and the update nearly rolled back). The workspaces whose boundary
- * runs, on any keeper, read once from the keepers' listing, are armed now,
- * {@link REARM_CONCURRENCY} at a time: that is where a CLI runs. Any other,
- * with no boundary running, has no command to run: it is armed the moment
- * a session there is adopted or launched, so the start's work grows with
- * what runs, not with every workspace folder ever made. What it returns
- * settles once those armed now are done.
+ * runs, on any keeper, read once from the keepers' listing, and in which a
+ * session's process is attached or a command is on its way in
+ * ({@link inUse}), are armed now, {@link REARM_CONCURRENCY} at a time: that
+ * is where a CLI runs, and one of an older form is handed over there. Any
+ * other has no command to run: it is armed the moment a session there is
+ * adopted or launched, or anything else ensures its boundary, so the start
+ * neither starts a boundary for an idle workspace nor hands one over; an
+ * idle one still running closes once quiet ({@link sweepQuiet}). What it
+ * returns settles once those armed now are done.
  */
 export const rearmHooks = (): Promise<void> => {
   const started = Date.now();
@@ -1059,15 +1067,28 @@ export const rearmHooks = (): Promise<void> => {
       }
     );
     const live = (await keepers.held()).filter((proc) => proc.alive);
-    const now = ids.filter((id) =>
+    const running = ids.filter((id) =>
       live.some((proc) => isBoundaryOf(proc.procId, id))
     );
+    const commands = await commandsNow();
+    const now: string[] = [];
+    for (const id of running) {
+      // biome-ignore lint/performance/noAwaitInLoops: one small record read per workspace whose boundary runs
+      const held = await readHeld(id).catch(() => undefined);
+      if (held && inUse(id, held.path, live, commands)) {
+        now.push(id);
+      }
+    }
     for (const id of ids) {
       if (!now.includes(id)) {
         unarmed.add(id);
       }
     }
-    return { now, later: ids.length - now.length };
+    return {
+      now,
+      idle: running.length - now.length,
+      later: ids.length - running.length,
+    };
   })();
   let armed = 0;
   const limit = bounded(REARM_CONCURRENCY);
@@ -1081,10 +1102,10 @@ export const rearmHooks = (): Promise<void> => {
       rearming.set(id, armNow(id));
     }
   });
-  return listing.then(async ({ now, later }) => {
+  return listing.then(async ({ now, idle, later }) => {
     await Promise.all(now.map((id) => rearming.get(id)));
     console.info(
-      `[workspace] boundary hooks written for ${armed} of ${now.length} workspace(s) with a boundary running, in ${Date.now() - started} ms; ${later} with none are armed when a session there starts`
+      `[workspace] boundary hooks written for ${armed} of ${now.length} workspace(s) with a boundary running and a session or command in it, in ${Date.now() - started} ms; ${idle} with a boundary running and nothing in it are left as they are and close once quiet; ${later} with none are armed when a session there starts`
     );
   });
 };
@@ -1486,13 +1507,25 @@ export const ensureBoundary = async (ref: WorkspaceRef): Promise<Boundary> => {
   return ensureNow(ref);
 };
 
-/** {@link ensureBoundary} with the hook already armed: the start-up rewrite's own hand-over ({@link rearmOne}). */
+/**
+ * {@link ensureBoundary} with the hook already armed: the start-up rewrite's
+ * own hand-over ({@link rearmOne}). A quiet close under way finishes first
+ * ({@link closeQuietly}), and this one starts the boundary again. Each ensure
+ * is a use: the workspace's quiet time counts from it ({@link liveAt}).
+ */
 const ensureNow = (ref: WorkspaceRef): Promise<Boundary> => {
+  liveAt.set(ref.id, Date.now());
   const pending = starting.get(ref.id);
   if (pending) {
     return pending;
   }
-  const started = ensure(ref).finally(() => starting.delete(ref.id));
+  const started = (async () => {
+    await closing.get(ref.id);
+    return await ensure(ref);
+  })().finally(() => {
+    starting.delete(ref.id);
+    liveAt.set(ref.id, Date.now());
+  });
   starting.set(ref.id, started);
   return started;
 };
@@ -2289,7 +2322,10 @@ const runsExecutor = (command: string, exec: string): boolean => {
 };
 
 /** The executors on their way into workspace `id`'s boundary ({@link runsExecutor}). */
-const executors = (seen: Seen[], id: string): number[] => {
+const executors = (
+  seen: readonly Pick<Seen, "command" | "pid">[],
+  id: string
+): number[] => {
   const exec = join(stateDir(id), "exec");
   return seen
     .filter((one) => one.pid !== process.pid && runsExecutor(one.command, exec))
@@ -2801,6 +2837,12 @@ const forgetRetiring = (id: string): void => {
  * (none was running) before this build's keeper took the endpoint, a judge,
  * and everything a `--keeper-only` handover leaves behind.
  *
+ * A workspace nothing holds ({@link liveWhy}) moves nothing: its boundaries
+ * and judges are closed where they run ({@link closeQuietly}), once nothing
+ * has ensured it for {@link QUIET_CLOSE_MS} (none has, after the agent's
+ * restart), and its next command starts them on the current keeper. Until the hub has said which
+ * work items are live, none of the retiring keeper's is moved or closed.
+ *
  * One listing of each keeper, whatever the number of workspaces.
  */
 export const leaveRetiringKeepers = async (): Promise<void> => {
@@ -2810,14 +2852,29 @@ export const leaveRetiringKeepers = async (): Promise<void> => {
   if (elsewhere.length === 0) {
     return;
   }
+  const facts = await liveFacts(procs);
+  if (!facts) {
+    return;
+  }
   const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
   for (const id of ids) {
-    if (starting.has(id)) {
+    if (starting.has(id) || closing.has(id)) {
       continue;
     }
     // biome-ignore lint/performance/noAwaitInLoops: one small read per workspace, only while a keeper retires
     const held = await readHeld(id).catch(() => undefined);
     if (!held) {
+      continue;
+    }
+    const onRetiring = elsewhere.some(
+      (proc) => isBoundaryOf(proc.procId, id) || isJudgeOf(proc.procId, id)
+    );
+    if (onRetiring && !liveWhy(id, held.path, facts)) {
+      // One ensured a moment ago may have its session on the way: it is
+      // closed at a later look, once quiet.
+      if (!recentlyHeld(id)) {
+        await closeQuietly(id, "it runs on a retiring session keeper");
+      }
       continue;
     }
     const boundary = boundaryProcId(id, held.gen);
@@ -2843,6 +2900,331 @@ export const leaveRetiringKeepers = async (): Promise<void> => {
       });
     }
   }
+};
+
+/**
+ * How long a workspace's boundary runs on with nothing holding it
+ * ({@link liveWhy}) before it closes ({@link closeQuietly}). Our call: the hub
+ * puts a finished delegate's session to sleep at once and lands its work
+ * right after, each of its commands a use; a handoff that soon after finds
+ * the boundary still up. Past that, a closed one costs its next command one
+ * sandbox start (seconds; `WORKSPACE_BOUNDARY_START_TIMEOUT_MS` at most),
+ * while an idle one holds its srt host, bwrap, socat relays, an inotify
+ * instance, its judge and their memory for as long as the workspace lasts:
+ * 55 of 76 on obelisk had no live work item (2026-10-15).
+ */
+export const QUIET_CLOSE_MS = 10 * 60_000;
+
+/** How often the boundaries are looked at for quiet ones. Ours: a minute against {@link QUIET_CLOSE_MS}. */
+const QUIET_SWEEP_MS = 60_000;
+
+/**
+ * When each workspace's boundary was last ensured or seen held
+ * ({@link liveWhy}): its quiet time counts from there. One first seen by this
+ * agent counts from that look, so a restart gives every boundary its full
+ * quiet time again.
+ */
+const liveAt = new Map<string, number>();
+
+/** Each workspace's quiet close under way ({@link closeQuietly}); it never rejects. An ensure waits for it. */
+const closing = new Map<string, Promise<void>>();
+
+/**
+ * What the agent knows holds a workspace that this module cannot read for
+ * itself, handed in by the daemon ({@link watchQuietBoundaries}).
+ */
+export interface BoundaryHolders {
+  /** The workspaces whose port a preview this agent serves names (preview.ts `servingPreviews`). */
+  readonly previews: () => Iterable<string>;
+  /** The workspaces a carried session's commands run in (session.ts `boundedWorkspaces`), whatever its harness. */
+  readonly sessions: () => Iterable<string>;
+}
+
+let holders: BoundaryHolders | undefined;
+
+/**
+ * The workspaces with a live work item on this machine, as the hub said on
+ * its last answer to a beat (`HeartbeatAckPayload.liveWorkspaces`); none yet
+ * until it has said, and nothing closes until then.
+ */
+let hubLive: ReadonlySet<string> | undefined;
+
+/** Takes the hub's list of workspaces with a live work item ({@link hubLive}); anything but a list is ignored. */
+export const liveWorkItems = (ids: unknown): void => {
+  if (Array.isArray(ids)) {
+    hubLive = new Set(ids.filter((id): id is string => typeof id === "string"));
+  }
+};
+
+/** Every process's command line, as one list and by pid: read once for every workspace a look covers. */
+interface Commands {
+  readonly byPid: ReadonlyMap<number, string>;
+  readonly lines: readonly { command: string; pid: number }[];
+}
+
+/** What {@link liveWhy} reads, once for every workspace a look covers. */
+interface LiveFacts {
+  readonly commands: Commands;
+  readonly hub: ReadonlySet<string>;
+  readonly previews: ReadonlySet<string>;
+  /** Every live process a keeper holds. */
+  readonly procs: readonly HeldProc[];
+  readonly sessions: ReadonlySet<string>;
+}
+
+/** {@link Commands} as they stand now. */
+const commandsNow = async (): Promise<Commands> => {
+  const lines = await commandLines();
+  return {
+    byPid: new Map(lines.map((line) => [line.pid, line.command])),
+    lines,
+  };
+};
+
+/**
+ * {@link LiveFacts} as they stand now; none while the hub has not said which
+ * work items are live or the daemon has not handed in its holders.
+ */
+const liveFacts = async (
+  procs: readonly HeldProc[]
+): Promise<LiveFacts | undefined> => {
+  if (!(hubLive && holders)) {
+    return;
+  }
+  return {
+    commands: await commandsNow(),
+    hub: hubLive,
+    previews: new Set(holders.previews()),
+    procs,
+    sessions: new Set(holders.sessions()),
+  };
+};
+
+/**
+ * Whether a session's process a keeper holds may run a command in workspace
+ * `id`, whose folder is `path`: a Claude Code or pi process started in its
+ * clone (every session there runs in its boundary), or, for a project lead's
+ * place (a person's own folder, where the person's own sessions run on the
+ * host), one launched with the place's hook. A sleeping session has no
+ * process. Read off the keepers, so it holds for a CLI this agent has not
+ * adopted yet.
+ */
+const attachedIn = (
+  id: string,
+  path: string,
+  procs: readonly HeldProc[],
+  commands: Commands
+): boolean => {
+  const hook = `'${join(stateDir(id), "hook")}'`;
+  return procs.some((proc) => {
+    const { kind } = parseProcId(proc.procId);
+    if (!(proc.alive && (kind === "claude" || kind === "pi"))) {
+      return false;
+    }
+    if (isLeadPlace(id)) {
+      return commands.byPid.get(proc.pid)?.includes(hook) ?? false;
+    }
+    return (
+      proc.cwd !== undefined &&
+      (proc.cwd === path || proc.cwd.startsWith(`${path}/`))
+    );
+  });
+};
+
+/** Whether a session's process is attached in workspace `id` or a command is on its way into it: the start's own test, before the hub or the sessions are heard ({@link rearmHooks}). */
+const inUse = (
+  id: string,
+  path: string,
+  procs: readonly HeldProc[],
+  commands: Commands
+): boolean =>
+  attachedIn(id, path, procs, commands) ||
+  executors(commands.lines, id).length > 0;
+
+/**
+ * Why workspace `id`'s boundary must run now, in words; nothing when nothing
+ * holds it. THE list of what holds a boundary:
+ *
+ *  - it is starting;
+ *  - a session that may run a command there is attached: carried by this
+ *    agent with its commands bounded there, or its process held by a keeper
+ *    ({@link attachedIn}); a session asleep is not;
+ *  - a work item there is live, as the hub says;
+ *  - a preview this agent serves names a port in it;
+ *  - a command is on its way in or running ({@link executors}).
+ */
+const liveWhy = (
+  id: string,
+  path: string,
+  facts: LiveFacts
+): string | undefined => {
+  if (starting.has(id)) {
+    return "its boundary is starting";
+  }
+  if (
+    facts.sessions.has(id) ||
+    attachedIn(id, path, facts.procs, facts.commands)
+  ) {
+    return "a session there is attached";
+  }
+  if (facts.hub.has(id)) {
+    return "a work item there is live";
+  }
+  if (facts.previews.has(id)) {
+    return "a preview shows a server in it";
+  }
+  if (executors(facts.commands.lines, id).length > 0) {
+    return "a command runs in it";
+  }
+};
+
+/** Whether workspace `id`'s boundary was ensured or seen held within {@link QUIET_CLOSE_MS}. */
+const recentlyHeld = (id: string): boolean =>
+  Date.now() - (liveAt.get(id) ?? 0) < QUIET_CLOSE_MS;
+
+/**
+ * Closes workspace `id`'s boundaries, every generation on every keeper, with
+ * everything in them, and its judges and doors, as nothing holds it any more:
+ * its clone, state dir, scratch dir, policy, hook and executor stay. Its
+ * record goes (`boundary.json`), so a judge's exit arms nothing again
+ * ({@link watchJudge}) and its executor, until the next start, says the
+ * boundary is not running. Its next {@link ensureBoundary} (a session's
+ * spawn or wake, the hub's land or check, a workflow's command) starts a new
+ * one and arms it. The gate is up while it closes, and an executor already on
+ * its way in leaves the boundary as it is. Never rejects.
+ */
+const closeQuietly = (id: string, why: string): Promise<void> => {
+  const pending = closing.get(id);
+  if (pending) {
+    return pending;
+  }
+  const work = closeNow(id, why)
+    .catch((error: unknown) => {
+      console.warn(
+        `[workspace] ${id}: its boundary could not be closed: ${error instanceof Error ? error.message : String(error)}`
+      );
+    })
+    .finally(() => closing.delete(id));
+  closing.set(id, work);
+  return work;
+};
+
+/** {@link closeQuietly}'s close itself. */
+const closeNow = async (id: string, why: string): Promise<void> => {
+  const held = await readHeld(id).catch(() => undefined);
+  if (!held) {
+    return;
+  }
+  const gate = gateOf(id);
+  await writeStateFile(gate, String(process.pid));
+  try {
+    if (executors(await commandLines(), id).length > 0) {
+      liveAt.set(id, Date.now());
+      return;
+    }
+    forgetStale(id);
+    forgetRetiring(id);
+    forgetStubbed(id);
+    const boundaries = [held, ...(await readRetiring(id))];
+    for (const boundary of boundaries) {
+      // biome-ignore lint/performance/noAwaitInLoops: one boundary at a time, as an archive closes them
+      await stopBoundary(id, boundary);
+      await cleanGeneration(id, boundary);
+      await rm(retiringFileOf(id, boundary), { force: true });
+    }
+    const left = (await keepers.held()).filter(
+      (proc) => proc.alive && isBoundaryOf(proc.procId, id)
+    );
+    await Promise.all(
+      left.map((proc) => proc.client.signal(proc.procId, "SIGKILL"))
+    );
+    await rm(join(stateDir(id), "boundary.json"), { force: true });
+    await closeToolDoor(id);
+    await closeGitDoor(id);
+    const judges = (await keepers.held()).filter(
+      (proc) => proc.alive && isJudgeOf(proc.procId, id)
+    );
+    await Promise.all(
+      judges.map((proc) => proc.client.signal(proc.procId, "SIGKILL"))
+    );
+    liveAt.delete(id);
+    console.info(
+      `[workspace] ${id}: nothing holds it (no session attached, no live work item, no preview, no command) and ${why}, so its boundary ${boundaries.map((boundary) => boundary.pid).join(", ")} and its ${judges.length} judge(s) are closed; its clone and state stay, and its next command starts it again`
+    );
+  } finally {
+    await rm(gate, { force: true });
+  }
+};
+
+/**
+ * Closes every boundary nothing has held for {@link QUIET_CLOSE_MS}
+ * ({@link liveWhy}), one listing of the keepers and one of the machine's
+ * processes for all of them. Nothing closes until the hub has said which work
+ * items are live.
+ */
+const sweepQuiet = async (): Promise<void> => {
+  const procs = (await keepers.held()).filter((proc) => proc.alive);
+  const ids = (await readdir(workspacesDir()).catch(() => [] as string[]))
+    .filter((id) => procs.some((proc) => isBoundaryOf(proc.procId, id)))
+    .filter((id) => !closing.has(id));
+  if (ids.length === 0) {
+    return;
+  }
+  const facts = await liveFacts(procs);
+  if (!facts) {
+    return;
+  }
+  const now = Date.now();
+  for (const id of ids) {
+    // biome-ignore lint/performance/noAwaitInLoops: one small record read per workspace whose boundary runs
+    const held = await readHeld(id).catch(() => undefined);
+    if (!held || liveWhy(id, held.path, facts)) {
+      liveAt.set(id, now);
+      continue;
+    }
+    const since = liveAt.get(id);
+    if (since === undefined) {
+      liveAt.set(id, now);
+      continue;
+    }
+    if (!(recentlyHeld(id) || starting.has(id))) {
+      await closeQuietly(
+        id,
+        `it has been quiet for ${Math.round((now - since) / 60_000)} min`
+      );
+    }
+  }
+};
+
+let quietTimer: ReturnType<typeof setInterval> | undefined;
+
+/**
+ * Starts looking for quiet boundaries every {@link QUIET_SWEEP_MS}
+ * ({@link sweepQuiet}), with what the daemon knows holds a workspace. Once per
+ * agent.
+ */
+export const watchQuietBoundaries = (given: BoundaryHolders): void => {
+  holders = given;
+  if (quietTimer) {
+    return;
+  }
+  let looking = false;
+  quietTimer = setInterval(() => {
+    if (looking) {
+      return;
+    }
+    looking = true;
+    sweepQuiet()
+      .catch((error: unknown) => {
+        console.warn(
+          `[workspace] the quiet boundaries could not be looked at: ${error instanceof Error ? error.message : String(error)}`
+        );
+      })
+      .finally(() => {
+        looking = false;
+      });
+  }, QUIET_SWEEP_MS);
+  quietTimer.unref();
 };
 
 /** Waits for a process's `line` (the boundary's {@link READY}); answers every line said before it, or its own words if it dies first. */

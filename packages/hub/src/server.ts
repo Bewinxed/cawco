@@ -23277,6 +23277,8 @@ export const createServer = (
                   // of what it kept to send again.
                   delivered: streams.deliveredFor(beatIds),
                   keepAwake: keptWarm(message.machineId, beatIds),
+                  // Each keeps its boundary up there, whatever else holds it.
+                  liveWorkspaces: db.liveWorkspacesOn(message.machineId),
                   sessionLimits: db.sessionLimits(),
                 } satisfies HeartbeatAckPayload,
               });

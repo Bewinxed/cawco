@@ -77,7 +77,12 @@ import {
   latestBinaryUpdate,
   reportBinaryUpdate,
 } from "./binary-update";
-import { checkBoundaryHost, rearmHooks } from "./boundary";
+import {
+  checkBoundaryHost,
+  liveWorkItems,
+  rearmHooks,
+  watchQuietBoundaries,
+} from "./boundary";
 import { buildInfo } from "./build";
 import { probeCapabilities } from "./capabilities";
 import { convertWorktrees } from "./clone";
@@ -2095,6 +2100,7 @@ const attach = (
         const beat = envelope.payload as
           Partial<HeartbeatAckPayload> | undefined;
         supervisor.keepAwake(beat?.keepAwake);
+        liveWorkItems(beat?.liveWorkspaces);
         takeSessionLimits(beat?.sessionLimits);
         supervisor.acknowledged(beat);
         return;
@@ -2346,6 +2352,19 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
           )
         )
     );
+
+    // A workspace's boundary runs only while something holds it: a carried
+    // session bounded there, a preview of a port in it (and, read by
+    // boundary.ts itself, an attached CLI, a command in flight, a live work
+    // item the hub names on each beat). One quiet for a while closes, and its
+    // next command starts it again.
+    watchQuietBoundaries({
+      sessions: () => supervisor.boundedWorkspaces(),
+      previews: () =>
+        servingPreviews().flatMap(({ source }) =>
+          "workspace" in source && source.workspace ? [source.workspace] : []
+        ),
+    });
 
     // The usage scanner outlives connections too: its store (usage.db) is the
     // machine's, so a reconnect picks up where the last scan stopped.
