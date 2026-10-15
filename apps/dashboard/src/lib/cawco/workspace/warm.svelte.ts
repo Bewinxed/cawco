@@ -7,9 +7,12 @@
  * of CPU for a long transcript. So a tab the reader reaches for — the
  * pointer comes onto it or presses it, the keyboard focuses it — warms its
  * pane: laid out and not painted (PaneLeaf `.pane-settling`), so that work
- * lands in the frame after the reach and the switch only paints. Swipe
- * groups need none of this: they keep both neighbours drawn (PaneLeaf
- * `shown`).
+ * lands in the frame after the reach and the switch only paints. And its
+ * conversation is told it is on screen (PaneLeaf's `slot`, SessionPane
+ * `visible`): its transcript follows its tail and draws the rows its session
+ * streamed while it was put away. Held back until the switch, a whole view
+ * of them was mounted in the click. Swipe groups need none of this: they
+ * keep both neighbours drawn (PaneLeaf `shown`).
  *
  * One pane a group at most, and only while the reach lasts: a warm pane is
  * laid out again as its session streams, the cost a pane put away is spared.
