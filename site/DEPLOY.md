@@ -31,6 +31,17 @@ that folder on `cawco.dev/*` (see `wrangler.jsonc`).
   it by its full `https://cawco.dev/og.png` address.
 - `/version.txt` is the short commit the deploy was built from.
 
+The pages follow the visitor's colour scheme, or the one picked in the landing
+header's switch (System, Light, Dark; kept in `localStorage`). By day they are
+the brand board's paper and ink; at night every colour in `src/styles.css` takes
+the night side of its product token (`light-dark()`, each named beside it),
+lifted one step up the product's neutral ramp, and the scenes draw in the
+product's night theme. Everything keys off the root's `color-scheme`, which
+`data-theme` sets: `src/scheme.ts` applies a pick, and the build writes that same
+function into each page's head, before the stylesheet, so a kept pick is there
+on the first paint. The build stops if the page ground or either `theme-color`
+differs from `design/tokens/cawco.tokens.json`.
+
 ## Work on it
 
 `site/` is one of the repository's Bun workspaces: `bun install` at the
@@ -67,6 +78,11 @@ and generates the steps that show one at a time, so there is no player to load.
 A clip plays once and rests on its last drawing; with reduced motion the page
 shows that last drawing and plays nothing. A clip marked `data-wait` shows
 nothing until the nearest `data-arrives` block scrolls into view.
+
+On a dark system Caw wears his cream rim, as his files do in `dark`: the build
+marks each drawing's black silhouette, `src/caw.ts` sets one device pixel in his
+box's units from the size he is drawn at, and `styles.css` strokes the
+silhouette at the wider of that and the kit's rim.
 
 The clips are copies, so the page keeps working when the product retires one.
 To add a clip or pick up a retraced one:

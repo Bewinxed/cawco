@@ -25,20 +25,69 @@
 
 :root {
   /*
-   * Paper is the page ground. Its value is `color.paper` in
-   * design/tokens/cawco.tokens.json, and the build stops if the two differ.
-   * Ink and vermilion are the brand board's. Everything else on the page is
-   * mixed from these three. Spark yellow belongs to the wordmark, the mascot
+   * The page follows the reader's system scheme, or the one they pick in the
+   * header's theme switch (`data-theme` on the root, src/theme.ts). By day it
+   * is the brand board: paper, crow ink and vermilion, and everything else is
+   * mixed from those three. At night it is the product's own night theme,
+   * roost-dark (DESIGN.md), lifted one step up its neutral ramp so the page
+   * and the panels on it separate: each colour's second value is the night
+   * side of the token named beside it in design/tokens/cawco.tokens.json.
+   *
+   * Paper is the page ground: `color.paper` by day and `color.neutral-2` at
+   * night, one step above `color.background`, and the build stops if either
+   * differs from its token. Spark yellow belongs to the wordmark, the mascot
    * and brand art: here that is Caw's app icon and his own drawings.
    */
-  --paper: #f4f0e6;
-  --ink: #171715;
-  --vermilion: #e65d46;
+  color-scheme: light dark;
 
-  --ink-2: color-mix(in oklab, var(--paper) 7%, var(--ink));
-  --ink-3: color-mix(in oklab, var(--paper) 14%, var(--ink));
-  --soft-on-ink: color-mix(in oklab, var(--paper) 66%, var(--ink));
-  --soft-on-paper: color-mix(in oklab, var(--ink) 80%, var(--paper));
+  --brand-paper: #f4f0e6;
+  --crow-ink: #171715;
+
+  /* The page: its ground, its type and lines, and their quieter step. */
+  --paper: light-dark(var(--brand-paper), oklch(21% 0.005 70));
+  /* color.ink-strong */
+  --ink: light-dark(var(--crow-ink), oklch(93.4% 0.01 82));
+  /* color.ink-muted */
+  --soft-on-paper: light-dark(
+    color-mix(in oklab, var(--crow-ink) 80%, var(--brand-paper)),
+    oklch(77.8% 0.012 78)
+  );
+  /* An ink button under the pointer. At night: color.neutral-11, a step down from ink-solid. */
+  --ink-hover: light-dark(
+    color-mix(in oklab, var(--brand-paper) 16%, var(--crow-ink)),
+    oklch(77.8% 0.012 78)
+  );
+
+  /* color.coral-9, its pointer state (night: color.brand-hover) and the ink on it (color.on-ink). */
+  --vermilion: light-dark(#e65d46, oklch(66.5% 0.17 33));
+  --vermilion-hover: light-dark(
+    color-mix(in oklab, var(--brand-paper) 14%, #e65d46),
+    oklch(70.5% 0.16 34)
+  );
+  --on-vermilion: light-dark(var(--crow-ink), oklch(18.4% 0.004 70));
+
+  /*
+   * The slabs: the feature stage, the command bar and the free card. Ink by
+   * day; at night two steps above the page (color.neutral-4) with the
+   * product's night ring, its type in ink-strong and ink-muted, and a step
+   * inside it (the chosen tab, the card's command bar) two steps higher again
+   * (color.neutral-6).
+   */
+  --slab: light-dark(var(--crow-ink), oklch(28.2% 0.007 70));
+  --slab-2: light-dark(
+    color-mix(in oklab, var(--brand-paper) 14%, var(--crow-ink)),
+    oklch(35.2% 0.009 70)
+  );
+  --on-slab: light-dark(var(--brand-paper), oklch(93.4% 0.01 82));
+  /*
+   * At night a slab is told from the page by a 1px inner ring of ink as well as
+   * its tone (DESIGN.md, The Night Ring Rule: `color.night-ring`, transparent by day).
+   */
+  --night-ring: light-dark(transparent, oklch(93.4% 0.01 82 / 0.07));
+  --soft-on-slab: light-dark(
+    color-mix(in oklab, var(--brand-paper) 66%, var(--crow-ink)),
+    oklch(77.8% 0.012 78)
+  );
 
   --font: 'Nunito Variable', ui-rounded, system-ui, sans-serif;
   --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
@@ -58,6 +107,15 @@
 
   /* The box Caw's ledge clips are drawn in: the same on the stage and the price cards. */
   --ledge-caw: clamp(120px, 72px + 10vw, 220px);
+}
+
+/* The reader's pick in the theme switch outranks the system's scheme. */
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
 }
 
 *,
@@ -128,7 +186,7 @@ code {
 .stage :focus-visible,
 .card-ink :focus-visible,
 .cmd :focus-visible {
-  outline-color: var(--paper);
+  outline-color: var(--on-slab);
 }
 
 .wrap {
@@ -196,6 +254,24 @@ code {
   .caw[data-wait]:not(.is-playing) g {
     visibility: hidden;
   }
+}
+
+/*
+ * On a dark page Caw wears the cream rim his files draw in `dark`
+ * (assets/mascot/README.md), and by day none: his black silhouette's own
+ * stroke, Ivory (`color.paper`) in the dark scheme and transparent in the light
+ * one, round-joined and drawn under its fill, so its outer half
+ * shows. That half is the wider of the kit's 5.31 units of his 512 box
+ * (`KIT_RIM` in assets/mascot/scripts/scene.mjs) and one device pixel,
+ * `--caw-pixel`, which src/caw.ts sets from the size he is drawn at. The build
+ * gives each drawing `--caw-unit`, the scale that places it on the box, since
+ * the stroke is drawn in the drawing's own units.
+ */
+.caw [data-silhouette] {
+  stroke: light-dark(transparent, var(--brand-paper));
+  stroke-width: calc(2 * max(5.3126, var(--caw-pixel, 0)) / var(--caw-unit));
+  stroke-linejoin: round;
+  paint-order: stroke;
 }
 
 /* Top bar */
@@ -345,8 +421,9 @@ h1 {
   --cmd-inset: 8px;
   padding: var(--cmd-inset) var(--cmd-inset) var(--cmd-inset) 18px;
   border-radius: var(--radius-control);
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--slab);
+  color: var(--on-slab);
+  box-shadow: inset 0 0 0 1px var(--night-ring);
 }
 
 .cmd code {
@@ -367,7 +444,7 @@ h1 {
   /* Concentric with the bar; never below DESIGN.md's 2px hair (`rounded.hair`). */
   border-radius: max(2px, var(--radius-control) - var(--cmd-inset));
   background: var(--vermilion);
-  color: var(--ink);
+  color: var(--on-vermilion);
   font: inherit;
   font-weight: 900;
   cursor: pointer;
@@ -474,8 +551,9 @@ h1 {
   row-gap: 14px;
   padding: clamp(14px, 2.2vw, 28px);
   border-radius: var(--radius-container);
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--slab);
+  color: var(--on-slab);
+  box-shadow: inset 0 0 0 1px var(--night-ring);
 }
 
 /*
@@ -517,7 +595,7 @@ h1 {
   border: 0;
   border-radius: var(--radius-control);
   background: transparent;
-  color: var(--soft-on-ink);
+  color: var(--soft-on-slab);
   font: inherit;
   font-size: 1.02rem;
   font-weight: 800;
@@ -530,12 +608,12 @@ h1 {
 }
 
 .tab .icon {
-  font-size: 1.55rem;
+  font-size: var(--tab-icon, 1.55rem);
 }
 
 .tab[aria-selected='true'] {
-  background: var(--ink-3);
-  color: var(--paper);
+  background: var(--slab-2);
+  color: var(--on-slab);
 }
 
 .tab-bar {
@@ -555,23 +633,27 @@ h1 {
 }
 
 /*
- * The channel switch is the page's tabs on paper: the chosen tab is ink, the others are ink text.
- * Its tabs are as tall as the label's line, so the row adds no height; the pseudo-element keeps the touch target.
+ * A segmented switch (the release channel, the colour scheme) is the page's tabs on paper: the
+ * chosen tab is ink, the others are ink text. Its tabs are as tall as a label's line, so the row
+ * adds no height; the pseudo-element keeps the touch target.
  */
-.tabs.tabs-channel {
+.tabs.segmented {
   position: relative;
   grid-area: auto;
   flex-direction: row;
   gap: 2px;
-  margin-left: auto;
   margin-block: -4px;
 }
 
-.tabs-channel[hidden] {
+.install-head .segmented {
+  margin-left: auto;
+}
+
+.segmented[hidden] {
   display: none;
 }
 
-.tabs-channel .tab {
+.segmented .tab {
   flex: none;
   flex-direction: row;
   justify-content: center;
@@ -585,18 +667,27 @@ h1 {
   line-height: 1;
 }
 
-.tabs-channel .tab::before {
+.segmented .tab::before {
   content: '';
   position: absolute;
   inset: -7px -1px;
 }
 
-.tabs-channel .tab[aria-selected='true'] {
+.segmented .tab:is([aria-selected='true'], [aria-checked='true']) {
   background: var(--ink);
   color: var(--paper);
 }
 
-/* One bar for the pair: it slides under the chosen tab. channel.ts sets its width and transform. */
+/* The colour scheme switch shows each scheme by its icon alone; each radio carries its name. */
+.segmented-icons {
+  --tab-icon: 1.15rem;
+}
+
+.segmented-icons .tab {
+  padding: 0 8px;
+}
+
+/* One bar for the group: it slides under the chosen tab. tabs.ts sets its width and transform. */
 .tab-slider {
   position: absolute;
   bottom: 5px;
@@ -640,28 +731,51 @@ h1 {
 
 /*
  * A scene is the product, drawn as the product draws itself. These are the
- * app's own light-theme tokens (apps/dashboard/src/lib/tokens/tokens.css), so
- * the needs-you pill is the app's needs-you yellow and nothing else is.
+ * app's own tokens (apps/dashboard/src/lib/tokens/tokens.css), day and night,
+ * so the needs-you pill is the app's needs-you yellow and nothing else is.
+ * Each line names its token in design/tokens/cawco.tokens.json.
  */
 .scene-frame {
-  --app-page: oklch(96.6% 0.008 85);
-  --app-raised: oklch(99.3% 0.004 85);
-  --app-recess: oklch(94.4% 0.01 84);
-  --app-line: oklch(89% 0.013 82);
-  --app-ink: oklch(29.5% 0.01 70);
-  --app-muted: oklch(49.5% 0.014 74);
-  --app-nest: oklch(70% 0.017 78);
-  --app-faint: oklch(81% 0.016 80);
-  --app-brand: oklch(64.5% 0.175 33);
-  --attn-bg: oklch(91% 0.115 95);
-  --attn-ink: oklch(35% 0.075 88);
-  --attn-glyph: oklch(57% 0.125 78);
-  --live-glyph: oklch(50% 0.15 252);
-  --done-glyph: oklch(52% 0.14 140);
-  --mark-2: oklch(53% 0.15 47.4);
-  --mark-5: oklch(51% 0.093 186.7);
-  --mark-8: oklch(51% 0.165 349.8);
-  --app-shadow: 0 1px 2px oklch(29.5% 0.01 70 / 0.07);
+  /*
+   * The surfaces and lines take the app's day values and, at night, the app's
+   * night values lifted one step up the neutral ramp, as the page around them
+   * is: the page color.neutral-2 (background is neutral-1), a raised card
+   * neutral-4 (surface-raised is neutral-3), the ground of a chip, a button or
+   * a message on it neutral-3 (surface-recess sits between the page and the
+   * card), a control's edge neutral-7 (border-control is neutral-6).
+   */
+  --app-page: light-dark(oklch(96.6% 0.008 85), oklch(21% 0.005 70));
+  --app-raised: light-dark(oklch(99.3% 0.004 85), oklch(28.2% 0.007 70));
+  --app-recess: light-dark(oklch(94.4% 0.01 84), oklch(24.8% 0.006 70));
+  --app-line: light-dark(oklch(89% 0.013 82), oklch(40.2% 0.01 72));
+  /* color.ink-strong, and color.on-ink on it */
+  --app-ink: light-dark(oklch(29.5% 0.01 70), oklch(93.4% 0.01 82));
+  --app-on-ink: light-dark(oklch(99.3% 0.004 85), oklch(18.4% 0.004 70));
+  /* color.ink-muted */
+  --app-muted: light-dark(oklch(49.5% 0.014 74), oklch(77.8% 0.012 78));
+  /* color.nest-ink (night: neutral-7 and -8 halved), and a machine drawing's faint line (neutral-7), each a step up at night */
+  --app-nest: light-dark(
+    oklch(70% 0.017 78),
+    color-mix(in oklch, oklch(48.8% 0.012 74) 50%, oklch(52% 0.016 76))
+  );
+  --app-faint: light-dark(oklch(81% 0.016 80), oklch(48.8% 0.012 74));
+  /* color.brand-solid */
+  --app-brand: light-dark(oklch(64.5% 0.175 33), oklch(66.5% 0.17 33));
+  /* color.status-attn-bg, -ink and -glyph; status-live-glyph; status-done-glyph */
+  --attn-bg: light-dark(oklch(91% 0.115 95), oklch(37% 0.07 92));
+  --attn-ink: light-dark(oklch(35% 0.075 88), oklch(90% 0.115 95));
+  --attn-glyph: light-dark(oklch(57% 0.125 78), oklch(87% 0.14 92));
+  --live-glyph: light-dark(oklch(50% 0.15 252), oklch(74% 0.12 245));
+  --done-glyph: light-dark(oklch(52% 0.14 140), oklch(76% 0.15 135));
+  /* color.mark-2, -5, -8, and color.mark-glyph on them */
+  --mark-2: light-dark(oklch(53% 0.15 47.4), oklch(70% 0.15 47.4));
+  --mark-5: light-dark(oklch(51% 0.093 186.7), oklch(70% 0.095 186.7));
+  --mark-8: light-dark(oklch(51% 0.165 349.8), oklch(70% 0.17 349.8));
+  --mark-glyph: light-dark(oklch(99% 0 0), oklch(18.4% 0.004 70));
+  /* shadow.shadow-tile: a warm drop by day; at night a black drop under a ring of ink */
+  --app-shadow:
+    0 1px 2px light-dark(oklch(29.5% 0.01 70 / 0.07), oklch(0% 0 0 / 0.3)),
+    0 0 0 1px light-dark(transparent, oklch(93.4% 0.01 82 / 0.06));
 
   grid-area: 1 / 2 / 3 / 3;
   position: relative;
@@ -718,20 +832,20 @@ h1 {
 .versus dt {
   font-size: 0.86rem;
   font-weight: 900;
-  color: var(--soft-on-ink);
+  color: var(--soft-on-slab);
 }
 
 .versus dd {
-  color: var(--soft-on-ink);
+  color: var(--soft-on-slab);
   text-wrap: pretty;
 }
 
 .with > dt {
-  color: var(--paper);
+  color: var(--on-slab);
 }
 
 .with > dd {
-  color: var(--paper);
+  color: var(--on-slab);
 }
 
 /* A subagent beside a delegate, row by row. The delegate's column is the bright one. */
@@ -749,7 +863,7 @@ h1 {
 .compare td {
   padding: 5px 10px 5px 0;
   vertical-align: top;
-  color: var(--soft-on-ink);
+  color: var(--soft-on-slab);
   font-weight: inherit;
   text-wrap: pretty;
 }
@@ -761,7 +875,7 @@ h1 {
 }
 
 .compare tbody tr {
-  border-top: 1px solid var(--ink-3);
+  border-top: 1px solid var(--slab-2);
 }
 
 .compare th[scope='row'] {
@@ -778,12 +892,12 @@ h1 {
 
 .compare :is(th, td):last-child {
   padding-right: 0;
-  color: var(--paper);
+  color: var(--on-slab);
 }
 
 .compare-note {
   margin-top: 10px;
-  color: var(--soft-on-ink);
+  color: var(--soft-on-slab);
   font-size: 0.9rem;
   line-height: 1.4;
   text-wrap: pretty;
@@ -802,7 +916,7 @@ h1 {
   border: 0;
   border-radius: var(--radius-control);
   background: transparent;
-  color: var(--soft-on-ink);
+  color: var(--soft-on-slab);
   font: inherit;
   font-size: 0.9rem;
   font-weight: 800;
@@ -934,7 +1048,7 @@ h1 {
   height: 1.38em;
   border-radius: 0.38em;
   background: var(--fill, var(--app-ink));
-  color: oklch(99% 0 0);
+  color: var(--mark-glyph);
   box-shadow:
     0 0 0 0.09em var(--app-raised),
     0 0 0 0.19em var(--rim);
@@ -1043,7 +1157,7 @@ h1 {
 .app-btn-solid {
   border-color: var(--app-ink);
   background: var(--app-ink);
-  color: var(--app-raised);
+  color: var(--app-on-ink);
 }
 
 .field-k {
@@ -1225,6 +1339,7 @@ h1 {
   pointer-events: none;
 }
 
+/* A terminal, not the product: the same black window in either scheme. */
 .term {
   position: absolute;
   left: var(--x);
@@ -1284,7 +1399,8 @@ h1 {
   border: 0.34em solid var(--app-ink);
   border-radius: 2.1em;
   background: var(--app-page);
-  box-shadow: 0 0.8em 2em oklch(29.5% 0.01 70 / 0.14);
+  /* color.shadow-tint-2 */
+  box-shadow: 0 0.8em 2em light-dark(oklch(29.5% 0.01 70 / 0.14), oklch(18.4% 0.004 70 / 0.66));
 }
 
 .hs-bar {
@@ -1645,7 +1761,7 @@ mark {
   padding: 0.08em 0.5em;
   border-radius: 0.4em;
   background: var(--app-ink);
-  color: var(--app-raised);
+  color: var(--app-on-ink);
   font-size: 0.82em;
   font-weight: 600;
 }
@@ -1859,22 +1975,27 @@ mark {
 }
 
 .card-ink {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--slab);
+  color: var(--on-slab);
+  box-shadow: inset 0 0 0 1px var(--night-ring);
 }
 
 .card-ink > p:not(.price) {
-  color: var(--soft-on-ink);
+  color: var(--soft-on-slab);
 }
 
 .card-ink .cmd {
   margin-top: 18px;
-  background: var(--ink-3);
+  background: var(--slab-2);
 }
 
-/* Paper on a paper ground: an ink line marks its edge. */
+/*
+ * Paper on a paper ground: an ink line marks its edge. At night the line is a
+ * card's edge (`color.border-card`, neutral-7, lifted a step with the page to
+ * neutral-8), so the raised free card still leads.
+ */
 .card-paper {
-  border: 2px solid var(--ink);
+  border: 2px solid light-dark(var(--crow-ink), oklch(48.8% 0.012 74));
   background: var(--paper);
 }
 
@@ -1952,19 +2073,19 @@ mark {
 
 @media (hover: hover) and (pointer: fine) {
   .btn-ink:hover {
-    background: color-mix(in oklab, var(--paper) 16%, var(--ink));
+    background: var(--ink-hover);
   }
 
   .copy:hover {
-    background: color-mix(in oklab, var(--paper) 14%, var(--vermilion));
+    background: var(--vermilion-hover);
   }
 
   .tab:hover,
   .autoplay:hover {
-    color: var(--paper);
+    color: var(--on-slab);
   }
 
-  .tabs-channel .tab:not([aria-selected='true']):hover {
+  .segmented .tab:not([aria-selected='true'], [aria-checked='true']):hover {
     color: var(--ink);
   }
 
@@ -2017,7 +2138,7 @@ mark {
   }
 
   .tab .icon {
-    font-size: 1.45rem;
+    font-size: var(--tab-icon, 1.45rem);
   }
 
   .tab-bar {
@@ -2101,6 +2222,42 @@ mark {
   /* The wordmark now carries the icon: the tagline must still fit beside it on one line. */
   .foot {
     column-gap: 16px;
+  }
+}
+
+/*
+ * A phone's top bar holds the wordmark, the scheme switch, GitHub and Install on one line:
+ * GitHub shows its mark alone (its name stays for screen readers), and the gaps and the
+ * switch's and the button's sides come in.
+ */
+@media (max-width: 480px) {
+  .top {
+    gap: 8px;
+  }
+
+  .top-nav {
+    gap: 6px;
+  }
+
+  .top-link-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .segmented-icons {
+    --tab-icon: 1.05rem;
+  }
+
+  .segmented-icons .tab {
+    padding: 0 5px;
+  }
+
+  .top .btn {
+    padding: 0 12px;
   }
 }
 

@@ -8,7 +8,19 @@
       name="description"
       content="Caw&amp;Co is a self-hosted control plane for Claude Code, OpenCode and pi. One browser board shows every machine, project and session, and you answer the ones that are waiting."
     />
-    <meta name="theme-color" content="#F4F0E6" />
+    <meta name="color-scheme" content="light dark" />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: light)"
+      content="#F4F0E6"
+      data-scheme="light"
+    />
+    <meta
+      name="theme-color"
+      media="(prefers-color-scheme: dark)"
+      content="#1A1816"
+      data-scheme="dark"
+    />
     <meta property="og:title" content="Caw&amp;Co: one board for every coding agent you run" />
     <meta
       property="og:description"
@@ -99,8 +111,56 @@
         />Caw&amp;Co</a
       >
       <nav class="top-nav" aria-label="Site">
+        <div
+          class="tabs segmented segmented-icons"
+          role="radiogroup"
+          aria-label="Colour scheme"
+          data-theme-switch
+          hidden
+        >
+          <!-- The scheme radios are the page's segmented tabs, so they share its buttons, slider and keys (tabs.ts). -->
+          <!-- biome-ignore lint/a11y/useSemanticElements: a segmented tab carrying radio semantics -->
+          <button
+            class="tab"
+            role="radio"
+            type="button"
+            aria-checked="true"
+            aria-label="Match the system"
+            title="Match the system"
+            data-tab="system"
+          >
+            <i data-icon="monitor"></i>
+          </button>
+          <!-- biome-ignore lint/a11y/useSemanticElements: a segmented tab carrying radio semantics -->
+          <button
+            class="tab"
+            role="radio"
+            type="button"
+            aria-checked="false"
+            tabindex="-1"
+            aria-label="Light"
+            title="Light"
+            data-tab="light"
+          >
+            <i data-icon="sun"></i>
+          </button>
+          <!-- biome-ignore lint/a11y/useSemanticElements: a segmented tab carrying radio semantics -->
+          <button
+            class="tab"
+            role="radio"
+            type="button"
+            aria-checked="false"
+            tabindex="-1"
+            aria-label="Dark"
+            title="Dark"
+            data-tab="dark"
+          >
+            <i data-icon="moon"></i>
+          </button>
+          <span class="tab-slider" aria-hidden="true" data-slider></span>
+        </div>
         <a class="top-link" href="https://github.com/Bewinxed/cawco"
-          ><i data-mark="github"></i>GitHub</a
+          ><i data-mark="github"></i><span class="top-link-label">GitHub</span></a
         >
         <a class="btn btn-ink" href="#install">Install</a>
       </nav>
@@ -125,7 +185,7 @@
             <div class="install-head">
               <p class="install-label">Install on your first machine</p>
               <div
-                class="tabs tabs-channel"
+                class="tabs segmented"
                 role="tablist"
                 aria-label="Release channel"
                 data-channel

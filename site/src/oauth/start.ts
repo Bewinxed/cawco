@@ -1,4 +1,7 @@
+import { sizeCawRims } from '../caw.ts';
 import { readStart, remember } from './handoff.ts';
+
+sizeCawRims(document);
 
 const title = document.querySelector<HTMLElement>('#title');
 const message = document.querySelector<HTMLElement>('#msg');

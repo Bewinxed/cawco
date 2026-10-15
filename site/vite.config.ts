@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { IconifyJSON } from '@iconify/types';
 import { getIconData, iconToHTML, iconToSVG } from '@iconify/utils';
 import { defineConfig, type HtmlTagDescriptor, type Plugin } from 'vite';
+import { applyTheme, THEME_KEY } from './src/scheme';
 
 const require = createRequire(import.meta.url);
 const solar = require('@iconify-json/solar/icons.json') as IconifyJSON;
@@ -52,13 +53,46 @@ const percent = (frame: number, frames: number): string =>
   `${Number(((frame / frames) * 100).toFixed(4))}%`;
 
 /**
+ * Caw's black ink. Each drawing's black is his silhouette, under every other ink, as in his
+ * Rive files (`assets/mascot/scripts/scene.mjs`: "the black silhouette first, each ink above it").
+ */
+const SILHOUETTE_INK = '#1b1b19';
+
+/**
+ * Marks each drawing's silhouette, which carries his dark rim (`.caw` in styles.css), and gives
+ * the drawing `--caw-unit`, the uniform scale that places it on the 512 box: the rim's stroke is
+ * drawn in the drawing's own units.
+ */
+function rimmed(name: string, source: string): string {
+  const marked = source
+    .replace(
+      /<g data-drawing="(\d+)" transform="matrix\(([\d.]+) 0 0 \2 [-\d.]+ [-\d.]+\)"/g,
+      (group, _drawing: string, scale: string) => `${group} style="--caw-unit:${Number(scale)}"`,
+    )
+    .replaceAll(`fill="${SILHOUETTE_INK}"`, `fill="${SILHOUETTE_INK}" data-silhouette`)
+    .replace(/<g data-drawing="(\d+)"(?![^>]*--caw-unit)[^>]*>/, (group) => {
+      throw new Error(`The "${name}" clip's drawing ${group} is not placed by a uniform scale.`);
+    });
+  for (const [, drawing, body = ''] of marked.matchAll(
+    /<g data-drawing="(\d+)"[^>]*>(.*?)<\/g>/gs,
+  )) {
+    if (body.includes('<path') && !body.includes('data-silhouette')) {
+      throw new Error(
+        `The "${name}" clip's drawing ${drawing} has no ${SILHOUETTE_INK} silhouette.`,
+      );
+    }
+  }
+  return marked;
+}
+
+/**
  * One of Caw's drawn clips (`scripts/import-caw.mjs`), as an inline picture
  * that plays by itself: each drawing is a group, and a stepped keyframe set
  * makes each one visible for exactly the frames its take holds it. Nothing
  * moves and nothing fades; the drawings change, as they do in the product.
  */
 function clip(name: string): Clip {
-  const source = asset(`caw/${name}.svg`);
+  const source = rimmed(name, asset(`caw/${name}.svg`));
   const read = (key: string): string => {
     const value = source.match(new RegExp(`data-${key}="([^"]*)"`))?.[1];
     if (!value) throw new Error(`The "${name}" clip has no ${key}.`);
@@ -132,18 +166,85 @@ function pageMarkup(): Plugin {
   };
 }
 
-/**
- * The page ground is the design tokens' paper. The stylesheet and the browser's
- * theme colour each write that value out, so the build checks both against the
- * token and stops if either has drifted.
- */
-const PAPER = (
-  require('../design/tokens/cawco.tokens.json') as { color: { paper: { $value: string } } }
-).color.paper.$value.toLowerCase();
+interface ColourToken {
+  $value: string;
+  $extensions?: { 'dev.cawco'?: { dark?: string } };
+}
 
-function mustBePaper(where: string, found: string | undefined): void {
-  if (found?.toLowerCase() !== PAPER) {
-    throw new Error(`${where} is ${found ?? 'missing'}, but the token color.paper is ${PAPER}.`);
+const TOKENS = require('../design/tokens/cawco.tokens.json') as {
+  color: Record<string, ColourToken>;
+};
+
+/** A colour token's value by day or at night, its references followed. */
+function tokenColour(name: string, night: boolean): string {
+  const token = TOKENS.color[name];
+  if (!token) throw new Error(`No colour token named "${name}".`);
+  const value = (night && token.$extensions?.['dev.cawco']?.dark) || token.$value;
+  const reference = value.match(/^\{color\.([\w-]+)\}$/)?.[1];
+  return reference ? tokenColour(reference, night) : value;
+}
+
+/** `oklch(L% C H)` as the sRGB hex a `theme-color` takes (CSS Color 4's OKLab matrices). */
+function oklchHex(colour: string): string {
+  const parts = colour.match(/^oklch\(([\d.]+)% ([\d.]+) ([\d.]+)\)$/);
+  if (!parts) throw new Error(`${colour} is not an oklch(L% C H) colour.`);
+  const [l, c, h] = [Number(parts[1]) / 100, Number(parts[2]), (Number(parts[3]) * Math.PI) / 180];
+  const [a, b] = [c * Math.cos(h), c * Math.sin(h)];
+  const lms = [
+    (l + 0.396_337_777_4 * a + 0.215_803_757_3 * b) ** 3,
+    (l - 0.105_561_345_8 * a - 0.063_854_172_8 * b) ** 3,
+    (l - 0.089_484_177_5 * a - 1.291_485_548 * b) ** 3,
+  ];
+  const rows = [
+    [4.076_741_662_1, -3.307_711_591_3, 0.230_969_929_2],
+    [-1.268_438_004_6, 2.609_757_401_1, -0.341_319_396_5],
+    [-0.004_196_086_3, -0.703_418_614_7, 1.707_614_701],
+  ];
+  return `#${rows
+    .map((row) => row.reduce((sum, k, i) => sum + k * (lms[i] ?? 0), 0))
+    .map((v) => Math.min(1, Math.max(0, v)))
+    .map((v) => (v <= 0.003_130_8 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055))
+    .map((v) =>
+      Math.round(v * 255)
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`;
+}
+
+/**
+ * The page ground is the design tokens' paper by day and, at night, the
+ * product's neutral ramp one step above its page (neutral-2; `color.background`
+ * is neutral-1), the lift the whole night page takes. The stylesheet and the
+ * browser's theme colours each write those values out, so the build checks them
+ * against the tokens and stops if any has drifted.
+ */
+const PAPER = tokenColour('paper', false).toLowerCase();
+const NIGHT_PAGE = tokenColour('neutral-2', true);
+const NIGHT_THEME = oklchHex(NIGHT_PAGE);
+
+/**
+ * Applies the reader's kept colour scheme pick (src/theme.ts) from the page's head, before the
+ * stylesheet, so the first paint is already in it. It is `applyTheme` itself, written out.
+ */
+const THEME_BOOT = `(${applyTheme.toString()})((() => {
+  try {
+    return localStorage.getItem(${JSON.stringify(THEME_KEY)}) ?? 'system';
+  } catch {
+    return 'system';
+  }
+})());`;
+
+/** Every `<meta name="theme-color">` tag, with its attributes. */
+const themeColours = (html: string) =>
+  [...html.matchAll(/<meta\s[^>]*name="theme-color"[^>]*>/g)].map(([tag]) => ({
+    tag,
+    attrs: Object.fromEntries([...tag.matchAll(/([\w-]+)="([^"]*)"/g)].map(([, k, v]) => [k, v])),
+  }));
+
+function mustBe(where: string, found: string | undefined, token: string, value: string): void {
+  if (found?.toLowerCase() !== value.toLowerCase()) {
+    throw new Error(`${where} is ${found ?? 'missing'}, but the token ${token} is ${value}.`);
   }
 }
 
@@ -151,13 +252,45 @@ const paperGround: Plugin = {
   name: 'cawco-paper-ground',
   buildStart() {
     const styles = readFileSync(new URL('./src/styles.css', import.meta.url), 'utf8');
-    mustBePaper('--paper in src/styles.css', styles.match(/--paper:\s*(#[0-9a-f]{6})/i)?.[1]);
-  },
-  transformIndexHtml(html) {
-    mustBePaper(
-      'theme-color in index.html',
-      html.match(/<meta name="theme-color" content="(#[0-9a-f]{6})"/i)?.[1],
+    mustBe(
+      '--brand-paper in src/styles.css',
+      styles.match(/--brand-paper:\s*(#[0-9a-f]{6})/i)?.[1],
+      'color.paper',
+      PAPER,
     );
+    mustBe(
+      'The night side of --paper in src/styles.css',
+      styles.match(/--paper:\s*light-dark\(var\(--brand-paper\),\s*(oklch\([^)]*\))\)/)?.[1],
+      'color.neutral-2 at night',
+      NIGHT_PAGE,
+    );
+  },
+  transformIndexHtml(html, { path }) {
+    const metas = themeColours(html);
+    const theme = (scheme: string) => {
+      const meta = metas.find(({ attrs }) => attrs['data-scheme'] === scheme);
+      if (meta?.attrs.media !== `(prefers-color-scheme: ${scheme})`) {
+        throw new Error(
+          `${path} needs a theme-color for ${scheme} with media="(prefers-color-scheme: ${scheme})" and data-scheme="${scheme}".`,
+        );
+      }
+      return meta.attrs.content;
+    };
+    mustBe(`The light theme-color in ${path}`, theme('light'), 'color.paper', PAPER);
+    mustBe(
+      `The dark theme-color in ${path}`,
+      theme('dark'),
+      `color.neutral-2 at night (${NIGHT_PAGE})`,
+      NIGHT_THEME,
+    );
+    if (!html.includes('<meta name="color-scheme" content="light dark"')) {
+      throw new Error(`${path} does not declare <meta name="color-scheme" content="light dark">.`);
+    }
+    const last = metas.at(-1)?.tag ?? '';
+    if (html.indexOf(last) > html.indexOf('rel="stylesheet"')) {
+      throw new Error(`${path} names its theme colours after its stylesheet.`);
+    }
+    return html.replace(last, `${last}\n    <script>${THEME_BOOT}</script>`);
   },
 };
 

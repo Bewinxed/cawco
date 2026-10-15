@@ -1,5 +1,5 @@
 import { all, one } from './dom';
-import { initTabs } from './tabs';
+import { initTabs, placeSlider } from './tabs';
 
 /**
  * The install command is three parts: a head, the `sh` tail, and, for Nightly only, the piece
@@ -145,24 +145,8 @@ export function initChannel(tablist: HTMLElement): void {
     };
   };
 
-  // One bar under the chosen tab. It moves by transform alone: a translate, and a scale where
-  // the two tabs differ in width.
-  const place = (animate: boolean) => {
-    const selected = tabButtons.find((tab) => tab.getAttribute('aria-selected') === 'true');
-    const first = tabButtons[0];
-    if (!selected || !first) return;
-    const inset = (tab: HTMLElement) => parseFloat(getComputedStyle(tab).paddingLeft);
-    const base = first.offsetWidth - inset(first) * 2;
-    if (base <= 0) return;
-    const scale = (selected.offsetWidth - inset(selected) * 2) / base;
-    if (!animate) slider.style.transition = 'none';
-    slider.style.width = `${base}px`;
-    slider.style.transform = `translateX(${selected.offsetLeft + inset(selected)}px) scaleX(${scale})`;
-    if (!animate) {
-      slider.getBoundingClientRect();
-      slider.style.transition = '';
-    }
-  };
+  // One bar under the chosen tab.
+  const place = (animate: boolean) => placeSlider(tabButtons, slider, 'aria-selected', animate);
 
   const tabs = initTabs(tablist, (id) => {
     if ((id !== 'stable' && id !== 'nightly') || id === chosen) return;

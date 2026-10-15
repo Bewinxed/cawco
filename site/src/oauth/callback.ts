@@ -1,4 +1,7 @@
+import { sizeCawRims } from '../caw.ts';
 import { forget, hubReturn, isTrusted, RETURN_AFTER_MS, recall, trust } from './handoff.ts';
+
+sizeCawRims(document);
 
 const page = document.querySelector<HTMLElement>('.handback');
 const text = (id: string): HTMLElement => {
