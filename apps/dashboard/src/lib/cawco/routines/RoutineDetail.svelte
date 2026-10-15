@@ -9,8 +9,9 @@
    * 3. Recent runs, the newest three: when, then the run's own result, the
    *    words its run set (Caw's `routine_result`, a delegate's
    *    `finish_item`), two lines at most, and Read the run. A silent run
-   *    answered `NO_REPLY`: "Nothing to report". A failed one says why, from
-   *    the hub's reason.
+   *    answered `NO_REPLY`: "Nothing to report", with the hub's reason when
+   *    it kept one (the curator's empty inbox). A failed one says why, from
+   *    the hub's reason. A run going now says so.
    *
    * No spend, no who runs it, nothing drawn over time: the row already says
    * when it runs next, and its actions are in the row's ⋯.
@@ -45,7 +46,9 @@
       return `Skipped: ${run.reason ?? "nothing started"}`;
     }
     if (run.outcome === "silent") {
-      return "Nothing to report";
+      return run.reason
+        ? `Nothing to report: ${run.reason}`
+        : "Nothing to report";
     }
     if (run.outcome === "failed") {
       return `Failed: ${run.reason ?? "no reason was kept"}`;
@@ -186,6 +189,10 @@
   }
   .run[data-outcome="failed"] .run-line {
     color: var(--status-fail-ink);
+  }
+  .run[data-outcome="running"] .run-line,
+  .run[data-outcome="starting"] .run-line {
+    color: var(--status-live-ink);
   }
   .read {
     color: var(--link-ink);

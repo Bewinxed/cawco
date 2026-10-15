@@ -3,8 +3,8 @@
  * dashboard dev server reads. A real hub, agent and sessiond on loopback
  * (scratch-fleet.ts), against the mock model, seeded with:
  *
- * - "cockpit" (code template, Caw on): tasks across its stages, three of
- *   them archived (the T5 switch draws them);
+ * - "cawco" (code template, Caw on): tasks across its stages, three of
+ *   them archived (the T5 switch draws them), and the owner's four routines;
  * - "Field notes" (no template, Caw on): nothing at all, for the empty
  *   board's and the empty Routines page's starters.
  *
@@ -60,9 +60,9 @@ interface Stage {
 }
 
 const cockpit = await fleet.api<{ id: string }>("/api/projects", {
-  name: "cockpit",
+  name: "cawco",
   machineId: MACHINE,
-  cwd: await folder("cockpit"),
+  cwd: await folder("cawco"),
   caw: true,
   template: "code",
 });
