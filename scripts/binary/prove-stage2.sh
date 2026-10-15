@@ -805,7 +805,7 @@ join_machine() {
   # The hub's own install.sh, the way the app's Connect a machine hands it out; pexpect types an "n" after each prompt appears.
   as_user "$joinerc" curl -fsS "http://$hub_ip:3456/install.sh" -o /tmp/join.sh
   local rc=0
-  python3 /shared/stage2-answer-prompts.py $P exec -it --user cawco --workdir /home/cawco --env HOME=/home/cawco \
+  python3 "$here/stage2-answer-prompts.py" $P exec -it --user cawco --workdir /home/cawco --env HOME=/home/cawco \
     --env XDG_RUNTIME_DIR=/run/user/1000 --env DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus \
     --env CAWCO_RELEASE_HOST="${FEED_OVERRIDE:-$feed}" "$joinerc" sh /tmp/join.sh > "$rigdir/join.out" || rc=$?
   cat "$rigdir/join.out"
