@@ -217,7 +217,7 @@
   open={doc !== null}
 >
   <DialogPrimitive.Portal>
-    <DialogOverlay class={leaving ? "leaving" : ""} />
+    <DialogOverlay class={leaving ? "lightbox-leaving" : ""} />
     <!-- Drawn through `child`: bits-ui then holds the body's lock only while
          it is open, and clears it at once (floating-presence). -->
     <DialogPrimitive.Content
@@ -342,7 +342,7 @@
     padding: var(--space-4);
   }
   /* The scrim leaves with the sheet, not after it. */
-  :global(.kit-scrim.leaving) {
+  :global(.kit-scrim.lightbox-leaving) {
     animation: kit-fade-out var(--dur-exit) var(--ease-out) both;
   }
 

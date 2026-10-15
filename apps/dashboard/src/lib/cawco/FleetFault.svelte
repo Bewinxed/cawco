@@ -273,7 +273,7 @@
         }}
         type="button"
       >
-        <IconChevronRight class="chevron size-4 shrink-0" />
+        <IconChevronRight class="fault-chevron size-4 shrink-0" />
         {expanded ? "Hide" : "Details"}
       </button>
     {/if}
@@ -338,7 +338,7 @@
             }}
             type="button"
           >
-            <IconChevronRight class="chevron size-4 shrink-0" />
+            <IconChevronRight class="fault-chevron size-4 shrink-0" />
             What it said
           </button>
           <div
@@ -482,13 +482,14 @@
     flex-direction: column;
     gap: var(--space-2);
   }
-  /* The chevron turns with the disclosure it opens. */
-  :global(.chevron) {
+  /* The chevron turns with the disclosure it opens. Its own name: as the
+     bare `.chevron` this reached every chevron on the page. */
+  :global(.fault-chevron) {
     @media (prefers-reduced-motion: no-preference) {
       transition: rotate var(--dur-control) var(--ease-out);
     }
   }
-  [aria-expanded="true"] > :global(.chevron) {
+  [aria-expanded="true"] > :global(.fault-chevron) {
     rotate: 90deg;
   }
   .result {

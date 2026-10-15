@@ -108,6 +108,7 @@
 {/if}
 
 <style>
+  /* css-scope .account-chip: SessionDetails names it to leave this chip's chevron alone */
   .dot {
     flex: none;
     inline-size: 8px;

@@ -785,7 +785,7 @@
             status={markOf(row)}
           >
             {#snippet face()}
-              <Sprite aria-hidden="true" class="session-mark-glyph" />
+              <Sprite aria-hidden="true" class="stop-mark-glyph" />
             {/snippet}
           </TreeMark>
           <span class="title"
@@ -916,6 +916,13 @@
     min-inline-size: 0;
     padding-block: var(--space-1);
     padding-inline: var(--ask-indent, 0) var(--ask-end, 0);
+  }
+  /* A delegate's mark, sized here as SessionMark sizes its own: under
+     SessionMark's class it took that size only while SessionMark's global
+     rule was loaded. */
+  .stop-tray :global(.stop-mark-glyph) {
+    inline-size: 12px;
+    block-size: 12px;
   }
   .tile {
     display: grid;

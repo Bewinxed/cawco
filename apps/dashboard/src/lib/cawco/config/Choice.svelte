@@ -21,7 +21,7 @@
 
 <ToggleGroup.Root
   aria-label={label}
-  class="choice"
+  class="choice-group"
   onValueChange={(next) => {
     if (next) {
       onchange(next);
@@ -38,7 +38,9 @@
 </ToggleGroup.Root>
 
 <style>
-  :global(.choice) {
+  /* bits-ui's root, so global, under this control's own name: as the bare
+     `.choice` it reached Prompt's, PeekPane's and AccountSetup's own. */
+  :global(.choice-group) {
     flex-wrap: wrap;
     align-self: flex-start;
     max-width: 100%;

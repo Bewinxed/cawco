@@ -903,6 +903,7 @@
 </div>
 
 <style>
+  /* css-scope .strip-hit: the usage-relay bench finds the strip's control by it */
   /* Its ground is the surface it stands on: the rail's by default, the
      phone home's raised card. A reserve notch is cut in the same paint. */
   .strip {

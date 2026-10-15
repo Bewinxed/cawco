@@ -29,6 +29,7 @@
 </Collapsible.Trigger>
 
 <style>
+  /* css-scope .thinking-header: the kit header's own root, on bits-ui's element; Thinking tunes it under its own root */
   :global(.thinking-header) {
     display: flex;
     align-items: center;

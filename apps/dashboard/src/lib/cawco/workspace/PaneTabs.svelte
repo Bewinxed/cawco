@@ -1849,6 +1849,7 @@
 </Popover.Root>
 
 <style>
+  /* css-scope .session-details-popover: SessionDetails finds the card it stands in by it */
   /* The card is a HangCard on its tab: its edge, the cut across the tab's
      flared span, its shadow cut at its top edge, and its open and close
      are the component's. Its content runs edge to edge. */

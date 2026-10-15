@@ -52,7 +52,7 @@
   <SheetOverlay bind:ref={scrim} />
   <SheetPrimitive.Content
     class={cn(
-      "sheet fixed z-50 flex flex-col bg-[var(--surface-raised)] bg-clip-padding text-foreground text-label shadow-[var(--shadow-drawer)] data-[side=bottom]:inset-x-0 data-[side=top]:inset-x-0 data-[side=left]:inset-y-0 data-[side=right]:inset-y-0 data-[side=top]:top-0 data-[side=right]:right-0 data-[side=bottom]:bottom-0 data-[side=left]:left-0 data-[side=bottom]:h-auto data-[side=left]:h-full data-[side=right]:h-full data-[side=top]:h-auto data-[side=left]:w-3/4 data-[side=right]:w-3/4 data-[side=bottom]:border-t data-[side=left]:border-r data-[side=top]:border-b data-[side=right]:border-l data-[side=left]:sm:max-w-sm data-[side=right]:sm:max-w-sm",
+      "kit-sheet fixed z-50 flex flex-col bg-[var(--surface-raised)] bg-clip-padding text-foreground text-label shadow-[var(--shadow-drawer)] data-[side=bottom]:inset-x-0 data-[side=top]:inset-x-0 data-[side=left]:inset-y-0 data-[side=right]:inset-y-0 data-[side=top]:top-0 data-[side=right]:right-0 data-[side=bottom]:bottom-0 data-[side=left]:left-0 data-[side=bottom]:h-auto data-[side=left]:h-full data-[side=right]:h-full data-[side=top]:h-auto data-[side=left]:w-3/4 data-[side=right]:w-3/4 data-[side=bottom]:border-t data-[side=left]:border-r data-[side=top]:border-b data-[side=right]:border-l data-[side=left]:sm:max-w-sm data-[side=right]:sm:max-w-sm",
       className
     )}
     data-side={side}
@@ -88,20 +88,22 @@
 </SheetPortal>
 
 <style>
-  /* A sheet travels its whole size from the edge it belongs to, over
+  /* bits-ui's element, so global, under the kit's own name: the bare
+     `.sheet` is what PinCard, PlanPane and SideSheet call their own.
+     A sheet travels its whole size from the edge it belongs to, over
      --dur-panel on the drawer curve, and leaves the same way over
      --dur-exit. The entrance does not hold its end (no fill): a drag writes
      the sheet's transform inline once it has landed. */
-  :global(.sheet[data-side="left"]) {
+  :global(.kit-sheet[data-side="left"]) {
     --sheet-away: translate3d(-100%, 0, 0);
   }
-  :global(.sheet[data-side="right"]) {
+  :global(.kit-sheet[data-side="right"]) {
     --sheet-away: translate3d(100%, 0, 0);
   }
-  :global(.sheet[data-side="top"]) {
+  :global(.kit-sheet[data-side="top"]) {
     --sheet-away: translate3d(0, -100%, 0);
   }
-  :global(.sheet[data-side="bottom"]) {
+  :global(.kit-sheet[data-side="bottom"]) {
     --sheet-away: translate3d(0, 100%, 0);
   }
   /* A touch is the browser's to pan only across the axis a sheet leaves by,
@@ -109,26 +111,26 @@
      touch-action from the finger's element up to the nearest scroller, so a
      scrolling list in the sheet would otherwise claim a sideways drag
      (motion/drag.svelte.ts). */
-  :global(.sheet:is([data-side="left"], [data-side="right"]) *) {
+  :global(.kit-sheet:is([data-side="left"], [data-side="right"]) *) {
     touch-action: pan-y;
   }
-  :global(.sheet:is([data-side="top"], [data-side="bottom"]) *) {
+  :global(.kit-sheet:is([data-side="top"], [data-side="bottom"]) *) {
     touch-action: pan-x;
   }
   @media (prefers-reduced-motion: no-preference) {
-    :global(.sheet[data-state="open"]) {
+    :global(.kit-sheet[data-state="open"]) {
       animation: sheet-in var(--dur-panel) var(--ease-drawer);
     }
-    :global(.sheet[data-state="closed"]) {
+    :global(.kit-sheet[data-state="closed"]) {
       animation: sheet-out var(--dur-exit) var(--ease-drawer) forwards;
     }
   }
   /* Asked for less motion, it fades in place. */
   @media (prefers-reduced-motion: reduce) {
-    :global(.sheet[data-state="open"]) {
+    :global(.kit-sheet[data-state="open"]) {
       animation: sheet-fade-in var(--dur-control) var(--ease-out);
     }
-    :global(.sheet[data-state="closed"]) {
+    :global(.kit-sheet[data-state="closed"]) {
       animation: sheet-fade-out var(--dur-control) var(--ease-out) forwards;
     }
   }

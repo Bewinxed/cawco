@@ -160,9 +160,10 @@
   }
   /* The spine is the rail row every rail block uses (app.css `.rail-row`).
      The trigger is a component's element, so the scoped selector cannot
-     reach it — everything under `.branch` here is addressed globally on
-     purpose. */
-  :global(.branch .bhead) {
+     reach it: it is addressed globally under this card's own `.branch`
+     (global all through, it styled Delegate's head too, whose card is a
+     `.branch` as well). */
+  .branch :global(.bhead) {
     min-block-size: 26px;
     inline-size: 100%;
     font-size: var(--text-label);
@@ -367,7 +368,7 @@
      target. Scoped `.bhead` never matched the trigger — this is the same rule
      the old card carried, written so it applies. */
   @media (pointer: coarse) {
-    :global(.branch .bhead) {
+    .branch :global(.bhead) {
       min-block-size: 44px;
     }
   }

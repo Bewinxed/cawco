@@ -254,6 +254,7 @@
 </div>
 
 <style>
+  /* css-scope .caw-pop: GlassCard names its Caw face with it; this panel draws that face's frame */
   /* The panel hangs from his glass (a HangCard on the glass: `kit-hang`
      and `glass-card` in app.css draw its edge, its cut, its hung shadow and
      its phone's square trailing side). Its rows stand 7px in from its drawn

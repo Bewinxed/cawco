@@ -130,7 +130,7 @@
     <Popover.Content
       align="start"
       aria-label="Caw, lead of {projectName}"
-      class="caw-pop"
+      class="caw-seat-pop"
       collisionPadding={12}
       customAnchor={anchor}
       onCloseAutoFocus={(event) => {
@@ -186,7 +186,9 @@
     background: transparent;
     cursor: pointer;
   }
-  :global(.caw-pop) {
+  /* Its own name: as `.caw-pop` it shared the glass card's frame
+     (home/CawPanel's `.kit-pop.caw-pop`), which overrode this. */
+  :global(.caw-seat-pop) {
     inline-size: auto;
     padding: 0;
   }

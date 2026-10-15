@@ -407,6 +407,7 @@
 </Command.Root>
 
 <style>
+  /* css-scope .jump-pop: GlassCard names its Jump face with it; this palette draws that face's frame */
   /* The glass's card showing it (GlassCard); the well is bounded so the
      footer is never pushed under the fold. */
   :global(.kit-pop.jump-pop) {

@@ -438,6 +438,7 @@
      control that has transitions of its own keeps them, and lists
      `translate` among them (PaneTabs). */
   @media (prefers-reduced-motion: no-preference) {
+    /* css-scope: zero-specificity on purpose so a host's own transitions win; `.ff-tab` is this kit tab's class, on every fluid tab */
     :global(:where([data-variant="folder"] .ff-tab > *)) {
       transition: translate var(--choose-dur) var(--choose-ease);
     }

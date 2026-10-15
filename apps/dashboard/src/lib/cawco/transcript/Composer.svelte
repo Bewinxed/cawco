@@ -3364,6 +3364,7 @@
 </div>
 
 <style>
+  /* css-scope .lift-copy: lift.svelte.ts makes the element for this composer; its look is here */
   .dock {
     /* What steps aside while an ask holds the composer comes back at once
        and fades in (`.dock.asking`, below). */
@@ -3798,11 +3799,12 @@
 
   /* The Command primitive is shadcn's; its parts are addressed by slot so the
      menu wears Quiet Ledger tokens rather than the stock ladder. The list is the
-     one thing that scrolls; the shell stays put. */
-  :global(.menu [data-slot="command"]) {
+     one thing that scrolls; the shell stays put. Under this composer's own
+     `.menu`: global all through, they reached any `.menu` on the page. */
+  .menu :global([data-slot="command"]) {
     background: transparent;
   }
-  :global(.menu [data-slot="command-list"]) {
+  .menu :global([data-slot="command-list"]) {
     max-height: 320px;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -3811,13 +3813,13 @@
 
   /* Each family is a titled section, ruled off from the one above so "Skills"
      and "Commands" read as two kinds of thing rather than one long list. */
-  :global(.menu [data-slot="command-group"]) {
+  .menu :global([data-slot="command-group"]) {
     padding: var(--space-1) 0;
   }
-  :global(.menu [data-slot="command-group"] + [data-slot="command-group"]) {
+  .menu :global([data-slot="command-group"] + [data-slot="command-group"]) {
     border-top: 1px solid var(--border-hairline);
   }
-  :global(.menu [data-slot="command-group"] [data-command-group-heading]) {
+  .menu :global([data-slot="command-group"] [data-command-group-heading]) {
     padding: var(--space-1) var(--space-2) var(--space-2);
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
@@ -3829,7 +3831,7 @@
   /* One row: the name, its prose, and where it came from — on a single
      line. The highlighted row stands on the kit's ghost (Command.List),
      which glides from row to row under the arrow keys and the pointer. */
-  :global(.menu [data-slot="command-item"]) {
+  .menu :global([data-slot="command-item"]) {
     display: flex;
     align-items: baseline;
     gap: var(--space-2);
@@ -3840,7 +3842,7 @@
     color: var(--ink-strong);
   }
   @media (pointer: coarse) {
-    :global(.menu [data-slot="command-item"]) {
+    .menu :global([data-slot="command-item"]) {
       min-height: 44px;
     }
   }

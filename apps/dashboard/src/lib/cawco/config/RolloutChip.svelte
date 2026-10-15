@@ -119,7 +119,7 @@
     aria-label="{what}: on {applied} of {machines.length} machines{failed > 0
       ? `, ${failed} refused`
       : ''}"
-    class="rollout"
+    class="rollout-chip"
     data-fail={failed > 0 ? "" : undefined}
   >
     <span aria-hidden="true" class="glyph" data-glyph={glyph}>
@@ -240,7 +240,9 @@
 </Popover.Root>
 
 <style>
-  :global(.rollout) {
+  /* The trigger is bits-ui's element, so its rules are global, under the
+     chip's own name (scripts/css-scope-check.ts). */
+  :global(.rollout-chip) {
     display: inline-flex;
     flex: none;
     align-items: center;
@@ -263,18 +265,18 @@
     }
   }
   @media (prefers-reduced-motion: no-preference) {
-    :global(.rollout:active) {
+    :global(.rollout-chip:active) {
       transform: scale(var(--press-scale));
     }
   }
-  :global(.rollout:hover) {
+  :global(.rollout-chip:hover) {
     background: var(--surface-hover);
   }
-  :global(.rollout[data-fail]) {
+  :global(.rollout-chip[data-fail]) {
     background: var(--status-fail-bg);
     color: var(--status-fail-ink);
   }
-  :global(.rollout svg) {
+  :global(.rollout-chip svg) {
     width: 12px;
     height: 12px;
     flex: none;
@@ -312,7 +314,7 @@
       animation-play-state: paused;
     }
   }
-  :global(.rollout .count) {
+  :global(.rollout-chip .count) {
     font-variant-numeric: tabular-nums;
     color: inherit;
   }

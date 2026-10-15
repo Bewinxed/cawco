@@ -276,6 +276,7 @@
 {/if}
 
 <style>
+  /* css-scope .preview-sheet: the canvas stage finds this sheet by it */
   /* Held by its top, as tall as the room above the composer. A height
      between a top and a bottom is the fixed layer's container's, which
      WebKit walks through stale sizes for frames while a keyboard resizes the

@@ -1204,7 +1204,7 @@
               {...tip}
               aria-current={configuring ? "page" : undefined}
               aria-label="Configure"
-              class="configure"
+              class="rail-configure"
               href={configureHref}
               size="icon-sm"
               variant="ghost"
@@ -1317,11 +1317,11 @@
   }
   /* Configure, while a /config page is open: the selected tint, crossing
      over --dur-control like every control's colour. */
-  :global(.configure[aria-current="page"]) {
+  :global(.rail-configure[aria-current="page"]) {
     background: var(--selected-bg);
     color: var(--selected-ink);
   }
-  :global(.configure) {
+  :global(.rail-configure) {
     transition:
       background-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out);

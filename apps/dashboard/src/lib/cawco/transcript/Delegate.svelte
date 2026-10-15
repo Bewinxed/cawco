@@ -538,7 +538,7 @@
     align-items: center;
     gap: var(--space-1);
   }
-  :global(.delegate .bhead) {
+  .delegate :global(.bhead) {
     min-block-size: 26px;
     flex: 1 1 auto;
     min-inline-size: 0;
@@ -837,7 +837,7 @@
     }
   }
   @media (pointer: coarse) {
-    :global(.delegate .bhead) {
+    .delegate :global(.bhead) {
       min-block-size: 44px;
     }
   }

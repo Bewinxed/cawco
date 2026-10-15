@@ -118,6 +118,7 @@
 </li>
 
 <style>
+  /* css-scope .session-tree .tree-branch .tree-node .tree-line: the tree's recipe; WorkTabs and HomeRecent draw its container and leaving rows with it */
   /* A list's trees, and each parent's rows under it: lists of rows,
      --tree-gap apart, the gap every tree in the app keeps (app.css; the
      rail's projects list reads the same one). Named for every list that
