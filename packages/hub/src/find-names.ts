@@ -5,6 +5,8 @@
  */
 import {
   type AgentRow,
+  CAWCO_SCRATCH_TAG,
+  deriveTitleFromFirstMessage,
   type FindChange,
   type FindConversation,
   type FindField,
@@ -13,6 +15,7 @@ import {
   type FindResult,
   type MomentAuthor,
   machineLabel,
+  type NeutralSessionInfo,
   type StageKind,
   type ThreadSummary,
 } from "@cawco/core";
@@ -337,14 +340,9 @@ const purposeOf = (
   return row.title && row.derivedTitle !== row.title ? row.derivedTitle : null;
 };
 
-/**
- * When a session last did something: the turn open now, else its last
- * turn's end, else when it began. Not `updatedAt`, which every status write
- * moves (a machine registering moves its asleep sessions'), so a session
- * asleep for weeks would read as active a minute ago.
- */
+/** When a session last moved: its activity, or a change of its status (db `touchInstanceActivity`). */
 export const lastActivityOf = (row: FindInstanceRow): number =>
-  row.turnOpenAt ?? row.turnEndedAt?.getTime() ?? row.createdAt.getTime();
+  row.updatedAt.getTime();
 
 /** Points for parentage: his own sessions, and today's delegates of them. */
 const kinOf = (
@@ -361,12 +359,17 @@ const kinOf = (
 };
 
 /** A project as a result carries it. */
-export type ProjectOf = (id: string | null) => { id: string; name: string } | null;
+export type ProjectOf = (
+  id: string | null
+) => { id: string; name: string } | null;
 
 /** What the conversations' entries are built from. */
 export interface ConversationSources {
   /** Each session's latest work item, and each work item by id. */
-  items: { byId: Map<string, FindWorkItemRow>; latest: Map<string, FindWorkItemRow> };
+  items: {
+    byId: Map<string, FindWorkItemRow>;
+    latest: Map<string, FindWorkItemRow>;
+  };
   leads: ReadonlySet<string>;
   machineName: (id: string) => string;
   now: number;
@@ -397,7 +400,8 @@ export const conversationEntry = (
   children: number
 ): Entry => {
   const item = row.workItemId
-    ? (sources.items.byId.get(row.workItemId) ?? sources.items.latest.get(row.id))
+    ? (sources.items.byId.get(row.workItemId) ??
+      sources.items.latest.get(row.id))
     : sources.items.latest.get(row.id);
   const parent = row.parentInstanceId
     ? sources.rows.get(row.parentInstanceId)
@@ -443,12 +447,82 @@ export const conversationEntry = (
     kin: kinOf(row, parent, sources.now - 24 * 3_600_000),
     fields: [
       ...field("title", title),
-      ...field("purpose", [purpose, item?.brief, step].filter(Boolean).join("\n")),
+      ...field(
+        "purpose",
+        [purpose, item?.brief, step].filter(Boolean).join("\n")
+      ),
       ...field("report", lastReport?.headline),
       ...field("project", result.project?.name),
       ...field("dir", dir),
       ...field("machine", result.machine.name),
       ...field("id", row.id),
+    ],
+  };
+};
+
+/**
+ * A conversation a machine keeps that the hub never started (a session run
+ * from a terminal), as its machine's catalog describes it: named as every
+ * listing names a stored session (the harness's custom title or summary,
+ * then what it was first asked, then its folder). Nothing can name it in a
+ * mention (no handle): the hub holds no session to hand it to. Its state is
+ * one the hub cannot know (`unknown`).
+ */
+export const storedEntry = (
+  info: NeutralSessionInfo,
+  machine: { id: string; name: string }
+): Entry | null => {
+  if (info.tag === CAWCO_SCRATCH_TAG) {
+    return null;
+  }
+  const dir = info.cwd ? leafOf(info.cwd) : null;
+  const first = info.firstPrompt?.trim()
+    ? deriveTitleFromFirstMessage(info.firstPrompt)
+    : "";
+  const title =
+    info.customTitle?.trim() ||
+    info.summary?.trim() ||
+    first ||
+    dir ||
+    info.sessionId.slice(0, 8);
+  const result: FindConversation = {
+    kind: "conversation",
+    id: `${machine.id}:${info.sessionId}`,
+    instanceId: null,
+    sessionId: info.sessionId,
+    harness: info.harness,
+    handle: null,
+    title,
+    purpose: first && first !== title ? first : null,
+    lastReport: null,
+    children: { count: 0, needsYou: 0 },
+    task: null,
+    project: null,
+    machine,
+    dir,
+    role: "session",
+    parent: null,
+    state: "unknown",
+    lastActivity: info.lastModified,
+    moments: [],
+    matched: [],
+    score: 0,
+  };
+  return {
+    result,
+    asked: new Set<string>(KIND_WORDS.conversation),
+    kin: 0,
+    fields: [
+      ...field("title", title),
+      ...field(
+        "purpose",
+        [info.firstPrompt?.slice(0, 400), info.gitBranch]
+          .filter(Boolean)
+          .join("\n")
+      ),
+      ...field("dir", dir),
+      ...field("machine", machine.name),
+      ...field("id", info.sessionId),
     ],
   };
 };
@@ -621,7 +695,9 @@ export const artifactEntry = (
       seen: opened !== undefined && opened >= artifact.revision,
       picksToMake:
         decision &&
-        !Object.values(artifact.changes).some((change) => change.by === "person"),
+        !Object.values(artifact.changes).some(
+          (change) => change.by === "person"
+        ),
       lastActivity: artifact.updatedAt.getTime(),
       matched: [],
       score: 0,
@@ -668,21 +744,19 @@ export const changeEntries = (
       result,
     };
   });
-  const files = changes.files.map(
-    (path): Entry => ({
-      asked: new Set(KIND_WORDS.file),
-      kin: 0,
-      fields: [...field("path", path), ...field("purpose", item.title)],
-      result: {
-        ...base,
-        kind: "file",
-        id: `${item.id}:${path}`,
-        handle: path,
-        title: path,
-        what: path,
-      },
-    })
-  );
+  const files = changes.files.map((path): Entry => ({
+    asked: new Set(KIND_WORDS.file),
+    kin: 0,
+    fields: [...field("path", path), ...field("purpose", item.title)],
+    result: {
+      ...base,
+      kind: "file",
+      id: `${item.id}:${path}`,
+      handle: path,
+      title: path,
+      what: path,
+    },
+  }));
   return [...commits, ...files];
 };
 

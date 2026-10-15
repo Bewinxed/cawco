@@ -662,6 +662,13 @@ function searchMiss(answer: ControlResult | "offline" | "timeout"): string {
   return answer.error ?? "it gave no reason";
 }
 
+/**
+ * How long find waits on a machine's catalog of the sessions it keeps: read
+ * in the background (find.ts), never on a keystroke, so a slow listing only
+ * delays when a new terminal session becomes findable by name.
+ */
+const STORED_LISTING_MS = 15_000;
+
 /** A busy probe is polled in a loop before a restart, so it answers fast or not at all. */
 const BUSY_TIMEOUT_MS = 5000;
 
@@ -14241,8 +14248,20 @@ export const createServer = (
   // nobody pressing refresh. An adopted skill's source is a machine, which is
   // not fetched from here.
   // Boot does not stall on network fetches for rows that were already unresolved.
+  // Each step after an await asks whether the hub closed meanwhile: a hub
+  // built and closed at once (scripts/openapi.ts, the role budgets) would
+  // otherwise have it write to a database already closed ("Cannot use a
+  // closed database"), and nothing a hub scheduled runs after its close
+  // (lifetime.ts).
   const reresolveFailed = async (): Promise<void> => {
-    if (await fetchPlugins(db.unresolvedPlugins())) {
+    if (lifetime.closed()) {
+      return;
+    }
+    const fetched = await fetchPlugins(db.unresolvedPlugins());
+    if (lifetime.closed()) {
+      return;
+    }
+    if (fetched) {
       fanOutFleet();
     }
     const unfetched = db
@@ -14252,6 +14271,9 @@ export const createServer = (
           (skill.error || !skill.hash) && !skill.source.startsWith("machine:")
       );
     for (const stored of unfetched) {
+      if (lifetime.closed()) {
+        return;
+      }
       // biome-ignore lint/performance/noAwaitInLoops: one source fetched at a time, as a refresh does it
       await fetchSkill(stored.name, stored.source);
     }
@@ -14270,6 +14292,9 @@ export const createServer = (
     for (const { name, source } of db.fleetConfig().marketplaces) {
       // biome-ignore lint/performance/noAwaitInLoops: one marketplace fetched at a time, as a resolve does it
       const read = await readMarketplaceSource(source);
+      if (lifetime.closed()) {
+        return;
+      }
       const own = read.name;
       if (!own) {
         console.warn(
@@ -16674,6 +16699,18 @@ export const createServer = (
         missing: read.flatMap((each) => each.missing),
         tasks: read.flatMap((each) => each.tasks),
       };
+    },
+    listStored: async (machineId) => {
+      const answer = await callAgent(
+        machineId,
+        CONTROL_LIST_SESSIONS,
+        [{}],
+        STORED_LISTING_MS
+      );
+      if (answer === "offline" || answer === "timeout" || !answer.ok) {
+        return { error: searchMiss(answer) };
+      }
+      return answer.result as NeutralSessionInfo[];
     },
     askMachine: async (machineId, query, options, timeoutMs) => {
       const answer = await callAgent(

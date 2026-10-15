@@ -38231,11 +38231,15 @@
             "type": "boolean"
           },
           "indexAgeMs": {
-            "description": "How old its index was when it answered, ms; null when it did not answer.",
+            "description": "How old its index was when it answered, ms; null when it did not answer, or its index has not finished a sync yet.",
             "type": [
               "null",
               "number"
             ]
+          },
+          "indexing": {
+            "description": "Its index was still taking in transcripts (a catch-up): what it answered may be short.",
+            "type": "boolean"
           },
           "machineId": {
             "type": "string"
@@ -38261,6 +38265,7 @@
         "required": [
           "answered",
           "indexAgeMs",
+          "indexing",
           "machineId",
           "name",
           "reason",
@@ -38558,7 +38563,7 @@
         ]
       },
       "FindLiveState": {
-        "description": "A conversation's live state, as the board says it: working on a turn,\nwaiting on the person, idle (its process up, no turn), asleep (no process,\nwakes on a message), ended, or unknown (its machine is not connected, so\nnobody can say).",
+        "description": "A conversation's live state, as the board says it: working on a turn,\nwaiting on the person, idle (its process up, no turn), asleep (no process,\nwakes on a message), ended, or unknown: nobody can say (its machine is not\nconnected, or the hub never ran it: a session started from a terminal).",
         "type": "string",
         "enum": [
           "ended",

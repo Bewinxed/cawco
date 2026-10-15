@@ -35,8 +35,6 @@ const findColumns = {
   role: instances.role,
   status: instances.status,
   turnOpenAt: instances.turnOpenAt,
-  turnEndedAt: instances.turnEndedAt,
-  createdAt: instances.createdAt,
   updatedAt: instances.updatedAt,
   workItemId: instances.workItemId,
 };

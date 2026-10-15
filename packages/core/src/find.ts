@@ -43,6 +43,8 @@ export interface TranscriptConversation {
 
 /** A machine's answer to a {@link TranscriptQuery}. */
 export interface TranscriptAnswer {
+  /** Its index was still taking in transcripts when it answered (a catch-up): the answer holds what was indexed so far. */
+  catchingUp: boolean;
   conversations: TranscriptConversation[];
   /** What the query itself took on the machine, ms. */
   queryMs: number;
@@ -70,8 +72,8 @@ export type FindKind = (typeof FIND_KINDS)[number];
 /**
  * A conversation's live state, as the board says it: working on a turn,
  * waiting on the person, idle (its process up, no turn), asleep (no process,
- * wakes on a message), ended, or unknown (its machine is not connected, so
- * nobody can say).
+ * wakes on a message), ended, or unknown: nobody can say (its machine is not
+ * connected, or the hub never ran it: a session started from a terminal).
  */
 export type FindLiveState =
   "working" | "needs-you" | "idle" | "sleeping" | "ended" | "unknown";
@@ -241,8 +243,10 @@ export type FindResult =
 export interface FindMachineCoverage {
   /** Whether it answered in time. */
   answered: boolean;
-  /** How old its index was when it answered, ms; null when it did not answer. */
+  /** How old its index was when it answered, ms; null when it did not answer, or its index has not finished a sync yet. */
   indexAgeMs: number | null;
+  /** Its index was still taking in transcripts (a catch-up): what it answered may be short. */
+  indexing: boolean;
   machineId: string;
   name: string;
   /** Why it did not answer, as the clause after "couldn't search:"; null when it did. */

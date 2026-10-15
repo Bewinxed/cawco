@@ -427,7 +427,7 @@ function ambiguous(
     .slice(0, LISTED_AT_MOST)
     .map(
       (peer) =>
-        `“${peer.title}” ${peer.label} on ${peer.host} (${restingWords(peer, asleep)}${ageOf(lastSaid(peer, asleep))})`
+        `“${peer.title}” ${peer.label} on ${peer.host} (${restingWords(peer, asleep)}${ageOf(peer.row.updatedAt)})`
     )
     .join(", ");
   const more = candidates.length - LISTED_AT_MOST;
@@ -437,24 +437,9 @@ function ambiguous(
   );
 }
 
-/**
- * When a session last said something: a live one's `updatedAt`, which its
- * pulse moves; an asleep one's last turn's end (none recorded: its age is
- * unknown), since a status write moves an asleep row's `updatedAt` without it
- * saying anything (its machine registering again read a session asleep for
- * weeks as "active 1m ago").
- */
-const lastSaid = (
-  peer: Peer,
-  asleep: ReadonlySet<Peer>
-): InstanceRow["updatedAt"] =>
-  asleep.has(peer) ? (peer.row.turnEndedAt ?? null) : peer.row.updatedAt;
-
-/** When a session last said something ({@link lastSaid}), for ordering: the most recent first. */
-const saidAt = (peer: Peer, asleep: ReadonlySet<Peer>): number => {
-  const at = lastSaid(peer, asleep);
-  return at ? new Date(at).getTime() || 0 : 0;
-};
+/** When a row last moved, for ordering: the most recent first. */
+const movedAt = (peer: Peer) =>
+  peer.row.updatedAt ? new Date(peer.row.updatedAt).getTime() || 0 : 0;
 
 /**
  * A hand-off's target, running or asleep (a never-started session counts as
@@ -499,7 +484,7 @@ function resolveHandoff(
     candidates.toSorted(
       (a, b) =>
         Number(sleeping.has(a)) - Number(sleeping.has(b)) ||
-        saidAt(b, sleeping) - saidAt(a, sleeping)
+        movedAt(b) - movedAt(a)
     ),
     sleeping
   );

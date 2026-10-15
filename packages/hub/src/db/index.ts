@@ -4350,10 +4350,14 @@ const make = async (path: string): Promise<DbShape> => {
         )
         .run();
     },
+    // Bookkeeping, never the session moving: `updatedAt` stays (it is
+    // activity, `touchInstanceActivity`, or a status change). Stamped here, a
+    // sign-in that carried every session to an account read sessions asleep
+    // for weeks as "active 1m ago", and kept stopped ones listed a day more.
     patchInstance: (id, patch) =>
       db
         .update(instances)
-        .set({ ...patch, updatedAt: new Date() })
+        .set(patch)
         .where(eq(instances.id, id))
         .returning(publicColumns)
         .get(),
@@ -6236,8 +6240,11 @@ const make = async (path: string): Promise<DbShape> => {
     },
     setInstancesProject: (ids, projectId) => {
       if (ids.length > 0) {
+        // Bookkeeping, never the sessions moving: `updatedAt` stays, as in
+        // `patchInstance`, or a project made for an old folder read every
+        // session in it as active now.
         db.update(instances)
-          .set({ projectId, updatedAt: new Date() })
+          .set({ projectId })
           .where(inArray(instances.id, ids))
           .run();
       }

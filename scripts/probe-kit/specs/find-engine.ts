@@ -30,7 +30,7 @@
  *   bun scripts/probe-kit/run.ts find-engine
  */
 import { Database } from "bun:sqlite";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   FindAnswer,
@@ -296,12 +296,17 @@ const writeTranscripts = async (rows: Seeded[], home: string) => {
       );
       await mkdir(dir, { recursive: true });
       const at = now - row.ageMs;
+      const file = join(dir, `${row.sessionId}.jsonl`);
       await writeFile(
-        join(dir, `${row.sessionId}.jsonl`),
+        file,
         row.lines
           .map((each, i) => line(row, each.author, each.text, at + i * 1000))
           .join("")
       );
+      // Last written when its last line was: the hub reads a conversation's
+      // activity from its transcript's mtime as its machine registers.
+      const last = new Date(at + row.lines.length * 1000);
+      await utimes(file, last, last);
     })
   );
 };
@@ -628,7 +633,9 @@ const checkMentions = async (
   );
   kit.check(
     "d. the bare title is refused, naming both",
-    bare.includes(`"${LIVE_TITLE}" matches 2 sessions`),
+    bare.includes(`"${LIVE_TITLE}" matches 2 sessions`) &&
+      // Asleep 20 days: its age is its own, not a sign-in's carry to an account.
+      bare.includes("asleep, active 20d ago"),
     `${bare.slice(0, 300)} | namesake ${JSON.stringify(namesake)}`
   );
   const toThread = await call(HANDOFF, {
@@ -639,6 +646,113 @@ const checkMentions = async (
     "d. a thread's handle resolves to its thread",
     toThread.includes("the thread “Search rework with Caw”"),
     toThread.slice(0, 300)
+  );
+};
+
+/**
+ * d, with Caw on: a thread's handle hands the words to his session, for that
+ * thread. Caw starts in his own place's boundary, which a CawCo workspace
+ * cannot hold (caw-threads.ts): inside one this step is a NOTE, and the
+ * spec is run on a host for it.
+ */
+const checkCawThread = async (
+  probe: Probe,
+  call: (name: string, input: object) => Promise<string>
+) => {
+  const { kit, fleet } = probe;
+  if (process.env.CAWCO_WORKSPACE) {
+    kit.note(
+      "d. a thread's hand-off with Caw on is not run inside a CawCo workspace (Caw's boundary cannot start there); run this spec on a host for it"
+    );
+    return;
+  }
+  const home = fleet.env.HOME as string;
+  const src = join(fleet.sandbox, "caw-src");
+  await mkdir(src, { recursive: true });
+  await writeFile(
+    join(home, ".gitconfig"),
+    "[user]\n\tname = Owner\n\temail = owner@probe.test\n"
+  );
+  await Bun.$`git init -q -b main && echo caw > README.md && git add -A && git commit -qm 'First commit'`
+    .cwd(src)
+    .env({ ...process.env, HOME: home })
+    .quiet();
+  const project = await fleet.api<{ id: string }>("/api/projects", {
+    name: "Caw desk",
+    machineId: MACHINE,
+    cwd: src,
+    caw: true,
+  });
+  const started = await fleet.api<{ thread: { id: string } }>(
+    `/api/projects/${project.id}/threads`,
+    { body: "hello" }
+  );
+  const lead = await until(
+    "Caw's session",
+    () =>
+      fleet.query<{ lead_instance_id: string | null }>(
+        "SELECT lead_instance_id FROM projects WHERE id = ?",
+        project.id
+      )[0]?.lead_instance_id ?? undefined,
+    Boolean,
+    180_000
+  );
+  const answer = await call(HANDOFF, {
+    target: `@hello <thread#${started.thread.id.slice(0, 8)}>`,
+    message: "PROBE-THREAD-REACHED",
+  });
+  const reached = await until(
+    "the hand-off in Caw's session",
+    () =>
+      fleet.query<{ instance_id: string }>(
+        "SELECT instance_id FROM sent_messages WHERE body LIKE '%PROBE-THREAD-REACHED%'"
+      ),
+    (rows) => rows.length > 0,
+    120_000
+  );
+  kit.check(
+    "d. with Caw on, a thread's handle hands the words to his session for that thread",
+    answer.includes("Handed to Caw in the thread “hello”") &&
+      reached.every((row) => row.instance_id === lead),
+    `${answer.slice(0, 200)} | reached ${reached.map((row) => row.instance_id).join(",")} (lead ${lead})`
+  );
+};
+
+/**
+ * A session the hub never started (run from a terminal), found by name from
+ * its machine's catalog, which find reads in the background.
+ */
+const checkStored = async ({ kit, find, fleet }: Probe) => {
+  const sessionId = crypto.randomUUID();
+  const terminal: Seeded = {
+    id: sessionId,
+    sessionId,
+    machine: MACHINE,
+    title: "",
+    cwd: "/work/quokka-lab",
+    ageMs: HOUR,
+    status: "stopped",
+    lines: [
+      { author: "user", text: "Investigate the quokka telemetry drift" },
+      { author: "assistant", text: "Looking." },
+    ],
+  };
+  await writeTranscripts([terminal], fleet.home);
+  const answer = await until(
+    "the terminal session by name, from its machine's catalog",
+    () => find("q=quokka+telemetry&transcripts=0"),
+    (found) =>
+      conversations(found).some((each) => each.sessionId === sessionId),
+    150_000
+  );
+  const [top] = conversations(answer);
+  kit.check(
+    "a. a session the hub never started is found by name, with no handle to mention",
+    top?.sessionId === sessionId &&
+      top.instanceId === null &&
+      top.handle === null &&
+      top.dir === "quokka-lab",
+    JSON.stringify([top?.title, top?.instanceId, top?.dir])
   );
 };
 
@@ -710,6 +824,35 @@ const QUERIES = [
   "tune usage",
   "memory",
 ];
+
+/**
+ * f: a machine whose index is catching up (a catch-up of 200 MB of new
+ * transcripts, longer than a search waits) still answers, from what it holds,
+ * and says it is indexing.
+ */
+const checkCatchUp = async ({ kit, find, other }: Probe) => {
+  const filler = "the rail and the relay and the stages ".repeat(120);
+  const rows = Array.from({ length: 4000 }, (_, i) =>
+    seeded(OTHER, `bulk ${i}`, `/work/bulk-${i % 40}`, DAY, "stopped", [
+      ...Array.from({ length: 6 }, () => ({
+        author: "user" as const,
+        text: filler,
+      })),
+    ])
+  );
+  await writeTranscripts(rows, other.home);
+  // Past the index's freshness (search/index.ts SEARCH_FRESH_MS), so the search syncs.
+  await Bun.sleep(11_000);
+  const answer = await find("q=zephyrine&kinds=conversation");
+  const bulk = answer.coverage.machines.find(
+    (each) => each.machineId === OTHER
+  );
+  kit.check(
+    "f. a machine catching up its index answers from what it holds, and says it is indexing",
+    bulk?.answered === true && bulk.indexing === true,
+    JSON.stringify(bulk)
+  );
+};
 
 /** g: the names part's time at the hub over 200 calls, asserted under 50 ms at p95. */
 const timeNames = async ({ kit, find }: Probe, label: string) => {
@@ -879,12 +1022,15 @@ const run = async (kit: Kit) => {
   await checkSaid(probe);
   const call = callFrom(probe);
   await checkMentions(probe, call);
+  await checkCawThread(probe, call);
+  await checkStored(probe);
   await checkWaiting(probe, call);
   await checkCoverage(probe);
   await timeNames(probe, `${probe.rows.length + 2} sessions`);
   await timeTranscripts(probe);
   await timeAtScale(probe);
   await timeIndex(probe);
+  await checkCatchUp(probe);
 };
 
 const spec: Spec = { name: "find-engine", run };

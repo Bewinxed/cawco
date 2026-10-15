@@ -35,6 +35,7 @@ import {
   type FindResult,
   type MomentAuthor,
   machineLabel,
+  type NeutralSessionInfo,
   type StageKind,
   type ThreadSummary,
   type TranscriptAnswer,
@@ -42,6 +43,7 @@ import {
   type WaitingAnswer,
   type WaitingItem,
 } from "@cawco/core";
+import { detach } from "@cawco/core/detach";
 import { status, t } from "elysia";
 import type { DbShape } from "./db";
 import type { FindInstanceRow, FindWorkItemRow } from "./db/find";
@@ -62,6 +64,7 @@ import {
   type Query,
   rankOf,
   routineEntry,
+  storedEntry,
   taskEntry,
   threadEntry,
   wordHit,
@@ -84,6 +87,13 @@ export const TRANSCRIPT_ANSWER_MS = 1500;
  * Sessions are kept by the board's change log and are never stale.
  */
 const NAMES_FRESH_MS = 1000;
+
+/**
+ * How old a machine's catalog of the sessions it keeps may be, ms, before
+ * find asks for it again, in the background: sessions run from a terminal,
+ * which the hub never started, are found by name from it.
+ */
+const STORED_FRESH_MS = 60_000;
 
 /** A project's stage kinds as last read, and when; read again once this old, ms. */
 const STAGES_FRESH_MS = 30_000;
@@ -131,6 +141,10 @@ export interface FindDeps {
     timeoutMs: number
   ) => Promise<TranscriptAnswer | { error: string }>;
   db: DbShape;
+  /** A machine's catalog of the sessions it keeps (`listSessions`), or why it gave none. */
+  listStored: (
+    machineId: string
+  ) => Promise<NeutralSessionInfo[] | { error: string }>;
   /** The sessions waiting on the person: a permission or a question parked for them. */
   needsYou: () => ReadonlySet<string>;
   /** Whether the hub holds `machineId`'s socket now. */
@@ -183,6 +197,8 @@ interface Names {
   entries: Entry[];
   leads: ReadonlySet<string>;
   machines: Map<string, AgentRow>;
+  /** Each session a machine keeps that the hub never started, by `machineId:sessionId`. */
+  stored: Map<string, Entry>;
   threadLines: ThreadLine[];
   /** Each thread's entry, by thread id. */
   threads: Map<string, Entry>;
@@ -343,7 +359,7 @@ const storedConversation = (
     dir,
     role: "session",
     parent: null,
-    state: "ended",
+    state: "unknown",
     lastActivity: last > 0 ? last : null,
     moments,
     matched: ["transcript"],
@@ -378,9 +394,6 @@ const decodeCursor = (cursor: string | undefined): number => {
   return offset;
 };
 
-const errorWords = (error: unknown): string =>
-  error instanceof Error ? error.message : String(error);
-
 export const createFind = (deps: FindDeps) => {
   const { db } = deps;
   /** Every findable session's row, by id: read whole once, then by the change log. */
@@ -394,6 +407,34 @@ export const createFind = (deps: FindDeps) => {
     { at: number; kinds: Map<string, StageKind> }
   >();
   const stagesReading = new Set<string>();
+  /** Each machine's catalog of the sessions it keeps, as last read, and when. */
+  const storedCatalogs = new Map<
+    string,
+    { at: number; sessions: NeutralSessionInfo[] }
+  >();
+  const storedReading = new Set<string>();
+  /** A machine's catalog as last read; read again in the background once stale. */
+  const catalogOf = (machineId: string, now: number) => {
+    const known = storedCatalogs.get(machineId);
+    const due = !known || now - known.at > STORED_FRESH_MS;
+    if (due && deps.online(machineId) && !storedReading.has(machineId)) {
+      storedReading.add(machineId);
+      detach(
+        deps
+          .listStored(machineId)
+          .then((answer) => {
+            if (!Array.isArray(answer)) {
+              throw new Error(answer.error);
+            }
+            storedCatalogs.set(machineId, { at: Date.now(), sessions: answer });
+            stale = true;
+          })
+          .finally(() => storedReading.delete(machineId)),
+        `find: ${machineId}'s stored sessions`
+      );
+    }
+    return known?.sessions ?? [];
+  };
   /** Each ended work item's commits and files, parsed once: its report never changes. */
   const itemChanges = new Map<string, ItemChanges>();
   let changesAfter = 0;
@@ -414,20 +455,17 @@ export const createFind = (deps: FindDeps) => {
     const due = !known || now - known.at > STAGES_FRESH_MS;
     if (due && !stagesReading.has(projectId)) {
       stagesReading.add(projectId);
-      deps
-        .stageKinds(projectId)
-        .then(
-          (kinds) => {
+      detach(
+        deps
+          .stageKinds(projectId)
+          .then((kinds) => {
             stageKinds.set(projectId, { at: Date.now(), kinds });
             // The names hold the kinds they were built with: built again next.
             stale = true;
-          },
-          (error: unknown) =>
-            console.warn(
-              `[find] ${projectId}'s stages could not be read: ${errorWords(error)}`
-            )
-        )
-        .finally(() => stagesReading.delete(projectId));
+          })
+          .finally(() => stagesReading.delete(projectId)),
+        `find: ${projectId}'s stages`
+      );
     }
     return known?.kinds;
   };
@@ -528,9 +566,12 @@ export const createFind = (deps: FindDeps) => {
           ]
         : [];
     });
+    const bySessionId = sessionIdsOf(held);
+    const stored = storedOf(machines, bySessionId, now);
     names = {
       at: now,
-      bySessionId: sessionIdsOf(held),
+      bySessionId,
+      stored,
       conversations,
       leads,
       machines,
@@ -545,6 +586,7 @@ export const createFind = (deps: FindDeps) => {
       })),
       entries: [
         ...[...conversations.values()].map((each) => each.entry),
+        ...stored.values(),
         ...threads.values(),
         ...tasks.map((task) =>
           taskEntry(
@@ -568,6 +610,34 @@ export const createFind = (deps: FindDeps) => {
     };
     stale = false;
     return names;
+  };
+
+  /**
+   * Each session a machine keeps that the hub never started, from the
+   * machines' catalogs as last read ({@link catalogOf}), by
+   * `machineId:sessionId`.
+   */
+  const storedOf = (
+    machines: Map<string, AgentRow>,
+    bySessionId: Map<string, string>,
+    now: number
+  ): Map<string, Entry> => {
+    const stored = new Map<string, Entry>();
+    for (const machine of machines.values()) {
+      const where = {
+        id: machine.machineId,
+        name: machineLabel(machine.hostname),
+      };
+      for (const info of catalogOf(machine.machineId, now)) {
+        const entry = bySessionId.has(info.sessionId)
+          ? null
+          : storedEntry(info, where);
+        if (entry) {
+          stored.set(entry.result.id, entry);
+        }
+      }
+    }
+    return stored;
   };
 
   /** The revision of each artifact the person last opened, by artifact id. */
@@ -654,6 +724,7 @@ export const createFind = (deps: FindDeps) => {
       answered: false,
       reason: deps.online(machine.machineId) ? null : "it is offline",
       indexAgeMs: null,
+      indexing: false,
       tookMs: null,
     }));
 
@@ -674,6 +745,7 @@ export const createFind = (deps: FindDeps) => {
           answered: false,
           reason: "it is offline",
           indexAgeMs: null,
+          indexing: false,
           tookMs: null,
         },
         answer: null,
@@ -694,6 +766,7 @@ export const createFind = (deps: FindDeps) => {
           answered: false,
           reason: answer.error,
           indexAgeMs: null,
+          indexing: false,
           tookMs,
         },
         answer: null,
@@ -702,7 +775,14 @@ export const createFind = (deps: FindDeps) => {
     const indexAgeMs =
       answer.syncedAt > 0 ? Math.max(0, Date.now() - answer.syncedAt) : null;
     return {
-      coverage: { ...base, answered: true, reason: null, indexAgeMs, tookMs },
+      coverage: {
+        ...base,
+        answered: true,
+        reason: null,
+        indexAgeMs,
+        indexing: answer.catchingUp,
+        tookMs,
+      },
       answer,
     };
   };
@@ -803,11 +883,24 @@ export const createFind = (deps: FindDeps) => {
     const match = momentMatch(hit.score, top, moments[0]?.author ?? "agent");
     const instanceId = held.bySessionId.get(hit.sessionId);
     if (instanceId === undefined) {
-      const stored = storedConversation(hit, machine, moments);
-      found.set(`conversation:${stored.id}`, {
-        ...stored,
-        score: rankOf(match, stored, 0, now),
-      });
+      const kept = held.stored.get(`${machine.id}:${hit.sessionId}`);
+      const stored =
+        kept?.result.kind === "conversation"
+          ? kept.result
+          : storedConversation(hit, machine, moments);
+      const key = `conversation:${stored.id}`;
+      const before = found.get(key);
+      found.set(
+        key,
+        before?.kind === "conversation"
+          ? withMoments(before, moments, match)
+          : {
+              ...stored,
+              moments,
+              matched: ["transcript"],
+              score: rankOf(match, stored, 0, now),
+            }
+      );
       return;
     }
     const heldEntry = held.conversations.get(instanceId);

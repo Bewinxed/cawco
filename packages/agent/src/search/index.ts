@@ -40,6 +40,15 @@ const SYNC_INTERVAL_MS = 10 * 60_000;
  * writes nothing.
  */
 const SEARCH_FRESH_MS = 10_000;
+/**
+ * How long a search waits for the sync it starts, ms: inside the hub's 1.5 s
+ * window for each machine. A sync still running past it is a catch-up (the
+ * index rebuilt, or a long time unsynced, minutes on a busy machine): the
+ * search answers from what the index holds so far and says it is catching up,
+ * rather than every search timing out at the hub until the catch-up ends. A
+ * sync that fails within it refuses the search with its reason.
+ */
+const SYNC_WAIT_MS = 1000;
 const MAX_SEARCH_LIMIT = 50;
 const DEFAULT_SEARCH_LIMIT = 20;
 
@@ -175,16 +184,25 @@ export class TranscriptSearchService {
     options?: TranscriptQuery
   ): Promise<TranscriptAnswer> {
     const started = performance.now();
-    // Never answered from a stale index: a sync that fails refuses the
-    // search, with the reason the hub names this machine by.
+    // A sync that fails refuses the search, with the reason the hub names
+    // this machine by; one still running past SYNC_WAIT_MS answers from what
+    // is indexed so far, saying so.
+    let catchingUp = false;
     if (Date.now() - this.#syncedAt > SEARCH_FRESH_MS) {
-      try {
-        await this.sync();
-      } catch (error) {
-        throw new Error(`its index couldn't update (${syncFailure(error)})`, {
-          cause: error,
-        });
+      const outcome = await Promise.race([
+        this.sync().then(
+          () => ({ synced: true as const }),
+          (error: unknown) => ({ error })
+        ),
+        Bun.sleep(SYNC_WAIT_MS).then(() => ({ synced: false as const })),
+      ]);
+      if ("error" in outcome) {
+        throw new Error(
+          `its index couldn't update (${syncFailure(outcome.error)})`,
+          { cause: outcome.error }
+        );
       }
+      catchingUp = !outcome.synced;
     }
     const queried = performance.now();
     const limit = Math.min(
@@ -197,6 +215,7 @@ export class TranscriptSearchService {
     });
     return {
       conversations,
+      catchingUp,
       syncedAt: this.#syncedAt,
       syncMs: Math.round(queried - started),
       queryMs: Math.round(performance.now() - queried),
