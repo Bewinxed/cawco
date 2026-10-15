@@ -115,6 +115,15 @@ export const USER_LAYER_DIRS = [
   "plans",
 ] as const;
 
+/**
+ * The dir in {@link claudeHome} CawCo writes the fleet's marketplaces into,
+ * one per fleet marketplace, each registered with Claude Code as a
+ * `directory` marketplace (agent fleet.ts `VENDOR_ROOT`). Claude Code runs a
+ * directory marketplace's plugins from there: their hooks' `${CLAUDE_PLUGIN_ROOT}`
+ * is a path inside it, so a session that may not read it runs none of them.
+ */
+export const VENDOR_MARKETPLACES_DIR = "cawco-marketplaces";
+
 /** The user layer's files ({@link USER_LAYER_DIRS} has why each is the user's). */
 export const USER_LAYER_FILES = [
   "CLAUDE.md",

@@ -242,11 +242,10 @@ const spec: Spec = {
         t0,
         (report) => settled(report, SLOW) && settled(report, HUNG)
       );
-      // pi runs no MCP and says so on every server (`unsupported`); the
-      // harnesses that do run MCP are the ones judged here.
-      const runsMcp = (one: { harness?: string }) => one.harness !== "pi";
-      const slow = readings(both, SLOW).filter(runsMcp);
-      const faults = (both ? machineFaults(MACHINE, both) : []).filter(runsMcp);
+      // pi runs no MCP and says so of every server (`unsupported`): it is
+      // judged by the faults below, which must not count it.
+      const slow = readings(both, SLOW).filter((one) => one.harness !== "pi");
+      const faults = both ? machineFaults(MACHINE, both) : [];
       check(
         `(a) ${SLOW}, ${SLOW_MS / 1000} s to answer a harness, is applied by Claude Code and OpenCode`,
         ["claude", "opencode"].every((harness) =>
@@ -273,7 +272,7 @@ const spec: Spec = {
         JSON.stringify(hung)
       );
       check(
-        `(b) every fault of the MCP-running harnesses is ${HUNG}'s, each timed-out`,
+        `(b) every fault on the machine is ${HUNG}'s, each timed-out (pi's "unsupported" none), so its badge reads "sync slow"`,
         faults.length > 0 &&
           faults.every(
             (fault) => fault.key === HUNG && fault.cause === "timed-out"

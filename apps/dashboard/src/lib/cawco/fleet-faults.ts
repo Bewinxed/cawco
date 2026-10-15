@@ -45,7 +45,6 @@ export type FaultScope =
 export type FaultCause =
   | "auth-discovery"
   | "needs-auth"
-  | "unsupported"
   | "cli-too-old"
   | "cli-missing"
   | "ssh-refused"
@@ -99,12 +98,6 @@ export const CAUSE: Record<FaultCause, CauseCopy> = {
     title: "This server needs sign-in",
     why: "The fleet has no usable sign-in for this server.",
     fix: "Open this server and sign in. Every supported agent can use it once approval finishes on the selected computer.",
-    action: "none",
-  },
-  unsupported: {
-    title: "This agent has no MCP support",
-    why: "pi cannot call MCP servers.",
-    fix: "Use Claude Code or OpenCode for this server.",
     action: "none",
   },
   // `runClaude`'s output for a flag the CLI does not have. The real one:
@@ -313,25 +306,25 @@ export interface Fault {
   scope: FaultScope;
 }
 
+/**
+ * A row's failures. `unsupported` is not one: it is a harness that cannot do
+ * this by design (pi runs no MCP, so it says so of every server on every
+ * machine), which nothing on the machine can or should change.
+ */
 const scan = (
   scope: FaultScope,
   machineId: string,
   record: Record<string, FleetItemState> | undefined
 ): Fault[] =>
   Object.entries(record ?? {})
-    .filter(([, item]) =>
-      ["failed", "needs-auth", "unsupported"].includes(item.state)
-    )
+    .filter(([, item]) => ["failed", "needs-auth"].includes(item.state))
     .map(([key, item]) => ({
       origin: "machine" as const,
       scope,
       key,
       machineId,
       ...(item.detail ? { detail: item.detail } : {}),
-      cause:
-        item.state === "needs-auth" || item.state === "unsupported"
-          ? item.state
-          : causeOf(item.detail),
+      cause: item.state === "needs-auth" ? item.state : causeOf(item.detail),
     }));
 
 /** Every row one machine's report says it could not apply. */

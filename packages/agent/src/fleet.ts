@@ -52,6 +52,7 @@ import {
   claudeHomeJson,
   projectClaudeDir,
   userLayerPath,
+  VENDOR_MARKETPLACES_DIR,
 } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
 import { accountClaudeJsons, linkUserLayer } from "./accounts";
@@ -97,7 +98,7 @@ const SKILLS_DIR = userLayerPath("skills");
  * https://code.claude.com/docs/en/plugins-reference) both key on it, so two
  * plugins of one name from two marketplaces need two marketplaces here too.
  */
-export const VENDOR_ROOT = userLayerPath("cawco-marketplaces");
+export const VENDOR_ROOT = userLayerPath(VENDOR_MARKETPLACES_DIR);
 
 /** What the vendored copy of fleet marketplace `marketplace` is registered as. */
 const vendorName = (marketplace: string): string => `cawco-${marketplace}`;

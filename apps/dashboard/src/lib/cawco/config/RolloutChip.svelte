@@ -70,9 +70,7 @@
   );
   const failed = $derived(
     machines.filter((machine) =>
-      ["failed", "needs-auth", "unsupported"].includes(
-        stateOf(machine)?.state ?? ""
-      )
+      ["failed", "needs-auth"].includes(stateOf(machine)?.state ?? "")
     ).length
   );
 

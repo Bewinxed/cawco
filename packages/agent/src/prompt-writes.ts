@@ -3,6 +3,7 @@ import {
   CLAUDE_JSON_NAME,
   projectClaudeRelative,
 } from "@cawco/core/claude-dirs";
+import { VENDOR_MARKETPLACES_DIR } from "@cawco/core/paths";
 
 export interface PromptWriteNotice {
   at: number;
@@ -57,7 +58,7 @@ const CLAUDE_DIR_REASONS: readonly [string, string][] = [
   [inClaudeDir("skills"), "skills"],
   [inClaudeDir("agents"), "agent definitions"],
   [inClaudeDir("plugins"), "plugins"],
-  [inClaudeDir("cawco-marketplaces"), "plugins"],
+  [inClaudeDir(VENDOR_MARKETPLACES_DIR), "plugins"],
   [inClaudeDir("cawco-hooks"), "hooks"],
 ];
 

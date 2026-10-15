@@ -48,6 +48,7 @@ import {
   USER_LAYER_DIRS,
   USER_LAYER_FILES,
   userGitConfigDir,
+  VENDOR_MARKETPLACES_DIR,
   workspaceAccountsFile,
   workspaceCaches,
   workspaceDoorDir,
@@ -761,6 +762,11 @@ export const workspacePolicy = async (
       ...[...USER_LAYER_DIRS, ...USER_LAYER_FILES].map((name) =>
         join(claudeHome(), name)
       ),
+      // The fleet's plugins as CawCo carried them, which Claude Code runs
+      // from (core paths.ts `VENDOR_MARKETPLACES_DIR`): without it every hook
+      // of such a plugin failed in a workspace, `python3: can't open file
+      // '…/cawco-marketplaces/axiom-marketplace/plugins/axiom/hooks/…'`.
+      join(claudeHome(), VENDOR_MARKETPLACES_DIR),
       ...(mac
         ? ["Developer", "Preferences", "Keychains"].map((name) =>
             join(home, "Library", name)
