@@ -377,7 +377,16 @@
 
   /* ---- overflow ------------------------------------------------------ */
 
-  let rowWidth = $state(0);
+  /**
+   * The row's width, as the size observer delivers it after a layout. The
+   * tray is mounted afresh on every tab switch (Composer's `{#key
+   * delegatesOf}`), and a `clientWidth` binding reads the width as it
+   * mounts: that read laid the page out in the click, with the pane just
+   * shown still to be styled, ~1,900 elements in that task. The delivery
+   * comes before the frame is painted, so the first frame drawn has the fit.
+   */
+  let hostBox = $state<DOMRectReadOnly>();
+  const rowWidth = $derived(hostBox?.width ?? 0);
   /**
    * Each chip's floor as drawn, by item: what does not give way in it (its
    * mark, its state glyph, its padding and gaps), its title's floor and its
@@ -1048,7 +1057,7 @@
   </button>
 {/snippet}
 
-<div class="host" bind:clientWidth={rowWidth}>
+<div class="host" bind:contentRect={hostBox}>
   {#if chips.length}
     <div
       class="tray"

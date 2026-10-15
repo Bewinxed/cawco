@@ -31,6 +31,8 @@ import type { Page } from "playwright-core";
 
 /** The transcript's scroller, as every transcript spec reads it. */
 export const SCROLLER = '[aria-label="Session transcript"]';
+/** A trace's node name's class attribute, cut to its first class. */
+const CLASS_ATTRIBUTE = / class='([^' ]*)[^']*'/;
 
 export interface Watched {
   anchor: string | null;
@@ -354,6 +356,27 @@ export interface MainTask {
   cpu: number;
   /** When it ended, the trace clock, µs. */
   end: number;
+  /**
+   * What its style recalculations were asked for (`restyles` only): each
+   * invalidation's reason and the element it named, with how many times.
+   */
+  invalidated: [string, number][];
+  layoutMs: number;
+  /**
+   * Each style recalculation and layout in it, in order (`restyles` only):
+   * what it was, the elements it restyled, its ms, and the script frame
+   * that forced it (`url:line:column`), or "the frame" when the frame's own
+   * rendering ran it.
+   */
+  passes: { at: string; elements: number; ms: number; name: string }[];
+  /**
+   * How many elements its style recalculations restyled, all of them
+   * together (`UpdateLayoutTree`'s `elementCount`); read only when asked
+   * for (`traceMain`'s `restyles`), 0 otherwise.
+   */
+  restyled: number;
+  /** Its style recalculations' and layouts' wall time, ms; 0 unless `restyles`. */
+  styleMs: number;
   /** The trace clock (`dur`), ms: wall time, other processes' turns included. */
   wall: number;
 }
@@ -365,7 +388,20 @@ export interface MainThread {
   tasks: MainTask[];
 }
 
+interface StackFrame {
+  columnNumber: number;
+  functionName: string;
+  lineNumber: number;
+  url: string;
+}
+
 interface TraceEvent {
+  args?: {
+    beginData?: { stackTrace?: StackFrame[] };
+    data?: { nodeName?: string; reason?: string; stackTrace?: StackFrame[] };
+    elementCount?: number;
+    endData?: { elementCount?: number };
+  };
   cat: string;
   dur?: number;
   name: string;
@@ -382,10 +418,13 @@ interface TraceEvent {
  * and its thread time (`tdur`, the thread clock: the CPU the task took),
  * and every user-timing mark. The main thread is the one the marks are made
  * on, so `act` makes at least one (`performance.mark`) in the page.
+ * `restyles`: each task also says how many elements it restyled, from the
+ * timeline's own category, which the trace then carries whole.
  */
 export async function traceMain(
   page: Page,
-  act: () => Promise<unknown>
+  act: () => Promise<unknown>,
+  { restyles = false }: { restyles?: boolean } = {}
 ): Promise<MainThread> {
   const cdp = await page.context().newCDPSession(page);
   const events: TraceEvent[] = [];
@@ -401,6 +440,13 @@ export async function traceMain(
       includedCategories: [
         "blink.user_timing",
         "disabled-by-default-devtools.timeline",
+        ...(restyles
+          ? [
+              "devtools.timeline",
+              "disabled-by-default-devtools.timeline.stack",
+              "disabled-by-default-devtools.timeline.invalidationTracking",
+            ]
+          : []),
       ],
     },
   });
@@ -415,22 +461,73 @@ export async function traceMain(
   if (!first) {
     throw new Error("the trace holds no performance.mark of the page's");
   }
+  const main = events.filter(
+    (event) =>
+      event.ph === "X" && event.pid === first.pid && event.tid === first.tid
+  );
+  const recalcs = main.filter((event) => event.name === "UpdateLayoutTree");
+  const layouts = main.filter((event) => event.name === "Layout");
+  const msIn = (list: TraceEvent[], from: number, to: number) =>
+    list
+      .filter((one) => one.ts >= from && one.ts < to)
+      .reduce((sum, one) => sum + (one.dur ?? 0) / 1000, 0);
+  const elementsOf = (one: TraceEvent) =>
+    one.args?.elementCount ?? one.args?.endData?.elementCount ?? 0;
+  const forcedBy = (one: TraceEvent) => {
+    const [frame] =
+      one.args?.beginData?.stackTrace ?? one.args?.data?.stackTrace ?? [];
+    return frame
+      ? `${frame.functionName || "(anonymous)"}@${frame.url.split("/").pop()}:${frame.lineNumber + 1}:${frame.columnNumber + 1}`
+      : "the frame";
+  };
+  const invalidations = events.filter(
+    (event) =>
+      event.name === "StyleRecalcInvalidationTracking" &&
+      event.pid === first.pid
+  );
+  const invalidatedIn = (from: number, to: number): [string, number][] => {
+    const counted = new Map<string, number>();
+    for (const one of invalidations) {
+      if (one.ts >= from && one.ts < to) {
+        const node = (one.args?.data?.nodeName ?? "?")
+          .replace(CLASS_ATTRIBUTE, ".$1")
+          .slice(0, 60);
+        const key = `${one.args?.data?.reason ?? "?"} on ${node}`;
+        counted.set(key, (counted.get(key) ?? 0) + 1);
+      }
+    }
+    return [...counted].sort((a, b) => b[1] - a[1]).slice(0, 8);
+  };
+  const passesIn = (from: number, to: number) =>
+    [...recalcs, ...layouts]
+      .filter((one) => one.ts >= from && one.ts < to)
+      .sort((a, b) => a.ts - b.ts)
+      .map((one) => ({
+        name: one.name,
+        elements: elementsOf(one),
+        ms: (one.dur ?? 0) / 1000,
+        at: forcedBy(one),
+      }));
   return {
     marks: marks.map((event) => ({ at: event.ts, name: event.name })),
-    tasks: events
-      .filter(
-        (event) =>
-          event.name === "RunTask" &&
-          event.ph === "X" &&
-          event.pid === first.pid &&
-          event.tid === first.tid
-      )
-      .map((event) => ({
-        at: event.ts,
-        end: event.ts + (event.dur ?? 0),
-        wall: (event.dur ?? 0) / 1000,
-        cpu: (event.tdur ?? 0) / 1000,
-      })),
+    tasks: main
+      .filter((event) => event.name === "RunTask")
+      .map((event) => {
+        const end = event.ts + (event.dur ?? 0);
+        return {
+          at: event.ts,
+          end,
+          wall: (event.dur ?? 0) / 1000,
+          cpu: (event.tdur ?? 0) / 1000,
+          restyled: recalcs
+            .filter((recalc) => recalc.ts >= event.ts && recalc.ts < end)
+            .reduce((sum, recalc) => sum + elementsOf(recalc), 0),
+          styleMs: msIn(recalcs, event.ts, end),
+          layoutMs: msIn(layouts, event.ts, end),
+          passes: restyles ? passesIn(event.ts, end) : [],
+          invalidated: restyles ? invalidatedIn(event.ts, end) : [],
+        };
+      }),
   };
 }
 

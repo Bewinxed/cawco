@@ -757,11 +757,25 @@
    */
   let cueTop = $state(false);
   let cueBottom = $state(false);
+  /**
+   * The field as it was last laid out: how far its text is scrolled past its
+   * drop, and the width its text wraps at. Kept by the cue, which reads the
+   * field wherever it already lays out (its scroll, its resize, the frame
+   * after its text moves), so a switch flies the words leaving off this
+   * (`fly`): read off the field in the switch itself, the page was laid out
+   * in the click with the pane just shown dirty, styling the whole page in
+   * that task.
+   */
+  let laidOut = { drop: 0, wrap: 0 };
   function scrollCue(node: HTMLTextAreaElement) {
     const cue = () => {
       const hidden = node.scrollHeight - node.clientHeight;
       cueTop = hidden > 1 && node.scrollTop > 1;
       cueBottom = hidden > 1 && node.scrollTop < hidden - 1;
+      laidOut = {
+        drop: scrollDrop(node.scrollHeight, node.clientHeight, node.scrollTop),
+        wrap: wrapOf(node),
+      };
     };
     let frame = 0;
     $effect(() => {
@@ -816,11 +830,9 @@
     let start = { transform: "none", opacity: "1" };
     let out = from;
     let outRest = "";
-    // Read before the swap, off the field still showing the words leaving.
-    let outDrop = field
-      ? scrollDrop(field.scrollHeight, field.clientHeight, field.scrollTop)
-      : 0;
-    let outWrap = field ? wrapOf(field) : 0;
+    // The field still showing the words leaving, as it was last laid out.
+    let outDrop = laidOut.drop;
+    let outWrap = laidOut.wrap;
     if (was && flightIn) {
       const style = getComputedStyle(flightIn);
       start = { transform: style.transform, opacity: style.opacity };

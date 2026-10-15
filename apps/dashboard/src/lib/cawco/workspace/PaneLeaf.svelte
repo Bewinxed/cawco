@@ -43,6 +43,7 @@
   import { settling, slot } from "./dock.svelte";
   import { createSwipe } from "./gesture.svelte";
   import PaneTabs from "./PaneTabs.svelte";
+  import { warm } from "./warm.svelte";
   import { contextOf, type LeafNode, workspace } from "./workspace.svelte";
 
   let {
@@ -395,13 +396,14 @@
           ((Math.abs(delta) <= 1 && !swipe.veiled.includes(paneId)) ||
             paneId === swipe.leaving))}
       {@const ctx = contextOf(paneId)}
+      {@const laidOut = settling.has(paneId) || warm.holds(leaf.id, paneId)}
       <div
         class="pane"
         data-delta={delta}
         data-pane={paneId}
         inert={!isActive}
-        class:pane-hidden={!(shown || settling.has(paneId))}
-        class:pane-settling={!shown && settling.has(paneId)}
+        class:pane-hidden={!(shown || laidOut)}
+        class:pane-settling={!shown && laidOut}
         use:slot={{ id: paneId, shown }}
         {@attach land(() => (isActive ? `pane:${paneId}` : undefined), {
           mode: "clip",
@@ -600,7 +602,8 @@
   /* A pane off screen that has not drawn its first picture yet (dock.svelte.ts
      `settling`) is laid out but not painted, so its transcript measures its
      rows and draws before its tab is chosen; once drawn it is skipped as
-     above. Only the hidden state is declared, as on the surfaces (see
+     above. So is the pane whose tab the reader is reaching for (warm.svelte.ts),
+     so the switch that shows it only paints. Only the hidden state is declared, as on the surfaces (see
      `.groups.hidden-surface` in SessionSurface). */
   .pane-settling {
     visibility: hidden;

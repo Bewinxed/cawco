@@ -94,6 +94,7 @@
   import { rebuildScheduler } from "./scheduler.svelte";
   import { type StatusTone, stepSessionStatus } from "./session-status";
   import { noNativeDrag, pressTab } from "./tab-drag.svelte";
+  import { warm } from "./warm.svelte";
   import { contextOf, type LeafNode, workspace } from "./workspace.svelte";
 
   let {
@@ -1432,6 +1433,9 @@
         data-tone={tab.tone}
         oncontextmenucapture={anchorMenu}
         onpointerdown={(event) => {
+          if (!chosen) {
+            warm.reach(leaf.id, tab.id);
+          }
           pullMenu(tab.id, event);
           pressTab(event, {
             leafId: leaf.id,
@@ -1452,9 +1456,15 @@
             return;
           }
           rebuildScheduler.prepare(tab.id);
+          if (!chosen) {
+            warm.reach(leaf.id, tab.id);
+          }
           hoverTab(tab.id, event);
         }}
-        onpointerleave={leaveDetails}
+        onpointerleave={() => {
+          warm.leave(leaf.id, tab.id);
+          leaveDetails();
+        }}
         style:--full-next={RIM[tabs[i + 1]?.tone ?? tab.tone].full}
         style:--full-prev={RIM[tabs[i - 1]?.tone ?? tab.tone].full}
         style:--lone-end={Number(i === tabs.length - 1)}
@@ -1569,7 +1579,15 @@
               href={tab.href}
               label={tab.label}
               onauxclick={(event) => middleClose(tab.id, event)}
+              onblur={() => warm.leave(leaf.id, tab.id)}
               onclick={(event) => clickTab(tab.id, event)}
+              onfocus={() => {
+                // The arrow keys move focus along the strip before Enter
+                // chooses: the pane is laid out while the focus rests.
+                if (!chosen) {
+                  warm.reach(leaf.id, tab.id);
+                }
+              }}
               onkeydown={(event) => {
                 if (event.key === "ArrowDown" || event.key === " ") {
                   event.preventDefault();

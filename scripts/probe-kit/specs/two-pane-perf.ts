@@ -13,7 +13,10 @@
  * front of the left one and the other long session in front of the right.
  * Each layout reads older pages into its long transcripts, then runs four
  * phases: steady streaming, typing in the left composer, wheeling the left
- * transcript, and switching tabs in both panes.
+ * transcript, and switching tabs in both panes three ways: the pointer
+ * coming onto a tab and clicking it (`point`), the focus resting on a tab
+ * and Enter (`focus`), and a switch nobody reached for first, as a shortcut
+ * makes it (`cold`).
  *
  * WHAT IS MEASURED IS THE PAGE'S OWN WORK, NOT THE MACHINE'S. Each phase's
  * main thread is read off a DevTools trace by its thread clock (`tdur`, the
@@ -25,9 +28,11 @@
  *
  * Asserted on two panes: no task over two frames' budget (`LONG_TASK_MS`
  * each) on that slower CPU while streaming and typing; the main thread's
- * CPU over a run of tab switches within `CPU_SHARE` of one pane's (the
- * owner's regression: a second pane made switching five times the work),
- * its CPU per hub message streaming and typing noted against one pane's;
+ * CPU per hub message streaming within `MESSAGE_SHARE` of one pane's (typing
+ * noted); a switch reached for first (`point`, `focus`), in either layout,
+ * no longer than `SWITCH_MS` on the slower CPU, its reach's task noted; a
+ * cold switch within `COLD_SHARE` of one pane's (the owner's regression: a
+ * second pane made switching five times the work), its own length noted;
  * and every key typed painting within `INPUT_MS` (Event Timing, the
  * entries an `interactionId` marks). Each phase's longest task on the
  * slower CPU is noted against `LONG_TASK_MS`, its longest animation frame
@@ -38,9 +43,9 @@
 // biome-ignore-all lint/performance/noAwaitInLoops: one phase, one tab, one key at a time, as a person makes them
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Page } from "playwright-core";
+import type { Locator, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import { SCROLLER, traceMain } from "../frames";
+import { type MainTask, SCROLLER, traceMain } from "../frames";
 import { type Kit, open, type Spec } from "../kit";
 
 /** Calls in each long session. */
@@ -57,21 +62,36 @@ const SLOWER = 4;
 /** A long task: the frame budget each phase's longest is noted against. */
 const LONG_TASK_MS = 50;
 /**
- * How much more of the main thread's CPU two panes' tab switches may take
- * than one pane's. Our own call: two panes draw two transcripts, so up to
- * twice one pane's work is their own; after the fix runs had 1.0x to 1.4x,
- * and before it two panes' switches took the main thread 40.8s against one
- * pane's 8.0s (5x; wall clock, 4x throttled).
+ * How much longer two panes' longest cold switch may be than one pane's: the
+ * owner's regression was a second pane making switching five times the work
+ * (40.8s against 8.0s, wall clock, 4x throttled). Our own call.
  */
-const CPU_SHARE = 2;
+const COLD_SHARE = 1.25;
 const INPUT_MS = 100;
 /** Older pages read into each long transcript, a scroll to its top apiece. */
 const PAGES = 6;
 const START_TOOL = "mcp__cawco__start_session";
 
 type Layout = "one" | "two";
-const PHASES = ["stream", "type", "scroll", "switch"] as const;
+/** How a switch is made: see `measure`. */
+const SWITCHES = ["point", "focus", "cold"] as const;
+type Switch = (typeof SWITCHES)[number];
+const PHASES = ["stream", "type", "scroll", ...SWITCHES] as const;
 type Phase = (typeof PHASES)[number];
+/**
+ * How long a reach rests on a tab before it switches: a pointer coming onto
+ * a tab and pressing it, the focus resting a beat before Enter. Our own call,
+ * a short dwell: a frame is all the warming needs (warm.svelte.ts).
+ */
+const REACH_MS = 300;
+/** How long after a switch its tasks are its own: the glide, the catch-up behind it. */
+const SETTLE_MS = 900;
+/** Between two ways of switching: every pane a reach warmed has gone cold (warm.svelte.ts `COOL_MS`). */
+const REST_MS = 2000;
+/** The longest a switch's own task may take on the slower CPU, ms: two frames. */
+const SWITCH_MS = 100;
+/** How much more a message's CPU two panes may take while streaming than one pane's. */
+const MESSAGE_SHARE = 1.1;
 interface Reading {
   /** The main thread's CPU over the phase, ms. */
   cpuMs: number;
@@ -83,6 +103,12 @@ interface Reading {
   maxInput: number;
   /** How many hub messages the page took over the phase. */
   messages: number;
+  /** The longest task between a reach and its switch, CPU ms (switch phases). */
+  reachCpu: number;
+  /** What the longest task restyled, and its style and layout time. */
+  restyled: string;
+  /** The longest task a switch set off, from it to `SETTLE_MS` after, CPU ms (switch phases). */
+  switchCpu: number;
   /** The longest animation frame's account of itself: what ran in it. */
   worstFrame: string;
 }
@@ -246,6 +272,79 @@ async function readOlder(page: Page): Promise<void> {
   await page.waitForTimeout(4000);
 }
 
+/**
+ * What each pane holds, by elements: in all, in its transcript's list (and
+ * how many rows virtua has mounted there), and the biggest of everything
+ * else, by the box it stands in on the way to the list.
+ */
+const census = (page: Page): Promise<string> =>
+  page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>(".pane[data-pane]")]
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: serialized into the page whole, so it cannot lean on helpers out here
+      .map((pane) => {
+        const all = pane.getElementsByTagName("*").length;
+        const listing = pane.querySelector(".listing");
+        const inList = listing?.getElementsByTagName("*").length ?? 0;
+        const items = listing?.firstElementChild?.children.length ?? 0;
+        // The boxes beside the path down to the list, each with what it holds.
+        const beside: [string, number][] = [];
+        for (
+          let at: Element | null = listing;
+          at && at !== pane;
+          at = at.parentElement
+        ) {
+          for (const sibling of at.parentElement?.children ?? []) {
+            if (sibling !== at) {
+              const cls =
+                typeof sibling.className === "string"
+                  ? (sibling.className.split(" ")[0] ?? "")
+                  : "";
+              beside.push([
+                `${sibling.tagName.toLowerCase()}${cls ? `.${cls}` : ""}`,
+                sibling.getElementsByTagName("*").length + 1,
+              ]);
+            }
+          }
+        }
+        const biggest = beside
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 4)
+          .map(([name, n]) => `${name} ${n}`)
+          .join(", ");
+        const state = pane.classList.contains("pane-hidden")
+          ? "hidden"
+          : "shown";
+        // Where the mounted rows stand against the view: virtua's buffer.
+        const scroller = pane.querySelector<HTMLElement>(
+          '[aria-label="Session transcript"]'
+        );
+        const tops = [...(listing?.firstElementChild?.children ?? [])].map(
+          (item) => Number.parseFloat((item as HTMLElement).style.top)
+        );
+        const span = tops.length
+          ? `rows ${Math.round(Math.min(...tops))}-${Math.round(Math.max(...tops))}px`
+          : "no rows";
+        const view = scroller
+          ? `view ${Math.round(scroller.scrollTop)}+${scroller.clientHeight}px of ${(listing?.firstElementChild as HTMLElement | null)?.style.height}`
+          : "";
+        return `${pane.dataset.pane?.slice(0, 8)} (${state}): ${all} elements, ${inList} in the list's ${items} rows (${span}; ${view}); beside it ${biggest || "nothing"}`;
+      })
+      .concat(
+        [...document.querySelectorAll("section.leaf")].map((leaf) => {
+          const count = (selector: string) =>
+            [...leaf.querySelectorAll(selector)].reduce(
+              (sum, el) => sum + el.getElementsByTagName("*").length + 1,
+              0
+            );
+          return `group ${(leaf as HTMLElement).dataset.leaf}: its composer ${count(":scope > .dock")}, its tabs ${count("[data-strip]")}`;
+        }),
+        [
+          `the rail ${document.querySelector("aside")?.getElementsByTagName("*").length ?? 0}, the page ${document.getElementsByTagName("*").length}`,
+        ]
+      )
+      .join(" | ")
+  );
+
 async function measure(
   kit: Kit,
   base: string,
@@ -261,26 +360,84 @@ async function measure(
   );
   await open(page, base, `${SCROLLER} [data-row]`, 120_000);
   await readOlder(page);
+  kit.note(`${mode} pane(s), what each pane holds: ${await census(page)}`);
   const now = () => page.evaluate(() => performance.now());
   const spans = {} as Record<
     Phase,
-    { cpu: number; from: number; maxCpu: number; to: number }
+    {
+      cpu: number;
+      from: number;
+      maxCpu: number;
+      reachCpu: number;
+      restyled: string;
+      switchCpu: number;
+      to: number;
+    }
   >;
-  // The main thread's CPU, off a DevTools trace's top-level tasks.
+  // The main thread's CPU, off a DevTools trace's top-level tasks; in a
+  // switch phase, the longest task of each switch's reach and of the switch
+  // itself (its marks, `two-pane:reach:<n>` and `two-pane:switch:<n>`); and
+  // what the longest task (the longest switch's, in a switch phase)
+  // restyled and laid out, and why.
   const phase = async (name: Phase, act: () => Promise<void>) => {
     let from = 0;
     let to = 0;
-    const main = await traceMain(page, async () => {
-      await page.evaluate((mark) => performance.mark(mark), `two-pane:${name}`);
-      from = await now();
-      await act();
-      to = await now();
-    });
+    const main = await traceMain(
+      page,
+      async () => {
+        await page.evaluate(
+          (mark) => performance.mark(mark),
+          `two-pane:${name}`
+        );
+        from = await now();
+        await act();
+        to = await now();
+      },
+      { restyles: true }
+    );
+    const longestOf = (tasks: MainTask[]) =>
+      tasks.reduce<MainTask | null>(
+        (most, task) => (most && most.cpu >= task.cpu ? most : task),
+        null
+      );
+    const markAt = (mark: string) =>
+      main.marks.find((one) => one.name === mark)?.at;
+    const reaches: MainTask[] = [];
+    const switches: MainTask[] = [];
+    for (let n = 0; markAt(`two-pane:switch:${n}`) !== undefined; n += 1) {
+      const reach = markAt(`two-pane:reach:${n}`) ?? 0;
+      const made = markAt(`two-pane:switch:${n}`) ?? 0;
+      reaches.push(
+        ...main.tasks.filter((task) => task.at >= reach && task.at < made)
+      );
+      switches.push(
+        ...main.tasks.filter(
+          (task) => task.at >= made && task.at < made + SETTLE_MS * 1000
+        )
+      );
+    }
+    const longestSwitch = longestOf(switches);
+    const longest = longestSwitch ?? longestOf(main.tasks);
     spans[name] = {
       from,
       to,
       cpu: main.tasks.reduce((sum, task) => sum + task.cpu, 0),
-      maxCpu: Math.max(0, ...main.tasks.map((task) => task.cpu)),
+      maxCpu: longestOf(main.tasks)?.cpu ?? 0,
+      reachCpu: longestOf(reaches)?.cpu ?? 0,
+      switchCpu: longestSwitch?.cpu ?? 0,
+      restyled: longest
+        ? `${longest.restyled} elements in ${Math.round(longest.styleMs)}ms of style, ${Math.round(longest.layoutMs)}ms of layout [${longest.passes
+            .filter((pass) => pass.ms >= 0.5)
+            .map(
+              (pass) =>
+                `${pass.name === "Layout" ? "layout" : "style"} ${pass.elements || ""} ${pass.ms.toFixed(1)}ms by ${pass.at}`
+            )
+            .join("; ")}], asked for by ${
+            longest.invalidated
+              .map(([what, n]) => `${what} ${n}x`)
+              .join("; ") || "nothing traced"
+          }`
+        : "nothing",
     };
   };
   await phase("stream", () => page.waitForTimeout(20_000));
@@ -307,27 +464,69 @@ async function measure(
     }
     await page.waitForTimeout(500);
   });
-  await phase("switch", async () => {
-    const order =
-      mode === "two"
-        ? [ids.streamD, ids.streamE, ids.longB, ids.streamC, ids.longA]
-        : [ids.longB, ids.streamD, ids.longA, ids.streamC, ids.longA];
-    for (const id of order) {
-      await page
-        .locator(`[data-session-tab="${id}"]`)
-        .filter({ visible: true })
-        .first()
-        .click();
-      await page.waitForTimeout(900);
+  // Five switches each way along both groups' tabs: by a pointer that comes
+  // onto the tab and rests before it clicks, by the keyboard's focus resting
+  // on it before Enter, and cold (the tab's own `click()`: no pointer over
+  // it, no focus on it, as a shortcut or a link switches).
+  const order = (
+    mode === "two"
+      ? [ids.streamD, ids.streamE, ids.longB, ids.streamC, ids.longA]
+      : [ids.longB, ids.streamD, ids.longA, ids.streamC, ids.longA]
+  ) as string[];
+  const tabOf = (id: string) =>
+    page
+      .locator(`[data-session-tab="${id}"]`)
+      .filter({ visible: true })
+      .first();
+  const marked = (mark: string) =>
+    page.evaluate((name) => performance.mark(name), mark);
+  const ways: Record<
+    Switch,
+    {
+      dwell: number;
+      make: (tab: Locator) => Promise<unknown>;
+      reach: (tab: Locator) => Promise<unknown>;
     }
-  });
+  > = {
+    cold: {
+      dwell: 0,
+      make: (tab) => tab.evaluate((el) => (el as HTMLElement).click()),
+      reach: () => Promise.resolve(),
+    },
+    focus: {
+      dwell: REACH_MS,
+      make: () => page.keyboard.press("Enter"),
+      reach: (tab) => tab.focus(),
+    },
+    point: {
+      dwell: REACH_MS,
+      make: (tab) => tab.click(),
+      reach: (tab) => tab.hover(),
+    },
+  };
+  for (const how of SWITCHES) {
+    const way = ways[how];
+    await page.waitForTimeout(REST_MS);
+    await phase(how, async () => {
+      for (const [n, id] of order.entries()) {
+        const tab = tabOf(id);
+        await marked(`two-pane:reach:${n}`);
+        await way.reach(tab);
+        await page.waitForTimeout(way.dwell);
+        await marked(`two-pane:switch:${n}`);
+        await way.make(tab);
+        await page.waitForTimeout(SETTLE_MS);
+      }
+    });
+  }
   const seen = await page.evaluate(
     () => (window as unknown as { __cost: Cost }).__cost
   );
   await page.close();
   const readings = {} as Record<Phase, Reading>;
   for (const name of PHASES) {
-    const { from, to, cpu, maxCpu } = spans[name];
+    const { from, to, cpu, maxCpu, reachCpu, restyled, switchCpu } =
+      spans[name];
     const tasks = seen.tasks.filter(([at]) => at >= from && at < to);
     const events = seen.events.filter(([at]) => at >= from && at < to);
     const [worst] = seen.frames
@@ -360,6 +559,9 @@ async function measure(
       maxInput: Math.round(Math.max(0, ...events.map(([, ms]) => ms))),
       cpuMs: Math.round(cpu),
       messages: heard.length,
+      reachCpu: Math.round(reachCpu),
+      restyled,
+      switchCpu: Math.round(switchCpu),
       worstFrame: `${worst ? `${Math.round(worst[1])}ms frame: ${worst[2]}` : "no long frame"}; hub messages of 4ms or more: ${heavy || "none"}`,
     };
   }
@@ -502,7 +704,7 @@ const spec: Spec = {
       for (const name of PHASES) {
         const r = numbers[mode][name];
         kit.note(
-          `${mode} pane(s), ${name}: main thread CPU ${r.cpuMs}ms over ${r.messages} hub messages, the longest task ${r.maxCpu}ms of CPU (${r.maxCpu * SLOWER}ms ${SLOWER}x slower, against ${LONG_TASK_MS}ms); ${r.longTasks} long tasks by the wall clock; ${r.interactions} interactions, the slowest ${r.maxInput}ms; the longest ${r.worstFrame}`
+          `${mode} pane(s), ${name}: main thread CPU ${r.cpuMs}ms over ${r.messages} hub messages${r.switchCpu || r.reachCpu ? `, the longest reach's task ${r.reachCpu}ms and switch's ${r.switchCpu}ms of CPU` : ""}, the longest task ${r.maxCpu}ms of CPU (${r.maxCpu * SLOWER}ms ${SLOWER}x slower, against ${LONG_TASK_MS}ms), restyling ${r.restyled}; ${r.longTasks} long tasks by the wall clock; ${r.interactions} interactions, the slowest ${r.maxInput}ms; the longest ${r.worstFrame}`
         );
       }
     }
@@ -519,27 +721,44 @@ const spec: Spec = {
         `the longest task ${two[name].maxCpu}ms of CPU; the longest ${two[name].worstFrame}`
       );
     }
-    // Streaming and typing, a message's CPU is told against one pane's, not
-    // held to it: two panes draw two transcripts, both streaming.
+    // A streamed message's CPU is held to one pane's: what a second pane
+    // adds is its own transcript's tail, not a pass over every row it holds.
     const perMessage = (r: Reading) => r.cpuMs / Math.max(1, r.messages);
-    for (const name of ["stream", "type"] as Phase[]) {
-      kit.note(
-        `two panes, ${name}: ${(perMessage(two[name]) / perMessage(one[name])).toFixed(2)}x one pane's CPU per hub message (${two[name].cpuMs}ms over ${two[name].messages}, one pane ${one[name].cpuMs}ms over ${one[name].messages})`
-      );
-    }
-    // A switch is the same five clicks in either layout: its CPU is held.
     kit.check(
-      `two panes, switch: the main thread's CPU within ${CPU_SHARE}x one pane's`,
-      two.switch.cpuMs <= one.switch.cpuMs * CPU_SHARE,
-      `two panes ${two.switch.cpuMs}ms, one pane ${one.switch.cpuMs}ms`
+      `two panes, stream: the main thread's CPU per hub message within ${MESSAGE_SHARE}x one pane's`,
+      perMessage(two.stream) <= perMessage(one.stream) * MESSAGE_SHARE,
+      `${(perMessage(two.stream) / perMessage(one.stream)).toFixed(2)}x: two panes ${two.stream.cpuMs}ms over ${two.stream.messages}, one pane ${one.stream.cpuMs}ms over ${one.stream.messages}`
+    );
+    kit.note(
+      `two panes, type: ${(perMessage(two.type) / perMessage(one.type)).toFixed(2)}x one pane's CPU per hub message (${two.type.cpuMs}ms over ${two.type.messages}, one pane ${one.type.cpuMs}ms over ${one.type.messages})`
     );
     kit.check(
       `two panes, type: every key paints within ${INPUT_MS}ms`,
       two.type.maxInput < INPUT_MS,
       `${two.type.interactions} interactions, the slowest ${two.type.maxInput}ms`
     );
+    // A switch the reader reached for first (a pointer resting on its tab,
+    // the focus resting on it) only paints: its pane was laid out in the
+    // reach. In either layout.
+    for (const mode of ["one", "two"] as Layout[]) {
+      for (const how of ["point", "focus"] as Switch[]) {
+        const r = numbers[mode][how];
+        kit.check(
+          `${mode} pane(s), ${how}: the switch's longest task within ${SWITCH_MS}ms on a CPU ${SLOWER}x slower`,
+          r.switchCpu * SLOWER <= SWITCH_MS,
+          `the switch's longest task ${r.switchCpu}ms of CPU (${r.switchCpu * SLOWER}ms ${SLOWER}x slower), restyling ${r.restyled}; the reach's ${r.reachCpu}ms`
+        );
+      }
+    }
+    // A switch nobody reached for first lays its pane out in the switch:
+    // held to one pane's, its own cost noted against two frames.
+    kit.check(
+      `two panes, cold: the switch's longest task within ${COLD_SHARE}x one pane's`,
+      two.cold.switchCpu <= one.cold.switchCpu * COLD_SHARE,
+      `two panes ${two.cold.switchCpu}ms of CPU, one pane ${one.cold.switchCpu}ms`
+    );
     kit.note(
-      `a switch's longest task is ${two.switch.maxCpu}ms of CPU (${two.switch.maxCpu * SLOWER}ms ${SLOWER}x slower), against the ${2 * LONG_TASK_MS}ms of two frames: revealing a pane put away (content-visibility: hidden) styles its whole transcript in that frame`
+      `a cold switch's longest task is ${two.cold.switchCpu}ms of CPU (${two.cold.switchCpu * SLOWER}ms ${SLOWER}x slower) against the ${SWITCH_MS}ms of two frames: a pane nobody reached for is laid out whole as it is shown`
     );
   },
 };
