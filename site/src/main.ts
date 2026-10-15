@@ -2,19 +2,27 @@ import { gsap } from 'gsap';
 import { sizeCawRims } from './caw';
 import { initChannel } from './channel';
 import { all, one } from './dom';
+import { initHero } from './hero/player';
 import { initStage } from './stage';
 import { initTheme } from './theme';
 
 initTheme(one(document, '[data-theme-switch]'));
+const hero = initHero(one(document, '[data-hero-stage]'), one(document, '[data-beats]'));
 const stage = initStage(one(document, '[data-stage]'));
 initChannel(one(document, '[data-channel]'));
 sizeCawRims(document);
 
 // Scenes move only for visitors who have not asked for reduced motion, and the
-// setting is followed live if it changes while the page is open.
+// setting is followed live if it changes while the page is open. Without it the
+// hero stands on scene 1's summary frame.
+hero.setMotion(false);
 gsap.matchMedia().add('(prefers-reduced-motion: no-preference)', () => {
+  hero.setMotion(true);
   stage.setMotion(true);
-  return () => stage.setMotion(false);
+  return () => {
+    hero.setMotion(false);
+    stage.setMotion(false);
+  };
 });
 
 // Further down the page Caw peers over the edge of a block, and his clip plays

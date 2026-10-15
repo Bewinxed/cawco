@@ -167,23 +167,39 @@
     </header>
 
     <main id="main">
-      <section class="hero wrap">
-        <div class="hero-art">
-          <i
-            data-caw="ready-enter-distance"
-            role="img"
-            aria-label="Caw, a small fluffy black crow with vermilion wing tips"
-          ></i>
-        </div>
-        <div class="hero-copy">
-          <h1>One board for every coding agent you run.</h1>
-          <p class="lede">
-            Run Claude Code, OpenCode and pi across your machines, and answer every waiting session
-            from one browser tab.
-          </p>
-          <div class="install" id="install">
+      <section class="hero" aria-labelledby="hero-title">
+        <p class="eyebrow">
+          Self-hosted, for
+          <span class="agent"
+            ><svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>Claude Code</span
+          >,
+          <span class="agent"
+            ><svg class="hg" aria-hidden="true"><use href="#hg-opencode" /></svg>OpenCode</span
+          >
+          and
+          <span class="agent"
+            ><svg class="hg" aria-hidden="true"><use href="#hg-pi" /></svg>pi</span
+          >.
+        </p>
+        <!-- The tail box stacks all five tails, so its size never changes. Only the first is read. -->
+        <h1 id="hero-title">
+          <span class="stem">Your agents keep working</span>
+          <span class="tails"
+            ><span class="tail is-on">after you close the lid.</span
+            ><span class="tail" aria-hidden="true">on all your machines.</span
+            ><span class="tail" aria-hidden="true">until they need your yes.</span
+            ><span class="tail" aria-hidden="true">while you circle what's wrong.</span
+            ><span class="tail" aria-hidden="true">after the code is done.</span></span
+          >
+        </h1>
+        <p class="lede">
+          Caw&amp;Co puts every session on every machine on one board on your own network. You
+          answer the ones waiting on you, from a browser or your phone. Caw, the project's lead,
+          takes the launch, the SEO and the docs as well as the code.
+        </p>
+        <div class="install" id="install">
             <div class="install-head">
-              <p class="install-label">Install on your first machine</p>
+              <p class="install-label">Install on the machine that stays on</p>
               <div
                 class="tabs segmented"
                 role="tablist"
@@ -222,14 +238,118 @@
               </p>
             </div>
             <p class="install-note">
-              It's free and runs on macOS and Linux with systemd.
-              <a href="install.sh">Read the script</a> or
-              <a href="https://github.com/Bewinxed/cawco">browse the source</a>.
+              Free. macOS and Linux with systemd. For more machines, use Add machine on the board.
             </p>
-            <p class="install-note install-more">
-              For more machines, use Add machine in your dashboard, not this command.
-            </p>
+        </div>
+
+        <!--
+          Scene 1, one paused GSAP timeline (src/hero/scene.ts), authored to the HyperFrames
+          composition contract: the stage is the composition root. Four layers, in this order:
+          the paper's lattice (the stage's ::before), the machines, the flat UI cards, free hand.
+        -->
+        <div
+          class="hero-stage"
+          data-hero-stage
+          data-composition-id="hero-scene-1"
+          data-width="1200"
+          data-height="600"
+          data-duration="7.6"
+        >
+          <i data-machine="desk-box"></i>
+          <i data-machine="laptop"></i>
+          <div class="hero-cards" aria-hidden="true">
+            <div class="drift" data-card>
+              <div class="session-card" data-height="1">
+                <span class="mark" style="--fill: var(--mark-2)"><i data-icon="rocket"></i></span>
+                <b class="card-title">Fix retry loop</b>
+                <svg class="hg" aria-hidden="true"><use href="#hg-claude" /></svg>
+                <span class="st st-live">working</span>
+                <span class="card-age"
+                  ><span data-age>2m</span><span data-age>3m</span><span data-age>4m</span></span
+                >
+              </div>
+            </div>
+            <div class="drift" data-card>
+              <div class="session-card" data-height="1">
+                <span class="mark" style="--fill: var(--mark-8)"><i data-icon="leaf"></i></span>
+                <b class="card-title">Build widget target</b>
+                <svg class="hg" aria-hidden="true"><use href="#hg-opencode" /></svg>
+                <span class="st st-live">working</span>
+                <span class="card-age"
+                  ><span data-age>2m</span><span data-age>3m</span><span data-age>4m</span></span
+                >
+              </div>
+            </div>
+            <div class="drift" data-card>
+              <div class="session-card" data-height="2">
+                <span class="mark" data-rim="attn" style="--fill: var(--mark-5)"
+                  ><i data-icon="bolt"></i
+                ></span>
+                <b class="card-title">Migrate auth tables</b>
+                <svg class="hg" aria-hidden="true"><use href="#hg-pi" /></svg>
+                <span class="pill pill-attn"><i data-icon="arrow-up"></i>needs you</span>
+                <span class="card-age"
+                  ><span data-age>2m</span><span data-age>3m</span><span data-age>4m</span></span
+                >
+              </div>
+            </div>
           </div>
+          <svg class="hero-hand" aria-hidden="true" focusable="false"></svg>
+        </div>
+
+        <div class="beats" data-beats>
+          <div class="beat-list" role="group" aria-label="Demos">
+            <button
+              class="beat"
+              type="button"
+              aria-label="after you close the lid."
+              aria-current="true"
+              data-beat="1"
+            >
+              <span class="beat-line"><span class="beat-fill" data-fill></span></span>
+            </button>
+            <button
+              class="beat"
+              type="button"
+              aria-label="on all your machines."
+              aria-disabled="true"
+              data-beat="2"
+            >
+              <span class="beat-line"></span>
+            </button>
+            <button
+              class="beat"
+              type="button"
+              aria-label="until they need your yes."
+              aria-disabled="true"
+              data-beat="3"
+            >
+              <span class="beat-line"></span>
+            </button>
+            <button
+              class="beat"
+              type="button"
+              aria-label="while you circle what's wrong."
+              aria-disabled="true"
+              data-beat="4"
+            >
+              <span class="beat-line"></span>
+            </button>
+            <button
+              class="beat"
+              type="button"
+              aria-label="after the code is done."
+              aria-disabled="true"
+              data-beat="5"
+            >
+              <span class="beat-line"></span>
+            </button>
+          </div>
+          <button class="demo-pause" type="button" data-demo-pause hidden>
+            <span class="ic-pause" aria-hidden="true"><i data-icon="pause"></i></span>
+            <span class="ic-play" aria-hidden="true"><i data-icon="play"></i></span>
+            <span data-demo-pause-label>Pause demos</span>
+          </button>
         </div>
       </section>
 

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import type { IconifyJSON } from '@iconify/types';
 import { getIconData, iconToHTML, iconToSVG } from '@iconify/utils';
 import { defineConfig, type HtmlTagDescriptor, type Plugin } from 'vite';
+import { deskBox, laptop } from './src/hero/machines.ts';
 import { applyTheme, THEME_KEY } from './src/scheme';
 
 const require = createRequire(import.meta.url);
@@ -134,6 +135,15 @@ function clip(name: string): Clip {
   };
 }
 
+/** The hero's machines (src/hero/machines.ts): `<i data-machine="laptop"></i>` becomes its drawing. */
+const MACHINES: Record<string, () => string> = { laptop, 'desk-box': deskBox };
+
+function machine(name: string): string {
+  const draw = MACHINES[name];
+  if (!draw) throw new Error(`No machine named "${name}".`);
+  return draw();
+}
+
 /** Markup shorthands in `index.html`, filled in at build time. */
 function pageMarkup(): Plugin {
   const clips = new Map<string, Clip>();
@@ -143,6 +153,7 @@ function pageMarkup(): Plugin {
       order: 'pre',
       handler(html) {
         const page = html
+          .replace(/<i data-machine="([^"]+)"><\/i>/g, (_, name: string) => machine(name))
           .replace(/<i data-icon="([^"]+)"><\/i>/g, (_, name: string) => icon(name))
           .replace(/<i data-mark="([^"]+)"><\/i>/g, (_, name: string) => mark(name))
           .replace(/<i data-device="([^"]+)"><\/i>/g, (_, name: string) => device(name))
