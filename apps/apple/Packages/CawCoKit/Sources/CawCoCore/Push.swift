@@ -23,6 +23,8 @@ public enum PushRoute: Sendable, Equatable {
     case task(projectId: String, taskId: String, attempt: String?)
     /// The board.
     case board
+    /// Needs you, in Caw's panel: a burst of several things that need you (push.ts `needs`).
+    case needs
     /// The free week's day-6 reminder: the paywall in its Get Pro form.
     case keepPro
 }
@@ -105,6 +107,9 @@ public struct PushNote: Sendable {
             guard let projectId = fields["projectId"], !projectId.isEmpty else { return .board }
             guard let taskId = fields["taskId"], !taskId.isEmpty else { return .project(projectId) }
             return .task(projectId: projectId, taskId: taskId, attempt: kind == "attempt" ? fields["workItemId"] : nil)
+        // Several at once: the list of what waits, each opened from there.
+        case "needs":
+            return .needs
         case TrialReminder.kind:
             return .keepPro
         default:

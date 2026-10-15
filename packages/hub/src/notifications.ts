@@ -14,7 +14,9 @@
  * presence it holds, not from a client remembering to post a look. Anything
  * else goes at once. Items that land while nobody is in front keep Zulip's
  * hold-then-recheck in their outlet: a finished turn waits a grace and goes
- * only if nobody looked at its session meanwhile (push.ts `turnEnded`).
+ * only if nobody looked at its session meanwhile (push.ts `turnEnded`), and
+ * the push outlet holds what isn't an ask for its burst and asks the gate
+ * again as the burst goes out (push.ts `arrive`).
  * A client is active until it says otherwise or is silent for
  * {@link PRESENCE_TTL_MS}; every change of a client's presence is logged.
  *
@@ -79,6 +81,9 @@ export const turnCollapseId = (instanceId: string): string =>
 /** A task waiting on the owner: its move and its failed attempt are one notification. */
 export const taskCollapseId = (projectId: string, taskId: string): string =>
   collapseOf("task", `${projectId}:${taskId}`);
+/** A burst of things that need you shown as one notification (push.ts), by when it began. */
+export const needsCollapseId = (firstAt: number): string =>
+  collapseOf("needs", firstAt.toString(36));
 
 /** Where a notification is shown. */
 type Outlet = "push" | "telegram";
@@ -131,6 +136,20 @@ export const createNotifications = ({
   const listeners: ClearListener[] = [];
   /** Counts clears: an outlet compares it to what it last told a device. */
   let clears = 0;
+
+  /**
+   * The gate's word on one notification: false, said in the log, when a
+   * client was active on its session at any moment since it landed.
+   */
+  const passes = (offer: Omit<Offer, "send">): boolean => {
+    if (offer.instanceId && inFrontSince(offer.instanceId, offer.landedAt)) {
+      console.log(
+        `[notify] ${offer.outlet} ${offer.collapseId}: dropped, ${offer.instanceId} was in front since it landed ${Math.round((Date.now() - offer.landedAt) / 1000)}s ago`
+      );
+      return false;
+    }
+    return true;
+  };
 
   const isActive = (client: Client, now: number): boolean =>
     client.active &&
@@ -248,14 +267,13 @@ export const createNotifications = ({
      * owner saw it there), sent now otherwise.
      */
     offer(offer: Offer): void {
-      if (offer.instanceId && inFrontSince(offer.instanceId, offer.landedAt)) {
-        console.log(
-          `[notify] ${offer.outlet} ${offer.collapseId}: dropped, ${offer.instanceId} was in front since it landed ${Math.round((Date.now() - offer.landedAt) / 1000)}s ago`
-        );
-        return;
+      if (passes(offer)) {
+        offer.send();
       }
-      offer.send();
     },
+
+    /** The gate alone, for an outlet that sends several at once (push.ts, a burst). */
+    passes,
 
     /** An outlet showed this notification: it is outstanding until it clears, and no longer cleared. */
     shown(collapseId: string): void {

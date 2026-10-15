@@ -648,7 +648,9 @@ try {
   const turn4Start = Date.now();
   await fleet.send(session, "TURN-4: say done");
   await turnEnded(turn4Start);
-  await pause(9000);
+  // The turn's grace (5 s), then its burst's quiet (10 s, push.ts `QUIET_MS`):
+  // the gate is asked as the burst goes out.
+  await pause(17_000);
   const [unlooked] = fleet.query<{
     turn_ended_at: number;
     seen_at: number | null;

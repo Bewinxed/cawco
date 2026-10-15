@@ -48,6 +48,8 @@ public enum PushCategory {
     public static let task = "CAWCO_TASK"
     public static let taskOpenOnly = "CAWCO_TASK_OPEN"
     public static let attempt = "CAWCO_ATTEMPT"
+    /// Several things that need you, as one push: it only opens Needs you.
+    public static let needs = "CAWCO_NEEDS"
     public static let test = "CAWCO_TEST"
     /// A question's own category: `CAWCO_QUESTION.` and a hash of its options.
     private static let answeringPrefix = question + "."
@@ -79,6 +81,7 @@ public enum PushCategory {
             category(task, [open, reply]),
             category(taskOpenOnly, [open]),
             category(attempt, [open, reply]),
+            category(needs, [open]),
             category(test, []),
         ]
     }

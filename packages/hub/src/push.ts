@@ -21,6 +21,18 @@
  *   ({@link Push.itemEnded}). Each item pushes at most once per transition:
  *   an ask once per request, and one collapse id per task, so a failed attempt
  *   that moves its task into a `you` stage is one push, not two.
+ * - **Bursts**: the phone gets one notification per moment of attention.
+ *   Every item joins the open burst ({@link QUIET_MS}, {@link BURST_MS}),
+ *   and as the burst goes out each is asked again whether it still needs
+ *   you and whether the gate lets it through. One left goes as itself;
+ *   several go as one push under the burst's own collapse id, naming the
+ *   count and the first ("6 tasks need you"), which opens Needs you. An ask
+ *   goes at once (a session is blocked on it); a second ask in the burst
+ *   replaces it on the device under the burst's id rather than stacking,
+ *   and the burst's push replaces both. A push that takes another's place
+ *   names the one it replaces in `cawco.cleared`, so the device takes it
+ *   down and never reports it as the person's dismissal. The burst's id
+ *   clears once every item it named has cleared.
  *
  * - **The gate** (notifications.ts): every push about a session is offered
  *   there and dropped when a client had that session in front at any moment
@@ -54,6 +66,7 @@ import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import {
   askCollapseId,
   type Notifications,
+  needsCollapseId,
   taskCollapseId,
   turnCollapseId,
 } from "./notifications";
@@ -63,6 +76,16 @@ const CAWRIER = Bun.env.CAWCO_CAWRIER_ORIGIN ?? "https://cawrier.cawco.dev";
 
 /** One push per collapse id inside this window: a task's move and its failed attempt are one moment. */
 const SAME_MOMENT_MS = 10_000;
+/**
+ * A burst stays open this long after its last arrival. An agent moving
+ * tasks makes one tool call every few seconds (2026-10-15: six moves to
+ * Review in about 25 s, six pushes), so a quiet of two such calls ends it.
+ */
+const QUIET_MS = 10_000;
+/** And at most this long from its first: nothing held waits longer for the owner. */
+const BURST_MS = 30_000;
+/** How long a burst's push is kept for clearing once every item it named has cleared. */
+const COVER_KEPT_MS = 24 * 60 * 60_000;
 /** An undelivered push is worth nothing after a day. */
 const EXPIRY_S = 24 * 60 * 60;
 const REQUEST_TIMEOUT_MS = 10_000;
@@ -89,6 +112,7 @@ export const PUSH_CATEGORIES = {
   task: "CAWCO_TASK",
   taskOpenOnly: "CAWCO_TASK_OPEN",
   attempt: "CAWCO_ATTEMPT",
+  needs: "CAWCO_NEEDS",
   test: "CAWCO_TEST",
 } as const;
 
@@ -184,6 +208,11 @@ export type PushData =
       actionId: string;
       projectId: string;
     }
+  | {
+      /** Several things need you at once (a burst): opens Needs you. */
+      kind: "needs";
+      count: number;
+    }
   | { kind: "test" };
 
 /** One option of a question answered from the push: its action is `ANSWER_<id>`, `id` its index among the question's options. */
@@ -226,6 +255,109 @@ const alertOf = (
   project && project !== title
     ? { title, subtitle: project, body }
     : { title, body };
+
+/** One item that needs you, held in its burst until it goes out. */
+interface Arrival {
+  /** An ask: a session is blocked on it, so it goes at once. */
+  readonly ask: boolean;
+  /** The session it is about, for the gate; null when none. */
+  readonly instanceId: string | null;
+  readonly landedAt: Date;
+  readonly notification: Notification;
+  /** Still needs you as it goes out: an ask still parked, a task still in a `you` stage, a turn not looked at. */
+  readonly still: () => boolean | Promise<boolean>;
+}
+
+/** Items that arose close together, from one actor or several: one notification. */
+interface Burst {
+  readonly firstAt: number;
+  /** The collapse id a push naming more than one of its items goes under. */
+  readonly id: string;
+  /**
+   * By collapse id, in the order they arose: a second arrival under one id
+   * (a task's move and its failed attempt) is the same item, newer words.
+   */
+  readonly items: Map<string, Arrival>;
+  /** What the device shows of it: one item's own collapse id, the burst's id, or nothing yet. */
+  showing: string | null;
+  /** The items what it shows counted. */
+  shown: ReadonlySet<string>;
+  timer?: HubTimer;
+}
+
+/** What a burst's items are, when they are all one thing: "6 tasks need you". */
+const NOUNS: Partial<Record<PushData["kind"], string>> = {
+  ask: "asks",
+  turn: "sessions",
+  task: "tasks",
+  attempt: "tasks",
+  routine: "routines",
+  action: "approved actions",
+};
+
+/** An alert that names the first of `count` items: its own title, then how many more. */
+const firstOf = (alert: Alert, count: number): string =>
+  `${alert.title}, and ${count - 1} more`;
+
+/**
+ * One push for several items: the count and what they are, the first
+ * item's own name (its safe one shown, its real one sealed) and how many
+ * more, its project when they share one. It opens Needs you.
+ */
+const burstOf = (id: string, items: readonly Arrival[]): Notification => {
+  const count = items.length;
+  const nouns = new Set(
+    items.map((item) => NOUNS[item.notification.data.kind])
+  );
+  const [noun] = nouns.size === 1 ? [...nouns] : [undefined];
+  const title = noun ? `${count} ${noun} need you` : `${count} need you`;
+  const projects = new Set(
+    items.map((item) => item.notification.shown.subtitle)
+  );
+  const [project] = projects.size === 1 ? [...projects] : [undefined];
+  const first = items[0].notification;
+  return {
+    shown: alertOf(title, project ?? null, firstOf(first.shown, count)),
+    sealed: alertOf(title, project ?? null, firstOf(first.sealed, count)),
+    category: PUSH_CATEGORIES.needs,
+    collapseId: id,
+    threadId: "needs",
+    data: { kind: "needs", count },
+  };
+};
+
+/** An ask that replaces the burst's earlier ones on the device: its own words and buttons, and how many more wait. */
+const askAmong = (
+  id: string,
+  ask: Notification,
+  count: number
+): Notification => {
+  const more = `And ${count - 1} more`;
+  return {
+    ...ask,
+    collapseId: id,
+    shown: { ...ask.shown, body: `${ask.shown.body}\n${more}` },
+    sealed: { ...ask.sealed, body: `${ask.sealed.body}\n${more}` },
+  };
+};
+
+/**
+ * What a burst sends for `items`: one item as itself; several under the
+ * burst's id, as the newest ask that just arrived or as the burst.
+ */
+const pushOf = (
+  id: string,
+  items: readonly Arrival[],
+  ask: Arrival | null
+): Notification => {
+  const [first] = items;
+  if (items.length === 1) {
+    return first.notification;
+  }
+  return ask
+    ? askAmong(id, ask.notification, items.length)
+    : burstOf(id, items);
+};
 
 /** Cawrier refuses a payload over APNs' 4096 bytes (apps/cawrier `MAX_PAYLOAD_BYTES`). */
 const MAX_PAYLOAD_BYTES = 4096;
@@ -560,15 +692,17 @@ export const createPush = ({
   /**
    * Sends one notification to every device that is not quiet (or to the ones
    * given), carrying the cleared ids: a device that takes it has been handed
-   * every clear so far.
+   * every clear so far. `replacing` are the ids of what it takes the place
+   * of, carried with them: the device takes those down as the hub's doing.
    */
   const deliver = async (
     notification: Notification,
-    to?: PushDeviceRow[]
+    to?: PushDeviceRow[],
+    replacing: readonly string[] = []
   ): Promise<PushOutcome[]> => {
     const devices = to ?? awake();
     const count = notifications.clearCount();
-    const cleared = notifications.carried();
+    const cleared = [...new Set([...replacing, ...notifications.carried()])];
     const plaintext = plaintextOf(notification, cleared);
     return await Promise.all(
       devices.map(async (device): Promise<PushOutcome> => {
@@ -590,58 +724,180 @@ export const createPush = ({
   };
 
   /** Sends now; a push already shown under its collapse id is replaced by it (`apns-collapse-id`). */
-  const replace = (notification: Notification): void => {
-    recent.set(notification.collapseId, Date.now());
+  const replace = (
+    notification: Notification,
+    replacing: readonly string[] = []
+  ): void => {
     if (awake().length > 0) {
       notifications.shown(notification.collapseId);
     }
-    deliver(notification).catch((error: unknown) =>
+    deliver(notification, undefined, replacing).catch((error: unknown) =>
       console.warn(
         `[push] ${notification.collapseId}: ${error instanceof Error ? error.message : String(error)}`
       )
     );
   };
 
+  /** The burst items arrive into, while it is open. */
+  let open: Burst | undefined;
   /**
-   * Offers a push about a session to the gate (notifications.ts): dropped
-   * when a client had `instanceId` in front at some moment since `landedAt`,
-   * sent now otherwise.
+   * By a burst's collapse id, once its push named several items: the ones
+   * that have not cleared yet. When the last clears, so does the burst's.
    */
-  const offer = (
-    notification: Notification,
-    instanceId: string | null,
-    landedAt: Date
+  const covers = new Map<string, { at: number; items: Set<string> }>();
+
+  notifications.onCleared((ids, via) => {
+    const now = Date.now();
+    for (const [id, cover] of covers) {
+      if (ids.includes(id) || now - cover.at > COVER_KEPT_MS) {
+        covers.delete(id);
+        continue;
+      }
+      for (const item of ids) {
+        cover.items.delete(item);
+      }
+      if (cover.items.size === 0) {
+        covers.delete(id);
+        notifications.clear([id], via);
+      }
+    }
+  });
+
+  /**
+   * Shows what of `burst` still needs you, unless the device already shows
+   * all of it: one item as itself, several as one push under the burst's id
+   * (`ask`, the newest ask, keeps its own words and buttons; without it, the
+   * count and the first item). Whatever the burst showed before is named in
+   * the new push's `cawco.cleared`, so the device takes it down.
+   */
+  const show = (
+    burst: Burst,
+    items: readonly Arrival[],
+    ask: Arrival | null
   ): void => {
-    notifications.offer({
-      outlet: "push",
-      collapseId: notification.collapseId,
-      instanceId,
-      landedAt: landedAt.getTime(),
-      send: () => replace(notification),
-    });
+    const ids = items.map((item) => item.notification.collapseId);
+    if (ids.every((id) => burst.shown.has(id))) {
+      return;
+    }
+    const notification = pushOf(burst.id, items, ask);
+    const replacing =
+      burst.showing && burst.showing !== notification.collapseId
+        ? [burst.showing]
+        : [];
+    const now = Date.now();
+    for (const id of ids) {
+      recent.set(id, now);
+    }
+    if (items.length > 1) {
+      // Each item is outstanding under its own id too: its clear (an ask
+      // settled, a session looked at) reaches `covers`.
+      for (const id of ids) {
+        notifications.shown(id);
+      }
+      covers.set(burst.id, { at: now, items: new Set(ids) });
+    }
+    burst.showing = notification.collapseId;
+    burst.shown = new Set(ids);
+    console.log(
+      `[notify] push ${notification.collapseId}: ${items.length === 1 ? "sent" : `${items.length} in one (${ids.join(", ")})`}${replacing.length > 0 ? `, replacing ${replacing.join(", ")}` : ""}`
+    );
+    replace(notification, replacing);
   };
 
   /**
-   * Offers unless the same collapse id went out a moment ago: a failed
-   * attempt that moves its task into a `you` stage reaches here twice, as the
-   * task and as the attempt, under one collapse id, and is one moment. A push
-   * whose every send is news (a session's finished turn) goes by `offer`.
+   * Asks each item of `burst` (only its asks when `ask` is the one that just
+   * arrived) whether it still needs you, and each the device doesn't show
+   * yet whether the gate lets it through; what fails either leaves the
+   * burst for good. Then shows what is left.
    */
-  const moment = (
-    notification: Notification,
-    instanceId: string | null,
-    landedAt: Date
-  ): void => {
+  const goOut = async (burst: Burst, ask: Arrival | null): Promise<void> => {
+    const entries = [...burst.items].filter(([, item]) => !ask || item.ask);
+    const still = await Promise.all(
+      entries.map(([, item]) =>
+        Promise.resolve()
+          .then(item.still)
+          .catch(() => true)
+      )
+    );
+    const live: Arrival[] = [];
+    for (const [index, [id, item]] of entries.entries()) {
+      if (burst.items.get(id) !== item) {
+        continue;
+      }
+      const over = !still[index];
+      if (over) {
+        console.log(
+          `[notify] push ${id}: over before ${burst.id} went out, not counted`
+        );
+      }
+      const passes =
+        over ||
+        burst.shown.has(id) ||
+        notifications.passes({
+          outlet: "push",
+          collapseId: id,
+          instanceId: item.instanceId,
+          landedAt: item.landedAt.getTime(),
+        });
+      if (over || !passes) {
+        burst.items.delete(id);
+        continue;
+      }
+      live.push(item);
+    }
+    if (ask && !live.includes(ask)) {
+      return;
+    }
+    if (live.length > 0) {
+      show(burst, live, ask);
+    }
+  };
+
+  /**
+   * An item that needs you joins the open burst, or opens one; the burst
+   * goes out {@link QUIET_MS} after its last arrival, at most
+   * {@link BURST_MS} after its first. An ask goes out at once. With `once`,
+   * an item whose collapse id went out a moment ago is that moment: a failed
+   * attempt that moves its task into a `you` stage reaches here twice, as
+   * the task and as the attempt. A push whose every send is news (a
+   * session's finished turn) arrives without it.
+   */
+  const arrive = (item: Arrival, once = true): void => {
+    const { collapseId } = item.notification;
     const now = Date.now();
     for (const [id, at] of recent) {
       if (now - at > SAME_MOMENT_MS) {
         recent.delete(id);
       }
     }
-    if (recent.has(notification.collapseId)) {
+    if (once && recent.has(collapseId)) {
       return;
     }
-    offer(notification, instanceId, landedAt);
+    const burst: Burst = open ?? {
+      id: needsCollapseId(now),
+      firstAt: now,
+      items: new Map(),
+      showing: null,
+      shown: new Set(),
+    };
+    open = burst;
+    burst.items.set(collapseId, item);
+    if (!item.ask) {
+      console.log(`[notify] push ${collapseId}: held for ${burst.id}`);
+    }
+    lifetime.cancel(burst.timer);
+    burst.timer = lifetime.after(
+      Math.min(QUIET_MS, burst.firstAt + BURST_MS - now),
+      () => {
+        if (open === burst) {
+          open = undefined;
+        }
+        detach(goOut(burst, null), "needs-you push");
+      }
+    );
+    if (item.ask) {
+      detach(goOut(burst, item), "ask push");
+    }
   };
 
   /** Nobody has looked at the session since `at`: what it pushed about then still needs you. */
@@ -790,8 +1046,12 @@ export const createPush = ({
       const { asker, summary } = (payload as PermissionRequestFrame)
         .presentation;
       const options = inlineOptions(payload, instanceId);
-      moment(
-        {
+      arrive({
+        ask: true,
+        instanceId: instanceId || null,
+        landedAt: new Date(),
+        still: () => asked.has(requestId),
+        notification: {
           shown: alertOf(
             // A proposal and a project setting are named by what they are,
             // never by what they say.
@@ -816,9 +1076,7 @@ export const createPush = ({
             workflowRunId: payload.workflowRunId ?? null,
           },
         },
-        instanceId || null,
-        new Date()
-      );
+      });
     },
 
     /** An ask left the pending list: a later ask can never reuse its id, so its mark goes. */
@@ -844,10 +1102,11 @@ export const createPush = ({
      * project's lead or a continuation's worker; and not stopped by them.
      * It waits {@link LOOK_GRACE_MS} first: a dashboard or an app that
      * opens the session marks it looked at (`/api/seen` `look`), and then
-     * nothing goes. Then the gate drops it if a client had the session in
-     * front at any moment since the turn ended. One collapse id per
-     * session, never deduplicated: a newer turn's push replaces the older on
-     * the device however soon after it comes.
+     * nothing goes. Then it joins the burst, which drops it if the session
+     * was looked at meanwhile or the gate finds a client had it in front at
+     * any moment since the turn ended. One collapse id per session, never
+     * deduplicated: a newer turn's push replaces the older on the device
+     * however soon after it comes.
      */
     turnEnded(
       instanceId: string,
@@ -857,7 +1116,7 @@ export const createPush = ({
       if (stopped.delete(instanceId)) {
         return;
       }
-      setTimeout(() => {
+      lifetime.after(LOOK_GRACE_MS, () => {
         const [row] = db.getInstancesByIds([instanceId]);
         if (
           !row ||
@@ -871,32 +1130,37 @@ export const createPush = ({
           return;
         }
         const project = projectName(row.projectId);
-        offer(
+        arrive(
           {
-            shown: alertOf(
-              sessionName(instanceId) ?? "A session",
-              project,
-              TURN_ENDED
-            ),
-            sealed: alertOf(
-              boardTitle(row),
-              project,
-              firstLine(reply) ?? TURN_ENDED
-            ),
-            category: PUSH_CATEGORIES.turn,
-            collapseId: turnCollapseId(instanceId),
-            threadId: row.projectId ?? instanceId,
-            data: {
-              kind: "turn",
-              instanceId,
-              machineId: row.machineId,
-              projectId: row.projectId ?? null,
+            ask: false,
+            instanceId,
+            landedAt: endedAt,
+            still: () => unseenSince(instanceId, endedAt),
+            notification: {
+              shown: alertOf(
+                sessionName(instanceId) ?? "A session",
+                project,
+                TURN_ENDED
+              ),
+              sealed: alertOf(
+                boardTitle(row),
+                project,
+                firstLine(reply) ?? TURN_ENDED
+              ),
+              category: PUSH_CATEGORIES.turn,
+              collapseId: turnCollapseId(instanceId),
+              threadId: row.projectId ?? instanceId,
+              data: {
+                kind: "turn",
+                instanceId,
+                machineId: row.machineId,
+                projectId: row.projectId ?? null,
+              },
             },
           },
-          instanceId,
-          endedAt
+          false
         );
-      }, LOOK_GRACE_MS);
+      });
     },
 
     /**
@@ -922,8 +1186,13 @@ export const createPush = ({
           const [row] = attempt
             ? db.getInstancesByIds([attempt.instanceId])
             : [];
-          moment(
-            {
+          arrive({
+            ask: false,
+            instanceId: row?.id ?? null,
+            landedAt: at,
+            // Moved on (or back) before the burst went out: not counted.
+            still: async () => (await task(projectId, id))?.kind === "you",
+            notification: {
               shown: alert,
               sealed: alert,
               category: row
@@ -939,9 +1208,7 @@ export const createPush = ({
                 taskId: id,
               },
             },
-            row?.id ?? null,
-            at
-          );
+          });
         })
         .catch(() => undefined);
     },
@@ -963,8 +1230,12 @@ export const createPush = ({
         .then((view) => {
           const project = projectName(projectId);
           const [row] = db.getInstancesByIds([item.instanceId]);
-          moment(
-            {
+          arrive({
+            ask: false,
+            instanceId: row ? item.instanceId : null,
+            landedAt: at,
+            still: () => true,
+            notification: {
               shown: alertOf(
                 view?.title || sessionName(item.instanceId) || "A task",
                 project
@@ -985,9 +1256,7 @@ export const createPush = ({
                 workItemId: item.id,
               },
             },
-            row ? item.instanceId : null,
-            at
-          );
+          });
         });
       detach(alerted, "attempt push");
     },
@@ -1012,8 +1281,12 @@ export const createPush = ({
         : [];
       const project = projectName(run.projectId);
       const body = run.failed ? NEEDS_YOU : "Delivered";
-      moment(
-        {
+      arrive({
+        ask: false,
+        instanceId: row?.id ?? null,
+        landedAt: new Date(),
+        still: () => true,
+        notification: {
           shown: alertOf("Routine", project, body),
           sealed: alertOf(
             run.name,
@@ -1034,9 +1307,7 @@ export const createPush = ({
             runId: run.runId,
           },
         },
-        row?.id ?? null,
-        new Date()
-      );
+      });
       console.log(
         `[push] routine ${run.routineId} run ${run.runId}: ${run.failed ? "needs you" : "delivered"}`
       );
@@ -1051,8 +1322,12 @@ export const createPush = ({
     watchNotice(notice: FleetWatchNotice): void {
       const [row] = db.getInstancesByIds([notice.instanceId]);
       const project = projectName(notice.projectId);
-      moment(
-        {
+      arrive({
+        ask: false,
+        instanceId: notice.instanceId,
+        landedAt: new Date(),
+        still: () => true,
+        notification: {
           shown: alertOf("Fleet watch", project, NEEDS_YOU),
           sealed: alertOf(
             row ? boardTitle(row) : "A session",
@@ -1069,9 +1344,7 @@ export const createPush = ({
             projectId: notice.projectId,
           },
         },
-        notice.instanceId,
-        new Date()
-      );
+      });
       console.log(`[push] fleet watch ${notice.instanceId}: needs you`);
     },
 
@@ -1095,8 +1368,12 @@ export const createPush = ({
         failed: { body: "Failed", ask: "it failed" },
         unknown: { body: "May or may not have run", ask: "check it" },
       }[action.state];
-      moment(
-        {
+      arrive({
+        ask: false,
+        instanceId: null,
+        landedAt: new Date(),
+        still: () => true,
+        notification: {
           shown: alertOf("Approved action", project, body),
           sealed: alertOf(
             `${action.connection}: ${ask}`,
@@ -1112,9 +1389,7 @@ export const createPush = ({
             projectId: action.projectId,
           },
         },
-        null,
-        new Date()
-      );
+      });
       console.log(`[push] action ${action.id}: ${action.state}`);
     },
 

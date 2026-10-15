@@ -350,6 +350,12 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         case let .project(id): go(.project(id))
         case let .task(projectId, taskId, attempt): openTask(projectId: projectId, taskId: taskId, attempt: attempt)
         case .board: go(.fleet)
+        // Needs you is Caw's panel: it hangs from the glass in front, as his press opens it.
+        case .needs:
+            let cluster = frontCluster
+            if glassCard.showing !== cawPanel || !cawPanel.open {
+                glassCard.show(cawPanel, from: cluster.caw, glass: cluster.glass)
+            }
         case .keepPro: onKeepPro()
         }
         Self.pushLog.notice("route \(String(describing: route), privacy: .public) landed")
