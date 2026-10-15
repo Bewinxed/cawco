@@ -116,7 +116,7 @@ function pageMarkup(): Plugin {
           .replace(/<i\s+data-caw="([^"]+)"([^>]*)><\/i>/g, (_, name: string, rest: string) => {
             const made = clips.get(name) ?? clip(name);
             clips.set(name, made);
-            return made.svg.replace('__REST__', rest);
+            return made.svg.replace('__REST__', rest.replace(/\s+/g, ' ').trimEnd());
           });
         const tags: HtmlTagDescriptor[] = [
           {
