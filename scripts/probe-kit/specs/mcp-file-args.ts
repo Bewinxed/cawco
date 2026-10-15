@@ -67,7 +67,7 @@ const NOT_FILES: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   artifact_create: { path: "a preview's start page, a URL path" },
   artifact_update: { path: "patch[].path, a JSON Pointer into its state" },
   workflow_read: { path: "a path into the run's result" },
-  run_workflow: {
+  workflow_run: {
     path: "workspace.path, where on its machine the workflow's steps run",
   },
   task_create: { outputs: "files the task's work makes in its workspace" },

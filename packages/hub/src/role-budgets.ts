@@ -92,13 +92,19 @@ export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   curator: 1200,
 };
 
-/** A typical session of each role: a session you started, a leaf work item, a project's Caw, triage, a web-facing work item. */
+/**
+ * A typical session of each role: a session you started, a leaf work item, a
+ * project's Caw, triage, a web-facing work item. The worker and the delegate
+ * are in a project: one in none is listed fewer tools (delegation-mcp.ts
+ * `PROJECT_ONLY`), and the budget holds the most a role is listed.
+ */
 const SAMPLES: Record<SessionRole, Partial<InstanceRow>> = {
-  worker: {},
+  worker: { projectId: "project" },
   delegate: {
     parentInstanceId: "parent",
     workItemId: "item",
     canDelegate: false,
+    projectId: "project",
   },
   lead: { role: "lead", projectId: "project" },
   overseer: { role: "overseer" },
@@ -281,7 +287,9 @@ export const measureRoles = (): RoleSize[] => {
       if (!listed) {
         throw new Error(`No measuring session for role ${role}.`);
       }
-      const { tools } = listed;
+      // What the model reads: a tool's `_meta` (its alwaysLoad mark) is
+      // Claude Code's to act on, never part of the definition it sends.
+      const tools = listed.tools.map(({ _meta, ...tool }) => tool);
       return {
         role,
         tools: tools.length,

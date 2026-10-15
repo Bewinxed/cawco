@@ -484,12 +484,12 @@ function resolve(peers: Peer[], target: string): Peer {
  * toolset). Fixed for the session's life, so the prompt cache is unaffected.
  */
 export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
-  "run_workflow",
-  "steer_workflow",
+  "workflow_run",
+  "workflow_steer",
   "workflow_read",
-  "list_workflows",
-  "create_workflow",
-  "update_workflow",
+  "workflow_list",
+  "workflow_create",
+  "workflow_update",
   "start_session",
   "continue_session",
   "delegate",

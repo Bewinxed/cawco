@@ -139,15 +139,15 @@ const CURATOR_OWN = ["memory_read", "memory_classify"] as const;
 
 /** The session tools a delegate keeps from the worker's set. */
 const DELEGATE_SESSION = [
-  "create_workflow",
-  "update_workflow",
+  "workflow_create",
+  "workflow_update",
   "workflow_state_read",
   "workflow_state_write",
   "submit_result",
-  "run_workflow",
+  "workflow_run",
   "workflow_read",
-  "steer_workflow",
-  "list_workflows",
+  "workflow_steer",
+  "workflow_list",
   "generate_image",
   "list_delegate_types",
   "list_sessions",

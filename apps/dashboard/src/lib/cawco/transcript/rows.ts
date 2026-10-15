@@ -42,7 +42,7 @@ export type Row =
   /** A `delegate` / `start_session` call: the fleet session it spawned, as a fold. */
   | { kind: "delegate"; key: string; message: Message }
   /**
-   * A workflow run, live, in the place it was started: its `run_workflow`
+   * A workflow run, live, in the place it was started: its `workflow_run`
    * call (`runId` null: the call's result names it), or the first notice of
    * a run supervised here without one (`runId` set). Its receipts fold into
    * it rather than rows of their own.
@@ -363,8 +363,8 @@ const isDelegateMsg = (m: Message): boolean =>
   (m.metadata?.handoffKind === "delegate" ||
     m.metadata?.handoffKind === "start");
 
-/** A `run_workflow` call, whichever harness named the tool (`mcp__cawco__…`, `cawco_…`). */
-const RUN_TOOL = /(?:^|_)run_workflow$/;
+/** A `workflow_run` call, whichever harness named the tool (`mcp__cawco__…`, `cawco_…`). */
+const RUN_TOOL = /(?:^|_)workflow_run$/;
 const isRunMsg = (m: Message): boolean =>
   isToolMsg(m) && RUN_TOOL.test(m.metadata?.toolName ?? "");
 
@@ -373,7 +373,7 @@ const RUN_ID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/;
 /** The `runId` key in a call's result, and the quoting up to its value. */
 const RUN_ID_KEY = /runId[^0-9a-f]{0,6}/;
 
-/** The run a `run_workflow` call started, once its result has come back. */
+/** The run a `workflow_run` call started, once its result has come back. */
 export function startedRunOf(m: Message): string | null {
   const result = m.metadata?.toolResult;
   if (result === undefined || result === null) {
@@ -403,7 +403,7 @@ export type Receipt = { fold: true } | { fold: false; anchor: string } | null;
 
 /**
  * How each workflow notice in `messages` is told. A run started here by a
- * `run_workflow` call is told by the call's block, so every notice naming
+ * `workflow_run` call is told by the call's block, so every notice naming
  * it folds, and so does a note from a workflow one of those calls ran (a
  * note names no run). A run supervised here without a call is told by a
  * block at its first notice, and its later notices fold into that. Read

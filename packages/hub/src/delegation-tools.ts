@@ -168,7 +168,7 @@ export function handoffTools(deps: HandoffDeps) {
   const actions = handoffActions(deps);
   const all = [
     tool(
-      "create_workflow",
+      "workflow_create",
       'Create a workflow from a TypeScript program: `import { z } from "zod"`, `export const inputs = z.object({…})`, and a default-exported async function taking the Workflow runtime (w.run, w.spawn, w.ask, w.exec, w.exists, w.jev, w.workflow, w.state, w.checkpoint, w.sleep, w.now, w.notify, w.notes, w.log). `w.jev({ state, questions: { id: { type: "noul" | "choice" | "score", instructions, criteria } } })` asks TypeSafe\'s Jev and returns typed `answers.<id>` (noul; choice + probabilities + confidence; score + legend + probabilities + confidence) and `usage`; put every question over one state in ONE call — they are evaluated in parallel for one price. `w.ask({ question, options, answer: z.object({…}) })` takes a typed answer: the answer\'s `value` is validated against that schema, which is how a supervisor fills in a decision. A `w.run`/`w.spawn` step that runs out of attempts in a supervised run is held for the supervisor to retry or fail; give it `onExhausted: "fail"` when the program handles its StepError itself. A step prompt or Jev state may name an earlier call\'s result as `{{ref:N.path}}` (N is the call\'s effect number); the hub fills it in when the step starts. Every call is a durable workflow-engine step and a run replays its program after a restart or resume, so zod is the only import allowed and the program must be deterministic. Returns the saved workflow, or line-numbered typecheck problems verbatim.',
       { name: z.string(), program: z.string() },
       async ({ name, program }) => ({
@@ -181,7 +181,7 @@ export function handoffTools(deps: HandoffDeps) {
       })
     ),
     tool(
-      "update_workflow",
+      "workflow_update",
       "Replace a saved workflow by name, slug or id with a complete TypeScript program. Returns the saved workflow, or line-numbered typecheck problems verbatim.",
       { name: z.string(), program: z.string() },
       async ({ name, program }) => ({
@@ -230,8 +230,8 @@ export function handoffTools(deps: HandoffDeps) {
       })
     ),
     tool(
-      "run_workflow",
-      "Run a saved workflow by name or slug. You become its supervisor and receive a receipt, as a queued peer message, for each step, checkpoint and the run's end: status, attempt, time, a `ref`, the result's size and the names of its top-level keys, or the whole result when it is 1,000 characters or less. Read more of a result with workflow_read only when you need it. A step that runs out of attempts is held for your decision (steer_workflow retry or fail); a receipt sent while your session is not live is kept and sent when it next is.",
+      "workflow_run",
+      "Run a saved workflow by name or slug. You become its supervisor and receive a receipt, as a queued peer message, for each step, checkpoint and the run's end: status, attempt, time, a `ref`, the result's size and the names of its top-level keys, or the whole result when it is 1,000 characters or less. Read more of a result with workflow_read only when you need it. A step that runs out of attempts is held for your decision (workflow_steer retry or fail); a receipt sent while your session is not live is kept and sent when it next is.",
       {
         name: z.string(),
         inputs: z.record(z.string(), z.unknown()),
@@ -293,7 +293,7 @@ export function handoffTools(deps: HandoffDeps) {
       })
     ),
     tool(
-      "steer_workflow",
+      "workflow_steer",
       "Steer a workflow you supervise: note for the next step, decide on a held step, answer a question routed to you, or cancel. A step that runs out of attempts is held for you, up to an hour, and its receipt says so: `retry` runs another attempt on the same step and session, `fail` hands the program its StepError now; left undecided, it fails when the hold runs out. A step is held twice at most. An answer names the option label as `choice`; a question that declared a typed answer takes `value`, validated against the schema its question notice shows. The program controls routing. Answers one line saying what was done.",
       {
         runId: z.string(),
@@ -332,7 +332,7 @@ export function handoffTools(deps: HandoffDeps) {
       })
     ),
     tool(
-      "list_workflows",
+      "workflow_list",
       "List the fleet's saved workflows, their input definitions, and graphs before choosing one to run.",
       {},
       async () => ({
@@ -1213,13 +1213,105 @@ export function handoffTools(deps: HandoffDeps) {
   );
 }
 
-export function handoffInstructions(deps: HandoffDeps): string {
+/**
+ * The CawCo tools a Claude session loads upfront, where its toolset has them
+ * (MCP `_meta` `"anthropic/alwaysLoad": true`, delegation-mcp.ts `listed`);
+ * every other one is deferred behind ToolSearch. These are the calls a
+ * session makes every turn or must not miss: in one orchestrator, handoff
+ * 69 calls, delegate 32, artifact_create 11 (2026-10-15); a leaf's
+ * finish_item and every session's set_title are asked for by name. When
+ * delegate sat deferred, one name among 133, sessions ran work inline 79
+ * times for each delegation. "Keep your 3–5 most frequently used tools
+ * non-deferred so Claude can call them without searching first"
+ * (platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool).
+ */
+export const ALWAYS_LOAD: ReadonlySet<string> = new Set([
+  "delegate",
+  "handoff",
+  "finish_item",
+  "set_title",
+  "artifact_create",
+]);
+
+/**
+ * The deferred groups by prefix, as the server's instructions name them:
+ * "Use consistent namespacing … so one search matches the whole group" and
+ * "Add a system prompt section describing available tool categories"
+ * (tool-search-tool docs).
+ */
+const DEFERRED_GROUPS: readonly { prefixes: string[]; what: string }[] = [
+  { prefixes: ["admin_"], what: "fleet configuration" },
+  { prefixes: ["task_", "todo_write"], what: "project tasks and to-dos" },
+  {
+    prefixes: [
+      "routine_",
+      "event_route_",
+      "connector_poll_",
+      "relay_",
+      "action_",
+    ],
+    what: "project automation",
+  },
+  { prefixes: ["workflow_", "submit_result"], what: "workflows" },
+  {
+    prefixes: ["artifact_", "comment_"],
+    what: "artifacts you show and the person's pins on them",
+  },
+  { prefixes: ["memory_"], what: "project memory" },
+  {
+    prefixes: ["thread_", "view_", "folder_"],
+    what: "the project's threads, views and folder",
+  },
+  { prefixes: ["conn__"], what: "connections granted to this session" },
+];
+
+/**
+ * One paragraph: which of `names` (the session's own listing) load upfront
+ * on Claude, and the rest by group prefix, each group only when the session
+ * has one of its tools, then the ungrouped ones by name.
+ */
+const loadingLine = (names: readonly string[]): string => {
+  const upfront = names.filter((name) => ALWAYS_LOAD.has(name));
+  const deferred = names.filter((name) => !ALWAYS_LOAD.has(name));
+  const grouped = new Set<string>();
+  const groups = DEFERRED_GROUPS.flatMap(({ prefixes, what }) => {
+    const members = deferred.filter((name) =>
+      prefixes.some((prefix) => name.startsWith(prefix))
+    );
+    for (const name of members) {
+      grouped.add(name);
+    }
+    const present = prefixes.filter((prefix) =>
+      members.some((name) => name.startsWith(prefix))
+    );
+    return present.length > 0
+      ? [
+          `${present.map((prefix) => (prefix.endsWith("_") ? `${prefix}*` : prefix)).join(", ")}: ${what}`,
+        ]
+      : [];
+  });
+  const rest = deferred.filter((name) => !grouped.has(name));
+  return `On Claude, ${upfront.join(", ")} load upfront; every other CawCo tool is deferred: load it with ToolSearch by its name (select:mcp__cawco__<name>) or its group's prefix before saying it is unavailable. ${[...groups, ...(rest.length > 0 ? [`also ${rest.join(", ")}`] : [])].join("; ")}.`;
+};
+
+/**
+ * The server's instructions for one session. `names` is what the session is
+ * listed, so the groups named are the ones it can use.
+ */
+export function handoffInstructions(
+  deps: HandoffDeps,
+  names: readonly string[]
+): string {
   const naming =
     "Name this session with set_title in 3 to 6 plain words once its task is clear; call it again only when the task changes.";
-  const images =
-    "CawCo can generate images regardless of your model: use generate_image (Claude: mcp__cawco__generate_image; OpenCode: cawco_generate_image). It uses the machine's ChatGPT subscription login only. Pass reference_images for edits or visual guidance, then show the returned path with show_image. Discover deferred tools before claiming image generation is unavailable. Do not delegate image generation to a different model.";
+  // Sessions said image generation was unavailable on models without it:
+  // the tool is the hub's, on every model, and stays the session's own.
+  const images = names.includes("generate_image")
+    ? "\n\ngenerate_image makes images on any model, through the machine's ChatGPT login; never hand image generation to another model."
+    : "";
+  const loading = `\n\n${loadingLine(names)}`;
   if (deps.canDelegate === false) {
-    return `This session is a leaf delegate. Do the assigned work yourself and call finish_item when it is done; delegate and start_session are unavailable. Use wait_item for a bounded wait on a command you started. Use mcp__cawco__handoff to reach your parent or a session that already owns related work.\n\n${naming}\n\n${images}`;
+    return `This session is a leaf delegate. Do the assigned work yourself and call finish_item when it is done; delegate and start_session are unavailable. Use wait_item for a bounded wait on a command you started. Use mcp__cawco__handoff to reach your parent or a session that already owns related work.\n\n${naming}${loading}${images}`;
   }
   let catalog = deps.delegateTypes?.length
     ? delegateTypeLine(deps.delegateTypes).trim()
@@ -1227,12 +1319,13 @@ export function handoffInstructions(deps: HandoffDeps): string {
   if (deps.delegateTypesError) {
     catalog = `${deps.delegateTypesError}. The catalog is unavailable, not empty. A delegate call naming a known type retries the fetch; if no type is known, report the catalog blocker rather than guessing a model.`;
   }
+  // The orchestrator's seat, the same on every model: an Opus orchestrator
+  // made 387 shell and about 50 browser calls in one day (killing dev
+  // servers, probing sockets, reading journals) where a brief belonged.
   return [
-    naming,
-    images,
-    "Use CawCo's delegate tool for bounded fleet work that must report back to its parent. Native harness subagents are a separate mechanism and do not resolve CawCo presets.",
-    'Call list_delegate_types for current model/effort mappings. Claude names these tools mcp__cawco__list_delegate_types and mcp__cawco__delegate; if deferred, use ToolSearch(query="select:mcp__cawco__delegate"). OpenCode names them cawco_list_delegate_types and cawco_delegate. These are tools, not MCP resources. list_sessions lists running sessions, not configured types.',
-    "Delegate substantial bounded work — multi-file implementation, wide sweeps, builds with verification, browser audits — with a brief that keeps intent, decisions, and acceptance with the parent and returns evidence and conclusions rather than file dumps. Menial reads and checks (git status, a grep, a file, a port) are the parent's own work, run inline.",
+    "This session orchestrates: it plans, briefs, reads reports and decides. Run reads yourself: git status, log or diff, a grep, a file, a log tail, a port check, a curl for a status. Hand substantial execution to a delegate with acceptance checks: implementation, builds, browser checks, probes, and any diagnosis that takes more than a few steps. The brief keeps intent, decisions and acceptance here and asks for evidence and conclusions, not file dumps. CawCo's delegate is not the harness's own subagents, which do not resolve CawCo's types.",
+    `${naming}${loading}${images}`,
+    "Call list_delegate_types for current model/effort mappings. Claude names these tools mcp__cawco__list_delegate_types and mcp__cawco__delegate; OpenCode names them cawco_list_delegate_types and cawco_delegate. These are tools, not MCP resources. list_sessions lists running sessions, not configured types.",
     "Prefer the configured type and omit model/harness overrides unless the user requested them. Give each delegate a concrete deliverable and bounded file ownership. Keep independent parent work moving; reports arrive automatically. Each delegate runs one work item in a workspace; use mcp__cawco__handoff to guide it while that item runs, and handoff again to follow up after it reports — that continues its own session on its cached transcript. Use start_session only for a separate persistent session.",
     "The catalog below is a session-start snapshot of configured routes, not confirmation of the model that will serve a request. If delegation fails or no suitable route is available, report the blocker; do not silently move bulk exploration onto the parent model.",
     catalog,

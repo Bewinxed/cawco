@@ -453,7 +453,7 @@ const BUILT_INS: Record<Call["harness"], Record<string, readonly Field[]>> = {
  * Every other argument of a cawco
  * tool names no file, whatever its name: `artifact_create`'s `path` is a
  * preview's URL path, `artifact_update`'s `patch[].path` a JSON Pointer,
- * `workflow_read`'s `path` a path into a result, `run_workflow`'s
+ * `workflow_read`'s `path` a path into a result, `workflow_run`'s
  * `workspace.path` where on its machine a workflow's steps run, `folder_*`
  * and `memory_*`'s `path` a file in the project's folder on the hub,
  * `admin_memory_write`'s `path` a document under the fleet's memories, a

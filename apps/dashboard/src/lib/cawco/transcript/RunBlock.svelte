@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * A workflow run in the chat of the session that started it, once, in the
-   * place its `run_workflow` call was made, and live: the run's line — where
+   * place its `workflow_run` call was made, and live: the run's line — where
    * it stands, its name, how far along — with its steps hung under it on the
    * nesting rails (RunSteps), the way the rail nests a session's delegates.
    * The run's receipts are told here, not as rows of their own (rows.ts).
@@ -29,7 +29,7 @@
     here = false,
     more,
   }: {
-    /** The `run_workflow` call, or the run's first notice; absent in the run's own tab. */
+    /** The `workflow_run` call, or the run's first notice; absent in the run's own tab. */
     message?: Message;
     /** The run, when the block stands at its notice rather than at a call. */
     runId?: string | null;

@@ -298,10 +298,10 @@ const DELEGATION_TOOLS = [
   "answer_delegate",
   "set_item_checks",
   "machine_pause",
-  "run_workflow",
-  "steer_workflow",
+  "workflow_run",
+  "workflow_steer",
   "workflow_read",
-  "list_workflows",
+  "workflow_list",
 ].map((name) => `cawco_${name}`);
 
 /** What OpenCode makes of a server's name in its tools' ids. */

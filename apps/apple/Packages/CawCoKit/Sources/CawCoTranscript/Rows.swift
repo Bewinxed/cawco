@@ -155,13 +155,13 @@ nonisolated enum Fold {
 
     static func isRun(_ block: Block) -> Bool {
         guard isTool(block), let name = block.toolName else { return false }
-        return name == "run_workflow" || name.hasSuffix("_run_workflow")
+        return name == "workflow_run" || name.hasSuffix("_workflow_run")
     }
 
     /// A literal, compiled with the app: built where it is read, as a Regex is not Sendable.
     private static var runId: Regex<Substring> { /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/ }
 
-    /// rows.ts `startedRunOf`: the run a `run_workflow` call's result names.
+    /// rows.ts `startedRunOf`: the run a `workflow_run` call's result names.
     static func startedRun(_ block: Block) -> String? {
         guard let result = block.meta["toolResult"] else { return nil }
         let text = (result as? String) ?? (try? JSONSerialization.data(withJSONObject: result)).flatMap { String(data: $0, encoding: .utf8) } ?? ""

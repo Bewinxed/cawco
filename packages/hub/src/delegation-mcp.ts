@@ -21,7 +21,11 @@ import { adminTools, answeredWithoutAsking, isAdminWrite } from "./admin-tools";
 import type { Caw } from "./caw";
 import type { Connections } from "./connections";
 import type { Fleet, HandoffDeps, SendDelivery } from "./delegation-actions";
-import { handoffInstructions, handoffTools } from "./delegation-tools";
+import {
+  ALWAYS_LOAD,
+  handoffInstructions,
+  handoffTools,
+} from "./delegation-tools";
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import type { AttemptStart } from "./dispatch";
 import type { FleetWatch } from "./fleet-watch";
@@ -95,7 +99,14 @@ const ASKING = "Waiting for the person to approve this fleet-settings change";
 
 declare const __CAWCO_RELEASE__: boolean | undefined;
 
-/** A tool as `tools/list` answers it. */
+/**
+ * A tool as `tools/list` answers it. One of {@link ALWAYS_LOAD} asks Claude
+ * Code to load it upfront: "To control how one of your server's tools
+ * loads, set "anthropic/alwaysLoad" in that tool's _meta object"
+ * (code.claude.com/docs/en/mcp#per-tool-alwaysload). The server's config
+ * sets no `alwaysLoad` (agent delegation.ts), so every other tool stays
+ * deferred.
+ */
 const listed = ({
   name,
   description,
@@ -110,7 +121,25 @@ const listed = ({
   description,
   inputSchema: inputSchema as { type: "object" },
   ...("annotations" in entry ? { annotations: entry.annotations } : {}),
+  ...(ALWAYS_LOAD.has(name) ? { _meta: { "anthropic/alwaysLoad": true } } : {}),
 });
+
+/**
+ * Tools that act on the caller's project: a session in none is never listed
+ * them, as a leaf is never listed the spawning tools. `todo_write` stays: its
+ * plan scope is the session's own.
+ */
+const PROJECT_ONLY: ReadonlySet<string> = new Set([
+  ...[...TASK_TOOLS].filter((name) => name !== "todo_write"),
+  ...ROUTINE_TOOLS,
+  ...INGRESS_TOOLS,
+  ...ACTION_TOOLS,
+  ...RELAY_TOOLS,
+  ...MEMORY_TOOLS,
+  ...CAW_TOOLS,
+  PROJECT_SETTINGS,
+  "artifact_promote",
+]);
 
 export function createDelegationMcp(options: {
   /** Runs the tool-list sweeps and each long call's heartbeat, and stops the source watchers, with the hub. */
@@ -302,8 +331,10 @@ export function createDelegationMcp(options: {
   /**
    * The tools a session is listed: its role's (roles.ts), narrowed by its own
    * context (a leaf gets no spawning tools, only a work item `finish_item`,
-   * only a workflow step its step tools). Without a session — OpenCode's
-   * shared discovery — every role's, the superset; the call enforces.
+   * only a workflow step its step tools, only a session in a project the
+   * project's tools, only one that may be made a project
+   * `project_from_session`). Without a session — OpenCode's shared
+   * discovery — every role's, the superset; the call enforces.
    */
   const toolsFor = (actor: InstanceRow | undefined) => {
     const workflowStepId = actor?.workflowStepId ?? undefined;
@@ -354,7 +385,15 @@ export function createDelegationMcp(options: {
       return [...all, ...connections];
     }
     const role = roleOf(actor);
-    return [...all.filter((tool) => allows(role, tool.name)), ...connections];
+    return [
+      ...all.filter(
+        (tool) =>
+          allows(role, tool.name) &&
+          (!!actor.projectId || !PROJECT_ONLY.has(tool.name)) &&
+          (tool.name !== PROJECT_FROM_SESSION || mayMakeProject(actor))
+      ),
+      ...connections,
+    ];
   };
 
   /**
@@ -869,28 +908,54 @@ export function createDelegationMcp(options: {
   // by the next sweep.
   options.lifetime.every(LIST_SWEEP_MS, reconcileLists);
 
-  /** Every request carries its own actor; no connection state outlives it but its GET stream. */
-  const open = async (binding: string | null) => {
+  /** The server's instructions for the session `bound`, from its own listing. */
+  const instructionsFor = (
+    bound: InstanceRow | undefined,
+    canDelegate: boolean | undefined,
+    binding: string | null
+  ): string =>
+    handoffInstructions(
+      {
+        instanceId: binding ?? "",
+        instanceById: options.instanceById,
+        formerIds: options.formerIds,
+        fleet: options.fleet,
+        cwd: bound?.cwd ?? "",
+        harness: bound?.harness as "claude" | "opencode" | "pi" | undefined,
+        canDelegate,
+        deliver: () => {
+          throw new Error("Instructions send nothing");
+        },
+        emit: () => undefined,
+        spawn: () => Promise.reject(new Error("Instructions start nothing")),
+      },
+      toolsFor(bound).map((tool) => tool.name)
+    );
+
+  /** Whether a POST's body is (or, batched, holds) an `initialize`. */
+  const initializes = (body: unknown): boolean =>
+    (Array.isArray(body) ? body : [body]).some(
+      (message) =>
+        typeof message === "object" &&
+        message !== null &&
+        (message as { method?: unknown }).method === "initialize"
+    );
+
+  /**
+   * Every request carries its own actor; no connection state outlives it but
+   * its GET stream. Only an `initialize` is answered the instructions, which
+   * read the session's whole listing to name its groups.
+   */
+  const open = async (binding: string | null, initialize: boolean) => {
     const bound = boundRow(binding);
     const canDelegate = bound?.canDelegate ?? undefined;
     const server = new Server(
       { name: "cawco", version: "1.0.0" },
       {
         capabilities: { tools: { listChanged: true } },
-        instructions: handoffInstructions({
-          instanceId: binding ?? "",
-          instanceById: options.instanceById,
-          formerIds: options.formerIds,
-          fleet: options.fleet,
-          cwd: bound?.cwd ?? "",
-          harness: bound?.harness as "claude" | "opencode" | "pi" | undefined,
-          canDelegate,
-          deliver: () => {
-            throw new Error("Instructions send nothing");
-          },
-          emit: () => undefined,
-          spawn: () => Promise.reject(new Error("Instructions start nothing")),
-        }),
+        instructions: initialize
+          ? instructionsFor(bound, canDelegate, binding)
+          : undefined,
       }
     );
     const transport = new WebStandardStreamableHTTPServerTransport({
@@ -1012,7 +1077,7 @@ export function createDelegationMcp(options: {
     binding: string | null,
     request: Request
   ): Promise<Response> => {
-    const { transport, server } = await open(binding);
+    const { transport, server } = await open(binding, false);
     const response = await transport.handleRequest(request);
     if (!(response.ok && response.body)) {
       await server.close();
@@ -1071,7 +1136,11 @@ export function createDelegationMcp(options: {
         headers: { Allow: "POST, GET" },
       });
     }
-    const { transport, server } = await open(binding);
+    // A body not parsed here is read by the transport: it may be one.
+    const { transport, server } = await open(
+      binding,
+      parsedBody === undefined || initializes(parsedBody)
+    );
     // Stateless SDK validation ignores old Mcp-Session-Id headers. Keep the
     // server alive until the POST SSE body completes, including long tools.
     const response = await transport.handleRequest(request, { parsedBody });

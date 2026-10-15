@@ -32,14 +32,15 @@ export const delegationMcp = (instanceId: string, credential?: string) => ({
   type: "http" as const,
   url: harnessMcpUrl(`/mcp/cawco?instanceId=${encodeURIComponent(instanceId)}`),
   ...(credential ? { headers: { Authorization: `Bearer ${credential}` } } : {}),
-  // Exempt from tool-search deferral (Claude Code >= 2.1.121). Measured: across
-  // 54 cawco-spawned sessions the delegate tool was one deferred NAME among
-  // 133, uncallable until a ToolSearch round trip, while Bash sat loaded — a
-  // 79:1 inline-to-delegate ratio and one unprompted adoption in 54 sessions.
-  // The whole server is ~10 tools, so loading them upfront costs little; the
-  // alternative (`ENABLE_TOOL_SEARCH=false`) would load all 133 and reintroduce
-  // the context cost this exists to avoid.
-  alwaysLoad: true,
+  // No server-level `alwaysLoad`: the hub marks the few tools a session uses
+  // every turn with `_meta` `"anthropic/alwaysLoad": true` (hub
+  // delegation-tools.ts `ALWAYS_LOAD`), and Claude Code defers the rest,
+  // some 80 of them, behind ToolSearch. The server-level flag would load all
+  // of them upfront in every session (code.claude.com/docs/en/mcp: "Use this
+  // for a small number of tools that Claude needs on every turn"). Measured
+  // before any of this: with delegate one deferred name among 133, sessions
+  // ran work inline 79 times for each delegation, so delegate is one of the
+  // marked few.
   // A hard wall clock on every call to this server, and the floor of its idle
   // limit: finish_item runs a work item's checks, up to an hour each, and
   // image generation runs minutes. Claude's own default would cut both.

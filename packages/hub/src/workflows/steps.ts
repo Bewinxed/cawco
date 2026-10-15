@@ -482,7 +482,7 @@ export function createSteps(ctx: StepContext) {
     ctx.write(run, step, attempt);
     ctx.notify(
       run,
-      `${workflowNoticeMarker(ctx.nameOf(run), `step ${spec.title} held`)}${receiptHead(run, step, attempt, spec)} · ${failureText(attempt.failure ?? "no-result")} · out of attempts, held for your decision (hold ${hold} of ${MAX_HOLDS}, ${HOLD_DEADLINE_MS / 60_000} min at most). steer_workflow {runId: "${run.id}", action: {type: "retry", stepId: "${step.id}"}} runs another attempt on the same session; {type: "fail", stepId: "${step.id}"} hands the program its StepError now. With no decision the step fails when the hold runs out.`
+      `${workflowNoticeMarker(ctx.nameOf(run), `step ${spec.title} held`)}${receiptHead(run, step, attempt, spec)} · ${failureText(attempt.failure ?? "no-result")} · out of attempts, held for your decision (hold ${hold} of ${MAX_HOLDS}, ${HOLD_DEADLINE_MS / 60_000} min at most). workflow_steer {runId: "${run.id}", action: {type: "retry", stepId: "${step.id}"}} runs another attempt on the same session; {type: "fail", stepId: "${step.id}"} hands the program its StepError now. With no decision the step fails when the hold runs out.`
     );
     ctx.hold(run, step, hold, HOLD_DEADLINE_MS);
   };
