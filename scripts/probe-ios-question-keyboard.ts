@@ -419,20 +419,54 @@ const partsOf = (layout: Layout) => {
   return { options, buttons, all: [...options, ...buttons] };
 };
 
-/** Every layout check, for the keyboard down or up. */
+/**
+ * What a stage's body window shows: options (`some`), or none yet (`none`):
+ * with the keyboard up and the body not scrolled, the long lede fills the
+ * window and the first option starts under its foot (the lede is not
+ * clamped, as on the web).
+ */
+type Showing = "some" | "none";
+
+/** Every layout check, for the keyboard down or up. An assertion over every
+ * option showing fails when none is, unless `showing` says none should be. */
 async function layoutChecks(
   run: Run,
   udid: string,
   stage: string,
-  layout: Layout
+  layout: Layout,
+  showing: Showing
 ) {
   const parts = partsOf(layout);
   checkPresent(run, stage, layout);
+  if (showing === "none") {
+    checkNoneShowing(run, stage, layout, parts);
+  }
   checkApart(run, stage, layout, parts);
-  checkInside(run, stage, layout, parts.all);
-  checkFoot(run, stage, parts);
+  checkInside(run, stage, layout, parts, showing);
+  checkFoot(run, stage, parts, showing);
   checkClear(run, stage, layout, parts.all);
   await checkFingers(run, udid, stage, parts.all);
+}
+
+/** No option drawn yet: the body's window holds the lede, and the first
+ * option starts at or under the window's foot. */
+function checkNoneShowing(
+  run: Run,
+  stage: string,
+  layout: Layout,
+  parts: ReturnType<typeof partsOf>
+) {
+  const { window } = layout;
+  const first = layout.options.find((o) => o.label === FIRST)?.frame;
+  const under =
+    window !== undefined &&
+    first !== undefined &&
+    first.y >= bottomOf(window) - 0.5;
+  run.check(
+    `${stage}: no option showing yet, the first starts under the body's window`,
+    parts.options.length === 0 && under,
+    `${parts.options.length} of ${OPTIONS.length} options showing; "${FIRST}" at y ${first ? Math.round(first.y) : "?"}, the window's foot at y ${window ? Math.round(bottomOf(window)) : "? (no body window logged)"}`
+  );
 }
 
 function checkPresent(run: Run, stage: string, layout: Layout) {
@@ -477,8 +511,17 @@ function checkApart(
   );
 }
 
-function checkInside(run: Run, stage: string, layout: Layout, parts: Part[]) {
-  const step = `${stage}: every option showing, Answer and Dismiss is inside the card`;
+function checkInside(
+  run: Run,
+  stage: string,
+  layout: Layout,
+  parts: ReturnType<typeof partsOf>,
+  showing: Showing
+) {
+  const step =
+    showing === "some"
+      ? `${stage}: every option showing, Answer and Dismiss is inside the card`
+      : `${stage}: Answer and Dismiss are inside the card`;
   const { card, window } = layout;
   const asTree = layout.cardNode ? ` (tree: ${show(layout.cardNode)})` : "";
   if (!card) {
@@ -489,23 +532,44 @@ function checkInside(run: Run, stage: string, layout: Layout, parts: Part[]) {
     );
     return;
   }
-  const outside = parts.filter((p) => !within(p.rect, card));
+  // Over every option showing: none showing proves nothing, so it fails.
+  const none = showing === "some" && parts.options.length === 0;
+  const outside = parts.all.filter((p) => !within(p.rect, card));
+  let detail = `card ${show(card)}, ${parts.options.length} options showing${asTree}`;
+  if (none) {
+    detail = `no option showing, of ${OPTIONS.length}: nothing to hold inside the card`;
+  } else if (outside.length > 0) {
+    detail = `card ${show(card)}; outside it: ${outside.map((p) => `"${p.label}" ${show(p.rect)}`).join("; ")}`;
+  }
   run.check(
     step,
-    outside.length === 0 && (!window || within(window, card)),
-    outside.length > 0
-      ? `card ${show(card)}; outside it: ${outside.map((p) => `"${p.label}" ${show(p.rect)}`).join("; ")}`
-      : `card ${show(card)}${asTree}`
+    !none && outside.length === 0 && (!window || within(window, card)),
+    detail
   );
 }
 
-function checkFoot(run: Run, stage: string, parts: ReturnType<typeof partsOf>) {
+/** Answer and Dismiss under every option showing: with none showing (and
+ * none expected) it fails, as `Math.max()` of nothing is -Infinity. */
+function checkFoot(
+  run: Run,
+  stage: string,
+  parts: ReturnType<typeof partsOf>,
+  showing: Showing
+) {
+  if (showing === "none") {
+    // checkNoneShowing asserts this state; there is no option to stand under.
+    return;
+  }
   const footTop = Math.min(...parts.buttons.map((p) => p.rect.y));
   const lowest = Math.max(...parts.options.map((p) => bottomOf(p.rect)));
   run.check(
     `${stage}: Answer and Dismiss stand under every option showing`,
-    parts.buttons.length === 2 && lowest <= footTop + 0.5,
-    `lowest option drawn to y ${Math.round(lowest)}, the buttons' top at y ${Math.round(footTop)}`
+    parts.options.length > 0 &&
+      parts.buttons.length === 2 &&
+      lowest <= footTop + 0.5,
+    parts.options.length === 0
+      ? `no option showing, of ${OPTIONS.length}: nothing to stand under`
+      : `lowest of ${parts.options.length} options drawn to y ${Math.round(lowest)}, the buttons' top at y ${Math.round(footTop)}`
   );
 }
 
@@ -656,7 +720,7 @@ async function keyboardDown(run: Run, sim: Sim): Promise<Layout> {
       ? `at ${show(down.tray)}`
       : `no "${TRAY_TITLE}, …" chip in the tree`
   );
-  await layoutChecks(run, sim.udid, "keyboard down", down);
+  await layoutChecks(run, sim.udid, "keyboard down", down, "some");
   await sim.shot("keyboard-down-light");
   await sim.appearance("dark");
   await pause(1000);
@@ -699,7 +763,8 @@ async function keyboardUp(
       ? `body window ${Math.round(body)}pt over ${Math.round(geometry.content)}pt of content`
       : "no PromptCard layout logged"
   );
-  await layoutChecks(run, sim.udid, "keyboard up", up);
+  // Not scrolled yet: the lede fills the body's window (Showing).
+  await layoutChecks(run, sim.udid, "keyboard up", up, "none");
   await sim.shot("keyboard-up-dark");
   await sim.appearance("light");
   await pause(1500);
@@ -800,7 +865,8 @@ async function pickFirstAndLast(run: Run, sim: Sim) {
     run,
     sim.udid,
     "keyboard up, scrolled to the end",
-    await readLayout(sim.udid)
+    await readLayout(sim.udid),
+    "some"
   );
 }
 
