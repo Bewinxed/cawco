@@ -6405,6 +6405,81 @@
                   "id": {
                     "type": "string",
                     "format": "uuid"
+                  },
+                  "images": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "mediaType": {
+                          "type": "string"
+                        },
+                        "data": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "mediaType",
+                        "data"
+                      ]
+                    }
+                  },
+                  "attachments": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "text"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "content": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "name",
+                            "content"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "file"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "mediaType": {
+                              "type": "string"
+                            },
+                            "size": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "ref": {
+                              "pattern": "^/api/files/",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "name",
+                            "mediaType",
+                            "size",
+                            "ref"
+                          ]
+                        }
+                      ]
+                    }
                   }
                 },
                 "required": [
@@ -6607,6 +6682,81 @@
                   "id": {
                     "type": "string",
                     "format": "uuid"
+                  },
+                  "images": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "mediaType": {
+                          "type": "string"
+                        },
+                        "data": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "mediaType",
+                        "data"
+                      ]
+                    }
+                  },
+                  "attachments": {
+                    "type": "array",
+                    "items": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "text"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "content": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "name",
+                            "content"
+                          ]
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "const": "file"
+                            },
+                            "name": {
+                              "type": "string"
+                            },
+                            "mediaType": {
+                              "type": "string"
+                            },
+                            "size": {
+                              "minimum": 0,
+                              "type": "integer"
+                            },
+                            "ref": {
+                              "pattern": "^/api/files/",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "name",
+                            "mediaType",
+                            "size",
+                            "ref"
+                          ]
+                        }
+                      ]
+                    }
                   }
                 },
                 "required": [
@@ -29903,7 +30053,7 @@
         ]
       },
       "YourThreadMessage": {
-        "description": "Yours: words you wrote, or your answer to the lead's question. An answer\ncarries `question` and `answer`, and `body` reads it in one line.",
+        "description": "Yours: words you wrote, or your answer to the lead's question. An answer\ncarries `question` and `answer`, and `body` reads it in one line. Words\ncarry what rode with them as a send's do: `images`, and `attachments`\n(pastes, and files by the hub's reference); Try again wakes Caw with all\nof it.",
         "type": "object",
         "properties": {
           "answer": {
@@ -29947,6 +30097,12 @@
               }
             ]
           },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SendAttachment"
+            }
+          },
           "author": {
             "type": "string",
             "enum": [
@@ -29955,6 +30111,12 @@
           },
           "body": {
             "type": "string"
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ThreadImage"
+            }
           },
           "question": {
             "$ref": "#/components/schemas/ThreadQuestion",
@@ -29981,6 +30143,87 @@
       "UserAnswers": {
         "description": "The reader's choices, back the way the tool reads them.",
         "type": "object"
+      },
+      "SendAttachment": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/TextAttachment"
+          },
+          {
+            "$ref": "#/components/schemas/FileAttachment"
+          }
+        ]
+      },
+      "TextAttachment": {
+        "description": "What a turn carries beside its typed words, other than pictures: a text\nthe reader attached or pasted at length, folded into the prompt as quoted\nmaterial; or any other file, which the hub stores (`POST /api/files`) and\nthe session's machine fetches and puts on its own disk before the harness\nsees the turn, naming its path in one line of the message.",
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "text"
+            ]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "content",
+          "kind",
+          "name"
+        ]
+      },
+      "FileAttachment": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "file"
+            ]
+          },
+          "mediaType": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ref": {
+            "description": "The hub's reference to its bytes: `/api/files/<sha256>`.",
+            "type": "string"
+          },
+          "size": {
+            "description": "Its length in bytes.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "kind",
+          "mediaType",
+          "name",
+          "ref",
+          "size"
+        ]
+      },
+      "ThreadImage": {
+        "description": "A picture your words carried, in the hub's media store (media.ts): its\naddress there (`/api/media/<sha256>.<ext>`), as a send's row names it.",
+        "type": "object",
+        "properties": {
+          "mediaType": {
+            "type": "string"
+          },
+          "src": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "mediaType",
+          "src"
+        ]
       },
       "ThreadQuestion": {
         "description": "The questions the lead asked you in a thread (its AskUserQuestion).",
@@ -41938,71 +42181,6 @@
           "instanceId",
           "kind",
           "send"
-        ]
-      },
-      "SendAttachment": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/TextAttachment"
-          },
-          {
-            "$ref": "#/components/schemas/FileAttachment"
-          }
-        ]
-      },
-      "TextAttachment": {
-        "description": "What a turn carries beside its typed words, other than pictures: a text\nthe reader attached or pasted at length, folded into the prompt as quoted\nmaterial; or any other file, which the hub stores (`POST /api/files`) and\nthe session's machine fetches and puts on its own disk before the harness\nsees the turn, naming its path in one line of the message.",
-        "type": "object",
-        "properties": {
-          "content": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "text"
-            ]
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "content",
-          "kind",
-          "name"
-        ]
-      },
-      "FileAttachment": {
-        "type": "object",
-        "properties": {
-          "kind": {
-            "type": "string",
-            "enum": [
-              "file"
-            ]
-          },
-          "mediaType": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "ref": {
-            "description": "The hub's reference to its bytes: `/api/files/<sha256>`.",
-            "type": "string"
-          },
-          "size": {
-            "description": "Its length in bytes.",
-            "type": "number"
-          }
-        },
-        "required": [
-          "kind",
-          "mediaType",
-          "name",
-          "ref",
-          "size"
         ]
       },
       "SentMessage": {

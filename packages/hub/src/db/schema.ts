@@ -36,6 +36,7 @@ import type {
   RuleScope,
   RuleTiming,
   RuleWatch,
+  SendAttachment,
   SendMode,
   SendRefusal,
   SendState,
@@ -46,6 +47,7 @@ import type {
   StrategyChoice,
   ThreadAnswer,
   ThreadEvent,
+  ThreadImage,
   ThreadMessage,
   ThreadQuestion,
   ToolStatus,
@@ -2768,6 +2770,12 @@ export const threadMessages = sqliteTable(
     /** Your answer's question and answer, from the lead's AskUserQuestion. */
     question: text("question", { mode: "json" }).$type<ThreadQuestion>(),
     answer: text("answer", { mode: "json" }).$type<ThreadAnswer>(),
+    /** The pictures your words carried, as the media store keeps them (media.ts), and its addresses for them. */
+    images: text("images", { mode: "json" }).$type<ThreadImage[]>(),
+    /** The pastes and files your words carried, files by the hub's reference (`POST /api/files`). */
+    attachments: text("attachments", { mode: "json" }).$type<
+      SendAttachment[]
+    >(),
     createdAt: timestamp("created_at").notNull(),
   },
   (table) => [index("thread_messages_thread").on(table.threadId)]

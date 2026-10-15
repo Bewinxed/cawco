@@ -100,6 +100,7 @@ import type {
 } from "./db";
 import type { Origin, WorkOrigin } from "./db/schema";
 import { inboxText } from "./ingress";
+import { mediaBase64, storeImage } from "./media";
 import { MAKE_A_NOTE, personsTier, ROUTINE_ORIGIN } from "./memory";
 import { VIEW_PROMPT } from "./openui";
 import type { Caps } from "./project-caps";
@@ -242,13 +243,15 @@ export const leadPlaceRef = (
  */
 export interface CawEvent {
   by: Origin;
+  /** What rode with your words (pictures, pastes, files), as a send carries it to his session. */
+  carried?: Carried;
   note?: ThreadNote;
   /** The routine whose run this wake is (routines.ts): its turn is that run's, and a note in it is tainted (memory.ts). */
   routine?: string;
   /**
    * The person's own send this wake carries ({@link Caw.personSent}): it
    * goes under that send's uuid, so the row their screen drew is the wake's
-   * record, with what the send carried besides its words.
+   * record.
    */
   send?: PersonSend;
   text: string;
@@ -263,9 +266,37 @@ export interface CawEvent {
 const sourceOf = (event: CawEvent, inboxed: number): "owner" | "outside" =>
   event.by === "you" && !event.routine && inboxed === 0 ? "owner" : "outside";
 
-/** A person's send to Caw's session, as its wake carries it on: its uuid and what it carried besides its words. */
+/** What a send carries besides its words: pictures (base64) and attachments. */
+export type Carried = Pick<SendPayload, "attachments" | "images">;
+
+/** What a wake's message carries: the uuid of the person's send it is, and what rode with your words. */
+interface Carry {
+  carried?: Carried;
+  uuid?: string;
+}
+
+/**
+ * Your words' send to a thread (caw.ts `start`, `say`): the message's id
+ * when its sender chose it, the send to Caw's session it came as, and what
+ * rode with it.
+ */
+interface YourSend {
+  carried?: Carried;
+  id?: string;
+  person?: PersonSend;
+}
+
+/** What rode with a thread message of yours, as the message keeps it. */
+type Kept = Partial<Pick<ThreadMessageRow, "images" | "attachments">>;
+
+/** What a wake's message carries, from its event. */
+const carryOf = (event: CawEvent): Carry => ({
+  ...(event.send ? { uuid: event.send.uuid } : {}),
+  ...(event.carried ? { carried: event.carried } : {}),
+});
+
+/** A person's send to Caw's session, as its wake carries it on: its uuid. */
 interface PersonSend {
-  carried: Pick<SendPayload, "attachments" | "images">;
   uuid: string;
   /**
    * Told the wake that carries the send once it is under way, with when it
@@ -328,6 +359,8 @@ const messageOf = (row: ThreadMessageRow): ThreadMessage => {
         ...base,
         author: "you",
         body: row.body,
+        ...(row.images?.length ? { images: row.images } : {}),
+        ...(row.attachments?.length ? { attachments: row.attachments } : {}),
         ...(row.question ? { question: row.question } : {}),
         ...(row.answer ? { answer: row.answer } : {}),
       };
@@ -1056,19 +1089,18 @@ export const createCaw = ({
    * (`human`), as a session's composer sends it: it wakes him stopped, and
    * at his account's limit it is moved or continued as any person's turn is.
    * Any other is CawCo's word (`system`): a routine's says so in its origin
-   * (`routine:<id>`), the turn it starts that run's (memory.ts). A person's
-   * send it carries ({@link PersonSend}) gives it its uuid and what it
-   * carried. Answers the send's uuid when the hub took it, for
-   * {@link follow}.
+   * (`routine:<id>`), the turn it starts that run's (memory.ts). `carry`
+   * gives it a person's send's uuid, and what rode with your words. Answers
+   * the send's uuid when the hub took it, for {@link follow}.
    */
   const message = (
     target: InstanceRow,
     content: string,
     by: Origin,
     routine?: string,
-    person?: PersonSend
+    carry?: Carry
   ): string | undefined => {
-    const uuid = person?.uuid ?? crypto.randomUUID();
+    const uuid = carry?.uuid ?? crypto.randomUUID();
     const origin: NeutralOrigin =
       by === "you"
         ? { kind: "human" }
@@ -1081,7 +1113,7 @@ export const createCaw = ({
       machineId: target.machineId,
       instanceId: target.id,
       payload: {
-        ...person?.carried,
+        ...carry?.carried,
         instanceId: target.id,
         message: {
           type: "user",
@@ -1105,7 +1137,7 @@ export const createCaw = ({
     event: string,
     by: Origin,
     routine?: string,
-    person?: PersonSend
+    carry?: Carry
   ): Promise<{ lead: InstanceRow; sent: string | undefined }> => {
     const place =
       (await placeFor(project)) ??
@@ -1136,7 +1168,7 @@ export const createCaw = ({
       `${briefOf(project.name)}\n\n${event}`,
       by,
       routine,
-      person
+      carry
     );
     console.log(
       `[caw] ${project.name}: started Caw on ${project.cawHarness} (${instanceId})`
@@ -1156,7 +1188,7 @@ export const createCaw = ({
     event: string,
     by: Origin,
     routine?: string,
-    person?: PersonSend
+    carry?: Carry
   ): Promise<
     | { row: InstanceRow; sent?: string | undefined; started: boolean }
     | undefined
@@ -1173,7 +1205,7 @@ export const createCaw = ({
     if (pending !== undefined) {
       return { row: await pending, started: false };
     }
-    const start = startLead(project, event, by, routine, person).finally(() =>
+    const start = startLead(project, event, by, routine, carry).finally(() =>
       starting.delete(projectId)
     );
     const shared = start.then((made) => made.lead);
@@ -1291,15 +1323,10 @@ export const createCaw = ({
         why: { reason, words },
         ...(thrown === undefined ? {} : { thrown }),
       });
+    const carry = carryOf(event);
     let lead: Awaited<ReturnType<typeof leadFor>>;
     try {
-      lead = await leadFor(
-        projectId,
-        text,
-        event.by,
-        event.routine,
-        event.send
-      );
+      lead = await leadFor(projectId, text, event.by, event.routine, carry);
     } catch (error) {
       return failed(startFailure(error), errorWords(error), error);
     }
@@ -1315,7 +1342,7 @@ export const createCaw = ({
     }
     const sent = lead.started
       ? lead.sent
-      : message(lead.row, text, event.by, event.routine, event.send);
+      : message(lead.row, text, event.by, event.routine, carry);
     if (!sent) {
       // His session refused it: nothing woke him, and the thread is not his.
       return failed("not-taken", "His session didn't take the message.");
@@ -1796,16 +1823,69 @@ export const createCaw = ({
   /**
    * Starts a thread with your first message, to every dashboard; the wake
    * that follows publishes its row. `id` is the message's, when the
-   * dashboard chose it (see `say`).
+   * dashboard chose it (see `say`); `kept`, what rode with it, as
+   * {@link keepCarried} keeps it.
    */
-  const open = (projectId: string, body: string, id?: string) => {
+  const open = (
+    projectId: string,
+    body: string,
+    id?: string,
+    kept: Kept = {}
+  ) => {
     const made = db.createThread({
       id: crypto.randomUUID(),
       projectId,
       title: titleFrom(body),
-      first: { author: "you", body, ...(id ? { id } : {}) },
+      first: { author: "you", body, ...kept, ...(id ? { id } : {}) },
     });
     return { row: made.thread, said: said(made.thread, made.message, false) };
+  };
+
+  /**
+   * What rode with your words, as their thread message keeps it: each
+   * picture in the hub's media store (media.ts, where a send's pictures go)
+   * by its address, pastes and files as they came (a file is already the
+   * hub's reference). Refused for a picture of a type the store does not
+   * keep, before anything is kept.
+   */
+  const keepCarried = (carried: Carried | undefined): Kept => {
+    const images = (carried?.images ?? []).map(({ mediaType, data }) => ({
+      mediaType,
+      src:
+        storeImage(mediaType, data) ??
+        refuse(
+          400,
+          `A ${mediaType} picture can't be kept. Send it as PNG, JPEG, GIF or WebP.`
+        ),
+    }));
+    const attachments = carried?.attachments ?? [];
+    return {
+      ...(images.length ? { images } : {}),
+      ...(attachments.length ? { attachments } : {}),
+    };
+  };
+
+  /**
+   * What your message carried, back as a send carries it: each picture's
+   * bytes out of the media store (server.ts `envelopeOf` does the same for
+   * a pending send). Refused when one is no longer stored: what went with
+   * your words would not go with them again.
+   */
+  const carriedOf = (line: ThreadMessageRow): Carried => {
+    const images = (line.images ?? []).map(({ mediaType, src }) => ({
+      mediaType,
+      data:
+        mediaBase64(src) ??
+        refuse(
+          409,
+          "A picture your message carried is no longer kept on the hub, so it can't go to Caw again. Write to him again with it."
+        ),
+    }));
+    const attachments = line.attachments ?? [];
+    return {
+      ...(images.length ? { images } : {}),
+      ...(attachments.length ? { attachments } : {}),
+    };
   };
 
   /**
@@ -2081,14 +2161,15 @@ export const createCaw = ({
     /**
      * Starts a thread with your first message, answered once it is kept, and
      * wakes Caw with it behind that answer ({@link wakeForYou}); "Make a
-     * note: …" goes to AGENTS.md instead. `person`: the send to his session
-     * it came as ({@link personSent}).
+     * note: …" goes to AGENTS.md instead. `sent`: the message's id, the send
+     * to his session it came as ({@link personSent}), and what rode with
+     * your words, which the message keeps ({@link keepCarried}) and the wake
+     * carries to him.
      */
     async start(
       projectId: string,
       raw: string,
-      id?: string,
-      person?: PersonSend
+      { id, person, carried }: YourSend = {}
     ): Promise<ThreadSaid> {
       const body = bodyOf(raw);
       unsaid(id);
@@ -2100,12 +2181,13 @@ export const createCaw = ({
         return { ...opened.said, thread: summaryOf(opened.row) };
       }
       listening(projectId);
-      const opened = open(projectId, body, id);
+      const opened = open(projectId, body, id, keepCarried(carried));
       wakeForYou(projectId, opened.row.id, opened.said.message.id, {
         by: "you",
         text: yourWords(opened.row, body, true),
         threadId: opened.row.id,
         ...(person ? { send: person } : {}),
+        ...(carried ? { carried } : {}),
       });
       return { ...opened.said, thread: summaryOf(opened.row) };
     },
@@ -2117,15 +2199,14 @@ export const createCaw = ({
      * AGENTS.md instead, waking nobody). `id` is the
      * message's when the dashboard chose it, as a session's composer does:
      * the row your words fly into is then the one they went out as, however
-     * soon the hub's frame draws it. `person`: the send to his session it
-     * came as ({@link personSent}).
+     * soon the hub's frame draws it. `person` and `carried` as for
+     * {@link start}.
      */
     async say(
       projectId: string,
       threadId: string,
       raw: string,
-      id?: string,
-      person?: PersonSend
+      { id, person, carried }: YourSend = {}
     ): Promise<ThreadSaid> {
       const body = bodyOf(raw);
       threadIn(projectId, threadId);
@@ -2147,6 +2228,7 @@ export const createCaw = ({
         threadId,
         author: "you",
         body,
+        ...keepCarried(carried),
         ...(id ? { id } : {}),
       });
       const out = said(added.thread, added.message, false);
@@ -2155,6 +2237,7 @@ export const createCaw = ({
         text: yourWords(added.thread, body, false),
         threadId,
         ...(person ? { send: person } : {}),
+        ...(carried ? { carried } : {}),
       });
       return { ...out, thread: summaryOf(added.thread) };
     },
@@ -2166,7 +2249,8 @@ export const createCaw = ({
      * added. Refused while his turn is on the thread, when your newest words
      * are not ones a wake failed to carry or he has answered them, and while
      * he cannot read them (`listening`). A wake that fails again is noted
-     * again. Answers the thread.
+     * again. What rode with your words (pictures, pastes, files) goes with
+     * them again, as the message kept it. Answers the thread.
      */
     wakeAgain(projectId: string, threadId: string): ThreadSummary {
       const thread = threadIn(projectId, threadId);
@@ -2189,6 +2273,7 @@ export const createCaw = ({
           "Caw has your newest message in this thread already. Write to him to wake him again."
         );
       }
+      const carried = carriedOf(yours);
       listening(projectId);
       wakingAgain.add(threadId);
       wakeForYou(
@@ -2203,6 +2288,7 @@ export const createCaw = ({
             !lines.slice(0, at).some((line) => line.author !== "event")
           ),
           threadId,
+          carried,
         },
         () => wakingAgain.delete(threadId)
       );
@@ -2231,21 +2317,25 @@ export const createCaw = ({
       let woken: Promise<void> | undefined;
       const person: PersonSend = {
         uuid: sent.uuid,
+        waking: (settled) => {
+          woken = settled;
+        },
+      };
+      const yours: YourSend = {
+        id: sent.uuid,
+        person,
         carried: {
           ...(payload.images?.length ? { images: payload.images } : {}),
           ...(payload.attachments?.length
             ? { attachments: payload.attachments }
             : {}),
         },
-        waking: (settled) => {
-          woken = settled;
-        },
       };
       const words = wordsOf(sent.message.content);
       const threadId = threadOfLead(payload.instanceId, project.id);
       const kept = threadId
-        ? api.say(project.id, threadId, words, sent.uuid, person)
-        : api.start(project.id, words, sent.uuid, person);
+        ? api.say(project.id, threadId, words, yours)
+        : api.start(project.id, words, yours);
       // Answered once the wake carrying it has settled: that wake records the
       // send under its uuid as it goes out, and answering before it (the
       // thread's answer comes at once, the wake runs behind it) let the
@@ -2892,10 +2982,52 @@ const answer = (error: unknown) => {
 
 const HARNESS = t.Union(CAW_HARNESSES.map((harness) => t.Literal(harness)));
 
-/** Your words to Caw, and the id the dashboard sent them as (its own, like a session's). */
+/**
+ * Your words to Caw, the id the dashboard sent them as (its own, like a
+ * session's), and what rides with them as a send carries it: pictures
+ * (base64) and attachments (pastes, and files by the hub's reference).
+ */
 const YOUR_WORDS = t.Object({
   body: t.String(),
   id: t.Optional(t.String({ format: "uuid" })),
+  images: t.Optional(
+    t.Array(t.Object({ mediaType: t.String(), data: t.String() }))
+  ),
+  attachments: t.Optional(
+    t.Array(
+      t.Union([
+        t.Object({
+          kind: t.Literal("text"),
+          name: t.String(),
+          content: t.String(),
+        }),
+        t.Object({
+          kind: t.Literal("file"),
+          name: t.String(),
+          mediaType: t.String(),
+          size: t.Integer({ minimum: 0 }),
+          ref: t.String({ pattern: "^/api/files/" }),
+        }),
+      ])
+    )
+  ),
+});
+
+/** A thread send's body as `start` and `say` take it. */
+const yourSend = ({
+  id,
+  images,
+  attachments,
+}: Carried & { id?: string }): YourSend => ({
+  ...(id ? { id } : {}),
+  ...(images?.length || attachments?.length
+    ? {
+        carried: {
+          ...(images?.length ? { images } : {}),
+          ...(attachments?.length ? { attachments } : {}),
+        },
+      }
+    : {}),
 });
 
 /** The routes for a project's Caw, its threads and your asks for views. */
@@ -2951,7 +3083,7 @@ export const cawRoutes = (caw: Caw) =>
         // Caw's session may be starting on a machine; that can take a while.
         server?.timeout(request, 0);
         try {
-          return await caw.start(params.id, body.body, body.id);
+          return await caw.start(params.id, body.body, yourSend(body));
         } catch (error) {
           return answer(error);
         }
@@ -2970,7 +3102,12 @@ export const cawRoutes = (caw: Caw) =>
       async ({ params, body, request, server }) => {
         server?.timeout(request, 0);
         try {
-          return await caw.say(params.id, params.threadId, body.body, body.id);
+          return await caw.say(
+            params.id,
+            params.threadId,
+            body.body,
+            yourSend(body)
+          );
         } catch (error) {
           return answer(error);
         }

@@ -122,13 +122,27 @@ interface ThreadMessageBase {
 }
 
 /**
+ * A picture your words carried, in the hub's media store (media.ts): its
+ * address there (`/api/media/<sha256>.<ext>`), as a send's row names it.
+ */
+export interface ThreadImage {
+  mediaType: string;
+  src: string;
+}
+
+/**
  * Yours: words you wrote, or your answer to the lead's question. An answer
- * carries `question` and `answer`, and `body` reads it in one line.
+ * carries `question` and `answer`, and `body` reads it in one line. Words
+ * carry what rode with them as a send's do: `images`, and `attachments`
+ * (pastes, and files by the hub's reference); Try again wakes Caw with all
+ * of it.
  */
 export interface YourThreadMessage extends ThreadMessageBase {
   answer?: ThreadAnswer;
+  attachments?: import("./attachments").SendAttachment[];
   author: "you";
   body: string;
+  images?: ThreadImage[];
   question?: ThreadQuestion;
 }
 

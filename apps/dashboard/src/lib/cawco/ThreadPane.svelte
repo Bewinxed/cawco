@@ -147,6 +147,20 @@
     });
   });
 
+  /** What rode with your words, as a send's row carries it (MessageRow); none when nothing did. */
+  function carriedOn(message: ThreadMessage): Message["metadata"] {
+    if (message.author !== "you") {
+      return;
+    }
+    const { images, attachments } = message;
+    return images?.length || attachments?.length
+      ? {
+          ...(images?.length ? { images } : {}),
+          ...(attachments?.length ? { attachments } : {}),
+        }
+      : undefined;
+  }
+
   /** One message as the transcript's block (`Message`). */
   function blockOf(message: ThreadMessage): Message {
     const base = {
@@ -215,7 +229,12 @@
         },
       };
     }
-    return { ...base, type: "user", content: message.body };
+    return {
+      ...base,
+      type: "user",
+      content: message.body,
+      metadata: carriedOn(message),
+    };
   }
 
   /**
@@ -526,8 +545,8 @@
       // The words left the field as `sent:<id>`, and go to the hub as that
       // message: its row lands them however soon its frame draws it.
       const said = threadId
-        ? await sayInThread(projectId, threadId, text, id)
-        : await startThread(projectId, text, id);
+        ? await sayInThread(projectId, threadId, text, id, extras)
+        : await startThread(projectId, text, id, extras);
       if (!threadId) {
         workspace.retarget(viewId, threadTabId(said.thread.id));
       }

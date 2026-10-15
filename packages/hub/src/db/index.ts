@@ -477,6 +477,8 @@ export interface DbShape {
           | "files"
           | "question"
           | "answer"
+          | "images"
+          | "attachments"
           | "createdAt"
         >
       >
@@ -588,7 +590,12 @@ export interface DbShape {
     /** The project's Setup thread (caw.ts `setup`). */
     setup?: boolean;
     first: Pick<ThreadMessageRow, "author" | "body"> &
-      Partial<Pick<ThreadMessageRow, "id" | "noteTitle" | "event">>;
+      Partial<
+        Pick<
+          ThreadMessageRow,
+          "id" | "noteTitle" | "event" | "images" | "attachments"
+        >
+      >;
   }) => { thread: ThreadRow; message: ThreadMessageRow };
   /** Files a work item as the hub accepted it. */
   readonly createWorkItem: (item: typeof workItems.$inferInsert) => WorkItemRow;

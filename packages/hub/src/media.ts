@@ -101,6 +101,17 @@ export function externalizeImages<T>(value: T): T {
   return value;
 }
 
+/**
+ * One picture into the store, as {@link externalizeImages} keeps each: its
+ * address, or undefined for a type the store does not keep.
+ */
+export function storeImage(
+  mediaType: string,
+  data: string
+): string | undefined {
+  return mediaType in EXTENSIONS ? store(mediaType, data) : undefined;
+}
+
 /** The file behind a media name, or undefined for any name this store never minted. */
 export function mediaFilePath(name: string): string | undefined {
   return MEDIA_NAME.test(name) ? join(MEDIA_DIR, name) : undefined;

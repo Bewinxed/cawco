@@ -5,10 +5,12 @@
  * B. Your words that do not wake him are typed data in the thread, and Try
  *    again wakes him with them. The project's checkout is moved away before
  *    his first start, so the start fails on its machine: the thread keeps
- *    your words and a `not-woken` note whose `notWoken` names your message,
- *    `could-not-start` and the machine's words, with no prose body; the
- *    page shows the reason and Try again under the note. The checkout put
- *    back, Try again on the page wakes him: one row of yours, one reply.
+ *    your words, the picture they carried (in the hub's media store, shown
+ *    on your row) and a `not-woken` note whose `notWoken` names your
+ *    message, `could-not-start` and the machine's words, with no prose
+ *    body; the page shows the reason and Try again under the note. The
+ *    checkout put back, Try again on the page wakes him: one row of yours,
+ *    one reply, and the model is handed the same picture's bytes.
  * A. His words stream into the thread. While his turn answers, the
  *    thread's live row shows his words before his reply lands in
  *    thread_messages; once it lands the page has exactly one row with his
@@ -46,6 +48,9 @@ const SENTENCE = (tag: string) => [
   ".",
 ];
 const replyOf = (tag: string) => SENTENCE(tag).join("");
+/** A 1×1 PNG your first words carry. */
+const PICTURE =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
 
 /** The `PROBE-STREAM-X` asks answered, by X. */
 const answered = new Set<string>();
@@ -192,9 +197,30 @@ const steps = async (kit: Kit, fleet: KitFleet) => {
   const started = await fleet.api<{
     message: { id: string };
     thread: { id: string };
-  }>(`/api/projects/${project.id}/threads`, { body: ONE });
+  }>(`/api/projects/${project.id}/threads`, {
+    body: ONE,
+    images: [{ mediaType: "image/png", data: PICTURE }],
+  });
   const threadId = started.thread.id;
   const youId = started.message.id;
+  const [kept] = fleet.query<{ images: string | null }>(
+    "SELECT images FROM thread_messages WHERE id = ?",
+    youId
+  );
+  const keptImages = JSON.parse(kept?.images ?? "[]") as {
+    mediaType: string;
+    src: string;
+  }[];
+  const stored = keptImages[0]
+    ? await fetch(`${fleet.base}${keptImages[0].src}`).then(async (r) =>
+        r.ok ? Buffer.from(await r.arrayBuffer()).toString("base64") : ""
+      )
+    : "";
+  kit.check(
+    "B: your words keep the picture they carried, in the hub's media store",
+    keptImages.length === 1 && stored === PICTURE,
+    kept?.images ?? "no row"
+  );
   const note = await until(
     "the not-woken note",
     () =>
@@ -232,6 +258,18 @@ const steps = async (kit: Kit, fleet: KitFleet) => {
       (await tryAgain.isVisible()),
     await chip.innerText()
   );
+  const shown = await page.evaluate(
+    ({ yours, picture }) =>
+      [...document.querySelectorAll<HTMLElement>("[data-row]")]
+        .filter((node) => node.innerText.includes(yours))
+        .some((node) =>
+          [...node.querySelectorAll("img")].some((img) =>
+            img.getAttribute("src")?.endsWith(picture)
+          )
+        ),
+    { yours: ONE, picture: keptImages[0]?.src ?? "\u0000" }
+  );
+  kit.check("B: your row in the thread shows the picture it carried", shown);
 
   // The cause cleared: the checkout is back.
   await rename(away, src);
@@ -241,6 +279,15 @@ const steps = async (kit: Kit, fleet: KitFleet) => {
     "B: Try again wakes him with your words: one row of yours, one reply",
     one.yours === 1 && one.replies === 1,
     JSON.stringify(one)
+  );
+  // What the model was handed with your words: the same picture's bytes.
+  const handed = fleet.seen.find(
+    (request) => request.tools && request.all.includes("PROBE-STREAM-ONE")
+  );
+  kit.check(
+    "B: Try again hands the model the picture your words carried",
+    !!handed?.body.includes(PICTURE),
+    handed ? `request of ${handed.body.length} bytes` : "no request read it"
   );
   kit.check(
     "A: his words stream into the thread before his reply lands, and one row carries it after",

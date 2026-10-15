@@ -5538,15 +5538,17 @@ export async function readThread(
  * Starts a thread with your first message; Caw is woken with it. `id` is the
  * message's, chosen here as a session's composer chooses its own: the row it
  * becomes lands the words that flew under it, whenever the hub draws it.
+ * `extras`: the pictures and attachments that ride with it.
  */
 export async function startThread(
   projectId: string,
   body: string,
-  id?: string
+  id?: string,
+  extras: SendExtras = {}
 ): Promise<ThreadSaid> {
   const said = await askHub<ThreadSaid>(
     `${projectPath(projectId)}/threads`,
-    json("POST", { body, ...(id ? { id } : {}) })
+    json("POST", { body, ...(id ? { id } : {}), ...carriedOf(extras) })
   );
   state.threadMessages[said.thread.id] ??= [];
   adoptThreadMessage(said.thread.id, said.message);
@@ -5554,16 +5556,26 @@ export async function startThread(
   return said;
 }
 
-/** Writes in a thread; Caw is woken with it. `id` as for {@link startThread}. */
+/**
+ * What rode with your words in a thread, as the hub's thread routes take it
+ * (a send's `images` and `attachments`); the thread message keeps it.
+ */
+const carriedOf = ({ images, attachments }: SendExtras): SendExtras => ({
+  ...(images?.length ? { images } : {}),
+  ...(attachments?.length ? { attachments } : {}),
+});
+
+/** Writes in a thread; Caw is woken with it. `id` and `extras` as for {@link startThread}. */
 export async function sayInThread(
   projectId: string,
   threadId: string,
   body: string,
-  id?: string
+  id?: string,
+  extras: SendExtras = {}
 ): Promise<ThreadSaid> {
   const said = await askHub<ThreadSaid>(
     `${projectPath(projectId)}/threads/${encodeURIComponent(threadId)}/messages`,
-    json("POST", { body, ...(id ? { id } : {}) })
+    json("POST", { body, ...(id ? { id } : {}), ...carriedOf(extras) })
   );
   adoptThreadMessage(threadId, said.message);
   adoptThread(said.thread);

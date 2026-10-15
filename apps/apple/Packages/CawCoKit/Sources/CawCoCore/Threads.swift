@@ -61,6 +61,9 @@ public struct ThreadNote: Sendable, Equatable {
     let answer: Data?
     /// A not-woken note's data: your words he has not read, and why.
     public let notWoken: ThreadNotWoken?
+    /// What rode with your words, as a send's row carries it (`images`,
+    /// `attachments`): the JSON of each, drawn on your row.
+    let carried: Data?
 
     init?(_ raw: [String: Any]) {
         guard let id = raw["id"] as? String, let threadId = raw["threadId"] as? String else { return nil }
@@ -80,6 +83,10 @@ public struct ThreadNote: Sendable, Equatable {
         question = (raw["question"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0) }
         answer = (raw["answer"] as? [String: Any]).flatMap { try? JSONSerialization.data(withJSONObject: $0) }
         notWoken = ((raw["event"] as? [String: Any])?["notWoken"] as? [String: Any]).flatMap(ThreadNotWoken.init)
+        var carried: [String: Any] = [:]
+        if let images = raw["images"] as? [[String: Any]], !images.isEmpty { carried["images"] = images }
+        if let attachments = raw["attachments"] as? [[String: Any]], !attachments.isEmpty { carried["attachments"] = attachments }
+        self.carried = carried.isEmpty ? nil : try? JSONSerialization.data(withJSONObject: carried)
     }
 
     /// A generated message (a frame's, a read's) as one note.
@@ -112,6 +119,10 @@ public struct ThreadNote: Sendable, Equatable {
                   let answer = answer.flatMap({ try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) else {
                 raw["type"] = "user"
                 raw["content"] = body
+                // What rode with your words, as a send's row carries it (ThreadPane.svelte `blockOf`).
+                if let carried = carried.flatMap({ try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) {
+                    raw["metadata"] = carried
+                }
                 return raw
             }
             let call = question["toolUseId"] as? String ?? id
