@@ -1820,12 +1820,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     /**
      * The pins on the session's artifacts (one, or all of them), with their
      * threads and anchors: `open` (unresolved), `resolved`, or `all`; with
-     * `since`, only pins with something newer than it.
+     * `since`, only pins with something newer than it. Read by the session
+     * itself (`bySession`, its comment_read tool), what it reads counts as
+     * heard; the person's own reads of them (the app's pane) never do, or
+     * every pin the app showed would be stamped heard and never delivered.
      */
     commentRead: (
       instanceId: string,
       query: {
         artifact?: string | undefined;
+        bySession: boolean;
         filter: "open" | "resolved" | "all";
         since?: string | undefined;
       }
@@ -1856,7 +1860,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           )
           .filter((pin) => !query.since || newest(pin) > query.since)
           .sort((a, b) => a.number - b.number);
-        if (takes(instance, row)) {
+        if (query.bySession && takes(instance, row)) {
           readHeard(row.id, pins, readAt);
         }
         const answered = pins.map((pin) => {

@@ -652,8 +652,14 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             openCard(id, made: body["made"] as? Bool == true)
             refresh()
         case "cawco:press":
-            // A press on the page outside the card: the outside-press rule, heard from the page.
-            if openPin != nil { closeCard(by: "page") }
+            // A press on the page outside the card: the outside-press rule,
+            // heard from the page as its finger goes down. The card closes as
+            // that finger lifts (`pageLifted`), as every outside press does:
+            // closing ends the field's editing, the keyboard leaves and the
+            // drawer drops under a finger still down, and the page never took
+            // the tap (the probe: "dismissed by=page" and no new document).
+            guard openPin != nil else { return }
+            if pressOnPage { pagePressed = true } else { closeCard(by: "page") }
         case "cawco:pin-at":
             guard Self.pinId(body["id"]) == openPin else { return }
             pinAt = Self.pinAt(body)
@@ -1043,6 +1049,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         card.endEditing(true)
         card.closed()
         outsidePress.view?.removeGestureRecognizer(outsidePress)
+        pressOnPage = false
+        pagePressed = false
         deliver(["type": "cawco:track-pin", "id": NSNull()])
         var withdrawn = false
         if id == madePin {
@@ -1082,10 +1090,34 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         watcher.delegate = self
         watcher.pressed = { [weak self] in
             // After the touch's own delivery: the watcher leaves the window as the card closes.
-            Task { @MainActor in self?.closeCard(by: "outside") }
+            Task { @MainActor in self?.pressEnded() }
+        }
+        watcher.cancelled = { [weak self] in
+            // A touch the page's scroll took: its press still closes the card, as on the web.
+            Task { @MainActor in self?.pressEnded(onlyPage: true) }
         }
         return watcher
     }()
+
+    /// The watched touch is on the page: the page says whether it pressed
+    /// outside the card (`cawco:press`), and the card closes as it lifts.
+    private var pressOnPage = false
+    /// The page said its press while the finger was still down.
+    private var pagePressed = false
+
+    /// The watched touch has ended. Off the page it closes the card; on it,
+    /// only once the page has said its press (or as that word arrives, if it
+    /// comes after the lift), so a tap on a pin's disc or in Comment mode
+    /// closes nothing.
+    private func pressEnded(onlyPage: Bool = false) {
+        let onPage = pressOnPage
+        pressOnPage = false
+        if onPage {
+            if pagePressed { closeCard(by: "page") }
+        } else if !onlyPage {
+            closeCard(by: "outside")
+        }
+    }
 
     /// A pin's own address (its card's Copy link, PreviewPane.svelte
     /// `pinLink`): its artifact's tab on the dashboard, opening the pin's
@@ -1625,8 +1657,11 @@ extension PreviewController: UIGestureRecognizerDelegate {
     func gestureRecognizer(_ recognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
         guard recognizer === outsidePress else { return true }
         guard openPin != nil, !card.isHidden, let touched = touch.view else { return false }
-        if touched.isDescendant(of: card) || touched.isDescendant(of: web) { return false }
+        if touched.isDescendant(of: card) { return false }
         if let presented = presentedViewController, touched.isDescendant(of: presented.view) { return false }
+        // The page's touches are heard for their lift alone: the page says its own press.
+        pressOnPage = touched.isDescendant(of: web)
+        pagePressed = false
         return true
     }
 
@@ -1646,6 +1681,8 @@ extension PreviewController: UIGestureRecognizerDelegate {
 /// before its view does: `pressed` runs its close on the next main turn.
 private final class PressWatcher: UIGestureRecognizer {
     var pressed: () -> Void = {}
+    /// A touch taken from it (by a scroll, the system).
+    var cancelled: () -> Void = {}
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
         super.touchesEnded(touches, with: event)
@@ -1657,6 +1694,7 @@ private final class PressWatcher: UIGestureRecognizer {
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
         super.touchesCancelled(touches, with: event)
+        if state == .possible { cancelled() }
         state = .failed
     }
 }

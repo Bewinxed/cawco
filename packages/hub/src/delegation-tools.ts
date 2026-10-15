@@ -1162,8 +1162,10 @@ export function handoffTools(deps: HandoffDeps) {
       commentRead.description,
       commentRead.input,
       async ({ artifact, filter, since }) => {
+        // The session reads them itself: what it reads counts as heard.
         const query = new URLSearchParams({
           filter,
+          reader: "session",
           ...(artifact ? { artifact } : {}),
           ...(since ? { since } : {}),
         }).toString();

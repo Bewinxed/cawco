@@ -7,8 +7,8 @@
  * card (the header, the page) closes it, a new pin with nothing written is
  * taken back, one with words keeps them for its next opening; the pin's
  * card and the Comments panel carry it, a reply and
- * Resolve go to the page's overlay, which writes the doc and answers, Send 1
- * sends its section with its picture, the pin then wears the live dot while
+ * Resolve go to the page's overlay, which writes the doc and answers, the
+ * reply reaches the session by itself (no Send), the pin then wears the live dot while
  * the session works (`-preview-working` holds it working) until it is
  * resolved, and the app tells the hub it has the page on screen (`shown`);
  * Interact, Reload (the mode standing through it) and a drag of the grabber
@@ -613,7 +613,7 @@ xcrun simctl install ${udid} "${app}"`);
             number: number;
             resolvedAt?: string;
             sentAt?: string;
-            thread: { by: string; text: string }[];
+            thread: { by: string; sentAt?: string; text: string }[];
           }[];
         }[];
       }>(
@@ -1034,7 +1034,7 @@ xcrun simctl install ${udid} "${app}"`);
     `${card ? `card for pin ${card.number}` : "no card line"}; ${backAgain ?? "no card-draft line"}`
   );
 
-  // ── 8. Reply, Send 1, the live dot, Resolve ───────────────────────────
+  // ── 8. Reply, its delivery, the live dot, Resolve ─────────────────────
   // The card's Reply and Resolve go to the page's overlay (`cawco:reply`,
   // `cawco:resolve`), which writes the doc and answers with its result. The
   // field holds pin 1's words from 6b already: a space after them (which
@@ -1071,30 +1071,11 @@ xcrun simctl install ${udid} "${app}"`);
       thread.some((entry) => entry.by === "person" && entry.text === REPLY),
     `${replied ?? "no reply-result line"}; the hub's thread: ${JSON.stringify(thread)}`
   );
-  head = await until(
-    "Send 1 in the header",
-    () => headNow("the header with the reply unsent"),
-    (h) => h.sendWords === "Send 1" && h.send !== undefined,
-    15_000
-  ).catch(() => headLast() as Head);
-  mark = seen.length;
-  if (head.sendWords === "Send 1" && head.send) {
-    await tap(head.send, `${head.sendWords} (from the newest header)`);
-  }
-  // The send's own outcome, not the head's words as it goes (`preview send words=Sending…`).
-  const sent = await lineAfter(
-    "the send",
-    mark,
-    (l) =>
-      l.startsWith("preview send ok") || l.startsWith("preview send failed"),
-    30_000
-  );
-  // Send stands outside the open card: its tap closes the card (the outside-press rule), as on the web.
-  const closedBySend = await lineAfter(
-    "the card closed by the tap on Send",
-    mark,
-    (l) => l.startsWith("preview card dismissed by=outside ")
-  );
+  // Pins and replies reach the session by themselves (1a59485f5): the hub
+  // delivers a burst once the person has been quiet 10 s, never past 60 s
+  // from its first write. The head offers Send picks only for the page's
+  // own picks, which this page has none of.
+  head = await headNow("the header with the reply written");
   /** The artifact's responses note (core ARTIFACT_RESPONSES), never a row of the person's. */
   const isResponses = (block: {
     metadata?: { subtype?: string };
@@ -1115,23 +1096,36 @@ xcrun simctl install ${udid} "${app}"`);
         }>(`/api/instances/${id}/transcript?limit=200`)
       ).blocks ?? [],
     (all) => all.some(isResponses),
-    20_000
+    75_000
   ).catch(() => []);
   const message = blocks.find(isResponses);
   const asWords = blocks.filter(
     (block) => block.type === "user" && block.content?.includes(REPLY)
   );
   const [sentPin] = await pinsOnHub();
+  const replySent = sentPin?.thread.find(
+    (entry) => entry.by === "person" && entry.text === REPLY
+  );
   check(
-    '"Send 1" tells the session it has responses to read: one responses note, no row of the person\'s carrying the pin; the tap on Send, outside the card, closes it',
-    head.sendWords === "Send 1" &&
-      sent?.startsWith("preview send ok") === true &&
-      closedBySend !== undefined &&
+    "with no Send, the reply reaches the session by itself: one responses note, no row of the person's carrying it, the pin and its entry stamped sentAt",
+    head.send === undefined &&
       message !== undefined &&
       asWords.length === 0 &&
-      !!sentPin?.sentAt,
-    `header read "${head.sendWords}"; ${sent ?? "no send outcome line"}; ${closedBySend ?? "the card not closed by the tap"}; note ${message ? JSON.stringify(message.metadata) : "not in the transcript"}; person's rows with the reply: ${asWords.length}; pin sentAt ${sentPin?.sentAt ?? "none"}`
+      !!sentPin?.sentAt &&
+      !!replySent?.sentAt,
+    `head's Send ${head.send ? `"${head.sendWords}" shown` : "hidden"}; note ${message ? JSON.stringify(message.metadata) : "not in the transcript"}; person's rows with the reply: ${asWords.length}; pin sentAt ${sentPin?.sentAt ?? "none"}, the reply's ${replySent?.sentAt ?? "none"}`
   );
+  // The card's Close puts it and the keyboard away, as the session's answers come in.
+  card = cardLast();
+  mark = seen.length;
+  if (card?.close) {
+    await tap(
+      card.close,
+      `pin ${card.number}'s card Close (from its newest line)`
+    );
+  }
+  await dismissedAfter("pin 1's card closed", mark);
+  await pause(1200);
   // The send stamped the frame's sentAt on the pin; the session counts as
   // working (-preview-working): its row wears the live dot, and its card,
   // opened again from that row, does too.

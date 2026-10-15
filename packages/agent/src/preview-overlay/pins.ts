@@ -498,11 +498,18 @@ export function startPins(deps: PinsDeps): Pins {
     track: (id) => {
       const before = tracked;
       tracked = id;
-      if (before === id) {
-        tell();
-      } else {
-        // Drawn again (a resolved pin stands while its card is open), which tells the host.
+      // Only a resolved pin stands or goes with its card (`onIt`): the page is
+      // drawn again for that alone. Drawn again for an open pin, every disc
+      // is put back new under the tap that closed the card, and iOS WebKit,
+      // seeing new content as that tap lands, takes it for a hover and sends
+      // no click (the iOS probe: "dismissed by=page" and no new document).
+      const resolved = (pin: string | null) =>
+        pin !== null && !!pinsMap().get(pin)?.resolvedAt;
+      if (before !== id && (resolved(before) || resolved(id))) {
+        // Drawn again, which tells the host.
         draw();
+      } else {
+        tell();
       }
     },
     show: (shown) => {

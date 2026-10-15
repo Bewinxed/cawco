@@ -204,6 +204,8 @@ export const artifactRoutes = (artifacts: Artifacts) =>
             ])
           ),
           since: t.Optional(t.String({ maxLength: 40 })),
+          // The session itself reads them (its comment_read tool): what it reads counts as heard.
+          reader: t.Optional(t.Literal("session")),
         }),
       },
       ({ params, query }) => {
@@ -212,6 +214,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
             artifact: query.artifact,
             filter: query.filter ?? "open",
             since: query.since,
+            bySession: query.reader === "session",
           });
         } catch (error) {
           return refused(error);

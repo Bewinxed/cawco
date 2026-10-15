@@ -4233,6 +4233,15 @@
               "maxLength": 40,
               "type": "string"
             }
+          },
+          {
+            "name": "reader",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "const": "session"
+            }
           }
         ],
         "operationId": "getApiInstancesByIdArtifactsComments",
