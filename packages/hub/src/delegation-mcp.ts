@@ -301,7 +301,7 @@ export function createDelegationMcp(options: {
         cwd: "",
         canDelegate: actor?.canDelegate ?? undefined,
         lands: landsOf(actor),
-        workItem: !actor || !!actor.parentInstanceId,
+        workItem: !actor || !!actor.workItemId,
         workflowStepId,
         workflowRunId: workflowStepId ? "" : undefined,
         deliver: () => {
@@ -725,7 +725,7 @@ export function createDelegationMcp(options: {
       canDelegate: actor.canDelegate ?? undefined,
       lands: landsOf(actor),
       ledBy: (id) => options.ledBy?.(id, actor.id) ?? false,
-      workItem: !!actor.parentInstanceId,
+      workItem: !!actor.workItemId,
       workflowStepId: actor.workflowStepId ?? undefined,
       workflowRunId: actor.workflowRunId ?? undefined,
       projectId: actor.projectId ?? undefined,

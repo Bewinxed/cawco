@@ -811,8 +811,6 @@ export type SendState =
  * - `item-superseded`: finished delegated work whose workspace has moved on
  *   to a newer item, the one to message instead.
  * - `workspace-archived`: finished delegated work whose clone is gone.
- * - `predates-items`: a delegate from before work items, which only the
- *   reader or its parent may message.
  */
 export type SendRefusal =
   | { kind: "account-signed-out"; accountId: string; machineId: string }
@@ -824,8 +822,7 @@ export type SendRefusal =
       itemId: string;
       latest: { id: string; title: string; instanceId: string | null };
     }
-  | { kind: "workspace-archived"; itemId: string; workspaceId: string }
-  | { kind: "predates-items" };
+  | { kind: "workspace-archived"; itemId: string; workspaceId: string };
 
 /**
  * THE ONE RECORD OF A SEND. The hub writes it when it accepts the send and is

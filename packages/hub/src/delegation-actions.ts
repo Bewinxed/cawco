@@ -1338,7 +1338,7 @@ export const handoffActions = ({
           ageOf(peer.row.updatedAt),
           ...(peer.row.kind === "scratch" ? ["spin-off"] : []),
           ...(peer.row.parentInstanceId === instanceId
-            ? ["your delegate"]
+            ? [peer.row.workItemId ? "your delegate" : "you started it"]
             : []),
           ...(own?.parentInstanceId && own.parentInstanceId === peer.row.id
             ? ["your parent session"]
@@ -1441,6 +1441,10 @@ export const handoffActions = ({
         ...(type?.skills?.length ? { skills: type.skills } : {}),
         ...(typeName ? namedTypeSettings(type, projectId) : {}),
         ...(spinOff ? { scratch: { baseCwd: workdir } } : {}),
+        // Its starter: it nests under this session in every rail, as all
+        // work another session started does; it is no work item, so it
+        // reports nothing back.
+        parent: { instanceId },
         // The machine answers it once the session is in place, or with why it
         // is not; the hub holds the relay until then, so a failed spawn is this
         // tool's error rather than a "Started" for a session that never was.
@@ -1476,7 +1480,7 @@ export const handoffActions = ({
         `Started "${title}" (${leafOf(workdir)})${spinOff ? " as a spin-off" : ""}${on} in ${workdir}, ` +
         `on ${harness} ${model}${type?.effort ? ` at ${type.effort} effort` : ""}${type ? ` (type '${type.name}')` : ""}, ` +
         `in ${opts.permissionMode ?? "this session's own"} permission mode where its harness has modes. ` +
-        "It is in the sidebar now and the user can open its transcript. " +
+        "It is in the sidebar now, under this session, and the user can open its transcript. " +
         `Hand it more work later with handoff("${id}", ...).`,
     };
   },

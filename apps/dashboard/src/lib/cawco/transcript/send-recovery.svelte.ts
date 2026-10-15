@@ -83,7 +83,7 @@ function signedOut(
 /**
  * What a refused send's row says and offers, or null for a refusal nothing
  * here recovers from (one only another session's message meets: finished
- * work it may not continue, a delegate from before work items).
+ * work it may not continue).
  */
 export function recoveryOf(
   refusal: SendRefusal,
@@ -160,7 +160,6 @@ export function recoveryOf(
         ],
       };
     case "item-closed":
-    case "predates-items":
       return null;
     default:
       return null;

@@ -458,8 +458,9 @@ export function handoffTools(deps: HandoffDeps) {
     tool(
       "start_session",
       "Start a NEW session on the fleet and give it work. Unlike a subagent, this " +
-        "is a full session of its own: it gets its own row in the sidebar, its own transcript " +
-        "the user can open and read, and it survives after this turn ends. " +
+        "is a full session of its own: its own row in the sidebar, nested under this session, " +
+        "its own transcript the user can open, and it survives after this turn ends. " +
+        "Unlike a delegate it is no work item: nothing waits on it or reports back. " +
         "It runs on the harness, model and effort of a delegate type — `type`, the same catalog delegate uses, " +
         "'medium' when omitted; a named type's denied tools apply too — and answers tool permissions in `permissionMode`, this session's own mode when omitted, " +
         "where its harness has permission modes (pi has none, and refuses one). " +
@@ -496,8 +497,8 @@ export function handoffTools(deps: HandoffDeps) {
           .boolean()
           .optional()
           .describe(
-            "A spin-off: a detour from this session's work, nested under this session in the " +
-              "sidebar and sharing its directory. Default false."
+            "A spin-off: throwaway work, its transcript deleted when the session is discarded. " +
+              "Default false: kept."
           ),
         type: z
           .string()

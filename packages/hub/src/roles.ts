@@ -41,15 +41,17 @@
 import type { InstanceRow, SessionRole } from "@cawco/core";
 import { ARTIFACT_TOOLS } from "./artifacts/tools";
 
-/** The role a session's row runs in: the one its spawn named, else derived from how it started. */
+/**
+ * The role a session's row runs in: the one its spawn named, else derived
+ * from what it is. Delegated work (a work item, a workflow step) is a
+ * delegate; a session another session started with `start_session` has a
+ * parent and is still a worker, as one a person started is.
+ */
 export const roleOf = (row: InstanceRow): SessionRole => {
   if (row.role) {
     return row.role;
   }
-  return row.parentInstanceId ||
-    row.workItemId ||
-    row.workflowStepId ||
-    row.canDelegate === false
+  return row.workItemId || row.workflowStepId || row.canDelegate === false
     ? "delegate"
     : "worker";
 };

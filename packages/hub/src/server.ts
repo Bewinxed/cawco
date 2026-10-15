@@ -1476,7 +1476,7 @@ const peekKind = (payload: unknown): InstanceKind => {
 const peekHarness = (payload: unknown): string | undefined =>
   peek(payload, "harness");
 
-/** The session a spawn is a delegate of, so its row nests under the parent. */
+/** The session that started a spawn (`SpawnPayload.parent`), so its row nests under it. */
 const peekParent = (
   payload: unknown
 ): { parentInstanceId?: string; parentToolUseId?: string } => {
@@ -9815,6 +9815,7 @@ export const createServer = (
       kind,
       permissionMode: settled.permissionMode,
       model: payload.model,
+      ...peekParent(payload),
       ...openedAccount(payload, placed),
     });
     publishInstances(machineId);
@@ -11464,7 +11465,8 @@ export const createServer = (
           request,
           prepared.source,
           row.targetInstanceId,
-          source?.projectId ?? request.target.projectId
+          source?.projectId ?? request.target.projectId,
+          source?.parentInstanceId
         ),
         request.target.scratch ? "scratch" : "mainline",
         request.target.fallbackPermissionMode
@@ -11612,14 +11614,22 @@ export const createServer = (
     }
   }
 
-  /** The continuation's new session, with the options the caller's form chose. */
+  /**
+   * The continuation's new session, with the options the caller's form chose.
+   * It takes the source's place: under the session that started the source
+   * (`parent`), at the top level when a person did, and the source's own
+   * children are adopted by it.
+   */
   const targetSpawn = (
     { target }: ContinueRequest,
     source: ContinuationSource,
     instanceId: string,
     /** The project the source is in: the new session joins it. */
-    projectId: string | null | undefined
+    projectId: string | null | undefined,
+    /** The session that started the source, if one did. */
+    parent: string | null | undefined
   ): SpawnPayload => ({
+    ...(parent ? { parent: { instanceId: parent } } : {}),
     instanceId,
     cwd: target.cwd ?? source.cwd,
     harness: target.harness,
@@ -12528,7 +12538,8 @@ export const createServer = (
    * Files an answer to a delegate's ask, whichever way it arrived — the parent's
    * `answer_delegate`, the relay route, or a reader clicking it in the dashboard
    * once it escalated — and closes the ask it settles. An answer to anything
-   * else is an ordinary session's own permission and nobody's record.
+   * else (an ask never routed to a parent: an ordinary session's own, or one
+   * a session another session started) is nobody's record.
    */
   const recordDelegateAnswer = (
     machineId: string,
@@ -12536,10 +12547,7 @@ export const createServer = (
     requestId: string,
     result: unknown
   ): void => {
-    const asked = db.delegateAsk(requestId);
-    const parentInstanceId =
-      asked?.parentInstanceId ??
-      db.listedInstancesByIds([instanceId])[0]?.parentInstanceId;
+    const parentInstanceId = db.delegateAsk(requestId)?.parentInstanceId;
     if (!parentInstanceId) {
       return;
     }
@@ -12556,8 +12564,6 @@ export const createServer = (
         payload: { behavior, ...(answers ? { answers } : {}) },
       })
     );
-    // An ask this hub never recorded — one parked before the table existed —
-    // still gets its answer stored; there is simply nothing to close.
     db.settleDelegateAsk(
       requestId,
       behavior === "deny" ? "denied" : "answered"
@@ -23722,9 +23728,11 @@ export const createServer = (
                   /** Whether a rule answered the turn with a reply. */
                   const answered = (): Promise<boolean> =>
                     ruleEngine.endTurn(turnId, neutral);
+                  // Delegated work hands its turn back; a session another
+                  // session started (`start_session`) has a parent and no
+                  // item, and its turns are its own.
                   const delegate =
-                    row &&
-                    !row.workflowStepId &&
+                    row?.workItemId &&
                     parentId &&
                     parentId !== turnId &&
                     neutral.subtype !== "aborted"

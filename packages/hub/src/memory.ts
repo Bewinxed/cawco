@@ -980,9 +980,9 @@ export const createMemory = ({
     if (item?.taskId) {
       return "attempt";
     }
-    return actor.parentInstanceId || actor.workItemId || actor.workflowStepId
-      ? "delegate"
-      : "session";
+    // Delegated work is a delegate's; a session another session started
+    // with `start_session` writes as a session.
+    return actor.workItemId || actor.workflowStepId ? "delegate" : "session";
   };
 
   // --- notes -----------------------------------------------------------------------

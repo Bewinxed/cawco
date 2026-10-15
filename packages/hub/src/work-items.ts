@@ -1544,6 +1544,19 @@ export const createWorkItems = ({
   };
 
   /**
+   * Whether a session's reports and asks go up to its parent at all: only
+   * delegated work's do (a work item; a workflow step, to its run's
+   * supervisor). A session another session started with `start_session`
+   * nests under it and reports to no one, its asks the person's; a
+   * routine's run reports to nobody either, as its routine reads how it
+   * ended, and a run that answers NO_REPLY must wake no model, the lead's
+   * included.
+   */
+  const reportsBack = (row: InstanceRow): boolean =>
+    !isRoutineParent(row.parentInstanceId) &&
+    !!(row.workItemId || row.workflowStepId);
+
+  /**
    * Who hears a delegated session's reports: its parent, and its project's
    * lead as well when that is another session; only the lead once the parent
    * has ended (stopped or discarded, or gone), as it adopts the orphan.
@@ -1553,9 +1566,7 @@ export const createWorkItems = ({
    * reaches him on or off.
    */
   const reportees = (row: InstanceRow): InstanceRow[] => {
-    // A routine's run reports to nobody: its routine reads how it ended, and
-    // a run that answers NO_REPLY must wake no model, the lead's included.
-    if (isRoutineParent(row.parentInstanceId)) {
+    if (!reportsBack(row)) {
       return [];
     }
     const [parent] = row.parentInstanceId
@@ -4189,8 +4200,8 @@ export const createWorkItems = ({
      * anyone. Finished work takes it from the reader or its parent only
      * ({@link reopens}), and only while it is still its workspace's latest
      * item — one writer per checkout; the send that passes reopens it
-     * ({@link reopen}). A delegate from before work items follows the same
-     * who-may rule. Every other session is not delegated work, and takes
+     * ({@link reopen}). Every other session, one another session started
+     * with `start_session` included, is not delegated work, and takes
      * messages as it always has.
      */
     refusal(
@@ -4234,16 +4245,6 @@ export const createWorkItems = ({
                 },
               },
             };
-      }
-      if (
-        row.parentInstanceId &&
-        !row.workflowStepId &&
-        !reopens(row.parentInstanceId, origin)
-      ) {
-        return {
-          reason: `${sessionLabel(row).tag} predates work items; only the reader or its parent can message it.`,
-          refusal: { kind: "predates-items" },
-        };
       }
       return undefined;
     },
@@ -4299,9 +4300,9 @@ export const createWorkItems = ({
      * and reports that failure to the parent. A declared wait stays
      * on the tray and is summarized only with the next actionable message.
      *
-     * An item filed before checks existed, and a delegate from before work
-     * items, end as they always did: on a turn nothing answers, with that
-     * turn's text as the report.
+     * An item filed before checks existed ends as it always did: on a turn
+     * nothing answers, with that turn's text as the report. A session that
+     * runs no item reports nothing.
      */
     turnEnded(
       row: InstanceRow,
@@ -4310,7 +4311,7 @@ export const createWorkItems = ({
     ): { body: string; failed: boolean } | undefined {
       const item = itemOf(row);
       if (!item) {
-        return { body: turn.text, failed: turn.error !== undefined };
+        return;
       }
       // The plan's completed to-do ids tick their to-dos, off the turn's path.
       syncSoon(item);

@@ -739,7 +739,11 @@ export const instances = sqliteTable("instances", {
     .$type<PriorConversation[]>()
     .notNull()
     .default([]),
-  /** The instance this one is a delegate of (nested under it in every rail). */
+  /**
+   * The session that started this one (`delegate`, `start_session`, a
+   * workflow's supervisor): nested under it in every rail. Null on a session
+   * a person started. Whether it is delegated work is {@link workItemId}'s.
+   */
   parentInstanceId: text("parent_instance_id"),
   /** The delegating tool call, so the parent transcript can render the round trip. */
   parentToolUseId: text("parent_tool_use_id"),

@@ -268,9 +268,10 @@ export interface SpawnPayload {
   /** Harness-specific spawn options, passed through verbatim. */
   options?: unknown;
   /**
-   * The session this spawn is a delegate of: the child nests under it in every
-   * rail, and `toolUseId` names the delegating tool call so the parent
-   * transcript can render the round trip.
+   * The session that started this spawn (a delegate's parent, or the caller
+   * of `start_session`): the child nests under it in every rail, and
+   * `toolUseId` names the delegating tool call so the parent transcript can
+   * render the round trip. Absent on a spawn a person asked for.
    */
   parent?: { instanceId: string; toolUseId?: string };
   /**
@@ -328,10 +329,10 @@ export interface SpawnPayload {
    */
   skills?: string[];
   /**
-   * The session that asked for this spawn — provenance, not nesting. Unlike
-   * {@link parent}, it neither nests the child nor routes reports; it is what
-   * the hub checks {@link canDelegate} against, so a leaf cannot `start_session`
-   * its way around the rule.
+   * The session a hub job spawns for (a continuation's summariser and its
+   * new session, on the person's ask): provenance for account placement,
+   * not nesting. Unlike {@link parent}, it neither nests the child nor
+   * routes reports, since no session started it.
    */
   spawnedBy?: { instanceId: string };
   /**
@@ -989,7 +990,12 @@ export interface InstanceRow {
   launchDir: "known" | "unread" | "unknown";
   machineId: string;
   model?: string | null;
-  /** The instance this one is a delegate of; absent for a mainline session. */
+  /**
+   * The session that started this one (`delegate`, `start_session`, a
+   * workflow's supervisor), which every rail nests it under; absent on a
+   * session a person started. A delegate is told from a session merely
+   * started by {@link workItemId}, never by where it stands.
+   */
   parentInstanceId?: string | null;
   /** The delegating tool call, so the parent transcript can render the round trip. */
   parentToolUseId?: string | null;

@@ -25368,7 +25368,7 @@
             "description": "Harness-specific spawn options, passed through verbatim."
           },
           "parent": {
-            "description": "The session this spawn is a delegate of: the child nests under it in every\nrail, and `toolUseId` names the delegating tool call so the parent\ntranscript can render the round trip.",
+            "description": "The session that started this spawn (a delegate's parent, or the caller\nof `start_session`): the child nests under it in every rail, and\n`toolUseId` names the delegating tool call so the parent transcript can\nrender the round trip. Absent on a spawn a person asked for.",
             "type": "object",
             "properties": {
               "instanceId": {
@@ -25479,7 +25479,7 @@
             }
           },
           "spawnedBy": {
-            "description": "The session that asked for this spawn — provenance, not nesting. Unlike\n{@link parent}, it neither nests the child nor routes reports; it is what\nthe hub checks {@link canDelegate} against, so a leaf cannot `start_session`\nits way around the rule.",
+            "description": "The session a hub job spawns for (a continuation's summariser and its\nnew session, on the person's ask): provenance for account placement,\nnot nesting. Unlike {@link parent}, it neither nests the child nor\nroutes reports, since no session started it.",
             "type": "object",
             "properties": {
               "instanceId": {
@@ -35188,20 +35188,6 @@
                   "kind",
                   "workspaceId"
                 ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "predates-items"
-                    ]
-                  }
-                },
-                "required": [
-                  "kind"
-                ]
               }
             ]
           },
@@ -39278,20 +39264,6 @@
                   "kind",
                   "workspaceId"
                 ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "kind": {
-                    "type": "string",
-                    "enum": [
-                      "predates-items"
-                    ]
-                  }
-                },
-                "required": [
-                  "kind"
-                ]
               }
             ]
           },
@@ -41510,7 +41482,7 @@
             ]
           },
           "parentInstanceId": {
-            "description": "The instance this one is a delegate of; absent for a mainline session.",
+            "description": "The session that started this one (`delegate`, `start_session`, a\nworkflow's supervisor), which every rail nests it under; absent on a\nsession a person started. A delegate is told from a session merely\nstarted by {@link workItemId}, never by where it stands.",
             "type": [
               "null",
               "string"
