@@ -28,7 +28,12 @@
  * - `ctx.tool.transform`: the workflow-step tools, and in a workspace's clone
  *   the `shell` that runs every command through the workspace's executor,
  *   inside its boundary, in place of the built-in (2.0's id for the shell
- *   tool is `shell`, settled #2). The server pins the built-in's description
+ *   tool is `shell`, settled #2). Each call is asked first as the built-in
+ *   asks, through `ctx.permission.assert` (2.0.29, anomalyco/opencode#54930:
+ *   "the same permission engine as built-in tools: configured rules, saved
+ *   'always allow' decisions, and the native approval prompt"), action
+ *   `shell` and the command in its metadata: a lead's call is the hub's
+ *   gate's to decide. The server pins the built-in's description
  *   for the model, so a clone's session context gives it the boundary's. A
  *   location serves every session in its folder, so in a project lead's
  *   place the `shell` decides per session (`context.sessionID`): the lead's
@@ -302,11 +307,13 @@ const runShell = async (file, args, input, context, directory) => {
   return { content: cut + notes, metadata: { exit, description: input.description ?? "" } };
 };
 
-// The \`shell\` of a location a workspace holds. A session \`bounded\` there runs
-// every command inside the workspace's boundary; any other (a person's
-// session in a lead's place) runs it through \`host\`, the built-in this
-// replaces, which asks and runs as it always does on the host.
-const boundedShell = (id, root, directory, bounded, host) => ({
+// The \`shell\` of a location a workspace holds. A session \`bounded\` there is
+// asked as the built-in asks (\`shell\`, the command its resource and in its
+// metadata, for CawCo's ask and a lead's gate), then runs the command inside
+// the workspace's boundary; any other (a person's session in a lead's place)
+// runs it through \`host\`, the built-in this replaces, which asks and runs as
+// it always does on the host. No call runs without its ask.
+const boundedShell = (id, root, directory, bounded, host, permission) => ({
   name: "shell",
   description: ${JSON.stringify(BOUNDED_SHELL_DESCRIPTION)},
   input: {
@@ -322,6 +329,16 @@ const boundedShell = (id, root, directory, bounded, host) => ({
   options: { codemode: false },
   async execute(input, context) {
     if (bounded(context.sessionID)) {
+      // A deny or a rejection throws, and the command does not run.
+      await permission.assert({
+        sessionID: context.sessionID,
+        agent: context.agent,
+        source: { type: "tool", messageID: context.messageID, id: context.id },
+        action: "shell",
+        resources: [input.command],
+        save: [input.command],
+        metadata: { command: input.command, ...(input.description ? { description: input.description } : {}), ...(input.workdir ? { workdir: input.workdir } : {}) },
+      });
       const held = boundaryOf(id, root);
       return runShell(held.exec, [input.command], input, context, directory);
     }
@@ -435,7 +452,7 @@ export default {
       });
       // In a lead's place, the built-in runs a person's session's commands:
       // taken from the editor before it is replaced, each time it replays.
-      if (holding) editor.add(boundedShell(holding.id, holding.root, directory, bounded, leadPlace ? editor.get("shell")?.execute : undefined));
+      if (holding) editor.add(boundedShell(holding.id, holding.root, directory, bounded, leadPlace ? editor.get("shell")?.execute : undefined, ctx.permission));
     });
 
     // The workspace's scratch is a root of its chrome-devtools (and its clone:

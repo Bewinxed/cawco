@@ -1,6 +1,6 @@
 /**
  * One OpenCode 2.0 server as CawCo talks to it: the `@opencode/client`
- * Promise client (pinned with the CLI at 2.0.28), its HTTP Basic
+ * Promise client (pinned with the CLI at core `OPENCODE_VERSION`), its HTTP Basic
  * authentication, how its errors read, and the two checks a server must pass
  * before a session runs in a location there: CawCo's plugin loaded (the gate
  * fails closed), and CawCo's MCP server connected with every other server
@@ -18,15 +18,12 @@ import { OpenCode, type OpenCodeClient } from "@opencode/client";
 
 export type OpencodeClient = OpenCodeClient;
 
-const opencodeTool = toolSpec("opencode");
-
 /**
  * The OpenCode binary CawCo runs and the one version of it: the tool
- * catalog's (`opencode2`, a name only 2.0's package has; 2.0.28, the release
- * `@opencode/client` here is pinned to).
+ * catalog's (`opencode2`, a name only 2.0's package has; core
+ * `OPENCODE_VERSION`, the release `@opencode/client` here is pinned to).
  */
-export const OPENCODE_BIN = opencodeTool?.bin ?? "opencode2";
-export const OPENCODE_VERSION = opencodeTool?.exactVersion ?? "2.0.28";
+export const OPENCODE_BIN = toolSpec("opencode")?.bin ?? "opencode2";
 
 /** Where one server listens and the password it was launched with. */
 export interface ServerAddress {

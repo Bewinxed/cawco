@@ -202,15 +202,18 @@ export type CawHarness = keyof typeof CAW_DENIED_TOOLS;
  * Caw's shell and edit tools, by the name each harness asks permission
  * under: every call of one is a permission ask (Claude Code's `ask` rules,
  * OpenCode's `ask` rules) that the hub's gate decides (hub lead-gate.ts),
- * whatever the session's mode. OpenCode's `edit` covers `write` and `patch`.
+ * whatever the session's mode. OpenCode's are 2.0's permission actions:
+ * `shell`, and `edit`, which covers `write` and `patch` ("In V2, use
+ * permissions, shell, and subagent instead of permission, bash, and task",
+ * opencode.ai/v2/docs/permissions).
  */
 export const LEAD_GATED_TOOLS = {
   claude: ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit"],
-  opencode: ["bash", "edit"],
+  opencode: ["shell", "edit"],
 } as const satisfies Record<CawHarness, readonly string[]>;
 
 /** Which of a lead's gated tools are shell, by any harness's name; the rest edit files. */
-export const LEAD_SHELL_TOOLS: ReadonlySet<string> = new Set(["Bash", "bash"]);
+export const LEAD_SHELL_TOOLS: ReadonlySet<string> = new Set(["Bash", "shell"]);
 
 /**
  * What a session on the board alone may never call: no edit, shell or

@@ -122,6 +122,16 @@ export interface ToolPolicy {
 }
 
 /**
+ * The one OpenCode release CawCo runs: its adapter speaks this release's
+ * server API, loads a plugin written for its plugin API, and pins
+ * `@opencode/client` to it (packages/agent/package.json). 2.0.29 gives
+ * plugins `ctx.permission.assert` ("Plugins had no in-process way to ask for
+ * permission", anomalyco/opencode#54930), which the plugin's `shell` asks
+ * through.
+ */
+export const OPENCODE_VERSION = "2.0.29";
+
+/**
  * The catalog. Order is display order. Verified against each tool's official
  * docs on 2026-08-06 — when an entry drifts from what an installer really
  * does, fix the entry and note the drift in NEW.md.
@@ -137,9 +147,7 @@ export const TOOL_CATALOG: ToolSpec[] = [
     // still sits on the PATH.
     bin: "opencode2",
     versionCommand: "opencode2 --version",
-    // CawCo's OpenCode adapter speaks 2.0.28's server API and loads a plugin
-    // written for it, with `@opencode/client` pinned to the same release.
-    exactVersion: "2.0.28",
+    exactVersion: OPENCODE_VERSION,
     install: [
       // 2.0 is the `@opencode/cli` package, a native binary per platform in
       // its optional dependencies. 1.x's npm package (`opencode-ai`) installs

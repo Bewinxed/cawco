@@ -873,7 +873,9 @@ function builtIn(
         `Edit notebook ${text(input.notebook_path) ?? path ?? "(no path)"}`,
         fieldsOf(input, ["notebook_path", ...FILE_KEYS])
       );
+    // Claude Code's and pi's `bash`; OpenCode 2.0's `shell`.
     case "bash":
+    case "shell":
       return shellCall(input);
     case "webfetch":
       return only(

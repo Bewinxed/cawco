@@ -141,7 +141,7 @@ const COMMANDS_SHOWN = 40;
 /**
  * Tool names by what they do, across harnesses (lowercased): claude
  * (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Read`, `Bash`), opencode
- * (`write`, `edit`, `patch`, `read`, `bash`) and pi (`write`, `edit`,
+ * 2.0 (`write`, `edit`, `patch`, `read`, `shell`) and pi (`write`, `edit`,
  * `read`, `bash`).
  */
 const CHANGE_TOOLS = new Set([
@@ -153,7 +153,7 @@ const CHANGE_TOOLS = new Set([
   "apply_patch",
 ]);
 const READ_TOOLS = new Set(["read"]);
-const SHELL_TOOLS = new Set(["bash"]);
+const SHELL_TOOLS = new Set(["bash", "shell"]);
 /** Where each harness's file tools put the path. */
 const PATH_ARGUMENTS = ["file_path", "filePath", "notebook_path", "path"];
 /** The input fields that name what a tool call acted on, most telling first. */

@@ -36,7 +36,8 @@ const CAWCO_TOOL = /^(?:mcp__cawco__|cawco_)/;
 const CONNECTOR = /^mcp__claude_ai_/;
 /** Claude's name for an MCP tool: `mcp__<server>__<tool>`. */
 const CLAUDE_MCP = /^mcp__(.+?)__/;
-const SHELLS: ReadonlySet<string> = new Set(["Bash", "bash"]);
+/** The harnesses' shell tools: Claude Code's `Bash`, OpenCode 2.0's `shell`. */
+const SHELLS: ReadonlySet<string> = new Set(["Bash", "shell"]);
 
 /** A URL anywhere in a command, of a scheme that fetches. */
 const URL_IN_TEXT = /\b(?:https?|ftps?|wss?|git):\/\/[^\s'"`<>|;()]+/gi;

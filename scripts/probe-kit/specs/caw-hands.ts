@@ -32,8 +32,14 @@
  * w. He has the fleet's Exa server: he fetches a page with it and sums it up
  *    in the thread, and the `git add` after it in that same turn your words
  *    woke raises the card (a read of the web makes the wake external).
+ * r. (OpenCode) A line that only reads (`cat notes.txt`) runs with no card.
+ *
+ * `CAW_HARNESS=opencode` runs a, s, b and r with Caw on OpenCode 2.0: his
+ * `shell` asks as `shell` (the plugin's `ctx.permission.assert`), and the
+ * hub's gate decides it as it does Claude Code's `Bash`.
  *
  *   bun scripts/probe-kit/run.ts caw-hands
+ *   CAW_HARNESS=opencode bun scripts/probe-kit/run.ts caw-hands
  */
 import {
   chmod,
@@ -49,6 +55,7 @@ import { commandOf } from "../../../packages/core/src/permission-presentation";
 import {
   ACCOUNT,
   MACHINE,
+  MODEL,
   type Reply,
   type Seen,
   until,
@@ -72,8 +79,18 @@ const call = (name: string, input: object): Reply => ({
   words: [],
   tool: { name, input },
 });
+/**
+ * The harness Caw runs on: Claude Code, or `CAW_HARNESS=opencode` for
+ * OpenCode 2.0, whose shell is `shell` and asks as `shell` (core
+ * `LEAD_GATED_TOOLS`); that variant plays a, s, b and r.
+ */
+const CAW_HARNESS =
+  process.env.CAW_HARNESS === "opencode" ? "opencode" : "claude";
 const bash = (command: string) =>
-  call("Bash", { command, description: "probe" });
+  call(CAW_HARNESS === "opencode" ? "shell" : "Bash", {
+    command,
+    description: "probe",
+  });
 
 interface Ask {
   instanceId: string;
@@ -145,22 +162,24 @@ const run = async (kit: Kit) => {
     "claude",
     CLAUDE_JSON_NAME
   );
-  const synced = await until(
-    "w: Exa in the account's Claude Code config",
-    async () =>
-      (
-        JSON.parse(await readFile(accountConfig, "utf8")) as {
-          mcpServers?: Record<string, unknown>;
-        }
-      ).mcpServers?.exa !== undefined,
-    Boolean,
-    60_000
-  ).catch(() => false);
-  kit.check(
-    "w: the machine writes Exa into the account's Claude Code config",
-    synced,
-    accountConfig
-  );
+  if (CAW_HARNESS === "claude") {
+    const synced = await until(
+      "w: Exa in the account's Claude Code config",
+      async () =>
+        (
+          JSON.parse(await readFile(accountConfig, "utf8")) as {
+            mcpServers?: Record<string, unknown>;
+          }
+        ).mcpServers?.exa !== undefined,
+      Boolean,
+      60_000
+    ).catch(() => false);
+    kit.check(
+      "w: the machine writes Exa into the account's Claude Code config",
+      synced,
+      accountConfig
+    );
+  }
 
   // A plain folder: no git, a note, and a vault only its owner reads.
   const place = join(fleet.sandbox, "place");
@@ -179,6 +198,18 @@ const run = async (kit: Kit) => {
       caw: true,
     }
   );
+  if (CAW_HARNESS === "opencode") {
+    const moved = await fetch(`${fleet.base}/api/projects/${project.id}/caw`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ harness: "opencode", model: MODEL.opencode }),
+    });
+    kit.check(
+      "Caw runs on OpenCode for this project",
+      moved.ok,
+      `${moved.status} ${await moved.text()}`
+    );
+  }
   const calls = () =>
     fleet.query<CallRow>(
       "SELECT tool, command, outcome, approved, why, exit, thread_id FROM lead_calls WHERE project_id = ? ORDER BY at",
@@ -188,7 +219,7 @@ const run = async (kit: Kit) => {
     calls().find((row) => row.command === command);
   const pending = async (): Promise<Ask[]> =>
     (await fleet.api<Ask[]>("/api/pending")).filter((ask) =>
-      ["Bash", "Write", "Edit"].includes(ask.payload.toolName)
+      ["Bash", "Write", "Edit", "shell", "edit"].includes(ask.payload.toolName)
     );
   /** Your answer as the dashboard's card sends it. */
   const answer = (ask: Ask, allow: boolean) =>
@@ -330,6 +361,34 @@ const run = async (kit: Kit) => {
       kept,
     })
   );
+
+  if (CAW_HARNESS === "opencode") {
+    // ── r. a line that only reads runs with no card (lead-gate readOnly) ──
+    cardsSeen = 0;
+    const watchReads = setInterval(() => {
+      pending()
+        .then((asks) => {
+          cardsSeen += asks.filter((ask) => ask.instanceId === leadId).length;
+        })
+        .catch(() => undefined);
+    }, 250);
+    script.push(bash("cat notes.txt"));
+    await say("main", "PROBE-R: what do the notes say?");
+    await turnEnds("r");
+    clearInterval(watchReads);
+    const read = callOf("cat notes.txt");
+    kit.check(
+      "r: a line that only reads runs in his place with no card",
+      read?.outcome === "ran" &&
+        read.approved === 0 &&
+        read.exit === "0" &&
+        cardsSeen === 0,
+      JSON.stringify({ read, cardsSeen })
+    );
+    // What follows is Claude Code's alone: its Write tool, its fleet MCP
+    // config, its stand-ins.
+    return;
+  }
 
   // ── c. a GitHub issue's wake: every call carded; 0700 stays unreadable ─
   fleet.write(

@@ -1,6 +1,6 @@
 /**
  * The OpenCode adapter, on OpenCode 2.0 (`@opencode/cli` and
- * `@opencode/client`, both pinned at 2.0.28).
+ * `@opencode/client`, both pinned at core `OPENCODE_VERSION`).
  *
  * OpenCode is server-first: a headless `opencode serve` owns its sessions,
  * and the client is a typed Promise API over its HTTP surface and its one
@@ -57,6 +57,7 @@ import {
   IMAGE_GENERATION_TIMEOUT_MS,
   machineLabel,
   mcpFleetState,
+  OPENCODE_VERSION,
   opencodeSignInFaultWords,
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
@@ -125,7 +126,6 @@ import {
   type McpNotConnected,
   notFound,
   OPENCODE_BIN,
-  OPENCODE_VERSION,
   type OpencodeClient,
   opencodeClient,
   unreachable,
@@ -1611,7 +1611,7 @@ export class OpencodeHarness implements Harness {
             `opencode version probe failed: ${ran.stdout.toString()}${ran.stderr.toString()}`
           );
         }
-        // The server API and the plugin are 2.0.28's: no other release starts.
+        // The server API and the plugin are OPENCODE_VERSION's: no other release starts.
         if (version !== OPENCODE_VERSION) {
           throw new Error(
             `${binary} is OpenCode ${version}; CawCo runs OpenCode ${OPENCODE_VERSION} (npm install -g @opencode/cli@${OPENCODE_VERSION})`
@@ -2955,7 +2955,7 @@ export class OpencodeHarness implements Harness {
       // singleton, the server it attaches to outlived the teardown.
       this.#disposed = false;
       this.#ready = (async () => {
-        // Only OpenCode 2.0.28 starts: its server API and plugin are what this speaks.
+        // Only OPENCODE_VERSION starts: its server API and plugin are what this speaks.
         await this.#installedVersion();
         await this.#cutoverV1();
         const launch = serverLaunch(
