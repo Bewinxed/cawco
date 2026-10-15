@@ -497,6 +497,8 @@ const REPOSITORY_ARGS =
 /** A GraphQL request as an API call sends it: its query, and its variables; `unread` when part of it came from where the guard reads nothing. */
 interface GraphqlBody {
   query?: string;
+  /** The variables as sent, nested inputs and all: where a mutation's node ids are. */
+  raw?: unknown;
   unread: boolean;
   variables: Partial<Record<string, string>>;
 }
@@ -546,6 +548,7 @@ const takeJson = (body: GraphqlBody, text: string | undefined): void => {
     if (typeof parsed.query === "string") {
       body.query = parsed.query;
     }
+    body.raw = parsed.variables;
     for (const [key, value] of Object.entries(parsed.variables ?? {})) {
       if (typeof value === "string") {
         body.variables[key] = value;
@@ -1028,7 +1031,18 @@ export const upstreamRefusal = (
   if (!rule.guarded) {
     return;
   }
-  const write = upstreamWrite(call);
+  return writeRefusal(rule, upstreamWrite(call));
+};
+
+/**
+ * Why `write` does not go ahead under a guarded `rule`, in the words the
+ * session reads; none when there is no write, or it is to the project's
+ * own repository.
+ */
+export const writeRefusal = (
+  rule: UpstreamRule,
+  write: UpstreamWrite | undefined
+): string | undefined => {
   if (!write || (write.repo !== undefined && owns(rule.remotes, write.repo))) {
     return;
   }
@@ -1048,4 +1062,109 @@ const targetWords = (write: UpstreamWrite, rule: UpstreamRule): string => {
     return `it names no repository the guard can check (a mutation acts on node ids), so it is taken as writing to another one. To change ${rule.remotes[0] ?? "this project's repository"}, name it in the query as repository(owner: "…", name: "…"), or use gh's own commands`;
   }
   return `it writes to ${write.repo}`;
+};
+
+/** One HTTP request a guarded workspace's gh sends, as its GitHub door reads it (agent github-door.ts). */
+export interface HttpCall {
+  /** The request's body as text, for GraphQL; none for any other. */
+  readonly body?: string;
+  readonly host: string;
+  readonly method: string;
+  /** Its path, the query string left off. */
+  readonly path: string;
+}
+
+/** A write an HTTP request makes, and, for a GraphQL mutation that names no repository, the node ids it acts on, for the door to resolve. */
+export interface HttpWrite extends UpstreamWrite {
+  readonly nodeIds?: readonly string[];
+}
+
+/** GitHub's API hosts, whose requests the door signs in to. */
+export const GITHUB_API: ReadonlySet<string> = GITHUB_API_HOSTS;
+
+/** A GitHub node id in its current form: a type prefix, `_`, then the encoded id (`R_kgDOQx0ZnQ`, `I_kwDO…`, `PR_kwDO…`). */
+const NEXT_ID = /^[A-Z][A-Za-z]{0,7}_[A-Za-z0-9_-]{6,}$/;
+/** A legacy node id: base64 of `NN:Type…` (`MDU6SXNzdWU1MDM1OTgxOTI=`, "05:Issue503598192"). */
+const LEGACY_ID = /^[A-Za-z0-9+/]{8,}={0,2}$/;
+const LEGACY_DECODED = /^\d{2}:[A-Za-z]+/;
+const QUOTED = /"((?:[^"\\]|\\.)*)"/g;
+/** The most ids one `nodes(ids:)` read takes. */
+const MOST_IDS = 100;
+
+/** Whether `text` has the shape of a GitHub node id, in either form. */
+const isNodeId = (text: string): boolean => {
+  if (NEXT_ID.test(text)) {
+    return true;
+  }
+  if (!LEGACY_ID.test(text)) {
+    return false;
+  }
+  try {
+    return LEGACY_DECODED.test(atob(text));
+  } catch {
+    return false;
+  }
+};
+
+/** Every string a value holds, at any depth. */
+const stringsIn = (value: unknown): string[] => {
+  if (typeof value === "string") {
+    return [value];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap(stringsIn);
+  }
+  return value && typeof value === "object"
+    ? Object.values(value).flatMap(stringsIn)
+    : [];
+};
+
+/**
+ * Every node id a GraphQL request carries, by its shape, wherever it is: any
+ * string of its variables, whatever the variable is called, and any string
+ * literal of its query. A mutation acts on what its ids name, so every one
+ * is read; at most {@link MOST_IDS}, past which it names more than the door
+ * reads, and none are given (it is refused).
+ */
+const nodeIdsOf = (body: GraphqlBody): string[] => {
+  const inQuery = [...(body.query ?? "").matchAll(QUOTED)].map(
+    (quoted) => quoted[1] as string
+  );
+  const ids = [
+    ...new Set([
+      ...stringsIn(body.raw),
+      ...stringsIn(body.variables),
+      ...inQuery,
+    ]),
+  ].filter(isNodeId);
+  return ids.length > MOST_IDS ? [] : ids;
+};
+
+/**
+ * What one HTTP request writes, by the same rules as a call's argv: a write
+ * method against `/repos/<owner>/<repo>` on GitHub's API, or a GraphQL
+ * mutation, with the repository it names, or else the node ids it acts on.
+ * A write to any other GitHub host the door does not forward at all.
+ */
+export const upstreamHttpWrite = (call: HttpCall): HttpWrite | undefined => {
+  const method = call.method.toUpperCase();
+  const path = call.path.replace(EDGE_SLASHES, "");
+  if (!GITHUB_API_HOSTS.has(call.host)) {
+    return WRITE_METHODS.has(method)
+      ? { what: `${method} ${call.host}/${path}` }
+      : undefined;
+  }
+  if (path === "graphql") {
+    const body: GraphqlBody = { unread: false, variables: {} };
+    takeJson(body, call.body);
+    const write = graphqlWrite(body, GITHUB, "a GraphQL mutation");
+    return write && write.repo === undefined && !write.unread
+      ? { ...write, nodeIds: nodeIdsOf(body) }
+      : write;
+  }
+  if (!WRITE_METHODS.has(method)) {
+    return;
+  }
+  const repo = githubApiRepo(path, GITHUB, () => undefined);
+  return repo ? { repo, what: `${method} ${call.host}/${path}` } : undefined;
 };

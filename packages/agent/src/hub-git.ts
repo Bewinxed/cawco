@@ -30,8 +30,8 @@
  * githubGitEnv}): the clone's own origin alone, fetched and pushed on the
  * host with the host's own gh credential, so a session's push to its
  * project's repository works and a push anywhere else has nothing to sign
- * in with. The door also answers one allowed `gh` call's ask for the token
- * ({@link TOKEN_ASK}), judging the call again here by the workspace's rule.
+ * in with. Its gh reaches GitHub's API through its GitHub door
+ * (github-door.ts) the same way: on the host, judged there.
  *
  * A checkout outside any workspace whose `origin` is the hub (one a project
  * got the hub as its remote in, or one a move made) pulls and pushes from a
@@ -40,7 +40,6 @@
  * helper asks the agent's credential socket ({@link serveHubCredential}).
  */
 import { spawn } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { chmod, rm } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { join } from "node:path";
@@ -49,7 +48,6 @@ import {
   hubCredentialSocket,
   workspaceDoorDir,
   workspaceReadOnlyDir,
-  workspaceUpstreamRuleFile,
 } from "@cawco/core/paths";
 import {
   repositoryConfigProblem,
@@ -58,12 +56,8 @@ import {
 } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
-import {
-  type GitRemote,
-  type UpstreamRule,
-  upstreamRefusal,
-} from "@cawco/core/upstream-guard";
-import { hostGh, hostGhToken } from "./host-gh";
+import { upstreamRule } from "./github-door";
+import { hostGh } from "./host-gh";
 import { hubGitEnv, hubGitLogin, isHubRemote, withoutCredential } from "./move";
 import { noRepositoryAt } from "./stand-ins";
 import { prepareDoor, socketPlace } from "./tool-door";
@@ -321,21 +315,6 @@ const isGithubHttps = (url: string): boolean => {
   }
 };
 
-/** Workspace `id`'s upstream rule as the agent last wrote it (boundary.ts `takeUpstreamRules`); none when it has none. */
-const upstreamRule = (id: string): UpstreamRule | undefined => {
-  try {
-    const rule = JSON.parse(
-      readFileSync(workspaceUpstreamRuleFile(id), "utf8")
-    ) as Partial<UpstreamRule>;
-    return typeof rule.guarded === "boolean" && Array.isArray(rule.remotes)
-      ? (rule as UpstreamRule)
-      : undefined;
-  } catch {
-    // No rule written yet, or not one: the workspace is not guarded here.
-    return undefined;
-  }
-};
-
 /**
  * git's environment for a guarded workspace's GitHub origin, on the host:
  * the host's own gh as GitHub's only credential helper (`helper =` clears
@@ -362,76 +341,6 @@ const githubGitEnv = async (): Promise<Record<string, string>> => {
   };
 };
 
-/**
- * The first line of a door connection that asks for GitHub's token for one
- * `gh` call (agent upstream-shim.ts), in place of a URL; the next line is
- * the call as JSON: its program, arguments, `GH_REPO`/`GH_HOST` and the
- * cwd's remotes.
- */
-export const TOKEN_ASK = "cawco-upstream-token";
-
-/** The call a token ask names. */
-interface TokenAsk {
-  args: string[];
-  env: Record<string, string | undefined>;
-  program: string;
-  remotes: GitRemote[];
-}
-
-/**
- * Answers a token ask: the host's GitHub token, on one line, when workspace
- * `ref` is guarded and its rule lets the call (judged here again: what the
- * shim inside said is not taken on its word); else an empty answer, and the
- * call runs with no token.
- */
-const answerTokenAsk = (
-  ref: WorkspaceRef,
-  socket: Socket,
-  first: Buffer
-): void => {
-  let body = first;
-  const answer = async (): Promise<string> => {
-    const ask = JSON.parse(body.toString()) as Partial<TokenAsk>;
-    const rule = upstreamRule(ref.id);
-    // Only for the programs a shim hands the token to (upstream-shim.ts).
-    if (!(
-      rule?.guarded &&
-      (ask.program === "gh" || ask.program === "hub") &&
-      Array.isArray(ask.args)
-    )) {
-      return "";
-    }
-    const refused = upstreamRefusal(rule, {
-      program: ask.program,
-      args: ask.args.filter((arg): arg is string => typeof arg === "string"),
-      env: { GH_REPO: ask.env?.GH_REPO, GH_HOST: ask.env?.GH_HOST },
-      cwdRemotes: () => (Array.isArray(ask.remotes) ? ask.remotes : []),
-    });
-    if (refused) {
-      console.warn(`[hub-git] ${ref.id}: a token ask was refused: ${refused}`);
-      return "";
-    }
-    return (await hostGhToken()) ?? "";
-  };
-  const done = () => {
-    socket.off("data", more);
-    answer()
-      .catch(() => "")
-      .then((token) => socket.end(`${token}\n`));
-  };
-  const more = (chunk: Buffer) => {
-    body = Buffer.concat([body, chunk]);
-    if (body.includes(LINE_END)) {
-      done();
-    }
-  };
-  if (body.includes(LINE_END)) {
-    done();
-    return;
-  }
-  socket.on("data", more);
-};
-
 /** One door connection: the URL line, then git's remote helper on the host, piped both ways. */
 const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
   let head = Buffer.alloc(0);
@@ -452,11 +361,6 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
     socket.pause();
     const url = head.subarray(0, end).toString().trim();
     const rest = head.subarray(end + 1);
-    if (url === TOKEN_ASK) {
-      socket.resume();
-      answerTokenAsk(ref, socket, rest);
-      return;
-    }
     start(url, rest).catch((error: unknown) =>
       fail(error instanceof Error ? error.message : String(error))
     );

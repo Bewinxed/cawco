@@ -7,8 +7,9 @@
  * start (not inside another one).
  *
  * A fake `gh` first on the services' PATH records each call it runs, with
- * the GitHub token it ran with, in the workspace's TMPDIR; the boundary's
- * guard shim stands before it. On the host it is the agent's gh too, whose
+ * the GitHub token it ran with and whether its config sends it through the
+ * workspace's GitHub door, in the workspace's TMPDIR; the boundary's guard
+ * shim stands before it. On the host it is the agent's gh too, whose
  * `gh auth token` answers `probe-host-token`. The services run with a
  * caller's `GH_TOKEN` (`probe-caller-token`), as a person's shell may. The
  * project is a checkout with no origin of its own, so the hub is its remote
@@ -34,9 +35,10 @@
  *       never ran;
  *     H a mutation naming the project's own repository: runs;
  *     X the real gh by its absolute path, `api repos/x/y/issues -f title=t`:
- *       fails signed out, with no token to post with;
+ *       its request reaches the workspace's GitHub door, which refuses it;
+ *     Z the real curl straight to the door's socket, the same POST: refused;
  *     P `git commit` and `git push` to the clone's origin: lands;
- *     and B's fake gh ran with the host's token, handed to it alone.
+ *     and B's gh ran with no token at all, its config naming the door.
  * (c) PATCH the project `upstreamPosts: true` (its own answer over the
  *     fleet's): the workspace's rule turns unguarded within a beat, and
  *     E, A again, runs; U its commands carry the caller's token again.
@@ -58,6 +60,11 @@ const DRAFT = "Put what you would have posted";
 /** Each step's command, in order; each ends by echoing its marker and the exit. */
 /** The real gh on this host, found before the fake goes first on PATH: what step X runs by its path. */
 const REAL_GH = Bun.which("gh") ?? "/usr/bin/gh";
+/** The real curl, by its path past the guard's shim: what step Z sends by hand. */
+const REAL_CURL = Bun.which("curl") ?? "/usr/bin/curl";
+/** The door's refusal of a POST to repos/x/y/issues (github-door.ts). */
+const DOOR_REFUSED =
+  "cawco: `POST api.github.com/repos/x/y/issues` did not run: it writes to github.com/x/y";
 const TOKEN_VARS = (id: string) =>
   `echo "TOKENVARS-${id}=$(env | grep -cE '^(GH_TOKEN|GITHUB_TOKEN|GH_ENTERPRISE_TOKEN|GITHUB_ENTERPRISE_TOKEN)=')"`;
 const TOKEN_COUNT = (id: string) => new RegExp(`TOKENVARS-${id}=(\\d+)`);
@@ -73,6 +80,10 @@ const STEPS = [
   { id: "G", command: MUTATION_NO_REPO },
   { id: "H", command: MUTATION_OWN },
   { id: "X", command: `${REAL_GH} api repos/x/y/issues -f title=t 2>&1` },
+  {
+    id: "Z",
+    command: `sock=$(sed -n 's/^http_unix_socket: "\\(.*\\)"$/\\1/p' "$GH_CONFIG_DIR/config.yml"); ${REAL_CURL} -s --unix-socket "$sock" -X POST http://api.github.com/repos/x/y/issues -d '{"title":"t"}'`,
+  },
   {
     id: "P",
     command:
@@ -147,7 +158,8 @@ const FAKE_GH = `#!/bin/sh
 # The probe's stand-in for gh: the host's token, or the call recorded with the
 # token it ran with where the probe reads it.
 if [ "$1 $2" = "auth token" ]; then echo probe-host-token; exit 0; fi
-printf '%s token=%s\\n' "$*" "\${GH_TOKEN:-none}" >> "$TMPDIR/fake-gh.log"
+case "$(cat "$GH_CONFIG_DIR/config.yml" 2>/dev/null)" in *http_unix_socket*) door=yes ;; *) door=no ;; esac
+printf '%s token=%s door=%s\\n' "$*" "\${GH_TOKEN:-none}" "$door" >> "$TMPDIR/fake-gh.log"
 echo "FAKE-GH-RAN $*"
 `;
 
@@ -277,12 +289,12 @@ const run = async (kit: Kit) => {
     `exit ${exitOf("A")}; fake gh calls:\n${calls}`
   );
   check(
-    "b: B `gh issue create` against the project's own remote runs, with the host's token handed to it alone",
+    "b: B `gh issue create` against the project's own remote runs, with no token, its config naming the GitHub door",
     exitOf("B") === 0 &&
       lines.some(
         (line) =>
           line.startsWith(`issue create -R ${OWN}`) &&
-          line.endsWith("token=probe-host-token")
+          line.endsWith("token=none door=yes")
       ),
     `exit ${exitOf("B")}; fake gh calls:\n${calls}`
   );
@@ -320,11 +332,16 @@ const run = async (kit: Kit) => {
     `exit ${exitOf("H")}; fake gh calls:\n${calls}`
   );
   check(
-    `b: X ${REAL_GH} by its path, api repos/x/y/issues -f title=t, fails signed out`,
+    `b: X ${REAL_GH} by its path, api repos/x/y/issues -f title=t, is refused by the GitHub door`,
     exitOf("X") !== 0 &&
       exitOf("X") !== undefined &&
-      text.includes("gh auth login"),
+      text.includes(DOOR_REFUSED),
     `exit ${exitOf("X")}`
+  );
+  check(
+    `b: Z ${REAL_CURL} straight to the door's socket, POST repos/x/y/issues, is refused`,
+    text.includes(DOOR_REFUSED) && text.split(DOOR_REFUSED).length > 2,
+    `exit ${exitOf("Z")}`
   );
   check(
     "b: P git push to the clone's origin (the hub, through the git door) lands",

@@ -150,6 +150,7 @@ import { rgPath } from "@vscode/ripgrep-universal";
 import { seatbeltProfile, srtSettings } from "./boundary-policy";
 import { cloneInPlace } from "./clone";
 import { reportDamaged } from "./damaged-records";
+import { closeGithubDoor, githubDoorOf, openGithubDoor } from "./github-door";
 import { hostGh } from "./host-gh";
 import {
   closeGitDoor,
@@ -969,8 +970,9 @@ export const takeUpstreamRules = async (
  * by the workspace's rule ({@link upstreamRuleOf}), and runs the program only
  * when the judge lets it; a refusal's reason is what the session reads. In
  * a guarded workspace, whose commands hold no GitHub token ({@link
- * guardedEnv}), the judge hands an allowed call the token from the git door
- * for that run alone. A
+ * guardedEnv}), gh runs with {@link guardedGhConfigOf}: it reaches GitHub
+ * through the workspace's GitHub door, which judges each request again on
+ * the host and signs in there (github-door.ts). A
  * `curl` naming none of GitHub's API hosts runs without asking, so a dev
  * server's poll costs nothing.
  */
@@ -991,9 +993,7 @@ const writeGuardShims = async (id: string, runtime: string): Promise<void> => {
   const judge = `${standalone ? "BUN_BE_BUN=1 " : ""}${[runtime, shim, upstreamRuleOf(id)].map(shellQuote).join(" ")}`;
   await Promise.all(
     GUARDED_PROGRAMS.map((program) => {
-      // The judge prints GitHub's token for this one call when the workspace
-      // is guarded and the call allowed (upstream-shim.ts); nothing else.
-      const asks = `token=$(${judge} ${shellQuote(program)} "$@" < /dev/null) || exit $?`;
+      const asks = `${judge} ${shellQuote(program)} "$@" < /dev/null || exit $?`;
       return writeWhole(
         join(dir, program),
         `#!/bin/bash
@@ -1012,13 +1012,44 @@ ${
 esac`
     : asks
 }
-if [ -n "\${token:-}" ]; then export GH_TOKEN=$token GITHUB_TOKEN=$token; fi
 exec "$real" "$@"
 `,
         0o755
       );
     })
   );
+};
+
+/**
+ * The gh config dir a guarded workspace's commands run with
+ * (`GH_CONFIG_DIR`, {@link guardedEnv}), read-only inside: `http_unix_socket`
+ * names the workspace's GitHub door, so gh sends every request there in the
+ * clear (go-gh pkg/api/client_options.go `resolveOptions`: "if
+ * opts.UnixDomainSocket == \"\" … cfg.Get([]string{\"http_unix_socket\"})"),
+ * and its login is a placeholder the door replaces with the host's token for
+ * what it lets through. `version: "1"` is the config gh would migrate to,
+ * so it writes nothing here.
+ */
+const guardedGhConfigOf = (id: string): string => join(roOf(id), "gh-guarded");
+
+/** The placeholder gh signs in with in a guarded workspace: no token at all. */
+const GH_PLACEHOLDER = "cawco-github-door";
+
+const writeGuardedGhConfig = async (id: string): Promise<void> => {
+  const dir = guardedGhConfigOf(id);
+  await mkdir(dir, { recursive: true });
+  await Promise.all([
+    writeWhole(
+      join(dir, "config.yml"),
+      `# CawCo workspace ${id}: gh reaches GitHub through the workspace's GitHub door.\nversion: "1"\nhttp_unix_socket: ${JSON.stringify(githubDoorOf(id))}\n`,
+      0o644
+    ),
+    writeWhole(
+      join(dir, "hosts.yml"),
+      `github.com:\n    git_protocol: https\n    user: cawco\n    oauth_token: ${GH_PLACEHOLDER}\n    users:\n        cawco:\n            oauth_token: ${GH_PLACEHOLDER}\n`,
+      0o644
+    ),
+  ]);
 };
 
 /** Writes `path` whole or not at all, at exactly `mode`: a reader never sees it half written. */
@@ -1063,6 +1094,7 @@ const armHook = async (
     await writeShims(id, runtime);
   }
   await writeGuardShims(id, runtime);
+  await writeGuardedGhConfig(id);
   await writeUpstreamRule(id);
   if (!held.identity) {
     // A boundary started before gh had a config dir of its own gets it here;
@@ -1074,6 +1106,7 @@ const armHook = async (
   }
   await openToolDoor(id);
   await openGitDoor({ id, path: held.path });
+  await openGithubDoor(id);
   await watchHost(id, held);
   const armed: Held = { ...held, hook, policy };
   await writeWhole(
@@ -3409,6 +3442,7 @@ const closeNow = async (id: string, why: string): Promise<void> => {
     await rm(join(stateDir(id), "boundary.json"), { force: true });
     await closeToolDoor(id);
     await closeGitDoor(id);
+    await closeGithubDoor(id);
     const judges = (await keepers.held()).filter(
       (proc) => proc.alive && isJudgeOf(proc.procId, id)
     );
@@ -3631,14 +3665,17 @@ const GITHUB_TOKEN_ENV = [
  * origin is on GitHub, that origin sent through the git door
  * (hub-git.ts `guardedGitParameters`), which fetches and pushes it on the
  * host with the host's gh credential, its large files with it
- * (`GIT_LFS_SKIP_PUSH`: the door sends them). An allowed `gh` call gets
- * the token for itself alone, through its shim ({@link writeGuardShims}).
+ * (`GIT_LFS_SKIP_PUSH`: the door sends them). gh runs with the guarded
+ * config dir ({@link guardedGhConfigOf}): its requests go through the
+ * workspace's GitHub door, which signs in on the host to what it lets
+ * through (github-door.ts).
  */
 const guardedEnv = (id: string, clone: string): string[] => {
   const github = guardedGitParameters(clone);
   const base = gitDoorEnv(id, clone).CAWCO_GIT_PARAMETERS;
   return [
     `unset ${GITHUB_TOKEN_ENV.join(" ")}`,
+    `export GH_CONFIG_DIR=${shellQuote(guardedGhConfigOf(id))}`,
     ...(github
       ? [
           `export CAWCO_GIT_PARAMETERS=${shellQuote(base ? `${base} ${github}` : github)}`,
@@ -4235,6 +4272,7 @@ export const closeBoundary = async (ref: WorkspaceRef): Promise<void> => {
   forgetStubbed(ref.id);
   await closeToolDoor(ref.id);
   await closeGitDoor(ref.id);
+  await closeGithubDoor(ref.id);
   const held = await readHeld(ref.id).catch(() => undefined);
   const boundaries = [...(held ? [held] : []), ...(await readRetiring(ref.id))];
   const inners: number[] = [];
