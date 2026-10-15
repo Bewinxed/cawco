@@ -1,3 +1,17 @@
+<script lang="ts" module>
+  /**
+   * The turn's clock, one formatter for every row: `toLocaleTimeString`
+   * builds the locale's formatter afresh on each call, and a row's speaker
+   * line is drawn as the row mounts — a whole page of them as a pane is
+   * shown or read back.
+   */
+  const CLOCK = new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+</script>
+
 <script lang="ts">
   /**
    * The role label leading every turn — a mark (the reader's 17px in the
@@ -50,15 +64,7 @@
   /** A transcript may arrive with its timestamp already serialised to a string. */
   const at = $derived(timestamp ? new Date(timestamp) : null);
   const validAt = $derived(at && !Number.isNaN(at.getTime()) ? at : null);
-  const clock = $derived(
-    validAt
-      ? validAt.toLocaleTimeString(undefined, {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        })
-      : ""
-  );
+  const clock = $derived(validAt ? CLOCK.format(validAt) : "");
 </script>
 
 <!-- The speaker line arrives with its row: it moves with the row's own

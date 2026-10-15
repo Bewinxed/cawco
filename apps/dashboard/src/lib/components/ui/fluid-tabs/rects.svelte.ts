@@ -18,16 +18,17 @@
 import { untrack } from "svelte";
 
 /**
- * What the track writes on a tab's box to draw its stack and seams on the
- * switch's clock (TabsList's `rank` and `placeSeams`), every frame of a
- * switch: none of it moves a tab, and each write had the tabs measured
- * again, their offsets laying the page out once a frame for the length of
- * every switch.
+ * The custom properties in an inline style. On a box holding a tab they
+ * draw it and never place it: the track's stack and seams on the switch's
+ * clock (TabsList's `rank` and `placeSeams`, every frame of a switch), and a
+ * host's tones, rims and ranks (PaneTabs, on every switch). A tab that
+ * changes size is heard by its own observer (`#sizes`). Each such write had
+ * the tabs measured again, their offsets laying the page out in the frame's
+ * callbacks, ahead of the frame's own layout.
  */
-const DRAWN =
-  /--(?:z|depth|depth-prev|depth-next|cut-start|cut-end|glide-start|glide-end|under-start|under-end)\s*:[^;]*;?/g;
+const DRAWN = /--[\w-]+\s*:[^;]*;?/g;
 
-/** An inline style less what the track draws with: what can place a tab. */
+/** An inline style less what draws a tab: what can place one. */
 const placedBy = (style: string | null): string =>
   (style ?? "").replace(DRAWN, "").trim();
 
