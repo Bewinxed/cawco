@@ -11,8 +11,10 @@
  * shipped app would break. Direction decides what breaks:
  *
  * - what the app receives (responses, frames other than its own): a property
- *   it requires that the hub may now leave out (removed, or made optional
- *   or nullable), a type that now admits a JSON kind it did not (a branch
+ *   the hub no longer sends at all (optional ones too: a rename leaves the
+ *   app's reader of the old name with nothing), one it requires that the hub
+ *   may now leave out (made optional or nullable), a type that now admits a
+ *   JSON kind it did not (a branch
  *   added to an undiscriminated union among them), a value added to an enum
  *   the app reads closed;
  * - what the app sends (request bodies and parameters, its own socket
@@ -403,6 +405,7 @@ class Comparer {
     const nowRequired = new Set((after.required as string[] | undefined) ?? []);
     if (place.direction === "receives") {
       this.lostRequired(wasRequired, nowRequired, now, place);
+      this.lostOptional(was, wasRequired, now, place);
     } else {
       for (const property of nowRequired) {
         if (!wasRequired.has(property)) {
@@ -421,6 +424,29 @@ class Comparer {
           ...place,
           at: `${place.at}.${property}`,
         });
+      }
+    }
+  }
+
+  /**
+   * What the app may read and the hub no longer sends at all: a rename
+   * (`host` to `origin` on PreviewFrame, 8c9b79c37) decodes, as an optional
+   * field, but the app's code that reads it is left with nothing. 0.1.11
+   * read a host-mode preview's address from `host`, and stopped opening previews.
+   */
+  private lostOptional(
+    was: Schema | undefined,
+    wasRequired: Set<string>,
+    now: Schema | undefined,
+    place: Place
+  ): void {
+    for (const property of Object.keys(was ?? {})) {
+      if (!(wasRequired.has(property) || (now && property in now))) {
+        this.say(
+          `${place.at}.${property}`,
+          place.root,
+          "the shipped app may read it, and the hub no longer sends it"
+        );
       }
     }
   }
