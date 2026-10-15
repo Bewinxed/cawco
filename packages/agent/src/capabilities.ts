@@ -1,16 +1,13 @@
 import { existsSync, readdirSync } from "node:fs";
 import { homedir, platform } from "node:os";
 import { join } from "node:path";
-import { OPENCODE_VERSION, toolSpec } from "@cawco/core";
 import type {
   MachineCapabilities,
   MachineCapability,
 } from "@cawco/core/capabilities";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { resolveBin } from "./tools";
-
-/** OpenCode as the tool catalog names it: 2.0's own bin name, at the release CawCo runs. */
-const opencodeBin = toolSpec("opencode")?.bin ?? "opencode2";
+import { opencodeBinary } from "./harnesses/opencode-client";
+import { installAdvice, resolveBin } from "./tools";
 
 export function browserExecutable(): string | undefined {
   const candidates =
@@ -128,6 +125,8 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
   }
   const nodeInstall =
     'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash && . "$HOME/.nvm/nvm.sh" && nvm install 24';
+  const opencode = opencodeBinary();
+  const opencodeAdvice = await installAdvice("opencode");
   const items: MachineCapability[] = [
     {
       id: "git",
@@ -137,9 +136,13 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
     },
     {
       id: "opencode",
-      available: !!resolveBin(opencodeBin),
-      path: resolveBin(opencodeBin),
-      installCommand: `npm uninstall -g opencode-ai && npm install -g @opencode/cli@${OPENCODE_VERSION}`,
+      available: !!opencode,
+      path: opencode,
+      // The command the install action runs here: the way this machine's
+      // OpenCode got here, or none and why.
+      ...("command" in opencodeAdvice
+        ? { installCommand: opencodeAdvice.command }
+        : { installCommand: "", reason: opencodeAdvice.refusal }),
     },
     {
       id: "pi",

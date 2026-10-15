@@ -23,6 +23,14 @@ export interface ToolInstallMethod {
    * and `native` is set.
    */
   command?: string;
+  /**
+   * How a binary this method put on a machine is told apart, from where it
+   * resolves. A tool already present is installed again only with the method
+   * whose footprint it bears, never a first-eligible one beside it: two
+   * package managers each holding a copy is two copies on the PATH, and the
+   * one that wins is not the one just installed.
+   */
+  footprint?: ToolFootprint;
   /** Names the method in status and errors: 'curl script', 'npm', 'winget'. */
   label: string;
   /**
@@ -45,6 +53,21 @@ export interface ToolInstallMethod {
   pinnedCommand?: string;
   platforms: ToolPlatform[];
 }
+
+/**
+ * Where an install method leaves a tool, read from the binary the PATH finds
+ * and the file it resolves to:
+ * - `npm-global`: the file is under `npm root -g`;
+ * - `bun-global`: the file is in a package of bun's global dir, and the PATH
+ *   finds it through bun's global bin dir or beside the global dir's lockfile;
+ * - `dir`: the binary or its file is under `path` (`~` expanded);
+ * - `brew`: the file is in Homebrew's Cellar, under `formula`'s own dir.
+ */
+export type ToolFootprint =
+  | { kind: "brew"; formula: string }
+  | { kind: "bun-global" }
+  | { kind: "dir"; path: string }
+  | { kind: "npm-global" };
 
 /** A catalog tool another tool needs first, with the version floor it needs. */
 export interface ToolRequirement {
@@ -148,6 +171,21 @@ export const TOOL_CATALOG: ToolSpec[] = [
     bin: "opencode2",
     versionCommand: "opencode2 --version",
     exactVersion: OPENCODE_VERSION,
+    // The curl script's dir, for a daemon whose PATH lacks it (bun's global
+    // bin is on every probe's PATH: agent tools.ts `toolPath`); then
+    // Homebrew's: anomalyco/tap's opencode-v2 formula runs `bin.install
+    // "opencode"` and leaves no `opencode2`, so its copy is found by the
+    // formula's own `opt` link, which only 2.0 has (the 1.x formula is
+    // `opencode`), on each prefix Homebrew installs to.
+    wellKnownPaths: [
+      "~/.opencode/bin/opencode2",
+      "/opt/homebrew/opt/opencode-v2/bin/opencode",
+      "/usr/local/opt/opencode-v2/bin/opencode",
+      "/home/linuxbrew/.linuxbrew/opt/opencode-v2/bin/opencode",
+    ],
+    // The ways opencode.ai/v2/docs gives (checked 2026-10-15) that CawCo can
+    // put a release on. A fresh machine gets npm, as before; one that has
+    // OpenCode already gets the method that put it there.
     install: [
       // 2.0 is the `@opencode/cli` package, a native binary per platform in
       // its optional dependencies. 1.x's npm package (`opencode-ai`) installs
@@ -158,10 +196,46 @@ export const TOOL_CATALOG: ToolSpec[] = [
         label: "npm",
         platforms: ["linux", "darwin", "win32"],
         needs: "npm",
+        footprint: { kind: "npm-global" },
         command:
           "npm uninstall -g opencode-ai && npm install -g @opencode/cli@{version}",
         pinnedCommand:
           "npm uninstall -g opencode-ai && npm install -g @opencode/cli@{version}",
+      },
+      // "bun install -g --trust @opencode/cli": `--trust` lets the package's
+      // postinstall pick the native binary (opencode.ai/v2/docs).
+      {
+        label: "bun",
+        platforms: ["linux", "darwin"],
+        needs: "bun",
+        footprint: { kind: "bun-global" },
+        command: "bun install -g --trust @opencode/cli@{version}",
+        pinnedCommand: "bun install -g --trust @opencode/cli@{version}",
+      },
+      // The tap carries one release, so no version can be asked for: "brew
+      // install formula will upgrade formula if it is already installed but
+      // outdated" (docs.brew.sh/Manpage), and the probe after it says whether
+      // the tap's release is the one CawCo runs.
+      {
+        label: "brew",
+        platforms: ["darwin", "linux"],
+        needs: "brew",
+        footprint: { kind: "brew", formula: "opencode-v2" },
+        command: "brew install anomalyco/tap/opencode-v2",
+      },
+      // "-v, --version <version> Install a specific version" into
+      // $HOME/.opencode/bin, which it writes an `opencode2` into
+      // (opencode.ai/v2/install); `--no-modify-path` leaves the user's rc
+      // files alone, as the catalog's installs all do.
+      {
+        label: "curl script",
+        platforms: ["linux", "darwin"],
+        needs: "curl",
+        footprint: { kind: "dir", path: "~/.opencode/bin" },
+        command:
+          "curl -fsSL https://opencode.ai/v2/install | bash -s -- --version {version} --no-modify-path",
+        pinnedCommand:
+          "curl -fsSL https://opencode.ai/v2/install | bash -s -- --version {version} --no-modify-path",
       },
     ],
     requires: [{ id: "node" }],
@@ -240,3 +314,15 @@ export const TOOL_CATALOG: ToolSpec[] = [
 
 export const toolSpec = (id: string): ToolSpec | undefined =>
   TOOL_CATALOG.find((spec) => spec.id === id);
+
+/**
+ * Each catalog tool this build runs at one version only, that version by id:
+ * what `cawco binary-pins` puts on, run from this build by the build before
+ * it, before the swap.
+ */
+export const pinnedTools = (): Record<string, string> =>
+  Object.fromEntries(
+    TOOL_CATALOG.flatMap((spec) =>
+      spec.exactVersion ? [[spec.id, spec.exactVersion]] : []
+    )
+  );

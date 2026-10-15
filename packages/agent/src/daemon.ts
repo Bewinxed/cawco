@@ -169,7 +169,7 @@ const takeSessionLimits = (
 };
 
 import { damagedRecords, sweepRecords } from "./damaged-records";
-import { probeTools } from "./tools";
+import { onToolsMoved, probeTools } from "./tools";
 import { UsageScanner } from "./usage/scanner";
 import {
   abandonCommands,
@@ -1398,6 +1398,43 @@ const attach = (
       tellOpencodeAccountsChanged();
       reportPiSoon();
     };
+    // An install this agent ran, or a harness finding its binary at another
+    // version than it last did (tools.ts `toolsMoved`): the tools are probed
+    // again and sent now, not at the next connect. Only the tools: a
+    // harness's own report is its `detect`, which may start its server, and a
+    // version moving is no reason to start one. A burst is read once, a
+    // second on.
+    let toolsSoon: ReturnType<typeof setTimeout> | undefined;
+    const reportTools = async (): Promise<void> => {
+      const tools = await readPart("tools", probeTools);
+      if (tools && socket.readyState === WebSocket.OPEN) {
+        send(socket, {
+          verb: "heartbeat",
+          machineId: identity.machineId,
+          payload: {
+            at: Date.now(),
+            instances: supervisor.instanceIds,
+            tools,
+          } satisfies HeartbeatPayload,
+        });
+      }
+    };
+    const stopToolsWatch = onToolsMoved(() => {
+      clearTimeout(toolsSoon);
+      toolsSoon = setTimeout(() => {
+        reportTools().catch((error: unknown) =>
+          console.warn(
+            `[agent] the tools could not be read again: ${errorWords(error)}`
+          )
+        );
+      }, 1000);
+    });
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        clearTimeout(toolsSoon);
+        stopToolsWatch();
+      })
+    );
     supervisor.reannounce();
 
     // This probe counts tokens through pi's proxy; it never starts a Claude SDK

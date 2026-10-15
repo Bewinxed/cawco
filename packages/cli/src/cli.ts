@@ -12,6 +12,7 @@ import {
   CAWCO_ENV,
   CAWCO_HUB_PORT,
   CAWCO_MDNS_TYPE,
+  pinnedTools,
   readEnv,
 } from "@cawco/core";
 import { hubCredentialSocket } from "@cawco/core/paths";
@@ -532,6 +533,40 @@ const runBinaryApply = async (args: Args): Promise<number> => {
 };
 
 /**
+ * `cawco binary-pins`, run from this build by the build before it, before the
+ * swap (agent binary-update.ts `#putOnPins`): this build's pinned harnesses go
+ * on, with the methods this build knows, each recorded as it lands. `cawco
+ * binary-pins back <build>`, run from the build that runs instead of <build>:
+ * what went on for <build> goes back on for this one (agent pin-record.ts).
+ * Says what it did on one line; a failure is one sentence on stderr and exit 1.
+ */
+const runBinaryPins = async (args: Args): Promise<number> => {
+  const { pinMoveWords, putOnPins } = await import("@cawco/agent/tools");
+  const { putBackPins, recordPinMove } =
+    await import("@cawco/agent/pin-record");
+  const back = args.action === "back" ? args.rest[0] : undefined;
+  if (args.action !== undefined && !back) {
+    throw new UsageError(
+      "binary-pins takes nothing, or back <the build that will not run>"
+    );
+  }
+  try {
+    const said = back
+      ? await putBackPins(back, CLI_VERSION)
+      : (
+          await putOnPins(pinnedTools(), CLI_VERSION, (move) =>
+            recordPinMove(CLI_VERSION, move)
+          )
+        ).map(pinMoveWords);
+    console.log(said.join(", "));
+    return 0;
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    return 1;
+  }
+};
+
+/**
  * `cawco git-credential <get|store|erase>`: git's credential helper for the
  * hub's git remote (git-credential(1), "custom helpers"), which each session
  * is configured with through env-only git config (agent git-credential.ts).
@@ -686,6 +721,8 @@ const run = async (argv: string[]): Promise<number> => {
       );
       return 0;
     }
+    case "binary-pins":
+      return runBinaryPins(args);
     case "binary-find-hub": {
       const url = await findExistingHub();
       if (url) {

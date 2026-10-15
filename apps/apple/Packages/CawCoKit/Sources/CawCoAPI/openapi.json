@@ -34631,6 +34631,7 @@
             "$ref": "#/components/schemas/MachineCapabilityId"
           },
           "installCommand": {
+            "description": "What installs it here. Empty when nothing may: a copy came some way\nCawCo has no method for, and another would be a second copy (`reason`\nsays so).",
             "type": "string"
           },
           "path": {
@@ -37220,6 +37221,75 @@
           "command": {
             "description": "The install command, run through the Bun shell. Exactly one of `command`\nand `native` is set.",
             "type": "string"
+          },
+          "footprint": {
+            "description": "How a binary this method put on a machine is told apart, from where it\nresolves. A tool already present is installed again only with the method\nwhose footprint it bears, never a first-eligible one beside it: two\npackage managers each holding a copy is two copies on the PATH, and the\none that wins is not the one just installed.",
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "brew"
+                    ]
+                  },
+                  "formula": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "formula",
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "bun-global"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "dir"
+                    ]
+                  },
+                  "path": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "path"
+                ]
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "npm-global"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              }
+            ]
           },
           "label": {
             "description": "Names the method in status and errors: 'curl script', 'npm', 'winget'.",

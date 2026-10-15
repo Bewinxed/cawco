@@ -15,15 +15,29 @@
  */
 import { toolSpec } from "@cawco/core";
 import { OpenCode, type OpenCodeClient } from "@opencode/client";
+import { toolBinary } from "../tools";
 
 export type OpencodeClient = OpenCodeClient;
+
+const OPENCODE_TOOL = toolSpec("opencode");
+if (!OPENCODE_TOOL) {
+  throw new Error("The tool catalog names no OpenCode");
+}
 
 /**
  * The OpenCode binary CawCo runs and the one version of it: the tool
  * catalog's (`opencode2`, a name only 2.0's package has; core
  * `OPENCODE_VERSION`, the release `@opencode/client` here is pinned to).
  */
-export const OPENCODE_BIN = toolSpec("opencode")?.bin ?? "opencode2";
+export const OPENCODE_BIN = OPENCODE_TOOL.bin;
+
+/**
+ * This machine's OpenCode, found where the tool probe finds it (tools.ts
+ * `toolBinary`): `opencode2` on the PATH, or a well-known path (Homebrew's
+ * 2.0 is only `opencode`, under its formula's own link).
+ */
+export const opencodeBinary = (): string | undefined =>
+  toolBinary(OPENCODE_TOOL);
 
 /** Where one server listens and the password it was launched with. */
 export interface ServerAddress {

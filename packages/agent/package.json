@@ -10,7 +10,9 @@
     "./discovery": "./src/discovery.ts",
     "./keeper-jobs": "./src/keeper-jobs.ts",
     "./pi-host": "./src/harnesses/pi-host.ts",
-    "./sessiond-client": "./src/sessiond-client.ts"
+    "./pin-record": "./src/pin-record.ts",
+    "./sessiond-client": "./src/sessiond-client.ts",
+    "./tools": "./src/tools.ts"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",

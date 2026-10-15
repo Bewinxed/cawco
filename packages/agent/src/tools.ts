@@ -5,9 +5,12 @@
  * nothing here names one.
  */
 
+import { existsSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { arch, platform, tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { delimiter, dirname, join, sep } from "node:path";
 import type {
+  ToolFootprint,
   ToolInstallMethod,
   ToolPlatform,
   ToolSpec,
@@ -23,13 +26,24 @@ const LOCAL_BIN = expandHome("~/.local/bin");
 const NODE_DIR = expandHome("~/.local/node");
 
 /**
+ * bun's global bin dir as bun places it: `BUN_INSTALL_BIN`, else
+ * `$BUN_INSTALL/bin`, else `~/.bun/bin`. bun's own installer puts bun there
+ * too, and a service manager's PATH has never heard of it.
+ */
+const bunGlobalBin = (): string =>
+  process.env.BUN_INSTALL_BIN ??
+  join(process.env.BUN_INSTALL ?? expandHome("~/.bun"), "bin");
+
+/**
  * The PATH every probe and installer runs with. A daemon that unpacked Node a
  * second ago still has the PATH it started with, so the `needs: 'npm'` method
  * that was waiting for it would find nothing — and asking the user to restart
- * the daemon between two halves of one install is not an install.
+ * the daemon between two halves of one install is not an install. bun's
+ * global bin goes on it for the same reason: a copy bun installed is put on
+ * again with bun, which a daemon under systemd would otherwise not find.
  */
 export const toolPath = (): string =>
-  [process.env.PATH, LOCAL_BIN, join(NODE_DIR, "bin")]
+  [process.env.PATH, LOCAL_BIN, join(NODE_DIR, "bin"), bunGlobalBin()]
     .filter(Boolean)
     .join(delimiter);
 
@@ -88,6 +102,43 @@ const remember = (status: ToolStatus): ToolStatus => {
   return status;
 };
 
+const movedListeners = new Set<() => void>();
+
+/**
+ * `listener` hears each time this machine's tools may have moved: an install
+ * this agent ran, or a harness finding its binary at another version than it
+ * last did (a hand upgrade). The connection re-probes and tells the hub, so a
+ * tool's state never sits stale until a restart. Answers the unsubscribe.
+ */
+export const onToolsMoved = (listener: () => void): (() => void) => {
+  movedListeners.add(listener);
+  return () => movedListeners.delete(listener);
+};
+
+/** Tells every {@link onToolsMoved} listener. */
+export const toolsMoved = (): void => {
+  for (const listener of movedListeners) {
+    listener();
+  }
+};
+
+/** What each tool was last found at, by any probe of it: its version, `missing`, or `unsaid`. */
+const seen = new Map<string, string>();
+
+/**
+ * A probe found tool `id` at `found` (its version, `missing`, or `unsaid`).
+ * Every probe of a tool says so here, the tool probe's and a harness's own
+ * version check alike, so a change any of them sees (a hand upgrade, a
+ * removal) is news to every listener ({@link toolsMoved}) whichever saw it.
+ */
+export const sawTool = (id: string, found: string): void => {
+  const before = seen.get(id);
+  seen.set(id, found);
+  if (before !== undefined && before !== found) {
+    toolsMoved();
+  }
+};
+
 /**
  * Where `npm install -g` puts binaries, asked of npm rather than guessed: nvm,
  * volta and a hand-set prefix all put them somewhere this daemon's PATH may
@@ -117,26 +168,189 @@ const npmGlobalBin = async (bin: string): Promise<string | undefined> => {
   return undefined;
 };
 
-/** PATH, then npm's global bin, then wherever the tool's installers are known to land. */
-const locate = async (spec: ToolSpec): Promise<string | undefined> => {
-  const onPath = resolveBin(spec.bin);
-  if (onPath) {
-    return onPath;
-  }
+/**
+ * A catalog tool's binary, found now: its bin on {@link toolPath}, then the
+ * first of its well-known paths that is there. What a harness adapter runs,
+ * so it runs the copy the tool probe reports on.
+ */
+export const toolBinary = (spec: ToolSpec): string | undefined =>
+  resolveBin(spec.bin) ??
+  spec.wellKnownPaths
+    ?.map((path) => expandHome(path))
+    .find((path) => existsSync(path));
 
-  const global = await npmGlobalBin(spec.bin);
-  if (global) {
-    return global;
-  }
+/** {@link toolBinary}, then npm's global bin. */
+const locate = async (spec: ToolSpec): Promise<string | undefined> =>
+  toolBinary(spec) ?? (await npmGlobalBin(spec.bin));
 
-  for (const wellKnown of spec.wellKnownPaths ?? []) {
-    const path = expandHome(wellKnown);
-    // biome-ignore lint/performance/noAwaitInLoops: well-known paths are tried in priority order and the loop returns on the first that exists
-    if (await Bun.file(path).exists()) {
-      return path;
+/** `npm root -g`, resolved: where npm's global packages are, asked of npm. */
+const npmGlobalRoot = async (): Promise<string | undefined> => {
+  const npm = resolveBin("npm");
+  if (!npm) {
+    return undefined;
+  }
+  const root = await Bun.$`${npm} root -g`.quiet().nothrow().env(toolEnv());
+  const said = root.text().trim();
+  if (root.exitCode !== 0 || !said) {
+    return undefined;
+  }
+  return await realpath(said).catch(() => said);
+};
+
+const isUnder = (path: string, dir: string): boolean =>
+  path === dir || path.startsWith(dir.endsWith(sep) ? dir : `${dir}${sep}`);
+
+/**
+ * The dir a package manager installed `file`'s package into: what comes
+ * before its first `node_modules` (`~/.bun/install/global` on obelisk, `~`
+ * on a Mac whose bun global dir is its home).
+ */
+const installedInto = (file: string): string | undefined => {
+  const at = file.indexOf(`${sep}node_modules${sep}`);
+  return at === -1 ? undefined : file.slice(0, at);
+};
+
+/** A tool binary the PATH (or a well-known path) finds, and the file it resolves to. */
+interface Found {
+  file: string;
+  /** The catalog method whose footprint it bears; none: it came some other way. */
+  method?: ToolInstallMethod;
+  path: string;
+}
+
+const bears = async (
+  footprint: ToolFootprint,
+  { path, file }: Found
+): Promise<boolean> => {
+  if (footprint.kind === "brew") {
+    // Every prefix keeps a formula's files in `Cellar/<formula>/<version>`;
+    // its `bin` and `opt` links resolve there.
+    return file.includes(`${sep}Cellar${sep}${footprint.formula}${sep}`);
+  }
+  if (footprint.kind === "dir") {
+    const dir = expandHome(footprint.path);
+    return isUnder(path, dir) || isUnder(file, dir);
+  }
+  if (footprint.kind === "npm-global") {
+    const root = await npmGlobalRoot();
+    return root !== undefined && isUnder(file, root);
+  }
+  const into = installedInto(file);
+  if (!into) {
+    return false;
+  }
+  if (dirname(path) === bunGlobalBin()) {
+    return true;
+  }
+  // A bun global dir holds bun's lockfile beside its node_modules; npm's
+  // global root (`<prefix>/lib`) holds none.
+  const locks = await Promise.all(
+    ["bun.lock", "bun.lockb"].map((name) => Bun.file(join(into, name)).exists())
+  );
+  return locks.some(Boolean);
+};
+
+/** Where this machine's copy of a tool is, and the catalog method that put it there. */
+const findCopy = async (spec: ToolSpec): Promise<Found | undefined> => {
+  const path = await locate(spec);
+  if (!path) {
+    return undefined;
+  }
+  const at: Found = {
+    path,
+    file: await realpath(path).catch(() => path),
+  };
+  for (const method of spec.install) {
+    // biome-ignore lint/performance/noAwaitInLoops: methods are tried in catalog order and the loop returns on the first whose footprint matches
+    if (method.footprint && (await bears(method.footprint, at))) {
+      return { ...at, method };
     }
   }
+  return at;
+};
+
+/**
+ * Whether the catalog can tell how a present copy of this tool got here (its
+ * methods carry footprints): only then is the copy held to its own method. A
+ * tool without them installs with its first eligible method, as it always has.
+ */
+const tracked = (spec: ToolSpec): boolean =>
+  spec.install.some((method) => method.footprint !== undefined);
+
+/**
+ * Why a present tool will not be installed again here: it came some way the
+ * catalog has no method for, or its method cannot run on this machine now.
+ * Never a first-eligible method instead: that is a second copy.
+ */
+const refusal = (
+  spec: ToolSpec,
+  at: Found,
+  version: string | undefined
+): string | undefined => {
+  if (!tracked(spec)) {
+    return undefined;
+  }
+  if (!at.method) {
+    const ways = spec.install.map((method) => method.label).join(", ");
+    return `${at.path} came from none of the ways CawCo installs ${spec.name} (${ways}), and CawCo puts no second copy beside it: install ${spec.name}${version ? ` ${version}` : ""} there the way it got there`;
+  }
+  if (!at.method.platforms.includes(platform() as ToolPlatform)) {
+    return `${at.path} was installed with ${at.method.label}, which CawCo does not run on ${platform()}`;
+  }
+  if (at.method.needs && !resolveBin(at.method.needs)) {
+    return `${at.path} was installed with ${at.method.label}, and ${at.method.needs} is not on this machine's PATH`;
+  }
   return undefined;
+};
+
+/** The command a method runs for `version`; none for a native routine. */
+const commandOf = (
+  method: ToolInstallMethod,
+  version: string | undefined
+): string | undefined =>
+  version && method.pinnedCommand
+    ? method.pinnedCommand.replaceAll("{version}", version)
+    : method.command;
+
+/**
+ * What putting a catalog tool on this machine runs, at the version CawCo runs
+ * it at: the command of the method its present copy came from, or of the
+ * first method this platform has when there is none. A present copy no method
+ * may install again answers why instead (`refusal`). What the agent's error
+ * texts and the machine's capabilities name, so the words and the install
+ * action never disagree.
+ */
+export const installAdvice = async (
+  id: string,
+  version?: string
+): Promise<{ command: string } | { refusal: string }> => {
+  const spec = toolSpec(id);
+  if (!spec) {
+    return { refusal: `${id} is not in the tool catalog` };
+  }
+  const want = spec.exactVersion ?? version;
+  const at = await findCopy(spec);
+  if (at) {
+    const refused = refusal(spec, at, want);
+    if (refused) {
+      return { refusal: refused };
+    }
+  }
+  const method =
+    at?.method ??
+    spec.install.find((one) =>
+      one.platforms.includes(platform() as ToolPlatform)
+    );
+  const command = method ? commandOf(method, want) : undefined;
+  return command
+    ? { command }
+    : { refusal: `${spec.name} has no install command for ${platform()}` };
+};
+
+/** {@link installAdvice} as words to put in a sentence: the command, or why there is none. */
+export const installAdviceText = async (id: string): Promise<string> => {
+  const advice = await installAdvice(id);
+  return "command" in advice ? advice.command : advice.refusal;
 };
 
 /**
@@ -163,23 +377,38 @@ const probeVersion = async (
  * still installed — presence is the question, and the version is what we can
  * add about it.
  */
-export const probeTool = async (spec: ToolSpec): Promise<ToolStatus> => {
-  const path = await locate(spec);
-  if (!path) {
+export const probeTool = async (
+  spec: ToolSpec,
+  /** The one version that counts as installed: the build's pin, or the one an install is putting on. */
+  want = spec.exactVersion
+): Promise<ToolStatus> => {
+  const at = await findCopy(spec);
+  if (!at) {
+    sawTool(spec.id, "missing");
     return { id: spec.id, state: "missing", at: Date.now() };
   }
-  const version = await probeVersion(spec, path);
+  const version = await probeVersion(spec, at.path);
+  sawTool(spec.id, version ?? "unsaid");
+  const method = at.method ? { method: at.method.label } : {};
   // A tool CawCo is built against is installed only at its one version.
-  if (spec.exactVersion && version !== spec.exactVersion) {
+  if (want && version !== want) {
+    const refused = refusal(spec, at, want);
     return {
       id: spec.id,
       state: "failed",
-      detail: `${spec.bin} ${version ?? "of no version it will say"} is installed; CawCo runs ${spec.name} ${spec.exactVersion}. Install it again to put that one on.`,
+      detail: `${spec.bin} ${version ?? "of no version it will say"} is installed${at.method ? ` with ${at.method.label}` : ""}; CawCo runs ${spec.name} ${want}. ${refused ? `${refused}.` : "Install it again to put that one on."}`,
       ...(version ? { version } : {}),
+      ...method,
       at: Date.now(),
     };
   }
-  return { id: spec.id, state: "installed", version, at: Date.now() };
+  return {
+    id: spec.id,
+    state: "installed",
+    version,
+    ...method,
+    at: Date.now(),
+  };
 };
 
 /**
@@ -314,10 +543,8 @@ const runMethod = async (
     }
   }
 
-  const command =
-    version && method.pinnedCommand
-      ? method.pinnedCommand.replaceAll("{version}", version)
-      : (method.command ?? "");
+  const command = commandOf(method, version) ?? "";
+  console.info(`[tools] ${spec.name}: ${method.label}: ${command}`);
   const ran = await Bun.$`${{ raw: command }}`.quiet().nothrow().env(toolEnv());
   if (ran.exitCode === 0) {
     return undefined;
@@ -329,26 +556,44 @@ const runMethod = async (
   );
 };
 
+/**
+ * Puts `version` of a tool on: a copy already here goes on again with the
+ * method that put it there, or not at all (`refusal`); with none here, its
+ * requirements first (when asked), then the first method this machine can run.
+ */
 const install = async (
   spec: ToolSpec,
   version: string | undefined,
   requirements: boolean
 ): Promise<ToolStatus> => {
-  if (requirements) {
-    const blocked = await satisfy(spec);
-    if (blocked) {
-      return remember(blocked);
+  const at = tracked(spec) ? await findCopy(spec) : undefined;
+  let method = at?.method;
+  if (at) {
+    const refused = refusal(spec, at, version);
+    if (refused) {
+      return remember({
+        id: spec.id,
+        state: "failed",
+        detail: refused,
+        ...(at.method ? { method: at.method.label } : {}),
+        at: Date.now(),
+      });
     }
+  } else {
+    if (requirements) {
+      const blocked = await satisfy(spec);
+      if (blocked) {
+        return remember(blocked);
+      }
+    }
+    method = spec.install.find(eligible);
   }
-
-  const method = spec.install.find(eligible);
   if (!method) {
     return remember(noMethod(spec));
   }
 
-  // A tool CawCo is built against goes on at its one version, whatever is pinned.
-  const said = await runMethod(spec, method, spec.exactVersion ?? version);
-  const probed = await probeTool(spec);
+  const said = await runMethod(spec, method, version);
+  const probed = await probeTool(spec, version ?? spec.exactVersion);
   if (probed.state === "installed") {
     return remember({ ...probed, method: method.label });
   }
@@ -407,10 +652,12 @@ const satisfy = async (spec: ToolSpec): Promise<ToolStatus | undefined> => {
 };
 
 /**
- * Puts a catalog tool on this machine with the first method its platform and
- * prerequisites allow, and answers with what the machine looks like afterwards.
- * Never throws: a failure is a {@link ToolStatus} carrying what the installer
- * said, which is what the dashboard shows and what the hub records.
+ * Puts a catalog tool on this machine: with the method its present copy came
+ * from, or with the first method its platform and prerequisites allow, and
+ * answers with what the machine looks like afterwards. Every tool is probed
+ * again for the hub then ({@link toolsMoved}). Never throws: a failure is a
+ * {@link ToolStatus} carrying what the installer said, which is what the
+ * dashboard shows and what the hub records.
  */
 export const installTool = async (
   id: string,
@@ -425,5 +672,73 @@ export const installTool = async (
       at: Date.now(),
     };
   }
-  return await install(spec, version, true);
+  try {
+    // A tool CawCo is built against goes on at its one version, whatever is pinned.
+    return await install(spec, spec.exactVersion ?? version, true);
+  } finally {
+    toolsMoved();
+  }
+};
+
+/** An installer's tail, as one line for a sentence. */
+const oneLine = (said: string | undefined): string =>
+  (said ?? "").trim().replaceAll(/\s*\n\s*/g, "; ");
+
+/** A tool {@link putOnPins} moved: from the version it said (when it said one) to `to`, with `method`. */
+export interface PinMove {
+  from?: string;
+  id: string;
+  method?: string;
+  to: string;
+}
+
+/** A move, as a line says it. */
+export const pinMoveWords = (move: PinMove): string =>
+  `${toolSpec(move.id)?.name ?? move.id} ${move.from ?? "(no version said)"} -> ${move.to}${move.method ? ` with ${move.method}` : ""}`;
+
+/**
+ * THE PINS GO ON BEFORE THE BUILD THAT RUNS THEM. `pins`, by tool id, are
+ * what `build` runs and no other: each one this machine has at another
+ * version is put on now, with the method its copy came from, so the build
+ * never starts beside a harness it refuses. A tool this machine does not have
+ * is left alone: nothing here runs it. `moved` hears each move as it lands,
+ * before the next is tried, so what went on is known even when a later one
+ * fails. Throws one sentence at the first that does not go on.
+ *
+ * It runs in the staged build's own process (`cawco binary-pins`), so the
+ * agent of the build before hears of a move only when a probe of its own
+ * looks again; the build that pins these probes when it connects.
+ */
+export const putOnPins = async (
+  pins: Record<string, string>,
+  build: string,
+  moved: (move: PinMove) => Promise<void>
+): Promise<PinMove[]> => {
+  const done: PinMove[] = [];
+  for (const [id, version] of Object.entries(pins)) {
+    const spec = toolSpec(id);
+    if (!spec) {
+      throw new Error(`${build} pins ${id}, which is not in its tool catalog`);
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: one install at a time, and the first that fails ends it
+    const before = await probeTool(spec, version);
+    if (before.state === "missing" || before.state === "installed") {
+      continue;
+    }
+    const after = await install(spec, version, false);
+    if (after.state !== "installed") {
+      throw new Error(
+        `${spec.name} ${version}, which ${build} runs, did not go on${after.method ? ` with ${after.method}` : ""}: ${oneLine(after.detail)}`
+      );
+    }
+    const move: PinMove = {
+      id,
+      to: version,
+      ...(before.version ? { from: before.version } : {}),
+      ...(after.method ? { method: after.method } : {}),
+    };
+    await moved(move);
+    done.push(move);
+  }
+  return done;
 };

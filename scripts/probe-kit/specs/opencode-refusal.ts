@@ -11,7 +11,8 @@
  *
  * 1. The first call fails within 30 s, saying why, having started `serve`.
  * 2. The next five answer in under a second each, with the same reason,
- *    and start no process at all.
+ *    and start no process but a version read (the machine's tool probe
+ *    reads OpenCode's version again when it changes, as its arrival does).
  * 3. The hub's row for the machine carries that reason in its OpenCode
  *    report (`authReason`), where the home says a machine's word.
  * 4. The OpenCode config file touched: the next call starts `serve` again.
@@ -82,7 +83,16 @@ const spec: Spec = {
       ].join("\n")
     );
     await chmod(stand, 0o755);
-    const started = async (): Promise<{ all: number; serve: number }> => {
+    /**
+     * Every process started from the stand-in: `serve`s, and the rest that
+     * are not a version read. A version read is no start: the machine's tool
+     * probe reads OpenCode's version again when it changes (its arrival here).
+     */
+    const started = async (): Promise<{
+      all: number;
+      serve: number;
+      starts: number;
+    }> => {
       const lines = (
         await Bun.file(calls)
           .text()
@@ -93,6 +103,7 @@ const spec: Spec = {
       return {
         all: lines.length,
         serve: lines.filter((line) => line.startsWith("serve")).length,
+        starts: lines.filter((line) => line !== "--version").length,
       };
     };
 
@@ -185,14 +196,14 @@ const spec: Spec = {
       }
       const afterFive = await started();
       kit.check(
-        "the next five answer in under 1 s each with the same reason, and start no process",
+        "the next five answer in under 1 s each with the same reason, and start no process but a version read",
         again.every(
           (one) => !one.ok && one.ms < 1000 && one.error === first.error
-        ) && afterFive.all === afterFirst.all,
+        ) && afterFive.starts === afterFirst.starts,
         JSON.stringify({
           ms: again.map((one) => one.ms),
           same: again.map((one) => one.error === first.error),
-          processes: { before: afterFirst.all, after: afterFive.all },
+          processes: { before: afterFirst, after: afterFive },
         })
       );
 

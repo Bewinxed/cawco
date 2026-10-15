@@ -101,10 +101,15 @@ async function offerTools(ask: boolean): Promise<boolean> {
         );
         continue;
       }
+      const command = item.installCommand;
       console.log(
-        `${item.id}: not installed. ${item.reason ?? ""}\n  To install it: ${item.installCommand}`
+        `${item.id}: not installed. ${item.reason ?? ""}${command ? `\n  To install it: ${command}` : ""}`
       );
-      if (!(ask && (OFFERED as readonly string[]).includes(item.id))) {
+      if (!(
+        command &&
+        ask &&
+        (OFFERED as readonly string[]).includes(item.id)
+      )) {
         continue;
       }
       // biome-ignore lint/performance/noAwaitInLoops: one prompt at a time, each reading its own line
@@ -112,7 +117,7 @@ async function offerTools(ask: boolean): Promise<boolean> {
         console.log(`${item.id}: skipped. CawCo works without it.`);
         continue;
       }
-      const child = Bun.spawn(["/bin/sh", "-c", item.installCommand], {
+      const child = Bun.spawn(["/bin/sh", "-c", command], {
         stdio: ["inherit", "inherit", "inherit"],
       });
       if ((await child.exited) === 0) {

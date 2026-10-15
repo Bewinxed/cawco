@@ -2,6 +2,11 @@
 export interface MachineCapability {
   available: boolean;
   id: "git" | "opencode" | "pi" | "node" | "browser" | "service-manager";
+  /**
+   * What installs it here. Empty when nothing may: a copy came some way
+   * CawCo has no method for, and another would be a second copy (`reason`
+   * says so).
+   */
   installCommand: string;
   path?: string;
   reason?: string;

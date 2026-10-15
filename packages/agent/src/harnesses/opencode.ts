@@ -114,7 +114,7 @@ import { readAccountSoon } from "../provider-usage";
 import { fenced } from "../restart";
 import type { SessiondClient } from "../sessiond-client";
 import { listStandIns } from "../stand-ins";
-import { resolveBin } from "../tools";
+import { installAdviceText, onToolsMoved, sawTool } from "../tools";
 import { cloneHolding, workspaceRefs } from "../workspace-records";
 import { readJson, readSidecar, writeJson } from "./fleet-common";
 import { OpencodeActivity } from "./opencode-activity";
@@ -127,6 +127,7 @@ import {
   notFound,
   OPENCODE_BIN,
   type OpencodeClient,
+  opencodeBinary,
   opencodeClient,
   unreachable,
   waitForMcp,
@@ -238,7 +239,7 @@ const serverLaunch = (
   env: Record<string, string> = {}
 ): ServerLaunch => ({
   spec: {
-    command: resolveBin(OPENCODE_BIN) ?? OPENCODE_BIN,
+    command: opencodeBinary() ?? OPENCODE_BIN,
     args: ["serve", "--hostname=127.0.0.1", "--port=0"],
     env: {
       OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
@@ -1368,6 +1369,12 @@ export class OpencodeHarness implements Harness {
       pumps: this.#pumps,
       reconcileJobs: this.#reconcileJobs,
     });
+    // The machine's tools moved (an install this agent ran, or this adapter
+    // finding another version): the next call reads the binary again, not a
+    // probe up to 30 s old.
+    onToolsMoved(() => {
+      this.#versionProbe = null;
+    });
     // A credential the agent wrote reaches the account's running server now
     // (2.0 applies a switch from the next request, settled #8).
     onAccountCredential((account) => {
@@ -1598,14 +1605,18 @@ export class OpencodeHarness implements Harness {
     if (!this.#versionProbe || Date.now() - this.#versionProbedAt >= 30_000) {
       this.#versionProbedAt = Date.now();
       this.#versionProbe = (async () => {
-        const binary = resolveBin(OPENCODE_BIN);
+        // What each probe finds is the tool probe's news too (tools.ts
+        // `sawTool`): a hand upgrade this sees reaches the hub's tool row now.
+        const binary = opencodeBinary();
         if (!binary) {
+          sawTool("opencode", "missing");
           throw new Error(
-            `${OPENCODE_BIN} not found: CawCo runs OpenCode ${OPENCODE_VERSION} (npm install -g @opencode/cli@${OPENCODE_VERSION})`
+            `${OPENCODE_BIN} not found: CawCo runs OpenCode ${OPENCODE_VERSION} (${await installAdviceText("opencode")})`
           );
         }
         const ran = await Bun.$`${binary} --version`.quiet().nothrow();
         const version = versionOf(ran.stdout.toString());
+        sawTool("opencode", version ?? "unsaid");
         if (ran.exitCode !== 0 || !version) {
           throw new Error(
             `opencode version probe failed: ${ran.stdout.toString()}${ran.stderr.toString()}`
@@ -1614,7 +1625,7 @@ export class OpencodeHarness implements Harness {
         // The server API and the plugin are OPENCODE_VERSION's: no other release starts.
         if (version !== OPENCODE_VERSION) {
           throw new Error(
-            `${binary} is OpenCode ${version}; CawCo runs OpenCode ${OPENCODE_VERSION} (npm install -g @opencode/cli@${OPENCODE_VERSION})`
+            `${binary} is OpenCode ${version}; CawCo runs OpenCode ${OPENCODE_VERSION} (${await installAdviceText("opencode")})`
           );
         }
         return version;
@@ -2522,7 +2533,7 @@ export class OpencodeHarness implements Harness {
   }
 
   async detect(): Promise<HarnessReport> {
-    const installed = resolveBin(OPENCODE_BIN) !== undefined;
+    const installed = opencodeBinary() !== undefined;
     const version = installed
       ? await this.#installedVersion().catch(() => undefined)
       : undefined;
@@ -3293,7 +3304,7 @@ export class OpencodeHarness implements Harness {
 
   /** Every provider OpenCode can sign in to (its integrations), by id and name. */
   async providerList(): Promise<{ id: string; name: string }[]> {
-    if (resolveBin(OPENCODE_BIN) === undefined) {
+    if (opencodeBinary() === undefined) {
       return [];
     }
     const listed = await (await this.#ensure()).integration.list();
@@ -4609,7 +4620,7 @@ export class OpencodeHarness implements Harness {
    * what converts a 1.x database before anything reads it as 2.0's.
    */
   async listSessions(dir?: string): Promise<NeutralSessionInfo[]> {
-    if (resolveBin(OPENCODE_BIN) === undefined) {
+    if (opencodeBinary() === undefined) {
       return [];
     }
     await this.#ensure();
@@ -4623,7 +4634,7 @@ export class OpencodeHarness implements Harness {
     sessionKey: string,
     _dir?: string
   ): Promise<NeutralSessionInfo | undefined> {
-    if (resolveBin(OPENCODE_BIN) === undefined) {
+    if (opencodeBinary() === undefined) {
       return;
     }
     // A read-only lookup: a key that cannot be an OpenCode session answers
@@ -4649,7 +4660,7 @@ export class OpencodeHarness implements Harness {
     sessionKey: string,
     _dir?: string
   ): Promise<SessionMessage[]> {
-    if (resolveBin(OPENCODE_BIN) === undefined) {
+    if (opencodeBinary() === undefined) {
       return [];
     }
     assertOpencodeKey(sessionKey, "getSessionMessages");
@@ -4715,7 +4726,7 @@ export class OpencodeHarness implements Harness {
     title: string,
     _dir?: string
   ): Promise<void> {
-    if (resolveBin(OPENCODE_BIN) === undefined) {
+    if (opencodeBinary() === undefined) {
       return;
     }
     assertOpencodeKey(sessionKey, "renameSession");
@@ -4737,7 +4748,7 @@ export class OpencodeHarness implements Harness {
   }
 
   async deleteSession(sessionKey: string, _dir?: string): Promise<void> {
-    if (resolveBin(OPENCODE_BIN) === undefined) {
+    if (opencodeBinary() === undefined) {
       return;
     }
     assertOpencodeKey(sessionKey, "deleteSession");

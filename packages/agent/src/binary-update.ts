@@ -72,6 +72,7 @@ import {
 } from "./helper-jobs";
 import { keeperJob, keeperJobsHere } from "./keeper-jobs";
 import { withKeepers } from "./keepers";
+import { runBinaryPins } from "./pin-record";
 import { lowerFence, raiseFence, restartReadiness } from "./restart";
 import { heldSessions } from "./sessiond-client";
 
@@ -503,15 +504,18 @@ export class BinaryUpdater {
     const error = `The update helper${launched ? ` (${launched.job.name})` : ""} did not take over the install of ${version ?? "the build"} within ${HELPER_START_MS / 1000} s${says ? `: ${says}` : ""}`;
     console.warn(`[update] ${error}; it is tried again`);
     this.#launched = undefined;
+    // Nothing was applied: what went on for the build goes back.
+    const back = version ? await this.#putBackPins(version) : undefined;
+    const said = back ? `${error}; ${back}` : error;
     await this.#lowerFence();
     if (version) {
-      await recordFailure(version, error);
+      await recordFailure(version, said);
     }
     if (launched?.command) {
       this.#flags.commanded = true;
       this.#flags.version = launched.command.version;
     }
-    await this.#set({ phase: "failed", error });
+    await this.#set({ phase: "failed", error: said });
   }
 
   /** Each retiring keeper's first look at which it held nothing, by its endpoint. */
@@ -1078,20 +1082,61 @@ export class BinaryUpdater {
     }
     // On the hub's machine the update restarts the hub as well.
     const installation = await readInstallation();
+    const { version } = release.manifest;
     await this.#replace(
       installation?.role === "hub" ? installation.hubUrl : undefined,
-      () => launchApplyHelper(["binary-apply", release.manifest.version])
+      version,
+      () => launchApplyHelper(["binary-apply", version])
     );
+  }
+
+  /**
+   * THE HARNESSES THE BUILD PINS GO ON BEFORE IT DOES: `cawco binary-pins`,
+   * run from the staged build itself, so its own catalog says what it pins
+   * and how a copy here got here (pin-record.ts `runBinaryPins`). After the
+   * drain, under the install's fence, so nothing new starts on a harness
+   * between its install and the swap, and before the helper is launched. One
+   * that does not go on ends the attempt with its sentence: nothing is
+   * swapped, what already went on goes back, and the build is tried again on
+   * the retry schedule.
+   */
+  async #putOnPins(version: string): Promise<void> {
+    const said = await runBinaryPins(version);
+    if (said) {
+      console.info(`[update] before ${version}: ${said}`);
+    }
+  }
+
+  /**
+   * `version` will not run after all: what went on for it goes back on for
+   * this build. Never throws: it runs on the way out of a failure, which it
+   * adds its own to, as the words it answers.
+   */
+  async #putBackPins(version: string): Promise<string | undefined> {
+    try {
+      const said = await runBinaryPins(runtimeVersion, version);
+      if (said) {
+        console.info(`[update] ${version} did not go on: ${said} went back`);
+      }
+      return undefined;
+    } catch (error) {
+      const said = `what went on for ${version} did not go back: ${error instanceof Error ? error.message : String(error)}`;
+      console.error(`[update] ${said}`);
+      return said;
+    }
   }
 
   /**
    * Replaces this machine's services once {@link #drain} allows. The fence
    * stays up until the helper restarts them, and comes down if the helper
    * cannot be started, or gives up before restarting anything ({@link #watch});
-   * its lease ends it in any case.
+   * its lease ends it in any case. Under it the build's pinned harnesses go on
+   * first ({@link #putOnPins}); every way out before the helper takes over
+   * puts them back ({@link #putBackPins}).
    */
   async #replace(
     hub: string | undefined,
+    version: string,
     launch: () => Promise<HelperJob>
   ): Promise<void> {
     const cut = await this.#drain(hub);
@@ -1100,6 +1145,7 @@ export class BinaryUpdater {
     }
     try {
       await this.#raiseFence(hub, INSTALL_FENCE_MS);
+      await this.#putOnPins(version);
       await this.#set({
         phase: "installing",
         heldChildren: undefined,
@@ -1123,7 +1169,15 @@ export class BinaryUpdater {
       this.#flags.commanded = false;
       this.#outlasted.clear();
     } catch (error) {
+      // Nothing was swapped: what went on for the build goes back first.
+      const back = await this.#putBackPins(version);
       await this.#lowerFence();
+      if (back) {
+        throw new Error(
+          `${error instanceof Error ? error.message : String(error)}; ${back}`,
+          { cause: error }
+        );
+      }
       throw error;
     }
   }

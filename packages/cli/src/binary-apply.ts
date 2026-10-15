@@ -38,6 +38,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { type KeeperJob, keeperJob } from "@cawco/agent/keeper-jobs";
+import { forgetPins, runBinaryPins } from "@cawco/agent/pin-record";
 import { SessiondClient } from "@cawco/agent/sessiond-client";
 import { probeHealth } from "@cawco/core/binary-health";
 import {
@@ -262,9 +263,18 @@ export async function applyBinary(
     await (keeperOnly ? handOverKeeperAlone(version) : applyBuild(version));
     await say(`end ${version}`);
   } catch (error) {
-    // Refused before anything changed: say so rather than leave the state at `installing`.
+    // Refused before anything changed: say so rather than leave the state at
+    // `installing`. Nothing was swapped, so what went on for the build goes
+    // back for the build that runs.
     await say(`failed ${message(error)}`);
-    await writeState({ phase: "failed", error: message(error) });
+    const back =
+      keeperOnly || (await readTrial())
+        ? undefined
+        : await putBackPins(version, runtimeVersion);
+    await writeState({
+      phase: "failed",
+      error: back ? `${message(error)}; ${back}` : message(error),
+    });
   } finally {
     await rm(lockPath(), { force: true });
   }
@@ -807,6 +817,8 @@ class TrialWatch {
 async function confirm(trial: TrialMarker): Promise<void> {
   await rm(trialPath(), { force: true });
   await say(`confirmed ${trial.version}`);
+  // What went on for it before the swap stays on.
+  await forgetPins();
   if (trial.dbPath && trial.dbBackup) {
     // Confirmed: this trial's copy is the newest one kept, older ones go.
     const prefix = `${basename(trial.dbPath)}.pre-`;
@@ -851,6 +863,8 @@ async function rollBack(start: TrialMarker): Promise<void> {
     trial = { ...trial, dbRestored: true };
     await writeJsonAtomic(trialPath(), trial);
   }
+  // Before the units restart, so the agent rolled back to starts beside its own.
+  const pinsBack = await putBackPins(trial.version, trial.previous);
   try {
     await svc("restart", units);
     await say(`roll back ${trial.version}: restarted ${units.join(", ")}`);
@@ -871,12 +885,37 @@ async function rollBack(start: TrialMarker): Promise<void> {
     failedVersion: trial.version,
     availableVersion: trial.version,
     ...(manifest ? { channel: manifest.channel, notes: manifest.notes } : {}),
-    error: trial.reason ?? "The new build did not become healthy",
+    error: `${trial.reason ?? "The new build did not become healthy"}${pinsBack ? `; ${pinsBack}` : ""}`,
     landed: { at: Date.now(), outcome: "rolled-back", version: trial.version },
   });
   await rm(trialPath(), { force: true });
   await say(`rolled back ${trial.version}`);
   await prune();
+}
+
+/**
+ * The harnesses that went on for `version` before the swap (binary-update.ts
+ * `#putOnPins`) put back for `runs`, the build that runs instead, which
+ * refuses them: by `runs`'s own `binary-pins back` (pin-record.ts), never by
+ * `version`, which may not start at all. Never throws: what calls it is on
+ * its way out already. What did not go back is said in the log, and answered
+ * for the state's error.
+ */
+async function putBackPins(
+  version: string,
+  runs: string
+): Promise<string | undefined> {
+  try {
+    const said = await runBinaryPins(runs, version);
+    if (said) {
+      await say(`${version} does not run: ${said} went back on for ${runs}`);
+    }
+    return undefined;
+  } catch (error) {
+    const said = `what went on for ${version} did not go back: ${message(error)}`;
+    await say(said);
+    return said;
+  }
 }
 
 /**

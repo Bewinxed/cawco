@@ -32,12 +32,12 @@ PROOF_TIME_SCALE=6
 
 # ---------------------------------------------------------------- which rigs run
 # A rig is a function rig_<name> below; its checks are its `check "<name>" …` lines.
-RIGS=(install spare legacy hubself rollback migration swapkill agentdown keeperheld keeperkilled handover drain retry workspace runaway memory capped)
+RIGS=(install spare legacy hubself rollback migration swapkill agentdown keeperheld keeperkilled handover drain retry pins workspace runaway memory capped)
 # How many systemd machines each rig boots (its `machines` refuses any other count): what it holds of the host user's
 # inotify instances while it runs.
 declare -A RIG_MACHINES=([install]=2 [spare]=1 [legacy]=2 [hubself]=1 [rollback]=1 [migration]=1 [swapkill]=1
-  [agentdown]=1 [keeperheld]=1 [keeperkilled]=1 [handover]=2 [drain]=2 [retry]=2 [workspace]=2 [runaway]=1 [memory]=1
-  [capped]=2)
+  [agentdown]=1 [keeperheld]=1 [keeperkilled]=1 [handover]=2 [drain]=2 [retry]=2 [pins]=1 [workspace]=2 [runaway]=1
+  [memory]=1 [capped]=2)
 # THE HOST USER'S INOTIFY INSTANCES are every rig's to share. The kernel charges an instance to its user in each user
 # namespace up to the initial one, and every rootless container's namespace is the host user's, so all machines of
 # every rig, and the host user's own processes, draw on one fs.inotify.max_user_instances (384 on obelisk). Run A of
@@ -1495,6 +1495,91 @@ rig_retry() {
   fleet base "$BASE" "hub joiner" "hub joiner"
   setup_done
   check "an install commanded on a joined machine whose hub cannot supply the build says failed and why, then applies it by itself once the hub can, with no agent restart by hand" joiner_install_retries 900
+}
+
+# ---------------------------------------------------------------- pins: the harness a build pins goes on before it,
+# the way the machine already has it (packages/agent/src/binary-update.ts #putOnPins, which runs the staged build's
+# own `cawco binary-pins`). The hub's machine has OpenCode as a bun global, laid out as `bun install -g --trust
+# @opencode/cli` lays it out (~/.bun/bin/opencode2 into ~/.bun/install/global/node_modules/@opencode/cli): a stub that
+# says the version ~/opencode-version holds, one release below what this tree pins. ~/.bun/bin/bun is a stand-in: each
+# `install -g` it is asked for is a line of ~/bun-calls.log, with how many swaps apply.log held then; it fails while
+# ~/bun-fails is there, and otherwise puts the version it was asked for in ~/opencode-version.
+plant_bun_opencode() {
+  local stub="$rigdir/opencode-stub" bun="$rigdir/bun-stand-in"
+  cat > "$stub" << 'EOF'
+#!/bin/sh
+if [ "$1" = --version ]; then echo "opencode v$(cat "$HOME/opencode-version")"; exit 0; fi
+echo "the proof's OpenCode does not serve" >&2
+exit 1
+EOF
+  cat > "$bun" << 'EOF'
+#!/bin/sh
+if [ "$1" = install ] && [ "$2" = -g ]; then
+  swaps=$(grep -c " swap " "$HOME/.local/share/cawco/binary/apply.log" 2> /dev/null || true)
+  echo "bun $* swaps=${swaps:-0}" >> "$HOME/bun-calls.log"
+  if [ -e "$HOME/bun-fails" ]; then echo "error: GET https://registry.npmjs.org/@opencode%2fcli - 503" >&2; exit 1; fi
+  for arg in "$@"; do case "$arg" in @opencode/cli@*) echo "${arg#@opencode/cli@}" > "$HOME/opencode-version";; esac; done
+  exit 0
+fi
+echo "the proof's bun runs installs only" >&2
+exit 1
+EOF
+  as_user "$hubc" sh -c 'mkdir -p ~/.bun/bin ~/.bun/install/global/node_modules/@opencode/cli/bin && echo "$1" > ~/opencode-version && echo "{}" > ~/.bun/install/global/bun.lock' sh "$OLD_PIN"
+  as_user "$hubc" sh -c 'cat > ~/.bun/install/global/node_modules/@opencode/cli/bin/opencode.exe && chmod 755 ~/.bun/install/global/node_modules/@opencode/cli/bin/opencode.exe' < "$stub"
+  as_user "$hubc" sh -c 'cat > ~/.bun/bin/bun && chmod 755 ~/.bun/bin/bun' < "$bun"
+  as_user "$hubc" ln -s ../install/global/node_modules/@opencode/cli/bin/opencode.exe /home/cawco/.bun/bin/opencode2
+  [[ "$(as_user "$hubc" /home/cawco/.bun/bin/opencode2 --version)" == "opencode v$OLD_PIN" ]]
+}
+# The hub's word on the machine's OpenCode: `<state> <method> <version>`.
+opencode_row() { hub_api /api/agents | json "d => { const t = d.find(a => a.machineId === '$hid')?.tools?.opencode; return t ? [t.state, t.method, t.version].join(' ') : '' }"; }
+pins_refused() {
+  need_hub
+  local agent
+  as_user "$hubc" touch /home/cawco/bun-fails
+  agent=$(agent_pid "$hubc")
+  use_feed next
+  learn
+  install_now_request "$hid"
+  wait_until 400 '[[ "$(phase $hid)" == failed && -n "$(field $hid error)" ]]'
+  echo "its error: $(field $hid error)"
+  as_user "$hubc" cat /home/cawco/bun-calls.log
+  # One sentence, naming the tool, the build and bun, and bun's own words.
+  [[ "$(field $hid error)" == "opencode $PIN, which $NEXT runs, did not go on with bun: error: GET https://registry.npmjs.org/@opencode%2fcli - 503" ]]
+  as_user "$hubc" grep -q "^bun install -g --trust @opencode/cli@$PIN swaps=" /home/cawco/bun-calls.log
+  # Nothing was applied: the build before runs on, its agent never restarted, and OpenCode is where it was.
+  [[ "$(build_version $hid)" == $BASE ]]
+  [[ "$(apply_starts "$hubc" "$NEXT")" == 0 ]]
+  [[ "$(agent_pid "$hubc")" == "$agent" ]]
+  [[ "$(as_user "$hubc" cat /home/cawco/opencode-version)" == "$OLD_PIN" ]]
+}
+pins_first() {
+  need_hub
+  local before
+  before=$(as_user "$hubc" sh -c 'grep -c " swap " ~/.local/share/cawco/binary/apply.log 2> /dev/null || true')
+  # bun works now: the command that failed stands, and tries the build again by itself after its delay.
+  as_user "$hubc" rm -f /home/cawco/bun-fails
+  wait_until 400 '[[ "$(build_version $hid)" == $NEXT && "$(phase $hid)" == installed ]]'
+  as_user "$hubc" cat /home/cawco/bun-calls.log
+  # The last bun install, the one that worked, was the pin's, and ran before the swap to the build: apply.log held
+  # no more swaps then than before the update, and holds one more now.
+  [[ "$(as_user "$hubc" tail -n 1 /home/cawco/bun-calls.log)" == "bun install -g --trust @opencode/cli@$PIN swaps=${before:-0}" ]]
+  [[ "$(as_user "$hubc" sh -c 'grep -c " swap " ~/.local/share/cawco/binary/apply.log')" == $(( ${before:-0} + 1 )) ]]
+  [[ "$(as_user "$hubc" cat /home/cawco/opencode-version)" == "$PIN" ]]
+  # The build's agent reads OpenCode installed with bun at the pin, no restart beyond the update's own; and once the
+  # build is confirmed, what the pin replaced is no longer kept to put back.
+  wait_until 120 '[[ "$(opencode_row)" == "installed bun $PIN" ]]'
+  wait_until 180 'as_user "$hubc" test ! -e /home/cawco/.local/share/cawco/binary/pins-before.json'
+}
+export -f plant_bun_opencode opencode_row pins_refused pins_first
+rig_pins() {
+  export PIN OLD_PIN
+  PIN=$(cd "$here/../.." && bun -e 'console.log((await import("./packages/core/src/tools.ts")).OPENCODE_VERSION)')
+  OLD_PIN=$(bun -e "const p = '$PIN'.split('.').map(Number); p[p.length - 1] -= 1; console.log(p.join('.'))")
+  fleet base "$BASE" hub
+  setup "OpenCode on the hub's machine as a bun global one release below the pin, bun a stand-in" plant_bun_opencode
+  setup_done
+  check "an update to a build pinning a newer OpenCode, whose bun install fails, says why in one sentence and leaves the build before running" pins_refused 900
+  check "with bun working the same update puts the pin on with bun before the swap, then applies, and the hub reads OpenCode installed with bun" pins_first 900 "an update to a build pinning a newer OpenCode, whose bun install fails, says why in one sentence and leaves the build before running"
 }
 
 # ---------------------------------------------------------------- a delegate workspace's boundary across an update

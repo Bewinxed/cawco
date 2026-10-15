@@ -138,11 +138,17 @@ if (verb === "keys") {
 } else if (verb === "broken-binary") {
   // A program that signs and unpacks like a build and cannot start. It says
   // what it was built from as a build of this tree does (`build-info`, which
-  // its release's manifest is written from). With `migrates` it first damages
-  // the hub database, as a migration that then fails would leave it.
+  // its release's manifest is written from), and its `binary-pins` (run from
+  // it before the swap) finds nothing pinned to put on, as a build of this
+  // tree does on the proof's machines, which have no harness. With `migrates`
+  // it first damages the hub database, as a migration that then fails would
+  // leave it.
   const [outFile, mode] = args;
   const buildInfo = `if [ "$1" = build-info ]; then
   echo '${JSON.stringify({ version: "broken", protocol: protocolRange })}'
+  exit 0
+fi
+if [ "$1" = binary-pins ]; then
   exit 0
 fi
 `;
