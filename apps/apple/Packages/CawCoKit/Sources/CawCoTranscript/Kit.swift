@@ -165,24 +165,14 @@ class ChipLabel: UILabel {
 
 /// A disclosure chevron (`alt-arrow-right-linear`), turned a quarter when open
 /// over --dur-control on --ease-out.
-final class Chevron: UIImageView {
-    private let side: Double
-
+/// A GlyphView, so it is drawn from its bitmap like every glyph.
+final class Chevron: GlyphView {
     init(size: Double = Size.iconMd, tint: UIColor = Palette.inkMuted) {
-        side = size
-        super.init(image: Glyph.chevronRight.image)
-        tintColor = tint
-        contentMode = .scaleAspectFit
-        translatesAutoresizingMaskIntoConstraints = false
-        isAccessibilityElement = false
-        setContentHuggingPriority(.required, for: .horizontal)
-        setContentCompressionResistancePriority(.required, for: .horizontal)
+        super.init(.chevronRight, size: size, tint: tint)
     }
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("built in code") }
-
-    override var intrinsicContentSize: CGSize { CGSize(width: side, height: side) }
 
     private var turned = false
 
@@ -309,6 +299,16 @@ func railLine(_ views: [UIView], spacing: Double = Columns.gap) -> UIStackView {
     return line
 }
 
+
+/// The Markdown marks a one-line excerpt is drawn without.
+private let excerptMarks: Set<Character> = ["*", "_", "`", "#", ">"]
+
+/// `text` without its Markdown marks (`*`, `_`, `` ` ``, `#`, `>`), for a
+/// one-line excerpt: a character test, not a Regex, which was most of
+/// setting the row that draws one up.
+func withoutMarks(_ text: some StringProtocol) -> String {
+    String(text.filter { !excerptMarks.contains($0) })
+}
 
 /// `formatDuration` (lib/utils/time.ts).
 func formatDuration(_ seconds: TimeInterval) -> String {

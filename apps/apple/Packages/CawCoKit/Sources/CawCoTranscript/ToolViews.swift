@@ -333,15 +333,21 @@ final class ToolLineView: RailRow, Recycled, Disclosing, FrameRow {
                                 patch: block.string("toolDiff"))
     }
 
+    /// A diff count after its sign (`\d[\d,._]*`): a digit, then digits and separators.
+    private static func isCount(_ text: Substring) -> Bool {
+        guard let first = text.first, ToolDescriptor.isDecimalDigit(first) else { return false }
+        return text.dropFirst().allSatisfy { ToolDescriptor.isDecimalDigit($0) || $0 == "," || $0 == "." || $0 == "_" }
+    }
+
     /// ToolGroup `.d`: a measurement in --ink-strong; a diff's `+` green and its `−` red.
     private static func fact(_ text: String, diff: Bool) -> NSAttributedString {
         let out = NSMutableAttributedString()
         for token in text.split(separator: " ", omittingEmptySubsequences: false) {
             if out.length > 0 { out.append(Styled.string(" ", TypeScale.typeLabel, color: Palette.inkStrong, leading: TypeScale.leadingRoot)) }
             var ink = Palette.inkStrong
-            if diff {
-                if token.wholeMatch(of: /\+\d[\d,._]*/) != nil { ink = Palette.dataOk }
-                if token.wholeMatch(of: /[−-]\d[\d,._]*/) != nil { ink = Palette.dataBad }
+            if diff, let sign = token.first, Self.isCount(token.dropFirst()) {
+                if sign == "+" { ink = Palette.dataOk }
+                if sign == "−" || sign == "-" { ink = Palette.dataBad }
             }
             out.append(Styled.string(String(token), TypeScale.typeLabel, color: ink, leading: TypeScale.leadingRoot, tabular: true))
         }

@@ -299,31 +299,134 @@ public enum BrandLogo: String, Sendable {
 }
 
 /// A glyph at a fixed size, in its tint. Decorative: hidden from VoiceOver.
-public final class GlyphView: UIImageView {
+///
+/// Drawn once into a bitmap in its tint, at the size it stands at and its
+/// screen's scale (GlyphBitmaps), and shown as that bitmap: a template image
+/// was drawn from its vector again each time its view came into a window
+/// (every row a transcript scrolled to), most of what standing a row there
+/// cost the main thread. It is drawn again only when what it is drawn from
+/// changes: its glyph, its size, its tint as it resolves (a theme, a
+/// contrast, a tint dimmed under a sheet), its scale.
+open class GlyphView: UIImageView {
     private let side: Double
+    /// The bitmap shown now, by what it was drawn from.
+    private var drawn: GlyphBitmaps.Key?
 
     public init(_ glyph: Glyph, size: Double = Size.iconMd, tint: UIColor = Palette.inkMuted) {
         side = size
-        super.init(image: glyph.image)
+        self.glyph = glyph
+        super.init(image: nil)
         tintColor = tint
         contentMode = .scaleAspectFit
         isAccessibilityElement = false
         translatesAutoresizingMaskIntoConstraints = false
         setContentHuggingPriority(.required, for: .horizontal)
         setContentCompressionResistancePriority(.required, for: .horizontal)
+        registerForTraitChanges([UITraitUserInterfaceStyle.self, UITraitDisplayScale.self, UITraitAccessibilityContrast.self]) { (view: GlyphView, _: UITraitCollection) in
+            view.paint()
+        }
+        paint()
     }
 
     @available(*, unavailable)
-    required init?(coder _: NSCoder) {
+    public required init?(coder _: NSCoder) {
         fatalError("GlyphView is built in code")
     }
 
     public var glyph: Glyph? {
-        didSet { image = glyph?.image }
+        didSet { if glyph != oldValue { paint() } }
     }
 
     override public var intrinsicContentSize: CGSize {
         CGSize(width: side, height: side)
+    }
+
+    override open func tintColorDidChange() {
+        super.tintColorDidChange()
+        paint()
+    }
+
+    override open func layoutSubviews() {
+        super.layoutSubviews()
+        paint()
+    }
+
+    /// Shows the bitmap for what the glyph is drawn from now, drawing it
+    /// only when no view has before: the square it stands in (`side` until
+    /// layout gives it one), its tint resolved for its traits, its scale.
+    private func paint() {
+        guard let glyph else {
+            drawn = nil
+            image = nil
+            return
+        }
+        let square = bounds.width > 0 && bounds.height > 0 ? min(bounds.width, bounds.height) : side
+        let ink = (tintColor ?? Palette.inkMuted).resolvedColor(with: traitCollection)
+        let key = GlyphBitmaps.Key(glyph: glyph, side: square, scale: GlyphBitmaps.scale(of: traitCollection), ink: ink)
+        guard key != drawn else { return }
+        drawn = key
+        image = GlyphBitmaps.image(key, ink: ink)
+    }
+}
+
+/// Glyphs drawn into bitmaps (GlyphView), one per glyph, size, ink and scale.
+@MainActor
+enum GlyphBitmaps {
+    struct Key: Hashable {
+        let glyph: Glyph
+        /// The square's side in points, to a hundredth.
+        let side: Int
+        let scale: Int
+        /// The ink, its components to 1/255.
+        let ink: [Int]
+
+        init(glyph: Glyph, side: Double, scale: Double, ink: UIColor) {
+            self.glyph = glyph
+            self.side = Int((side * 100).rounded())
+            self.scale = Int(scale.rounded())
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            ink.getRed(&r, green: &g, blue: &b, alpha: &a)
+            self.ink = [r, g, b, a].map { Int(($0 * 255).rounded()) }
+        }
+    }
+
+    private static var drawn: [Key: UIImage] = [:]
+    /// The most bitmaps kept: every glyph at a few sizes in a few inks is far fewer.
+    private static let most = 2048
+    /// The scale a view out of every window draws at: the last a view in one had.
+    private static var lastScale = 3.0
+
+    /// The scale `traits` draw at; a view in no window yet has none of its own.
+    static func scale(of traits: UITraitCollection) -> Double {
+        guard traits.displayScale > 0 else { return lastScale }
+        lastScale = traits.displayScale
+        return traits.displayScale
+    }
+
+    /// The glyph `key` names, drawn in `ink`: its template's alpha in the ink,
+    /// aspect-fit in its square, as an image view draws a template.
+    static func image(_ key: Key, ink: UIColor) -> UIImage {
+        if let image = drawn[key] { return image }
+        let side = Double(key.side) / 100
+        let format = UIGraphicsImageRendererFormat.preferred()
+        format.scale = Double(key.scale)
+        format.opaque = false
+        let template = key.glyph.image
+        let fit = Self.fit(template.size, in: side)
+        let image = UIGraphicsImageRenderer(size: CGSize(width: side, height: side), format: format).image { _ in
+            template.withTintColor(ink, renderingMode: .alwaysOriginal).draw(in: fit)
+        }.withRenderingMode(.alwaysOriginal)
+        if drawn.count >= most { drawn.removeAll(keepingCapacity: true) }
+        drawn[key] = image
+        return image
+    }
+
+    /// `size` scaled to fit a square of `side`, centred in it.
+    private static func fit(_ size: CGSize, in side: Double) -> CGRect {
+        guard size.width > 0, size.height > 0 else { return CGRect(x: 0, y: 0, width: side, height: side) }
+        let scale = min(side / size.width, side / size.height)
+        let width = size.width * scale, height = size.height * scale
+        return CGRect(x: (side - width) / 2, y: (side - height) / 2, width: width, height: height)
     }
 }
 

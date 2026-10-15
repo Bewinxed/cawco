@@ -372,9 +372,6 @@ final class ThinkingView: RailRow, Recycled, Disclosing, FrameRow {
         return reveal.toggle(open: open)
     }
 
-    /// The Markdown marks a folded block's last thought is drawn without.
-    private static let marks: Set<Character> = ["*", "_", "`", "#", ">"]
-
     func configure(_ item: Item) {
         guard case let .thinking(reasoning) = item.kind else { return }
         place()
@@ -399,8 +396,8 @@ final class ThinkingView: RailRow, Recycled, Disclosing, FrameRow {
         open = Self.isOpen(reasoning, env: env)
         chevron.set(open: open, animated: false)
         reveal.set(open: open)
-        // Its Markdown marks left out (a character test, not a Regex: one was most of setting a reasoning row up).
-        let last = (paragraphs.last ?? "").filter { !Self.marks.contains($0) }
+        // Its Markdown marks left out.
+        let last = withoutMarks(paragraphs.last ?? "")
         let line = String(last.split(whereSeparator: \.isWhitespace).joined(separator: " ").suffix(240))
         tail.attributedText = Styled.string(line, TypeScale.typeMeta, color: Palette.inkMuted, lineBreak: .byTruncatingHead)
         setTail(animated: false)

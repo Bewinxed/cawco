@@ -373,7 +373,7 @@ final class PeerView: RailRow, RowContent, Disclosing {
         // it wraps rather than being cut to the one line. Else the body's first line.
         let headline = block.string("reportHeadline") ?? ""
         let first = !headline.isEmpty ? headline
-            : block.content.split(separator: "\n").map { $0.replacing(/[*_`#>]/, with: "").trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? ""
+            : block.content.split(separator: "\n").lazy.map { withoutMarks($0).trimmingCharacters(in: .whitespaces) }.first { !$0.isEmpty } ?? ""
         excerpt.numberOfLines = headline.isEmpty ? 1 : 0
         excerpt.attributedText = Styled.string(first, TypeScale.typeLabel, color: Palette.inkMuted, weight: TypeScale.weightBody, leading: TypeScale.leadingUi,
                                                lineBreak: headline.isEmpty ? .byTruncatingTail : .byWordWrapping)

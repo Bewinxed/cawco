@@ -1690,6 +1690,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             // and drawing it is not landing. (A history read moves only with
             // a page, never with what the live stream brings.)
             if !landed, fed == nil || rowCount == 0, transcript?.loading == false, prepared != nil, !historyBehind { landed = true }
+            #if DEBUG
+            if landed { probeGlyphs() }
+            #endif
             guard follow else { return }
             if grew {
                 // The rows above make room on the place's clock rather than jumping.
@@ -2490,6 +2493,20 @@ extension TranscriptView: RevealDriver {
 /// What a simulator pass reads of the list's own screen (probe-kit spec
 /// `ios-scroll-up`, the app launched with `-probe-pace`).
 extension TranscriptView {
+    /// Glyphs drawn from their bitmaps against their templates, once a launch (GlyphProbe).
+    private static var glyphsCompared = false
+
+    fileprivate func probeGlyphs() {
+        guard Pace.probing, !Self.glyphsCompared, window != nil else { return }
+        Self.glyphsCompared = true
+        // In a turn of its own: the screen is drawn for it, not inside the list's update.
+        DispatchQueue.main.async { [weak self] in
+            guard let window = self?.window else { return }
+            let found = GlyphProbe.compare(in: window)
+            Self.dockLog.notice("probe glyphs: \(found.compared) compared, \(found.pixels) pixels, the largest channel difference \(found.worst), \(found.differing) pixels differing by more than 1")
+        }
+    }
+
     /// Where the list came to rest: at the conversation's top or not,
     /// whether a page before the first row is left to read, the rows it holds.
     fileprivate func sayRest() {

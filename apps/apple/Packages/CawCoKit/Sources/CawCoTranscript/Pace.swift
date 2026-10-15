@@ -278,7 +278,10 @@ extension Pace {
 
     /// A row view took 2 ms or more to make or to set for its item (RowStore `row`): said, by kind.
     static func rowSet(_ kind: String, made: Double, configured: Double) {
-        guard probing, made + configured >= 0.002 else { return }
+        guard probing else { return }
+        setKinds[kind, default: (0, 0)].rows += 1
+        setKinds[kind, default: (0, 0)].time += made + configured
+        guard made + configured >= 0.002 else { return }
         log.notice("probe row \(kind, privacy: .public): made \(made * 1000, format: .fixed(precision: 1)) ms, set \(configured * 1000, format: .fixed(precision: 1)) ms")
     }
 
@@ -312,7 +315,14 @@ extension Pace {
             return "\(kind) \(w.rows) rows (\(w.fresh) new) \(ms) ms"
         }.joined(separator: "; ")
         log.notice("probe warmed kinds (set up/laid out/measured/laid out again): \(said, privacy: .public); row views from spares \(fromSpare), made new \(madeNew)")
+        let set = setKinds.sorted { $0.key < $1.key }.map { kind, s in
+            "\(kind) \(s.rows) rows \(String(format: "%.0f", s.time * 1000)) ms (\(String(format: "%.2f", s.time * 1000 / Double(max(1, s.rows)))) ms a row)"
+        }.joined(separator: "; ")
+        log.notice("probe rows set (made and set for an item, every row): \(set, privacy: .public)")
     }
+
+    /// Every row view made or set for an item (RowStore `row`), by kind: how many, and the time in all.
+    private static var setKinds: [String: (rows: Int, time: Double)] = [:]
 
     /// The end of one turn of the main thread, after Core Animation's commit.
     fileprivate static func measure(_ now: Double, held: Double) {

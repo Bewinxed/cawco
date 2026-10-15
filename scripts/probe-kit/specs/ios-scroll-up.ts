@@ -82,6 +82,11 @@ const MARK = /(seed|stream)-mark-[0-9a-f]{6}/g;
 const PACE = /probe pace (.*)$/;
 const REST = /probe rest \w+: top=(\d) older=(\d) rows=(\d+)/;
 const COMMIT = /probe commit ([\d.]+) ms/;
+/** The app's glyph comparison (GlyphProbe): compared, pixels, the largest channel difference, pixels differing. */
+const GLYPHS =
+  /probe glyphs: (\d+) compared, (\d+) pixels, the largest channel difference (\d+), (\d+) pixels differing/;
+/** Eight glyphs, each in the light and the dark. */
+const GLYPH_CASES = 16;
 /** `PROBE_SAMPLE=1`: the app samples its main thread's stack (MainSampler.swift) and says where it was busy. */
 const SAMPLE = process.env.PROBE_SAMPLE === "1";
 /** The most a commit of the rows may take while a turn streams. */
@@ -679,6 +684,24 @@ async function run(kit: Kit): Promise<void> {
       heights.drifts === 0 && heights.heightsChecked > 0,
       `${heights.heightsChecked} rows checked, ${heights.drifts} drifted, the largest drift ${heights.maxDrift.toFixed(2)}pt${drifted.length > 0 ? `: ${drifted.join(" | ")}` : ""}`
     );
+    // Glyphs drawn from their bitmaps, against the same glyphs drawn from
+    // their templates by an image view, in the light and the dark (GlyphProbe).
+    const glyphs = heard.find((h) => h.line.includes("probe glyphs"));
+    const glyphTally = GLYPHS.exec(glyphs?.line ?? "");
+    kit.check(
+      "every glyph drawn from its bitmap is its template's pixels (none differs by more than 1 of 255)",
+      glyphTally !== null &&
+        Number(glyphTally[1]) === GLYPH_CASES &&
+        Number(glyphTally[4]) === 0,
+      glyphs
+        ? glyphs.line.slice(glyphs.line.indexOf("probe glyphs"))
+        : "the app never said its glyphs"
+    );
+    // What setting a row up for its item took, by kind, over the passes (RowStore `row`).
+    const set = heard.filter((h) => h.line.includes("probe rows set")).at(-1);
+    if (set) {
+      kit.note(set.line.slice(set.line.indexOf("probe rows set")));
+    }
     const blanks = heard.filter((h) => h.line.includes("probe blank"));
     if (blanks.length > 0) {
       kit.note(

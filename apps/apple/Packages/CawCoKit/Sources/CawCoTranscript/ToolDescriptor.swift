@@ -1,5 +1,6 @@
 import CawCoDesign
 import Foundation
+import Synchronization
 import UIKit
 
 /// The sentence a tool call reads as, and the body it opens: the rules of
@@ -33,24 +34,52 @@ nonisolated struct ToolDescriptor {
     // MARK: Kinds
 
     static func mcpParts(_ name: String) -> (server: String, tool: String)? {
-        guard let regex = try? Regex(ToolPresentation.mcpName), let match = name.wholeMatch(of: regex),
-              match.count == 3, let server = match[1].substring, let tool = match[2].substring else { return nil }
-        return (String(server), String(tool))
+        if let known = read.withLock({ $0.parts[name] }) { return known.map { ($0.server, $0.tool) } }
+        var parts: Parts?
+        if let regex = try? Regex(ToolPresentation.mcpName), let match = name.wholeMatch(of: regex),
+           match.count == 3, let server = match[1].substring, let tool = match[2].substring {
+            parts = Parts(server: String(server), tool: String(tool))
+        }
+        read.withLock { $0.remember(\.parts, name, parts) }
+        return parts.map { ($0.server, $0.tool) }
     }
 
     /// The kind a tool name is: by its own name (an MCP tool's past its server), else `mcp` or `other`.
     static func kind(_ toolName: String?) -> Kind {
         let raw = toolName ?? ""
+        if let known = read.withLock({ $0.kinds[raw] }) { return known }
         let mcp = mcpParts(raw)
         let own = (mcp?.tool ?? raw).lowercased()
-        if !own.isEmpty, let found = ToolPresentation.kinds.first(where: { kind in
-            kind.names.contains(own) || kind.namePattern.flatMap { try? Regex($0) }.map { own.firstMatch(of: $0) != nil } == true
-        }) {
-            return found
-        }
         let fallback: ToolPresentation.KindID = mcp != nil ? .mcp : .other
-        return ToolPresentation.kinds.first { $0.id == fallback }!
+        let kind = (own.isEmpty ? nil : ToolPresentation.kinds.first { kind in
+            kind.names.contains(own) || kind.namePattern.flatMap { try? Regex($0) }.map { own.firstMatch(of: $0) != nil } == true
+        }) ?? ToolPresentation.kinds.first { $0.id == fallback }!
+        read.withLock { $0.remember(\.kinds, raw, kind) }
+        return kind
     }
+
+    /// An MCP tool name's server and tool.
+    private struct Parts: Sendable {
+        let server: String
+        let tool: String
+    }
+
+    /// What each tool name read as, kept: a name reads the same every time,
+    /// and reading it compiled the shared patterns (`mcpName`, a kind's
+    /// `namePattern`) into a Regex for every call's row set up.
+    private struct Read: Sendable {
+        var parts: [String: Parts?] = [:]
+        var kinds: [String: Kind] = [:]
+        /// The most names kept; past it the table starts again.
+        static let most = 4096
+
+        mutating func remember<Value>(_ table: WritableKeyPath<Read, [String: Value]>, _ name: String, _ value: Value) {
+            if self[keyPath: table].count >= Self.most { self[keyPath: table].removeAll(keepingCapacity: true) }
+            self[keyPath: table][name] = value
+        }
+    }
+
+    private static let read = Mutex(Read())
 
     // MARK: Pieces
 
@@ -146,11 +175,60 @@ nonisolated struct ToolDescriptor {
     }
 
     /// `list_sessions` / `listSessions` → `List sessions`.
+    ///
+    /// A run of `_` or `-` is a space, and a space parts a lowercase letter or
+    /// a digit from a capital after it: one scan, where two Regex replacements
+    /// were most of setting a call's row up.
     static func humanize(_ name: String) -> String {
-        var words = name.replacing(/[_-]+/, with: " ")
-        words = words.replacing(/([a-z\d])([A-Z])/) { "\($0.1) \($0.2)" }
-        words = words.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
+        var spaced = ""
+        var last: Character?
+        for character in name {
+            if character == "_" || character == "-" {
+                if last != " " { spaced.append(" ") }
+                last = " "
+                continue
+            }
+            if let last, (last.isASCII && last.isLowercase) || isDecimalDigit(last), character.isASCII, character.isUppercase {
+                spaced.append(" ")
+            }
+            spaced.append(character)
+            last = character
+        }
+        let words = spaced.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
         return words.prefix(1).uppercased() + words.dropFirst()
+    }
+
+    /// A decimal digit (`\d`): a character whose one scalar is a decimal number.
+    static func isDecimalDigit(_ character: Character) -> Bool {
+        character.unicodeScalars.count == 1 && character.unicodeScalars.first?.properties.generalCategory == .decimalNumber
+    }
+
+    /// Grep's `Found <count> <word>` at a line's start, any case (`^Found (\d+) (\w+)`).
+    static func foundLine(_ line: String) -> (count: Substring, word: Substring)? {
+        guard line.prefix(6).lowercased() == "found " else { return nil }
+        let rest = line.dropFirst(6)
+        let digits = leadingDigits(rest)
+        guard digits > 0 else { return nil }
+        let after = rest.dropFirst(digits)
+        guard after.first == " " else { return nil }
+        let word = after.dropFirst().prefix { $0.isLetter || $0.isNumber || $0 == "_" }
+        guard !word.isEmpty else { return nil }
+        return (rest.prefix(digits), word)
+    }
+
+    /// A count line's tally (`:(\d+)\s*$`): the digits after its last colon, at its end but for spaces.
+    static func countTail(_ line: Substring) -> Substring? {
+        var end = line.endIndex
+        while end > line.startIndex, line[line.index(before: end)].isWhitespace { end = line.index(before: end) }
+        var start = end
+        while start > line.startIndex, isDecimalDigit(line[line.index(before: start)]) { start = line.index(before: start) }
+        guard start < end, start > line.startIndex, line[line.index(before: start)] == ":" else { return nil }
+        return line[start ..< end]
+    }
+
+    /// The digits `text` starts with (`\d+`): how many characters they take.
+    static func leadingDigits(_ text: Substring) -> Int {
+        text.prefix { isDecimalDigit($0) }.count
     }
 
     // MARK: File changes
@@ -212,22 +290,27 @@ nonisolated struct ToolDescriptor {
         switch fact {
         case .readLines:
             guard let output else { return nil }
-            let numbered = output.split(separator: "\n").filter { $0.firstMatch(of: /^\s*\d+→/) != nil }.count
+            // A line numbered as Read numbers it: spaces, digits, `→`.
+            let numbered = output.split(separator: "\n").filter { line in
+                let rest = line.drop { $0.isWhitespace }
+                let digits = leadingDigits(rest)
+                return digits > 0 && rest.dropFirst(digits).first == "→"
+            }.count
             let lines = numbered > 0 ? numbered : output.split(separator: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count
             return lines > 0 ? "\(lines) lines" : nil
         case .grepCount:
             guard let output else { return nil }
-            if let found = firstLine(output)?.firstMatch(of: /^Found (\d+) (\w+)/.ignoresCase()) {
-                return "\(found.1) \(found.2.lowercased())"
+            if let found = firstLine(output).flatMap(foundLine) {
+                return "\(found.count) \(found.word.lowercased())"
             }
             guard input["output_mode"] as? String == "count" else { return nil }
             var total = 0
             for line in output.split(separator: "\n") {
-                if let tally = line.firstMatch(of: /:(\d+)\s*$/) { total += Int(tally.1) ?? 0 }
+                if let tally = countTail(line) { total += Int(tally) ?? 0 }
             }
             return total > 0 ? "\(total) matches" : nil
         case .globFiles:
-            guard let output, output.trimmingCharacters(in: .whitespaces).firstMatch(of: /^no files found/.ignoresCase()) == nil else { return nil }
+            guard let output, String(output.trimmingCharacters(in: .whitespaces).prefix(14)).lowercased() != "no files found" else { return nil }
             let files = output.split(separator: "\n").filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count
             return files > 0 ? "\(files) files" : nil
         case .editLines, .patchLines:
@@ -254,11 +337,23 @@ nonisolated struct ToolDescriptor {
 
     private static let hostQuery = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".-"))
 
+    /// An IPv4 address's shape (`\d{1,3}(?:\.\d{1,3}){3}`, whole): four runs of one to three digits, dots between.
+    private static func isAddress(_ host: String) -> Bool {
+        let parts = host.split(separator: ".", omittingEmptySubsequences: false)
+        return parts.count == 4 && parts.allSatisfy { (1 ... 3).contains($0.count) && $0.allSatisfy(isDecimalDigit) }
+    }
+
+    /// Whether the host's last label is a number (`\.\d+$`).
+    private static func endsInNumber(_ host: String) -> Bool {
+        guard let dot = host.lastIndex(of: ".") else { return false }
+        let last = host[host.index(after: dot)...]
+        return !last.isEmpty && last.allSatisfy(isDecimalDigit)
+    }
+
     /// The site's icon as the user's own hub serves it, for a public host; no third party is ever asked.
     static func favicon(_ host: String) -> String? {
         let reachable = host.contains(".") && !host.contains(":")
-            && host.wholeMatch(of: /\d{1,3}(?:\.\d{1,3}){3}/) == nil
-            && host.firstMatch(of: /\.\d+$/) == nil
+            && !isAddress(host) && !endsInNumber(host)
             && !localZones.contains { host == $0 || host.hasSuffix(".\($0)") }
         guard reachable, let query = host.addingPercentEncoding(withAllowedCharacters: hostQuery) else { return nil }
         return "/api/favicon?host=\(query)"
@@ -371,7 +466,22 @@ nonisolated struct ToolDescriptor {
     private static func script(_ number: Double) -> String {
         guard number.isFinite else { return "null" }
         if number == number.rounded(), abs(number) < 1e21 { return String(format: "%.0f", number) }
-        return "\(number)".replacing(/e([+-])0+(\d)/) { "e\($0.1)\($0.2)" }
+        return exponentTrimmed("\(number)")
+    }
+
+    /// `text` with the zeros that open its exponent left out but its last
+    /// digit (`e([+-])0+(\d)` → `e$1$2`): Swift writes `1e-07`, JavaScript `1e-7`.
+    static func exponentTrimmed(_ text: String) -> String {
+        guard let e = text.firstIndex(of: "e") else { return text }
+        let sign = text.index(after: e)
+        guard sign < text.endIndex, text[sign] == "+" || text[sign] == "-" else { return text }
+        let digits = text[text.index(after: sign)...]
+        let run = digits.prefix { isDecimalDigit($0) }
+        let zeros = run.prefix { $0 == "0" }.count
+        // The zeros taken, leaving a digit after them; none when nothing follows the first.
+        let taken = zeros < run.count ? zeros : zeros - 1
+        guard taken > 0 else { return text }
+        return String(text[...sign]) + String(digits.dropFirst(taken))
     }
 
     /// A string as `JSON.stringify` quotes it.

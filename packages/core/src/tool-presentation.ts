@@ -658,14 +658,84 @@ export const TOOL_KINDS: ToolKind[] = [
 const LEADING_WWW = /^www\./;
 const TRAILING_SLASH = /\/$/;
 const PATCH_NEW_SIDE = /^b\//;
-/** Read answers with `␣␣␣␣1→…`; anything appended to that is not the file. */
-const NUMBERED_LINE = /^\s*\d+→/;
-const GREP_FOUND = /^Found (\d+) (\w+)/i;
-const GREP_TALLY = /:(\d+)\s*$/;
-const NO_FILES_FOUND = /^no files found/i;
-const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
-const NUMERIC_TLD = /\.\d+$/;
 const SERVER_SEPARATORS = /[_\-.]+/;
+
+// The shapes a call's output and its names are read by, as scans: the
+// native app reads them by the same steps (ToolDescriptor), where a Regex
+// was most of setting a call's row up.
+
+const isDigit = (c: string | undefined): boolean =>
+  c !== undefined && c >= "0" && c <= "9";
+const isWordCharacter = (c: string | undefined): boolean =>
+  c !== undefined &&
+  (isDigit(c) || (c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || c === "_");
+
+/** How many digits `text` has from `from` on. */
+function digitsAt(text: string, from: number): number {
+  let end = from;
+  while (isDigit(text[end])) {
+    end += 1;
+  }
+  return end - from;
+}
+
+/** Read answers with `␣␣␣␣1→…` (spaces, digits, `→`); anything appended to that is not the file. */
+function numberedLine(line: string): boolean {
+  const rest = line.trimStart();
+  const digits = digitsAt(rest, 0);
+  return digits > 0 && rest[digits] === "→";
+}
+
+/** Grep's `Found <count> <word>` at a line's start, any case. */
+function foundLine(line: string): [string, string] | undefined {
+  if (line.slice(0, 6).toLowerCase() !== "found ") {
+    return undefined;
+  }
+  const digits = digitsAt(line, 6);
+  if (!digits || line[6 + digits] !== " ") {
+    return undefined;
+  }
+  let end = 7 + digits;
+  while (isWordCharacter(line[end])) {
+    end += 1;
+  }
+  return end > 7 + digits
+    ? [line.slice(6, 6 + digits), line.slice(7 + digits, end)]
+    : undefined;
+}
+
+/** A count line's tally: the digits after its last colon, at its end but for spaces. */
+function countTail(line: string): string | undefined {
+  const body = line.trimEnd();
+  let start = body.length;
+  while (start > 0 && isDigit(body[start - 1])) {
+    start -= 1;
+  }
+  return start < body.length && start > 0 && body[start - 1] === ":"
+    ? body.slice(start)
+    : undefined;
+}
+
+/** An IPv4 address's shape: four runs of one to three digits, dots between. */
+function isAddress(host: string): boolean {
+  const parts = host.split(".");
+  return (
+    parts.length === 4 &&
+    parts.every(
+      (part) =>
+        part.length >= 1 &&
+        part.length <= 3 &&
+        digitsAt(part, 0) === part.length
+    )
+  );
+}
+
+/** Whether the host's last label is a number. */
+function endsInNumber(host: string): boolean {
+  const dot = host.lastIndexOf(".");
+  const last = dot < 0 ? "" : host.slice(dot + 1);
+  return last.length > 0 && digitsAt(last, 0) === last.length;
+}
 
 /** One piece, a list of them, or none, as a list. */
 const asList = (piece: Piece | Piece[] | undefined): Piece[] => {
@@ -679,13 +749,22 @@ const asList = (piece: Piece | Piece[] | undefined): Piece[] => {
 export function mcpParts(
   name: string
 ): { server: string; tool: string } | undefined {
+  if (readParts.has(name)) {
+    return readParts.get(name);
+  }
   const match = new RegExp(MCP_NAME).exec(name);
-  return match ? { server: match[1], tool: match[2] } : undefined;
+  const parts = match ? { server: match[1], tool: match[2] } : undefined;
+  remember(readParts, name, parts);
+  return parts;
 }
 
 /** The kind a tool name is: by its own name (an MCP tool's past its server), else `mcp` or `other`. */
 export function toolKind(toolName: string | undefined): ToolKind {
   const raw = toolName ?? "";
+  const known = readKinds.get(raw);
+  if (known) {
+    return known;
+  }
   const mcp = mcpParts(raw);
   const own = (mcp ? mcp.tool : raw).toLowerCase();
   const found = own
@@ -697,7 +776,34 @@ export function toolKind(toolName: string | undefined): ToolKind {
       )
     : undefined;
   const fallback = mcp ? "mcp" : "other";
-  return found ?? (TOOL_KINDS.find((kind) => kind.id === fallback) as ToolKind);
+  const resolved =
+    found ?? (TOOL_KINDS.find((each) => each.id === fallback) as ToolKind);
+  remember(readKinds, raw, resolved);
+  return resolved;
+}
+
+/**
+ * What each tool name read as, kept: a name reads the same every time, and
+ * reading it compiled the shared patterns (`MCP_NAME`, a kind's
+ * `namePattern`) for every call's row. The native app keeps them alike
+ * (ToolDescriptor `read`).
+ */
+const readParts = new Map<
+  string,
+  { server: string; tool: string } | undefined
+>();
+const readKinds = new Map<string, ToolKind>();
+/** The most names kept; past it the table starts again. */
+const MOST_NAMES = 4096;
+function remember<Value>(
+  table: Map<string, Value>,
+  name: string,
+  value: Value
+): void {
+  if (table.size >= MOST_NAMES) {
+    table.clear();
+  }
+  table.set(name, value);
 }
 
 /** The sentence a call's row reads as, and the body it opens. */
@@ -858,12 +964,29 @@ function read(
 
 /** `list_sessions` / `listSessions` → `List sessions`. */
 export function humanize(name: string): string {
-  const words = name
-    .replace(/[_-]+/g, " ")
-    .replace(/([a-z\d])([A-Z])/g, "$1 $2")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
+  // A run of `_` or `-` is a space; a space parts a lowercase letter or a digit from a capital after it.
+  let spaced = "";
+  let last = "";
+  for (const character of name) {
+    if (character === "_" || character === "-") {
+      if (last !== " ") {
+        spaced += " ";
+      }
+      last = " ";
+      continue;
+    }
+    if (
+      ((last >= "a" && last <= "z" && last.length === 1) || isDigit(last)) &&
+      character >= "A" &&
+      character <= "Z" &&
+      character.length === 1
+    ) {
+      spaced += " ";
+    }
+    spaced += character;
+    last = character;
+  }
+  const words = spaced.replace(/\s+/g, " ").trim().toLowerCase();
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
@@ -1045,9 +1168,7 @@ function factOf(
       if (!output) {
         return undefined;
       }
-      const numbered = output
-        .split("\n")
-        .filter((line) => NUMBERED_LINE.test(line)).length;
+      const numbered = output.split("\n").filter(numberedLine).length;
       const lines =
         numbered || output.split("\n").filter((line) => line.trim()).length;
       return lines > 0 ? `${lines} lines` : undefined;
@@ -1056,24 +1177,27 @@ function factOf(
       if (!output) {
         return undefined;
       }
-      const found = GREP_FOUND.exec(firstLine(output) ?? "");
+      const found = foundLine(firstLine(output) ?? "");
       if (found) {
-        return `${found[1]} ${found[2].toLowerCase()}`;
+        return `${found[0]} ${found[1].toLowerCase()}`;
       }
       if (input.output_mode !== "count") {
         return undefined;
       }
       let total = 0;
       for (const line of output.split("\n")) {
-        const tally = GREP_TALLY.exec(line);
+        const tally = countTail(line);
         if (tally) {
-          total += Number(tally[1]);
+          total += Number(tally);
         }
       }
       return total > 0 ? `${total} matches` : undefined;
     }
     case "glob-files": {
-      if (!output || NO_FILES_FOUND.test(output.trim())) {
+      if (
+        !output ||
+        output.trim().slice(0, 14).toLowerCase() === "no files found"
+      ) {
         return undefined;
       }
       const files = output.split("\n").filter((line) => line.trim()).length;
@@ -1132,9 +1256,9 @@ export function faviconReachable(host: string): boolean {
   return (
     host.includes(".") &&
     !host.includes(":") &&
-    !IPV4.test(host) &&
+    !isAddress(host) &&
     // No top-level label is all digits: "3.100", an address cut short, is not a public name.
-    !NUMERIC_TLD.test(host) &&
+    !endsInNumber(host) &&
     !LOCAL_ZONES.some((zone) => host === zone || host.endsWith(`.${zone}`))
   );
 }
@@ -1265,8 +1389,21 @@ export interface Field {
 /** Name order by UTF-16 code unit, which every client can reproduce exactly. */
 const byName = (a: string, b: string): number => (a < b ? -1 : Number(a > b));
 
-/** `1e-7`, never `1e-07`: an exponent written without leading zeros. */
-const EXPONENT_ZEROS = /e([+-])0+(\d)/;
+/** `1e-7`, never `1e-07`: an exponent written without leading zeros, but its last digit. */
+function exponentTrimmed(text: string): string {
+  const e = text.indexOf("e");
+  const sign = text[e + 1];
+  if (e < 0 || (sign !== "+" && sign !== "-")) {
+    return text;
+  }
+  const run = digitsAt(text, e + 2);
+  let zeros = 0;
+  while (zeros < run && text[e + 2 + zeros] === "0") {
+    zeros += 1;
+  }
+  const taken = zeros < run ? zeros : zeros - 1;
+  return taken > 0 ? text.slice(0, e + 2) + text.slice(e + 2 + taken) : text;
+}
 
 /**
  * A value in the one JSON form a fields body writes, on every client: two
@@ -1283,9 +1420,7 @@ export function writeJson(value: unknown, indent = ""): string {
     return JSON.stringify(value);
   }
   if (typeof value === "number") {
-    return Number.isFinite(value)
-      ? String(value).replace(EXPONENT_ZEROS, "e$1$2")
-      : "null";
+    return Number.isFinite(value) ? exponentTrimmed(String(value)) : "null";
   }
   if (typeof value === "boolean") {
     return String(value);
