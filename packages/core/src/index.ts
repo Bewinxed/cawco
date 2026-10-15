@@ -1440,6 +1440,12 @@ export const CAWCO_ENV = {
   sessiondEndpoint: "CAWCO_SESSIOND_ENDPOINT",
   /** Where the links the bridge sends point. */
   dashboardUrl: "CAWCO_DASHBOARD_URL",
+  /**
+   * The port the dashboard's socket listens on, as the installer wrote it
+   * into the hub's unit: the hub's preview ports never take it, and the
+   * bridge's composed links point at it.
+   */
+  dashboardPort: "CAWCO_DASHBOARD_PORT",
   /** The bot the hub reaches its owner's Telegram on. */
   telegramToken: "CAWCO_TELEGRAM_TOKEN",
   /** Telegram's API origin, for pointing the bridge at a proxy. */

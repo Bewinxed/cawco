@@ -1,5 +1,10 @@
 import { dirname, resolve } from "node:path";
-import { CAWCO_ENV, CAWCO_HUB_PORT, readEnv } from "@cawco/core";
+import {
+  CAWCO_ENV,
+  CAWCO_HUB_PORT,
+  mcpGatewayPort,
+  readEnv,
+} from "@cawco/core";
 import { runtimeVersion, standalone } from "@cawco/core/runtime";
 
 /** Reported by `GET /health`; keep in sync with package.json. */
@@ -42,6 +47,36 @@ export const PREVIEW_PORTS = (() => {
 
 /** The range as the person reads it: `3457–3556`. */
 export const PREVIEW_PORTS_TEXT = `${PREVIEW_PORTS.first}–${PREVIEW_PORTS.last}`;
+
+/**
+ * The port the dashboard is served on (`CAWCO_DASHBOARD_PORT`): the
+ * installer writes the dashboard socket's own port into the hub's unit (cli
+ * service.ts `DASHBOARD_PORT`), and 3000 is its default there too. A value
+ * that is not a port stops the hub at start.
+ */
+export const DASHBOARD_PORT = (() => {
+  const raw = readEnv(CAWCO_ENV.dashboardPort) ?? "3000";
+  const port = Number(raw);
+  if (!(Number.isInteger(port) && port > 0 && port < 65_536)) {
+    throw new Error(
+      `${CAWCO_ENV.dashboardPort} must be a port number, not "${raw}"`
+    );
+  }
+  return port;
+})();
+
+/**
+ * The fleet's own listeners on the hub's machine, each in the words a moved
+ * preview's line says it with: no session's preview ever takes one of these
+ * ports, even while its listener is down (a restart, a socket being
+ * reinstalled). The agent's MCP gateway is read from the setting the agent
+ * serves it on (core `mcpGatewayPort`).
+ */
+export const FLEET_PORTS: ReadonlyMap<number, string> = new Map([
+  [mcpGatewayPort(), "the MCP gateway's"],
+  [DASHBOARD_PORT, "the dashboard's"],
+  [HUB_PORT, "the hub's"],
+]);
 
 /**
  * How long a spawn the hub waits on (a continuation's sessions, a

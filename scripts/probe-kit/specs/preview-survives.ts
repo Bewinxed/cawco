@@ -66,6 +66,17 @@
  *    says so in one `[preview] hub listener` line.
  * 8. No journal says "No preview selected".
  *
+ * Its port is one the hub can bind (between 5 and 6):
+ *
+ * 19. The fleet's configured dashboard port (`CAWCO_DASHBOARD_PORT`) set to
+ *     the port the first session keeps, with nothing bound there: the hub's
+ *     start moves the row, says so in one line, and the preview answers 200
+ *     with the overlay on its new port.
+ * 20. A new session's port passes over the dashboard's port and one a
+ *     stranger's server holds, both lower than the one it takes.
+ * 21. A stranger takes that session's kept port while the hub is down: the
+ *     hub's start moves it, and its preview answers on the new port.
+ *
  * 18. A call never waits out its timeout on a socket that is no longer its
  *     machine's: the spec plays a machine over a raw agent socket, a config
  *     read (10 s timeout) waits on it, and a second socket registers as the
@@ -382,7 +393,8 @@ const run = async (kit: Kit) => {
   const base = await fleet.dashboard();
   const where = `${base}/session/${session}`;
   const { port: firstPort } = await address(session);
-  const firstOrigin = `http://127.0.0.1:${firstPort}`;
+  /** Moved by checks 19–21's hub starts. */
+  let firstOrigin = `http://127.0.0.1:${firstPort}`;
 
   // 1. Its own origin.
   let tab = await kit.page("desk");
@@ -967,6 +979,135 @@ const run = async (kit: Kit) => {
     !!reopened.frame,
     reopened.last
   );
+
+  // 19–21. A preview port is never the fleet's own, nor one another process holds.
+  const portOf = (sid: string): number | undefined =>
+    fleet.query<{ port: number }>(
+      "SELECT port FROM preview_ports WHERE instance_id = ?",
+      sid
+    )[0]?.port;
+  const [rangeFirst, rangeLast] = range.ports.split("–").map(Number) as [
+    number,
+    number,
+  ];
+  const inRange = (port: number | undefined): port is number =>
+    port !== undefined && port >= rangeFirst && port <= rangeLast;
+  /** The hub's line for `sid`'s preview moving from `from` to `to`, saying why. */
+  const moveLine = async (sid: string, from: number, to: number) =>
+    (await fleet.logs("hub"))
+      .split("\n")
+      .find((line) =>
+        line.includes(
+          `[preview] hub listener: preview of ${sid} moves from port ${from} to ${to}: `
+        )
+      );
+
+  // 19. The dashboard's configured port is the one the session keeps (the
+  // collision a hub already holds in its database): with no dashboard open,
+  // nothing asks for an address, so the hub's start alone moves it.
+  const dashboardPort = portOf(session) as number;
+  await tab.context().close();
+  await fleet.stop("hub");
+  fleet.env.CAWCO_DASHBOARD_PORT = String(dashboardPort);
+  fleet.launch("hub");
+  await fleet.hubUp();
+  const movedTo = portOf(session);
+  firstOrigin = `http://127.0.0.1:${movedTo}`;
+  previews[0].origin = firstOrigin;
+  const onMoved = await served(previews[0]);
+  const leftBehind = await fetch(
+    `http://127.0.0.1:${dashboardPort}${PREVIEW_PING_PATH}`,
+    { signal: AbortSignal.timeout(3000) }
+  )
+    .then((response) => String(response.status))
+    .catch((error: Error) => error.message);
+  const movedLine = await moveLine(session, dashboardPort, movedTo ?? 0);
+  kit.check(
+    "19: a session keeping the fleet's configured dashboard port (inside the range) is moved by the hub's start and saved, and its preview answers 200 with the overlay on the new port",
+    inRange(movedTo) &&
+      movedTo !== dashboardPort &&
+      onMoved.ok &&
+      leftBehind !== "200" &&
+      !!movedLine?.endsWith("it is the dashboard's port"),
+    `kept ${dashboardPort}, now ${movedTo}; ${onMoved.ms} ms; ${onMoved.last}; the old port's ping: ${leftBehind}; log: ${movedLine ?? "none"}`
+  );
+
+  // 20. A new session's port: the dashboard's and one another process holds
+  // are passed over.
+  const heldNow = new Set(
+    fleet
+      .query<{ port: number }>("SELECT port FROM preview_ports")
+      .map((row) => row.port)
+  );
+  const lowestFree = (...also: number[]): number => {
+    let port = rangeFirst;
+    while (heldNow.has(port) || also.includes(port)) {
+      port += 1;
+    }
+    return port;
+  };
+  const strangerPort = lowestFree(dashboardPort);
+  const stranger = Bun.serve({
+    hostname: "127.0.0.1",
+    port: strangerPort,
+    fetch: () => new Response("a stranger's server"),
+  });
+  const expected = lowestFree(dashboardPort, strangerPort);
+  const newcomer = await fleet.spawn("claude", "Newcomer", fleet.repo);
+  await create(newcomer, { name: "newcomer", port: second.server.port });
+  const { port: newcomerPort } = await address(newcomer);
+  const newcomerShown = await served({
+    label: "the new session's preview",
+    origin: `http://127.0.0.1:${newcomerPort}`,
+    title: OTHER,
+  });
+  kit.check(
+    "20: a new session's port passes over the dashboard's configured port and one another process holds, each lower than the port it takes, and its preview answers",
+    newcomerPort === expected &&
+      dashboardPort < expected &&
+      strangerPort < expected &&
+      newcomerShown.ok,
+    `dashboard ${dashboardPort}, the stranger's ${strangerPort}, taken ${newcomerPort} (lowest open ${expected}); ${newcomerShown.ms} ms; ${newcomerShown.last}`
+  );
+
+  // 21. A kept port another process takes while the hub is down (the
+  // dashboard socket's case): the hub's start moves it.
+  await fleet.stop("hub");
+  const squatter = Bun.serve({
+    hostname: "127.0.0.1",
+    port: newcomerPort as number,
+    fetch: () => new Response("a squatter's server"),
+  });
+  fleet.launch("hub");
+  await fleet.hubUp();
+  const newcomerMoved = portOf(newcomer);
+  const onNewcomer = await served({
+    label: "the new session's preview",
+    origin: `http://127.0.0.1:${newcomerMoved}`,
+    title: OTHER,
+  });
+  const squatLine = await moveLine(
+    newcomer,
+    newcomerPort as number,
+    newcomerMoved ?? 0
+  );
+  const squatterSays = await fetch(`http://127.0.0.1:${newcomerPort}/`)
+    .then((response) => response.text())
+    .catch((error: Error) => error.message);
+  kit.check(
+    "21: a kept port another process took while the hub was down is moved by the hub's start, past the dashboard's and the stranger's, and the preview answers 200 with the overlay there",
+    inRange(newcomerMoved) &&
+      ![newcomerPort, dashboardPort, strangerPort].includes(newcomerMoved) &&
+      onNewcomer.ok &&
+      squatterSays === "a squatter's server" &&
+      !!squatLine?.endsWith("another process holds it"),
+    `kept ${newcomerPort}, now ${newcomerMoved}; ${onNewcomer.ms} ms; ${onNewcomer.last}; the old port answers ${JSON.stringify(squatterSays)}; log: ${squatLine ?? "none"}`
+  );
+  await squatter.stop(true);
+  await stranger.stop(true);
+  await fleet.agentUp();
+  tab = await kit.page("desk");
+  await open(tab, where, FRAME);
 
   // 6. The server stops: the worded state, and the agent's one line.
   await first.server.stop(true);

@@ -636,6 +636,9 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
         ...(readEnv(CAWCO_ENV.previewPorts)
           ? { [CAWCO_ENV.previewPorts]: readEnv(CAWCO_ENV.previewPorts) }
           : {}),
+        // The dashboard socket's port, which the hub's preview ports never
+        // take (hub config.ts `FLEET_PORTS`) and its bridge's links name.
+        [CAWCO_ENV.dashboardPort]: DASHBOARD_PORT,
       },
       workingDirectory: LAYOUT_ROOT,
       after: ["network-online.target"],

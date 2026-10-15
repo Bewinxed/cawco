@@ -33,7 +33,12 @@ import {
   type artifactSend,
   type artifactSocket,
 } from "./artifacts/sync";
-import { ARTIFACTS_ROOT, PREVIEW_PORTS, PREVIEW_PORTS_TEXT } from "./config";
+import {
+  ARTIFACTS_ROOT,
+  FLEET_PORTS,
+  PREVIEW_PORTS,
+  PREVIEW_PORTS_TEXT,
+} from "./config";
 import type { PreviewsDb } from "./db/previews";
 import { FolderRefusal, folderPath } from "./project-folder";
 
@@ -424,8 +429,12 @@ async function serveSession(
 /** The fleet's preview mode could not be taken: why, in one sentence. */
 export class PreviewRefusal extends Error {
   readonly status: 409 | 422 | 503;
-  constructor(status: 409 | 422 | 503, message: string) {
-    super(message);
+  constructor(
+    status: 409 | 422 | 503,
+    message: string,
+    options?: ErrorOptions
+  ) {
+    super(message, options);
     this.status = status;
   }
 }
@@ -545,8 +554,13 @@ export function createPreviewListeners(
   /** Host mode's one listener. */
   let byHost: Server<ListenerSocket> | undefined;
 
-  /** Serves `instanceId` on `port`; false when the port is taken by something else. */
+  /**
+   * Serves `instanceId` on `port`: false when another process holds it
+   * (EADDRINUSE). Any other refusal is the bind address's, not the port's,
+   * so no other port would open either: it is thrown, in one sentence.
+   */
   const serveOn = (instanceId: string, port: number): boolean => {
+    let refused: unknown;
     try {
       sessions.set(
         instanceId,
@@ -554,21 +568,46 @@ export function createPreviewListeners(
       );
       return true;
     } catch (thrown) {
-      previewFailed(
-        HOP,
-        instanceId,
-        `port ${port} didn't open: ${causeOf(thrown)}`
-      );
-      return false;
+      if ((thrown as { code?: unknown }).code === "EADDRINUSE") {
+        return false;
+      }
+      refused = thrown;
     }
+    throw new PreviewRefusal(
+      503,
+      `Preview port ${port} didn't open on ${hostname} (${causeOf(refused)}).`,
+      { cause: refused }
+    );
   };
 
-  /** Session `instanceId`'s port: the one it keeps, else the lowest free one of the range that opens. */
-  const portFor = (instanceId: string): number => {
+  /** Why no session may have `port`: one of the fleet's own, or outside the range; null when one may. */
+  const barred = (port: number): string | null => {
+    const fleet = FLEET_PORTS.get(port);
+    if (fleet) {
+      return `it is ${fleet} port`;
+    }
+    return port < PREVIEW_PORTS.first || port > PREVIEW_PORTS.last
+      ? `it is outside the preview ports ${PREVIEW_PORTS_TEXT}`
+      : null;
+  };
+
+  /**
+   * The one way a session's listener gets its port, at the hub's start and
+   * on demand: the port it keeps while that is still a preview port and
+   * opens; else the lowest of the range that is not the fleet's own, not
+   * another session's, and opens. A move is saved, so a collision heals
+   * itself, and said in one line.
+   */
+  const bind = (instanceId: string): number => {
     const held = db.ports();
     const kept = held.find((row) => row.instanceId === instanceId)?.port;
-    if (kept !== undefined && serveOn(instanceId, kept)) {
-      return kept;
+    let why = "";
+    if (kept !== undefined) {
+      const refused = barred(kept);
+      if (!refused && serveOn(instanceId, kept)) {
+        return kept;
+      }
+      why = refused ?? "another process holds it";
     }
     const taken = new Set(held.map((row) => row.port));
     for (
@@ -576,8 +615,13 @@ export function createPreviewListeners(
       port <= PREVIEW_PORTS.last;
       port += 1
     ) {
-      if (!taken.has(port) && serveOn(instanceId, port)) {
+      if (!(taken.has(port) || barred(port)) && serveOn(instanceId, port)) {
         db.keepPort(instanceId, port);
+        if (kept !== undefined) {
+          console.warn(
+            `[preview] ${HOP}: preview of ${instanceId} moves from port ${kept} to ${port}: ${why}`
+          );
+        }
         return port;
       }
     }
@@ -590,6 +634,12 @@ export function createPreviewListeners(
   /** Host mode's listener on the range's first port; why it didn't open, or null. */
   const startHostMode = (): string | null => {
     const pattern = settings.pattern ?? "";
+    const fleet = FLEET_PORTS.get(PREVIEW_PORTS.first);
+    if (fleet) {
+      const why = `Port ${PREVIEW_PORTS.first} is ${fleet} port, so host-mode previews can't take it: set CAWCO_PREVIEW_PORTS to a range whose first port is free.`;
+      previewFailed(HOP, null, why);
+      return why;
+    }
     try {
       byHost = listen(PREVIEW_PORTS.first, (request) =>
         sessionOfHost(pattern, request.headers.get("host"))
@@ -616,18 +666,21 @@ export function createPreviewListeners(
      * Starts what the stored mode serves: host mode's listener; in port mode
      * each session's listener on the port it keeps, so a pane or a tab that
      * loads its preview origin straight after a hub restart finds it bound,
-     * before any dashboard asks for its address. A kept port something else
-     * holds now says so in one line, and the session's next address takes
-     * another (`portFor`).
+     * before any dashboard asks for its address. A kept port that is the
+     * fleet's own, or that another process holds now, moves here (`bind`).
      */
     start(): void {
       if (settings.mode === "host") {
         startHostMode();
         return;
       }
-      for (const { instanceId, port } of db.ports()) {
+      for (const { instanceId } of db.ports()) {
         if (!sessions.has(instanceId)) {
-          serveOn(instanceId, port);
+          try {
+            bind(instanceId);
+          } catch (thrown) {
+            previewFailed(HOP, instanceId, causeOf(thrown));
+          }
         }
       }
     },
@@ -638,7 +691,7 @@ export function createPreviewListeners(
         return { host: hostFor(settings.pattern ?? "", instanceId) };
       }
       const running = sessions.get(instanceId);
-      return { port: running?.port ?? portFor(instanceId) };
+      return { port: running?.port ?? bind(instanceId) };
     },
 
     /** The session ended: its listener stops and its port is free again. */

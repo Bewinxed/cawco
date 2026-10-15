@@ -15,6 +15,8 @@ import {
   readEnv,
 } from "@cawco/core";
 import { detach, failureOf } from "@cawco/core/detach";
+// The port the dashboard is served on, for the composed fallback below.
+import { DASHBOARD_PORT } from "./config";
 import type { DbShape } from "./db";
 import { sessionLabel } from "./labels";
 import type { HubLifetimeShape } from "./lifetime";
@@ -146,14 +148,6 @@ const SWEEP_INTERVAL_MS = 60 * 60_000;
  * `readEnv`: `CAWCO_ENV` has no key for it.
  */
 const DASHBOARD_URL_OVERRIDE = Bun.env.CAWCO_DASHBOARD_URL;
-
-/**
- * The port the dashboard is served on, for the composed fallback below. The
- * default matches the one the installer gives the dashboard unit
- * (`packages/cli/src/service.ts`, `PORT ?? '3000'`); a hub that cannot import
- * the CLI has to be told separately when that is changed.
- */
-const DASHBOARD_PORT = Bun.env.CAWCO_DASHBOARD_PORT ?? "3000";
 
 /**
  * Where a message that is too big to answer here sends the reader instead.
