@@ -47,7 +47,7 @@ For values the person tunes rather than picks (a radius, a colour, a spring), ke
 </script>
 ```
 
-`cawcoDials(name, config, options)` takes DialKit's config ([control types](https://github.com/joshpuckett/dialkit#controls)) and returns its controller. Values go to the hub under the one id `dials` (`{ Card: { radius: 16, … } }`), restored on reload and revision; `artifact_read` returns them as that entry's `value`. A set value stops at 2,000 characters of JSON, so keep panels small. Leave `{{DIALS}}` out of pages without dials: it adds about 330 KiB.
+`cawcoDials(name, config, options)` takes DialKit's config ([control types](https://github.com/joshpuckett/dialkit#controls)) and returns its controller. Values go to the hub under the one id `dials`, each panel's by path (`{ Card: { radius: 16, "shadow.blur": 8 } }`), restored on reload and revision; `artifact_read` returns them as that entry's `value`. A set value stops at 2,000 characters of JSON, so keep panels small. Leave `{{DIALS}}` out of pages without dials: it adds about 330 KiB.
 
 ## The bridge, from your own script
 

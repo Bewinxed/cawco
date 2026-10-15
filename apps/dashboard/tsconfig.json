@@ -4,5 +4,6 @@
     "sourceMap": true,
     "strict": true
   },
-  "include": ["src"]
+  "include": ["src", "harness"],
+  "exclude": ["harness/vite.config.ts", "harness/build.ts"]
 }

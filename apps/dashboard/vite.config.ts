@@ -59,7 +59,7 @@ const devHub = (): URL => {
  * Vite's limit: the other subsets and Fredoka load by URL when a page uses
  * them.
  */
-const INLINE_FACES =
+export const INLINE_FACES =
   /\/(?:figtree-latin-wght-normal|jetbrains-mono-latin-wght-normal)\.woff2$/;
 
 /**
@@ -197,7 +197,7 @@ const runningVersion = (): Plugin => ({
  */
 const EC_INDEX = /@event-calendar[\\/]core[\\/]src[\\/]styles[\\/]index\.css$/;
 const EC_THEME_IMPORT = /@import\s+["']\.\/theme\.css["'];?/;
-const calendarThemeOff = (): Plugin => ({
+export const calendarThemeOff = (): Plugin => ({
   name: "cawco-calendar-theme-off",
   enforce: "pre",
   transform(code, id) {
@@ -231,7 +231,7 @@ const calendarThemeOff = (): Plugin => ({
 const STREAMDOWN_ROOT =
   /svelte-streamdown[\\/]dist[\\/]Streamdown\.svelte\?.*type=style/;
 const STREAMDOWN_OVERLAY = /\[data-expanded=(['"]?)true\1\](?=\s*\{)/g;
-const streamdownOverlayOwn = (): Plugin => ({
+export const streamdownOverlayOwn = (): Plugin => ({
   name: "cawco-streamdown-overlay-own",
   transform(code, id) {
     if (!STREAMDOWN_ROOT.test(id)) {
@@ -249,6 +249,15 @@ const streamdownOverlayOwn = (): Plugin => ({
     );
   },
 });
+
+/** The CSS floor, for the minifier (`build.cssTarget` below says why). */
+export const CSS_TARGET = [
+  "chrome131",
+  "edge131",
+  "firefox146",
+  "safari18",
+  "ios18",
+];
 
 export default defineConfig(({ command }) => {
   // A build talks to no hub; only a vite server does, and only to the dev hub.
@@ -311,7 +320,7 @@ export default defineConfig(({ command }) => {
      * target stays Vite's default.
      */
     build: {
-      cssTarget: ["chrome131", "edge131", "firefox146", "safari18", "ios18"],
+      cssTarget: CSS_TARGET,
       assetsInlineLimit: (file) => INLINE_FACES.test(file) || undefined,
     },
     optimizeDeps: {

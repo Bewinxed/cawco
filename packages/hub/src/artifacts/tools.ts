@@ -62,9 +62,10 @@ export const artifactCreate = {
   description:
     "Make an artifact and open it in your panel. A page is `html`, or `dir` " +
     "holding a decision page's page.html (decision-page skill); in a project, neither builds decisions/<name>/page.html " +
-    "from its folder. A preview is your dev server (`port`) or a folder (`dir`). A canvas is a drawing from `elements` " +
-    "or `mermaid`, or empty for the person. The same kind and name again replaces it in place, picks kept. " +
-    "Answers its id and `opened`: true once a dashboard shows it (within 10 s), else false with `why`.",
+    "from its folder. A preview is your dev server (`port`) or a folder (`dir`). A design preview (options to pick, " +
+    "a component's states): design-explore skill first. A canvas is `elements` or `mermaid`, " +
+    "or empty for the person. The same kind and name again replaces it, picks kept. " +
+    "Answers its id and `opened` (false: `why`).",
   input: {
     kind: z.enum(["page", "preview", "canvas"]),
     name: z
@@ -84,7 +85,7 @@ export const artifactCreate = {
       .regex(PREVIEW_START_PATH)
       .max(2000)
       .optional()
-      .describe("A preview's start page, like /motion/mac-readiness."),
+      .describe("A preview's start page, like /settings."),
     machine: z
       .string()
       .min(1)

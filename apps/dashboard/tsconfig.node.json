@@ -5,5 +5,10 @@
     "allowImportingTsExtensions": true,
     "types": ["bun"]
   },
-  "include": ["*.ts", "scripts/**/*.ts"]
+  "include": [
+    "*.ts",
+    "scripts/**/*.ts",
+    "harness/vite.config.ts",
+    "harness/build.ts"
+  ]
 }

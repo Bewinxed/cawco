@@ -10,6 +10,7 @@
   "scripts": {
     "build": "vite build && bun scripts/publish-build.ts",
     "dev": "vite dev",
+    "harness": "bun harness/build.ts",
     "preview": "vite preview",
     "tab-icon": "bun scripts/tab-icon-art.ts",
     "tokens": "bun scripts/build-tokens.ts && bun ../../scripts/fmt.ts src/lib/tokens/tokens.css ../../packages/hub/skills/decision-page/kit/tokens.css ../apple/Packages/CawCoKit/Sources/CawCoDesign/Resources",
@@ -70,6 +71,7 @@
     "@types/bun": "^1.4.2",
     "@typescript/native": "npm:typescript@~7.0.2",
     "colorjs.io": "^0.7.1",
+    "dialkit": "2.0.2",
     "jsrepo": "^3.8.1",
     "paneforge": "^1.0.2",
     "shadcn-svelte": "^1.7.0",
