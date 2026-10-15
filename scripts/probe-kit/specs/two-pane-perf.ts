@@ -610,6 +610,46 @@ async function measure(
       }`
     );
   }
+  // Where a switch's script goes: the pointer's switches again, sampled,
+  // after the measured ones (the sampler is not in what they read), each
+  // switch's own window from its press to `SETTLE_MS` on.
+  await page.waitForTimeout(REST_MS);
+  const presses: number[] = [];
+  const sampled = await traceMain(
+    page,
+    async () => {
+      for (const [n, id] of order.entries()) {
+        const tab = tabOf(id);
+        await ways.point.reach(tab);
+        await page.waitForTimeout(REACH_MS);
+        await marked(`two-pane:sampled:${n}`);
+        await ways.point.make(tab);
+        await page.waitForTimeout(SETTLE_MS);
+      }
+    },
+    { profile: true }
+  );
+  for (const { at, name } of sampled.marks) {
+    if (name.startsWith("two-pane:sampled:")) {
+      presses.push(at);
+    }
+  }
+  const switchScript = new Map<string, number>();
+  for (const at of presses) {
+    for (const [fn, ms] of sampled.selfTime(at, at + SETTLE_MS * 1000)) {
+      switchScript.set(fn, (switchScript.get(fn) ?? 0) + ms);
+    }
+  }
+  kit.note(
+    `${mode} pane(s), point: the script its ${presses.length} switches ran, by self time, all told: ${[
+      ...switchScript,
+    ]
+      .filter(([fn]) => fn !== "(idle)")
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 24)
+      .map(([fn, ms]) => `${fn} ${ms.toFixed(1)}ms`)
+      .join("; ")}`
+  );
   const seen = await page.evaluate(
     () => (window as unknown as { __cost: Cost }).__cost
   );
