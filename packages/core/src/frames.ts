@@ -38,6 +38,8 @@ export interface CacheInvalidatedFrame {
 export interface PreviewFrame {
   /** The artifact the session's panel shows (Projects spec §5.10). */
   artifact: { id: string; kind: ArtifactKind; name: string };
+  /** Host mode's `name[:port]` beside `origin`: a bridge for readers before it ({@link PreviewAddress}). */
+  host?: string;
   instanceId: string;
   kind: "preview";
   /**
@@ -58,8 +60,17 @@ export interface PreviewFrame {
 /**
  * A session's preview origin, as the hub reports it: a port on the hub's
  * host, or a whole origin of its own (host mode).
+ *
+ * `host` is a bridge, not part of the address: host mode's `name[:port]`,
+ * the only host-mode field readers built before `origin` (8c9b79c37) decode,
+ * nightly 3146's dashboard and TestFlight 20261015 among them. Every reader
+ * now reads `origin`. It goes in the change that expires TestFlight 20261015,
+ * once a TestFlight build that reads `origin` has shipped; the wire check
+ * refuses it from the moment no shipped reader needs it (hub scripts
+ * wire-compat.ts `BRIDGES`).
  */
-export type PreviewAddress = { port: number } | { origin: string };
+export type PreviewAddress =
+  { port: number } | { origin: string; host: string };
 
 /**
  * The origin a client loads a session's previews from: in port mode the

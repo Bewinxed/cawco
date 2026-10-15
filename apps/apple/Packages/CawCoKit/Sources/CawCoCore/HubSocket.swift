@@ -37,7 +37,7 @@ struct HubSocket: Sendable {
         var parts = URLComponents(url: hub, resolvingAgainstBaseURL: false) ?? URLComponents()
         parts.scheme = parts.scheme == "https" ? "wss" : "ws"
         parts.path = "/ws/dashboard"
-        // Names the wire this client reads (core APP_BOARD_WIRE, 6): board deltas, not a snapshot per change,
+        // Names the wire this client reads (WIRE_PROTOCOL, 6): board deltas, not a snapshot per change,
         // and Caw's thread frames (`ThreadsStore`).
         // And says it reads parts (`WIRE_PARTS_PARAM`): a large board then
         // comes as parts (`Wire.Assembler`) instead of one frame.

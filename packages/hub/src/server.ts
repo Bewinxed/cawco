@@ -103,7 +103,6 @@ import {
   type AccountReport,
   type AccountSigninResult,
   AGENT_BUSY,
-  APP_BOARD_WIRE,
   ARTIFACT_ORIGIN,
   ARTIFACT_SESSION_PATH,
   type ArtifactSessionFrame,
@@ -24339,21 +24338,15 @@ export const createServer = (
         open(ws) {
           // Before anything is sent to it: every frame goes through its line.
           openLine(ws, true);
-          // A client names the wire it was built for. One that names none was
-          // built before clients did: a browser sends `Origin` on every
-          // socket it opens, and the clients that are not pages (the Apple
-          // app, scripts) send none and read this wire. A page on an older
-          // wire reloads onto this one, so below WIRE_PROTOCOL it is older.
-          // An app cannot reload: it is older only below the wire whose board
-          // it reads (APP_BOARD_WIRE, deltas); every later change it reads is
-          // kept readable for it by the schema check (hub scripts openapi.ts:
-          // BRIDGES, TestFlight expiry), never by a protocol bump.
+          // A page names the wire it was built for (WIRE_PROTOCOL, 6). One
+          // that names none was built before pages did: a browser sends
+          // `Origin` on every socket it opens, and the clients that are not
+          // pages (the Apple app, scripts) send none and read this wire.
           const named = Number(ws.query.protocol);
           const page = pageOrigin(ws.headers);
-          let older = Boolean(page);
-          if (Number.isFinite(named)) {
-            older = named < (page ? WIRE_PROTOCOL : APP_BOARD_WIRE);
-          }
+          const older = Number.isFinite(named)
+            ? named < WIRE_PROTOCOL
+            : Boolean(page);
           if (older) {
             console.warn(
               `[hub] dashboard page at ${page ?? ws.remoteAddress} is on wire ${Number.isFinite(named) ? named : "4 or older"}, this hub on ${WIRE_PROTOCOL}: it is sent the snapshot only, until it reloads`
