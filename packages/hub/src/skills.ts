@@ -51,20 +51,15 @@ export interface UnresolvedSkill {
 /** How long a download gets before the hub stops waiting on it. */
 const FETCH_TIMEOUT_MS = 60_000;
 
-/**
- * A skill this size is not a skill any more. Both caps are the download's, not
- * the tunnel's: the files ride every sync to every machine. Sized with real
- * headroom — impeccable's Claude variant was already 147 files / 3.07 MB on
- * 2026-08-07 and growing.
- *
+/*
  * A skill carries no media its instructions never name: an image or video
  * (gif, jpg, jpeg, png, webp, svg, mp4, mov, webm, avif) rides along only when
  * a markdown file in the skill other than README.md names its path or basename.
  * README demo renders are for people browsing the repo, not for the agent.
- * The rule runs on the walk before these caps, so they count what is carried.
+ * There is no size or file-count cap: a machine already holding a skill's hash
+ * is sent the skill without its files, so the bytes cross once per machine per
+ * version.
  */
-const MAX_FILES = 512;
-const MAX_BYTES = 8 * 1024 * 1024;
 
 /**
  * Where a repo keeps its skills, in the order the skills CLI looks — except
@@ -289,21 +284,10 @@ export const downloadRepo = async (
  */
 export const readTree = async (
   dir: string,
-  what = "the directory",
   keep: (found: Found[]) => Promise<Found[]> = async (found) => found
 ): Promise<{ files: SkillFile[]; hash: string; bytes: number }> => {
   const found = await keep(await walk(dir));
-  if (found.length > MAX_FILES) {
-    throw new Error(
-      `${what} has ${found.length} files; cawco carries at most ${MAX_FILES}`
-    );
-  }
   const bytes = found.reduce((total, file) => total + file.size, 0);
-  if (bytes > MAX_BYTES) {
-    throw new Error(
-      `${what} is ${bytes} bytes; cawco carries at most ${MAX_BYTES}`
-    );
-  }
   const files: SkillFile[] = await Promise.all(
     found.map(async (file) => ({
       path: file.rel,
@@ -507,7 +491,7 @@ const namedMedia = async (found: Found[]): Promise<Found[]> => {
 };
 
 const readSkill = async (dir: string): Promise<ResolvedSkill> => {
-  const { files, hash, bytes } = await readTree(dir, "the skill", namedMedia);
+  const { files, hash, bytes } = await readTree(dir, namedMedia);
   return { name: basename(dir), hash, bytes, files };
 };
 

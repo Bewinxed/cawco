@@ -3311,9 +3311,6 @@ export const inspectConfig = async (
   };
 };
 
-/** Past this a skill is not a skill any more, and adoption says so rather than trying. */
-const SKILL_BYTES_CAP = 2 * 1024 * 1024;
-
 /** Every file under a directory, relative to it. Symlinks are not followed. */
 const filesUnder = async (root: string, prefix = ""): Promise<string[]> => {
   const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
@@ -3347,18 +3344,11 @@ export const readSkillFiles = async (
   }
 
   const files: SkillFile[] = [];
-  let bytes = 0;
   for (const path of await filesUnder(skill.path)) {
     const content = new Uint8Array(
-      // biome-ignore lint/performance/noAwaitInLoops: `bytes` must hit the cap in file order so the error names the file that pushed it over, not whichever read happened to land last
+      // biome-ignore lint/performance/noAwaitInLoops: files are read one at a time in directory-listing order, so the result's order is stable and a huge skill never holds every file's read in flight at once
       await Bun.file(join(skill.path, path)).arrayBuffer()
     );
-    bytes += content.byteLength;
-    if (bytes > SKILL_BYTES_CAP) {
-      throw new Error(
-        `${name} is over ${SKILL_BYTES_CAP / 1024 / 1024} MB — too big to carry to every machine`
-      );
-    }
     files.push({
       path,
       contentBase64: Buffer.from(content).toString("base64"),
