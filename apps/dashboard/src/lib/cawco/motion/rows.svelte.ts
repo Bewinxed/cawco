@@ -400,7 +400,8 @@ export function tableReflow(options: {
  *
  * Movement eases in-out over --dur-panel (over --dur-exit in a batch a
  * tree's closing paces, `atTravel`); entrances ease out over --dur-pop and
- * exits over --dur-exit (app.css). With reduced motion nothing travels:
+ * exits over --dur-exit (app.css), except that a row's fade, in a batch that
+ * paces its moves, runs over its clip's duration (`heldWithClip`). With reduced motion nothing travels:
  * arrivals and departures only fade.
  */
 interface Box {
@@ -611,6 +612,25 @@ export function heldToTravel(
   return animation;
 }
 
+/**
+ * A row's fade, held to the same batch as its clip (`heldToTravel`) and, in a
+ * batch that paces its moves (a tree closing, `closing`; a tree opening at its
+ * line's speed, `glide`), run over the duration that pace gave the clip, so
+ * the row is uncovered or closed and faded on one clock. In any other batch it
+ * keeps its own length (arrivals --dur-pop, departures --dur-exit).
+ */
+function heldWithClip(fade: Animation, clip: Animation, distance: number) {
+  heldToTravel(fade);
+  // Asked after the clip's own, so it runs once the clip has its pace.
+  atTravel((_at, pace) => {
+    if (pace.close || (pace.speed && distance > 0)) {
+      fade.effect?.updateTiming({
+        duration: Number(clip.effect?.getTiming().duration),
+      });
+    }
+  });
+}
+
 /** It pops (scales in and out) rather than being uncovered like a row. */
 const pops = (element: HTMLElement) =>
   (element.dataset.flip ?? "").includes("pop");
@@ -810,14 +830,18 @@ function arrival(
   } else {
     // Uncovered on the curve the rows after it slide down on, from the frame
     // they start on, so its bottom edge is their top edge all the way.
-    heldToTravel(
+    const clip = heldToTravel(
       element.animate(
         [{ clipPath: "inset(0 0 100% 0)" }, { clipPath: "inset(0 0 0 0)" }],
         travel()
       ),
       height
     );
-    heldToTravel(element.animate([{ opacity: 0 }, { opacity: 1 }], entrance()));
+    heldWithClip(
+      element.animate([{ opacity: 0 }, { opacity: 1 }], entrance()),
+      clip,
+      height
+    );
   }
 }
 
@@ -862,12 +886,6 @@ function departure(
       { ...exit(), fill: "forwards" }
     );
   } else {
-    heldToTravel(
-      copy.animate([{ opacity: 1 }, { opacity: 0 }], {
-        ...exit(),
-        fill: "forwards",
-      })
-    );
     last = copy.animate(
       [{ clipPath: "inset(0 0 0 0)" }, { clipPath: "inset(0 0 100% 0)" }],
       { ...travel(), fill: "forwards" }
@@ -876,6 +894,16 @@ function departure(
   }
   // It closes from the frame the rows around it start moving on.
   heldToTravel(last, travels).finished.then(done, done);
+  if (travels !== undefined) {
+    heldWithClip(
+      copy.animate([{ opacity: 1 }, { opacity: 0 }], {
+        ...exit(),
+        fill: "forwards",
+      }),
+      last,
+      travels
+    );
+  }
 }
 
 /**
