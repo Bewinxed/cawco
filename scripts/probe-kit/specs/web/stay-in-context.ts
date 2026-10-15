@@ -31,6 +31,7 @@ import {
   until,
 } from "../../../scratch-fleet";
 import { type Kit, type KitFleet, open, ROOT, type Spec } from "../../kit";
+import { openCawSettings } from "./caw-seat-pop";
 
 const ASK = "PROBE-ASK";
 const STOP_REFUSAL = "The machine would not stop it: probe refusal.";
@@ -1423,7 +1424,8 @@ async function cawOff(kit: Kit, fleet: KitFleet, page: Page, base: string) {
     standingSeat.standing === 1 && standingSeat.inHead === 0,
     JSON.stringify(standingSeat)
   );
-  await page.locator(".caw-80 .caw-seat").click();
+  // His switch is the project's setting, under the head's ⋯.
+  await openCawSettings(page);
   // His view read: the switch says he is on, and takes a press.
   await page
     .waitForFunction(

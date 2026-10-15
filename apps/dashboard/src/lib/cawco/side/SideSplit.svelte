@@ -60,6 +60,9 @@
     active,
     phone,
     share = $bindable(0),
+    side,
+    sideOpen = false,
+    onsideclose,
     children,
   }: {
     /** The conversation: its preview, and the key its width is kept under. */
@@ -82,6 +85,15 @@
     phone: boolean;
     /** The surface's share of the width, in percent: 0 while closed or a sheet. */
     share?: number;
+    /**
+     * A page's own surface in place of the plan and preview (a project's
+     * Caw dock): drawn in the split on a desk, in the kit's bottom sheet
+     * under 900px (`true`: in the sheet). Open while `sideOpen`; the sheet
+     * dismissed says so through `onsideclose`.
+     */
+    side?: Snippet<[boolean]>;
+    sideOpen?: boolean;
+    onsideclose?: () => void;
     /** The transcript's side. */
     children: Snippet;
   } = $props();
@@ -126,7 +138,7 @@
   /** The reader asked for the plan (its ring) and has not closed it. */
   let planAsked = $state(false);
   const planOpen = $derived(planAsked && hasPlan);
-  const open = $derived(previewOpen || planOpen);
+  const open = $derived(side ? sideOpen : previewOpen || planOpen);
   let tab = $state<"plan" | "preview">("plan");
   /** The one on show: the one chosen while both are there, else the one there is. */
   const shown = $derived.by((): "plan" | "preview" => {
@@ -417,7 +429,9 @@
 {/snippet}
 
 {#snippet surface()}
-  {#if shown === "plan" && planOf && planOpen}
+  {#if side}
+    {@render side(false)}
+  {:else if shown === "plan" && planOf && planOpen}
     <PlanPane
       instanceId={planOf}
       onclose={() => {
@@ -536,6 +550,22 @@
         />
       </RegionBoundary>
     </SideSheet>
+  {/if}
+  {#if side && phone && visible && active}
+    <Drawer.Root
+      onOpenChange={(next) => {
+        if (!next) {
+          onsideclose?.();
+        }
+      }}
+      open={sideOpen}
+    >
+      <Drawer.Content class="side-sheet">
+        <RegionBoundary region="side sheet">
+          {@render side(true)}
+        </RegionBoundary>
+      </Drawer.Content>
+    </Drawer.Root>
   {/if}
   {#if phone && visible && active && planOf && hasPlan}
     <Drawer.Root

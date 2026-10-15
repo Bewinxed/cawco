@@ -1,15 +1,18 @@
 /**
- * Caw's popover in the project's head (CawSeat) stands in the glass card's
+ * Caw's settings popover in the project's head stands in the glass card's
  * frame: the panel's width (`--c-panel-w`, capped at the viewport less 24px,
  * less 12px under 900px) with its rows 7px in, as home/CawPanel draws the
  * glass's Caw panel. It took that frame through the shared `.caw-pop` name
  * until 5a493be53 gave it its own (`.caw-seat-pop`), and must look as it did.
+ * His seat opens his dock now (CawDock); his settings are the project's,
+ * under the head's `⋯` (Caw settings…), in the same frame
+ * (`.caw-settings-pop`).
  *
  * On a scratch fleet (real hub, agent and sessiond), the built dashboard, a
- * project with Caw off (his seat is drawn, no lead session needed), at
- * 1440×900 and 800×900 with a mouse: Caw's seat pressed, and the popover
- * holding his panel read from the engine: its computed width and padding and
- * its box, against the frame's rule (±0.5px).
+ * project with Caw off (no lead session needed), at 1440×900 and 800×900
+ * with a mouse: `⋯` › Caw settings…, and the popover holding his panel read
+ * from the engine: its computed width and padding and its box, against the
+ * frame's rule (±0.5px).
  *
  *   bun scripts/probe-kit/run.ts web caw-seat-pop
  */
@@ -26,6 +29,15 @@ const SIZES = [
   { width: 1440, height: 900 },
   { width: 800, height: 900 },
 ] as const;
+
+/** Opens Caw's settings from the project head's `⋯`, as the person does. */
+export async function openCawSettings(page: Page): Promise<void> {
+  await page.click('.project-head [aria-label^="More for"]');
+  await page.getByRole("menuitem", { name: "Caw settings…" }).click();
+  await page.waitForSelector(".caw-panel [role='switch']", {
+    timeout: 15_000,
+  });
+}
 
 /**
  * With Caw's panel open in its popover: its computed width, padding and box
@@ -112,12 +124,10 @@ const spec: Spec = {
       await page.setViewportSize(at);
       await open(page, `${base}/project/${project.id}`, "button.caw-seat");
       await settle(page, 400);
-      await page.click("button.caw-seat");
-      const shown = await page
-        .waitForSelector(CAW_SEAT_POP, { timeout: 15_000 })
+      const shown = await openCawSettings(page)
         .then(() => true)
         .catch(() => false);
-      if (!kit.check(`${name}: pressing Caw's seat opens his panel`, shown)) {
+      if (!kit.check(`${name}: ⋯ › Caw settings… opens his panel`, shown)) {
         continue;
       }
       await settle(page, 400);

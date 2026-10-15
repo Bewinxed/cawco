@@ -1,21 +1,15 @@
 <script lang="ts">
   /**
    * Caw in the project's head: the page's one live Caw, at 48px, as a
-   * button. A press opens his panel and keeps it; a pointer resting on him
-   * for 350ms opens it too, and it closes 250ms after the pointer leaves
-   * both him and the panel, as a session tab's details card does
-   * (PaneTabs). On touch the panel is a bottom sheet. Off, he sleeps between
-   * your words: no event wakes him, and the panel holds the switch.
+   * button. A press opens his dock beside the page (CawDock) and a second
+   * press puts it away; whether it stands open is kept per project
+   * (caw-dock). His face keeps saying what he is doing either way. His
+   * settings are the project's, under the head's `⋯`.
    */
-  import { MediaQuery } from "svelte/reactivity";
   import { cawLoop } from "#lib/cawco/feel.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
   import { land } from "#lib/cawco/motion/share.svelte.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Drawer from "#lib/components/ui/drawer/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Popover from "#lib/components/ui/popover/index.js";
-  import CawPanel from "./CawPanel.svelte";
+  import { cawDock } from "./caw-dock.svelte";
   import { type CawLead, HEAD_NEXT } from "./caw-lead.svelte";
 
   let {
@@ -30,72 +24,20 @@
     size?: number;
   } = $props();
 
-  const touch = new MediaQuery(
-    "(hover: none), (pointer: coarse), (max-width: 640px)"
-  );
-  let open = $state(false);
-  let pinned = $state(false);
-  let anchor = $state<HTMLButtonElement | null>(null);
-  let timer: ReturnType<typeof setTimeout> | undefined;
-
   /** He holds his still: idle, the done hold, and working when his loop is off. */
   const still = $derived(
     lead.holds || (lead.status === "working" && !cawLoop.on)
   );
-
-  /**
-   * The panel was opened by the pointer (a press or a rest). Closing it
-   * gives focus back to Caw without the focus ring: a ring is for a reader
-   * on the keyboard, and one left on him at rest reads as a state he is in.
-   */
-  let byPointer = false;
-
-  function close() {
-    clearTimeout(timer);
-    open = false;
-    pinned = false;
-  }
-  function rest(event: PointerEvent) {
-    if (touch.current || event.pointerType !== "mouse" || pinned) {
-      return;
-    }
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      byPointer = true;
-      open = true;
-    }, 350);
-  }
-  function leave() {
-    clearTimeout(timer);
-    if (!pinned) {
-      timer = setTimeout(close, 250);
-    }
-  }
-  function press(event: MouseEvent) {
-    clearTimeout(timer);
-    if (open && pinned) {
-      close();
-      return;
-    }
-    // A click from Enter or Space has no pointer behind it (detail 0).
-    byPointer = event.detail > 0;
-    open = true;
-    pinned = true;
-  }
-  $effect(() => () => clearTimeout(timer));
+  const open = $derived(cawDock.isOpen(projectId));
 </script>
 
 <button
-  aria-expanded={open}
-  aria-haspopup="dialog"
   aria-label="Caw, lead of {projectName}. {lead.sentence}"
+  aria-pressed={open}
   class="caw-seat press-tint"
   data-share="caw:{projectId}"
-  onclick={press}
-  onpointerenter={rest}
-  onpointerleave={leave}
+  onclick={() => cawDock.toggle(projectId)}
   type="button"
-  bind:this={anchor}
   style:--seat="{size}px"
   {@attach land(() => `caw:${projectId}`, { uniform: true })}
 >
@@ -103,73 +45,6 @@
     <Caw next={HEAD_NEXT} {size} status={lead.status} {still} />
   {/if}
 </button>
-
-{#if touch.current}
-  <Drawer.Root
-    onOpenChange={(next) => {
-      if (!next) {
-        close();
-      }
-    }}
-    {open}
-  >
-    <Drawer.Content class="caw-sheet">
-      <Drawer.Title class="sr-only">Caw, lead of {projectName}</Drawer.Title>
-      <CawPanel {lead} {projectId} {projectName} />
-    </Drawer.Content>
-  </Drawer.Root>
-{:else}
-  <Popover.Root
-    onOpenChange={(next) => {
-      if (!next) {
-        close();
-      }
-    }}
-    {open}
-  >
-    <Popover.Content
-      align="start"
-      aria-label="Caw, lead of {projectName}"
-      class="caw-seat-pop"
-      collisionPadding={12}
-      customAnchor={anchor}
-      onCloseAutoFocus={(event) => {
-        if (byPointer) {
-          event.preventDefault();
-          anchor?.focus({ focusVisible: false } as FocusOptions);
-        }
-      }}
-      onfocusin={() => {
-        clearTimeout(timer);
-        pinned = true;
-      }}
-      onInteractOutside={(event) => {
-        if (
-          event.target instanceof Element &&
-          event.target.closest(".caw-seat")
-        ) {
-          event.preventDefault();
-        }
-      }}
-      onOpenAutoFocus={(event) => {
-        if (!pinned) {
-          event.preventDefault();
-        }
-      }}
-      onpointerdowncapture={() => {
-        clearTimeout(timer);
-        pinned = true;
-      }}
-      onpointerenter={() => clearTimeout(timer)}
-      onpointerleave={leave}
-      side="bottom"
-      sideOffset={4}
-      trapFocus={pinned}
-    >
-      <CawPanel {lead} {projectId} {projectName} />
-    </Popover.Content>
-  </Popover.Root>
-{/if}
 
 <style>
   /* His still's box is the button; his acting spills past it, unclipped,
@@ -185,23 +60,5 @@
     border-radius: var(--radius-md);
     background: transparent;
     cursor: pointer;
-  }
-  /* His panel in the glass card's frame (home/CawPanel's `.kit-pop.caw-pop`):
-     the panel's width, its rows 7px in, a narrower cap under 900px. It took
-     that frame through the shared `.caw-pop` name; under its own it says so. */
-  :global(.kit-pop.caw-seat-pop) {
-    width: min(var(--c-panel-w), calc(100vw - 24px));
-    padding: 7px;
-  }
-  @media (max-width: 899px) {
-    :global(.kit-pop.caw-seat-pop) {
-      width: min(
-        var(--c-panel-w),
-        calc(100vw - 12px - env(safe-area-inset-right, 0px))
-      );
-    }
-  }
-  :global(.caw-sheet) {
-    padding-block-end: var(--safe-bottom);
   }
 </style>

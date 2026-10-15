@@ -7,8 +7,9 @@
    * place only while he has something to say: what his session is doing,
    * his question as a link to its thread, a task that landed. Then New
    * session, Spin off, and `⋯` holding Pick stages (while the code
-   * stages stand in), Spend and Forget (and, under 640px, New task and Ask
-   * Caw for a view).
+   * stages stand in), Caw's settings (CawPanel, off `⋯`: a popover on a
+   * desk, the bottom sheet on touch), Spend and Forget (and, under 640px,
+   * New task and Ask Caw for a view), each with its glyph.
    *
    * With the board empty and the lead on, Caw stands over the empty board
    * instead (picks.md), and his slot here closes.
@@ -35,13 +36,24 @@
   import { rememberSpawn, spawnPrefs } from "#lib/cawco/spawnPrefs.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
+  import * as Drawer from "#lib/components/ui/drawer/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
-  import { IconMore } from "#lib/icons.js";
+  import {
+    IconColumns,
+    IconMore,
+    IconPlus,
+    IconSettings,
+    IconSparkles,
+    IconTrash,
+    IconUsage,
+  } from "#lib/icons.js";
   import { goto } from "$app/navigation";
+  import CawPanel from "./CawPanel.svelte";
   import CawSeat from "./CawSeat.svelte";
   import type { CawLead } from "./caw-lead.svelte";
 
@@ -67,6 +79,11 @@
   } = $props();
 
   const narrow = new MediaQuery("(max-width: 639px)");
+  /** Caw's settings rise as the bottom sheet on touch, as the head's other sheets do. */
+  const touch = new MediaQuery(
+    "(hover: none), (pointer: coarse), (max-width: 640px)"
+  );
+  let cawOpen = $state(false);
   let spawnOpen = $state(false);
   let spawnPrompt = $state("");
   let more = $state<HTMLElement | null>(null);
@@ -442,15 +459,21 @@
         }}
       >
         {#if narrow.current}
-          <DropdownMenu.Item onSelect={onnewtask}>New task</DropdownMenu.Item>
+          <DropdownMenu.Item onSelect={onnewtask}>
+            <IconPlus />
+            <span>New task</span>
+          </DropdownMenu.Item>
           {#if onask}
             <DropdownMenu.Item
               onSelect={() => {
                 if (more) {
                   onask?.(more);
                 }
-              }}>Ask Caw for a view</DropdownMenu.Item
+              }}
             >
+              <IconSparkles />
+              <span>Ask Caw for a view</span>
+            </DropdownMenu.Item>
           {/if}
           <DropdownMenu.Separator />
         {/if}
@@ -460,26 +483,65 @@
               if (more) {
                 onstages?.(more);
               }
-            }}>Pick stages…</DropdownMenu.Item
+            }}
           >
+            <IconColumns />
+            <span>Pick stages…</span>
+          </DropdownMenu.Item>
         {/if}
+        <DropdownMenu.Item
+          onSelect={() => {
+            cawOpen = true;
+          }}
+        >
+          <IconSettings />
+          <span>Caw settings…</span>
+        </DropdownMenu.Item>
         <DropdownMenu.Item
           onSelect={() =>
             goto(`/usage?project=${encodeURIComponent(project.id)}`)}
-          >Spend</DropdownMenu.Item
         >
+          <IconUsage />
+          <span>Spend</span>
+        </DropdownMenu.Item>
         <!-- The one destructive row, as every menu draws one: the house's
              destructive item, set apart at the end. -->
         <DropdownMenu.Separator />
         <!-- The forget unfolds under this head (forget.svelte.ts). -->
         <DropdownMenu.Item
           onSelect={() => forgetProject(project, forgetAt)}
-          variant="destructive">Forget project…</DropdownMenu.Item
+          variant="destructive"
         >
+          <IconTrash />
+          <span>Forget project…</span>
+        </DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu.Root>
   </div>
 </header>
+<!-- Caw's settings, off `⋯`: the project's own, beside its other settings. -->
+{#if touch.current}
+  <Drawer.Root bind:open={cawOpen}>
+    <Drawer.Content class="caw-sheet">
+      <Drawer.Title class="sr-only">Caw, lead of {project.name}</Drawer.Title>
+      <CawPanel {lead} projectId={project.id} projectName={project.name} />
+    </Drawer.Content>
+  </Drawer.Root>
+{:else}
+  <Popover.Root bind:open={cawOpen}>
+    <Popover.Content
+      align="end"
+      aria-label="Caw, lead of {project.name}"
+      class="caw-settings-pop"
+      collisionPadding={12}
+      customAnchor={more}
+      side="bottom"
+      sideOffset={4}
+    >
+      <CawPanel {lead} projectId={project.id} projectName={project.name} />
+    </Popover.Content>
+  </Popover.Root>
+{/if}
 <!-- A forget asked from `⋯`, under the head, from where its title starts. -->
 <ForgetProjectTray at={forgetAt} class="head-forget max-w-lg" />
 
@@ -489,6 +551,24 @@
   :global(.head-forget) {
     --ask-indent: var(--space-7);
     --fault-indent: var(--space-7);
+  }
+  /* Caw's settings in the glass card's frame (home/CawPanel's
+     `.kit-pop.caw-pop`): the panel's width, its rows 7px in, a narrower cap
+     under 900px. */
+  :global(.kit-pop.caw-settings-pop) {
+    width: min(var(--c-panel-w), calc(100vw - 24px));
+    padding: 7px;
+  }
+  @media (max-width: 899px) {
+    :global(.kit-pop.caw-settings-pop) {
+      width: min(
+        var(--c-panel-w),
+        calc(100vw - 12px - env(safe-area-inset-right, 0px))
+      );
+    }
+  }
+  :global(.caw-sheet) {
+    padding-block-end: var(--safe-bottom);
   }
   .project-head {
     display: flex;

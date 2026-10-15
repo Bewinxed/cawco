@@ -1,20 +1,15 @@
 <script lang="ts">
   /**
-   * Caw's panel (fable-lead-switch.md §1, "switch in panel"): who he is and
-   * what he is doing in one sentence, the lead switch, the harness he runs
-   * on and the model his session runs, and the way to talk to him, on or
-   * off. Off, he acts only
-   * when you write to him: no event wakes him (WORDS.md, Caw on and off).
+   * Caw's settings, the project's own (fable-lead-switch.md §1), opened
+   * from the project head's `⋯`: who he is and what he is doing in one
+   * sentence, the lead switch, the harness he runs on and the model his
+   * session runs. Off, he acts only when you write to him: no event wakes
+   * him (WORDS.md, Caw on and off). Talking to him is his dock (CawDock).
    */
   import type { CawHarness, CawInitiated, CawRunning } from "@cawco/core";
   import { untrack } from "svelte";
   import CawOffTray, { type CawOffAsk } from "#lib/cawco/CawOffTray.svelte";
-  import {
-    cawco,
-    onProjectStop,
-    startThread,
-    threadsOf,
-  } from "#lib/cawco/client.svelte.js";
+  import { cawco, onProjectStop } from "#lib/cawco/client.svelte.js";
   import CawFace from "#lib/cawco/home/CawFace.svelte";
   import ModelCombobox from "#lib/cawco/ModelCombobox.svelte";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
@@ -22,7 +17,6 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Select from "#lib/components/ui/select/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
-  import CawField from "./CawField.svelte";
   import { CAW_HARNESS_LABEL, type CawLead } from "./caw-lead.svelte";
 
   let {
@@ -32,8 +26,6 @@
   }: { lead: CawLead; projectId: string; projectName: string } = $props();
 
   const on = $derived(lead.view?.on ?? false);
-  const lastThread = $derived(threadsOf(projectId)[0] ?? null);
-  let talking = $state(false);
 
   /**
    * Turning him off (The Stay In Context Rule): nothing he started runs,
@@ -214,38 +206,6 @@
       />
     {/if}
   </div>
-  {#if !lead.view?.problem || lastThread}
-    <div class="row actions">
-      {#if !(lead.view?.problem || talking)}
-        <Button
-          onclick={() => {
-            talking = true;
-          }}
-          size="sm"
-          variant="outline">Message Caw</Button
-        >
-      {/if}
-      {#if lastThread}
-        <Button
-          class="ml-auto"
-          href="/session/thread:{lastThread.id}"
-          size="sm"
-          variant="ghost">Open last thread</Button
-        >
-      {/if}
-    </div>
-  {/if}
-  {#if talking}
-    <CawField
-      autofocus
-      label="Message Caw"
-      onsend={async (text) => {
-        await startThread(projectId, text);
-        talking = false;
-      }}
-      placeholder="Message the project…"
-    />
-  {/if}
   {#if cawco.hub === "unreachable"}
     <p class="muted">The hub is not answering; what shows was read before.</p>
   {/if}
@@ -286,9 +246,6 @@
   .muted {
     font: var(--type-meta);
     color: var(--ink-muted);
-  }
-  .actions {
-    justify-content: flex-start;
   }
   /* His own turn, asked about under the switch: its words, then the two ways. */
   .turn-words {

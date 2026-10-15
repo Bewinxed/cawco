@@ -16,19 +16,28 @@
    *
    * `thread:new:<project>` is a thread not yet started: its first message
    * makes it, and the tab is re-addressed to the thread the hub made.
+   *
+   * A thread with nothing said yet opens on the hero (PRD §5.6, the New
+   * project page's and the empty board's): Caw at 80 over the question,
+   * and the project's starters, each putting its sentence into the
+   * composer. He stands there instead of on the composer; your first words
+   * send him from the hero to his seat on it.
    */
   import type { CawView, PermissionResult, ThreadMessage } from "@cawco/core";
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import type { TransitionConfig } from "svelte/transition";
   import { cawLoop } from "#lib/cawco/feel.svelte.js";
   import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
-  import { land } from "#lib/cawco/motion/share.svelte.js";
+  import { depart, land } from "#lib/cawco/motion/share.svelte.js";
+  import StarterCards from "#lib/cawco/project/StarterCards.svelte";
   import {
     Alert,
     AlertAction,
     AlertDescription,
   } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { browser } from "$app/env";
   import { barGlass } from "./bar-glass.svelte";
   import { failureWords, unreachable } from "./hub-read";
@@ -67,26 +76,27 @@
     readStages,
     type StageKind,
     type StagesView,
+    type Starter,
     type TaskSummary,
     type TaskView,
   } from "./project-tasks";
+  import RegionBoundary from "./RegionBoundary.svelte";
   import RowFault from "./RowFault.svelte";
   import SideSplit from "./side/SideSplit.svelte";
   import TaskCard from "./tasks/TaskCard.svelte";
   import TaskSheet from "./tasks/TaskSheet.svelte";
-  import {
-    newThreadProjectOf,
-    routineMadeOf,
-    threadIdOf,
-    threadTabId,
-  } from "./thread-tabs";
-  import type { ComposerAsk, ComposerFoot } from "./transcript/Composer.svelte";
+  import { threadBlockOf } from "./thread-blocks";
+  import { newThreadProjectOf, threadIdOf, threadTabId } from "./thread-tabs";
+  import Composer, {
+    type ComposerAsk,
+    type ComposerFoot,
+  } from "./transcript/Composer.svelte";
   import { ComposerDraft } from "./transcript/composer-draft.svelte";
   import FootFade from "./transcript/FootFade.svelte";
   import HeadFade from "./transcript/HeadFade.svelte";
   import Transcript from "./transcript/Transcript.svelte";
   import TranscriptSkeleton from "./transcript/TranscriptSkeleton.svelte";
-  import { CAW_EVENT, setVoice } from "./transcript/voice";
+  import { setVoice } from "./transcript/voice";
   import type { Message } from "./types";
   import {
     type ComposerBinding,
@@ -100,12 +110,21 @@
     visible,
     active,
     focused = false,
+    docked,
   }: {
     viewId: string;
     visible: boolean;
     /** Its group's active tab (PaneHost). */
     active: boolean;
     focused?: boolean;
+    /**
+     * Drawn in Caw's dock beside a project's page (CawDock), not as a tab:
+     * it draws its own composer (there is no group to lend one), nothing
+     * beside it (the dock is the page's side surface), and the thread its
+     * first message makes is handed to the dock (`onthread`) where a tab
+     * would be re-addressed.
+     */
+    docked?: { onthread: (threadId: string) => void };
   } = $props();
 
   const threadId = $derived(threadIdOf(viewId));
@@ -147,95 +166,9 @@
     });
   });
 
-  /** What rode with your words, as a send's row carries it (MessageRow); none when nothing did. */
-  function carriedOn(message: ThreadMessage): Message["metadata"] {
-    if (message.author !== "you") {
-      return;
-    }
-    const { images, attachments } = message;
-    return images?.length || attachments?.length
-      ? {
-          ...(images?.length ? { images } : {}),
-          ...(attachments?.length ? { attachments } : {}),
-        }
-      : undefined;
-  }
-
   /** One message as the transcript's block (`Message`). */
-  function blockOf(message: ThreadMessage): Message {
-    const base = {
-      id: message.id,
-      instanceId: viewId,
-      timestamp: new Date(message.createdAt).toISOString(),
-    };
-    if (message.author === "caw") {
-      const metadata = {
-        ...(message.tasks?.length ? { tasks: message.tasks } : {}),
-        ...(message.files?.length ? { files: message.files } : {}),
-      };
-      return {
-        ...base,
-        type: "assistant",
-        content: message.body,
-        metadata: Object.keys(metadata).length ? metadata : undefined,
-      };
-    }
-    if (message.author === "event") {
-      const made = routineMadeOf(message);
-      return {
-        ...base,
-        type: "ui.system_note",
-        content: message.body ?? "",
-        metadata: {
-          noteTitle: message.noteTitle,
-          noteKind: CAW_EVENT,
-          ...(made
-            ? {
-                routineMade: {
-                  expiresAt: made.expiresAt,
-                  routineId: made.routineId,
-                  threadId: message.threadId,
-                },
-              }
-            : {}),
-        },
-      };
-    }
-    if (message.question && message.answer) {
-      // Your answer to his question: the call that asked it, answered, which
-      // the transcript draws as the settled QuestionCard.
-      const call = message.question.toolUseId ?? message.id;
-      return {
-        ...base,
-        type: "tool.use",
-        content: "",
-        toolCallId: call,
-        metadata: {
-          toolName: "AskUserQuestion",
-          toolId: call,
-          toolInput: { questions: message.question.questions },
-          toolStatus: "success",
-          toolUseResult:
-            message.answer.outcome === "answered"
-              ? {
-                  outcome: "answered",
-                  answers: message.answer.answers,
-                  questions: message.question.questions,
-                  ...(message.answer.annotations
-                    ? { annotations: message.answer.annotations }
-                    : {}),
-                }
-              : { outcome: "dismissed", questions: message.question.questions },
-        },
-      };
-    }
-    return {
-      ...base,
-      type: "user",
-      content: message.body,
-      metadata: carriedOn(message),
-    };
-  }
+  const blockOf = (message: ThreadMessage): Message =>
+    threadBlockOf(message, viewId);
 
   /**
    * His questions withdrawn before they were answered (his turn
@@ -537,6 +470,51 @@
   /** The failed send never reached the hub: its line offers Send again. */
   let sendAgain = $state(false);
 
+  // --- the hero: a thread with nothing said yet ---------------------------------
+
+  /**
+   * Nothing said here yet and nothing on its way: the hero stands where the
+   * transcript will. Your first send takes it away as it leaves, and a send
+   * the hub refused brings it back with your words in the field.
+   */
+  const hero = $derived(
+    messages !== null && messages.length === 0 && !sending && !readProblem
+  );
+  /** The project's starters (its stages' `starters`), read for the hero. */
+  let starters = $state<Starter[]>([]);
+  $effect(() => {
+    const pid = projectId;
+    if (!(hero && pid && cawco.status === "connected")) {
+      return;
+    }
+    untrack(() => {
+      readStages(pid).then(
+        (read) => {
+          if (pid === projectId) {
+            ({ starters } = read);
+          }
+        },
+        () => undefined
+      );
+    });
+  });
+  const projectName = $derived(
+    cawco.project(projectId)?.name ?? "this project"
+  );
+  /** A starter's sentence into the composer, the caret after it; nothing is sent. */
+  function pick(text: string) {
+    draft.text = text;
+    draft.focusWanted = true;
+  }
+  /**
+   * The hero's Caw departs as it goes, and his seat on the composer lands
+   * him (`perch`): one Caw, 80 into his seat, as the empty board's does.
+   */
+  function seatHim(node: HTMLElement): TransitionConfig {
+    depart(node);
+    return { duration: 0 };
+  }
+
   async function onsubmit(text: string, extras: SendExtras, id: string) {
     sending = true;
     sendError = "";
@@ -548,7 +526,11 @@
         ? await sayInThread(projectId, threadId, text, id, extras)
         : await startThread(projectId, text, id, extras);
       if (!threadId) {
-        workspace.retarget(viewId, threadTabId(said.thread.id));
+        if (docked) {
+          docked.onthread(said.thread.id);
+        } else {
+          workspace.retarget(viewId, threadTabId(said.thread.id));
+        }
       }
     } catch (error) {
       draft.restore(text, extras);
@@ -590,7 +572,7 @@
       return visible;
     },
     get transcriptShare() {
-      return (100 - sideShare) / 100;
+      return docked ? 1 : (100 - sideShare) / 100;
     },
     delegatesOf: "",
     get recallOf() {
@@ -606,17 +588,21 @@
     get ask() {
       return firstAsk;
     },
-    perch,
+    get perch() {
+      return hero ? undefined : perch;
+    },
     onfoot: (next) => {
       foot = next;
     },
+    // Docked, the plan has nowhere beside the thread to open: the dock is
+    // the page's side surface.
     get planRing() {
-      return planProgressNow ? planRing : undefined;
+      return planProgressNow && !docked ? planRing : undefined;
     },
   };
 
   $effect(() => {
-    if (!(browser && writable)) {
+    if (!(browser && writable) || docked) {
       return;
     }
     const id = viewId;
@@ -656,8 +642,9 @@
       return view ? `${offHeight}px` : "0px";
     }
     // His slot above the pill, and what his acting may draw above it, in
-    // every status: a working Caw reaches higher than his still.
-    const rise = seatSize * (LEDGE_LINE + CAW_HEADROOM);
+    // every status: a working Caw reaches higher than his still. On the
+    // hero he stands over it instead, and the pill has no seat.
+    const rise = hero ? 0 : seatSize * (LEDGE_LINE + CAW_HEADROOM);
     return `var(--c-composer-panel) + var(--c-tray-row) + ${rise}px`;
   });
   /** Caw cannot start because no machine is online: the cause's one action is to look at the machines. */
@@ -752,6 +739,65 @@
   </div>
 {/snippet}
 
+{#snippet slide()}
+  <div class="transcript-slide">
+    {#if readProblem}
+      <p class="problem" role="alert" in:crossIn>
+        The thread could not be read: {readProblem}
+      </p>
+    {:else if hero}
+      <div class="hero" data-thread-hero in:crossIn>
+        <EmptyState
+          line={view && !view.on
+            ? "Caw is off, so he acts only when you write to him."
+            : undefined}
+          title="What's next for {projectName}?"
+        >
+          {#snippet mark()}
+            <div
+              class="caw-80"
+              data-share={projectId ? `caw:${projectId}` : undefined}
+              out:seatHim|global
+            >
+              <Caw size={80} status="ready" />
+            </div>
+          {/snippet}
+          {#snippet action()}
+            {#if starters.length > 0}
+              <StarterCards onpick={pick} {starters} />
+            {/if}
+          {/snippet}
+        </EmptyState>
+      </div>
+    {:else if messages !== null}
+      <div class="state">
+        <Transcript
+          agentName="Caw"
+          bare
+          {focused}
+          onshown={(drawn) => {
+            shown = drawn;
+          }}
+          {session}
+          {visible}
+        />
+      </div>
+      <HeadFade />
+    {/if}
+    <!-- The skeleton stands in for rows still on their way and goes the
+         moment they are drawn: its rows are not where the real ones fall, so
+         fading it over them reads as a second, stale transcript. -->
+    {#if writable}
+      <FootFade solid={foot.stack ? fadeSolid : undefined} />
+    {/if}
+    {#if veiled}
+      <div class="veil" in:crossIn>
+        <TranscriptSkeleton />
+      </div>
+    {/if}
+  </div>
+{/snippet}
+
 <div class="pane" bind:clientWidth={paneWidth}>
   <div
     class="body"
@@ -761,49 +807,52 @@
       ? `--latest-inset: calc(${latestFoot} - max(calc(var(--space-8) * 3), var(--composer-clearance)))`
       : ''}"
   >
-    <SideSplit
-      {active}
-      {phone}
-      planOf={lead}
-      previewOf={lead}
-      {viewId}
-      {visible}
-      bind:this={side}
-      bind:share={sideShare}
-    >
-      <div class="transcript-slide">
-        {#if readProblem}
-          <p class="problem" role="alert" in:crossIn>
-            The thread could not be read: {readProblem}
-          </p>
-        {:else if messages !== null}
-          <div class="state">
-            <Transcript
-              agentName="Caw"
-              bare
-              {focused}
-              onshown={(drawn) => {
-                shown = drawn;
-              }}
-              {session}
-              {visible}
-            />
-          </div>
-          <HeadFade />
-        {/if}
-        <!-- The skeleton stands in for rows still on their way and goes the
-             moment they are drawn: its rows are not where the real ones fall, so
-             fading it over them reads as a second, stale transcript. -->
-        {#if writable}
-          <FootFade solid={foot.stack ? fadeSolid : undefined} />
-        {/if}
-        {#if veiled}
-          <div class="veil" in:crossIn>
-            <TranscriptSkeleton />
-          </div>
-        {/if}
+    {#if docked}
+      {@render slide()}
+    {:else}
+      <SideSplit
+        {active}
+        {phone}
+        planOf={lead}
+        previewOf={lead}
+        {viewId}
+        {visible}
+        bind:this={side}
+        bind:share={sideShare}
+      >
+        {@render slide()}
+      </SideSplit>
+    {/if}
+    {#if docked && writable}
+      <!-- No group lends this pane a composer: it draws its own, where the
+           group's stands (PaneLeaf `.dock`), from the same binding. -->
+      <div class="composer-dock">
+        <RegionBoundary kept="Your draft is kept." region="composer">
+          <Composer
+            agentName={binding.agentName}
+            ask={firstAsk}
+            busy={thread?.status === "working"}
+            commands={binding.commands}
+            delegatesOf={binding.delegatesOf}
+            {draft}
+            mentions={binding.mentions}
+            onfoot={binding.onfoot}
+            oninterruptsend={binding.oninterruptsend}
+            onmenu={binding.onmenu}
+            {onstop}
+            {onsubmit}
+            paneVisible={visible}
+            perch={hero ? undefined : perch}
+            placeholder={binding.placeholder}
+            recallOf={viewId}
+            {sendAgain}
+            {sendError}
+            {sending}
+            suggest={binding.suggest}
+          />
+        </RegionBoundary>
       </div>
-    </SideSplit>
+    {/if}
     {#if view?.problem}
       <!-- No composer: Caw cannot start to read it. What is true, and the
            one thing that changes it. -->
@@ -938,6 +987,40 @@
   }
   .seat {
     inline-size: var(--seat);
+  }
+  /* The hero: the empty board's (project page `.caw-empty`), centred in the
+     room over the composer, which it clears as the transcript does. */
+  .hero {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    justify-content: center;
+    min-block-size: 0;
+    padding: var(--space-6) var(--space-5) var(--composer-clearance);
+    overflow-y: auto;
+  }
+  .hero :global(.kit-empty) {
+    align-items: center;
+    inline-size: 100%;
+    max-inline-size: var(--c-starters-w);
+    margin-inline: auto;
+    text-align: center;
+  }
+  .hero :global(.kit-empty-action) {
+    align-self: stretch;
+  }
+  .caw-80 {
+    display: grid;
+    place-items: center;
+    margin-block-end: var(--space-3);
+  }
+  /* The docked composer's layer, as the group's (PaneLeaf `.dock`): over
+     the pane, taking no press but the composer's own. */
+  .composer-dock {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
   }
   .thread-tasks {
     display: grid;

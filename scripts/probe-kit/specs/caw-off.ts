@@ -8,8 +8,8 @@
  * running-sessions tray in the page (StopTray, `data-stop-tray`): in his
  * panel under the switch, under the head's ⋯ for forget. In order:
  *
- * 1. His popover stands in the glass card's frame (web/caw-seat-pop's
- *    check); nothing he started runs: the switch flips at once, no tray.
+ * 1. His settings popover (the head's ⋯ › Caw settings…) stands in the
+ *    glass card's frame (web/caw-seat-pop's check); nothing he started runs: the switch flips at once, no tray.
  * 2. Only his own turn (a routine's) runs: one line under the switch, no
  *    tray; "Stop now" turns him off once the hub says the turn stopped.
  * 3. Two sessions he started run: the tray names both; "Stop 2 and turn Caw
@@ -31,7 +31,7 @@ import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
-import { checkCawSeatPop } from "./web/caw-seat-pop";
+import { checkCawSeatPop, openCawSettings } from "./web/caw-seat-pop";
 
 const CAW = "You are Caw";
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
@@ -139,8 +139,7 @@ const run = async (kit: Kit) => {
   const page = await kit.page("desk", { init: [RECORD] });
   const openPanel = async () => {
     await open(page, `${base}/project/${project.id}`, "button.caw-seat");
-    await page.click("button.caw-seat");
-    await page.waitForSelector(".caw-panel [role='switch']");
+    await openCawSettings(page);
   };
   const flip = () => page.click(".caw-panel [role='switch']");
   // The running-sessions tray in the page (StopTray): in his panel under
