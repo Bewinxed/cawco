@@ -69,7 +69,15 @@ import { placedMemoryDir } from "./placed-memory";
 import { promptWrite } from "./prompt-writes";
 import { noRepositoryAt } from "./stand-ins";
 import { claudeHomeEnv, resolveBin, toolEnv, toolPath } from "./tools";
-import { linkedTree, placeTree, removeTree, treeStoreOf } from "./tree-swap";
+import {
+  CARRIED,
+  carriedList,
+  heldHash,
+  linkedTree,
+  placeTree,
+  removeTree,
+  treeStoreOf,
+} from "./tree-swap";
 import {
   guardWorkflowSkillRemoval,
   workflowSkillCollision,
@@ -1103,17 +1111,19 @@ const dirExists = async (path: string): Promise<boolean> => {
 };
 
 /**
- * The skill's directory, as the hub resolved it. Written whole, because the
- * directory is cawco's own: a file the last version carried is not one this
- * version carries, and leaving it there is how a skill drifts. Swapped in with
- * one rename ({@link placeTree}), because a running session reads it.
+ * The skill's directory, as the hub resolved it. Written whole: a file the
+ * last version carried is not one this version carries, and leaving it there
+ * is how a skill drifts. What the fleet never carried (a script's
+ * `__pycache__`, a note someone added) goes into the new version as it is.
+ * Swapped in with one rename ({@link placeTree}), because a running session
+ * reads it.
  */
 export const writeSkill = async (
   skill: FleetSkillPayload,
   root = SKILLS_DIR
 ): Promise<void> => {
   const dir = join(root, skill.name);
-  const write = () => placeTree(dir, skill.files ?? []);
+  const write = () => placeTree(dir, skill.files ?? [], carriedPaths(skill));
   // Workflow stubs since d15e919d are manual-only and absent from the model's
   // skill catalog. Hiding a pre-cutover visible stub is still a prompt change.
   const previous = Bun.file(join(dir, "SKILL.md"));
@@ -1159,7 +1169,7 @@ const byMarketplace = (
  *
  * Each plugin's tree is swapped in with one rename ({@link placeTree}):
  * Claude Code runs its hooks from `plugins/<name>` while this writes, and
- * the list of the files the fleet carried goes with it ({@link CARRIED}).
+ * the list of the files the fleet carried goes with it.
  */
 const writeVendoredMarketplace = async (
   marketplace: string,
@@ -1174,26 +1184,13 @@ const writeVendoredMarketplace = async (
       throw new Error(`unsafe plugin name ${plugin.name}`);
     }
     // The same refusal a skill's files get: a path out of the directory is a
-    // file the fleet would write somewhere nobody asked it to. The carried
-    // list's own name is cawco's.
-    const unsafe = plugin.files.find(
-      ({ path }) => !isSafeSkillPath(path) || path === CARRIED
-    );
+    // file the fleet would write somewhere nobody asked it to.
+    const unsafe = plugin.files.find(({ path }) => !isSafeSkillPath(path));
     if (unsafe) {
       throw new Error(`unsafe path ${unsafe.path}`);
     }
-    const carried = Buffer.from(
-      `${JSON.stringify(plugin.files.map(({ path }) => path))}\n`
-    );
     // biome-ignore lint/performance/noAwaitInLoops: one plugin's tree at a time keeps the disk writes bounded
-    await placeTree(join(into, "plugins", plugin.name), [
-      ...plugin.files,
-      {
-        path: CARRIED,
-        contentBase64: carried.toString("base64"),
-        executable: false,
-      },
-    ]);
+    await placeTree(join(into, "plugins", plugin.name), plugin.files);
     console.log(
       `[fleet] ${plugin.name}@${marketplace} written (${plugin.files.length} files, ${plugin.hash.slice(0, 7)})`
     );
@@ -1260,15 +1257,23 @@ const writeVendoredMarketplaces = async (
   });
 };
 
+/** The paths of the files the fleet carries for a skill now, when this sync has them. */
+const carriedPaths = (skill: FleetSkillPayload): string[] | undefined =>
+  skill.files?.map(({ path }) => path);
+
 /**
- * The hash of a directory's files as they are on this disk, computed as the
- * hub computes a resolved skill's or plugin's (`hashFiles`), so equal means
- * the same bytes. Undefined for a directory that is missing or empty.
+ * Whether the skill at `dir`, whose carried files hash to `held`, is the
+ * fleet's copy and needs no write. One written before skills kept their
+ * carried list is written once more when this sync carries its files, so it
+ * gets one and is read by it from then on.
  */
-const treeHash = async (dir: string): Promise<string | undefined> => {
-  const files = await treeFiles(dir);
-  return files.length > 0 ? hashFiles(files) : undefined;
-};
+export const holdsFleetCopy = async (
+  dir: string,
+  skill: FleetSkillPayload,
+  held: string | undefined
+): Promise<boolean> =>
+  held === skill.hash &&
+  !(skill.files && (await carriedList(dir)) === undefined);
 
 /** A directory's files as they are on this disk, execute bits included. */
 const treeFiles = async (dir: string): Promise<SkillFile[]> => {
@@ -1341,17 +1346,25 @@ export const skillRecords = async (
 
 /**
  * What a skills directory holds of the skills cawco wrote there: name → hash
- * of that skill's directory on disk now. Only the names the sidecar owns are
- * read; a skill nobody wrote is not one the fleet holds.
+ * of the files the fleet carried for that skill, as they are on disk now
+ * ({@link heldHash}). Only the names the sidecar owns are read; a skill
+ * nobody wrote is not one the fleet holds. `desired` is the sync's payload,
+ * whose file list reads a skill written before skills kept their own.
  */
 export const heldSkills = async (
   dir: string,
-  names: readonly string[]
+  names: readonly string[],
+  desired: readonly FleetSkillPayload[] = []
 ): Promise<Record<string, string>> => {
+  const known = new Map(desired.map((skill) => [skill.name, skill]));
   const held: Record<string, string> = {};
   for (const name of names) {
+    const skill = known.get(name);
     // biome-ignore lint/performance/noAwaitInLoops: one skill directory read at a time keeps the disk reads bounded
-    const hash = await treeHash(join(dir, name));
+    const hash = await heldHash(
+      join(dir, name),
+      skill ? carriedPaths(skill) : undefined
+    );
     if (hash) {
       held[name] = hash;
     }
@@ -1362,9 +1375,10 @@ export const heldSkills = async (
 /**
  * Whether a skill cawco owns was edited on this machine, and what it reports
  * if so — the rule a memory document follows ({@link memoryPlan}). Edited is
- * a directory on disk that is neither what cawco last wrote there (`recorded`,
- * the sidecar's hash) nor already what the fleet carries: a copy someone
- * changed by hand. It is not rewritten; the operator adopts it or overwrites
+ * a directory whose carried files ({@link heldHash}) are neither what cawco
+ * last wrote there (`recorded`, the sidecar's hash) nor already what the
+ * fleet carries: a carried file someone changed or took away. A file the
+ * fleet never carried (a `__pycache__`, a note) is no edit. It is not rewritten; the operator adopts it or overwrites
  * it. A missing directory is not an edit, and neither is one with no record
  * of what was written (a write that failed part-way), so both are written.
  * When the fleet's copy also moved since cawco wrote, both changes are named
@@ -1384,55 +1398,12 @@ export const skillDrift = (
 };
 
 /**
- * The paths of the files the fleet carried for a vendored plugin, as a JSON
- * list in the plugin's own tree, written with it. Not one of those files.
- */
-const CARRIED = ".cawco-carried.json";
-
-/**
- * The hash of a vendored plugin as it is on this disk, over exactly the files
- * the fleet carried for it ({@link CARRIED}), in the hub's `hashFiles`, so it
- * equals the hub's hash of the same plugin whenever those files are as
- * written. What the plugin's own code made beside them (a hook's
- * `__pycache__`) is in no list, so it never reads as a change and never has
- * the hub send the bytes again (on 2026-10-16 it did on every sync, and each
- * rewrite raced the plugin's hooks). Undefined when the list or a file it
- * names is missing: a copy that is not whole is carried again.
- */
-const carriedHash = async (dir: string): Promise<string | undefined> => {
-  const listed: unknown = await Bun.file(join(dir, CARRIED))
-    .json()
-    .catch(() => undefined);
-  if (!Array.isArray(listed) || listed.length === 0) {
-    return undefined;
-  }
-  const files: SkillFile[] = [];
-  for (const path of listed) {
-    if (typeof path !== "string" || !isSafeSkillPath(path)) {
-      return undefined;
-    }
-    const file = join(dir, path);
-    // biome-ignore lint/performance/noAwaitInLoops: one file read at a time keeps the disk reads bounded
-    const stats = await stat(file).catch(() => undefined);
-    if (!stats?.isFile()) {
-      return undefined;
-    }
-    files.push({
-      path,
-      contentBase64: Buffer.from(await Bun.file(file).bytes()).toString(
-        "base64"
-      ),
-      // biome-ignore lint/suspicious/noBitwiseOperators: the execute bits of a stat mode are a mask, and the mask is the question
-      executable: (stats.mode & 0o111) !== 0,
-    });
-  }
-  return hashFiles(files);
-};
-
-/**
  * What the vendored marketplaces hold on this disk now, by fleet plugin id
- * (`plugin@marketplace`) → hash ({@link carriedHash}): the key the hub leaves
- * bytes out by.
+ * (`plugin@marketplace`) → hash ({@link heldHash}): the key the hub leaves
+ * bytes out by. Over the files the fleet carried alone, so what a plugin's
+ * own code makes beside them (a hook's `__pycache__`) never has the hub send
+ * the bytes again (on 2026-10-16 it did on every sync, and each rewrite raced
+ * the plugin's hooks).
  */
 const readVendoredPlugins = async (): Promise<Record<string, string>> => {
   const held: Record<string, string> = {};
@@ -1442,7 +1413,7 @@ const readVendoredPlugins = async (): Promise<Record<string, string>> => {
     const root = join(vendorDir(marketplace), "plugins");
     for (const name of await readdir(root).catch(() => [] as string[])) {
       // biome-ignore lint/performance/noAwaitInLoops: one plugin directory read at a time keeps the disk reads bounded
-      const hash = await carriedHash(join(root, name));
+      const hash = await heldHash(join(root, name));
       if (hash) {
         held[`${name}@${marketplace}`] = hash;
       }
@@ -1724,7 +1695,7 @@ const syncSkillFiles = async (
   const written: Sidecar["skills"] = {};
   // What is on this disk now, not what the sidecar says was written: the
   // sidecar is who owns a directory, the disk is what is in it.
-  const held = await heldSkills(SKILLS_DIR, Object.keys(sidecar));
+  const held = await heldSkills(SKILLS_DIR, Object.keys(sidecar), desired);
   const managed = await skillRecords(SKILLS_DIR, sidecar, held, desired);
   for (const skill of desired) {
     try {
@@ -1738,7 +1709,13 @@ const syncSkillFiles = async (
       report[skill.name] = { state: "failed", detail: said(error) };
       continue;
     }
-    if (held[skill.name] === skill.hash) {
+    if (
+      await holdsFleetCopy(
+        join(SKILLS_DIR, skill.name),
+        skill,
+        held[skill.name]
+      )
+    ) {
       written[skill.name] = skill.hash;
       report[skill.name] = { state: "applied" };
       continue;
@@ -1885,8 +1862,8 @@ const placeSkill = async (
   }
   const root = placedSkillsDir(cwd);
   const dir = join(root, skill.name);
-  const disk = await treeHash(dir);
-  if (disk === skill.hash) {
+  const disk = await heldHash(dir, carriedPaths(skill));
+  if (await holdsFleetCopy(dir, skill, disk)) {
     report[key] = { state: "applied" };
     return skill.hash;
   }
@@ -1949,7 +1926,7 @@ const syncPlacedSkills = async (
     }
     const dir = join(placedSkillsDir(record.cwd), record.name);
     // biome-ignore lint/performance/noAwaitInLoops: one removal at a time, each recorded before the next
-    const disk = await treeHash(dir);
+    const disk = await heldHash(dir);
     if (disk !== undefined && record.hash && disk !== record.hash) {
       report[key] = { state: "removed", detail: "kept: edited in the folder" };
       continue;
@@ -1985,10 +1962,16 @@ export const placedAsMade = async (cwd: string): Promise<string[]> => {
       continue;
     }
     const dir = join(placedSkillsDir(folder), record.name);
-    if ((await treeHash(dir)) === record.hash) {
-      // The skill's link, and the tree it links to (tree-swap.ts).
+    if ((await heldHash(dir)) === record.hash) {
+      // The skill's link, and in the tree it links to (tree-swap.ts) the
+      // files the fleet carried and their list. Anything else in that tree
+      // (a note someone added there) is theirs, not CawCo's.
       const tree = await linkedTree(dir);
-      made.push(dir, ...(tree ? [tree] : []));
+      const carried = tree ? ((await carriedList(tree)) ?? []) : [];
+      made.push(
+        dir,
+        ...(tree ? [CARRIED, ...carried].map((path) => join(tree, path)) : [])
+      );
     }
   }
   for (const record of Object.values(placedMemory)) {
@@ -3165,7 +3148,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
   for (const [key, record] of Object.entries(managed.placedSkills)) {
     const dir = join(placedSkillsDir(record.cwd), record.name);
     // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
-    const disk = await treeHash(dir);
+    const disk = await heldHash(dir);
     if (disk === undefined) {
       skills[key] = { state: "failed", detail: `${dir} is not on disk` };
     } else if (disk === record.hash) {
@@ -3563,7 +3546,9 @@ const filesUnder = async (root: string, prefix = ""): Promise<string[]> => {
 /**
  * The files of a skill that is already on this machine, so the hub can adopt it
  * into the fleet and hand it to every other machine. Named as
- * {@link inspectConfig} named it, plugin skills included.
+ * {@link inspectConfig} named it, plugin skills included. Every file in it,
+ * a note someone added included, but CawCo's own list of what the fleet
+ * carried ({@link CARRIED}).
  */
 export const readSkillFiles = async (
   name: string,
@@ -3577,7 +3562,10 @@ export const readSkillFiles = async (
   }
 
   const files: SkillFile[] = [];
-  for (const path of await filesUnder(skill.path)) {
+  const paths = (await filesUnder(skill.path)).filter(
+    (each) => each !== CARRIED
+  );
+  for (const path of paths) {
     const content = new Uint8Array(
       // biome-ignore lint/performance/noAwaitInLoops: files are read one at a time in directory-listing order, so the result's order is stable and a huge skill never holds every file's read in flight at once
       await Bun.file(join(skill.path, path)).arrayBuffer()

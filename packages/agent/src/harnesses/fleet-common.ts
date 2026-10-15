@@ -20,6 +20,7 @@ import type {
 import { writeStateFile } from "@cawco/core/state-file";
 import {
   heldSkills,
+  holdsFleetCopy,
   memoryPlan,
   skillDrift,
   skillRecords,
@@ -97,7 +98,7 @@ export const syncSkillFiles = async (
   const written: Record<string, string> = {};
   // What is on this disk now, not what the sidecar says was written: the
   // sidecar is who owns a directory, the disk is what is in it.
-  const held = await heldSkills(dir, Object.keys(sidecar));
+  const held = await heldSkills(dir, Object.keys(sidecar), desired);
   const managed = await skillRecords(dir, sidecar, held, desired);
   for (const skill of desired) {
     try {
@@ -111,7 +112,7 @@ export const syncSkillFiles = async (
       report[skill.name] = { state: "failed", detail: String(error) };
       continue;
     }
-    if (held[skill.name] === skill.hash) {
+    if (await holdsFleetCopy(join(dir, skill.name), skill, held[skill.name])) {
       written[skill.name] = skill.hash;
       report[skill.name] = { state: "applied" };
       continue;
