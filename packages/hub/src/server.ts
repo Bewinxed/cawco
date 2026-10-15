@@ -8350,6 +8350,10 @@ export const createServer = (
     }
   };
 
+  /** A session's artifacts by id, newest first: what a preview frame lists (its panel's menu). */
+  const artifactIds = (instanceId: string): string[] =>
+    db.artifacts.ofInstance(instanceId).map((row) => row.id);
+
   const publishPreview = (
     instanceId: string,
     state: "open" | "closed",
@@ -8359,7 +8363,8 @@ export const createServer = (
       instanceId,
       state,
       target,
-      state === "open" ? previewAddress(instanceId) : null
+      state === "open" ? previewAddress(instanceId) : null,
+      artifactIds(instanceId)
     );
     streams.sequence(instanceId, frame);
     artifactSessions.refresh(instanceId);
@@ -8583,8 +8588,35 @@ export const createServer = (
       }
       target.upstream = started.upstream;
     }
+    const before = previewTargets.get(instanceId);
     previewTargets.set(instanceId, target);
     db.artifacts.show(instanceId, artifact.id);
+    // The panel moved off a machine's preview to a page or another machine:
+    // that machine's listener for this session goes. A start on the same
+    // machine already replaced it there. A daemon keys its listeners by
+    // session, so another session showing the same source keeps its own.
+    if (
+      before &&
+      !("page" in before.source) &&
+      ("page" in source || before.machineId !== machineId)
+    ) {
+      detach(
+        callAgent(
+          before.machineId,
+          PREVIEW_STOP,
+          [
+            {
+              instanceId,
+              ...(before.upstream?.token === undefined
+                ? {}
+                : { token: before.upstream.token }),
+            },
+          ],
+          BUSY_TIMEOUT_MS
+        ),
+        "previous preview stop"
+      );
+    }
     return { ok: true, frame: publishPreview(instanceId, "open", target) };
   };
 
@@ -9203,6 +9235,13 @@ export const createServer = (
         },
       }),
     showing: (instanceId) => previewTargets.get(instanceId)?.artifact.id,
+    // The same open, its list without what went: no pane reloads.
+    relist: (instanceId) => {
+      const target = previewTargets.get(instanceId);
+      if (target) {
+        publishPreview(instanceId, "open", target);
+      }
+    },
     previewAddress: (instanceId) => {
       let refusal: PreviewRefusal;
       try {
@@ -12538,7 +12577,13 @@ export const createServer = (
       return {
         type: "artifact.session",
         preview: target
-          ? previewFrame(instanceId, "open", target, previewAddress(instanceId))
+          ? previewFrame(
+              instanceId,
+              "open",
+              target,
+              previewAddress(instanceId),
+              artifactIds(instanceId)
+            )
           : null,
         session: row
           ? {
@@ -12569,7 +12614,7 @@ export const createServer = (
   const boardExtras = () => ({
     agents: withPresence(db.listAgents()),
     previews: [...previewTargets].map(([id, target]) =>
-      previewFrame(id, "open", target, previewAddress(id))
+      previewFrame(id, "open", target, previewAddress(id), artifactIds(id))
     ),
     handoffs: Object.fromEntries(handoffs),
     // Carried on every publish, so a dashboard follows a continuation it

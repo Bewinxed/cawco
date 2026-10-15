@@ -6,8 +6,9 @@
    * choosing one shows it. Each row's Remove (its trailing glyph, or Delete
    * on the highlighted row) removes it where it stands: a light action, no
    * confirm. The row leaves once the hub says it is gone, closing as the
-   * rows under it slide up (motion/rows); the panel follows the hub's frame
-   * when it was the one shown.
+   * rows under it slide up (motion/rows), in every tab: the panel's frame
+   * lists the session's artifacts (`held`), and the panel follows that frame
+   * when the removed one was shown.
    */
   import type { ArtifactKind, ArtifactSummary } from "@cawco/core";
   import type { Component } from "svelte";
@@ -28,9 +29,16 @@
 
   let {
     instanceId,
+    held,
     shown,
   }: {
     instanceId: string;
+    /**
+     * The session's artifacts by id, as its panel's frame lists them: a row
+     * whose id leaves it (removed in any tab, or by the agent) leaves the
+     * open list at once, and a new id reads the list again.
+     */
+    held: string[] | undefined;
     /** The artifact the panel shows. */
     shown: { id: string; kind: ArtifactKind; name: string };
   } = $props();
@@ -49,18 +57,37 @@
       createdAt: string | null;
       promoted: ArtifactSummary["promoted"];
     })[]
-  >(listed ?? [{ ...shown, createdAt: null, promoted: null }]);
+  >(
+    listed?.filter((row) => held?.includes(row.id) ?? true) ?? [
+      { ...shown, createdAt: null, promoted: null },
+    ]
+  );
 
-  $effect(() => {
-    if (!open) {
-      return;
-    }
+  /** An id the frame lists that the list read has not: the list is read again. */
+  const unread = $derived(
+    listed !== null &&
+      (held?.some((id) => !listed?.some((row) => row.id === id)) ?? false)
+  );
+
+  function readList() {
     listArtifacts(instanceId).then(
       (artifacts) => {
         listed = artifacts;
       },
       (error: Error) => toast.error(error.message)
     );
+  }
+
+  // Read on every open, and again when the frame names one it hasn't.
+  $effect(() => {
+    if (open) {
+      readList();
+    }
+  });
+  $effect(() => {
+    if (open && unread) {
+      readList();
+    }
   });
 
   function choose(artifact: { id: string }) {

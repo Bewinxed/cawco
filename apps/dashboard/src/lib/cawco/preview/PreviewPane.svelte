@@ -1265,7 +1265,7 @@
      it), the preview's own controls, Close; the page in the well. -->
 {#snippet artifactTitle()}
   {#if artifact}
-    <ArtifactMenu {instanceId} shown={artifact} />
+    <ArtifactMenu {instanceId} held={preview?.artifacts} shown={artifact} />
   {/if}
 {/snippet}
 

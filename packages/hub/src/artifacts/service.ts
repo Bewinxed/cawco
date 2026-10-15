@@ -511,6 +511,12 @@ export interface ArtifactServiceDeps {
    * when it has none; throws a refusal when every port is taken.
    */
   previewAddress: (instanceId: string) => PreviewAddress;
+  /**
+   * Every view of session `instanceId`'s panel hears its artifacts again on
+   * the frame it follows (the panel's open frame, unchanged otherwise); none
+   * when the panel shows nothing.
+   */
+  relist: (instanceId: string) => void;
   /** Where artifacts' files are kept: a page's `<root>/<id>/index.html`, a canvas's `<root>/<id>/picture.png`. */
   root: string;
   /**
@@ -1661,6 +1667,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const wasShown = deps.showing(instance.id) === row.id;
       discard(row);
       if (!wasShown) {
+        deps.relist(instance.id);
         const shown = deps.showing(instance.id);
         const now = shown === undefined ? undefined : db.get(shown);
         return {

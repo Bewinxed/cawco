@@ -212,7 +212,8 @@ export class ArtifactSession implements PaneFleet {
     if (
       sameRevision &&
       previous.state === frame.state &&
-      JSON.stringify(previous.artifact) === JSON.stringify(frame.artifact)
+      JSON.stringify(previous.artifact) === JSON.stringify(frame.artifact) &&
+      JSON.stringify(previous.artifacts) === JSON.stringify(frame.artifacts)
     ) {
       return;
     }

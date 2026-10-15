@@ -40811,6 +40811,13 @@
               "name"
             ]
           },
+          "artifacts": {
+            "description": "Every artifact the session holds, by id, newest first: republished when\none is removed, so a panel's open list drops it at once.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "host": {
             "description": "Host mode's `name[:port]` beside `origin`: a bridge for readers before it ({@link PreviewAddress}).",
             "type": "string"

@@ -149,13 +149,16 @@ export function previewFrame(
   instanceId: string,
   state: "open" | "closed",
   target: Pick<PreviewTarget, "artifact" | "revision" | "source">,
-  address: PreviewAddress | null
+  address: PreviewAddress | null,
+  /** The session's artifacts by id, newest first. */
+  artifacts: string[]
 ): PreviewFrame {
   return {
     kind: "preview",
     instanceId,
     state,
     artifact: target.artifact,
+    artifacts,
     ...(address ?? {}),
     source: target.source,
     revision: target.revision,

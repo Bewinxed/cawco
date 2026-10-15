@@ -44,6 +44,11 @@ export interface CacheInvalidatedFrame {
 export interface PreviewFrame {
   /** The artifact the session's panel shows (Projects spec §5.10). */
   artifact: { id: string; kind: ArtifactKind; name: string };
+  /**
+   * Every artifact the session holds, by id, newest first: republished when
+   * one is removed, so a panel's open list drops it at once.
+   */
+  artifacts?: string[];
   /** Host mode's `name[:port]` beside `origin`: a bridge for readers before it ({@link PreviewAddress}). */
   host?: string;
   instanceId: string;
