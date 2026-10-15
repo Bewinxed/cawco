@@ -404,7 +404,7 @@ interface StackFrame {
 /** A sampling profile's chunk (`ProfileChunk`): new call-tree nodes, and samples with the µs since the last. */
 interface ProfileData {
   cpuProfile?: {
-    nodes?: { callFrame: StackFrame; id: number }[];
+    nodes?: { callFrame: Partial<StackFrame>; id: number }[];
     samples?: number[];
   };
   startTime?: number;
@@ -463,9 +463,13 @@ function samplesOf(
     }
     const data = chunk.args?.data;
     for (const { callFrame: c, id } of data?.cpuProfile?.nodes ?? []) {
+      // The engine's own frames ("(program)", "(garbage collector)", a
+      // native's) come with no script and no line.
       fns.set(
         id,
-        `${c.functionName || "(anonymous)"}@${c.url.split("/").pop() ?? ""}:${c.lineNumber + 1}`
+        c.url
+          ? `${c.functionName || "(anonymous)"}@${c.url.split("/").pop()}:${(c.lineNumber ?? 0) + 1}`
+          : c.functionName || "(native)"
       );
     }
     const ids = data?.cpuProfile?.samples ?? [];
